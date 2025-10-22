@@ -1,6 +1,6 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 //
 import { onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { usersCollectionRef, USERS, initialAuthCheckDone } from './haupteingang.js';
+import { usersCollectionRef, USERS, initialAuthCheckDone, modalUserButtons } from './haupteingang.js';
 import { checkCurrentUserValidity } from './log-InOut.js';
 // ENDE-ZIKA //
 
@@ -41,21 +41,41 @@ export function listenForUserUpdates() {
 
 }
 
-function renderModalUserButtons() {
-    modalUserButtons.innerHTML = '';
+// ERSETZE die komplette Funktion hiermit:
+export function renderModalUserButtons() {
+    // --- SPIONE ---
+    console.log("renderModalUserButtons: Funktion wird aufgerufen.");
+    console.log("renderModalUserButtons: USERS Objekt VOR Filter:", USERS);
+
+    // Prüfen, ob das importierte Element gültig ist
+    if (!modalUserButtons) {
+        console.error("renderModalUserButtons: FEHLER - Importierte Variable 'modalUserButtons' ist leer!");
+        return; // Abbruch, wenn das Element fehlt
+    }
+    console.log("renderModalUserButtons: Importiertes Element 'modalUserButtons' gefunden:", modalUserButtons);
+    // --- ENDE SPIONE ---
+
     const ROLE_BORDER_COLORS = {
         ADMIN: 'border-red-500',
         SYSTEMADMIN: 'border-purple-700',
         DEFAULT: 'border-indigo-500'
     };
 
-    // --- KORREKTUR START: Filter für nicht registrierte Benutzer ---
     const allUsers = Object.values(USERS).filter(u =>
-        u.name && u.permissionType !== 'not_registered' // Nur Benutzer mit Namen anzeigen, die NICHT 'not_registered' sind
+        u.name && u.permissionType !== 'not_registered'
     );
-    // --- KORREKTUR ENDE ---
 
-    allUsers.forEach(user => { // Verwendet jetzt die gefilterte Liste
+    console.log("renderModalUserButtons: Anzahl User NACH Filter:", allUsers.length); // Spion
+
+    modalUserButtons.innerHTML = ''; // Leeren des Containers über die importierte Variable
+
+    if (allUsers.length === 0) {
+        console.log("renderModalUserButtons: Keine Benutzer zum Anzeigen nach Filterung."); // Spion
+        modalUserButtons.innerHTML = '<p class="text-sm text-center text-gray-500">Keine anmeldbaren Benutzer gefunden.</p>';
+        return;
+    }
+
+    allUsers.forEach(user => {
         const userCard = document.createElement('div');
         userCard.className = 'select-user-button w-full p-4 bg-gray-50 hover:bg-indigo-50 rounded-lg shadow-sm flex items-center gap-4 cursor-pointer transition duration-150 border-l-4';
         userCard.dataset.user = user.id;
@@ -69,10 +89,11 @@ function renderModalUserButtons() {
          </svg>
          <span class="text-lg font-medium text-gray-800">${user.name}</span>
          `;
-        modalUserButtons.appendChild(userCard);
+        modalUserButtons.appendChild(userCard); // Füge zum korrekten Element hinzu (über importierte Variable)
     });
-}
 
+    console.log("renderModalUserButtons: Rendern der Benutzer abgeschlossen."); // Spion
+}
 function renderUserKeyList() {
     const userKeyList = document.getElementById('userKeyList'); // Sicherstellen, dass die Variable hier definiert ist
     userKeyList.innerHTML = '';

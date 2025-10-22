@@ -3,7 +3,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, getDocs, writeBatch, addDoc, query, where, serverTimestamp, orderBy, limit, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode } from './log-InOut.js';
-import { listenForUserUpdates } from './admin_benutzersteuerung.js';
+import { renderModalUserButtons, listenForUserUpdates } from './admin_benutzersteuerung.js';
 import { listenForRoleUpdates, listenForAdminRoleUpdates } from './admin_rollenverwaltung.js';
 import { listenForApprovalRequests } from './admin_genehmigungsprozess.js';
 import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, listenForTemplates } from './checklist.js';
@@ -16,11 +16,13 @@ export let ARCHIVED_CHECKLISTS = {};
 export let CHECKLIST_STACKS = {};
 export let CHECKLIST_ITEMS = {};
 export let DELETED_CHECKLISTS = {};
+export let submitAdminKeyButton;
 export let CHECKLIST_CATEGORIES = {};
 export let CHECKLIST_GROUPS = {};
 export let ROLES = {};
 export let initialAuthCheckDone = false;
 export let adminPinInput;
+export let modalUserButtons;
 export let adminRightsToggle;
 export let pinModal;
 export let pinError;
@@ -128,6 +130,7 @@ export const USER_COLORS = {
 
 window.onload = function () {
 
+    modalUserButtons = document.getElementById('modalUserButtons');
     const distributionList = document.getElementById('distribution-list');
     const appHeader = document.getElementById('appHeader');
     const footerModeHandler = document.getElementById('footerModeHandler');
@@ -135,12 +138,13 @@ window.onload = function () {
     const userSelectionModal = document.getElementById('userSelectionModal');
     pinModal = document.getElementById('pinModal');
     const pinModalTitle = document.getElementById('pinModalTitle');
-    const modalUserButtons = document.getElementById('modalUserButtons');
     adminPinInput = document.getElementById('adminPinInput');
     pinError = document.getElementById('pinError');
     const mainSettingsButton = document.getElementById('mainSettingsButton');
     const adminRightsSection = document.getElementById('adminRightsSection');
     adminRightsToggle = document.getElementById('adminRightsToggle');
+    submitAdminKeyButton = document.getElementById('submitAdminKeyButton');
+    console.log("Wert von submitAdminKeyButton IN window.onload:", submitAdminKeyButton); // <-- SPION 1
     const adminRightsArea = document.getElementById('adminRightsArea');
     const adminRightsToggleIcon = document.getElementById('adminRightsToggleIcon');
     const roleManagementSection = document.getElementById('roleManagementSection');
@@ -217,15 +221,9 @@ async function initializeFirebase() {
                     onSnapshot(settingsDocRef, (docSnap) => {
                         if (docSnap.exists()) {
                             adminSettings = docSnap.data();
-                        } else {
-                            const defaultSettings = {
-                                approvalRules: { ADMIN: true, DELETE_USER: false, CREATE_USER: false },
-                                logAccess: { adminCanSeeSysadminLogs: false },
-                                adminPermissions: { canSeePasswords: true, canSeeUsers: true, canSeeApprovals: true, canViewLogs: false },
-                                adminPermissionType: 'individual', // <-- Komma war hier wichtig
-                                assignedAdminRoleId: null
-                            };
-                            setDoc(settingsDocRef, defaultSettings).then(() => { adminSettings = defaultSettings; });
+                        } else { // Firebase sagt, niemand ist da
+                            console.log("Firebase meldet keinen User (oder anonymen User), wechsle zum Gastmodus.");
+                            switchToGuestMode(false);
                         }
                         // UI Update wird jetzt erst am Ende von onAuthStateChanged gemacht
                     }, (error) => {
@@ -525,6 +523,15 @@ export function setupEventListeners() {
     });
 
     const handleLogin = () => {
+        // --- SPIONE ---
+        const userKeyInDB = USERS[selectedUserForLogin]?.key;
+        const enteredPin = adminPinInput.value;
+        console.log("handleLogin: Vergleich startet.");
+        console.log("handleLogin: User ID:", selectedUserForLogin);
+        console.log("handleLogin: Erwarteter Key (aus DB):", userKeyInDB);
+        console.log("handleLogin: Eingegebene PIN:", enteredPin);
+        console.log("handleLogin: Stimmen sie überein?", userKeyInDB === enteredPin);
+        // --- ENDE SPIONE ---
         if (USERS[selectedUserForLogin]?.key === adminPinInput.value) {
             pinModal.style.display = 'none';
             adminPinInput.value = '';
@@ -537,7 +544,12 @@ export function setupEventListeners() {
         }
     };
 
-    document.getElementById('submitAdminKeyButton').addEventListener('click', handleLogin);
+if (submitAdminKeyButton && typeof submitAdminKeyButton.addEventListener === 'function') {
+    submitAdminKeyButton.addEventListener('click', handleLogin);
+    console.log("Listener für submitAdminKeyButton ERFOLGREICH hinzugefügt."); // <-- SPION 2
+} else {
+    console.error("FEHLER: Konnte Listener für submitAdminKeyButton NICHT hinzufügen!", submitAdminKeyButton); // <-- SPION 3
+}
     console.log("Wert von adminPinInput VOR addEventListener:", adminPinInput);
     if (adminPinInput && typeof adminPinInput.addEventListener === 'function') {
         // Nur hinzufügen, wenn das Element existiert UND die Methode hat
