@@ -200,8 +200,8 @@ async function initializeFirebase() {
         auth = getAuth(app);
         console.log("initializeFirebase: Firebase App, DB und Auth initialisiert.");
 
-        if (!db) { console.error("..."); return; }
-        if (!appId) { console.error("..."); return; }
+        if (!db) { console.error("initializeFirebase: FEHLER - Firestore DB Objekt (db) konnte nicht initialisiert werden!"); return; }
+        if (!appId) { console.error("initializeFirebase: FEHLER - appId ist nicht definiert!"); return; }
         console.log("initializeFirebase: DB Objekt vorhanden. appId:", appId);
 
         // --- DB Refs ---
@@ -220,81 +220,131 @@ async function initializeFirebase() {
         approvalRequestsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'approval-requests');
         // --- Ende DB Refs ---
 
-        if (!usersCollectionRef) { console.error("..."); return; }
+        if (!usersCollectionRef) { console.error("initializeFirebase: FEHLER - usersCollectionRef konnte nicht erstellt werden!"); return; }
         else { console.log("initializeFirebase: usersCollectionRef erfolgreich erstellt, Pfad:", usersCollectionRef.path); }
+
+        console.log("initializeFirebase: Versuche anonyme Anmeldung...");
+        try {
+            const userCredential = await signInAnonymously(auth);
+            console.log("initializeFirebase: Anonyme Anmeldung erfolgreich. User UID:", userCredential.user.uid);
+        } catch (error) {
+            console.error("initializeFirebase: FEHLER bei anonymer Anmeldung:", error);
+            // alertUser ist hier evtl. noch nicht sicher definiert, daher nur Konsole
+            // alertUser("Firebase Authentifizierung fehlgeschlagen.", "error");
+        }
+
 
         console.log("initializeFirebase: Starte onAuthStateChanged Listener...");
         auth.onAuthStateChanged(async (user) => {
-            console.log("initializeFirebase: onAuthStateChanged ausgelöst. User:", user ? user.uid : "keiner/anonym");
+            console.log("initializeFirebase: onAuthStateChanged ausgelöst. User:", user ? user.uid : "keiner");
             console.log("initializeFirebase: Entering onAuthStateChanged callback logic...");
 
-            // <<< === ÄNDERUNG START === >>>
-            // Listener starten, sobald Auth-Status bekannt ist (egal ob user oder null)
-            // Dies stellt sicher, dass wir Daten holen, wenn die Regeln es erlauben.
+            // Listener starten (unabhängig vom Login-Status)
             try {
-                console.log("initializeFirebase: Starte Daten-Listener (unabhängig vom Login-Status)...");
+                console.log("initializeFirebase: Starte Daten-Listener...");
                 // --- Listener für App-Einstellungen ---
-                onSnapshot(settingsDocRef, /* ... */); // (Keine Änderung hier nötig)
-                onSnapshot(notrufSettingsDocRef, /* ... */); // (Keine Änderung hier nötig)
+                onSnapshot(settingsDocRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        adminSettings = docSnap.data();
+                    } else {
+                        console.warn("Firebase App Settings Document 'main' not found.");
+                        adminSettings = {}; // Fallback
+                    }
+                     // UI Update für default checklist könnte hier ausgelöst werden, falls nötig
+                     // updateUIForMode(); // Eher am Ende aufrufen
+                }, (error) => {
+                    console.error("Error listening to settings:", error);
+                });
 
-                await seedInitialData(); // Läuft nur beim ersten Mal oder wenn nötig
+                onSnapshot(notrufSettingsDocRef, (docSnap) => {
+                     if (docSnap.exists()) {
+                         notrufSettings = docSnap.data();
+                         // Initialisiere fehlende Felder, falls nötig
+                         if (!notrufSettings.modes) notrufSettings.modes = [];
+                         if (!notrufSettings.contacts) notrufSettings.contacts = [];
+                         if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
+                         if (!notrufSettings.sounds) notrufSettings.sounds = [];
+                         if (!notrufSettings.flicAssignments) notrufSettings.flicAssignments = { einfach: null, doppel: null, halten: null };
+                     } else {
+                         console.warn("Firebase Notruf Settings Document 'notruf' not found, creating default.");
+                         notrufSettings = { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } };
+                         // Optional: Hier setDoc aufrufen, um das Dokument zu erstellen
+                         // setDoc(notrufSettingsDocRef, notrufSettings);
+                     }
+                      // UI Update für Notruf-Seite hier auslösen, falls sie aktiv ist
+                      // if (document.getElementById('notrufSettingsView')?.classList.contains('active')) {
+                      //     initializeNotrufSettingsView(); // Beispiel
+                      // }
+                }, (error) => {
+                    console.error("Error listening to notruf settings:", error);
+                });
+                // --- Ende Listener für App-Einstellungen ---
+
+                await seedInitialData(); // Sicherstellen, dass die Funktion existiert
                 console.log("initializeFirebase: Seed Data abgeschlossen, starte Haupt-Listener...");
 
                 // Haupt-Daten-Listener
                 console.log("initializeFirebase: Rufe listenForRoleUpdates auf...");
-                listenForRoleUpdates();
+                listenForRoleUpdates(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: Rufe listenForAdminRoleUpdates auf...");
-                listenForAdminRoleUpdates();
+                listenForAdminRoleUpdates(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: Rufe listenForUserUpdates auf...");
-                listenForUserUpdates(); // <<< STARTET JETZT IMMER
+                listenForUserUpdates(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: Rufe listenForApprovalRequests auf...");
-                listenForApprovalRequests();
+                listenForApprovalRequests(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: Rufe listenForChecklists auf...");
-                listenForChecklists();
+                listenForChecklists(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: Rufe listenForChecklistItems auf...");
-                listenForChecklistItems();
+                listenForChecklistItems(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: Rufe listenForChecklistGroups auf...");
-                listenForChecklistGroups();
+                listenForChecklistGroups(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: Rufe listenForChecklistCategories auf...");
-                listenForChecklistCategories();
+                listenForChecklistCategories(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: Rufe listenForTemplates auf...");
-                listenForTemplates();
+                listenForTemplates(); // Sicherstellen, dass importiert
 
                 onSnapshot(query(checklistStacksCollectionRef, orderBy('name')), (snapshot) => {
-                    // ... (Inhalt bleibt gleich) ...
+                    Object.assign(CHECKLIST_STACKS, {}); // Leeren statt neu zuweisen
+                     snapshot.forEach((doc) => {
+                         CHECKLIST_STACKS[doc.id] = { id: doc.id, ...doc.data() };
+                     });
+                     // UI Update für Templates/Stacks, falls nötig und aktiv
+                     // const settingsView = document.getElementById('checklistSettingsView');
+                     // if (settingsView?.classList.contains('active')) { ... }
                 });
                 console.log("initializeFirebase: Alle Listener-Funktionen aufgerufen.");
 
             } catch (error) {
                 console.error("initializeFirebase: FEHLER beim Starten der Listener:", error);
-                alertUser("Fehler beim Initialisieren der Daten-Listener.", "error");
+                if (typeof alertUser === 'function') {
+                    alertUser("Fehler beim Initialisieren der Daten-Listener.", "error");
+                }
             }
-            // <<< === ÄNDERUNG ENDE === >>>
 
-            // Jetzt die UI basierend auf dem User-Status aktualisieren
+            // UI basierend auf User-Status aktualisieren
             if (user) {
-                // Hier könnten spezifische Aktionen für eingeloggte User stehen, falls nötig
-                console.log("initializeFirebase: User ist vorhanden/anonym eingeloggt.");
-                checkCurrentUserValidity(); // Prüft localStorage etc.
+                console.log("initializeFirebase: User (anonym) vorhanden.");
+                checkCurrentUserValidity(); // Sicherstellen, dass importiert
                 initialAuthCheckDone = true;
-                updateUIForMode();
-                console.log("initializeFirebase: UI für eingeloggten/anonymen Status aktualisiert.");
+                updateUIForMode(); // Sicherstellen, dass importiert
+                console.log("initializeFirebase: UI für aktuellen Status aktualisiert.");
             } else {
-                // Spezifisch zum Gastmodus wechseln, WENN kein User da ist
-                console.log("Firebase meldet keinen User, wechsle explizit zum Gastmodus.");
-                switchToGuestMode(false); // Nicht erneut benachrichtigen
-                 initialAuthCheckDone = true; // Wichtig, damit checkCurrentUserValidity nicht zu früh läuft
-                 updateUIForMode(); // UI für Gastmodus aktualisieren
+                console.log("Firebase meldet KEINEN User (auch nicht anonym!), wechsle explizit zum Gastmodus.");
+                switchToGuestMode(false); // Sicherstellen, dass importiert
+                 initialAuthCheckDone = true;
+                 updateUIForMode(); // Sicherstellen, dass importiert
             }
              console.log("initializeFirebase: Ende des onAuthStateChanged Callbacks.");
         }); // Ende onAuthStateChanged
     } catch (error) {
         console.error("initializeFirebase: FEHLER bei der grundlegenden Firebase Initialisierung:", error);
-        alertUser("Firebase konnte nicht initialisiert werden.", "error");
+        if (typeof alertUser === 'function') {
+             alertUser("Firebase konnte nicht initialisiert werden.", "error");
+        }
     }
      console.log("initializeFirebase: Funktion komplett beendet.");
 }
-
+// --- HIER ENDET DIE FUNKTION ZUM ERSETZEN ---
 async function seedInitialData() {
     try {
         const rolesSnapshot = await getDocs(rolesCollectionRef);
