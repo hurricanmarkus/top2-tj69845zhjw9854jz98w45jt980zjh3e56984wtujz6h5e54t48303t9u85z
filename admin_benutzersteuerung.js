@@ -42,10 +42,12 @@ export function listenForUserUpdates() {
 }
 
 // ERSETZE die komplette Funktion hiermit:
+// ERSETZE die komplette Funktion hiermit:
 export function renderModalUserButtons() {
     // --- SPIONE ---
     console.log("renderModalUserButtons: Funktion wird aufgerufen.");
-    console.log("renderModalUserButtons: USERS Objekt VOR Filter:", USERS);
+    console.log("renderModalUserButtons: USERS Objekt VOR Filter:", USERS); // Bleibt drin
+    console.log("renderModalUserButtons: Detaillierte Benutzerdaten VOR Filter:", JSON.stringify(Object.values(USERS), null, 2)); // Bleibt drin
 
     // Prüfen, ob das importierte Element gültig ist
     if (!modalUserButtons) {
@@ -55,27 +57,40 @@ export function renderModalUserButtons() {
     console.log("renderModalUserButtons: Importiertes Element 'modalUserButtons' gefunden:", modalUserButtons);
     // --- ENDE SPIONE ---
 
+    // <<< NEUER CHECK: Sind überhaupt Daten im USERS Objekt? >>>
+    if (Object.keys(USERS).length === 0) {
+        console.log("renderModalUserButtons: USERS Objekt ist noch leer. Zeige Lade-Nachricht."); // Neuer Spion
+        modalUserButtons.innerHTML = '<p class="text-sm text-center text-gray-500">Lade Benutzerdaten...</p>';
+        return; // Wichtig: Hier abbrechen, da keine Daten zum Filtern da sind.
+    }
+    // <<< ENDE NEUER CHECK >>>
+
     const ROLE_BORDER_COLORS = {
         ADMIN: 'border-red-500',
         SYSTEMADMIN: 'border-purple-700',
         DEFAULT: 'border-indigo-500'
     };
 
-    console.log("renderModalUserButtons: Detaillierte Benutzerdaten VOR Filter:", JSON.stringify(Object.values(USERS), null, 2)); // <<< NEUER SPION
+    // Filter bleibt gleich
     const allUsers = Object.values(USERS).filter(u =>
         u.name && u.permissionType !== 'not_registered'
     );
 
-    console.log("renderModalUserButtons: Anzahl User NACH Filter:", allUsers.length); // Spion
+    console.log("renderModalUserButtons: Anzahl User NACH Filter:", allUsers.length); // Spion bleibt
 
-    modalUserButtons.innerHTML = ''; // Leeren des Containers über die importierte Variable
+    modalUserButtons.innerHTML = ''; // Leeren des Containers
 
+    // <<< ANGEPASSTER CHECK: Wird jetzt erst nach dem Filter geprüft >>>
     if (allUsers.length === 0) {
-        console.log("renderModalUserButtons: Keine Benutzer zum Anzeigen nach Filterung."); // Spion
-        modalUserButtons.innerHTML = '<p class="text-sm text-center text-gray-500">Keine anmeldbaren Benutzer gefunden.</p>';
+        console.log("renderModalUserButtons: Keine Benutzer zum Anzeigen nach Filterung."); // Spion bleibt
+        // <<< ANGEPASSTE NACHRICHT: Deutlicher machen, WARUM nichts angezeigt wird >>>
+        modalUserButtons.innerHTML = '<p class="text-sm text-center text-gray-500">Keine anmeldbaren Benutzer gefunden (Filterkriterien nicht erfüllt oder Datenproblem).</p>';
         return;
     }
+    // <<< ENDE ANGEPASSTER CHECK >>>
 
+
+    // Schleife zum Rendern der Buttons bleibt gleich
     allUsers.forEach(user => {
         const userCard = document.createElement('div');
         userCard.className = 'select-user-button w-full p-4 bg-gray-50 hover:bg-indigo-50 rounded-lg shadow-sm flex items-center gap-4 cursor-pointer transition duration-150 border-l-4';
@@ -90,11 +105,12 @@ export function renderModalUserButtons() {
          </svg>
          <span class="text-lg font-medium text-gray-800">${user.name}</span>
          `;
-        modalUserButtons.appendChild(userCard); // Füge zum korrekten Element hinzu (über importierte Variable)
+        modalUserButtons.appendChild(userCard); // Füge zum korrekten Element hinzu
     });
 
-    console.log("renderModalUserButtons: Rendern der Benutzer abgeschlossen."); // Spion
+    console.log("renderModalUserButtons: Rendern der Benutzer abgeschlossen."); // Spion bleibt
 }
+
 function renderUserKeyList() {
     const userKeyList = document.getElementById('userKeyList'); // Sicherstellen, dass die Variable hier definiert ist
     userKeyList.innerHTML = '';
