@@ -205,30 +205,30 @@ export function updateUIForMode() {
     footerUser.innerHTML = '';
     footerLogout.innerHTML = '';
 
-    if (currentUser.mode === GUEST_MODE) { // Diese Prüfung ist korrekt hier
+    if (currentUser.mode === GUEST_MODE) {
         footerUser.textContent = 'Nicht angemeldet';
         const loginButton = document.createElement('button');
         loginButton.textContent = 'Anmelden';
         loginButton.className = 'font-bold text-indigo-400 hover:text-indigo-300';
 
-        // --- HIER DIE ENTSCHEIDENDE ÄNDERUNG ---
+        // --- HIER DIE KORREKTUR ---
         // Der onclick-Handler öffnet jetzt NUR NOCH das Modal.
         // Das Befüllen passiert automatisch durch listenForUserUpdates.
         loginButton.onclick = () => {
-            console.log("Anmelden-Button geklickt! Rendere Buttons UND zeige Modal."); // Angepasster Spion
-            renderModalUserButtons(); // <<< DIESE ZEILE IST NEU
+            console.log("Anmelden-Button geklickt! Zeige Modal."); // Spion
+            // renderModalUserButtons(); // <<< RAUS DAMIT!
             const userSelectionModal = document.getElementById('userSelectionModal');
             if (userSelectionModal) {
                 userSelectionModal.style.display = 'flex';
             } else {
-                console.error("FEHLER: Konnte #userSelectionModal nicht finden!"); // Spion
+                 console.error("FEHLER: Konnte #userSelectionModal nicht finden!"); // Spion
             }
         };
-        // --- ENDE ÄNDERUNG ---
+        // --- ENDE KORREKTUR ---
 
         footerLogout.appendChild(loginButton);
     } else {
-        // Code zum Anzeigen des eingeloggten Benutzers und Logout-Button (wie bei dir, sieht gut aus)
+        // Code zum Anzeigen des eingeloggten Benutzers und Logout-Button
         const user = USERS ? USERS[currentUser.mode] : null; // Sicherer Zugriff auf USERS
         const effectiveRoleId = user?.role || user?.displayRole;
         const roleName = (ROLES && ROLES[effectiveRoleId]?.name) || 'Unbekannt'; // Sicherer Zugriff auf ROLES
