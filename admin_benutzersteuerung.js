@@ -61,6 +61,7 @@ export function renderModalUserButtons() {
         DEFAULT: 'border-indigo-500'
     };
 
+    console.log("renderModalUserButtons: Detaillierte Benutzerdaten VOR Filter:", JSON.stringify(Object.values(USERS), null, 2)); // <<< NEUER SPION
     const allUsers = Object.values(USERS).filter(u =>
         u.name && u.permissionType !== 'not_registered'
     );
