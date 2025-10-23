@@ -1,5 +1,6 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 //
 import { ROLES, alertUser, currentUser, GUEST_MODE, adminSettings, CHECKLISTS, ADMIN_STORAGE_KEY, USERS, navigate } from './haupteingang.js';
+import { renderModalUserButtons } from './admin_benutzersteuerung.js';
 // ENDE-ZIKA //
 
 export function checkCurrentUserValidity() {
@@ -214,13 +215,13 @@ export function updateUIForMode() {
         // Der onclick-Handler öffnet jetzt NUR NOCH das Modal.
         // Das Befüllen passiert automatisch durch listenForUserUpdates.
         loginButton.onclick = () => {
-            console.log("Anmelden-Button geklickt! Zeige Modal."); // Spion
-            // renderModalUserButtons(); // <-- RAUS DAMIT!
+            console.log("Anmelden-Button geklickt! Rendere Buttons UND zeige Modal."); // Angepasster Spion
+            renderModalUserButtons(); // <<< DIESE ZEILE IST NEU
             const userSelectionModal = document.getElementById('userSelectionModal');
             if (userSelectionModal) {
                 userSelectionModal.style.display = 'flex';
             } else {
-                 console.error("FEHLER: Konnte #userSelectionModal nicht finden!"); // Spion
+                console.error("FEHLER: Konnte #userSelectionModal nicht finden!"); // Spion
             }
         };
         // --- ENDE ÄNDERUNG ---
