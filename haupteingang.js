@@ -200,72 +200,98 @@ async function initializeFirebase() {
         auth = getAuth(app);
         console.log("initializeFirebase: Firebase App, DB und Auth initialisiert.");
 
-        if (!db) { /* ... check ... */ return; }
-        if (!appId) { /* ... check ... */ return; }
+        if (!db) { console.error("..."); return; }
+        if (!appId) { console.error("..."); return; }
         console.log("initializeFirebase: DB Objekt vorhanden. appId:", appId);
 
         // --- DB Refs ---
         usersCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'user-config');
-        // ... (other refs) ...
+        rolesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'user-roles');
+        adminRolesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'admin-roles');
+        roleChangeRequestsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'role-change-requests');
+        auditLogCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'audit-log');
+        settingsDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'app-settings', 'main');
+        notrufSettingsDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'app-settings', 'notruf');
+        checklistsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklists');
+        checklistItemsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-items');
+        checklistGroupsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-groups');
+        checklistCategoriesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-categories');
+        const checklistStacksCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-stacks');
+        approvalRequestsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'approval-requests');
         // --- Ende DB Refs ---
 
-        if (!usersCollectionRef) { /* ... check ... */ return; }
+        if (!usersCollectionRef) { console.error("..."); return; }
         else { console.log("initializeFirebase: usersCollectionRef erfolgreich erstellt, Pfad:", usersCollectionRef.path); }
 
         console.log("initializeFirebase: Starte onAuthStateChanged Listener...");
         auth.onAuthStateChanged(async (user) => {
             console.log("initializeFirebase: onAuthStateChanged ausgelöst. User:", user ? user.uid : "keiner/anonym");
-
-            // <<< NEUER SPION: Loggen VOR dem try-Block >>>
             console.log("initializeFirebase: Entering onAuthStateChanged callback logic...");
 
+            // <<< === ÄNDERUNG START === >>>
+            // Listener starten, sobald Auth-Status bekannt ist (egal ob user oder null)
+            // Dies stellt sicher, dass wir Daten holen, wenn die Regeln es erlauben.
+            try {
+                console.log("initializeFirebase: Starte Daten-Listener (unabhängig vom Login-Status)...");
+                // --- Listener für App-Einstellungen ---
+                onSnapshot(settingsDocRef, /* ... */); // (Keine Änderung hier nötig)
+                onSnapshot(notrufSettingsDocRef, /* ... */); // (Keine Änderung hier nötig)
+
+                await seedInitialData(); // Läuft nur beim ersten Mal oder wenn nötig
+                console.log("initializeFirebase: Seed Data abgeschlossen, starte Haupt-Listener...");
+
+                // Haupt-Daten-Listener
+                console.log("initializeFirebase: Rufe listenForRoleUpdates auf...");
+                listenForRoleUpdates();
+                console.log("initializeFirebase: Rufe listenForAdminRoleUpdates auf...");
+                listenForAdminRoleUpdates();
+                console.log("initializeFirebase: Rufe listenForUserUpdates auf...");
+                listenForUserUpdates(); // <<< STARTET JETZT IMMER
+                console.log("initializeFirebase: Rufe listenForApprovalRequests auf...");
+                listenForApprovalRequests();
+                console.log("initializeFirebase: Rufe listenForChecklists auf...");
+                listenForChecklists();
+                console.log("initializeFirebase: Rufe listenForChecklistItems auf...");
+                listenForChecklistItems();
+                console.log("initializeFirebase: Rufe listenForChecklistGroups auf...");
+                listenForChecklistGroups();
+                console.log("initializeFirebase: Rufe listenForChecklistCategories auf...");
+                listenForChecklistCategories();
+                console.log("initializeFirebase: Rufe listenForTemplates auf...");
+                listenForTemplates();
+
+                onSnapshot(query(checklistStacksCollectionRef, orderBy('name')), (snapshot) => {
+                    // ... (Inhalt bleibt gleich) ...
+                });
+                console.log("initializeFirebase: Alle Listener-Funktionen aufgerufen.");
+
+            } catch (error) {
+                console.error("initializeFirebase: FEHLER beim Starten der Listener:", error);
+                alertUser("Fehler beim Initialisieren der Daten-Listener.", "error");
+            }
+            // <<< === ÄNDERUNG ENDE === >>>
+
+            // Jetzt die UI basierend auf dem User-Status aktualisieren
             if (user) {
-                try {
-                    console.log("initializeFirebase: User vorhanden, starte Listener...");
-                    // --- Listener für App-Einstellungen ---
-                    onSnapshot(settingsDocRef, /* ... */);
-                    onSnapshot(notrufSettingsDocRef, /* ... */);
-                    // --- Ende Listener für App-Einstellungen ---
-
-                    await seedInitialData();
-                    console.log("initializeFirebase: Seed Data abgeschlossen, starte Haupt-Listener...");
-
-                    // <<< NEUER SPION: Loggen direkt VOR jedem Listener-Start >>>
-                    console.log("initializeFirebase: Rufe listenForRoleUpdates auf...");
-                    listenForRoleUpdates();
-                    console.log("initializeFirebase: Rufe listenForAdminRoleUpdates auf...");
-                    listenForAdminRoleUpdates();
-                    console.log("initializeFirebase: Rufe listenForUserUpdates auf..."); // <<< WICHTIG
-                    listenForUserUpdates(); // <<< HIER WIRD DER PROBLEMATISCHE LISTENER GESTARTET
-                    console.log("initializeFirebase: Rufe listenForApprovalRequests auf...");
-                    listenForApprovalRequests();
-                    console.log("initializeFirebase: Rufe listenForChecklists auf...");
-                    listenForChecklists();
-                    // ... (rufe alle anderen Listener auf und logge davor) ...
-                    console.log("initializeFirebase: Alle Listener-Funktionen aufgerufen.");
-                    // <<< ENDE NEUER SPION >>>
-
-
-                    checkCurrentUserValidity();
-                    initialAuthCheckDone = true;
-                    updateUIForMode();
-                    console.log("initializeFirebase: Initialisierungs-Logik innerhalb onAuthStateChanged (User vorhanden) abgeschlossen.");
-
-                } catch (error) { // <<< NEUER SPION: Detaillierterer Fehler im try-catch >>>
-                    console.error("initializeFirebase: FEHLER innerhalb des onAuthStateChanged try-Blocks:", error);
-                    alertUser("Ein kritischer Fehler ist beim Start aufgetreten.", "error");
-                    switchToGuestMode(false);
-                } // <<< ENDE NEUER SPION >>>
+                // Hier könnten spezifische Aktionen für eingeloggte User stehen, falls nötig
+                console.log("initializeFirebase: User ist vorhanden/anonym eingeloggt.");
+                checkCurrentUserValidity(); // Prüft localStorage etc.
+                initialAuthCheckDone = true;
+                updateUIForMode();
+                console.log("initializeFirebase: UI für eingeloggten/anonymen Status aktualisiert.");
             } else {
-                console.log("Firebase meldet keinen User (oder anonymen User), wechsle zum Gastmodus.");
-                switchToGuestMode(false);
+                // Spezifisch zum Gastmodus wechseln, WENN kein User da ist
+                console.log("Firebase meldet keinen User, wechsle explizit zum Gastmodus.");
+                switchToGuestMode(false); // Nicht erneut benachrichtigen
+                 initialAuthCheckDone = true; // Wichtig, damit checkCurrentUserValidity nicht zu früh läuft
+                 updateUIForMode(); // UI für Gastmodus aktualisieren
             }
              console.log("initializeFirebase: Ende des onAuthStateChanged Callbacks.");
         }); // Ende onAuthStateChanged
-    } catch (error) { // <<< NEUER SPION: Fehler bei der Grundinitialisierung >>>
-        console.error("initializeFirebase: FEHLER bei der grundlegenden Firebase Initialisierung (vor onAuthStateChanged):", error);
+    } catch (error) {
+        console.error("initializeFirebase: FEHLER bei der grundlegenden Firebase Initialisierung:", error);
         alertUser("Firebase konnte nicht initialisiert werden.", "error");
-    } // <<< ENDE NEUER SPION >>>
+    }
      console.log("initializeFirebase: Funktion komplett beendet.");
 }
 
