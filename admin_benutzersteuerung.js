@@ -7,37 +7,67 @@ import { checkCurrentUserValidity } from './log-InOut.js';
 export function listenForUserUpdates() {
     const mainContent = document.querySelector('.main-content');
 
-    onSnapshot(usersCollectionRef, (snapshot) => {
+    // <<< NEUER SPION: Prüfen, ob usersCollectionRef gültig ist BEVOR onSnapshot >>>
+    if (!usersCollectionRef) {
+        console.error("listenForUserUpdates: FEHLER - usersCollectionRef ist nicht definiert, bevor onSnapshot aufgerufen wird!");
+        return; // Abbruch, wenn die Referenz fehlt
+    } else {
+        console.log("listenForUserUpdates: usersCollectionRef scheint gültig zu sein:", usersCollectionRef.path); // Log den Pfad
+    }
+    // <<< ENDE NEUER SPION >>>
 
-        Object.keys(USERS).forEach(key => delete USERS[key]); snapshot.forEach((doc) => { USERS[doc.id] = { id: doc.id, ...doc.data() }; });
+
+    onSnapshot(usersCollectionRef, (snapshot) => {
+        // <<< SPION: Bestätigen, dass Daten empfangen wurden (bleibt drin) >>>
+        console.log("listenForUserUpdates: onSnapshot hat Daten empfangen!", snapshot.size, "Dokumente");
+
+        // <<< WICHTIG: Prüfen, ob die Snapshot-Größe > 0 ist >>>
+        if (snapshot.empty) {
+            console.warn("listenForUserUpdates: onSnapshot hat eine leere Snapshot empfangen (keine Benutzer in der DB oder Filterproblem?).");
+        }
+        // <<< ENDE WICHTIGE PRÜFUNG >>>
+
+
+        Object.keys(USERS).forEach(key => delete USERS[key]);
+        snapshot.forEach((doc) => {
+             // <<< NEUER SPION: Logge jedes einzelne Dokument, das verarbeitet wird >>>
+             console.log("listenForUserUpdates: Verarbeite Dokument:", doc.id, doc.data());
+             USERS[doc.id] = { id: doc.id, ...doc.data() };
+        });
 
         // Verhindert ein Neuzeichnen, wenn die Änderung vom User selbst kam
         if (initialAuthCheckDone) {
             checkCurrentUserValidity();
         }
-        renderModalUserButtons();
+        renderModalUserButtons(); // <<< Wird jetzt immer aufgerufen, wenn Daten kommen
 
-        // Prüft, ob geöffnete Admin-Sektionen neu gezeichnet werden müssen
-        // Prüft, ob geöffnete Admin-Sektionen neu gezeichnet werden müssen
-        const isAdminViewActive = document.getElementById('adminView').classList.contains('active');
+        // Prüft, ob geöffnete Admin-Sektionen neu gezeichnet werden müssen (bleibt gleich)
+        const isAdminViewActive = document.getElementById('adminView')?.classList.contains('active'); // Sicherer Zugriff
 
+        // --- HINWEIS: Stelle sicher, dass diese Render-Funktionen existieren oder auskommentiert sind, wenn nicht benötigt ---
         if (isAdminViewActive) {
-            if (adminSectionsState.password) {
-                renderUserKeyList();
+            // Beispiel: Wenn renderUserKeyList in einer anderen Datei ist, musst du sie ggf. importieren
+            // import { renderUserKeyList } from './admin_passwoerter.js'; // Beispielhaft
+            if (adminSectionsState.password && typeof renderUserKeyList === 'function') {
+                 renderUserKeyList();
             }
-            if (adminSectionsState.user) {
-                renderUserManagement();
+            if (adminSectionsState.user && typeof renderUserManagement === 'function') {
+                 renderUserManagement();
             }
-            if (adminSectionsState.role) {
-                renderRoleManagement();
+            if (adminSectionsState.role && typeof renderRoleManagement === 'function') {
+                 renderRoleManagement();
             }
-            if (adminSectionsState.protocol) {
-                renderProtocolHistory();
-            }
+             if (adminSectionsState.protocol && typeof renderProtocolHistory === 'function') {
+                 renderProtocolHistory();
+             }
         }
-    }, (error) => {
-        console.error("Error listening for user updates:", error);
-    });
+        // --- ENDE HINWEIS ---
+
+    }, (error) => { // <<< NEU: Fehlerbehandlung für den Listener >>>
+        console.error("listenForUserUpdates: FEHLER im onSnapshot Listener:", error);
+        // Optional: Dem Benutzer eine Fehlermeldung anzeigen
+        alertUser("Fehler beim Laden der Benutzerdaten. Prüfen Sie die Konsole.", "error"); // Annahme: alertUser ist global verfügbar oder importiert
+    }); // <<< ENDE NEU >>>
 
 }
 
