@@ -303,7 +303,7 @@ async function initializeFirebase() {
         alertUser("Firebase konnte nicht initialisiert werden. Bitte Seite neu laden.", "error"); // Annahme: alertUser importiert/global
     }
      console.log("initializeFirebase: Funktion komplett beendet."); // Neuer Spion
-} // Ende von initializeFirebase!
+} // Ende von initializeFirebase
 
 async function seedInitialData() {
     try {
