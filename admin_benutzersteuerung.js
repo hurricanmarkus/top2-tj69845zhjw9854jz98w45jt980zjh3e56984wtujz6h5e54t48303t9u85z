@@ -2,7 +2,6 @@
 import { onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { usersCollectionRef, USERS, initialAuthCheckDone, modalUserButtons } from './haupteingang.js';
 import { checkCurrentUserValidity } from './log-InOut.js';
-import { populatePersonDropdown } from './checklist.js';
 // ENDE-ZIKA //
 
 export function listenForUserUpdates() {
@@ -63,14 +62,6 @@ export function listenForUserUpdates() {
              }
         }
         // --- ENDE HINWEIS ---
-
-        const essensberechnungView = document.getElementById('essensberechnungView');
-if (essensberechnungView && essensberechnungView.classList.contains('active')) {
-     // Stelle sicher, dass populatePersonDropdown importiert ist
-     // import { populatePersonDropdown } from './checklist.js'; // Am Anfang der Datei hinzufügen
-     populatePersonDropdown();
-     console.log("Essensberechnung Dropdown aktualisiert nach User Update."); // Optional: Für Debugging
-}
 
     }, (error) => { // <<< NEU: Fehlerbehandlung für den Listener >>>
         console.error("listenForUserUpdates: FEHLER im onSnapshot Listener:", error);
