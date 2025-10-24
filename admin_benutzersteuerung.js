@@ -141,7 +141,7 @@ export function renderModalUserButtons() {
     console.log("renderModalUserButtons: Rendern der Benutzer abgeschlossen."); // Spion bleibt
 }
 
-function renderUserKeyList() {
+export function renderUserKeyList() {
     const userKeyList = document.getElementById('userKeyList'); // Sicherstellen, dass die Variable hier definiert ist
     userKeyList.innerHTML = '';
     const isAdmin = currentUser.role === 'ADMIN';

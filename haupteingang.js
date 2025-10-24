@@ -12,8 +12,8 @@ import { IFTTT_URL, initializeNotrufSettingsView } from './notfall.js';
 import { PUSHOVER_TOKEN, RECIPIENT_KEYS } from './pushbenachrichtigung.js';
 import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, openTemplateModal, renderChecklistView, renderChecklistSettingsView } from './checklist.js';
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
-import { renderUserKeyList } from './admin_passwoerter.js';
-// ENDE-ZIKA //
+import { renderUserKeyList } from './admin_benutzersteuerung.js'; // <-- KORRIGIERT
+// // ENDE-ZIKA //
 
 
 // BEGINN-ZIKA: LET-BEFEHLE IMMER NACH IMPORT-BEFEHLE //
