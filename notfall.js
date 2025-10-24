@@ -699,7 +699,7 @@ function updateFlicDisplay(klickTyp) {
     }
 }
 
-export function renderModeEditorList() {
+function renderModeEditorList() {
     const listContainer = document.getElementById('existingModesList');
     if (notrufSettings.modes.length === 0) {
         listContainer.innerHTML = '<p class="text-sm text-center text-gray-400">Keine Modi vorhanden.</p>';
