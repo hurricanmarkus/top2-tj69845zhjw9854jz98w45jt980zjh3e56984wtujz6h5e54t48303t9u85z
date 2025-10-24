@@ -2,7 +2,12 @@ export const IFTTT_EVENT = 'NFC_Stick_Switchbot_Bauteil_2_Wohnungsanlage_oeffnen
 export const IFTTT_KEY = 'pECKM4iJ9sI_3ZF4DdYTzsH60p3cCg0yLbnPGzUFbFO';
 export const IFTTT_URL = `https://maker.ifttt.com/trigger/${IFTTT_EVENT}/with/key/${IFTTT_KEY}`;
 
+import { notrufSettings, notrufSettingsDocRef, alertUser, setButtonLoading } from './haupteingang.js'; // <-- NEU: notrufSettings importiert (ggf. auch andere benötigte Dinge wie alertUser, setButtonLoading, setDoc, notrufSettingsDocRef hinzufügen, falls sie in notfall.js verwendet werden)
+import { setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"; // <-- NEU: setDoc importieren, falls noch nicht geschehen
+
 let activeFlicEditorKlickTyp = null;
+let tempSelectedApiTokenId = null; // Für das Bearbeiten-Formular
+let tempSelectedSoundId = null;    // Für das Bearbeiten-Formular
 
 export function initializeNotrufSettingsView() {
     activeFlicEditorKlickTyp = null; // Aktiven Klick-Typ zurücksetzen
