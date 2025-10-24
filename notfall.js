@@ -10,6 +10,11 @@ let tempSelectedApiTokenId = null; // Für das Bearbeiten-Formular
 let tempSelectedSoundId = null;    // Für das Bearbeiten-Formular
 
 export function initializeNotrufSettingsView() {
+    const notrufView = document.getElementById('notrufSettingsView'); // <-- DIESE ZEILE HINZUFÜGEN
+    if (!notrufView) { // Sicherheitshalber prüfen, ob das Element existiert
+        console.error("initializeNotrufSettingsView: Element #notrufSettingsView nicht gefunden!");
+        return;
+    }
     activeFlicEditorKlickTyp = null; // Aktiven Klick-Typ zurücksetzen
     document.getElementById('flic-details-editor-container').classList.add('hidden'); // Editor-Box verstecken
 
@@ -30,7 +35,7 @@ export function initializeNotrufSettingsView() {
     const assignmentCard = document.querySelector('#card-flic-notruf .card');
     if (assignmentCard) assignmentCard.classList.remove('hidden');
     const tabsContainer = notrufView.querySelector('#notruf-settings-tabs');
-    
+
     if (tabsContainer && !tabsContainer.dataset.listenerAttached) {
         tabsContainer.addEventListener('click', (e) => {
             const clickedTab = e.target.closest('.settings-tab-btn');
@@ -65,73 +70,73 @@ export function initializeNotrufSettingsView() {
     }
 
     // --- Event Listener für das Kontaktbuch-Modal ---
-const contactModal = document.getElementById('contactBookModal');
-if (contactModal && !contactModal.dataset.listenerAttached) {
-    contactModal.addEventListener('click', (e) => {
-        // Modal schließen
-        if (e.target.closest('#contactBookCloseButton')) {
-            contactModal.style.display = 'none';
-        }
-        // Kontakt hinzufügen
-        // NEUER CODE
-        if (e.target.closest('#contactAddButton')) {
-            const type = document.getElementById('contactIsGroup').value; // .trim() ist nicht mehr nötig
-            const name = document.getElementById('contactName').value.trim();
-            const key = document.getElementById('contactUserKey').value.trim();
-            if (type && name && key) {
-                if (!notrufSettings.contacts) notrufSettings.contacts = []; // Initialisieren, falls leer
-                notrufSettings.contacts.push({ id: Date.now(), type, name, key });
-
-                // Das ganze Objekt in Firebase speichern
-                setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
-                    renderContactBook();
-                    // Felder leeren (hier ist die Änderung)
-                    document.getElementById('contactIsGroup').value = 'User'; // Setzt auf Standardwert zurück
-                    document.getElementById('contactName').value = '';
-                    document.getElementById('contactUserKey').value = '';
-                }).catch(err => alertUser('Fehler beim Speichern des Kontakts.', 'error'));
-            } else {
-                alertUser('Bitte alle Felder für den Kontakt ausfüllen.', 'error');
+    const contactModal = document.getElementById('contactBookModal');
+    if (contactModal && !contactModal.dataset.listenerAttached) {
+        contactModal.addEventListener('click', (e) => {
+            // Modal schließen
+            if (e.target.closest('#contactBookCloseButton')) {
+                contactModal.style.display = 'none';
             }
-        }
-        // Kontakt löschen
-        if (e.target.closest('.delete-contact-btn')) {
-            const contactId = e.target.closest('.delete-contact-btn').dataset.contactId;
-            if (confirm('Möchten Sie diesen Kontakt wirklich löschen?')) {
-                notrufSettings.contacts = notrufSettings.contacts.filter(c => c.id != contactId);
+            // Kontakt hinzufügen
+            // NEUER CODE
+            if (e.target.closest('#contactAddButton')) {
+                const type = document.getElementById('contactIsGroup').value; // .trim() ist nicht mehr nötig
+                const name = document.getElementById('contactName').value.trim();
+                const key = document.getElementById('contactUserKey').value.trim();
+                if (type && name && key) {
+                    if (!notrufSettings.contacts) notrufSettings.contacts = []; // Initialisieren, falls leer
+                    notrufSettings.contacts.push({ id: Date.now(), type, name, key });
 
-                // Das ganze Objekt in Firebase speichern
-                setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
-                    renderContactBook();
-                }).catch(err => alertUser('Fehler beim Löschen des Kontakts.', 'error'));
-            }
-        }
-        // Auswahl übernehmen und Modal schließen
-        if (e.target.closest('#contactBookApplyButton')) {
-            const displayArea = document.getElementById('notrufUserKeyDisplay');
-            displayArea.innerHTML = '';
-            const selectedContacts = [];
-            contactModal.querySelectorAll('.contact-checkbox:checked').forEach(cb => {
-                const contact = (notrufSettings.contacts || []).find(c => c.id == cb.value);
-                if (contact) {
-                    displayArea.innerHTML += `<span class="contact-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-contact-id="${contact.id}">${contact.name}</span>`;
+                    // Das ganze Objekt in Firebase speichern
+                    setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
+                        renderContactBook();
+                        // Felder leeren (hier ist die Änderung)
+                        document.getElementById('contactIsGroup').value = 'User'; // Setzt auf Standardwert zurück
+                        document.getElementById('contactName').value = '';
+                        document.getElementById('contactUserKey').value = '';
+                    }).catch(err => alertUser('Fehler beim Speichern des Kontakts.', 'error'));
+                } else {
+                    alertUser('Bitte alle Felder für den Kontakt ausfüllen.', 'error');
                 }
-            });
-            contactModal.style.display = 'none';
-        }
-    });
-    contactModal.dataset.listenerAttached = 'true';
-}
+            }
+            // Kontakt löschen
+            if (e.target.closest('.delete-contact-btn')) {
+                const contactId = e.target.closest('.delete-contact-btn').dataset.contactId;
+                if (confirm('Möchten Sie diesen Kontakt wirklich löschen?')) {
+                    notrufSettings.contacts = notrufSettings.contacts.filter(c => c.id != contactId);
 
-const notrufConfigToggle = document.getElementById('notrufConfigToggle');
-if (notrufConfigToggle) {
-    notrufConfigToggle.addEventListener('click', () => {
-        const area = document.getElementById('notrufConfigArea');
-        const icon = document.getElementById('notrufConfigToggleIcon');
-        area.classList.toggle('hidden');
-        icon.classList.toggle('rotate-180');
-    });
-}
+                    // Das ganze Objekt in Firebase speichern
+                    setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
+                        renderContactBook();
+                    }).catch(err => alertUser('Fehler beim Löschen des Kontakts.', 'error'));
+                }
+            }
+            // Auswahl übernehmen und Modal schließen
+            if (e.target.closest('#contactBookApplyButton')) {
+                const displayArea = document.getElementById('notrufUserKeyDisplay');
+                displayArea.innerHTML = '';
+                const selectedContacts = [];
+                contactModal.querySelectorAll('.contact-checkbox:checked').forEach(cb => {
+                    const contact = (notrufSettings.contacts || []).find(c => c.id == cb.value);
+                    if (contact) {
+                        displayArea.innerHTML += `<span class="contact-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-contact-id="${contact.id}">${contact.name}</span>`;
+                    }
+                });
+                contactModal.style.display = 'none';
+            }
+        });
+        contactModal.dataset.listenerAttached = 'true';
+    }
+
+    const notrufConfigToggle = document.getElementById('notrufConfigToggle');
+    if (notrufConfigToggle) {
+        notrufConfigToggle.addEventListener('click', () => {
+            const area = document.getElementById('notrufConfigArea');
+            const icon = document.getElementById('notrufConfigToggleIcon');
+            area.classList.toggle('hidden');
+            icon.classList.toggle('rotate-180');
+        });
+    }
 }
 
 function populateFlicAssignmentSelectors() {
