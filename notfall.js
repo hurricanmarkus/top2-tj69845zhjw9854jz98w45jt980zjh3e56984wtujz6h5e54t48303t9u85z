@@ -591,7 +591,7 @@ const contactModal = document.getElementById('contactBookModal');
 
 // Beispielhaft hier eine der Funktionen (die anderen müssen auch hier rein!)
 // (updateFlicColumnDisplays, updateFlicEditorDetails, updateFlicEditorBox, renderModeEditorList, openModeConfigForm, saveNotrufMode, renderContactBook, renderApiTokenBook, renderSoundBook)
-export function populateFlicAssignmentSelectors() {
+function populateFlicAssignmentSelectors() {
     const selector = document.getElementById('flic-editor-selector');
     if (!selector) return;
     const modes = notrufSettings.modes || [];
