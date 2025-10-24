@@ -33,7 +33,7 @@ export let pinError;
 export let TEMPLATES = {};
 export let TEMPLATE_ITEMS = {};
 export let notrufSettingsDocRef;
-export let activeFlicEditorKlickTyp = null;
+let activeFlicEditorKlickTyp = null;
 export let tempSelectedApiTokenId = null; // Für das Bearbeiten-Formular
 export let tempSelectedSoundId = null;    // Für das Bearbeiten-Formular
 export let unsubscribeTemplateItems = null;

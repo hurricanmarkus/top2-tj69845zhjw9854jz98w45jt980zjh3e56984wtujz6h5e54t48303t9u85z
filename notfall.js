@@ -2,6 +2,8 @@ export const IFTTT_EVENT = 'NFC_Stick_Switchbot_Bauteil_2_Wohnungsanlage_oeffnen
 export const IFTTT_KEY = 'pECKM4iJ9sI_3ZF4DdYTzsH60p3cCg0yLbnPGzUFbFO';
 export const IFTTT_URL = `https://maker.ifttt.com/trigger/${IFTTT_EVENT}/with/key/${IFTTT_KEY}`;
 
+let activeFlicEditorKlickTyp = null;
+
 export function initializeNotrufSettingsView() {
     activeFlicEditorKlickTyp = null; // Aktiven Klick-Typ zurücksetzen
     document.getElementById('flic-details-editor-container').classList.add('hidden'); // Editor-Box verstecken
