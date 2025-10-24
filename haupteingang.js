@@ -400,7 +400,7 @@ export function alertUser(message, type) {
     }, 3000);
 }
 
-function setButtonLoading(button, isLoading) {
+export function setButtonLoading(button, isLoading) {
     const text = button.querySelector('.button-text');
     const spinner = button.querySelector('.loading-spinner');
     button.disabled = isLoading;
