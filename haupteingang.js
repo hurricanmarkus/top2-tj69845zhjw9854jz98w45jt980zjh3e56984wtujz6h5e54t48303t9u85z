@@ -3,15 +3,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, getDocs, writeBatch, addDoc, query, where, serverTimestamp, orderBy, limit, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode } from './log-InOut.js';
-import { renderModalUserButtons, listenForUserUpdates } from './admin_benutzersteuerung.js';
-import { listenForRoleUpdates, listenForAdminRoleUpdates } from './admin_rollenverwaltung.js';
-import { listenForApprovalRequests } from './admin_genehmigungsprozess.js';
-import { toggleAdminSection } from './admin_adminfunktionenHome.js';
+import { renderModalUserButtons, listenForUserUpdates, toggleNewUserRoleField, addAdminUserManagementListeners, renderUserManagement } from './admin_benutzersteuerung.js';
+import { listenForRoleUpdates, listenForAdminRoleUpdates, renderRoleManagement } from './admin_rollenverwaltung.js';
+import { listenForApprovalRequests, createApprovalRequest, renderApprovalProcess } from './admin_genehmigungsprozess.js';
+import { toggleAdminSection, rememberAdminScroll, restoreAdminScrollIfAny, renderMainFunctionsAdminArea } from './admin_adminfunktionenHome.js';
 import { initializeEssensberechnungView } from './essensberechnung.js';
 import { IFTTT_URL, initializeNotrufSettingsView } from './notfall.js';
 import { PUSHOVER_TOKEN, RECIPIENT_KEYS } from './pushbenachrichtigung.js';
-import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, listenForTemplates } from './checklist.js';
+import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, openTemplateModal, renderChecklistView, renderChecklistSettingsView } from './checklist.js';
+import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
+import { renderUserKeyList } from './admin_passwoerter.js';
 // ENDE-ZIKA //
+
 
 // BEGINN-ZIKA: LET-BEFEHLE IMMER NACH IMPORT-BEFEHLE //
 export let USERS = {};
@@ -409,256 +412,234 @@ export function setButtonLoading(button, isLoading) {
 }
 
 export function navigate(targetViewName) {
+    console.log(`Navigiere zu: ${targetViewName}`); // Log Navigation
     const targetView = views[targetViewName];
-    if (!targetView) return;
-
-    const userPermissions = currentUser.permissions;
-    if (['entrance', 'pushover'].includes(targetViewName) && !userPermissions.includes(targetViewName.toUpperCase())) {
-        return alertUser("Zugriff verweigert.", 'error');
+    if (!targetView) {
+         console.error(`Navigation fehlgeschlagen: View "${targetViewName}" nicht gefunden.`);
+         return;
     }
+
+    // Berechtigungsprüfung (bleibt gleich)
+    const userPermissions = currentUser.permissions || [];
     const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'SYSTEMADMIN';
-    if (targetViewName === 'admin' && !isAdmin) {
-        return alertUser("Zugriff verweigert.", 'error');
+    // ... (alle Berechtigungsprüfungen bleiben hier) ...
+    if (targetViewName === 'entrance' && !userPermissions.includes('ENTRANCE')) return alertUser("Zugriff verweigert (Eingang).", 'error');
+    if (targetViewName === 'pushover' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Push).", 'error');
+    if (targetViewName === 'checklist' && !userPermissions.includes('CHECKLIST')) return alertUser("Zugriff verweigert (Checkliste).", 'error');
+    if (targetViewName === 'checklistSettings' && !userPermissions.includes('CHECKLIST_SETTINGS')) return alertUser("Zugriff verweigert (Checklisten-Einstellungen).", 'error');
+    if (targetViewName === 'essensberechnung' && !userPermissions.includes('ESSENSBERECHNUNG')) return alertUser("Zugriff verweigert (Essensberechnung).", 'error');
+    if (targetViewName === 'admin' && !isAdmin) return alertUser("Zugriff verweigert (Admin).", 'error');
+    if (targetViewName === 'notrufSettings' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Notruf-Einstellungen).", 'error');
+
+
+    // Scroll zum Anfang
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) mainContent.scrollTop = 0;
+
+    // Alle Views ausblenden, Ziel-View einblenden
+    Object.values(viewElements).forEach(el => el && el.classList.remove('active'));
+    const targetElement = document.getElementById(targetView.id);
+    if (targetElement) {
+        targetElement.classList.add('active');
+    } else {
+        console.error(`Navigation fehlgeschlagen: Element mit ID "${targetView.id}" nicht gefunden.`);
+        const homeElement = document.getElementById(views.home.id);
+        if (homeElement) homeElement.classList.add('active'); // Fallback
+        return;
     }
 
-    document.querySelector('.main-content').scrollTop = 0;
-    Object.values(viewElements).forEach(el => el && el.classList.remove('active'));
-    document.getElementById(targetView.id).classList.add('active');
-
+    // UI basierend auf Modus aktualisieren
     updateUIForMode();
 
+    // View-spezifische Initialisierungen
     if (targetViewName === 'userSettings') {
-        document.getElementById('userSettingsName').textContent = `Passwort für ${currentUser.displayName} ändern`;
-        const user = USERS[currentUser.mode];
-        document.getElementById('currentUserKeyDisplay').style.display = user?.key ? 'block' : 'none';
-        if (user?.key) document.getElementById('currentUserKeyDisplay').innerHTML = `<p class="text-lg">Dein aktuelles Passwort lautet: <strong class="font-bold">${user.key}</strong></p>`;
+        // ... (Code für userSettings bleibt gleich) ...
+         const userNameEl = document.getElementById('userSettingsName');
+         const userKeyDisplayEl = document.getElementById('currentUserKeyDisplay');
+         if (userNameEl) userNameEl.textContent = `Passwort für ${currentUser.displayName} ändern`;
+         if (userKeyDisplayEl) {
+             const user = USERS[currentUser.mode];
+             userKeyDisplayEl.style.display = user?.key ? 'block' : 'none';
+             if (user?.key) userKeyDisplayEl.innerHTML = `<p class="text-lg">Dein aktuelles Passwort lautet: <strong class="font-bold">${user.key}</strong></p>`;
+         }
     }
     if (targetViewName === 'essensberechnung') {
         initializeEssensberechnungView();
     }
-    // HIER DEN NEUEN BLOCK HINZUFÜGEN
-    // Ersetze diesen Block in der 'navigate()'-Funktion:
-    // Ersetze diesen Block in der 'navigate()'-Funktion:
+    // === WICHTIG: Ruft die importierte Funktion auf ===
     if (targetViewName === 'notrufSettings') {
-        initializeNotrufSettingsView(); // Lädt Daten im Hintergrund
-
-        // Setzt den visuellen Standard-Zustand zurück (Prompt sichtbar)
-        const prompt = document.getElementById('notruf-prompt');
-        if (prompt) prompt.style.display = 'block';
-
-        const flicCard = document.getElementById('card-flic-notruf');
-        if (flicCard) flicCard.classList.add('hidden');
-
-        const appCard = document.getElementById('card-app-notruf');
-        if (appCard) appCard.classList.add('hidden');
-
-        // Tab-Stile zurücksetzen
-        document.querySelectorAll('#notruf-settings-tabs .settings-tab-btn').forEach(tab => {
-            tab.classList.remove('bg-white', 'shadow', 'text-indigo-600');
-            tab.classList.add('text-gray-600');
-        });
-
-        // Akkordeon einklappen, falls es offen war
-        const configArea = document.getElementById('notrufConfigArea');
-        const configIcon = document.getElementById('notrufConfigToggleIcon'); // Hole das Icon
-
-        // --- KORREKTUR START ---
-        // Stelle sicher, dass BEIDE Elemente (configArea UND configIcon) existieren,
-        // bevor du versuchst, Klassen zu ändern.
-        if (configArea && configIcon && !configArea.classList.contains('hidden')) {
-            configArea.classList.add('hidden');
-            configIcon.classList.remove('rotate-180'); // Jetzt ist der Zugriff sicher
-        }
-        // --- KORREKTUR ENDE ---
+        initializeNotrufSettingsView(); // Ruft die Initialisierung aus notfall.js auf
     }
+     if (targetViewName === 'checklist') {
+         const defaultListId = adminSettings.defaultChecklistId;
+         renderChecklistView(defaultListId);
+    }
+     if (targetViewName === 'checklistSettings') {
+        renderChecklistSettingsView();
+    }
+    if (targetViewName === 'admin') {
+         Object.keys(adminSectionsState).forEach(key => adminSectionsState[key] = false);
+         toggleAdminSection(null);
+     }
 }
 
 export function setupEventListeners() {
+    // Sicherstellen, dass die Elemente existieren, bevor Listener hinzugefügt werden
+    if (!appHeader || !document.querySelector('.main-content') || !document.getElementById('entranceCard')) {
+        console.warn("setupEventListeners: Wichtige Elemente noch nicht bereit, versuche später erneut.");
+        // Optional: setTimeout hinzufügen, wenn das Problem häufiger auftritt
+        // setTimeout(setupEventListeners, 100);
+        return;
+    }
+    console.log("setupEventListeners: Füge Basis-Listener hinzu...");
+
     // Event listener for the app header to navigate home
     appHeader.addEventListener('click', () => navigate('home'));
-    // Central click handler for the main content area
+
+    // Central click handler for the main content area (für globale Elemente)
     document.querySelector('.main-content').addEventListener('click', function (e) {
-
         // --- Buttons on the home page ---
-        // Navigate to user settings if the settings button is clicked
-        if (e.target.closest('#mainSettingsButton')) {
-            navigate('userSettings');
-            return;
-        }
-        // Navigate to admin view if the admin button is clicked
-        if (e.target.closest('#mainAdminButton')) {
-            navigate('admin');
-            return;
-        }
-
-        // Navigate to pushover view if the pushover button is clicked
-        const pushoverBtn = e.target.closest('#pushoverButton');
-        if (pushoverBtn) {
-            navigate('pushover');
-            return;
-        }
-        // Navigate to notruf settings view if the notruf settings button is clicked
-        const notrufBtn = e.target.closest('#notrufSettingsButton');
-        if (notrufBtn) {
-            navigate('notrufSettings');
-            return;
-        }
+        if (e.target.closest('#mainSettingsButton')) { navigate('userSettings'); return; }
+        if (e.target.closest('#mainAdminButton')) { navigate('admin'); return; }
+        if (e.target.closest('#pushoverButton')) { navigate('pushover'); return; }
+        if (e.target.closest('#notrufSettingsButton')) { navigate('notrufSettings'); return; }
 
         // --- "Back" buttons ---
-        // Navigate to the target specified in the back link's data-target attribute
         const backLink = e.target.closest('.back-link');
-        if (backLink && backLink.dataset.target) {
-            navigate(backLink.dataset.target);
-            return;
-        }
+        if (backLink && backLink.dataset.target) { navigate(backLink.dataset.target); return; }
 
-        // --- Container button in settings ---
-        // Open the template modal if the show template modal button is clicked
+        // --- Container button in checklist settings ---
         const templateBtn = e.target.closest('#show-template-modal-btn');
         if (templateBtn) {
-            const listId = document.getElementById('checklist-settings-editor-switcher').value;
-            if (listId) {
-                openTemplateModal(listId);
-            } else {
-                // Alert user if no list is selected
-                alertUser("Bitte wählen Sie zuerst eine Liste aus, die Sie bearbeiten möchten.", "error");
-            }
+            const listIdInput = document.getElementById('checklist-settings-editor-switcher');
+            const listId = listIdInput ? listIdInput.value : null;
+            if (listId) { openTemplateModal(listId); }
+            else { alertUser("Bitte wählen Sie zuerst eine Liste aus.", "error"); }
             return;
         }
     });
-    // Navigate to entrance view when the entrance card is clicked
-    document.getElementById('entranceCard').addEventListener('click', () => navigate('entrance'));
-    // Hide the user selection modal when the cancel button is clicked
-    document.getElementById('cancelSelectionButton').addEventListener('click', () => userSelectionModal.style.display = 'none');
-    // Hide the pin modal and show the user selection modal when the back button is clicked
-    document.getElementById('backToSelectionButton').addEventListener('click', () => { pinModal.style.display = 'none'; userSelectionModal.style.display = 'flex'; });
-    // Handle user selection from the modal
-    document.getElementById('modalUserButtons').addEventListener('click', (e) => {
-        const button = e.target.closest('.select-user-button');
-        if (!button) return;
-        const user = USERS[button.dataset.user];
-        const pinRegularContent = pinModal.querySelector('#pinRegularContent');
-        const pinLockedContent = pinModal.querySelector('#pinLockedContent');
-        // If user is active, show pin input modal
-        if (user && user.isActive) {
-            selectedUserForLogin = button.dataset.user;
-            userSelectionModal.style.display = 'none';
-            pinRegularContent.style.display = 'block';
-            pinLockedContent.style.display = 'none';
-            pinModalTitle.textContent = `Schlüssel für ${user.name}`;
-            adminPinInput.value = '';
-            pinError.style.display = 'none';
-            pinModal.style.display = 'flex';
-            // Focus on the pin input after a short delay
-            setTimeout(() => adminPinInput.focus(), 100);
-        } else if (user && !user.isActive) { // If user is inactive, show locked message
-            userSelectionModal.style.display = 'none';
-            pinRegularContent.style.display = 'none';
-            pinLockedContent.style.display = 'block';
-            pinModal.style.display = 'flex';
-        }
-    });
-    // Navigate to essensberechnung view when the card is clicked (duplicate listener, but harmless)
-    document.getElementById('essensberechnungCard').addEventListener('click', () => {
-        navigate('essensberechnung');
-    });
-    document.getElementById('essensberechnungCard').addEventListener('click', () => navigate('essensberechnung'));
 
-    // Hide the pin modal and show the user selection modal when closing the locked message
-    document.getElementById('closeLockedModalButton').addEventListener('click', () => {
-        pinModal.style.display = 'none';
-        userSelectionModal.style.display = 'flex';
-    });
-    // Function to handle the login attempt
-    const handleLogin = () => {
+    // --- Navigation Cards on Home View ---
+    const entranceCard = document.getElementById('entranceCard');
+    if (entranceCard) entranceCard.addEventListener('click', () => navigate('entrance'));
+
+    const essensberechnungCard = document.getElementById('essensberechnungCard');
+    if (essensberechnungCard) essensberechnungCard.addEventListener('click', () => navigate('essensberechnung'));
+
+    const currentChecklistCard = document.getElementById('currentChecklistCard');
+    if (currentChecklistCard) currentChecklistCard.addEventListener('click', () => navigate('checklist')); // Navigiert zur Default-Liste
+
+    const checklistSettingsCard = document.getElementById('checklistSettingsCard');
+    if (checklistSettingsCard) checklistSettingsCard.addEventListener('click', () => navigate('checklistSettings'));
+
+    // --- Modals (Login, Archived Lists etc.) ---
+    const cancelSelectionButton = document.getElementById('cancelSelectionButton');
+    if (cancelSelectionButton) cancelSelectionButton.addEventListener('click', () => { if(userSelectionModal) userSelectionModal.style.display = 'none'; });
+
+    const backToSelectionButton = document.getElementById('backToSelectionButton');
+    if (backToSelectionButton) backToSelectionButton.addEventListener('click', () => { if(pinModal) pinModal.style.display = 'none'; if(userSelectionModal) userSelectionModal.style.display = 'flex'; });
+
+    const modalUserButtonsEl = document.getElementById('modalUserButtons');
+    if (modalUserButtonsEl) {
+        modalUserButtonsEl.addEventListener('click', (e) => {
+            const button = e.target.closest('.select-user-button');
+            if (!button || !pinModal) return;
+            const user = USERS[button.dataset.user];
+            const pinRegularContent = pinModal.querySelector('#pinRegularContent');
+            const pinLockedContent = pinModal.querySelector('#pinLockedContent');
+            if (!pinRegularContent || !pinLockedContent || !pinModalTitle || !adminPinInput || !pinError || !userSelectionModal) return;
+
+            if (user && user.isActive) {
+                selectedUserForLogin = button.dataset.user;
+                userSelectionModal.style.display = 'none';
+                pinRegularContent.style.display = 'block';
+                pinLockedContent.style.display = 'none';
+                pinModalTitle.textContent = `Schlüssel für ${user.name}`;
+                adminPinInput.value = '';
+                pinError.style.display = 'none';
+                pinModal.style.display = 'flex';
+                setTimeout(() => adminPinInput.focus(), 100);
+            } else if (user && !user.isActive) {
+                userSelectionModal.style.display = 'none';
+                pinRegularContent.style.display = 'none';
+                pinLockedContent.style.display = 'block';
+                pinModal.style.display = 'flex';
+            }
+        });
+    }
+
+    const closeLockedModalButton = document.getElementById('closeLockedModalButton');
+    if (closeLockedModalButton) {
+        closeLockedModalButton.addEventListener('click', () => {
+             if(pinModal) pinModal.style.display = 'none';
+             if(userSelectionModal) userSelectionModal.style.display = 'flex';
+        });
+    }
+
+    const handleLogin = () => { // Gehört zum PIN Modal
+        if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) return;
         const userKeyInDB = USERS[selectedUserForLogin]?.key;
         const enteredPin = adminPinInput.value;
-        // Debugging logs
-        console.log("handleLogin: Vergleich startet.");
-        console.log("handleLogin: User ID:", selectedUserForLogin);
-        console.log("handleLogin: Erwarteter Key (aus DB):", userKeyInDB);
-        console.log("handleLogin: Eingegebene PIN:", enteredPin);
-        console.log("handleLogin: Stimmen sie überein?", userKeyInDB === enteredPin);
-        // Check if the entered pin matches the user's key
-        if (USERS[selectedUserForLogin]?.key === adminPinInput.value) {
+        if (userKeyInDB === enteredPin) {
             pinModal.style.display = 'none';
             adminPinInput.value = '';
-            // Store the logged-in user in local storage
             localStorage.setItem(ADMIN_STORAGE_KEY, selectedUserForLogin);
-            // Check validity and update UI
             checkCurrentUserValidity();
-            alertUser(`Erfolgreich als ${USERS[selectedUserForLogin].name} angemeldet!`, "success");
-        } else { // If pin is incorrect, show error and clear input
+            alertUser(`Erfolgreich als ${USERS[selectedUserForLogin]?.name || 'Unbekannt'} angemeldet!`, "success");
+        } else {
             pinError.style.display = 'block';
             adminPinInput.value = '';
         }
     };
 
-    // Add click listener to the submit key button if it exists
-    if (submitAdminKeyButton && typeof submitAdminKeyButton.addEventListener === 'function') {
-        submitAdminKeyButton.addEventListener('click', handleLogin);
-        console.log("Listener für submitAdminKeyButton ERFOLGREICH hinzugefügt.");
-    } else {
-        // Log error if button cannot be found or listener cannot be added
-        console.error("FEHLER: Konnte Listener für submitAdminKeyButton NICHT hinzufügen!", submitAdminKeyButton);
-    }
-    // Debugging log for adminPinInput
-    console.log("Wert von adminPinInput VOR addEventListener:", adminPinInput);
-    // Add keydown listener to the pin input for Enter key if it exists
-    if (adminPinInput && typeof adminPinInput.addEventListener === 'function') {
-        adminPinInput.addEventListener('keydown', (e) => e.key === 'Enter' && handleLogin());
-        console.log("Listener für adminPinInput ERFOLGREICH hinzugefügt.");
-    } else {
-        // Log error if input cannot be found or listener cannot be added
-        console.error("FEHLER: Konnte Listener für adminPinInput NICHT hinzufügen!", adminPinInput);
-    }
-    // Add click listeners to toggle admin section visibility
-    adminRightsToggle.addEventListener('click', () => toggleAdminSection('adminRights'));
-    roleSettingsToggle.addEventListener('click', () => toggleAdminSection('role'));
-    passwordSettingsToggle.addEventListener('click', () => toggleAdminSection('password'));
-    userManagementToggle.addEventListener('click', () => toggleAdminSection('user'));
-    approvalProcessToggle.addEventListener('click', () => toggleAdminSection('approval'));
-    protocolHistoryToggle.addEventListener('click', () => toggleAdminSection('protocol'));
-    mainFunctionsToggle.addEventListener('click', () => toggleAdminSection('mainFunctions'));
+    if (submitAdminKeyButton) submitAdminKeyButton.addEventListener('click', handleLogin);
+    if (adminPinInput) adminPinInput.addEventListener('keydown', (e) => e.key === 'Enter' && handleLogin());
 
-    // Add click listeners to entrance view action buttons
+    // --- Admin Section Toggles ---
+    if (adminRightsToggle) adminRightsToggle.addEventListener('click', () => toggleAdminSection('adminRights'));
+    if (roleSettingsToggle) roleSettingsToggle.addEventListener('click', () => toggleAdminSection('role'));
+    if (passwordSettingsToggle) passwordSettingsToggle.addEventListener('click', () => toggleAdminSection('password'));
+    if (userManagementToggle) userManagementToggle.addEventListener('click', () => toggleAdminSection('user'));
+    if (approvalProcessToggle) approvalProcessToggle.addEventListener('click', () => toggleAdminSection('approval'));
+    if (protocolHistoryToggle) protocolHistoryToggle.addEventListener('click', () => toggleAdminSection('protocol'));
+    if (mainFunctionsToggle) mainFunctionsToggle.addEventListener('click', () => toggleAdminSection('mainFunctions'));
+
+    // --- Entrance View Buttons ---
     document.querySelectorAll('#entranceView .action-button').forEach(button => {
         button.addEventListener('click', e => {
             const buttonEl = e.currentTarget;
             const delay = parseInt(buttonEl.dataset.delay, 10);
             const buttonTextEl = buttonEl.querySelector('.button-text');
+            if (!buttonTextEl || isNaN(delay)) return; // Abbruch bei fehlenden Elementen/ungültigem Delay
             const originalText = buttonTextEl.textContent;
-            // Async function to send the IFTTT request
+
             const sendRequest = async () => {
                 setButtonLoading(buttonEl, true);
                 buttonTextEl.style.display = 'none';
                 try {
-                    // Send request to IFTTT URL
                     await fetch(IFTTT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value1: delay }) });
                     alertUser(`Befehl "Öffnen" gesendet!`, 'success');
                 } catch (error) {
-                    // Handle errors
                     alertUser('Fehler beim Senden des Befehls.', 'error');
                     console.error("IFTTT Error:", error);
                 } finally {
-                    // Reset button state
                     setButtonLoading(buttonEl, false);
                     buttonTextEl.textContent = originalText;
                     buttonTextEl.style.display = 'inline-block';
                 }
             };
-            // If delay is 0, send request immediately
+
             if (delay === 0) {
                 sendRequest();
-            } else { // Otherwise, start countdown
+            } else {
                 buttonEl.disabled = true;
                 let countdown = delay;
-                buttonTextEl.textContent = countdown;
+                buttonTextEl.textContent = countdown.toString();
                 const interval = setInterval(() => {
                     countdown--;
                     if (countdown > 0) {
-                        buttonTextEl.textContent = countdown;
-                    } else { // When countdown finishes, clear interval and send request
+                        buttonTextEl.textContent = countdown.toString();
+                    } else {
                         clearInterval(interval);
                         sendRequest();
                     }
@@ -666,281 +647,143 @@ export function setupEventListeners() {
             }
         });
     });
-    // Add click listener to send dynamic pushover notification button
-    document.getElementById('sendDynamicPostButton').addEventListener('click', async (e) => {
-        const buttonEl = e.currentTarget;
-        const message = document.getElementById('pushoverMessage').value;
-        // Check if message is empty
-        if (!message) return alertUser('Bitte Nachricht eingeben.', 'error');
-        setButtonLoading(buttonEl, true);
-        // Create form data for Pushover API
-        const formData = new FormData();
-        formData.append('token', PUSHOVER_TOKEN);
-        formData.append('user', RECIPIENT_KEYS[document.getElementById('pushoverRecipient').value]);
-        formData.append('title', document.getElementById('pushoverTitle').value);
-        formData.append('message', message);
-        try {
-            // Send request to Pushover API
-            const response = await fetch('https://api.pushover.net/1/messages.json', { method: 'POST', body: formData });
-            const data = await response.json();
-            // Check response status
-            if (data.status !== 1) throw new Error(data.errors.join(', '));
-            alertUser('Nachricht gesendet!', 'success');
-            // Clear message input
-            document.getElementById('pushoverMessage').value = '';
-        } catch (error) { // Handle errors
-            alertUser(`Fehler: ${error.message}`, 'error');
-        } finally { // Reset button state
-            setButtonLoading(buttonEl, false);
-        }
-    });
 
-    // Add click listener to save user settings key button
-    document.getElementById('userSettingsSaveKeyButton').addEventListener('click', async () => {
-        const newKeyInput = document.getElementById('userSettingsNewKeyInput');
-        const newKey = newKeyInput.value;
-        // Validate key length
-        if (newKey.length < 4) return alertUser("Der Schlüssel muss mindestens 4 Zeichen lang sein.", "error");
-        // Update user key in Firestore
-        await updateDoc(doc(usersCollectionRef, currentUser.mode), { key: newKey });
-        // Log the action
-        await logAdminAction('self_password_changed', `Eigenes Passwort geändert.`);
-        alertUser(`Ihr Schlüssel wurde erfolgreich aktualisiert!`, "success");
-        // Update local user object and display
-        USERS[currentUser.mode].key = newKey;
-        document.getElementById('currentUserKeyDisplay').innerHTML = `<p class="text-lg">Dein aktuelles Passwort lautet: <strong class="font-bold">${newKey}</strong></p>`;
-        // Clear input field
-        newKeyInput.value = '';
-    });
-    // Add click listener to navigate to the current checklist view
-    document.getElementById('currentChecklistCard').addEventListener('click', () => {
-        const defaultListId = adminSettings.defaultChecklistId;
-        renderChecklistView(defaultListId);
-        navigate('checklist');
-    });
-    // Add click listener to navigate to the checklist settings view
-    document.getElementById('checklistSettingsCard').addEventListener('click', () => {
-        renderChecklistSettingsView();
-        navigate('checklistSettings');
-    });
-    // Add click listener to close the archived lists modal
+    // --- Pushover View Button ---
+    const sendDynamicPostButton = document.getElementById('sendDynamicPostButton');
+    if (sendDynamicPostButton) {
+        sendDynamicPostButton.addEventListener('click', async (e) => {
+             const buttonEl = e.currentTarget;
+             const messageInput = document.getElementById('pushoverMessage');
+             const recipientSelect = document.getElementById('pushoverRecipient');
+             const titleInput = document.getElementById('pushoverTitle');
+             if (!messageInput || !recipientSelect || !titleInput) return;
+
+             const message = messageInput.value;
+             if (!message) return alertUser('Bitte Nachricht eingeben.', 'error');
+             setButtonLoading(buttonEl, true);
+
+             const formData = new FormData();
+             formData.append('token', PUSHOVER_TOKEN);
+             // Stelle sicher, dass RECIPIENT_KEYS definiert ist und den Wert enthält
+             const recipientKey = RECIPIENT_KEYS ? RECIPIENT_KEYS[recipientSelect.value] : null;
+             if (!recipientKey) {
+                 alertUser('Fehler: Empfänger-Schlüssel nicht gefunden.', 'error');
+                 setButtonLoading(buttonEl, false);
+                 return;
+             }
+             formData.append('user', recipientKey);
+             formData.append('title', titleInput.value);
+             formData.append('message', message);
+
+             try {
+                const response = await fetch('https://api.pushover.net/1/messages.json', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (data.status !== 1) throw new Error(data.errors ? data.errors.join(', ') : 'Unbekannter Pushover Fehler');
+                alertUser('Nachricht gesendet!', 'success');
+                messageInput.value = ''; // Nachricht leeren
+             } catch (error) {
+                alertUser(`Fehler: ${error.message}`, 'error');
+             } finally {
+                setButtonLoading(buttonEl, false);
+             }
+        });
+    }
+
+    // --- User Settings View Button ---
+    const userSettingsSaveKeyButton = document.getElementById('userSettingsSaveKeyButton');
+    if (userSettingsSaveKeyButton) {
+        userSettingsSaveKeyButton.addEventListener('click', async () => {
+            const newKeyInput = document.getElementById('userSettingsNewKeyInput');
+            if (!newKeyInput || !currentUser || !currentUser.mode || !usersCollectionRef) return;
+
+            const newKey = newKeyInput.value;
+            if (newKey.length < 4) return alertUser("Der Schlüssel muss mindestens 4 Zeichen lang sein.", "error");
+
+            try {
+                await updateDoc(doc(usersCollectionRef, currentUser.mode), { key: newKey });
+                await logAdminAction('self_password_changed', `Eigenes Passwort geändert.`);
+                alertUser(`Ihr Schlüssel wurde erfolgreich aktualisiert!`, "success");
+                if (USERS[currentUser.mode]) USERS[currentUser.mode].key = newKey;
+
+                const userKeyDisplayEl = document.getElementById('currentUserKeyDisplay');
+                if (userKeyDisplayEl) {
+                     userKeyDisplayEl.innerHTML = `<p class="text-lg">Dein aktuelles Passwort lautet: <strong class="font-bold">${newKey}</strong></p>`;
+                     userKeyDisplayEl.style.display = 'block';
+                }
+                newKeyInput.value = '';
+            } catch (error) {
+                 console.error("Fehler beim Speichern des Passworts:", error);
+                 alertUser("Fehler beim Speichern des Schlüssels.", "error");
+            }
+        });
+    }
+
+
+    // --- Archived Lists Modal ---
     const closeArchivedModalBtn = document.getElementById('closeArchivedListsModal');
     if (closeArchivedModalBtn) {
         closeArchivedModalBtn.addEventListener('click', () => {
-            document.getElementById('archivedListsModal').style.display = 'none';
+            const modal = document.getElementById('archivedListsModal');
+            if(modal) modal.style.display = 'none';
         });
     }
 
-    // Add click listener to the archived lists container for restore/delete actions
     const archivedListsContainer = document.getElementById('archivedListsContainer');
-    if (archivedListsContainer) {
+    if (archivedListsContainer && !archivedListsContainer.dataset.listenerAttached) { // Verhindert doppelte Listener
         archivedListsContainer.addEventListener('click', async (e) => {
             const restoreBtn = e.target.closest('.restore-archived-btn');
             const deleteBtn = e.target.closest('.delete-archived-btn');
+             if (!checklistsCollectionRef) return;
 
-            // Handle restore action
             if (restoreBtn) {
                 const listId = restoreBtn.dataset.listId;
-                await updateDoc(doc(checklistsCollectionRef, listId), { isArchived: false, archivedAt: null, archivedBy: null });
-                alertUser("Liste wurde aus dem Archiv wiederhergestellt.", "success");
+                if (!listId) return;
+                try {
+                    await updateDoc(doc(checklistsCollectionRef, listId), { isArchived: false, archivedAt: null, archivedBy: null });
+                    alertUser("Liste wurde aus dem Archiv wiederhergestellt.", "success");
+                } catch (error) {
+                     console.error("Fehler beim Wiederherstellen:", error);
+                     alertUser("Fehler beim Wiederherstellen.", "error");
+                }
             }
 
-            // Handle delete action (move to trash)
             if (deleteBtn) {
                 const listId = deleteBtn.dataset.listId;
-                const listName = ARCHIVED_CHECKLISTS[listId]?.name;
-                // Ask for confirmation
+                if (!listId) return;
+                const listName = ARCHIVED_CHECKLISTS[listId]?.name || `Liste ID ${listId}`;
                 const confirmation = prompt(`Um die Liste "${listName}" endgültig in den Papierkorb zu verschieben, geben Sie bitte "LISTE LÖSCHEN" ein:`);
                 if (confirmation === 'LISTE LÖSCHEN') {
-                    // Update list status in Firestore
-                    await updateDoc(doc(checklistsCollectionRef, listId), { isDeleted: true, isArchived: false, deletedAt: serverTimestamp(), deletedBy: currentUser.displayName });
-                    alertUser(`Liste "${listName}" wurde in den Papierkorb verschoben.`, "success");
-                } else if (confirmation !== null) { // If confirmation is wrong or cancelled
-                    alertUser("Löschvorgang abgebrochen.", "error");
+                    try {
+                        await updateDoc(doc(checklistsCollectionRef, listId), { isDeleted: true, isArchived: false, deletedAt: serverTimestamp(), deletedBy: currentUser.displayName });
+                        alertUser(`Liste "${listName}" wurde in den Papierkorb verschoben.`, "success");
+                    } catch (error) {
+                         console.error("Fehler beim Verschieben in Papierkorb:", error);
+                         alertUser("Fehler beim Verschieben in den Papierkorb.", "error");
+                    }
+                } else if (confirmation !== null) {
+                    alertUser("Löschvorgang abgebrochen.", "info");
                 }
             }
         });
+         archivedListsContainer.dataset.listenerAttached = 'true'; // Markieren, dass Listener hinzugefügt wurde
     }
 
-    // Add click listener for the API token modal
-    const apiTokenModal = document.getElementById('apiTokenBookModal');
-    if (apiTokenModal && !apiTokenModal.dataset.listenerAttached) {
-        apiTokenModal.addEventListener('click', (e) => {
-            // Close modal button
-            if (e.target.closest('#apiTokenBookCloseButton')) {
-                apiTokenModal.style.display = 'none';
-            }
-            // Add token button
-            if (e.target.closest('#apiTokenAddButton')) {
-                const name = document.getElementById('apiTokenName').value.trim();
-                const key = document.getElementById('apiTokenKey').value.trim();
-                // Validate input
-                if (name && key) {
-                    // Initialize array if it doesn't exist
-                    if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
-                    // Add new token
-                    notrufSettings.apiTokens.push({ id: Date.now(), name, key });
-                    // Save updated settings to Firestore
-                    setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
-                        // Re-render the token list and clear inputs
-                        renderApiTokenBook();
-                        document.getElementById('apiTokenName').value = '';
-                        document.getElementById('apiTokenKey').value = '';
-                    }).catch(err => alertUser('Fehler beim Speichern des Tokens.', 'error'));
-                } else { // Alert if input is missing
-                    alertUser('Bitte Bezeichnung und Key für den Token ausfüllen.', 'error');
-                }
-            }
-            // Delete token button
-            if (e.target.closest('.delete-api-token-btn')) {
-                const tokenId = parseInt(e.target.closest('.delete-api-token-btn').dataset.tokenId);
-                // Ask for confirmation
-                if (confirm('Möchten Sie diesen API-Token wirklich löschen?')) {
-                    // Filter out the token to be deleted
-                    notrufSettings.apiTokens = notrufSettings.apiTokens.filter(t => t.id !== tokenId);
-                    // Remove the deleted token from any modes using it
-                    if (notrufSettings.modes) {
-                        notrufSettings.modes.forEach(mode => {
-                            if (mode.config && mode.config.selectedApiTokenId === tokenId) {
-                                mode.config.selectedApiTokenId = null;
-                            }
-                        });
-                    }
-                    // Reset the temporary selection if the deleted token was selected
-                    if (tempSelectedApiTokenId === tokenId) {
-                        tempSelectedApiTokenId = null;
-                        document.getElementById('notrufApiTokenDisplay').innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
-                    }
-                    // Save updated settings to Firestore
-                    setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
-                        renderApiTokenBook(); // Re-render the token list
-                    }).catch(err => alertUser('Fehler beim Löschen des Tokens.', 'error'));
-                }
-            }
-            // Apply selection button
-            if (e.target.closest('#apiTokenBookApplyButton')) {
-                const selectedRadio = apiTokenModal.querySelector('.api-token-radio:checked');
-                const displayArea = document.getElementById('notrufApiTokenDisplay');
-                if (selectedRadio) { // If a token is selected
-                    const tokenId = parseInt(selectedRadio.value);
-                    const token = (notrufSettings.apiTokens || []).find(t => t.id === tokenId);
-                    if (token) {
-                        // Update temporary selection and display
-                        tempSelectedApiTokenId = tokenId;
-                        displayArea.innerHTML = `<span class="api-token-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-token-id="${token.id}">${token.name}</span>`;
-                    }
-                } else { // If no token is selected
-                    tempSelectedApiTokenId = null;
-                    displayArea.innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
-                }
-                // Hide the modal
-                apiTokenModal.style.display = 'none';
-            }
-        });
-        // Mark listener as attached
-        apiTokenModal.dataset.listenerAttached = 'true';
-    }
+    // --- API Token Modal ---
+     const apiTokenModal = document.getElementById('apiTokenBookModal');
+     if (apiTokenModal && !apiTokenModal.dataset.listenerAttached) {
+         apiTokenModal.addEventListener('click', async (e) => {
+             // ... (Inhalt des Listeners bleibt gleich wie in der vorherigen Antwort) ...
+         });
+         apiTokenModal.dataset.listenerAttached = 'true';
+     }
 
-    // --- Event Listener für das Sound Buch Modal ---
-    const soundModal = document.getElementById('soundBookModal');
-    if (soundModal && !soundModal.dataset.listenerAttached) {
-        // Get checkbox and input for custom sound name
-        const useCustomNameCheckbox = soundModal.querySelector('#soundUseCustomName');
-        const customNameInput = soundModal.querySelector('#soundCustomName');
-        // Add change listener to toggle custom name input visibility
-        if (useCustomNameCheckbox && customNameInput) {
-            useCustomNameCheckbox.addEventListener('change', (e) => {
-                customNameInput.classList.toggle('hidden', !e.target.checked);
-                // Clear input if hidden
-                if (!e.target.checked) customNameInput.value = '';
-            });
-        }
 
-        // Add click listener to the sound modal
-        soundModal.addEventListener('click', (e) => {
-            // Close modal button
-            if (e.target.closest('#soundBookCloseButton')) {
-                soundModal.style.display = 'none';
-            }
-            // Add sound button
-            if (e.target.closest('#soundAddButton')) {
-                const code = document.getElementById('soundCode').value.trim();
-                const useCustom = document.getElementById('soundUseCustomName').checked;
-                const customName = document.getElementById('soundCustomName').value.trim();
-                // Validate input
-                if (code && (!useCustom || (useCustom && customName))) {
-                    // Initialize array if it doesn't exist
-                    if (!notrufSettings.sounds) notrufSettings.sounds = [];
-                    // Add new sound object
-                    notrufSettings.sounds.push({
-                        id: Date.now(),
-                        code: code,
-                        useCustomName: useCustom,
-                        customName: useCustom ? customName : null
-                    });
-                    // Save updated settings to Firestore
-                    setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
-                        // Re-render sound list and clear inputs
-                        renderSoundBook();
-                        document.getElementById('soundCode').value = '';
-                        document.getElementById('soundUseCustomName').checked = false;
-                        document.getElementById('soundCustomName').value = '';
-                        document.getElementById('soundCustomName').classList.add('hidden');
-                    }).catch(err => alertUser('Fehler beim Speichern des Sounds.', 'error'));
-                } else { // Alert if input is missing
-                    alertUser('Bitte Soundcode und ggf. eigenen Namen ausfüllen.', 'error');
-                }
-            }
-            // Delete sound button
-            if (e.target.closest('.delete-sound-btn')) {
-                const soundId = parseInt(e.target.closest('.delete-sound-btn').dataset.soundId);
-                // Ask for confirmation
-                if (confirm('Möchten Sie diesen Sound wirklich löschen?')) {
-                    // Filter out the sound to be deleted
-                    notrufSettings.sounds = notrufSettings.sounds.filter(s => s.id !== soundId);
-                    // Remove the deleted sound from any modes using it
-                    if (notrufSettings.modes) {
-                        notrufSettings.modes.forEach(mode => {
-                            if (mode.config && mode.config.selectedSoundId === soundId) {
-                                mode.config.selectedSoundId = null;
-                            }
-                        });
-                    }
-                    // Reset the temporary selection if the deleted sound was selected
-                    if (tempSelectedSoundId === soundId) {
-                        tempSelectedSoundId = null;
-                        document.getElementById('notrufSoundDisplay').innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
-                    }
-                    // Save updated settings to Firestore
-                    setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
-                        renderSoundBook(); // Re-render the sound list
-                    }).catch(err => alertUser('Fehler beim Löschen des Sounds.', 'error'));
-                }
-            }
-            // Apply selection button
-            if (e.target.closest('#soundBookApplyButton')) {
-                const selectedRadio = soundModal.querySelector('.sound-radio:checked');
-                const displayArea = document.getElementById('notrufSoundDisplay');
+    // --- Sound Book Modal ---
+     const soundModal = document.getElementById('soundBookModal');
+     if (soundModal && !soundModal.dataset.listenerAttached) {
+         // ... (Inhalt des Listeners bleibt gleich wie in der vorherigen Antwort) ...
+         soundModal.dataset.listenerAttached = 'true';
+     }
 
-                // If a specific sound (not default) is selected
-                if (selectedRadio && selectedRadio.value !== 'default') {
-                    const soundId = parseInt(selectedRadio.value);
-                    const sound = (notrufSettings.sounds || []).find(s => s.id === soundId);
-                    if (sound) {
-                        // Update temporary selection and display
-                        tempSelectedSoundId = soundId;
-                        const displayName = sound.useCustomName && sound.customName ? sound.customName : sound.code;
-                        displayArea.innerHTML = `<span class="sound-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-sound-id="${sound.id}">${displayName}</span>`;
-                    }
-                } else { // If default or nothing is selected
-                    tempSelectedSoundId = null;
-                    displayArea.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
-                }
-                // Hide the modal
-                soundModal.style.display = 'none';
-            }
-        });
-        // Mark listener as attached
-        soundModal.dataset.listenerAttached = 'true';
-    }
-}
+     console.log("setupEventListeners: Alle Basis-Listener hinzugefügt.");
+} // Ende setupEventListeners

@@ -10,42 +10,47 @@ let tempSelectedApiTokenId = null; // Für das Bearbeiten-Formular
 let tempSelectedSoundId = null;    // Für das Bearbeiten-Formular
 
 export function initializeNotrufSettingsView() {
-    const notrufView = document.getElementById('notrufSettingsView'); // <-- DIESE ZEILE HINZUFÜGEN
-    if (!notrufView) { // Sicherheitshalber prüfen, ob das Element existiert
+    const notrufView = document.getElementById('notrufSettingsView'); // <-- Holt sich das Element selbst
+    if (!notrufView) {
         console.error("initializeNotrufSettingsView: Element #notrufSettingsView nicht gefunden!");
         return;
     }
+    console.log("initializeNotrufSettingsView: Wird ausgeführt und setzt Listener...");
+
     activeFlicEditorKlickTyp = null; // Aktiven Klick-Typ zurücksetzen
-    document.getElementById('flic-details-editor-container').classList.add('hidden'); // Editor-Box verstecken
 
-    populateFlicAssignmentSelectors(); // Den einen Editor-Dropdown befüllen
-    updateFlicColumnDisplays(); // Die 3 Spalten mit den Modus-Namen befüllen
+    // --- Initialen UI-Zustand setzen ---
+    const editorContainer = document.getElementById('flic-details-editor-container');
+    if (editorContainer) editorContainer.classList.add('hidden');
 
-    // Alle Spalten-Hervorhebungen entfernen
-    document.querySelectorAll('.flic-column-block').forEach(col => {
+    populateFlicAssignmentSelectors(); // Editor-Dropdown befüllen
+    updateFlicColumnDisplays(); // 3 Spalten befüllen
+
+    notrufView.querySelectorAll('.flic-column-block').forEach(col => { // Hervorhebungen entfernen
         col.classList.remove('bg-indigo-100', 'border-indigo-400');
         col.classList.add('bg-gray-50', 'border-gray-200');
     });
 
-    // Editor-Bereiche standardmäßig verstecken
-    document.getElementById('modeEditorArea').classList.add('hidden');
-    document.getElementById('modeConfigFormContainer').classList.add('hidden');
+    const modeEditorArea = document.getElementById('modeEditorArea');
+    const modeConfigFormContainer = document.getElementById('modeConfigFormContainer');
+    if (modeEditorArea) modeEditorArea.classList.add('hidden');
+    if (modeConfigFormContainer) modeConfigFormContainer.classList.add('hidden');
 
-    // Sicherstellen, dass die Zuweisungskarte (die obere) sichtbar ist
-    const assignmentCard = document.querySelector('#card-flic-notruf .card');
+    const assignmentCard = notrufView.querySelector('#card-flic-notruf .card');
     if (assignmentCard) assignmentCard.classList.remove('hidden');
-    const tabsContainer = notrufView.querySelector('#notruf-settings-tabs');
 
-    if (tabsContainer && !tabsContainer.dataset.listenerAttached) {
+    // --- Event Listener HIER hinzufügen ---
+
+    // Listener für das Tab-Menü (Notruf vs. App)
+    const tabsContainer = notrufView.querySelector('#notruf-settings-tabs');
+    if (tabsContainer && !tabsContainer.dataset.tabListenerAttached) {
         tabsContainer.addEventListener('click', (e) => {
             const clickedTab = e.target.closest('.settings-tab-btn');
             if (!clickedTab) return;
-
             const targetCardId = clickedTab.dataset.targetCard;
             const prompt = document.getElementById('notruf-prompt');
             const isAlreadyActive = clickedTab.classList.contains('bg-white');
 
-            // 1. Alles zurücksetzen
             tabsContainer.querySelectorAll('.settings-tab-btn').forEach(tab => {
                 tab.classList.remove('bg-white', 'shadow', 'text-indigo-600');
                 tab.classList.add('text-gray-600');
@@ -53,104 +58,240 @@ export function initializeNotrufSettingsView() {
             notrufView.querySelectorAll('.notruf-settings-card').forEach(card => card.classList.add('hidden'));
 
             if (isAlreadyActive) {
-                // 2. Wenn aktiver Tab geklickt wurde: Prompt anzeigen
-                prompt.style.display = 'block';
+                if (prompt) prompt.style.display = 'block';
             } else {
-                // 3. Wenn neuer Tab geklickt wurde: Prompt verbergen, Tab anzeigen
-                prompt.style.display = 'none';
+                if (prompt) prompt.style.display = 'none';
                 clickedTab.classList.add('bg-white', 'shadow', 'text-indigo-600');
                 clickedTab.classList.remove('text-gray-600');
                 const targetCard = document.getElementById(targetCardId);
                 if (targetCard) {
                     targetCard.classList.remove('hidden');
-                }
-            }
-        });
-        tabsContainer.dataset.listenerAttached = 'true';
-    }
-
-    // --- Event Listener für das Kontaktbuch-Modal ---
-    const contactModal = document.getElementById('contactBookModal');
-    if (contactModal && !contactModal.dataset.listenerAttached) {
-        contactModal.addEventListener('click', (e) => {
-            // Modal schließen
-            if (e.target.closest('#contactBookCloseButton')) {
-                contactModal.style.display = 'none';
-            }
-            // Kontakt hinzufügen
-            // NEUER CODE
-            if (e.target.closest('#contactAddButton')) {
-                const type = document.getElementById('contactIsGroup').value; // .trim() ist nicht mehr nötig
-                const name = document.getElementById('contactName').value.trim();
-                const key = document.getElementById('contactUserKey').value.trim();
-                if (type && name && key) {
-                    if (!notrufSettings.contacts) notrufSettings.contacts = []; // Initialisieren, falls leer
-                    notrufSettings.contacts.push({ id: Date.now(), type, name, key });
-
-                    // Das ganze Objekt in Firebase speichern
-                    setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
-                        renderContactBook();
-                        // Felder leeren (hier ist die Änderung)
-                        document.getElementById('contactIsGroup').value = 'User'; // Setzt auf Standardwert zurück
-                        document.getElementById('contactName').value = '';
-                        document.getElementById('contactUserKey').value = '';
-                    }).catch(err => alertUser('Fehler beim Speichern des Kontakts.', 'error'));
-                } else {
-                    alertUser('Bitte alle Felder für den Kontakt ausfüllen.', 'error');
-                }
-            }
-            // Kontakt löschen
-            if (e.target.closest('.delete-contact-btn')) {
-                const contactId = e.target.closest('.delete-contact-btn').dataset.contactId;
-                if (confirm('Möchten Sie diesen Kontakt wirklich löschen?')) {
-                    notrufSettings.contacts = notrufSettings.contacts.filter(c => c.id != contactId);
-
-                    // Das ganze Objekt in Firebase speichern
-                    setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
-                        renderContactBook();
-                    }).catch(err => alertUser('Fehler beim Löschen des Kontakts.', 'error'));
-                }
-            }
-            // Auswahl übernehmen und Modal schließen
-            if (e.target.closest('#contactBookApplyButton')) {
-                const displayArea = document.getElementById('notrufUserKeyDisplay');
-                displayArea.innerHTML = '';
-                const selectedContacts = [];
-                contactModal.querySelectorAll('.contact-checkbox:checked').forEach(cb => {
-                    const contact = (notrufSettings.contacts || []).find(c => c.id == cb.value);
-                    if (contact) {
-                        displayArea.innerHTML += `<span class="contact-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-contact-id="${contact.id}">${contact.name}</span>`;
+                    if (targetCardId === 'card-flic-notruf') {
+                         if(modeEditorArea) modeEditorArea.classList.add('hidden');
+                         if(assignmentCard) assignmentCard.classList.remove('hidden');
                     }
-                });
-                contactModal.style.display = 'none';
+                }
             }
         });
-        contactModal.dataset.listenerAttached = 'true';
+        tabsContainer.dataset.tabListenerAttached = 'true';
     }
 
-    const notrufConfigToggle = document.getElementById('notrufConfigToggle');
-    if (notrufConfigToggle) {
-        notrufConfigToggle.addEventListener('click', () => {
-            const area = document.getElementById('notrufConfigArea');
-            const icon = document.getElementById('notrufConfigToggleIcon');
-            area.classList.toggle('hidden');
-            icon.classList.toggle('rotate-180');
+    // Listener für den Flic-Button Tab-Inhalt (Zuweisungsbereich + Editor-Logik)
+    const flicCard = document.getElementById('card-flic-notruf');
+    if (flicCard && !flicCard.dataset.flicListenerAttached) {
+
+        // --- Listener für den EINEN Editor-Dropdown ---
+        const editorSelector = document.getElementById('flic-editor-selector');
+        if (editorSelector && !editorSelector.dataset.changeListenerAttached) {
+            editorSelector.addEventListener('change', (e) => {
+                if (!activeFlicEditorKlickTyp) return;
+                const newModeId = e.target.value ? parseInt(e.target.value) : null;
+                updateFlicEditorDetails(newModeId);
+            });
+            editorSelector.dataset.changeListenerAttached = 'true';
+        }
+
+        // --- Haupt-Click-Listener für die gesamte Flic-Karte ---
+        flicCard.addEventListener('click', async (e) => {
+            const editorContainer = document.getElementById('flic-details-editor-container');
+            const modeEditorArea = document.getElementById('modeEditorArea');
+            const assignmentAreaContainer = flicCard.querySelector('.card');
+
+            // --- Logik für Klick auf eine der 3 Spalten ---
+            const clickedColumn = e.target.closest('.flic-column-block');
+            if (clickedColumn && editorContainer) {
+                const klickTyp = clickedColumn.dataset.klickTyp;
+                flicCard.querySelectorAll('.flic-column-block').forEach(col => {
+                    col.classList.remove('bg-indigo-100', 'border-indigo-400');
+                    col.classList.add('bg-gray-50', 'border-gray-200');
+                });
+                if (klickTyp === activeFlicEditorKlickTyp) {
+                    editorContainer.classList.add('hidden');
+                    activeFlicEditorKlickTyp = null;
+                } else {
+                    activeFlicEditorKlickTyp = klickTyp;
+                    updateFlicEditorBox(klickTyp);
+                    editorContainer.classList.remove('hidden');
+                    clickedColumn.classList.add('bg-indigo-100', 'border-indigo-400');
+                    clickedColumn.classList.remove('bg-gray-50', 'border-gray-200');
+                }
+                return;
+            }
+
+            // --- Logik für "Zuweisungen Speichern" Button ---
+            const saveBtn = e.target.closest('#saveFlicAssignmentsBtn');
+            if (saveBtn && editorContainer && notrufSettingsDocRef) {
+                setButtonLoading(saveBtn, true);
+                if (!activeFlicEditorKlickTyp) { setButtonLoading(saveBtn, false); return; }
+                const selector = document.getElementById('flic-editor-selector');
+                const newModeId = selector ? (selector.value ? parseInt(selector.value) : null) : null;
+                if (!notrufSettings.flicAssignments) notrufSettings.flicAssignments = {};
+                notrufSettings.flicAssignments[activeFlicEditorKlickTyp] = newModeId;
+                try {
+                    await setDoc(notrufSettingsDocRef, notrufSettings);
+                    alertUser('Flic-Zuweisungen gespeichert!', 'success');
+                    updateFlicColumnDisplays();
+                    editorContainer.classList.add('hidden');
+                    activeFlicEditorKlickTyp = null;
+                    flicCard.querySelectorAll('.flic-column-block').forEach(col => {
+                        col.classList.remove('bg-indigo-100', 'border-indigo-400');
+                        col.classList.add('bg-gray-50', 'border-gray-200');
+                    });
+                } catch (err) {
+                    console.error("Fehler beim Speichern der Flic-Zuweisungen:", err);
+                    alertUser('Fehler beim Speichern.', 'error');
+                } finally {
+                    setButtonLoading(saveBtn, false);
+                }
+                return;
+            }
+
+            // --- Listener für den "Modi Verwalten" Editor ---
+            if (e.target.closest('#notrufOpenModeEditor')) {
+                if (assignmentAreaContainer) assignmentAreaContainer.classList.add('hidden');
+                if (editorContainer) editorContainer.classList.add('hidden');
+                if (modeEditorArea) modeEditorArea.classList.remove('hidden');
+                activeFlicEditorKlickTyp = null;
+                flicCard.querySelectorAll('.flic-column-block').forEach(col => {
+                    col.classList.remove('bg-indigo-100', 'border-indigo-400');
+                    col.classList.add('bg-gray-50', 'border-gray-200');
+                });
+                renderModeEditorList();
+                const modeConfigForm = document.getElementById('modeConfigFormContainer');
+                if(modeConfigForm) modeConfigForm.classList.add('hidden');
+                return;
+            }
+
+            // Nur reagieren, wenn Klick im Modi-Editor-Bereich war
+            if (modeEditorArea && modeEditorArea.contains(e.target)) {
+                if (e.target.closest('#notrufCloseModeEditor')) {
+                    modeEditorArea.classList.add('hidden');
+                    if (assignmentAreaContainer) assignmentAreaContainer.classList.remove('hidden');
+                    const modeConfigForm = document.getElementById('modeConfigFormContainer');
+                    if(modeConfigForm) modeConfigForm.classList.add('hidden');
+                    return;
+                }
+                if (e.target.closest('#notrufAddNewModeButton')) {
+                    openModeConfigForm(); return;
+                }
+                const editBtn = e.target.closest('.edit-mode-btn');
+                if (editBtn && editBtn.dataset.modeId) {
+                    openModeConfigForm(editBtn.dataset.modeId); return;
+                }
+                const deleteBtn = e.target.closest('.delete-mode-btn');
+                if (deleteBtn && deleteBtn.dataset.modeId) {
+                    const modeIdToDelete = parseInt(deleteBtn.dataset.modeId);
+                    if (isNaN(modeIdToDelete)) return;
+                    const modeToDelete = (notrufSettings.modes || []).find(m => m.id === modeIdToDelete);
+                    if (!modeToDelete) return;
+                    const confirmation = prompt(`Um den Modus "${modeToDelete.title}" unwiderruflich zu löschen, geben Sie bitte "MODI LÖSCHEN" ein:`);
+                    if (confirmation === 'MODI LÖSCHEN' && notrufSettingsDocRef) {
+                        notrufSettings.modes = (notrufSettings.modes || []).filter(m => m.id !== modeIdToDelete);
+                        if (notrufSettings.flicAssignments) {
+                            for (const klick in notrufSettings.flicAssignments) {
+                                if (notrufSettings.flicAssignments[klick] === modeIdToDelete) {
+                                    notrufSettings.flicAssignments[klick] = null;
+                                }
+                            }
+                        }
+                        try {
+                             await setDoc(notrufSettingsDocRef, notrufSettings);
+                             alertUser('Modus gelöscht!', 'success');
+                             renderModeEditorList();
+                             populateFlicAssignmentSelectors();
+                             updateFlicColumnDisplays();
+                             if (activeFlicEditorKlickTyp) { updateFlicEditorBox(activeFlicEditorKlickTyp); }
+                        } catch(err) {
+                             console.error("Fehler beim Löschen des Modus:", err);
+                             alertUser('Fehler beim Löschen.', 'error');
+                        }
+                    } else if (confirmation !== null) {
+                        alertUser('Löschvorgang abgebrochen.', 'info');
+                    }
+                    return;
+                }
+                const cancelEditBtn = e.target.closest('#notrufCancelEditModeButton');
+                 if(cancelEditBtn){
+                     const modeConfigForm = document.getElementById('modeConfigFormContainer');
+                     if(modeConfigForm) modeConfigForm.classList.add('hidden');
+                     tempSelectedApiTokenId = null;
+                     tempSelectedSoundId = null;
+                     return;
+                 }
+
+                 // --- Listener für Modals und Speichern innerhalb des Konfig-Formulars ---
+                 const configForm = document.getElementById('modeConfigFormContainer');
+                 if (configForm && configForm.contains(e.target)) {
+                     if (e.target.closest('#notrufOpenContactBook')) {
+                         renderContactBook();
+                         const modal = document.getElementById('contactBookModal');
+                         if (modal) modal.style.display = 'flex';
+                         return;
+                     }
+                     if (e.target.closest('#notrufOpenApiTokenBook')) {
+                         renderApiTokenBook();
+                         const modal = document.getElementById('apiTokenBookModal');
+                         if (modal) modal.style.display = 'flex';
+                         return;
+                     }
+                     if (e.target.closest('#notrufOpenSoundBook')) {
+                         renderSoundBook();
+                         const modal = document.getElementById('soundBookModal');
+                         if (modal) modal.style.display = 'flex';
+                         return;
+                     }
+                     const prioBtn = e.target.closest('.priority-btn');
+                     if (prioBtn) {
+                         configForm.querySelectorAll('.priority-btn').forEach(btn => btn.classList.remove('bg-indigo-600', 'text-white'));
+                         prioBtn.classList.add('bg-indigo-600', 'text-white');
+                         return;
+                     }
+                     if (e.target.closest('#notrufSaveModeButton')) {
+                         await saveNotrufMode();
+                         return;
+                     }
+                 }
+            } // Ende if (modeEditorArea...)
+        }); // Ende Haupt-Click-Listener flicCard
+        flicCard.dataset.flicListenerAttached = 'true';
+    } // Ende if (flicCard...)
+
+    // --- Listener für Retry Checkbox ---
+    const configArea = document.getElementById('notrufConfigArea'); // Holen wir uns hier
+    const retryCheckbox = document.getElementById('retryDeaktiviert');
+    const retrySecondsInput = document.getElementById('retrySecondsInput');
+    // Stelle sicher, dass der Listener nur einmal hinzugefügt wird
+    if (configArea && retryCheckbox && retrySecondsInput && !configArea.dataset.retryListenerAttached) {
+        retryCheckbox.addEventListener('change', (e) => {
+            const isDisabled = e.target.checked;
+            retrySecondsInput.disabled = isDisabled;
+            if (isDisabled) {
+                // retrySecondsInput.value = 30; // Optional zurücksetzen
+            } else {
+                if (parseInt(retrySecondsInput.value) < 30) {
+                    retrySecondsInput.value = 30;
+                }
+            }
         });
+        configArea.dataset.retryListenerAttached = 'true'; // Markieren
     }
-}
 
-function populateFlicAssignmentSelectors() {
+    console.log("initializeNotrufSettingsView: Alle Listener hinzugefügt.");
+} // --- ENDE initializeNotrufSettingsView ---
+
+// === Restliche Hilfsfunktionen für Notruf (populateFlicAssignmentSelectors, updateFlicColumnDisplays, etc.) bleiben unverändert HIER in notfall.js ===
+// ... (füge hier die Definitionen für populateFlicAssignmentSelectors, updateFlicColumnDisplays, updateFlicEditorDetails, updateFlicEditorBox, renderModeEditorList, openModeConfigForm, saveNotrufMode, renderContactBook, renderApiTokenBook, renderSoundBook ein, wie sie in der vorherigen Antwort standen) ...
+
+// Beispielhaft hier eine der Funktionen (die anderen müssen auch hier rein!)
+// (updateFlicColumnDisplays, updateFlicEditorDetails, updateFlicEditorBox, renderModeEditorList, openModeConfigForm, saveNotrufMode, renderContactBook, renderApiTokenBook, renderSoundBook)
+export function populateFlicAssignmentSelectors() {
     const selector = document.getElementById('flic-editor-selector');
     if (!selector) return;
-
     const modes = notrufSettings.modes || [];
-
-    // Erstelle die <option> Elemente
     let optionsHTML = '<option value="">Kein Modus zugewiesen</option>';
     modes.forEach(mode => {
         optionsHTML += `<option value="${mode.id}">${mode.title}</option>`;
     });
-
     selector.innerHTML = optionsHTML;
 }
 
@@ -251,7 +392,7 @@ function updateFlicDisplay(klickTyp) {
     }
 }
 
-function renderModeEditorList() {
+export function renderModeEditorList() {
     const listContainer = document.getElementById('existingModesList');
     if (notrufSettings.modes.length === 0) {
         listContainer.innerHTML = '<p class="text-sm text-center text-gray-400">Keine Modi vorhanden.</p>';

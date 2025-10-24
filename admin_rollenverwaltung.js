@@ -28,7 +28,7 @@ export function listenForAdminRoleUpdates() {
     });
 }
 
-function renderRoleManagement() {
+export function renderRoleManagement() {
     roleManagementArea.innerHTML = '';
     let effectiveAdminPerms = {};
     const isAdmin = currentUser.role === 'ADMIN';

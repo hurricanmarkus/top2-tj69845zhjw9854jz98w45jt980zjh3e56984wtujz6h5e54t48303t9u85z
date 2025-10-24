@@ -499,7 +499,7 @@ function renderChecklistItems(listId) {
     });
 }
 
-function renderChecklistView(listId) {
+export function renderChecklistView(listId) {
     const view = document.getElementById('checklistView');
 
     view.innerHTML = `
@@ -1379,7 +1379,7 @@ function setupStackAndContainerManagementListeners(view) {
     templatesCard.dataset.listenerAttached = 'true';
 }
 
-function renderChecklistSettingsView(editListId = null) {
+export function renderChecklistSettingsView(editListId = null) {
     const view = document.getElementById('checklistSettingsView');
     const currentUserData = USERS[currentUser.mode] || {};
 
@@ -1791,7 +1791,7 @@ function setupTemplateEditorListeners() {
 
 }
 
-function openTemplateModal(targetListId) {
+export function openTemplateModal(targetListId) {
     const modal = document.getElementById('templateApplyModal');
     modal.dataset.targetListId = targetListId;
 

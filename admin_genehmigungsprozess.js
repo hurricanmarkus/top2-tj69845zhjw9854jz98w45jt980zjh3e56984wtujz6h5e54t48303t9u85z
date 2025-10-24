@@ -3,7 +3,7 @@ import { onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/1
 import { roleChangeRequestsCollectionRef, adminSectionsState, approvalRequestsCollectionRef } from './haupteingang.js';
 // ENDE-ZIKA //
 
-async function createApprovalRequest(type, userId, details = {}) {
+export async function createApprovalRequest(type, userId, details = {}) {
     try {
         // NEU: Stellt sicher, dass der Benutzername auch für neue Benutzer korrekt ausgelesen wird.
         let reqUserName;
@@ -45,7 +45,7 @@ export function listenForApprovalRequests() {
     });
 }
 
-async function renderApprovalProcess(snapshot = null) {
+export async function renderApprovalProcess(snapshot = null) {
     approvalProcessArea.innerHTML = '';
 
     if (!snapshot) {

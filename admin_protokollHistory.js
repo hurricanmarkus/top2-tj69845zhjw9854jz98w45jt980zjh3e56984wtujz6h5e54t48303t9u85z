@@ -14,7 +14,7 @@ async function logAdminAction(action, details) {
     }
 }
 
-async function renderProtocolHistory() {
+export async function renderProtocolHistory() {
     protocolHistoryArea.innerHTML = '';
     let logQuery;
 

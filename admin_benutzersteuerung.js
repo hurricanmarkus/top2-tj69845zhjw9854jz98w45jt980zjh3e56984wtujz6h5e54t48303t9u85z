@@ -199,7 +199,7 @@ function renderUserKeyList() {
     });
 }
 
-async function renderUserManagement() {
+export async function renderUserManagement() {
     // Frühe Überprüfung der Referenz (bleibt gleich)
     if (!roleChangeRequestsCollectionRef || !usersCollectionRef || !rolesCollectionRef) {
         userManagementArea.innerHTML = `<p class="text-center text-red-500">Datenbankverbindung wird noch aufgebaut...</p>`;
@@ -440,7 +440,7 @@ async function renderUserManagement() {
     restoreAdminScrollIfAny();
 }
 
-function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions) {
+export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions) {
 
     // --- KORREKTUR START: Listener explizit entfernen und hinzufügen ---
     // Entferne den vorherigen Listener, falls er existiert (gespeichert in _handleUserManagementClick)
@@ -769,7 +769,7 @@ function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing, permS
 
 }
 
-function toggleNewUserRoleField() {
+export function toggleNewUserRoleField() {
     const typeSelect = document.getElementById('newUserPermissionType'); // 
     const roleSelect = document.getElementById('newUserRole'); // [cite: 770]
     const keyInput = document.getElementById('newUserKey'); // [cite: 770]

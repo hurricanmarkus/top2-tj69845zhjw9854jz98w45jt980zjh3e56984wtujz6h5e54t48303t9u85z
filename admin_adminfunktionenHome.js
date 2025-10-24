@@ -42,12 +42,12 @@
     })();
 })();
 
-function rememberAdminScroll() {
+export function rememberAdminScroll() {
     const scroller = document.querySelector('.main-content') || document.scrollingElement || document.documentElement;
     if (scroller) sessionStorage.setItem('adminScrollY', String(scroller.scrollTop));
 }
 
-function restoreAdminScrollIfAny() {
+export function restoreAdminScrollIfAny() {
     const scroller = document.querySelector('.main-content') || document.scrollingElement || document.documentElement;
     const y = Number(sessionStorage.getItem('adminScrollY'));
     if (scroller && !Number.isNaN(y)) {
@@ -56,7 +56,7 @@ function restoreAdminScrollIfAny() {
     }
 }
 
-function renderMainFunctionsAdminArea() {
+export function renderMainFunctionsAdminArea() {
     const tabsContainer = document.getElementById('main-functions-tabs');
     if (!tabsContainer) return;
 
