@@ -130,7 +130,7 @@ function renderMainFunctionsAdminArea() {
     tabsContainer.dataset.listenerAttached = 'true';
 }
 
-function toggleAdminSection(section) {
+export function toggleAdminSection(section) {
     Object.keys(adminSectionsState).forEach(key => {
         adminSectionsState[key] = key === section ? !adminSectionsState[key] : false;
     });

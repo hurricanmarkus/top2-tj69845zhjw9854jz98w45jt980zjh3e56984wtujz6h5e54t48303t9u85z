@@ -6,6 +6,8 @@ import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode } from './
 import { renderModalUserButtons, listenForUserUpdates } from './admin_benutzersteuerung.js';
 import { listenForRoleUpdates, listenForAdminRoleUpdates } from './admin_rollenverwaltung.js';
 import { listenForApprovalRequests } from './admin_genehmigungsprozess.js';
+import { toggleAdminSection } from './admin_adminfunktionenHome.js';
+import { initializeEssensberechnungView } from './essensberechnung.js';
 import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, listenForTemplates } from './checklist.js';
 // ENDE-ZIKA //
 

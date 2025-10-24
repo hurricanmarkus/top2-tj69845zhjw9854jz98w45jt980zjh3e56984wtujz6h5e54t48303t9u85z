@@ -743,7 +743,7 @@ function displayCalculationResult(mode) {
     resultsTable.innerHTML = tableHTML;
 }
 
-function initializeEssensberechnungView() {
+export function initializeEssensberechnungView() {
     setupEssensberechnungListeners(); // Stellt sicher, dass die Listener nur einmal gesetzt werden
     populatePersonDropdown();         // Füllt das Dropdown-Menü EINMALIG
 
