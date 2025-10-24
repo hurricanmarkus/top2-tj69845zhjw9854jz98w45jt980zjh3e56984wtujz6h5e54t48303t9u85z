@@ -47,7 +47,6 @@ export function listenForUserUpdates() {
         // --- HINWEIS: Stelle sicher, dass diese Render-Funktionen existieren oder auskommentiert sind, wenn nicht benötigt ---
         if (isAdminViewActive) {
             // Beispiel: Wenn renderUserKeyList in einer anderen Datei ist, musst du sie ggf. importieren
-            // import { renderUserKeyList } from './admin_passwoerter.js'; // Beispielhaft
             if (adminSectionsState.password && typeof renderUserKeyList === 'function') {
                  renderUserKeyList();
             }
