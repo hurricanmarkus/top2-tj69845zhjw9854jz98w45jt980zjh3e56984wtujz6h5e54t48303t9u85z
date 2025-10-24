@@ -1,4 +1,5 @@
 import { USERS, currentMeal } from './haupteingang.js';
+import { populatePersonDropdown } from './checklist.js';
 
 function setDefaultPortionName() {
     const personId = document.getElementById('person-select').value;

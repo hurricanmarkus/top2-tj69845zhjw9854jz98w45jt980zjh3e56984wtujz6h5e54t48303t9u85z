@@ -1680,7 +1680,7 @@ function getItemBadges(item) {
     return `<div class="flex items-center gap-2 flex-wrap mt-1">${badgesHTML}</div>`;
 };
 
-function populatePersonDropdown() {
+export function populatePersonDropdown() {
     const userOptions = Object.values(USERS)
         .filter(u => u.name && u.isActive)
         .map(user => `<option value="${user.id}">${user.name}</option>`)
