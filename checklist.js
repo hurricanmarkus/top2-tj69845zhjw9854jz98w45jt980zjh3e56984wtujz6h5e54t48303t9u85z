@@ -15,7 +15,7 @@ import {
     CHECKLIST_CATEGORIES,
     db,
     appId,
-    TEMPLATES
+    TEMPLATES,
     USERS
 } from './haupteingang.js';
 
