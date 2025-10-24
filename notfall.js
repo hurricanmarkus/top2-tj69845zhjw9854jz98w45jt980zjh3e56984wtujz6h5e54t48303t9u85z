@@ -586,7 +586,9 @@ const contactModal = document.getElementById('contactBookModal');
         console.error("Soundbuch-Modal (#soundBookModal) nicht gefunden!");
     } else {
         console.log("Listener für soundModal bereits vorhanden.");
-    }// === Restliche Hilfsfunktionen für Notruf (populateFlicAssignmentSelectors, updateFlicColumnDisplays, etc.) bleiben unverändert HIER in notfall.js ===
+    }
+    }
+// === Restliche Hilfsfunktionen für Notruf (populateFlicAssignmentSelectors, updateFlicColumnDisplays, etc.) bleiben unverändert HIER in notfall.js ===
 // ... (füge hier die Definitionen für populateFlicAssignmentSelectors, updateFlicColumnDisplays, updateFlicEditorDetails, updateFlicEditorBox, renderModeEditorList, openModeConfigForm, saveNotrufMode, renderContactBook, renderApiTokenBook, renderSoundBook ein, wie sie in der vorherigen Antwort standen) ...
 
 // Beispielhaft hier eine der Funktionen (die anderen müssen auch hier rein!)
