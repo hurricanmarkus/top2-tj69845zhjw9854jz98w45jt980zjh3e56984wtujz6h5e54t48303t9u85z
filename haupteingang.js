@@ -475,9 +475,9 @@ export function navigate(targetViewName) {
 
 export function setupEventListeners() {
     // Event listener for the app header to navigate home
-    appHeader.addEventListener('click', () => navigate('home')); [cite: 1]
+    appHeader.addEventListener('click', () => navigate('home'));
     // Central click handler for the main content area
-    document.querySelector('.main-content').addEventListener('click', function (e) { [cite: 2]
+    document.querySelector('.main-content').addEventListener('click', function (e) {
 
         // --- Buttons on the home page ---
         // Navigate to user settings if the settings button is clicked
@@ -488,7 +488,7 @@ export function setupEventListeners() {
         // Navigate to admin view if the admin button is clicked
         if (e.target.closest('#mainAdminButton')) {
             navigate('admin');
-            return; [cite: 3]
+            return;
         }
 
         // Navigate to pushover view if the pushover button is clicked
@@ -500,7 +500,7 @@ export function setupEventListeners() {
         // Navigate to notruf settings view if the notruf settings button is clicked
         const notrufBtn = e.target.closest('#notrufSettingsButton');
         if (notrufBtn) {
-            navigate('notrufSettings'); [cite: 4]
+            navigate('notrufSettings');
             return;
         }
 
@@ -514,26 +514,26 @@ export function setupEventListeners() {
 
         // --- Container button in settings ---
         // Open the template modal if the show template modal button is clicked
-        const templateBtn = e.target.closest('#show-template-modal-btn'); [cite: 5]
-        if (templateBtn) { [cite: 6]
+        const templateBtn = e.target.closest('#show-template-modal-btn');
+        if (templateBtn) {
             const listId = document.getElementById('checklist-settings-editor-switcher').value;
-            if (listId) { [cite: 7]
+            if (listId) {
                 openTemplateModal(listId);
-            } else { [cite: 8]
+            } else {
                 // Alert user if no list is selected
-                alertUser("Bitte wählen Sie zuerst eine Liste aus, die Sie bearbeiten möchten.", "error"); [cite: 9]
+                alertUser("Bitte wählen Sie zuerst eine Liste aus, die Sie bearbeiten möchten.", "error");
             }
             return;
         }
     });
     // Navigate to entrance view when the entrance card is clicked
-    document.getElementById('entranceCard').addEventListener('click', () => navigate('entrance')); [cite: 10]
+    document.getElementById('entranceCard').addEventListener('click', () => navigate('entrance'));
     // Hide the user selection modal when the cancel button is clicked
     document.getElementById('cancelSelectionButton').addEventListener('click', () => userSelectionModal.style.display = 'none');
     // Hide the pin modal and show the user selection modal when the back button is clicked
-    document.getElementById('backToSelectionButton').addEventListener('click', () => { pinModal.style.display = 'none'; userSelectionModal.style.display = 'flex'; }); [cite: 11]
+    document.getElementById('backToSelectionButton').addEventListener('click', () => { pinModal.style.display = 'none'; userSelectionModal.style.display = 'flex'; });
     // Handle user selection from the modal
-    document.getElementById('modalUserButtons').addEventListener('click', (e) => { [cite: 12]
+    document.getElementById('modalUserButtons').addEventListener('click', (e) => {
         const button = e.target.closest('.select-user-button');
         if (!button) return;
         const user = USERS[button.dataset.user];
@@ -543,7 +543,7 @@ export function setupEventListeners() {
         if (user && user.isActive) {
             selectedUserForLogin = button.dataset.user;
             userSelectionModal.style.display = 'none';
-            pinRegularContent.style.display = 'block'; [cite: 13]
+            pinRegularContent.style.display = 'block';
             pinLockedContent.style.display = 'none';
             pinModalTitle.textContent = `Schlüssel für ${user.name}`;
             adminPinInput.value = '';
@@ -552,17 +552,17 @@ export function setupEventListeners() {
             // Focus on the pin input after a short delay
             setTimeout(() => adminPinInput.focus(), 100);
         } else if (user && !user.isActive) { // If user is inactive, show locked message
-            userSelectionModal.style.display = 'none'; [cite: 14]
-            pinRegularContent.style.display = 'none'; [cite: 15]
+            userSelectionModal.style.display = 'none';
+            pinRegularContent.style.display = 'none';
             pinLockedContent.style.display = 'block';
             pinModal.style.display = 'flex';
         }
     });
     // Navigate to essensberechnung view when the card is clicked (duplicate listener, but harmless)
-    document.getElementById('essensberechnungCard').addEventListener('click', () => { [cite: 16]
+    document.getElementById('essensberechnungCard').addEventListener('click', () => {
         navigate('essensberechnung');
     });
-    document.getElementById('essensberechnungCard').addEventListener('click', () => navigate('essensberechnung')); [cite: 17]
+    document.getElementById('essensberechnungCard').addEventListener('click', () => navigate('essensberechnung'));
 
     // Hide the pin modal and show the user selection modal when closing the locked message
     document.getElementById('closeLockedModalButton').addEventListener('click', () => {
@@ -570,56 +570,56 @@ export function setupEventListeners() {
         userSelectionModal.style.display = 'flex';
     });
     // Function to handle the login attempt
-    const handleLogin = () => { [cite: 18]
+    const handleLogin = () => {
         const userKeyInDB = USERS[selectedUserForLogin]?.key;
-        const enteredPin = adminPinInput.value; [cite: 19]
+        const enteredPin = adminPinInput.value;
         // Debugging logs
         console.log("handleLogin: Vergleich startet.");
         console.log("handleLogin: User ID:", selectedUserForLogin);
         console.log("handleLogin: Erwarteter Key (aus DB):", userKeyInDB);
-        console.log("handleLogin: Eingegebene PIN:", enteredPin); [cite: 20]
-        console.log("handleLogin: Stimmen sie überein?", userKeyInDB === enteredPin); [cite: 21]
+        console.log("handleLogin: Eingegebene PIN:", enteredPin);
+        console.log("handleLogin: Stimmen sie überein?", userKeyInDB === enteredPin);
         // Check if the entered pin matches the user's key
         if (USERS[selectedUserForLogin]?.key === adminPinInput.value) {
             pinModal.style.display = 'none';
-            adminPinInput.value = ''; [cite: 22]
+            adminPinInput.value = '';
             // Store the logged-in user in local storage
             localStorage.setItem(ADMIN_STORAGE_KEY, selectedUserForLogin);
             // Check validity and update UI
             checkCurrentUserValidity();
             alertUser(`Erfolgreich als ${USERS[selectedUserForLogin].name} angemeldet!`, "success");
         } else { // If pin is incorrect, show error and clear input
-            pinError.style.display = 'block'; [cite: 23]
+            pinError.style.display = 'block';
             adminPinInput.value = '';
-        } [cite: 24]
+        }
     };
 
     // Add click listener to the submit key button if it exists
     if (submitAdminKeyButton && typeof submitAdminKeyButton.addEventListener === 'function') {
         submitAdminKeyButton.addEventListener('click', handleLogin);
-        console.log("Listener für submitAdminKeyButton ERFOLGREICH hinzugefügt."); [cite: 25]
+        console.log("Listener für submitAdminKeyButton ERFOLGREICH hinzugefügt.");
     } else {
         // Log error if button cannot be found or listener cannot be added
-        console.error("FEHLER: Konnte Listener für submitAdminKeyButton NICHT hinzufügen!", submitAdminKeyButton); [cite: 26]
+        console.error("FEHLER: Konnte Listener für submitAdminKeyButton NICHT hinzufügen!", submitAdminKeyButton);
     }
     // Debugging log for adminPinInput
     console.log("Wert von adminPinInput VOR addEventListener:", adminPinInput);
     // Add keydown listener to the pin input for Enter key if it exists
-    if (adminPinInput && typeof adminPinInput.addEventListener === 'function') { [cite: 27]
+    if (adminPinInput && typeof adminPinInput.addEventListener === 'function') {
         adminPinInput.addEventListener('keydown', (e) => e.key === 'Enter' && handleLogin());
-        console.log("Listener für adminPinInput ERFOLGREICH hinzugefügt."); [cite: 28]
+        console.log("Listener für adminPinInput ERFOLGREICH hinzugefügt.");
     } else {
         // Log error if input cannot be found or listener cannot be added
-        console.error("FEHLER: Konnte Listener für adminPinInput NICHT hinzufügen!", adminPinInput); [cite: 29]
+        console.error("FEHLER: Konnte Listener für adminPinInput NICHT hinzufügen!", adminPinInput);
     }
     // Add click listeners to toggle admin section visibility
     adminRightsToggle.addEventListener('click', () => toggleAdminSection('adminRights'));
-    roleSettingsToggle.addEventListener('click', () => toggleAdminSection('role')); [cite: 30]
+    roleSettingsToggle.addEventListener('click', () => toggleAdminSection('role'));
     passwordSettingsToggle.addEventListener('click', () => toggleAdminSection('password'));
     userManagementToggle.addEventListener('click', () => toggleAdminSection('user'));
     approvalProcessToggle.addEventListener('click', () => toggleAdminSection('approval'));
     protocolHistoryToggle.addEventListener('click', () => toggleAdminSection('protocol'));
-    mainFunctionsToggle.addEventListener('click', () => toggleAdminSection('mainFunctions')); [cite: 31]
+    mainFunctionsToggle.addEventListener('click', () => toggleAdminSection('mainFunctions'));
 
     // Add click listeners to entrance view action buttons
     document.querySelectorAll('#entranceView .action-button').forEach(button => {
@@ -630,44 +630,44 @@ export function setupEventListeners() {
             const originalText = buttonTextEl.textContent;
             // Async function to send the IFTTT request
             const sendRequest = async () => {
-                setButtonLoading(buttonEl, true); [cite: 32]
+                setButtonLoading(buttonEl, true);
                 buttonTextEl.style.display = 'none';
                 try {
                     // Send request to IFTTT URL
                     await fetch(IFTTT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value1: delay }) });
-                    alertUser(`Befehl "Öffnen" gesendet!`, 'success'); [cite: 33]
+                    alertUser(`Befehl "Öffnen" gesendet!`, 'success');
                 } catch (error) {
                     // Handle errors
                     alertUser('Fehler beim Senden des Befehls.', 'error');
                     console.error("IFTTT Error:", error);
                 } finally {
                     // Reset button state
-                    setButtonLoading(buttonEl, false); [cite: 34]
+                    setButtonLoading(buttonEl, false);
                     buttonTextEl.textContent = originalText;
-                    buttonTextEl.style.display = 'inline-block'; [cite: 35]
+                    buttonTextEl.style.display = 'inline-block';
                 }
             };
             // If delay is 0, send request immediately
-            if (delay === 0) { [cite: 36]
+            if (delay === 0) {
                 sendRequest();
             } else { // Otherwise, start countdown
-                buttonEl.disabled = true; [cite: 37]
-                let countdown = delay; [cite: 38]
+                buttonEl.disabled = true;
+                let countdown = delay;
                 buttonTextEl.textContent = countdown;
                 const interval = setInterval(() => {
                     countdown--;
                     if (countdown > 0) {
                         buttonTextEl.textContent = countdown;
                     } else { // When countdown finishes, clear interval and send request
-                        clearInterval(interval); [cite: 39]
+                        clearInterval(interval);
                         sendRequest();
                     }
                 }, 1000);
-            } [cite: 40]
+            }
         });
     });
     // Add click listener to send dynamic pushover notification button
-    document.getElementById('sendDynamicPostButton').addEventListener('click', async (e) => { [cite: 41]
+    document.getElementById('sendDynamicPostButton').addEventListener('click', async (e) => {
         const buttonEl = e.currentTarget;
         const message = document.getElementById('pushoverMessage').value;
         // Check if message is empty
@@ -679,7 +679,7 @@ export function setupEventListeners() {
         formData.append('user', RECIPIENT_KEYS[document.getElementById('pushoverRecipient').value]);
         formData.append('title', document.getElementById('pushoverTitle').value);
         formData.append('message', message);
-        try { [cite: 42]
+        try {
             // Send request to Pushover API
             const response = await fetch('https://api.pushover.net/1/messages.json', { method: 'POST', body: formData });
             const data = await response.json();
@@ -689,10 +689,10 @@ export function setupEventListeners() {
             // Clear message input
             document.getElementById('pushoverMessage').value = '';
         } catch (error) { // Handle errors
-            alertUser(`Fehler: ${error.message}`, 'error'); [cite: 43]
+            alertUser(`Fehler: ${error.message}`, 'error');
         } finally { // Reset button state
-            setButtonLoading(buttonEl, false); [cite: 44]
-        } [cite: 45]
+            setButtonLoading(buttonEl, false);
+        }
     });
 
     // Add click listener to save user settings key button
@@ -707,29 +707,29 @@ export function setupEventListeners() {
         await logAdminAction('self_password_changed', `Eigenes Passwort geändert.`);
         alertUser(`Ihr Schlüssel wurde erfolgreich aktualisiert!`, "success");
         // Update local user object and display
-        USERS[currentUser.mode].key = newKey; [cite: 46]
+        USERS[currentUser.mode].key = newKey;
         document.getElementById('currentUserKeyDisplay').innerHTML = `<p class="text-lg">Dein aktuelles Passwort lautet: <strong class="font-bold">${newKey}</strong></p>`;
         // Clear input field
         newKeyInput.value = '';
     });
     // Add click listener to navigate to the current checklist view
-    document.getElementById('currentChecklistCard').addEventListener('click', () => { [cite: 47]
+    document.getElementById('currentChecklistCard').addEventListener('click', () => {
         const defaultListId = adminSettings.defaultChecklistId;
         renderChecklistView(defaultListId);
         navigate('checklist');
     });
     // Add click listener to navigate to the checklist settings view
-    document.getElementById('checklistSettingsCard').addEventListener('click', () => { [cite: 48]
+    document.getElementById('checklistSettingsCard').addEventListener('click', () => {
         renderChecklistSettingsView();
         navigate('checklistSettings');
     });
     // Add click listener to close the archived lists modal
-    const closeArchivedModalBtn = document.getElementById('closeArchivedListsModal'); [cite: 49]
+    const closeArchivedModalBtn = document.getElementById('closeArchivedListsModal');
     if (closeArchivedModalBtn) {
         closeArchivedModalBtn.addEventListener('click', () => {
             document.getElementById('archivedListsModal').style.display = 'none';
         });
-    } [cite: 50]
+    }
 
     // Add click listener to the archived lists container for restore/delete actions
     const archivedListsContainer = document.getElementById('archivedListsContainer');
@@ -741,7 +741,7 @@ export function setupEventListeners() {
             // Handle restore action
             if (restoreBtn) {
                 const listId = restoreBtn.dataset.listId;
-                await updateDoc(doc(checklistsCollectionRef, listId), { isArchived: false, archivedAt: null, archivedBy: null }); [cite: 51]
+                await updateDoc(doc(checklistsCollectionRef, listId), { isArchived: false, archivedAt: null, archivedBy: null });
                 alertUser("Liste wurde aus dem Archiv wiederhergestellt.", "success");
             }
 
@@ -750,28 +750,28 @@ export function setupEventListeners() {
                 const listId = deleteBtn.dataset.listId;
                 const listName = ARCHIVED_CHECKLISTS[listId]?.name;
                 // Ask for confirmation
-                const confirmation = prompt(`Um die Liste "${listName}" endgültig in den Papierkorb zu verschieben, geben Sie bitte "LISTE LÖSCHEN" ein:`); [cite: 52]
+                const confirmation = prompt(`Um die Liste "${listName}" endgültig in den Papierkorb zu verschieben, geben Sie bitte "LISTE LÖSCHEN" ein:`);
                 if (confirmation === 'LISTE LÖSCHEN') {
                     // Update list status in Firestore
                     await updateDoc(doc(checklistsCollectionRef, listId), { isDeleted: true, isArchived: false, deletedAt: serverTimestamp(), deletedBy: currentUser.displayName });
-                    alertUser(`Liste "${listName}" wurde in den Papierkorb verschoben.`, "success"); [cite: 53]
+                    alertUser(`Liste "${listName}" wurde in den Papierkorb verschoben.`, "success");
                 } else if (confirmation !== null) { // If confirmation is wrong or cancelled
                     alertUser("Löschvorgang abgebrochen.", "error");
-                } [cite: 54]
+                }
             }
         });
-    } [cite: 55]
+    }
 
     // Add click listener for the API token modal
     const apiTokenModal = document.getElementById('apiTokenBookModal');
-    if (apiTokenModal && !apiTokenModal.dataset.listenerAttached) { [cite: 56]
+    if (apiTokenModal && !apiTokenModal.dataset.listenerAttached) {
         apiTokenModal.addEventListener('click', (e) => {
             // Close modal button
             if (e.target.closest('#apiTokenBookCloseButton')) {
                 apiTokenModal.style.display = 'none';
             }
             // Add token button
-            if (e.target.closest('#apiTokenAddButton')) { [cite: 57]
+            if (e.target.closest('#apiTokenAddButton')) {
                 const name = document.getElementById('apiTokenName').value.trim();
                 const key = document.getElementById('apiTokenKey').value.trim();
                 // Validate input
@@ -779,74 +779,74 @@ export function setupEventListeners() {
                     // Initialize array if it doesn't exist
                     if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
                     // Add new token
-                    notrufSettings.apiTokens.push({ id: Date.now(), name, key }); [cite: 58]
+                    notrufSettings.apiTokens.push({ id: Date.now(), name, key });
                     // Save updated settings to Firestore
                     setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
                         // Re-render the token list and clear inputs
                         renderApiTokenBook();
                         document.getElementById('apiTokenName').value = '';
-                        document.getElementById('apiTokenKey').value = ''; [cite: 59]
+                        document.getElementById('apiTokenKey').value = '';
                     }).catch(err => alertUser('Fehler beim Speichern des Tokens.', 'error'));
                 } else { // Alert if input is missing
-                    alertUser('Bitte Bezeichnung und Key für den Token ausfüllen.', 'error'); [cite: 60]
-                } [cite: 61]
+                    alertUser('Bitte Bezeichnung und Key für den Token ausfüllen.', 'error');
+                }
             }
             // Delete token button
             if (e.target.closest('.delete-api-token-btn')) {
                 const tokenId = parseInt(e.target.closest('.delete-api-token-btn').dataset.tokenId);
                 // Ask for confirmation
-                if (confirm('Möchten Sie diesen API-Token wirklich löschen?')) { [cite: 62]
+                if (confirm('Möchten Sie diesen API-Token wirklich löschen?')) {
                     // Filter out the token to be deleted
                     notrufSettings.apiTokens = notrufSettings.apiTokens.filter(t => t.id !== tokenId);
                     // Remove the deleted token from any modes using it
-                    if (notrufSettings.modes) { [cite: 63, 64]
+                    if (notrufSettings.modes) {
                         notrufSettings.modes.forEach(mode => {
                             if (mode.config && mode.config.selectedApiTokenId === tokenId) {
-                                mode.config.selectedApiTokenId = null; [cite: 65]
+                                mode.config.selectedApiTokenId = null;
                             }
                         });
-                    } [cite: 66]
+                    }
                     // Reset the temporary selection if the deleted token was selected
-                    if (tempSelectedApiTokenId === tokenId) { [cite: 67]
+                    if (tempSelectedApiTokenId === tokenId) {
                         tempSelectedApiTokenId = null;
-                        document.getElementById('notrufApiTokenDisplay').innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>'; [cite: 68]
+                        document.getElementById('notrufApiTokenDisplay').innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
                     }
                     // Save updated settings to Firestore
                     setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
                         renderApiTokenBook(); // Re-render the token list
                     }).catch(err => alertUser('Fehler beim Löschen des Tokens.', 'error'));
-                } [cite: 69]
+                }
             }
             // Apply selection button
             if (e.target.closest('#apiTokenBookApplyButton')) {
                 const selectedRadio = apiTokenModal.querySelector('.api-token-radio:checked');
-                const displayArea = document.getElementById('notrufApiTokenDisplay'); [cite: 70]
+                const displayArea = document.getElementById('notrufApiTokenDisplay');
                 if (selectedRadio) { // If a token is selected
                     const tokenId = parseInt(selectedRadio.value);
-                    const token = (notrufSettings.apiTokens || []).find(t => t.id === tokenId); [cite: 71]
-                    if (token) { [cite: 72]
+                    const token = (notrufSettings.apiTokens || []).find(t => t.id === tokenId);
+                    if (token) {
                         // Update temporary selection and display
-                        tempSelectedApiTokenId = tokenId; [cite: 73]
-                        displayArea.innerHTML = `<span class="api-token-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-token-id="${token.id}">${token.name}</span>`; [cite: 74]
+                        tempSelectedApiTokenId = tokenId;
+                        displayArea.innerHTML = `<span class="api-token-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-token-id="${token.id}">${token.name}</span>`;
                     }
                 } else { // If no token is selected
                     tempSelectedApiTokenId = null;
-                    displayArea.innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>'; [cite: 75]
+                    displayArea.innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
                 }
                 // Hide the modal
-                apiTokenModal.style.display = 'none'; [cite: 76]
+                apiTokenModal.style.display = 'none';
             }
         });
         // Mark listener as attached
         apiTokenModal.dataset.listenerAttached = 'true';
-    } [cite: 77]
+    }
 
     // --- Event Listener für das Sound Buch Modal ---
     const soundModal = document.getElementById('soundBookModal');
-    if (soundModal && !soundModal.dataset.listenerAttached) { [cite: 78]
+    if (soundModal && !soundModal.dataset.listenerAttached) {
         // Get checkbox and input for custom sound name
         const useCustomNameCheckbox = soundModal.querySelector('#soundUseCustomName');
-        const customNameInput = soundModal.querySelector('#soundCustomName'); [cite: 79]
+        const customNameInput = soundModal.querySelector('#soundCustomName');
         // Add change listener to toggle custom name input visibility
         if (useCustomNameCheckbox && customNameInput) {
             useCustomNameCheckbox.addEventListener('change', (e) => {
@@ -854,7 +854,7 @@ export function setupEventListeners() {
                 // Clear input if hidden
                 if (!e.target.checked) customNameInput.value = '';
             });
-        } [cite: 80]
+        }
 
         // Add click listener to the sound modal
         soundModal.addEventListener('click', (e) => {
@@ -864,91 +864,83 @@ export function setupEventListeners() {
             }
             // Add sound button
             if (e.target.closest('#soundAddButton')) {
-                const code = document.getElementById('soundCode').value.trim(); [cite: 81]
+                const code = document.getElementById('soundCode').value.trim();
                 const useCustom = document.getElementById('soundUseCustomName').checked;
                 const customName = document.getElementById('soundCustomName').value.trim();
                 // Validate input
                 if (code && (!useCustom || (useCustom && customName))) {
                     // Initialize array if it doesn't exist
-                    if (!notrufSettings.sounds) notrufSettings.sounds = []; [cite: 82]
+                    if (!notrufSettings.sounds) notrufSettings.sounds = [];
                     // Add new sound object
                     notrufSettings.sounds.push({
                         id: Date.now(),
                         code: code,
                         useCustomName: useCustom,
-                        customName: useCustom ? customName : null [cite: 83]
+                        customName: useCustom ? customName : null
                     });
                     // Save updated settings to Firestore
                     setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
                         // Re-render sound list and clear inputs
                         renderSoundBook();
-                        document.getElementById('soundCode').value = ''; [cite: 84]
+                        document.getElementById('soundCode').value = '';
                         document.getElementById('soundUseCustomName').checked = false;
                         document.getElementById('soundCustomName').value = '';
                         document.getElementById('soundCustomName').classList.add('hidden');
                     }).catch(err => alertUser('Fehler beim Speichern des Sounds.', 'error'));
                 } else { // Alert if input is missing
-                    alertUser('Bitte Soundcode und ggf. eigenen Namen ausfüllen.', 'error'); [cite: 85]
-                } [cite: 86]
+                    alertUser('Bitte Soundcode und ggf. eigenen Namen ausfüllen.', 'error');
+                }
             }
             // Delete sound button
             if (e.target.closest('.delete-sound-btn')) {
                 const soundId = parseInt(e.target.closest('.delete-sound-btn').dataset.soundId);
                 // Ask for confirmation
-                if (confirm('Möchten Sie diesen Sound wirklich löschen?')) { [cite: 87]
+                if (confirm('Möchten Sie diesen Sound wirklich löschen?')) {
                     // Filter out the sound to be deleted
                     notrufSettings.sounds = notrufSettings.sounds.filter(s => s.id !== soundId);
                     // Remove the deleted sound from any modes using it
-                    if (notrufSettings.modes) { [cite: 88, 89]
+                    if (notrufSettings.modes) {
                         notrufSettings.modes.forEach(mode => {
                             if (mode.config && mode.config.selectedSoundId === soundId) {
-                                mode.config.selectedSoundId = null; [cite: 90]
+                                mode.config.selectedSoundId = null;
                             }
                         });
-                    } [cite: 91]
+                    }
                     // Reset the temporary selection if the deleted sound was selected
-                    if (tempSelectedSoundId === soundId) { [cite: 92]
+                    if (tempSelectedSoundId === soundId) {
                         tempSelectedSoundId = null;
-                        document.getElementById('notrufSoundDisplay').innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>'; [cite: 93]
+                        document.getElementById('notrufSoundDisplay').innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
                     }
                     // Save updated settings to Firestore
                     setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
                         renderSoundBook(); // Re-render the sound list
                     }).catch(err => alertUser('Fehler beim Löschen des Sounds.', 'error'));
-                } [cite: 94]
+                }
             }
             // Apply selection button
             if (e.target.closest('#soundBookApplyButton')) {
                 const selectedRadio = soundModal.querySelector('.sound-radio:checked');
-                const displayArea = document.getElementById('notrufSoundDisplay'); [cite: 95]
+                const displayArea = document.getElementById('notrufSoundDisplay');
 
                 // If a specific sound (not default) is selected
                 if (selectedRadio && selectedRadio.value !== 'default') {
                     const soundId = parseInt(selectedRadio.value);
-                    const sound = (notrufSettings.sounds || []).find(s => s.id === soundId); [cite: 96]
-                    if (sound) { [cite: 97]
+                    const sound = (notrufSettings.sounds || []).find(s => s.id === soundId);
+                    if (sound) {
                         // Update temporary selection and display
-                        tempSelectedSoundId = soundId; [cite: 98]
-                        const displayName = sound.useCustomName && sound.customName ? sound.customName : sound.code; [cite: 99]
-                        displayArea.innerHTML = `<span class="sound-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-sound-id="${sound.id}">${displayName}</span>`; [cite: 100]
+                        tempSelectedSoundId = soundId;
+                        const displayName = sound.useCustomName && sound.customName ? sound.customName : sound.code;
+                        displayArea.innerHTML = `<span class="sound-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-sound-id="${sound.id}">${displayName}</span>`;
                     }
                 } else { // If default or nothing is selected
-                    tempSelectedSoundId = null; [cite: 101]
-                    displayArea.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>'; [cite: 102]
+                    tempSelectedSoundId = null;
+                    displayArea.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
                 }
                 // Hide the modal
-                soundModal.style.display = 'none'; [cite: 103]
+                soundModal.style.display = 'none';
             }
         });
         // Mark listener as attached
         soundModal.dataset.listenerAttached = 'true';
-    } [cite: 104]
-
-    // --- DIESER BLOCK WURDE ENTFERNT, da die Listener bereits in notfall.js gesetzt werden ---
-    /*
-    if (configArea && !configArea.dataset.extraListenersAttached) { 
-        // ... (alter Code für configArea Listener) ... [cite: 106-112]
-        configArea.dataset.extraListenersAttached = 'true';
-    } 
-    */
+    }
 }
