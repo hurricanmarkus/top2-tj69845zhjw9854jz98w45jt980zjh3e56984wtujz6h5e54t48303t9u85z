@@ -63,6 +63,14 @@ export function listenForUserUpdates() {
         }
         // --- ENDE HINWEIS ---
 
+        const essensberechnungView = document.getElementById('essensberechnungView');
+if (essensberechnungView && essensberechnungView.classList.contains('active')) {
+     // Stelle sicher, dass populatePersonDropdown importiert ist
+     // import { populatePersonDropdown } from './checklist.js'; // Am Anfang der Datei hinzufügen
+     populatePersonDropdown();
+     console.log("Essensberechnung Dropdown aktualisiert nach User Update."); // Optional: Für Debugging
+}
+
     }, (error) => { // <<< NEU: Fehlerbehandlung für den Listener >>>
         console.error("listenForUserUpdates: FEHLER im onSnapshot Listener:", error);
         // Optional: Dem Benutzer eine Fehlermeldung anzeigen
