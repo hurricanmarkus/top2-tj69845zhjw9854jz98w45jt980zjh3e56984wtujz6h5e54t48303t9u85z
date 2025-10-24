@@ -303,6 +303,346 @@ export function initializeNotrufSettingsView() {
     }
 
     console.log("initializeNotrufSettingsView: Alle Listener hinzugefügt.");
+
+const contactModal = document.getElementById('contactBookModal');
+    // Verhindert, dass der Listener mehrfach hinzugefügt wird, falls initialize... öfter aufgerufen wird
+    if (contactModal && !contactModal.dataset.listenerAttached) {
+        contactModal.addEventListener('click', async (e) => { // Async für setDoc
+            // Modal schließen
+            if (e.target.closest('#contactBookCloseButton')) {
+                contactModal.style.display = 'none';
+            }
+            // Kontakt hinzufügen
+            if (e.target.closest('#contactAddButton')) {
+                const typeInput = document.getElementById('contactIsGroup');
+                const nameInput = document.getElementById('contactName');
+                const keyInput = document.getElementById('contactUserKey');
+                // Sicherstellen, dass die Elemente existieren
+                if (!typeInput || !nameInput || !keyInput) return;
+                const type = typeInput.value; // Kein .trim() mehr nötig für select
+                const name = nameInput.value.trim();
+                const key = keyInput.value.trim();
+                // Prüfen, ob notrufSettingsDocRef existiert
+                if (type && name && key && notrufSettingsDocRef) {
+                    // Sicherstellen, dass das Array existiert
+                    if (!notrufSettings.contacts) notrufSettings.contacts = [];
+                    notrufSettings.contacts.push({ id: Date.now(), type, name, key });
+                    try {
+                        // Änderungen in Firestore speichern
+                        await setDoc(notrufSettingsDocRef, notrufSettings);
+                        // renderContactBook(); // Wird durch onSnapshot erledigt
+                        // Felder leeren nach erfolgreichem Speichern
+                        typeInput.value = 'User'; // Setzt auf Standardwert zurück
+                        nameInput.value = '';
+                        keyInput.value = '';
+                    } catch (err) {
+                        console.error("Fehler beim Speichern des Kontakts:", err);
+                        alertUser('Fehler beim Speichern des Kontakts.', 'error');
+                    }
+                } else {
+                    // Fehlermeldung, wenn Felder leer sind oder Referenz fehlt
+                    if (!notrufSettingsDocRef) console.error("Kontakt hinzufügen: notrufSettingsDocRef ist nicht definiert!");
+                    alertUser('Bitte alle Felder für den Kontakt ausfüllen.', 'error');
+                }
+            }
+            // Kontakt löschen
+            const deleteContactBtn = e.target.closest('.delete-contact-btn');
+            if (deleteContactBtn) {
+                const contactId = parseInt(deleteContactBtn.dataset.contactId);
+                 // Prüfen, ob contactId eine gültige Zahl ist
+                if (isNaN(contactId)) return;
+                // Bestätigung einholen und Referenz prüfen
+                if (confirm('Möchten Sie diesen Kontakt wirklich löschen?') && notrufSettingsDocRef) {
+                    // Kontakt aus der Liste filtern
+                    notrufSettings.contacts = (notrufSettings.contacts || []).filter(c => c.id !== contactId);
+                    // Entferne Kontakt auch aus allen Modi-Configs, die ihn verwenden
+                    (notrufSettings.modes || []).forEach(mode => {
+                        if (mode.config && mode.config.userKeys) {
+                            mode.config.userKeys = mode.config.userKeys.filter(uk => uk.id !== contactId);
+                        }
+                    });
+                    // Entferne Badge aus der Formularanzeige, falls vorhanden
+                    const badgeToRemove = document.querySelector(`#notrufUserKeyDisplay .contact-badge[data-contact-id="${contactId}"]`);
+                    if (badgeToRemove) badgeToRemove.remove();
+
+                    try {
+                        // Änderungen in Firestore speichern
+                        await setDoc(notrufSettingsDocRef, notrufSettings);
+                        // renderContactBook(); // Wird durch onSnapshot erledigt
+                    } catch (err) {
+                        console.error("Fehler beim Löschen des Kontakts:", err);
+                        alertUser('Fehler beim Löschen des Kontakts.', 'error');
+                    }
+                }
+            }
+            // Auswahl übernehmen und Modal schließen
+            if (e.target.closest('#contactBookApplyButton')) {
+                const displayArea = document.getElementById('notrufUserKeyDisplay');
+                // Sicherstellen, dass der Anzeigebereich existiert
+                if (displayArea) {
+                    displayArea.innerHTML = ''; // Bereich leeren
+                    // Durch alle ausgewählten Checkboxen iterieren
+                    contactModal.querySelectorAll('.contact-checkbox:checked').forEach(cb => {
+                        const contactId = parseInt(cb.value);
+                         // Prüfen, ob contactId eine gültige Zahl ist
+                        if(isNaN(contactId)) return;
+                        // Den zugehörigen Kontakt finden
+                        const contact = (notrufSettings.contacts || []).find(c => c.id === contactId);
+                        // Badge hinzufügen, wenn Kontakt gefunden wurde
+                        if (contact) {
+                            displayArea.innerHTML += `<span class="contact-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-contact-id="${contact.id}">${contact.name}</span>`;
+                        }
+                    });
+                }
+                contactModal.style.display = 'none'; // Modal schließen
+            }
+        });
+        // Markieren, dass der Listener hinzugefügt wurde
+        contactModal.dataset.listenerAttached = 'true';
+
+
+const apiTokenModal = document.getElementById('apiTokenBookModal');
+    // Verhindert, dass der Listener mehrfach hinzugefügt wird
+    if (apiTokenModal && !apiTokenModal.dataset.listenerAttached) {
+        apiTokenModal.addEventListener('click', async (e) => { // Async für setDoc
+            // Modal schließen
+            if (e.target.closest('#apiTokenBookCloseButton')) {
+                apiTokenModal.style.display = 'none';
+            }
+            // Token hinzufügen
+            if (e.target.closest('#apiTokenAddButton')) {
+                const nameInput = document.getElementById('apiTokenName');
+                const keyInput = document.getElementById('apiTokenKey');
+                // Sicherstellen, dass Elemente existieren
+                if (!nameInput || !keyInput) return;
+                const name = nameInput.value.trim();
+                const key = keyInput.value.trim();
+                // Prüfen, ob notrufSettingsDocRef existiert
+                if (name && key && notrufSettingsDocRef) {
+                    // Sicherstellen, dass das Array existiert
+                    if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
+                    notrufSettings.apiTokens.push({ id: Date.now(), name, key });
+                    try {
+                        // Änderungen in Firestore speichern
+                        await setDoc(notrufSettingsDocRef, notrufSettings);
+                        // renderApiTokenBook(); // Wird durch onSnapshot erledigt
+                        // Felder leeren nach erfolgreichem Speichern
+                        nameInput.value = '';
+                        keyInput.value = '';
+                    } catch (err) {
+                        console.error("Fehler beim Speichern des Tokens:", err);
+                        alertUser('Fehler beim Speichern des Tokens.', 'error');
+                    }
+                } else {
+                    // Fehlermeldung, wenn Felder leer sind oder Referenz fehlt
+                    if (!notrufSettingsDocRef) console.error("Token hinzufügen: notrufSettingsDocRef ist nicht definiert!");
+                    alertUser('Bitte Bezeichnung und Key für den Token ausfüllen.', 'error');
+                }
+            }
+            // Token löschen
+            const deleteTokenBtn = e.target.closest('.delete-api-token-btn');
+            if (deleteTokenBtn) {
+                const tokenId = parseInt(deleteTokenBtn.dataset.tokenId);
+                 // Prüfen, ob tokenId eine gültige Zahl ist
+                if (isNaN(tokenId)) return;
+                // Bestätigung einholen und Referenz prüfen
+                if (confirm('Möchten Sie diesen API-Token wirklich löschen?') && notrufSettingsDocRef) {
+                    // Token aus der Liste filtern
+                    notrufSettings.apiTokens = (notrufSettings.apiTokens || []).filter(t => t.id !== tokenId);
+                    // Entferne Token auch aus allen Modi-Configs, die ihn verwenden
+                    (notrufSettings.modes || []).forEach(mode => {
+                        if (mode.config && mode.config.selectedApiTokenId === tokenId) {
+                            mode.config.selectedApiTokenId = null;
+                        }
+                    });
+                    // Setze temporäre Auswahl zurück, falls dieser Token ausgewählt war
+                    if (tempSelectedApiTokenId === tokenId) {
+                        tempSelectedApiTokenId = null;
+                        const display = document.getElementById('notrufApiTokenDisplay');
+                        if(display) display.innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
+                    }
+                    try {
+                        // Änderungen in Firestore speichern
+                        await setDoc(notrufSettingsDocRef, notrufSettings);
+                        // renderApiTokenBook(); // Wird durch onSnapshot erledigt
+                    } catch (err) {
+                        console.error("Fehler beim Löschen des Tokens:", err);
+                        alertUser('Fehler beim Löschen des Tokens.', 'error');
+                    }
+                }
+            }
+            // Auswahl übernehmen und Modal schließen
+            if (e.target.closest('#apiTokenBookApplyButton')) {
+                const selectedRadio = apiTokenModal.querySelector('.api-token-radio:checked');
+                const displayArea = document.getElementById('notrufApiTokenDisplay');
+                // Sicherstellen, dass der Anzeigebereich existiert
+                if (displayArea) {
+                     if (selectedRadio) { // Wenn ein Radio-Button ausgewählt ist
+                         const tokenId = parseInt(selectedRadio.value);
+                          // Prüfen, ob tokenId eine gültige Zahl ist
+                         if(isNaN(tokenId)) {
+                              tempSelectedApiTokenId = null; // Fallback
+                              displayArea.innerHTML = '<span class="text-gray-400 italic">Ungültige Auswahl</span>';
+                         } else {
+                             // Den zugehörigen Token finden
+                             const token = (notrufSettings.apiTokens || []).find(t => t.id === tokenId);
+                             if (token) {
+                                 // Temporäre Variable setzen und Anzeige aktualisieren
+                                 tempSelectedApiTokenId = tokenId;
+                                 displayArea.innerHTML = `<span class="api-token-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-token-id="${token.id}">${token.name}</span>`;
+                             } else { // Fallback, falls Token nicht gefunden wird
+                                  tempSelectedApiTokenId = null;
+                                  displayArea.innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
+                             }
+                         }
+                     } else { // Wenn kein Radio-Button ausgewählt ist
+                         tempSelectedApiTokenId = null;
+                         displayArea.innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
+                     }
+                }
+                apiTokenModal.style.display = 'none'; // Modal schließen
+            }
+        });
+        // Markieren, dass der Listener hinzugefügt wurde
+        apiTokenModal.dataset.listenerAttached = 'true';
+    }
+}
+
+const soundModal = document.getElementById('soundBookModal');
+    // Verhindert, dass der Listener mehrfach hinzugefügt wird
+    if (soundModal && !soundModal.dataset.listenerAttached) {
+        // Listener für Checkbox "Eigenen Namen verwenden"
+        const useCustomNameCheckbox = soundModal.querySelector('#soundUseCustomName');
+        const customNameInput = soundModal.querySelector('#soundCustomName');
+        if (useCustomNameCheckbox && customNameInput) {
+            // Verhindert doppelten Change-Listener
+            if (!useCustomNameCheckbox.dataset.changeListenerAttached) {
+                useCustomNameCheckbox.addEventListener('change', (e) => {
+                    customNameInput.classList.toggle('hidden', !e.target.checked);
+                    if (!e.target.checked) customNameInput.value = ''; // Leeren, wenn versteckt
+                });
+                useCustomNameCheckbox.dataset.changeListenerAttached = 'true';
+            }
+        }
+
+        // Haupt-Click-Listener für das Modal
+        soundModal.addEventListener('click', async (e) => { // Async für setDoc
+            // Modal schließen
+            if (e.target.closest('#soundBookCloseButton')) {
+                soundModal.style.display = 'none';
+            }
+            // Sound hinzufügen
+            if (e.target.closest('#soundAddButton')) {
+                const codeInput = document.getElementById('soundCode');
+                const customNameInput = document.getElementById('soundCustomName'); // Erneut holen
+                const useCustomCheckbox = document.getElementById('soundUseCustomName'); // Erneut holen
+                // Sicherstellen, dass Elemente existieren
+                if (!codeInput || !useCustomCheckbox || !customNameInput) return;
+
+                const code = codeInput.value.trim();
+                const useCustom = useCustomCheckbox.checked;
+                const customName = customNameInput.value.trim();
+
+                // Prüfen, ob notrufSettingsDocRef existiert
+                if (code && (!useCustom || (useCustom && customName)) && notrufSettingsDocRef) {
+                     // Sicherstellen, dass das Array existiert
+                    if (!notrufSettings.sounds) notrufSettings.sounds = [];
+                    notrufSettings.sounds.push({
+                        id: Date.now(),
+                        code: code,
+                        useCustomName: useCustom,
+                        customName: useCustom ? customName : null
+                    });
+                    try {
+                        // Änderungen in Firestore speichern
+                        await setDoc(notrufSettingsDocRef, notrufSettings);
+                        // renderSoundBook(); // Wird durch onSnapshot erledigt
+                        // Felder leeren nach erfolgreichem Speichern
+                        codeInput.value = '';
+                        useCustomCheckbox.checked = false;
+                        customNameInput.value = '';
+                        customNameInput.classList.add('hidden');
+                    } catch (err) {
+                        console.error("Fehler beim Speichern des Sounds:", err);
+                        alertUser('Fehler beim Speichern des Sounds.', 'error');
+                    }
+                } else {
+                    // Fehlermeldung, wenn Felder leer sind oder Referenz fehlt
+                    if (!notrufSettingsDocRef) console.error("Sound hinzufügen: notrufSettingsDocRef ist nicht definiert!");
+                    alertUser('Bitte Soundcode und ggf. eigenen Namen ausfüllen.', 'error');
+                }
+            }
+            // Sound löschen
+            const deleteSoundBtn = e.target.closest('.delete-sound-btn');
+            if (deleteSoundBtn) {
+                const soundId = parseInt(deleteSoundBtn.dataset.soundId);
+                 // Prüfen, ob soundId eine gültige Zahl ist
+                if (isNaN(soundId)) return;
+                // Bestätigung einholen und Referenz prüfen
+                if (confirm('Möchten Sie diesen Sound wirklich löschen?') && notrufSettingsDocRef) {
+                    // Sound aus der Liste filtern
+                    notrufSettings.sounds = (notrufSettings.sounds || []).filter(s => s.id !== soundId);
+                    // Entferne Sound auch aus allen Modi-Configs, die ihn verwenden
+                    (notrufSettings.modes || []).forEach(mode => {
+                        if (mode.config && mode.config.selectedSoundId === soundId) {
+                            // Setze auf null (Standard) zurück
+                            mode.config.selectedSoundId = null;
+                        }
+                    });
+                    // Setze temporäre Auswahl zurück, falls dieser Sound ausgewählt war
+                    if (tempSelectedSoundId === soundId) {
+                        tempSelectedSoundId = null;
+                        const display = document.getElementById('notrufSoundDisplay');
+                        if(display) display.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
+                    }
+                    try {
+                        // Änderungen in Firestore speichern
+                        await setDoc(notrufSettingsDocRef, notrufSettings);
+                        // renderSoundBook(); // Wird durch onSnapshot erledigt
+                    } catch (err) {
+                        console.error("Fehler beim Löschen des Sounds:", err);
+                        alertUser('Fehler beim Löschen des Sounds.', 'error');
+                    }
+                }
+            }
+            // Auswahl übernehmen und Modal schließen
+            if (e.target.closest('#soundBookApplyButton')) {
+                const selectedRadio = soundModal.querySelector('.sound-radio:checked');
+                const displayArea = document.getElementById('notrufSoundDisplay');
+                 // Sicherstellen, dass der Anzeigebereich existiert
+                if (displayArea) {
+                     // Prüfen, ob ein spezifischer Sound ausgewählt wurde (nicht 'default')
+                     if (selectedRadio && selectedRadio.value !== 'default') {
+                         const soundId = parseInt(selectedRadio.value);
+                         // Prüfen, ob soundId eine gültige Zahl ist
+                         if(isNaN(soundId)){
+                              tempSelectedSoundId = null; // Fallback
+                              displayArea.innerHTML = '<span class="text-gray-400 italic">Ungültige Auswahl</span>';
+                         } else {
+                             // Den zugehörigen Sound finden
+                             const sound = (notrufSettings.sounds || []).find(s => s.id === soundId);
+                             if (sound) {
+                                 // Temporäre Variable setzen und Anzeige aktualisieren
+                                 tempSelectedSoundId = soundId;
+                                 const displayName = sound.useCustomName && sound.customName ? sound.customName : sound.code;
+                                 displayArea.innerHTML = `<span class="sound-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-sound-id="${sound.id}">${displayName}</span>`;
+                             } else { // Fallback, falls Sound nicht gefunden wird
+                                 tempSelectedSoundId = null;
+                                 displayArea.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
+                             }
+                         }
+                     } else { // Wenn 'default' oder nichts ausgewählt wurde
+                         tempSelectedSoundId = null; // Setze auf null für Standard
+                         displayArea.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
+                     }
+                }
+                soundModal.style.display = 'none'; // Modal schließen
+            }
+        });
+        // Markieren, dass der Listener hinzugefügt wurde
+        soundModal.dataset.listenerAttached = 'true';
+    }
+
 } // --- ENDE initializeNotrufSettingsView ---
 
 // === Restliche Hilfsfunktionen für Notruf (populateFlicAssignmentSelectors, updateFlicColumnDisplays, etc.) bleiben unverändert HIER in notfall.js ===
