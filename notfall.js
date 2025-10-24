@@ -9,6 +9,32 @@ let activeFlicEditorKlickTyp = null;
 let tempSelectedApiTokenId = null; // Für das Bearbeiten-Formular
 let tempSelectedSoundId = null;    // Für das Bearbeiten-Formular
 
+function updateFlicEditorDetails(selectedModeId) {
+    const detailsDisplay = document.getElementById('flic-editor-details');
+    if (!detailsDisplay) {
+         console.error("updateFlicEditorDetails: Element #flic-editor-details nicht gefunden!");
+         return;
+    }
+    // Greift auf das importierte notrufSettings zu
+    const modes = notrufSettings.modes || [];
+    // Finde den Modus anhand der ID
+    const selectedMode = modes.find(m => m.id === selectedModeId);
+
+     if (selectedMode) { // Wenn ein Modus ausgewählt ist
+        const config = selectedMode.config || {};
+        const recipients = (config.userKeys || []).map(u => u.name).join(', ') || 'Niemand';
+        // Zeige Details des ausgewählten Modus an
+        detailsDisplay.innerHTML = `
+            <strong class="block">Empfänger:</strong>
+            <span class="block pl-2 mb-1">${recipients}</span>
+            <strong class="block">Nachricht:</strong>
+            <span class="block pl-2 mb-1">"${config.message || 'Keine'}"</span>
+            <strong class="block">Prio:\u00A0${config.priority ?? '0'}, Retry:\u00A0${config.retry ?? '0'}s</strong>`; // ?? für Default 0
+    } else { // Wenn "Kein Modus zugewiesen" ausgewählt ist
+        detailsDisplay.innerHTML = 'Kein Modus zugewiesen.';
+    }
+}
+
 export function initializeNotrufSettingsView() {
     const notrufView = document.getElementById('notrufSettingsView'); // <-- Holt sich das Element selbst
     if (!notrufView) {
