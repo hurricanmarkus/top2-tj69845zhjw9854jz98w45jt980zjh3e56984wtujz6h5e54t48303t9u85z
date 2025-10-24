@@ -10,7 +10,7 @@ import { toggleAdminSection, rememberAdminScroll, restoreAdminScrollIfAny, rende
 import { initializeEssensberechnungView } from './essensberechnung.js';
 import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, listenForTemplates, openTemplateModal, renderChecklistView, renderChecklistSettingsView } from './checklist.js'; // openTemplateModal etc. importiert
 import { IFTTT_URL, initializeNotrufSettingsView } from './notfall.js'; // <-- initializeNotrufSettingsView HIER importiert
-import { PUSHOVER_TOKEN, RECIENT_KEYS } from './pushbenachrichtigung.js';
+import { PUSHOVER_TOKEN, RECIPIENT_KEYS } from './pushbenachrichtigung.js';
 import { logAdminAction } from './admin_protokollHistory.js'; // logAdminAction importiert
 import { renderUserKeyList } from './admin_passwoerter.js'; // renderUserKeyList importiert
 import { renderApprovalProcess } from './admin_genehmigungsprozess.js'; // renderApprovalProcess importiert
