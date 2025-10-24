@@ -49,7 +49,7 @@ export let checklistCategoriesCollectionRef;
 export let auth;
 export let usersCollectionRef, rolesCollectionRef, roleChangeRequestsCollectionRef, settingsDocRef, auditLogCollectionRef;
 export let activeDisplayMode = 'gesamt';
-export let editingPortionId = null;
+let editingPortionId = null;
 
 export const firebaseConfigFromUser = {
     apiKey: "AIzaSyCCQML1UOy7NB5ohbiPZmOE6dB6oIpzlQk",
