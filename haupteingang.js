@@ -10,7 +10,7 @@ import { toggleAdminSection, rememberAdminScroll, restoreAdminScrollIfAny, rende
 import { initializeEssensberechnungView } from './essensberechnung.js';
 import { IFTTT_URL, initializeNotrufSettingsView } from './notfall.js';
 import { PUSHOVER_TOKEN, RECIPIENT_KEYS } from './pushbenachrichtigung.js';
-import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, openTemplateModal, renderChecklistView, renderChecklistSettingsView } from './checklist.js';
+import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, openTemplateModal, renderChecklistView, renderChecklistSettingsView, listenForTemplates } from './checklist.js';
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
 import { renderUserKeyList } from './admin_benutzersteuerung.js'; // <-- KORRIGIERT
 // // ENDE-ZIKA //
