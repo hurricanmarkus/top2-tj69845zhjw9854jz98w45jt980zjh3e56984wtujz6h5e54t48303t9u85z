@@ -5,19 +5,12 @@ import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged }
 import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode } from './log-InOut.js';
 import { renderModalUserButtons, listenForUserUpdates } from './admin_benutzersteuerung.js';
 import { listenForRoleUpdates, listenForAdminRoleUpdates } from './admin_rollenverwaltung.js';
-import { listenForApprovalRequests, createApprovalRequest } from './admin_genehmigungsprozess.js'; // createApprovalRequest importiert
-import { toggleAdminSection, rememberAdminScroll, restoreAdminScrollIfAny, renderMainFunctionsAdminArea } from './admin_adminfunktionenHome.js'; // Scroll-Funktionen importiert
+import { listenForApprovalRequests } from './admin_genehmigungsprozess.js';
+import { toggleAdminSection } from './admin_adminfunktionenHome.js';
 import { initializeEssensberechnungView } from './essensberechnung.js';
-import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, listenForTemplates, openTemplateModal, renderChecklistView, renderChecklistSettingsView } from './checklist.js'; // openTemplateModal etc. importiert
-import { IFTTT_URL, initializeNotrufSettingsView } from './notfall.js'; // <-- initializeNotrufSettingsView HIER importiert
+import { IFTTT_URL, initializeNotrufSettingsView } from './notfall.js';
 import { PUSHOVER_TOKEN, RECIPIENT_KEYS } from './pushbenachrichtigung.js';
-import { logAdminAction } from './admin_protokollHistory.js'; // logAdminAction importiert
-import { renderUserKeyList } from './admin_passwoerter.js'; // renderUserKeyList importiert
-import { renderApprovalProcess } from './admin_genehmigungsprozess.js'; // renderApprovalProcess importiert
-import { renderRoleManagement } from './admin_rollenverwaltung.js'; // renderRoleManagement importiert
-import { renderAdminRightsManagement, renderAdminUserDetails, setupPermissionDependencies } from './admin_rechteverwaltung.js'; // Nötige Funktionen importiert
-import { renderUserManagement, addAdminUserManagementListeners, toggleNewUserRoleField } from './admin_benutzersteuerung.js'; // Nötige Funktionen importiert
-import { renderProtocolHistory } from './admin_protokollHistory.js'; // renderProtocolHistory importiert
+import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, listenForTemplates } from './checklist.js';
 // ENDE-ZIKA //
 
 // BEGINN-ZIKA: LET-BEFEHLE IMMER NACH IMPORT-BEFEHLE //
@@ -40,15 +33,14 @@ export let pinError;
 export let TEMPLATES = {};
 export let TEMPLATE_ITEMS = {};
 export let notrufSettingsDocRef;
-// export let activeFlicEditorKlickTyp = null; // <-- Entfernt, gehört zu notfall.js
-// export let tempSelectedApiTokenId = null; // <-- Entfernt, gehört zu notfall.js
-// export let tempSelectedSoundId = null; // <-- Entfernt, gehört zu notfall.js
+let activeFlicEditorKlickTyp = null;
+export let tempSelectedApiTokenId = null; // Für das Bearbeiten-Formular
+export let tempSelectedSoundId = null;    // Für das Bearbeiten-Formular
 export let unsubscribeTemplateItems = null;
 export let adminSettings = {};
 export let selectedUserForLogin = null;
-export let adminSectionsState = { password: false, user: false, role: false, approval: false, protocol: false, adminRights: false, mainFunctions: false };
-export let localUpdateInProgress = false; // Wird in admin_benutzersteuerung.js verwendet
-export let roleManagementSectionsState = { userRolesOpen: false, adminRolesOpen: false }; // Wird in admin_rollenverwaltung.js verwendet
+export let adminSectionsState = { password: false, user: false, role: false, approval: false, protocol: false, adminRights: false, mainFunctions: false }; let localUpdateInProgress = false;
+export let roleManagementSectionsState = { userRolesOpen: false, adminRolesOpen: false };
 export let ADMIN_ROLES = {};
 export let adminRolesCollectionRef;
 export let approvalRequestsCollectionRef;
@@ -58,8 +50,8 @@ export let checklistGroupsCollectionRef;
 export let checklistCategoriesCollectionRef;
 export let auth;
 export let usersCollectionRef, rolesCollectionRef, roleChangeRequestsCollectionRef, settingsDocRef, auditLogCollectionRef;
-export let activeDisplayMode = 'gesamt'; // Wird in essensberechnung.js verwendet
-// let editingPortionId = null; // <-- Entfernt, gehört zu essensberechnung.js
+export let activeDisplayMode = 'gesamt';
+let editingPortionId = null;
 
 export const firebaseConfigFromUser = {
     apiKey: "AIzaSyCCQML1UOy7NB5ohbiPZmOE6dB6oIpzlQk",
@@ -76,22 +68,28 @@ export const ADMIN_STORAGE_KEY = 't2_user_mode';
 export const appId = typeof __app_id !== 'undefined' ? __app_id : '20LVob88b3ovXRUyX3ra';
 export const usingEnvConfig = typeof __firebase_config !== 'undefined' && __firebase_config;
 export const firebaseConfig = usingEnvConfig ? JSON.parse(__firebase_config) : firebaseConfigFromUser;
-export const views = { home: { id: 'homeView' }, entrance: { id: 'entranceView' }, pushover: { id: 'pushoverView' }, admin: { id: 'adminView' }, userSettings: { id: 'userSettingsView' }, checklist: { id: 'checklistView' }, checklistSettings: { id: 'checklistSettingsView' }, essensberechnung: { id: 'essensberechnungView' }, notrufSettings: { id: 'notrufSettingsView' } };
-const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
+export const views = { home: { id: 'homeView' }, entrance: { id: 'entranceView' }, pushover: { id: 'pushoverView' }, admin: { id: 'adminView' }, userSettings: { id: 'userSettingsView' }, checklist: { id: 'checklistView' }, checklistSettings: { id: 'checklistSettingsView' }, essensberechnung: { id: 'essensberechnungView' }, notrufSettings: { id: 'notrufSettingsView' } }; const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
 
 
 export let currentMeal = {
     name: '',
     singleProducts: [], // { id, name, weight }
     recipes: [],        // { id, name, ingredients: [{...}] }
-    userInputDistribution: [], // { id, portionName, personId, personName, anzahl, recipeInputs:[{recipeId, weight}], productInputs: [{productId, mode, value}] }
+
+    // Die "distribution" speichert jetzt die Eingaben des Benutzers, nicht das Ergebnis
+    userInputDistribution: [], // { id, portionName, personId, personName, anzahl, productInputs: [{productId, mode, value}] }
+
+    // Hier speichern wir, ob der "Rest" berechnet werden soll
     calculateRest: false,
+
+    // Das Endergebnis der Berechnung wird separat gespeichert
     finalDistribution: []
 };
 
 export let notrufSettings = {
     modes: [],
     contacts: [],
+    // Stelle sicher, dass flicAssignments immer existiert
     flicAssignments: { einfach: null, doppel: null, halten: null },
     apiTokens: [],
     sounds: []
@@ -105,7 +103,7 @@ export let currentUser = {
 };
 // ENDE-ZIKA //
 
-export const COLOR_PALETTE = { // Wird in checklist.js verwendet
+export const COLOR_PALETTE = {
     gray: { name: 'Grau', bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-400' },
     red: { name: 'Rot', bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-500' },
     orange: { name: 'Orange', bg: 'bg-orange-100', text: 'text-orange-800', border: 'border-orange-500' },
@@ -126,79 +124,69 @@ export const COLOR_PALETTE = { // Wird in checklist.js verwendet
     rose: { name: 'Rose', bg: 'bg-rose-100', text: 'text-rose-800', border: 'border-rose-500' },
 };
 
-export const USER_COLORS = { // Wird nicht verwendet?
+export const USER_COLORS = {
     ADMIN: ['bg-red-600', 'hover:bg-red-700'],
     SYSTEMADMIN: ['bg-purple-800', 'hover:bg-purple-900'],
     DEFAULT: ['bg-indigo-600', 'hover:bg-indigo-700']
 };
 
 
-// Globale Referenzen auf HTML-Elemente holen
-let appHeader, footerModeHandler, modeTextDisplay, userSelectionModal, pinModalTitle,
-    adminRightsArea, adminRightsToggleIcon, roleManagementSection, roleSettingsToggle,
-    roleManagementArea, roleToggleIcon, passwordSection, passwordSettingsToggle,
-    passwordManagementArea, passwordToggleIcon, userSection, userManagementToggle,
-    userManagementArea, userManagementToggleIcon, approvalProcessSection,
-    approvalProcessToggle, approvalProcessArea, approvalToggleIcon,
-    protocolHistorySection, protocolHistoryToggle, protocolHistoryArea,
-    protocolHistoryToggleIcon, noAdminPermissionsPrompt, mainFunctionsSection,
-    mainFunctionsToggle, mainFunctionsArea, mainFunctionsToggleIcon;
-
 
 window.onload = function () {
-    // Globale Element-Referenzen im onload setzen, da das DOM jetzt bereit ist
-    appHeader = document.getElementById('appHeader');
+
     modalUserButtons = document.getElementById('modalUserButtons');
-    userSelectionModal = document.getElementById('userSelectionModal');
+    const distributionList = document.getElementById('distribution-list');
+    const appHeader = document.getElementById('appHeader');
+    const footerModeHandler = document.getElementById('footerModeHandler');
+    const modeTextDisplay = document.getElementById('modeTextDisplay');
+    const userSelectionModal = document.getElementById('userSelectionModal');
     pinModal = document.getElementById('pinModal');
-    pinModalTitle = document.getElementById('pinModalTitle');
+    const pinModalTitle = document.getElementById('pinModalTitle');
     adminPinInput = document.getElementById('adminPinInput');
     pinError = document.getElementById('pinError');
-    submitAdminKeyButton = document.getElementById('submitAdminKeyButton');
-    adminRightsSection = document.getElementById('adminRightsSection');
+    const mainSettingsButton = document.getElementById('mainSettingsButton');
+    const adminRightsSection = document.getElementById('adminRightsSection');
     adminRightsToggle = document.getElementById('adminRightsToggle');
-    adminRightsArea = document.getElementById('adminRightsArea');
-    adminRightsToggleIcon = document.getElementById('adminRightsToggleIcon');
-    roleManagementSection = document.getElementById('roleManagementSection');
-    roleSettingsToggle = document.getElementById('roleSettingsToggle');
-    roleManagementArea = document.getElementById('roleManagementArea');
-    roleToggleIcon = document.getElementById('roleToggleIcon');
-    passwordSection = document.getElementById('passwordSection');
-    passwordSettingsToggle = document.getElementById('passwordSettingsToggle');
-    passwordManagementArea = document.getElementById('passwordManagementArea');
-    passwordToggleIcon = document.getElementById('passwordToggleIcon');
-    userSection = document.getElementById('userSection');
-    userManagementToggle = document.getElementById('userManagementToggle');
-    userManagementArea = document.getElementById('userManagementArea');
-    userManagementToggleIcon = document.getElementById('userManagementToggleIcon');
-    approvalProcessSection = document.getElementById('approvalProcessSection');
-    approvalProcessToggle = document.getElementById('approvalProcessToggle');
-    approvalProcessArea = document.getElementById('approvalProcessArea');
-    approvalToggleIcon = document.getElementById('approvalToggleIcon');
-    protocolHistorySection = document.getElementById('protocolHistorySection');
-    protocolHistoryToggle = document.getElementById('protocolHistoryToggle');
-    protocolHistoryArea = document.getElementById('protocolHistoryArea');
-    protocolHistoryToggleIcon = document.getElementById('protocolHistoryToggleIcon');
-    noAdminPermissionsPrompt = document.getElementById('noAdminPermissionsPrompt');
-    mainFunctionsSection = document.getElementById('mainFunctionsSection');
-    mainFunctionsToggle = document.getElementById('mainFunctionsToggle');
-    mainFunctionsArea = document.getElementById('mainFunctionsArea');
-    mainFunctionsToggleIcon = document.getElementById('mainFunctionsToggleIcon');
+    submitAdminKeyButton = document.getElementById('submitAdminKeyButton');
+    console.log("Wert von submitAdminKeyButton IN window.onload:", submitAdminKeyButton); // <-- SPION 1
+    const adminRightsArea = document.getElementById('adminRightsArea');
+    const adminRightsToggleIcon = document.getElementById('adminRightsToggleIcon');
+    const roleManagementSection = document.getElementById('roleManagementSection');
+    const roleSettingsToggle = document.getElementById('roleSettingsToggle');
+    const roleManagementArea = document.getElementById('roleManagementArea');
+    const roleToggleIcon = document.getElementById('roleToggleIcon');
+    const passwordSection = document.getElementById('passwordSection');
+    const passwordSettingsToggle = document.getElementById('passwordSettingsToggle');
+    const passwordManagementArea = document.getElementById('passwordManagementArea');
+    const passwordToggleIcon = document.getElementById('passwordToggleIcon');
+    const userSection = document.getElementById('userSection');
+    const userManagementToggle = document.getElementById('userManagementToggle');
+    const userManagementArea = document.getElementById('userManagementArea');
+    const userManagementToggleIcon = document.getElementById('userManagementToggleIcon');
+    const approvalProcessSection = document.getElementById('approvalProcessSection');
+    const approvalProcessToggle = document.getElementById('approvalProcessToggle');
+    const approvalProcessArea = document.getElementById('approvalProcessArea');
+    const approvalToggleIcon = document.getElementById('approvalToggleIcon');
+    const protocolHistorySection = document.getElementById('protocolHistorySection');
+    const protocolHistoryToggle = document.getElementById('protocolHistoryToggle');
+    const protocolHistoryArea = document.getElementById('protocolHistoryArea');
+    const protocolHistoryToggleIcon = document.getElementById('protocolHistoryToggleIcon');
+    const noAdminPermissionsPrompt = document.getElementById('noAdminPermissionsPrompt');
+    const mainFunctionsSection = document.getElementById('mainFunctionsSection');
+    const mainFunctionsToggle = document.getElementById('mainFunctionsToggle');
+    const mainFunctionsArea = document.getElementById('mainFunctionsArea');
+    const mainFunctionsToggleIcon = document.getElementById('mainFunctionsToggleIcon');
+    const notrufView = document.getElementById('notrufSettingsView');
 
-    // Listener für Modals hinzufügen
     const closeDeletedModalBtn = document.getElementById('closeDeletedListsModal');
     if (closeDeletedModalBtn) {
         closeDeletedModalBtn.addEventListener('click', () => {
-            const modal = document.getElementById('deletedListsModal');
-            if(modal) modal.style.display = 'none';
+            document.getElementById('deletedListsModal').style.display = 'none';
         });
     }
 
-    // Grundlegende Event Listener und Firebase Initialisierung starten
     setupEventListeners();
     initializeFirebase();
-
-    // Service Worker Registrierung
     if ('serviceWorker' in navigator) {
         try {
             navigator.serviceWorker.register('/sw.js');
@@ -227,13 +215,13 @@ async function initializeFirebase() {
         roleChangeRequestsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'role-change-requests');
         auditLogCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'audit-log');
         settingsDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'app-settings', 'main');
-        notrufSettingsDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'app-settings', 'notruf'); // <-- notrufSettingsDocRef wird hier definiert
+        notrufSettingsDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'app-settings', 'notruf');
         checklistsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklists');
         checklistItemsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-items');
         checklistGroupsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-groups');
         checklistCategoriesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-categories');
         const checklistStacksCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-stacks');
-        approvalRequestsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'approval-requests'); // Wird in admin_genehmigungsprozess.js verwendet
+        approvalRequestsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'approval-requests');
         // --- Ende DB Refs ---
 
         if (!usersCollectionRef) { console.error("initializeFirebase: FEHLER - usersCollectionRef konnte nicht erstellt werden!"); return; }
@@ -245,6 +233,8 @@ async function initializeFirebase() {
             console.log("initializeFirebase: Anonyme Anmeldung erfolgreich. User UID:", userCredential.user.uid);
         } catch (error) {
             console.error("initializeFirebase: FEHLER bei anonymer Anmeldung:", error);
+            // alertUser ist hier evtl. noch nicht sicher definiert, daher nur Konsole
+            // alertUser("Firebase Authentifizierung fehlgeschlagen.", "error");
         }
 
 
@@ -264,74 +254,67 @@ async function initializeFirebase() {
                         console.warn("Firebase App Settings Document 'main' not found.");
                         adminSettings = {}; // Fallback
                     }
-                     updateUIForMode(); // Wichtig, um z.B. Default-Checklist Namen anzuzeigen
+                     // UI Update für default checklist könnte hier ausgelöst werden, falls nötig
+                     // updateUIForMode(); // Eher am Ende aufrufen
                 }, (error) => {
                     console.error("Error listening to settings:", error);
                 });
 
                 onSnapshot(notrufSettingsDocRef, (docSnap) => {
                      if (docSnap.exists()) {
-                         // Überschreibe das lokale Objekt mit den Daten aus Firebase
-                         Object.assign(notrufSettings, docSnap.data());
-                         // Initialisiere fehlende Felder robust, falls sie in Firebase fehlen
+                         notrufSettings = docSnap.data();
+                         // Initialisiere fehlende Felder, falls nötig
                          if (!notrufSettings.modes) notrufSettings.modes = [];
                          if (!notrufSettings.contacts) notrufSettings.contacts = [];
                          if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
                          if (!notrufSettings.sounds) notrufSettings.sounds = [];
                          if (!notrufSettings.flicAssignments) notrufSettings.flicAssignments = { einfach: null, doppel: null, halten: null };
                      } else {
-                         console.warn("Firebase Notruf Settings Document 'notruf' not found, using default.");
-                         // Setze auf Standardwerte zurück, falls Dokument nicht existiert
-                         Object.assign(notrufSettings, { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } });
+                         console.warn("Firebase Notruf Settings Document 'notruf' not found, creating default.");
+                         notrufSettings = { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } };
                          // Optional: Hier setDoc aufrufen, um das Dokument zu erstellen
                          // setDoc(notrufSettingsDocRef, notrufSettings);
                      }
                       // UI Update für Notruf-Seite hier auslösen, falls sie aktiv ist
-                      const notrufView = document.getElementById('notrufSettingsView');
-                      if (notrufView && notrufView.classList.contains('active')) {
-                           initializeNotrufSettingsView(); // Ruft die Initialisierung erneut auf, um die neuen Daten anzuzeigen
-                      }
+                      // if (document.getElementById('notrufSettingsView')?.classList.contains('active')) {
+                      //     initializeNotrufSettingsView(); // Beispiel
+                      // }
                 }, (error) => {
                     console.error("Error listening to notruf settings:", error);
                 });
                 // --- Ende Listener für App-Einstellungen ---
 
-                await seedInitialData();
+                await seedInitialData(); // Sicherstellen, dass die Funktion existiert
                 console.log("initializeFirebase: Seed Data abgeschlossen, starte Haupt-Listener...");
 
                 // Haupt-Daten-Listener
                 console.log("initializeFirebase: Rufe listenForRoleUpdates auf...");
-                listenForRoleUpdates();
+                listenForRoleUpdates(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: Rufe listenForAdminRoleUpdates auf...");
-                listenForAdminRoleUpdates();
+                listenForAdminRoleUpdates(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: Rufe listenForUserUpdates auf...");
-                listenForUserUpdates();
+                listenForUserUpdates(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: Rufe listenForApprovalRequests auf...");
-                listenForApprovalRequests();
+                listenForApprovalRequests(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: Rufe listenForChecklists auf...");
-                listenForChecklists();
+                listenForChecklists(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: Rufe listenForChecklistItems auf...");
-                listenForChecklistItems();
+                listenForChecklistItems(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: Rufe listenForChecklistGroups auf...");
-                listenForChecklistGroups();
+                listenForChecklistGroups(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: Rufe listenForChecklistCategories auf...");
-                listenForChecklistCategories();
+                listenForChecklistCategories(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: Rufe listenForTemplates auf...");
-                listenForTemplates();
+                listenForTemplates(); // Sicherstellen, dass importiert
 
                 onSnapshot(query(checklistStacksCollectionRef, orderBy('name')), (snapshot) => {
                     Object.assign(CHECKLIST_STACKS, {}); // Leeren statt neu zuweisen
                      snapshot.forEach((doc) => {
                          CHECKLIST_STACKS[doc.id] = { id: doc.id, ...doc.data() };
                      });
-                     // UI Update für Templates/Stacks, falls Checklist-Settings aktiv
-                     const settingsView = document.getElementById('checklistSettingsView');
-                     if (settingsView && settingsView.classList.contains('active')) {
-                         const activeTab = settingsView.querySelector('#settings-tabs .settings-tab-btn.bg-white');
-                         if (activeTab && activeTab.dataset.targetCard === 'card-templates') {
-                              renderChecklistSettingsView(settingsView.dataset.editingListId); // Render settings view might rerender the container list
-                         }
-                     }
+                     // UI Update für Templates/Stacks, falls nötig und aktiv
+                     // const settingsView = document.getElementById('checklistSettingsView');
+                     // if (settingsView?.classList.contains('active')) { ... }
                 });
                 console.log("initializeFirebase: Alle Listener-Funktionen aufgerufen.");
 
@@ -345,15 +328,15 @@ async function initializeFirebase() {
             // UI basierend auf User-Status aktualisieren
             if (user) {
                 console.log("initializeFirebase: User (anonym) vorhanden.");
-                checkCurrentUserValidity();
-                initialAuthCheckDone = true; // Setze Flag *nach* dem ersten Check
-                updateUIForMode();
+                checkCurrentUserValidity(); // Sicherstellen, dass importiert
+                initialAuthCheckDone = true;
+                updateUIForMode(); // Sicherstellen, dass importiert
                 console.log("initializeFirebase: UI für aktuellen Status aktualisiert.");
             } else {
                 console.log("Firebase meldet KEINEN User (auch nicht anonym!), wechsle explizit zum Gastmodus.");
-                switchToGuestMode(false);
+                switchToGuestMode(false); // Sicherstellen, dass importiert
                  initialAuthCheckDone = true;
-                 updateUIForMode();
+                 updateUIForMode(); // Sicherstellen, dass importiert
             }
              console.log("initializeFirebase: Ende des onAuthStateChanged Callbacks.");
         }); // Ende onAuthStateChanged
@@ -365,10 +348,9 @@ async function initializeFirebase() {
     }
      console.log("initializeFirebase: Funktion komplett beendet.");
 }
-
+// --- HIER ENDET DIE FUNKTION ZUM ERSETZEN ---
 async function seedInitialData() {
     try {
-        // Seed User Roles
         const rolesSnapshot = await getDocs(rolesCollectionRef);
         if (rolesSnapshot.empty) {
             const batch = writeBatch(db);
@@ -380,70 +362,45 @@ async function seedInitialData() {
             };
             Object.keys(defaultRoles).forEach(roleId => batch.set(doc(rolesCollectionRef, roleId), defaultRoles[roleId]));
             await batch.commit();
-            console.log("Default User Roles seeded.");
         } else {
-            // Ensure NO_RIGHTS exists even if roles were seeded before
+            // Stellt sicher, dass die neue Rolle auch bei bestehenden Installationen hinzugefügt wird
             const noRightsDoc = doc(rolesCollectionRef, 'NO_RIGHTS');
             const noRightsSnap = await getDoc(noRightsDoc);
             if (!noRightsSnap.exists()) {
                 await setDoc(noRightsDoc, { name: '- Keine Rechte -', permissions: [], deletable: false });
-                console.log("Added missing NO_RIGHTS role.");
             }
         }
 
-        // Seed Admin Roles (ensure empty role exists)
+        const adminRolesSnapshot = await getDocs(adminRolesCollectionRef);
         const emptyRoleDoc = doc(adminRolesCollectionRef, 'LEERE_ROLLE');
         const emptyRoleSnapshot = await getDoc(emptyRoleDoc);
         if (!emptyRoleSnapshot.exists()) {
             await setDoc(emptyRoleDoc, { name: '** Leere Rolle**', permissions: {}, deletable: false });
-            console.log("Seeded empty Admin Role.");
         }
 
-        // Seed initial System Admin User
         const usersSnapshot = await getDocs(usersCollectionRef);
         if (usersSnapshot.empty) {
-            await setDoc(doc(usersCollectionRef, 'SYSTEMADMIN'), { name: 'Systemadmin', key: 'top2sys', role: 'SYSTEMADMIN', isActive: true, permissionType: 'role' });
-            console.log("Initial System Admin User seeded.");
+            await setDoc(doc(usersCollectionRef, 'SYSTEMADMIN'), { name: 'Systemadmin', key: 'top2sys', role: 'SYSTEMADMIN', isActive: true });
         }
     } catch (error) {
         console.error("Error in seedInitialData:", error);
-        // Do not throw error here to allow app to continue if seeding fails partially
+        throw error;
     }
 }
 
 export function alertUser(message, type) {
-    // Finde und entferne zuerst eine eventuell vorhandene alte Alert-Box
-    const existingAlert = document.getElementById('temp-alert-box');
-    if (existingAlert) {
-        existingAlert.remove();
-    }
-
     const tempAlert = document.createElement('div');
-    tempAlert.id = 'temp-alert-box'; // Gib ihr eine ID zum einfachen Finden
     tempAlert.textContent = message;
-    // Standard Tailwind Klassen
-    tempAlert.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 rounded-xl text-white font-bold shadow-lg transition-opacity duration-300 z-50 text-center`;
-    // Farbklassen basierend auf Typ hinzufügen
-    if (type === 'success') {
-        tempAlert.classList.add('bg-green-600');
-    } else if (type === 'error') {
-        tempAlert.classList.add('bg-red-600');
-    } else { // Default/Info
-        tempAlert.classList.add('bg-blue-600');
-    }
-
+    tempAlert.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 rounded-xl text-white font-bold shadow-lg transition-opacity duration-300 z-50 text-center ${type === 'success' ? 'bg-green-600' : 'bg-red-600'}`;
     document.body.appendChild(tempAlert);
-    // Fade in
     setTimeout(() => tempAlert.style.opacity = '1', 10);
-    // Fade out und entfernen
     setTimeout(() => {
         tempAlert.style.opacity = '0';
-        setTimeout(() => tempAlert.remove(), 300); // Entferne nach dem Fade-Out
-    }, 3000); // Bleibt 3 Sekunden sichtbar
+        setTimeout(() => tempAlert.remove(), 300);
+    }, 3000);
 }
 
-export function setButtonLoading(button, isLoading) { // Exportiert, falls in anderen Modulen benötigt
-    if (!button) return;
+export function setButtonLoading(button, isLoading) {
     const text = button.querySelector('.button-text');
     const spinner = button.querySelector('.loading-spinner');
     button.disabled = isLoading;
@@ -452,521 +409,538 @@ export function setButtonLoading(button, isLoading) { // Exportiert, falls in an
 }
 
 export function navigate(targetViewName) {
-    console.log(`Navigiere zu: ${targetViewName}`); // Log Navigation
     const targetView = views[targetViewName];
-    if (!targetView) {
-         console.error(`Navigation fehlgeschlagen: View "${targetViewName}" nicht gefunden.`);
-         return;
-    }
+    if (!targetView) return;
 
-    // Berechtigungsprüfung
-    const userPermissions = currentUser.permissions || [];
+    const userPermissions = currentUser.permissions;
+    if (['entrance', 'pushover'].includes(targetViewName) && !userPermissions.includes(targetViewName.toUpperCase())) {
+        return alertUser("Zugriff verweigert.", 'error');
+    }
     const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'SYSTEMADMIN';
-
-    // Spezifische Berechtigungen für bestimmte Views
-    if (targetViewName === 'entrance' && !userPermissions.includes('ENTRANCE')) {
-        return alertUser("Zugriff verweigert (Eingang).", 'error');
-    }
-    if (targetViewName === 'pushover' && !userPermissions.includes('PUSHOVER')) {
-        return alertUser("Zugriff verweigert (Push).", 'error');
-    }
-    if (targetViewName === 'checklist' && !userPermissions.includes('CHECKLIST')) {
-        return alertUser("Zugriff verweigert (Checkliste).", 'error');
-    }
-     if (targetViewName === 'checklistSettings' && !userPermissions.includes('CHECKLIST_SETTINGS')) {
-        return alertUser("Zugriff verweigert (Checklisten-Einstellungen).", 'error');
-    }
-     if (targetViewName === 'essensberechnung' && !userPermissions.includes('ESSENSBERECHNUNG')) {
-        return alertUser("Zugriff verweigert (Essensberechnung).", 'error');
-    }
-    // Admin-Bereich
     if (targetViewName === 'admin' && !isAdmin) {
-        return alertUser("Zugriff verweigert (Admin).", 'error');
-    }
-    // Notruf-Einstellungen (angenommen, PUSHOVER-Recht genügt?)
-     if (targetViewName === 'notrufSettings' && !userPermissions.includes('PUSHOVER')) {
-        // Hier könnte man auch ein separates Recht 'NOTRUF_SETTINGS' einführen
-        return alertUser("Zugriff verweigert (Notruf-Einstellungen).", 'error');
+        return alertUser("Zugriff verweigert.", 'error');
     }
 
-
-    // Scroll zum Anfang
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent) mainContent.scrollTop = 0;
-
-    // Alle Views ausblenden, Ziel-View einblenden
+    document.querySelector('.main-content').scrollTop = 0;
     Object.values(viewElements).forEach(el => el && el.classList.remove('active'));
-    const targetElement = document.getElementById(targetView.id);
-    if (targetElement) {
-        targetElement.classList.add('active');
-    } else {
-        console.error(`Navigation fehlgeschlagen: Element mit ID "${targetView.id}" nicht gefunden.`);
-        // Fallback zur Home-View
-        const homeElement = document.getElementById(views.home.id);
-        if (homeElement) homeElement.classList.add('active');
-        return;
-    }
+    document.getElementById(targetView.id).classList.add('active');
 
-
-    // UI basierend auf Modus aktualisieren (wichtig für Header/Footer etc.)
     updateUIForMode();
 
-    // View-spezifische Initialisierungen
     if (targetViewName === 'userSettings') {
-        const userNameEl = document.getElementById('userSettingsName');
-        const userKeyDisplayEl = document.getElementById('currentUserKeyDisplay');
-        if (userNameEl) userNameEl.textContent = `Passwort für ${currentUser.displayName} ändern`;
-        if (userKeyDisplayEl) {
-             const user = USERS[currentUser.mode];
-             userKeyDisplayEl.style.display = user?.key ? 'block' : 'none';
-             if (user?.key) userKeyDisplayEl.innerHTML = `<p class="text-lg">Dein aktuelles Passwort lautet: <strong class="font-bold">${user.key}</strong></p>`;
-        }
+        document.getElementById('userSettingsName').textContent = `Passwort für ${currentUser.displayName} ändern`;
+        const user = USERS[currentUser.mode];
+        document.getElementById('currentUserKeyDisplay').style.display = user?.key ? 'block' : 'none';
+        if (user?.key) document.getElementById('currentUserKeyDisplay').innerHTML = `<p class="text-lg">Dein aktuelles Passwort lautet: <strong class="font-bold">${user.key}</strong></p>`;
     }
     if (targetViewName === 'essensberechnung') {
-        initializeEssensberechnungView(); // Ruft die Initialisierung auf
+        initializeEssensberechnungView();
     }
+    // HIER DEN NEUEN BLOCK HINZUFÜGEN
+    // Ersetze diesen Block in der 'navigate()'-Funktion:
+    // Ersetze diesen Block in der 'navigate()'-Funktion:
     if (targetViewName === 'notrufSettings') {
-        initializeNotrufSettingsView(); // Ruft die Initialisierung auf
+        initializeNotrufSettingsView(); // Lädt Daten im Hintergrund
+
+        // Setzt den visuellen Standard-Zustand zurück (Prompt sichtbar)
+        const prompt = document.getElementById('notruf-prompt');
+        if (prompt) prompt.style.display = 'block';
+
+        const flicCard = document.getElementById('card-flic-notruf');
+        if (flicCard) flicCard.classList.add('hidden');
+
+        const appCard = document.getElementById('card-app-notruf');
+        if (appCard) appCard.classList.add('hidden');
+
+        // Tab-Stile zurücksetzen
+        document.querySelectorAll('#notruf-settings-tabs .settings-tab-btn').forEach(tab => {
+            tab.classList.remove('bg-white', 'shadow', 'text-indigo-600');
+            tab.classList.add('text-gray-600');
+        });
+
+        // Akkordeon einklappen, falls es offen war
+        const configArea = document.getElementById('notrufConfigArea');
+        const configIcon = document.getElementById('notrufConfigToggleIcon'); // Hole das Icon
+
+        // --- KORREKTUR START ---
+        // Stelle sicher, dass BEIDE Elemente (configArea UND configIcon) existieren,
+        // bevor du versuchst, Klassen zu ändern.
+        if (configArea && configIcon && !configArea.classList.contains('hidden')) {
+            configArea.classList.add('hidden');
+            configIcon.classList.remove('rotate-180'); // Jetzt ist der Zugriff sicher
+        }
+        // --- KORREKTUR ENDE ---
     }
-     if (targetViewName === 'checklist') {
-         const defaultListId = adminSettings.defaultChecklistId;
-         renderChecklistView(defaultListId); // Rendert die View mit der Default-Liste
-    }
-     if (targetViewName === 'checklistSettings') {
-        renderChecklistSettingsView(); // Rendert die Settings-View (holt sich ggf. die erste Liste)
-    }
-     if (targetViewName === 'admin') {
-         // Stellt sicher, dass die Admin-Bereiche beim Navigieren dorthin initial korrekt angezeigt werden
-         Object.keys(adminSectionsState).forEach(key => adminSectionsState[key] = false); // Alle einklappen
-         // Optional: Eine Sektion standardmäßig öffnen?
-         // adminSectionsState.user = true; // z.B. Benutzerverwaltung öffnen
-         toggleAdminSection(null); // Aktualisiert die Anzeige (null öffnet nichts Neues)
-     }
 }
 
-
-// Setup Event Listeners (vereinfacht, da viele Listener jetzt in Modulen sind)
 export function setupEventListeners() {
-    if (!appHeader) { // Prüfen ob Elemente schon geladen sind (relevant wg. window.onload)
-        console.warn("setupEventListeners: Elemente noch nicht bereit, versuche später erneut.");
-        setTimeout(setupEventListeners, 100); // Erneut versuchen
-        return;
-    }
-
-    console.log("setupEventListeners: Füge Listener hinzu...");
-
     // Event listener for the app header to navigate home
     appHeader.addEventListener('click', () => navigate('home'));
-
-    // Central click handler for the main content area (für globale Elemente wie Back-Links etc.)
+    // Central click handler for the main content area
     document.querySelector('.main-content').addEventListener('click', function (e) {
+
         // --- Buttons on the home page ---
-        if (e.target.closest('#mainSettingsButton')) { navigate('userSettings'); return; }
-        if (e.target.closest('#mainAdminButton')) { navigate('admin'); return; }
-        if (e.target.closest('#pushoverButton')) { navigate('pushover'); return; }
-        if (e.target.closest('#notrufSettingsButton')) { navigate('notrufSettings'); return; }
+        // Navigate to user settings if the settings button is clicked
+        if (e.target.closest('#mainSettingsButton')) {
+            navigate('userSettings');
+            return;
+        }
+        // Navigate to admin view if the admin button is clicked
+        if (e.target.closest('#mainAdminButton')) {
+            navigate('admin');
+            return;
+        }
+
+        // Navigate to pushover view if the pushover button is clicked
+        const pushoverBtn = e.target.closest('#pushoverButton');
+        if (pushoverBtn) {
+            navigate('pushover');
+            return;
+        }
+        // Navigate to notruf settings view if the notruf settings button is clicked
+        const notrufBtn = e.target.closest('#notrufSettingsButton');
+        if (notrufBtn) {
+            navigate('notrufSettings');
+            return;
+        }
 
         // --- "Back" buttons ---
+        // Navigate to the target specified in the back link's data-target attribute
         const backLink = e.target.closest('.back-link');
-        if (backLink && backLink.dataset.target) { navigate(backLink.dataset.target); return; }
+        if (backLink && backLink.dataset.target) {
+            navigate(backLink.dataset.target);
+            return;
+        }
 
-        // --- Container button in checklist settings ---
+        // --- Container button in settings ---
+        // Open the template modal if the show template modal button is clicked
         const templateBtn = e.target.closest('#show-template-modal-btn');
         if (templateBtn) {
-            const listId = document.getElementById('checklist-settings-editor-switcher')?.value; // Sicherer Zugriff
-            if (listId) { openTemplateModal(listId); }
-            else { alertUser("Bitte wählen Sie zuerst eine Liste aus.", "error"); }
+            const listId = document.getElementById('checklist-settings-editor-switcher').value;
+            if (listId) {
+                openTemplateModal(listId);
+            } else {
+                // Alert user if no list is selected
+                alertUser("Bitte wählen Sie zuerst eine Liste aus, die Sie bearbeiten möchten.", "error");
+            }
             return;
         }
     });
+    // Navigate to entrance view when the entrance card is clicked
+    document.getElementById('entranceCard').addEventListener('click', () => navigate('entrance'));
+    // Hide the user selection modal when the cancel button is clicked
+    document.getElementById('cancelSelectionButton').addEventListener('click', () => userSelectionModal.style.display = 'none');
+    // Hide the pin modal and show the user selection modal when the back button is clicked
+    document.getElementById('backToSelectionButton').addEventListener('click', () => { pinModal.style.display = 'none'; userSelectionModal.style.display = 'flex'; });
+    // Handle user selection from the modal
+    document.getElementById('modalUserButtons').addEventListener('click', (e) => {
+        const button = e.target.closest('.select-user-button');
+        if (!button) return;
+        const user = USERS[button.dataset.user];
+        const pinRegularContent = pinModal.querySelector('#pinRegularContent');
+        const pinLockedContent = pinModal.querySelector('#pinLockedContent');
+        // If user is active, show pin input modal
+        if (user && user.isActive) {
+            selectedUserForLogin = button.dataset.user;
+            userSelectionModal.style.display = 'none';
+            pinRegularContent.style.display = 'block';
+            pinLockedContent.style.display = 'none';
+            pinModalTitle.textContent = `Schlüssel für ${user.name}`;
+            adminPinInput.value = '';
+            pinError.style.display = 'none';
+            pinModal.style.display = 'flex';
+            // Focus on the pin input after a short delay
+            setTimeout(() => adminPinInput.focus(), 100);
+        } else if (user && !user.isActive) { // If user is inactive, show locked message
+            userSelectionModal.style.display = 'none';
+            pinRegularContent.style.display = 'none';
+            pinLockedContent.style.display = 'block';
+            pinModal.style.display = 'flex';
+        }
+    });
+    // Navigate to essensberechnung view when the card is clicked (duplicate listener, but harmless)
+    document.getElementById('essensberechnungCard').addEventListener('click', () => {
+        navigate('essensberechnung');
+    });
+    document.getElementById('essensberechnungCard').addEventListener('click', () => navigate('essensberechnung'));
 
-    // --- Navigation Cards on Home View ---
-    const entranceCard = document.getElementById('entranceCard');
-    if (entranceCard) entranceCard.addEventListener('click', () => navigate('entrance'));
-
-    const essensberechnungCard = document.getElementById('essensberechnungCard');
-    if (essensberechnungCard) essensberechnungCard.addEventListener('click', () => navigate('essensberechnung'));
-
-    const currentChecklistCard = document.getElementById('currentChecklistCard');
-    if (currentChecklistCard) currentChecklistCard.addEventListener('click', () => navigate('checklist'));
-
-    const checklistSettingsCard = document.getElementById('checklistSettingsCard');
-    if (checklistSettingsCard) checklistSettingsCard.addEventListener('click', () => navigate('checklistSettings'));
-
-    // --- Modals (Login, Archived Lists etc.) ---
-    const cancelSelectionButton = document.getElementById('cancelSelectionButton');
-    if (cancelSelectionButton) cancelSelectionButton.addEventListener('click', () => { if(userSelectionModal) userSelectionModal.style.display = 'none'; });
-
-    const backToSelectionButton = document.getElementById('backToSelectionButton');
-    if (backToSelectionButton) backToSelectionButton.addEventListener('click', () => { if(pinModal) pinModal.style.display = 'none'; if(userSelectionModal) userSelectionModal.style.display = 'flex'; });
-
-    const modalUserButtonsEl = document.getElementById('modalUserButtons');
-    if (modalUserButtonsEl) {
-        modalUserButtonsEl.addEventListener('click', (e) => {
-            const button = e.target.closest('.select-user-button');
-            if (!button || !pinModal) return;
-            const user = USERS[button.dataset.user];
-            const pinRegularContent = pinModal.querySelector('#pinRegularContent');
-            const pinLockedContent = pinModal.querySelector('#pinLockedContent');
-            if (!pinRegularContent || !pinLockedContent || !pinModalTitle || !adminPinInput || !pinError || !userSelectionModal) return;
-
-            if (user && user.isActive) {
-                selectedUserForLogin = button.dataset.user;
-                userSelectionModal.style.display = 'none';
-                pinRegularContent.style.display = 'block';
-                pinLockedContent.style.display = 'none';
-                pinModalTitle.textContent = `Schlüssel für ${user.name}`;
-                adminPinInput.value = '';
-                pinError.style.display = 'none';
-                pinModal.style.display = 'flex';
-                setTimeout(() => adminPinInput.focus(), 100);
-            } else if (user && !user.isActive) {
-                userSelectionModal.style.display = 'none';
-                pinRegularContent.style.display = 'none';
-                pinLockedContent.style.display = 'block';
-                pinModal.style.display = 'flex';
-            }
-        });
-    }
-
-    const closeLockedModalButton = document.getElementById('closeLockedModalButton');
-    if (closeLockedModalButton) {
-        closeLockedModalButton.addEventListener('click', () => {
-             if(pinModal) pinModal.style.display = 'none';
-             if(userSelectionModal) userSelectionModal.style.display = 'flex';
-        });
-    }
-
-    const handleLogin = () => { // Gehört zum PIN Modal
-        if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) return;
+    // Hide the pin modal and show the user selection modal when closing the locked message
+    document.getElementById('closeLockedModalButton').addEventListener('click', () => {
+        pinModal.style.display = 'none';
+        userSelectionModal.style.display = 'flex';
+    });
+    // Function to handle the login attempt
+    const handleLogin = () => {
         const userKeyInDB = USERS[selectedUserForLogin]?.key;
         const enteredPin = adminPinInput.value;
-        if (userKeyInDB === enteredPin) {
+        // Debugging logs
+        console.log("handleLogin: Vergleich startet.");
+        console.log("handleLogin: User ID:", selectedUserForLogin);
+        console.log("handleLogin: Erwarteter Key (aus DB):", userKeyInDB);
+        console.log("handleLogin: Eingegebene PIN:", enteredPin);
+        console.log("handleLogin: Stimmen sie überein?", userKeyInDB === enteredPin);
+        // Check if the entered pin matches the user's key
+        if (USERS[selectedUserForLogin]?.key === adminPinInput.value) {
             pinModal.style.display = 'none';
             adminPinInput.value = '';
+            // Store the logged-in user in local storage
             localStorage.setItem(ADMIN_STORAGE_KEY, selectedUserForLogin);
+            // Check validity and update UI
             checkCurrentUserValidity();
-            alertUser(`Erfolgreich als ${USERS[selectedUserForLogin]?.name || 'Unbekannt'} angemeldet!`, "success");
-        } else {
+            alertUser(`Erfolgreich als ${USERS[selectedUserForLogin].name} angemeldet!`, "success");
+        } else { // If pin is incorrect, show error and clear input
             pinError.style.display = 'block';
             adminPinInput.value = '';
         }
     };
 
-    if (submitAdminKeyButton) submitAdminKeyButton.addEventListener('click', handleLogin);
-    if (adminPinInput) adminPinInput.addEventListener('keydown', (e) => e.key === 'Enter' && handleLogin());
+    // Add click listener to the submit key button if it exists
+    if (submitAdminKeyButton && typeof submitAdminKeyButton.addEventListener === 'function') {
+        submitAdminKeyButton.addEventListener('click', handleLogin);
+        console.log("Listener für submitAdminKeyButton ERFOLGREICH hinzugefügt.");
+    } else {
+        // Log error if button cannot be found or listener cannot be added
+        console.error("FEHLER: Konnte Listener für submitAdminKeyButton NICHT hinzufügen!", submitAdminKeyButton);
+    }
+    // Debugging log for adminPinInput
+    console.log("Wert von adminPinInput VOR addEventListener:", adminPinInput);
+    // Add keydown listener to the pin input for Enter key if it exists
+    if (adminPinInput && typeof adminPinInput.addEventListener === 'function') {
+        adminPinInput.addEventListener('keydown', (e) => e.key === 'Enter' && handleLogin());
+        console.log("Listener für adminPinInput ERFOLGREICH hinzugefügt.");
+    } else {
+        // Log error if input cannot be found or listener cannot be added
+        console.error("FEHLER: Konnte Listener für adminPinInput NICHT hinzufügen!", adminPinInput);
+    }
+    // Add click listeners to toggle admin section visibility
+    adminRightsToggle.addEventListener('click', () => toggleAdminSection('adminRights'));
+    roleSettingsToggle.addEventListener('click', () => toggleAdminSection('role'));
+    passwordSettingsToggle.addEventListener('click', () => toggleAdminSection('password'));
+    userManagementToggle.addEventListener('click', () => toggleAdminSection('user'));
+    approvalProcessToggle.addEventListener('click', () => toggleAdminSection('approval'));
+    protocolHistoryToggle.addEventListener('click', () => toggleAdminSection('protocol'));
+    mainFunctionsToggle.addEventListener('click', () => toggleAdminSection('mainFunctions'));
 
-    // --- Admin Section Toggles ---
-    if (adminRightsToggle) adminRightsToggle.addEventListener('click', () => toggleAdminSection('adminRights'));
-    if (roleSettingsToggle) roleSettingsToggle.addEventListener('click', () => toggleAdminSection('role'));
-    if (passwordSettingsToggle) passwordSettingsToggle.addEventListener('click', () => toggleAdminSection('password'));
-    if (userManagementToggle) userManagementToggle.addEventListener('click', () => toggleAdminSection('user'));
-    if (approvalProcessToggle) approvalProcessToggle.addEventListener('click', () => toggleAdminSection('approval'));
-    if (protocolHistoryToggle) protocolHistoryToggle.addEventListener('click', () => toggleAdminSection('protocol'));
-    if (mainFunctionsToggle) mainFunctionsToggle.addEventListener('click', () => toggleAdminSection('mainFunctions'));
-
-    // --- Entrance View Buttons ---
+    // Add click listeners to entrance view action buttons
     document.querySelectorAll('#entranceView .action-button').forEach(button => {
         button.addEventListener('click', e => {
             const buttonEl = e.currentTarget;
             const delay = parseInt(buttonEl.dataset.delay, 10);
             const buttonTextEl = buttonEl.querySelector('.button-text');
-            if (!buttonTextEl) return;
             const originalText = buttonTextEl.textContent;
-
+            // Async function to send the IFTTT request
             const sendRequest = async () => {
                 setButtonLoading(buttonEl, true);
-                if (buttonTextEl) buttonTextEl.style.display = 'none'; // Sicherer Zugriff
+                buttonTextEl.style.display = 'none';
                 try {
+                    // Send request to IFTTT URL
                     await fetch(IFTTT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value1: delay }) });
                     alertUser(`Befehl "Öffnen" gesendet!`, 'success');
                 } catch (error) {
+                    // Handle errors
                     alertUser('Fehler beim Senden des Befehls.', 'error');
                     console.error("IFTTT Error:", error);
                 } finally {
+                    // Reset button state
                     setButtonLoading(buttonEl, false);
-                    if (buttonTextEl) { // Sicherer Zugriff
-                         buttonTextEl.textContent = originalText;
-                         buttonTextEl.style.display = 'inline-block';
-                    }
+                    buttonTextEl.textContent = originalText;
+                    buttonTextEl.style.display = 'inline-block';
                 }
             };
-
-            if (isNaN(delay)) return; // Abbruch bei ungültigem Delay
-
+            // If delay is 0, send request immediately
             if (delay === 0) {
                 sendRequest();
-            } else {
+            } else { // Otherwise, start countdown
                 buttonEl.disabled = true;
                 let countdown = delay;
-                buttonTextEl.textContent = countdown.toString();
+                buttonTextEl.textContent = countdown;
                 const interval = setInterval(() => {
                     countdown--;
                     if (countdown > 0) {
-                        buttonTextEl.textContent = countdown.toString();
-                    } else {
+                        buttonTextEl.textContent = countdown;
+                    } else { // When countdown finishes, clear interval and send request
                         clearInterval(interval);
-                        sendRequest(); // Ruft sendRequest ohne Argumente auf
+                        sendRequest();
                     }
                 }, 1000);
             }
         });
     });
+    // Add click listener to send dynamic pushover notification button
+    document.getElementById('sendDynamicPostButton').addEventListener('click', async (e) => {
+        const buttonEl = e.currentTarget;
+        const message = document.getElementById('pushoverMessage').value;
+        // Check if message is empty
+        if (!message) return alertUser('Bitte Nachricht eingeben.', 'error');
+        setButtonLoading(buttonEl, true);
+        // Create form data for Pushover API
+        const formData = new FormData();
+        formData.append('token', PUSHOVER_TOKEN);
+        formData.append('user', RECIPIENT_KEYS[document.getElementById('pushoverRecipient').value]);
+        formData.append('title', document.getElementById('pushoverTitle').value);
+        formData.append('message', message);
+        try {
+            // Send request to Pushover API
+            const response = await fetch('https://api.pushover.net/1/messages.json', { method: 'POST', body: formData });
+            const data = await response.json();
+            // Check response status
+            if (data.status !== 1) throw new Error(data.errors.join(', '));
+            alertUser('Nachricht gesendet!', 'success');
+            // Clear message input
+            document.getElementById('pushoverMessage').value = '';
+        } catch (error) { // Handle errors
+            alertUser(`Fehler: ${error.message}`, 'error');
+        } finally { // Reset button state
+            setButtonLoading(buttonEl, false);
+        }
+    });
 
-    // --- Pushover View Button ---
-    const sendDynamicPostButton = document.getElementById('sendDynamicPostButton');
-    if (sendDynamicPostButton) {
-        sendDynamicPostButton.addEventListener('click', async (e) => {
-             const buttonEl = e.currentTarget;
-             const messageInput = document.getElementById('pushoverMessage');
-             const recipientSelect = document.getElementById('pushoverRecipient');
-             const titleInput = document.getElementById('pushoverTitle');
-             if (!messageInput || !recipientSelect || !titleInput) return;
-
-             const message = messageInput.value;
-             if (!message) return alertUser('Bitte Nachricht eingeben.', 'error');
-             setButtonLoading(buttonEl, true);
-
-             const formData = new FormData();
-             formData.append('token', PUSHOVER_TOKEN);
-             formData.append('user', RECIPIENT_KEYS[recipientSelect.value]);
-             formData.append('title', titleInput.value);
-             formData.append('message', message);
-
-             try {
-                const response = await fetch('https://api.pushover.net/1/messages.json', { method: 'POST', body: formData });
-                const data = await response.json();
-                if (data.status !== 1) throw new Error(data.errors ? data.errors.join(', ') : 'Unbekannter Pushover Fehler');
-                alertUser('Nachricht gesendet!', 'success');
-                messageInput.value = ''; // Nachricht leeren
-             } catch (error) {
-                alertUser(`Fehler: ${error.message}`, 'error');
-             } finally {
-                setButtonLoading(buttonEl, false);
-             }
-        });
-    }
-
-    // --- User Settings View Button ---
-    const userSettingsSaveKeyButton = document.getElementById('userSettingsSaveKeyButton');
-    if (userSettingsSaveKeyButton) {
-        userSettingsSaveKeyButton.addEventListener('click', async () => {
-            const newKeyInput = document.getElementById('userSettingsNewKeyInput');
-            if (!newKeyInput || !currentUser || !currentUser.mode || !usersCollectionRef) return; // Wichtige Checks
-
-            const newKey = newKeyInput.value;
-            if (newKey.length < 4) return alertUser("Der Schlüssel muss mindestens 4 Zeichen lang sein.", "error");
-
-            try {
-                await updateDoc(doc(usersCollectionRef, currentUser.mode), { key: newKey });
-                await logAdminAction('self_password_changed', `Eigenes Passwort geändert.`); // logAdminAction muss importiert sein
-                alertUser(`Ihr Schlüssel wurde erfolgreich aktualisiert!`, "success");
-                if (USERS[currentUser.mode]) USERS[currentUser.mode].key = newKey; // Update lokales Objekt
-
-                const userKeyDisplayEl = document.getElementById('currentUserKeyDisplay');
-                if (userKeyDisplayEl) {
-                     userKeyDisplayEl.innerHTML = `<p class="text-lg">Dein aktuelles Passwort lautet: <strong class="font-bold">${newKey}</strong></p>`;
-                     userKeyDisplayEl.style.display = 'block';
-                }
-                newKeyInput.value = ''; // Input leeren
-            } catch (error) {
-                 console.error("Fehler beim Speichern des Passworts:", error);
-                 alertUser("Fehler beim Speichern des Schlüssels.", "error");
-            }
-        });
-    }
-
-
-    // --- Archived Lists Modal ---
+    // Add click listener to save user settings key button
+    document.getElementById('userSettingsSaveKeyButton').addEventListener('click', async () => {
+        const newKeyInput = document.getElementById('userSettingsNewKeyInput');
+        const newKey = newKeyInput.value;
+        // Validate key length
+        if (newKey.length < 4) return alertUser("Der Schlüssel muss mindestens 4 Zeichen lang sein.", "error");
+        // Update user key in Firestore
+        await updateDoc(doc(usersCollectionRef, currentUser.mode), { key: newKey });
+        // Log the action
+        await logAdminAction('self_password_changed', `Eigenes Passwort geändert.`);
+        alertUser(`Ihr Schlüssel wurde erfolgreich aktualisiert!`, "success");
+        // Update local user object and display
+        USERS[currentUser.mode].key = newKey;
+        document.getElementById('currentUserKeyDisplay').innerHTML = `<p class="text-lg">Dein aktuelles Passwort lautet: <strong class="font-bold">${newKey}</strong></p>`;
+        // Clear input field
+        newKeyInput.value = '';
+    });
+    // Add click listener to navigate to the current checklist view
+    document.getElementById('currentChecklistCard').addEventListener('click', () => {
+        const defaultListId = adminSettings.defaultChecklistId;
+        renderChecklistView(defaultListId);
+        navigate('checklist');
+    });
+    // Add click listener to navigate to the checklist settings view
+    document.getElementById('checklistSettingsCard').addEventListener('click', () => {
+        renderChecklistSettingsView();
+        navigate('checklistSettings');
+    });
+    // Add click listener to close the archived lists modal
     const closeArchivedModalBtn = document.getElementById('closeArchivedListsModal');
     if (closeArchivedModalBtn) {
         closeArchivedModalBtn.addEventListener('click', () => {
-            const modal = document.getElementById('archivedListsModal');
-            if(modal) modal.style.display = 'none';
+            document.getElementById('archivedListsModal').style.display = 'none';
         });
     }
 
+    // Add click listener to the archived lists container for restore/delete actions
     const archivedListsContainer = document.getElementById('archivedListsContainer');
     if (archivedListsContainer) {
         archivedListsContainer.addEventListener('click', async (e) => {
             const restoreBtn = e.target.closest('.restore-archived-btn');
             const deleteBtn = e.target.closest('.delete-archived-btn');
-             if (!checklistsCollectionRef) return; // Firestore Ref prüfen
 
+            // Handle restore action
             if (restoreBtn) {
                 const listId = restoreBtn.dataset.listId;
-                if (!listId) return;
-                try {
-                    await updateDoc(doc(checklistsCollectionRef, listId), { isArchived: false, archivedAt: null, archivedBy: null });
-                    alertUser("Liste wurde aus dem Archiv wiederhergestellt.", "success");
-                     // Modal muss hier nicht geschlossen werden, Liste aktualisiert sich via Listener
-                } catch (error) {
-                     console.error("Fehler beim Wiederherstellen:", error);
-                     alertUser("Fehler beim Wiederherstellen.", "error");
-                }
+                await updateDoc(doc(checklistsCollectionRef, listId), { isArchived: false, archivedAt: null, archivedBy: null });
+                alertUser("Liste wurde aus dem Archiv wiederhergestellt.", "success");
             }
 
+            // Handle delete action (move to trash)
             if (deleteBtn) {
                 const listId = deleteBtn.dataset.listId;
-                if (!listId) return;
-                const listName = ARCHIVED_CHECKLISTS[listId]?.name || `Liste ID ${listId}`;
+                const listName = ARCHIVED_CHECKLISTS[listId]?.name;
+                // Ask for confirmation
                 const confirmation = prompt(`Um die Liste "${listName}" endgültig in den Papierkorb zu verschieben, geben Sie bitte "LISTE LÖSCHEN" ein:`);
                 if (confirmation === 'LISTE LÖSCHEN') {
-                    try {
-                        await updateDoc(doc(checklistsCollectionRef, listId), { isDeleted: true, isArchived: false, deletedAt: serverTimestamp(), deletedBy: currentUser.displayName });
-                        alertUser(`Liste "${listName}" wurde in den Papierkorb verschoben.`, "success");
-                         // Modal muss hier nicht geschlossen werden, Liste aktualisiert sich via Listener
-                    } catch (error) {
-                         console.error("Fehler beim Verschieben in Papierkorb:", error);
-                         alertUser("Fehler beim Verschieben in den Papierkorb.", "error");
-                    }
-                } else if (confirmation !== null) {
-                    alertUser("Löschvorgang abgebrochen.", "info");
+                    // Update list status in Firestore
+                    await updateDoc(doc(checklistsCollectionRef, listId), { isDeleted: true, isArchived: false, deletedAt: serverTimestamp(), deletedBy: currentUser.displayName });
+                    alertUser(`Liste "${listName}" wurde in den Papierkorb verschoben.`, "success");
+                } else if (confirmation !== null) { // If confirmation is wrong or cancelled
+                    alertUser("Löschvorgang abgebrochen.", "error");
                 }
             }
         });
     }
 
-    // --- API Token Modal ---
-     const apiTokenModal = document.getElementById('apiTokenBookModal');
-     if (apiTokenModal && !apiTokenModal.dataset.listenerAttached) {
-         apiTokenModal.addEventListener('click', async (e) => { // Async für setDoc
-             // Close
-             if (e.target.closest('#apiTokenBookCloseButton')) {
-                 apiTokenModal.style.display = 'none';
-             }
-             // Add
-             if (e.target.closest('#apiTokenAddButton')) {
-                 const nameInput = document.getElementById('apiTokenName');
-                 const keyInput = document.getElementById('apiTokenKey');
-                 if (!nameInput || !keyInput) return;
-                 const name = nameInput.value.trim();
-                 const key = keyInput.value.trim();
-                 if (name && key && notrufSettingsDocRef) { // Prüfe Ref
-                     if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
-                     notrufSettings.apiTokens.push({ id: Date.now(), name, key });
-                     try {
-                         await setDoc(notrufSettingsDocRef, notrufSettings); // await verwenden
-                         // renderApiTokenBook(); // Wird durch onSnapshot erledigt
-                         nameInput.value = '';
-                         keyInput.value = '';
-                     } catch (err) {
-                          console.error("Fehler beim Speichern des Tokens:", err);
-                          alertUser('Fehler beim Speichern des Tokens.', 'error');
-                     }
-                 } else {
-                     alertUser('Bitte Bezeichnung und Key ausfüllen.', 'error');
-                 }
-             }
-             // Delete
-             const deleteTokenBtn = e.target.closest('.delete-api-token-btn');
-             if (deleteTokenBtn) {
-                 const tokenId = parseInt(deleteTokenBtn.dataset.tokenId);
-                 if (isNaN(tokenId)) return;
-                 if (confirm('Möchten Sie diesen API-Token wirklich löschen?') && notrufSettingsDocRef) { // Prüfe Ref
-                     notrufSettings.apiTokens = (notrufSettings.apiTokens || []).filter(t => t.id !== tokenId);
-                     (notrufSettings.modes || []).forEach(mode => {
-                         if (mode.config && mode.config.selectedApiTokenId === tokenId) {
-                             mode.config.selectedApiTokenId = null;
-                         }
-                     });
-                     // Reset temp ID is handled correctly in notfall.js render function
-                     try {
-                         await setDoc(notrufSettingsDocRef, notrufSettings); // await verwenden
-                         // renderApiTokenBook(); // Wird durch onSnapshot erledigt
-                     } catch (err) {
-                          console.error("Fehler beim Löschen des Tokens:", err);
-                          alertUser('Fehler beim Löschen des Tokens.', 'error');
-                     }
-                 }
-             }
-             // Apply (Logik bleibt in notfall.js' renderApiTokenBook und openModeConfigForm)
-             if (e.target.closest('#apiTokenBookApplyButton')) {
-                 // Die Auswahl wird in notfall.js gehandhabt, hier nur schließen
-                 apiTokenModal.style.display = 'none';
-             }
-         });
-         apiTokenModal.dataset.listenerAttached = 'true';
-     }
+    // Add click listener for the API token modal
+    const apiTokenModal = document.getElementById('apiTokenBookModal');
+    if (apiTokenModal && !apiTokenModal.dataset.listenerAttached) {
+        apiTokenModal.addEventListener('click', (e) => {
+            // Close modal button
+            if (e.target.closest('#apiTokenBookCloseButton')) {
+                apiTokenModal.style.display = 'none';
+            }
+            // Add token button
+            if (e.target.closest('#apiTokenAddButton')) {
+                const name = document.getElementById('apiTokenName').value.trim();
+                const key = document.getElementById('apiTokenKey').value.trim();
+                // Validate input
+                if (name && key) {
+                    // Initialize array if it doesn't exist
+                    if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
+                    // Add new token
+                    notrufSettings.apiTokens.push({ id: Date.now(), name, key });
+                    // Save updated settings to Firestore
+                    setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
+                        // Re-render the token list and clear inputs
+                        renderApiTokenBook();
+                        document.getElementById('apiTokenName').value = '';
+                        document.getElementById('apiTokenKey').value = '';
+                    }).catch(err => alertUser('Fehler beim Speichern des Tokens.', 'error'));
+                } else { // Alert if input is missing
+                    alertUser('Bitte Bezeichnung und Key für den Token ausfüllen.', 'error');
+                }
+            }
+            // Delete token button
+            if (e.target.closest('.delete-api-token-btn')) {
+                const tokenId = parseInt(e.target.closest('.delete-api-token-btn').dataset.tokenId);
+                // Ask for confirmation
+                if (confirm('Möchten Sie diesen API-Token wirklich löschen?')) {
+                    // Filter out the token to be deleted
+                    notrufSettings.apiTokens = notrufSettings.apiTokens.filter(t => t.id !== tokenId);
+                    // Remove the deleted token from any modes using it
+                    if (notrufSettings.modes) {
+                        notrufSettings.modes.forEach(mode => {
+                            if (mode.config && mode.config.selectedApiTokenId === tokenId) {
+                                mode.config.selectedApiTokenId = null;
+                            }
+                        });
+                    }
+                    // Reset the temporary selection if the deleted token was selected
+                    if (tempSelectedApiTokenId === tokenId) {
+                        tempSelectedApiTokenId = null;
+                        document.getElementById('notrufApiTokenDisplay').innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
+                    }
+                    // Save updated settings to Firestore
+                    setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
+                        renderApiTokenBook(); // Re-render the token list
+                    }).catch(err => alertUser('Fehler beim Löschen des Tokens.', 'error'));
+                }
+            }
+            // Apply selection button
+            if (e.target.closest('#apiTokenBookApplyButton')) {
+                const selectedRadio = apiTokenModal.querySelector('.api-token-radio:checked');
+                const displayArea = document.getElementById('notrufApiTokenDisplay');
+                if (selectedRadio) { // If a token is selected
+                    const tokenId = parseInt(selectedRadio.value);
+                    const token = (notrufSettings.apiTokens || []).find(t => t.id === tokenId);
+                    if (token) {
+                        // Update temporary selection and display
+                        tempSelectedApiTokenId = tokenId;
+                        displayArea.innerHTML = `<span class="api-token-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-token-id="${token.id}">${token.name}</span>`;
+                    }
+                } else { // If no token is selected
+                    tempSelectedApiTokenId = null;
+                    displayArea.innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
+                }
+                // Hide the modal
+                apiTokenModal.style.display = 'none';
+            }
+        });
+        // Mark listener as attached
+        apiTokenModal.dataset.listenerAttached = 'true';
+    }
 
+    // --- Event Listener für das Sound Buch Modal ---
+    const soundModal = document.getElementById('soundBookModal');
+    if (soundModal && !soundModal.dataset.listenerAttached) {
+        // Get checkbox and input for custom sound name
+        const useCustomNameCheckbox = soundModal.querySelector('#soundUseCustomName');
+        const customNameInput = soundModal.querySelector('#soundCustomName');
+        // Add change listener to toggle custom name input visibility
+        if (useCustomNameCheckbox && customNameInput) {
+            useCustomNameCheckbox.addEventListener('change', (e) => {
+                customNameInput.classList.toggle('hidden', !e.target.checked);
+                // Clear input if hidden
+                if (!e.target.checked) customNameInput.value = '';
+            });
+        }
 
-    // --- Sound Book Modal ---
-     const soundModal = document.getElementById('soundBookModal');
-     if (soundModal && !soundModal.dataset.listenerAttached) {
-         // Toggle Custom Name Input
-         const useCustomNameCheckbox = soundModal.querySelector('#soundUseCustomName');
-         const customNameInput = soundModal.querySelector('#soundCustomName');
-         if (useCustomNameCheckbox && customNameInput) {
-             useCustomNameCheckbox.addEventListener('change', (e) => {
-                 customNameInput.classList.toggle('hidden', !e.target.checked);
-                 if (!e.target.checked) customNameInput.value = '';
-             });
-         }
+        // Add click listener to the sound modal
+        soundModal.addEventListener('click', (e) => {
+            // Close modal button
+            if (e.target.closest('#soundBookCloseButton')) {
+                soundModal.style.display = 'none';
+            }
+            // Add sound button
+            if (e.target.closest('#soundAddButton')) {
+                const code = document.getElementById('soundCode').value.trim();
+                const useCustom = document.getElementById('soundUseCustomName').checked;
+                const customName = document.getElementById('soundCustomName').value.trim();
+                // Validate input
+                if (code && (!useCustom || (useCustom && customName))) {
+                    // Initialize array if it doesn't exist
+                    if (!notrufSettings.sounds) notrufSettings.sounds = [];
+                    // Add new sound object
+                    notrufSettings.sounds.push({
+                        id: Date.now(),
+                        code: code,
+                        useCustomName: useCustom,
+                        customName: useCustom ? customName : null
+                    });
+                    // Save updated settings to Firestore
+                    setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
+                        // Re-render sound list and clear inputs
+                        renderSoundBook();
+                        document.getElementById('soundCode').value = '';
+                        document.getElementById('soundUseCustomName').checked = false;
+                        document.getElementById('soundCustomName').value = '';
+                        document.getElementById('soundCustomName').classList.add('hidden');
+                    }).catch(err => alertUser('Fehler beim Speichern des Sounds.', 'error'));
+                } else { // Alert if input is missing
+                    alertUser('Bitte Soundcode und ggf. eigenen Namen ausfüllen.', 'error');
+                }
+            }
+            // Delete sound button
+            if (e.target.closest('.delete-sound-btn')) {
+                const soundId = parseInt(e.target.closest('.delete-sound-btn').dataset.soundId);
+                // Ask for confirmation
+                if (confirm('Möchten Sie diesen Sound wirklich löschen?')) {
+                    // Filter out the sound to be deleted
+                    notrufSettings.sounds = notrufSettings.sounds.filter(s => s.id !== soundId);
+                    // Remove the deleted sound from any modes using it
+                    if (notrufSettings.modes) {
+                        notrufSettings.modes.forEach(mode => {
+                            if (mode.config && mode.config.selectedSoundId === soundId) {
+                                mode.config.selectedSoundId = null;
+                            }
+                        });
+                    }
+                    // Reset the temporary selection if the deleted sound was selected
+                    if (tempSelectedSoundId === soundId) {
+                        tempSelectedSoundId = null;
+                        document.getElementById('notrufSoundDisplay').innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
+                    }
+                    // Save updated settings to Firestore
+                    setDoc(notrufSettingsDocRef, notrufSettings).then(() => {
+                        renderSoundBook(); // Re-render the sound list
+                    }).catch(err => alertUser('Fehler beim Löschen des Sounds.', 'error'));
+                }
+            }
+            // Apply selection button
+            if (e.target.closest('#soundBookApplyButton')) {
+                const selectedRadio = soundModal.querySelector('.sound-radio:checked');
+                const displayArea = document.getElementById('notrufSoundDisplay');
 
-         soundModal.addEventListener('click', async (e) => { // Async für setDoc
-             // Close
-             if (e.target.closest('#soundBookCloseButton')) {
-                 soundModal.style.display = 'none';
-             }
-             // Add
-             if (e.target.closest('#soundAddButton')) {
-                 const codeInput = document.getElementById('soundCode');
-                 const customNameInput = document.getElementById('soundCustomName'); // Wieder holen
-                 const useCustomCheckbox = document.getElementById('soundUseCustomName'); // Wieder holen
-                 if (!codeInput || !customNameInput || !useCustomCheckbox) return;
-
-                 const code = codeInput.value.trim();
-                 const useCustom = useCustomCheckbox.checked;
-                 const customName = customNameInput.value.trim();
-
-                 if (code && (!useCustom || (useCustom && customName)) && notrufSettingsDocRef) { // Prüfe Ref
-                     if (!notrufSettings.sounds) notrufSettings.sounds = [];
-                     notrufSettings.sounds.push({ id: Date.now(), code, useCustomName: useCustom, customName: useCustom ? customName : null });
-                     try {
-                         await setDoc(notrufSettingsDocRef, notrufSettings); // await verwenden
-                         // renderSoundBook(); // Wird durch onSnapshot erledigt
-                         codeInput.value = '';
-                         useCustomCheckbox.checked = false;
-                         customNameInput.value = '';
-                         customNameInput.classList.add('hidden');
-                     } catch (err) {
-                         console.error("Fehler beim Speichern des Sounds:", err);
-                         alertUser('Fehler beim Speichern des Sounds.', 'error');
-                     }
-                 } else {
-                     alertUser('Bitte Soundcode und ggf. eigenen Namen ausfüllen.', 'error');
-                 }
-             }
-             // Delete
-             const deleteSoundBtn = e.target.closest('.delete-sound-btn');
-             if (deleteSoundBtn) {
-                 const soundId = parseInt(deleteSoundBtn.dataset.soundId);
-                  if (isNaN(soundId)) return;
-                 if (confirm('Möchten Sie diesen Sound wirklich löschen?') && notrufSettingsDocRef) { // Prüfe Ref
-                     notrufSettings.sounds = (notrufSettings.sounds || []).filter(s => s.id !== soundId);
-                     (notrufSettings.modes || []).forEach(mode => {
-                         if (mode.config && mode.config.selectedSoundId === soundId) {
-                             mode.config.selectedSoundId = null; // Auf null setzen statt undefined
-                         }
-                     });
-                      // Reset temp ID is handled correctly in notfall.js render function
-                     try {
-                         await setDoc(notrufSettingsDocRef, notrufSettings); // await verwenden
-                         // renderSoundBook(); // Wird durch onSnapshot erledigt
-                     } catch (err) {
-                          console.error("Fehler beim Löschen des Sounds:", err);
-                          alertUser('Fehler beim Löschen des Sounds.', 'error');
-                     }
-                 }
-             }
-             // Apply (Logik bleibt in notfall.js' renderSoundBook und openModeConfigForm)
-             if (e.target.closest('#soundBookApplyButton')) {
-                 // Die Auswahl wird in notfall.js gehandhabt, hier nur schließen
-                 soundModal.style.display = 'none';
-             }
-         });
-         soundModal.dataset.listenerAttached = 'true';
-     }
-
-     console.log("setupEventListeners: Alle Listener hinzugefügt.");
-} // Ende setupEventListeners
+                // If a specific sound (not default) is selected
+                if (selectedRadio && selectedRadio.value !== 'default') {
+                    const soundId = parseInt(selectedRadio.value);
+                    const sound = (notrufSettings.sounds || []).find(s => s.id === soundId);
+                    if (sound) {
+                        // Update temporary selection and display
+                        tempSelectedSoundId = soundId;
+                        const displayName = sound.useCustomName && sound.customName ? sound.customName : sound.code;
+                        displayArea.innerHTML = `<span class="sound-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-sound-id="${sound.id}">${displayName}</span>`;
+                    }
+                } else { // If default or nothing is selected
+                    tempSelectedSoundId = null;
+                    displayArea.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
+                }
+                // Hide the modal
+                soundModal.style.display = 'none';
+            }
+        });
+        // Mark listener as attached
+        soundModal.dataset.listenerAttached = 'true';
+    }
+}
