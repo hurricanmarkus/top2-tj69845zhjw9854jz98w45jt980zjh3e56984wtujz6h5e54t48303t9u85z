@@ -1,4 +1,4 @@
-async function logAdminAction(action, details) {
+export async function logAdminAction(action, details) {
     try {
         if (!auditLogCollectionRef) return;
         const logData = {
