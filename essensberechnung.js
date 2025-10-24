@@ -424,8 +424,6 @@ function renderDistributionList() {
                         <p class="font-bold">${displayName}</p>
                         <p class="text-xs text-gray-600">Anzahl: ${p.anzahl}</p>
                     </div>
-                     {/* Hier könnte optional ein kleiner Bearbeiten/Löschen Knopf hin,
-                         aber die Hauptlogik ist, auf das Item selbst zu klicken */}
                 </div>
             `;
         }).join('');
