@@ -8,6 +8,8 @@ import { listenForRoleUpdates, listenForAdminRoleUpdates } from './admin_rollenv
 import { listenForApprovalRequests } from './admin_genehmigungsprozess.js';
 import { toggleAdminSection } from './admin_adminfunktionenHome.js';
 import { initializeEssensberechnungView } from './essensberechnung.js';
+import { IFTTT_URL } from './notfall.js';
+import { PUSHOVER_TOKEN, RECIPIENT_KEYS } from './pushbenachrichtigung.js';
 import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, listenForTemplates } from './checklist.js';
 // ENDE-ZIKA //
 
