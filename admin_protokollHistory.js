@@ -8,7 +8,9 @@ export async function logAdminAction(action, details) {
             performedByName: currentUser.displayName,
             performedByRole: currentUser.role,
             timestamp: serverTimestamp()
-        }; await addDoc(auditLogCollectionRef, logData); return logData;
+        };
+        await addDoc(auditLogCollectionRef, logData);
+        return logData;
     } catch (error) {
         console.error("Error logging action:", error);
     }
@@ -31,6 +33,7 @@ export async function renderProtocolHistory() {
         }
         // Wenn der Admin nicht die Berechtigung hat, Sysadmin-Logs zu sehen, filtern
         if (!effectiveAdminPerms.canSeeSysadminLogs) {
+            // Filter: exclude SYSTEMADMIN entries
             logQuery = query(auditLogCollectionRef, where('performedByRole', '!=', 'SYSTEMADMIN'), orderBy('performedByRole'), orderBy('timestamp', 'desc'));
         }
     }
@@ -42,7 +45,7 @@ export async function renderProtocolHistory() {
 
     try {
         const snapshot = await getDocs(logQuery);
-        if (snapshot.empty) {
+        if (!snapshot || snapshot.empty) {
             protocolHistoryArea.innerHTML += '<p class="text-gray-500">Keine Protokolleinträge vorhanden.</p>';
             return;
         }
@@ -52,14 +55,14 @@ export async function renderProtocolHistory() {
         snapshot.forEach(docSnap => {
             const log = docSnap.data();
             const logId = docSnap.id;
-            const logDate = log.timestamp?.toDate().toLocaleString('de-DE') || '...';
+            const logDate = log.timestamp?.toDate?.().toLocaleString('de-DE') || '...';
             const listItem = document.createElement('li');
             listItem.className = 'text-sm p-2 bg-gray-50 rounded-md flex justify-between items-center';
 
             let deleteButton = '';
             if (currentUser.role === 'SYSTEMADMIN') {
                 deleteButton = `<button class="delete-log-btn text-red-500 hover:text-red-700 transition" data-log-id="${logId}">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" /></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 001.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" /></svg>
                         </button>`;
             }
 
@@ -74,12 +77,14 @@ export async function renderProtocolHistory() {
                 if (confirm('Möchten Sie diesen Protokolleintrag wirklich löschen?')) {
                     await deleteDoc(doc(auditLogCollectionRef, logId));
                     await logAdminAction('log_deleted', `Protokolleintrag (ID: ${logId}) gelöscht.`);
+                    // Neu: neu rendern
+                    renderProtocolHistory();
                 }
             });
         });
 
     } catch (error) {
         console.error("Error fetching protocol history:", error);
-        protocolHistoryArea.innerHTML += `<p class="text-red-500">Fehler beim Laden des Protokolls. Möglicherweise muss ein Datenbank-Index erstellt werden. Bitte prüfen Sie die Browser-Konsole auf einen Link zur Erstellung.</p>`;
+        protocolHistoryArea.innerHTML += `<p class="text-red-500">Fehler beim Laden des Protokolls. Möglicherweise muss ein Datenbank-Index erstellt werden. Bitte prüfen Sie die Browser-Konsole auf Detail-Fehler.</p>`;
     }
 }

@@ -20,7 +20,7 @@
         return document.querySelector(ROOT_SELECTOR) || document.body || document.documentElement;
     }
 
-    // Wiederholt versuchen, bis der richtige Container existiert
+    // Wiederholt versuchen, bis der richtigen Container existiert
     (function waitForRoot() {
         const root = getRootCandidate();
         if (root) {
@@ -44,14 +44,21 @@
 
 export function rememberAdminScroll() {
     const scroller = document.querySelector('.main-content') || document.scrollingElement || document.documentElement;
-    if (scroller) sessionStorage.setItem('adminScrollY', String(scroller.scrollTop));
+    if (scroller) sessionStorage.setItem('adminScrollY', String(scroller.scrollTop || scroller.scrollY || 0));
 }
 
 export function restoreAdminScrollIfAny() {
     const scroller = document.querySelector('.main-content') || document.scrollingElement || document.documentElement;
-    const y = Number(sessionStorage.getItem('adminScrollY'));
+    const yRaw = sessionStorage.getItem('adminScrollY');
+    const y = yRaw !== null ? Number(yRaw) : NaN;
     if (scroller && !Number.isNaN(y)) {
-        scroller.scrollTo({ top: y, behavior: 'instant' in scroller ? 'instant' : undefined });
+        // 'instant' ist kein Standardwert; verwende 'auto' für sofortiges Springen
+        try {
+            scroller.scrollTo({ top: y, behavior: 'auto' });
+        } catch (e) {
+            // Fallback für ältere Browser
+            scroller.scrollTop = y;
+        }
         sessionStorage.removeItem('adminScrollY');
     }
 }
@@ -67,7 +74,7 @@ export function renderMainFunctionsAdminArea() {
     if (isAdmin) {
         const adminUser = USERS[currentUser.mode];
         if (adminUser) {
-            if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
+            if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
                 effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
             } else {
                 effectiveAdminPerms = adminUser.adminPermissions || {};
@@ -80,21 +87,22 @@ export function renderMainFunctionsAdminArea() {
     const entranceTab = tabsContainer.querySelector('[data-target-card="card-main-entrance"]');
     const checklistTab = tabsContainer.querySelector('[data-target-card="card-main-checklist"]');
 
-    if (pushTab) pushTab.style.display = isSysAdmin || effectiveAdminPerms.canUseMainPush ? 'block' : 'none';
-    if (entranceTab) entranceTab.style.display = isSysAdmin || effectiveAdminPerms.canUseMainEntrance ? 'block' : 'none';
-    if (checklistTab) checklistTab.style.display = isSysAdmin || effectiveAdminPerms.canUseMainChecklist ? 'block' : 'none';
+    if (pushTab) pushTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainPush) ? 'block' : 'none';
+    if (entranceTab) entranceTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainEntrance) ? 'block' : 'none';
+    if (checklistTab) checklistTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainChecklist) ? 'block' : 'none';
     // --- ENDE DER ÄNDERUNG ---
 
     const deletePermanentlyBtn = document.getElementById('permanently-delete-items-btn');
     if (deletePermanentlyBtn && !deletePermanentlyBtn.dataset.listenerAttached) {
         deletePermanentlyBtn.addEventListener('click', () => {
-            const deletedCount = Object.keys(DELETED_CHECKLISTS).length;
+            const deletedCount = Object.keys(DELETED_CHECKLISTS || {}).length;
             if (deletedCount === 0) {
                 alertUser("Der Papierkorb ist bereits leer.", "success");
                 return;
             }
             renderPermanentDeleteModal();
-            document.getElementById('permanentDeleteModal').style.display = 'flex';
+            const modal = document.getElementById('permanentDeleteModal');
+            if (modal) modal.style.display = 'flex';
         });
         deletePermanentlyBtn.dataset.listenerAttached = 'true';
     }
@@ -116,14 +124,14 @@ export function renderMainFunctionsAdminArea() {
         document.querySelectorAll('.main-functions-card').forEach(card => card.classList.add('hidden'));
 
         if (isAlreadyActive) {
-            prompt.classList.remove('hidden');
+            if (prompt) prompt.classList.remove('hidden');
         } else {
             clickedTab.classList.add('bg-white', 'shadow', 'text-indigo-600');
             clickedTab.classList.remove('text-gray-600');
             const targetCard = document.getElementById(targetCardId);
             if (targetCard) {
                 targetCard.classList.remove('hidden');
-                prompt.classList.add('hidden');
+                if (prompt) prompt.classList.add('hidden');
             }
         }
     });
