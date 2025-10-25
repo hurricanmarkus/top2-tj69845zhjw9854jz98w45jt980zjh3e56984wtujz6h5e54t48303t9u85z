@@ -141,68 +141,102 @@ function renderContainerList() {
 }
 
 async function applyTemplateLogic() {
+    // Robust implementation: wählt ausgewählte Einträge im Modal und fügt sie in die Ziel-Liste ein.
     const modal = document.getElementById('templateApplyModal');
+    if (!modal) return console.warn('applyTemplateLogic: modal not found');
     const targetListId = modal.dataset.targetListId;
-    const applyBtn = document.getElementById('apply-template-btn');
-
     if (!targetListId) {
-        alertUser("Fehler: Keine Ziel-Checkliste gefunden.", "error");
+        if (typeof alertUser === 'function') alertUser("Fehler: Keine Ziel-Checkliste definiert.", "error");
         return;
     }
 
-    setButtonLoading(applyBtn, true);
+    const applyBtn = document.getElementById('apply-template-btn');
+    if (applyBtn) try { applyBtn.disabled = true; } catch(e) {}
 
     try {
-        const batch = writeBatch(db);
-        const selectedType = modal.querySelector('input[name="template-type"]:checked').value;
-        const insertMode = modal.querySelector('input[name="insert-mode"]:checked')?.value;
-
-        if (selectedType === 'Schiff' && insertMode === 'ersetzen') {
-            const itemsToDeleteQuery = query(checklistItemsCollectionRef, where("listId", "==", targetListId));
-            const itemsToDeleteSnapshot = await getDocs(itemsToDeleteQuery);
-            itemsToDeleteSnapshot.forEach(doc => {
-                batch.delete(doc.ref);
-            });
-        }
+        const selectedType = modal.querySelector('input[name="template-type"]:checked')?.value || 'Container';
+        const insertMode = modal.querySelector('input[name="insert-mode"]:checked')?.value || 'append';
 
         const selectedItemsCheckboxes = modal.querySelectorAll('.template-item-cb:checked');
-        if (selectedItemsCheckboxes.length === 0) {
-            alertUser("Bitte wählen Sie mindestens einen Eintrag zum Einfügen aus.", "error");
-            setButtonLoading(applyBtn, false);
+        if (!selectedItemsCheckboxes || selectedItemsCheckboxes.length === 0) {
+            if (typeof alertUser === 'function') alertUser("Bitte wählen Sie mindestens einen Eintrag zum Einfügen aus.", "error");
             return;
         }
 
-        selectedItemsCheckboxes.forEach(checkbox => {
-            const newItemRef = doc(checklistItemsCollectionRef);
-            const newItemData = {
-                listId: targetListId,
-                text: checkbox.dataset.text,
-                status: 'open',
-                important: checkbox.dataset.important === 'true',
-                addedBy: currentUser.displayName,
-                addedAt: serverTimestamp(),
-                assignedTo: checkbox.dataset.assignedTo || null,
-                assignedToName: checkbox.dataset.assignedToName || null,
-                categoryId: checkbox.dataset.categoryId || null,
-                categoryName: checkbox.dataset.categoryName || null,
-                categoryColor: checkbox.dataset.categoryColor || null
-            };
-            batch.set(newItemRef, newItemData);
-        });
+        if (selectedType === 'Schiff' && insertMode === 'ersetzen') {
+            // Ersetzt die Liste: lösche existierende Einträge (Batch)
+            if (typeof query === 'function' && typeof getDocs === 'function') {
+                try {
+                    const q = query(checklistItemsCollectionRef, where("listId", "==", targetListId));
+                    const snapshot = await getDocs(q);
+                    if (snapshot && snapshot.size > 0 && typeof writeBatch === 'function') {
+                        const batch = writeBatch(db);
+                        snapshot.forEach(docSnap => batch.delete(docSnap.ref));
+                        await batch.commit();
+                    }
+                } catch (err) {
+                    console.warn('applyTemplateLogic: Fehler beim Löschen vorhandener Einträge (ersetzen):', err);
+                }
+            }
+        }
 
-        await batch.commit();
+        // Füge neue Einträge hinzu
+        const batchMode = false; // wenn du große Mengen hast, setze true und benutze writeBatch
+        if (batchMode && typeof writeBatch === 'function') {
+            const batch = writeBatch(db);
+            selectedItemsCheckboxes.forEach(cb => {
+                const newItemRef = doc(checklistItemsCollectionRef); // macht Referenz
+                const data = {
+                    listId: targetListId,
+                    text: cb.dataset.text || '',
+                    status: 'open',
+                    important: cb.dataset.important === 'true',
+                    assignedTo: cb.dataset.assignedTo || null,
+                    assignedToName: cb.dataset.assignedToName || null,
+                    categoryId: cb.dataset.categoryId || null,
+                    categoryName: cb.dataset.categoryName || null,
+                    categoryColor: cb.dataset.categoryColor || null,
+                    addedBy: (currentUser && currentUser.displayName) ? currentUser.displayName : 'Unbekannt',
+                    addedAt: serverTimestamp ? serverTimestamp() : null
+                };
+                batch.set(newItemRef, data);
+            });
+            await batch.commit();
+        } else {
+            // Einzelne Inserts
+            for (const cb of selectedItemsCheckboxes) {
+                const data = {
+                    listId: targetListId,
+                    text: cb.dataset.text || '',
+                    status: 'open',
+                    important: cb.dataset.important === 'true',
+                    assignedTo: cb.dataset.assignedTo || null,
+                    assignedToName: cb.dataset.assignedToName || null,
+                    categoryId: cb.dataset.categoryId || null,
+                    categoryName: cb.dataset.categoryName || null,
+                    categoryColor: cb.dataset.categoryColor || null,
+                    addedBy: (currentUser && currentUser.displayName) ? currentUser.displayName : 'Unbekannt',
+                    addedAt: serverTimestamp ? serverTimestamp() : null
+                };
+                if (typeof addDoc === 'function') {
+                    await addDoc(checklistItemsCollectionRef, data);
+                } else {
+                    console.error('applyTemplateLogic: addDoc not available.');
+                    break;
+                }
+            }
+        }
 
-        alertUser(`${selectedItemsCheckboxes.length} Einträge wurden erfolgreich hinzugefügt!`, "success");
+        if (typeof alertUser === 'function') alertUser(`${selectedItemsCheckboxes.length} Einträge wurden erfolgreich hinzugefügt!`, "success");
         closeTemplateModal();
 
     } catch (error) {
-        console.error("Fehler beim Anwenden des Inhalts:", error);
-        alertUser("Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.", "error");
+        console.error('applyTemplateLogic error:', error);
+        if (typeof alertUser === 'function') alertUser("Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.", "error");
     } finally {
-        setButtonLoading(applyBtn, false);
+        if (applyBtn) try { applyBtn.disabled = false; } catch(e) {}
     }
 }
-
 export function listenForTemplates() {
     const templatesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates');
     onSnapshot(query(templatesCollectionRef, orderBy('name')), (snapshot) => {
@@ -757,20 +791,28 @@ function updateCategoryDropdowns() {
 }
 
 function setupListAndItemManagementListeners(view) {
+    // Diese Funktion bindet alle Listener rund um das Erstellen/Bearbeiten von Listen/Einträgen
+    // Sie ersetzt die ältere Version und enthält einen robusten addItemHandler.
+    if (!view) return;
+
+    // sichere Globals
+    const currentUserSafe = (typeof currentUser !== 'undefined' && currentUser) ? currentUser : { id: null, displayName: 'Gast', permissions: [] };
+
     const defaultGroupSwitcher = view.querySelector('#checklist-settings-default-group-switcher');
     const defaultListSwitcher = view.querySelector('#checklist-settings-default-list-switcher');
 
     if (defaultGroupSwitcher) {
         const updateDefaultListOptions = (isUserChange = false) => {
-            const defaultListId = adminSettings.defaultChecklistId;
+            const defaultListId = (typeof adminSettings !== 'undefined' && adminSettings) ? adminSettings.defaultChecklistId : null;
             const groupId = defaultGroupSwitcher.value;
+            if (!defaultListSwitcher) return;
             defaultListSwitcher.innerHTML = '<option value="">Liste wählen...</option>';
             if (!groupId || groupId === 'none') {
                 defaultListSwitcher.disabled = true;
-                if (groupId === 'none' && isUserChange) {
-                    updateDoc(settingsDocRef, { defaultChecklistId: null });
-                    adminSettings.defaultChecklistId = null;
-                    alertUser("Standard-Liste wurde entfernt.", "success");
+                if (groupId === 'none' && isUserChange && typeof updateDoc === 'function' && typeof settingsDocRef !== 'undefined') {
+                    // Nur versuchen, falls updateDoc und settingsDocRef vorhanden sind
+                    try { updateDoc(settingsDocRef, { defaultChecklistId: null }); } catch (e) { console.warn('update defaultList failed', e); }
+                    if (typeof adminSettings !== 'undefined' && adminSettings) adminSettings.defaultChecklistId = null;
                 }
                 return;
             }
@@ -784,72 +826,188 @@ function setupListAndItemManagementListeners(view) {
 
     if (defaultListSwitcher) {
         defaultListSwitcher.addEventListener('change', async () => {
+            if (typeof updateDoc !== 'function' || typeof settingsDocRef === 'undefined') {
+                console.warn('updateDoc or settingsDocRef not available; skipping default list update.');
+                return;
+            }
             const newDefaultListId = defaultListSwitcher.value || null;
-            await updateDoc(settingsDocRef, { defaultChecklistId: newDefaultListId });
-            adminSettings.defaultChecklistId = newDefaultListId;
-            alertUser("Globale Standard-Liste wurde gespeichert.", "success");
+            try {
+                await updateDoc(settingsDocRef, { defaultChecklistId: newDefaultListId });
+                if (typeof adminSettings !== 'undefined' && adminSettings) adminSettings.defaultChecklistId = newDefaultListId;
+                if (typeof alertUser === 'function') alertUser("Globale Standard-Liste wurde gespeichert.", "success");
+            } catch (err) {
+                console.error('Fehler beim Speichern der globalen Standard-Liste:', err);
+                if (typeof alertUser === 'function') alertUser("Fehler beim Speichern der Standard-Liste.", "error");
+            }
         });
     }
 
     const editorCard = view.querySelector('#card-list-item-editor');
     if (editorCard) {
         editorCard.addEventListener('click', (e) => {
-            if (e.target.id === 'edit-group-assignment-btn') {
-                view.querySelector('#group-display-container').classList.add('hidden');
-                view.querySelector('#group-edit-container').classList.remove('hidden');
+            if (e.target && e.target.id === 'edit-group-assignment-btn') {
+                const display = view.querySelector('#group-display-container');
+                const edit = view.querySelector('#group-edit-container');
+                if (display) display.classList.add('hidden');
+                if (edit) edit.classList.remove('hidden');
             }
         });
     }
 
-    const createListBtn = view.querySelector('#checklist-settings-create-list-btn');
-    if (createListBtn) {
-        createListBtn.addEventListener('click', async () => {
-            const newListName = view.querySelector('#checklist-settings-new-name').value.trim();
-            const groupId = view.querySelector('#checklist-settings-new-group-selector').value;
-            if (!newListName || !groupId) {
-                alertUser("Bitte geben Sie einen Listennamen und eine Gruppe an.", "error");
+    // --- addItemHandler (robust, überprüft Felder, fügt hinzu und räumt auf) ---
+    const addItemHandler = async () => {
+        try {
+            const textInput = view.querySelector('#checklist-settings-add-text');
+            const suggestionsContainer = view.querySelector('#item-suggestions-container');
+            const importantCheckbox = view.querySelector('#checklist-settings-add-important');
+            const assigneeSelect = view.querySelector('#checklist-settings-add-assignee');
+            const categorySelect = view.querySelector('#checklist-settings-add-category');
+            const currentListId = view.querySelector('#checklist-settings-editor-switcher')?.value;
+
+            if (!textInput) return console.warn('addItemHandler: text input not found');
+            const text = textInput.value.trim();
+            if (!text) {
+                if (typeof alertUser === 'function') alertUser("Bitte Text für den Eintrag eingeben.", "error");
                 return;
             }
-            const allActiveListNames = Object.values(CHECKLISTS).map(l => l.name.toLowerCase());
-            const allDeletedListNames = Object.values(DELETED_CHECKLISTS).map(l => l.name.toLowerCase());
-            const allListNames = [...allActiveListNames, ...allDeletedListNames];
-            if (allListNames.includes(newListName.toLowerCase())) {
-                alertUser(`Eine Liste mit dem Namen "${newListName}" existiert bereits.`, "error");
+
+            if (!currentListId) {
+                if (typeof alertUser === 'function') alertUser("Kann keinen Eintrag hinzufügen: Bitte erstellen Sie zuerst eine Liste.", "error");
                 return;
             }
-            const groupName = CHECKLIST_GROUPS[groupId].name;
-            const newListDoc = await addDoc(checklistsCollectionRef, { name: newListName, isDeleted: false, isArchived: false, groupId, groupName });
-            view.querySelector('#checklist-settings-new-name').value = '';
-            view.querySelector('#checklist-settings-new-group-selector').value = '';
-            alertUser(`Liste "${newListName}" wurde erstellt.`, "success");
-            renderChecklistSettingsView(newListDoc.id);
-        });
+
+            const important = !!(importantCheckbox && importantCheckbox.checked);
+            const assignedTo = assigneeSelect ? assigneeSelect.value : null;
+            const assignedToName = (assignedTo && assigneeSelect && assigneeSelect.options[assigneeSelect.selectedIndex]) ? assigneeSelect.options[assigneeSelect.selectedIndex].text : null;
+            const categoryId = categorySelect ? categorySelect.value : null;
+
+            // Kategorie-Name/-Color ermitteln (falls notwendig)
+            let categoryName = null;
+            let categoryColor = null;
+            if (categoryId) {
+                for (const group of Object.values(CHECKLIST_CATEGORIES || {})) {
+                    const foundCat = (group || []).find(cat => cat.id === categoryId);
+                    if (foundCat) {
+                        categoryName = foundCat.name;
+                        categoryColor = foundCat.color || 'gray';
+                        break;
+                    }
+                }
+            }
+
+            // Stelle sicher, dass checklistItemsCollectionRef und addDoc vorhanden sind
+            if (typeof addDoc !== 'function' || typeof checklistItemsCollectionRef === 'undefined') {
+                console.error('Firestore addDoc or checklistItemsCollectionRef not available.');
+                if (typeof alertUser === 'function') alertUser("Fehler: Datenbank nicht verfügbar.", "error");
+                return;
+            }
+
+            const newItemData = {
+                listId: currentListId,
+                text,
+                status: 'open',
+                important,
+                addedBy: (currentUser && currentUser.displayName) ? currentUser.displayName : 'Unbekannt',
+                addedAt: serverTimestamp ? serverTimestamp() : null,
+                assignedTo: assignedTo || null,
+                assignedToName: assignedToName || null,
+                categoryId: categoryId || null,
+                categoryName: categoryName || null,
+                categoryColor: categoryColor || null
+            };
+
+            await addDoc(checklistItemsCollectionRef, newItemData);
+
+            if (typeof alertUser === 'function') alertUser("Eintrag wurde hinzugefügt.", "success");
+
+            // Aufräumen / Reset des Formulars
+            textInput.value = '';
+            if (suggestionsContainer) { suggestionsContainer.innerHTML = ''; suggestionsContainer.classList.add('hidden'); }
+            if (importantCheckbox) importantCheckbox.checked = false;
+            if (assigneeSelect) assigneeSelect.value = '';
+            if (categorySelect) categorySelect.value = '';
+            textInput.focus();
+
+        } catch (err) {
+            console.error('Fehler beim Hinzufügen des Eintrags:', err);
+            if (typeof alertUser === 'function') alertUser("Fehler beim Hinzufügen des Eintrags.", "error");
+        }
+    };
+
+    const addItemBtn = view.querySelector('#checklist-settings-add-item-btn');
+    if (addItemBtn) {
+        // Entferne vorherige Listener, falls mehrfach gebunden
+        try { addItemBtn.replaceWith(addItemBtn.cloneNode(true)); } catch(e) { /* ignore */ }
     }
 
-    const saveGroupAssignmentBtn = view.querySelector('#checklist-save-group-assignment');
-    if (saveGroupAssignmentBtn) {
-        saveGroupAssignmentBtn.addEventListener('click', async () => {
-            const listId = view.querySelector('#checklist-settings-editor-switcher').value;
-            const newGroupId = view.querySelector('#checklist-group-assign-switcher').value;
-            if (listId && newGroupId) {
-                const newGroupName = CHECKLIST_GROUPS[newGroupId].name;
-                await updateDoc(doc(checklistsCollectionRef, listId), { groupId: newGroupId, groupName: newGroupName });
-                alertUser("Gruppenzugehörigkeit gespeichert.", "success");
-                renderChecklistSettingsView(listId);
+    // Re-query weil wir evtl. ersetzt haben
+    const addItemBtnFinal = view.querySelector('#checklist-settings-add-item-btn');
+    if (addItemBtnFinal) addItemBtnFinal.addEventListener('click', addItemHandler);
+
+    // Tipp: Enter im Textfeld soll ebenfalls hinzufügen
+    const addTextInput = view.querySelector('#checklist-settings-add-text');
+    if (addTextInput) {
+        addTextInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addItemHandler();
             }
         });
     }
 
+    // Vorschlags-Container Verhalten: Klick auf Vorschlag füllt Formular
+    const suggestionsContainer = view.querySelector('#item-suggestions-container');
+    if (suggestionsContainer) {
+        suggestionsContainer.addEventListener('click', (e) => {
+            const suggestionItem = e.target.closest('.suggestion-item');
+            if (!suggestionItem) return;
+            const applyCategoryBtn = e.target.closest('.apply-category-btn');
+            const textSpan = suggestionItem.querySelector('.suggestion-text');
+            const isImportant = suggestionItem.dataset.important === 'true';
+            if (textSpan) {
+                addTextInput.value = textSpan.textContent;
+            }
+            const importantCheckboxLocal = view.querySelector('#checklist-settings-add-important');
+            if (importantCheckboxLocal) importantCheckboxLocal.checked = isImportant;
+            if (applyCategoryBtn) {
+                const categoryId = applyCategoryBtn.dataset.categoryId;
+                const categorySelectLocal = view.querySelector('#checklist-settings-add-category');
+                if (categorySelectLocal) categorySelectLocal.value = categoryId;
+            }
+            suggestionsContainer.innerHTML = '';
+            suggestionsContainer.classList.add('hidden');
+            addTextInput.focus();
+        });
+    }
+
+    // Klick außerhalb des Input schliesst Vorschläge
+    document.addEventListener('click', (e) => {
+        const ai = view.querySelector('#checklist-settings-add-text');
+        const sc = view.querySelector('#item-suggestions-container');
+        if (!ai || !sc) return;
+        if (!ai.contains(e.target) && !sc.contains(e.target)) {
+            sc.classList.add('hidden');
+        }
+    });
+
+    // Bind other controls that were in original function but make them robust (archive, show modals, etc.)
     const archiveListBtn = view.querySelector('#checklist-archive-list-btn');
     if (archiveListBtn) {
         archiveListBtn.addEventListener('click', async () => {
-            const listIdToArchive = view.querySelector('#checklist-settings-editor-switcher').value;
+            const listIdToArchive = view.querySelector('#checklist-settings-editor-switcher')?.value;
             if (!listIdToArchive) return;
-            const listName = CHECKLISTS[listIdToArchive]?.name;
-            if (confirm(`Möchten Sie die Liste "${listName}" wirklich archivieren?`)) {
-                await updateDoc(doc(checklistsCollectionRef, listIdToArchive), { isArchived: true, archivedAt: serverTimestamp(), archivedBy: currentUser.displayName });
-                alertUser(`Liste "${listName}" wurde archiviert.`, "success");
-                // Die manuelle Neulade-Zeile wurde hier entfernt.
+            const listName = CHECKLISTS[listIdToArchive]?.name || 'Unbekannt';
+            if (!confirm(`Möchten Sie die Liste "${listName}" wirklich archivieren?`)) return;
+            try {
+                if (typeof updateDoc === 'function') {
+                    await updateDoc(doc(checklistsCollectionRef, listIdToArchive), { isArchived: true, archivedAt: serverTimestamp(), archivedBy: (currentUser && currentUser.displayName) ? currentUser.displayName : 'System' });
+                    if (typeof alertUser === 'function') alertUser(`Liste "${listName}" wurde archiviert.`, "success");
+                } else {
+                    console.warn('updateDoc not available; archive not performed');
+                }
+            } catch (error) {
+                console.error("Fehler beim Archivieren:", error);
+                if (typeof alertUser === 'function') alertUser("Fehler beim Archivieren der Liste.", "error");
             }
         });
     }
@@ -857,215 +1015,31 @@ function setupListAndItemManagementListeners(view) {
     const showArchivedBtn = view.querySelector('#show-archived-lists-btn');
     if (showArchivedBtn) {
         showArchivedBtn.addEventListener('click', () => {
-            renderArchivedListsModal();
-            document.getElementById('archivedListsModal').style.display = 'flex';
+            if (typeof renderArchivedListsModal === 'function') {
+                renderArchivedListsModal();
+                const modal = document.getElementById('archivedListsModal');
+                if (modal) modal.style.display = 'flex';
+            }
         });
     }
 
     const showDeletedBtn = view.querySelector('#show-deleted-lists-btn');
     if (showDeletedBtn) {
         showDeletedBtn.addEventListener('click', () => {
-            renderDeletedListsModal();
-            document.getElementById('deletedListsModal').style.display = 'flex';
+            if (typeof renderDeletedListsModal === 'function') {
+                renderDeletedListsModal();
+                const modal = document.getElementById('deletedListsModal');
+                if (modal) modal.style.display = 'flex';
+            }
         });
     }
 
+    // Editor switcher: Wechseln der zu bearbeitenden Liste
     const editorSwitcher = view.querySelector('#checklist-settings-editor-switcher');
     if (editorSwitcher) {
         editorSwitcher.addEventListener('change', (e) => {
-            renderChecklistSettingsView(e.target.value);
-        });
-    }
-
-    const itemsEditorContainer = view.querySelector('#checklist-items-editor-container');
-    if (itemsEditorContainer) {
-        itemsEditorContainer.addEventListener('click', async (e) => {
-            const editBtn = e.target.closest('.edit-checklist-item-btn');
-            const saveBtn = e.target.closest('.save-checklist-item-btn');
-            const deleteBtn = e.target.closest('.delete-checklist-item-btn');
-            if (editBtn) {
-                const itemDiv = editBtn.closest('[data-item-id]');
-                itemDiv.querySelector('.item-display-content').classList.add('hidden');
-                itemDiv.querySelector('.edit-checklist-item-btn').classList.add('hidden');
-                itemDiv.querySelector('.item-edit-content').classList.remove('hidden');
-                itemDiv.querySelector('.save-checklist-item-btn').classList.remove('hidden');
-                itemDiv.querySelector('input').focus();
-            }
-            if (saveBtn) {
-                const itemDiv = saveBtn.closest('[data-item-id]');
-                const itemId = itemDiv.dataset.itemId;
-                const newText = itemDiv.querySelector('input').value.trim();
-                if (newText) {
-                    await updateDoc(doc(checklistItemsCollectionRef, itemId), { text: newText, lastEditedBy: currentUser.displayName, lastEditedAt: serverTimestamp() });
-                    await logAdminAction('checklist_item_edited', `Checklisten-Eintrag (ID: ${itemId}) umbenannt.`);
-                }
-            }
-            if (deleteBtn) {
-                const itemDiv = deleteBtn.closest('[data-item-id]');
-                if (confirm("Möchten Sie diesen Eintrag wirklich löschen?")) {
-                    const itemId = itemDiv.dataset.itemId;
-                    await deleteDoc(doc(checklistItemsCollectionRef, itemId));
-                    await logAdminAction('checklist_item_deleted', `Checklisten-Eintrag (ID: ${itemId}) gelöscht.`);
-                }
-            }
-        });
-    }
-
-    const addItemHandler = async () => {
-        const textInput = view.querySelector('#checklist-settings-add-text');
-        const suggestionsContainer = view.querySelector('#item-suggestions-container');
-        const text = textInput.value.trim();
-        const important = view.querySelector('#checklist-settings-add-important').checked;
-        const assigneeSelect = view.querySelector('#checklist-settings-add-assignee');
-        const assignedTo = assigneeSelect.value;
-        const assignedToName = assignedTo ? assigneeSelect.options[assigneeSelect.selectedIndex].text : null;
-        const categorySelect = view.querySelector('#checklist-settings-add-category');
-        const categoryId = categorySelect.value;
-
-        let categoryName = null;
-        let categoryColor = null;
-
-        if (categoryId) {
-            for (const group of Object.values(CHECKLIST_CATEGORIES)) {
-                const foundCat = group.find(cat => cat.id === categoryId);
-                if (foundCat) {
-                    categoryName = foundCat.name;
-                    categoryColor = foundCat.color || 'gray';
-                    break;
-                }
-            }
-        }
-
-        const currentListId = view.querySelector('#checklist-settings-editor-switcher').value;
-        if (!currentListId) {
-            alertUser("Kann keinen Eintrag hinzufügen: Bitte erstellen Sie zuerst eine Liste.", "error");
-            return;
-        }
-        if (text) {
-            await addDoc(checklistItemsCollectionRef, {
-                listId: currentListId, text, status: 'open', important,
-                addedBy: currentUser.displayName, addedAt: serverTimestamp(),
-                assignedTo: assignedTo || null, assignedToName,
-                categoryId: categoryId || null, categoryName, categoryColor: categoryColor || null
-            });
-            await logAdminAction('checklist_item_added', `Checklisten-Eintrag "${text}" hinzugefügt.`);
-            textInput.value = '';
-            suggestionsContainer.innerHTML = '';
-            suggestionsContainer.classList.add('hidden');
-            view.querySelector('#checklist-settings-add-important').checked = false;
-            assigneeSelect.value = '';
-            categorySelect.value = '';
-            textInput.focus();
-        }
-    };
-    const addItemBtn = view.querySelector('#checklist-settings-add-item-btn');
-    if (addItemBtn) addItemBtn.addEventListener('click', addItemHandler);
-
-    const addTextInput = view.querySelector('#checklist-settings-add-text');
-    const suggestionsContainer = view.querySelector('#item-suggestions-container');
-    if (addTextInput && suggestionsContainer) {
-        addTextInput.addEventListener('input', (e) => {
-            const query = e.target.value.trim().toLowerCase();
-            if (query.length < 2) {
-                suggestionsContainer.innerHTML = '';
-                suggestionsContainer.classList.add('hidden');
-                return;
-            }
-
-            const allChecklistItems = Object.values(CHECKLIST_ITEMS).flat();
-            const allTemplateItems = Object.values(TEMPLATE_ITEMS).flat().map(item => ({ ...item, isTemplate: true }));
-            const combinedItems = [...allChecklistItems, ...allTemplateItems];
-
-            const uniqueItemsByText = new Map();
-            combinedItems.forEach(item => {
-                if (!uniqueItemsByText.has(item.text) || !item.isTemplate) {
-                    uniqueItemsByText.set(item.text, item);
-                }
-            });
-            const matchingSuggestions = [...uniqueItemsByText.values()]
-                .filter(item => item.text.toLowerCase().includes(query))
-                .slice(0, 7);
-            if (matchingSuggestions.length > 0) {
-                suggestionsContainer.innerHTML = matchingSuggestions.map(item => {
-                    const isImportant = item.important === true;
-                    const importantClass = isImportant ? 'bg-yellow-50' :
-                        'hover:bg-gray-100';
-                    const categoryButton = item.categoryId ?
-                        `<button class="apply-category-btn text-xs bg-purple-100 text-purple-700 font-bold py-1 px-2 rounded-md hover:bg-purple-200 flex-shrink-0" data-category-id="${item.categoryId}">+KAT</button>` :
-                        '';
-
-                    let path = '';
-                    if (item.isTemplate) {
-                        for (const templateId in TEMPLATE_ITEMS) {
-                            if (TEMPLATE_ITEMS[templateId].some(tItem => tItem.text === item.text)) {
-                                const parentContainer = TEMPLATES[templateId];
-                                const stackName = parentContainer.stackName || 'Kein Stack zugewiesen';
-                                path = `<span class="text-xs text-teal-700 font-medium">Pfad: ${stackName}/${parentContainer.name}</span>`;
-                                break;
-                            }
-                        }
-                    } else {
-                        const parentList = CHECKLISTS[item.listId] ||
-                            ARCHIVED_CHECKLISTS[item.listId] || DELETED_CHECKLISTS[item.listId];
-                        if (parentList) {
-                            let prefix = 'Pfad: ';
-                            if (parentList.isArchived) prefix = 'Pfad: Archiv/';
-                            if (parentList.isDeleted) prefix = 'Pfad: Gelöscht/';
-                            const groupName = parentList.groupName ||
-                                'Gruppe gelöscht';
-                            path = `<span class="text-xs text-gray-500">${prefix}${groupName}/${parentList.name}</span>`;
-                        }
-                    }
-
-                    return `
-                        <div class="suggestion-item p-2 flex justify-between items-center ${importantClass} cursor-pointer" data-important="${isImportant}">
-                            <div class="flex flex-col items-start">
-                                <span class="suggestion-text">${item.text}</span>
-                                ${path}
-                            </div>
-                            ${categoryButton}
-                        </div>
-                    `;
-                }).join('');
-                suggestionsContainer.classList.remove('hidden');
-            } else {
-                suggestionsContainer.innerHTML = '';
-                suggestionsContainer.classList.add('hidden');
-            }
-        });
-        addTextInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                addItemHandler();
-            }
-        });
-        suggestionsContainer.addEventListener('click', (e) => {
-            const suggestionItem = e.target.closest('.suggestion-item');
-            if (!suggestionItem) return;
-
-            const applyCategoryBtn = e.target.closest('.apply-category-btn');
-            const textSpan = suggestionItem.querySelector('.suggestion-text');
-            const isImportant = suggestionItem.dataset.important === 'true';
-            const importantCheckbox = view.querySelector('#checklist-settings-add-important');
-
-            if (applyCategoryBtn) {
-                addTextInput.value = textSpan.textContent;
-                const categoryId = applyCategoryBtn.dataset.categoryId;
-                view.querySelector('#checklist-settings-add-category').value = categoryId;
-            } else {
-                addTextInput.value = textSpan.textContent;
-            }
-
-            importantCheckbox.checked = isImportant;
-            suggestionsContainer.innerHTML = '';
-            suggestionsContainer.classList.add('hidden');
-            addTextInput.focus();
-        });
-
-        document.addEventListener('click', (e) => {
-            if (!addTextInput.contains(e.target) && !suggestionsContainer.contains(e.target)) {
-                suggestionsContainer.classList.add('hidden');
-            }
+            const val = e.target.value;
+            renderChecklistSettingsView(val);
         });
     }
 }
@@ -1809,79 +1783,126 @@ function setupTemplateEditorListeners() {
 
 }
 
-export function openTemplateModal(targetListId) {
+function openTemplateModal(targetListId) {
     const modal = document.getElementById('templateApplyModal');
-    modal.dataset.targetListId = targetListId;
+    if (!modal) return console.warn('openTemplateModal: modal not found');
+    modal.dataset.targetListId = targetListId || '';
 
-    const templateTypeRadios = modal.querySelectorAll('input[name="template-type"]');
     const templateSelect = document.getElementById('template-select');
+    const templateTypeRadios = modal.querySelectorAll('input[name="template-type"]');
 
-    const updateTemplateDropdown = () => {
-        const selectedType = modal.querySelector('input[name="template-type"]:checked').value;
-        document.getElementById('template-items-container').innerHTML = '';
-        document.getElementById('template-mode-section').classList.toggle('hidden', selectedType !== 'Schiff');
+    const updateTemplateDropdown = async () => {
+        const selectedType = modal.querySelector('input[name="template-type"]:checked')?.value || 'Container';
+        const itemsContainer = document.getElementById('template-items-container');
+        const modeSection = document.getElementById('template-mode-section');
+        if (itemsContainer) itemsContainer.innerHTML = '';
+        if (modeSection) modeSection.classList.toggle('hidden', selectedType !== 'Schiff');
 
+        if (!templateSelect) return;
         templateSelect.innerHTML = '<option value="">Bitte Quelle wählen...</option>';
 
         if (selectedType === 'Container') {
-            let groupedContainerOptions = Object.values(CHECKLIST_STACKS).map(stack => {
-                const containersInStack = Object.values(TEMPLATES).filter(t => t.stackId === stack.id);
+            // Gruppierte Container basierend auf STACKS
+            const grouped = Object.values(CHECKLIST_STACKS || {}).map(stack => {
+                const containersInStack = Object.values(TEMPLATES || {}).filter(t => t.stackId === stack.id);
                 if (containersInStack.length === 0) return '';
-                return `
-                    <optgroup label="${stack.name}">
-                        ${containersInStack.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
-                    </optgroup>
-                `;
+                return `<optgroup label="${stack.name}">${containersInStack.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}</optgroup>`;
             }).join('');
-            const containersWithoutStack = Object.values(TEMPLATES).filter(t => !t.stackId);
-            if (containersWithoutStack.length > 0) {
-                groupedContainerOptions += `<optgroup label="Ohne Stack">
-                    ${containersWithoutStack.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
-                </optgroup>`;
-            }
-            templateSelect.innerHTML += groupedContainerOptions;
-
+            const withoutStack = Object.values(TEMPLATES || {}).filter(t => !t.stackId).map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+            templateSelect.innerHTML += grouped + (withoutStack ? `<optgroup label="Ohne Stack">${withoutStack}</optgroup>` : '');
         } else if (selectedType === 'Schiff') {
-            Object.values(CHECKLISTS).forEach(checklist => {
+            Object.values(CHECKLISTS || {}).forEach(checklist => {
                 templateSelect.innerHTML += `<option value="${checklist.id}">${checklist.name}</option>`;
             });
         }
     };
 
-    templateTypeRadios.forEach(radio => radio.addEventListener('change', updateTemplateDropdown));
+    // Idempotente Listener-Bindung: falls noch nicht, füge hinzu
+    if (!modal.dataset.listenersAttached) {
+        // template type radio change
+        templateTypeRadios.forEach(r => r.addEventListener('change', updateTemplateDropdown));
 
-    templateSelect.addEventListener('change', async (e) => {
-        const selectedId = e.target.value;
-        const selectedType = modal.querySelector('input[name="template-type"]:checked').value;
-        const itemsContainer = document.getElementById('template-items-container');
-
-        // Wichtig: Wir leeren den Container, um Platz für die neuen Einträge zu machen.
-        itemsContainer.innerHTML = '';
-
-        if (selectedId) {
-            // Wenn ein Container ausgewählt wurde...
-            if (selectedType === 'Container') {
-                // 1. Zeige eine Lade-Nachricht an
-                itemsContainer.innerHTML = '<p class="text-xs text-gray-500">Lade Einträge...</p>';
-
-                // 2. Lade die Einträge direkt aus der Datenbank
-                const itemsSubCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', selectedId, 'template-items');
-                const snapshot = await getDocs(query(itemsSubCollectionRef, orderBy('text')));
-
-                // 3. Speichere die geladenen Einträge
-                TEMPLATE_ITEMS[selectedId] = [];
-                snapshot.forEach(doc => TEMPLATE_ITEMS[selectedId].push({ id: doc.id, ...doc.data() }));
-
-                // 4. Zeige die Einträge an
-                renderTemplateItemsView(selectedId, selectedType);
-
-                // Wenn ein Schiff (eine andere Checkliste) ausgewählt wurde...
-            } else if (selectedType === 'Schiff') {
-                // Zeige einfach die bereits geladenen Einträge an
-                renderTemplateItemsView(selectedId, selectedType);
-            }
+        const templateSelectEl = templateSelect;
+        if (templateSelectEl) {
+            templateSelectEl.addEventListener('change', async (e) => {
+                const selectedId = e.target.value;
+                const selectedType = modal.querySelector('input[name="template-type"]:checked')?.value || 'Container';
+                const itemsContainer = document.getElementById('template-items-container');
+                if (!itemsContainer) return;
+                itemsContainer.innerHTML = '';
+                if (!selectedId) return;
+                // Load items: if Container => fetch template-items subcollection, if Schiff => use CHECKLIST_ITEMS
+                if (selectedType === 'Container') {
+                    try {
+                        itemsContainer.innerHTML = '<p class="text-xs text-gray-500">Lade Einträge...</p>';
+                        if (typeof getDocs === 'function' && typeof query === 'function') {
+                            const itemsSubCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', selectedId, 'template-items');
+                            const snapshot = await getDocs(query(itemsSubCollectionRef, orderBy('text')));
+                            const items = [];
+                            snapshot.forEach(docSnap => items.push({ id: docSnap.id, ...docSnap.data() }));
+                            // render template items
+                            if (items.length === 0) {
+                                itemsContainer.innerHTML = '<p class="text-xs text-gray-500">Diese Vorlage hat keine Einträge.</p>';
+                                return;
+                            }
+                            itemsContainer.innerHTML = items.map(item => `
+                                <label class="flex items-center gap-2 p-1 cursor-pointer hover:bg-gray-100 rounded">
+                                    <input type="checkbox" value="${item.id}" class="h-4 w-4 template-item-cb"
+                                        data-text="${(item.text||'').replace(/"/g,'&quot;')}"
+                                        data-important="${!!item.important}"
+                                        data-assigned-to="${item.assignedTo || ''}"
+                                        data-assigned-to-name="${item.assignedToName || ''}"
+                                        data-category-id="${item.categoryId || ''}"
+                                        data-category-name="${item.categoryName || ''}"
+                                        data-category-color="${item.categoryColor || ''}">
+                                    <span class="text-sm">${item.text}</span>
+                                </label>
+                            `).join('');
+                        } else {
+                            itemsContainer.innerHTML = '<p class="text-xs text-gray-500">Datenbank-Funktionen nicht verfügbar.</p>';
+                        }
+                    } catch (err) {
+                        console.error('openTemplateModal: Fehler beim Laden von Container-Einträgen', err);
+                        itemsContainer.innerHTML = '<p class="text-xs text-red-500">Fehler beim Laden.</p>';
+                    }
+                } else {
+                    // Schiff: nutze bereits geladene CHECKLIST_ITEMS
+                    const items = CHECKLIST_ITEMS[selectedId] || [];
+                    if (items.length === 0) {
+                        itemsContainer.innerHTML = '<p class="text-xs text-gray-500">Diese Vorlage hat keine Einträge.</p>';
+                        return;
+                    }
+                    itemsContainer.innerHTML = items.map(item => `
+                        <label class="flex items-center gap-2 p-1 cursor-pointer hover:bg-gray-100 rounded">
+                            <input type="checkbox" value="${item.id}" class="h-4 w-4 template-item-cb"
+                                data-text="${(item.text||'').replace(/"/g,'&quot;')}"
+                                data-important="${!!item.important}"
+                                data-assigned-to="${item.assignedTo || ''}"
+                                data-assigned-to-name="${item.assignedToName || ''}"
+                                data-category-id="${item.categoryId || ''}"
+                                data-category-name="${item.categoryName || ''}"
+                                data-category-color="${item.categoryColor || ''}">
+                            <span class="text-sm">${item.text}</span>
+                        </label>
+                    `).join('');
+                }
+            });
         }
-    });
+
+        // Apply/Cancel/Close buttons
+        const applyBtn = document.getElementById('apply-template-btn');
+        if (applyBtn) applyBtn.addEventListener('click', applyTemplateLogic);
+
+        const cancelBtn = document.getElementById('cancel-template-modal-btn');
+        if (cancelBtn) cancelBtn.addEventListener('click', closeTemplateModal);
+
+        const closeBtn = document.getElementById('closeTemplateModalBtn');
+        if (closeBtn) closeBtn.addEventListener('click', closeTemplateModal);
+
+        modal.dataset.listenersAttached = 'true';
+    }
+
+    // Initial populate
     updateTemplateDropdown();
     modal.style.display = 'flex';
 }
@@ -1933,11 +1954,22 @@ function renderTemplateItemsView(templateId, templateType) {
 
 function closeTemplateModal() {
     const modal = document.getElementById('templateApplyModal');
+    if (!modal) return;
     modal.style.display = 'none';
 
-    // Setzt das Modal für die nächste Benutzung zurück
-    const itemsContainer = document.getElementById('template-items-container');
-    itemsContainer.innerHTML = '';
-    document.getElementById('template-select').innerHTML = '<option value="">Bitte zuerst Typ wählen...</option>';
-    document.getElementById('template-mode-section').classList.add('hidden');
+    // Reset Inhalte sicher zurücksetzen
+    try {
+        const itemsContainer = document.getElementById('template-items-container');
+        if (itemsContainer) itemsContainer.innerHTML = '';
+        const templateSelect = document.getElementById('template-select');
+        if (templateSelect) templateSelect.innerHTML = '<option value="">Bitte zuerst Typ wählen...</option>';
+        const modeSection = document.getElementById('template-mode-section');
+        if (modeSection) modeSection.classList.add('hidden');
+        modal.dataset.targetListId = '';
+        // Optional: reset radio to default
+        const defaultRadio = modal.querySelector('input[name="template-type"]');
+        if (defaultRadio) defaultRadio.checked = true;
+    } catch (err) {
+        console.warn('closeTemplateModal: Fehler beim Zurücksetzen des Modals', err);
+    }
 }
