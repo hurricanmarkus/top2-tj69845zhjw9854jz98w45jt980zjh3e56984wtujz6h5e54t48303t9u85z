@@ -371,17 +371,149 @@ function openModeConfigForm(modeId = null) {
   formContainer.classList.remove('hidden');
 }
 
+// Ersetze oder füge diese Funktion in notfall.js ein (komplett 1:1).
 async function saveNotrufMode() {
-  // Einfacher Placeholder: die eigentliche Implementierung in deiner Datei war umfangreicher.
-  // Hier prüfen wir minimal und speichern dann falls possible.
-  if (!canSaveToNotrufSettings()) return;
-  // Beispiel: notrufSettings.modes push oder update
+  // DOM-Elemente / Felder
+  const formContainer = document.getElementById('modeConfigFormContainer');
+  const editingModeIdInput = document.getElementById('editingModeId');
+  const titleInput = document.getElementById('notrufModeTitle');
+  const descInput = document.getElementById('notrufModeDescInput');
+  const pushoverTitleInput = document.getElementById('notrufTitle');
+  const messageInput = document.getElementById('notrufMessage');
+  const retryCheckbox = document.getElementById('retryDeaktiviert');
+  const retrySecondsInput = document.getElementById('retrySecondsInput');
+
+  if (!formContainer || !titleInput || !pushoverTitleInput || !messageInput) {
+    console.error('saveNotrufMode: notwendige Form-Elemente fehlen!');
+    alertUser('Interner Fehler: Formular nicht vollständig. Öffne die Entwicklerkonsole.', 'error');
+    return;
+  }
+
+  // Werte aus Formular lesen
+  const editingModeId = editingModeIdInput ? (editingModeIdInput.value || '').trim() : '';
+  const title = titleInput.value.trim();
+  const description = descInput ? descInput.value.trim() : '';
+  const pushoverTitle = pushoverTitleInput.value.trim();
+  const message = messageInput.value.trim();
+
+  // Priorität: die aktive priority-btn (bg-indigo-600) oder data-priority auf Default 0
+  let priority = 0;
+  const activePrioBtn = document.querySelector('.priority-btn.bg-indigo-600') || document.querySelector('.priority-btn[data-priority="0"]');
+  if (activePrioBtn && activePrioBtn.dataset && typeof activePrioBtn.dataset.priority !== 'undefined') {
+    priority = parseInt(activePrioBtn.dataset.priority) || 0;
+  }
+
+  // Retry: 0 wenn deaktiviert, sonst numeric value (min 30)
+  let retry = 30;
+  if (retryCheckbox && retryCheckbox.checked) {
+    retry = 0;
+  } else if (retrySecondsInput) {
+    const r = parseInt(retrySecondsInput.value, 10);
+    retry = Number.isNaN(r) ? 30 : Math.max(30, r);
+  }
+
+  // Ausgewähltes API-Token / Sound: wir verwenden die temporären Variablen, die vom Editor gesetzt werden
+  // (tempSelectedApiTokenId / tempSelectedSoundId werden in deinem Skript gepflegt)
+  const selectedApiTokenId = typeof tempSelectedApiTokenId !== 'undefined' ? tempSelectedApiTokenId : null;
+  const selectedSoundId = typeof tempSelectedSoundId !== 'undefined' ? tempSelectedSoundId : null;
+
+  // Empfänger / userKeys: aus den Badges im Formular (#notrufUserKeyDisplay)
+  const userKeys = [];
+  document.querySelectorAll('#notrufUserKeyDisplay .contact-badge').forEach(b => {
+    const id = b.dataset && b.dataset.contactId ? parseInt(b.dataset.contactId, 10) : NaN;
+    if (!Number.isNaN(id)) {
+      userKeys.push({ id: id, name: b.textContent.trim() });
+    }
+  });
+
+  // Validation
+  if (!title) {
+    alertUser('Bitte einen Titel für den Modus eingeben.', 'error');
+    return;
+  }
+
+  // Prepare config object
+  const configObj = {
+    title: pushoverTitle || '',
+    message: message || '',
+    priority: priority,
+    retry: retry, // 0 = deaktiviert
+    selectedApiTokenId: selectedApiTokenId ?? null,
+    selectedSoundId: selectedSoundId ?? null,
+    userKeys: userKeys
+  };
+
+  // Sicherstellen, dass notrufSettings.modes existiert
+  if (!Array.isArray(notrufSettings.modes)) notrufSettings.modes = [];
+
+  // Add or update mode
+  let savedModeId = null;
+  if (editingModeId) {
+    // Update vorhandenen Modus, wenn vorhanden
+    const idx = notrufSettings.modes.findIndex(m => String(m.id) === String(editingModeId));
+    if (idx !== -1) {
+      // Merge bestehende Daten, aber überschreibe Felder mit Formularwerten
+      const existing = notrufSettings.modes[idx] || {};
+      notrufSettings.modes[idx] = {
+        ...existing,
+        title: title,
+        description: description,
+        config: configObj
+      };
+      savedModeId = notrufSettings.modes[idx].id;
+    } else {
+      // Falls ID nicht gefunden (selten), lege neuen Modus an
+      const newId = Date.now();
+      notrufSettings.modes.push({ id: newId, title: title, description: description, config: configObj });
+      savedModeId = newId;
+    }
+  } else {
+    // Neuer Modus
+    const newId = Date.now();
+    notrufSettings.modes.push({ id: newId, title: title, description: description, config: configObj });
+    savedModeId = newId;
+  }
+
+  // Firestore-Guard & Save
+  if (!canSaveToNotrufSettings()) {
+    return;
+  }
+
   try {
     await setDoc(notrufSettingsDocRef, notrufSettings);
-    alertUser('Modus gespeichert.', 'success');
+    // Nach erfolgreichem Speichern: UI-Aktualisierungen
+    alertUser('Modus erfolgreich gespeichert.', 'success');
+
+    // Formular schließen / zurücksetzen
+    if (formContainer) formContainer.classList.add('hidden');
+    if (editingModeIdInput) editingModeIdInput.value = '';
+
+    // Update UI-Listen / Selector / Displays
+    if (typeof renderModeEditorList === 'function') renderModeEditorList();
+    if (typeof populateFlicAssignmentSelectors === 'function') populateFlicAssignmentSelectors();
+    if (typeof updateFlicColumnDisplays === 'function') updateFlicColumnDisplays();
+
+    // Optional: wenn der Editor noch offen, setze ihn auf den frisch gespeicherten Eintrag
+    // (z.B. damit der Benutzer direkt sieht, dass der Modus existiert)
+    const editorSelector = document.getElementById('flic-editor-selector');
+    if (editorSelector && savedModeId) {
+      // Stelle sicher, dass der Option existiert (populateFlicAssignmentSelectors hat die Options aktualisiert)
+      try {
+        editorSelector.value = String(savedModeId);
+      } catch (e) { /* ignore */ }
+    }
+
+    // Reset temporäre Auswahl-IDs, damit beim nächsten Öffnen klar ist, was neu gewählt wird
+    tempSelectedApiTokenId = null;
+    tempSelectedSoundId = null;
   } catch (err) {
     console.error('Fehler beim Speichern des Modus:', err);
-    alertUser('Fehler beim Speichern des Modus.', 'error');
+    alertUser('Fehler beim Speichern des Modus. Siehe Konsole.', 'error');
+
+    // Rollback: entferne neu hinzugefügten Modus falls er gerade erstellt wurde
+    if (!editingModeId) {
+      notrufSettings.modes = (notrufSettings.modes || []).filter(m => m.id !== savedModeId);
+    }
   }
 }
 
