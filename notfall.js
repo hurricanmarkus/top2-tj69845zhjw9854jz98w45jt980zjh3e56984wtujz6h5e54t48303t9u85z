@@ -311,23 +311,98 @@ function updateFlicColumnDisplays() {
   });
 }
 
+// 1:1 ersetzen: updateFlicEditorDetails - zeigt jetzt Titel, Kurzbeschreibung, API-Token-Name, Pushover-Title, Sound + Empfänger, Nachricht, Prio, Retry
 function updateFlicEditorDetails(selectedModeId) {
-  const detailsDisplay = document.getElementById('flic-editor-details');
-  if (!detailsDisplay) return;
-  const modes = notrufSettings.modes || [];
-  const selectedMode = modes.find(m => m.id === selectedModeId);
-  if (selectedMode) {
+    const detailsDisplay = document.getElementById('flic-editor-details');
+    if (!detailsDisplay) {
+        console.error("updateFlicEditorDetails: Element #flic-editor-details nicht gefunden!");
+        return;
+    }
+
+    const modes = notrufSettings.modes || [];
+    const selectedMode = modes.find(m => m.id === selectedModeId);
+
+    if (!selectedMode) {
+        detailsDisplay.innerHTML = '<p class="text-sm text-gray-500">Kein Modus zugewiesen.</p>';
+        return;
+    }
+
     const config = selectedMode.config || {};
-    const recipients = (config.userKeys || []).map(u => u.name).join(', ') || 'Niemand';
+
+    // Title / Kurzbeschreibung
+    const modeTitle = selectedMode.title || '–';
+    const modeDesc = selectedMode.description || '';
+
+    // Pushover title (Titel der Benachrichtigung)
+    const pushoverTitle = config.title || '';
+
+    // API Token (nur Name anzeigen, nicht der Key)
+    let apiTokenName = 'Kein Token ausgewählt';
+    if (typeof config.selectedApiTokenId !== 'undefined' && config.selectedApiTokenId !== null) {
+        const tok = (notrufSettings.apiTokens || []).find(t => String(t.id) === String(config.selectedApiTokenId));
+        if (tok) apiTokenName = tok.name || apiTokenName;
+        else apiTokenName = 'Token nicht gefunden';
+    }
+
+    // Sound
+    let soundLabel = 'Standard (pushover)';
+    if (typeof config.selectedSoundId !== 'undefined' && config.selectedSoundId !== null) {
+        const snd = (notrufSettings.sounds || []).find(s => String(s.id) === String(config.selectedSoundId));
+        if (snd) soundLabel = snd.useCustomName && snd.customName ? snd.customName : snd.code;
+        else soundLabel = 'Sound nicht gefunden';
+    }
+
+    // Empfänger
+    const recipients = (config.userKeys || []).map(u => {
+        if (u && typeof u === 'object') return u.name || `#${u.id}`;
+        return (notrufSettings.contacts || []).find(c => String(c.id) === String(u))?.name || `#${u}`;
+    }).filter(Boolean).join(', ') || 'Niemand';
+
+    // Nachricht + Prio/Retry
+    const message = config.message || '(Keine)';
+    const priority = (typeof config.priority !== 'undefined') ? config.priority : '0';
+    const retry = (typeof config.retry !== 'undefined') ? config.retry : '0';
+
+    // Baue das HTML für die Detail-Box
     detailsDisplay.innerHTML = `
-      <strong class="block">Empfänger:</strong>
-      <span class="block pl-2 mb-1">${recipients}</span>
-      <strong class="block">Nachricht:</strong>
-      <span class="block pl-2 mb-1">"${config.message || 'Keine'}"</span>
-      <strong class="block">Prio:\u00A0${config.priority ?? '0'}, Retry:\u00A0${config.retry ?? '0'}s</strong>`;
-  } else {
-    detailsDisplay.innerHTML = 'Kein Modus zugewiesen.';
-  }
+        <div class="space-y-2 text-sm text-gray-800">
+            <div>
+                <p class="text-xs text-gray-500">Modus</p>
+                <p class="font-semibold">${modeTitle}</p>
+            </div>
+            ${modeDesc ? `<div><p class="text-xs text-gray-500">Kurzbeschreibung</p><p class="text-sm text-gray-600">${modeDesc}</p></div>` : ''}
+            <div>
+                <p class="text-xs text-gray-500">API-Token</p>
+                <p class="text-sm text-blue-700 font-medium">${apiTokenName}</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-500">Titel der Benachrichtigung</p>
+                <p class="text-sm text-gray-700">${pushoverTitle || '<span class="text-gray-400 italic">(kein Titel)</span>'}</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-500">Sound</p>
+                <p class="text-sm text-gray-700">${soundLabel}</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-500">Empfänger</p>
+                <p class="text-sm text-gray-700">${recipients}</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-500">Nachricht</p>
+                <p class="text-sm text-gray-700">"${message}"</p>
+            </div>
+            <div class="flex gap-4">
+                <div>
+                    <p class="text-xs text-gray-500">Prio</p>
+                    <p class="text-sm text-gray-700">${priority}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-500">Retry (s)</p>
+                    <p class="text-sm text-gray-700">${retry}</p>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 function updateFlicEditorBox(klickTyp) {
@@ -341,26 +416,39 @@ function updateFlicEditorBox(klickTyp) {
   updateFlicEditorDetails(selector.value ? parseInt(selector.value) : null);
 }
 
+// 1:1 ersetzen: renderModeEditorList - macht die Liste länger/scrollbar
 function renderModeEditorList() {
-  const listContainer = document.getElementById('existingModesList');
-  if (!listContainer) return;
-  const modes = notrufSettings.modes || [];
-  if (modes.length === 0) {
-    listContainer.innerHTML = '<p class="text-sm text-center text-gray-400">Keine Modi vorhanden.</p>';
-    return;
-  }
-  listContainer.innerHTML = modes.map(mode => `
-    <div class="flex justify-between items-center p-2 bg-gray-50 rounded-md border">
-      <div>
-        <p class="font-semibold">${mode.title}</p>
-        <p class="text-xs text-gray-500">${mode.description || ''}</p>
-      </div>
-      <div class="flex gap-1">
-        <button data-mode-id="${mode.id}" class="edit-mode-btn p-2 text-blue-500 hover:bg-blue-100 rounded-full" title="Bearbeiten">✎</button>
-        <button data-mode-id="${mode.id}" class="delete-mode-btn p-2 text-red-500 hover:bg-red-100 rounded-full" title="Löschen">🗑</button>
-      </div>
-    </div>
-  `).join('');
+    const listContainer = document.getElementById('existingModesList');
+    if (!listContainer) return;
+
+    const modes = notrufSettings.modes || [];
+    // Mach das List-Container "länger" / scrollbar, damit mehr Modi sichtbar werden
+    // (du kannst '60vh' anpassen, falls du noch mehr/ weniger Höhe willst)
+    listContainer.style.maxHeight = '60vh';
+    listContainer.style.overflowY = 'auto';
+    listContainer.style.paddingRight = '8px';
+
+    if (modes.length === 0) {
+        listContainer.innerHTML = '<p class="text-sm text-center text-gray-400">Keine Modi vorhanden.</p>';
+        return;
+    }
+
+    // Kompakteres Item-Layout, sodass pro Sicht mehr Einträge passen
+    listContainer.innerHTML = modes.map(mode => {
+        const desc = mode.description ? `<p class="text-xs text-gray-500 truncate">${mode.description}</p>` : '';
+        return `
+            <div class="flex justify-between items-center p-2 gap-3 bg-gray-50 rounded-md border mb-2">
+                <div class="flex-1 min-w-0">
+                    <p class="font-semibold text-sm truncate">${mode.title}</p>
+                    ${desc}
+                </div>
+                <div class="flex items-center gap-2 ml-3">
+                    <button data-mode-id="${mode.id}" class="edit-mode-btn p-2 text-blue-500 hover:bg-blue-100 rounded-full" title="Bearbeiten">✎</button>
+                    <button data-mode-id="${mode.id}" class="delete-mode-btn p-2 text-red-500 hover:bg-red-100 rounded-full" title="Löschen">🗑</button>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 function openModeConfigForm(modeId = null) {
