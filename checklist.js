@@ -228,7 +228,7 @@ export async function applyTemplateLogic() {
 }
 
 
-export function listenForTemplates() {
+function listenForTemplates() {
   if (typeof onSnapshot !== 'function') return;
   try {
     const templatesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates');
@@ -247,7 +247,7 @@ export function listenForTemplates() {
 }
 
 
-export function listenForChecklists() {
+function listenForChecklists() {
   if (typeof onSnapshot !== 'function') return;
   try {
     onSnapshot(query(checklistsCollectionRef, orderBy('name')), (snapshot) => {
@@ -268,7 +268,7 @@ export function listenForChecklists() {
 }
 
 
-export function listenForChecklistGroups() {
+function listenForChecklistGroups() {
   if (typeof onSnapshot !== 'function') return;
   try {
     onSnapshot(query(checklistGroupsCollectionRef, orderBy('name')), (snapshot) => {
@@ -282,7 +282,7 @@ export function listenForChecklistGroups() {
 }
 
 
-export function listenForChecklistCategories() {
+function listenForChecklistCategories() {
   if (typeof onSnapshot !== 'function') return;
   try {
     onSnapshot(query(checklistCategoriesCollectionRef, orderBy('name')), (snapshot) => {
@@ -301,7 +301,7 @@ export function listenForChecklistCategories() {
 }
 
 
-export function listenForChecklistItems() {
+function listenForChecklistItems() {
   if (typeof onSnapshot !== 'function') return;
   try {
     onSnapshot(query(checklistItemsCollectionRef, orderBy('addedAt')), (snapshot) => {
