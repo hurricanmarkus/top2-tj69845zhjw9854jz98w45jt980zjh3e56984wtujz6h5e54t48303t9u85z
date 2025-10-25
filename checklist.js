@@ -1681,7 +1681,7 @@ function setupTemplateEditorListeners() {
 
 }
 
-export function openTemplateModal(targetListId) {
+function openTemplateModal(targetListId) {
   const modal = document.getElementById('templateApplyModal');
   if (!modal) return;
   modal.dataset.targetListId = targetListId || '';
