@@ -365,9 +365,147 @@ function renderModeEditorList() {
 
 function openModeConfigForm(modeId = null) {
   const formContainer = document.getElementById('modeConfigFormContainer');
-  if (!formContainer) return;
-  // (Die detaillierte Füllung war in deiner Datei; wir setzen nur wichtige Felder)
-  // -> Du kannst hier deine komplette Füll-Logik wieder einsetzen, falls du mehr brauchst.
+  if (!formContainer) {
+    console.error('openModeConfigForm: #modeConfigFormContainer nicht gefunden!');
+    return;
+  }
+
+  const editingModeIdInput = document.getElementById('editingModeId');
+  const titleInput = document.getElementById('notrufModeTitle');
+  const descInput = document.getElementById('notrufModeDescInput');
+  const pushoverTitleInput = document.getElementById('notrufTitle');
+  const messageInput = document.getElementById('notrufMessage');
+  const apiTokenDisplay = document.getElementById('notrufApiTokenDisplay');
+  const userKeyDisplay = document.getElementById('notrufUserKeyDisplay');
+  const soundDisplay = document.getElementById('notrufSoundDisplay');
+  const priorityButtons = document.querySelectorAll('#priority-buttons-container .priority-btn');
+  const retryCheckbox = document.getElementById('retryDeaktiviert');
+  const retrySecondsInput = document.getElementById('retrySecondsInput');
+
+  // Sicherheitschecks
+  if (!titleInput || !pushoverTitleInput || !messageInput) {
+    console.error('openModeConfigForm: notwendige Form-Elemente fehlen!');
+    return;
+  }
+
+  // Reset / Defaultzustand
+  if (editingModeIdInput) editingModeIdInput.value = '';
+  titleInput.value = '';
+  if (descInput) descInput.value = '';
+  pushoverTitleInput.value = '';
+  messageInput.value = '';
+  tempSelectedApiTokenId = null;
+  tempSelectedSoundId = null;
+  if (apiTokenDisplay) apiTokenDisplay.innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
+  if (userKeyDisplay) userKeyDisplay.innerHTML = '';
+  if (soundDisplay) soundDisplay.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
+
+  // Reset Priorities (remove active)
+  if (priorityButtons && priorityButtons.length) {
+    priorityButtons.forEach(btn => btn.classList.remove('bg-indigo-600', 'text-white'));
+    // markiere default 0 wenn vorhanden
+    const btn0 = document.querySelector('.priority-btn[data-priority="0"]');
+    if (btn0) btn0.classList.add('bg-indigo-600', 'text-white');
+  }
+
+  // Reset retry
+  if (retryCheckbox) retryCheckbox.checked = false;
+  if (retrySecondsInput) { retrySecondsInput.value = 30; retrySecondsInput.disabled = false; }
+
+  // Wenn modeId gegeben -> Modus editieren, dann mit existierenden Werten füllen
+  if (modeId) {
+    const modeToEdit = (notrufSettings.modes || []).find(m => String(m.id) === String(modeId));
+    if (!modeToEdit) {
+      console.warn('openModeConfigForm: Modus mit ID nicht gefunden:', modeId);
+      // trotzdem Formular öffnen (leere Maske) damit Nutzer einen neuen Modus anlegen kann
+      formContainer.classList.remove('hidden');
+      return;
+    }
+
+    // set editing id
+    if (editingModeIdInput) editingModeIdInput.value = String(modeToEdit.id);
+
+    // titel & beschreibung
+    titleInput.value = modeToEdit.title || '';
+    if (descInput) descInput.value = modeToEdit.description || '';
+
+    // config (sicher extrahieren)
+    const config = modeToEdit.config || {};
+
+    pushoverTitleInput.value = config.title || '';
+    messageInput.value = config.message || '';
+
+    // Priorität setzen
+    const prio = (typeof config.priority !== 'undefined' && config.priority !== null) ? Number(config.priority) : 0;
+    if (priorityButtons && priorityButtons.length) {
+      priorityButtons.forEach(btn => {
+        btn.classList.remove('bg-indigo-600', 'text-white');
+      });
+      const prioBtn = document.querySelector(`.priority-btn[data-priority="${prio}"]`) || document.querySelector('.priority-btn[data-priority="0"]');
+      if (prioBtn) prioBtn.classList.add('bg-indigo-600', 'text-white');
+    }
+
+    // Retry: wenn 0 => deaktiviert
+    const savedRetry = (typeof config.retry !== 'undefined') ? config.retry : 30;
+    if (savedRetry === 0) {
+      if (retryCheckbox) retryCheckbox.checked = true;
+      if (retrySecondsInput) { retrySecondsInput.value = 30; retrySecondsInput.disabled = true; }
+    } else {
+      if (retryCheckbox) retryCheckbox.checked = false;
+      if (retrySecondsInput) { retrySecondsInput.value = Math.max(30, Number(savedRetry) || 30); retrySecondsInput.disabled = false; }
+    }
+
+    // API Token: set tempSelectedApiTokenId and update display
+    if (typeof config.selectedApiTokenId !== 'undefined' && config.selectedApiTokenId !== null) {
+      tempSelectedApiTokenId = config.selectedApiTokenId;
+      const token = (notrufSettings.apiTokens || []).find(t => String(t.id) === String(tempSelectedApiTokenId));
+      if (apiTokenDisplay) {
+        if (token) apiTokenDisplay.innerHTML = `<span class="api-token-badge" data-token-id="${token.id}">${token.name}</span>`;
+        else apiTokenDisplay.innerHTML = '<span class="text-gray-400 italic">Token nicht gefunden</span>';
+      }
+    } else {
+      tempSelectedApiTokenId = null;
+      if (apiTokenDisplay) apiTokenDisplay.innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
+    }
+
+    // Sound: set tempSelectedSoundId and update display
+    if (typeof config.selectedSoundId !== 'undefined' && config.selectedSoundId !== null) {
+      tempSelectedSoundId = config.selectedSoundId;
+      const sound = (notrufSettings.sounds || []).find(s => String(s.id) === String(tempSelectedSoundId));
+      if (soundDisplay) {
+        if (sound) {
+          const displayName = sound.useCustomName && sound.customName ? sound.customName : sound.code;
+          soundDisplay.innerHTML = `<span class="sound-badge" data-sound-id="${sound.id}">${displayName}</span>`;
+        } else {
+          soundDisplay.innerHTML = '<span class="text-gray-400 italic">Sound nicht gefunden</span>';
+        }
+      }
+    } else {
+      tempSelectedSoundId = null;
+      if (soundDisplay) soundDisplay.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
+    }
+
+    // User keys / Empfänger: config.userKeys kann Array von {id,...} oder Array von IDs sein
+    if (Array.isArray(config.userKeys) && userKeyDisplay) {
+      userKeyDisplay.innerHTML = '';
+      config.userKeys.forEach(uk => {
+        let id = null, name = null;
+        if (typeof uk === 'object') { id = uk.id; name = uk.name || null; }
+        else { id = uk; }
+        const contact = (notrufSettings.contacts || []).find(c => String(c.id) === String(id));
+        const label = contact ? contact.name : (name ? String(name) : `#${id}`);
+        if (id != null) {
+          userKeyDisplay.innerHTML += `<span class="contact-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-contact-id="${id}">${label}</span>`;
+        }
+      });
+    }
+
+    // Formular anzeigen
+    formContainer.classList.remove('hidden');
+    return;
+  }
+
+  // Kein modeId: Neuer Modus anlegen -> Formular leer anzeigen (Defaultwerte oben gesetzt)
   formContainer.classList.remove('hidden');
 }
 
