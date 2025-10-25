@@ -416,40 +416,43 @@ function updateFlicEditorBox(klickTyp) {
   updateFlicEditorDetails(selector.value ? parseInt(selector.value) : null);
 }
 
-// 1:1 ersetzen: renderModeEditorList - macht die Liste länger/scrollbar
+// Ersetze die vorhandene renderModeEditorList() in notfall.js mit diesem Block:
+
 function renderModeEditorList() {
-    const listContainer = document.getElementById('existingModesList');
-    if (!listContainer) return;
+  const listContainer = document.getElementById('existingModesList');
+  if (!listContainer) return;
 
-    const modes = notrufSettings.modes || [];
-    // Mach das List-Container "länger" / scrollbar, damit mehr Modi sichtbar werden
-    // (du kannst '60vh' anpassen, falls du noch mehr/ weniger Höhe willst)
-    listContainer.style.maxHeight = '60vh';
-    listContainer.style.overflowY = 'auto';
-    listContainer.style.paddingRight = '8px';
+  const modes = notrufSettings.modes || [];
 
-    if (modes.length === 0) {
-        listContainer.innerHTML = '<p class="text-sm text-center text-gray-400">Keine Modi vorhanden.</p>';
-        return;
-    }
+  // Mach das List-Container scrollbar für mehr Einträge sichtbar
+  listContainer.style.maxHeight = '60vh';
+  listContainer.style.overflowY = 'auto';
+  listContainer.style.paddingRight = '8px';
 
-    // Kompakteres Item-Layout, sodass pro Sicht mehr Einträge passen
-    listContainer.innerHTML = modes.map(mode => {
-        const desc = mode.description ? `<p class="text-xs text-gray-500 truncate">${mode.description}</p>` : '';
-        return `
-            <div class="flex justify-between items-center p-2 gap-3 bg-gray-50 rounded-md border mb-2">
-                <div class="flex-1 min-w-0">
-                    <p class="font-semibold text-sm truncate">${mode.title}</p>
-                    ${desc}
-                </div>
-                <div class="flex items-center gap-2 ml-3">
-                    <button data-mode-id="${mode.id}" class="edit-mode-btn p-2 text-blue-500 hover:bg-blue-100 rounded-full" title="Bearbeiten">✎</button>
-                    <button data-mode-id="${mode.id}" class="delete-mode-btn p-2 text-red-500 hover:bg-red-100 rounded-full" title="Löschen">🗑</button>
-                </div>
-            </div>
-        `;
-    }).join('');
+  if (modes.length === 0) {
+    listContainer.innerHTML = '<p class="text-sm text-center text-gray-400">Keine Modi vorhanden.</p>';
+    return;
+  }
+
+  listContainer.innerHTML = modes.map(mode => {
+    const desc = mode.description ? `<p class="text-xs text-gray-500 truncate">${mode.description}</p>` : '';
+    // Wir geben data-mode-id am Container aus, damit openModeConfigForm das Item hervorheben kann
+    return `
+      <div class="mode-list-item flex justify-between items-center p-2 gap-3 bg-gray-50 rounded-md border mb-2" data-mode-id="${mode.id}">
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold text-sm truncate">${mode.title}</p>
+          ${desc}
+        </div>
+        <div class="flex items-center gap-2 ml-3">
+          <button data-mode-id="${mode.id}" class="edit-mode-btn p-2 text-blue-500 hover:bg-blue-100 rounded-full" title="Bearbeiten">✎</button>
+          <button data-mode-id="${mode.id}" class="delete-mode-btn p-2 text-red-500 hover:bg-red-100 rounded-full" title="Löschen">🗑</button>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
+
+// Ersetze die vorhandene Funktion openModeConfigForm(...) in notfall.js mit genau diesem Block:
 
 function openModeConfigForm(modeId = null) {
   const formContainer = document.getElementById('modeConfigFormContainer');
@@ -491,7 +494,6 @@ function openModeConfigForm(modeId = null) {
   // Reset Priorities (remove active)
   if (priorityButtons && priorityButtons.length) {
     priorityButtons.forEach(btn => btn.classList.remove('bg-indigo-600', 'text-white'));
-    // markiere default 0 wenn vorhanden
     const btn0 = document.querySelector('.priority-btn[data-priority="0"]');
     if (btn0) btn0.classList.add('bg-indigo-600', 'text-white');
   }
@@ -500,12 +502,28 @@ function openModeConfigForm(modeId = null) {
   if (retryCheckbox) retryCheckbox.checked = false;
   if (retrySecondsInput) { retrySecondsInput.value = 30; retrySecondsInput.disabled = false; }
 
+  // Styling: mache das Formular visuell wie bei Portionsbearbeitung (Indigo-Box)
+  // Entferne vorherige Farbklassen, falls vorhanden, und setze Indigo-Box-Klassen
+  formContainer.classList.remove('bg-white', 'bg-yellow-100', 'border-yellow-300', 'shadow-sm');
+  formContainer.classList.add('bg-indigo-50', 'border', 'border-indigo-200', 'rounded-lg', 'p-4');
+
+  // Buttons im Formular: stelle sicher, dass Update/Delete sichtbar sind wie beim Portion-Editor
+  const addBtn = document.getElementById('notrufAddModeButton'); // falls vorhanden (Neuanlegen)
+  const updateBtn = document.getElementById('notrufUpdateModeButton'); // Button zum Aktualisieren
+  const deleteBtn = document.getElementById('notrufDeleteModeButton'); // Button zum Löschen
+  const cancelBtn = document.getElementById('notrufCancelEditModeButton');
+
+  // Standard: Add sichtbar, Update/Delete versteckt
+  if (addBtn) { addBtn.classList.remove('hidden'); addBtn.classList.add('bg-indigo-600', 'text-white'); }
+  if (updateBtn) { updateBtn.classList.add('hidden'); updateBtn.classList.remove('bg-indigo-600', 'text-white'); }
+  if (deleteBtn) { deleteBtn.classList.add('hidden'); deleteBtn.classList.remove('bg-red-100', 'text-red-600'); }
+  if (cancelBtn) { cancelBtn.classList.remove('hidden'); cancelBtn.classList.add('ml-2'); }
+
   // Wenn modeId gegeben -> Modus editieren, dann mit existierenden Werten füllen
   if (modeId) {
     const modeToEdit = (notrufSettings.modes || []).find(m => String(m.id) === String(modeId));
     if (!modeToEdit) {
       console.warn('openModeConfigForm: Modus mit ID nicht gefunden:', modeId);
-      // trotzdem Formular öffnen (leere Maske) damit Nutzer einen neuen Modus anlegen kann
       formContainer.classList.remove('hidden');
       return;
     }
@@ -526,9 +544,7 @@ function openModeConfigForm(modeId = null) {
     // Priorität setzen
     const prio = (typeof config.priority !== 'undefined' && config.priority !== null) ? Number(config.priority) : 0;
     if (priorityButtons && priorityButtons.length) {
-      priorityButtons.forEach(btn => {
-        btn.classList.remove('bg-indigo-600', 'text-white');
-      });
+      priorityButtons.forEach(btn => btn.classList.remove('bg-indigo-600', 'text-white'));
       const prioBtn = document.querySelector(`.priority-btn[data-priority="${prio}"]`) || document.querySelector('.priority-btn[data-priority="0"]');
       if (prioBtn) prioBtn.classList.add('bg-indigo-600', 'text-white');
     }
@@ -588,12 +604,32 @@ function openModeConfigForm(modeId = null) {
       });
     }
 
+    // Buttons: in Edit-Modus Update/Delete sichtbar, Add versteckt
+    if (addBtn) addBtn.classList.add('hidden');
+    if (updateBtn) { updateBtn.classList.remove('hidden'); updateBtn.classList.add('bg-indigo-600', 'text-white'); }
+    if (deleteBtn) { deleteBtn.classList.remove('hidden'); deleteBtn.classList.add('bg-red-100', 'text-red-600'); }
+
+    // Highlight in "Vorhandene Modi" – versuche das zu setzen falls Liste Einträge data-mode-id hat
+    try {
+      const previous = document.querySelector('.mode-list-item.is-editing');
+      if (previous) previous.classList.remove('is-editing', 'bg-indigo-50', 'border-indigo-300');
+      const item = document.querySelector(`.mode-list-item[data-mode-id="${modeId}"]`);
+      if (item) item.classList.add('is-editing', 'bg-indigo-50', 'border-indigo-300');
+    } catch (e) { /* ignore if structure differs */ }
+
     // Formular anzeigen
     formContainer.classList.remove('hidden');
+    // Scroll to form (optional, macht UX wie Portions-Editor)
+    formContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
 
   // Kein modeId: Neuer Modus anlegen -> Formular leer anzeigen (Defaultwerte oben gesetzt)
+  // Stelle sicher, Add-Button sichtbar, Update/Delete versteckt
+  if (addBtn) addBtn.classList.remove('hidden');
+  if (updateBtn) updateBtn.classList.add('hidden');
+  if (deleteBtn) deleteBtn.classList.add('hidden');
+
   formContainer.classList.remove('hidden');
 }
 
