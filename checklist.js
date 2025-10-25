@@ -1482,7 +1482,7 @@ function setupTemplateEditorListeners() {
 
 }
 
-function openTemplateModal(targetListId) {
+export function openTemplateModal(targetListId) {
     const modal = document.getElementById('templateApplyModal');
     if (!modal) return console.warn('openTemplateModal: modal fehlt');
     modal.dataset.targetListId = targetListId || '';
