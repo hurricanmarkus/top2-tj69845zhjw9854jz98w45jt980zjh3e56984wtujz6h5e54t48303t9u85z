@@ -15,20 +15,51 @@ function ensureModalListeners() {
     if (contactModal && !contactModal.dataset.listenerAttached) {
         contactModal.addEventListener('click', async (e) => {
             if (e.target.closest('#contactBookCloseButton')) { contactModal.style.display = 'none'; return; }
-            if (e.target.closest('#contactAddButton')) {
-                const typeInput = document.getElementById('contactIsGroup');
-                const nameInput = document.getElementById('contactName');
-                const keyInput = document.getElementById('contactUserKey');
-                if (!typeInput || !nameInput || !keyInput) return;
-                const type = typeInput.value, name = nameInput.value.trim(), key = keyInput.value.trim();
-                if (type && name && key && notrufSettingsDocRef) {
-                    if (!notrufSettings.contacts) notrufSettings.contacts = [];
-                    notrufSettings.contacts.push({ id: Date.now(), type, name, key });
-                    try { await setDoc(notrufSettingsDocRef, notrufSettings); nameInput.value=''; keyInput.value=''; alertUser('Kontakt hinzugefügt','success'); }
-                    catch (err) { console.error(err); alertUser('Fehler beim Speichern des Kontakts.','error'); }
-                } else alertUser('Bitte alle Felder ausfüllen.','error');
-                return;
-            }
+// Handler: Kontakt hinzufügen (ersetze den Inhalt von if (e.target.closest('#contactAddButton')) { ... } genau durch diesen Block)
+if (e.target.closest('#contactAddButton')) {
+    const typeInput = document.getElementById('contactIsGroup');
+    const nameInput = document.getElementById('contactName');
+    const keyInput = document.getElementById('contactUserKey');
+    if (!typeInput || !nameInput || !keyInput) {
+        alertUser('Fehler: Formularfelder fehlen.', 'error');
+        return;
+    }
+
+    const type = typeInput.value;
+    const name = nameInput.value.trim();
+    const key = keyInput.value.trim();
+
+    if (!name || !key) {
+        alertUser('Bitte Name und Key eingeben.', 'error');
+        return;
+    }
+
+    // Guard: erst speichern, wenn Firestore-Ref & Funktion bereit sind
+    if (!canSaveToNotrufSettings()) return;
+
+    // Daten in das lokale Objekt pushen
+    if (!notrufSettings.contacts) notrufSettings.contacts = [];
+    const newContact = { id: Date.now(), type, name, key };
+    notrufSettings.contacts.push(newContact);
+
+    // Speichern mit Fehlerbehandlung
+    try {
+        await setDoc(notrufSettingsDocRef, notrufSettings);
+        // UI Feedback / Reset des Formulars
+        nameInput.value = '';
+        keyInput.value = '';
+        typeInput.value = 'User';
+        alertUser('Kontakt erfolgreich gespeichert.', 'success');
+        // Optional: aktualisiere die Liste im Modal sofort (falls renderContactBook existiert)
+        if (typeof renderContactBook === 'function') renderContactBook();
+    } catch (err) {
+        console.error('Fehler beim Speichern des Kontakts:', err);
+        alertUser('Fehler beim Speichern des Kontakts. Siehe Konsole.', 'error');
+        // Fehler: entferne den lokal hinzugefügten Kontakt, um Zustand konsistent zu halten
+        notrufSettings.contacts = (notrufSettings.contacts || []).filter(c => c.id !== newContact.id);
+    }
+    return;
+}
             const deleteContactBtn = e.target.closest('.delete-contact-btn');
             if (deleteContactBtn) {
                 const contactId = parseInt(deleteContactBtn.dataset.contactId);
@@ -61,18 +92,45 @@ function ensureModalListeners() {
     if (apiTokenModal && !apiTokenModal.dataset.listenerAttached) {
         apiTokenModal.addEventListener('click', async (e) => {
             if (e.target.closest('#apiTokenBookCloseButton')) { apiTokenModal.style.display = 'none'; return; }
-            if (e.target.closest('#apiTokenAddButton')) {
-                const nameInput = document.getElementById('apiTokenName'), keyInput = document.getElementById('apiTokenKey');
-                if (!nameInput || !keyInput) return;
-                const name = nameInput.value.trim(), key = keyInput.value.trim();
-                if (name && key && notrufSettingsDocRef) {
-                    if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
-                    notrufSettings.apiTokens.push({ id: Date.now(), name, key });
-                    try { await setDoc(notrufSettingsDocRef, notrufSettings); nameInput.value=''; keyInput.value=''; alertUser('API-Token gespeichert','success'); }
-                    catch(err){ console.error(err); alertUser('Fehler beim Speichern','error'); }
-                } else alertUser('Bitte Bezeichnung und Key ausfüllen.','error');
-                return;
-            }
+// Handler: API-Token hinzufügen (ersetze den Inhalt von if (e.target.closest('#apiTokenAddButton')) { ... } genau durch diesen Block)
+if (e.target.closest('#apiTokenAddButton')) {
+    const nameInput = document.getElementById('apiTokenName');
+    const keyInput = document.getElementById('apiTokenKey');
+    if (!nameInput || !keyInput) {
+        alertUser('Fehler: Formularfelder fehlen.', 'error');
+        return;
+    }
+
+    const name = nameInput.value.trim();
+    const key = keyInput.value.trim();
+
+    if (!name || !key) {
+        alertUser('Bitte Bezeichnung und Key eingeben.', 'error');
+        return;
+    }
+
+    // Guard: erst speichern, wenn Firestore-Ref & Funktion bereit sind
+    if (!canSaveToNotrufSettings()) return;
+
+    if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
+    const newToken = { id: Date.now(), name, key };
+    notrufSettings.apiTokens.push(newToken);
+
+    try {
+        await setDoc(notrufSettingsDocRef, notrufSettings);
+        // UI Feedback & Reset
+        nameInput.value = '';
+        keyInput.value = '';
+        alertUser('API-Token erfolgreich gespeichert.', 'success');
+        if (typeof renderApiTokenBook === 'function') renderApiTokenBook();
+    } catch (err) {
+        console.error('Fehler beim Speichern des API-Tokens:', err);
+        alertUser('Fehler beim Speichern des API-Tokens. Siehe Konsole.', 'error');
+        // Rollback lokal
+        notrufSettings.apiTokens = (notrufSettings.apiTokens || []).filter(t => t.id !== newToken.id);
+    }
+    return;
+}
             const deleteTokenBtn = e.target.closest('.delete-api-token-btn');
             if (deleteTokenBtn) {
                 const tokenId = parseInt(deleteTokenBtn.dataset.tokenId);
@@ -109,18 +167,49 @@ function ensureModalListeners() {
     if (soundModal && !soundModal.dataset.listenerAttached) {
         soundModal.addEventListener('click', async (e) => {
             if (e.target.closest('#soundBookCloseButton')) { soundModal.style.display = 'none'; return; }
-            if (e.target.closest('#soundAddButton')) {
-                const codeInput = document.getElementById('soundCode'), customNameInput = document.getElementById('soundCustomName'), useCustomCheckbox = document.getElementById('soundUseCustomName');
-                if (!codeInput || !customNameInput || !useCustomCheckbox) return;
-                const code = codeInput.value.trim(), useCustom = useCustomCheckbox.checked, customName = customNameInput.value.trim();
-                if (code && (!useCustom || (useCustom && customName)) && notrufSettingsDocRef) {
-                    if (!notrufSettings.sounds) notrufSettings.sounds = [];
-                    notrufSettings.sounds.push({ id: Date.now(), code, useCustomName: useCustom, customName: useCustom?customName:null });
-                    try { await setDoc(notrufSettingsDocRef, notrufSettings); codeInput.value=''; useCustomCheckbox.checked=false; customNameInput.value=''; customNameInput.classList.add('hidden'); alertUser('Sound gespeichert','success'); }
-                    catch(err){ console.error(err); alertUser('Fehler','error'); }
-                } else alertUser('Bitte Soundcode ausfüllen.','error');
-                return;
-            }
+// Handler: Sound hinzufügen (ersetze den Inhalt von if (e.target.closest('#soundAddButton')) { ... } genau durch diesen Block)
+if (e.target.closest('#soundAddButton')) {
+    const codeInput = document.getElementById('soundCode');
+    const customNameInput = document.getElementById('soundCustomName');
+    const useCustomCheckbox = document.getElementById('soundUseCustomName');
+    if (!codeInput || !customNameInput || !useCustomCheckbox) {
+        alertUser('Fehler: Formularfelder fehlen.', 'error');
+        return;
+    }
+
+    const code = codeInput.value.trim();
+    const useCustom = useCustomCheckbox.checked;
+    const customName = customNameInput.value.trim();
+
+    if (!code || (useCustom && !customName)) {
+        alertUser('Bitte Soundcode und ggf. eigenen Namen eingeben.', 'error');
+        return;
+    }
+
+    // Guard: erst speichern, wenn Firestore-Ref & Funktion bereit sind
+    if (!canSaveToNotrufSettings()) return;
+
+    if (!notrufSettings.sounds) notrufSettings.sounds = [];
+    const newSound = { id: Date.now(), code, useCustomName: useCustom, customName: useCustom ? customName : null };
+    notrufSettings.sounds.push(newSound);
+
+    try {
+        await setDoc(notrufSettingsDocRef, notrufSettings);
+        // Reset & Feedback
+        codeInput.value = '';
+        useCustomCheckbox.checked = false;
+        customNameInput.value = '';
+        customNameInput.classList.add('hidden');
+        alertUser('Sound erfolgreich gespeichert.', 'success');
+        if (typeof renderSoundBook === 'function') renderSoundBook();
+    } catch (err) {
+        console.error('Fehler beim Speichern des Sounds:', err);
+        alertUser('Fehler beim Speichern des Sounds. Siehe Konsole.', 'error');
+        // Rollback lokal
+        notrufSettings.sounds = (notrufSettings.sounds || []).filter(s => s.id !== newSound.id);
+    }
+    return;
+}
             const deleteSoundBtn = e.target.closest('.delete-sound-btn');
             if (deleteSoundBtn) {
                 const soundId = parseInt(deleteSoundBtn.dataset.soundId);
@@ -151,6 +240,18 @@ function ensureModalListeners() {
         });
         soundModal.dataset.listenerAttached = 'true';
     }
+}
+
+function canSaveToNotrufSettings() {
+  if (typeof setDoc !== 'function') {
+    alertUser('Interner Fehler: Firestore-Funktion setDoc nicht verfügbar.', 'error');
+    return false;
+  }
+  if (!notrufSettingsDocRef) {
+    alertUser('Datenbank noch nicht bereit. Bitte kurz warten und es dann erneut versuchen.', 'error');
+    return false;
+  }
+  return true;
 }
 
 function updateFlicEditorDetails(selectedModeId) {
