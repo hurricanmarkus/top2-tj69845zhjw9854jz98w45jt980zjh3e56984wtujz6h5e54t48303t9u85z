@@ -459,9 +459,8 @@ function renderModeEditorList() {
   }).join('');
 }
 
-// Ersetze die vorhandene Funktion openModeConfigForm(...) in notfall.js mit genau diesem Block:
-
-// 1:1 ersetzen: openModeConfigForm - Edit-Modus zeigt orange Hintergrund & "Änderung übernehmen"-Button
+// 1:1 Ersetzen: robuste openModeConfigForm, sorgt dafür, dass beim Bearbeiten
+// der Button "Änderung übernehmen" (orange) angezeigt wird — auch wenn kein separater Update-Button existiert.
 function openModeConfigForm(modeId = null) {
   const formContainer = document.getElementById('modeConfigFormContainer');
   if (!formContainer) {
@@ -481,13 +480,19 @@ function openModeConfigForm(modeId = null) {
   const retryCheckbox = document.getElementById('retryDeaktiviert');
   const retrySecondsInput = document.getElementById('retrySecondsInput');
 
+  // Buttons (mögliche Varianten)
+  const addBtn = document.getElementById('notrufAddModeButton');         // Standard "Modus speichern"
+  const updateBtn = document.getElementById('notrufUpdateModeButton');   // Optionaler expliziter Update-Button
+  const deleteBtn = document.getElementById('notrufDeleteModeButton');
+  const cancelBtn = document.getElementById('notrufCancelEditModeButton');
+
   // Sicherheitschecks
   if (!titleInput || !pushoverTitleInput || !messageInput) {
     console.error('openModeConfigForm: notwendige Form-Elemente fehlen!');
     return;
   }
 
-  // Reset / Defaultzustand (Grundzustand vor Befüllen)
+  // Reset Grundwerte
   if (editingModeIdInput) editingModeIdInput.value = '';
   titleInput.value = '';
   if (descInput) descInput.value = '';
@@ -499,39 +504,40 @@ function openModeConfigForm(modeId = null) {
   if (userKeyDisplay) userKeyDisplay.innerHTML = '';
   if (soundDisplay) soundDisplay.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
 
-  // Reset Priorities (remove active)
+  // Prioritäten / Retry reset
   if (priorityButtons && priorityButtons.length) {
     priorityButtons.forEach(btn => btn.classList.remove('bg-indigo-600', 'text-white', 'bg-yellow-600', 'text-yellow-900'));
     const btn0 = document.querySelector('.priority-btn[data-priority="0"]');
     if (btn0) btn0.classList.add('bg-indigo-600', 'text-white');
   }
-
-  // Reset retry
   if (retryCheckbox) retryCheckbox.checked = false;
   if (retrySecondsInput) { retrySecondsInput.value = 30; retrySecondsInput.disabled = false; }
 
-  // Styling: Standard (für NEU) - entferne evtl. Edit-Farben
+  // Formular: entferne evtl. Edit-Farben, setze Standard (weiß)
   formContainer.classList.remove('bg-yellow-100', 'border-yellow-300', 'bg-indigo-50', 'border-indigo-200');
   formContainer.classList.add('bg-white', 'border', 'border-gray-200', 'rounded-md', 'p-4');
 
-  // Buttons-Referenzen (IDs aus deiner Datei)
-  const addBtn = document.getElementById('notrufAddModeButton');
-  const updateBtn = document.getElementById('notrufUpdateModeButton');
-  const deleteBtn = document.getElementById('notrufDeleteModeButton');
-  const cancelBtn = document.getElementById('notrufCancelEditModeButton');
+  // Standard-Buttonzustand (Neu anlegen)
+  if (addBtn) {
+    addBtn.dataset.editMode = 'false';
+    addBtn.textContent = 'Modus speichern';
+    addBtn.classList.remove('bg-yellow-600', 'text-white');
+    addBtn.classList.add('bg-indigo-600', 'text-white');
+    addBtn.classList.remove('hidden');
+  }
+  if (updateBtn) {
+    updateBtn.classList.add('hidden');
+    updateBtn.textContent = 'Änderung übernehmen';
+    updateBtn.classList.remove('bg-yellow-600', 'text-white');
+  }
+  if (deleteBtn) deleteBtn.classList.add('hidden');
+  if (cancelBtn) cancelBtn.classList.remove('hidden');
 
-  // Default: Add sichtbar, Update/Delete versteckt
-  if (addBtn) { addBtn.classList.remove('hidden'); addBtn.classList.remove('hidden'); addBtn.textContent = 'Modus speichern'; addBtn.classList.remove('bg-yellow-600','text-white'); addBtn.classList.add('bg-indigo-600','text-white'); }
-  if (updateBtn) { updateBtn.classList.add('hidden'); updateBtn.textContent = 'Änderung übernehmen'; updateBtn.classList.remove('bg-indigo-600','text-white'); }
-  if (deleteBtn) { deleteBtn.classList.add('hidden'); deleteBtn.classList.remove('bg-red-100','text-red-600'); }
-  if (cancelBtn) { cancelBtn.classList.remove('hidden'); }
-
-  // Wenn modeId gegeben -> Modus editieren, dann mit existierenden Werten füllen und UI orange machen
+  // Wenn modeId gegeben -> Editieren: befüllen + orange-Design + "Änderung übernehmen"
   if (modeId) {
     const modeToEdit = (notrufSettings.modes || []).find(m => String(m.id) === String(modeId));
     if (!modeToEdit) {
       console.warn('openModeConfigForm: Modus mit ID nicht gefunden:', modeId);
-      // trotzdem Formular öffnen (leere Maske) damit Nutzer einen neuen Modus anlegen kann
       formContainer.classList.remove('hidden');
       return;
     }
@@ -539,25 +545,22 @@ function openModeConfigForm(modeId = null) {
     // set editing id
     if (editingModeIdInput) editingModeIdInput.value = String(modeToEdit.id);
 
-    // titel & beschreibung
+    // Befülle Felder
     titleInput.value = modeToEdit.title || '';
     if (descInput) descInput.value = modeToEdit.description || '';
-
-    // config (sicher extrahieren)
     const config = modeToEdit.config || {};
-
     pushoverTitleInput.value = config.title || '';
     messageInput.value = config.message || '';
 
-    // Priorität setzen
+    // Priorität
     const prio = (typeof config.priority !== 'undefined' && config.priority !== null) ? Number(config.priority) : 0;
     if (priorityButtons && priorityButtons.length) {
-      priorityButtons.forEach(btn => btn.classList.remove('bg-indigo-600', 'text-white'));
+      priorityButtons.forEach(btn => btn.classList.remove('bg-indigo-600', 'text-white', 'bg-yellow-600', 'text-yellow-900'));
       const prioBtn = document.querySelector(`.priority-btn[data-priority="${prio}"]`) || document.querySelector('.priority-btn[data-priority="0"]');
       if (prioBtn) prioBtn.classList.add('bg-indigo-600', 'text-white');
     }
 
-    // Retry: wenn 0 => deaktiviert
+    // Retry
     const savedRetry = (typeof config.retry !== 'undefined') ? config.retry : 30;
     if (savedRetry === 0) {
       if (retryCheckbox) retryCheckbox.checked = true;
@@ -567,91 +570,87 @@ function openModeConfigForm(modeId = null) {
       if (retrySecondsInput) { retrySecondsInput.value = Math.max(30, Number(savedRetry) || 30); retrySecondsInput.disabled = false; }
     }
 
-    // API Token: set tempSelectedApiTokenId and update display
+    // API Token / Sound / UserKeys befüllen (wie vorher)
     if (typeof config.selectedApiTokenId !== 'undefined' && config.selectedApiTokenId !== null) {
       tempSelectedApiTokenId = config.selectedApiTokenId;
       const token = (notrufSettings.apiTokens || []).find(t => String(t.id) === String(tempSelectedApiTokenId));
-      if (apiTokenDisplay) {
-        if (token) apiTokenDisplay.innerHTML = `<span class="api-token-badge" data-token-id="${token.id}">${token.name}</span>`;
-        else apiTokenDisplay.innerHTML = '<span class="text-gray-400 italic">Token nicht gefunden</span>';
-      }
+      if (apiTokenDisplay) apiTokenDisplay.innerHTML = token ? `<span class="api-token-badge" data-token-id="${token.id}">${token.name}</span>` : '<span class="text-gray-400 italic">Token nicht gefunden</span>';
     } else {
       tempSelectedApiTokenId = null;
       if (apiTokenDisplay) apiTokenDisplay.innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
     }
 
-    // Sound: set tempSelectedSoundId and update display
     if (typeof config.selectedSoundId !== 'undefined' && config.selectedSoundId !== null) {
       tempSelectedSoundId = config.selectedSoundId;
       const sound = (notrufSettings.sounds || []).find(s => String(s.id) === String(tempSelectedSoundId));
-      if (soundDisplay) {
-        if (sound) {
-          const displayName = sound.useCustomName && sound.customName ? sound.customName : sound.code;
-          soundDisplay.innerHTML = `<span class="sound-badge" data-sound-id="${sound.id}">${displayName}</span>`;
-        } else {
-          soundDisplay.innerHTML = '<span class="text-gray-400 italic">Sound nicht gefunden</span>';
-        }
-      }
+      if (soundDisplay) soundDisplay.innerHTML = sound ? `<span class="sound-badge" data-sound-id="${sound.id}">${sound.useCustomName && sound.customName ? sound.customName : sound.code}</span>` : '<span class="text-gray-400 italic">Sound nicht gefunden</span>';
     } else {
       tempSelectedSoundId = null;
       if (soundDisplay) soundDisplay.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
     }
 
-    // User keys / Empfänger: config.userKeys kann Array von {id,...} oder Array von IDs sein
     if (Array.isArray(config.userKeys) && userKeyDisplay) {
       userKeyDisplay.innerHTML = '';
       config.userKeys.forEach(uk => {
         let id = null, name = null;
-        if (typeof uk === 'object') { id = uk.id; name = uk.name || null; }
-        else { id = uk; }
+        if (typeof uk === 'object') { id = uk.id; name = uk.name || null; } else { id = uk; }
         const contact = (notrufSettings.contacts || []).find(c => String(c.id) === String(id));
         const label = contact ? contact.name : (name ? String(name) : `#${id}`);
-        if (id != null) {
-          userKeyDisplay.innerHTML += `<span class="contact-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-contact-id="${id}">${label}</span>`;
-        }
+        if (id != null) userKeyDisplay.innerHTML += `<span class="contact-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-contact-id="${id}">${label}</span>`;
       });
     }
 
-    // --- VISUAL: Edit-Modus - orange Hintergrund & Button ---
+    // VISUAL: orange Hintergrund + orange Update-Button
     formContainer.classList.remove('bg-white', 'border-gray-200');
     formContainer.classList.add('bg-yellow-100', 'border', 'border-yellow-300', 'rounded-lg', 'p-4');
 
-    if (addBtn) addBtn.classList.add('hidden');
+    // Wenn es einen separaten updateBtn gibt -> nutze ihn sichtbar & style orange
     if (updateBtn) {
       updateBtn.classList.remove('hidden');
       updateBtn.textContent = 'Änderung übernehmen';
-      // orange-styling für den Update-Button
-      updateBtn.classList.remove('hidden','bg-indigo-600','text-white');
+      updateBtn.classList.remove('bg-indigo-600', 'text-white');
       updateBtn.classList.add('bg-yellow-600', 'text-white');
     }
-    if (deleteBtn) {
-      deleteBtn.classList.remove('hidden');
-      deleteBtn.classList.add('bg-red-100', 'text-red-600');
+
+    // Falls kein updateBtn vorhanden: fallback -> verwandle addBtn temporär in Edit-Button
+    if (!updateBtn && addBtn) {
+      addBtn.dataset.editMode = 'true';
+      addBtn.textContent = 'Änderung übernehmen';
+      // orange styling (wie bei Portion-Editor)
+      addBtn.classList.remove('bg-indigo-600', 'text-white');
+      addBtn.classList.add('bg-yellow-600', 'text-white');
     }
 
-    // Highlight in "Vorhandene Modi" – setze orange Highlight für das editierte Item
+    // Delete sichtbar & cancel sichtbar
+    if (deleteBtn) { deleteBtn.classList.remove('hidden'); deleteBtn.classList.add('bg-red-100', 'text-red-600'); }
+    if (cancelBtn) cancelBtn.classList.remove('hidden');
+
+    // Highlight in Mode-Liste (orange)
     try {
       const previous = document.querySelector('.mode-list-item.is-editing');
       if (previous) previous.classList.remove('is-editing', 'bg-yellow-100', 'border-yellow-300');
       const item = document.querySelector(`.mode-list-item[data-mode-id="${modeId}"]`);
       if (item) item.classList.add('is-editing', 'bg-yellow-100', 'border-yellow-300');
-    } catch (e) { /* ignore if structure differs */ }
+    } catch (e) { /* ignore */ }
 
-    // Formular anzeigen und in View scrollen
     formContainer.classList.remove('hidden');
     formContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
 
-  // Kein modeId: Neuer Modus anlegen -> Formular leer anzeigen (Defaultwerte oben gesetzt)
-  if (addBtn) addBtn.classList.remove('hidden');
+  // Kein modeId => New Mode: Standard-Style wiederherstellen (wie oben)
+  if (addBtn) {
+    addBtn.dataset.editMode = 'false';
+    addBtn.textContent = 'Modus speichern';
+    addBtn.classList.remove('bg-yellow-600', 'text-white');
+    addBtn.classList.add('bg-indigo-600', 'text-white');
+    addBtn.classList.remove('hidden');
+  }
   if (updateBtn) updateBtn.classList.add('hidden');
   if (deleteBtn) deleteBtn.classList.add('hidden');
 
-  // Standard Formular-Style für "Neu"
   formContainer.classList.remove('bg-yellow-100', 'border-yellow-300');
   formContainer.classList.add('bg-white', 'border', 'border-gray-200');
-
   formContainer.classList.remove('hidden');
 }
 
