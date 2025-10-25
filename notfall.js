@@ -9,6 +9,150 @@ let activeFlicEditorKlickTyp = null;
 let tempSelectedApiTokenId = null; // Für das Bearbeiten-Formular
 let tempSelectedSoundId = null;    // Für das Bearbeiten-Formular
 
+function ensureModalListeners() {
+    // CONTACT Modal
+    const contactModal = document.getElementById('contactBookModal');
+    if (contactModal && !contactModal.dataset.listenerAttached) {
+        contactModal.addEventListener('click', async (e) => {
+            if (e.target.closest('#contactBookCloseButton')) { contactModal.style.display = 'none'; return; }
+            if (e.target.closest('#contactAddButton')) {
+                const typeInput = document.getElementById('contactIsGroup');
+                const nameInput = document.getElementById('contactName');
+                const keyInput = document.getElementById('contactUserKey');
+                if (!typeInput || !nameInput || !keyInput) return;
+                const type = typeInput.value, name = nameInput.value.trim(), key = keyInput.value.trim();
+                if (type && name && key && notrufSettingsDocRef) {
+                    if (!notrufSettings.contacts) notrufSettings.contacts = [];
+                    notrufSettings.contacts.push({ id: Date.now(), type, name, key });
+                    try { await setDoc(notrufSettingsDocRef, notrufSettings); nameInput.value=''; keyInput.value=''; alertUser('Kontakt hinzugefügt','success'); }
+                    catch (err) { console.error(err); alertUser('Fehler beim Speichern des Kontakts.','error'); }
+                } else alertUser('Bitte alle Felder ausfüllen.','error');
+                return;
+            }
+            const deleteContactBtn = e.target.closest('.delete-contact-btn');
+            if (deleteContactBtn) {
+                const contactId = parseInt(deleteContactBtn.dataset.contactId);
+                if (isNaN(contactId) || !confirm('Kontakt wirklich löschen?')) return;
+                notrufSettings.contacts = (notrufSettings.contacts||[]).filter(c=>c.id!==contactId);
+                (notrufSettings.modes||[]).forEach(m=>{ if (m.config && m.config.userKeys) m.config.userKeys = m.config.userKeys.filter(uk=>uk.id!==contactId); });
+                try { await setDoc(notrufSettingsDocRef, notrufSettings); alertUser('Kontakt gelöscht','success'); }
+                catch(err){ console.error(err); alertUser('Fehler beim Löschen','error'); }
+                return;
+            }
+            if (e.target.closest('#contactBookApplyButton')) {
+                const displayArea = document.getElementById('notrufUserKeyDisplay');
+                if (displayArea) {
+                    displayArea.innerHTML = '';
+                    contactModal.querySelectorAll('.contact-checkbox:checked').forEach(cb=>{
+                        const id = parseInt(cb.value); if (isNaN(id)) return;
+                        const c = (notrufSettings.contacts||[]).find(x=>x.id===id);
+                        if (c) displayArea.innerHTML += `<span class="contact-badge" data-contact-id="${c.id}">${c.name}</span>`;
+                    });
+                }
+                contactModal.style.display = 'none';
+                return;
+            }
+        });
+        contactModal.dataset.listenerAttached = 'true';
+    }
+
+    // API TOKEN Modal
+    const apiTokenModal = document.getElementById('apiTokenBookModal');
+    if (apiTokenModal && !apiTokenModal.dataset.listenerAttached) {
+        apiTokenModal.addEventListener('click', async (e) => {
+            if (e.target.closest('#apiTokenBookCloseButton')) { apiTokenModal.style.display = 'none'; return; }
+            if (e.target.closest('#apiTokenAddButton')) {
+                const nameInput = document.getElementById('apiTokenName'), keyInput = document.getElementById('apiTokenKey');
+                if (!nameInput || !keyInput) return;
+                const name = nameInput.value.trim(), key = keyInput.value.trim();
+                if (name && key && notrufSettingsDocRef) {
+                    if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
+                    notrufSettings.apiTokens.push({ id: Date.now(), name, key });
+                    try { await setDoc(notrufSettingsDocRef, notrufSettings); nameInput.value=''; keyInput.value=''; alertUser('API-Token gespeichert','success'); }
+                    catch(err){ console.error(err); alertUser('Fehler beim Speichern','error'); }
+                } else alertUser('Bitte Bezeichnung und Key ausfüllen.','error');
+                return;
+            }
+            const deleteTokenBtn = e.target.closest('.delete-api-token-btn');
+            if (deleteTokenBtn) {
+                const tokenId = parseInt(deleteTokenBtn.dataset.tokenId);
+                if (isNaN(tokenId) || !confirm('Token wirklich löschen?')) return;
+                notrufSettings.apiTokens = (notrufSettings.apiTokens||[]).filter(t=>t.id!==tokenId);
+                (notrufSettings.modes||[]).forEach(m=>{ if (m.config && m.config.selectedApiTokenId===tokenId) m.config.selectedApiTokenId=null; });
+                if (tempSelectedApiTokenId===tokenId) tempSelectedApiTokenId=null;
+                try { await setDoc(notrufSettingsDocRef, notrufSettings); alertUser('Token gelöscht','success'); } catch(err){ console.error(err); alertUser('Fehler','error'); }
+                return;
+            }
+            if (e.target.closest('#apiTokenBookApplyButton')) {
+                const selectedRadio = apiTokenModal.querySelector('.api-token-radio:checked');
+                const displayArea = document.getElementById('notrufApiTokenDisplay');
+                if (displayArea) {
+                    if (selectedRadio) {
+                        const tokenId = parseInt(selectedRadio.value);
+                        if (isNaN(tokenId)) { tempSelectedApiTokenId=null; displayArea.innerHTML='<span>Ungültige Auswahl</span>'; }
+                        else {
+                            const token = (notrufSettings.apiTokens||[]).find(t=>t.id===tokenId);
+                            if (token) { tempSelectedApiTokenId=tokenId; displayArea.innerHTML=`<span data-token-id="${token.id}">${token.name}</span>`; }
+                            else { tempSelectedApiTokenId=null; displayArea.innerHTML='<span>Kein Token</span>'; }
+                        }
+                    } else { tempSelectedApiTokenId=null; displayArea.innerHTML='<span>Kein Token</span>'; }
+                }
+                apiTokenModal.style.display = 'none';
+                return;
+            }
+        });
+        apiTokenModal.dataset.listenerAttached = 'true';
+    }
+
+    // SOUND Modal
+    const soundModal = document.getElementById('soundBookModal');
+    if (soundModal && !soundModal.dataset.listenerAttached) {
+        soundModal.addEventListener('click', async (e) => {
+            if (e.target.closest('#soundBookCloseButton')) { soundModal.style.display = 'none'; return; }
+            if (e.target.closest('#soundAddButton')) {
+                const codeInput = document.getElementById('soundCode'), customNameInput = document.getElementById('soundCustomName'), useCustomCheckbox = document.getElementById('soundUseCustomName');
+                if (!codeInput || !customNameInput || !useCustomCheckbox) return;
+                const code = codeInput.value.trim(), useCustom = useCustomCheckbox.checked, customName = customNameInput.value.trim();
+                if (code && (!useCustom || (useCustom && customName)) && notrufSettingsDocRef) {
+                    if (!notrufSettings.sounds) notrufSettings.sounds = [];
+                    notrufSettings.sounds.push({ id: Date.now(), code, useCustomName: useCustom, customName: useCustom?customName:null });
+                    try { await setDoc(notrufSettingsDocRef, notrufSettings); codeInput.value=''; useCustomCheckbox.checked=false; customNameInput.value=''; customNameInput.classList.add('hidden'); alertUser('Sound gespeichert','success'); }
+                    catch(err){ console.error(err); alertUser('Fehler','error'); }
+                } else alertUser('Bitte Soundcode ausfüllen.','error');
+                return;
+            }
+            const deleteSoundBtn = e.target.closest('.delete-sound-btn');
+            if (deleteSoundBtn) {
+                const soundId = parseInt(deleteSoundBtn.dataset.soundId);
+                if (isNaN(soundId) || !confirm('Sound wirklich löschen?')) return;
+                notrufSettings.sounds = (notrufSettings.sounds||[]).filter(s=>s.id!==soundId);
+                (notrufSettings.modes||[]).forEach(m=>{ if (m.config && m.config.selectedSoundId===soundId) m.config.selectedSoundId=null; });
+                if (tempSelectedSoundId===soundId) tempSelectedSoundId=null;
+                try { await setDoc(notrufSettingsDocRef, notrufSettings); alertUser('Sound gelöscht','success'); } catch(err){ console.error(err); alertUser('Fehler','error'); }
+                return;
+            }
+            if (e.target.closest('#soundBookApplyButton')) {
+                const selectedRadio = soundModal.querySelector('.sound-radio:checked');
+                const displayArea = document.getElementById('notrufSoundDisplay');
+                if (displayArea) {
+                    if (selectedRadio && selectedRadio.value!=='default') {
+                        const soundId = parseInt(selectedRadio.value);
+                        if (isNaN(soundId)) { tempSelectedSoundId=null; displayArea.innerHTML='<span>Ungültig</span>'; }
+                        else {
+                            const sound = (notrufSettings.sounds||[]).find(s=>s.id===soundId);
+                            if (sound) { tempSelectedSoundId=soundId; const name = sound.useCustomName && sound.customName ? sound.customName : sound.code; displayArea.innerHTML=`<span data-sound-id="${sound.id}">${name}</span>`; }
+                            else { tempSelectedSoundId=null; displayArea.innerHTML='<span>Standard</span>'; }
+                        }
+                    } else { tempSelectedSoundId=null; displayArea.innerHTML='<span>Standard</span>'; }
+                }
+                soundModal.style.display = 'none';
+                return;
+            }
+        });
+        soundModal.dataset.listenerAttached = 'true';
+    }
+}
+
 function updateFlicEditorDetails(selectedModeId) {
     const detailsDisplay = document.getElementById('flic-editor-details');
     if (!detailsDisplay) {
@@ -589,6 +733,7 @@ export function initializeNotrufSettingsView() {
     } else {
         console.log("Listener für soundModal bereits vorhanden.");
     }
+    ensureModalListeners();
     }
 // === Restliche Hilfsfunktionen für Notruf (populateFlicAssignmentSelectors, updateFlicColumnDisplays, etc.) bleiben unverändert HIER in notfall.js ===
 // ... (füge hier die Definitionen für populateFlicAssignmentSelectors, updateFlicColumnDisplays, updateFlicEditorDetails, updateFlicEditorBox, renderModeEditorList, openModeConfigForm, saveNotrufMode, renderContactBook, renderApiTokenBook, renderSoundBook ein, wie sie in der vorherigen Antwort standen) ...
@@ -841,6 +986,7 @@ function openModeConfigForm(modeId = null) {
 }
 
 function renderContactBook() {
+    ensureModalListeners()
     const list = document.getElementById('contactBookList');
     const contacts = notrufSettings.contacts || [];
 
@@ -876,6 +1022,7 @@ function renderContactBook() {
 }
 
 function renderApiTokenBook() {
+    ensureModalListeners()
     const list = document.getElementById('apiTokenBookList');
     const tokens = notrufSettings.apiTokens || [];
     // 'tempSelectedApiTokenId' enthält die ID des Tokens, das gerade im Formular ausgewählt ist
@@ -906,6 +1053,7 @@ function renderApiTokenBook() {
 }
 
 function renderSoundBook() {
+    ensureModalListeners()
     const list = document.getElementById('soundBookList');
     const sounds = notrufSettings.sounds || [];
     const currentlySelectedId = tempSelectedSoundId; // Kann null sein für Standard
