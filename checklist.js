@@ -326,7 +326,7 @@ export function listenForChecklistItems() {
   }
 }
 
-export function renderChecklistView(listId) {
+function renderChecklistView(listId) {
   const view = document.getElementById('checklistView');
   if (!view) return;
 
@@ -1100,7 +1100,7 @@ function setupStackAndContainerManagementListeners(view) {
     });
 }
 
-export function renderChecklistSettingsView(editListId = null) {
+function renderChecklistSettingsView(editListId = null) {
   const view = document.getElementById('checklistSettingsView');
   if (!view) return;
 
