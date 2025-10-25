@@ -86,22 +86,22 @@ function renderTemplateItemsEditor() {
 function renderContainerList() {
     const editorDiv = document.getElementById('container-list-editor');
     if (!editorDiv) return;
-
     editorDiv.innerHTML = `<h3 class="font-bold text-gray-800 mb-2 mt-6">Bestehende Container verwalten</h3>`;
 
-    const stacks = Object.values(CHECKLIST_STACKS);
-    const containers = Object.values(TEMPLATES);
-    const stackOptions = `<option value="">Keinen Stack zuweisen</option>` + Object.values(CHECKLIST_STACKS).map(stack => `<option value="${stack.id}">${stack.name}</option>`).join('');
+    const stacks = Object.values(CHECKLIST_STACKS || {});
+    const containers = Object.values(TEMPLATES || {});
+    const stackOptions = `<option value="">Keinen Stack zuweisen</option>` + stacks.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+    if (stacks.length === 0 && containers.length === 0) {
+        editorDiv.innerHTML += `<p class="text-sm text-center text-gray-500">Keine Container oder Stacks vorhanden.</p>`;
+        return;
+    }
 
     const createContainerItemHTML = (container) => {
-        const isSelected = container.id === selectedTemplateId;
         const currentStackName = container.stackName || "Kein Stack zugewiesen";
-
-        // HIER IST DIE ÄNDERUNG: Der data-template-id und die Klasse sind jetzt auf dem äußeren Div
         return `
-            <div data-template-id="${container.id}" class="template-selection-item p-2 border rounded-md bg-white cursor-pointer hover:bg-gray-100 ${isSelected ? 'bg-indigo-50 border-indigo-300' : ''}">
+            <div data-template-id="${container.id}" class="template-selection-item p-2 border rounded-md bg-white cursor-pointer hover:bg-gray-100">
                 <p class="font-semibold">${container.name}</p>
-                
                 <div class="mt-2 p-2 bg-gray-50 rounded-lg">
                     <div id="stack-display-container-${container.id}" class="flex justify-between items-center">
                         <p class="text-sm">Aktueller Stack: <span class="font-bold text-teal-800">${currentStackName}</span></p>
@@ -116,127 +116,94 @@ function renderContainerList() {
         `;
     };
 
-    const containersWithoutStack = containers.filter(c => !c.stackId);
-
+    // Gruppiert nach Stack
     stacks.forEach(stack => {
         const containersInStack = containers.filter(c => c.stackId === stack.id);
         if (containersInStack.length > 0) {
             editorDiv.innerHTML += `<h4 class="font-semibold text-sm text-gray-600 mt-4 mb-1">${stack.name}</h4>`;
-            containersInStack.forEach(container => {
-                editorDiv.innerHTML += createContainerItemHTML(container);
-            });
+            containersInStack.forEach(container => editorDiv.innerHTML += createContainerItemHTML(container));
         }
     });
 
+    const containersWithoutStack = containers.filter(c => !c.stackId);
     if (containersWithoutStack.length > 0) {
         editorDiv.innerHTML += `<h4 class="font-semibold text-sm text-gray-600 mt-4 mb-1">Ohne Stack</h4>`;
-        containersWithoutStack.forEach(container => {
-            editorDiv.innerHTML += createContainerItemHTML(container);
-        });
-    }
-
-    if (containers.length === 0) {
-        editorDiv.innerHTML += `<p class="text-sm text-center text-gray-400">Keine Container gefunden.</p>`;
+        containersWithoutStack.forEach(container => editorDiv.innerHTML += createContainerItemHTML(container));
     }
 }
 
 async function applyTemplateLogic() {
-    // Robust implementation: wählt ausgewählte Einträge im Modal und fügt sie in die Ziel-Liste ein.
     const modal = document.getElementById('templateApplyModal');
-    if (!modal) return console.warn('applyTemplateLogic: modal not found');
+    if (!modal) return console.warn('applyTemplateLogic: modal fehlt');
     const targetListId = modal.dataset.targetListId;
     if (!targetListId) {
-        if (typeof alertUser === 'function') alertUser("Fehler: Keine Ziel-Checkliste definiert.", "error");
+        if (typeof alertUser === 'function') alertUser('Fehler: Keine Ziel-Checkliste angegeben.', 'error');
         return;
     }
 
     const applyBtn = document.getElementById('apply-template-btn');
-    if (applyBtn) try { applyBtn.disabled = true; } catch(e) {}
+    applyBtn && (applyBtn.disabled = true);
 
     try {
         const selectedType = modal.querySelector('input[name="template-type"]:checked')?.value || 'Container';
         const insertMode = modal.querySelector('input[name="insert-mode"]:checked')?.value || 'append';
-
-        const selectedItemsCheckboxes = modal.querySelectorAll('.template-item-cb:checked');
-        if (!selectedItemsCheckboxes || selectedItemsCheckboxes.length === 0) {
-            if (typeof alertUser === 'function') alertUser("Bitte wählen Sie mindestens einen Eintrag zum Einfügen aus.", "error");
+        const selectedItems = Array.from(modal.querySelectorAll('.template-item-cb:checked'));
+        if (selectedItems.length === 0) {
+            if (typeof alertUser === 'function') alertUser('Bitte wählen Sie mindestens einen Eintrag.', 'error');
             return;
         }
 
+        // optionales Ersetzen
         if (selectedType === 'Schiff' && insertMode === 'ersetzen') {
-            // Ersetzt die Liste: lösche existierende Einträge (Batch)
-            if (typeof query === 'function' && typeof getDocs === 'function') {
+            if (typeof query === 'function' && typeof getDocs === 'function' && typeof writeBatch === 'function') {
                 try {
-                    const q = query(checklistItemsCollectionRef, where("listId", "==", targetListId));
-                    const snapshot = await getDocs(q);
-                    if (snapshot && snapshot.size > 0 && typeof writeBatch === 'function') {
+                    const q = query(checklistItemsCollectionRef, where('listId', '==', targetListId));
+                    const snap = await getDocs(q);
+                    if (snap && snap.size > 0) {
                         const batch = writeBatch(db);
-                        snapshot.forEach(docSnap => batch.delete(docSnap.ref));
+                        snap.forEach(s => batch.delete(s.ref));
                         await batch.commit();
                     }
                 } catch (err) {
-                    console.warn('applyTemplateLogic: Fehler beim Löschen vorhandener Einträge (ersetzen):', err);
+                    console.warn('applyTemplateLogic: Fehler beim Löschen vorhandener Einträge', err);
                 }
             }
         }
 
-        // Füge neue Einträge hinzu
-        const batchMode = false; // wenn du große Mengen hast, setze true und benutze writeBatch
-        if (batchMode && typeof writeBatch === 'function') {
-            const batch = writeBatch(db);
-            selectedItemsCheckboxes.forEach(cb => {
-                const newItemRef = doc(checklistItemsCollectionRef); // macht Referenz
-                const data = {
-                    listId: targetListId,
-                    text: cb.dataset.text || '',
-                    status: 'open',
-                    important: cb.dataset.important === 'true',
-                    assignedTo: cb.dataset.assignedTo || null,
-                    assignedToName: cb.dataset.assignedToName || null,
-                    categoryId: cb.dataset.categoryId || null,
-                    categoryName: cb.dataset.categoryName || null,
-                    categoryColor: cb.dataset.categoryColor || null,
-                    addedBy: (currentUser && currentUser.displayName) ? currentUser.displayName : 'Unbekannt',
-                    addedAt: serverTimestamp ? serverTimestamp() : null
-                };
-                batch.set(newItemRef, data);
-            });
-            await batch.commit();
-        } else {
-            // Einzelne Inserts
-            for (const cb of selectedItemsCheckboxes) {
-                const data = {
-                    listId: targetListId,
-                    text: cb.dataset.text || '',
-                    status: 'open',
-                    important: cb.dataset.important === 'true',
-                    assignedTo: cb.dataset.assignedTo || null,
-                    assignedToName: cb.dataset.assignedToName || null,
-                    categoryId: cb.dataset.categoryId || null,
-                    categoryName: cb.dataset.categoryName || null,
-                    categoryColor: cb.dataset.categoryColor || null,
-                    addedBy: (currentUser && currentUser.displayName) ? currentUser.displayName : 'Unbekannt',
-                    addedAt: serverTimestamp ? serverTimestamp() : null
-                };
-                if (typeof addDoc === 'function') {
-                    await addDoc(checklistItemsCollectionRef, data);
-                } else {
-                    console.error('applyTemplateLogic: addDoc not available.');
-                    break;
-                }
+        // Einfügen
+        for (const cb of selectedItems) {
+            const data = {
+                listId: targetListId,
+                text: cb.dataset.text || '',
+                status: 'open',
+                important: cb.dataset.important === 'true',
+                assignedTo: cb.dataset.assignedTo || null,
+                assignedToName: cb.dataset.assignedToName || null,
+                categoryId: cb.dataset.categoryId || null,
+                categoryName: cb.dataset.categoryName || null,
+                categoryColor: cb.dataset.categoryColor || null,
+                addedBy: (window.currentUser?.displayName) || 'Unbekannt',
+                addedAt: (typeof serverTimestamp === 'function' ? serverTimestamp() : null)
+            };
+            if (typeof addDoc === 'function') {
+                await addDoc(checklistItemsCollectionRef, data);
+            } else {
+                // Fallback: lokal
+                CHECKLIST_ITEMS[targetListId] = CHECKLIST_ITEMS[targetListId] || [];
+                CHECKLIST_ITEMS[targetListId].push({ id: Date.now(), ...data });
             }
         }
 
-        if (typeof alertUser === 'function') alertUser(`${selectedItemsCheckboxes.length} Einträge wurden erfolgreich hinzugefügt!`, "success");
+        if (typeof alertUser === 'function') alertUser(`${selectedItems.length} Einträge hinzugefügt.`, 'success');
         closeTemplateModal();
-
-    } catch (error) {
-        console.error('applyTemplateLogic error:', error);
-        if (typeof alertUser === 'function') alertUser("Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.", "error");
+    } catch (err) {
+        console.error('applyTemplateLogic error:', err);
+        if (typeof alertUser === 'function') alertUser('Fehler beim Anwenden der Vorlage.', 'error');
     } finally {
-        if (applyBtn) try { applyBtn.disabled = false; } catch(e) {}
+        applyBtn && (applyBtn.disabled = false);
     }
 }
+
 export function listenForTemplates() {
     const templatesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates');
     onSnapshot(query(templatesCollectionRef, orderBy('name')), (snapshot) => {
@@ -405,132 +372,98 @@ export function listenForChecklistItems() {
     });
 }
 
-function renderChecklistItems(listId) {
+export function renderChecklistItems(listId) {
     const view = document.getElementById('checklistView');
-    const items = CHECKLIST_ITEMS[listId] || [];
+    if (!view) return;
+    const items = (typeof CHECKLIST_ITEMS !== 'undefined' && CHECKLIST_ITEMS[listId]) ? CHECKLIST_ITEMS[listId] : [];
+    const filterTextEl = view.querySelector('#checklist-filter-text');
+    const filterStatusEl = view.querySelector('#checklist-filter-status');
+    const filterText = (filterTextEl?.value || '').toLowerCase();
+    const filterStatus = filterStatusEl?.value || 'all';
 
-    const filterText = (view.querySelector('#checklist-filter-text')?.value || '').toLowerCase();
-    const filterStatus = view.querySelector('#checklist-filter-status')?.value || 'all';
-    const itemsWithOriginalIndex = items.map((item, index) => ({ ...item, originalIndex: index }));
-
-    let filteredItems = itemsWithOriginalIndex.filter(item => {
-        const itemID = (item.originalIndex + 1).toString();
-        const matchesText = filterText === '' || item.text.toLowerCase().includes(filterText) || itemID.includes(filterText);
+    const itemsWithIndex = items.map((item, index) => ({ ...item, originalIndex: index }));
+    const filtered = itemsWithIndex.filter(item => {
+        const itemIdStr = String(item.originalIndex + 1);
+        const matchesText = filterText === '' || (item.text || '').toLowerCase().includes(filterText) || itemIdStr.includes(filterText);
         const matchesStatus = filterStatus === 'all' ||
             (filterStatus === 'open' && item.status !== 'done') ||
             (filterStatus === 'done' && item.status === 'done');
         return matchesText && matchesStatus;
     });
 
-    const doneItems = filteredItems.filter(item => item.status === 'done');
-    const openItems = filteredItems.filter(item => item.status !== 'done');
-    const total = filteredItems.length;
+    const doneItems = filtered.filter(i => i.status === 'done');
+    const openItems = filtered.filter(i => i.status !== 'done');
+    const total = filtered.length;
     const doneCount = doneItems.length;
     const openCount = openItems.length;
     const percentage = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
-    view.querySelector('#checklist-stats').innerHTML = `${doneCount} von ${total} erledigt - Noch ${openCount} offen (${percentage}%)`;
-
-    const getStatusInfo = (item) => {
-        if (item.lastActionBy && item.lastActionAt) {
-            const date = item.lastActionAt.toDate().toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) || '';
-            const actionText = item.status === 'done' ? 'Erledigt' : 'Wieder geöffnet';
-            return `<p class="text-xs text-gray-400">${actionText} von ${item.lastActionBy} (${date})</p>`;
-        }
-        return '';
-    };
-
-    const getItemBadges = (item) => {
-        let badgesHTML = '';
-        if (item.assignedToName) {
-            badgesHTML += `<span class="text-xs font-semibold py-0.5 px-2 rounded-full whitespace-nowrap bg-gray-200 text-gray-700">${item.assignedToName}</span>`;
-        }
-        return badgesHTML ? `<div class="flex items-center gap-2 flex-wrap mt-1">${badgesHTML}</div>` : '';
-    };
-
-    const groupedItems = openItems.reduce((acc, item) => {
-        const categoryId = item.categoryId || 'no-category';
-        if (!acc[categoryId]) {
-            acc[categoryId] = { name: item.categoryName, items: [] };
-        }
-        acc[categoryId].items.push(item);
-        return acc;
-    }, {});
+    const statsEl = view.querySelector('#checklist-stats');
+    if (statsEl) statsEl.innerHTML = `${doneCount} von ${total} erledigt - Noch ${openCount} offen (${percentage}%)`;
 
     const openItemsContainer = view.querySelector('#checklist-items-container');
-    openItemsContainer.innerHTML = '';
+    const doneItemsContainer = view.querySelector('#checklist-done-items-container');
 
-    const renderItems = (items) => {
-        items.sort((a, b) => (b.important || 0) - (a.important || 0)); // "Wichtige" nach oben sortieren
-        items.forEach(item => {
-            const importantClass = item.important ? 'bg-yellow-50 border-l-4 border-yellow-400' : 'bg-white';
-            openItemsContainer.innerHTML += `
-            <div class="${importantClass} p-2 rounded-lg shadow-sm flex flex-col gap-1">
+    if (!openItemsContainer) return;
+
+    openItemsContainer.innerHTML = '';
+    doneItemsContainer && (doneItemsContainer.innerHTML = '');
+
+    const renderItemHTML = (item) => {
+        const importantClass = item.important ? 'bg-yellow-50 border-l-4 border-yellow-400' : 'bg-white';
+        return `
+            <div class="${importantClass} p-2 rounded-lg shadow-sm flex flex-col gap-1" data-item-id="${item.id}">
                 <div class="flex items-start gap-2.5">
                     <span class="text-xs font-bold text-gray-400 pt-1">${item.originalIndex + 1}.</span>
-                    <input type="checkbox" data-item-id="${item.id}" class="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 mt-0.5 flex-shrink-0">
+                    <input type="checkbox" data-item-id="${item.id}" class="checklist-item-cb h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 mt-0.5 flex-shrink-0" ${item.status === 'done' ? 'checked' : ''}>
                     <div class="flex-grow">
-                        <label class="text-sm">${item.text}</label>
-                        ${getStatusInfo(item)}
+                        <label class="text-sm">${item.text || ''}</label>
+                        ${item.lastActionBy && item.lastActionAt ? `<p class="text-xs text-gray-400">${item.lastActionBy} (${(item.lastActionAt && item.lastActionAt.toDate) ? item.lastActionAt.toDate().toLocaleString() : ''})</p>` : ''}
                     </div>
                 </div>
-                ${getItemBadges(item)}
-            </div>`;
-        });
+            </div>
+        `;
     };
 
-    if (groupedItems['no-category'] && groupedItems['no-category'].items.length > 0) {
-        renderItems(groupedItems['no-category'].items);
-    }
-
-    Object.keys(groupedItems).forEach(categoryId => {
-        if (categoryId === 'no-category') return;
-        const group = groupedItems[categoryId];
-        let categoryColorKey = 'gray';
-        for (const catGroup of Object.values(CHECKLIST_CATEGORIES)) {
-            const foundCat = catGroup.find(cat => cat.id === categoryId);
-            if (foundCat) {
-                categoryColorKey = foundCat.color || 'gray';
-                break;
-            }
+    openItems.forEach(item => openItemsContainer.innerHTML += renderItemHTML(item));
+    if (doneItemsContainer) {
+        if (doneItems.length > 0) {
+            view.querySelector('#checklist-done-section')?.classList.remove('hidden');
+            doneItemsContainer.innerHTML = doneItems.map(item => renderItemHTML(item)).join('');
+        } else {
+            view.querySelector('#checklist-done-section')?.classList.add('hidden');
         }
-        const color = COLOR_PALETTE[categoryColorKey] || COLOR_PALETTE.gray;
-        openItemsContainer.innerHTML += `<h3 class="font-bold text-base p-2 rounded-lg mt-4 ${color.bg} ${color.text}">${group.name}</h3>`;
-        renderItems(group.items);
-    });
-
-    const doneItemsSection = view.querySelector('#checklist-done-section');
-    if (doneItems.length > 0) {
-        doneItemsSection.classList.remove('hidden');
-        doneItemsSection.querySelector('#checklist-done-items-container').innerHTML = doneItems.map(item => `
-            <div class="bg-gray-100 p-2 rounded-lg flex flex-col gap-1 opacity-60">
-                <div class="flex items-start gap-2.5">
-                    <span class="text-xs font-bold text-gray-400 pt-1">${item.originalIndex + 1}.</span>
-                    <input type="checkbox" data-item-id="${item.id}" class="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 mt-0.5 flex-shrink-0" checked>
-                    <div class="flex-grow">
-                        <label class="line-through text-sm">${item.text}</label>
-                        ${getStatusInfo(item)}
-                    </div>
-                </div>
-                ${getItemBadges(item)}
-            </div>
-        `).join('');
-    } else {
-        doneItemsSection.classList.add('hidden');
     }
 
-    view.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-        checkbox.addEventListener('change', async (e) => {
-            const itemId = e.target.dataset.itemId;
-            const isChecked = e.target.checked;
-            const updateData = {
-                status: isChecked ? 'done' : 'open',
-                lastActionBy: currentUser.displayName,
-                lastActionAt: serverTimestamp()
-            };
-            await updateDoc(doc(checklistItemsCollectionRef, itemId), updateData);
+    // Delegierter Listener (einmalig) für Checkbox-Änderungen
+    if (!openItemsContainer.dataset.listenerAttached) {
+        openItemsContainer.addEventListener('change', async (e) => {
+            const cb = e.target.closest('.checklist-item-cb');
+            if (!cb) return;
+            const itemId = cb.dataset.itemId;
+            const isChecked = cb.checked;
+            // Defensive checks
+            if (!itemId) return;
+            try {
+                // Update in DB wenn verfügbar
+                if (typeof updateDoc === 'function' && typeof doc === 'function' && typeof checklistItemsCollectionRef !== 'undefined') {
+                    await updateDoc(doc(checklistItemsCollectionRef, itemId), {
+                        status: isChecked ? 'done' : 'open',
+                        lastActionBy: (window.currentUser && window.currentUser.displayName) ? window.currentUser.displayName : 'System',
+                        lastActionAt: typeof serverTimestamp === 'function' ? serverTimestamp() : null
+                    });
+                } else {
+                    // Fallback: update local cache (useful for testing without DB)
+                    const local = (CHECKLIST_ITEMS[itemId] ? CHECKLIST_ITEMS[itemId] : null);
+                    // No-op if no DB functions
+                }
+            } catch (err) {
+                console.error('Fehler beim Aktualisieren des Item-Status:', err);
+                if (typeof alertUser === 'function') alertUser('Fehler beim Speichern des Eintragsstatus.', 'error');
+            }
         });
-    });
+        openItemsContainer.dataset.listenerAttached = 'true';
+    }
 }
 
 export function renderChecklistView(listId) {
@@ -605,41 +538,110 @@ export function renderChecklistView(listId) {
     renderChecklistItems(listId);
 }
 
-function renderChecklistSettingsItems(listId) {
+export function renderChecklistSettingsItems(listId) {
     const container = document.getElementById('checklist-items-editor-container');
     if (!container) return;
+    const items = (typeof CHECKLIST_ITEMS !== 'undefined' && CHECKLIST_ITEMS[listId]) ? [...CHECKLIST_ITEMS[listId]] : [];
 
-    const itemsForEditList = [...(CHECKLIST_ITEMS[listId] || [])]; // Kopie erstellen, um Original nicht zu ändern
-    itemsForEditList.sort((a, b) => (b.important || 0) - (a.important || 0)); // "Wichtige" nach oben sortieren
+    if (items.length === 0) {
+        container.innerHTML = '<p class="text-xs text-center text-gray-500">Dieser Liste sind noch keine Einträge vorhanden.</p>';
+        return;
+    }
 
-    container.innerHTML = itemsForEditList.map(item => {
-        const addedAtDate = item.addedAt?.toDate().toLocaleString('de-DE') || '';
-        const editedAtDate = item.lastEditedAt?.toDate().toLocaleString('de-DE') || '';
+    items.sort((a, b) => (b.important || 0) - (a.important || 0));
+    container.innerHTML = items.map(item => {
         const colorKey = item.categoryColor || 'gray';
-        const color = COLOR_PALETTE[colorKey] || COLOR_PALETTE.gray;
-
+        const color = (typeof COLOR_PALETTE !== 'undefined' && COLOR_PALETTE[colorKey]) ? COLOR_PALETTE[colorKey] : { bg: 'bg-gray-100', text: 'text-gray-700' };
         return `
-        <div class="p-2 border rounded-lg flex items-center gap-2 ${item.important ? 'bg-yellow-100' : ''}" data-item-id="${item.id}">
-            <div class="item-display-content flex-grow">
-                <p class="font-semibold">${item.text}</p>
-                <div class="text-xs text-gray-500 mt-1 space-y-1">
-                    ${item.assignedToName ? `<p class="font-semibold text-blue-600">Zugewiesen an: ${item.assignedToName}</p>` : ''}
-                    ${item.categoryName ? `<p class="font-semibold ${color.text}">Kategorie: ${item.categoryName}</p>` : ''}
-                    <p>Hinzugefügt von: ${item.addedBy} <span class="text-gray-400">(${addedAtDate})</span></p>
-                    ${item.lastEditedBy ? `<p>Bearbeitet von: ${item.lastEditedBy} <span class="text-gray-400">(${editedAtDate})</span></p>` : ''}
+            <div class="p-2 border rounded-lg flex items-center gap-2 ${item.important ? 'bg-yellow-100' : ''}" data-item-id="${item.id}">
+                <div class="item-display-content flex-grow">
+                    <p class="font-semibold">${item.text}</p>
+                    <div class="text-xs text-gray-500 mt-1 space-y-1">
+                        ${item.assignedToName ? `<p class="font-semibold text-blue-600">Zugewiesen an: ${item.assignedToName}</p>` : ''}
+                        ${item.categoryName ? `<p class="font-semibold ${color.text}">Kategorie: ${item.categoryName}</p>` : ''}
+                        <p>Hinzugefügt von: ${item.addedBy || ''} ${item.addedAt ? `<span class="text-gray-400">(${(item.addedAt && item.addedAt.toDate) ? item.addedAt.toDate().toLocaleString() : ''})</span>` : ''}</p>
+                    </div>
+                </div>
+                <div class="item-edit-content hidden flex-grow">
+                    <input type="text" class="w-full p-2 border rounded-lg" value="${item.text || ''}">
+                </div>
+                <div class="flex items-center">
+                    <button class="edit-checklist-item-btn p-2 text-blue-500 hover:bg-blue-100 rounded-full" title="Bearbeiten">✎</button>
+                    <button class="save-checklist-item-btn p-2 text-green-500 hover:bg-green-100 rounded-full hidden" title="Speichern">✓</button>
+                    <button class="delete-checklist-item-btn p-2 text-red-500 hover:bg-red-100 rounded-full" title="Löschen">🗑</button>
                 </div>
             </div>
-            <div class="item-edit-content hidden flex-grow">
-                <input type="text" class="w-full p-2 border rounded-lg" value="${item.text}">
-            </div>
-            <div class="flex items-center">
-                <button class="edit-checklist-item-btn p-2 text-blue-500 hover:bg-blue-100 rounded-full"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4"><path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.775a.75.75 0 0 0-.22.53l-.5 2.5a.75.75 0 0 0 .913.913l2.5-.5a.75.75 0 0 0 .53-.22l4.263-4.262a1.75 1.75 0 0 0 0-2.475Z" /><path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v9.5c0 .69.56 1.25 1.25 1.25h9.5c.69 0 1.25-.56 1.25-1.25V9.5a.75.75 0 0 1 1.5 0v5.25A2.75 2.75 0 0 1 14.25 18h-9.5A2.75 2.75 0 0 1 2 15.25v-9.5A2.75 2.75 0 0 1 4.75 3.5h5.25a.75.75 0 0 1 0 1.5H4.75Z" /></svg></button>
-                <button class="save-checklist-item-btn p-2 text-green-500 hover:bg-green-100 rounded-full hidden"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd" /></svg></button>
-                <button class="delete-checklist-item-btn p-2 text-red-500 hover:bg-red-100 rounded-full"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4"><path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1H2V3Zm2 2h8v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5Z" /></svg></button>
-            </div>
-        </div>
         `;
     }).join('');
+
+    // Delegierter Click-Handler (einmalig)
+    if (!container.dataset.listenerAttached) {
+        container.addEventListener('click', async (e) => {
+            const editBtn = e.target.closest('.edit-checklist-item-btn');
+            const saveBtn = e.target.closest('.save-checklist-item-btn');
+            const deleteBtn = e.target.closest('.delete-checklist-item-btn');
+
+            if (editBtn) {
+                const itemDiv = editBtn.closest('[data-item-id]');
+                if (!itemDiv) return;
+                itemDiv.querySelector('.item-display-content')?.classList.add('hidden');
+                itemDiv.querySelector('.item-edit-content')?.classList.remove('hidden');
+                editBtn.classList.add('hidden');
+                itemDiv.querySelector('.save-checklist-item-btn')?.classList.remove('hidden');
+                const input = itemDiv.querySelector('.item-edit-content input');
+                input && input.focus();
+                return;
+            }
+
+            if (saveBtn) {
+                const itemDiv = saveBtn.closest('[data-item-id]');
+                if (!itemDiv) return;
+                const itemId = itemDiv.dataset.itemId;
+                const newText = itemDiv.querySelector('.item-edit-content input')?.value.trim();
+                if (!newText) {
+                    if (typeof alertUser === 'function') alertUser('Eintragstext darf nicht leer sein.', 'error');
+                    return;
+                }
+                try {
+                    if (typeof updateDoc === 'function' && typeof doc === 'function') {
+                        await updateDoc(doc(checklistItemsCollectionRef, itemId), { text: newText, lastEditedBy: (window.currentUser?.displayName) || 'System', lastEditedAt: (typeof serverTimestamp === 'function' ? serverTimestamp() : null) });
+                    }
+                } catch (err) {
+                    console.error('Fehler beim Speichern des Eintrags:', err);
+                    if (typeof alertUser === 'function') alertUser('Fehler beim Speichern.', 'error');
+                }
+                // lokal sofort UI zurücksetzen (DB-Listener aktualisiert später)
+                itemDiv.querySelector('.item-display-content p') && (itemDiv.querySelector('.item-display-content p').textContent = newText);
+                itemDiv.querySelector('.item-display-content')?.classList.remove('hidden');
+                itemDiv.querySelector('.item-edit-content')?.classList.add('hidden');
+                saveBtn.classList.add('hidden');
+                itemDiv.querySelector('.edit-checklist-item-btn')?.classList.remove('hidden');
+                return;
+            }
+
+            if (deleteBtn) {
+                const itemDiv = deleteBtn.closest('[data-item-id]');
+                if (!itemDiv) return;
+                const itemId = itemDiv.dataset.itemId;
+                if (!confirm('Möchten Sie diesen Eintrag wirklich löschen?')) return;
+                try {
+                    if (typeof deleteDoc === 'function' && typeof doc === 'function') {
+                        await deleteDoc(doc(checklistItemsCollectionRef, itemId));
+                    } else {
+                        // Fallback: remove from local structure
+                        Object.keys(CHECKLIST_ITEMS || {}).forEach(list => {
+                            CHECKLIST_ITEMS[list] = (CHECKLIST_ITEMS[list] || []).filter(i => String(i.id) !== String(itemId));
+                        });
+                        renderChecklistSettingsItems(listId);
+                    }
+                } catch (err) {
+                    console.error('Fehler beim Löschen des Eintrags:', err);
+                    if (typeof alertUser === 'function') alertUser('Fehler beim Löschen', 'error');
+                }
+            }
+        });
+        container.dataset.listenerAttached = 'true';
+    }
 }
 
 function renderDeletedListsModal() {
@@ -791,124 +793,48 @@ function updateCategoryDropdowns() {
 }
 
 function setupListAndItemManagementListeners(view) {
-    // Diese Funktion bindet alle Listener rund um das Erstellen/Bearbeiten von Listen/Einträgen
-    // Sie ersetzt die ältere Version und enthält einen robusten addItemHandler.
     if (!view) return;
+    // Verhindere mehrfaches Binden
+    if (view.dataset.listenersSetup === 'true') return;
+    view.dataset.listenersSetup = 'true';
 
-    // sichere Globals
-    const currentUserSafe = (typeof currentUser !== 'undefined' && currentUser) ? currentUser : { id: null, displayName: 'Gast', permissions: [] };
-
-    const defaultGroupSwitcher = view.querySelector('#checklist-settings-default-group-switcher');
-    const defaultListSwitcher = view.querySelector('#checklist-settings-default-list-switcher');
-
-    if (defaultGroupSwitcher) {
-        const updateDefaultListOptions = (isUserChange = false) => {
-            const defaultListId = (typeof adminSettings !== 'undefined' && adminSettings) ? adminSettings.defaultChecklistId : null;
-            const groupId = defaultGroupSwitcher.value;
-            if (!defaultListSwitcher) return;
-            defaultListSwitcher.innerHTML = '<option value="">Liste wählen...</option>';
-            if (!groupId || groupId === 'none') {
-                defaultListSwitcher.disabled = true;
-                if (groupId === 'none' && isUserChange && typeof updateDoc === 'function' && typeof settingsDocRef !== 'undefined') {
-                    // Nur versuchen, falls updateDoc und settingsDocRef vorhanden sind
-                    try { updateDoc(settingsDocRef, { defaultChecklistId: null }); } catch (e) { console.warn('update defaultList failed', e); }
-                    if (typeof adminSettings !== 'undefined' && adminSettings) adminSettings.defaultChecklistId = null;
-                }
-                return;
-            }
-            const listsInGroup = Object.values(CHECKLISTS).filter(list => list.groupId === groupId);
-            defaultListSwitcher.innerHTML += listsInGroup.map(list => `<option value="${list.id}" ${list.id === defaultListId ? 'selected' : ''}>${list.name}</option>`).join('');
-            defaultListSwitcher.disabled = false;
-        };
-        defaultGroupSwitcher.addEventListener('change', () => updateDefaultListOptions(true));
-        updateDefaultListOptions(false);
-    }
-
-    if (defaultListSwitcher) {
-        defaultListSwitcher.addEventListener('change', async () => {
-            if (typeof updateDoc !== 'function' || typeof settingsDocRef === 'undefined') {
-                console.warn('updateDoc or settingsDocRef not available; skipping default list update.');
-                return;
-            }
-            const newDefaultListId = defaultListSwitcher.value || null;
-            try {
-                await updateDoc(settingsDocRef, { defaultChecklistId: newDefaultListId });
-                if (typeof adminSettings !== 'undefined' && adminSettings) adminSettings.defaultChecklistId = newDefaultListId;
-                if (typeof alertUser === 'function') alertUser("Globale Standard-Liste wurde gespeichert.", "success");
-            } catch (err) {
-                console.error('Fehler beim Speichern der globalen Standard-Liste:', err);
-                if (typeof alertUser === 'function') alertUser("Fehler beim Speichern der Standard-Liste.", "error");
-            }
-        });
-    }
-
-    const editorCard = view.querySelector('#card-list-item-editor');
-    if (editorCard) {
-        editorCard.addEventListener('click', (e) => {
-            if (e.target && e.target.id === 'edit-group-assignment-btn') {
-                const display = view.querySelector('#group-display-container');
-                const edit = view.querySelector('#group-edit-container');
-                if (display) display.classList.add('hidden');
-                if (edit) edit.classList.remove('hidden');
-            }
-        });
-    }
-
-    // --- addItemHandler (robust, überprüft Felder, fügt hinzu und räumt auf) ---
     const addItemHandler = async () => {
         try {
             const textInput = view.querySelector('#checklist-settings-add-text');
-            const suggestionsContainer = view.querySelector('#item-suggestions-container');
-            const importantCheckbox = view.querySelector('#checklist-settings-add-important');
             const assigneeSelect = view.querySelector('#checklist-settings-add-assignee');
             const categorySelect = view.querySelector('#checklist-settings-add-category');
+            const importantCheckbox = view.querySelector('#checklist-settings-add-important');
             const currentListId = view.querySelector('#checklist-settings-editor-switcher')?.value;
 
-            if (!textInput) return console.warn('addItemHandler: text input not found');
+            if (!textInput) return console.warn('addItemHandler: kein Textinput gefunden');
             const text = textInput.value.trim();
             if (!text) {
-                if (typeof alertUser === 'function') alertUser("Bitte Text für den Eintrag eingeben.", "error");
+                if (typeof alertUser === 'function') alertUser('Bitte Text für den Eintrag eingeben.', 'error');
                 return;
             }
-
             if (!currentListId) {
-                if (typeof alertUser === 'function') alertUser("Kann keinen Eintrag hinzufügen: Bitte erstellen Sie zuerst eine Liste.", "error");
+                if (typeof alertUser === 'function') alertUser('Bitte wählen Sie zuerst eine Liste zum Hinzufügen.', 'error');
                 return;
             }
 
-            const important = !!(importantCheckbox && importantCheckbox.checked);
-            const assignedTo = assigneeSelect ? assigneeSelect.value : null;
-            const assignedToName = (assignedTo && assigneeSelect && assigneeSelect.options[assigneeSelect.selectedIndex]) ? assigneeSelect.options[assigneeSelect.selectedIndex].text : null;
-            const categoryId = categorySelect ? categorySelect.value : null;
-
-            // Kategorie-Name/-Color ermitteln (falls notwendig)
-            let categoryName = null;
-            let categoryColor = null;
+            const assignedTo = assigneeSelect?.value || null;
+            const assignedToName = (assigneeSelect && assigneeSelect.options[assigneeSelect.selectedIndex]) ? assigneeSelect.options[assigneeSelect.selectedIndex].text : null;
+            const categoryId = categorySelect?.value || null;
+            let categoryName = null, categoryColor = null;
             if (categoryId) {
-                for (const group of Object.values(CHECKLIST_CATEGORIES || {})) {
-                    const foundCat = (group || []).find(cat => cat.id === categoryId);
-                    if (foundCat) {
-                        categoryName = foundCat.name;
-                        categoryColor = foundCat.color || 'gray';
-                        break;
-                    }
+                for (const g of Object.values(CHECKLIST_CATEGORIES || {})) {
+                    const found = (g || []).find(c => c.id === categoryId);
+                    if (found) { categoryName = found.name; categoryColor = found.color || 'gray'; break; }
                 }
             }
 
-            // Stelle sicher, dass checklistItemsCollectionRef und addDoc vorhanden sind
-            if (typeof addDoc !== 'function' || typeof checklistItemsCollectionRef === 'undefined') {
-                console.error('Firestore addDoc or checklistItemsCollectionRef not available.');
-                if (typeof alertUser === 'function') alertUser("Fehler: Datenbank nicht verfügbar.", "error");
-                return;
-            }
-
-            const newItemData = {
+            const payload = {
                 listId: currentListId,
                 text,
                 status: 'open',
-                important,
-                addedBy: (currentUser && currentUser.displayName) ? currentUser.displayName : 'Unbekannt',
-                addedAt: serverTimestamp ? serverTimestamp() : null,
+                important: !!importantCheckbox?.checked,
+                addedBy: (window.currentUser?.displayName) || 'Unbekannt',
+                addedAt: (typeof serverTimestamp === 'function') ? serverTimestamp() : null,
                 assignedTo: assignedTo || null,
                 assignedToName: assignedToName || null,
                 categoryId: categoryId || null,
@@ -916,132 +842,58 @@ function setupListAndItemManagementListeners(view) {
                 categoryColor: categoryColor || null
             };
 
-            await addDoc(checklistItemsCollectionRef, newItemData);
+            if (typeof addDoc === 'function' && typeof checklistItemsCollectionRef !== 'undefined') {
+                await addDoc(checklistItemsCollectionRef, payload);
+            } else {
+                console.warn('Datenbank nicht verfügbar; füge lokal hinzu.');
+                CHECKLIST_ITEMS[currentListId] = CHECKLIST_ITEMS[currentListId] || [];
+                CHECKLIST_ITEMS[currentListId].push({ id: Date.now(), ...payload });
+                renderChecklistSettingsItems(currentListId);
+            }
 
-            if (typeof alertUser === 'function') alertUser("Eintrag wurde hinzugefügt.", "success");
-
-            // Aufräumen / Reset des Formulars
+            // reset UI
             textInput.value = '';
-            if (suggestionsContainer) { suggestionsContainer.innerHTML = ''; suggestionsContainer.classList.add('hidden'); }
-            if (importantCheckbox) importantCheckbox.checked = false;
-            if (assigneeSelect) assigneeSelect.value = '';
-            if (categorySelect) categorySelect.value = '';
+            importantCheckbox && (importantCheckbox.checked = false);
+            assigneeSelect && (assigneeSelect.value = '');
+            categorySelect && (categorySelect.value = '');
             textInput.focus();
-
+            if (typeof alertUser === 'function') alertUser('Eintrag wurde hinzugefügt.', 'success');
         } catch (err) {
-            console.error('Fehler beim Hinzufügen des Eintrags:', err);
-            if (typeof alertUser === 'function') alertUser("Fehler beim Hinzufügen des Eintrags.", "error");
+            console.error('addItemHandler error:', err);
+            if (typeof alertUser === 'function') alertUser('Fehler beim Hinzufügen des Eintrags.', 'error');
         }
     };
 
     const addItemBtn = view.querySelector('#checklist-settings-add-item-btn');
-    if (addItemBtn) {
-        // Entferne vorherige Listener, falls mehrfach gebunden
-        try { addItemBtn.replaceWith(addItemBtn.cloneNode(true)); } catch(e) { /* ignore */ }
-    }
+    if (addItemBtn) addItemBtn.addEventListener('click', addItemHandler);
 
-    // Re-query weil wir evtl. ersetzt haben
-    const addItemBtnFinal = view.querySelector('#checklist-settings-add-item-btn');
-    if (addItemBtnFinal) addItemBtnFinal.addEventListener('click', addItemHandler);
-
-    // Tipp: Enter im Textfeld soll ebenfalls hinzufügen
     const addTextInput = view.querySelector('#checklist-settings-add-text');
-    if (addTextInput) {
-        addTextInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                addItemHandler();
-            }
-        });
-    }
-
-    // Vorschlags-Container Verhalten: Klick auf Vorschlag füllt Formular
-    const suggestionsContainer = view.querySelector('#item-suggestions-container');
-    if (suggestionsContainer) {
-        suggestionsContainer.addEventListener('click', (e) => {
-            const suggestionItem = e.target.closest('.suggestion-item');
-            if (!suggestionItem) return;
-            const applyCategoryBtn = e.target.closest('.apply-category-btn');
-            const textSpan = suggestionItem.querySelector('.suggestion-text');
-            const isImportant = suggestionItem.dataset.important === 'true';
-            if (textSpan) {
-                addTextInput.value = textSpan.textContent;
-            }
-            const importantCheckboxLocal = view.querySelector('#checklist-settings-add-important');
-            if (importantCheckboxLocal) importantCheckboxLocal.checked = isImportant;
-            if (applyCategoryBtn) {
-                const categoryId = applyCategoryBtn.dataset.categoryId;
-                const categorySelectLocal = view.querySelector('#checklist-settings-add-category');
-                if (categorySelectLocal) categorySelectLocal.value = categoryId;
-            }
-            suggestionsContainer.innerHTML = '';
-            suggestionsContainer.classList.add('hidden');
-            addTextInput.focus();
-        });
-    }
-
-    // Klick außerhalb des Input schliesst Vorschläge
-    document.addEventListener('click', (e) => {
-        const ai = view.querySelector('#checklist-settings-add-text');
-        const sc = view.querySelector('#item-suggestions-container');
-        if (!ai || !sc) return;
-        if (!ai.contains(e.target) && !sc.contains(e.target)) {
-            sc.classList.add('hidden');
-        }
+    if (addTextInput) addTextInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); addItemHandler(); }
     });
 
-    // Bind other controls that were in original function but make them robust (archive, show modals, etc.)
-    const archiveListBtn = view.querySelector('#checklist-archive-list-btn');
-    if (archiveListBtn) {
-        archiveListBtn.addEventListener('click', async () => {
-            const listIdToArchive = view.querySelector('#checklist-settings-editor-switcher')?.value;
-            if (!listIdToArchive) return;
-            const listName = CHECKLISTS[listIdToArchive]?.name || 'Unbekannt';
-            if (!confirm(`Möchten Sie die Liste "${listName}" wirklich archivieren?`)) return;
-            try {
-                if (typeof updateDoc === 'function') {
-                    await updateDoc(doc(checklistsCollectionRef, listIdToArchive), { isArchived: true, archivedAt: serverTimestamp(), archivedBy: (currentUser && currentUser.displayName) ? currentUser.displayName : 'System' });
-                    if (typeof alertUser === 'function') alertUser(`Liste "${listName}" wurde archiviert.`, "success");
-                } else {
-                    console.warn('updateDoc not available; archive not performed');
-                }
-            } catch (error) {
-                console.error("Fehler beim Archivieren:", error);
-                if (typeof alertUser === 'function') alertUser("Fehler beim Archivieren der Liste.", "error");
-            }
-        });
-    }
-
-    const showArchivedBtn = view.querySelector('#show-archived-lists-btn');
-    if (showArchivedBtn) {
-        showArchivedBtn.addEventListener('click', () => {
-            if (typeof renderArchivedListsModal === 'function') {
-                renderArchivedListsModal();
-                const modal = document.getElementById('archivedListsModal');
-                if (modal) modal.style.display = 'flex';
-            }
-        });
-    }
-
-    const showDeletedBtn = view.querySelector('#show-deleted-lists-btn');
-    if (showDeletedBtn) {
-        showDeletedBtn.addEventListener('click', () => {
-            if (typeof renderDeletedListsModal === 'function') {
-                renderDeletedListsModal();
-                const modal = document.getElementById('deletedListsModal');
-                if (modal) modal.style.display = 'flex';
-            }
-        });
-    }
-
-    // Editor switcher: Wechseln der zu bearbeitenden Liste
+    // Editor switcher
     const editorSwitcher = view.querySelector('#checklist-settings-editor-switcher');
-    if (editorSwitcher) {
-        editorSwitcher.addEventListener('change', (e) => {
-            const val = e.target.value;
-            renderChecklistSettingsView(val);
-        });
-    }
+    if (editorSwitcher) editorSwitcher.addEventListener('change', (e) => {
+        renderChecklistSettingsView(e.target.value);
+    });
+
+    // Archive / modals buttons: re-use existing functions if available
+    view.querySelector('#checklist-archive-list-btn')?.addEventListener('click', async () => {
+        const listId = view.querySelector('#checklist-settings-editor-switcher')?.value;
+        if (!listId) return;
+        const name = CHECKLISTS[listId]?.name || 'Unbekannt';
+        if (!confirm(`Möchten Sie die Liste "${name}" archivieren?`)) return;
+        try {
+            if (typeof updateDoc === 'function') {
+                await updateDoc(doc(checklistsCollectionRef, listId), { isArchived: true, archivedAt: serverTimestamp(), archivedBy: (window.currentUser?.displayName) || 'System' });
+                if (typeof alertUser === 'function') alertUser(`Liste "${name}" archiviert.`, 'success');
+            }
+        } catch (err) {
+            console.error('Archivieren fehlgeschlagen:', err);
+            if (typeof alertUser === 'function') alertUser('Fehler beim Archivieren.', 'error');
+        }
+    });
 }
 
 function setupGroupManagementListeners(view, currentUserData) {
@@ -1137,219 +989,66 @@ function setupGroupManagementListeners(view, currentUserData) {
 
 function setupStackAndContainerManagementListeners(view) {
     const templatesCard = view.querySelector('#card-templates');
-    if (!templatesCard || templatesCard.dataset.listenerAttached === 'true') {
-        return; // Verhindert, dass der Listener mehrfach hinzugefügt wird
-    }
-
+    if (!templatesCard || templatesCard.dataset.listenerAttached === 'true') return;
     templatesCard.addEventListener('click', async (e) => {
-        // --- Logik zum Auswählen und Abwählen eines Containers ---
         const containerItem = e.target.closest('.template-selection-item');
         if (containerItem && !e.target.closest('button') && !e.target.closest('select')) {
             const clickedTemplateId = containerItem.dataset.templateId;
             const editor = document.getElementById('template-item-editor');
-
+            if (!clickedTemplateId) return;
             if (selectedTemplateId === clickedTemplateId) {
-                // FALL 1: Bereits ausgewählter Container wird erneut geklickt -> Abwählen
                 selectedTemplateId = null;
                 editor.classList.add('hidden');
-                if (unsubscribeTemplateItems) unsubscribeTemplateItems();
+                if (typeof unsubscribeTemplateItems === 'function') unsubscribeTemplateItems();
             } else {
-                // FALL 2: Ein neuer Container wird ausgewählt
                 selectedTemplateId = clickedTemplateId;
-                const editorTitle = document.getElementById('template-editor-title');
-                editorTitle.textContent = `Einträge für Container "${TEMPLATES[selectedTemplateId].name}"`;
+                document.getElementById('template-editor-title').textContent = `Einträge für Container "${TEMPLATES[selectedTemplateId]?.name || '–'}"`;
                 editor.classList.remove('hidden');
-
-                if (unsubscribeTemplateItems) unsubscribeTemplateItems();
-
-                const itemsSubCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', selectedTemplateId, 'template-items');
-                unsubscribeTemplateItems = onSnapshot(query(itemsSubCollectionRef, orderBy('text')), (snapshot) => {
-                    TEMPLATE_ITEMS[selectedTemplateId] = [];
-                    snapshot.forEach(doc => TEMPLATE_ITEMS[selectedTemplateId].push({ id: doc.id, ...doc.data() }));
-                    renderTemplateItemsEditor();
-                });
+                if (typeof unsubscribeTemplateItems === 'function') unsubscribeTemplateItems();
+                if (typeof onSnapshot === 'function') {
+                    const itemsSubCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', selectedTemplateId, 'template-items');
+                    unsubscribeTemplateItems = onSnapshot(query(itemsSubCollectionRef, orderBy('text')), (snapshot) => {
+                        TEMPLATE_ITEMS[selectedTemplateId] = [];
+                        snapshot.forEach(doc => TEMPLATE_ITEMS[selectedTemplateId].push({ id: doc.id, ...doc.data() }));
+                        renderTemplateItemsEditor();
+                    });
+                }
             }
-            renderContainerList(); // Zeichnet die Liste neu, um die Markierung zu aktualisieren
+            renderContainerList();
             return;
         }
 
-        // --- Logik für "ändern" und "speichern" der Stack-Zuweisung ---
+        // change-stack / save-stack
         const changeStackBtn = e.target.closest('.change-stack-btn');
         if (changeStackBtn) {
-            const containerId = changeStackBtn.dataset.containerId;
-            document.getElementById(`stack-display-container-${containerId}`).classList.add('hidden');
-            document.getElementById(`stack-edit-container-${containerId}`).classList.remove('hidden');
+            const cid = changeStackBtn.dataset.containerId;
+            document.getElementById(`stack-display-container-${cid}`)?.classList.add('hidden');
+            document.getElementById(`stack-edit-container-${cid}`)?.classList.remove('hidden');
             return;
         }
-
         const saveStackBtn = e.target.closest('.save-stack-assignment-btn');
         if (saveStackBtn) {
-            const containerId = saveStackBtn.dataset.containerId;
-            const editContainer = document.getElementById(`stack-edit-container-${containerId}`);
-            const newStackId = editContainer.querySelector('.stack-assign-switcher').value;
-
-            const newStackName = newStackId ? CHECKLIST_STACKS[newStackId]?.name : null;
-            const templateRef = doc(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', containerId);
-            await updateDoc(templateRef, { stackId: newStackId || null, stackName: newStackName });
-            alertUser("Stack-Zuweisung gespeichert.", "success");
-
-            return;
-        }
-
-        // --- Hinzufügen eines Eintrags zum ausgewählten Container ---
-        if (e.target.closest('#add-template-item-btn') && selectedTemplateId) {
-            const textInput = document.getElementById('new-template-item-text');
-            const text = textInput.value.trim();
-            if (!text) return alertUser("Bitte Text für den Eintrag eingeben.", "error");
-
-            const assigneeSelect = document.getElementById('new-template-item-assignee');
-            const categorySelect = document.getElementById('new-template-item-category');
-            const importantCheckbox = document.getElementById('new-template-item-important');
-            const assignedTo = assigneeSelect.value;
-            const assignedToName = assignedTo ? assigneeSelect.options[assigneeSelect.selectedIndex].text : null;
-            const categoryId = categorySelect.value;
-            const categoryName = categoryId ? categorySelect.options[categorySelect.selectedIndex].text : null;
-            let categoryColor = null;
-            if (categoryId) {
-                for (const group of Object.values(CHECKLIST_CATEGORIES)) {
-                    const foundCat = group.find(cat => cat.id === categoryId);
-                    if (foundCat) { categoryColor = foundCat.color || 'gray'; break; }
-                }
-            }
-
-            const newItemData = { text, important: importantCheckbox.checked, assignedTo, assignedToName, categoryId, categoryName, categoryColor };
-            const itemsSubCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', selectedTemplateId, 'template-items');
-            await addDoc(itemsSubCollectionRef, newItemData);
-
-            textInput.value = '';
-            assigneeSelect.value = '';
-            categorySelect.value = '';
-            importantCheckbox.checked = false;
-            textInput.focus();
-            return;
-        }
-
-        // --- Löschen eines einzelnen Eintrags aus einem Container ---
-        const deleteTemplateItemBtn = e.target.closest('.delete-template-item-btn');
-        if (deleteTemplateItemBtn && selectedTemplateId) {
-            const itemId = deleteTemplateItemBtn.dataset.itemId;
-            if (confirm("Möchten Sie diesen Eintrag wirklich aus dem Container löschen?")) {
-                const itemRef = doc(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', selectedTemplateId, 'template-items', itemId);
-                await deleteDoc(itemRef);
-            }
-            return;
-        }
-
-        // --- Löschen des gesamten Containers ---
-        const deleteTemplateBtn = e.target.closest('#delete-template-btn');
-        if (deleteTemplateBtn && selectedTemplateId) {
-            if (confirm(`Möchten Sie den Container "${TEMPLATES[selectedTemplateId].name}" wirklich unwiderruflich löschen?`)) {
-                const templateRef = doc(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', selectedTemplateId);
-                await deleteDoc(templateRef);
-                selectedTemplateId = null;
-                document.getElementById('template-item-editor').classList.add('hidden');
-                renderContainerList();
-            }
-            return;
-        }
-
-        // --- Logik für Stacks (Erstellen, Umbenennen, Löschen) ---
-        const createStackForm = view.querySelector('#create-stack-form');
-        const showCreateStackBtn = view.querySelector('#show-create-stack-form-btn');
-        if (e.target.closest('#show-create-stack-form-btn')) {
-            createStackForm.classList.remove('hidden');
-            createStackForm.classList.add('flex');
-            showCreateStackBtn.classList.add('hidden');
-            return;
-        }
-
-        if (e.target.closest('#checklist-settings-create-stack-btn')) {
-            const nameInput = view.querySelector('#checklist-settings-new-stack-name');
-            const newName = nameInput.value.trim();
-            if (!newName) return;
-            const allStackNames = Object.values(CHECKLIST_STACKS).map(s => s.name.toLowerCase());
-            if (allStackNames.includes(newName.toLowerCase())) {
-                alertUser(`Ein Stack mit dem Namen "${newName}" existiert bereits.`, 'error');
-                return;
-            }
-            const checklistStacksCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-stacks');
-            await addDoc(checklistStacksCollectionRef, { name: newName });
-            nameInput.value = '';
-            alertUser(`Stack "${newName}" wurde erstellt.`, 'success');
-            return;
-        }
-
-        if (e.target.closest('#checklist-settings-create-container-btn')) {
-            const newName = view.querySelector('#checklist-settings-new-container-name').value.trim();
-            const stackId = view.querySelector('#checklist-settings-new-stack-selector').value;
-            if (!stackId) return alertUser("Bitte wählen Sie einen Stack für den neuen Container aus.", "error");
-            if (!newName) return alertUser("Bitte geben Sie einen Namen für den Container an.", "error");
-
-            const templatesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates');
-            await addDoc(templatesCollectionRef, { name: newName, stackId, stackName: CHECKLIST_STACKS[stackId].name, createdAt: serverTimestamp() });
-            view.querySelector('#checklist-settings-new-container-name').value = '';
-            view.querySelector('#checklist-settings-new-stack-selector').value = '';
-            alertUser(`Container "${newName}" wurde erstellt.`, 'success');
-            return;
-        }
-
-        const editStackBtn = e.target.closest('#edit-selected-stack-btn');
-        if (editStackBtn) {
-            const stackId = view.querySelector('#manage-stacks-dropdown').value;
-            if (!stackId) return alertUser("Bitte wählen Sie einen Stack zum Bearbeiten aus.", "error");
-
-            const stackName = CHECKLIST_STACKS[stackId]?.name;
-            const newName = prompt(`Neuen Namen für den Stack "${stackName}" eingeben:`, stackName);
-            if (newName && newName.trim() !== stackName) {
-                const trimmedNewName = newName.trim();
-                const allStackNames = Object.values(CHECKLIST_STACKS).map(g => g.name.toLowerCase());
-                if (allStackNames.includes(trimmedNewName.toLowerCase())) {
-                    alertUser(`Ein Stack mit dem Namen "${trimmedNewName}" existiert bereits.`, "error");
-                    return;
-                }
-                const checklistStacksCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-stacks');
-                await updateDoc(doc(checklistStacksCollectionRef, stackId), { name: trimmedNewName });
-                alertUser("Stack wurde umbenannt.", "success");
-            }
-            return;
-        }
-
-        const deleteStackBtn = e.target.closest('#delete-selected-stack-btn');
-        if (deleteStackBtn) {
-            const stackId = view.querySelector('#manage-stacks-dropdown').value;
-            if (!stackId) return alertUser("Bitte wählen Sie einen Stack zum Löschen aus.", "error");
-
-            const stackName = CHECKLIST_STACKS[stackId]?.name;
-            if (!confirm(`WARNUNG: Alle Container im Stack "${stackName}" verlieren ihre Zuordnung. Der Stack wird endgültig gelöscht. Fortfahren?`)) return;
-
+            const cid = saveStackBtn.dataset.containerId;
+            const editContainer = document.getElementById(`stack-edit-container-${cid}`);
+            const newStackId = editContainer?.querySelector('.stack-assign-switcher')?.value || null;
             try {
-                const templatesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates');
-                const q = query(templatesCollectionRef, where("stackId", "==", stackId));
-                const containersToUpdateSnapshot = await getDocs(q);
-
-                const batch = writeBatch(db);
-
-                containersToUpdateSnapshot.forEach(containerDoc => {
-                    batch.update(containerDoc.ref, {
-                        stackId: null,
-                        stackName: null
-                    });
-                });
-
-                const checklistStacksCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-stacks');
-                batch.delete(doc(checklistStacksCollectionRef, stackId));
-
-                await batch.commit();
-                alertUser(`Stack "${stackName}" wurde gelöscht.`, "success");
-
-            } catch (error) {
-                console.error("Error deleting stack and updating containers:", error);
-                alertUser("Fehler beim Löschen des Stacks.", "error");
+                if (typeof updateDoc === 'function') {
+                    await updateDoc(doc(checklistsCollectionRef, cid), { stackId: newStackId || null, stackName: newStackId ? CHECKLIST_STACKS[newStackId]?.name : null });
+                } else {
+                    // Fallback lokal
+                    TEMPLATES[cid] = TEMPLATES[cid] || {};
+                    TEMPLATES[cid].stackId = newStackId;
+                    TEMPLATES[cid].stackName = newStackId ? CHECKLIST_STACKS[newStackId]?.name : null;
+                }
+                if (typeof alertUser === 'function') alertUser('Stack-Zuweisung gespeichert.', 'success');
+            } catch (err) {
+                console.error('Fehler beim Speichern der Stack-Zuweisung:', err);
+                if (typeof alertUser === 'function') alertUser('Fehler beim Speichern.', 'error');
             }
             return;
         }
-    });
 
+    });
     templatesCard.dataset.listenerAttached = 'true';
 }
 
@@ -1783,126 +1482,97 @@ function setupTemplateEditorListeners() {
 
 }
 
-export function openTemplateModal(targetListId) {
+function openTemplateModal(targetListId) {
     const modal = document.getElementById('templateApplyModal');
-    if (!modal) return console.warn('openTemplateModal: modal not found');
+    if (!modal) return console.warn('openTemplateModal: modal fehlt');
     modal.dataset.targetListId = targetListId || '';
 
     const templateSelect = document.getElementById('template-select');
-    const templateTypeRadios = modal.querySelectorAll('input[name="template-type"]');
+    const itemsContainer = document.getElementById('template-items-container');
+    const modeSection = document.getElementById('template-mode-section');
 
     const updateTemplateDropdown = async () => {
         const selectedType = modal.querySelector('input[name="template-type"]:checked')?.value || 'Container';
-        const itemsContainer = document.getElementById('template-items-container');
-        const modeSection = document.getElementById('template-mode-section');
         if (itemsContainer) itemsContainer.innerHTML = '';
         if (modeSection) modeSection.classList.toggle('hidden', selectedType !== 'Schiff');
-
         if (!templateSelect) return;
         templateSelect.innerHTML = '<option value="">Bitte Quelle wählen...</option>';
-
         if (selectedType === 'Container') {
-            // Gruppierte Container basierend auf STACKS
             const grouped = Object.values(CHECKLIST_STACKS || {}).map(stack => {
-                const containersInStack = Object.values(TEMPLATES || {}).filter(t => t.stackId === stack.id);
-                if (containersInStack.length === 0) return '';
-                return `<optgroup label="${stack.name}">${containersInStack.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}</optgroup>`;
+                const containers = Object.values(TEMPLATES || {}).filter(t => t.stackId === stack.id);
+                if (containers.length === 0) return '';
+                return `<optgroup label="${stack.name}">${containers.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}</optgroup>`;
             }).join('');
             const withoutStack = Object.values(TEMPLATES || {}).filter(t => !t.stackId).map(t => `<option value="${t.id}">${t.name}</option>`).join('');
             templateSelect.innerHTML += grouped + (withoutStack ? `<optgroup label="Ohne Stack">${withoutStack}</optgroup>` : '');
-        } else if (selectedType === 'Schiff') {
-            Object.values(CHECKLISTS || {}).forEach(checklist => {
-                templateSelect.innerHTML += `<option value="${checklist.id}">${checklist.name}</option>`;
-            });
+        } else {
+            Object.values(CHECKLISTS || {}).forEach(cl => templateSelect.innerHTML += `<option value="${cl.id}">${cl.name}</option>`);
         }
     };
 
-    // Idempotente Listener-Bindung: falls noch nicht, füge hinzu
     if (!modal.dataset.listenersAttached) {
-        // template type radio change
-        templateTypeRadios.forEach(r => r.addEventListener('change', updateTemplateDropdown));
-
-        const templateSelectEl = templateSelect;
-        if (templateSelectEl) {
-            templateSelectEl.addEventListener('change', async (e) => {
-                const selectedId = e.target.value;
-                const selectedType = modal.querySelector('input[name="template-type"]:checked')?.value || 'Container';
-                const itemsContainer = document.getElementById('template-items-container');
-                if (!itemsContainer) return;
-                itemsContainer.innerHTML = '';
-                if (!selectedId) return;
-                // Load items: if Container => fetch template-items subcollection, if Schiff => use CHECKLIST_ITEMS
-                if (selectedType === 'Container') {
+        // change handler for select
+        templateSelect?.addEventListener('change', async (e) => {
+            const selectedId = e.target.value;
+            const selectedType = modal.querySelector('input[name="template-type"]:checked')?.value || 'Container';
+            if (!itemsContainer) return;
+            itemsContainer.innerHTML = '';
+            if (!selectedId) return;
+            if (selectedType === 'Container') {
+                if (typeof getDocs === 'function') {
+                    itemsContainer.innerHTML = '<p class="text-xs text-gray-500">Lade Einträge...</p>';
                     try {
-                        itemsContainer.innerHTML = '<p class="text-xs text-gray-500">Lade Einträge...</p>';
-                        if (typeof getDocs === 'function' && typeof query === 'function') {
-                            const itemsSubCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', selectedId, 'template-items');
-                            const snapshot = await getDocs(query(itemsSubCollectionRef, orderBy('text')));
-                            const items = [];
-                            snapshot.forEach(docSnap => items.push({ id: docSnap.id, ...docSnap.data() }));
-                            // render template items
-                            if (items.length === 0) {
-                                itemsContainer.innerHTML = '<p class="text-xs text-gray-500">Diese Vorlage hat keine Einträge.</p>';
-                                return;
-                            }
-                            itemsContainer.innerHTML = items.map(item => `
-                                <label class="flex items-center gap-2 p-1 cursor-pointer hover:bg-gray-100 rounded">
-                                    <input type="checkbox" value="${item.id}" class="h-4 w-4 template-item-cb"
-                                        data-text="${(item.text||'').replace(/"/g,'&quot;')}"
-                                        data-important="${!!item.important}"
-                                        data-assigned-to="${item.assignedTo || ''}"
-                                        data-assigned-to-name="${item.assignedToName || ''}"
-                                        data-category-id="${item.categoryId || ''}"
-                                        data-category-name="${item.categoryName || ''}"
-                                        data-category-color="${item.categoryColor || ''}">
-                                    <span class="text-sm">${item.text}</span>
-                                </label>
-                            `).join('');
-                        } else {
-                            itemsContainer.innerHTML = '<p class="text-xs text-gray-500">Datenbank-Funktionen nicht verfügbar.</p>';
-                        }
+                        const itemsRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', selectedId, 'template-items');
+                        const snap = await getDocs(query(itemsRef, orderBy('text')));
+                        const items = [];
+                        snap.forEach(s => items.push({ id: s.id, ...s.data() }));
+                        if (items.length === 0) { itemsContainer.innerHTML = '<p class="text-xs text-gray-500">Keine Einträge.</p>'; return; }
+                        itemsContainer.innerHTML = items.map(it => `
+                            <label class="flex items-center gap-2 p-1 cursor-pointer hover:bg-gray-100 rounded">
+                                <input type="checkbox" class="h-4 w-4 template-item-cb" value="${it.id}"
+                                    data-text="${(it.text||'').replace(/"/g,'&quot;')}"
+                                    data-important="${!!it.important}"
+                                    data-assigned-to="${it.assignedTo || ''}"
+                                    data-assigned-to-name="${it.assignedToName || ''}"
+                                    data-category-id="${it.categoryId || ''}"
+                                    data-category-name="${it.categoryName || ''}"
+                                    data-category-color="${it.categoryColor || ''}">
+                                <span class="text-sm">${it.text}</span>
+                            </label>
+                        `).join('');
                     } catch (err) {
-                        console.error('openTemplateModal: Fehler beim Laden von Container-Einträgen', err);
+                        console.error('Fehler beim Laden der Template-Items:', err);
                         itemsContainer.innerHTML = '<p class="text-xs text-red-500">Fehler beim Laden.</p>';
                     }
                 } else {
-                    // Schiff: nutze bereits geladene CHECKLIST_ITEMS
-                    const items = CHECKLIST_ITEMS[selectedId] || [];
-                    if (items.length === 0) {
-                        itemsContainer.innerHTML = '<p class="text-xs text-gray-500">Diese Vorlage hat keine Einträge.</p>';
-                        return;
-                    }
-                    itemsContainer.innerHTML = items.map(item => `
-                        <label class="flex items-center gap-2 p-1 cursor-pointer hover:bg-gray-100 rounded">
-                            <input type="checkbox" value="${item.id}" class="h-4 w-4 template-item-cb"
-                                data-text="${(item.text||'').replace(/"/g,'&quot;')}"
-                                data-important="${!!item.important}"
-                                data-assigned-to="${item.assignedTo || ''}"
-                                data-assigned-to-name="${item.assignedToName || ''}"
-                                data-category-id="${item.categoryId || ''}"
-                                data-category-name="${item.categoryName || ''}"
-                                data-category-color="${item.categoryColor || ''}">
-                            <span class="text-sm">${item.text}</span>
-                        </label>
-                    `).join('');
+                    itemsContainer.innerHTML = '<p class="text-xs text-gray-500">Datenbank nicht verfügbar.</p>';
                 }
-            });
-        }
+            } else {
+                // Schiff: use CHECKLIST_ITEMS snapshot
+                const items = CHECKLIST_ITEMS[selectedId] || [];
+                if (!items || items.length === 0) { itemsContainer.innerHTML = '<p class="text-xs text-gray-500">Keine Einträge.</p>'; return; }
+                itemsContainer.innerHTML = items.map(it => `
+                    <label class="flex items-center gap-2 p-1 cursor-pointer hover:bg-gray-100 rounded">
+                        <input type="checkbox" class="h-4 w-4 template-item-cb" value="${it.id}"
+                            data-text="${(it.text||'').replace(/"/g,'&quot;')}"
+                            data-important="${!!it.important}"
+                            data-assigned-to="${it.assignedTo || ''}"
+                            data-assigned-to-name="${it.assignedToName || ''}"
+                            data-category-id="${it.categoryId || ''}"
+                            data-category-name="${it.categoryName || ''}"
+                            data-category-color="${it.categoryColor || ''}">
+                        <span class="text-sm">${it.text}</span>
+                    </label>
+                `).join('');
+            }
+        });
 
-        // Apply/Cancel/Close buttons
-        const applyBtn = document.getElementById('apply-template-btn');
-        if (applyBtn) applyBtn.addEventListener('click', applyTemplateLogic);
-
-        const cancelBtn = document.getElementById('cancel-template-modal-btn');
-        if (cancelBtn) cancelBtn.addEventListener('click', closeTemplateModal);
-
-        const closeBtn = document.getElementById('closeTemplateModalBtn');
-        if (closeBtn) closeBtn.addEventListener('click', closeTemplateModal);
-
+        document.getElementById('apply-template-btn')?.addEventListener('click', applyTemplateLogic);
+        document.getElementById('cancel-template-modal-btn')?.addEventListener('click', closeTemplateModal);
+        document.getElementById('closeTemplateModalBtn')?.addEventListener('click', closeTemplateModal);
         modal.dataset.listenersAttached = 'true';
     }
 
-    // Initial populate
     updateTemplateDropdown();
     modal.style.display = 'flex';
 }
@@ -1956,20 +1626,11 @@ function closeTemplateModal() {
     const modal = document.getElementById('templateApplyModal');
     if (!modal) return;
     modal.style.display = 'none';
-
-    // Reset Inhalte sicher zurücksetzen
-    try {
-        const itemsContainer = document.getElementById('template-items-container');
-        if (itemsContainer) itemsContainer.innerHTML = '';
-        const templateSelect = document.getElementById('template-select');
-        if (templateSelect) templateSelect.innerHTML = '<option value="">Bitte zuerst Typ wählen...</option>';
-        const modeSection = document.getElementById('template-mode-section');
-        if (modeSection) modeSection.classList.add('hidden');
-        modal.dataset.targetListId = '';
-        // Optional: reset radio to default
-        const defaultRadio = modal.querySelector('input[name="template-type"]');
-        if (defaultRadio) defaultRadio.checked = true;
-    } catch (err) {
-        console.warn('closeTemplateModal: Fehler beim Zurücksetzen des Modals', err);
-    }
+    const itemsContainer = document.getElementById('template-items-container');
+    if (itemsContainer) itemsContainer.innerHTML = '';
+    const templateSelect = document.getElementById('template-select');
+    if (templateSelect) templateSelect.innerHTML = '<option value="">Bitte zuerst Typ wählen...</option>';
+    const modeSection = document.getElementById('template-mode-section');
+    if (modeSection) modeSection.classList.add('hidden');
+    modal.dataset.targetListId = '';
 }
