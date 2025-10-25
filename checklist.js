@@ -16,7 +16,8 @@ import {
     db,
     appId,
     TEMPLATES,
-    USERS
+    USERS,
+    currentUser
 } from './haupteingang.js';
 
 // ENDE-ZIKA //
@@ -1381,7 +1382,15 @@ function setupStackAndContainerManagementListeners(view) {
 
 export function renderChecklistSettingsView(editListId = null) {
     const view = document.getElementById('checklistSettingsView');
-    const currentUserData = USERS[currentUser.mode] || {};
+    
+    // Safe guard: Ensure currentUser is defined to avoid ReferenceError
+    const currentUserSafe = currentUser || { mode: null, displayName: 'Guest', permissions: [], role: null };
+    const currentUserData = USERS[currentUserSafe.mode] || {};
+    
+    // Warn if currentUser is missing (for debugging)
+    if (!currentUser || !currentUser.mode) {
+        console.warn('renderChecklistSettingsView: currentUser is not properly initialized. Using safe defaults.');
+    }
 
     // WICHTIG: Diese beiden Zeilen müssen VOR der Berechnung von 'listToEditId' stehen.
     const hasLists = Object.keys(CHECKLISTS).length > 0;

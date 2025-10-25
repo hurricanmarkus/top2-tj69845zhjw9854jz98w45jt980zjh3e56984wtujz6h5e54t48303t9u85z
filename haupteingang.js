@@ -104,6 +104,11 @@ export let currentUser = {
     permissions: [],
     role: null
 };
+
+// Safe bootstrap: Ensure window.currentUser is available for modules that may access it globally
+// This prevents ReferenceError in case modules try to access it before proper initialization
+window.currentUser = window.currentUser || currentUser;
+
 // ENDE-ZIKA //
 
 export const COLOR_PALETTE = {
