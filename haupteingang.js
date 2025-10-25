@@ -485,7 +485,11 @@ export function navigate(targetViewName) {
 
 export function setupEventListeners() {
     // Sicherstellen, dass die Elemente existieren, bevor Listener hinzugefügt werden
-    if (!appHeader || !document.querySelector('.main-content') || !document.getElementById('entranceCard')) {
+    const appHeader = document.getElementById('appHeader');
+    const mainContent = document.querySelector('.main-content');
+    const entranceCard = document.getElementById('entranceCard');
+    
+    if (!appHeader || !mainContent || !entranceCard) {
         console.warn("setupEventListeners: Wichtige Elemente noch nicht bereit, versuche später erneut.");
         // Optional: setTimeout hinzufügen, wenn das Problem häufiger auftritt
         // setTimeout(setupEventListeners, 100);
@@ -497,7 +501,7 @@ export function setupEventListeners() {
     appHeader.addEventListener('click', () => navigate('home'));
 
     // Central click handler for the main content area (für globale Elemente)
-    document.querySelector('.main-content').addEventListener('click', function (e) {
+    mainContent.addEventListener('click', function (e) {
         // --- Buttons on the home page ---
         if (e.target.closest('#mainSettingsButton')) { navigate('userSettings'); return; }
         if (e.target.closest('#mainAdminButton')) { navigate('admin'); return; }
@@ -520,17 +524,28 @@ export function setupEventListeners() {
     });
 
     // --- Navigation Cards on Home View ---
-    const entranceCard = document.getElementById('entranceCard');
-    if (entranceCard) entranceCard.addEventListener('click', () => navigate('entrance'));
+    if (entranceCard) {
+        console.log("setupEventListeners: Registering entranceCard listener");
+        entranceCard.addEventListener('click', () => navigate('entrance'));
+    }
 
     const essensberechnungCard = document.getElementById('essensberechnungCard');
-    if (essensberechnungCard) essensberechnungCard.addEventListener('click', () => navigate('essensberechnung'));
+    if (essensberechnungCard) {
+        console.log("setupEventListeners: Registering essensberechnungCard listener");
+        essensberechnungCard.addEventListener('click', () => navigate('essensberechnung'));
+    }
 
     const currentChecklistCard = document.getElementById('currentChecklistCard');
-    if (currentChecklistCard) currentChecklistCard.addEventListener('click', () => navigate('checklist')); // Navigiert zur Default-Liste
+    if (currentChecklistCard) {
+        console.log("setupEventListeners: Registering currentChecklistCard listener");
+        currentChecklistCard.addEventListener('click', () => navigate('checklist')); // Navigiert zur Default-Liste
+    }
 
     const checklistSettingsCard = document.getElementById('checklistSettingsCard');
-    if (checklistSettingsCard) checklistSettingsCard.addEventListener('click', () => navigate('checklistSettings'));
+    if (checklistSettingsCard) {
+        console.log("setupEventListeners: Registering checklistSettingsCard listener");
+        checklistSettingsCard.addEventListener('click', () => navigate('checklistSettings'));
+    }
 
     // --- Modals (Login, Archived Lists etc.) ---
     const cancelSelectionButton = document.getElementById('cancelSelectionButton');
