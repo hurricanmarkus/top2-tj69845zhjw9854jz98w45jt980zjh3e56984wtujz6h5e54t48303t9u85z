@@ -10,7 +10,7 @@ import { toggleAdminSection, rememberAdminScroll, restoreAdminScrollIfAny, rende
 import { initializeEssensberechnungView } from './essensberechnung.js';
 import { IFTTT_URL, initializeNotrufSettingsView } from './notfall.js';
 import { PUSHOVER_TOKEN, RECIPIENT_KEYS } from './pushbenachrichtigung.js';
-import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, openTemplateModal, renderChecklistView, renderChecklistSettingsView, listenForTemplates } from './checklist.js';
+import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, openTemplateModal, renderChecklistView, renderChecklistSettingsView, listenForTemplates, listenForStacks } from './checklist.js';
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
 import { renderUserKeyList } from './admin_benutzersteuerung.js'; // <-- KORRIGIERT
 // // ENDE-ZIKA //
@@ -54,6 +54,8 @@ export let checklistCategoriesCollectionRef;
 export let auth;
 export let usersCollectionRef, rolesCollectionRef, roleChangeRequestsCollectionRef, settingsDocRef, auditLogCollectionRef;
 export let activeDisplayMode = 'gesamt';
+export let checklistStacksCollectionRef;
+export let checklistTemplatesCollectionRef;
 let editingPortionId = null;
 
 export const firebaseConfigFromUser = {
@@ -223,9 +225,12 @@ async function initializeFirebase() {
         checklistItemsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-items');
         checklistGroupsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-groups');
         checklistCategoriesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-categories');
-        const checklistStacksCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-stacks');
         approvalRequestsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'approval-requests');
-        // --- Ende DB Refs ---
+
+        // --- NEUE/GEÄNDERTE REFS ---
+        checklistStacksCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-stacks');
+        checklistTemplatesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates');
+        // --- ENDE NEUE/GEÄNDERTE REFS ---
 
         if (!usersCollectionRef) { console.error("initializeFirebase: FEHLER - usersCollectionRef konnte nicht erstellt werden!"); return; }
         else { console.log("initializeFirebase: usersCollectionRef erfolgreich erstellt, Pfad:", usersCollectionRef.path); }
@@ -236,8 +241,6 @@ async function initializeFirebase() {
             console.log("initializeFirebase: Anonyme Anmeldung erfolgreich. User UID:", userCredential.user.uid);
         } catch (error) {
             console.error("initializeFirebase: FEHLER bei anonymer Anmeldung:", error);
-            // alertUser ist hier evtl. noch nicht sicher definiert, daher nur Konsole
-            // alertUser("Firebase Authentifizierung fehlgeschlagen.", "error");
         }
 
 
@@ -257,8 +260,6 @@ async function initializeFirebase() {
                         console.warn("Firebase App Settings Document 'main' not found.");
                         adminSettings = {}; // Fallback
                     }
-                     // UI Update für default checklist könnte hier ausgelöst werden, falls nötig
-                     // updateUIForMode(); // Eher am Ende aufrufen
                 }, (error) => {
                     console.error("Error listening to settings:", error);
                 });
@@ -266,7 +267,6 @@ async function initializeFirebase() {
                 onSnapshot(notrufSettingsDocRef, (docSnap) => {
                      if (docSnap.exists()) {
                          notrufSettings = docSnap.data();
-                         // Initialisiere fehlende Felder, falls nötig
                          if (!notrufSettings.modes) notrufSettings.modes = [];
                          if (!notrufSettings.contacts) notrufSettings.contacts = [];
                          if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
@@ -275,50 +275,40 @@ async function initializeFirebase() {
                      } else {
                          console.warn("Firebase Notruf Settings Document 'notruf' not found, creating default.");
                          notrufSettings = { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } };
-                         // Optional: Hier setDoc aufrufen, um das Dokument zu erstellen
-                         // setDoc(notrufSettingsDocRef, notrufSettings);
                      }
-                      // UI Update für Notruf-Seite hier auslösen, falls sie aktiv ist
-                      // if (document.getElementById('notrufSettingsView')?.classList.contains('active')) {
-                      //     initializeNotrufSettingsView(); // Beispiel
-                      // }
                 }, (error) => {
                     console.error("Error listening to notruf settings:", error);
                 });
                 // --- Ende Listener für App-Einstellungen ---
 
-                await seedInitialData(); // Sicherstellen, dass die Funktion existiert
+                await seedInitialData();
                 console.log("initializeFirebase: Seed Data abgeschlossen, starte Haupt-Listener...");
 
                 // Haupt-Daten-Listener
                 console.log("initializeFirebase: Rufe listenForRoleUpdates auf...");
-                listenForRoleUpdates(); // Sicherstellen, dass importiert
+                listenForRoleUpdates();
                 console.log("initializeFirebase: Rufe listenForAdminRoleUpdates auf...");
-                listenForAdminRoleUpdates(); // Sicherstellen, dass importiert
+                listenForAdminRoleUpdates();
                 console.log("initializeFirebase: Rufe listenForUserUpdates auf...");
-                listenForUserUpdates(); // Sicherstellen, dass importiert
+                listenForUserUpdates();
                 console.log("initializeFirebase: Rufe listenForApprovalRequests auf...");
-                listenForApprovalRequests(); // Sicherstellen, dass importiert
+                listenForApprovalRequests();
                 console.log("initializeFirebase: Rufe listenForChecklists auf...");
-                listenForChecklists(); // Sicherstellen, dass importiert
+                listenForChecklists();
                 console.log("initializeFirebase: Rufe listenForChecklistItems auf...");
-                listenForChecklistItems(); // Sicherstellen, dass importiert
+                listenForChecklistItems();
                 console.log("initializeFirebase: Rufe listenForChecklistGroups auf...");
-                listenForChecklistGroups(); // Sicherstellen, dass importiert
+                listenForChecklistGroups();
                 console.log("initializeFirebase: Rufe listenForChecklistCategories auf...");
-                listenForChecklistCategories(); // Sicherstellen, dass importiert
+                listenForChecklistCategories();
+                
+                // --- HIER DIE ÄNDERUNGEN ---
                 console.log("initializeFirebase: Rufe listenForTemplates auf...");
-                listenForTemplates(); // Sicherstellen, dass importiert
-
-                onSnapshot(query(checklistStacksCollectionRef, orderBy('name')), (snapshot) => {
-                    Object.assign(CHECKLIST_STACKS, {}); // Leeren statt neu zuweisen
-                     snapshot.forEach((doc) => {
-                         CHECKLIST_STACKS[doc.id] = { id: doc.id, ...doc.data() };
-                     });
-                     // UI Update für Templates/Stacks, falls nötig und aktiv
-                     // const settingsView = document.getElementById('checklistSettingsView');
-                     // if (settingsView?.classList.contains('active')) { ... }
-                });
+                listenForTemplates(); // Importiert aus checklist.js
+                console.log("initializeFirebase: Rufe listenForStacks auf...");
+                listenForStacks(); // NEU: Importiert aus checklist.js
+                // --- ENDE ÄNDERUNGEN ---
+                
                 console.log("initializeFirebase: Alle Listener-Funktionen aufgerufen.");
 
             } catch (error) {
@@ -331,15 +321,15 @@ async function initializeFirebase() {
             // UI basierend auf User-Status aktualisieren
             if (user) {
                 console.log("initializeFirebase: User (anonym) vorhanden.");
-                checkCurrentUserValidity(); // Sicherstellen, dass importiert
+                checkCurrentUserValidity();
                 initialAuthCheckDone = true;
-                updateUIForMode(); // Sicherstellen, dass importiert
+                updateUIForMode();
                 console.log("initializeFirebase: UI für aktuellen Status aktualisiert.");
             } else {
                 console.log("Firebase meldet KEINEN User (auch nicht anonym!), wechsle explizit zum Gastmodus.");
-                switchToGuestMode(false); // Sicherstellen, dass importiert
+                switchToGuestMode(false);
                  initialAuthCheckDone = true;
-                 updateUIForMode(); // Sicherstellen, dass importiert
+                 updateUIForMode();
             }
              console.log("initializeFirebase: Ende des onAuthStateChanged Callbacks.");
         }); // Ende onAuthStateChanged
