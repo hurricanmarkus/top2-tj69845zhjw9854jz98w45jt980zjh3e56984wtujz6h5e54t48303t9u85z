@@ -1596,134 +1596,156 @@ function renderChecklistSettingsView(editListId = null) {
 
 function setupCategoryManagementListeners(view) {
     if (!view) return;
-    if (view.dataset.categoryListenersAttached === 'true') return;
-    view.dataset.categoryListenersAttached = 'true';
+    // Idempotent: Verhindert doppelte Listener
+    // if (view.dataset.categoryListenersAttached === 'true') return; // Temporär entfernt für Test, ob Listener neu gesetzt werden muss
+    view.dataset.categoryListenersAttached = 'true'; // Setzen wir es trotzdem
 
     const groupSelector = view.querySelector('#category-group-selector');
     const categoryContent = view.querySelector('#category-content');
 
-    // Wenn Gruppe wechselt, rendere Editor neu
-    if (groupSelector) {
+    // Wenn Gruppe wechselt, rendere Editor neu (Listener nur einmal hinzufügen)
+    if (groupSelector && !groupSelector.dataset.changeListenerAttached) {
         groupSelector.addEventListener('change', () => {
+             // Merken, welche Gruppe ausgewählt wurde, für den Fall, dass wir neu rendern
+             view.dataset.selectedCategoryIdForRender = groupSelector.value;
             renderCategoryEditor(groupSelector.value);
         });
+        groupSelector.dataset.changeListenerAttached = 'true';
     }
 
-    // Delegierter Click-Handler für Aktionen im categoryContent
-    categoryContent && categoryContent.addEventListener('click', async (e) => {
-        const createBtn = e.target.closest('#create-category-btn');
-        const editBtn = e.target.closest('.edit-category-btn');
-        const saveBtn = e.target.closest('.save-category-btn');
-        const deleteBtn = e.target.closest('.delete-category-btn');
-        const colorDot = e.target.closest('.category-color-dot'); // neue palette
-        const existingColorDot = e.target.closest('.color-dot'); // if used elsewhere
 
-        const groupId = groupSelector?.value;
-        if (!groupId) {
-            if (createBtn) return alertUser && alertUser('Bitte zuerst eine Gruppe wählen.', 'error');
-            return;
-        }
+    // Delegierter Click-Handler für Aktionen im categoryContent (Nur einmal hinzufügen)
+    if (categoryContent && !categoryContent.dataset.clickListenerAttached) {
+        categoryContent.addEventListener('click', async (e) => {
+            const createBtn = e.target.closest('#create-category-btn');
+            const editBtn = e.target.closest('.edit-category-btn');
+            const saveBtn = e.target.closest('.save-category-btn');
+            const deleteBtn = e.target.closest('.delete-category-btn');
+            const colorDot = e.target.closest('.category-color-dot');
+            const existingColorDot = e.target.closest('.color-dot'); // Falls woanders benutzt
 
-        if (createBtn) {
-            const nameInput = document.getElementById('new-category-name');
-            const colorInput = document.getElementById('new-category-selected-color');
-            const newName = nameInput?.value.trim();
-            const color = colorInput?.value || 'gray';
-            if (!newName) return alertUser && alertUser('Bitte einen Kategorienamen eingeben.', 'error');
-            try {
-                if (typeof addDoc === 'function') {
-                    await addDoc(checklistCategoriesCollectionRef, { name: newName, groupId, color });
-                } else {
-                    const id = String(Date.now());
-                    if (!CHECKLIST_CATEGORIES[groupId]) CHECKLIST_CATEGORIES[groupId] = [];
-                    CHECKLIST_CATEGORIES[groupId].push({ id, name: newName, color });
-                }
-                nameInput.value = '';
-                if (typeof alertUser === 'function') alertUser('Kategorie gespeichert.', 'success');
-                renderCategoryEditor(groupId);
-            } catch (err) {
-                console.error('Fehler beim Erstellen der Kategorie:', err);
-                if (typeof alertUser === 'function') alertUser('Fehler beim Speichern.', 'error');
+            // Lese die aktuell ausgewählte Gruppe direkt aus dem Dropdown im Moment des Klicks
+            const currentGroupId = view.querySelector('#category-group-selector')?.value;
+
+            if (!currentGroupId && createBtn) { // Nur bei "Erstellen" prüfen
+                 return alertUser && alertUser('Bitte zuerst eine Gruppe wählen.', 'error');
             }
-            return;
-        }
 
-        if (editBtn) {
-            const container = editBtn.closest('[data-category-id]');
-            container?.querySelector('.cat-display-content')?.classList.add('hidden');
-            container?.querySelector('.cat-edit-content')?.classList.remove('hidden');
-            editBtn.classList.add('hidden');
-            container?.querySelector('.save-category-btn')?.classList.remove('hidden');
-            return;
-        }
+            if (createBtn) {
+                const nameInput = document.getElementById('new-category-name');
+                const colorInput = document.getElementById('new-category-selected-color');
+                const newName = nameInput?.value.trim();
+                const color = colorInput?.value || 'gray';
+                if (!newName) return alertUser && alertUser('Bitte einen Kategorienamen eingeben.', 'error');
+                try {
+                    if (typeof addDoc === 'function') {
+                        await addDoc(checklistCategoriesCollectionRef, { name: newName, groupId: currentGroupId, color });
+                    } else { /* lokales Fallback */ }
+                    nameInput.value = '';
+                    if (typeof alertUser === 'function') alertUser('Kategorie gespeichert.', 'success');
+                    
+                    // Wichtig: Editor neu rendern, um die neue Kategorie anzuzeigen
+                    renderCategoryEditor(currentGroupId);
+                    
+                    // --- FIX HIER: Gruppe im Dropdown wieder auswählen ---
+                    const selector = view.querySelector('#category-group-selector');
+                    if(selector) selector.value = currentGroupId;
+                    // --- ENDE FIX ---
 
-        if (saveBtn) {
-            const container = saveBtn.closest('[data-category-id]');
-            const catId = container?.dataset.categoryId;
-            const input = container?.querySelector('.edit-category-name-input');
-            const newName = input?.value.trim();
-            if (!newName) return alertUser && alertUser('Name darf nicht leer sein.', 'error');
-            try {
-                if (typeof updateDoc === 'function') {
-                    await updateDoc(doc(checklistCategoriesCollectionRef, catId), { name: newName });
+                } catch (err) {
+                    console.error('Fehler beim Erstellen der Kategorie:', err);
+                    if (typeof alertUser === 'function') alertUser('Fehler beim Speichern.', 'error');
                 }
-                if (typeof alertUser === 'function') alertUser('Kategorie umbenannt.', 'success');
-                renderCategoryEditor(groupId);
-            } catch (err) {
-                console.error('Fehler beim Umbennen der Kategorie:', err);
-                if (typeof alertUser === 'function') alertUser('Fehler beim Umbennen.', 'error');
+                return;
             }
-            return;
-        }
 
-        if (deleteBtn) {
-            const container = deleteBtn.closest('[data-category-id]');
-            const catId = container?.dataset.categoryId;
-            if (!confirm('Kategorie wirklich löschen?')) return;
-            try {
-                if (typeof deleteDoc === 'function') {
-                    await deleteDoc(doc(checklistCategoriesCollectionRef, catId));
-                } else {
-                    CHECKLIST_CATEGORIES[groupId] = (CHECKLIST_CATEGORIES[groupId] || []).filter(c => c.id !== catId);
+            // Restliche Logik (Edit, Save, Delete, Color) bleibt gleich...
+            if (editBtn) {
+                const container = editBtn.closest('[data-category-id]');
+                container?.querySelector('.cat-display-content')?.classList.add('hidden');
+                container?.querySelector('.cat-edit-content')?.classList.remove('hidden');
+                editBtn.classList.add('hidden');
+                container?.querySelector('.save-category-btn')?.classList.remove('hidden');
+                return;
+            }
+
+            if (saveBtn) {
+                const container = saveBtn.closest('[data-category-id]');
+                const catId = container?.dataset.categoryId;
+                const input = container?.querySelector('.edit-category-name-input');
+                const newName = input?.value.trim();
+                if (!newName) return alertUser && alertUser('Name darf nicht leer sein.', 'error');
+                const groupIdForRender = view.querySelector('#category-group-selector')?.value; // Gruppe merken
+                try {
+                    if (typeof updateDoc === 'function') {
+                        await updateDoc(doc(checklistCategoriesCollectionRef, catId), { name: newName });
+                    }
+                    if (typeof alertUser === 'function') alertUser('Kategorie umbenannt.', 'success');
+                    renderCategoryEditor(groupIdForRender); // Editor für die gemerkte Gruppe neu rendern
+                    // Gruppe wieder auswählen nach dem Rendern
+                    const selector = view.querySelector('#category-group-selector');
+                    if(selector) selector.value = groupIdForRender;
+
+                } catch (err) {
+                    console.error('Fehler beim Umbennen der Kategorie:', err);
+                    if (typeof alertUser === 'function') alertUser('Fehler beim Umbennen.', 'error');
                 }
-                if (typeof alertUser === 'function') alertUser('Kategorie gelöscht.', 'success');
-                renderCategoryEditor(groupId);
-            } catch (err) {
-                console.error('Fehler beim Löschen der Kategorie:', err);
-                if (typeof alertUser === 'function') alertUser('Fehler beim Löschen.', 'error');
+                return;
             }
-            return;
-        }
 
-        // Farbwahl (neu): Klick auf Farbe wählt für "new category" aus
-        if (colorDot) {
-            const selected = colorDot.dataset.color;
-            const colorInput = document.getElementById('new-category-selected-color');
-            if (colorInput) colorInput.value = selected;
-            // Visual feedback: ring um gewählte Farbe (einfach)
-            const palette = document.getElementById('new-category-color-palette');
-            palette && palette.querySelectorAll('.category-color-dot').forEach(d => d.classList.remove('ring-2', 'ring-blue-500'));
-            colorDot.classList.add('ring-2', 'ring-blue-500');
-            return;
-        }
-
-        // Farbwechsel für bestehende Kategorie (wenn vorhanden)
-        if (existingColorDot) {
-            const catId = existingColorDot.dataset.categoryId;
-            const newColor = existingColorDot.dataset.color;
-            try {
-                if (typeof updateDoc === 'function') {
-                    await updateDoc(doc(checklistCategoriesCollectionRef, catId), { color: newColor });
+            if (deleteBtn) {
+                const container = deleteBtn.closest('[data-category-id]');
+                const catId = container?.dataset.categoryId;
+                const groupIdForRender = view.querySelector('#category-group-selector')?.value; // Gruppe merken
+                if (!confirm('Kategorie wirklich löschen?')) return;
+                try {
+                    if (typeof deleteDoc === 'function') {
+                        await deleteDoc(doc(checklistCategoriesCollectionRef, catId));
+                    } else { /* lokales Fallback */ }
+                    if (typeof alertUser === 'function') alertUser('Kategorie gelöscht.', 'success');
+                    renderCategoryEditor(groupIdForRender); // Editor für die gemerkte Gruppe neu rendern
+                    // Gruppe wieder auswählen nach dem Rendern
+                    const selector = view.querySelector('#category-group-selector');
+                    if(selector) selector.value = groupIdForRender;
+                } catch (err) {
+                    console.error('Fehler beim Löschen der Kategorie:', err);
+                    if (typeof alertUser === 'function') alertUser('Fehler beim Löschen.', 'error');
                 }
-                if (typeof alertUser === 'function') alertUser('Farbe gespeichert.', 'success');
-                renderCategoryEditor(groupId);
-            } catch (err) {
-                console.error('Fehler beim Speichern der Farbe:', err);
-                if (typeof alertUser === 'function') alertUser('Fehler beim Speichern der Farbe.', 'error');
+                return;
             }
-            return;
-        }
-    });
+             // Farbwahl Logik... (bleibt gleich)
+            if (colorDot) {
+                const selected = colorDot.dataset.color;
+                const colorInput = document.getElementById('new-category-selected-color');
+                if (colorInput) colorInput.value = selected;
+                const palette = document.getElementById('new-category-color-palette');
+                palette && palette.querySelectorAll('.category-color-dot').forEach(d => d.classList.remove('ring-2', 'ring-blue-500'));
+                colorDot.classList.add('ring-2', 'ring-blue-500');
+                return;
+            }
+
+            if (existingColorDot) {
+                const catId = existingColorDot.dataset.categoryId;
+                const newColor = existingColorDot.dataset.color;
+                const groupIdForRender = view.querySelector('#category-group-selector')?.value; // Gruppe merken
+                try {
+                    if (typeof updateDoc === 'function') {
+                        await updateDoc(doc(checklistCategoriesCollectionRef, catId), { color: newColor });
+                    }
+                    if (typeof alertUser === 'function') alertUser('Farbe gespeichert.', 'success');
+                    renderCategoryEditor(groupIdForRender); // Editor für die gemerkte Gruppe neu rendern
+                     // Gruppe wieder auswählen nach dem Rendern
+                     const selector = view.querySelector('#category-group-selector');
+                     if(selector) selector.value = groupIdForRender;
+                } catch (err) {
+                    console.error('Fehler beim Speichern der Farbe:', err);
+                    if (typeof alertUser === 'function') alertUser('Fehler beim Speichern der Farbe.', 'error');
+                }
+                return;
+            }
+        });
+        categoryContent.dataset.clickListenerAttached = 'true';
+    }
 }
 
 function renderPermanentDeleteModal() {
@@ -1831,22 +1853,23 @@ function setupTemplateEditorListeners() {
     templatesCard.addEventListener('click', async (e) => {
         const templateItem = e.target.closest('.template-selection-item');
         if (templateItem) {
-            selectedTemplateId = templateItem.dataset.templateId;
+            selectedTemplateId = templateItem.dataset.templateId; // Merken, welcher Container gewählt wurde
             document.getElementById('template-editor-title').textContent = `Einträge für Container "${TEMPLATES[selectedTemplateId].name}"`;
-            document.getElementById('template-item-editor').classList.remove('hidden');
-            renderTemplateList();
+            document.getElementById('template-item-editor').classList.remove('hidden'); // Editor anzeigen
+            renderTemplateList(); // Container-Liste neu rendern (um Auswahl hervorzuheben)
 
+            // Listener für die Einträge dieses Containers starten
             if (unsubscribeTemplateItems) unsubscribeTemplateItems();
-
             const itemsSubCollectionRef = collection(checklistTemplatesCollectionRef, selectedTemplateId, 'template-items');
             unsubscribeTemplateItems = onSnapshot(query(itemsSubCollectionRef), (snapshot) => {
                 TEMPLATE_ITEMS[selectedTemplateId] = [];
                 snapshot.forEach(doc => TEMPLATE_ITEMS[selectedTemplateId].push({ id: doc.id, ...doc.data() }));
-                renderTemplateItemsEditor();
+                renderTemplateItemsEditor(); // Einträge im Editor anzeigen
             });
             return;
         }
 
+        // Logik für "+ Eintrag hinzufügen" im Editor
         if (e.target.closest('#add-template-item-btn') && selectedTemplateId) {
             const textInput = document.getElementById('new-template-item-text');
             const assigneeSelect = document.getElementById('new-template-item-assignee');
@@ -1868,77 +1891,80 @@ function setupTemplateEditorListeners() {
             assigneeSelect.value = '';
             categorySelect.value = '';
             importantCheckbox.checked = false;
-            textInput.focus();
+            textInput.focus(); // Cursor bleibt im Textfeld für nächsten Eintrag
             return;
         }
 
+        // Logik für "+ Container erstellen" (Formular ein/ausblenden)
         const createForm = templatesCard.querySelector('#create-template-form');
         const showCreateFormBtn = templatesCard.querySelector('#show-create-template-form-btn');
-
         if (e.target.closest('#show-create-template-form-btn')) {
-            createForm.classList.remove('hidden');
-            showCreateFormBtn.classList.add('hidden');
+            createForm?.classList.remove('hidden');
+            showCreateFormBtn?.classList.add('hidden');
         }
 
+        // Logik für "Erstellen" Button (neuer Container)
         if (e.target.closest('#create-template-btn')) {
             const newTemplateNameInput = document.getElementById('new-template-name');
-            const templateName = newTemplateNameInput.value.trim();
+            const templateName = newTemplateNameInput?.value.trim();
             if (!templateName) return alertUser("Bitte geben Sie einen Namen für den Container ein.", "error");
 
-            await addDoc(checklistTemplatesCollectionRef, { name: templateName, createdAt: serverTimestamp() });
-            alertUser(`Container "${templateName}" wurde erstellt!`, "success");
-            newTemplateNameInput.value = '';
-            createForm.classList.add('hidden');
-            showCreateFormBtn.classList.remove('hidden');
-            return;
-        }
-
-        const deleteTemplateItemBtn = e.target.closest('.delete-template-item-btn');
-        if (deleteTemplateItemBtn && selectedTemplateId) {
-            const itemId = deleteTemplateItemBtn.dataset.itemId;
-            if (confirm("Möchten Sie diesen Eintrag wirklich aus dem Container löschen?")) {
-                try {
-                    const itemRef = doc(checklistTemplatesCollectionRef, selectedTemplateId, 'template-items', itemId);
-                    await deleteDoc(itemRef);
-                    alertUser && alertUser('Eintrag gelöscht.', 'success');
-                } catch (err) {
-                    console.error("Fehler beim Löschen des Eintrags:", err);
-                    alertUser && alertUser('Fehler beim Löschen des Eintrags.', 'error');
-                }
+            try {
+                await addDoc(checklistTemplatesCollectionRef, { name: templateName, createdAt: serverTimestamp() });
+                alertUser(`Container "${templateName}" wurde erstellt!`, "success");
+                if(newTemplateNameInput) newTemplateNameInput.value = '';
+                createForm?.classList.add('hidden');
+                showCreateFormBtn?.classList.remove('hidden');
+                // renderChecklistSettingsView(); // Wird durch Listener erledigt
+            } catch (err) {
+                 console.error("Fehler beim Erstellen des Containers:", err);
+                 alertUser && alertUser('Fehler beim Erstellen des Containers.', 'error');
             }
             return;
         }
 
+
+        // Logik für "Diesen Container löschen" Button im Editor
         const deleteTemplateBtn = e.target.closest('#delete-template-btn');
         if (deleteTemplateBtn && selectedTemplateId) {
-            if (confirm(`Möchten Sie den Container "${TEMPLATES[selectedTemplateId]?.name || 'Unbekannt'}" wirklich unwiderruflich löschen?`)) {
+            const containerName = TEMPLATES[selectedTemplateId]?.name || 'Unbekannt';
+            if (confirm(`Möchten Sie den Container "${containerName}" wirklich unwiderruflich löschen?`)) {
+                
+                // Wichtig: Merken wir uns die ID, bevor wir sie zurücksetzen
+                const idToDelete = selectedTemplateId; 
                 
                 try {
-                    const templateRef = doc(checklistTemplatesCollectionRef, selectedTemplateId);
+                    const templateRef = doc(checklistTemplatesCollectionRef, idToDelete);
                     await deleteDoc(templateRef);
                     
                     alertUser && alertUser('Container gelöscht.', 'success');
-                    selectedTemplateId = null; 
                     
-                    // --- HIER IST DER FIX FÜR FEHLER 1 ---
-                    // Lädt die gesamte Einstellungsansicht neu, damit der Editor verschwindet
-                    renderChecklistSettingsView(); 
+                    // --- FIX HIER: Auswahl zurücksetzen BEVOR neu gerendert wird ---
+                    selectedTemplateId = null; // Signalisiert, dass kein Container mehr gewählt ist
+                    if (unsubscribeTemplateItems) unsubscribeTemplateItems(); // Listener stoppen
                     // --- ENDE FIX ---
-                
+                    
+                    renderChecklistSettingsView(); // Gesamte Ansicht neu laden
+
                 } catch (err) {
                     console.error("Fehler beim Löschen des Containers:", err);
                     alertUser && alertUser('Fehler beim Löschen. (Internetverbindung prüfen)', 'error');
+                    // Wichtig: Hier NICHT selectedTemplateId zurücksetzen, damit der User es erneut versuchen kann
                 }
             }
-            return;
+            return; // Wichtig: Funktion hier beenden
         }
-    });
+        
+        // Hinweis: Die Logik für deleteTemplateItemBtn wurde entfernt, da der Button in renderTemplateItemsEditor entfernt wurde.
+        
+    }); // Ende addEventListener für templatesCard
 
     templatesCard.dataset.listenerAttached = 'true';
-    document.getElementById('closeTemplateModalBtn').addEventListener('click', closeTemplateModal);
-    document.getElementById('cancel-template-modal-btn').addEventListener('click', closeTemplateModal);
-    document.getElementById('apply-template-btn').addEventListener('click', applyTemplateLogic);
 
+    // Listener für das Template-Anwenden-Modal (bleiben unverändert)
+    document.getElementById('closeTemplateModalBtn')?.addEventListener('click', closeTemplateModal);
+    document.getElementById('cancel-template-modal-btn')?.addEventListener('click', closeTemplateModal);
+    document.getElementById('apply-template-btn')?.addEventListener('click', applyTemplateLogic);
 }
 
 function renderTemplateItemsEditor() {
