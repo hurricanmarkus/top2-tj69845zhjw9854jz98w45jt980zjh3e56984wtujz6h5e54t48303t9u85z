@@ -36,6 +36,8 @@ export {
 };
 
 // ENDE-ZIKA //
+  const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+
 
 const safeWindow = (name, fallback) => {
   if (typeof window[name] === 'undefined') window[name] = fallback;
@@ -1281,6 +1283,8 @@ function setupStackAndContainerManagementListeners(view) {
 
 // Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
 // Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
+
+// Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
 function renderChecklistSettingsView(editListId = null) {
   const view = document.getElementById('checklistSettingsView');
   if (!view) return;
@@ -1372,13 +1376,15 @@ function renderChecklistSettingsView(editListId = null) {
     </div>
     <div id="card-templates" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-4">
       <div class="p-3 bg-gray-50 rounded-lg space-y-2">
-        <h4 class="font-bold text-gray-800">Neuen Stack erstellen</h4>
+        <div class="flex justify-between items-center mb-1">
+            <h4 class="font-bold text-gray-800">Neuen Stack erstellen</h4>
+            <button id="show-delete-stack-form-btn" class="text-xs text-red-600 font-semibold hover:underline">Stack löschen...</button>
+        </div>
         <div class="flex gap-2">
           <input type="text" id="checklist-settings-new-stack-name" class="flex-grow p-2 border rounded-lg" placeholder="Name für neuen Stack...">
           <button id="checklist-settings-create-stack-btn" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Erstellen</button>
         </div>
-        <button id="show-delete-stack-form-btn" class="w-full text-sm text-red-600 font-semibold hover:underline mt-1">Stack löschen...</button>
-      </div>
+        </div>
 
       <div id="delete-stack-section" class="hidden p-3 bg-red-50 border border-red-200 rounded-lg space-y-2">
         <h4 class="font-bold text-red-800">Stack löschen</h4>
@@ -1529,7 +1535,10 @@ function renderChecklistSettingsView(editListId = null) {
       }
       if(view.dataset.selectedCategoryIdForRender) {
         catGroupSelector.value = view.dataset.selectedCategoryIdForRender;
-        renderCategoryEditor(view.dataset.selectedCategoryIdForRender);
+        // Wichtig: renderCategoryEditor muss hier aufgerufen werden, NACHDEM der Wert gesetzt wurde
+        if (typeof renderCategoryEditor === 'function') {
+             renderCategoryEditor(view.dataset.selectedCategoryIdForRender);
+        }
       }
   }
 
@@ -1568,7 +1577,6 @@ function renderChecklistSettingsView(editListId = null) {
           if (savedGroupId) {
               defaultGroupSelector.value = savedGroupId;
               defaultGroupSelector.dispatchEvent(new Event('change'));
-              // Nur den Wert setzen, wenn das Element nicht disabled ist
               if (!defaultListSelector.disabled) {
                  defaultListSelector.value = savedListId;
               }
@@ -1607,7 +1615,6 @@ function renderChecklistSettingsView(editListId = null) {
       const stackOpts = Object.values(CHECKLIST_STACKS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
       stackSelector.innerHTML = `<option value="">Stack wählen...</option>` + stackOpts;
   }
-   // Stack-Löschen Dropdown auch füllen
   const deleteStackSelector = view.querySelector('#delete-stack-selector');
   if (deleteStackSelector) {
         const stackOpts = Object.values(CHECKLIST_STACKS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
@@ -1725,6 +1732,7 @@ function renderChecklistSettingsView(editListId = null) {
     if (container) container.innerHTML = '<p class="text-sm text-center text-gray-500">Keine Listen vorhanden. Bitte erstellen Sie zuerst eine Liste.</p>';
   }
 }
+
 
 function setupCategoryManagementListeners(view) {
     if (!view) return;
