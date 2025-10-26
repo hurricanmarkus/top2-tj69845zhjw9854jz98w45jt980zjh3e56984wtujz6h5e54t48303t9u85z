@@ -1924,13 +1924,18 @@ function setupTemplateEditorListeners() {
 
         const deleteTemplateItemBtn = e.target.closest('.delete-template-item-btn');
         if (deleteTemplateItemBtn && selectedTemplateId) {
-            // DIESER CODE IST JETZT DEAKTIVIERT WEGEN FIX 5, ABER WIR LASSEN IHN HIER,
-            // FALLS DU IHN SPÄTER BRAUCHST. ER WIRD NICHT AUSGELÖST,
-            // DA DER BUTTON IN renderTemplateItemsEditor ENTFERNT WURDE.
+            // Dieser Button ist in renderTemplateItemsEditor() entfernt,
+            // aber wir lassen die Logik hier, falls sie zurückkommt.
             const itemId = deleteTemplateItemBtn.dataset.itemId;
             if (confirm("Möchten Sie diesen Eintrag wirklich aus dem Container löschen?")) {
-                const itemRef = doc(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', selectedTemplateId, 'template-items', itemId);
-                await deleteDoc(itemRef);
+                try {
+                    const itemRef = doc(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', selectedTemplateId, 'template-items', itemId);
+                    await deleteDoc(itemRef);
+                    alertUser && alertUser('Eintrag gelöscht.', 'success');
+                } catch (err) {
+                    console.error("Fehler beim Löschen des Eintrags:", err);
+                    alertUser && alertUser('Fehler beim Löschen des Eintrags.', 'error');
+                }
             }
             return;
         }
@@ -1938,11 +1943,22 @@ function setupTemplateEditorListeners() {
         const deleteTemplateBtn = e.target.closest('#delete-template-btn');
         if (deleteTemplateBtn && selectedTemplateId) {
             if (confirm(`Möchten Sie den Container "${TEMPLATES[selectedTemplateId].name}" wirklich unwiderruflich löschen?`)) {
-                const templateRef = doc(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', selectedTemplateId);
-                await deleteDoc(templateRef);
-                selectedTemplateId = null;
-                // FIX 4: Ruft die Hauptfunktion auf, um ALLES neu zu laden
-                renderChecklistSettingsView();
+                
+                // --- BEGINN FIX FÜR FEHLER 2 ---
+                try {
+                    const templateRef = doc(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', selectedTemplateId);
+                    await deleteDoc(templateRef);
+                    
+                    alertUser && alertUser('Container gelöscht.', 'success');
+                    selectedTemplateId = null; 
+                    renderChecklistSettingsView(); // Lade die Einstellungs-Ansicht komplett neu
+                
+                } catch (err) {
+                    console.error("Fehler beim Löschen des Containers:", err);
+                    // Zeigt jetzt einen Fehler an, statt einzufrieren
+                    alertUser && alertUser('Fehler beim Löschen. (Internetverbindung prüfen)', 'error');
+                }
+                // --- ENDE FIX FÜR FEHLER 2 ---
             }
             return;
         }
