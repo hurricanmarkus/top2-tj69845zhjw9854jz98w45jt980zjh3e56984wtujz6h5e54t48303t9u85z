@@ -801,18 +801,23 @@ function updateCategoryDropdowns() {
 
 // Ersetze NUR diese Funktion in checklist.js
 // Ersetze NUR diese Funktion in checklist.js
+// Ersetze NUR diese Funktion in checklist.js
 function setupListAndItemManagementListeners(view) {
   if (!view) return;
 
-  if (view.hasAttribute('data-list-item-listeners-setup')) {
-      return;
-  }
-  view.setAttribute('data-list-item-listeners-setup', 'true');
-  console.log("setupListAndItemManagementListeners: Hänge Listener für Listen/Items an."); // Debug
+  // --- ENTFERNT: Die globale Prüfung, die das Neu-Anhängen verhindert hat ---
+  // if (view.hasAttribute('data-list-item-listeners-setup')) {
+  //     return;
+  // }
+  // view.setAttribute('data-list-item-listeners-setup', 'true');
+  // --- ENDE ENTFERNT ---
+
+  console.log("setupListAndItemManagementListeners: Funktion wird aufgerufen und Hängt Listener an (globale Prüfung entfernt)."); // Debug
 
   // --- Archivieren-Button ---
   const archiveBtn = view.querySelector('#checklist-archive-list-btn');
-  if (archiveBtn && !archiveBtn.hasAttribute('data-listener-attached')) {
+  // Individuelle Prüfung bleibt wichtig, falls die Funktion doch mal ohne Neurendern aufgerufen wird
+  if (archiveBtn && !archiveBtn.dataset.listenerAttached) {
       archiveBtn.addEventListener('click', async () => {
           console.log("Archivieren-Button geklickt."); // Debug
           const listIdToArchive = view.dataset.editingListId;
@@ -839,12 +844,9 @@ function setupListAndItemManagementListeners(view) {
                   console.log("updateDoc erfolgreich gesendet (Firebase)."); // Angepasst
 
                   alertUser && alertUser(`Liste "${listName}" wurde archiviert.`, 'success');
-
-                  // renderChecklistSettingsView(); // --- ENTFERNT! Der Listener soll das UI aktualisieren ---
-                  console.log("renderChecklistSettingsView NICHT manuell aufgerufen. Warte auf Listener-Update."); // Debug
+                  // renderChecklistSettingsView() wurde hier korrekterweise entfernt.
 
               } catch (error) {
-                  // Detailliertere Fehlerausgabe
                   console.error("FEHLER beim Archivieren der Liste:", error.code, error.message, error);
                   alertUser && alertUser(`Fehler beim Archivieren: ${error.message}`, "error");
               }
@@ -852,50 +854,65 @@ function setupListAndItemManagementListeners(view) {
                console.log("Archivieren abgebrochen."); // Debug
           }
       });
-      archiveBtn.setAttribute('data-listener-attached', 'true');
+      archiveBtn.dataset.listenerAttached = 'true'; // Markieren
       console.log("Archivieren-Listener angehängt."); // Debug
   }
 
-  // --- Rest der Funktion (Eintrag hinzufügen, Editor Aktionen, Modals, Liste erstellen) bleibt unverändert ---
-  // (Code hier aus Platzgründen gekürzt - bitte den Rest der Funktion aus der vorherigen Antwort beibehalten)
-  // ... (Code für AddItem, ItemEditor, ShowModals, CreateList) ...
 
-   // --- Eintrag hinzufügen ---
-   const addItemBtn = view.querySelector('#checklist-settings-add-item-btn');
-   const addTextInput = view.querySelector('#checklist-settings-add-text');
-   const addHandler = async () => { /* ... (addHandler bleibt gleich) ... */
-     // ... (Kompletter addHandler Code von oben) ...
-   };
-   if (addItemBtn && !addItemBtn.dataset.listenerAttached) { addItemBtn.addEventListener('click', addHandler); addItemBtn.dataset.listenerAttached = 'true'; console.log("AddItem-Button-Listener angehängt."); }
-   if (addTextInput && !addTextInput.dataset.listenerAttached) { addTextInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addHandler(); } }); addTextInput.dataset.listenerAttached = 'true'; console.log("AddItem-Texteingabe-Listener angehängt."); }
-
-   // --- Editor Aktionen ---
-   const itemsEditor = view.querySelector('#checklist-items-editor-container');
-   if (itemsEditor && !itemsEditor.dataset.listenerAttached) {
-     itemsEditor.addEventListener('click', async (e) => { /* ... (Edit/Delete Item Logik bleibt gleich) ... */ });
-     itemsEditor.dataset.listenerAttached = 'true'; console.log("Items-Editor-Listener angehängt.");
+  // --- Eintrag hinzufügen ---
+  const addItemBtn = view.querySelector('#checklist-settings-add-item-btn');
+  const addTextInput = view.querySelector('#checklist-settings-add-text');
+  const addHandler = async () => { /* ... (addHandler bleibt gleich) ... */
+     // Code von oben...
+  };
+  if (addItemBtn && !addItemBtn.dataset.listenerAttached) {
+      addItemBtn.addEventListener('click', addHandler);
+      addItemBtn.dataset.listenerAttached = 'true';
+      console.log("AddItem-Button-Listener angehängt."); // Debug
+  }
+  if (addTextInput && !addTextInput.dataset.listenerAttached) {
+       addTextInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addHandler(); } });
+       addTextInput.dataset.listenerAttached = 'true';
+       console.log("AddItem-Texteingabe-Listener angehängt."); // Debug
    }
 
-   // --- Buttons für Archiv/Papierkorb Modals ---
-    const showArchivedBtn = view.querySelector('#show-archived-lists-btn');
-    if (showArchivedBtn && !showArchivedBtn.dataset.listenerAttached) {
-        showArchivedBtn.addEventListener('click', () => { console.log("Archiv anzeigen geklickt."); try { renderArchivedListsModal && renderArchivedListsModal(); document.getElementById('archivedListsModal') && (document.getElementById('archivedListsModal').style.display = 'flex'); } catch(e){console.error(e);} });
-        showArchivedBtn.dataset.listenerAttached = 'true'; console.log("ShowArchived-Button-Listener angehängt.");
-    }
-    const showDeletedBtn = view.querySelector('#show-deleted-lists-btn');
-    if (showDeletedBtn && !showDeletedBtn.dataset.listenerAttached) {
-        showDeletedBtn.addEventListener('click', () => { console.log("Papierkorb anzeigen geklickt."); try { renderDeletedListsModal && renderDeletedListsModal(); document.getElementById('deletedListsModal') && (document.getElementById('deletedListsModal').style.display = 'flex'); } catch(e){console.error(e);} });
-        showDeletedBtn.dataset.listenerAttached = 'true'; console.log("ShowDeleted-Button-Listener angehängt.");
-    }
+  // --- Editor Aktionen (Bearbeiten/Löschen von Einträgen) ---
+  const itemsEditor = view.querySelector('#checklist-items-editor-container');
+  if (itemsEditor && !itemsEditor.dataset.listenerAttached) {
+    itemsEditor.addEventListener('click', async (e) => { /* ... (Logik bleibt gleich) ... */ });
+    itemsEditor.dataset.listenerAttached = 'true'; // Markieren
+    console.log("Items-Editor-Listener angehängt."); // Debug
+  }
 
-   // --- Neue Liste erstellen ---
-   const createListBtn = view.querySelector('#checklist-settings-create-list-btn');
-    if (createListBtn && !createListBtn.dataset.listenerAttached) {
-        createListBtn.addEventListener('click', async () => { /* ... (Create List Logik bleibt gleich) ... */ });
-        createListBtn.dataset.listenerAttached = 'true'; console.log("CreateList-Button-Listener angehängt.");
-    }
+  // --- Buttons für Archiv/Papierkorb Modals ---
+   const showArchivedBtn = view.querySelector('#show-archived-lists-btn');
+   if (showArchivedBtn && !showArchivedBtn.dataset.listenerAttached) {
+       showArchivedBtn.addEventListener('click', () => {
+           console.log("Archiv anzeigen geklickt."); // Debug
+           try { renderArchivedListsModal && renderArchivedListsModal(); document.getElementById('archivedListsModal') && (document.getElementById('archivedListsModal').style.display = 'flex'); } catch(e){console.error(e);}
+       });
+       showArchivedBtn.dataset.listenerAttached = 'true';
+       console.log("ShowArchived-Button-Listener angehängt."); // Debug
+   }
+   const showDeletedBtn = view.querySelector('#show-deleted-lists-btn');
+   if (showDeletedBtn && !showDeletedBtn.dataset.listenerAttached) {
+       showDeletedBtn.addEventListener('click', () => {
+           console.log("Papierkorb anzeigen geklickt."); // Debug
+           try { renderDeletedListsModal && renderDeletedListsModal(); document.getElementById('deletedListsModal') && (document.getElementById('deletedListsModal').style.display = 'flex'); } catch(e){console.error(e);}
+       });
+       showDeletedBtn.dataset.listenerAttached = 'true';
+       console.log("ShowDeleted-Button-Listener angehängt."); // Debug
+   }
 
+  // --- Neue Liste erstellen ---
+  const createListBtn = view.querySelector('#checklist-settings-create-list-btn');
+   if (createListBtn && !createListBtn.dataset.listenerAttached) {
+       createListBtn.addEventListener('click', async () => { /* ... (Logik bleibt gleich) ... */ });
+       createListBtn.dataset.listenerAttached = 'true';
+       console.log("CreateList-Button-Listener angehängt."); // Debug
+   }
 } // Ende setupListAndItemManagementListeners
+
 function setupGroupManagementListeners(view, currentUserData) {
     if (!view) return;
     // idempotent
