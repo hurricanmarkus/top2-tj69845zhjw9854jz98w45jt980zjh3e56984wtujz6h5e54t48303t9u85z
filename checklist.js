@@ -1166,6 +1166,7 @@ function setupStackAndContainerManagementListeners(view) {
 }
 
 // Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
+// Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
 function renderChecklistSettingsView(editListId = null) {
   const view = document.getElementById('checklistSettingsView');
   if (!view) return;
@@ -1202,7 +1203,6 @@ function renderChecklistSettingsView(editListId = null) {
     <div id="card-templates" class="settings-card hidden p-4 bg-white rounded-lg mb-4"></div>
 
     <div id="card-list-item-editor" class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-green-500 mt-6">
-      <!-- Editor für Listeneinträge (grüne Box) -->
       <div class="flex gap-2 items-center mb-3">
         <select id="checklist-settings-editor-switcher" class="flex-grow p-2 border rounded-lg bg-white"></select>
         <button id="show-template-modal-btn" class="p-2 bg-teal-100 text-teal-800 text-sm font-bold rounded-lg hover:bg-teal-200 transition">+C</button>
@@ -1371,6 +1371,119 @@ function renderChecklistSettingsView(editListId = null) {
     });
     addItemBtn.dataset.listenerAttached = '1';
   }
+
+  // --- BEGINN FIX: FEHLENDE LISTENER HINZUGEFÜGT ---
+
+  // 1. FIX: Listener für die "Verwalten"-Tabs (Standard, Gruppen & Listen, etc.)
+  const tabButtons = view.querySelectorAll('.settings-tab-btn');
+  if (tabButtons.length > 0 && !view.dataset.tabListenersAttached) {
+      tabButtons.forEach(btn => {
+          btn.addEventListener('click', () => {
+              const targetCardId = btn.dataset.targetCard;
+
+              // 1. Alle Karten (Inhalte) verstecken
+              view.querySelectorAll('.settings-card').forEach(card => {
+                  card.classList.add('hidden');
+              });
+              // 2. Alle Tab-Buttons zurücksetzen (visuell)
+              tabButtons.forEach(b => {
+                  b.classList.remove('bg-white', 'text-indigo-600', 'shadow-sm');
+                  b.classList.add('text-gray-600');
+              });
+
+              // 3. Ziel-Karte anzeigen
+              const targetCard = view.querySelector(`#${targetCardId}`);
+              if (targetCard) {
+                  targetCard.classList.remove('hidden');
+              }
+              
+              // 4. Geklickten Tab-Button hervorheben (visuell)
+              btn.classList.add('bg-white', 'text-indigo-600', 'shadow-sm');
+              btn.classList.remove('text-gray-600');
+              
+              // Speichern, welcher Tab aktiv ist
+              view.dataset.activeSettingsTab = targetCardId;
+          });
+      });
+      
+      // Beim Laden der Ansicht: Entweder den zuletzt offenen Tab
+      // oder einfach den ersten Tab als aktiv markieren
+      const lastTab = view.dataset.activeSettingsTab;
+      const tabToClick = lastTab ? view.querySelector(`.settings-tab-btn[data-target-card="${lastTab}"]`) : tabButtons[0];
+      
+      if (tabToClick) {
+          tabToClick.click(); // Simuliert einen Klick auf den Tab
+      } else if (tabButtons[0]) {
+          tabButtons[0].click(); // Fallback auf den ersten Tab
+      }
+      
+      view.dataset.tabListenersAttached = '1'; // Markieren, damit wir die Listener nicht doppelt hinzufügen
+  }
+
+  // 2. FIX: Listener für "Gruppe ändern" und "Speichern" im grünen Kasten
+  const editGroupBtn = view.querySelector('#edit-group-assignment-btn');
+  if (editGroupBtn && !editGroupBtn.dataset.listenerAttached) {
+      editGroupBtn.addEventListener('click', () => {
+          // Verstecke die normale Anzeige
+          view.querySelector('#group-display-container')?.classList.add('hidden');
+          // Zeige das Bearbeitungs-Dropdown und den Speichern-Button
+          view.querySelector('#group-edit-container')?.classList.remove('hidden');
+          
+          // Wähle die aktuell zugewiesene Gruppe im Dropdown aus
+          const currentList = (view.dataset.editingListId && CHECKLISTS) ? CHECKLISTS[view.dataset.editingListId] : null;
+          if (currentList && currentList.groupId) {
+              const assignSwitcher = view.querySelector('#checklist-group-assign-switcher');
+              if (assignSwitcher) assignSwitcher.value = currentList.groupId;
+          }
+      });
+      editGroupBtn.dataset.listenerAttached = '1';
+  }
+
+  const saveGroupBtn = view.querySelector('#checklist-save-group-assignment');
+  if (saveGroupBtn && !saveGroupBtn.dataset.listenerAttached) {
+      saveGroupBtn.addEventListener('click', async () => {
+          const assignSwitcher = view.querySelector('#checklist-group-assign-switcher');
+          const newGroupId = assignSwitcher ? assignSwitcher.value : null; // Die ID der neuen Gruppe (oder null)
+          const listId = view.dataset.editingListId; // Die ID der Liste, die wir bearbeiten
+          
+          if (!listId) return alertUser && alertUser('Keine Liste zum Speichern ausgewählt.', 'error');
+
+          // Finde den Namen zur neuen Gruppen-ID
+          const newGroupName = (newGroupId && CHECKLIST_GROUPS && CHECKLIST_GROUPS[newGroupId]) ? CHECKLIST_GROUPS[newGroupId].name : null;
+
+          try {
+              // Speichere die Änderung in der Datenbank (Firebase)
+              if (typeof updateDoc === 'function' && typeof doc === 'function' && typeof checklistsCollectionRef !== 'undefined') {
+                  await updateDoc(doc(checklistsCollectionRef, listId), {
+                      groupId: newGroupId || null,
+                      groupName: newGroupName
+                  });
+              } else {
+                  // Lokales Fallback, falls Firebase nicht verbunden ist
+                  if (CHECKLISTS && CHECKLISTS[listId]) {
+                      CHECKLISTS[listId].groupId = newGroupId || null;
+                      CHECKLISTS[listId].groupName = newGroupName;
+                  }
+              }
+              
+              // Ansicht wieder aktualisieren
+              updateCurrentGroupDisplay(listId); // Aktualisiert den Text "Aktuelle Gruppe: ..."
+              view.querySelector('#group-display-container')?.classList.remove('hidden');
+              view.querySelector('#group-edit-container')?.classList.add('hidden');
+              buildEditorSwitcherOptions(); // Baut das Haupt-Dropdown neu auf, falls sich die Gruppe geändert hat
+              
+              if (typeof alertUser === 'function') alertUser('Gruppenzuweisung gespeichert.', 'success');
+
+          } catch (err) {
+              console.error('Fehler beim Speichern der Gruppe:', err);
+              if (typeof alertUser === 'function') alertUser('Fehler beim Speichern.', 'error');
+          }
+      });
+      saveGroupBtn.dataset.listenerAttached = '1';
+  }
+
+  // --- ENDE FIX ---
+
 
   // Ensure the items editor is filled for the initial list
   if (listToEditId) {
