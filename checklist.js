@@ -32,7 +32,6 @@ export {
   openTemplateModal,
   renderChecklistView,
   renderChecklistSettingsView,
-  listenForStacks
 };
 
 // ENDE-ZIKA //
