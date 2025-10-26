@@ -1846,31 +1846,49 @@ export function populatePersonDropdown() {
 
 function setupTemplateEditorListeners() {
     const templatesCard = document.getElementById('card-templates');
-    if (!templatesCard || templatesCard.dataset.listenerAttached === 'true') {
-        return; // Verhindert, dass der Listener mehrfach hinzugefügt wird
+    if (!templatesCard) {
+        console.error("setupTemplateEditorListeners: Konnte #card-templates nicht finden.");
+        return;
     }
+    // WICHTIG: Den Listener nur EINMAL hinzufügen. Die dataset-Prüfung ist hier korrekt.
+    if (templatesCard.dataset.listenerAttached === 'true') {
+        // console.log("setupTemplateEditorListeners: Listener bereits angehängt."); // Optional: Zur Bestätigung
+        return;
+    }
+    templatesCard.dataset.listenerAttached = 'true';
+    console.log("setupTemplateEditorListeners: Hänge Listener an #card-templates an."); // Debugging
 
     templatesCard.addEventListener('click', async (e) => {
-        const templateItem = e.target.closest('.template-selection-item');
-        if (templateItem) {
-            selectedTemplateId = templateItem.dataset.templateId; // Merken, welcher Container gewählt wurde
-            document.getElementById('template-editor-title').textContent = `Einträge für Container "${TEMPLATES[selectedTemplateId].name}"`;
-            document.getElementById('template-item-editor').classList.remove('hidden'); // Editor anzeigen
-            renderTemplateList(); // Container-Liste neu rendern (um Auswahl hervorzuheben)
+        console.log("setupTemplateEditorListeners: Klick auf #card-templates erkannt.", e.target); // Debugging: Welches Element wurde geklickt?
 
-            // Listener für die Einträge dieses Containers starten
+        // --- Container AUSWÄHLEN Logik ---
+        const templateItem = e.target.closest('.template-selection-item');
+        if (templateItem && !e.target.closest('button') && !e.target.closest('select')) { // Stelle sicher, dass nicht auf Button geklickt wurde
+             console.log("setupTemplateEditorListeners: Klick auf Container-Auswahl-Item."); // Debugging
+            selectedTemplateId = templateItem.dataset.templateId;
+            console.log("setupTemplateEditorListeners: selectedTemplateId gesetzt auf:", selectedTemplateId); // Debugging
+            document.getElementById('template-editor-title').textContent = `Einträge für Container "${TEMPLATES[selectedTemplateId]?.name || 'Unbekannt'}"`;
+            document.getElementById('template-item-editor')?.classList.remove('hidden');
+            renderTemplateList();
+
             if (unsubscribeTemplateItems) unsubscribeTemplateItems();
-            const itemsSubCollectionRef = collection(checklistTemplatesCollectionRef, selectedTemplateId, 'template-items');
-            unsubscribeTemplateItems = onSnapshot(query(itemsSubCollectionRef), (snapshot) => {
-                TEMPLATE_ITEMS[selectedTemplateId] = [];
-                snapshot.forEach(doc => TEMPLATE_ITEMS[selectedTemplateId].push({ id: doc.id, ...doc.data() }));
-                renderTemplateItemsEditor(); // Einträge im Editor anzeigen
-            });
+            if (checklistTemplatesCollectionRef && selectedTemplateId) {
+                const itemsSubCollectionRef = collection(checklistTemplatesCollectionRef, selectedTemplateId, 'template-items');
+                unsubscribeTemplateItems = onSnapshot(query(itemsSubCollectionRef), (snapshot) => {
+                    TEMPLATE_ITEMS[selectedTemplateId] = [];
+                    snapshot.forEach(doc => TEMPLATE_ITEMS[selectedTemplateId].push({ id: doc.id, ...doc.data() }));
+                    renderTemplateItemsEditor();
+                });
+            } else {
+                 console.error("setupTemplateEditorListeners: checklistTemplatesCollectionRef oder selectedTemplateId fehlt für Item-Listener.");
+            }
             return;
         }
 
-        // Logik für "+ Eintrag hinzufügen" im Editor
+        // --- "+ Eintrag hinzufügen" Logik ---
         if (e.target.closest('#add-template-item-btn') && selectedTemplateId) {
+            console.log("setupTemplateEditorListeners: Klick auf '+ Eintrag hinzufügen'."); // Debugging
+            // ... (Restliche Logik für Eintrag hinzufügen bleibt gleich)
             const textInput = document.getElementById('new-template-item-text');
             const assigneeSelect = document.getElementById('new-template-item-assignee');
             const categorySelect = document.getElementById('new-template-item-category');
@@ -1891,75 +1909,109 @@ function setupTemplateEditorListeners() {
             assigneeSelect.value = '';
             categorySelect.value = '';
             importantCheckbox.checked = false;
-            textInput.focus(); // Cursor bleibt im Textfeld für nächsten Eintrag
+            textInput.focus();
             return;
         }
 
-        // Logik für "+ Container erstellen" (Formular ein/ausblenden)
-        const createForm = templatesCard.querySelector('#create-template-form');
-        const showCreateFormBtn = templatesCard.querySelector('#show-create-template-form-btn');
+        // --- "+ Container erstellen" (Formular ein/ausblenden) Logik ---
+        const createForm = templatesCard.querySelector('#create-template-form'); // Evtl. nicht mehr relevant?
+        const showCreateFormBtn = templatesCard.querySelector('#show-create-template-form-btn'); // Evtl. nicht mehr relevant?
         if (e.target.closest('#show-create-template-form-btn')) {
+            console.log("setupTemplateEditorListeners: Klick auf 'Formular anzeigen'."); // Debugging
             createForm?.classList.remove('hidden');
             showCreateFormBtn?.classList.add('hidden');
+            return; // Wichtig: Hier beenden, sonst wird evtl. der Lösch-Button geprüft
         }
 
-        // Logik für "Erstellen" Button (neuer Container)
+        // --- "Erstellen" Button (Neuer Container) Logik ---
         if (e.target.closest('#create-template-btn')) {
-            const newTemplateNameInput = document.getElementById('new-template-name');
-            const templateName = newTemplateNameInput?.value.trim();
-            if (!templateName) return alertUser("Bitte geben Sie einen Namen für den Container ein.", "error");
+            console.log("setupTemplateEditorListeners: Klick auf 'Container Erstellen'."); // Debugging
+            // ... (Restliche Logik für Container erstellen bleibt gleich)
+             const newTemplateNameInput = document.getElementById('new-template-name');
+             const templateName = newTemplateNameInput?.value.trim();
+             if (!templateName) return alertUser("Bitte geben Sie einen Namen für den Container ein.", "error");
 
-            try {
-                await addDoc(checklistTemplatesCollectionRef, { name: templateName, createdAt: serverTimestamp() });
-                alertUser(`Container "${templateName}" wurde erstellt!`, "success");
-                if(newTemplateNameInput) newTemplateNameInput.value = '';
-                createForm?.classList.add('hidden');
-                showCreateFormBtn?.classList.remove('hidden');
-                // renderChecklistSettingsView(); // Wird durch Listener erledigt
-            } catch (err) {
-                 console.error("Fehler beim Erstellen des Containers:", err);
-                 alertUser && alertUser('Fehler beim Erstellen des Containers.', 'error');
-            }
-            return;
+             try {
+                 await addDoc(checklistTemplatesCollectionRef, { name: templateName, createdAt: serverTimestamp() });
+                 alertUser(`Container "${templateName}" wurde erstellt!`, "success");
+                 if(newTemplateNameInput) newTemplateNameInput.value = '';
+                 createForm?.classList.add('hidden');
+                 showCreateFormBtn?.classList.remove('hidden');
+             } catch (err) {
+                  console.error("Fehler beim Erstellen des Containers:", err);
+                  alertUser && alertUser('Fehler beim Erstellen des Containers.', 'error');
+             }
+            return; // Wichtig: Hier beenden
         }
 
 
-        // Logik für "Diesen Container löschen" Button im Editor
+        // --- "Diesen Container löschen" Button Logik ---
         const deleteTemplateBtn = e.target.closest('#delete-template-btn');
+        console.log("setupTemplateEditorListeners: Prüfe, ob Lösch-Button geklickt wurde:", deleteTemplateBtn); // Debugging
+        console.log("setupTemplateEditorListeners: Aktueller Wert von selectedTemplateId:", selectedTemplateId); // Debugging
+
         if (deleteTemplateBtn && selectedTemplateId) {
+            console.log("setupTemplateEditorListeners: Bedingung für Löschen erfüllt. Starte Löschvorgang für ID:", selectedTemplateId); // Debugging
+
             const containerName = TEMPLATES[selectedTemplateId]?.name || 'Unbekannt';
+            
+            // Bestätigungsdialog anzeigen
             if (confirm(`Möchten Sie den Container "${containerName}" wirklich unwiderruflich löschen?`)) {
-                
-                // Wichtig: Merken wir uns die ID, bevor wir sie zurücksetzen
-                const idToDelete = selectedTemplateId; 
+                console.log("setupTemplateEditorListeners: Bestätigung zum Löschen erhalten."); // Debugging
+                const idToDelete = selectedTemplateId; // ID sichern
                 
                 try {
+                    console.log("setupTemplateEditorListeners: Versuche deleteDoc für Ref:", doc(checklistTemplatesCollectionRef, idToDelete).path); // Debugging
+                    
+                    if (!checklistTemplatesCollectionRef) throw new Error("checklistTemplatesCollectionRef ist nicht definiert!");
+                    
                     const templateRef = doc(checklistTemplatesCollectionRef, idToDelete);
                     await deleteDoc(templateRef);
                     
+                    console.log("setupTemplateEditorListeners: deleteDoc erfolgreich."); // Debugging
                     alertUser && alertUser('Container gelöscht.', 'success');
                     
-                    // --- FIX HIER: Auswahl zurücksetzen BEVOR neu gerendert wird ---
-                    selectedTemplateId = null; // Signalisiert, dass kein Container mehr gewählt ist
+                    selectedTemplateId = null; // Auswahl zurücksetzen
                     if (unsubscribeTemplateItems) unsubscribeTemplateItems(); // Listener stoppen
-                    // --- ENDE FIX ---
                     
+                    console.log("setupTemplateEditorListeners: Rufe renderChecklistSettingsView() auf."); // Debugging
                     renderChecklistSettingsView(); // Gesamte Ansicht neu laden
 
                 } catch (err) {
-                    console.error("Fehler beim Löschen des Containers:", err);
-                    alertUser && alertUser('Fehler beim Löschen. (Internetverbindung prüfen)', 'error');
-                    // Wichtig: Hier NICHT selectedTemplateId zurücksetzen, damit der User es erneut versuchen kann
+                    // Fehler im Detail ausgeben
+                    console.error("setupTemplateEditorListeners: FEHLER beim Löschen des Containers:", err); // Debugging
+                    alertUser && alertUser(`Fehler beim Löschen: ${err.message}. (Internet/Berechtigungen prüfen)`, 'error');
                 }
+            } else {
+                 console.log("setupTemplateEditorListeners: Löschen abgebrochen."); // Debugging
             }
-            return; // Wichtig: Funktion hier beenden
+            return; // Wichtig: Funktion hier beenden, auch wenn abgebrochen wurde
+        } else {
+             // Debugging: Warum wurde die Bedingung nicht erfüllt?
+             if (!deleteTemplateBtn) console.log("setupTemplateEditorListeners: Lösch-Bedingung nicht erfüllt (Button nicht gefunden).");
+             if (!selectedTemplateId) console.log("setupTemplateEditorListeners: Lösch-Bedingung nicht erfüllt (selectedTemplateId ist null/leer).");
         }
-        
-        // Hinweis: Die Logik für deleteTemplateItemBtn wurde entfernt, da der Button in renderTemplateItemsEditor entfernt wurde.
-        
-    }); // Ende addEventListener für templatesCard
 
-    templatesCard.dataset.listenerAttached = 'true';
+        // --- Logik für das Löschen einzelner ITEMS (falls der Button zurückkommt) ---
+        const deleteTemplateItemBtn = e.target.closest('.delete-template-item-btn');
+        if (deleteTemplateItemBtn && selectedTemplateId) {
+            console.log("setupTemplateEditorListeners: Klick auf Item-Löschen erkannt (obwohl Button entfernt sein sollte)."); // Debugging
+            // ... (Restliche Logik für Item löschen bleibt gleich)
+             const itemId = deleteTemplateItemBtn.dataset.itemId;
+             if (confirm("Möchten Sie diesen Eintrag wirklich aus dem Container löschen?")) {
+                 try {
+                     const itemRef = doc(checklistTemplatesCollectionRef, selectedTemplateId, 'template-items', itemId);
+                     await deleteDoc(itemRef);
+                     alertUser && alertUser('Eintrag gelöscht.', 'success');
+                 } catch (err) {
+                     console.error("Fehler beim Löschen des Eintrags:", err);
+                     alertUser && alertUser('Fehler beim Löschen des Eintrags.', 'error');
+                 }
+             }
+            return;
+        }
+
+    }); // Ende addEventListener für templatesCard
 
     // Listener für das Template-Anwenden-Modal (bleiben unverändert)
     document.getElementById('closeTemplateModalBtn')?.addEventListener('click', closeTemplateModal);
