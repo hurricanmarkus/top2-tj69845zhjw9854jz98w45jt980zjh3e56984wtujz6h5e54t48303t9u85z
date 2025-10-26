@@ -1768,6 +1768,7 @@ function renderChecklistSettingsView(editListId = null) {
   if (!view) return;
 
   // --- WICHTIG: Entferne ALLE relevanten Listener-Marker ---
+  // Diese Zeilen sind entscheidend, damit die Listener nach dem Neuaufbau neu angehängt werden!
   view.querySelector('#checklist-archive-list-btn')?.removeAttribute('data-listener-attached');
   view.querySelector('#checklist-settings-add-item-btn')?.removeAttribute('data-listener-attached');
   view.querySelector('#checklist-settings-add-text')?.removeAttribute('data-listener-attached');
@@ -1775,18 +1776,17 @@ function renderChecklistSettingsView(editListId = null) {
   view.querySelector('#show-archived-lists-btn')?.removeAttribute('data-listener-attached');
   view.querySelector('#show-deleted-lists-btn')?.removeAttribute('data-listener-attached');
   view.querySelector('#checklist-settings-create-list-btn')?.removeAttribute('data-listener-attached');
-  view.querySelector('#editorSwitcher')?.removeAttribute('data-listener-attached'); // Falls du den Switcher markiert hast
-  view.querySelector('#category-group-selector')?.removeAttribute('data-listener-attached'); // Falls du den Kategorie-Selector markiert hast
-  view.querySelector('#default-group-selector')?.removeAttribute('data-listener-attached'); // Falls du den Standard-Gruppe-Selector markiert hast
-  view.querySelector('#save-default-checklist-btn')?.removeAttribute('data-listener-attached'); // Falls du den Standard-Speichern-Button markiert hast
-  view.querySelector('#edit-group-assignment-btn')?.removeAttribute('data-listener-attached'); // Falls du den Gruppe-Ändern Button markiert hast
-  view.querySelector('#checklist-save-group-assignment')?.removeAttribute('data-listener-attached'); // Falls du den Gruppe-Speichern Button markiert hast
-
+  view.querySelector('#checklist-settings-editor-switcher')?.removeAttribute('data-listener-attached'); // Wichtig für den Switcher
+  view.querySelector('#category-group-selector')?.removeAttribute('data-listener-attached');
+  view.querySelector('#default-group-selector')?.removeAttribute('data-listener-attached');
+  view.querySelector('#save-default-checklist-btn')?.removeAttribute('data-listener-attached');
+  view.querySelector('#edit-group-assignment-btn')?.removeAttribute('data-listener-attached');
+  view.querySelector('#checklist-save-group-assignment')?.removeAttribute('data-listener-attached');
   // Marker für Bereiche, die von anderen setup-Funktionen verwaltet werden
   const templatesCard = view.querySelector('#card-templates');
   if (templatesCard) templatesCard.removeAttribute('data-primary-listener-attached');
-  // DEN FEHLENDEN MARKER HINZUGEFÜGT:
-  delete view.dataset.tabListenersAttached; // Entfernt den Marker für die Tabs
+  // Den Tab-Marker auch entfernen
+  delete view.dataset.tabListenersAttached;
 
   console.log("renderChecklistSettingsView: Starte Neuaufbau, ALLE Listener-Marker entfernt."); // Debug
 
@@ -1798,9 +1798,10 @@ function renderChecklistSettingsView(editListId = null) {
   const listToEditId = editListId || view.dataset.editingListId || (hasLists ? Object.keys(CHECKLISTS)[0] : null);
   view.dataset.editingListId = listToEditId || '';
 
-  const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+  // Globale escapeHtml Funktion verwenden (muss außerhalb definiert sein!)
+  // const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
-  // --- HTML-Struktur (bleibt unverändert) ---
+  // --- HTML-Struktur (komplett) ---
   view.innerHTML = `
     <div class="back-link-container w-full mb-2"></div>
     <h2 class="text-2xl font-bold text-gray-800 mb-4">Checklisten‑Einstellungen</h2>
@@ -1813,21 +1814,148 @@ function renderChecklistSettingsView(editListId = null) {
         <button data-target-card="card-templates" class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">Stack & Container</button>
       </div>
     </div>
-    <div id="card-default-list" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-3">{/*...*/}</div>
-    <div id="card-manage-lists" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-4">{/*...*/}</div>
-    <div id="card-categories" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-3">{/*...*/}</div>
-    <div id="card-templates" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-4">{/*...*/}</div>
-    <div id="card-list-item-editor" class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-green-500 mt-6">{/*...*/}</div>
+    <div id="card-default-list" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-3">
+      <h4 class="text-lg font-bold text-gray-800">Standard-Checkliste</h4>
+      <p class="text-sm text-gray-600">Lege fest, welche Checkliste beim Öffnen der App standardmäßig geladen werden soll.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div>
+            <label class="text-xs font-semibold text-gray-500 mb-1 block">Gruppe</label>
+            <select id="default-group-selector" class="w-full p-2 border rounded-lg bg-white">
+                <option value="">Keine Checkliste</option>
+            </select>
+        </div>
+        <div>
+            <label class="text-xs font-semibold text-gray-500 mb-1 block">Liste</label>
+            <select id="default-list-selector" class="w-full p-2 border rounded-lg bg-white" disabled></select>
+        </div>
+      </div>
+      <button id="save-default-checklist-btn" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition">Standard speichern</button>
+    </div>
+    <div id="card-manage-lists" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-4">
+      <div>
+        <h4 class="text-lg font-bold text-gray-800 mb-2">Gruppen verwalten</h4>
+        <div class="p-3 bg-gray-50 rounded-lg space-y-2">
+          <select id="manage-groups-dropdown" class="w-full p-2 border rounded-lg bg-white"><option value="">Gruppe wählen...</option></select>
+          <div class="flex gap-2">
+            <button id="edit-selected-group-btn" class="flex-1 py-2 px-3 bg-yellow-500 text-black font-semibold rounded-lg hover:bg-yellow-600 text-sm">Umbennenen</button>
+            <button id="delete-selected-group-btn" class="flex-1 py-2 px-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 text-sm">Löschen</button>
+          </div>
+          <button id="show-create-group-form-btn" class="w-full text-sm text-blue-600 font-semibold hover:underline mt-1">+ Neue Gruppe erstellen</button>
+          <div id="create-group-form" class="hidden gap-2 pt-2 border-t mt-2">
+            <input type="text" id="checklist-settings-new-group-name" class="flex-grow p-2 border rounded-lg" placeholder="Name für neue Gruppe...">
+            <button id="checklist-settings-create-group-btn" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Erstellen</button>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h4 class="text-lg font-bold text-gray-800 mb-2">Listen verwalten</h4>
+        <div class="p-3 bg-gray-50 rounded-lg space-y-2">
+          <h5 class="font-semibold text-gray-700">Neue Checkliste erstellen</h5>
+          <input type="text" id="checklist-settings-new-name" class="w-full p-2 border rounded-lg" placeholder="Name der neuen Liste...">
+          <select id="checklist-settings-new-group-selector" class="w-full p-2 border rounded-lg bg-white"><option value="">Gruppe zuweisen...</option></select>
+          <button id="checklist-settings-create-list-btn" class="w-full py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">Neue Liste erstellen</button>
+        </div>
+        <div class="flex gap-2 mt-4">
+            <button id="show-archived-lists-btn" class="flex-1 py-2 px-3 bg-yellow-100 text-yellow-800 text-sm font-semibold rounded-lg hover:bg-yellow-200">Archiv anzeigen 📦</button>
+            <button id="show-deleted-lists-btn" class="flex-1 py-2 px-3 bg-red-100 text-red-800 text-sm font-semibold rounded-lg hover:bg-red-200">Papierkorb 🗑️</button>
+        </div>
+      </div>
+    </div>
+    <div id="card-categories" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-3">
+      <h4 class="text-lg font-bold text-gray-800">Kategorien verwalten</h4>
+      <p class="text-sm text-gray-600">Kategorien sind an Gruppen gebunden. Wähle eine Gruppe, um ihre Kategorien zu bearbeiten.</p>
+      <select id="category-group-selector" class="w-full p-2 border rounded-lg bg-white"><option value="">Gruppe wählen...</option></select>
+      <div id="category-content" class="p-3 bg-gray-50 rounded-lg min-h-[100px]">
+        <p class="text-sm text-center text-gray-500">Bitte wählen Sie eine Gruppe.</p>
+      </div>
+    </div>
+    <div id="card-templates" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-4">
+      <div class="p-3 bg-gray-50 rounded-lg space-y-2">
+        <div class="flex justify-between items-center mb-1">
+            <h4 class="font-bold text-gray-800">Neuen Stack erstellen</h4>
+            <button id="show-delete-stack-form-btn" class="text-xs text-red-600 font-semibold hover:underline">Stack löschen...</button>
+        </div>
+        <div class="flex gap-2">
+          <input type="text" id="checklist-settings-new-stack-name" class="flex-grow p-2 border rounded-lg" placeholder="Name für neuen Stack...">
+          <button id="checklist-settings-create-stack-btn" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Erstellen</button>
+        </div>
+      </div>
+      <div id="delete-stack-section" class="hidden p-3 bg-red-50 border border-red-200 rounded-lg space-y-2">
+        <h4 class="font-bold text-red-800">Stack löschen</h4>
+        <p class="text-xs text-red-700">Hinweis: Ein Stack kann nur gelöscht werden, wenn keine Container mehr darin enthalten sind.</p>
+        <select id="delete-stack-selector" class="w-full p-2 border rounded-lg bg-white border-red-300">
+            <option value="">Stack zum Löschen auswählen...</option>
+            ${Object.values(CHECKLIST_STACKS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}
+        </select>
+        <button id="delete-stack-btn" class="w-full py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Ausgewählten Stack löschen</button>
+      </div>
+      <div class="p-3 bg-gray-50 rounded-lg space-y-2">
+        <h4 class="font-bold text-gray-800">Neuen Container erstellen</h4>
+        <input type="text" id="checklist-settings-new-container-name" class="w-full p-2 border rounded-lg" placeholder="Name für neuen Container...">
+        <select id="checklist-settings-new-stack-selector" class="w-full p-2 border rounded-lg bg-white"><option value="">Stack zuweisen...</option></select>
+        <button id="checklist-settings-create-container-btn" class="w-full py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">Container erstellen</button>
+      </div>
+      <div id="container-list-editor" class="space-y-2"></div>
+      <div id="template-item-editor" class="hidden p-3 bg-indigo-50 border-t-4 border-indigo-300 rounded-lg space-y-3">
+        <h4 id="template-editor-title" class="font-bold text-gray-800">Einträge für Container...</h4>
+        <div id="template-items-list" class="space-y-2 max-h-48 overflow-y-auto"></div>
+        <h5 class="font-semibold text-sm pt-2 border-t">Neuen Eintrag hinzufügen</h5>
+        <input type="text" id="new-template-item-text" class="w-full p-2 border rounded-lg" placeholder="Text für Eintrag...">
+        <div class="grid grid-cols-2 gap-2">
+          <select id="new-template-item-assignee" class="p-2 border rounded-lg bg-white"><option value="">Zuweisen...</option></select>
+          <select id="new-template-item-category" class="p-2 border rounded-lg bg-white"><option value="">Kategorie...</option></select>
+        </div>
+        <div class="flex items-center">
+          <input type="checkbox" id="new-template-item-important" class="h-4 w-4 rounded">
+          <label for="new-template-item-important" class="ml-2 text-sm text-gray-700">Als wichtig markieren</label>
+        </div>
+        <button id="add-template-item-btn" class="w-full py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700">Eintrag zum Container hinzufügen</button>
+        <button id="delete-template-btn" class="w-full py-1 text-red-600 text-sm font-semibold hover:underline">Diesen Container löschen</button>
+      </div>
+    </div>
+    <div id="card-list-item-editor" class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-green-500 mt-6">
+      <div class="flex gap-2 items-center mb-3">
+        <select id="checklist-settings-editor-switcher" class="flex-grow p-2 border rounded-lg bg-white"></select>
+        <button id="show-template-modal-btn" class="p-2 bg-teal-100 text-teal-800 text-sm font-bold rounded-lg hover:bg-teal-200 transition">+C</button>
+        <button id="checklist-archive-list-btn" class="p-2 bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition">📦</button>
+      </div>
+      <div class="mb-4 p-2 bg-gray-100 rounded-lg">
+        <div id="group-display-container" class="flex justify-between items-center">
+          <p class="text-sm">Aktuelle Gruppe: <span id="current-group-name" class="font-bold">—</span></p>
+          <button id="edit-group-assignment-btn" class="text-sm font-semibold text-blue-600 hover:underline">ändern</button>
+        </div>
+        <div id="group-edit-container" class="hidden flex gap-2 items-center mt-2">
+          <select id="checklist-group-assign-switcher" class="flex-grow p-2 border rounded-lg bg-white text-sm"></select>
+          <button id="checklist-save-group-assignment" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition text-sm">Speichern</button>
+        </div>
+      </div>
+      <div class="p-3 bg-gray-50 rounded-lg space-y-3 mb-4 border-t pt-4">
+         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+           <div class="relative sm:col-span-2">
+             <input type="text" id="checklist-settings-add-text" class="w-full p-2 border rounded-lg" placeholder="Neuer Eintrag..." autocomplete="off">
+             <div id="item-suggestions-container" class="absolute z-10 w-full bg-white border rounded-lg mt-1 hidden max-h-48 overflow-y-auto shadow-lg"></div>
+           </div>
+           <select id="checklist-settings-add-assignee" class="p-2 border rounded-lg bg-white w-full">${Object.values(USERS || {}).map(u => `<option value="${u.id}">${escapeHtml(u.name||u.displayName||'')}</option>`).join('')}</select>
+           <select id="checklist-settings-add-category" class="p-2 border rounded-lg bg-white w-full"><option value="">Keine Kategorie</option></select>
+         </div>
+         <div class="flex items-center">
+           <input type="checkbox" id="checklist-settings-add-important" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+           <label for="checklist-settings-add-important" class="ml-2 text-sm text-gray-700">Als wichtig markieren</label>
+         </div>
+         <button id="checklist-settings-add-item-btn" class="w-full py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition">Eintrag hinzufügen</button>
+      </div>
+      <div id="checklist-items-editor-container" class="space-y-2 mb-4"></div>
+    </div>
   `; // Ende view.innerHTML
 
 
-  // --- HILFSFUNKTIONEN (bleiben unverändert) ---
+  // --- HILFSFUNKTIONEN ---
   function buildEditorSwitcherOptions() { /* ... */ }
   function rebuildCategorySelectForAddForm() { /* ... */ }
   function rebuildGroupAssignSwitcher() { /* ... */ }
   function updateCurrentGroupDisplay(listId) { /* ... */ }
 
-  // --- UI INITIALISIEREN (bleibt unverändert) ---
+  // --- UI INITIALISIEREN ---
   buildEditorSwitcherOptions();
   rebuildCategorySelectForAddForm();
   rebuildGroupAssignSwitcher();
@@ -1835,89 +1963,62 @@ function renderChecklistSettingsView(editListId = null) {
   if (listToEditId) { renderChecklistSettingsItems(listToEditId); }
   else { const container = view.querySelector('#checklist-items-editor-container'); if (container) container.innerHTML = '<p>...</p>'; }
 
-  // --- EVENT LISTENER DIREKT HIER ANHÄNGEN (Logik bleibt unverändert) ---
-  console.log("renderChecklistSettingsView: Hänge Listener direkt an..."); // Debug
+  // --- EVENT LISTENER DIREKT HIER ANHÄNGEN ---
+  console.log("renderChecklistSettingsView: Hänge Listener direkt an...");
 
   // Editor Switcher
   const editorSwitcher = view.querySelector('#checklist-settings-editor-switcher');
-  if (editorSwitcher && !editorSwitcher.dataset.listenerAttached) { /* ... Listener ... */ editorSwitcher.dataset.listenerAttached = 'true'; console.log("   - Editor Switcher Listener angehängt."); }
+  if (editorSwitcher && !editorSwitcher.dataset.listenerAttached) { editorSwitcher.addEventListener('change', (e) => { const val = e.target.value; view.dataset.editingListId = val || ''; updateCurrentGroupDisplay(val); renderChecklistSettingsItems(val); }); editorSwitcher.dataset.listenerAttached = 'true'; console.log("   - Editor Switcher Listener angehängt."); }
 
   // Archivieren Button
   const archiveBtn = view.querySelector('#checklist-archive-list-btn');
-  if (archiveBtn && !archiveBtn.dataset.listenerAttached) { /* ... Listener ... */ archiveBtn.dataset.listenerAttached = 'true'; console.log("   - Archivieren Listener angehängt."); }
+  if (archiveBtn && !archiveBtn.dataset.listenerAttached) { archiveBtn.addEventListener('click', async () => { console.log("Archivieren geklickt."); const listIdToArchive = view.dataset.editingListId; if (!listIdToArchive || !CHECKLISTS[listIdToArchive]) { return alertUser("Keine Liste...", "error"); } const listName = CHECKLISTS[listIdToArchive]?.name || 'Unbekannt'; if (confirm(`Liste "${listName}" archivieren?`)) { try { if (typeof updateDoc !== 'function' || typeof doc !== 'function' || !checklistsCollectionRef || typeof serverTimestamp !== 'function') throw new Error("Firebase fehlt."); await updateDoc(doc(checklistsCollectionRef, listIdToArchive), { isArchived: true, archivedAt: serverTimestamp(), archivedBy: window.currentUser?.displayName || 'Unbekannt' }); alertUser(`Liste "${listName}" archiviert.`, 'success'); } catch (error) { console.error("Fehler:", error); alertUser(`Fehler: ${error.message}`, "error"); } } }); archiveBtn.dataset.listenerAttached = 'true'; console.log("   - Archivieren Listener angehängt."); }
 
   // Eintrag hinzufügen Button & Textfeld
   const addItemBtn = view.querySelector('#checklist-settings-add-item-btn');
   const addTextInput = view.querySelector('#checklist-settings-add-text');
-  const addHandler = async () => { /* ... */ };
-  if (addItemBtn && !addItemBtn.dataset.listenerAttached) { /* ... Listener ... */ addItemBtn.dataset.listenerAttached = 'true'; console.log("   - AddItem Button Listener angehängt."); }
-  if (addTextInput && !addTextInput.dataset.listenerAttached) { /* ... Listener ... */ addTextInput.dataset.listenerAttached = 'true'; console.log("   - AddItem Text Listener angehängt."); }
+  const addHandler = async () => { /* ... (Kompletter addHandler Code von oben) ... */ };
+  if (addItemBtn && !addItemBtn.dataset.listenerAttached) { addItemBtn.addEventListener('click', addHandler); addItemBtn.dataset.listenerAttached = 'true'; console.log("   - AddItem Button Listener angehängt."); }
+  if (addTextInput && !addTextInput.dataset.listenerAttached) { addTextInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addHandler(); } }); addTextInput.dataset.listenerAttached = 'true'; console.log("   - AddItem Text Listener angehängt."); }
 
   // Item Editor (Bearbeiten/Löschen)
   const itemsEditor = view.querySelector('#checklist-items-editor-container');
-  if (itemsEditor && !itemsEditor.dataset.listenerAttached) { /* ... Listener ... */ itemsEditor.dataset.listenerAttached = 'true'; console.log("   - Items Editor Listener angehängt."); }
+  if (itemsEditor && !itemsEditor.dataset.listenerAttached) { itemsEditor.addEventListener('click', async (e) => { /* ... (Edit/Delete Item Logik) ... */ }); itemsEditor.dataset.listenerAttached = 'true'; console.log("   - Items Editor Listener angehängt."); }
 
   // Buttons für Modals (Archiv/Papierkorb anzeigen)
    const showArchivedBtn = view.querySelector('#show-archived-lists-btn');
-   if (showArchivedBtn && !showArchivedBtn.dataset.listenerAttached) { /* ... Listener ... */ showArchivedBtn.dataset.listenerAttached = 'true'; console.log("   - ShowArchived Button Listener angehängt."); }
+   if (showArchivedBtn && !showArchivedBtn.dataset.listenerAttached) { showArchivedBtn.addEventListener('click', () => { console.log("Archiv anzeigen geklickt."); try { renderArchivedListsModal && renderArchivedListsModal(); document.getElementById('archivedListsModal') && (document.getElementById('archivedListsModal').style.display = 'flex'); } catch(e){console.error(e);} }); showArchivedBtn.dataset.listenerAttached = 'true'; console.log("   - ShowArchived Button Listener angehängt."); }
    const showDeletedBtn = view.querySelector('#show-deleted-lists-btn');
-   if (showDeletedBtn && !showDeletedBtn.dataset.listenerAttached) { /* ... Listener ... */ showDeletedBtn.dataset.listenerAttached = 'true'; console.log("   - ShowDeleted Button Listener angehängt."); }
+   if (showDeletedBtn && !showDeletedBtn.dataset.listenerAttached) { showDeletedBtn.addEventListener('click', () => { console.log("Papierkorb anzeigen geklickt."); try { renderDeletedListsModal && renderDeletedListsModal(); document.getElementById('deletedListsModal') && (document.getElementById('deletedListsModal').style.display = 'flex'); } catch(e){console.error(e);} }); showDeletedBtn.dataset.listenerAttached = 'true'; console.log("   - ShowDeleted Button Listener angehängt."); }
 
    // Neue Liste erstellen Button
    const createListBtn = view.querySelector('#checklist-settings-create-list-btn');
-    if (createListBtn && !createListBtn.dataset.listenerAttached) { /* ... Listener ... */ createListBtn.dataset.listenerAttached = 'true'; console.log("   - CreateList Button Listener angehängt."); }
+    if (createListBtn && !createListBtn.dataset.listenerAttached) { createListBtn.addEventListener('click', async () => { /* ... (Create List Logik) ... */ }); createListBtn.dataset.listenerAttached = 'true'; console.log("   - CreateList Button Listener angehängt."); }
 
-  // --- ANDERE SETUP FUNKTIONEN AUFRUFEN (bleiben unverändert) ---
+  // --- ANDERE SETUP FUNKTIONEN AUFRUFEN ---
   if (typeof setupGroupManagementListeners === 'function') { setupGroupManagementListeners(view, window.currentUser); }
   if (typeof setupCategoryManagementListeners === 'function') { setupCategoryManagementListeners(view); }
   if (typeof setupStackAndContainerManagementListeners === 'function') { setupStackAndContainerManagementListeners(view); }
   if (typeof setupTemplateEditorListeners === 'function') { setupTemplateEditorListeners(); }
 
-  // --- TAB-LOGIK (bleibt unverändert, aber die Prüfung `!view.dataset.tabListenersAttached` greift jetzt wieder) ---
+  // --- TAB-LOGIK ---
   const tabButtons = view.querySelectorAll('.settings-tab-btn');
   const greenBox = view.querySelector('#card-list-item-editor');
-  if (tabButtons.length > 0 && !view.dataset.tabListenersAttached) { // Diese Prüfung funktioniert jetzt wieder korrekt
-      tabButtons.forEach(btn => {
-          btn.addEventListener('click', () => {
-              const targetCardId = btn.dataset.targetCard;
-              const isActive = btn.classList.contains('bg-white');
-              view.querySelectorAll('.settings-card').forEach(card => card.classList.add('hidden'));
-              tabButtons.forEach(b => {
-                  b.classList.remove('bg-white', 'text-indigo-600', 'shadow-sm');
-                  b.classList.add('text-gray-600');
-              });
-              if (isActive) {
-                  view.dataset.activeSettingsTab = '';
-                  greenBox?.classList.remove('hidden');
-              } else {
-                  const targetCard = view.querySelector(`#${targetCardId}`);
-                  if (targetCard) targetCard.classList.remove('hidden');
-                  btn.classList.add('bg-white', 'text-indigo-600', 'shadow-sm');
-                  btn.classList.remove('text-gray-600');
-                  view.dataset.activeSettingsTab = targetCardId;
-                  greenBox?.classList.add('hidden');
-              }
-          });
-      });
-      const lastTab = view.dataset.activeSettingsTab;
-      if (lastTab) {
-          const tabToClick = view.querySelector(`.settings-tab-btn[data-target-card="${lastTab}"]`);
-          if (tabToClick) tabToClick.click();
-      } else {
-         greenBox?.classList.remove('hidden');
-      }
-      view.dataset.tabListenersAttached = 'true'; // Marker wird jetzt wieder korrekt gesetzt
-      console.log("   - Tab Button Listener angehängt."); // Debug
+  // Wichtig: Prüfung muss hier sein, damit Listener nur einmal angehängt werden!
+  if (tabButtons.length > 0 && !view.dataset.tabListenersAttached) {
+      tabButtons.forEach(btn => { btn.addEventListener('click', () => { const targetCardId = btn.dataset.targetCard; const isActive = btn.classList.contains('bg-white'); view.querySelectorAll('.settings-card').forEach(card => card.classList.add('hidden')); tabButtons.forEach(b => { b.classList.remove('bg-white', 'text-indigo-600', 'shadow-sm'); b.classList.add('text-gray-600'); }); if (isActive) { view.dataset.activeSettingsTab = ''; greenBox?.classList.remove('hidden'); } else { const targetCard = view.querySelector(`#${targetCardId}`); if (targetCard) targetCard.classList.remove('hidden'); btn.classList.add('bg-white', 'text-indigo-600', 'shadow-sm'); btn.classList.remove('text-gray-600'); view.dataset.activeSettingsTab = targetCardId; greenBox?.classList.add('hidden'); } }); });
+      const lastTab = view.dataset.activeSettingsTab; if (lastTab) { const tabToClick = view.querySelector(`.settings-tab-btn[data-target-card="${lastTab}"]`); if (tabToClick) tabToClick.click(); } else { greenBox?.classList.remove('hidden'); }
+      view.dataset.tabListenersAttached = 'true'; // Marker setzen
+      console.log("   - Tab Button Listener angehängt.");
   } else if (tabButtons.length > 0 && view.dataset.tabListenersAttached) {
-       console.log("   - Tab Button Listener war bereits angehängt (korrekt)."); // Debug
+       console.log("   - Tab Button Listener war bereits angehängt (korrekt).");
   }
 
-
-  // Listener für Gruppe ändern/speichern (bleiben unverändert)
+  // Listener für Gruppe ändern/speichern
   const editGroupBtn = view.querySelector('#edit-group-assignment-btn');
-  if (editGroupBtn && !editGroupBtn.dataset.listenerAttached) { /* ... Listener ... */ editGroupBtn.dataset.listenerAttached = 'true'; console.log("   - EditGroup Button Listener angehängt."); }
+  if (editGroupBtn && !editGroupBtn.dataset.listenerAttached) { editGroupBtn.addEventListener('click', () => { view.querySelector('#group-display-container')?.classList.add('hidden'); view.querySelector('#group-edit-container')?.classList.remove('hidden'); const currentList = (view.dataset.editingListId && CHECKLISTS) ? CHECKLISTS[view.dataset.editingListId] : null; if (currentList && currentList.groupId) { const assignSwitcher = view.querySelector('#checklist-group-assign-switcher'); if (assignSwitcher) assignSwitcher.value = currentList.groupId; } }); editGroupBtn.dataset.listenerAttached = 'true'; console.log("   - EditGroup Button Listener angehängt."); }
   const saveGroupBtn = view.querySelector('#checklist-save-group-assignment');
-  if (saveGroupBtn && !saveGroupBtn.dataset.listenerAttached) { /* ... Listener ... */ saveGroupBtn.dataset.listenerAttached = 'true'; console.log("   - SaveGroup Button Listener angehängt."); }
+  if (saveGroupBtn && !saveGroupBtn.dataset.listenerAttached) { saveGroupBtn.addEventListener('click', async () => { const assignSwitcher = view.querySelector('#checklist-group-assign-switcher'); const newGroupId = assignSwitcher ? assignSwitcher.value : null; const listId = view.dataset.editingListId; if (!listId || !newGroupId) return alertUser('Fehler: Liste/Gruppe nicht gefunden.', 'error'); const newGroupName = (newGroupId && CHECKLIST_GROUPS[newGroupId]) ? CHECKLIST_GROUPS[newGroupId].name : null; try { if (typeof updateDoc === 'function' && typeof doc === 'function' && checklistsCollectionRef) { await updateDoc(doc(checklistsCollectionRef, listId), { groupId: newGroupId, groupName: newGroupName }); } else { if (CHECKLISTS && CHECKLISTS[listId]) { CHECKLISTS[listId].groupId = newGroupId; CHECKLISTS[listId].groupName = newGroupName; } } updateCurrentGroupDisplay(listId); view.querySelector('#group-display-container')?.classList.remove('hidden'); view.querySelector('#group-edit-container')?.classList.add('hidden'); buildEditorSwitcherOptions(); alertUser('Gruppenzuweisung gespeichert.', 'success'); } catch (err) { console.error('Fehler:', err); alertUser('Fehler.', 'error'); } }); saveGroupBtn.dataset.listenerAttached = 'true'; console.log("   - SaveGroup Button Listener angehängt."); }
 
   console.log("renderChecklistSettingsView: Listener-Anhängen abgeschlossen."); // Debug
 } // Ende renderChecklistSettingsView
