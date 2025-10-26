@@ -5,6 +5,22 @@
 // Hinweise:
 //  - Wenn du eine alte export { ... } Liste am Dateianfang hast, entferne sie (Duplicate export).
 //  - Nach Austausch: Strg+F5 (hartes Neuladen).
+// füge das in checklist.js ein (z. B. unter den Helpern oder neben anderen exportierten Funktionen)
+export function populatePersonDropdown(selectedId = '') {
+  const sel = document.getElementById('person-select');
+  if (!sel) return;
+  // clear and build options
+  const users = Object.values(window.USERS || {});
+  const html = ['<option value="">Person wählen...</option>']
+    .concat(users.map(u => {
+      const label = escapeHtml(u.name || u.displayName || u.email || u.id || 'Unbenannt');
+      return `<option value="${u.id}" ${String(u.id) === String(selectedId) ? 'selected' : ''}>${label}</option>`;
+    })).join('');
+  sel.innerHTML = html;
+}
+
+// optional: für Debugging / Kompatibilität auch an window hängen
+window.populatePersonDropdown = populatePersonDropdown;
 
 /* Firestore helpers (imported in original project). We reference them if available. */
 const hasFirestore = (typeof addDoc === 'function' && typeof updateDoc === 'function' && typeof deleteDoc === 'function');
