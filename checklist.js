@@ -1167,15 +1167,13 @@ function setupStackAndContainerManagementListeners(view) {
 
 // Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
 // Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
+// Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
 function renderChecklistSettingsView(editListId = null) {
   const view = document.getElementById('checklistSettingsView');
   if (!view) return;
 
   // --- BEGINN FIX: "ERLEDIGT-MARKIERUNGEN" LÖSCHEN ---
-  // Wenn die Funktion neu aufgerufen wird (z.B. nach Löschen),
-  // wird der Inhalt (innerHTML) komplett neu erstellt.
-  // Wir müssen diese Markierungen löschen, damit die "setup" Funktionen
-  // wissen, dass sie die Listener an die NEUEN Knöpfe anhängen müssen.
+  // Stellt sicher, dass alle Listener nach einer Aktion (z.B. Löschen) neu geladen werden.
   delete view.dataset.listenersSetup;
   delete view.dataset.groupListenersAttached;
   delete view.dataset.categoryListenersAttached;
@@ -1211,10 +1209,20 @@ function renderChecklistSettingsView(editListId = null) {
     <div id="card-default-list" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-3">
       <h4 class="text-lg font-bold text-gray-800">Standard-Checkliste</h4>
       <p class="text-sm text-gray-600">Lege fest, welche Checkliste beim Öffnen der App standardmäßig geladen werden soll.</p>
-      <select id="default-checklist-selector" class="w-full p-2 border rounded-lg bg-white"></select>
+      
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div>
+            <label class="text-xs font-semibold text-gray-500 mb-1 block">Gruppe</label>
+            <select id="default-group-selector" class="w-full p-2 border rounded-lg bg-white"></select>
+        </div>
+        <div>
+            <label class="text-xs font-semibold text-gray-500 mb-1 block">Liste</label>
+            <select id="default-list-selector" class="w-full p-2 border rounded-lg bg-white" disabled></select>
+        </div>
+      </div>
+      
       <button id="save-default-checklist-btn" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition">Standard speichern</button>
     </div>
-
     <div id="card-manage-lists" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-4">
       <div>
         <h4 class="text-lg font-bold text-gray-800 mb-2">Gruppen verwalten</h4>
@@ -1360,10 +1368,16 @@ function renderChecklistSettingsView(editListId = null) {
   function rebuildGroupAssignSwitcher() {
     const sel = view.querySelector('#checklist-group-assign-switcher');
     if (!sel) return;
+    
+    // --- BEGINN FIX 1 (KEINE "KEINE" GRUPPE) ---
+    // Die Option "(Keine)" wird entfernt.
     const html = Object.values(CHECKLIST_GROUPS || {}).map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
     const prev = sel.value;
-    sel.innerHTML = `<option value="">(Keine)</option>` + html;
-    if (prev) sel.value = prev;
+    sel.innerHTML = html; // Die Option <option value="">(Keine)</option> wurde entfernt.
+    if (prev) {
+      sel.value = prev;
+    }
+    // --- ENDE FIX 1 ---
   }
 
   // populate initial selects and editor-switcher
@@ -1392,19 +1406,51 @@ function renderChecklistSettingsView(editListId = null) {
     editorSwitcher.dataset.listenerAttached = '1';
   }
   
-  // 1. "Standard" Tab-Inhalt füllen
-  const defaultSelector = view.querySelector('#default-checklist-selector');
-  if (defaultSelector) {
-      const groups = Object.values(CHECKLIST_GROUPS || {});
-      const opts = groups.map(g => {
-        const lists = Object.values(CHECKLISTS || {}).filter(l => l.groupId === g.id);
-        if (lists.length === 0) return '';
-        return `<optgroup label="${escapeHtml(g.name)}">${lists.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('')}</optgroup>`;
-      }).join('');
-      defaultSelector.innerHTML = `<option value="">Keine Standard-Liste</option>` + opts;
-      // Aktuellen Standardwert setzen
-      if (window.adminSettings && window.adminSettings.defaultChecklistId) {
-          defaultSelector.value = window.adminSettings.defaultChecklistId;
+  // --- BEGINN FIX 3 (NEUE LOGIK FÜR STANDARD-CHECKLISTE) ---
+
+  // 1. "Standard" Tab-Inhalt füllen (Zwei Dropdowns)
+  const defaultGroupSelector = view.querySelector('#default-group-selector');
+  const defaultListSelector = view.querySelector('#default-list-selector');
+  
+  if (defaultGroupSelector && defaultListSelector) {
+      // Gruppe füllen
+      const groupOpts = Object.values(CHECKLIST_GROUPS || {}).map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
+      defaultGroupSelector.innerHTML = `<option value="">Gruppe wählen...</option>` + groupOpts;
+      defaultListSelector.innerHTML = `<option value="">Zuerst Gruppe wählen</option>`;
+      
+      // Listener für Gruppe
+      if (!defaultGroupSelector.dataset.listenerAttached) {
+          defaultGroupSelector.addEventListener('change', () => {
+              const selectedGroupId = defaultGroupSelector.value;
+              if (selectedGroupId) {
+                  const listsInGroup = Object.values(CHECKLISTS || {}).filter(l => l.groupId === selectedGroupId);
+                  if (listsInGroup.length > 0) {
+                      const listOpts = listsInGroup.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
+                      defaultListSelector.innerHTML = listOpts;
+                      defaultListSelector.disabled = false;
+                  } else {
+                      defaultListSelector.innerHTML = `<option value="">Keine Listen in Gruppe</option>`;
+                      defaultListSelector.disabled = true;
+                  }
+              } else {
+                  defaultListSelector.innerHTML = `<option value="">Zuerst Gruppe wählen</option>`;
+                  defaultListSelector.disabled = true;
+              }
+          });
+          defaultGroupSelector.dataset.listenerAttached = '1';
+      }
+
+      // Gespeicherten Wert laden
+      const savedListId = window.adminSettings.defaultChecklistId;
+      if (savedListId && CHECKLISTS[savedListId]) {
+          const savedGroupId = CHECKLISTS[savedListId].groupId;
+          if (savedGroupId) {
+              defaultGroupSelector.value = savedGroupId;
+              // Event manuell auslösen, um Listen-Dropdown zu füllen
+              defaultGroupSelector.dispatchEvent(new Event('change'));
+              // Jetzt den Listenwert setzen
+              defaultListSelector.value = savedListId;
+          }
       }
   }
 
@@ -1412,12 +1458,29 @@ function renderChecklistSettingsView(editListId = null) {
   const saveDefaultBtn = view.querySelector('#save-default-checklist-btn');
   if (saveDefaultBtn && !saveDefaultBtn.dataset.listenerAttached) {
       saveDefaultBtn.addEventListener('click', async () => {
-          const newDefaultId = view.querySelector('#default-checklist-selector')?.value || null;
+          // Liest jetzt vom Listen-Selector
+          const newDefaultId = view.querySelector('#default-list-selector')?.value || null;
+          
+          // Prüfen, ob eine gültige Liste ausgewählt wurde
+          if (!newDefaultId || !CHECKLISTS[newDefaultId]) {
+             // Wenn "Gruppe wählen..." oder "Keine Listen..." ausgewählt ist,
+             // behandeln wir es als "keine Standardliste"
+             if (typeof alertUser === 'function') alertUser('Standard-Auswahl entfernt.', 'success');
+             try {
+                 if (typeof doc === 'function' && typeof updateDoc === 'function' && typeof collection === 'function') {
+                       const adminSettingsRef = doc(collection(db, 'artifacts', appId, 'public', 'data'), 'adminSettings');
+                       await updateDoc(adminSettingsRef, { defaultChecklistId: null });
+                       window.adminSettings.defaultChecklistId = null;
+                 }
+             } catch(err) { /* Fehler beim Entfernen */ }
+             return; // Beenden
+          }
+          
           try {
               if (typeof doc === 'function' && typeof updateDoc === 'function' && typeof collection === 'function') {
                     const adminSettingsRef = doc(collection(db, 'artifacts', appId, 'public', 'data'), 'adminSettings');
-                    await updateDoc(adminSettingsRef, { defaultChecklistId: newDefaultId || null });
-                    window.adminSettings.defaultChecklistId = newDefaultId; // Lokalen Cache aktualisieren
+                    await updateDoc(adminSettingsRef, { defaultChecklistId: newDefaultId });
+                    window.adminSettings.defaultChecklistId = newDefaultId;
                     alertUser && alertUser('Standard-Checkliste gespeichert.', 'success');
               } else {
                     alertUser && alertUser('Fehler: Speicherfunktion nicht gefunden.', 'error');
@@ -1429,6 +1492,8 @@ function renderChecklistSettingsView(editListId = null) {
       });
       saveDefaultBtn.dataset.listenerAttached = '1';
   }
+  // --- ENDE FIX 3 ---
+
 
   // 3. "Stack & Container" Tab-Inhalt füllen
   const stackSelector = view.querySelector('#checklist-settings-new-stack-selector');
@@ -1467,32 +1532,49 @@ function renderChecklistSettingsView(editListId = null) {
   }
   
   // 6. Listener für die "Verwalten"-Tabs (Standard, Gruppen & Listen, etc.)
+  // --- BEGINN FIX 2 (MENÜ ABWÄHLBAR) ---
   const tabButtons = view.querySelectorAll('.settings-tab-btn');
   if (tabButtons.length > 0 && !view.dataset.tabListenersAttached) {
       tabButtons.forEach(btn => {
           btn.addEventListener('click', () => {
               const targetCardId = btn.dataset.targetCard;
+              const isActive = btn.classList.contains('bg-white'); // Prüfen, ob schon aktiv
+
+              // Alle Karten verstecken und alle Knöpfe zurücksetzen
               view.querySelectorAll('.settings-card').forEach(card => card.classList.add('hidden'));
               tabButtons.forEach(b => {
                   b.classList.remove('bg-white', 'text-indigo-600', 'shadow-sm');
                   b.classList.add('text-gray-600');
               });
-              const targetCard = view.querySelector(`#${targetCardId}`);
-              if (targetCard) targetCard.classList.remove('hidden');
-              btn.classList.add('bg-white', 'text-indigo-600', 'shadow-sm');
-              btn.classList.remove('text-gray-600');
-              view.dataset.activeSettingsTab = targetCardId;
+
+              if (isActive) {
+                  // War schon aktiv -> einfach deaktiviert lassen
+                  view.dataset.activeSettingsTab = ''; // Auswahl aufheben
+              } else {
+                  // War nicht aktiv -> aktivieren
+                  const targetCard = view.querySelector(`#${targetCardId}`);
+                  if (targetCard) targetCard.classList.remove('hidden');
+                  btn.classList.add('bg-white', 'text-indigo-600', 'shadow-sm');
+                  btn.classList.remove('text-gray-600');
+                  view.dataset.activeSettingsTab = targetCardId;
+              }
           });
       });
+
+      // Beim Laden nur den Tab aktivieren, der gespeichert war
       const lastTab = view.dataset.activeSettingsTab;
-      const tabToClick = lastTab ? view.querySelector(`.settings-tab-btn[data-target-card="${lastTab}"]`) : tabButtons[0];
-      if (tabToClick) {
-        tabToClick.click();
-      } else if (tabButtons.length > 0) {
-        tabButtons[0].click(); // Fallback auf den ersten Button, wenn gar nichts ausgewählt ist
+      if (lastTab) {
+          const tabToClick = view.querySelector(`.settings-tab-btn[data-target-card="${lastTab}"]`);
+          if (tabToClick) {
+            tabToClick.click(); // Gespeicherten Tab wiederherstellen
+          }
       }
+      // Wenn kein lastTab, wird nichts geklickt -> kein Menü offen (wie gewünscht)
+      
       view.dataset.tabListenersAttached = '1';
   }
+  // --- ENDE FIX 2 ---
+
 
   // 7. Listener für "Gruppe ändern" und "Speichern" im grünen Kasten
   const editGroupBtn = view.querySelector('#edit-group-assignment-btn');
@@ -1514,17 +1596,22 @@ function renderChecklistSettingsView(editListId = null) {
           const assignSwitcher = view.querySelector('#checklist-group-assign-switcher');
           const newGroupId = assignSwitcher ? assignSwitcher.value : null;
           const listId = view.dataset.editingListId;
-          if (!listId) return alertUser && alertUser('Keine Liste zum Speichern ausgewählt.', 'error');
+          
+          // Da wir FIX 1 (kein "(Keine)") haben, MUSS newGroupId jetzt einen Wert haben.
+          if (!listId || !newGroupId) {
+             return alertUser && alertUser('Fehler: Liste oder Gruppe nicht gefunden.', 'error');
+          }
+          
           const newGroupName = (newGroupId && CHECKLIST_GROUPS && CHECKLIST_GROUPS[newGroupId]) ? CHECKLIST_GROUPS[newGroupId].name : null;
           try {
               if (typeof updateDoc === 'function' && typeof doc === 'function' && typeof checklistsCollectionRef !== 'undefined') {
                   await updateDoc(doc(checklistsCollectionRef, listId), {
-                      groupId: newGroupId || null,
+                      groupId: newGroupId, // (wird nie null sein)
                       groupName: newGroupName
                   });
               } else {
                   if (CHECKLISTS && CHECKLISTS[listId]) {
-                      CHECKLISTS[listId].groupId = newGroupId || null;
+                      CHECKLISTS[listId].groupId = newGroupId;
                       CHECKLISTS[listId].groupName = newGroupName;
                   }
               }
