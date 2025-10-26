@@ -1166,9 +1166,21 @@ function setupStackAndContainerManagementListeners(view) {
 }
 
 // Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
+// Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
 function renderChecklistSettingsView(editListId = null) {
   const view = document.getElementById('checklistSettingsView');
   if (!view) return;
+
+  // --- BEGINN FIX: "ERLEDIGT-MARKIERUNGEN" LÖSCHEN ---
+  // Wenn die Funktion neu aufgerufen wird (z.B. nach Löschen),
+  // wird der Inhalt (innerHTML) komplett neu erstellt.
+  // Wir müssen diese Markierungen löschen, damit die "setup" Funktionen
+  // wissen, dass sie die Listener an die NEUEN Knöpfe anhängen müssen.
+  delete view.dataset.listenersSetup;
+  delete view.dataset.groupListenersAttached;
+  delete view.dataset.categoryListenersAttached;
+  delete view.dataset.tabListenersAttached;
+  // --- ENDE FIX ---
 
   // Defensive defaults
   window.currentUser = window.currentUser || { id: null, name: 'Gast', permissions: [] };
@@ -1379,15 +1391,7 @@ function renderChecklistSettingsView(editListId = null) {
     });
     editorSwitcher.dataset.listenerAttached = '1';
   }
-
-  // --- HINWEIS: 'category-group-selector' listener ist jetzt in setupCategoryManagementListeners() ---
-  // --- (Der alte Codeblock hier wurde entfernt, da setupCategoryManagementListeners() das jetzt managed) ---
-
-  // --- HINWEIS: 'add-item-btn' listener ist jetzt in setupListAndItemManagementListeners() ---
-  // --- (Der alte Codeblock hier wurde entfernt) ---
   
-  // --- BEGINN FIX 2: POPULATE & ACTIVATE NEW TAB CONTENT ---
-
   // 1. "Standard" Tab-Inhalt füllen
   const defaultSelector = view.querySelector('#default-checklist-selector');
   if (defaultSelector) {
@@ -1410,8 +1414,6 @@ function renderChecklistSettingsView(editListId = null) {
       saveDefaultBtn.addEventListener('click', async () => {
           const newDefaultId = view.querySelector('#default-checklist-selector')?.value || null;
           try {
-              // Wir nehmen an, dass 'db' und 'appId' global verfügbar sind (aus imports)
-              // und die Einstellungen in 'adminSettings' in der 'data' collection gespeichert sind
               if (typeof doc === 'function' && typeof updateDoc === 'function' && typeof collection === 'function') {
                     const adminSettingsRef = doc(collection(db, 'artifacts', appId, 'public', 'data'), 'adminSettings');
                     await updateDoc(adminSettingsRef, { defaultChecklistId: newDefaultId || null });
@@ -1438,13 +1440,11 @@ function renderChecklistSettingsView(editListId = null) {
   if (templateAssignee) {
       templateAssignee.innerHTML = `<option value="">Zuweisen...</option>` + Object.values(USERS || {}).map(u => `<option value="${u.id}">${escapeHtml(u.name||u.displayName||'')}</option>`).join('');
   }
-  // Fülle Kategorie-Dropdowns (im Template-Editor und im "Eintrag hinzufügen"-Bereich)
   if (typeof updateCategoryDropdowns === 'function') {
       updateCategoryDropdowns(); 
   }
   
   // 4. Alle Setup-Funktionen für die neuen Tabs und die grüne Box aufrufen
-  // Diese Funktionen (aus deiner checklist.js) fügen die Klick-Ereignisse hinzu
   if (typeof setupListAndItemManagementListeners === 'function') {
       setupListAndItemManagementListeners(view);
   }
@@ -1458,12 +1458,12 @@ function renderChecklistSettingsView(editListId = null) {
       setupStackAndContainerManagementListeners(view);
   }
   if (typeof setupTemplateEditorListeners === 'function') {
-      setupTemplateEditorListeners(); // Diese scheint 'view' nicht zu benötigen
+      setupTemplateEditorListeners();
   }
 
   // 5. Inhalte für die Tabs laden, die es brauchen
   if (typeof renderContainerList === 'function') {
-      renderContainerList(); // Füllt #container-list-editor im "Stack & Container" Tab
+      renderContainerList();
   }
   
   // 6. Listener für die "Verwalten"-Tabs (Standard, Gruppen & Listen, etc.)
@@ -1486,7 +1486,11 @@ function renderChecklistSettingsView(editListId = null) {
       });
       const lastTab = view.dataset.activeSettingsTab;
       const tabToClick = lastTab ? view.querySelector(`.settings-tab-btn[data-target-card="${lastTab}"]`) : tabButtons[0];
-      if (tabToClick) tabToClick.click();
+      if (tabToClick) {
+        tabToClick.click();
+      } else if (tabButtons.length > 0) {
+        tabButtons[0].click(); // Fallback auf den ersten Button, wenn gar nichts ausgewählt ist
+      }
       view.dataset.tabListenersAttached = '1';
   }
 
@@ -1536,8 +1540,6 @@ function renderChecklistSettingsView(editListId = null) {
       });
       saveGroupBtn.dataset.listenerAttached = '1';
   }
-
-  // --- ENDE FIX 2 ---
 
   // Ensure the items editor is filled for the initial list
   if (listToEditId) {
