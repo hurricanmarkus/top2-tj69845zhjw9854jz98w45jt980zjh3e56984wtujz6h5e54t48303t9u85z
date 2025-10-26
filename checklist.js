@@ -1154,6 +1154,7 @@ function setupStackAndContainerManagementListeners(view) {
 }
 
 // Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
+// Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
 function renderChecklistSettingsView(editListId = null) {
   const view = document.getElementById('checklistSettingsView');
   if (!view) return;
@@ -1366,21 +1367,29 @@ function renderChecklistSettingsView(editListId = null) {
     editorSwitcher.dataset.listenerAttached = '1';
   }
 
+  // --- BEGINN FIX 2 (KATEGORIE-DROPDOWN) ---
   const catGroupSelector = view.querySelector('#category-group-selector');
-  if (catGroupSelector && !catGroupSelector.dataset.listenerAttached) {
+  if (catGroupSelector) { // Immer ausführen, wenn das Element da ist
+      
+      // 1. Dropdown JEDES MAL neu füllen (löst das "Race Condition"-Problem)
       const groupOpts = Object.values(CHECKLIST_GROUPS || {}).map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
       catGroupSelector.innerHTML = `<option value="">Gruppe wählen...</option>` + groupOpts;
-      catGroupSelector.addEventListener('change', (e) => {
-          const gid = e.target.value;
-          if (typeof renderCategoryEditor === 'function') {
-              renderCategoryEditor(gid); 
-          } else {
-              const content = view.querySelector('#category-content');
-              if (content) content.innerHTML = `<p class="text-red-500">Fehler: renderCategoryEditor nicht gefunden.</p>`;
-          }
-      });
-      catGroupSelector.dataset.listenerAttached = '1';
+      
+      // 2. Listener NUR EINMAL hinzufügen
+      if (!catGroupSelector.dataset.listenerAttached) {
+          catGroupSelector.addEventListener('change', (e) => {
+              const gid = e.target.value;
+              if (typeof renderCategoryEditor === 'function') {
+                  renderCategoryEditor(gid); // Diese Funktion aufrufen
+              } else {
+                  const content = view.querySelector('#category-content');
+                  if (content) content.innerHTML = `<p class="text-red-500">Fehler: renderCategoryEditor nicht gefunden.</p>`;
+              }
+          });
+          catGroupSelector.dataset.listenerAttached = '1';
+      }
   }
+  // --- ENDE FIX 2 ---
   
   const defaultGroupSelector = view.querySelector('#default-group-selector');
   const defaultListSelector = view.querySelector('#default-list-selector');
@@ -1428,33 +1437,25 @@ function renderChecklistSettingsView(editListId = null) {
           const newDefaultId = view.querySelector('#default-list-selector')?.value || null;
           const selectedGroup = view.querySelector('#default-group-selector')?.value;
 
-          // --- BEGINN FIX 4 (Speichern mit korrekter Referenz) ---
           try {
               if (!settingsDocRef) {
                   throw new Error("settingsDocRef ist nicht importiert oder nicht definiert.");
               }
-
-              let finalId = null; // Standardmäßig auf null (Keine Checkliste)
-
-              // Nur wenn eine Gruppe UND eine gültige Liste ausgewählt ist, speichern
+              let finalId = null; 
               if (selectedGroup && newDefaultId && CHECKLISTS[newDefaultId]) {
                   finalId = newDefaultId;
               }
-              
               await updateDoc(settingsDocRef, { defaultChecklistId: finalId });
               window.adminSettings.defaultChecklistId = finalId;
-              
               if (finalId) {
                 alertUser && alertUser('Standard-Checkliste gespeichert.', 'success');
               } else {
                 alertUser && alertUser('Standard-Auswahl entfernt.', 'success');
               }
-
           } catch (err) {
               console.error("Fehler beim Speichern der Standard-Liste:", err);
               alertUser && alertUser('Fehler beim Speichern.', 'error');
           }
-          // --- ENDE FIX 4 ---
       });
       saveDefaultBtn.dataset.listenerAttached = '1';
   }
@@ -1836,7 +1837,6 @@ function setupTemplateEditorListeners() {
 
             if (unsubscribeTemplateItems) unsubscribeTemplateItems();
 
-            // BENUTZT JETZT IMPORTIERTE REF
             const itemsSubCollectionRef = collection(checklistTemplatesCollectionRef, selectedTemplateId, 'template-items');
             unsubscribeTemplateItems = onSnapshot(query(itemsSubCollectionRef), (snapshot) => {
                 TEMPLATE_ITEMS[selectedTemplateId] = [];
@@ -1860,7 +1860,6 @@ function setupTemplateEditorListeners() {
             const categoryName = categoryId ? categorySelect.options[categorySelect.selectedIndex].text : null;
 
             const newItemData = { text, important: importantCheckbox.checked, assignedTo: assignedTo || null, assignedToName, categoryId: categoryId || null, categoryName };
-            // BENUTZT JETZT IMPORTIERTE REF
             const itemsSubCollectionRef = collection(checklistTemplatesCollectionRef, selectedTemplateId, 'template-items');
             await addDoc(itemsSubCollectionRef, newItemData);
 
@@ -1885,7 +1884,6 @@ function setupTemplateEditorListeners() {
             const templateName = newTemplateNameInput.value.trim();
             if (!templateName) return alertUser("Bitte geben Sie einen Namen für den Container ein.", "error");
 
-            // BENUTZT JETZT IMPORTIERTE REF
             await addDoc(checklistTemplatesCollectionRef, { name: templateName, createdAt: serverTimestamp() });
             alertUser(`Container "${templateName}" wurde erstellt!`, "success");
             newTemplateNameInput.value = '';
@@ -1899,7 +1897,6 @@ function setupTemplateEditorListeners() {
             const itemId = deleteTemplateItemBtn.dataset.itemId;
             if (confirm("Möchten Sie diesen Eintrag wirklich aus dem Container löschen?")) {
                 try {
-                    // BENUTZT JETZT IMPORTIERTE REF
                     const itemRef = doc(checklistTemplatesCollectionRef, selectedTemplateId, 'template-items', itemId);
                     await deleteDoc(itemRef);
                     alertUser && alertUser('Eintrag gelöscht.', 'success');
@@ -1913,16 +1910,20 @@ function setupTemplateEditorListeners() {
 
         const deleteTemplateBtn = e.target.closest('#delete-template-btn');
         if (deleteTemplateBtn && selectedTemplateId) {
-            if (confirm(`Möchten Sie den Container "${TEMPLATES[selectedTemplateId].name}" wirklich unwiderruflich löschen?`)) {
+            // BENUTZT ?., um Fehler abzufangen, falls TEMPLATES[selectedTemplateId] nicht existiert
+            if (confirm(`Möchten Sie den Container "${TEMPLATES[selectedTemplateId]?.name || 'Unbekannt'}" wirklich unwiderruflich löschen?`)) {
                 
                 try {
-                    // BENUTZT JETZT IMPORTIERTE REF
                     const templateRef = doc(checklistTemplatesCollectionRef, selectedTemplateId);
                     await deleteDoc(templateRef);
                     
                     alertUser && alertUser('Container gelöscht.', 'success');
                     selectedTemplateId = null; 
-                    // renderChecklistSettingsView(); // ENTFERNT - Listener macht das jetzt
+                    
+                    // --- BEGINN FIX 1 (NEU LADEN) ---
+                    // Lädt die gesamte Einstellungsansicht neu, um den Status zurückzusetzen
+                    renderChecklistSettingsView(); 
+                    // --- ENDE FIX 1 ---
                 
                 } catch (err) {
                     console.error("Fehler beim Löschen des Containers:", err);
