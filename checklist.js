@@ -51,20 +51,36 @@ function escapeHtml(s = '') {
 // Firestore availability check
 const hasFirestore = (typeof addDoc === 'function' && typeof updateDoc === 'function' && typeof deleteDoc === 'function' && typeof onSnapshot === 'function');
 
-// Ensure global caches exist (if haupteingang didn't already create them)
-window.CHECKLISTS = window.CHECKLISTS || CHECKLISTS || {};
-window.CHECKLIST_GROUPS = window.CHECKLIST_GROUPS || CHECKLIST_GROUPS || {};
-window.CHECKLIST_CATEGORIES = window.CHECKLIST_CATEGORIES || CHECKLIST_CATEGORIES || {};
-window.CHECKLIST_STACKS = window.CHECKLIST_STACKS || {};
-window.CHECKLIST_ITEMS = window.CHECKLIST_ITEMS || CHECKLIST_ITEMS || {};
-window.TEMPLATES = window.TEMPLATES || TEMPLATES || {};
-window.TEMPLATE_ITEMS = window.TEMPLATE_ITEMS || {};
-window.USERS = window.USERS || USERS || {};
-window.ARCHIVED_CHECKLISTS = window.ARCHIVED_CHECKLISTS || ARCHIVED_CHECKLISTS || {};
-window.DELETED_CHECKLISTS = window.DELETED_CHECKLISTS || DELETED_CHECKLISTS || {};
-window.adminSettings = window.adminSettings || {};
-window.currentUser = window.currentUser || null;
+/* =========================
+   Sicheres Setup globaler Caches ohne TDZ-Abhängigkeit
+   (vermeidet ReferenceError bei zirkulären Imports)
+   ========================= */
 
+function _ensureGlobalCache(globalName, importedBinding) {
+  try {
+    // Versuch, vorhandenes window[globalName] zu nutzen oder auf das importierte Binding zurückzufallen.
+    // Wenn das importierteBinding noch nicht initialisiert ist (TDZ wegen circular import),
+    // wirft die Expression und wir fangen den Fehler weiter unten ab.
+    window[globalName] = window[globalName] || importedBinding || {};
+  } catch (e) {
+    // Fallback: importiertes Binding war nicht erreichbar (TDZ) — setze mindestens ein leeres Objekt
+    window[globalName] = window[globalName] || {};
+  }
+}
+
+// Verwende die helper-Funktion für alle globalen Caches, die evtl. per Import kommen
+_ensureGlobalCache('CHECKLISTS', typeof CHECKLISTS !== 'undefined' ? CHECKLISTS : undefined);
+_ensureGlobalCache('CHECKLIST_GROUPS', typeof CHECKLIST_GROUPS !== 'undefined' ? CHECKLIST_GROUPS : undefined);
+_ensureGlobalCache('CHECKLIST_CATEGORIES', typeof CHECKLIST_CATEGORIES !== 'undefined' ? CHECKLIST_CATEGORIES : undefined);
+
+// Elemente, die möglicherweise nicht per import kommen — setze Fallbacks
+_ensureGlobalCache('CHECKLIST_STACKS', typeof CHECKLIST_STACKS !== 'undefined' ? CHECKLIST_STACKS : undefined);
+_ensureGlobalCache('CHECKLIST_ITEMS', typeof CHECKLIST_ITEMS !== 'undefined' ? CHECKLIST_ITEMS : undefined);
+_ensureGlobalCache('TEMPLATES', typeof TEMPLATES !== 'undefined' ? TEMPLATES : undefined);
+_ensureGlobalCache('TEMPLATE_ITEMS', typeof TEMPLATE_ITEMS !== 'undefined' ? TEMPLATE_ITEMS : undefined);
+_ensureGlobalCache('USERS', typeof USERS !== 'undefined' ? USERS : undefined);
+_ensureGlobalCache('ARCHIVED_CHECKLISTS', typeof ARCHIVED_CHECKLISTS !== 'undefined' ? ARCHIVED_CHECKLISTS : undefined);
+_ensureGlobalCache('DELETED_CHECKLISTS', typeof DELETED_CHECKLISTS !== 'undefined' ? DELETED_CHECKLISTS : undefined);
 /* =========================
    Utility / UI helper functions
    ========================= */
