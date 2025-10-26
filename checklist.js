@@ -1166,7 +1166,6 @@ function setupStackAndContainerManagementListeners(view) {
 }
 
 // Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
-// Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
 function renderChecklistSettingsView(editListId = null) {
   const view = document.getElementById('checklistSettingsView');
   if (!view) return;
@@ -1197,10 +1196,87 @@ function renderChecklistSettingsView(editListId = null) {
       </div>
     </div>
 
-    <div id="card-default-list" class="settings-card hidden p-4 bg-white rounded-lg mb-4"></div>
-    <div id="card-manage-lists" class="settings-card hidden p-4 bg-white rounded-lg mb-4"></div>
-    <div id="card-categories" class="settings-card hidden p-4 bg-white rounded-lg mb-4"></div>
-    <div id="card-templates" class="settings-card hidden p-4 bg-white rounded-lg mb-4"></div>
+    <div id="card-default-list" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-3">
+      <h4 class="text-lg font-bold text-gray-800">Standard-Checkliste</h4>
+      <p class="text-sm text-gray-600">Lege fest, welche Checkliste beim Öffnen der App standardmäßig geladen werden soll.</p>
+      <select id="default-checklist-selector" class="w-full p-2 border rounded-lg bg-white"></select>
+      <button id="save-default-checklist-btn" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition">Standard speichern</button>
+    </div>
+
+    <div id="card-manage-lists" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-4">
+      <div>
+        <h4 class="text-lg font-bold text-gray-800 mb-2">Gruppen verwalten</h4>
+        <div class="p-3 bg-gray-50 rounded-lg space-y-2">
+          <select id="manage-groups-dropdown" class="w-full p-2 border rounded-lg bg-white"><option value="">Gruppe wählen...</option></select>
+          <div class="flex gap-2">
+            <button id="edit-selected-group-btn" class="flex-1 py-2 px-3 bg-yellow-500 text-black font-semibold rounded-lg hover:bg-yellow-600 text-sm">Umbennenen</button>
+            <button id="delete-selected-group-btn" class="flex-1 py-2 px-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 text-sm">Löschen</button>
+          </div>
+          <button id="show-create-group-form-btn" class="w-full text-sm text-blue-600 font-semibold hover:underline mt-1">+ Neue Gruppe erstellen</button>
+          <div id="create-group-form" class="hidden gap-2 pt-2 border-t mt-2">
+            <input type="text" id="checklist-settings-new-group-name" class="flex-grow p-2 border rounded-lg" placeholder="Name für neue Gruppe...">
+            <button id="checklist-settings-create-group-btn" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Erstellen</button>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h4 class="text-lg font-bold text-gray-800 mb-2">Listen verwalten</h4>
+        <div class="p-3 bg-gray-50 rounded-lg space-y-2">
+          <h5 class="font-semibold text-gray-700">Neue Checkliste erstellen</h5>
+          <input type="text" id="checklist-settings-new-name" class="w-full p-2 border rounded-lg" placeholder="Name der neuen Liste...">
+          <select id="checklist-settings-new-group-selector" class="w-full p-2 border rounded-lg bg-white"><option value="">Gruppe zuweisen...</option></select>
+          <button id="checklist-settings-create-list-btn" class="w-full py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">Neue Liste erstellen</button>
+        </div>
+        <div class="flex gap-2 mt-4">
+            <button id="show-archived-lists-btn" class="flex-1 py-2 px-3 bg-yellow-100 text-yellow-800 text-sm font-semibold rounded-lg hover:bg-yellow-200">Archiv anzeigen 📦</button>
+            <button id="show-deleted-lists-btn" class="flex-1 py-2 px-3 bg-red-100 text-red-800 text-sm font-semibold rounded-lg hover:bg-red-200">Papierkorb 🗑️</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="card-categories" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-3">
+      <h4 class="text-lg font-bold text-gray-800">Kategorien verwalten</h4>
+      <p class="text-sm text-gray-600">Kategorien sind an Gruppen gebunden. Wähle eine Gruppe, um ihre Kategorien zu bearbeiten.</p>
+      <select id="category-group-selector" class="w-full p-2 border rounded-lg bg-white"><option value="">Gruppe wählen...</option></select>
+      <div id="category-content" class="p-3 bg-gray-50 rounded-lg min-h-[100px]">
+        <p class="text-sm text-center text-gray-500">Bitte wählen Sie eine Gruppe.</p>
+      </div>
+    </div>
+
+    <div id="card-templates" class="settings-card hidden p-4 bg-white rounded-lg mb-4 space-y-4">
+      <div class="p-3 bg-gray-50 rounded-lg space-y-2">
+        <h4 class="font-bold text-gray-800">Neuen Stack erstellen</h4>
+        <div class="flex gap-2">
+          <input type="text" id="checklist-settings-new-stack-name" class="flex-grow p-2 border rounded-lg" placeholder="Name für neuen Stack...">
+          <button id="checklist-settings-create-stack-btn" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Erstellen</button>
+        </div>
+      </div>
+      <div class="p-3 bg-gray-50 rounded-lg space-y-2">
+        <h4 class="font-bold text-gray-800">Neuen Container erstellen</h4>
+        <input type="text" id="checklist-settings-new-container-name" class="w-full p-2 border rounded-lg" placeholder="Name für neuen Container...">
+        <select id="checklist-settings-new-stack-selector" class="w-full p-2 border rounded-lg bg-white"><option value="">Stack zuweisen...</option></select>
+        <button id="checklist-settings-create-container-btn" class="w-full py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">Container erstellen</button>
+      </div>
+      <div id="container-list-editor" class="space-y-2">
+          </div>
+      <div id="template-item-editor" class="hidden p-3 bg-indigo-50 border-t-4 border-indigo-300 rounded-lg space-y-3">
+        <h4 id="template-editor-title" class="font-bold text-gray-800">Einträge für Container...</h4>
+        <div id="template-items-list" class="space-y-2 max-h-48 overflow-y-auto">
+          </div>
+        <h5 class="font-semibold text-sm pt-2 border-t">Neuen Eintrag hinzufügen</h5>
+        <input type="text" id="new-template-item-text" class="w-full p-2 border rounded-lg" placeholder="Text für Eintrag...">
+        <div class="grid grid-cols-2 gap-2">
+          <select id="new-template-item-assignee" class="p-2 border rounded-lg bg-white"><option value="">Zuweisen...</option></select>
+          <select id="new-template-item-category" class="p-2 border rounded-lg bg-white"><option value="">Kategorie...</option></select>
+        </div>
+        <div class="flex items-center">
+          <input type="checkbox" id="new-template-item-important" class="h-4 w-4 rounded">
+          <label for="new-template-item-important" class="ml-2 text-sm text-gray-700">Als wichtig markieren</label>
+        </div>
+        <button id="add-template-item-btn" class="w-full py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700">Eintrag zum Container hinzufügen</button>
+        <button id="delete-template-btn" class="w-full py-1 text-red-600 text-sm font-semibold hover:underline">Diesen Container löschen</button>
+      </div>
+    </div>
 
     <div id="card-list-item-editor" class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-green-500 mt-6">
       <div class="flex gap-2 items-center mb-3">
@@ -1304,132 +1380,122 @@ function renderChecklistSettingsView(editListId = null) {
     editorSwitcher.dataset.listenerAttached = '1';
   }
 
-  // Category group selector change -> renderCategoryEditor
-  const catGroupSelector = view.querySelector('#category-group-selector');
-  if (catGroupSelector && !catGroupSelector.dataset.listenerAttached) {
-    catGroupSelector.addEventListener('change', (e) => {
-      const gid = e.target.value;
-      if (typeof renderCategoryEditor === 'function') {
-        renderCategoryEditor(gid);
-      } else {
-        // fallback: try to populate category-content with message
-        const content = document.getElementById('category-content');
-        if (content) content.innerHTML = `<p class="text-sm text-center text-gray-500">${gid ? 'Kategorie-Editor laden...' : 'Bitte Gruppe wählen.'}</p>`;
+  // --- HINWEIS: 'category-group-selector' listener ist jetzt in setupCategoryManagementListeners() ---
+  // --- (Der alte Codeblock hier wurde entfernt, da setupCategoryManagementListeners() das jetzt managed) ---
+
+  // --- HINWEIS: 'add-item-btn' listener ist jetzt in setupListAndItemManagementListeners() ---
+  // --- (Der alte Codeblock hier wurde entfernt) ---
+  
+  // --- BEGINN FIX 2: POPULATE & ACTIVATE NEW TAB CONTENT ---
+
+  // 1. "Standard" Tab-Inhalt füllen
+  const defaultSelector = view.querySelector('#default-checklist-selector');
+  if (defaultSelector) {
+      const groups = Object.values(CHECKLIST_GROUPS || {});
+      const opts = groups.map(g => {
+        const lists = Object.values(CHECKLISTS || {}).filter(l => l.groupId === g.id);
+        if (lists.length === 0) return '';
+        return `<optgroup label="${escapeHtml(g.name)}">${lists.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('')}</optgroup>`;
+      }).join('');
+      defaultSelector.innerHTML = `<option value="">Keine Standard-Liste</option>` + opts;
+      // Aktuellen Standardwert setzen
+      if (window.adminSettings && window.adminSettings.defaultChecklistId) {
+          defaultSelector.value = window.adminSettings.defaultChecklistId;
       }
-    });
-    catGroupSelector.dataset.listenerAttached = '1';
   }
 
-  // Add-item button (bind once)
-  const addItemBtn = view.querySelector('#checklist-settings-add-item-btn');
-  if (addItemBtn && !addItemBtn.dataset.listenerAttached) {
-    addItemBtn.addEventListener('click', async () => {
-      const textInput = view.querySelector('#checklist-settings-add-text');
-      const assignee = view.querySelector('#checklist-settings-add-assignee')?.value || null;
-      const category = view.querySelector('#checklist-settings-add-category')?.value || null;
-      const important = view.querySelector('#checklist-settings-add-important')?.checked || false;
-      const targetList = view.querySelector('#checklist-settings-editor-switcher')?.value;
-      if (!textInput || !targetList) return alertUser && alertUser('Bitte Liste auswählen und Text eingeben.', 'error');
-      const text = textInput.value.trim();
-      if (!text) return alertUser && alertUser('Bitte Text für den Eintrag eingeben.', 'error');
-
-      const payload = {
-        listId: targetList,
-        text,
-        status: 'open',
-        important,
-        addedBy: window.currentUser?.displayName || 'Unbekannt',
-        addedAt: typeof serverTimestamp === 'function' ? serverTimestamp() : null,
-        assignedTo: assignee || null,
-        assignedToName: assignee && USERS[assignee] ? USERS[assignee].name : null,
-        categoryId: category || null,
-        categoryName: null
-      };
-
-      if (payload.categoryId) {
-        for (const g of Object.values(CHECKLIST_CATEGORIES || {})) {
-          const found = (g || []).find(c => c.id === payload.categoryId);
-          if (found) { payload.categoryName = found.name; payload.categoryColor = found.color || null; break; }
-        }
-      }
-
-      try {
-        if (typeof addDoc === 'function' && typeof checklistItemsCollectionRef !== 'undefined') {
-          await addDoc(checklistItemsCollectionRef, payload);
-        } else {
-          // local fallback
-          CHECKLIST_ITEMS[targetList] = CHECKLIST_ITEMS[targetList] || [];
-          CHECKLIST_ITEMS[targetList].push({ id: String(Date.now()), ...payload });
-          renderChecklistSettingsItems(targetList);
-        }
-        textInput.value = '';
-        alertUser && alertUser('Eintrag hinzugefügt.', 'success');
-      } catch (err) {
-        console.error('Fehler beim Hinzufügen:', err);
-        alertUser && alertUser('Fehler beim Hinzufügen des Eintrags.', 'error');
-      }
-    });
-    addItemBtn.dataset.listenerAttached = '1';
+  // 2. "Standard" Tab-Button (Speichern) aktivieren
+  const saveDefaultBtn = view.querySelector('#save-default-checklist-btn');
+  if (saveDefaultBtn && !saveDefaultBtn.dataset.listenerAttached) {
+      saveDefaultBtn.addEventListener('click', async () => {
+          const newDefaultId = view.querySelector('#default-checklist-selector')?.value || null;
+          try {
+              // Wir nehmen an, dass 'db' und 'appId' global verfügbar sind (aus imports)
+              // und die Einstellungen in 'adminSettings' in der 'data' collection gespeichert sind
+              if (typeof doc === 'function' && typeof updateDoc === 'function' && typeof collection === 'function') {
+                    const adminSettingsRef = doc(collection(db, 'artifacts', appId, 'public', 'data'), 'adminSettings');
+                    await updateDoc(adminSettingsRef, { defaultChecklistId: newDefaultId || null });
+                    window.adminSettings.defaultChecklistId = newDefaultId; // Lokalen Cache aktualisieren
+                    alertUser && alertUser('Standard-Checkliste gespeichert.', 'success');
+              } else {
+                    alertUser && alertUser('Fehler: Speicherfunktion nicht gefunden.', 'error');
+              }
+          } catch (err) {
+              console.error('Fehler beim Speichern der Standard-Liste:', err);
+              alertUser && alertUser('Fehler beim Speichern.', 'error');
+          }
+      });
+      saveDefaultBtn.dataset.listenerAttached = '1';
   }
 
-  // --- BEGINN FIX: FEHLENDE LISTENER HINZUGEFÜGT ---
+  // 3. "Stack & Container" Tab-Inhalt füllen
+  const stackSelector = view.querySelector('#checklist-settings-new-stack-selector');
+  if (stackSelector) {
+      const stackOpts = Object.values(CHECKLIST_STACKS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+      stackSelector.innerHTML = `<option value="">Stack wählen...</option>` + stackOpts;
+  }
+  const templateAssignee = view.querySelector('#new-template-item-assignee');
+  if (templateAssignee) {
+      templateAssignee.innerHTML = `<option value="">Zuweisen...</option>` + Object.values(USERS || {}).map(u => `<option value="${u.id}">${escapeHtml(u.name||u.displayName||'')}</option>`).join('');
+  }
+  // Fülle Kategorie-Dropdowns (im Template-Editor und im "Eintrag hinzufügen"-Bereich)
+  if (typeof updateCategoryDropdowns === 'function') {
+      updateCategoryDropdowns(); 
+  }
+  
+  // 4. Alle Setup-Funktionen für die neuen Tabs und die grüne Box aufrufen
+  // Diese Funktionen (aus deiner checklist.js) fügen die Klick-Ereignisse hinzu
+  if (typeof setupListAndItemManagementListeners === 'function') {
+      setupListAndItemManagementListeners(view);
+  }
+  if (typeof setupGroupManagementListeners === 'function') {
+      setupGroupManagementListeners(view, window.currentUser);
+  }
+  if (typeof setupCategoryManagementListeners === 'function') {
+      setupCategoryManagementListeners(view);
+  }
+  if (typeof setupStackAndContainerManagementListeners === 'function') {
+      setupStackAndContainerManagementListeners(view);
+  }
+  if (typeof setupTemplateEditorListeners === 'function') {
+      setupTemplateEditorListeners(); // Diese scheint 'view' nicht zu benötigen
+  }
 
-  // 1. FIX: Listener für die "Verwalten"-Tabs (Standard, Gruppen & Listen, etc.)
+  // 5. Inhalte für die Tabs laden, die es brauchen
+  if (typeof renderContainerList === 'function') {
+      renderContainerList(); // Füllt #container-list-editor im "Stack & Container" Tab
+  }
+  
+  // 6. Listener für die "Verwalten"-Tabs (Standard, Gruppen & Listen, etc.)
   const tabButtons = view.querySelectorAll('.settings-tab-btn');
   if (tabButtons.length > 0 && !view.dataset.tabListenersAttached) {
       tabButtons.forEach(btn => {
           btn.addEventListener('click', () => {
               const targetCardId = btn.dataset.targetCard;
-
-              // 1. Alle Karten (Inhalte) verstecken
-              view.querySelectorAll('.settings-card').forEach(card => {
-                  card.classList.add('hidden');
-              });
-              // 2. Alle Tab-Buttons zurücksetzen (visuell)
+              view.querySelectorAll('.settings-card').forEach(card => card.classList.add('hidden'));
               tabButtons.forEach(b => {
                   b.classList.remove('bg-white', 'text-indigo-600', 'shadow-sm');
                   b.classList.add('text-gray-600');
               });
-
-              // 3. Ziel-Karte anzeigen
               const targetCard = view.querySelector(`#${targetCardId}`);
-              if (targetCard) {
-                  targetCard.classList.remove('hidden');
-              }
-              
-              // 4. Geklickten Tab-Button hervorheben (visuell)
+              if (targetCard) targetCard.classList.remove('hidden');
               btn.classList.add('bg-white', 'text-indigo-600', 'shadow-sm');
               btn.classList.remove('text-gray-600');
-              
-              // Speichern, welcher Tab aktiv ist
               view.dataset.activeSettingsTab = targetCardId;
           });
       });
-      
-      // Beim Laden der Ansicht: Entweder den zuletzt offenen Tab
-      // oder einfach den ersten Tab als aktiv markieren
       const lastTab = view.dataset.activeSettingsTab;
       const tabToClick = lastTab ? view.querySelector(`.settings-tab-btn[data-target-card="${lastTab}"]`) : tabButtons[0];
-      
-      if (tabToClick) {
-          tabToClick.click(); // Simuliert einen Klick auf den Tab
-      } else if (tabButtons[0]) {
-          tabButtons[0].click(); // Fallback auf den ersten Tab
-      }
-      
-      view.dataset.tabListenersAttached = '1'; // Markieren, damit wir die Listener nicht doppelt hinzufügen
+      if (tabToClick) tabToClick.click();
+      view.dataset.tabListenersAttached = '1';
   }
 
-  // 2. FIX: Listener für "Gruppe ändern" und "Speichern" im grünen Kasten
+  // 7. Listener für "Gruppe ändern" und "Speichern" im grünen Kasten
   const editGroupBtn = view.querySelector('#edit-group-assignment-btn');
   if (editGroupBtn && !editGroupBtn.dataset.listenerAttached) {
       editGroupBtn.addEventListener('click', () => {
-          // Verstecke die normale Anzeige
           view.querySelector('#group-display-container')?.classList.add('hidden');
-          // Zeige das Bearbeitungs-Dropdown und den Speichern-Button
           view.querySelector('#group-edit-container')?.classList.remove('hidden');
-          
-          // Wähle die aktuell zugewiesene Gruppe im Dropdown aus
           const currentList = (view.dataset.editingListId && CHECKLISTS) ? CHECKLISTS[view.dataset.editingListId] : null;
           if (currentList && currentList.groupId) {
               const assignSwitcher = view.querySelector('#checklist-group-assign-switcher');
@@ -1438,52 +1504,40 @@ function renderChecklistSettingsView(editListId = null) {
       });
       editGroupBtn.dataset.listenerAttached = '1';
   }
-
   const saveGroupBtn = view.querySelector('#checklist-save-group-assignment');
   if (saveGroupBtn && !saveGroupBtn.dataset.listenerAttached) {
       saveGroupBtn.addEventListener('click', async () => {
           const assignSwitcher = view.querySelector('#checklist-group-assign-switcher');
-          const newGroupId = assignSwitcher ? assignSwitcher.value : null; // Die ID der neuen Gruppe (oder null)
-          const listId = view.dataset.editingListId; // Die ID der Liste, die wir bearbeiten
-          
+          const newGroupId = assignSwitcher ? assignSwitcher.value : null;
+          const listId = view.dataset.editingListId;
           if (!listId) return alertUser && alertUser('Keine Liste zum Speichern ausgewählt.', 'error');
-
-          // Finde den Namen zur neuen Gruppen-ID
           const newGroupName = (newGroupId && CHECKLIST_GROUPS && CHECKLIST_GROUPS[newGroupId]) ? CHECKLIST_GROUPS[newGroupId].name : null;
-
           try {
-              // Speichere die Änderung in der Datenbank (Firebase)
               if (typeof updateDoc === 'function' && typeof doc === 'function' && typeof checklistsCollectionRef !== 'undefined') {
                   await updateDoc(doc(checklistsCollectionRef, listId), {
                       groupId: newGroupId || null,
                       groupName: newGroupName
                   });
               } else {
-                  // Lokales Fallback, falls Firebase nicht verbunden ist
                   if (CHECKLISTS && CHECKLISTS[listId]) {
                       CHECKLISTS[listId].groupId = newGroupId || null;
                       CHECKLISTS[listId].groupName = newGroupName;
                   }
               }
-              
-              // Ansicht wieder aktualisieren
-              updateCurrentGroupDisplay(listId); // Aktualisiert den Text "Aktuelle Gruppe: ..."
+              updateCurrentGroupDisplay(listId);
               view.querySelector('#group-display-container')?.classList.remove('hidden');
               view.querySelector('#group-edit-container')?.classList.add('hidden');
-              buildEditorSwitcherOptions(); // Baut das Haupt-Dropdown neu auf, falls sich die Gruppe geändert hat
-              
-              if (typeof alertUser === 'function') alertUser('Gruppenzuweisung gespeichert.', 'success');
-
+              buildEditorSwitcherOptions();
+              alertUser && alertUser('Gruppenzuweisung gespeichert.', 'success');
           } catch (err) {
               console.error('Fehler beim Speichern der Gruppe:', err);
-              if (typeof alertUser === 'function') alertUser('Fehler beim Speichern.', 'error');
+              alertUser && alertUser('Fehler beim Speichern.', 'error');
           }
       });
       saveGroupBtn.dataset.listenerAttached = '1';
   }
 
-  // --- ENDE FIX ---
-
+  // --- ENDE FIX 2 ---
 
   // Ensure the items editor is filled for the initial list
   if (listToEditId) {
