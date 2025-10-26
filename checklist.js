@@ -735,8 +735,54 @@ function updateCategoryDropdowns() {
 
 function setupListAndItemManagementListeners(view) {
   if (!view) return;
+  // Idempotent: Verhindert doppelte Listener nur für diesen spezifischen View-Aufruf
+  // Der Marker wird beim Neuaufbau von renderChecklistSettingsView gelöscht
   if (view.dataset.listenersSetup === 'true') return;
   view.dataset.listenersSetup = 'true';
+
+  // --- HIER BEGINNT DIE NEUE LOGIK FÜR DEN ARCHIVIEREN-BUTTON ---
+  const archiveBtn = view.querySelector('#checklist-archive-list-btn');
+  if (archiveBtn && !archiveBtn.dataset.listenerAttached) { // Sicherstellen, dass Listener nur einmal hinzugefügt wird
+      archiveBtn.addEventListener('click', async () => {
+          const listIdToArchive = view.dataset.editingListId; // ID der aktuell ausgewählten Liste holen
+          
+          if (!listIdToArchive || !CHECKLISTS[listIdToArchive]) {
+              return alertUser && alertUser("Keine gültige Liste zum Archivieren ausgewählt.", "error");
+          }
+
+          const listName = CHECKLISTS[listIdToArchive].name;
+          // Sicherheitsabfrage
+          if (confirm(`Möchten Sie die Liste "${listName}" wirklich archivieren? Sie wird dann aus den normalen Auswahlen entfernt.`)) {
+              try {
+                  // Prüfen, ob Firebase-Funktionen verfügbar sind
+                  if (typeof updateDoc !== 'function' || typeof doc !== 'function' || !checklistsCollectionRef || typeof serverTimestamp !== 'function') {
+                       throw new Error("Firebase-Funktionen/Referenzen fehlen.");
+                  }
+
+                  // Update-Befehl an Firebase senden
+                  await updateDoc(doc(checklistsCollectionRef, listIdToArchive), {
+                      isArchived: true,
+                      archivedAt: serverTimestamp(), // Zeitstempel setzen
+                      archivedBy: window.currentUser?.displayName || 'Unbekannt' // Wer hat archiviert
+                  });
+
+                  alertUser && alertUser(`Liste "${listName}" wurde archiviert.`, 'success');
+
+                  // Wichtig: Die Einstellungsansicht neu laden.
+                  // Da die archivierte Liste jetzt fehlt, wird automatisch die erste
+                  // verfügbare Liste ausgewählt (oder keine, wenn es die letzte war).
+                  renderChecklistSettingsView(); 
+
+              } catch (error) {
+                  console.error("Fehler beim Archivieren der Liste:", error);
+                  alertUser && alertUser(`Fehler beim Archivieren: ${error.message}`, "error");
+              }
+          }
+      });
+      archiveBtn.dataset.listenerAttached = 'true'; // Markieren, dass Listener hinzugefügt wurde
+  }
+  // --- HIER ENDET DIE NEUE LOGIK ---
+
 
   // Add item
   const addItemBtn = view.querySelector('#checklist-settings-add-item-btn');
@@ -760,14 +806,19 @@ function setupListAndItemManagementListeners(view) {
       assignedTo: assignee || null,
       assignedToName: (assignee && (USERS[assignee] && USERS[assignee].name)) ? USERS[assignee].name : null,
       categoryId: category || null,
-      categoryName: null
+      categoryName: null,
+      categoryColor: null // Farbe auch initialisieren
     };
 
-    // determine category name if provided
+    // determine category name and color if provided
     if (category) {
       for (const group of Object.values(CHECKLIST_CATEGORIES || {})) {
         const found = (group || []).find(c => c.id === category);
-        if (found) { payload.categoryName = found.name; payload.categoryColor = found.color || 'gray'; break; }
+        if (found) { 
+            payload.categoryName = found.name; 
+            payload.categoryColor = found.color || 'gray'; // Farbe hinzufügen
+            break; 
+        }
       }
     }
 
@@ -777,114 +828,142 @@ function setupListAndItemManagementListeners(view) {
       } else {
         CHECKLIST_ITEMS[currentListId] = CHECKLIST_ITEMS[currentListId] || [];
         CHECKLIST_ITEMS[currentListId].push({ id: String(Date.now()), ...payload });
-        renderChecklistSettingsItems(currentListId);
+        renderChecklistSettingsItems(currentListId); // Direkt neu rendern bei lokalem Fallback
       }
-      textInput.value = '';
+      textInput.value = ''; // Eingabefeld leeren
+      // Optional: Dropdowns zurücksetzen, falls gewünscht
+      // if (view.querySelector('#checklist-settings-add-assignee')) view.querySelector('#checklist-settings-add-assignee').value = '';
+      // if (view.querySelector('#checklist-settings-add-category')) view.querySelector('#checklist-settings-add-category').value = '';
+      // if (view.querySelector('#checklist-settings-add-important')) view.querySelector('#checklist-settings-add-important').checked = false;
+      
       if (typeof alertUser === 'function') alertUser('Eintrag wurde hinzugefügt.', 'success');
     } catch (err) {
       console.error('Fehler beim Hinzufügen:', err);
       if (typeof alertUser === 'function') alertUser('Fehler beim Hinzufügen.', 'error');
     }
   };
-  addItemBtn?.addEventListener('click', addHandler);
-  view.querySelector('#checklist-settings-add-text')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addHandler(); } });
+  // Sicherstellen, dass Listener nur einmal hinzugefügt werden
+  if (addItemBtn && !addItemBtn.dataset.listenerAttached) {
+      addItemBtn.addEventListener('click', addHandler);
+      addItemBtn.dataset.listenerAttached = 'true';
+  }
+  const addTextInput = view.querySelector('#checklist-settings-add-text');
+   if (addTextInput && !addTextInput.dataset.listenerAttached) {
+       addTextInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addHandler(); } });
+       addTextInput.dataset.listenerAttached = 'true';
+   }
 
   // Editor actions (delegated)
   const itemsEditor = view.querySelector('#checklist-items-editor-container');
+  // Wichtig: Prüfen, ob der Listener für den *spezifischen* View schon dran ist
   if (itemsEditor && !itemsEditor.dataset.listenerAttached) {
     itemsEditor.addEventListener('click', async (e) => {
       const editBtn = e.target.closest('.edit-checklist-item-btn');
-      const saveBtn = e.target.closest('.save-checklist-item-btn');
+      // const saveBtn = e.target.closest('.save-checklist-item-btn'); // Save Button Logik entfernt, da Inline-Edit entfernt wurde
       const deleteBtn = e.target.closest('.delete-checklist-item-btn');
+      const currentListIdForRender = view.dataset.editingListId; // Liste merken für re-render
 
       if (editBtn) {
-        const row = editBtn.closest('[data-item-id]');
-        row.querySelector('.item-display-content')?.classList.add('hidden');
-        row.querySelector('.item-edit-content')?.classList.remove('hidden');
-        editBtn.classList.add('hidden');
-        row.querySelector('.save-checklist-item-btn')?.classList.remove('hidden');
-        row.querySelector('.edit-item-input')?.focus();
-        return;
+          const row = editBtn.closest('[data-item-id]');
+          if (!row) return;
+          const id = row.dataset.itemId;
+          const currentText = row.querySelector('.item-text')?.textContent || '';
+          const newText = prompt('Eintrag bearbeiten:', currentText);
+          if (newText === null) return; // Abbrechen
+          const trimmed = newText.trim();
+          if (!trimmed) return alertUser && alertUser('Text darf nicht leer sein.', 'error');
+          try {
+            if (typeof updateDoc === 'function' && typeof doc === 'function') {
+              await updateDoc(doc(checklistItemsCollectionRef, id), { text: trimmed, lastEditedBy: window.currentUser?.displayName || 'System', lastEditedAt: typeof serverTimestamp === 'function' ? serverTimestamp() : null });
+              // Firebase Listener sollte UI aktualisieren
+              alertUser && alertUser('Eintrag gespeichert.', 'success');
+            } else {
+              // local fallback
+              CHECKLIST_ITEMS[currentListIdForRender] = (CHECKLIST_ITEMS[currentListIdForRender] || []).map(it => it.id === id ? { ...it, text: trimmed } : it);
+              renderChecklistSettingsItems(currentListIdForRender);
+              alertUser && alertUser('Eintrag gespeichert (lokal).', 'success');
+            }
+          } catch (err) {
+            console.error('Fehler beim Speichern des Eintrags:', err);
+            alertUser && alertUser('Fehler beim Speichern des Eintrags.', 'error');
+          }
+          return; // Wichtig: Aktion behandelt
       }
 
-      if (saveBtn) {
-        const row = saveBtn.closest('[data-item-id]');
-        const itemId = row?.dataset.itemId;
-        const newText = row.querySelector('.edit-item-input')?.value.trim();
-        if (!newText) return alertUser && alertUser('Text darf nicht leer sein.', 'error');
-        try {
-          if (hasFirestore && typeof updateDoc === 'function') {
-            await updateDoc(doc(checklistItemsCollectionRef, itemId), { text: newText, lastEditedBy: window.currentUser?.displayName || 'System', lastEditedAt: typeof serverTimestamp === 'function' ? serverTimestamp() : null });
-          } else {
-            for (const lid of Object.keys(CHECKLIST_ITEMS || {})) {
-              CHECKLIST_ITEMS[lid] = (CHECKLIST_ITEMS[lid] || []).map(it => it.id === itemId ? { ...it, text: newText } : it);
-            }
-            renderChecklistSettingsItems(view.querySelector('#checklist-settings-editor-switcher')?.value);
-          }
-          row.querySelector('.item-display-content p') && (row.querySelector('.item-display-content p').textContent = newText);
-          row.querySelector('.item-display-content')?.classList.remove('hidden');
-          row.querySelector('.item-edit-content')?.classList.add('hidden');
-          saveBtn.classList.add('hidden');
-          row.querySelector('.edit-checklist-item-btn')?.classList.remove('hidden');
-        } catch (err) {
-          console.error('Fehler beim Speichern des Eintrags:', err);
-          alertUser && alertUser('Fehler beim Speichern.', 'error');
-        }
-        return;
-      }
+      /* Save Button Logik entfernt, da Inline Edit entfernt */
 
       if (deleteBtn) {
         const row = deleteBtn.closest('[data-item-id]');
-        const itemId = row?.dataset.itemId;
+        if (!row) return;
+        const itemId = row.dataset.itemId;
         if (!confirm('Eintrag wirklich löschen?')) return;
         try {
-          if (hasFirestore && typeof deleteDoc === 'function') {
+          if (typeof deleteDoc === 'function' && typeof doc === 'function') {
             await deleteDoc(doc(checklistItemsCollectionRef, itemId));
+             // Firebase Listener sollte UI aktualisieren
+             alertUser && alertUser('Eintrag gelöscht.', 'success');
           } else {
+            // Local fallback
             Object.keys(CHECKLIST_ITEMS || {}).forEach(lid => {
               CHECKLIST_ITEMS[lid] = (CHECKLIST_ITEMS[lid] || []).filter(i => i.id !== itemId);
             });
-            renderChecklistSettingsItems(view.querySelector('#checklist-settings-editor-switcher')?.value);
+            renderChecklistSettingsItems(currentListIdForRender);
+            alertUser && alertUser('Eintrag gelöscht (lokal).', 'success');
           }
         } catch (err) {
           console.error('Fehler beim Löschen:', err);
           alertUser && alertUser('Fehler beim Löschen.', 'error');
         }
-        return;
+        return; // Wichtig: Aktion behandelt
       }
     });
-    itemsEditor.dataset.listenerAttached = 'true';
+    itemsEditor.dataset.listenerAttached = 'true'; // Markieren
   }
 
-  // Archive / show archived / show deleted
-  view.querySelector('#show-archived-lists-btn')?.addEventListener('click', () => { try { renderArchivedListsModal && renderArchivedListsModal(); document.getElementById('archivedListsModal') && (document.getElementById('archivedListsModal').style.display = 'flex'); } catch(e){console.error(e);} });
-  view.querySelector('#show-deleted-lists-btn')?.addEventListener('click', () => { try { renderDeletedListsModal && renderDeletedListsModal(); document.getElementById('deletedListsModal') && (document.getElementById('deletedListsModal').style.display = 'flex'); } catch(e){console.error(e);} });
+  // Archive / show archived / show deleted Buttons
+   const showArchivedBtn = view.querySelector('#show-archived-lists-btn');
+   if (showArchivedBtn && !showArchivedBtn.dataset.listenerAttached) {
+       showArchivedBtn.addEventListener('click', () => { try { renderArchivedListsModal && renderArchivedListsModal(); document.getElementById('archivedListsModal') && (document.getElementById('archivedListsModal').style.display = 'flex'); } catch(e){console.error(e);} });
+       showArchivedBtn.dataset.listenerAttached = 'true';
+   }
+   const showDeletedBtn = view.querySelector('#show-deleted-lists-btn');
+   if (showDeletedBtn && !showDeletedBtn.dataset.listenerAttached) {
+       showDeletedBtn.addEventListener('click', () => { try { renderDeletedListsModal && renderDeletedListsModal(); document.getElementById('deletedListsModal') && (document.getElementById('deletedListsModal').style.display = 'flex'); } catch(e){console.error(e);} });
+       showDeletedBtn.dataset.listenerAttached = 'true';
+   }
 
   // Create list button
-  view.querySelector('#checklist-settings-create-list-btn')?.addEventListener('click', async () => {
-    const name = view.querySelector('#checklist-settings-new-name')?.value.trim();
-    const groupId = view.querySelector('#checklist-settings-new-group-selector')?.value;
-    if (!name || !groupId) return alertUser && alertUser('Bitte Namen und Gruppe angeben.', 'error');
-    try {
-      if (hasFirestore && typeof addDoc === 'function') {
-        const docRef = await addDoc(checklistsCollectionRef, { name, isDeleted: false, isArchived: false, groupId, groupName: CHECKLIST_GROUPS[groupId]?.name || null });
-        view.querySelector('#checklist-settings-new-name').value = '';
-        view.querySelector('#checklist-settings-new-group-selector').value = '';
-        alertUser && alertUser(`Liste "${name}" wurde erstellt.`, 'success');
-        renderChecklistSettingsView(docRef?.id || null);
-      } else {
-        const id = String(Date.now());
-        CHECKLISTS[id] = { id, name, groupId, groupName: CHECKLIST_GROUPS[groupId]?.name || null };
-        alertUser && alertUser('Liste erstellt (lokal).', 'success');
-        renderChecklistSettingsView(id);
-      }
-    } catch (err) {
-      console.error('Fehler beim Erstellen der Liste:', err);
-      alertUser && alertUser('Fehler beim Erstellen der Liste.', 'error');
-    }
-  });
-}
+  const createListBtn = view.querySelector('#checklist-settings-create-list-btn');
+   if (createListBtn && !createListBtn.dataset.listenerAttached) {
+       createListBtn.addEventListener('click', async () => {
+         const nameInput = view.querySelector('#checklist-settings-new-name');
+         const groupSelector = view.querySelector('#checklist-settings-new-group-selector');
+         if(!nameInput || !groupSelector) return;
 
+         const name = nameInput.value.trim();
+         const groupId = groupSelector.value;
+         if (!name || !groupId) return alertUser && alertUser('Bitte Namen und Gruppe angeben.', 'error');
+         try {
+           if (hasFirestore && typeof addDoc === 'function') {
+             const docRef = await addDoc(checklistsCollectionRef, { name, isDeleted: false, isArchived: false, groupId, groupName: CHECKLIST_GROUPS[groupId]?.name || null });
+             nameInput.value = '';
+             groupSelector.value = '';
+             alertUser && alertUser(`Liste "${name}" wurde erstellt.`, 'success');
+             renderChecklistSettingsView(docRef?.id || null); // Neu rendern und neue Liste auswählen
+           } else {
+             const id = String(Date.now());
+             CHECKLISTS[id] = { id, name, groupId, groupName: CHECKLIST_GROUPS[groupId]?.name || null, isDeleted: false, isArchived: false };
+             alertUser && alertUser('Liste erstellt (lokal).', 'success');
+             renderChecklistSettingsView(id); // Neu rendern und neue Liste auswählen
+           }
+         } catch (err) {
+           console.error('Fehler beim Erstellen der Liste:', err);
+           alertUser && alertUser('Fehler beim Erstellen der Liste.', 'error');
+         }
+       });
+       createListBtn.dataset.listenerAttached = 'true';
+   }
+} // Ende setupListAndItemManagementListeners
 
 function setupGroupManagementListeners(view, currentUserData) {
     if (!view) return;
