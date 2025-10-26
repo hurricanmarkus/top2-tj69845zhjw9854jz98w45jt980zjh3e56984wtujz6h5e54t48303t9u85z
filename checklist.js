@@ -79,45 +79,6 @@ function renderTemplateList() {
     });
 }
 
-function renderTemplateItemsEditor() {
-    const itemsListContainer = document.getElementById('template-items-list');
-    const items = TEMPLATE_ITEMS[selectedTemplateId] || [];
-
-    itemsListContainer.innerHTML = '';
-
-    if (items.length === 0) {
-        itemsListContainer.innerHTML = '<p class="text-xs text-center text-gray-400">Dieser Container hat noch keine Einträge.</p>';
-        return;
-    }
-
-    items.forEach(item => {
-        const isImportantClass = item.important ? 'bg-yellow-50 border-l-4 border-yellow-400' : 'bg-white';
-        let detailsHTML = '';
-        if (item.categoryName) {
-            const colorKey = item.categoryColor || 'gray';
-            const color = COLOR_PALETTE[colorKey] || COLOR_PALETTE.gray;
-            detailsHTML += `<span class="ml-2 text-xs font-semibold py-0.5 px-2 rounded-full whitespace-nowrap ${color.bg} ${color.text}">${item.categoryName}</span>`;
-        }
-        if (item.assignedToName) {
-            detailsHTML += `<span class="ml-2 text-xs bg-gray-200 text-gray-700 font-semibold py-0.5 px-2 rounded-full whitespace-nowrap">${item.assignedToName}</span>`;
-        }
-
-        itemsListContainer.innerHTML += `
-            <div class="p-2 border rounded-md flex justify-between items-center ${isImportantClass}">
-                <div class="flex items-center flex-wrap">
-                    <span>${item.text}</span>
-                    <div class="flex items-center mt-1 sm:mt-0">
-                        ${detailsHTML}
-                    </div>
-                </div>
-                <button data-item-id="${item.id}" class="delete-template-item-btn p-1 text-red-400 hover:text-red-600 flex-shrink-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4"><path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1H2V3Zm2 2h8v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5Z" /></svg>
-                </button>
-            </div>
-        `;
-    });
-}
-
 export function renderContainerList() {
   const editorDiv = document.getElementById('container-list-editor');
   if (!editorDiv) return;
@@ -1076,8 +1037,8 @@ function setupStackAndContainerManagementListeners(view) {
                 }
                 nameInput.value = '';
                 if (typeof alertUser === 'function') alertUser('Stack erstellt.', 'success');
-                // Re-render
-                renderContainerList();
+                // FIX 6: Ruft die Hauptfunktion auf, um ALLES neu zu laden, inkl. Dropdowns
+                renderChecklistSettingsView();
             } catch (err) {
                 console.error('Fehler beim Erstellen des Stacks:', err);
                 if (typeof alertUser === 'function') alertUser('Fehler beim Erstellen des Stacks.', 'error');
@@ -1099,7 +1060,8 @@ function setupStackAndContainerManagementListeners(view) {
                 view.querySelector('#checklist-settings-new-container-name').value = '';
                 view.querySelector('#checklist-settings-new-stack-selector').value = '';
                 if (typeof alertUser === 'function') alertUser('Container erstellt.', 'success');
-                renderContainerList();
+                // FIX 6: Ruft die Hauptfunktion auf, um ALLES neu zu laden
+                renderChecklistSettingsView();
             } catch (err) {
                 console.error('Fehler beim Erstellen des Containers:', err);
                 if (typeof alertUser === 'function') alertUser('Fehler beim Erstellen des Containers.', 'error');
@@ -1155,7 +1117,8 @@ function setupStackAndContainerManagementListeners(view) {
                     TEMPLATES[cid].stackName = newStackId ? CHECKLIST_STACKS[newStackId]?.name : null;
                 }
                 if (typeof alertUser === 'function') alertUser('Stack-Zuweisung gespeichert.', 'success');
-                renderContainerList();
+                // FIX 6: Ruft die Hauptfunktion auf, um ALLES neu zu laden
+                renderChecklistSettingsView();
             } catch (err) {
                 console.error('Fehler beim Speichern der Stack-Zuweisung:', err);
                 if (typeof alertUser === 'function') alertUser('Fehler beim Speichern.', 'error');
@@ -1166,14 +1129,11 @@ function setupStackAndContainerManagementListeners(view) {
 }
 
 // Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
-// Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
-// Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
 function renderChecklistSettingsView(editListId = null) {
   const view = document.getElementById('checklistSettingsView');
   if (!view) return;
 
   // --- BEGINN FIX: "ERLEDIGT-MARKIERUNGEN" LÖSCHEN ---
-  // Stellt sicher, dass alle Listener nach einer Aktion (z.B. Löschen) neu geladen werden.
   delete view.dataset.listenersSetup;
   delete view.dataset.groupListenersAttached;
   delete view.dataset.categoryListenersAttached;
@@ -1213,7 +1173,8 @@ function renderChecklistSettingsView(editListId = null) {
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <div>
             <label class="text-xs font-semibold text-gray-500 mb-1 block">Gruppe</label>
-            <select id="default-group-selector" class="w-full p-2 border rounded-lg bg-white"></select>
+            <select id="default-group-selector" class="w-full p-2 border rounded-lg bg-white">
+                <option value="">Keine Checkliste</option> </select>
         </div>
         <div>
             <label class="text-xs font-semibold text-gray-500 mb-1 block">Liste</label>
@@ -1299,7 +1260,7 @@ function renderChecklistSettingsView(editListId = null) {
     </div>
 
     <div id="card-list-item-editor" class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-green-500 mt-6">
-      <div class="flex gap-2 items-center mb-3">
+    <div class="flex gap-2 items-center mb-3">
         <select id="checklist-settings-editor-switcher" class="flex-grow p-2 border rounded-lg bg-white"></select>
         <button id="show-template-modal-btn" class="p-2 bg-teal-100 text-teal-800 text-sm font-bold rounded-lg hover:bg-teal-200 transition">+C</button>
         <button id="checklist-archive-list-btn" class="p-2 bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition">📦</button>
@@ -1369,15 +1330,12 @@ function renderChecklistSettingsView(editListId = null) {
     const sel = view.querySelector('#checklist-group-assign-switcher');
     if (!sel) return;
     
-    // --- BEGINN FIX 1 (KEINE "KEINE" GRUPPE) ---
-    // Die Option "(Keine)" wird entfernt.
     const html = Object.values(CHECKLIST_GROUPS || {}).map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
     const prev = sel.value;
-    sel.innerHTML = html; // Die Option <option value="">(Keine)</option> wurde entfernt.
+    sel.innerHTML = html; 
     if (prev) {
       sel.value = prev;
     }
-    // --- ENDE FIX 1 ---
   }
 
   // populate initial selects and editor-switcher
@@ -1405,9 +1363,29 @@ function renderChecklistSettingsView(editListId = null) {
     });
     editorSwitcher.dataset.listenerAttached = '1';
   }
-  
-  // --- BEGINN FIX 3 (NEUE LOGIK FÜR STANDARD-CHECKLISTE) ---
 
+  // --- BEGINN FIX 3 (KATEGORIE-LISTENER ROBUST GEMACHT) ---
+  const catGroupSelector = view.querySelector('#category-group-selector');
+  if (catGroupSelector && !catGroupSelector.dataset.listenerAttached) {
+      // Dropdown füllen (sicherheitshalber, falls setupGroupManagementListeners es nicht tut)
+      const groupOpts = Object.values(CHECKLIST_GROUPS || {}).map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
+      catGroupSelector.innerHTML = `<option value="">Gruppe wählen...</option>` + groupOpts;
+      
+      // Listener hinzufügen
+      catGroupSelector.addEventListener('change', (e) => {
+          const gid = e.target.value;
+          if (typeof renderCategoryEditor === 'function') {
+              renderCategoryEditor(gid); // Ruft die Funktion aus checklist.js auf
+          } else {
+              // Fallback, falls renderCategoryEditor fehlt
+              const content = view.querySelector('#category-content');
+              if (content) content.innerHTML = `<p class="text-red-500">Fehler: renderCategoryEditor nicht gefunden.</p>`;
+          }
+      });
+      catGroupSelector.dataset.listenerAttached = '1';
+  }
+  // --- ENDE FIX 3 ---
+  
   // 1. "Standard" Tab-Inhalt füllen (Zwei Dropdowns)
   const defaultGroupSelector = view.querySelector('#default-group-selector');
   const defaultListSelector = view.querySelector('#default-list-selector');
@@ -1415,7 +1393,8 @@ function renderChecklistSettingsView(editListId = null) {
   if (defaultGroupSelector && defaultListSelector) {
       // Gruppe füllen
       const groupOpts = Object.values(CHECKLIST_GROUPS || {}).map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
-      defaultGroupSelector.innerHTML = `<option value="">Gruppe wählen...</option>` + groupOpts;
+      // FIX 2: "Keine Checkliste" ist jetzt die erste Option
+      defaultGroupSelector.innerHTML = `<option value="">Keine Checkliste</option>` + groupOpts;
       defaultListSelector.innerHTML = `<option value="">Zuerst Gruppe wählen</option>`;
       
       // Listener für Gruppe
@@ -1458,24 +1437,32 @@ function renderChecklistSettingsView(editListId = null) {
   const saveDefaultBtn = view.querySelector('#save-default-checklist-btn');
   if (saveDefaultBtn && !saveDefaultBtn.dataset.listenerAttached) {
       saveDefaultBtn.addEventListener('click', async () => {
-          // Liest jetzt vom Listen-Selector
           const newDefaultId = view.querySelector('#default-list-selector')?.value || null;
-          
-          // Prüfen, ob eine gültige Liste ausgewählt wurde
+          const selectedGroup = view.querySelector('#default-group-selector')?.value;
+
+          // Fall 1: "Keine Checkliste" (Gruppe) ist ausgewählt
+          if (!selectedGroup) {
+              try {
+                   if (typeof doc === 'function' && typeof updateDoc === 'function' && typeof collection === 'function') {
+                         const adminSettingsRef = doc(collection(db, 'artifacts', appId, 'public', 'data'), 'adminSettings');
+                         await updateDoc(adminSettingsRef, { defaultChecklistId: null });
+                         window.adminSettings.defaultChecklistId = null;
+                         alertUser && alertUser('Standard-Auswahl entfernt.', 'success');
+                   }
+               } catch(err) { 
+                  console.error('Fehler beim Entfernen der Standard-Liste:', err);
+                  alertUser && alertUser('Fehler beim Speichern.', 'error');
+               }
+               return; // Beenden
+          }
+
+          // Fall 2: Eine Gruppe ist gewählt, aber keine Liste (z.B. "Keine Listen in Gruppe")
           if (!newDefaultId || !CHECKLISTS[newDefaultId]) {
-             // Wenn "Gruppe wählen..." oder "Keine Listen..." ausgewählt ist,
-             // behandeln wir es als "keine Standardliste"
-             if (typeof alertUser === 'function') alertUser('Standard-Auswahl entfernt.', 'success');
-             try {
-                 if (typeof doc === 'function' && typeof updateDoc === 'function' && typeof collection === 'function') {
-                       const adminSettingsRef = doc(collection(db, 'artifacts', appId, 'public', 'data'), 'adminSettings');
-                       await updateDoc(adminSettingsRef, { defaultChecklistId: null });
-                       window.adminSettings.defaultChecklistId = null;
-                 }
-             } catch(err) { /* Fehler beim Entfernen */ }
-             return; // Beenden
+               alertUser && alertUser('Bitte eine gültige Liste auswählen oder "Keine Checkliste" wählen.', 'error');
+               return; // Beenden
           }
           
+          // Fall 3: Gültige Liste ist ausgewählt
           try {
               if (typeof doc === 'function' && typeof updateDoc === 'function' && typeof collection === 'function') {
                     const adminSettingsRef = doc(collection(db, 'artifacts', appId, 'public', 'data'), 'adminSettings');
@@ -1492,8 +1479,6 @@ function renderChecklistSettingsView(editListId = null) {
       });
       saveDefaultBtn.dataset.listenerAttached = '1';
   }
-  // --- ENDE FIX 3 ---
-
 
   // 3. "Stack & Container" Tab-Inhalt füllen
   const stackSelector = view.querySelector('#checklist-settings-new-stack-selector');
@@ -1532,15 +1517,17 @@ function renderChecklistSettingsView(editListId = null) {
   }
   
   // 6. Listener für die "Verwalten"-Tabs (Standard, Gruppen & Listen, etc.)
-  // --- BEGINN FIX 2 (MENÜ ABWÄHLBAR) ---
   const tabButtons = view.querySelectorAll('.settings-tab-btn');
+  // BEGINN FIX 1 (GRÜNE BOX VERSTECKEN)
+  const greenBox = view.querySelector('#card-list-item-editor');
+  // ENDE FIX 1
+
   if (tabButtons.length > 0 && !view.dataset.tabListenersAttached) {
       tabButtons.forEach(btn => {
           btn.addEventListener('click', () => {
               const targetCardId = btn.dataset.targetCard;
-              const isActive = btn.classList.contains('bg-white'); // Prüfen, ob schon aktiv
+              const isActive = btn.classList.contains('bg-white'); 
 
-              // Alle Karten verstecken und alle Knöpfe zurücksetzen
               view.querySelectorAll('.settings-card').forEach(card => card.classList.add('hidden'));
               tabButtons.forEach(b => {
                   b.classList.remove('bg-white', 'text-indigo-600', 'shadow-sm');
@@ -1548,32 +1535,31 @@ function renderChecklistSettingsView(editListId = null) {
               });
 
               if (isActive) {
-                  // War schon aktiv -> einfach deaktiviert lassen
-                  view.dataset.activeSettingsTab = ''; // Auswahl aufheben
+                  view.dataset.activeSettingsTab = ''; 
+                  greenBox?.classList.remove('hidden'); // FIX 1
               } else {
-                  // War nicht aktiv -> aktivieren
                   const targetCard = view.querySelector(`#${targetCardId}`);
                   if (targetCard) targetCard.classList.remove('hidden');
                   btn.classList.add('bg-white', 'text-indigo-600', 'shadow-sm');
                   btn.classList.remove('text-gray-600');
                   view.dataset.activeSettingsTab = targetCardId;
+                  greenBox?.classList.add('hidden'); // FIX 1
               }
           });
       });
 
-      // Beim Laden nur den Tab aktivieren, der gespeichert war
       const lastTab = view.dataset.activeSettingsTab;
       if (lastTab) {
           const tabToClick = view.querySelector(`.settings-tab-btn[data-target-card="${lastTab}"]`);
           if (tabToClick) {
-            tabToClick.click(); // Gespeicherten Tab wiederherstellen
+            tabToClick.click(); 
           }
+      } else {
+         greenBox?.classList.remove('hidden'); // FIX 1: Sicherstellen, dass Box sichtbar ist, wenn kein Tab aktiv
       }
-      // Wenn kein lastTab, wird nichts geklickt -> kein Menü offen (wie gewünscht)
       
       view.dataset.tabListenersAttached = '1';
   }
-  // --- ENDE FIX 2 ---
 
 
   // 7. Listener für "Gruppe ändern" und "Speichern" im grünen Kasten
@@ -1597,7 +1583,6 @@ function renderChecklistSettingsView(editListId = null) {
           const newGroupId = assignSwitcher ? assignSwitcher.value : null;
           const listId = view.dataset.editingListId;
           
-          // Da wir FIX 1 (kein "(Keine)") haben, MUSS newGroupId jetzt einen Wert haben.
           if (!listId || !newGroupId) {
              return alertUser && alertUser('Fehler: Liste oder Gruppe nicht gefunden.', 'error');
           }
@@ -1606,7 +1591,7 @@ function renderChecklistSettingsView(editListId = null) {
           try {
               if (typeof updateDoc === 'function' && typeof doc === 'function' && typeof checklistsCollectionRef !== 'undefined') {
                   await updateDoc(doc(checklistsCollectionRef, listId), {
-                      groupId: newGroupId, // (wird nie null sein)
+                      groupId: newGroupId, 
                       groupName: newGroupName
                   });
               } else {
@@ -1939,6 +1924,9 @@ function setupTemplateEditorListeners() {
 
         const deleteTemplateItemBtn = e.target.closest('.delete-template-item-btn');
         if (deleteTemplateItemBtn && selectedTemplateId) {
+            // DIESER CODE IST JETZT DEAKTIVIERT WEGEN FIX 5, ABER WIR LASSEN IHN HIER,
+            // FALLS DU IHN SPÄTER BRAUCHST. ER WIRD NICHT AUSGELÖST,
+            // DA DER BUTTON IN renderTemplateItemsEditor ENTFERNT WURDE.
             const itemId = deleteTemplateItemBtn.dataset.itemId;
             if (confirm("Möchten Sie diesen Eintrag wirklich aus dem Container löschen?")) {
                 const itemRef = doc(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', selectedTemplateId, 'template-items', itemId);
@@ -1953,8 +1941,8 @@ function setupTemplateEditorListeners() {
                 const templateRef = doc(db, 'artifacts', appId, 'public', 'data', 'checklist-templates', selectedTemplateId);
                 await deleteDoc(templateRef);
                 selectedTemplateId = null;
-                document.getElementById('template-item-editor').classList.add('hidden');
-                renderTemplateList();
+                // FIX 4: Ruft die Hauptfunktion auf, um ALLES neu zu laden
+                renderChecklistSettingsView();
             }
             return;
         }
@@ -1965,6 +1953,42 @@ function setupTemplateEditorListeners() {
     document.getElementById('cancel-template-modal-btn').addEventListener('click', closeTemplateModal);
     document.getElementById('apply-template-btn').addEventListener('click', applyTemplateLogic);
 
+}
+
+function renderTemplateItemsEditor() {
+    const itemsListContainer = document.getElementById('template-items-list');
+    const items = TEMPLATE_ITEMS[selectedTemplateId] || [];
+
+    itemsListContainer.innerHTML = '';
+
+    if (items.length === 0) {
+        itemsListContainer.innerHTML = '<p class="text-xs text-center text-gray-400">Dieser Container hat noch keine Einträge.</p>';
+        return;
+    }
+
+    items.forEach(item => {
+        const isImportantClass = item.important ? 'bg-yellow-50 border-l-4 border-yellow-400' : 'bg-white';
+        let detailsHTML = '';
+        if (item.categoryName) {
+            const colorKey = item.categoryColor || 'gray';
+            const color = COLOR_PALETTE[colorKey] || COLOR_PALETTE.gray;
+            detailsHTML += `<span class="ml-2 text-xs font-semibold py-0.5 px-2 rounded-full whitespace-nowrap ${color.bg} ${color.text}">${item.categoryName}</span>`;
+        }
+        if (item.assignedToName) {
+            detailsHTML += `<span class="ml-2 text-xs bg-gray-200 text-gray-700 font-semibold py-0.5 px-2 rounded-full whitespace-nowrap">${item.assignedToName}</span>`;
+        }
+
+        itemsListContainer.innerHTML += `
+            <div class="p-2 border rounded-md flex justify-between items-center ${isImportantClass}">
+                <div class="flex items-center flex-wrap">
+                    <span>${item.text}</span>
+                    <div class="flex items-center mt-1 sm:mt-0">
+                        ${detailsHTML}
+                    </div>
+                </div>
+                </div>
+        `;
+    });
 }
 
 function openTemplateModal(targetListId) {
