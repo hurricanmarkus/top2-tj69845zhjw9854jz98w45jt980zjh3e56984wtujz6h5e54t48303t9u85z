@@ -1101,7 +1101,7 @@ function setupStackAndContainerManagementListeners(view) {
 }
 
 // Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
-export function renderChecklistSettingsView(editListId = null) {
+function renderChecklistSettingsView(editListId = null) {
   const view = document.getElementById('checklistSettingsView');
   if (!view) return;
 
