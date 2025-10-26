@@ -1762,33 +1762,17 @@ function renderChecklistSettingsView(editListId = null) {
 }
   */
 
-// Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
 function renderChecklistSettingsView(editListId = null) {
   const view = document.getElementById('checklistSettingsView');
   if (!view) return;
 
-  // --- WICHTIG: Entferne ALLE relevanten Listener-Marker ---
-  // Diese Zeilen sind entscheidend, damit die Listener nach dem Neuaufbau neu angehängt werden!
-  view.querySelector('#checklist-archive-list-btn')?.removeAttribute('data-listener-attached');
-  view.querySelector('#checklist-settings-add-item-btn')?.removeAttribute('data-listener-attached');
-  view.querySelector('#checklist-settings-add-text')?.removeAttribute('data-listener-attached');
-  view.querySelector('#checklist-items-editor-container')?.removeAttribute('data-listener-attached');
-  view.querySelector('#show-archived-lists-btn')?.removeAttribute('data-listener-attached');
-  view.querySelector('#show-deleted-lists-btn')?.removeAttribute('data-listener-attached');
-  view.querySelector('#checklist-settings-create-list-btn')?.removeAttribute('data-listener-attached');
-  view.querySelector('#checklist-settings-editor-switcher')?.removeAttribute('data-listener-attached'); // Wichtig für den Switcher
-  view.querySelector('#category-group-selector')?.removeAttribute('data-listener-attached');
-  view.querySelector('#default-group-selector')?.removeAttribute('data-listener-attached');
-  view.querySelector('#save-default-checklist-btn')?.removeAttribute('data-listener-attached');
-  view.querySelector('#edit-group-assignment-btn')?.removeAttribute('data-listener-attached');
-  view.querySelector('#checklist-save-group-assignment')?.removeAttribute('data-listener-attached');
-  // Marker für Bereiche, die von anderen setup-Funktionen verwaltet werden
-  const templatesCard = view.querySelector('#card-templates');
-  if (templatesCard) templatesCard.removeAttribute('data-primary-listener-attached');
-  // Den Tab-Marker auch entfernen
+  delete view.dataset.listenersSetup;
+  delete view.dataset.groupListenersAttached;
+  delete view.dataset.categoryListenersAttached;
   delete view.dataset.tabListenersAttached;
+  const templatesCard = view.querySelector('#card-templates');
+  if (templatesCard) delete templatesCard.dataset.primaryListenerAttached;
 
-  console.log("renderChecklistSettingsView: Starte Neuaufbau, ALLE Listener-Marker entfernt."); // Debug
 
   window.currentUser = window.currentUser || { id: null, name: 'Gast', permissions: [] };
   window.adminSettings = window.adminSettings || {};
@@ -1798,10 +1782,8 @@ function renderChecklistSettingsView(editListId = null) {
   const listToEditId = editListId || view.dataset.editingListId || (hasLists ? Object.keys(CHECKLISTS)[0] : null);
   view.dataset.editingListId = listToEditId || '';
 
-  // Globale escapeHtml Funktion verwenden (muss außerhalb definiert sein!)
-  // const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+  const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
-  // --- HTML-Struktur (komplett) ---
   view.innerHTML = `
     <div class="back-link-container w-full mb-2"></div>
     <h2 class="text-2xl font-bold text-gray-800 mb-4">Checklisten‑Einstellungen</h2>
@@ -1879,7 +1861,8 @@ function renderChecklistSettingsView(editListId = null) {
           <input type="text" id="checklist-settings-new-stack-name" class="flex-grow p-2 border rounded-lg" placeholder="Name für neuen Stack...">
           <button id="checklist-settings-create-stack-btn" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Erstellen</button>
         </div>
-      </div>
+        </div>
+
       <div id="delete-stack-section" class="hidden p-3 bg-red-50 border border-red-200 rounded-lg space-y-2">
         <h4 class="font-bold text-red-800">Stack löschen</h4>
         <p class="text-xs text-red-700">Hinweis: Ein Stack kann nur gelöscht werden, wenn keine Container mehr darin enthalten sind.</p>
@@ -1895,10 +1878,12 @@ function renderChecklistSettingsView(editListId = null) {
         <select id="checklist-settings-new-stack-selector" class="w-full p-2 border rounded-lg bg-white"><option value="">Stack zuweisen...</option></select>
         <button id="checklist-settings-create-container-btn" class="w-full py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">Container erstellen</button>
       </div>
-      <div id="container-list-editor" class="space-y-2"></div>
+      <div id="container-list-editor" class="space-y-2">
+      </div>
       <div id="template-item-editor" class="hidden p-3 bg-indigo-50 border-t-4 border-indigo-300 rounded-lg space-y-3">
         <h4 id="template-editor-title" class="font-bold text-gray-800">Einträge für Container...</h4>
-        <div id="template-items-list" class="space-y-2 max-h-48 overflow-y-auto"></div>
+        <div id="template-items-list" class="space-y-2 max-h-48 overflow-y-auto">
+        </div>
         <h5 class="font-semibold text-sm pt-2 border-t">Neuen Eintrag hinzufügen</h5>
         <input type="text" id="new-template-item-text" class="w-full p-2 border rounded-lg" placeholder="Text für Eintrag...">
         <div class="grid grid-cols-2 gap-2">
@@ -1930,98 +1915,301 @@ function renderChecklistSettingsView(editListId = null) {
         </div>
       </div>
       <div class="p-3 bg-gray-50 rounded-lg space-y-3 mb-4 border-t pt-4">
-         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-           <div class="relative sm:col-span-2">
-             <input type="text" id="checklist-settings-add-text" class="w-full p-2 border rounded-lg" placeholder="Neuer Eintrag..." autocomplete="off">
-             <div id="item-suggestions-container" class="absolute z-10 w-full bg-white border rounded-lg mt-1 hidden max-h-48 overflow-y-auto shadow-lg"></div>
-           </div>
-           <select id="checklist-settings-add-assignee" class="p-2 border rounded-lg bg-white w-full">${Object.values(USERS || {}).map(u => `<option value="${u.id}">${escapeHtml(u.name||u.displayName||'')}</option>`).join('')}</select>
-           <select id="checklist-settings-add-category" class="p-2 border rounded-lg bg-white w-full"><option value="">Keine Kategorie</option></select>
-         </div>
-         <div class="flex items-center">
-           <input type="checkbox" id="checklist-settings-add-important" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-           <label for="checklist-settings-add-important" class="ml-2 text-sm text-gray-700">Als wichtig markieren</label>
-         </div>
-         <button id="checklist-settings-add-item-btn" class="w-full py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition">Eintrag hinzufügen</button>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div class="relative sm:col-span-2">
+            <input type="text" id="checklist-settings-add-text" class="w-full p-2 border rounded-lg" placeholder="Neuer Eintrag..." autocomplete="off">
+            <div id="item-suggestions-container" class="absolute z-10 w-full bg-white border rounded-lg mt-1 hidden max-h-48 overflow-y-auto shadow-lg"></div>
+          </div>
+          <select id="checklist-settings-add-assignee" class="p-2 border rounded-lg bg-white w-full">${Object.values(USERS || {}).map(u => `<option value="${u.id}">${escapeHtml(u.name||u.displayName||'')}</option>`).join('')}</select>
+          <select id="checklist-settings-add-category" class="p-2 border rounded-lg bg-white w-full"><option value="">Keine Kategorie</option></select>
+        </div>
+        <div class="flex items-center">
+          <input type="checkbox" id="checklist-settings-add-important" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+          <label for="checklist-settings-add-important" class="ml-2 text-sm text-gray-700">Als wichtig markieren</label>
+        </div>
+        <button id="checklist-settings-add-item-btn" class="w-full py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition">Eintrag hinzufügen</button>
       </div>
       <div id="checklist-items-editor-container" class="space-y-2 mb-4"></div>
     </div>
-  `; // Ende view.innerHTML
+  `;
 
+  // --- Alle Hilfsfunktionen und Listener-Registrierungen ---
+  // (Diese bleiben gleich wie in der vorherigen Version)
 
-  // --- HILFSFUNKTIONEN ---
-  function buildEditorSwitcherOptions() { /* ... */ }
-  function rebuildCategorySelectForAddForm() { /* ... */ }
-  function rebuildGroupAssignSwitcher() { /* ... */ }
-  function updateCurrentGroupDisplay(listId) { /* ... */ }
+  function buildEditorSwitcherOptions() {
+    const groups = Object.values(CHECKLIST_GROUPS || {});
+    const opts = groups.map(g => {
+      const lists = Object.values(CHECKLISTS || {}).filter(l => l.groupId === g.id);
+      if (lists.length === 0) return '';
+      return `<optgroup label="${escapeHtml(g.name)}">${lists.map(l => `<option value="${l.id}" ${l.id === listToEditId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('')}</optgroup>`;
+    }).join('');
+    const editorSwitcher = view.querySelector('#checklist-settings-editor-switcher');
+    if (editorSwitcher) {
+      editorSwitcher.innerHTML = (opts || `<option value="">Keine Listen vorhanden</option>`);
+      if (listToEditId) editorSwitcher.value = listToEditId;
+    }
+  }
 
-  // --- UI INITIALISIEREN ---
+  function rebuildCategorySelectForAddForm() {
+    const catSelect = view.querySelector('#checklist-settings-add-category');
+    if (!catSelect) return;
+    const groups = Object.values(CHECKLIST_GROUPS || {});
+    const html = groups.map(g => {
+      const cats = CHECKLIST_CATEGORIES[g.id] || [];
+      if (!cats.length) return '';
+      return `<optgroup label="${escapeHtml(g.name)}">${cats.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`;
+    }).join('');
+    catSelect.innerHTML = `<option value="">Keine Kategorie</option>` + html;
+  }
+
+  function rebuildGroupAssignSwitcher() {
+    const sel = view.querySelector('#checklist-group-assign-switcher');
+    if (!sel) return;
+    const html = Object.values(CHECKLIST_GROUPS || {}).map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
+    const prev = sel.value;
+    sel.innerHTML = html;
+    if (prev) sel.value = prev;
+  }
+
   buildEditorSwitcherOptions();
   rebuildCategorySelectForAddForm();
   rebuildGroupAssignSwitcher();
+
+  function updateCurrentGroupDisplay(listId) {
+    const span = view.querySelector('#current-group-name');
+    const list = listId ? CHECKLISTS[listId] : null;
+    span && (span.textContent = list ? (list.groupName || (CHECKLIST_GROUPS[list.groupId] && CHECKLIST_GROUPS[list.groupId].name) || '—') : '—');
+  }
   updateCurrentGroupDisplay(listToEditId);
-  if (listToEditId) { renderChecklistSettingsItems(listToEditId); }
-  else { const container = view.querySelector('#checklist-items-editor-container'); if (container) container.innerHTML = '<p>...</p>'; }
 
-  // --- EVENT LISTENER DIREKT HIER ANHÄNGEN ---
-  console.log("renderChecklistSettingsView: Hänge Listener direkt an...");
-
-  // Editor Switcher
   const editorSwitcher = view.querySelector('#checklist-settings-editor-switcher');
-  if (editorSwitcher && !editorSwitcher.dataset.listenerAttached) { editorSwitcher.addEventListener('change', (e) => { const val = e.target.value; view.dataset.editingListId = val || ''; updateCurrentGroupDisplay(val); renderChecklistSettingsItems(val); }); editorSwitcher.dataset.listenerAttached = 'true'; console.log("   - Editor Switcher Listener angehängt."); }
-
-  // Archivieren Button
-  const archiveBtn = view.querySelector('#checklist-archive-list-btn');
-  if (archiveBtn && !archiveBtn.dataset.listenerAttached) { archiveBtn.addEventListener('click', async () => { console.log("Archivieren geklickt."); const listIdToArchive = view.dataset.editingListId; if (!listIdToArchive || !CHECKLISTS[listIdToArchive]) { return alertUser("Keine Liste...", "error"); } const listName = CHECKLISTS[listIdToArchive]?.name || 'Unbekannt'; if (confirm(`Liste "${listName}" archivieren?`)) { try { if (typeof updateDoc !== 'function' || typeof doc !== 'function' || !checklistsCollectionRef || typeof serverTimestamp !== 'function') throw new Error("Firebase fehlt."); await updateDoc(doc(checklistsCollectionRef, listIdToArchive), { isArchived: true, archivedAt: serverTimestamp(), archivedBy: window.currentUser?.displayName || 'Unbekannt' }); alertUser(`Liste "${listName}" archiviert.`, 'success'); } catch (error) { console.error("Fehler:", error); alertUser(`Fehler: ${error.message}`, "error"); } } }); archiveBtn.dataset.listenerAttached = 'true'; console.log("   - Archivieren Listener angehängt."); }
-
-  // Eintrag hinzufügen Button & Textfeld
-  const addItemBtn = view.querySelector('#checklist-settings-add-item-btn');
-  const addTextInput = view.querySelector('#checklist-settings-add-text');
-  const addHandler = async () => { /* ... (Kompletter addHandler Code von oben) ... */ };
-  if (addItemBtn && !addItemBtn.dataset.listenerAttached) { addItemBtn.addEventListener('click', addHandler); addItemBtn.dataset.listenerAttached = 'true'; console.log("   - AddItem Button Listener angehängt."); }
-  if (addTextInput && !addTextInput.dataset.listenerAttached) { addTextInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addHandler(); } }); addTextInput.dataset.listenerAttached = 'true'; console.log("   - AddItem Text Listener angehängt."); }
-
-  // Item Editor (Bearbeiten/Löschen)
-  const itemsEditor = view.querySelector('#checklist-items-editor-container');
-  if (itemsEditor && !itemsEditor.dataset.listenerAttached) { itemsEditor.addEventListener('click', async (e) => { /* ... (Edit/Delete Item Logik) ... */ }); itemsEditor.dataset.listenerAttached = 'true'; console.log("   - Items Editor Listener angehängt."); }
-
-  // Buttons für Modals (Archiv/Papierkorb anzeigen)
-   const showArchivedBtn = view.querySelector('#show-archived-lists-btn');
-   if (showArchivedBtn && !showArchivedBtn.dataset.listenerAttached) { showArchivedBtn.addEventListener('click', () => { console.log("Archiv anzeigen geklickt."); try { renderArchivedListsModal && renderArchivedListsModal(); document.getElementById('archivedListsModal') && (document.getElementById('archivedListsModal').style.display = 'flex'); } catch(e){console.error(e);} }); showArchivedBtn.dataset.listenerAttached = 'true'; console.log("   - ShowArchived Button Listener angehängt."); }
-   const showDeletedBtn = view.querySelector('#show-deleted-lists-btn');
-   if (showDeletedBtn && !showDeletedBtn.dataset.listenerAttached) { showDeletedBtn.addEventListener('click', () => { console.log("Papierkorb anzeigen geklickt."); try { renderDeletedListsModal && renderDeletedListsModal(); document.getElementById('deletedListsModal') && (document.getElementById('deletedListsModal').style.display = 'flex'); } catch(e){console.error(e);} }); showDeletedBtn.dataset.listenerAttached = 'true'; console.log("   - ShowDeleted Button Listener angehängt."); }
-
-   // Neue Liste erstellen Button
-   const createListBtn = view.querySelector('#checklist-settings-create-list-btn');
-    if (createListBtn && !createListBtn.dataset.listenerAttached) { createListBtn.addEventListener('click', async () => { /* ... (Create List Logik) ... */ }); createListBtn.dataset.listenerAttached = 'true'; console.log("   - CreateList Button Listener angehängt."); }
-
-  // --- ANDERE SETUP FUNKTIONEN AUFRUFEN ---
-  if (typeof setupGroupManagementListeners === 'function') { setupGroupManagementListeners(view, window.currentUser); }
-  if (typeof setupCategoryManagementListeners === 'function') { setupCategoryManagementListeners(view); }
-  if (typeof setupStackAndContainerManagementListeners === 'function') { setupStackAndContainerManagementListeners(view); }
-  if (typeof setupTemplateEditorListeners === 'function') { setupTemplateEditorListeners(); }
-
-  // --- TAB-LOGIK ---
-  const tabButtons = view.querySelectorAll('.settings-tab-btn');
-  const greenBox = view.querySelector('#card-list-item-editor');
-  // Wichtig: Prüfung muss hier sein, damit Listener nur einmal angehängt werden!
-  if (tabButtons.length > 0 && !view.dataset.tabListenersAttached) {
-      tabButtons.forEach(btn => { btn.addEventListener('click', () => { const targetCardId = btn.dataset.targetCard; const isActive = btn.classList.contains('bg-white'); view.querySelectorAll('.settings-card').forEach(card => card.classList.add('hidden')); tabButtons.forEach(b => { b.classList.remove('bg-white', 'text-indigo-600', 'shadow-sm'); b.classList.add('text-gray-600'); }); if (isActive) { view.dataset.activeSettingsTab = ''; greenBox?.classList.remove('hidden'); } else { const targetCard = view.querySelector(`#${targetCardId}`); if (targetCard) targetCard.classList.remove('hidden'); btn.classList.add('bg-white', 'text-indigo-600', 'shadow-sm'); btn.classList.remove('text-gray-600'); view.dataset.activeSettingsTab = targetCardId; greenBox?.classList.add('hidden'); } }); });
-      const lastTab = view.dataset.activeSettingsTab; if (lastTab) { const tabToClick = view.querySelector(`.settings-tab-btn[data-target-card="${lastTab}"]`); if (tabToClick) tabToClick.click(); } else { greenBox?.classList.remove('hidden'); }
-      view.dataset.tabListenersAttached = 'true'; // Marker setzen
-      console.log("   - Tab Button Listener angehängt.");
-  } else if (tabButtons.length > 0 && view.dataset.tabListenersAttached) {
-       console.log("   - Tab Button Listener war bereits angehängt (korrekt).");
+  if (editorSwitcher && !editorSwitcher.dataset.listenerAttached) {
+    editorSwitcher.addEventListener('change', (e) => {
+      const val = e.target.value;
+      view.dataset.editingListId = val || '';
+      updateCurrentGroupDisplay(val);
+      renderChecklistSettingsItems(val);
+    });
+    editorSwitcher.dataset.listenerAttached = '1';
   }
 
-  // Listener für Gruppe ändern/speichern
-  const editGroupBtn = view.querySelector('#edit-group-assignment-btn');
-  if (editGroupBtn && !editGroupBtn.dataset.listenerAttached) { editGroupBtn.addEventListener('click', () => { view.querySelector('#group-display-container')?.classList.add('hidden'); view.querySelector('#group-edit-container')?.classList.remove('hidden'); const currentList = (view.dataset.editingListId && CHECKLISTS) ? CHECKLISTS[view.dataset.editingListId] : null; if (currentList && currentList.groupId) { const assignSwitcher = view.querySelector('#checklist-group-assign-switcher'); if (assignSwitcher) assignSwitcher.value = currentList.groupId; } }); editGroupBtn.dataset.listenerAttached = 'true'; console.log("   - EditGroup Button Listener angehängt."); }
-  const saveGroupBtn = view.querySelector('#checklist-save-group-assignment');
-  if (saveGroupBtn && !saveGroupBtn.dataset.listenerAttached) { saveGroupBtn.addEventListener('click', async () => { const assignSwitcher = view.querySelector('#checklist-group-assign-switcher'); const newGroupId = assignSwitcher ? assignSwitcher.value : null; const listId = view.dataset.editingListId; if (!listId || !newGroupId) return alertUser('Fehler: Liste/Gruppe nicht gefunden.', 'error'); const newGroupName = (newGroupId && CHECKLIST_GROUPS[newGroupId]) ? CHECKLIST_GROUPS[newGroupId].name : null; try { if (typeof updateDoc === 'function' && typeof doc === 'function' && checklistsCollectionRef) { await updateDoc(doc(checklistsCollectionRef, listId), { groupId: newGroupId, groupName: newGroupName }); } else { if (CHECKLISTS && CHECKLISTS[listId]) { CHECKLISTS[listId].groupId = newGroupId; CHECKLISTS[listId].groupName = newGroupName; } } updateCurrentGroupDisplay(listId); view.querySelector('#group-display-container')?.classList.remove('hidden'); view.querySelector('#group-edit-container')?.classList.add('hidden'); buildEditorSwitcherOptions(); alertUser('Gruppenzuweisung gespeichert.', 'success'); } catch (err) { console.error('Fehler:', err); alertUser('Fehler.', 'error'); } }); saveGroupBtn.dataset.listenerAttached = 'true'; console.log("   - SaveGroup Button Listener angehängt."); }
+  const catGroupSelector = view.querySelector('#category-group-selector');
+  if (catGroupSelector) {
+      const groupOpts = Object.values(CHECKLIST_GROUPS || {}).map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
+      catGroupSelector.innerHTML = `<option value="">Gruppe wählen...</option>` + groupOpts;
+      if (!catGroupSelector.dataset.listenerAttached) {
+          catGroupSelector.addEventListener('change', (e) => {
+              const gid = e.target.value;
+              view.dataset.selectedCategoryIdForRender = gid;
+              if (typeof renderCategoryEditor === 'function') {
+                  renderCategoryEditor(gid);
+              } else {
+                  const content = view.querySelector('#category-content');
+                  if (content) content.innerHTML = `<p class="text-red-500">Fehler: renderCategoryEditor nicht gefunden.</p>`;
+              }
+          });
+          catGroupSelector.dataset.listenerAttached = '1';
+      }
+      if(view.dataset.selectedCategoryIdForRender) {
+        catGroupSelector.value = view.dataset.selectedCategoryIdForRender;
+        // Wichtig: renderCategoryEditor muss hier aufgerufen werden, NACHDEM der Wert gesetzt wurde
+        if (typeof renderCategoryEditor === 'function') {
+             renderCategoryEditor(view.dataset.selectedCategoryIdForRender);
+        }
+      }
+  }
 
-  console.log("renderChecklistSettingsView: Listener-Anhängen abgeschlossen."); // Debug
-} // Ende renderChecklistSettingsView
+  const defaultGroupSelector = view.querySelector('#default-group-selector');
+  const defaultListSelector = view.querySelector('#default-list-selector');
+
+  if (defaultGroupSelector && defaultListSelector) {
+      const groupOpts = Object.values(CHECKLIST_GROUPS || {}).map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
+      defaultGroupSelector.innerHTML = `<option value="">Keine Checkliste</option>` + groupOpts;
+      defaultListSelector.innerHTML = `<option value="">Zuerst Gruppe wählen</option>`;
+
+      if (!defaultGroupSelector.dataset.listenerAttached) {
+          defaultGroupSelector.addEventListener('change', () => {
+              const selectedGroupId = defaultGroupSelector.value;
+              if (selectedGroupId) {
+                  const listsInGroup = Object.values(CHECKLISTS || {}).filter(l => l.groupId === selectedGroupId);
+                  if (listsInGroup.length > 0) {
+                      const listOpts = listsInGroup.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
+                      defaultListSelector.innerHTML = listOpts;
+                      defaultListSelector.disabled = false;
+                  } else {
+                      defaultListSelector.innerHTML = `<option value="">Keine Listen in Gruppe</option>`;
+                      defaultListSelector.disabled = true;
+                  }
+              } else {
+                  defaultListSelector.innerHTML = `<option value="">Zuerst Gruppe wählen</option>`;
+                  defaultListSelector.disabled = true;
+              }
+          });
+          defaultGroupSelector.dataset.listenerAttached = '1';
+      }
+
+      const savedListId = window.adminSettings.defaultChecklistId;
+      if (savedListId && CHECKLISTS[savedListId]) {
+          const savedGroupId = CHECKLISTS[savedListId].groupId;
+          if (savedGroupId) {
+              defaultGroupSelector.value = savedGroupId;
+              defaultGroupSelector.dispatchEvent(new Event('change'));
+              if (!defaultListSelector.disabled) {
+                 defaultListSelector.value = savedListId;
+              }
+          }
+      } else {
+         defaultGroupSelector.value = "";
+         defaultGroupSelector.dispatchEvent(new Event('change'));
+      }
+  }
+
+  const saveDefaultBtn = view.querySelector('#save-default-checklist-btn');
+  if (saveDefaultBtn && !saveDefaultBtn.dataset.listenerAttached) {
+      saveDefaultBtn.addEventListener('click', async () => {
+          const newDefaultId = view.querySelector('#default-list-selector')?.value || null;
+          const selectedGroup = view.querySelector('#default-group-selector')?.value;
+          try {
+              if (!settingsDocRef) throw new Error("settingsDocRef ist nicht importiert oder nicht definiert.");
+              let finalId = null;
+              if (selectedGroup && newDefaultId && CHECKLISTS[newDefaultId]) {
+                  finalId = newDefaultId;
+              }
+              await updateDoc(settingsDocRef, { defaultChecklistId: finalId });
+              window.adminSettings.defaultChecklistId = finalId;
+              if (finalId) alertUser && alertUser('Standard-Checkliste gespeichert.', 'success');
+              else alertUser && alertUser('Standard-Auswahl entfernt.', 'success');
+          } catch (err) {
+              console.error("Fehler beim Speichern der Standard-Liste:", err);
+              alertUser && alertUser('Fehler beim Speichern.', 'error');
+          }
+      });
+      saveDefaultBtn.dataset.listenerAttached = '1';
+  }
+
+  const stackSelector = view.querySelector('#checklist-settings-new-stack-selector');
+  if (stackSelector) {
+      const stackOpts = Object.values(CHECKLIST_STACKS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+      stackSelector.innerHTML = `<option value="">Stack wählen...</option>` + stackOpts;
+  }
+  const deleteStackSelector = view.querySelector('#delete-stack-selector');
+  if (deleteStackSelector) {
+        const stackOpts = Object.values(CHECKLIST_STACKS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+        deleteStackSelector.innerHTML = `<option value="">Stack zum Löschen auswählen...</option>` + stackOpts;
+  }
+
+  const templateAssignee = view.querySelector('#new-template-item-assignee');
+  if (templateAssignee) {
+      templateAssignee.innerHTML = `<option value="">Zuweisen...</option>` + Object.values(USERS || {}).map(u => `<option value="${u.id}">${escapeHtml(u.name||u.displayName||'')}</option>`).join('');
+  }
+  if (typeof updateCategoryDropdowns === 'function') {
+      updateCategoryDropdowns();
+  }
+
+  if (typeof setupListAndItemManagementListeners === 'function') {
+      setupListAndItemManagementListeners(view);
+  }
+  if (typeof setupGroupManagementListeners === 'function') {
+      setupGroupManagementListeners(view, window.currentUser);
+  }
+  if (typeof setupCategoryManagementListeners === 'function') {
+      setupCategoryManagementListeners(view);
+  }
+  if (typeof setupStackAndContainerManagementListeners === 'function') {
+      setupStackAndContainerManagementListeners(view);
+  }
+  if (typeof setupTemplateEditorListeners === 'function') {
+      setupTemplateEditorListeners();
+  }
+
+  if (typeof renderContainerList === 'function') {
+      renderContainerList();
+  }
+
+  const tabButtons = view.querySelectorAll('.settings-tab-btn');
+  const greenBox = view.querySelector('#card-list-item-editor');
+
+  if (tabButtons.length > 0 && !view.dataset.tabListenersAttached) {
+      tabButtons.forEach(btn => {
+          btn.addEventListener('click', () => {
+              const targetCardId = btn.dataset.targetCard;
+              const isActive = btn.classList.contains('bg-white');
+              view.querySelectorAll('.settings-card').forEach(card => card.classList.add('hidden'));
+              tabButtons.forEach(b => {
+                  b.classList.remove('bg-white', 'text-indigo-600', 'shadow-sm');
+                  b.classList.add('text-gray-600');
+              });
+              if (isActive) {
+                  view.dataset.activeSettingsTab = '';
+                  greenBox?.classList.remove('hidden');
+              } else {
+                  const targetCard = view.querySelector(`#${targetCardId}`);
+                  if (targetCard) targetCard.classList.remove('hidden');
+                  btn.classList.add('bg-white', 'text-indigo-600', 'shadow-sm');
+                  btn.classList.remove('text-gray-600');
+                  view.dataset.activeSettingsTab = targetCardId;
+                  greenBox?.classList.add('hidden');
+              }
+          });
+      });
+      const lastTab = view.dataset.activeSettingsTab;
+      if (lastTab) {
+          const tabToClick = view.querySelector(`.settings-tab-btn[data-target-card="${lastTab}"]`);
+          if (tabToClick) tabToClick.click();
+      } else {
+         greenBox?.classList.remove('hidden');
+      }
+      view.dataset.tabListenersAttached = '1';
+  }
+
+  const editGroupBtn = view.querySelector('#edit-group-assignment-btn');
+  if (editGroupBtn && !editGroupBtn.dataset.listenerAttached) {
+      editGroupBtn.addEventListener('click', () => {
+          view.querySelector('#group-display-container')?.classList.add('hidden');
+          view.querySelector('#group-edit-container')?.classList.remove('hidden');
+          const currentList = (view.dataset.editingListId && CHECKLISTS) ? CHECKLISTS[view.dataset.editingListId] : null;
+          if (currentList && currentList.groupId) {
+              const assignSwitcher = view.querySelector('#checklist-group-assign-switcher');
+              if (assignSwitcher) assignSwitcher.value = currentList.groupId;
+          }
+      });
+      editGroupBtn.dataset.listenerAttached = '1';
+  }
+  const saveGroupBtn = view.querySelector('#checklist-save-group-assignment');
+  if (saveGroupBtn && !saveGroupBtn.dataset.listenerAttached) {
+      saveGroupBtn.addEventListener('click', async () => {
+          const assignSwitcher = view.querySelector('#checklist-group-assign-switcher');
+          const newGroupId = assignSwitcher ? assignSwitcher.value : null;
+          const listId = view.dataset.editingListId;
+          if (!listId || !newGroupId) return alertUser && alertUser('Fehler: Liste oder Gruppe nicht gefunden.', 'error');
+          const newGroupName = (newGroupId && CHECKLIST_GROUPS && CHECKLIST_GROUPS[newGroupId]) ? CHECKLIST_GROUPS[newGroupId].name : null;
+          try {
+              if (typeof updateDoc === 'function' && typeof doc === 'function' && typeof checklistsCollectionRef !== 'undefined') {
+                  await updateDoc(doc(checklistsCollectionRef, listId), { groupId: newGroupId, groupName: newGroupName });
+              } else {
+                  if (CHECKLISTS && CHECKLISTS[listId]) { CHECKLISTS[listId].groupId = newGroupId; CHECKLISTS[listId].groupName = newGroupName; }
+              }
+              updateCurrentGroupDisplay(listId);
+              view.querySelector('#group-display-container')?.classList.remove('hidden');
+              view.querySelector('#group-edit-container')?.classList.add('hidden');
+              buildEditorSwitcherOptions();
+              alertUser && alertUser('Gruppenzuweisung gespeichert.', 'success');
+          } catch (err) {
+              console.error('Fehler beim Speichern der Gruppe:', err);
+              alertUser && alertUser('Fehler beim Speichern.', 'error');
+          }
+      });
+      saveGroupBtn.dataset.listenerAttached = '1';
+  }
+
+  if (listToEditId) {
+    renderChecklistSettingsItems(listToEditId);
+  } else {
+    const container = view.querySelector('#checklist-items-editor-container');
+    if (container) container.innerHTML = '<p class="text-sm text-center text-gray-500">Keine Listen vorhanden. Bitte erstellen Sie zuerst eine Liste.</p>';
+  }
+}
+
 
 function setupCategoryManagementListeners(view) {
     if (!view) return;
