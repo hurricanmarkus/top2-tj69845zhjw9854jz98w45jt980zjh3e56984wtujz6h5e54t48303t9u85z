@@ -16,7 +16,7 @@ import {
     db,
     appId,
     TEMPLATES,
-    USERS
+    USERS,
     settingsDocRef,
     checklistStacksCollectionRef,
     checklistTemplatesCollectionRef,
