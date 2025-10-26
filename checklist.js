@@ -1878,26 +1878,24 @@ export function populatePersonDropdown() {
 function setupTemplateEditorListeners() {
     const templatesCard = document.getElementById('card-templates');
     if (!templatesCard) {
-        console.error("setupTemplateEditorListeners: Konnte #card-templates nicht finden.");
+        // console.error("setupTemplateEditorListeners: Konnte #card-templates nicht finden."); // DEBUG ENTFERNT
         return;
     }
-    // WICHTIG: Den Listener nur EINMAL hinzufügen. Die dataset-Prüfung ist hier korrekt.
     if (templatesCard.dataset.listenerAttached === 'true') {
-        // console.log("setupTemplateEditorListeners: Listener bereits angehängt."); // Optional: Zur Bestätigung
         return;
     }
     templatesCard.dataset.listenerAttached = 'true';
-    console.log("setupTemplateEditorListeners: Hänge Listener an #card-templates an."); // Debugging
+    // console.log("setupTemplateEditorListeners: Hänge Listener an #card-templates an."); // DEBUG ENTFERNT
 
     templatesCard.addEventListener('click', async (e) => {
-        console.log("setupTemplateEditorListeners: Klick auf #card-templates erkannt.", e.target); // Debugging: Welches Element wurde geklickt?
+        // console.log("setupTemplateEditorListeners: Klick auf #card-templates erkannt.", e.target); // DEBUG ENTFERNT
 
         // --- Container AUSWÄHLEN Logik ---
         const templateItem = e.target.closest('.template-selection-item');
-        if (templateItem && !e.target.closest('button') && !e.target.closest('select')) { // Stelle sicher, dass nicht auf Button geklickt wurde
-             console.log("setupTemplateEditorListeners: Klick auf Container-Auswahl-Item."); // Debugging
+        if (templateItem && !e.target.closest('button') && !e.target.closest('select')) {
+            // console.log("setupTemplateEditorListeners: Klick auf Container-Auswahl-Item."); // DEBUG ENTFERNT
             selectedTemplateId = templateItem.dataset.templateId;
-            console.log("setupTemplateEditorListeners: selectedTemplateId gesetzt auf:", selectedTemplateId); // Debugging
+            // console.log("setupTemplateEditorListeners: selectedTemplateId gesetzt auf:", selectedTemplateId); // DEBUG ENTFERNT
             document.getElementById('template-editor-title').textContent = `Einträge für Container "${TEMPLATES[selectedTemplateId]?.name || 'Unbekannt'}"`;
             document.getElementById('template-item-editor')?.classList.remove('hidden');
             renderTemplateList();
@@ -1911,15 +1909,14 @@ function setupTemplateEditorListeners() {
                     renderTemplateItemsEditor();
                 });
             } else {
-                 console.error("setupTemplateEditorListeners: checklistTemplatesCollectionRef oder selectedTemplateId fehlt für Item-Listener.");
+                 console.error("setupTemplateEditorListeners: checklistTemplatesCollectionRef oder selectedTemplateId fehlt für Item-Listener."); // Fehler belassen
             }
             return;
         }
 
         // --- "+ Eintrag hinzufügen" Logik ---
         if (e.target.closest('#add-template-item-btn') && selectedTemplateId) {
-            console.log("setupTemplateEditorListeners: Klick auf '+ Eintrag hinzufügen'."); // Debugging
-            // ... (Restliche Logik für Eintrag hinzufügen bleibt gleich)
+            // console.log("setupTemplateEditorListeners: Klick auf '+ Eintrag hinzufügen'."); // DEBUG ENTFERNT
             const textInput = document.getElementById('new-template-item-text');
             const assigneeSelect = document.getElementById('new-template-item-assignee');
             const categorySelect = document.getElementById('new-template-item-category');
@@ -1945,19 +1942,18 @@ function setupTemplateEditorListeners() {
         }
 
         // --- "+ Container erstellen" (Formular ein/ausblenden) Logik ---
-        const createForm = templatesCard.querySelector('#create-template-form'); // Evtl. nicht mehr relevant?
-        const showCreateFormBtn = templatesCard.querySelector('#show-create-template-form-btn'); // Evtl. nicht mehr relevant?
+        const createForm = templatesCard.querySelector('#create-template-form');
+        const showCreateFormBtn = templatesCard.querySelector('#show-create-template-form-btn');
         if (e.target.closest('#show-create-template-form-btn')) {
-            console.log("setupTemplateEditorListeners: Klick auf 'Formular anzeigen'."); // Debugging
+            // console.log("setupTemplateEditorListeners: Klick auf 'Formular anzeigen'."); // DEBUG ENTFERNT
             createForm?.classList.remove('hidden');
             showCreateFormBtn?.classList.add('hidden');
-            return; // Wichtig: Hier beenden, sonst wird evtl. der Lösch-Button geprüft
+            return;
         }
 
         // --- "Erstellen" Button (Neuer Container) Logik ---
         if (e.target.closest('#create-template-btn')) {
-            console.log("setupTemplateEditorListeners: Klick auf 'Container Erstellen'."); // Debugging
-            // ... (Restliche Logik für Container erstellen bleibt gleich)
+            // console.log("setupTemplateEditorListeners: Klick auf 'Container Erstellen'."); // DEBUG ENTFERNT
              const newTemplateNameInput = document.getElementById('new-template-name');
              const templateName = newTemplateNameInput?.value.trim();
              if (!templateName) return alertUser("Bitte geben Sie einen Namen für den Container ein.", "error");
@@ -1969,65 +1965,60 @@ function setupTemplateEditorListeners() {
                  createForm?.classList.add('hidden');
                  showCreateFormBtn?.classList.remove('hidden');
              } catch (err) {
-                  console.error("Fehler beim Erstellen des Containers:", err);
+                  console.error("Fehler beim Erstellen des Containers:", err); // Fehler belassen
                   alertUser && alertUser('Fehler beim Erstellen des Containers.', 'error');
              }
-            return; // Wichtig: Hier beenden
+            return;
         }
 
 
         // --- "Diesen Container löschen" Button Logik ---
         const deleteTemplateBtn = e.target.closest('#delete-template-btn');
-        console.log("setupTemplateEditorListeners: Prüfe, ob Lösch-Button geklickt wurde:", deleteTemplateBtn); // Debugging
-        console.log("setupTemplateEditorListeners: Aktueller Wert von selectedTemplateId:", selectedTemplateId); // Debugging
+        // console.log("setupTemplateEditorListeners: Prüfe, ob Lösch-Button geklickt wurde:", deleteTemplateBtn); // DEBUG ENTFERNT
+        // console.log("setupTemplateEditorListeners: Aktueller Wert von selectedTemplateId:", selectedTemplateId); // DEBUG ENTFERNT
 
         if (deleteTemplateBtn && selectedTemplateId) {
-            console.log("setupTemplateEditorListeners: Bedingung für Löschen erfüllt. Starte Löschvorgang für ID:", selectedTemplateId); // Debugging
-
+            // console.log("setupTemplateEditorListeners: Bedingung für Löschen erfüllt. Starte Löschvorgang für ID:", selectedTemplateId); // DEBUG ENTFERNT
             const containerName = TEMPLATES[selectedTemplateId]?.name || 'Unbekannt';
-            
-            // Bestätigungsdialog anzeigen
+
             if (confirm(`Möchten Sie den Container "${containerName}" wirklich unwiderruflich löschen?`)) {
-                console.log("setupTemplateEditorListeners: Bestätigung zum Löschen erhalten."); // Debugging
-                const idToDelete = selectedTemplateId; // ID sichern
-                
+                // console.log("setupTemplateEditorListeners: Bestätigung zum Löschen erhalten."); // DEBUG ENTFERNT
+                const idToDelete = selectedTemplateId;
+
                 try {
-                    console.log("setupTemplateEditorListeners: Versuche deleteDoc für Ref:", doc(checklistTemplatesCollectionRef, idToDelete).path); // Debugging
-                    
-                    if (!checklistTemplatesCollectionRef) throw new Error("checklistTemplatesCollectionRef ist nicht definiert!");
-                    
+                    // console.log("setupTemplateEditorListeners: Versuche deleteDoc für Ref:", doc(checklistTemplatesCollectionRef, idToDelete).path); // DEBUG ENTFERNT
+                    if (!checklistTemplatesCollectionRef) throw new Error("checklistTemplatesCollectionRef ist nicht definiert!"); // Fehlerprüfung belassen
+
                     const templateRef = doc(checklistTemplatesCollectionRef, idToDelete);
                     await deleteDoc(templateRef);
-                    
-                    console.log("setupTemplateEditorListeners: deleteDoc erfolgreich."); // Debugging
+
+                    // console.log("setupTemplateEditorListeners: deleteDoc erfolgreich."); // DEBUG ENTFERNT
                     alertUser && alertUser('Container gelöscht.', 'success');
-                    
+
                     selectedTemplateId = null; // Auswahl zurücksetzen
                     if (unsubscribeTemplateItems) unsubscribeTemplateItems(); // Listener stoppen
-                    
-                    console.log("setupTemplateEditorListeners: Rufe renderChecklistSettingsView() auf."); // Debugging
+
+                    // console.log("setupTemplateEditorListeners: Rufe renderChecklistSettingsView() auf."); // DEBUG ENTFERNT
                     renderChecklistSettingsView(); // Gesamte Ansicht neu laden
 
                 } catch (err) {
-                    // Fehler im Detail ausgeben
-                    console.error("setupTemplateEditorListeners: FEHLER beim Löschen des Containers:", err); // Debugging
+                    console.error("setupTemplateEditorListeners: FEHLER beim Löschen des Containers:", err); // Fehler belassen
                     alertUser && alertUser(`Fehler beim Löschen: ${err.message}. (Internet/Berechtigungen prüfen)`, 'error');
                 }
             } else {
-                 console.log("setupTemplateEditorListeners: Löschen abgebrochen."); // Debugging
+                 // console.log("setupTemplateEditorListeners: Löschen abgebrochen."); // DEBUG ENTFERNT
             }
-            return; // Wichtig: Funktion hier beenden, auch wenn abgebrochen wurde
+            return;
         } else {
-             // Debugging: Warum wurde die Bedingung nicht erfüllt?
-             if (!deleteTemplateBtn) console.log("setupTemplateEditorListeners: Lösch-Bedingung nicht erfüllt (Button nicht gefunden).");
-             if (!selectedTemplateId) console.log("setupTemplateEditorListeners: Lösch-Bedingung nicht erfüllt (selectedTemplateId ist null/leer).");
+             // Debugging, warum Bedingung nicht erfüllt war, entfernt
+             // if (!deleteTemplateBtn) console.log("setupTemplateEditorListeners: Lösch-Bedingung nicht erfüllt (Button nicht gefunden).");
+             // if (!selectedTemplateId) console.log("setupTemplateEditorListeners: Lösch-Bedingung nicht erfüllt (selectedTemplateId ist null/leer).");
         }
 
         // --- Logik für das Löschen einzelner ITEMS (falls der Button zurückkommt) ---
         const deleteTemplateItemBtn = e.target.closest('.delete-template-item-btn');
         if (deleteTemplateItemBtn && selectedTemplateId) {
-            console.log("setupTemplateEditorListeners: Klick auf Item-Löschen erkannt (obwohl Button entfernt sein sollte)."); // Debugging
-            // ... (Restliche Logik für Item löschen bleibt gleich)
+            // console.log("setupTemplateEditorListeners: Klick auf Item-Löschen erkannt (obwohl Button entfernt sein sollte)."); // DEBUG ENTFERNT
              const itemId = deleteTemplateItemBtn.dataset.itemId;
              if (confirm("Möchten Sie diesen Eintrag wirklich aus dem Container löschen?")) {
                  try {
@@ -2035,7 +2026,7 @@ function setupTemplateEditorListeners() {
                      await deleteDoc(itemRef);
                      alertUser && alertUser('Eintrag gelöscht.', 'success');
                  } catch (err) {
-                     console.error("Fehler beim Löschen des Eintrags:", err);
+                     console.error("Fehler beim Löschen des Eintrags:", err); // Fehler belassen
                      alertUser && alertUser('Fehler beim Löschen des Eintrags.', 'error');
                  }
              }
