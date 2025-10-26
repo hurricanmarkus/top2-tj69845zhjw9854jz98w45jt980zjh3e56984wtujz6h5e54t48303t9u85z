@@ -1046,6 +1046,7 @@ function setupGroupManagementListeners(view, currentUserData) {
 }
 
 // Ersetze DIESE Funktion komplett
+// Ersetze NUR diese Funktion in checklist.js
 function setupStackAndContainerManagementListeners(view) {
     if (!view) {
         console.error("setupStackAndContainerManagementListeners: 'view' wurde nicht übergeben.");
@@ -1057,14 +1058,21 @@ function setupStackAndContainerManagementListeners(view) {
          return;
     }
 
-    if (templatesCard.dataset.primaryListenerAttached === 'true') {
-        return;
+    // --- NEUE PRÜFUNG ---
+    // Prüfen, ob das Attribut direkt existiert
+    if (templatesCard.hasAttribute('data-primary-listener-attached')) {
+        console.log("setupStackAndContainerManagementListeners: Listener bereits vorhanden (via Attribut-Check), breche ab.");
+        return; // Verhindert doppelte Listener zuverlässiger
     }
-    templatesCard.dataset.primaryListenerAttached = 'true';
+    // Attribut setzen, um zu markieren
+    templatesCard.setAttribute('data-primary-listener-attached', 'true');
+    // --- ENDE NEUE PRÜFUNG ---
+
     console.log("setupStackAndContainerManagementListeners: Hänge PRIMÄREN Listener an #card-templates an.");
 
     templatesCard.addEventListener('click', async (e) => {
-        console.log("setupStackAndContainerManagementListeners: PRIMÄRER Klick IN #card-templates erkannt! Target:", e.target);
+        // Der Rest der Funktion bleibt genau gleich wie in der letzten Version
+        // ... (Logik für Stack erstellen, Stack löschen, Container erstellen, Container auswählen, Stack zuweisen, Eintrag hinzufügen, Container löschen) ...
 
         // --- Aktionen AUSSERHALB des Editors ---
 
@@ -1088,13 +1096,12 @@ function setupStackAndContainerManagementListeners(view) {
             return;
         }
 
-        // --- NEU: Button zum Anzeigen/Verstecken des Lösch-Bereichs ---
+        // Button zum Anzeigen/Verstecken des Lösch-Bereichs
         if (e.target.closest('#show-delete-stack-form-btn')) {
             console.log("... Klick auf 'Stack löschen...' Button verarbeitet.");
             const deleteSection = view.querySelector('#delete-stack-section');
             if (deleteSection) {
-                deleteSection.classList.toggle('hidden'); // Schaltet Sichtbarkeit um
-                 // Dropdown im Lösch-Bereich neu füllen, falls es geöffnet wird
+                deleteSection.classList.toggle('hidden');
                  if (!deleteSection.classList.contains('hidden')) {
                      const deleteStackSelector = view.querySelector('#delete-stack-selector');
                      if (deleteStackSelector) {
@@ -1103,10 +1110,8 @@ function setupStackAndContainerManagementListeners(view) {
                      }
                  }
             }
-            return; // Aktion behandelt
+            return;
         }
-        // --- ENDE NEU ---
-
 
         // Stack löschen (im roten Bereich)
         if (e.target.closest('#delete-stack-btn')) {
@@ -1129,7 +1134,6 @@ function setupStackAndContainerManagementListeners(view) {
                     const stackRef = doc(checklistStacksCollectionRef, stackIdToDelete);
                     await deleteDoc(stackRef);
                     alertUser && alertUser("Stack gelöscht.", "success");
-                    // Verstecke den Löschbereich nach Erfolg
                     view.querySelector('#delete-stack-section')?.classList.add('hidden');
                 } catch (err) {
                      console.error("Fehler beim Löschen des Stacks:", err);
