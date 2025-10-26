@@ -20,7 +20,8 @@ import {
     settingsDocRef,
     checklistStacksCollectionRef,
     checklistTemplatesCollectionRef,
-    CHECKLIST_STACKS
+    CHECKLIST_STACKS,
+    COLOR_PALETTE
 } from './haupteingang.js';
 
 export {
@@ -1910,7 +1911,6 @@ function setupTemplateEditorListeners() {
 
         const deleteTemplateBtn = e.target.closest('#delete-template-btn');
         if (deleteTemplateBtn && selectedTemplateId) {
-            // BENUTZT ?., um Fehler abzufangen, falls TEMPLATES[selectedTemplateId] nicht existiert
             if (confirm(`Möchten Sie den Container "${TEMPLATES[selectedTemplateId]?.name || 'Unbekannt'}" wirklich unwiderruflich löschen?`)) {
                 
                 try {
@@ -1920,10 +1920,10 @@ function setupTemplateEditorListeners() {
                     alertUser && alertUser('Container gelöscht.', 'success');
                     selectedTemplateId = null; 
                     
-                    // --- BEGINN FIX 1 (NEU LADEN) ---
-                    // Lädt die gesamte Einstellungsansicht neu, um den Status zurückzusetzen
+                    // --- HIER IST DER FIX FÜR FEHLER 1 ---
+                    // Lädt die gesamte Einstellungsansicht neu, damit der Editor verschwindet
                     renderChecklistSettingsView(); 
-                    // --- ENDE FIX 1 ---
+                    // --- ENDE FIX ---
                 
                 } catch (err) {
                     console.error("Fehler beim Löschen des Containers:", err);
