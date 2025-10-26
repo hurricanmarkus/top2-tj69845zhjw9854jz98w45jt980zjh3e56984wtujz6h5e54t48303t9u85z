@@ -1086,9 +1086,29 @@ function setupStackAndContainerManagementListeners(view) {
             return;
         }
 
-        // --- NEUE LOGIK: Stack löschen ---
+        // --- NEU: Button zum Anzeigen/Verstecken des Lösch-Bereichs ---
+        if (e.target.closest('#show-delete-stack-form-btn')) {
+            console.log("... Klick auf 'Stack löschen...' Button verarbeitet.");
+            const deleteSection = view.querySelector('#delete-stack-section');
+            if (deleteSection) {
+                deleteSection.classList.toggle('hidden'); // Schaltet Sichtbarkeit um
+                 // Dropdown im Lösch-Bereich neu füllen, falls es geöffnet wird
+                 if (!deleteSection.classList.contains('hidden')) {
+                     const deleteStackSelector = view.querySelector('#delete-stack-selector');
+                     if (deleteStackSelector) {
+                         const stackOpts = Object.values(CHECKLIST_STACKS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+                         deleteStackSelector.innerHTML = `<option value="">Stack zum Löschen auswählen...</option>` + stackOpts;
+                     }
+                 }
+            }
+            return; // Aktion behandelt
+        }
+        // --- ENDE NEU ---
+
+
+        // Stack löschen (im roten Bereich)
         if (e.target.closest('#delete-stack-btn')) {
-            console.log("... Klick auf Stack löschen verarbeitet.");
+            console.log("... Klick auf Stack löschen (roter Button) verarbeitet.");
             const selector = view.querySelector('#delete-stack-selector');
             const stackIdToDelete = selector ? selector.value : null;
 
@@ -1096,28 +1116,26 @@ function setupStackAndContainerManagementListeners(view) {
                 return alertUser && alertUser("Bitte zuerst einen Stack zum Löschen auswählen.", "warning");
             }
 
-            // Prüfen, ob noch Container im Stack sind
             const containersInStack = Object.values(TEMPLATES || {}).filter(t => t.stackId === stackIdToDelete);
             if (containersInStack.length > 0) {
                  return alertUser && alertUser(`Der Stack "${CHECKLIST_STACKS[stackIdToDelete]?.name || 'Unbekannt'}" kann nicht gelöscht werden, da er noch ${containersInStack.length} Container enthält. Bitte verschieben oder löschen Sie diese zuerst.`, "error");
             }
 
-            // Sicherheitsabfrage
             if (confirm(`Möchten Sie den leeren Stack "${CHECKLIST_STACKS[stackIdToDelete]?.name || 'Unbekannt'}" wirklich unwiderruflich löschen?`)) {
                 try {
                     if (!checklistStacksCollectionRef) throw new Error("checklistStacksCollectionRef ist nicht definiert!");
                     const stackRef = doc(checklistStacksCollectionRef, stackIdToDelete);
                     await deleteDoc(stackRef);
                     alertUser && alertUser("Stack gelöscht.", "success");
-                    // Die Ansicht wird durch den Listener automatisch aktualisiert
+                    // Verstecke den Löschbereich nach Erfolg
+                    view.querySelector('#delete-stack-section')?.classList.add('hidden');
                 } catch (err) {
                      console.error("Fehler beim Löschen des Stacks:", err);
                      alertUser && alertUser(`Fehler beim Löschen des Stacks: ${err.message}`, "error");
                 }
             }
-            return; // Aktion behandelt
+            return;
         }
-        // --- ENDE NEUE LOGIK ---
 
 
         // Neues Container erstellen
@@ -1245,9 +1263,9 @@ function setupStackAndContainerManagementListeners(view) {
                     const templateRef = doc(checklistTemplatesCollectionRef, idToDelete);
                     await deleteDoc(templateRef);
                     alertUser && alertUser('Container gelöscht.', 'success');
-                    selectedTemplateId = null; // WICHTIG VOR dem Rendern
+                    selectedTemplateId = null;
                     if (unsubscribeTemplateItems) unsubscribeTemplateItems();
-                    renderChecklistSettingsView(); // Gesamte Ansicht neu laden
+                    renderChecklistSettingsView();
                 } catch (err) {
                     console.error("Fehler beim Löschen des Containers:", err);
                     alertUser && alertUser(`Fehler beim Löschen: ${err.message}. (Internet/Berechtigungen prüfen)`, 'error');
@@ -1262,6 +1280,7 @@ function setupStackAndContainerManagementListeners(view) {
 }
 
 // Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
+// Ersetze die vorhandene renderChecklistSettingsView durch diese komplette Funktion (ganze Function austauschen)
 function renderChecklistSettingsView(editListId = null) {
   const view = document.getElementById('checklistSettingsView');
   if (!view) return;
@@ -1270,7 +1289,6 @@ function renderChecklistSettingsView(editListId = null) {
   delete view.dataset.groupListenersAttached;
   delete view.dataset.categoryListenersAttached;
   delete view.dataset.tabListenersAttached;
-  // Wichtig: Auch den Listener für den Stack/Container-Bereich zurücksetzen
   const templatesCard = view.querySelector('#card-templates');
   if (templatesCard) delete templatesCard.dataset.primaryListenerAttached;
 
@@ -1359,9 +1377,10 @@ function renderChecklistSettingsView(editListId = null) {
           <input type="text" id="checklist-settings-new-stack-name" class="flex-grow p-2 border rounded-lg" placeholder="Name für neuen Stack...">
           <button id="checklist-settings-create-stack-btn" class="py-2 px-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Erstellen</button>
         </div>
+        <button id="show-delete-stack-form-btn" class="w-full text-sm text-red-600 font-semibold hover:underline mt-1">Stack löschen...</button>
       </div>
 
-      <div class="p-3 bg-red-50 border border-red-200 rounded-lg space-y-2">
+      <div id="delete-stack-section" class="hidden p-3 bg-red-50 border border-red-200 rounded-lg space-y-2">
         <h4 class="font-bold text-red-800">Stack löschen</h4>
         <p class="text-xs text-red-700">Hinweis: Ein Stack kann nur gelöscht werden, wenn keine Container mehr darin enthalten sind.</p>
         <select id="delete-stack-selector" class="w-full p-2 border rounded-lg bg-white border-red-300">
@@ -1495,11 +1514,10 @@ function renderChecklistSettingsView(editListId = null) {
   if (catGroupSelector) {
       const groupOpts = Object.values(CHECKLIST_GROUPS || {}).map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
       catGroupSelector.innerHTML = `<option value="">Gruppe wählen...</option>` + groupOpts;
-       // Listener nur einmal hinzufügen
       if (!catGroupSelector.dataset.listenerAttached) {
           catGroupSelector.addEventListener('change', (e) => {
               const gid = e.target.value;
-              view.dataset.selectedCategoryIdForRender = gid; // Merken für setupCategory...
+              view.dataset.selectedCategoryIdForRender = gid;
               if (typeof renderCategoryEditor === 'function') {
                   renderCategoryEditor(gid);
               } else {
@@ -1509,10 +1527,9 @@ function renderChecklistSettingsView(editListId = null) {
           });
           catGroupSelector.dataset.listenerAttached = '1';
       }
-      // Gespeicherte Auswahl wiederherstellen
       if(view.dataset.selectedCategoryIdForRender) {
         catGroupSelector.value = view.dataset.selectedCategoryIdForRender;
-        renderCategoryEditor(view.dataset.selectedCategoryIdForRender); // Inhalt direkt laden
+        renderCategoryEditor(view.dataset.selectedCategoryIdForRender);
       }
   }
 
@@ -1551,10 +1568,12 @@ function renderChecklistSettingsView(editListId = null) {
           if (savedGroupId) {
               defaultGroupSelector.value = savedGroupId;
               defaultGroupSelector.dispatchEvent(new Event('change'));
-              defaultListSelector.value = savedListId;
+              // Nur den Wert setzen, wenn das Element nicht disabled ist
+              if (!defaultListSelector.disabled) {
+                 defaultListSelector.value = savedListId;
+              }
           }
       } else {
-         // Wenn keine Liste gespeichert ist, sicherstellen, dass "Keine Checkliste" ausgewählt ist
          defaultGroupSelector.value = "";
          defaultGroupSelector.dispatchEvent(new Event('change'));
       }
@@ -1588,6 +1607,13 @@ function renderChecklistSettingsView(editListId = null) {
       const stackOpts = Object.values(CHECKLIST_STACKS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
       stackSelector.innerHTML = `<option value="">Stack wählen...</option>` + stackOpts;
   }
+   // Stack-Löschen Dropdown auch füllen
+  const deleteStackSelector = view.querySelector('#delete-stack-selector');
+  if (deleteStackSelector) {
+        const stackOpts = Object.values(CHECKLIST_STACKS || {}).map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+        deleteStackSelector.innerHTML = `<option value="">Stack zum Löschen auswählen...</option>` + stackOpts;
+  }
+
   const templateAssignee = view.querySelector('#new-template-item-assignee');
   if (templateAssignee) {
       templateAssignee.innerHTML = `<option value="">Zuweisen...</option>` + Object.values(USERS || {}).map(u => `<option value="${u.id}">${escapeHtml(u.name||u.displayName||'')}</option>`).join('');
