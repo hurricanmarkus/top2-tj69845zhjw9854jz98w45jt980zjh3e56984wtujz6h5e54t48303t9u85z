@@ -1812,6 +1812,22 @@ function renderChecklistSettingsView(editListId = null) {
   window.currentUser = window.currentUser || { id: null, name: 'Gast', permissions: [] };
   window.adminSettings = window.adminSettings || {};
 
+    // --- NEUER FIX 1: listToEditId korrekt bestimmen ---
+  const activeListsObj = CHECKLISTS || {}; // Verwende das globale Objekt, das bereits gefiltert sein sollte
+  const hasLists = Object.keys(activeListsObj).length > 0;
+  const validEditListId = (editListId && activeListsObj[editListId]) ? editListId : null; // Prüfen gegen aktive Listen
+  let listToEditId = validEditListId || view.dataset.editingListId || (hasLists ? Object.keys(activeListsObj)[0] : null);
+  // Erneut prüfen, ob die ID (z.B. aus dataset) noch gültig ist
+  if (listToEditId && !activeListsObj[listToEditId]) {
+      listToEditId = hasLists ? Object.keys(activeListsObj)[0] : null; // Fallback zur ersten aktiven oder null
+  }
+  // Explizit null setzen, wenn keine Listen da sind
+  if (!hasLists) {
+      listToEditId = null;
+  }
+  view.dataset.editingListId = listToEditId || ''; // Korrekten Wert im dataset speichern
+  // --- ENDE NEUER FIX 1 ---
+
   const hasLists = Object.keys(CHECKLISTS || {}).length > 0;
   const defaultListId = adminSettings.defaultChecklistId || null;
   const listToEditId = editListId || view.dataset.editingListId || (hasLists ? Object.keys(CHECKLISTS)[0] : null);
