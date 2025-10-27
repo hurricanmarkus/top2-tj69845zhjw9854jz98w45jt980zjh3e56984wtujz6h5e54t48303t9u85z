@@ -1,5 +1,6 @@
 import { db, auditLogCollectionRef, currentUser } from './haupteingang.js';
 import { query, orderBy, limit, onSnapshot, collection, doc, addDoc, serverTimestamp, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { rememberAdminScroll } from './admin_adminfunktionenHome.js';
 
 export async function logAdminAction(action, details) {
     try {
@@ -79,6 +80,7 @@ export async function renderProtocolHistory() {
                 const logId = e.currentTarget.dataset.logId;
                 if (confirm('Möchten Sie diesen Protokolleintrag wirklich löschen?')) {
                     await deleteDoc(doc(auditLogCollectionRef, logId));
+                    rememberAdminScroll(); // Aktuelle Scrollposition speichern
                     renderProtocolHistory();
                 }
             });
