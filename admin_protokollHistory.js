@@ -1,4 +1,4 @@
-import { currentuser } from './haupteingang.js';
+import { currentUser } from './haupteingang.js';
 
 export async function logAdminAction(action, details) {
     try {
