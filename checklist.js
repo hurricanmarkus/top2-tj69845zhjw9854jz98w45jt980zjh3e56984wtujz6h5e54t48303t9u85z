@@ -1987,20 +1987,36 @@ function renderChecklistSettingsView(editListId = null) {
   // --- Alle Hilfsfunktionen und Listener-Registrierungen ---
   // (Diese bleiben gleich wie in der vorherigen Version)
 
-  function buildEditorSwitcherOptions() {
+function buildEditorSwitcherOptions() {
+    const editorSwitcher = view.querySelector('#checklist-settings-editor-switcher'); if (!editorSwitcher) return;
     const groups = Object.values(CHECKLIST_GROUPS || {});
-    const opts = groups.map(g => {
-      const lists = Object.values(CHECKLISTS || {}).filter(l => l.groupId === g.id);
-      if (lists.length === 0) return '';
-      return `<optgroup label="${escapeHtml(g.name)}">${lists.map(l => `<option value="${l.id}" ${l.id === listToEditId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('')}</optgroup>`;
-    }).join('');
-    const editorSwitcher = view.querySelector('#checklist-settings-editor-switcher');
-    if (editorSwitcher) {
-      editorSwitcher.innerHTML = (opts || `<option value="">Keine Listen vorhanden</option>`);
-      if (listToEditId) editorSwitcher.value = listToEditId;
-    }
-  }
+    // Verwende direkt das (hoffentlich) bereits gefilterte CHECKLISTS Objekt
+    const activeLists = Object.values(CHECKLISTS || {});
 
+    // --- NEUER FIX 1: Vereinfachte Logik ---
+    if (activeLists.length === 0) {
+        editorSwitcher.innerHTML = `<option value="">Keine Listen vorhanden</option>`;
+    } else {
+        const opts = groups.map(g => {
+            const listsInGroup = activeLists.filter(l => l.groupId === g.id);
+            if (listsInGroup.length === 0) return '';
+            // Setze 'selected' Attribut basierend auf dem KORREKTEN listToEditId von oben
+            return `<optgroup label="${escapeHtml(g.name)}">${listsInGroup.map(l => `<option value="${l.id}" ${l.id === listToEditId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('')}</optgroup>`;
+        }).join('');
+        editorSwitcher.innerHTML = opts;
+        // Stelle sicher, dass der Wert des Selects dem entspricht, was als 'selected' markiert wurde
+        // (oder dem ersten Element, falls listToEditId ungültig war, was oben korrigiert wurde)
+        if (listToEditId && activeLists.some(l => l.id === listToEditId)) {
+           editorSwitcher.value = listToEditId;
+        } else if (activeLists.length > 0) {
+           // Dieser Fall sollte durch die Korrektur oben nicht mehr nötig sein,
+           // aber zur Sicherheit setzen wir den Wert auf die erste Liste, falls doch was schiefgeht.
+           editorSwitcher.value = activeLists[0].id;
+        }
+    }
+    // --- ENDE NEUER FIX 1 ---
+  }
+  
   function rebuildCategorySelectForAddForm() {
     const catSelect = view.querySelector('#checklist-settings-add-category');
     if (!catSelect) return;
