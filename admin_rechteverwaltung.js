@@ -30,7 +30,7 @@ function setupPermissionDependencies(container) {
 
 export async function renderAdminRightsManagement() {
     let sysAdminListHTML = '<h4 class="text-lg font-semibold text-gray-700 mb-2">Übersicht Systemadministratoren</h4>';
-    if (systemAdmins.length > 0) {
+    if (Object.keys(ADMIN_ROLES || {}).length > 0) {
         sysAdminListHTML += '<div class="space-y-1">';
         systemAdmins.forEach(sysAdmin => {
             const isSelf = sysAdmin.id === currentUser.mode;

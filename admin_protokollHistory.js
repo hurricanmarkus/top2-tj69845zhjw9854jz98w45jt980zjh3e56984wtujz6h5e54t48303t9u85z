@@ -1,5 +1,5 @@
 import { db, auditLogCollectionRef, currentUser } from './haupteingang.js';
-import { query, orderBy, limit, onSnapshot, collection, doc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { query, orderBy, limit, onSnapshot, collection, doc, addDoc, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 export async function logAdminAction(action, details) {
     try {
