@@ -1,4 +1,4 @@
-import { db, adminRolesCollectionRef, ADMIN_ROLES, USERS, alertUser } from './haupteingang.js'; // ADMIN_ROLES hinzugefügt
+import { db, adminRolesCollectionRef, ADMIN_ROLES, USERS, alertUser, currentUser } from './haupteingang.js'; // ADMIN_ROLES hinzugefügt
 import { logAdminAction } from './admin_protokollHistory.js';
 import { doc, updateDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
