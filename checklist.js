@@ -1812,21 +1812,21 @@ function renderChecklistSettingsView(editListId = null) {
   window.currentUser = window.currentUser || { id: null, name: 'Gast', permissions: [] };
   window.adminSettings = window.adminSettings || {};
 
-    // --- NEUER FIX 1: listToEditId korrekt bestimmen ---
-  const activeListsObj = CHECKLISTS || {}; // Verwende das globale Objekt, das bereits gefiltert sein sollte
-  const hasLists = Object.keys(activeListsObj).length > 0;
-  const validEditListId = (editListId && activeListsObj[editListId]) ? editListId : null; // Prüfen gegen aktive Listen
-  let listToEditId = validEditListId || view.dataset.editingListId || (hasLists ? Object.keys(activeListsObj)[0] : null);
-  // Erneut prüfen, ob die ID (z.B. aus dataset) noch gültig ist
-  if (listToEditId && !activeListsObj[listToEditId]) {
-      listToEditId = hasLists ? Object.keys(activeListsObj)[0] : null; // Fallback zur ersten aktiven oder null
-  }
-  // Explizit null setzen, wenn keine Listen da sind
-  if (!hasLists) {
-      listToEditId = null;
-  }
-  view.dataset.editingListId = listToEditId || ''; // Korrekten Wert im dataset speichern
-  // --- ENDE NEUER FIX 1 ---
+// --- FIX 1: listToEditId korrekt bestimmen (hasLists nur einmal definiert) ---
+const activeListsObj = CHECKLISTS || {}; // Verwende das globale Objekt
+const hasLists = Object.keys(activeListsObj).length > 0; // Nur hier definieren
+const defaultListId = adminSettings.defaultChecklistId || null; // Bleibt unverändert
+const validEditListId = (editListId && activeListsObj[editListId]) ? editListId : null;
+let listToEditId = validEditListId || view.dataset.editingListId || (hasLists ? Object.keys(activeListsObj)[0] : null);
+// Erneut prüfen und ggf. auf null setzen
+if (listToEditId && !activeListsObj[listToEditId]) {
+listToEditId = hasLists ? Object.keys(activeListsObj)[0] : null;
+}
+if (!hasLists) { // Explizit null setzen, wenn keine Listen da sind
+listToEditId = null;
+}
+view.dataset.editingListId = listToEditId || ''; // Korrekten Wert speichern
+// --- ENDE FIX 1 ---
 
   const hasLists = Object.keys(CHECKLISTS || {}).length > 0;
   const defaultListId = adminSettings.defaultChecklistId || null;
@@ -1987,36 +1987,20 @@ function renderChecklistSettingsView(editListId = null) {
   // --- Alle Hilfsfunktionen und Listener-Registrierungen ---
   // (Diese bleiben gleich wie in der vorherigen Version)
 
-function buildEditorSwitcherOptions() {
-    const editorSwitcher = view.querySelector('#checklist-settings-editor-switcher'); if (!editorSwitcher) return;
+  function buildEditorSwitcherOptions() {
     const groups = Object.values(CHECKLIST_GROUPS || {});
-    // Verwende direkt das (hoffentlich) bereits gefilterte CHECKLISTS Objekt
-    const activeLists = Object.values(CHECKLISTS || {});
-
-    // --- NEUER FIX 1: Vereinfachte Logik ---
-    if (activeLists.length === 0) {
-        editorSwitcher.innerHTML = `<option value="">Keine Listen vorhanden</option>`;
-    } else {
-        const opts = groups.map(g => {
-            const listsInGroup = activeLists.filter(l => l.groupId === g.id);
-            if (listsInGroup.length === 0) return '';
-            // Setze 'selected' Attribut basierend auf dem KORREKTEN listToEditId von oben
-            return `<optgroup label="${escapeHtml(g.name)}">${listsInGroup.map(l => `<option value="${l.id}" ${l.id === listToEditId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('')}</optgroup>`;
-        }).join('');
-        editorSwitcher.innerHTML = opts;
-        // Stelle sicher, dass der Wert des Selects dem entspricht, was als 'selected' markiert wurde
-        // (oder dem ersten Element, falls listToEditId ungültig war, was oben korrigiert wurde)
-        if (listToEditId && activeLists.some(l => l.id === listToEditId)) {
-           editorSwitcher.value = listToEditId;
-        } else if (activeLists.length > 0) {
-           // Dieser Fall sollte durch die Korrektur oben nicht mehr nötig sein,
-           // aber zur Sicherheit setzen wir den Wert auf die erste Liste, falls doch was schiefgeht.
-           editorSwitcher.value = activeLists[0].id;
-        }
+    const opts = groups.map(g => {
+      const lists = Object.values(CHECKLISTS || {}).filter(l => l.groupId === g.id);
+      if (lists.length === 0) return '';
+      return `<optgroup label="${escapeHtml(g.name)}">${lists.map(l => `<option value="${l.id}" ${l.id === listToEditId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('')}</optgroup>`;
+    }).join('');
+    const editorSwitcher = view.querySelector('#checklist-settings-editor-switcher');
+    if (editorSwitcher) {
+      editorSwitcher.innerHTML = (opts || `<option value="">Keine Listen vorhanden</option>`);
+      if (listToEditId) editorSwitcher.value = listToEditId;
     }
-    // --- ENDE NEUER FIX 1 ---
   }
-  
+
   function rebuildCategorySelectForAddForm() {
     const catSelect = view.querySelector('#checklist-settings-add-category');
     if (!catSelect) return;
