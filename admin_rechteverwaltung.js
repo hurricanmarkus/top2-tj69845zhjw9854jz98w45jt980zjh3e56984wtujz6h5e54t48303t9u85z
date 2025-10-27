@@ -24,7 +24,7 @@ function setupPermissionDependencies(container) {
     updateSubToggles(); // Einmal beim Laden ausführen, um den initialen Status zu setzen
 }
 
-async function renderAdminRightsManagement() {
+export async function renderAdminRightsManagement() {
     let sysAdminListHTML = '<h4 class="text-lg font-semibold text-gray-700 mb-2">Übersicht Systemadministratoren</h4>';
     if (systemAdmins.length > 0) {
         sysAdminListHTML += '<div class="space-y-1">';
