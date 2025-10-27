@@ -79,8 +79,6 @@ export async function renderProtocolHistory() {
                 const logId = e.currentTarget.dataset.logId;
                 if (confirm('Möchten Sie diesen Protokolleintrag wirklich löschen?')) {
                     await deleteDoc(doc(auditLogCollectionRef, logId));
-                    await logAdminAction('log_deleted', `Protokolleintrag (ID: ${logId}) gelöscht.`);
-                    // Neu: neu rendern
                     renderProtocolHistory();
                 }
             });
