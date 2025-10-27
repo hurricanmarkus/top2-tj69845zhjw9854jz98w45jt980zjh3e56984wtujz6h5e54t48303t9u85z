@@ -1,9 +1,12 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 // TEST 2
-import { onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { usersCollectionRef, USERS, initialAuthCheckDone, modalUserButtons, roleChangeRequestsCollectionRef, currentUser, db, rolesCollectionRef, ROLES, alertUser } from './haupteingang.js';
+import { onSnapshot, doc, updateDoc, setDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { db, usersCollectionRef, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES } from './haupteingang.js';
 import { checkCurrentUserValidity } from './log-InOut.js';
 import { logAdminAction } from './admin_protokollHistory.js';
+import { restoreAdminScrollIfAny } from './admin_adminfunktionenHome.js';
 // ENDE-ZIKA //
+
+const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
 export function listenForUserUpdates() {
     const mainContent = document.querySelector('.main-content');
