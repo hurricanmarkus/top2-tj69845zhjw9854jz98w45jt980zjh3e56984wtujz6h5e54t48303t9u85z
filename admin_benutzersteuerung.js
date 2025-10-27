@@ -465,214 +465,157 @@ export async function renderUserManagement() {
 }
 
 // Ersetze NUR diese Funktion in admin_benutzersteuerung.js
+// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
 export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions) {
-    if (!area) {
-        console.error("addAdminUserManagementListeners: FEHLER - 'area' wurde nicht übergeben.");
-        return;
-    }
+    if (!area) return;
 
     // --- Nur EINEN primären Listener hinzufügen ---
     if (area.dataset.userManagementListenerAttached === 'true') {
-        console.log("addAdminUserManagementListeners: Primärer Listener bereits vorhanden."); // Debug
         return;
     }
     area.dataset.userManagementListenerAttached = 'true';
-    console.log("addAdminUserManagementListeners: Hänge primären CLICK Listener an userManagementArea an."); // Debug
+    console.log("addAdminUserManagementListeners: Hänge primären Listener an userManagementArea an.");
 
     // --- CLICK Listener ---
     area.addEventListener('click', async (e) => {
-        console.log("[CLICK] Event ausgelöst. Target:", e.target); // DEBUG: Welches Element wurde geklickt?
+        console.log("[CLICK] Event ausgelöst. Target:", e.target);
         const userCard = e.target.closest('.user-card');
         const userId = userCard?.dataset.userid;
 
         // --- Buttons AUSSERHALB der Karten ---
         const saveNewUserButton = e.target.closest('#saveNewUserButton');
-        if (saveNewUserButton) {
-            console.log("[CLICK] 'Neuen Benutzer speichern' Button erkannt."); // DEBUG
-            // ... (Logik zum Speichern neuer Benutzer - Annahme: funktioniert) ...
-            return;
-        }
+        if (saveNewUserButton) { /* ... (Logik zum Speichern neuer Benutzer) ... */ return; }
         const notRegisteredToggle = e.target.closest('#notRegisteredToggle');
-        if (notRegisteredToggle) {
-            console.log("[CLICK] 'Nicht registriert' Toggle erkannt."); // DEBUG
-            // ... (Logik zum Umschalten der Liste) ...
-            return;
-        }
+        if (notRegisteredToggle) { /* ... (Logik zum Umschalten der Liste) ... */ return; }
 
         // --- Aktionen INNERHALB einer Benutzerkarte ---
-        if (!userCard || !userId) {
-            console.log("[CLICK] Klick war nicht innerhalb einer User Card oder User ID fehlt."); // DEBUG
-            return; // Klick war nicht relevant für eine spezifische Karte
-        }
-        console.log(`[CLICK] Klick innerhalb der Karte für User: ${userId}`); // DEBUG
+        if (!userCard || !userId) return;
+        console.log(`[CLICK] Klick innerhalb der Karte für User: ${userId}`);
 
         // Löschen Button
         const deleteButton = e.target.closest('.delete-user-button');
-        if (deleteButton) {
-            console.log(`[CLICK] Löschen Button für User ${userId} erkannt.`); // DEBUG
-            // ... (Logik zum Löschen) ...
-            return;
-        }
+        if (deleteButton) { /* ... (Logik zum Löschen) ... */ return; }
 
         // Umbenennen Button (Stift)
         const renameButton = e.target.closest('.rename-user-btn');
-        if (renameButton) {
-            console.log(`[CLICK] Umbenennen (Stift) für User ${userId} erkannt.`); // DEBUG
-            // ... (Logik zum Anzeigen der Edit-Felder) ...
-            return;
-        }
+        if (renameButton) { /* ... (Logik zum Anzeigen der Edit-Felder) ... */ return; }
 
         // Speichern nach Umbenennen Button (Häkchen)
         const saveNameButton = e.target.closest('.save-name-btn');
-        if (saveNameButton) {
-            console.log(`[CLICK] Speichern (Name) für User ${userId} erkannt.`); // DEBUG
-            // ... (Logik zum Speichern des Namens) ...
-            return;
-        }
+        if (saveNameButton) { /* ... (Logik zum Speichern des Namens) ... */ return; }
 
         // --- Speichern der Berechtigungen Button ---
         const savePermsButton = e.target.closest('.save-perms-button');
         if (savePermsButton) {
-            console.log(`[CLICK] Speichern (Berechtigungen) für User ${userId} erkannt.`); // DEBUG
-            const permContainer = savePermsButton.closest('[data-userid]'); // Finde den Container der Karte
-            if (!permContainer) {
-                 console.error(`[CLICK] Konnte Berechtigungs-Container für User ${userId} nicht finden!`); // DEBUG
-                 return;
-            }
+            console.log(`[CLICK] Speichern (Berechtigungen) für User ${userId} erkannt.`);
+            const permContainer = savePermsButton.closest('[data-userid]');
+            if (!permContainer) { console.error(`[CLICK] Konnte Berechtigungs-Container für User ${userId} nicht finden!`); return; }
 
             const typeRadio = permContainer.querySelector('input[name^="perm-type-"]:checked');
-            if (!typeRadio) {
-                console.error(`[CLICK] Konnte Berechtigungstyp-Radiobutton für User ${userId} nicht lesen!`); // DEBUG
-                return;
-            }
+            if (!typeRadio) { console.error(`[CLICK] Konnte Berechtigungstyp-Radiobutton für User ${userId} nicht lesen!`); return; }
             const type = typeRadio.value;
-            console.log(`[CLICK] Gelesener Typ: ${type}`); // DEBUG
+            console.log(`[CLICK] Gelesener Typ: ${type}`);
 
             rememberAdminScroll();
-            let updateData = {};
+            let updateData = { permissionType: type }; // Typ immer speichern
 
             if (type === 'role') {
                 const roleSelect = permContainer.querySelector('.user-role-select');
-                if (!roleSelect) { console.error(`[CLICK] Konnte Rollen-Select für User ${userId} nicht finden!`); return; } // DEBUG
+                if (!roleSelect) { console.error(`[CLICK] Konnte Rollen-Select für User ${userId} nicht finden!`); return; }
                 const newRole = roleSelect.value;
-                updateData = { role: newRole, permissionType: 'role', customPermissions: [], displayRole: null, assignedAdminRoleId: null, adminPermissions: {} };
-                 console.log(`[CLICK] Update-Daten (Rolle):`, updateData); // DEBUG
+                // Wenn Typ 'role', setze die role-Eigenschaft, leere individuelle Felder
+                updateData = {
+                    ...updateData, // Behalte permissionType: 'role'
+                    role: newRole,
+                    customPermissions: [], // Individuelle löschen
+                    displayRole: null,     // Angezeigte Rolle löschen
+                    assignedAdminRoleId: null, // Admin-Rolle löschen (falls es keine Benutzerrolle Admin mehr ist)
+                    adminPermissions: {}       // Admin-Rechte löschen
+                };
+                 // Wichtig: Falls die gewählte Rolle ADMIN oder SYSTEMADMIN ist,
+                 // muss hier sichergestellt werden, dass keine individuellen Rechte mehr gelten.
+                 // Das Leeren von customPermissions sollte ausreichen.
+
             } else { // type === 'individual'
                 const customPermissions = Array.from(permContainer.querySelectorAll('.custom-perm-checkbox:checked')).map(cb => cb.dataset.perm);
                 const displayRoleSelect = permContainer.querySelector('.display-role-select');
-                if (!displayRoleSelect) { console.error(`[CLICK] Konnte Display-Rollen-Select für User ${userId} nicht finden!`); return; } // DEBUG
-                const selectedDisplayRole = displayRoleSelect.value || null;
+                if (!displayRoleSelect) { console.error(`[CLICK] Konnte Display-Rollen-Select für User ${userId} nicht finden!`); return; }
+                const selectedDisplayRole = displayRoleSelect.value || 'NO_RIGHTS'; // Default zu NO_RIGHTS falls leer
 
-                updateData = { permissionType: 'individual', customPermissions: customPermissions, role: null, displayRole: null, assignedAdminRoleId: null, adminPermissions: {} };
-                if (selectedDisplayRole === 'ADMIN' || selectedDisplayRole === 'SYSTEMADMIN') {
-                    updateData.role = selectedDisplayRole;
-                } else {
-                    updateData.displayRole = selectedDisplayRole;
-                }
-                 console.log(`[CLICK] Update-Daten (Individuell):`, updateData); // DEBUG
+                // --- KORRIGIERTE LOGIK FÜR INDIVIDUAL ---
+                // Setze die tatsächliche 'role' auf null (oder eine Basisrolle wie 'ANGEMELDET'),
+                // damit checkCurrentUserValidity nicht fälschlicherweise Admin-Rechte gibt.
+                updateData = {
+                    ...updateData, // Behalte permissionType: 'individual'
+                    role: null, // Wichtig: Echte Rolle entfernen/zurücksetzen!
+                    customPermissions: customPermissions,
+                    // Speichere die ausgewählte Anzeige-Rolle NUR, wenn sie nicht "Keine Rechte" ist
+                    displayRole: (selectedDisplayRole !== 'NO_RIGHTS' ? selectedDisplayRole : null),
+                    assignedAdminRoleId: null, // Admin-Rolle entfernen
+                    adminPermissions: {}       // Admin-Rechte entfernen
+                };
+                // --- ENDE KORRIGIERTE LOGIK ---
             }
 
+            console.log("[CLICK] Finale Update-Daten für Berechtigungen:", updateData);
+
             try {
-                console.log(`[CLICK] Versuche updateDoc für User ${userId}...`); // DEBUG
+                console.log(`[CLICK] Versuche updateDoc für User ${userId}...`);
                 await updateDoc(doc(usersCollectionRef, userId), updateData);
-                console.log(`[CLICK] updateDoc für User ${userId} erfolgreich.`); // DEBUG
+                console.log(`[CLICK] updateDoc für User ${userId} erfolgreich.`);
                 const saveBtnContainer = permContainer.querySelector('.save-perms-container');
                 if (saveBtnContainer) saveBtnContainer.classList.add('hidden');
                 alertUser("Berechtigungen gespeichert!", "success");
+                // UI wird durch onSnapshot aktualisiert.
             } catch (error) {
-                console.error(`[CLICK] FEHLER beim Speichern der Berechtigungen für User ${userId}:`, error); // DEBUG mit Fehlerdetails
+                console.error(`[CLICK] FEHLER beim Speichern der Berechtigungen für User ${userId}:`, error);
                 alertUser(`Fehler beim Speichern: ${error.message}`, "error");
             }
             return; // Klick behandelt
         }
 
-        console.log("[CLICK] Klick innerhalb einer Karte, aber kein bekannter Button."); // DEBUG
+        console.log("[CLICK] Klick innerhalb einer Karte, aber kein bekannter Button.");
 
     }); // Ende CLICK Listener
 
     // --- Separater CHANGE Listener für Inputs ---
-    // Prüfen ob Listener schon dran ist
-    if (area.dataset.userManagementChangeListenerAttached === 'true') {
-         console.log("addAdminUserManagementListeners: CHANGE Listener bereits vorhanden."); // Debug
-        // Nichts tun, wenn schon vorhanden
-    } else {
-        area.dataset.userManagementChangeListenerAttached = 'true'; // Markieren
-        console.log("addAdminUserManagementListeners: Hänge CHANGE Listener an userManagementArea an."); // Debug
+    if (!area.dataset.userManagementChangeListenerAttached) {
+        area.dataset.userManagementChangeListenerAttached = 'true';
+        console.log("addAdminUserManagementListeners: Hänge CHANGE Listener an userManagementArea an.");
         area.addEventListener('change', async (e) => {
-            console.log("[CHANGE] Event ausgelöst. Target:", e.target); // DEBUG: Welches Element wurde geändert?
+            console.log("[CHANGE] Event ausgelöst. Target:", e.target);
             const target = e.target;
             const userCard = target.closest('.user-card');
             if (!userCard) return;
             const userId = userCard.dataset.userid;
             if (!userId) return;
-            console.log(`[CHANGE] Änderung innerhalb der Karte für User: ${userId}`); // DEBUG
+            console.log(`[CHANGE] Änderung innerhalb der Karte für User: ${userId}`);
 
              // --- Aktivieren/Deaktivieren Toggle ---
              if (target.classList.contains('user-active-toggle')) {
-                console.log(`[CHANGE] Aktiv-Toggle geändert für User ${userId}. Neuer Status (checked=gesperrt): ${target.checked}`); // DEBUG
+                console.log(`[CHANGE] Aktiv-Toggle geändert. checked=${target.checked}`);
                 const isChecked = target.checked;
-                 if (!confirm(`Möchten Sie den Status von ${USERS[userId].name} wirklich ändern?`)) {
-                     target.checked = !isChecked; return;
-                 }
+                 if (!confirm(`Status von ${USERS[userId].name} ändern?`)) { target.checked = !isChecked; return; }
                  // Berechtigungen prüfen...
                  let currentAdminPerms = {}; if (currentUser.role === 'ADMIN') { /*...*/ } const currentPermSet = (currentUser.role === 'SYSTEMADMIN') ? { canToggleUserActive: true } : currentAdminPerms; const requiresApproval = (currentUser.role === 'ADMIN' && currentPermSet.approvalRequired?.toggleUserActive);
-
-                 if (requiresApproval) {
-                     console.log(`[CHANGE] Genehmigung für Toggle erforderlich.`); // DEBUG
-                     target.checked = !isChecked;
-                     await createApprovalRequest('TOGGLE_USER_ACTIVE', userId, { isActive: !isChecked });
-                 } else {
-                     console.log(`[CHANGE] Speichere neuen Aktiv-Status direkt.`); // DEBUG
-                     try {
-                         await updateDoc(doc(usersCollectionRef, userId), { isActive: !isChecked });
-                         console.log(`[CHANGE] Aktiv-Status gespeichert.`); // DEBUG
-                     } catch (error) {
-                         console.error("[CHANGE] Fehler beim Ändern des Status:", error); // DEBUG
-                         alertUser("Fehler beim Ändern.", "error");
-                         target.checked = !isChecked;
-                     }
-                 }
-                 return; // Änderung behandelt
+                 if (requiresApproval) { target.checked = !isChecked; await createApprovalRequest('TOGGLE_USER_ACTIVE', userId, { isActive: !isChecked }); }
+                 else { try { await updateDoc(doc(usersCollectionRef, userId), { isActive: !isChecked }); } catch (error) { console.error("Fehler:", error); alertUser("Fehler.", "error"); target.checked = !isChecked; } }
+                 return;
              }
 
-            // --- Änderungen an Berechtigungs-Inputs (Radio, Select, Checkbox) ---
+            // --- Änderungen an Berechtigungs-Inputs ---
             if (target.matches('.perm-type-toggle, .user-role-select, .custom-perm-checkbox, .display-role-select')) {
-                 console.log(`[CHANGE] Berechtigungs-Input geändert für User ${userId}. Element:`, target); // DEBUG
-                const container = target.closest('[data-userid]');
-                if (!container) return;
-
-                // Ansicht umschalten bei Radio-Button Änderung
-                if (target.classList.contains('perm-type-toggle')) {
-                     console.log(`[CHANGE] Berechtigungstyp umgeschaltet auf: ${target.value}`); // DEBUG
-                    container.querySelector('.role-selection-area')?.classList.toggle('hidden', target.value !== 'role');
-                    container.querySelector('.individual-perms-area')?.classList.toggle('hidden', target.value !== 'individual');
-                }
-
-                // Speicher-Button anzeigen
-                const saveBtnContainer = container.querySelector('.save-perms-container');
-                if (saveBtnContainer) {
-                    console.log("[CHANGE] Zeige Speicher-Button an."); // DEBUG
-                    saveBtnContainer.classList.remove('hidden');
-                } else {
-                     console.warn("[CHANGE] Konnte Speicher-Button-Container nicht finden zum Anzeigen!"); // DEBUG
-                }
-
-
-                // Abhängigkeiten für Checklist-Checkboxen prüfen
-                if (target.dataset.perm === 'CHECKLIST') {
-                     console.log("[CHANGE] Checklist-Haupt-Checkbox geändert, prüfe Abhängigkeiten."); // DEBUG
-                     const individualPermsArea = container.querySelector('.individual-perms-area');
-                     if (individualPermsArea) {
-                         setupPermissionDependencies(individualPermsArea);
-                     }
-                }
-                 return; // Änderung behandelt
+                 console.log(`[CHANGE] Berechtigungs-Input geändert.`);
+                const container = target.closest('[data-userid]'); if (!container) return;
+                if (target.classList.contains('perm-type-toggle')) { container.querySelector('.role-selection-area')?.classList.toggle('hidden', target.value !== 'role'); container.querySelector('.individual-perms-area')?.classList.toggle('hidden', target.value !== 'individual'); }
+                const saveBtnContainer = container.querySelector('.save-perms-container'); if (saveBtnContainer) { saveBtnContainer.classList.remove('hidden'); } else { console.warn("[CHANGE] Speicher-Button Container nicht gefunden!"); }
+                if (target.dataset.perm === 'CHECKLIST') { const individualPermsArea = container.querySelector('.individual-perms-area'); if (individualPermsArea) { setupPermissionDependencies(individualPermsArea); } }
+                 return;
             }
-
-            console.log("[CHANGE] Änderung wurde erkannt, aber kein bekannter Input-Typ."); // DEBUG
+            console.log("[CHANGE] Änderung erkannt, aber kein bekannter Input-Typ.");
 
         }); // Ende CHANGE Listener
-    } // Ende if Listener noch nicht angehängt
+    }
 
 } // Ende addAdminUserManagementListeners
 
