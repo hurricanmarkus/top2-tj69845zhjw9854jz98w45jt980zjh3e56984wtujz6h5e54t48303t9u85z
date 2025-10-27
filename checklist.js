@@ -1801,37 +1801,45 @@ function renderChecklistSettingsView(editListId = null) {
   const view = document.getElementById('checklistSettingsView');
   if (!view) return;
 
-  delete view.dataset.listenersSetup;
-  delete view.dataset.groupListenersAttached;
-  delete view.dataset.categoryListenersAttached;
-  delete view.dataset.tabListenersAttached;
+  // --- Listener-Marker entfernen ---
+  view.querySelector('#checklist-archive-list-btn')?.removeAttribute('data-listener-attached');
+  view.querySelector('#checklist-settings-add-item-btn')?.removeAttribute('data-listener-attached');
+  view.querySelector('#checklist-settings-add-text')?.removeAttribute('data-listener-attached');
+  view.querySelector('#checklist-items-editor-container')?.removeAttribute('data-listener-attached');
+  view.querySelector('#show-archived-lists-btn')?.removeAttribute('data-listener-attached');
+  view.querySelector('#show-deleted-lists-btn')?.removeAttribute('data-listener-attached');
+  view.querySelector('#checklist-settings-create-list-btn')?.removeAttribute('data-listener-attached');
+  view.querySelector('#checklist-settings-editor-switcher')?.removeAttribute('data-listener-attached');
+  view.querySelector('#category-group-selector')?.removeAttribute('data-listener-attached');
+  view.querySelector('#default-group-selector')?.removeAttribute('data-listener-attached');
+  view.querySelector('#save-default-checklist-btn')?.removeAttribute('data-listener-attached');
+  view.querySelector('#edit-group-assignment-btn')?.removeAttribute('data-listener-attached');
+  view.querySelector('#checklist-save-group-assignment')?.removeAttribute('data-listener-attached');
   const templatesCard = view.querySelector('#card-templates');
-  if (templatesCard) delete templatesCard.dataset.primaryListenerAttached;
+  if (templatesCard) templatesCard.removeAttribute('data-primary-listener-attached');
+  delete view.dataset.tabListenersAttached; // Wichtig für die Tabs
 
+  // console.log("renderChecklistSettingsView: Starte Neuaufbau, ALLE Listener-Marker entfernt."); // Debug entfernt
 
   window.currentUser = window.currentUser || { id: null, name: 'Gast', permissions: [] };
   window.adminSettings = window.adminSettings || {};
 
-// --- FIX 1: listToEditId korrekt bestimmen (hasLists nur einmal definiert) ---
-const activeListsObj = CHECKLISTS || {}; // Verwende das globale Objekt
-const hasLists = Object.keys(activeListsObj).length > 0; // Nur hier definieren
-const defaultListId = adminSettings.defaultChecklistId || null; // Bleibt unverändert
-const validEditListId = (editListId && activeListsObj[editListId]) ? editListId : null;
-let listToEditId = validEditListId || view.dataset.editingListId || (hasLists ? Object.keys(activeListsObj)[0] : null);
-// Erneut prüfen und ggf. auf null setzen
-if (listToEditId && !activeListsObj[listToEditId]) {
-listToEditId = hasLists ? Object.keys(activeListsObj)[0] : null;
-}
-if (!hasLists) { // Explizit null setzen, wenn keine Listen da sind
-listToEditId = null;
-}
-view.dataset.editingListId = listToEditId || ''; // Korrekten Wert speichern
-// --- ENDE FIX 1 ---
-
-  const hasLists = Object.keys(CHECKLISTS || {}).length > 0;
-  const defaultListId = adminSettings.defaultChecklistId || null;
-  const listToEditId = editListId || view.dataset.editingListId || (hasLists ? Object.keys(CHECKLISTS)[0] : null);
-  view.dataset.editingListId = listToEditId || '';
+  // --- FIX 1: listToEditId korrekt bestimmen ---
+  const activeListsObj = CHECKLISTS || {}; // Verwende das globale Objekt
+  const hasLists = Object.keys(activeListsObj).length > 0; // Nur hier definieren
+  const defaultListId = adminSettings.defaultChecklistId || null; // Bleibt unverändert
+  const validEditListId = (editListId && activeListsObj[editListId]) ? editListId : null;
+  let listToEditId = validEditListId || view.dataset.editingListId || (hasLists ? Object.keys(activeListsObj)[0] : null);
+  // Erneut prüfen und ggf. auf null setzen
+  if (listToEditId && !activeListsObj[listToEditId]) {
+      listToEditId = hasLists ? Object.keys(activeListsObj)[0] : null; // Fallback zur ersten aktiven oder null
+  }
+  // Explizit null setzen, wenn keine Listen da sind
+  if (!hasLists) {
+      listToEditId = null;
+  }
+  view.dataset.editingListId = listToEditId || ''; // Korrekten Wert im dataset speichern
+  // --- ENDE FIX 1 ---
 
   const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
