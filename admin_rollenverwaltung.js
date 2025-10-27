@@ -1,6 +1,6 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 //
-import { onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { initialAuthCheckDone, adminSectionsState, rolesCollectionRef, ADMIN_ROLES, ROLES, adminRolesCollectionRef, currentUser } from './haupteingang.js';
+import { doc, updateDoc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { initialAuthCheckDone, adminSectionsState, rolesCollectionRef, ADMIN_ROLES, ROLES, adminRolesCollectionRef, currentUser, db, roleManagementSectionsState, alertUser, logAdminAction } from './haupteingang.js';
 import { checkCurrentUserValidity } from './log-InOut.js';
 // ENDE-ZIKA //
 

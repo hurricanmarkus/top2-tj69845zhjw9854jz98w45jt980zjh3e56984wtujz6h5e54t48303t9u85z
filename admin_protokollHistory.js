@@ -1,4 +1,5 @@
 import { currentUser } from './haupteingang.js';
+import { query, orderBy, limit, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 export async function logAdminAction(action, details) {
     try {
