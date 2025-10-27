@@ -1,3 +1,17 @@
+import {
+    db, collection, doc, updateDoc, deleteDoc, getDocs, writeBatch,
+    USERS, ADMIN_ROLES, DELETED_CHECKLISTS, alertUser, adminSectionsState, currentUser // currentUser hinzugefügt
+} from './haupteingang.js';
+
+// Fehlende Render-Funktionen importieren:
+import { renderUserKeyList, renderUserManagement } from './admin_benutzersteuerung.js';
+import { renderRoleManagement } from './admin_rollenverwaltung.js';
+import { renderApprovalProcess } from './admin_genehmigungsprozess.js';
+import { renderProtocolHistory } from './admin_protokollHistory.js';
+// renderAdminRightsManagement ist wahrscheinlich in admin_rechteverwaltung.js? Prüfe den Dateinamen!
+// Passe den Pfad './admin_rechteverwaltung.js' an, falls die Datei anders heißt.
+import { renderAdminRightsManagement } from './admin_rechteverwaltung.js';
+
 import { adminSectionsState } from './haupteingang.js';
 
 (function setupGlobalScrollRestore() {
