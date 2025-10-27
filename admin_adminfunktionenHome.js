@@ -12,7 +12,7 @@ import { renderRoleManagement } from './admin_rollenverwaltung.js';
 import { renderApprovalProcess } from './admin_genehmigungsprozess.js';
 import { renderProtocolHistory, logAdminAction } from './admin_protokollHistory.js';
 import { renderAdminRightsManagement } from './admin_rechteverwaltung.js'; // Pfad ggf. anpassen!
-
+import { renderPermanentDeleteModal } from './checklist.js';
 // --- (Der Rest deiner Importe bleibt, falls noch andere da waren) ---
 
 (function setupGlobalScrollRestore() {

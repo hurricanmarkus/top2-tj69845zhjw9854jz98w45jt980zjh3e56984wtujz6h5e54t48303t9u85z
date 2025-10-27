@@ -2424,7 +2424,7 @@ function setupCategoryManagementListeners(view) {
     }
 }
 
-function renderPermanentDeleteModal() {
+export function renderPermanentDeleteModal() {
     const container = document.getElementById('permanentDeleteListsContainer');
     container.innerHTML = ''; // Vorherigen Inhalt leeren
 
