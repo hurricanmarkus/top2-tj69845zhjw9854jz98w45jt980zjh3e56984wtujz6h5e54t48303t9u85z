@@ -32,7 +32,7 @@ export async function renderAdminRightsManagement() {
     let sysAdminListHTML = '<h4 class="text-lg font-semibold text-gray-700 mb-2">Übersicht Systemadministratoren</h4>';
     if (Object.keys(ADMIN_ROLES || {}).length > 0) {
         sysAdminListHTML += '<div class="space-y-1">';
-        systemAdmins.forEach(sysAdmin => {
+        Object.values(ADMIN_ROLES || {}).forEach(role => {
             const isSelf = sysAdmin.id === currentUser.mode;
             const currentUserLabel = isSelf ? '<span class="bg-indigo-100 text-indigo-800 font-bold text-xs px-2 py-1 rounded-full ml-2">AKTUELL</span>' : '';
             sysAdminListHTML += `<p class="p-2 bg-gray-100 rounded-md text-sm">${sysAdmin.name} ${currentUserLabel}</p>`;
