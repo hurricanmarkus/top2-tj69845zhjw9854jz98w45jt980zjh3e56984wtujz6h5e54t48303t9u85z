@@ -141,60 +141,119 @@ export function renderModalUserButtons() {
     console.log("renderModalUserButtons: Rendern der Benutzer abgeschlossen."); // Spion bleibt
 }
 
+// Ersetze diese Funktion komplett in admin_benutzersteuerung.js
 export function renderUserKeyList() {
-    const userKeyList = document.getElementById('userKeyList'); // Sicherstellen, dass die Variable hier definiert ist
-    userKeyList.innerHTML = '';
+    const userKeyList = document.getElementById('userKeyList');
+    if (!userKeyList) {
+        console.error("renderUserKeyList: Container #userKeyList nicht gefunden.");
+        return; // Frühzeitiger Abbruch, wenn Container fehlt
+    }
+    userKeyList.innerHTML = ''; // Leeren vor dem Neuaufbau
+
+    // Prüfen, ob currentUser und ROLES geladen sind
+    if (!currentUser || !ROLES) {
+         userKeyList.innerHTML = '<p class="text-center text-gray-500">Benutzerdaten werden geladen...</p>';
+         // Optional: Nach kurzer Zeit erneut versuchen
+         // setTimeout(renderUserKeyList, 300);
+         return;
+    }
+
     const isAdmin = currentUser.role === 'ADMIN';
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
 
-    // --- KORREKTUR START: Filter für nicht registrierte Benutzer ---
-    Object.values(USERS)
-        .filter(user => user.permissionType !== 'not_registered') // Nur Benutzer anzeigen, die NICHT 'not_registered' sind
-        .sort((a, b) => (a.name || '').localeCompare(b.name || '')) // Sortieren NACH dem Filtern
+    Object.values(USERS || {}) // || {} zur Sicherheit
+        .filter(user => user.permissionType !== 'not_registered')
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
         .forEach(user => {
-            // --- KORREKTUR ENDE ---
             const userId = user.id;
-            // Der Rest der Logik innerhalb der Schleife bleibt gleich...
-            if (!user.name) return;
+            if (!user.name) return; // Überspringe Benutzer ohne Namen
 
             const isSelf = userId === currentUser.mode;
             const isTargetSysAdmin = user.role === 'SYSTEMADMIN';
-            const canEditKey = isSelf || (isSysAdmin && !isTargetSysAdmin) || (isAdmin && !isTargetSysAdmin);
-            const canViewKey = canEditKey;
+            // Nur SysAdmin darf SysAdmin bearbeiten (sich selbst nicht), Admin darf nur Nicht-Admins/SysAdmins
+            const canEditKey = (isSysAdmin && !isTargetSysAdmin && !isSelf) || (isAdmin && !isTargetSysAdmin && user.role !== 'ADMIN') || isSelf;
+            const canViewKey = canEditKey; // Gleiche Logik für das Sehen des Schlüssels
             const keyDisplay = canViewKey ? (user.key || 'Nicht gesetzt') : '••••••••••';
             const currentUserLabel = isSelf ? '<span class="bg-indigo-100 text-indigo-800 font-bold text-xs px-2 py-1 rounded-full ml-2">AKTUELL</span>' : '';
 
             const userDiv = document.createElement('div');
             userDiv.className = `p-3 border rounded-lg ${!canEditKey ? 'bg-gray-200 opacity-70' : 'bg-gray-50'}`;
+            // Verwende die globale escapeHtml Funktion
             userDiv.innerHTML = `
-             <p class="font-bold text-gray-800 flex items-center">${user.name} ${currentUserLabel}</p>
-             <p class="text-xs text-gray-500 mb-2">Rolle: ${ROLES[user.role]?.name || ROLES[user.displayRole]?.name || 'Keine Rolle'}</p>
-             <div class="mb-3"><label class="block text-xs font-medium text-gray-600">Aktueller Schlüssel</label><input type="text" value="${keyDisplay}" class="w-full p-2 bg-gray-200 border rounded-md text-sm text-gray-700" readonly></div>
+             <p class="font-bold text-gray-800 flex items-center">${escapeHtml(user.name)} ${currentUserLabel}</p>
+             <p class="text-xs text-gray-500 mb-2">Rolle: ${escapeHtml(ROLES[user.role]?.name || ROLES[user.displayRole]?.name || 'Keine Rolle')}</p>
+             <div class="mb-3"><label class="block text-xs font-medium text-gray-600">Aktueller Schlüssel</label><input type="text" value="${escapeHtml(keyDisplay)}" class="w-full p-2 bg-gray-200 border rounded-md text-sm text-gray-700" readonly></div>
              <div class="flex space-x-2">
                  <input type="password" class="new-key-input flex-grow p-2 border rounded-lg text-sm" placeholder="Neuen Schlüssel eingeben" ${!canEditKey ? 'disabled' : ''}>
-                 <button class="save-key-button py-2 px-3 bg-blue-600 text-white text-sm font-semibold rounded-lg ${!canEditKey ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700'}" data-userid="${userId}" ${!canEditKey ? 'disabled' : ''}>Speichern</button>
+                 <button class="save-key-button py-2 px-3 bg-blue-600 text-white text-sm font-semibold rounded-lg ${!canEditKey ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700'}" data-userid="${userId}" ${!canEditKey ? 'disabled' : ''}>
+                     <span class="button-text">Speichern</span>
+                     <div class="loading-spinner" style="display: none;"></div>
+                 </button>
              </div>`;
             userKeyList.appendChild(userDiv);
-        }); // Ende der forEach-Schleife
+        });
 
-    // Event-Listener für die Speicher-Buttons (bleibt gleich)
+    // --- KORRIGIERTER Event-Listener für die Speicher-Buttons ---
     userKeyList.querySelectorAll('.save-key-button').forEach(button => {
-        if (!button.dataset.listenerAttached) { // Verhindert doppelte Listener
+        // Prüfe mit dataset, ob Listener schon dran ist (sicherer)
+        if (!button.dataset.listenerAttached) {
             button.addEventListener('click', async (e) => {
-                const userId = e.target.dataset.userid;
+                const currentButton = e.currentTarget; // Den Button selbst referenzieren
+                const userId = currentButton.dataset.userid;
+                const userToEdit = USERS[userId]; // Benutzerdaten holen
+                if (!userToEdit) return; // Abbruch, falls User nicht gefunden
+
                 const isSelf = userId === currentUser.mode;
-                if (!isSelf && !confirm(`Möchten Sie das Passwort für ${USERS[userId].name} wirklich ändern?`)) return;
 
-                const newKeyInput = e.target.closest('.flex').querySelector('.new-key-input');
-                const newKey = newKeyInput.value;
-                if (newKey.length < 4) return alertUser("Schlüssel muss mind. 4 Zeichen haben.", "error");
+                // Sicherheitsabfrage nur für ANDERE Benutzer
+                if (!isSelf && !confirm(`Möchten Sie das Passwort für ${userToEdit.name} wirklich ändern?`)) {
+                    return; // Abbruch bei "Nein"
+                }
 
-                await updateDoc(doc(usersCollectionRef, userId), { key: newKey });
-                await logAdminAction('password_changed', `Passwort für '${USERS[userId].name}' wurde geändert.`);
-                alertUser(`Schlüssel für ${USERS[userId].name} wurde aktualisiert!`, "success");
-                newKeyInput.value = '';
+                const flexContainer = currentButton.closest('.flex'); // Den Container des Buttons finden
+                if (!flexContainer) return; // Abbruch, wenn Struktur unerwartet ist
+
+                const newKeyInput = flexContainer.querySelector('.new-key-input');
+                if (!newKeyInput) return; // Abbruch, wenn Input-Feld nicht gefunden
+
+                const newKey = newKeyInput.value; // Kein .trim(), falls Leerzeichen erlaubt sind
+
+                // Längenprüfung
+                if (newKey.length < 4) {
+                    return alertUser("Schlüssel muss mindestens 4 Zeichen haben.", "error");
+                }
+
+                // Try-Catch Block für Fehlerbehandlung und Await
+                try {
+                    setButtonLoading(currentButton, true); // Ladezustand aktivieren
+                    console.log(`Versuche Passwort für User ${userId} zu ändern...`); // Debug
+
+                    // Warten auf Firebase Update
+                    await updateDoc(doc(usersCollectionRef, userId), { key: newKey });
+                    console.log(`Passwort für User ${userId} erfolgreich in Firebase geändert.`); // Debug
+
+                    // Warten auf Log-Eintrag
+                    await logAdminAction('password_changed', `Passwort für '${userToEdit.name}' wurde geändert.`);
+                    console.log(`Admin-Aktion geloggt.`); // Debug
+
+                    // Erfolgsmeldung erst NACH erfolgreichem Speichern
+                    alertUser(`Schlüssel für ${userToEdit.name} wurde aktualisiert!`, "success");
+
+                    newKeyInput.value = ''; // Input-Feld leeren
+
+                    // Optional: Lokale Daten auch aktualisieren (sollte aber durch Listener passieren)
+                    // if (USERS[userId]) USERS[userId].key = newKey;
+                    // renderUserKeyList(); // Nicht neu rendern, Listener sollte das tun
+
+                } catch (error) {
+                    // Fehlermeldung anzeigen
+                    console.error("Fehler beim Speichern des Schlüssels:", error);
+                    alertUser(`Fehler beim Speichern des Schlüssels: ${error.message}`, "error");
+                } finally {
+                    setButtonLoading(currentButton, false); // Ladezustand immer deaktivieren
+                }
             });
-            button.dataset.listenerAttached = 'true';
+            button.dataset.listenerAttached = 'true'; // Markieren, dass Listener dran ist
         }
     });
 }
