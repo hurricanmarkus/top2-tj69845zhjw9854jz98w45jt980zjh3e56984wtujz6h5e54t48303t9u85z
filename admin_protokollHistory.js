@@ -82,11 +82,12 @@ export async function renderProtocolHistory() {
                     await deleteDoc(doc(auditLogCollectionRef, logId));
                     rememberAdminScroll(); // Aktuelle Scrollposition speichern
                     renderProtocolHistory();
-                    setTimeout(restoreAdminScrollIfAny, 0);
+                    setTimeout(restoreAdminScrollIfAny, 50);
                 }
             });
         });
 
+        setTimeout(restoreAdminScrollIfAny, 50);
     } catch (error) {
         console.error("Error fetching protocol history:", error);
         protocolHistoryArea.innerHTML += `<p class="text-red-500">Fehler beim Laden des Protokolls. Möglicherweise muss ein Datenbank-Index erstellt werden. Bitte prüfen Sie die Browser-Konsole auf Detail-Fehler.</p>`;
