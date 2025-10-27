@@ -1,6 +1,6 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 // TEST 2
 import { onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { usersCollectionRef, USERS, initialAuthCheckDone, modalUserButtons } from './haupteingang.js';
+import { usersCollectionRef, USERS, initialAuthCheckDone, modalUserButtons, roleChangeRequestsCollectionRef, currentUser } from './haupteingang.js';
 import { checkCurrentUserValidity } from './log-InOut.js';
 // ENDE-ZIKA //
 

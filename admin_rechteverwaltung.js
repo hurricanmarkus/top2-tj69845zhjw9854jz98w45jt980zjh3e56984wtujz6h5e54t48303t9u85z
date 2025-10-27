@@ -1,3 +1,5 @@
+import { ADMIN_ROLES, USERS } from './haupteingang.js';
+
 function setupPermissionDependencies(container) {
     const mainToggle = container.querySelector('[data-perm="canSeeMainFunctions"]');
     const subToggles = [
