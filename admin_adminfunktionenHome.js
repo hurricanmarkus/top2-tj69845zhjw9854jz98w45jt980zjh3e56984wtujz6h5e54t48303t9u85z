@@ -65,6 +65,7 @@ export function rememberAdminScroll() {
 }
 
 // Ersetze NUR DIESE Funktion in admin_adminfunktionenHome.js
+// Ersetze NUR DIESE Funktion in admin_adminfunktionenHome.js
 export function restoreAdminScrollIfAny() {
     const scroller = document.querySelector('.main-content') || document.body || document.documentElement;
     const yRaw = sessionStorage.getItem('adminScrollY');
@@ -73,35 +74,44 @@ export function restoreAdminScrollIfAny() {
     console.log(`restoreAdminScrollIfAny: Versuch der Wiederherstellung. Scroller: ${scroller ? scroller.tagName : 'Nein'}, Y: ${yRaw} (${y})`);
 
     if (scroller && !Number.isNaN(y)) {
-        // --- NEUE LOGIK mit requestAnimationFrame ---
-        // Warte auf den nächsten Frame (Layout-Berechnung sollte abgeschlossen sein)
-        requestAnimationFrame(() => {
-            // Warte auf den Frame DANACH (Rendering sollte abgeschlossen sein)
-            requestAnimationFrame(() => {
-                console.log(`restoreAdminScrollIfAny (nach rAF): Scrolle ${scroller.tagName} zu Position ${y}`);
-                try {
-                    scroller.scrollTo({ top: y, behavior: 'auto' });
-                    // Prüfe die Position *nach* dem zweiten Frame
-                    console.log(`restoreAdminScrollIfAny (nach rAF): ScrollTop nach scrollTo: ${scroller.scrollTop}`);
-                    // Wert erst hier entfernen
+        // --- NEUER VERSUCH mit setTimeout und längerer Verzögerung ---
+        setTimeout(() => {
+            console.log(`restoreAdminScrollIfAny (nach 50ms): Scrolle ${scroller.tagName} zu Position ${y}`);
+            try {
+                // Sicherstellen, dass das Element noch existiert, bevor gescrollt wird
+                const currentScroller = document.querySelector('.main-content') || document.body || document.documentElement;
+                // Nur scrollen, wenn das Element noch dasselbe ist
+                if (currentScroller === scroller) {
+                    currentScroller.scrollTo({ top: y, behavior: 'auto' });
+                    // Prüfung direkt danach
+                    console.log(`restoreAdminScrollIfAny (nach 50ms): ScrollTop nach scrollTo: ${currentScroller.scrollTop}`);
+                     // Wert erst hier entfernen
                     sessionStorage.removeItem('adminScrollY');
-                    console.log(`restoreAdminScrollIfAny (nach rAF): Gespeicherten Wert entfernt.`);
-                } catch (e) {
-                    console.error("restoreAdminScrollIfAny (nach rAF): Fehler bei scrollTo:", e);
-                    // Fallback
-                    scroller.scrollTop = y;
-                    console.log(`restoreAdminScrollIfAny (nach rAF): ScrollTop nach Fallback: ${scroller.scrollTop}`);
-                     sessionStorage.removeItem('adminScrollY'); // Auch im Fehlerfall entfernen
+                    console.log(`restoreAdminScrollIfAny (nach 50ms): Gespeicherten Wert entfernt.`);
+                } else {
+                     console.warn("restoreAdminScrollIfAny (nach 50ms): Scroller-Element hat sich geändert oder existiert nicht mehr!");
+                     sessionStorage.removeItem('adminScrollY'); // Wert trotzdem entfernen
                 }
-            });
-        });
-        // --- ENDE NEUE LOGIK ---
+            } catch (e) {
+                console.error("restoreAdminScrollIfAny (nach 50ms): Fehler bei scrollTo:", e);
+                // Fallback (weniger wahrscheinlich, dass er jetzt noch gebraucht wird)
+                try {
+                   scroller.scrollTop = y;
+                   console.log(`restoreAdminScrollIfAny (nach 50ms): ScrollTop nach Fallback: ${scroller.scrollTop}`);
+                } catch (fallbackError) {
+                   console.error("restoreAdminScrollIfAny (nach 50ms): Fehler bei Fallback-Scroll:", fallbackError);
+                } finally {
+                   sessionStorage.removeItem('adminScrollY'); // Wert im Fehlerfall entfernen
+                }
+            }
+        }, 50); // Verzögerung auf 50 Millisekunden erhöht
+        // --- ENDE NEUER VERSUCH ---
     } else {
-        // Alte Logs für den Fehlerfall
+        // Logs für ungültigen Wert oder fehlenden Scroller
         if (Number.isNaN(y)) { console.warn("restoreAdminScrollIfAny: Y-Wert war ungültig."); }
         else { console.warn("restoreAdminScrollIfAny: Konnte Scroller nicht finden."); }
-         // Wert trotzdem entfernen, um Probleme zu vermeiden
-         sessionStorage.removeItem('adminScrollY');
+        // Wert trotzdem entfernen, um Probleme zu vermeiden
+        sessionStorage.removeItem('adminScrollY');
     }
 }
 
