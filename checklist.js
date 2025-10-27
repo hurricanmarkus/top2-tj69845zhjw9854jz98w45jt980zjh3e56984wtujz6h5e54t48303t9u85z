@@ -34,7 +34,7 @@ export {
   renderChecklistView,
   renderChecklistSettingsView,
 };
-
+import { logAdminAction } from './admin_protokollHistory.js';
 // ENDE-ZIKA //
   const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
