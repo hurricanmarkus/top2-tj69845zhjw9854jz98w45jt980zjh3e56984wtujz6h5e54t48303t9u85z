@@ -1,11 +1,82 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 // TEST 2
 import { onSnapshot, doc, updateDoc, setDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { db, usersCollectionRef, setButtonLoading, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES } from './haupteingang.js';
-import { checkCurrentUserValidity } from './log-InOut.js';
 import { logAdminAction } from './admin_protokollHistory.js';
 import { setupPermissionDependencies } from './admin_rechteverwaltung.js'; // Oder der richtige Dateiname
 import { restoreAdminScrollIfAny, rememberAdminScroll } from './admin_adminfunktionenHome.js';
 // ENDE-ZIKA //
+
+
+function checkCurrentUserValidity_COPY_V2() {
+    // Dieser "Spion" sagt uns, wann die Funktion aufgerufen wird.
+    console.log("--- Prüfe Benutzerberechtigungen ---");
+
+    if (Object.keys(USERS).length === 0 || Object.keys(ROLES).length === 0) {
+        return;
+    }
+
+    const storedKey = localStorage.getItem(ADMIN_STORAGE_KEY);
+    const user = USERS[storedKey];
+
+    // Dieser Spion zeigt uns das komplette Benutzer-Objekt, mit dem wir arbeiten.
+    if (user) {
+        console.log("Aktuelles Benutzer-Objekt aus der Datenbank:", user);
+    }
+
+    if (user && user.isActive) {
+        let userPermissions = [];
+        let permissionSource = "Unbekannt"; // Eine Notiz, woher die Rechte kommen.
+
+        if (user.role === 'SYSTEMADMIN') {
+            userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
+            permissionSource = "Feste Regel für SYSTEMADMIN";
+        } else if (user.role === 'ADMIN') {
+            userPermissions = ROLES['ADMIN']?.permissions || [];
+            permissionSource = "Aus der Rollenverwaltung für 'ADMIN'";
+            // Dieser Spion zeigt uns, was genau für die ADMIN-Rolle gefunden wurde.
+            console.log("Für ADMIN-Rolle gefundene Rechte:", ROLES['ADMIN']?.permissions);
+
+        } else if (user.permissionType === 'individual') {
+            userPermissions = user.customPermissions || [];
+            permissionSource = "Aus den individuellen Einstellungen des Benutzers";
+
+        } else if (user.role && ROLES[user.role]) {
+            userPermissions = ROLES[user.role].permissions || [];
+            permissionSource = `Aus der Rollenverwaltung für '${user.role}'`;
+        }
+
+        // Dieser Spion gibt das Endergebnis aus.
+        console.log(`Quelle der Berechtigungen: ${permissionSource}`);
+        console.log("Final zugewiesene Berechtigungen:", userPermissions);
+
+        Object.keys(currentUser).forEach(key => delete currentUser[key]);
+        // 2. Dann die neuen Eigenschaften hinzufügen
+        Object.assign(currentUser, {
+            mode: storedKey,
+            displayName: user.name,
+            role: user.role,
+            permissions: userPermissions
+        });
+    } else {
+        if (currentUser.mode !== GUEST_MODE) {
+            switchToGuestMode(true, "Ihr Profil ist nicht mehr gültig oder wurde deaktiviert.");
+        } else if (storedKey && USERS[storedKey] && !USERS[storedKey].isActive) {
+            switchToGuestMode(true, "Ihr Profil wurde deaktiviert.");
+        } else {
+            switchToGuestMode(false);
+        }
+    }
+    updateUIForMode();
+
+    const activeView = document.querySelector('.view.active');
+    if (!activeView) return;
+    const isAdminView = activeView.id === 'adminView';
+    if (isAdminView && !(currentUser.role === 'ADMIN' || currentUser.role === 'SYSTEMADMIN')) {
+        alertUser("Ihre Administrator-Rechte wurden entzogen.", "error");
+        navigate('home');
+    }
+}
+
 
 const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
@@ -42,7 +113,7 @@ export function listenForUserUpdates() {
 
         // Verhindert ein Neuzeichnen, wenn die Änderung vom User selbst kam
         if (initialAuthCheckDone) {
-            checkCurrentUserValidity();
+            checkCurrentUserValidity_COPY_V2();
         }
         renderModalUserButtons(); // <<< Wird jetzt immer aufgerufen, wenn Daten kommen
 
@@ -262,15 +333,22 @@ export function renderUserKeyList() {
     });
 }
 
+// Ersetze diese Funktion komplett in admin_benutzersteuerung.js
 export async function renderUserManagement() {
-    // Frühe Überprüfung der Referenz (bleibt gleich)
-    if (!roleChangeRequestsCollectionRef || !usersCollectionRef || !rolesCollectionRef) {
-        userManagementArea.innerHTML = `<p class="text-center text-red-500">Datenbankverbindung wird noch aufgebaut...</p>`;
-        setTimeout(renderUserManagement, 500);
+    const userManagementArea = document.getElementById('userManagementArea'); // Sicherstellen, dass die Variable hier definiert ist
+    if (!userManagementArea) {
+        console.error("renderUserManagement: Container #userManagementArea nicht gefunden.");
         return;
     }
 
-    // Admin-Berechtigungen ermitteln (bleibt gleich)
+    // Frühe Überprüfung der Referenzen
+    if (!roleChangeRequestsCollectionRef || !usersCollectionRef || !rolesCollectionRef) {
+        userManagementArea.innerHTML = `<p class="text-center text-red-500">Datenbankverbindung wird noch aufgebaut...</p>`;
+        // Optional: setTimeout(renderUserManagement, 500); // Erneut versuchen
+        return;
+    }
+
+    // Admin-Berechtigungen ermitteln
     let effectiveAdminPerms = {};
     const isAdmin = currentUser.role === 'ADMIN';
     const isSysAdminEditing = currentUser.role === 'SYSTEMADMIN';
@@ -286,7 +364,7 @@ export async function renderUserManagement() {
     }
     const permSet = (isSysAdminEditing) ? { canToggleUserActive: true, canDeleteUser: true, canRenameUser: true, canChangeUserPermissionType: true, canCreateUser: true } : effectiveAdminPerms;
 
-    // --- HTML-Grundgerüst neu aufbauen (inkl. Listener für "+ Benutzer anlegen") ---
+    // --- HTML-Grundgerüst ---
     userManagementArea.innerHTML = `
         <button id="showAddUserFormBtn" class="w-full p-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 transition shadow-md ${!permSet.canCreateUser ? 'hidden' : ''}">+ Benutzer anlegen</button>
         <div id="addUserFormContainer" class="p-4 border rounded-xl bg-green-50 hidden">
@@ -294,17 +372,15 @@ export async function renderUserManagement() {
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <input type="text" id="newUserName" class="p-2 border rounded-lg" placeholder="Nickname*">
                 <input type="text" id="newUserRealName" class="p-2 border rounded-lg" placeholder="Vollständiger Name (Optional)">
-<div id="newUserKeyWrapper" class="sm:col-span-1"> 
-     <input type="password" id="newUserKey" class="p-2 border rounded-lg w-full" placeholder="Passwort* (mind. 4 Zeichen)">
- </div>
+                <div id="newUserKeyWrapper" class="sm:col-span-1">
+                     <input type="password" id="newUserKey" class="p-2 border rounded-lg w-full" placeholder="Passwort* (mind. 4 Zeichen)">
+                 </div>
                 <select id="newUserPermissionType" class="p-2 border rounded-lg bg-white">
                     <option value="role" selected>Typ: Rolle (Standard)</option>
                     <option value="individual">Typ: Individuell</option>
                     <option value="not_registered">Typ: Nicht registriert</option>
                 </select>
-                <select id="newUserRole" class="p-2 border rounded-lg bg-white sm:col-span-2">
-                    
-                </select>
+                <select id="newUserRole" class="p-2 border rounded-lg bg-white sm:col-span-2"></select>
                 <button id="saveNewUserButton" class="sm:col-span-2 p-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">Erstellen</button>
             </div>
             <p class="text-xs text-gray-500 mt-2">* Pflichtfelder (außer bei "Nicht registriert")</p>
@@ -322,20 +398,22 @@ export async function renderUserManagement() {
 
     // Listener für "+ Benutzer anlegen" Button
     const addUserBtn = userManagementArea.querySelector('#showAddUserFormBtn');
-    if (addUserBtn) {
+    if (addUserBtn && !addUserBtn.dataset.listenerAttached) {
         addUserBtn.addEventListener('click', (e) => {
             e.currentTarget.style.display = 'none';
-            userManagementArea.querySelector('#addUserFormContainer').classList.remove('hidden');
-            // Setze Standardwerte im Formular
-            document.getElementById('newUserPermissionType').value = 'role';
-            toggleNewUserRoleField(); // Zeige Rollenauswahl initial an
+            userManagementArea.querySelector('#addUserFormContainer')?.classList.remove('hidden');
+            const permTypeSelect = document.getElementById('newUserPermissionType');
+            if (permTypeSelect) permTypeSelect.value = 'role';
+            toggleNewUserRoleField();
         });
+        addUserBtn.dataset.listenerAttached = 'true';
     }
 
     // Listener für Typ-Auswahl im "Neu anlegen"-Formular
     const newUserPermTypeSelect = userManagementArea.querySelector('#newUserPermissionType');
-    if (newUserPermTypeSelect) {
+    if (newUserPermTypeSelect && !newUserPermTypeSelect.dataset.listenerAttached) {
         newUserPermTypeSelect.addEventListener('change', toggleNewUserRoleField);
+        newUserPermTypeSelect.dataset.listenerAttached = 'true';
     }
 
     // --- Daten vorbereiten ---
@@ -345,76 +423,45 @@ export async function renderUserManagement() {
 
     const registeredListContainer = userManagementArea.querySelector('#registeredUserList');
     const notRegisteredListContainer = userManagementArea.querySelector('#notRegisteredList');
-    registeredListContainer.innerHTML = ''; // Leeren für Neudarstellung
-    notRegisteredListContainer.innerHTML = ''; // Leeren für Neudarstellung
+    if(registeredListContainer) registeredListContainer.innerHTML = '';
+    if(notRegisteredListContainer) notRegisteredListContainer.innerHTML = '';
 
-    // Zähler aktualisieren
-    document.getElementById('notRegisteredCount').textContent = notRegisteredUsers.length;
+    const notRegCountEl = document.getElementById('notRegisteredCount');
+    if (notRegCountEl) notRegCountEl.textContent = notRegisteredUsers.length;
 
-    // Rollenoptionen für Dropdowns vorbereiten
+    // Rollenoptionen für "Neu Anlegen"
     const roleOptionsHTML = Object.values(ROLES)
-        .filter(r => r.id !== 'SYSTEMADMIN' && r.id !== 'ADMIN' && r.id !== 'NO_RIGHTS') // Standard-Filter
-        .map(role => `<option value="${role.id}">${role.name}</option>`)
+        .filter(r => r.id !== 'SYSTEMADMIN' && r.id !== 'ADMIN' && r.id !== 'NO_RIGHTS')
+        .map(role => `<option value="${role.id}">${escapeHtml(role.name)}</option>`)
         .join('');
     const newUserRoleSelect = userManagementArea.querySelector('#newUserRole');
     if (newUserRoleSelect) {
         newUserRoleSelect.innerHTML = roleOptionsHTML;
-        newUserRoleSelect.value = 'ANGEMELDET'; // Standardrolle vorauswählen
+        newUserRoleSelect.value = 'ANGEMELDET';
     }
 
-    // Verfügbare Berechtigungen (bleibt gleich)
+    // Verfügbare Berechtigungen
     const allPermissions = { 'ENTRANCE': 'Haupteingang öffnen', 'PUSHOVER': 'Push-Nachricht senden', 'CHECKLIST': 'Aktuelle Checkliste', 'CHECKLIST_SWITCH': '-> Listen umschalten', 'CHECKLIST_SETTINGS': '-> Checkliste-Einstellungen', 'ESSENSBERECHNUNG': 'Essensberechnung' };
-    // Anzeige-Rollen (bleibt gleich)
-    const displayRoleOptions = Object.values(ROLES).filter(r => (isSysAdminEditing || r.id !== 'SYSTEMADMIN')).map(role => `<option value="${role.id}">${role.name.replace(/-/g, '').trim()}</option>`).join('');
+
+    // Optionen für Angezeigten Status (OHNE SYSTEMADMIN)
+    const displayRoleOptions = Object.values(ROLES)
+        .filter(r => r.id !== 'SYSTEMADMIN') // SYSTEMADMIN herausfiltern
+        .map(role => `<option value="${role.id}">${escapeHtml(role.name.replace(/-/g, '').trim())}</option>`)
+        .join('');
 
     // --- Rendern der Benutzerkarten ---
-
-    // Funktion zum Erstellen einer Benutzerkarte (wird für beide Listen verwendet)
     const createUserCardHTML = (user) => {
-        const userId = user.id;
-        const isSelf = userId === currentUser.mode;
-        const isTargetSysAdmin = user.role === 'SYSTEMADMIN';
-        const isTargetAdmin = user.role === 'ADMIN';
-        const isNotRegistered = user.permissionType === 'not_registered';
-
-        let canEdit = false;
-        if (isSysAdminEditing) { canEdit = !isSelf; } // SysAdmin darf alle außer sich selbst
-        else if (isAdmin) { canEdit = !isTargetSysAdmin && !isTargetAdmin; } // Admin darf keine Admins/SysAdmins
-
-        // Überschreiben für nicht registrierte User: können von Admins bearbeitet werden
-        if (isNotRegistered && isAdmin) canEdit = true;
-
-        const canToggle = permSet.canToggleUserActive && canEdit && !isSelf && !isNotRegistered; // Nicht registrierte können nicht gesperrt werden
-        const canDelete = permSet.canDeleteUser && canEdit && !isSelf;
-        const canRename = permSet.canRenameUser && canEdit;
-        const canChangePerms = permSet.canChangeUserPermissionType && canEdit && !isNotRegistered; // Nicht registrierte haben keine Berechtigungen zum Ändern
-
-        const currentUserLabel = isSelf ? '<span class="bg-indigo-100 text-indigo-800 font-bold text-xs px-2 py-1 rounded-full ml-2">AKTUELL</span>' : '';
-        const realNameDisplay = user.realName ? `<span class="text-gray-500 italic text-sm ml-1 real-name-display">(${user.realName})</span>` : '';
-
-        // Rollenanzeige Logik
-        let roleName = 'Unbekannt';
-        let roleColorClass = 'text-gray-500';
-        if (isNotRegistered) {
-            roleName = 'Nicht registriert';
-            roleColorClass = 'text-gray-400 italic';
-        } else {
-            const effectiveRoleId = user.role || user.displayRole || 'NO_RIGHTS';
-            roleName = ROLES[effectiveRoleId]?.name || 'Keine Rolle';
-            if (user.role === 'SYSTEMADMIN') roleColorClass = 'text-purple-600 font-bold';
-            else if (user.role === 'ADMIN') roleColorClass = 'text-red-600 font-bold';
-        }
-
-        // Berechtigungs-HTML (nur für registrierte User relevant)
+        const userId = user.id; const isSelf = userId === currentUser.mode; const isTargetSysAdmin = user.role === 'SYSTEMADMIN'; const isTargetAdmin = user.role === 'ADMIN'; const isNotRegistered = user.permissionType === 'not_registered';
+        let canEdit = false; if (isSysAdminEditing) { canEdit = !isSelf; } else if (isAdmin) { canEdit = !isTargetSysAdmin && !isTargetAdmin; } if (isNotRegistered && isAdmin) canEdit = true;
+        const canToggle = permSet.canToggleUserActive && canEdit && !isSelf && !isNotRegistered; const canDelete = permSet.canDeleteUser && canEdit && !isSelf; const canRename = permSet.canRenameUser && canEdit; const canChangePerms = permSet.canChangeUserPermissionType && canEdit && !isNotRegistered;
+        const currentUserLabel = isSelf ? '<span class="bg-indigo-100 text-indigo-800 font-bold text-xs px-2 py-1 rounded-full ml-2">AKTUELL</span>' : ''; const realNameDisplay = user.realName ? `<span class="text-gray-500 italic text-sm ml-1 real-name-display">(${escapeHtml(user.realName)})</span>` : '';
+        let roleName = 'Unbekannt'; let roleColorClass = 'text-gray-500'; if (isNotRegistered) { roleName = 'Nicht registriert'; roleColorClass = 'text-gray-400 italic'; } else { const effectiveRoleId = user.role || user.displayRole || 'NO_RIGHTS'; roleName = ROLES[effectiveRoleId]?.name || 'Keine Rolle'; if (user.role === 'SYSTEMADMIN') roleColorClass = 'text-purple-600 font-bold'; else if (user.role === 'ADMIN') roleColorClass = 'text-red-600 font-bold'; }
         let permissionsHTML = '';
         if (!isNotRegistered) {
-            const permType = user.permissionType || 'role'; // Default to role if undefined
+            const permType = user.permissionType || 'role';
             let selectedDisplayRole = user.displayRole || 'NO_RIGHTS';
-            // Korrektur: Wenn ein Admin individuelle Rechte hat, soll "Admin" angezeigt werden
             if (user.role === 'ADMIN' && permType === 'individual') selectedDisplayRole = 'ADMIN';
-
-            const finalDisplayRoleOptionsWithSelection = displayRoleOptions.replace(`value="${selectedDisplayRole}"`, `value="${selectedDisplayRole}" selected`);
-
+            const finalDisplayRoleOptionsWithSelection = displayRoleOptions.replace(`value="${selectedDisplayRole}"`, `value="${selectedDisplayRole}" selected`); // Fügt 'selected' zur richtigen Option hinzu
             permissionsHTML = `
             <div class="mt-4 pt-3 border-t" data-userid="${userId}">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Berechtigungs-Typ</label>
@@ -424,7 +471,7 @@ export async function renderUserManagement() {
                 </div>
                 <div class="role-selection-area mt-2 ${permType === 'role' ? '' : 'hidden'}">
                     <select class="user-role-select w-full p-2 border rounded-lg bg-white text-sm" ${!canChangePerms ? 'disabled' : ''}>
-                        ${Object.values(ROLES).filter(r => (isSysAdminEditing || (r.id !== 'SYSTEMADMIN' && r.id !== 'ADMIN'))).map(role => `<option value="${role.id}" ${user.role === role.id ? 'selected' : ''}>${role.name}</option>`).join('')}
+                        ${Object.values(ROLES).filter(r => (isSysAdminEditing || (r.id !== 'SYSTEMADMIN' && r.id !== 'ADMIN'))).map(role => `<option value="${role.id}" ${user.role === role.id ? 'selected' : ''}>${escapeHtml(role.name)}</option>`).join('')}
                     </select>
                 </div>
                 <div class="individual-perms-area mt-3 ${permType === 'individual' ? '' : 'hidden'}">
@@ -435,7 +482,7 @@ export async function renderUserManagement() {
                          </select>
                     </div>
                     <div class="space-y-2 mt-3 pt-3 border-t">
-                        ${Object.keys(allPermissions).map(permKey => `<label class="flex items-center ${permKey.startsWith('CHECKLIST_') ? 'pl-6' : ''}"><input type="checkbox" class="custom-perm-checkbox h-4 w-4" data-perm="${permKey}" ${(user.customPermissions || []).includes(permKey) ? 'checked' : ''} ${!canChangePerms ? 'disabled' : ''}><span class="ml-2 text-sm">${allPermissions[permKey]}</span></label>`).join('')}
+                        ${Object.keys(allPermissions).map(permKey => `<label class="flex items-center ${permKey.startsWith('CHECKLIST_') ? 'pl-6' : ''}"><input type="checkbox" class="custom-perm-checkbox h-4 w-4" data-perm="${permKey}" ${(user.customPermissions || []).includes(permKey) ? 'checked' : ''} ${!canChangePerms ? 'disabled' : ''}><span class="ml-2 text-sm">${escapeHtml(allPermissions[permKey])}</span></label>`).join('')}
                     </div>
                 </div>
                 <div class="flex justify-end mt-3 hidden save-perms-container">
@@ -443,62 +490,31 @@ export async function renderUserManagement() {
                 </div>
             </div>`;
         }
-
-        // Lock-Toggle HTML (nur für registrierte User)
-        const lockToggleHTML = !isNotRegistered ? `
-            <label class="flex items-center ${canToggle ? 'cursor-pointer' : 'cursor-not-allowed'}">
-                <span class="mr-2 text-sm font-medium">Gesperrt: <span class="${!user.isActive ? 'text-red-700' : 'text-green-700'} font-bold">${!user.isActive ? 'JA' : 'NEIN'}</span></span>
-                <div class="relative">
-                    <input type="checkbox" class="sr-only user-active-toggle" data-userid="${userId}" ${!user.isActive ? 'checked' : ''} ${!canToggle ? 'disabled' : ''}>
-                    <div class="block bg-gray-300 w-10 h-6 rounded-full"></div>
-                    <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition"></div>
-                </div>
-            </label>` : '<div class="w-10 h-6"></div>'; // Platzhalter für Layout
-
-        // Zusammenbau der Karte
+        const lockToggleHTML = !isNotRegistered ? `<label class="flex items-center ${canToggle ? 'cursor-pointer' : 'cursor-not-allowed'}"><span class="mr-2 text-sm font-medium">Gesperrt: <span class="${!user.isActive ? 'text-red-700' : 'text-green-700'} font-bold">${!user.isActive ? 'JA' : 'NEIN'}</span></span><div class="relative"><input type="checkbox" class="sr-only user-active-toggle" data-userid="${userId}" ${!user.isActive ? 'checked' : ''} ${!canToggle ? 'disabled' : ''}><div class="block bg-gray-300 w-10 h-6 rounded-full"></div><div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition"></div></div></label>` : '<div class="w-10 h-6"></div>';
         return `
         <div class="user-card p-3 border rounded-lg flex flex-col gap-3 ${!canEdit && !isSelf ? 'bg-gray-200 opacity-70' : (isNotRegistered ? 'bg-gray-50' : 'bg-gray-50')}" data-userid="${userId}">
-            <div class="flex justify-between items-start">
-                 <div class="flex-grow">
-<div class="flex items-center gap-2 flex-wrap">
-     <div data-userid="${userId}" class="name-display font-bold text-gray-800">${user.name || 'Unbenannt'} ${currentUserLabel} ${realNameDisplay}</div>
-     <div data-userid="${userId}" class="name-edit-container hidden flex-grow gap-2 items-center">
-         <input type="text" value="${user.name || ''}" class="edit-nickname-input p-1 border rounded w-full text-sm" placeholder="Nickname">
-         <input type="text" value="${user.realName || ''}" class="edit-realname-input p-1 border rounded w-full text-sm" placeholder="Vollständiger Name">
-         <button class="save-name-btn p-1 ml-1 bg-green-500 text-white rounded text-xs">✔️</button>
-     </div>
-     ${canRename ? `<button class="rename-user-btn p-1" data-userid="${userId}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4 text-gray-500 hover:text-indigo-600"><path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.775a.75.75 0 0 0-.22.53l-.5 2.5a.75.75 0 0 0 .913.913l2.5-.5a.75.75 0 0 0 .53-.22l4.263-4.262a1.75 1.75 0 0 0 0-2.475Z" /><path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v9.5c0 .69.56 1.25 1.25 1.25h9.5c.69 0 1.25-.56 1.25-1.25V9.5a.75.75 0 0 1 1.5 0v5.25A2.75 2.75 0 0 1 14.25 18h-9.5A2.75 2.75 0 0 1 2 15.25v-9.5A2.75 2.75 0 0 1 4.75 3.5h5.25a.75.75 0 0 1 0 1.5H4.75Z" /></svg></button>` : ''}
- </div>
-                    <p class="text-xs ${roleColorClass}">${roleName}</p>
-                </div>
-                ${lockToggleHTML}
-            </div>
+            <div class="flex justify-between items-start"> <div class="flex-grow"> <div class="flex items-center gap-2 flex-wrap"> <div data-userid="${userId}" class="name-display font-bold text-gray-800">${escapeHtml(user.name || 'Unbenannt')} ${currentUserLabel} ${realNameDisplay}</div> <div data-userid="${userId}" class="name-edit-container hidden flex-grow gap-2 items-center"> <input type="text" value="${escapeHtml(user.name || '')}" class="edit-nickname-input p-1 border rounded w-full text-sm" placeholder="Nickname"> <input type="text" value="${escapeHtml(user.realName || '')}" class="edit-realname-input p-1 border rounded w-full text-sm" placeholder="Vollständiger Name"> <button class="save-name-btn p-1 ml-1 bg-green-500 text-white rounded text-xs">✔️</button> </div> ${canRename ? `<button class="rename-user-btn p-1" data-userid="${userId}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4 text-gray-500 hover:text-indigo-600"><path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.775a.75.75 0 0 0-.22.53l-.5 2.5a.75.75 0 0 0 .913.913l2.5-.5a.75.75 0 0 0 .53-.22l4.263-4.262a1.75 1.75 0 0 0 0-2.475Z" /><path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v9.5c0 .69.56 1.25 1.25 1.25h9.5c.69 0 1.25-.56 1.25-1.25V9.5a.75.75 0 0 1 1.5 0v5.25A2.75 2.75 0 0 1 14.25 18h-9.5A2.75 2.75 0 0 1 2 15.25v-9.5A2.75 2.75 0 0 1 4.75 3.5h5.25a.75.75 0 0 1 0 1.5H4.75Z" /></svg></button>` : ''} </div> <p class="text-xs ${roleColorClass}">${escapeHtml(roleName)}</p> </div> ${lockToggleHTML} </div>
             ${permissionsHTML}
-            <div class="flex justify-end mt-2">
-                <button class="delete-user-button py-1 px-3 text-xs font-semibold bg-red-600 text-white rounded-lg ${!canDelete ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-700'}" data-userid="${userId}" ${!canDelete ? 'disabled' : ''}>Löschen</button>
-            </div>
+            <div class="flex justify-end mt-2"> <button class="delete-user-button py-1 px-3 text-xs font-semibold bg-red-600 text-white rounded-lg ${!canDelete ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-700'}" data-userid="${userId}" ${!canDelete ? 'disabled' : ''}>Löschen</button> </div>
         </div>`;
     };
 
     // Rendere registrierte Benutzer
-    if (registeredUsers.length > 0) {
-        registeredUsers.forEach(user => {
-            registeredListContainer.innerHTML += createUserCardHTML(user);
-        });
-    } else {
+    if (registeredUsers.length > 0 && registeredListContainer) {
+        registeredUsers.forEach(user => { registeredListContainer.innerHTML += createUserCardHTML(user); });
+    } else if (registeredListContainer) {
         registeredListContainer.innerHTML = '<p class="text-sm text-center text-gray-400">Keine registrierten Benutzer vorhanden.</p>';
     }
 
     // Rendere nicht registrierte Benutzer
-    if (notRegisteredUsers.length > 0) {
-        notRegisteredUsers.forEach(user => {
-            notRegisteredListContainer.innerHTML += createUserCardHTML(user);
-        });
-    } else {
+    if (notRegisteredUsers.length > 0 && notRegisteredListContainer) {
+        notRegisteredUsers.forEach(user => { notRegisteredListContainer.innerHTML += createUserCardHTML(user); });
+    } else if (notRegisteredListContainer) {
         notRegisteredListContainer.innerHTML = '<p class="text-xs text-center text-gray-400">Keine nicht registrierten Personen vorhanden.</p>';
     }
 
     // --- Event Listener hinzufügen ---
+    // Der Aufruf bleibt hier, die Funktion selbst wird separat aktualisiert/ersetzt
     addAdminUserManagementListeners(userManagementArea, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions);
     restoreAdminScrollIfAny();
 }
