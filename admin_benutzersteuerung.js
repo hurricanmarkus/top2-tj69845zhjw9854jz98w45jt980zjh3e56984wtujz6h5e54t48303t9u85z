@@ -1,6 +1,6 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 // TEST 2
 import { onSnapshot, doc, updateDoc, setDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { db, usersCollectionRef, setButtonLoading, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES } from './haupteingang.js';
+import { db, usersCollectionRef, setButtonLoading, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES, ADMIN_STORAGE_KEY } from './haupteingang.js';
 import { logAdminAction } from './admin_protokollHistory.js';
 import { setupPermissionDependencies } from './admin_rechteverwaltung.js'; // Oder der richtige Dateiname
 import { restoreAdminScrollIfAny, rememberAdminScroll } from './admin_adminfunktionenHome.js';
