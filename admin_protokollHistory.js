@@ -1,6 +1,6 @@
 import { db, auditLogCollectionRef, currentUser } from './haupteingang.js';
 import { query, orderBy, limit, onSnapshot, collection, doc, addDoc, serverTimestamp, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { rememberAdminScroll } from './admin_adminfunktionenHome.js';
+import { rememberAdminScroll, restoreAdminScrollIfAny } from './admin_adminfunktionenHome.js';
 
 export async function logAdminAction(action, details) {
     try {
@@ -82,6 +82,7 @@ export async function renderProtocolHistory() {
                     await deleteDoc(doc(auditLogCollectionRef, logId));
                     rememberAdminScroll(); // Aktuelle Scrollposition speichern
                     renderProtocolHistory();
+                    setTimeout(restoreAdminScrollIfAny, 0);
                 }
             });
         });
