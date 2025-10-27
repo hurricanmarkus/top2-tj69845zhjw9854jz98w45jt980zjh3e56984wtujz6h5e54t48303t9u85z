@@ -2,7 +2,7 @@ import { db, adminRolesCollectionRef, ADMIN_ROLES, USERS, alertUser, currentUser
 import { logAdminAction } from './admin_protokollHistory.js';
 import { doc, updateDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-function setupPermissionDependencies(container) {
+export function setupPermissionDependencies(container) {
     const mainToggle = container.querySelector('[data-perm="canSeeMainFunctions"]');
     const subToggles = [
         container.querySelector('[data-perm="canUseMainPush"]'),
