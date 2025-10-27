@@ -67,6 +67,7 @@ export function rememberAdminScroll() {
 // Ersetze NUR DIESE Funktion in admin_adminfunktionenHome.js
 // Ersetze NUR DIESE Funktion in admin_adminfunktionenHome.js
 // Ersetze NUR DIESE Funktion in admin_adminfunktionenHome.js
+// Ersetze NUR DIESE Funktion in admin_adminfunktionenHome.js
 export function restoreAdminScrollIfAny() {
     const scroller = document.querySelector('.main-content') || document.body || document.documentElement;
     const yRaw = sessionStorage.getItem('adminScrollY');
@@ -75,44 +76,44 @@ export function restoreAdminScrollIfAny() {
     console.log(`restoreAdminScrollIfAny: Versuch der Wiederherstellung. Scroller: ${scroller ? scroller.tagName : 'Nein'}, Y: ${yRaw} (${y})`);
 
     if (scroller && !Number.isNaN(y)) {
-        // --- NEUER VERSUCH: Fokus entfernen + setTimeout ---
-        setTimeout(() => {
-            console.log(`restoreAdminScrollIfAny (nach 50ms): Versuche Scroll zu ${y}`);
-            try {
-                const currentScroller = document.querySelector('.main-content') || document.body || document.documentElement;
-                if (currentScroller === scroller) {
-                    // **NEU:** Versuche, den Fokus vom aktuell fokussierten Element zu entfernen
-                    if (document.activeElement && document.activeElement instanceof HTMLElement) {
-                        console.log(`restoreAdminScrollIfAny: Entferne Fokus von ${document.activeElement.tagName}`);
-                        document.activeElement.blur();
+        // --- ALLERLETZTER VERSUCH: rAF + direkte Zuweisung ---
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => { // Doppeltes rAF
+                console.log(`restoreAdminScrollIfAny (nach rAF): Versuche Scroll zu ${y}`);
+                try {
+                    const currentScroller = document.querySelector('.main-content') || document.body || document.documentElement;
+                    if (currentScroller === scroller) {
+                        if (document.activeElement && document.activeElement instanceof HTMLElement) {
+                            console.log(`restoreAdminScrollIfAny: Entferne Fokus von ${document.activeElement.tagName}`);
+                            document.activeElement.blur();
+                        }
+
+                        // **NEU:** Direkte Zuweisung statt scrollTo
+                        console.log(`restoreAdminScrollIfAny: Setze scrollTop direkt auf ${y}`);
+                        currentScroller.scrollTop = y;
+
+                        // Prüfung direkt danach
+                        console.log(`restoreAdminScrollIfAny: ScrollTop nach direkter Zuweisung: ${currentScroller.scrollTop}`);
+
+                        sessionStorage.removeItem('adminScrollY');
+                        console.log(`restoreAdminScrollIfAny: Gespeicherten Wert entfernt.`);
+
+                        // Optionale finale Prüfung nach kurzem Timeout (nur zum Debuggen, falls es immer noch 0 ist)
+                        // setTimeout(() => {
+                        //     console.log(`restoreAdminScrollIfAny: ScrollTop nach 10ms: ${currentScroller.scrollTop}`);
+                        // }, 10);
+
+                    } else {
+                         console.warn("restoreAdminScrollIfAny (nach rAF): Scroller-Element hat sich geändert!");
+                         sessionStorage.removeItem('adminScrollY');
                     }
-
-                    // Scrolle jetzt
-                    currentScroller.scrollTo({ top: y, behavior: 'auto' });
-                    console.log(`restoreAdminScrollIfAny: ScrollTop nach scrollTo: ${currentScroller.scrollTop}`);
-
-                    // Wert erst hier entfernen
-                    sessionStorage.removeItem('adminScrollY');
-                    console.log(`restoreAdminScrollIfAny: Gespeicherten Wert entfernt.`);
-
-                    // **Zusätzliche Prüfung nach kurzer weiterer Verzögerung:**
-                    // Manchmal wird der ScrollTop erst im nächsten "Tick" korrekt gesetzt.
-                    // setTimeout(() => {
-                    //     console.log(`restoreAdminScrollIfAny: ScrollTop nach weiterer Verzögerung: ${currentScroller.scrollTop}`);
-                    // }, 0);
-
-
-                } else {
-                     console.warn("restoreAdminScrollIfAny (nach 50ms): Scroller-Element hat sich geändert!");
+                } catch (e) {
+                    console.error("restoreAdminScrollIfAny (nach rAF): Fehler bei scrollTop Zuweisung:", e);
                      sessionStorage.removeItem('adminScrollY');
                 }
-            } catch (e) {
-                console.error("restoreAdminScrollIfAny (nach 50ms): Fehler bei scrollTo:", e);
-                 try { scroller.scrollTop = y; } catch (fe) {} // Fallback
-                 sessionStorage.removeItem('adminScrollY');
-            }
-        }, 50); // Behalte die 50ms Verzögerung bei
-        // --- ENDE NEUER VERSUCH ---
+            });
+        });
+        // --- ENDE ALLERLETZTER VERSUCH ---
     } else {
         if (Number.isNaN(y)) { console.warn("restoreAdminScrollIfAny: Y-Wert war ungültig."); }
         else { console.warn("restoreAdminScrollIfAny: Konnte Scroller nicht finden."); }
