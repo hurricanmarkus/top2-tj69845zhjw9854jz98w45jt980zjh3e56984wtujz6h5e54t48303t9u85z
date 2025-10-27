@@ -3,7 +3,7 @@ import { onSnapshot, doc, updateDoc, setDoc, deleteDoc, getDoc } from "https://w
 import { db, usersCollectionRef, setButtonLoading, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES } from './haupteingang.js';
 import { checkCurrentUserValidity } from './log-InOut.js';
 import { logAdminAction } from './admin_protokollHistory.js';
-import { restoreAdminScrollIfAny } from './admin_adminfunktionenHome.js';
+import { restoreAdminScrollIfAny, rememberAdminScroll } from './admin_adminfunktionenHome.js';
 // ENDE-ZIKA //
 
 const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
