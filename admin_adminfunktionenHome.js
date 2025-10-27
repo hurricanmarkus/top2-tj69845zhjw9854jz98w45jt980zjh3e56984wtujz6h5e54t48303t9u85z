@@ -59,48 +59,49 @@ import { renderAdminRightsManagement } from './admin_rechteverwaltung.js'; // Pf
     })();
 })();
 
-// Ersetze DIESE Funktion in admin_adminfunktionenHome.js
 export function rememberAdminScroll() {
-    // Finde das scrollbare Element
-    const scroller = document.querySelector('.main-content') || document.body || document.documentElement;
-    if (scroller) {
-        const scrollY = scroller.scrollTop; // Hole die aktuelle Scrollposition
-        sessionStorage.setItem('adminScrollY', String(scrollY)); // Speichere sie
-        console.log(`rememberAdminScroll: Scroller gefunden (${scroller.tagName}), ScrollY gespeichert: ${scrollY}`); // Debugging
-    } else {
-        console.warn("rememberAdminScroll: Konnte kein scrollbares Element finden."); // Debugging
-    }
+    const scroller = document.querySelector('.main-content') || document.scrollingElement || document.documentElement;
+    if (scroller) sessionStorage.setItem('adminScrollY', String(scroller.scrollTop || scroller.scrollY || 0));
 }
 
-// Ersetze AUCH DIESE Funktion in admin_adminfunktionenHome.js
+// Ersetze NUR DIESE Funktion in admin_adminfunktionenHome.js
 export function restoreAdminScrollIfAny() {
-    // Finde das scrollbare Element erneut
     const scroller = document.querySelector('.main-content') || document.body || document.documentElement;
-    const yRaw = sessionStorage.getItem('adminScrollY'); // Hole den gespeicherten Wert
-    const y = yRaw !== null ? Number(yRaw) : NaN; // Wandle ihn in eine Zahl um
+    const yRaw = sessionStorage.getItem('adminScrollY');
+    const y = yRaw !== null ? Number(yRaw) : NaN;
 
-    console.log(`restoreAdminScrollIfAny: Versuch der Wiederherstellung. Scroller gefunden: ${scroller ? scroller.tagName : 'Nein'}, Gespeicherter Y-Wert: ${yRaw}, Umgewandelt: ${y}`); // Debugging
+    console.log(`restoreAdminScrollIfAny: Versuch der Wiederherstellung. Scroller: ${scroller ? scroller.tagName : 'Nein'}, Y: ${yRaw} (${y})`);
 
     if (scroller && !Number.isNaN(y)) {
-        console.log(`restoreAdminScrollIfAny: Scrolle ${scroller.tagName} zu Position ${y}`); // Debugging
-        try {
-            // Versuche sofort zu scrollen
-            scroller.scrollTo({ top: y, behavior: 'auto' });
-            // Prüfe direkt danach die Position (kann manchmal 0 sein, wenn Layout noch nicht passt)
-            console.log(`restoreAdminScrollIfAny: ScrollTop direkt nach scrollTo: ${scroller.scrollTop}`); // Debugging
-        } catch (e) {
-            console.error("restoreAdminScrollIfAny: Fehler bei scrollTo:", e); // Debugging
-            // Fallback für ältere Browser
-            scroller.scrollTop = y;
-            console.log(`restoreAdminScrollIfAny: ScrollTop nach Fallback-Zuweisung: ${scroller.scrollTop}`); // Debugging
-        }
-        // Wichtig: Den gespeicherten Wert erst entfernen, NACHDEM gescrollt wurde
-        sessionStorage.removeItem('adminScrollY');
-        console.log(`restoreAdminScrollIfAny: Gespeicherten Wert 'adminScrollY' entfernt.`); // Debugging
-    } else if (Number.isNaN(y)) {
-        console.warn("restoreAdminScrollIfAny: Gespeicherter Y-Wert war ungültig."); // Debugging
+        // --- NEUE LOGIK mit requestAnimationFrame ---
+        // Warte auf den nächsten Frame (Layout-Berechnung sollte abgeschlossen sein)
+        requestAnimationFrame(() => {
+            // Warte auf den Frame DANACH (Rendering sollte abgeschlossen sein)
+            requestAnimationFrame(() => {
+                console.log(`restoreAdminScrollIfAny (nach rAF): Scrolle ${scroller.tagName} zu Position ${y}`);
+                try {
+                    scroller.scrollTo({ top: y, behavior: 'auto' });
+                    // Prüfe die Position *nach* dem zweiten Frame
+                    console.log(`restoreAdminScrollIfAny (nach rAF): ScrollTop nach scrollTo: ${scroller.scrollTop}`);
+                    // Wert erst hier entfernen
+                    sessionStorage.removeItem('adminScrollY');
+                    console.log(`restoreAdminScrollIfAny (nach rAF): Gespeicherten Wert entfernt.`);
+                } catch (e) {
+                    console.error("restoreAdminScrollIfAny (nach rAF): Fehler bei scrollTo:", e);
+                    // Fallback
+                    scroller.scrollTop = y;
+                    console.log(`restoreAdminScrollIfAny (nach rAF): ScrollTop nach Fallback: ${scroller.scrollTop}`);
+                     sessionStorage.removeItem('adminScrollY'); // Auch im Fehlerfall entfernen
+                }
+            });
+        });
+        // --- ENDE NEUE LOGIK ---
     } else {
-         console.warn("restoreAdminScrollIfAny: Konnte Scroller nicht finden, um Position wiederherzustellen."); // Debugging
+        // Alte Logs für den Fehlerfall
+        if (Number.isNaN(y)) { console.warn("restoreAdminScrollIfAny: Y-Wert war ungültig."); }
+        else { console.warn("restoreAdminScrollIfAny: Konnte Scroller nicht finden."); }
+         // Wert trotzdem entfernen, um Probleme zu vermeiden
+         sessionStorage.removeItem('adminScrollY');
     }
 }
 
