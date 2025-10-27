@@ -1,4 +1,5 @@
-import { db, collection, doc, updateDoc, deleteDoc, getDocs, writeBatch, USERS, ADMIN_ROLES, DELETED_CHECKLISTS, alertUser, adminSectionsState } from './haupteingang.js'; // Beispiel - adminSectionsState hinzugefügt
+import { adminSectionsState } from './haupteingang.js';
+
 (function setupGlobalScrollRestore() {
     const ROOT_SELECTOR = '.main-content'; // <— falls dein Haupt-Container anders heißt, hier anpassen
 
