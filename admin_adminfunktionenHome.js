@@ -12,8 +12,6 @@ import { renderProtocolHistory } from './admin_protokollHistory.js';
 // Passe den Pfad './admin_rechteverwaltung.js' an, falls die Datei anders heißt.
 import { renderAdminRightsManagement } from './admin_rechteverwaltung.js';
 
-import { adminSectionsState } from './haupteingang.js';
-
 (function setupGlobalScrollRestore() {
     const ROOT_SELECTOR = '.main-content'; // <— falls dein Haupt-Container anders heißt, hier anpassen
 
