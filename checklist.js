@@ -1971,32 +1971,19 @@ function renderChecklistSettingsView(editListId = null) {
   // --- Alle Hilfsfunktionen und Listener-Registrierungen ---
   // (Diese bleiben gleich wie in der vorherigen Version)
 
-function buildEditorSwitcherOptions() {
-const editorSwitcher = view.querySelector('#checklist-settings-editor-switcher'); if (!editorSwitcher) return;
-const groups = Object.values(CHECKLIST_GROUPS || {}); const activeLists = Object.values(CHECKLISTS || {}).filter(l =>
-!l.isArchived && !l.isDeleted);
-const opts = groups.map(g => { const listsInGroup = activeLists.filter(l => l.groupId === g.id); if (listsInGroup.length
-=== 0) return ''; return `<optgroup label="${escapeHtml(g.name)}">${listsInGroup.map(l => `<option value="${l.id}"
-    ${l.id===listToEditId ? 'selected' : '' }>${escapeHtml(l.name)}</option>`).join('')}</optgroup>`; }).join('');
-
-// --- FIX 1: Prüfen ob Listen vorhanden sind und Dropdown entsprechend setzen ---
-if (activeLists.length === 0) { // Einfachere Prüfung: Gibt es überhaupt aktive Listen?
-editorSwitcher.innerHTML = `<option value="">Keine Listen vorhanden</option>`;
-listToEditId = null; // Wichtig: Zurücksetzen
-view.dataset.editingListId = ''; // Auch im dataset leeren
-} else {
-editorSwitcher.innerHTML = opts; // Optionen setzen
-// Sicherstellen, dass listToEditId gültig ist
-if (listToEditId && activeLists.some(l => l.id === listToEditId)) {
-editorSwitcher.value = listToEditId; // Alten Wert wiederherstellen
-} else {
-// Wenn alte ID ungültig oder nie gesetzt, nimm die erste Liste
-listToEditId = activeLists[0].id;
-editorSwitcher.value = listToEditId;
-view.dataset.editingListId = listToEditId;
-}
-}
-}
+  function buildEditorSwitcherOptions() {
+    const groups = Object.values(CHECKLIST_GROUPS || {});
+    const opts = groups.map(g => {
+      const lists = Object.values(CHECKLISTS || {}).filter(l => l.groupId === g.id);
+      if (lists.length === 0) return '';
+      return `<optgroup label="${escapeHtml(g.name)}">${lists.map(l => `<option value="${l.id}" ${l.id === listToEditId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('')}</optgroup>`;
+    }).join('');
+    const editorSwitcher = view.querySelector('#checklist-settings-editor-switcher');
+    if (editorSwitcher) {
+      editorSwitcher.innerHTML = (opts || `<option value="">Keine Listen vorhanden</option>`);
+      if (listToEditId) editorSwitcher.value = listToEditId;
+    }
+  }
 
   function rebuildCategorySelectForAddForm() {
     const catSelect = view.querySelector('#checklist-settings-add-category');
