@@ -65,59 +65,61 @@ export function rememberAdminScroll() {
 }
 
 // Ersetze NUR DIESE Funktion in admin_adminfunktionenHome.js
-// Ersetze NUR DIESE Funktion in admin_adminfunktionenHome.js
-// Ersetze NUR DIESE Funktion in admin_adminfunktionenHome.js
-// Ersetze NUR DIESE Funktion in admin_adminfunktionenHome.js
 export function restoreAdminScrollIfAny() {
+    // Finde das scrollbare Element. WICHTIG: Stelle sicher, dass '.main-content' das Element ist, das tatsächlich scrollt!
+    // Falls nicht, passe den Selektor an (z.B. 'body' oder 'html')
     const scroller = document.querySelector('.main-content') || document.body || document.documentElement;
     const yRaw = sessionStorage.getItem('adminScrollY');
     const y = yRaw !== null ? Number(yRaw) : NaN;
 
     console.log(`restoreAdminScrollIfAny: Versuch der Wiederherstellung. Scroller: ${scroller ? scroller.tagName : 'Nein'}, Y: ${yRaw} (${y})`);
 
-    if (scroller && !Number.isNaN(y)) {
-        // --- ALLERLETZTER VERSUCH: rAF + direkte Zuweisung ---
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => { // Doppeltes rAF
-                console.log(`restoreAdminScrollIfAny (nach rAF): Versuche Scroll zu ${y}`);
-                try {
-                    const currentScroller = document.querySelector('.main-content') || document.body || document.documentElement;
-                    if (currentScroller === scroller) {
-                        if (document.activeElement && document.activeElement instanceof HTMLElement) {
-                            console.log(`restoreAdminScrollIfAny: Entferne Fokus von ${document.activeElement.tagName}`);
-                            document.activeElement.blur();
-                        }
+    // Wert entfernen, egal was passiert, um Endlosschleifen zu vermeiden
+    sessionStorage.removeItem('adminScrollY');
+    console.log(`restoreAdminScrollIfAny: Gespeicherten Wert 'adminScrollY' entfernt.`);
 
-                        // **NEU:** Direkte Zuweisung statt scrollTo
-                        console.log(`restoreAdminScrollIfAny: Setze scrollTop direkt auf ${y}`);
-                        currentScroller.scrollTop = y;
-
-                        // Prüfung direkt danach
-                        console.log(`restoreAdminScrollIfAny: ScrollTop nach direkter Zuweisung: ${currentScroller.scrollTop}`);
-
-                        sessionStorage.removeItem('adminScrollY');
-                        console.log(`restoreAdminScrollIfAny: Gespeicherten Wert entfernt.`);
-
-                        // Optionale finale Prüfung nach kurzem Timeout (nur zum Debuggen, falls es immer noch 0 ist)
-                        // setTimeout(() => {
-                        //     console.log(`restoreAdminScrollIfAny: ScrollTop nach 10ms: ${currentScroller.scrollTop}`);
-                        // }, 10);
-
-                    } else {
-                         console.warn("restoreAdminScrollIfAny (nach rAF): Scroller-Element hat sich geändert!");
-                         sessionStorage.removeItem('adminScrollY');
+    if (scroller && !Number.isNaN(y) && y > 0) { // Nur scrollen, wenn Wert gültig und nicht 0
+        // --- LETZTER VERSUCH: Längere Verzögerung und Fokus-Management ---
+        setTimeout(() => {
+            console.log(`restoreAdminScrollIfAny (nach 150ms): Versuche Scroll zu ${y}`);
+            try {
+                // Erneut das Element holen, falls es sich geändert hat
+                const currentScroller = document.querySelector('.main-content') || document.body || document.documentElement;
+                if (currentScroller === scroller) {
+                    // Fokus entfernen
+                    if (document.activeElement && document.activeElement instanceof HTMLElement) {
+                        console.log(`restoreAdminScrollIfAny: Entferne Fokus von ${document.activeElement.tagName}`);
+                        document.activeElement.blur();
                     }
-                } catch (e) {
-                    console.error("restoreAdminScrollIfAny (nach rAF): Fehler bei scrollTop Zuweisung:", e);
-                     sessionStorage.removeItem('adminScrollY');
+
+                    // Scrolle mit direkter Zuweisung
+                    console.log(`restoreAdminScrollIfAny: Setze scrollTop direkt auf ${y}`);
+                    currentScroller.scrollTop = y;
+
+                    // FINALE Prüfung
+                    const finalScrollTop = currentScroller.scrollTop;
+                    console.log(`restoreAdminScrollIfAny: ScrollTop nach direkter Zuweisung (150ms): ${finalScrollTop}`);
+
+                    // Wenn es immer noch 0 ist, ist das Problem woanders
+                    if (finalScrollTop < y && y > 50) { // Toleranz für kleine Abweichungen, aber nicht wenn es auf 0 springt
+                         console.error(`restoreAdminScrollIfAny: ScrollTop ist immer noch ${finalScrollTop} statt ${y}. Scroll wird extern überschrieben!`);
+                         // Hier könnte man versuchen, den Fokus explizit auf den Scroller zu setzen,
+                         // aber das kann unerwünschte Nebeneffekte haben.
+                         // currentScroller.focus(); // Nur als letzter Ausweg testen
+                    }
+
+                } else {
+                     console.warn("restoreAdminScrollIfAny (nach 150ms): Scroller-Element hat sich geändert!");
                 }
-            });
-        });
-        // --- ENDE ALLERLETZTER VERSUCH ---
+            } catch (e) {
+                console.error("restoreAdminScrollIfAny (nach 150ms): Fehler bei scrollTop Zuweisung:", e);
+            }
+        }, 150); // Verzögerung auf 150 Millisekunden erhöht
+        // --- ENDE LETZTER VERSUCH ---
     } else {
         if (Number.isNaN(y)) { console.warn("restoreAdminScrollIfAny: Y-Wert war ungültig."); }
+        else if (y === 0) { console.log("restoreAdminScrollIfAny: Gespeicherter Wert war 0, kein Scroll nötig."); }
         else { console.warn("restoreAdminScrollIfAny: Konnte Scroller nicht finden."); }
-        sessionStorage.removeItem('adminScrollY');
     }
 }
 
