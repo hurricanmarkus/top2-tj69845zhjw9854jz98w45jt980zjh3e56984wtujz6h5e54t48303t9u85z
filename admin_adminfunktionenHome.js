@@ -3,14 +3,14 @@ import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc
 
 // 2. Importiere die Variablen/Funktionen, die tatsächlich aus haupteingang.js kommen
 import {
-    db, USERS, ADMIN_ROLES, DELETED_CHECKLISTS, alertUser, adminSectionsState, currentUser, logAdminAction // logAdminAction hinzugefügt, falls benötigt
+    db, USERS, ADMIN_ROLES, DELETED_CHECKLISTS, alertUser, adminSectionsState, currentUser // logAdminAction hinzugefügt, falls benötigt
 } from './haupteingang.js';
 
 // 3. Importiere die benötigten Render-Funktionen aus ihren jeweiligen Dateien
 import { renderUserKeyList, renderUserManagement } from './admin_benutzersteuerung.js';
 import { renderRoleManagement } from './admin_rollenverwaltung.js';
 import { renderApprovalProcess } from './admin_genehmigungsprozess.js';
-import { renderProtocolHistory } from './admin_protokollHistory.js';
+import { renderProtocolHistory, logAdminAction } from './admin_protokollHistory.js';
 import { renderAdminRightsManagement } from './admin_rechteverwaltung.js'; // Pfad ggf. anpassen!
 
 // --- (Der Rest deiner Importe bleibt, falls noch andere da waren) ---
