@@ -800,27 +800,19 @@ function updateCategoryDropdowns() {
 }
 
 // Ersetze NUR diese Funktion in checklist.js
-// Ersetze NUR diese Funktion in checklist.js
-// Ersetze NUR diese Funktion in checklist.js
 function setupListAndItemManagementListeners(view) {
   if (!view) return;
 
-  // --- ENTFERNT: Die globale Prüfung, die das Neu-Anhängen verhindert hat ---
-  // if (view.hasAttribute('data-list-item-listeners-setup')) {
-  //     return;
-  // }
-  // view.setAttribute('data-list-item-listeners-setup', 'true');
-  // --- ENDE ENTFERNT ---
-
-  console.log("setupListAndItemManagementListeners: Funktion wird aufgerufen und Hängt Listener an (globale Prüfung entfernt)."); // Debug
+  // Globale Prüfung wurde entfernt in vorherigen Schritten, das ist gut so.
+  console.log("setupListAndItemManagementListeners: Funktion wird aufgerufen und hängt Listener an."); // Debug
 
   // --- Archivieren-Button ---
   const archiveBtn = view.querySelector('#checklist-archive-list-btn');
-  // Individuelle Prüfung bleibt wichtig, falls die Funktion doch mal ohne Neurendern aufgerufen wird
+  // Individuelle Prüfung mit dataset
   if (archiveBtn && !archiveBtn.dataset.listenerAttached) {
       archiveBtn.addEventListener('click', async () => {
           console.log("Archivieren-Button geklickt."); // Debug
-          const listIdToArchive = view.dataset.editingListId;
+          const listIdToArchive = view.dataset.editingListId; // ID im Moment des Klicks holen
           console.log("Liste zum Archivieren:", listIdToArchive); // Debug
 
           if (!listIdToArchive || !CHECKLISTS[listIdToArchive]) {
@@ -844,7 +836,9 @@ function setupListAndItemManagementListeners(view) {
                   console.log("updateDoc erfolgreich gesendet (Firebase)."); // Angepasst
 
                   alertUser && alertUser(`Liste "${listName}" wurde archiviert.`, 'success');
-                  // renderChecklistSettingsView() wurde hier korrekterweise entfernt.
+
+                  // renderChecklistSettingsView(); // --- DIESE ZEILE IST DAS PROBLEM - ENTFERNT ---
+                  console.log("renderChecklistSettingsView NICHT manuell aufgerufen. Warte auf Listener-Update."); // Debug
 
               } catch (error) {
                   console.error("FEHLER beim Archivieren der Liste:", error.code, error.message, error);
@@ -862,9 +856,26 @@ function setupListAndItemManagementListeners(view) {
   // --- Eintrag hinzufügen ---
   const addItemBtn = view.querySelector('#checklist-settings-add-item-btn');
   const addTextInput = view.querySelector('#checklist-settings-add-text');
-  const addHandler = async () => { /* ... (addHandler bleibt gleich) ... */
-     // Code von oben...
-  };
+  const addHandler = async () => {
+    console.log("addHandler aufgerufen."); // Debug
+    const textInput = view.querySelector('#checklist-settings-add-text');
+    const assigneeSelect = view.querySelector('#checklist-settings-add-assignee');
+    const categorySelect = view.querySelector('#checklist-settings-add-category');
+    const importantCheck = view.querySelector('#checklist-settings-add-important');
+    const currentListId = view.querySelector('#checklist-settings-editor-switcher')?.value;
+    if (!textInput || !assigneeSelect || !categorySelect || !importantCheck || !currentListId) { console.error("addHandler: Benötigte Elemente nicht gefunden."); return alertUser("Fehler...", "error"); }
+    const text = textInput.value.trim(); if (!text) return alertUser && alertUser('Text eingeben.', 'error');
+    const assignee = assigneeSelect.value || null; const category = categorySelect.value || null; const important = importantCheck.checked || false;
+    const payload = { listId: currentListId, text, status: 'open', important, addedBy: window.currentUser?.displayName || 'Unbekannt', addedAt: typeof serverTimestamp === 'function' ? serverTimestamp() : null, assignedTo: assignee, assignedToName: (assignee && USERS[assignee]?.name) ? USERS[assignee].name : null, categoryId: category, categoryName: null, categoryColor: null };
+    if (category) { for (const group of Object.values(CHECKLIST_CATEGORIES || {})) { const found = (group || []).find(c => c.id === category); if (found) { payload.categoryName = found.name; payload.categoryColor = found.color || 'gray'; break; } } }
+    try {
+      console.log("addHandler: Versuche Eintrag hinzuzufügen:", payload);
+      if (typeof addDoc === 'function' && checklistItemsCollectionRef) { await addDoc(checklistItemsCollectionRef, payload); console.log("addHandler: Eintrag hinzugefügt (Firebase)."); }
+      else { console.warn("addHandler: addDoc/Ref fehlt, füge lokal hinzu."); CHECKLIST_ITEMS[currentListId] = CHECKLIST_ITEMS[currentListId] || []; CHECKLIST_ITEMS[currentListId].push({ id: String(Date.now()), ...payload }); renderChecklistSettingsItems(currentListId); }
+      textInput.value = ''; if (typeof alertUser === 'function') alertUser('Eintrag hinzugefügt.', 'success');
+    } catch (err) { console.error('Fehler beim Hinzufügen:', err); if (typeof alertUser === 'function') alertUser('Fehler beim Hinzufügen.', 'error'); }
+  }; // Ende addHandler
+
   if (addItemBtn && !addItemBtn.dataset.listenerAttached) {
       addItemBtn.addEventListener('click', addHandler);
       addItemBtn.dataset.listenerAttached = 'true';
@@ -879,7 +890,20 @@ function setupListAndItemManagementListeners(view) {
   // --- Editor Aktionen (Bearbeiten/Löschen von Einträgen) ---
   const itemsEditor = view.querySelector('#checklist-items-editor-container');
   if (itemsEditor && !itemsEditor.dataset.listenerAttached) {
-    itemsEditor.addEventListener('click', async (e) => { /* ... (Logik bleibt gleich) ... */ });
+    itemsEditor.addEventListener('click', async (e) => {
+        console.log("Klick im Items-Editor erkannt.");
+      const editBtn = e.target.closest('.edit-checklist-item-btn'); const deleteBtn = e.target.closest('.delete-checklist-item-btn'); const currentListIdForRender = view.dataset.editingListId;
+      if (editBtn) {
+           console.log("Bearbeiten-Button geklickt.");
+          const row = editBtn.closest('[data-item-id]'); if (!row) return; const id = row.dataset.itemId; const currentText = row.querySelector('.item-text')?.textContent || ''; const newText = prompt('Eintrag bearbeiten:', currentText); if (newText === null) return; const trimmed = newText.trim(); if (!trimmed) return alertUser && alertUser('Text darf nicht leer sein.', 'error');
+          try { if (typeof updateDoc === 'function' && typeof doc === 'function' && checklistItemsCollectionRef) { await updateDoc(doc(checklistItemsCollectionRef, id), { text: trimmed, lastEditedBy: window.currentUser?.displayName || 'System', lastEditedAt: typeof serverTimestamp === 'function' ? serverTimestamp() : null }); alertUser && alertUser('Eintrag gespeichert.', 'success'); } else { CHECKLIST_ITEMS[currentListIdForRender] = (CHECKLIST_ITEMS[currentListIdForRender] || []).map(it => it.id === id ? { ...it, text: trimmed } : it); renderChecklistSettingsItems(currentListIdForRender); alertUser && alertUser('Eintrag gespeichert (lokal).', 'success'); } } catch (err) { console.error('Fehler beim Speichern:', err); alertUser && alertUser('Fehler beim Speichern.', 'error'); } return;
+      }
+      if (deleteBtn) {
+         console.log("Löschen-Button (Item) geklickt.");
+        const row = deleteBtn.closest('[data-item-id]'); if (!row) return; const itemId = row.dataset.itemId; if (!confirm('Eintrag wirklich löschen?')) return;
+        try { if (typeof deleteDoc === 'function' && typeof doc === 'function' && checklistItemsCollectionRef) { await deleteDoc(doc(checklistItemsCollectionRef, itemId)); alertUser && alertUser('Eintrag gelöscht.', 'success'); } else { Object.keys(CHECKLIST_ITEMS || {}).forEach(lid => { CHECKLIST_ITEMS[lid] = (CHECKLIST_ITEMS[lid] || []).filter(i => i.id !== itemId); }); renderChecklistSettingsItems(currentListIdForRender); alertUser && alertUser('Eintrag gelöscht (lokal).', 'success'); } } catch (err) { console.error('Fehler beim Löschen:', err); alertUser && alertUser('Fehler beim Löschen.', 'error'); } return;
+      }
+    });
     itemsEditor.dataset.listenerAttached = 'true'; // Markieren
     console.log("Items-Editor-Listener angehängt."); // Debug
   }
@@ -907,11 +931,16 @@ function setupListAndItemManagementListeners(view) {
   // --- Neue Liste erstellen ---
   const createListBtn = view.querySelector('#checklist-settings-create-list-btn');
    if (createListBtn && !createListBtn.dataset.listenerAttached) {
-       createListBtn.addEventListener('click', async () => { /* ... (Logik bleibt gleich) ... */ });
+       createListBtn.addEventListener('click', async () => {
+         console.log("Neue Liste erstellen geklickt.");
+         const nameInput = view.querySelector('#checklist-settings-new-name'); const groupSelector = view.querySelector('#checklist-settings-new-group-selector'); if(!nameInput || !groupSelector) return; const name = nameInput.value.trim(); const groupId = groupSelector.value; if (!name || !groupId) return alertUser && alertUser('Name/Gruppe angeben.', 'error');
+         try { if (typeof addDoc === 'function' && checklistsCollectionRef) { const docRef = await addDoc(checklistsCollectionRef, { name, isDeleted: false, isArchived: false, groupId, groupName: CHECKLIST_GROUPS[groupId]?.name || null }); nameInput.value = ''; groupSelector.value = ''; alertUser && alertUser(`Liste "${name}" erstellt.`, 'success'); renderChecklistSettingsView(docRef?.id || null); } else { const id = String(Date.now()); CHECKLISTS[id] = { id, name, groupId, groupName: CHECKLIST_GROUPS[groupId]?.name || null, isDeleted: false, isArchived: false }; alertUser && alertUser('Liste erstellt (lokal).', 'success'); renderChecklistSettingsView(id); } } catch (err) { console.error('Fehler:', err); alertUser && alertUser('Fehler.', 'error'); }
+       });
        createListBtn.dataset.listenerAttached = 'true';
        console.log("CreateList-Button-Listener angehängt."); // Debug
    }
 } // Ende setupListAndItemManagementListeners
+
 
 function setupGroupManagementListeners(view, currentUserData) {
     if (!view) return;
