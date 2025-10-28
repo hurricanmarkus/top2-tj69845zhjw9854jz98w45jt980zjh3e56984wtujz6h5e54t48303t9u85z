@@ -4,6 +4,7 @@ import { doc, updateDoc, setDoc, deleteDoc, onSnapshot, writeBatch, query, where
 import { initialAuthCheckDone, adminSectionsState, rolesCollectionRef, ADMIN_ROLES, ROLES, adminRolesCollectionRef, currentUser, db, roleManagementSectionsState, alertUser, USERS } from './haupteingang.js'; // USERS importiert
 import { checkCurrentUserValidity } from './log-InOut.js';
 import { logAdminAction } from './admin_protokollHistory.js';
+import { setupPermissionDependencies } from './admin_rechteverwaltung.js';
 // ENDE-ZIKA //
 
 export function listenForRoleUpdates() {
