@@ -898,30 +898,41 @@ export function toggleNewUserRoleField() {
     if (selectedType === 'not_registered') keyInput.value = ''; // [cite: 778]
 }
 
+// KORREKTUR: 'export' muss beibehalten werden (aus vorigem Schritt)
 export function renderAdminUserDetails(userId) {
     const detailsArea = document.getElementById('admin-user-details-area');
     const adminUser = USERS[userId];
 
+    // (Code zum Schließen/Öffnen bleibt gleich)
     if (detailsArea.dataset.editingUser === userId) {
         detailsArea.innerHTML = '';
         delete detailsArea.dataset.editingUser;
         return;
     }
-
     document.querySelectorAll('.edit-admin-user-btn').forEach(b => b.closest('.p-2').classList.remove('bg-indigo-100'));
-    adminRightsArea.querySelector(`.edit-admin-user-btn[data-userid="${userId}"]`).closest('.p-2').classList.add('bg-indigo-100');
-
+    // (Kleiner Fix: Sicherstellen, dass adminRightsArea existiert, bevor querySelector aufgerufen wird)
+    const adminRightsArea = document.getElementById('adminRightsArea');
+    if (adminRightsArea) {
+        adminRightsArea.querySelector(`.edit-admin-user-btn[data-userid="${userId}"]`).closest('.p-2').classList.add('bg-indigo-100');
+    }
+    // (Ende Fix)
 
     detailsArea.dataset.editingUser = userId;
 
     const perms = adminUser.adminPermissions || {};
     const approvalPerms = perms.approvalRequired || {};
-    const type = adminUser.permissionType || 'individual';
+    
+    // ================== LOGIKÄNDERUNG HIER (START) ==================
+    // KORREKTUR: Standard-Berechtigungstyp auf 'role' gesetzt
+    const type = adminUser.permissionType || 'role';
+    // ================== LOGIKÄNDERUNG HIER (ENDE) ==================
+
 
     let roleOptions = Object.values(ADMIN_ROLES)
         .filter(r => r.id !== 'LEERE_ROLLE')
         .map(r => `<option value="${r.id}" ${adminUser.assignedAdminRoleId === r.id ? 'selected' : ''}>${r.name}</option>`)
         .join('');
+    
     detailsArea.innerHTML = `
         <div class="p-4 border-t-4 border-indigo-500 rounded-xl bg-gray-50 mt-4 relative shadow-lg">
             <button id="close-details-btn" class="absolute top-2 right-3 text-2xl font-bold text-gray-400 hover:text-red-600">&times;</button>
@@ -929,11 +940,12 @@ export function renderAdminUserDetails(userId) {
             
             <div class="mt-4 pt-3 border-t">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Berechtigungs-Typ</label>
+                
                 <div class="flex items-center gap-4">
-                    <label class="flex items-center"><input type="radio" name="perm-type-${userId}" value="individual" class="perm-type-toggle" data-userid="${userId}" ${type === 'individual' ? 'checked' : ''}> <span class="ml-2">Individuell</span></label>
                     <label class="flex items-center"><input type="radio" name="perm-type-${userId}" value="role" class="perm-type-toggle" data-userid="${userId}" ${type === 'role' ? 'checked' : ''}> <span class="ml-2">Rolle</span></label>
+                    <label class="flex items-center"><input type="radio" name="perm-type-${userId}" value="individual" class="perm-type-toggle" data-userid="${userId}" ${type === 'individual' ? 'checked' : ''}> <span class="ml-2">Individuell</span></label>
                 </div>
-            </div>
+                </div>
 
             <div class="role-selection-area mt-2 ${type === 'role' ? '' : 'hidden'}">
                 <select id="assigned-admin-role-select" class="w-full p-2 border rounded-lg bg-white text-sm" data-userid="${userId}">${roleOptions}</select>
@@ -996,6 +1008,8 @@ export function renderAdminUserDetails(userId) {
             </div>
         </div>
     `;
+    
+    // (Event-Listener-Logik bleibt gleich)
     detailsArea.querySelector('#close-details-btn').addEventListener('click', () => {
         detailsArea.innerHTML = '';
         delete detailsArea.dataset.editingUser;
@@ -1040,12 +1054,15 @@ export function renderAdminUserDetails(userId) {
         await updateDoc(doc(usersCollectionRef, userId), updateData);
         alertUser("Änderungen gespeichert!", "success");
 
-        setTimeout(async () => {
+        // Rufe renderAdminRightsManagement auf, um die Listen "Rolle" vs "Individuell" zu aktualisieren
+        // (Vorausgesetzt, es wurde wie im vorigen Schritt importiert)
+        if (typeof renderAdminRightsManagement === 'function') {
             await renderAdminRightsManagement();
+            // Stelle sicher, dass das Detailfenster offen bleibt, wenn es vorher offen war
             if (document.getElementById('admin-user-details-area')) {
                 renderAdminUserDetails(userId);
             }
-        }, 200);
+        }
     });
 
     // Stellt sicher, dass die Abhängigkeitslogik für die Checkboxen aktiv ist
