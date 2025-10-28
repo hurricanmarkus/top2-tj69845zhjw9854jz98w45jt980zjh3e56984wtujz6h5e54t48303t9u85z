@@ -418,7 +418,19 @@ export function navigate(targetViewName) {
     if (targetViewName === 'checklist' && !userPermissions.includes('CHECKLIST')) return alertUser("Zugriff verweigert (Checkliste).", 'error');
     if (targetViewName === 'checklistSettings' && !userPermissions.includes('CHECKLIST_SETTINGS')) return alertUser("Zugriff verweigert (Checklisten-Einstellungen).", 'error');
     if (targetViewName === 'essensberechnung' && !userPermissions.includes('ESSENSBERECHNUNG')) return alertUser("Zugriff verweigert (Essensberechnung).", 'error');
-    if (targetViewName === 'admin' && !isAdmin) return alertUser("Zugriff verweigert (Admin).", 'error');
+
+if (targetViewName === 'admin') {
+    const isAdminRole = currentUser.role === 'ADMIN' || currentUser.role === 'SYSTEMADMIN'; // Echte Rolle
+    const isIndividualAdminDisplay = currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN'; // Individuell mit Admin-Anzeige
+    const allowAdminAccess = isAdminRole || isIndividualAdminDisplay; // Zugriff erlauben, wenn eine Bedingung zutrifft
+
+    if (!allowAdminAccess) {
+        // Nur wenn KEINE der Bedingungen zutrifft, Zugriff verweigern
+        return alertUser("Zugriff verweigert (Admin).", 'error');
+    }
+    // Wenn allowAdminAccess true ist, wird der Code nach dem if-Block normal weiter ausgeführt.
+}
+
     if (targetViewName === 'notrufSettings' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Notruf-Einstellungen).", 'error');
 
 
