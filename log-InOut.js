@@ -126,7 +126,8 @@ export function updateUIForMode() {
     });
 
     // Zeige/Verstecke Einstellungs- und Admin-Knopf auf der Startseite
-const settingsButton = document.getElementById('mainSettingsButton');
+// --- KORRIGIERTE LOGIK für Einstellungs- und Admin-Button ---
+    const settingsButton = document.getElementById('mainSettingsButton');
     const adminButton = document.getElementById('mainAdminButton');
     const homeActionButtons = document.getElementById('homeActionButtons'); // Container holen
 
@@ -156,7 +157,6 @@ const settingsButton = document.getElementById('mainSettingsButton');
 
         // Einstellungs-Button anzeigen (Bedingung bleibt wie vorher: eingeloggt, aber kein Admin/SysAdmin)
         // ODER wenn Admin/Sysadmin KEINE Passwort-Rechte hat (selten, aber möglich)
-        [cite_start]// Hinweis: effectiveAdminPerms muss VOR diesem Block berechnet werden, wie in deinem Originalcode [cite: 3-8]
         const canSeePasswords = isSysAdmin || (isAdminRole && effectiveAdminPerms.canSeePasswords);
         if (currentUser.mode !== GUEST_MODE && !showAdminButton && settingsButton) { // Zeige nur an, wenn KEIN Admin-Button angezeigt wird
              settingsButton.style.display = 'block';
