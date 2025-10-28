@@ -59,7 +59,7 @@ export let checklistStacksCollectionRef;
 export let checklistTemplatesCollectionRef;
 let editingPortionId = null;
 let functions; 
-let setRoleClaim;
+export let setRoleClaim;
 
 export const firebaseConfigFromUser = {
     apiKey: "AIzaSyCCQML1UOy7NB5ohbiPZmOE6dB6oIpzlQk",

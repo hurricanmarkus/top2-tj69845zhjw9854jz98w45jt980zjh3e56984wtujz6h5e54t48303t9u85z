@@ -1,6 +1,7 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 //
-import { db, usersCollectionRef, setButtonLoading, adminSectionsState, modalUserButtons, ADMIN_ROLES, adminRolesCollectionRef, rolesCollectionRef, ROLES, alertUser, initialAuthCheckDone, currentUser, GUEST_MODE, adminSettings, CHECKLISTS, ADMIN_STORAGE_KEY, USERS, navigate, auth } from './haupteingang.js';
+import { db, setRoleClaim, usersCollectionRef, setButtonLoading, adminSectionsState, modalUserButtons, ADMIN_ROLES, adminRolesCollectionRef, rolesCollectionRef, ROLES, alertUser, initialAuthCheckDone, currentUser, GUEST_MODE, adminSettings, CHECKLISTS, ADMIN_STORAGE_KEY, USERS, navigate, auth } from './haupteingang.js';
 import { renderModalUserButtons } from './admin_benutzersteuerung.js';
+
 // ENDE-ZIKA //
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion hiermit:
