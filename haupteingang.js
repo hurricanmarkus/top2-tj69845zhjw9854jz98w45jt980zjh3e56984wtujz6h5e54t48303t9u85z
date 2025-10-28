@@ -58,6 +58,8 @@ export let activeDisplayMode = 'gesamt';
 export let checklistStacksCollectionRef;
 export let checklistTemplatesCollectionRef;
 let editingPortionId = null;
+let functions; 
+let setRoleClaim;
 
 export const firebaseConfigFromUser = {
     apiKey: "AIzaSyCCQML1UOy7NB5ohbiPZmOE6dB6oIpzlQk",
@@ -202,21 +204,21 @@ window.onload = function () {
     }
 };
 
+// ERSETZE die komplette initializeFirebase Funktion hiermit:
 async function initializeFirebase() {
     try {
         console.log("initializeFirebase: Starte Firebase Initialisierung...");
         const app = initializeApp(firebaseConfig);
         db = getFirestore(app);
-        auth = getAuth(app);
-        const functions = getFunctions(app, 'europe-west1'); // WICHTIG: Dieselbe Region wie in der Cloud Function!
-const setRoleClaim = httpsCallable(functions, 'setRoleClaim'); // Referenz zur Cloud Function
-        console.log("initializeFirebase: Firebase App, DB und Auth initialisiert.");
+        auth = getAuth(app); // 'auth' wird hier der globalen Variable zugewiesen
 
-        if (!db) { console.error("initializeFirebase: FEHLER - Firestore DB Objekt (db) konnte nicht initialisiert werden!"); return; }
-        if (!appId) { console.error("initializeFirebase: FEHLER - appId ist nicht definiert!"); return; }
-        console.log("initializeFirebase: DB Objekt vorhanden. appId:", appId);
+        // Functions und Callable initialisieren
+        functions = getFunctions(app); // Region hier weglassen, wenn in der Function auch weggelassen
+        setRoleClaim = httpsCallable(functions, 'setRoleClaim'); // 'setRoleClaim' wird hier zugewiesen
 
-        // --- DB Refs ---
+        console.log("initializeFirebase: Firebase App, DB, Auth und Functions initialisiert.");
+
+        // --- DB Refs (bleiben wie sie waren) ---
         usersCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'user-config');
         rolesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'user-roles');
         adminRolesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'admin-roles');
@@ -229,14 +231,10 @@ const setRoleClaim = httpsCallable(functions, 'setRoleClaim'); // Referenz zur C
         checklistGroupsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-groups');
         checklistCategoriesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-categories');
         approvalRequestsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'approval-requests');
-
-        // --- NEUE/GEÄNDERTE REFS ---
         checklistStacksCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-stacks');
         checklistTemplatesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates');
-        // --- ENDE NEUE/GEÄNDERTE REFS ---
+        // ... (füge hier ggf. weitere Ref-Initialisierungen ein, falls welche fehlen) ...
 
-        if (!usersCollectionRef) { console.error("initializeFirebase: FEHLER - usersCollectionRef konnte nicht erstellt werden!"); return; }
-        else { console.log("initializeFirebase: usersCollectionRef erfolgreich erstellt, Pfad:", usersCollectionRef.path); }
 
         console.log("initializeFirebase: Versuche anonyme Anmeldung...");
         try {
@@ -250,100 +248,82 @@ const setRoleClaim = httpsCallable(functions, 'setRoleClaim'); // Referenz zur C
         console.log("initializeFirebase: Starte onAuthStateChanged Listener...");
         auth.onAuthStateChanged(async (user) => {
             console.log("initializeFirebase: onAuthStateChanged ausgelöst. User:", user ? user.uid : "keiner");
-            console.log("initializeFirebase: Entering onAuthStateChanged callback logic...");
 
             // Listener starten (unabhängig vom Login-Status)
             try {
                 console.log("initializeFirebase: Starte Daten-Listener...");
-                // --- Listener für App-Einstellungen ---
+                // --- Listener für App-Einstellungen (Settings) ---
                 onSnapshot(settingsDocRef, (docSnap) => {
                     if (docSnap.exists()) {
                         adminSettings = docSnap.data();
+                         console.log("Admin Settings geladen:", adminSettings);
                     } else {
                         console.warn("Firebase App Settings Document 'main' not found.");
-                        adminSettings = {}; // Fallback
+                        adminSettings = {};
                     }
                 }, (error) => {
-                    console.error("Error listening to settings:", error);
+                    console.error("Error listening to settings:", error); 
                 });
 
                 onSnapshot(notrufSettingsDocRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        notrufSettings = docSnap.data();
-                        if (!notrufSettings.modes) notrufSettings.modes = [];
-                        if (!notrufSettings.contacts) notrufSettings.contacts = [];
-                        if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
-                        if (!notrufSettings.sounds) notrufSettings.sounds = [];
-                        if (!notrufSettings.flicAssignments) notrufSettings.flicAssignments = { einfach: null, doppel: null, halten: null };
-                    } else {
-                        console.warn("Firebase Notruf Settings Document 'notruf' not found, creating default.");
-                        notrufSettings = { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } };
-                    }
+                     if (docSnap.exists()) {
+                         notrufSettings = docSnap.data();
+                         console.log("Notruf Settings geladen");
+                         if (!notrufSettings.modes) notrufSettings.modes = [];
+                         if (!notrufSettings.contacts) notrufSettings.contacts = [];
+                         if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
+                         if (!notrufSettings.sounds) notrufSettings.sounds = [];
+                         if (!notrufSettings.flicAssignments) notrufSettings.flicAssignments = { einfach: null, doppel: null, halten: null };
+                     } else {
+                         console.warn("Firebase Notruf Settings Document 'notruf' not found, creating default.");
+                         notrufSettings = { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } };
+                     }
                 }, (error) => {
-                    console.error("Error listening to notruf settings:", error);
+                    console.error("Error listening to notruf settings:", error); 
                 });
                 // --- Ende Listener für App-Einstellungen ---
 
-                await seedInitialData();
-                console.log("initializeFirebase: Seed Data abgeschlossen, starte Haupt-Listener...");
+                // await seedInitialData(); // Seed ggf. auskommentieren
+                console.log("initializeFirebase: Seed Data übersprungen/abgeschlossen, starte Haupt-Listener...");
 
                 // Haupt-Daten-Listener
-                console.log("initializeFirebase: Rufe listenForRoleUpdates auf...");
                 listenForRoleUpdates();
-                console.log("initializeFirebase: Rufe listenForAdminRoleUpdates auf...");
                 listenForAdminRoleUpdates();
-                console.log("initializeFirebase: Rufe listenForUserUpdates auf...");
-                listenForUserUpdates();
-                console.log("initializeFirebase: Rufe listenForApprovalRequests auf...");
+                listenForUserUpdates(); // Wichtig für USERS Objekt
                 listenForApprovalRequests();
-                console.log("initializeFirebase: Rufe listenForChecklists auf...");
                 listenForChecklists();
-                console.log("initializeFirebase: Rufe listenForChecklistItems auf...");
                 listenForChecklistItems();
-                console.log("initializeFirebase: Rufe listenForChecklistGroups auf...");
                 listenForChecklistGroups();
-                console.log("initializeFirebase: Rufe listenForChecklistCategories auf...");
                 listenForChecklistCategories();
-
-                // --- HIER DIE ÄNDERUNGEN ---
-                console.log("initializeFirebase: Rufe listenForTemplates auf...");
-                listenForTemplates(); // Importiert aus checklist.js
-                console.log("initializeFirebase: Rufe listenForStacks auf...");
-                listenForStacks(); // NEU: Importiert aus checklist.js
-                // --- ENDE ÄNDERUNGEN ---
-
+                listenForTemplates();
+                listenForStacks();
                 console.log("initializeFirebase: Alle Listener-Funktionen aufgerufen.");
 
             } catch (error) {
                 console.error("initializeFirebase: FEHLER beim Starten der Listener:", error);
-                if (typeof alertUser === 'function') {
-                    alertUser("Fehler beim Initialisieren der Daten-Listener.", "error");
-                }
+                alertUser("Fehler beim Initialisieren der Daten-Listener.", "error");
             }
 
             // UI basierend auf User-Status aktualisieren
             if (user) {
-                console.log("initializeFirebase: User (anonym) vorhanden.");
-                checkCurrentUserValidity();
-                initialAuthCheckDone = true;
-                updateUIForMode();
-                console.log("initializeFirebase: UI für aktuellen Status aktualisiert.");
+                console.log("initializeFirebase: User (anonym) vorhanden. Rufe checkCurrentUserValidity auf.");
+                await checkCurrentUserValidity(); // Aufrufen, um initialen Claim zu prüfen
+                initialAuthCheckDone = true; // Flag setzen
             } else {
-                console.log("Firebase meldet KEINEN User (auch nicht anonym!), wechsle explizit zum Gastmodus.");
+                console.log("Firebase meldet KEINEN User, wechsle explizit zum Gastmodus.");
                 switchToGuestMode(false);
-                initialAuthCheckDone = true;
-                updateUIForMode();
+                 initialAuthCheckDone = true;
+                 updateUIForMode(); 
             }
-            console.log("initializeFirebase: Ende des onAuthStateChanged Callbacks.");
+             console.log("initializeFirebase: Ende des onAuthStateChanged Callbacks.");
         }); // Ende onAuthStateChanged
     } catch (error) {
         console.error("initializeFirebase: FEHLER bei der grundlegenden Firebase Initialisierung:", error);
-        if (typeof alertUser === 'function') {
-            alertUser("Firebase konnte nicht initialisiert werden.", "error");
-        }
+        alertUser("Firebase konnte nicht initialisiert werden.", "error");
     }
-    console.log("initializeFirebase: Funktion komplett beendet.");
+     console.log("initializeFirebase: Funktion komplett beendet.");
 }
+
 // --- HIER ENDET DIE FUNKTION ZUM ERSETZEN ---
 async function seedInitialData() {
     try {
@@ -583,7 +563,6 @@ export function setupEventListeners() {
 
 // Ersetze deine alte handleLogin Funktion komplett hiermit:
 const handleLogin = async () => { // Funktion muss async sein
-    // Initial checks for elements and selected user
     if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) {
         console.error("handleLogin: Missing required elements or selected user.");
         return;
@@ -591,58 +570,63 @@ const handleLogin = async () => { // Funktion muss async sein
 
     const appUserId = selectedUserForLogin; // z.B. "MARKUS"
     const enteredPin = adminPinInput.value;
-    const userFromFirestore = USERS[appUserId]; // Benutzerdaten aus Firestore holen
+    const userFromFirestore = USERS[appUserId]; // Benutzerdaten aus Firestore holen (USERS muss durch listenForUserUpdates gefüllt sein!)
 
-    // 1. Lokale PIN-Prüfung (optional, aber gut für schnelles UI-Feedback)
-    if (!userFromFirestore || userFromFirestore.key !== enteredPin) {
-        pinError.style.display = 'block'; // Zeige Fehler im Modal
-        adminPinInput.value = ''; // Leere das PIN-Feld
-        return; // Breche hier ab, wenn der PIN lokal schon falsch ist
+    if (!userFromFirestore) {
+        console.error(`handleLogin: Benutzerdaten für ${appUserId} nicht im globalen USERS Objekt gefunden!`);
+        alertUser("Benutzerdaten noch nicht geladen. Bitte kurz warten.", "error");
+        return; // Verhindert Fehler, falls USERS noch leer ist
     }
 
-    // 2. PIN scheint lokal korrekt, schließe Modal und rufe Cloud Function auf
-    pinModal.style.display = 'none'; // Verstecke das PIN-Modal
-    adminPinInput.value = ''; // Leere das PIN-Feld
-    pinError.style.display = 'none'; // Verstecke eventuelle Fehlermeldung
+    // 1. Lokale PIN-Prüfung
+    if (userFromFirestore.key !== enteredPin) {
+        pinError.style.display = 'block';
+        adminPinInput.value = '';
+        return;
+    }
+
+    // 2. PIN korrekt, Modal schließen & Cloud Function
+    pinModal.style.display = 'none';
+    adminPinInput.value = '';
+    pinError.style.display = 'none';
 
     try {
         console.log(`Rufe Cloud Function setRoleClaim für ${appUserId} auf...`);
-        // 3. Rufe die Cloud Function auf und übergib appUserId und PIN
-        // (setRoleClaim muss vorher initialisiert worden sein, siehe Schritt 3 der Anleitung)
+        // 3. Cloud Function aufrufen
+        // Stelle sicher, dass 'setRoleClaim' oben global initialisiert wurde!
+        if (!setRoleClaim) throw new Error("setRoleClaim Cloud Function Referenz ist nicht initialisiert.");
         const result = await setRoleClaim({ appUserId: appUserId, pin: enteredPin });
         console.log("Cloud Function Ergebnis:", result.data);
 
-        // 4. WICHTIG: Token aktualisieren, um den neuen Claim zu erhalten
-        if (auth.currentUser) {
+        // 4. Token aktualisieren
+        // Stelle sicher, dass 'auth' oben global initialisiert wurde!
+        if (auth && auth.currentUser) {
             console.log("Aktualisiere ID Token...");
-            const idTokenResult = await auth.currentUser.getIdTokenResult(true); // true erzwingt Refresh
-            const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle'; // Lese den neuen Claim
+            const idTokenResult = await auth.currentUser.getIdTokenResult(true);
+            const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle';
             console.log("Token aktualisiert. Neuer Claim 'appRole':", newClaimRole);
 
-            // 5. Speichere die Firestore-ID ("MARKUS") im Local Storage,
-            // damit checkCurrentUserValidity weiß, wen es anzeigen soll.
+            // 5. Local Storage setzen
             localStorage.setItem(ADMIN_STORAGE_KEY, appUserId);
 
-            // 6. Aktualisiere den Benutzerstatus und die UI (checkCurrentUserValidity sollte jetzt den Claim lesen)
-            await checkCurrentUserValidity(); // await hinzufügen, da die Funktion async ist
+            // 6. Benutzerstatus/UI aktualisieren (checkCurrentUserValidity muss importiert sein!)
+            await checkCurrentUserValidity(); // await hier!
 
-            // 7. Erfolgsmeldung anzeigen
-            alertUser(`Erfolgreich als ${userFromFirestore?.name || 'Unbekannt'} angemeldet! Rolle: ${newClaimRole}`, "success");
+            // 7. Erfolgsmeldung
+            alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet! Rolle: ${newClaimRole}`, "success");
 
         } else {
-             // Sollte nicht passieren, da wir anonym angemeldet sind
              throw new Error("Kein Benutzer bei Firebase angemeldet nach Cloud Function Call.");
         }
 
     } catch (error) {
         // 8. Fehlerbehandlung
         console.error("Fehler beim Cloud Function Aufruf oder Token Refresh:", error);
-        // Zeige spezifische Fehlermeldungen von der Cloud Function an, falls vorhanden
         const message = error.message || "Anmeldung fehlgeschlagen.";
         alertUser(`Fehler: ${message}`, "error");
-        // Ggf. Benutzer zum Gastmodus zurücksetzen, um einen definierten Zustand zu haben
+        // Stelle sicher, dass switchToGuestMode und updateUIForMode importiert sind!
         switchToGuestMode(false);
-        updateUIForMode(); // UI für Gastmodus aktualisieren
+        updateUIForMode();
     }
 };
 
