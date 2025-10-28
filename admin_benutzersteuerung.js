@@ -382,7 +382,28 @@ export async function renderUserManagement() {
         let canEdit = false; if (isSysAdminEditing) { canEdit = !isSelf; } else if (isAdmin) { canEdit = !isTargetSysAdmin && !isTargetAdmin; } if (isNotRegistered && isAdmin) canEdit = true;
         const canToggle = permSet.canToggleUserActive && canEdit && !isSelf && !isNotRegistered; const canDelete = permSet.canDeleteUser && canEdit && !isSelf; const canRename = permSet.canRenameUser && canEdit; const canChangePerms = permSet.canChangeUserPermissionType && canEdit && !isNotRegistered;
         const currentUserLabel = isSelf ? '<span class="bg-indigo-100 text-indigo-800 font-bold text-xs px-2 py-1 rounded-full ml-2">AKTUELL</span>' : ''; const realNameDisplay = user.realName ? `<span class="text-gray-500 italic text-sm ml-1 real-name-display">(${escapeHtml(user.realName)})</span>` : '';
-        let roleName = 'Unbekannt'; let roleColorClass = 'text-gray-500'; if (isNotRegistered) { roleName = 'Nicht registriert'; roleColorClass = 'text-gray-400 italic'; } else { const effectiveRoleId = user.role || user.displayRole || 'NO_RIGHTS'; roleName = ROLES[effectiveRoleId]?.name || 'Keine Rolle'; if (user.role === 'SYSTEMADMIN') roleColorClass = 'text-purple-600 font-bold'; else if (user.role === 'ADMIN') roleColorClass = 'text-red-600 font-bold'; }
+        
+        let roleName = 'Unbekannt'; 
+        let roleColorClass = 'text-gray-500'; 
+        
+        if (isNotRegistered) { 
+            roleName = 'Nicht registriert'; 
+            roleColorClass = 'text-gray-400 italic'; 
+        } else { 
+            const effectiveRoleId = user.role || user.displayRole || 'NO_RIGHTS'; 
+            roleName = ROLES[effectiveRoleId]?.name || 'Keine Rolle'; 
+            
+            // =========== DEINE KORREKTUR STARTET HIER ===========
+            // KORREKTUR: Prüfe die 'effectiveRoleId' statt nur 'user.role'
+            if (effectiveRoleId === 'SYSTEMADMIN') {
+                roleColorClass = 'text-purple-600 font-bold'; 
+            } else if (effectiveRoleId === 'ADMIN') {
+                roleColorClass = 'text-red-600 font-bold'; 
+            }
+            // (Der 'else'-Fall wird durch die Standarddefinition von roleColorClass abgedeckt)
+            // =========== DEINE KORREKTUR ENDET HIER ===========
+        }
+        
         let permissionsHTML = '';
         if (!isNotRegistered) {
             const permType = user.permissionType || 'role';
