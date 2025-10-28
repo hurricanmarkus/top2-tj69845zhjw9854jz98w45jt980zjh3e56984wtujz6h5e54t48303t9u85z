@@ -558,10 +558,6 @@ export async function renderUserManagement() {
     restoreAdminScrollIfAny();
 }
 
-// Ersetze NUR diese Funktion in admin_benutzersteuerung.js
-// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
-// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
-// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
 // Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
 export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions) {
     if (!area) return;
@@ -595,10 +591,15 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             const roleSelect = form.querySelector('#newUserRole');
 
             const name = nameInput.value.trim();
+            const realName = realNameInput.value.trim(); // KORREKTUR: Wert holen
             const type = typeSelect.value;
             const key = keyInput.value; // Kein trim!
 
+            // ================== LOGIKÄNDERUNG HIER (START) ==================
             if (!name) return alertUser("Nickname ist ein Pflichtfeld.", "error");
+            if (!realName) return alertUser("Vorname & Nachname ist ein Pflichtfeld.", "error"); // KORREKTUR: Prüfung hinzugefügt
+            // ================== LOGIKÄNDERUNG HIER (ENDE) ==================
+
             if (type !== 'not_registered' && key.length < 4) return alertUser("Passwort muss mind. 4 Zeichen haben.", "error");
 
             if (type === 'role' && roleSelect.value === 'SYSTEMADMIN' && currentUser.role !== 'SYSTEMADMIN') {
@@ -610,7 +611,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
             const newUserData = {
                 name: name,
-                realName: realNameInput.value.trim() || null, // Speichern bei Erstellung
+                realName: realName, // KORREKTUR: Gesäuberten Wert verwenden
                 key: type !== 'not_registered' ? key : null,
                 permissionType: type,
                 role: type === 'role' ? roleSelect.value : null,
