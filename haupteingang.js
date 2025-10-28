@@ -238,7 +238,7 @@ async function initializeFirebase() {
         console.log("initializeFirebase: Versuche anonyme Anmeldung...");
         try {
             const userCredential = await signInAnonymously(auth);
-            alert(`Deine aktuelle anonyme UID ist: ${userCredential.user.uid}`);
+            console.log("initializeFirebase: Anonyme Anmeldung erfolgreich. User UID:", userCredential.user.uid);
         } catch (error) {
             console.error("initializeFirebase: FEHLER bei anonymer Anmeldung:", error);
         }
