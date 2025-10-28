@@ -238,7 +238,7 @@ async function initializeFirebase() {
         console.log("initializeFirebase: Versuche anonyme Anmeldung...");
         try {
             const userCredential = await signInAnonymously(auth);
-            console.log("initializeFirebase: Anonyme Anmeldung erfolgreich. User UID:", userCredential.user.uid);
+            alert(`Deine aktuelle anonyme UID ist: ${userCredential.user.uid}`);
         } catch (error) {
             console.error("initializeFirebase: FEHLER bei anonymer Anmeldung:", error);
         }
@@ -265,17 +265,17 @@ async function initializeFirebase() {
                 });
 
                 onSnapshot(notrufSettingsDocRef, (docSnap) => {
-                     if (docSnap.exists()) {
-                         notrufSettings = docSnap.data();
-                         if (!notrufSettings.modes) notrufSettings.modes = [];
-                         if (!notrufSettings.contacts) notrufSettings.contacts = [];
-                         if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
-                         if (!notrufSettings.sounds) notrufSettings.sounds = [];
-                         if (!notrufSettings.flicAssignments) notrufSettings.flicAssignments = { einfach: null, doppel: null, halten: null };
-                     } else {
-                         console.warn("Firebase Notruf Settings Document 'notruf' not found, creating default.");
-                         notrufSettings = { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } };
-                     }
+                    if (docSnap.exists()) {
+                        notrufSettings = docSnap.data();
+                        if (!notrufSettings.modes) notrufSettings.modes = [];
+                        if (!notrufSettings.contacts) notrufSettings.contacts = [];
+                        if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
+                        if (!notrufSettings.sounds) notrufSettings.sounds = [];
+                        if (!notrufSettings.flicAssignments) notrufSettings.flicAssignments = { einfach: null, doppel: null, halten: null };
+                    } else {
+                        console.warn("Firebase Notruf Settings Document 'notruf' not found, creating default.");
+                        notrufSettings = { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } };
+                    }
                 }, (error) => {
                     console.error("Error listening to notruf settings:", error);
                 });
@@ -301,14 +301,14 @@ async function initializeFirebase() {
                 listenForChecklistGroups();
                 console.log("initializeFirebase: Rufe listenForChecklistCategories auf...");
                 listenForChecklistCategories();
-                
+
                 // --- HIER DIE ÄNDERUNGEN ---
                 console.log("initializeFirebase: Rufe listenForTemplates auf...");
                 listenForTemplates(); // Importiert aus checklist.js
                 console.log("initializeFirebase: Rufe listenForStacks auf...");
                 listenForStacks(); // NEU: Importiert aus checklist.js
                 // --- ENDE ÄNDERUNGEN ---
-                
+
                 console.log("initializeFirebase: Alle Listener-Funktionen aufgerufen.");
 
             } catch (error) {
@@ -328,18 +328,18 @@ async function initializeFirebase() {
             } else {
                 console.log("Firebase meldet KEINEN User (auch nicht anonym!), wechsle explizit zum Gastmodus.");
                 switchToGuestMode(false);
-                 initialAuthCheckDone = true;
-                 updateUIForMode();
+                initialAuthCheckDone = true;
+                updateUIForMode();
             }
-             console.log("initializeFirebase: Ende des onAuthStateChanged Callbacks.");
+            console.log("initializeFirebase: Ende des onAuthStateChanged Callbacks.");
         }); // Ende onAuthStateChanged
     } catch (error) {
         console.error("initializeFirebase: FEHLER bei der grundlegenden Firebase Initialisierung:", error);
         if (typeof alertUser === 'function') {
-             alertUser("Firebase konnte nicht initialisiert werden.", "error");
+            alertUser("Firebase konnte nicht initialisiert werden.", "error");
         }
     }
-     console.log("initializeFirebase: Funktion komplett beendet.");
+    console.log("initializeFirebase: Funktion komplett beendet.");
 }
 // --- HIER ENDET DIE FUNKTION ZUM ERSETZEN ---
 async function seedInitialData() {
@@ -405,8 +405,8 @@ export function navigate(targetViewName) {
     console.log(`Navigiere zu: ${targetViewName}`); // Log Navigation
     const targetView = views[targetViewName];
     if (!targetView) {
-         console.error(`Navigation fehlgeschlagen: View "${targetViewName}" nicht gefunden.`);
-         return;
+        console.error(`Navigation fehlgeschlagen: View "${targetViewName}" nicht gefunden.`);
+        return;
     }
 
     // Berechtigungsprüfung (bleibt gleich)
@@ -419,17 +419,17 @@ export function navigate(targetViewName) {
     if (targetViewName === 'checklistSettings' && !userPermissions.includes('CHECKLIST_SETTINGS')) return alertUser("Zugriff verweigert (Checklisten-Einstellungen).", 'error');
     if (targetViewName === 'essensberechnung' && !userPermissions.includes('ESSENSBERECHNUNG')) return alertUser("Zugriff verweigert (Essensberechnung).", 'error');
 
-if (targetViewName === 'admin') {
-    const isAdminRole = currentUser.role === 'ADMIN' || currentUser.role === 'SYSTEMADMIN'; // Echte Rolle
-    const isIndividualAdminDisplay = currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN'; // Individuell mit Admin-Anzeige
-    const allowAdminAccess = isAdminRole || isIndividualAdminDisplay; // Zugriff erlauben, wenn eine Bedingung zutrifft
+    if (targetViewName === 'admin') {
+        const isAdminRole = currentUser.role === 'ADMIN' || currentUser.role === 'SYSTEMADMIN'; // Echte Rolle
+        const isIndividualAdminDisplay = currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN'; // Individuell mit Admin-Anzeige
+        const allowAdminAccess = isAdminRole || isIndividualAdminDisplay; // Zugriff erlauben, wenn eine Bedingung zutrifft
 
-    if (!allowAdminAccess) {
-        // Nur wenn KEINE der Bedingungen zutrifft, Zugriff verweigern
-        return alertUser("Zugriff verweigert (Admin).", 'error');
+        if (!allowAdminAccess) {
+            // Nur wenn KEINE der Bedingungen zutrifft, Zugriff verweigern
+            return alertUser("Zugriff verweigert (Admin).", 'error');
+        }
+        // Wenn allowAdminAccess true ist, wird der Code nach dem if-Block normal weiter ausgeführt.
     }
-    // Wenn allowAdminAccess true ist, wird der Code nach dem if-Block normal weiter ausgeführt.
-}
 
     if (targetViewName === 'notrufSettings' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Notruf-Einstellungen).", 'error');
 
@@ -456,14 +456,14 @@ if (targetViewName === 'admin') {
     // View-spezifische Initialisierungen
     if (targetViewName === 'userSettings') {
         // ... (Code für userSettings bleibt gleich) ...
-         const userNameEl = document.getElementById('userSettingsName');
-         const userKeyDisplayEl = document.getElementById('currentUserKeyDisplay');
-         if (userNameEl) userNameEl.textContent = `Passwort für ${currentUser.displayName} ändern`;
-         if (userKeyDisplayEl) {
-             const user = USERS[currentUser.mode];
-             userKeyDisplayEl.style.display = user?.key ? 'block' : 'none';
-             if (user?.key) userKeyDisplayEl.innerHTML = `<p class="text-lg">Dein aktuelles Passwort lautet: <strong class="font-bold">${user.key}</strong></p>`;
-         }
+        const userNameEl = document.getElementById('userSettingsName');
+        const userKeyDisplayEl = document.getElementById('currentUserKeyDisplay');
+        if (userNameEl) userNameEl.textContent = `Passwort für ${currentUser.displayName} ändern`;
+        if (userKeyDisplayEl) {
+            const user = USERS[currentUser.mode];
+            userKeyDisplayEl.style.display = user?.key ? 'block' : 'none';
+            if (user?.key) userKeyDisplayEl.innerHTML = `<p class="text-lg">Dein aktuelles Passwort lautet: <strong class="font-bold">${user.key}</strong></p>`;
+        }
     }
     if (targetViewName === 'essensberechnung') {
         initializeEssensberechnungView();
@@ -472,17 +472,17 @@ if (targetViewName === 'admin') {
     if (targetViewName === 'notrufSettings') {
         initializeNotrufSettingsView(); // Ruft die Initialisierung aus notfall.js auf
     }
-     if (targetViewName === 'checklist') {
-         const defaultListId = adminSettings.defaultChecklistId;
-         renderChecklistView(defaultListId);
+    if (targetViewName === 'checklist') {
+        const defaultListId = adminSettings.defaultChecklistId;
+        renderChecklistView(defaultListId);
     }
-     if (targetViewName === 'checklistSettings') {
+    if (targetViewName === 'checklistSettings') {
         renderChecklistSettingsView();
     }
     if (targetViewName === 'admin') {
-         Object.keys(adminSectionsState).forEach(key => adminSectionsState[key] = false);
-         toggleAdminSection(null);
-     }
+        Object.keys(adminSectionsState).forEach(key => adminSectionsState[key] = false);
+        toggleAdminSection(null);
+    }
 }
 
 export function setupEventListeners() {
@@ -536,10 +536,10 @@ export function setupEventListeners() {
 
     // --- Modals (Login, Archived Lists etc.) ---
     const cancelSelectionButton = document.getElementById('cancelSelectionButton');
-    if (cancelSelectionButton) cancelSelectionButton.addEventListener('click', () => { if(userSelectionModal) userSelectionModal.style.display = 'none'; });
+    if (cancelSelectionButton) cancelSelectionButton.addEventListener('click', () => { if (userSelectionModal) userSelectionModal.style.display = 'none'; });
 
     const backToSelectionButton = document.getElementById('backToSelectionButton');
-    if (backToSelectionButton) backToSelectionButton.addEventListener('click', () => { if(pinModal) pinModal.style.display = 'none'; if(userSelectionModal) userSelectionModal.style.display = 'flex'; });
+    if (backToSelectionButton) backToSelectionButton.addEventListener('click', () => { if (pinModal) pinModal.style.display = 'none'; if (userSelectionModal) userSelectionModal.style.display = 'flex'; });
 
     const modalUserButtonsEl = document.getElementById('modalUserButtons');
     if (modalUserButtonsEl) {
@@ -573,8 +573,8 @@ export function setupEventListeners() {
     const closeLockedModalButton = document.getElementById('closeLockedModalButton');
     if (closeLockedModalButton) {
         closeLockedModalButton.addEventListener('click', () => {
-             if(pinModal) pinModal.style.display = 'none';
-             if(userSelectionModal) userSelectionModal.style.display = 'flex';
+            if (pinModal) pinModal.style.display = 'none';
+            if (userSelectionModal) userSelectionModal.style.display = 'flex';
         });
     }
 
@@ -654,40 +654,40 @@ export function setupEventListeners() {
     const sendDynamicPostButton = document.getElementById('sendDynamicPostButton');
     if (sendDynamicPostButton) {
         sendDynamicPostButton.addEventListener('click', async (e) => {
-             const buttonEl = e.currentTarget;
-             const messageInput = document.getElementById('pushoverMessage');
-             const recipientSelect = document.getElementById('pushoverRecipient');
-             const titleInput = document.getElementById('pushoverTitle');
-             if (!messageInput || !recipientSelect || !titleInput) return;
+            const buttonEl = e.currentTarget;
+            const messageInput = document.getElementById('pushoverMessage');
+            const recipientSelect = document.getElementById('pushoverRecipient');
+            const titleInput = document.getElementById('pushoverTitle');
+            if (!messageInput || !recipientSelect || !titleInput) return;
 
-             const message = messageInput.value;
-             if (!message) return alertUser('Bitte Nachricht eingeben.', 'error');
-             setButtonLoading(buttonEl, true);
+            const message = messageInput.value;
+            if (!message) return alertUser('Bitte Nachricht eingeben.', 'error');
+            setButtonLoading(buttonEl, true);
 
-             const formData = new FormData();
-             formData.append('token', PUSHOVER_TOKEN);
-             // Stelle sicher, dass RECIPIENT_KEYS definiert ist und den Wert enthält
-             const recipientKey = RECIPIENT_KEYS ? RECIPIENT_KEYS[recipientSelect.value] : null;
-             if (!recipientKey) {
-                 alertUser('Fehler: Empfänger-Schlüssel nicht gefunden.', 'error');
-                 setButtonLoading(buttonEl, false);
-                 return;
-             }
-             formData.append('user', recipientKey);
-             formData.append('title', titleInput.value);
-             formData.append('message', message);
+            const formData = new FormData();
+            formData.append('token', PUSHOVER_TOKEN);
+            // Stelle sicher, dass RECIPIENT_KEYS definiert ist und den Wert enthält
+            const recipientKey = RECIPIENT_KEYS ? RECIPIENT_KEYS[recipientSelect.value] : null;
+            if (!recipientKey) {
+                alertUser('Fehler: Empfänger-Schlüssel nicht gefunden.', 'error');
+                setButtonLoading(buttonEl, false);
+                return;
+            }
+            formData.append('user', recipientKey);
+            formData.append('title', titleInput.value);
+            formData.append('message', message);
 
-             try {
+            try {
                 const response = await fetch('https://api.pushover.net/1/messages.json', { method: 'POST', body: formData });
                 const data = await response.json();
                 if (data.status !== 1) throw new Error(data.errors ? data.errors.join(', ') : 'Unbekannter Pushover Fehler');
                 alertUser('Nachricht gesendet!', 'success');
                 messageInput.value = ''; // Nachricht leeren
-             } catch (error) {
+            } catch (error) {
                 alertUser(`Fehler: ${error.message}`, 'error');
-             } finally {
+            } finally {
                 setButtonLoading(buttonEl, false);
-             }
+            }
         });
     }
 
@@ -709,13 +709,13 @@ export function setupEventListeners() {
 
                 const userKeyDisplayEl = document.getElementById('currentUserKeyDisplay');
                 if (userKeyDisplayEl) {
-                     userKeyDisplayEl.innerHTML = `<p class="text-lg">Dein aktuelles Passwort lautet: <strong class="font-bold">${newKey}</strong></p>`;
-                     userKeyDisplayEl.style.display = 'block';
+                    userKeyDisplayEl.innerHTML = `<p class="text-lg">Dein aktuelles Passwort lautet: <strong class="font-bold">${newKey}</strong></p>`;
+                    userKeyDisplayEl.style.display = 'block';
                 }
                 newKeyInput.value = '';
             } catch (error) {
-                 console.error("Fehler beim Speichern des Passworts:", error);
-                 alertUser("Fehler beim Speichern des Schlüssels.", "error");
+                console.error("Fehler beim Speichern des Passworts:", error);
+                alertUser("Fehler beim Speichern des Schlüssels.", "error");
             }
         });
     }
@@ -726,7 +726,7 @@ export function setupEventListeners() {
     if (closeArchivedModalBtn) {
         closeArchivedModalBtn.addEventListener('click', () => {
             const modal = document.getElementById('archivedListsModal');
-            if(modal) modal.style.display = 'none';
+            if (modal) modal.style.display = 'none';
         });
     }
 
@@ -735,7 +735,7 @@ export function setupEventListeners() {
         archivedListsContainer.addEventListener('click', async (e) => {
             const restoreBtn = e.target.closest('.restore-archived-btn');
             const deleteBtn = e.target.closest('.delete-archived-btn');
-             if (!checklistsCollectionRef) return;
+            if (!checklistsCollectionRef) return;
 
             if (restoreBtn) {
                 const listId = restoreBtn.dataset.listId;
@@ -744,8 +744,8 @@ export function setupEventListeners() {
                     await updateDoc(doc(checklistsCollectionRef, listId), { isArchived: false, archivedAt: null, archivedBy: null });
                     alertUser("Liste wurde aus dem Archiv wiederhergestellt.", "success");
                 } catch (error) {
-                     console.error("Fehler beim Wiederherstellen:", error);
-                     alertUser("Fehler beim Wiederherstellen.", "error");
+                    console.error("Fehler beim Wiederherstellen:", error);
+                    alertUser("Fehler beim Wiederherstellen.", "error");
                 }
             }
 
@@ -759,33 +759,33 @@ export function setupEventListeners() {
                         await updateDoc(doc(checklistsCollectionRef, listId), { isDeleted: true, isArchived: false, deletedAt: serverTimestamp(), deletedBy: currentUser.displayName });
                         alertUser(`Liste "${listName}" wurde in den Papierkorb verschoben.`, "success");
                     } catch (error) {
-                         console.error("Fehler beim Verschieben in Papierkorb:", error);
-                         alertUser("Fehler beim Verschieben in den Papierkorb.", "error");
+                        console.error("Fehler beim Verschieben in Papierkorb:", error);
+                        alertUser("Fehler beim Verschieben in den Papierkorb.", "error");
                     }
                 } else if (confirmation !== null) {
                     alertUser("Löschvorgang abgebrochen.", "info");
                 }
             }
         });
-         archivedListsContainer.dataset.listenerAttached = 'true'; // Markieren, dass Listener hinzugefügt wurde
+        archivedListsContainer.dataset.listenerAttached = 'true'; // Markieren, dass Listener hinzugefügt wurde
     }
 
     // --- API Token Modal ---
-     const apiTokenModal = document.getElementById('apiTokenBookModal');
-     if (apiTokenModal && !apiTokenModal.dataset.listenerAttached) {
-         apiTokenModal.addEventListener('click', async (e) => {
-             // ... (Inhalt des Listeners bleibt gleich wie in der vorherigen Antwort) ...
-         });
-         apiTokenModal.dataset.listenerAttached = 'true';
-     }
+    const apiTokenModal = document.getElementById('apiTokenBookModal');
+    if (apiTokenModal && !apiTokenModal.dataset.listenerAttached) {
+        apiTokenModal.addEventListener('click', async (e) => {
+            // ... (Inhalt des Listeners bleibt gleich wie in der vorherigen Antwort) ...
+        });
+        apiTokenModal.dataset.listenerAttached = 'true';
+    }
 
 
     // --- Sound Book Modal ---
-     const soundModal = document.getElementById('soundBookModal');
-     if (soundModal && !soundModal.dataset.listenerAttached) {
-         // ... (Inhalt des Listeners bleibt gleich wie in der vorherigen Antwort) ...
-         soundModal.dataset.listenerAttached = 'true';
-     }
+    const soundModal = document.getElementById('soundBookModal');
+    if (soundModal && !soundModal.dataset.listenerAttached) {
+        // ... (Inhalt des Listeners bleibt gleich wie in der vorherigen Antwort) ...
+        soundModal.dataset.listenerAttached = 'true';
+    }
 
-     console.log("setupEventListeners: Alle Basis-Listener hinzugefügt.");
+    console.log("setupEventListeners: Alle Basis-Listener hinzugefügt.");
 } // Ende setupEventListeners
