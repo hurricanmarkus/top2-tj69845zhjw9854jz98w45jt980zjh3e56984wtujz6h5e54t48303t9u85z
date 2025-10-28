@@ -253,6 +253,7 @@ async function initializeFirebase() {
             try {
                 console.log("initializeFirebase: Starte Daten-Listener...");
                 // --- Listener für App-Einstellungen (Settings) ---
+        console.log("Vor Settings-Listener: Auth User vorhanden?", !!auth.currentUser, "UID:", auth.currentUser?.uid);        
                 onSnapshot(settingsDocRef, (docSnap) => {
                     if (docSnap.exists()) {
                         adminSettings = docSnap.data();
