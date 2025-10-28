@@ -2,7 +2,7 @@
 import { onSnapshot, doc, updateDoc, setDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { db, usersCollectionRef, setButtonLoading, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES, ADMIN_STORAGE_KEY } from './haupteingang.js';
 import { logAdminAction } from './admin_protokollHistory.js';
-import { setupPermissionDependencies } from './admin_rechteverwaltung.js'; // Oder der richtige Dateiname
+import { setupPermissionDependencies, renderAdminRightsManagement } from './admin_rechteverwaltung.js'; // Oder der richtige Dateiname
 import { restoreAdminScrollIfAny, rememberAdminScroll } from './admin_adminfunktionenHome.js';
 import { updateUIForMode, switchToGuestMode } from './log-InOut.js';
 // ENDE-ZIKA //
@@ -898,7 +898,7 @@ export function toggleNewUserRoleField() {
     if (selectedType === 'not_registered') keyInput.value = ''; // [cite: 778]
 }
 
-function renderAdminUserDetails(userId) {
+export function renderAdminUserDetails(userId) {
     const detailsArea = document.getElementById('admin-user-details-area');
     const adminUser = USERS[userId];
 

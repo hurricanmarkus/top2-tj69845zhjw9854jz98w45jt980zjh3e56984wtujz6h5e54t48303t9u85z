@@ -1,6 +1,8 @@
-import { db, adminRolesCollectionRef, ADMIN_ROLES, USERS, alertUser, currentUser } from './haupteingang.js'; // ADMIN_ROLES hinzugefügt
+import { db, adminRolesCollectionRef, ADMIN_ROLES, USERS, alertUser, currentUser, ROLES } from './haupteingang.js'; // ROLES hinzugefügt
 import { logAdminAction } from './admin_protokollHistory.js';
 import { doc, updateDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+// KORREKTUR: Import hinzugefügt, um den Zirkelbezug aufzulösen
+import { renderAdminUserDetails } from './admin_benutzersteuerung.js'; 
 
 export function setupPermissionDependencies(container) {
     const mainToggle = container.querySelector('[data-perm="canSeeMainFunctions"]');
@@ -29,39 +31,35 @@ export function setupPermissionDependencies(container) {
 }
 
 export async function renderAdminRightsManagement() {
-    // Hole das Container-Element hier, um sicherzugehen, dass es verfügbar ist
     const adminRightsArea = document.getElementById('adminRightsArea');
     if (!adminRightsArea) {
         console.error("renderAdminRightsManagement: Container #adminRightsArea nicht gefunden.");
         return;
     }
 
-    // --- KORREKTUR: Verwende 'role' statt 'sysAdmin' ---
-    let sysAdminListHTML = '<h4 class="text-lg font-semibold text-gray-700 mb-2">Übersicht Admin-Rollen</h4>'; // Titel angepasst
-    if (Object.keys(ADMIN_ROLES || {}).length > 0) {
-        sysAdminListHTML += '<div class="space-y-1">';
-        Object.values(ADMIN_ROLES || {}).forEach(role => { // Variable heißt jetzt 'role'
-            // Prüfen, ob die aktuelle Rolle (role.id) die Rolle des aktuellen Benutzers ist.
-            // Annahme: currentUser.assignedAdminRoleId enthält die ID der zugewiesenen Admin-Rolle für Admins
-            // Annahme: SYSTEMADMIN hat keine zugewiesene Rolle, sondern ist direkt SYSTEMADMIN
-            let isSelfRole = false;
-            if (currentUser.role === 'ADMIN' && currentUser.assignedAdminRoleId === role.id) {
-                isSelfRole = true;
-            } else if (currentUser.role === 'SYSTEMADMIN' && role.id === 'SYSTEMADMIN') { // Prüfen, ob die Rolle SYSTEMADMIN ist (falls diese ID existiert)
-                isSelfRole = true; // Oder eine andere Logik, falls SYSTEMADMIN nicht in ADMIN_ROLES ist
-            }
-             // Oder Prüfen, ob role.id === currentUser.role, falls die IDs übereinstimmen
-            // const isSelf = role.id === currentUser.role; // Alternative Prüfung
+    // --- KORREKTUR 2: Titel anpassen ---
+    let sysAdminListHTML = '<h4 class="text-lg font-semibold text-gray-700 mb-2">Übersicht Systemadmins</h4>'; 
 
-            const currentUserLabel = isSelfRole ? '<span class="bg-indigo-100 text-indigo-800 font-bold text-xs px-2 py-1 rounded-full ml-2">AKTUELL</span>' : '';
-            // Verwende role.name statt sysAdmin.name
-            sysAdminListHTML += `<p class="p-2 bg-gray-100 rounded-md text-sm">${role.name} ${currentUserLabel}</p>`;
+    // --- KORREKTUR 3: Liste der Systemadmin-BENUTZER statt Admin-ROLLEN ---
+    // Filtere das USERS-Objekt nach Benutzern mit der Rolle 'SYSTEMADMIN'
+    const systemAdmins = Object.values(USERS || {}).filter(user => user.role === 'SYSTEMADMIN');
+
+    if (systemAdmins.length > 0) {
+        sysAdminListHTML += '<div class="space-y-1">';
+        systemAdmins.forEach(sysAdmin => {
+            // Prüfen, ob der gelistete SysAdmin der aktuell angemeldete Benutzer ist
+            const isSelf = sysAdmin.id === currentUser.mode; 
+            const currentUserLabel = isSelf ? '<span class="bg-indigo-100 text-indigo-800 font-bold text-xs px-2 py-1 rounded-full ml-2">AKTUELL</span>' : '';
+            
+            // Zeige den Namen des Benutzers an
+            sysAdminListHTML += `<p class="p-2 bg-gray-100 rounded-md text-sm">${sysAdmin.name} ${currentUserLabel}</p>`;
         });
         sysAdminListHTML += '</div>';
     } else {
-        sysAdminListHTML += '<p class="text-sm text-gray-500">Keine Admin-Rollen gefunden.</p>';
+        sysAdminListHTML += '<p class="text-sm text-gray-500">Keine Systemadmins gefunden.</p>';
     }
-    // --- ENDE KORREKTUR ---
+    // --- ENDE KORREKTUR 3 ---
+
 
     adminRightsArea.innerHTML = `
              <h3 class="text-xl font-bold text-gray-800 mb-4">Admin-Benutzer verwalten</h3>
@@ -76,50 +74,31 @@ export async function renderAdminRightsManagement() {
                  </div>
              </div>
              <div class="mt-6 border-t pt-4">
-                 ${sysAdminListHTML}
-             </div>
+                 ${sysAdminListHTML} </div>
              <div id="admin-user-details-area" class="mt-6"></div>
            `;
 
-    // --- Listener für Edit-Buttons hinzufügen ---
-    // Wichtig: Wir müssen sicherstellen, dass die Funktion renderAdminUserDetails existiert und importiert ist.
-    // Dieser Teil setzt voraus, dass renderAdminUserDetails korrekt implementiert ist.
-    const editButtons = adminRightsArea.querySelectorAll('.edit-admin-user-btn');
-    if (editButtons.length > 0) { // Nur hinzufügen, wenn es Buttons gibt
-        // Prüfen, ob Listener schon dran sind (optional, aber sicherer)
-        if (!adminRightsArea.dataset.editListenersAttached) {
-            editButtons.forEach(button => {
-                button.addEventListener('click', (e) => {
-                    const userId = e.currentTarget.dataset.userid;
-                    if (typeof renderAdminUserDetails === 'function') { // Prüfen, ob die Funktion existiert
-                        renderAdminUserDetails(userId);
-                    } else {
-                        console.error("Funktion renderAdminUserDetails ist nicht definiert oder importiert.");
-                    }
-                });
-            });
-            adminRightsArea.dataset.editListenersAttached = 'true'; // Markieren
-        }
-    }
 
-
-    // --- Admin-Benutzer auflisten (Logik bleibt größtenteils gleich) ---
-    const adminUsers = Object.values(USERS || {}).filter(user => user.role === 'ADMIN' || user.role === 'SYSTEMADMIN');
+    // --- KORREKTUR 1: Filtere NUR nach 'ADMIN', nicht 'SYSTEMADMIN' ---
+    // Systemadmins werden jetzt in der separaten Liste oben behandelt.
+    const adminUsers = Object.values(USERS || {}).filter(user => user.role === 'ADMIN');
+    // --- ENDE KORREKTUR 1 ---
 
     const roleUsersContainer = adminRightsArea.querySelector('#admin-role-users');
     const individualUsersContainer = adminRightsArea.querySelector('#admin-individual-users');
 
-    // Container leeren, bevor neue Elemente hinzugefügt werden
     if (roleUsersContainer) roleUsersContainer.innerHTML = '';
     if (individualUsersContainer) individualUsersContainer.innerHTML = '';
 
 
     if (adminUsers.length === 0) {
          if (roleUsersContainer) roleUsersContainer.innerHTML = '<p class="text-center text-sm text-gray-500">Keine Admins gefunden.</p>';
+         if (individualUsersContainer) individualUsersContainer.innerHTML = '<p class="text-center text-sm text-gray-500">Keine Admins gefunden.</p>';
     } else {
         adminUsers.forEach(adminUser => {
-            const permissionType = adminUser.role === 'SYSTEMADMIN' ? 'role' : (adminUser.permissionType || 'role');
-            const canBeEdited = adminUser.role !== 'SYSTEMADMIN';
+            // Logik vereinfacht, da 'SYSTEMADMIN' hier nicht mehr vorkommt
+            const permissionType = adminUser.permissionType || 'role';
+            const canBeEdited = true; // Admins (nicht SysAdmins) sind immer bearbeitbar
 
             const userCard = document.createElement('div');
             userCard.className = 'p-2 border rounded-lg bg-white shadow-sm flex justify-between items-center';
@@ -128,15 +107,11 @@ export async function renderAdminRightsManagement() {
             let targetContainer = null;
 
             if (permissionType === 'role') {
-                 // Verwende ROLES für den Namen der Benutzerrolle (ADMIN)
-                 // oder ADMIN_ROLES für den Namen der zugewiesenen Admin-Rolle
                  let roleName = 'Unbekannt';
-                 if (adminUser.role === 'SYSTEMADMIN') {
-                     roleName = 'Systemadmin'; // Fester Name für Systemadmin
-                 } else if (adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
+                 if (adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
                      roleName = ADMIN_ROLES[adminUser.assignedAdminRoleId].name; // Name der Admin-Rolle
                  } else if (ROLES && ROLES[adminUser.role]) {
-                     roleName = ROLES[adminUser.role].name; // Fallback auf Benutzerrolle (sollte 'Admin' sein)
+                     roleName = ROLES[adminUser.role].name; // Fallback (sollte 'Admin' sein)
                  }
 
                  userInfoHTML = `<div><p class="font-bold text-gray-800">${adminUser.name}</p><p class="text-xs text-indigo-600 font-medium">${roleName}</p></div>`;
@@ -154,7 +129,6 @@ export async function renderAdminRightsManagement() {
                      </button>` : ''}
                    `;
 
-             // Füge die Karte zum richtigen Container hinzu
              if (targetContainer) {
                  targetContainer.appendChild(userCard);
              } else {
@@ -162,21 +136,16 @@ export async function renderAdminRightsManagement() {
              }
         });
 
-         // Füge die Listener für die neu erstellten Edit-Buttons hinzu (erneut, da sie jetzt im DOM sind)
+         // Füge die Listener für die neu erstellten Edit-Buttons hinzu
          adminRightsArea.querySelectorAll('.edit-admin-user-btn').forEach(button => {
-             // Prüfe, ob schon ein Listener dran ist, um Verdopplung zu vermeiden
              if (!button.dataset.listenerAttached) {
                  button.addEventListener('click', (e) => {
                      const userId = e.currentTarget.dataset.userid;
-                     if (typeof renderAdminUserDetails === 'function') {
-                         renderAdminUserDetails(userId);
-                     } else {
-                         console.error("Funktion renderAdminUserDetails ist nicht definiert oder importiert.");
-                     }
+                     // KORREKTUR: Direkter Aufruf der importierten Funktion
+                     renderAdminUserDetails(userId); 
                  });
                  button.dataset.listenerAttached = 'true';
              }
          });
-
     }
 }
