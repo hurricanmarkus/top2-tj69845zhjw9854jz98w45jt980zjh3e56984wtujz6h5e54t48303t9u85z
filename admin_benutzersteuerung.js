@@ -311,6 +311,7 @@ export function renderUserKeyList() {
 // Ersetze diese Funktion komplett in admin_benutzersteuerung.js
 // Ersetze diese Funktion komplett in admin_benutzersteuerung.js
 // Ersetze diese Funktion komplett in admin_benutzersteuerung.js
+// Ersetze diese Funktion komplett in admin_benutzersteuerung.js
 export async function renderUserManagement() {
     const userManagementArea = document.getElementById('userManagementArea');
     if (!userManagementArea) {
@@ -439,31 +440,23 @@ export async function renderUserManagement() {
         const isTargetAdmin = user.role === 'ADMIN'; 
         const isNotRegistered = user.permissionType === 'not_registered';
         
-        // ================== LOGIKÄNDERUNG HIER (START) ==================
-        
         let canEdit = false; 
         if (isSysAdminEditing) { 
-            // KORREKTUR: SysAdmin darf weder sich selbst (außer Name) noch andere SysAdmins bearbeiten
             canEdit = !isSelf && !isTargetSysAdmin; 
         } else if (isAdmin) { 
             canEdit = !isTargetSysAdmin && !isTargetAdmin; 
         } 
-        if (isNotRegistered && (isAdmin || isSysAdminEditing)) canEdit = true; // not_registered dürfen immer bearbeitet werden
+        if (isNotRegistered && (isAdmin || isSysAdminEditing)) canEdit = true;
 
         const canToggle = permSet.canToggleUserActive && canEdit && !isSelf && !isNotRegistered; 
         const canDelete = permSet.canDeleteUser && canEdit && !isSelf; 
         
-        // KORREKTUR: canRename braucht eine Sonderregel
         // Regel: Normales Recht (via canEdit) ODER (SysAdmin darf EIGENEN Namen bearbeiten)
+        // KORREKTUR: "canRenameUser" für alle, die 'permSet.canRenameUser' haben (auch Admins für normale User)
         const canRename = (permSet.canRenameUser && canEdit) || (isSysAdminEditing && isSelf); 
         
         const canChangePerms = permSet.canChangeUserPermissionType && canEdit && !isNotRegistered;
         
-        // KORREKTUR: RealName-Input deaktivieren, wenn SysAdmin sich selbst bearbeitet
-        const disableRealName = isSysAdminEditing && isSelf;
-
-        // ================== LOGIKÄNDERUNG HIER (ENDE) ==================
-
         const currentUserLabel = isSelf ? '<span class="bg-indigo-100 text-indigo-800 font-bold text-xs px-2 py-1 rounded-full ml-2">AKTUELL</span>' : ''; 
         const realNameDisplay = user.realName ? `<span class="text-gray-500 italic text-sm ml-1 real-name-display">(${escapeHtml(user.realName)})</span>` : '';
         
@@ -529,7 +522,7 @@ export async function renderUserManagement() {
                         
                         <div data-userid="${userId}" class="name-edit-container hidden flex-grow gap-2 items-center"> 
                             <input type="text" value="${escapeHtml(user.name || '')}" class="edit-nickname-input p-1 border rounded w-full text-sm" placeholder="Nickname"> 
-                            <input type="text" value="${escapeHtml(user.realName || '')}" class="edit-realname-input p-1 border rounded w-full text-sm" placeholder="Vollständiger Name" ${disableRealName ? 'disabled' : ''}> 
+                            <input type="text" value="${escapeHtml(user.realName || '')}" class="edit-realname-input p-1 border rounded w-full text-sm bg-gray-100 cursor-not-allowed" placeholder="Vollständiger Name" disabled> 
                             <button class="save-name-btn p-1 ml-1 bg-green-500 text-white rounded text-xs">✔️</button> 
                         </div> 
                         
@@ -566,6 +559,7 @@ export async function renderUserManagement() {
 }
 
 // Ersetze NUR diese Funktion in admin_benutzersteuerung.js
+// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
 // Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
 // Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
 // Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
@@ -607,19 +601,16 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             if (!name) return alertUser("Nickname ist ein Pflichtfeld.", "error");
             if (type !== 'not_registered' && key.length < 4) return alertUser("Passwort muss mind. 4 Zeichen haben.", "error");
 
-            // Sicherheitscheck: Darf der Ersteller diese Rolle zuweisen?
             if (type === 'role' && roleSelect.value === 'SYSTEMADMIN' && currentUser.role !== 'SYSTEMADMIN') {
                  return alertUser("Nur Systemadmins dürfen die Rolle SYSTEMADMIN zuweisen.", "error");
             }
             if (type === 'role' && roleSelect.value === 'ADMIN' && currentUser.role !== 'SYSTEMADMIN') {
-                 // Ggf. Genehmigungsprozess oder Sperre für Admins
                  console.warn("Admin versucht Admin-Rolle zuzuweisen.");
-                 // Hier könnte eine Genehmigung (createApprovalRequest) ausgelöst werden
             }
 
             const newUserData = {
                 name: name,
-                realName: realNameInput.value.trim() || null,
+                realName: realNameInput.value.trim() || null, // Speichern bei Erstellung
                 key: type !== 'not_registered' ? key : null,
                 permissionType: type,
                 role: type === 'role' ? roleSelect.value : null,
@@ -643,8 +634,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 keyInput.value = '';
                 typeSelect.value = 'role';
                 roleSelect.value = 'ANGEMELDET';
-                toggleNewUserRoleField(); // Felder korrekt anzeigen/verstecken
-                form.classList.add('hidden'); // Formular einklappen
+                toggleNewUserRoleField(); 
+                form.classList.add('hidden'); 
                 const addUserBtn = document.getElementById('showAddUserFormBtn');
                 if (addUserBtn) addUserBtn.textContent = '+ Benutzer anlegen';
 
@@ -679,14 +670,12 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
         // Löschen Button
         const deleteButton = e.target.closest('.delete-user-button');
         if (deleteButton) {
-            // (Logik von oben ist OK, da 'canDelete' bereits 'isSelf' und 'isTargetSysAdmin' prüft)
             const userToDelete = USERS[userId];
             if (!userToDelete) return;
             if (!confirm(`Soll der Benutzer '${userToDelete.name}' wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden.`)) return;
             
             rememberAdminScroll();
             try {
-                // TODO: Genehmigungsprozess hier einfügen
                 await deleteDoc(doc(usersCollectionRef, userId));
                 await logAdminAction('user_deleted', `Benutzer '${userToDelete.name}' gelöscht.`);
                 alertUser(`Benutzer '${userToDelete.name}' gelöscht.`, "success");
@@ -700,18 +689,15 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
         // Umbenennen Button (Stift)
         const renameButton = e.target.closest('.rename-user-btn');
         if (renameButton) {
-            // (Logik von oben ist OK, da 'canRename' die Sonderregel für SysAdmin-Self-Edit enthält)
             const nameDisplay = userCard.querySelector('.name-display');
             const nameEdit = userCard.querySelector('.name-edit-container');
             if (nameDisplay && nameEdit) {
                 nameDisplay.classList.add('hidden');
                 nameEdit.classList.remove('hidden');
-                nameEdit.querySelector('.edit-nickname-input')?.focus(); // Fokus auf Nickname
+                nameEdit.querySelector('.edit-nickname-input')?.focus(); 
             }
             return; 
         }
-
-        // ================== LOGIKÄNDERUNG HIER (START) ==================
 
         // Speichern nach Umbenennen Button (Häkchen)
         const saveNameButton = e.target.closest('.save-name-btn');
@@ -721,32 +707,17 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             if (!nameEditContainer || !nameDisplay) return;
 
             const newNickname = nameEditContainer.querySelector('.edit-nickname-input').value.trim();
-            const newRealNameInput = nameEditContainer.querySelector('.edit-realname-input'); // Element holen
-            const newRealName = newRealNameInput.value.trim();
             
             if (!newNickname) return alertUser("Nickname darf nicht leer sein.", "error");
 
-            // KORREKTUR: Prüfen, ob der SysAdmin sich selbst bearbeitet
-            const isSysAdminEditingSelf = isSysAdminEditing && userId === currentUser.mode;
-
             rememberAdminScroll();
             try {
-                // KORREKTUR: Update-Objekt dynamisch bauen
+                // KORREKTUR: Nur noch 'name' (Nickname) aktualisieren.
                 const updateData = {
                     name: newNickname
                 };
 
-                // Nur 'realName' aktualisieren, wenn es NICHT SysAdmin-Self-Edit ist
-                // (Oder wenn der Input nicht deaktiviert war, falls die UI-Logik fehlschlägt)
-                if (!isSysAdminEditingSelf || !newRealNameInput.disabled) {
-                    updateData.realName = newRealName || null;
-                } else {
-                    console.warn("SysAdmin self-edit: 'realName' Änderung wird ignoriert.");
-                }
-
-                // TODO: Genehmigungsprozess
                 await updateDoc(doc(usersCollectionRef, userId), updateData);
-                
                 await logAdminAction('user_renamed', `Benutzer ${USERS[userId]?.name || userId} umbenannt in '${newNickname}'.`);
                 
                 nameDisplay.classList.remove('hidden');
@@ -759,12 +730,9 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             return; 
         }
 
-        // ================== LOGIKÄNDERUNG HIER (ENDE) ==================
-
         // --- Speichern der Berechtigungen Button ---
         const savePermsButton = e.target.closest('.save-perms-button');
         if (savePermsButton) {
-            // (Logik von oben ist OK, da 'canChangePerms' bereits 'isSelf' und 'isTargetSysAdmin' prüft)
             console.log(`[CLICK] Speichern (Berechtigungen) für User ${userId} erkannt.`);
             const permContainer = savePermsButton.closest('[data-userid]');
             if (!permContainer) { console.error(`[CLICK] Konnte Berechtigungs-Container für User ${userId} nicht finden!`); return; }
@@ -802,7 +770,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
                 updateData = {
                     ...updateData, 
-                    role: 'ANGEMELDET', // Zurücksetzen auf Basis-Rolle
+                    role: 'ANGEMELDET', 
                     customPermissions: customPermissions,
                     displayRole: (selectedDisplayRole !== 'NO_RIGHTS' ? selectedDisplayRole : null),
                     assignedAdminRoleId: null, 
@@ -813,7 +781,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             console.log("[CLICK] Finale Update-Daten für Berechtigungen:", updateData);
 
             try {
-                // TODO: Genehmigungsprozess
                 console.log(`[CLICK] Versuche updateDoc für User ${userId}...`);
                 await updateDoc(doc(usersCollectionRef, userId), updateData);
                 console.log(`[CLICK] updateDoc für User ${userId} erfolgreich.`);
@@ -848,7 +815,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
              // --- Aktivieren/Deaktivieren Toggle ---
              if (target.classList.contains('user-active-toggle')) {
-                // (Logik von oben ist OK, da 'canToggle' bereits 'isSelf' und 'isTargetSysAdmin' prüft)
                 console.log(`[CHANGE] Aktiv-Toggle geändert. checked=${target.checked}`);
                 const isChecked = target.checked; // true wenn "Gesperrt" (also isActive = false)
                  if (!confirm(`Status von ${USERS[userId].name} ändern?`)) { target.checked = !isChecked; return; }
@@ -858,7 +824,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                  const requiresApproval = (currentUser.role === 'ADMIN' && currentPermSet.approvalRequired?.toggleUserActive);
                  
                  if (requiresApproval) { 
-                     target.checked = !isChecked; // Aktion zurücksetzen
+                     target.checked = !isChecked; 
                      await createApprovalRequest('TOGGLE_USER_ACTIVE', userId, { isActive: !isChecked }); 
                      alertUser("Aktion zur Genehmigung eingereicht.", "success");
                  }
@@ -878,7 +844,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
             // --- Änderungen an Berechtigungs-Inputs ---
             if (target.matches('.perm-type-toggle, .user-role-select, .custom-perm-checkbox, .display-role-select')) {
-                 // (Logik von oben ist OK, da 'canChangePerms' die Berechtigung steuert)
                  console.log(`[CHANGE] Berechtigungs-Input geändert.`);
                 const container = target.closest('[data-userid]'); if (!container) return;
                 
