@@ -222,7 +222,7 @@ export function updateUIForMode() {
             if (userSelectionModal) {
                 userSelectionModal.style.display = 'flex';
             } else {
-                console.error("FEHLER: Konnte #userSelectionModal nicht finden!"); // Spion
+                 console.error("FEHLER: Konnte #userSelectionModal nicht finden!"); // Spion
             }
         };
         // --- ENDE KORREKTUR ---
@@ -230,6 +230,8 @@ export function updateUIForMode() {
         footerLogout.appendChild(loginButton);
     } else {
         // Code zum Anzeigen des eingeloggten Benutzers und Logout-Button
+
+// Code zum Anzeigen des eingeloggten Benutzers und Logout-Button
         const user = USERS ? USERS[currentUser.mode] : null; // Sicherer Zugriff auf USERS
         let roleNameToDisplay = 'Unbekannt';
         let roleColor = 'text-gray-300'; // Standardfarbe
@@ -258,8 +260,11 @@ export function updateUIForMode() {
             }
         }
         // --- ENDE KORREKTUR ---
-        //         const realNamePart = user?.realName ? `<span class="text-gray-400 italic text-xs ml-1">(${user.realName})</span>` : '';
-        footerUser.innerHTML = `${currentUser.displayName} ${realNamePart} <span class="mx-1 text-gray-400">❖</span> <span class="${roleColor} italic">(${roleName})</span>`;
+
+        const realNamePart = user?.realName ? `<span class="text-gray-400 italic text-xs ml-1">(${(typeof escapeHtml === 'function' ? escapeHtml(user.realName) : user.realName)})</span>` : '';
+        const displayName = (typeof escapeHtml === 'function' ? escapeHtml(currentUser.displayName || userMode) : (currentUser.displayName || userMode));
+        const roleDisplay = roleNameToDisplay ? ` <span class="mx-1 text-gray-400">❖</span> <span class="${roleColor} italic">(${(typeof escapeHtml === 'function' ? escapeHtml(roleNameToDisplay) : roleNameToDisplay)})</span>` : '';
+        footerUser.innerHTML = `${displayName} ${realNamePart}${roleDisplay}`;
 
         const logoutButton = document.createElement('button');
         logoutButton.id = 'logoutButton';
