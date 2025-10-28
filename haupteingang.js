@@ -204,17 +204,12 @@ window.onload = function () {
     }
 };
 
-// ERSETZE die komplette initializeFirebase Funktion hiermit:
 async function initializeFirebase() {
     try {
         console.log("initializeFirebase: Starte Firebase Initialisierung...");
         const app = initializeApp(firebaseConfig);
         db = getFirestore(app);
         auth = getAuth(app); // 'auth' wird hier der globalen Variable zugewiesen
-
-        // Functions und Callable initialisieren
-        functions = getFunctions(app); // Region hier weglassen, wenn in der Function auch weggelassen
-        setRoleClaim = httpsCallable(functions, 'setRoleClaim'); // 'setRoleClaim' wird hier zugewiesen
 
         console.log("initializeFirebase: Firebase App, DB, Auth und Functions initialisiert.");
 
@@ -248,6 +243,18 @@ async function initializeFirebase() {
         console.log("initializeFirebase: Starte onAuthStateChanged Listener...");
         auth.onAuthStateChanged(async (user) => {
             console.log("initializeFirebase: onAuthStateChanged ausgelöst. User:", user ? user.uid : "keiner");
+
+
+
+            if (app && !functions) {
+                console.log("Initialisiere Firebase Functions...");
+                functions = getFunctions(app); // Keine Region angeben
+                setRoleClaim = httpsCallable(functions, 'setRoleClaim');
+                console.log("Firebase Functions initialisiert.");
+            }
+            // --- ENDE NEU ---
+
+
 
             // Listener starten (unabhängig vom Login-Status)
             try {
@@ -324,6 +331,7 @@ async function initializeFirebase() {
     }
      console.log("initializeFirebase: Funktion komplett beendet.");
 }
+
 
 // --- HIER ENDET DIE FUNKTION ZUM ERSETZEN ---
 async function seedInitialData() {
