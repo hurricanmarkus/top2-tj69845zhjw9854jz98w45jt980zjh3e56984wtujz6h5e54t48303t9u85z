@@ -309,6 +309,7 @@ export function renderUserKeyList() {
 // Ersetze diese Funktion komplett in admin_benutzersteuerung.js
 // Ersetze diese Funktion komplett in admin_benutzersteuerung.js
 // Ersetze diese Funktion komplett in admin_benutzersteuerung.js
+// Ersetze diese Funktion komplett in admin_benutzersteuerung.js
 export async function renderUserManagement() {
     const userManagementArea = document.getElementById('userManagementArea');
     if (!userManagementArea) {
@@ -326,26 +327,81 @@ export async function renderUserManagement() {
     let effectiveAdminPerms = {};
     const isAdmin = currentUser.role === 'ADMIN';
     const isSysAdminEditing = currentUser.role === 'SYSTEMADMIN';
-    if (isAdmin) { /* ... (Logik zum Holen der Admin-Perms) ... */ }
-    const permSet = (isSysAdminEditing) ? { canToggleUserActive: true, canDeleteUser: true, canRenameUser: true, canChangeUserPermissionType: true, canCreateUser: true } : effectiveAdminPerms;
+    if (isAdmin) { 
+        // Logik zum Holen der Admin-Perms
+        const adminUser = USERS[currentUser.mode];
+        if (adminUser) {
+            if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) { 
+                effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
+            } else {
+                effectiveAdminPerms = adminUser.adminPermissions || {};
+            }
+        }
+    }
+    const permSet = (isSysAdminEditing) ? { 
+        canToggleUserActive: true, canDeleteUser: true, canRenameUser: true, 
+        canChangeUserPermissionType: true, canCreateUser: true 
+    } : effectiveAdminPerms;
 
-    // --- HTML-Grundgerüst ---
+    // --- HTML-Grundgerüst (JETZT KORRIGIERT) ---
     userManagementArea.innerHTML = `
         <button id="showAddUserFormBtn" class="w-full p-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 transition shadow-md ${!permSet.canCreateUser ? 'hidden' : ''}">+ Benutzer anlegen</button>
-        <div id="addUserFormContainer" class="p-4 border rounded-xl bg-green-50 hidden">/* ... Formular ... */</div>
+        
+        <div id="addUserFormContainer" class="p-4 border rounded-xl bg-green-50 hidden">
+            <h4 class="font-bold text-lg text-green-800 mb-2">Neuen Benutzer anlegen</h4>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input type="text" id="newUserName" class="p-2 border rounded-lg" placeholder="Nickname*">
+                <input type="text" id="newUserRealName" class="p-2 border rounded-lg" placeholder="Vollständiger Name (Optional)">
+                <div id="newUserKeyWrapper" class="sm:col-span-1">
+                    <input type="password" id="newUserKey" class="p-2 border rounded-lg w-full" placeholder="Passwort* (mind. 4 Zeichen)">
+                </div>
+                <select id="newUserPermissionType" class="p-2 border rounded-lg bg-white">
+                    <option value="role" selected>Rolle (Standard)</option>
+                    <option value="individual">Individuell</option>
+                    <option value="not_registered">Nicht registriert</option>
+                </select>
+                <select id="newUserRole" class="p-2 border rounded-lg bg-white sm:col-span-2">
+                    </select>
+                <button id="saveNewUserButton" class="sm:col-span-2 p-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">
+                    <span class="button-text">Erstellen</span>
+                    <div class="loading-spinner" style="display: none;"></div>
+                </button>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">* Pflichtfelder (außer bei "Nicht registriert")</p>
+        </div>
+        
         <div id="registeredUserList" class="space-y-3 pt-4 border-t mt-4"></div>
+        
         <div class="mt-6 pt-4 border-t">
-            <button id="notRegisteredToggle" class="w-full flex justify-between items-center p-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-left font-semibold text-gray-700">/* ... */</button>
-            <div id="notRegisteredList" class="hidden mt-2 space-y-2 pl-4 border-l-2 border-gray-200">/* ... */</div>
+            <button id="notRegisteredToggle" class="w-full flex justify-between items-center p-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-left font-semibold text-gray-700">
+                <span>Nicht registrierte Personen (<span id="notRegisteredCount">0</span>)</span>
+                <svg id="notRegisteredToggleIcon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5 transform transition-transform">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"></path>
+                </svg>
+            </button>
+            <div id="notRegisteredList" class="hidden mt-2 space-y-2 pl-4 border-l-2 border-gray-200">
+                </div>
         </div>`;
 
-    // Listener für "+ Benutzer anlegen" Button
+    // --- KORREKTUR: Listener für "+ Benutzer anlegen" Button ---
     const addUserBtn = userManagementArea.querySelector('#showAddUserFormBtn');
-    if (addUserBtn && !addUserBtn.dataset.listenerAttached) { /* ... Listener ... */ }
+    if (addUserBtn && !addUserBtn.dataset.listenerAttached) {
+        addUserBtn.addEventListener('click', () => {
+            const formContainer = userManagementArea.querySelector('#addUserFormContainer');
+            if (formContainer) {
+                const isHidden = formContainer.classList.toggle('hidden');
+                addUserBtn.textContent = isHidden ? '+ Benutzer anlegen' : 'Schließen';
+            }
+        });
+        addUserBtn.dataset.listenerAttached = 'true';
+    }
 
-    // Listener für Typ-Auswahl im "Neu anlegen"-Formular
+    // --- KORREKTUR: Listener für Typ-Auswahl im "Neu anlegen"-Formular ---
     const newUserPermTypeSelect = userManagementArea.querySelector('#newUserPermissionType');
-    if (newUserPermTypeSelect && !newUserPermTypeSelect.dataset.listenerAttached) { /* ... Listener ... */ }
+    if (newUserPermTypeSelect && !newUserPermTypeSelect.dataset.listenerAttached) {
+        newUserPermTypeSelect.addEventListener('change', toggleNewUserRoleField); // Ruft die importierte Funktion auf
+        newUserPermTypeSelect.dataset.listenerAttached = 'true';
+    }
 
     // --- Daten vorbereiten ---
     const allUsers = Object.values(USERS).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -357,7 +413,7 @@ export async function renderUserManagement() {
     if(registeredListContainer) registeredListContainer.innerHTML = '';
     if(notRegisteredListContainer) notRegisteredListContainer.innerHTML = '';
 
-    const notRegCountEl = document.getElementById('notRegisteredCount');
+    const notRegCountEl = userManagementArea.querySelector('#notRegisteredCount'); // Korrigierter Selektor
     if (notRegCountEl) notRegCountEl.textContent = notRegisteredUsers.length;
 
     // Rollenoptionen für "Neu Anlegen"
@@ -368,18 +424,16 @@ export async function renderUserManagement() {
     // Verfügbare Berechtigungen
     const allPermissions = { 'ENTRANCE': 'Haupteingang öffnen', 'PUSHOVER': 'Push-Nachricht senden', 'CHECKLIST': 'Aktuelle Checkliste', 'CHECKLIST_SWITCH': '-> Listen umschalten', 'CHECKLIST_SETTINGS': '-> Checkliste-Einstellungen', 'ESSENSBERECHNUNG': 'Essensberechnung' };
 
-    // --- KORRIGIERTE Optionen für Angezeigten Status (OHNE SYSTEMADMIN) ---
+    // Optionen für Angezeigten Status (OHNE SYSTEMADMIN)
     const displayRoleOptions = Object.values(ROLES)
         .filter(r => r.id !== 'SYSTEMADMIN') // SYSTEMADMIN herausfiltern
         .map(role => `<option value="${role.id}">${escapeHtml(role.name.replace(/-/g, '').trim())}</option>`)
         .join('');
-    // --- ENDE KORREKTUR ---
 
     // --- Rendern der Benutzerkarten ---
     const createUserCardHTML = (user) => {
-        // ... (Logik zum Erstellen der Karte bleibt gleich, verwendet jetzt das korrigierte displayRoleOptions) ...
         const userId = user.id; const isSelf = userId === currentUser.mode; const isTargetSysAdmin = user.role === 'SYSTEMADMIN'; const isTargetAdmin = user.role === 'ADMIN'; const isNotRegistered = user.permissionType === 'not_registered';
-        let canEdit = false; if (isSysAdminEditing) { canEdit = !isSelf; } else if (isAdmin) { canEdit = !isTargetSysAdmin && !isTargetAdmin; } if (isNotRegistered && isAdmin) canEdit = true;
+        let canEdit = false; if (isSysAdminEditing) { canEdit = !isSelf; } else if (isAdmin) { canEdit = !isTargetSysAdmin && !isTargetAdmin; } if (isNotRegistered && (isAdmin || isSysAdminEditing)) canEdit = true; // SysAdmin darf auch not_registered bearbeiten
         const canToggle = permSet.canToggleUserActive && canEdit && !isSelf && !isNotRegistered; const canDelete = permSet.canDeleteUser && canEdit && !isSelf; const canRename = permSet.canRenameUser && canEdit; const canChangePerms = permSet.canChangeUserPermissionType && canEdit && !isNotRegistered;
         const currentUserLabel = isSelf ? '<span class="bg-indigo-100 text-indigo-800 font-bold text-xs px-2 py-1 rounded-full ml-2">AKTUELL</span>' : ''; const realNameDisplay = user.realName ? `<span class="text-gray-500 italic text-sm ml-1 real-name-display">(${escapeHtml(user.realName)})</span>` : '';
         
@@ -390,26 +444,24 @@ export async function renderUserManagement() {
             roleName = 'Nicht registriert'; 
             roleColorClass = 'text-gray-400 italic'; 
         } else { 
-            const effectiveRoleId = user.role || user.displayRole || 'NO_RIGHTS'; 
+            // KORREKTUR: effectiveRoleId bestimmt die Anzeige
+            const effectiveRoleId = (user.permissionType === 'role') ? user.role : (user.displayRole || 'NO_RIGHTS');
             roleName = ROLES[effectiveRoleId]?.name || 'Keine Rolle'; 
             
-            // =========== DEINE KORREKTUR STARTET HIER ===========
-            // KORREKTUR: Prüfe die 'effectiveRoleId' statt nur 'user.role'
+            // KORREKTUR: Prüfe die 'effectiveRoleId' statt nur 'user.role' für die Farbe
             if (effectiveRoleId === 'SYSTEMADMIN') {
                 roleColorClass = 'text-purple-600 font-bold'; 
             } else if (effectiveRoleId === 'ADMIN') {
                 roleColorClass = 'text-red-600 font-bold'; 
             }
-            // (Der 'else'-Fall wird durch die Standarddefinition von roleColorClass abgedeckt)
-            // =========== DEINE KORREKTUR ENDET HIER ===========
         }
         
         let permissionsHTML = '';
         if (!isNotRegistered) {
             const permType = user.permissionType || 'role';
             let selectedDisplayRole = user.displayRole || 'NO_RIGHTS';
-            if (user.role === 'ADMIN' && permType === 'individual') selectedDisplayRole = 'ADMIN';
-            // Das korrigierte displayRoleOptions wird hier eingefügt
+            // if (user.role === 'ADMIN' && permType === 'individual') selectedDisplayRole = 'ADMIN'; // Alte Logik, ggf. fehlerhaft
+            
             const finalDisplayRoleOptionsWithSelection = displayRoleOptions.replace(`value="${selectedDisplayRole}"`, `value="${selectedDisplayRole}" selected`);
             permissionsHTML = `
             <div class="mt-4 pt-3 border-t" data-userid="${userId}">
@@ -420,7 +472,7 @@ export async function renderUserManagement() {
                 </div>
                 <div class="role-selection-area mt-2 ${permType === 'role' ? '' : 'hidden'}">
                     <select class="user-role-select w-full p-2 border rounded-lg bg-white text-sm" ${!canChangePerms ? 'disabled' : ''}>
-                        ${Object.values(ROLES).filter(r => (isSysAdminEditing || (r.id !== 'SYSTEMADMIN' && r.id !== 'ADMIN'))).map(role => `<option value="${role.id}" ${user.role === role.id ? 'selected' : ''}>${escapeHtml(role.name)}</option>`).join('')}
+                        ${Object.values(ROLES).filter(r => (isSysAdminEditing || (r.id !== 'SYSTEMADMIN'))).map(role => `<option value="${role.id}" ${user.role === role.id ? 'selected' : ''}>${escapeHtml(role.name)}</option>`).join('')}
                     </select>
                 </div>
                 <div class="individual-perms-area mt-3 ${permType === 'individual' ? '' : 'hidden'}">
@@ -463,6 +515,7 @@ export async function renderUserManagement() {
     }
 
     // --- Event Listener hinzufügen ---
+    // (Stelle sicher, dass die permSet-Logik oben korrekt ist)
     addAdminUserManagementListeners(userManagementArea, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions);
     restoreAdminScrollIfAny();
 }
