@@ -136,7 +136,6 @@ export function updateUIForMode() {
     if (adminButton) adminButton.style.display = 'none';
 
     // Prüfe die Bedingungen
-    const isSysAdmin = currentUser.role === 'SYSTEMADMIN'; // Echte Rolle
     const isAdminRole = currentUser.role === 'ADMIN';     // Echte Rolle
     const isIndividualAdminDisplay = currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN'; // Individuell mit Admin-Anzeige
     const showAdminButton = isSysAdmin || isAdminRole || isIndividualAdminDisplay; // Zeige Button, wenn eine der Bedingungen zutrifft
