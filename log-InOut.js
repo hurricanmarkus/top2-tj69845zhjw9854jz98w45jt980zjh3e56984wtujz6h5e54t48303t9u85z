@@ -53,6 +53,8 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         console.log("Hole ID Token Result...");
         // Force refresh (true) ist wichtig, um den neuesten Claim nach dem Login zu bekommen
         const idTokenResult = await currentAuthUser.getIdTokenResult(true);
+// *** NEUE LOG-ZEILE: Alle Claims ausgeben ***
+    console.log("Alle Claims im Token:", idTokenResult.claims);
         const userClaimRole = idTokenResult.claims.appRole; // 'appRole' ist der Name des Claims aus der Cloud Function
         console.log("Claim 'appRole' gefunden:", userClaimRole);
 
