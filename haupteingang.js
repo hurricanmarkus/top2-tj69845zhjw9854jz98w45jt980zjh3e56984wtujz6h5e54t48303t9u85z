@@ -562,8 +562,9 @@ export function setupEventListeners() {
         });
     }
 
-// Ersetze deine alte handleLogin Funktion komplett hiermit:
-const handleLogin = () => { // Nicht mehr async!
+// ERSETZE deine alte handleLogin Funktion KOMPLETT hiermit:
+const handleLogin = async () => { // Funktion muss async sein
+    // Initial checks for elements and selected user
     if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) {
         console.error("handleLogin: Missing required elements or selected user.");
         return;
@@ -571,35 +572,82 @@ const handleLogin = () => { // Nicht mehr async!
 
     const appUserId = selectedUserForLogin; // z.B. "MARKUS"
     const enteredPin = adminPinInput.value;
-    const userFromFirestore = USERS[appUserId];
+    const userFromFirestore = USERS[appUserId]; // Benutzerdaten aus Firestore holen (USERS muss durch listenForUserUpdates gefüllt sein!)
 
+    // Prüfen, ob Benutzerdaten schon geladen sind
     if (!userFromFirestore) {
         console.error(`handleLogin: Benutzerdaten für ${appUserId} nicht im globalen USERS Objekt gefunden!`);
-        alertUser("Benutzerdaten noch nicht geladen. Bitte kurz warten.", "error");
-        return;
+        alertUser("Benutzerdaten noch nicht geladen. Bitte kurz warten und erneut versuchen.", "error");
+        return; // Verhindert Fehler, falls USERS noch leer ist
     }
 
     // 1. Lokale PIN-Prüfung
     if (userFromFirestore.key !== enteredPin) {
-        pinError.style.display = 'block';
-        adminPinInput.value = '';
-        return;
+        pinError.style.display = 'block'; // Zeige Fehler im Modal
+        adminPinInput.value = ''; // Leere das PIN-Feld
+        return; // Breche hier ab, wenn der PIN falsch ist
     }
 
-    // 2. PIN korrekt: Modal schließen, User im Speicher merken, Validierung anstoßen
-    pinModal.style.display = 'none';
-    adminPinInput.value = '';
-    pinError.style.display = 'none';
+    // 2. PIN scheint lokal korrekt, schließe Modal und starte Cloud Function Prozess
+    pinModal.style.display = 'none'; // Verstecke das PIN-Modal
+    adminPinInput.value = ''; // Leere das PIN-Feld
+    pinError.style.display = 'none'; // Verstecke eventuelle Fehlermeldung
 
-    console.log(`handleLogin: PIN korrekt für ${appUserId}. Speichere im localStorage und rufe checkCurrentUserValidity auf.`);
-    localStorage.setItem(ADMIN_STORAGE_KEY, appUserId); // Merken, wer sich angemeldet hat
+    // === HIER BEGINNT DER BLOCK, DER DIE CLOUD FUNCTION AUFRUFT ===
+    try {
+        // Sicherheitscheck: Ist der anonyme Benutzer bei Firebase angemeldet?
+        if (!auth || !auth.currentUser) {
+            console.error("handleLogin: Auth oder currentUser ist null VOR dem Cloud Function Aufruf!");
+            // Optional: Kurze Verzögerung (kann oft entfernt werden, wenn auth initialisiert ist)
+            // await new Promise(resolve => setTimeout(resolve, 300));
+            if (!auth || !auth.currentUser) { // Erneut prüfen
+                 throw new Error("Benutzer ist nicht bei Firebase angemeldet.");
+            }
+             console.log("handleLogin: currentUser VOR Cloud Function Call vorhanden:", auth.currentUser.uid);
+        } else {
+             console.log("handleLogin: currentUser VOR Cloud Function Call vorhanden:", auth.currentUser.uid);
+        }
 
-    // Wichtig: checkCurrentUserValidity wird jetzt die Cloud Function aufrufen,
-    // da es den Eintrag im localStorage sieht und feststellt, dass der Claim fehlt.
-    checkCurrentUserValidity(); // Funktion anstoßen (ist async, läuft im Hintergrund)
+        console.log(`Rufe Cloud Function setRoleClaim für ${appUserId} auf...`);
+        // 3. Cloud Function aufrufen
+        // Stelle sicher, dass 'setRoleClaim' oben global initialisiert wurde!
+        if (!setRoleClaim) throw new Error("setRoleClaim Cloud Function Referenz ist nicht initialisiert.");
+        const result = await setRoleClaim({ appUserId: appUserId, pin: enteredPin }); // Übergabe von ID und PIN
+        console.log("Cloud Function Ergebnis:", result.data); // Logge das Ergebnis
 
-    // Direkte Erfolgsmeldung hier entfernen, kommt aus checkCurrentUserValidity nach Claim-Setzen.
-    // alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet!`, "success"); // Vorerst entfernt
+        // 4. Token aktualisieren, um den neuen Claim zu erhalten
+        if (auth.currentUser) {
+            console.log("Aktualisiere ID Token...");
+            const idTokenResult = await auth.currentUser.getIdTokenResult(true); // true erzwingt Refresh
+            const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle zugewiesen'; // Lese den neuen Claim
+            console.log("Token aktualisiert. Neuer Claim 'appRole':", newClaimRole);
+
+            // 5. Speichere die Firestore-ID ("MARKUS") im Local Storage,
+            // damit checkCurrentUserValidity weiß, wen es anzeigen soll.
+            localStorage.setItem(ADMIN_STORAGE_KEY, appUserId);
+
+            // 6. Aktualisiere den Benutzerstatus und die UI (checkCurrentUserValidity liest den Claim)
+            await checkCurrentUserValidity(); // await hinzufügen, da die Funktion async ist
+
+            // 7. Erfolgsmeldung anzeigen
+            alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet! Rolle: ${newClaimRole}`, "success");
+
+        } else {
+             // Sollte nicht passieren, da wir oben geprüft haben
+             throw new Error("Kein Benutzer bei Firebase angemeldet nach Cloud Function Call.");
+        }
+
+    } catch (error) {
+        // 8. Fehlerbehandlung für Cloud Function Aufruf oder Token Refresh
+        console.error("Fehler beim Cloud Function Aufruf oder Token Refresh:", error);
+        // Zeige spezifische Fehlermeldungen von der Cloud Function an, falls vorhanden
+        const message = error.message || "Anmeldung fehlgeschlagen.";
+        alertUser(`Fehler: ${message}`, "error");
+        // Ggf. Benutzer zum Gastmodus zurücksetzen, um einen definierten Zustand zu haben
+        switchToGuestMode(false);
+        updateUIForMode(); // UI für Gastmodus aktualisieren
+    }
+    // === HIER ENDET DER BLOCK ===
 };
 
     if (submitAdminKeyButton) submitAdminKeyButton.addEventListener('click', handleLogin);
