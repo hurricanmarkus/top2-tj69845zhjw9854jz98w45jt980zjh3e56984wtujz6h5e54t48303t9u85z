@@ -1,6 +1,7 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 //
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, getDocs, writeBatch, addDoc, query, where, serverTimestamp, orderBy, limit, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode } from './log-InOut.js';
 import { renderModalUserButtons, listenForUserUpdates, toggleNewUserRoleField, addAdminUserManagementListeners, renderUserManagement } from './admin_benutzersteuerung.js';
@@ -207,6 +208,8 @@ async function initializeFirebase() {
         const app = initializeApp(firebaseConfig);
         db = getFirestore(app);
         auth = getAuth(app);
+        const functions = getFunctions(app, 'europe-west1'); // WICHTIG: Dieselbe Region wie in der Cloud Function!
+const setRoleClaim = httpsCallable(functions, 'setRoleClaim'); // Referenz zur Cloud Function
         console.log("initializeFirebase: Firebase App, DB und Auth initialisiert.");
 
         if (!db) { console.error("initializeFirebase: FEHLER - Firestore DB Objekt (db) konnte nicht initialisiert werden!"); return; }
@@ -578,21 +581,70 @@ export function setupEventListeners() {
         });
     }
 
-    const handleLogin = () => { // Gehört zum PIN Modal
-        if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) return;
-        const userKeyInDB = USERS[selectedUserForLogin]?.key;
-        const enteredPin = adminPinInput.value;
-        if (userKeyInDB === enteredPin) {
-            pinModal.style.display = 'none';
-            adminPinInput.value = '';
-            localStorage.setItem(ADMIN_STORAGE_KEY, selectedUserForLogin);
-            checkCurrentUserValidity();
-            alertUser(`Erfolgreich als ${USERS[selectedUserForLogin]?.name || 'Unbekannt'} angemeldet!`, "success");
+// Ersetze deine alte handleLogin Funktion komplett hiermit:
+const handleLogin = async () => { // Funktion muss async sein
+    // Initial checks for elements and selected user
+    if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) {
+        console.error("handleLogin: Missing required elements or selected user.");
+        return;
+    }
+
+    const appUserId = selectedUserForLogin; // z.B. "MARKUS"
+    const enteredPin = adminPinInput.value;
+    const userFromFirestore = USERS[appUserId]; // Benutzerdaten aus Firestore holen
+
+    // 1. Lokale PIN-Prüfung (optional, aber gut für schnelles UI-Feedback)
+    if (!userFromFirestore || userFromFirestore.key !== enteredPin) {
+        pinError.style.display = 'block'; // Zeige Fehler im Modal
+        adminPinInput.value = ''; // Leere das PIN-Feld
+        return; // Breche hier ab, wenn der PIN lokal schon falsch ist
+    }
+
+    // 2. PIN scheint lokal korrekt, schließe Modal und rufe Cloud Function auf
+    pinModal.style.display = 'none'; // Verstecke das PIN-Modal
+    adminPinInput.value = ''; // Leere das PIN-Feld
+    pinError.style.display = 'none'; // Verstecke eventuelle Fehlermeldung
+
+    try {
+        console.log(`Rufe Cloud Function setRoleClaim für ${appUserId} auf...`);
+        // 3. Rufe die Cloud Function auf und übergib appUserId und PIN
+        // (setRoleClaim muss vorher initialisiert worden sein, siehe Schritt 3 der Anleitung)
+        const result = await setRoleClaim({ appUserId: appUserId, pin: enteredPin });
+        console.log("Cloud Function Ergebnis:", result.data);
+
+        // 4. WICHTIG: Token aktualisieren, um den neuen Claim zu erhalten
+        if (auth.currentUser) {
+            console.log("Aktualisiere ID Token...");
+            const idTokenResult = await auth.currentUser.getIdTokenResult(true); // true erzwingt Refresh
+            const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle'; // Lese den neuen Claim
+            console.log("Token aktualisiert. Neuer Claim 'appRole':", newClaimRole);
+
+            // 5. Speichere die Firestore-ID ("MARKUS") im Local Storage,
+            // damit checkCurrentUserValidity weiß, wen es anzeigen soll.
+            localStorage.setItem(ADMIN_STORAGE_KEY, appUserId);
+
+            // 6. Aktualisiere den Benutzerstatus und die UI (checkCurrentUserValidity sollte jetzt den Claim lesen)
+            await checkCurrentUserValidity(); // await hinzufügen, da die Funktion async ist
+
+            // 7. Erfolgsmeldung anzeigen
+            alertUser(`Erfolgreich als ${userFromFirestore?.name || 'Unbekannt'} angemeldet! Rolle: ${newClaimRole}`, "success");
+
         } else {
-            pinError.style.display = 'block';
-            adminPinInput.value = '';
+             // Sollte nicht passieren, da wir anonym angemeldet sind
+             throw new Error("Kein Benutzer bei Firebase angemeldet nach Cloud Function Call.");
         }
-    };
+
+    } catch (error) {
+        // 8. Fehlerbehandlung
+        console.error("Fehler beim Cloud Function Aufruf oder Token Refresh:", error);
+        // Zeige spezifische Fehlermeldungen von der Cloud Function an, falls vorhanden
+        const message = error.message || "Anmeldung fehlgeschlagen.";
+        alertUser(`Fehler: ${message}`, "error");
+        // Ggf. Benutzer zum Gastmodus zurücksetzen, um einen definierten Zustand zu haben
+        switchToGuestMode(false);
+        updateUIForMode(); // UI für Gastmodus aktualisieren
+    }
+};
 
     if (submitAdminKeyButton) submitAdminKeyButton.addEventListener('click', handleLogin);
     if (adminPinInput) adminPinInput.addEventListener('keydown', (e) => e.key === 'Enter' && handleLogin());
