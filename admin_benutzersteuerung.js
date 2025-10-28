@@ -522,6 +522,7 @@ export async function renderUserManagement() {
 
 // Ersetze NUR diese Funktion in admin_benutzersteuerung.js
 // Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
+// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
 export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions) {
     if (!area) return;
 
@@ -538,11 +539,92 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
         const userCard = e.target.closest('.user-card');
         const userId = userCard?.dataset.userid;
 
-        // --- Buttons AUSSERHALB der Karten ---
+        // --- KORREKTUR: Buttons AUSSERHALB der Karten ---
+        
+        // KORREKTUR: Logik für "Speichern" des neuen Benutzers
         const saveNewUserButton = e.target.closest('#saveNewUserButton');
-        if (saveNewUserButton) { /* ... (Logik zum Speichern neuer Benutzer) ... */ return; }
+        if (saveNewUserButton) {
+            console.log("[CLICK] 'Neuen Benutzer speichern' geklickt.");
+            const form = saveNewUserButton.closest('#addUserFormContainer');
+            if (!form) return;
+
+            const nameInput = form.querySelector('#newUserName');
+            const realNameInput = form.querySelector('#newUserRealName');
+            const keyInput = form.querySelector('#newUserKey');
+            const typeSelect = form.querySelector('#newUserPermissionType');
+            const roleSelect = form.querySelector('#newUserRole');
+
+            const name = nameInput.value.trim();
+            const type = typeSelect.value;
+            const key = keyInput.value; // Kein trim!
+
+            if (!name) return alertUser("Nickname ist ein Pflichtfeld.", "error");
+            if (type !== 'not_registered' && key.length < 4) return alertUser("Passwort muss mind. 4 Zeichen haben.", "error");
+
+            // Sicherheitscheck: Darf der Ersteller diese Rolle zuweisen?
+            if (type === 'role' && roleSelect.value === 'SYSTEMADMIN' && currentUser.role !== 'SYSTEMADMIN') {
+                 return alertUser("Nur Systemadmins dürfen die Rolle SYSTEMADMIN zuweisen.", "error");
+            }
+            if (type === 'role' && roleSelect.value === 'ADMIN' && currentUser.role !== 'SYSTEMADMIN') {
+                 // Ggf. Genehmigungsprozess oder Sperre für Admins
+                 console.warn("Admin versucht Admin-Rolle zuzuweisen. (Noch nicht implementiert)");
+            }
+
+            const newUserData = {
+                name: name,
+                realName: realNameInput.value.trim() || null,
+                key: type !== 'not_registered' ? key : null,
+                permissionType: type,
+                role: type === 'role' ? roleSelect.value : null,
+                customPermissions: [],
+                adminPermissions: {},
+                assignedAdminRoleId: null,
+                displayRole: null,
+                isActive: true
+            };
+
+            try {
+                setButtonLoading(saveNewUserButton, true);
+                // doc() mit usersCollectionRef, um eine Auto-ID zu erhalten
+                const newDocRef = doc(usersCollectionRef); 
+                await setDoc(newDocRef, newUserData);
+                await logAdminAction('user_created', `Neuen Benutzer angelegt: '${name}' (ID: ${newDocRef.id}).`);
+                alertUser(`Benutzer '${name}' erfolgreich angelegt!`, "success");
+                
+                // Formular zurücksetzen
+                nameInput.value = '';
+                realNameInput.value = '';
+                keyInput.value = '';
+                form.classList.add('hidden'); // Formular einklappen
+                const addUserBtn = document.getElementById('showAddUserFormBtn');
+                if (addUserBtn) addUserBtn.textContent = '+ Benutzer anlegen';
+
+            } catch (error) {
+                console.error("Fehler beim Anlegen des Benutzers:", error);
+                alertUser("Fehler beim Anlegen des Benutzers.", "error");
+            } finally {
+                setButtonLoading(saveNewUserButton, false);
+            }
+            return; // Klick behandelt
+        }
+        
+        // KORREKTUR: Logik für "Nicht registrierte" aufklappen
         const notRegisteredToggle = e.target.closest('#notRegisteredToggle');
-        if (notRegisteredToggle) { /* ... (Logik zum Umschalten der Liste) ... */ return; }
+        if (notRegisteredToggle) {
+            console.log("[CLICK] 'Nicht registrierte' Toggle geklickt.");
+            const list = area.querySelector('#notRegisteredList');
+            const icon = notRegisteredToggle.querySelector('svg'); 
+            if (list) {
+                list.classList.toggle('hidden');
+                // Icon drehen (Tailwind 'rotate-180' wird hinzugefügt/entfernt)
+                if (icon) {
+                    icon.classList.toggle('rotate-180'); 
+                }
+            }
+            return; // Klick behandelt
+        }
+        // --- ENDE KORREKTUR ---
+
 
         // --- Aktionen INNERHALB einer Benutzerkarte ---
         if (!userCard || !userId) return;
@@ -550,15 +632,68 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
         // Löschen Button
         const deleteButton = e.target.closest('.delete-user-button');
-        if (deleteButton) { /* ... (Logik zum Löschen) ... */ return; }
+        if (deleteButton) {
+            const userToDelete = USERS[userId];
+            if (!userToDelete) return;
+            if (!confirm(`Soll der Benutzer '${userToDelete.name}' wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden.`)) return;
+            
+            rememberAdminScroll();
+            try {
+                // TODO: Genehmigungsprozess hier einfügen, falls 'permSet.approvalRequired.deleteUser' true ist
+                await deleteDoc(doc(usersCollectionRef, userId));
+                await logAdminAction('user_deleted', `Benutzer '${userToDelete.name}' gelöscht.`);
+                alertUser(`Benutzer '${userToDelete.name}' gelöscht.`, "success");
+            } catch (error) {
+                console.error("Fehler beim Löschen:", error);
+                alertUser("Fehler beim Löschen.", "error");
+            }
+            return; 
+        }
 
         // Umbenennen Button (Stift)
         const renameButton = e.target.closest('.rename-user-btn');
-        if (renameButton) { /* ... (Logik zum Anzeigen der Edit-Felder) ... */ return; }
+        if (renameButton) {
+            const nameDisplay = userCard.querySelector('.name-display');
+            const nameEdit = userCard.querySelector('.name-edit-container');
+            if (nameDisplay && nameEdit) {
+                nameDisplay.classList.add('hidden');
+                nameEdit.classList.remove('hidden');
+            }
+            return; 
+        }
 
         // Speichern nach Umbenennen Button (Häkchen)
         const saveNameButton = e.target.closest('.save-name-btn');
-        if (saveNameButton) { /* ... (Logik zum Speichern des Namens) ... */ return; }
+        if (saveNameButton) {
+            const nameEditContainer = saveNameButton.closest('.name-edit-container');
+            const nameDisplay = userCard.querySelector('.name-display');
+            if (!nameEditContainer || !nameDisplay) return;
+
+            const newNickname = nameEditContainer.querySelector('.edit-nickname-input').value.trim();
+            const newRealName = nameEditContainer.querySelector('.edit-realname-input').value.trim();
+            
+            if (!newNickname) return alertUser("Nickname darf nicht leer sein.", "error");
+
+            rememberAdminScroll();
+            try {
+                // TODO: Genehmigungsprozess
+                await updateDoc(doc(usersCollectionRef, userId), {
+                    name: newNickname,
+                    realName: newRealName || null
+                });
+                await logAdminAction('user_renamed', `Benutzer ${userId} umbenannt in '${newNickname}'.`);
+                
+                // UI direkt aktualisieren (Listener ist schneller)
+                nameDisplay.classList.remove('hidden');
+                nameEditContainer.classList.add('hidden');
+                // (Der onSnapshot-Listener wird den Rest erledigen)
+
+            } catch (error) {
+                 console.error("Fehler beim Umbenennen:", error);
+                 alertUser("Fehler beim Umbenennen.", "error");
+            }
+            return; 
+        }
 
         // --- Speichern der Berechtigungen Button ---
         const savePermsButton = e.target.closest('.save-perms-button');
@@ -579,50 +714,50 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 const roleSelect = permContainer.querySelector('.user-role-select');
                 if (!roleSelect) { console.error(`[CLICK] Konnte Rollen-Select für User ${userId} nicht finden!`); return; }
                 const newRole = roleSelect.value;
-                // Wenn Typ 'role', setze die role-Eigenschaft, leere individuelle Felder
+                
+                // Sicherheitscheck
+                if (newRole === 'SYSTEMADMIN' && currentUser.role !== 'SYSTEMADMIN') {
+                    return alertUser("Nur Systemadmins dürfen die Rolle SYSTEMADMIN zuweisen.", "error");
+                }
+
                 updateData = {
                     ...updateData, // Behalte permissionType: 'role'
                     role: newRole,
                     customPermissions: [], // Individuelle löschen
                     displayRole: null,     // Angezeigte Rolle löschen
-                    assignedAdminRoleId: null, // Admin-Rolle löschen (falls es keine Benutzerrolle Admin mehr ist)
-                    adminPermissions: {}       // Admin-Rechte löschen
+                    assignedAdminRoleId: null, 
+                    adminPermissions: {}       
                 };
-                 // Wichtig: Falls die gewählte Rolle ADMIN oder SYSTEMADMIN ist,
-                 // muss hier sichergestellt werden, dass keine individuellen Rechte mehr gelten.
-                 // Das Leeren von customPermissions sollte ausreichen.
 
             } else { // type === 'individual'
                 const customPermissions = Array.from(permContainer.querySelectorAll('.custom-perm-checkbox:checked')).map(cb => cb.dataset.perm);
                 const displayRoleSelect = permContainer.querySelector('.display-role-select');
                 if (!displayRoleSelect) { console.error(`[CLICK] Konnte Display-Rollen-Select für User ${userId} nicht finden!`); return; }
-                const selectedDisplayRole = displayRoleSelect.value || 'NO_RIGHTS'; // Default zu NO_RIGHTS falls leer
+                const selectedDisplayRole = displayRoleSelect.value || 'NO_RIGHTS'; 
 
-                // --- KORRIGIERTE LOGIK FÜR INDIVIDUAL ---
-                // Setze die tatsächliche 'role' auf null (oder eine Basisrolle wie 'ANGEMELDET'),
-                // damit checkCurrentUserValidity nicht fälschlicherweise Admin-Rechte gibt.
+                // KORRIGIERTE LOGIK FÜR INDIVIDUAL
                 updateData = {
                     ...updateData, // Behalte permissionType: 'individual'
-                    role: null, // Wichtig: Echte Rolle entfernen/zurücksetzen!
+                    role: 'ANGEMELDET', // Wichtig: Echte Rolle zurücksetzen! (oder null, je nach DB-Struktur)
                     customPermissions: customPermissions,
-                    // Speichere die ausgewählte Anzeige-Rolle NUR, wenn sie nicht "Keine Rechte" ist
                     displayRole: (selectedDisplayRole !== 'NO_RIGHTS' ? selectedDisplayRole : null),
-                    assignedAdminRoleId: null, // Admin-Rolle entfernen
-                    adminPermissions: {}       // Admin-Rechte entfernen
+                    assignedAdminRoleId: null, 
+                    adminPermissions: {}       
                 };
-                // --- ENDE KORRIGIERTE LOGIK ---
             }
 
             console.log("[CLICK] Finale Update-Daten für Berechtigungen:", updateData);
 
             try {
+                // TODO: Genehmigungsprozess
                 console.log(`[CLICK] Versuche updateDoc für User ${userId}...`);
                 await updateDoc(doc(usersCollectionRef, userId), updateData);
                 console.log(`[CLICK] updateDoc für User ${userId} erfolgreich.`);
+                await logAdminAction('user_perms_changed', `Berechtigungen für ${USERS[userId]?.name || userId} geändert.`);
+                
                 const saveBtnContainer = permContainer.querySelector('.save-perms-container');
                 if (saveBtnContainer) saveBtnContainer.classList.add('hidden');
                 alertUser("Berechtigungen gespeichert!", "success");
-                // UI wird durch onSnapshot aktualisiert.
             } catch (error) {
                 console.error(`[CLICK] FEHLER beim Speichern der Berechtigungen für User ${userId}:`, error);
                 alertUser(`Fehler beim Speichern: ${error.message}`, "error");
@@ -650,12 +785,27 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
              // --- Aktivieren/Deaktivieren Toggle ---
              if (target.classList.contains('user-active-toggle')) {
                 console.log(`[CHANGE] Aktiv-Toggle geändert. checked=${target.checked}`);
-                const isChecked = target.checked;
+                const isChecked = target.checked; // true wenn "Gesperrt" (also isActive = false)
                  if (!confirm(`Status von ${USERS[userId].name} ändern?`)) { target.checked = !isChecked; return; }
-                 // Berechtigungen prüfen...
-                 let currentAdminPerms = {}; if (currentUser.role === 'ADMIN') { /*...*/ } const currentPermSet = (currentUser.role === 'SYSTEMADMIN') ? { canToggleUserActive: true } : currentAdminPerms; const requiresApproval = (currentUser.role === 'ADMIN' && currentPermSet.approvalRequired?.toggleUserActive);
-                 if (requiresApproval) { target.checked = !isChecked; await createApprovalRequest('TOGGLE_USER_ACTIVE', userId, { isActive: !isChecked }); }
-                 else { try { await updateDoc(doc(usersCollectionRef, userId), { isActive: !isChecked }); } catch (error) { console.error("Fehler:", error); alertUser("Fehler.", "error"); target.checked = !isChecked; } }
+                 
+                 let currentAdminPerms = {}; if (currentUser.role === 'ADMIN' && USERS[currentUser.mode]) { currentAdminPerms = USERS[currentUser.mode].adminPermissions || {}; } 
+                 const currentPermSet = (currentUser.role === 'SYSTEMADMIN') ? { canToggleUserActive: true } : currentAdminPerms; 
+                 const requiresApproval = (currentUser.role === 'ADMIN' && currentPermSet.approvalRequired?.toggleUserActive);
+                 
+                 if (requiresApproval) { 
+                     target.checked = !isChecked; // Aktion zurücksetzen
+                     await createApprovalRequest('TOGGLE_USER_ACTIVE', userId, { isActive: !isChecked }); 
+                 }
+                 else { 
+                     try { 
+                         await updateDoc(doc(usersCollectionRef, userId), { isActive: !isChecked }); 
+                         await logAdminAction('user_toggled_active', `Benutzer ${USERS[userId].name} Status auf ${!isChecked} gesetzt.`);
+                     } catch (error) { 
+                         console.error("Fehler:", error); 
+                         alertUser("Fehler.", "error"); 
+                         target.checked = !isChecked; 
+                     } 
+                 }
                  return;
              }
 
@@ -663,9 +813,28 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             if (target.matches('.perm-type-toggle, .user-role-select, .custom-perm-checkbox, .display-role-select')) {
                  console.log(`[CHANGE] Berechtigungs-Input geändert.`);
                 const container = target.closest('[data-userid]'); if (!container) return;
-                if (target.classList.contains('perm-type-toggle')) { container.querySelector('.role-selection-area')?.classList.toggle('hidden', target.value !== 'role'); container.querySelector('.individual-perms-area')?.classList.toggle('hidden', target.value !== 'individual'); }
-                const saveBtnContainer = container.querySelector('.save-perms-container'); if (saveBtnContainer) { saveBtnContainer.classList.remove('hidden'); } else { console.warn("[CHANGE] Speicher-Button Container nicht gefunden!"); }
-                if (target.dataset.perm === 'CHECKLIST') { const individualPermsArea = container.querySelector('.individual-perms-area'); if (individualPermsArea) { setupPermissionDependencies(individualPermsArea); } }
+                
+                // Zeige/verstecke Bereiche
+                if (target.classList.contains('perm-type-toggle')) { 
+                    container.querySelector('.role-selection-area')?.classList.toggle('hidden', target.value !== 'role'); 
+                    container.querySelector('.individual-perms-area')?.classList.toggle('hidden', target.value !== 'individual'); 
+                }
+                
+                // Zeige Speicher-Button
+                const saveBtnContainer = container.querySelector('.save-perms-container'); 
+                if (saveBtnContainer) { 
+                    saveBtnContainer.classList.remove('hidden'); 
+                } else { 
+                    console.warn("[CHANGE] Speicher-Button Container nicht gefunden!"); 
+                }
+                
+                // Abhängigkeiten (z.B. CHECKLIST_SWITCH)
+                if (target.dataset.perm === 'CHECKLIST') { 
+                    const individualPermsArea = container.querySelector('.individual-perms-area'); 
+                    if (individualPermsArea) { 
+                        setupPermissionDependencies(individualPermsArea); 
+                    } 
+                }
                  return;
             }
             console.log("[CHANGE] Änderung erkannt, aber kein bekannter Input-Typ.");
@@ -674,7 +843,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
     }
 
 } // Ende addAdminUserManagementListeners
-
 
 export function toggleNewUserRoleField() {
     const typeSelect = document.getElementById('newUserPermissionType'); // 
