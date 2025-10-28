@@ -126,7 +126,7 @@ export function updateUIForMode() {
     });
 
     // Zeige/Verstecke Einstellungs- und Admin-Knopf auf der Startseite
-// --- KORRIGIERTE LOGIK für Einstellungs- und Admin-Button ---
+    // --- KORRIGIERTE LOGIK für Einstellungs- und Admin-Button ---
     const settingsButton = document.getElementById('mainSettingsButton');
     const adminButton = document.getElementById('mainAdminButton');
     const homeActionButtons = document.getElementById('homeActionButtons'); // Container holen
@@ -158,20 +158,20 @@ export function updateUIForMode() {
         // ODER wenn Admin/Sysadmin KEINE Passwort-Rechte hat (selten, aber möglich)
         const canSeePasswords = isSysAdmin || (isAdminRole && effectiveAdminPerms.canSeePasswords);
         if (currentUser.mode !== GUEST_MODE && !showAdminButton && settingsButton) { // Zeige nur an, wenn KEIN Admin-Button angezeigt wird
-             settingsButton.style.display = 'block';
-             settingsButton.className = 'bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-lg shadow-lg hover:bg-gray-700 transition z-10'; // Standard-Styling
+            settingsButton.style.display = 'block';
+            settingsButton.className = 'bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-lg shadow-lg hover:bg-gray-700 transition z-10'; // Standard-Styling
         } else if (currentUser.mode !== GUEST_MODE && showAdminButton && !canSeePasswords && settingsButton) {
-             // Spezialfall: Admin/Sysadmin OHNE Passwortrechte sieht trotzdem Einstellungen
-             settingsButton.style.display = 'block';
-             settingsButton.className = 'bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-lg shadow-lg hover:bg-gray-700 transition z-10';
+            // Spezialfall: Admin/Sysadmin OHNE Passwortrechte sieht trotzdem Einstellungen
+            settingsButton.style.display = 'block';
+            settingsButton.className = 'bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-lg shadow-lg hover:bg-gray-700 transition z-10';
         }
 
         // Container (#homeActionButtons) nur anzeigen, wenn mindestens ein Button sichtbar ist
         if (homeActionButtons) {
-             const settingsVisible = settingsButton && settingsButton.style.display !== 'none';
-             const adminVisible = adminButton && adminButton.style.display !== 'none';
-             homeActionButtons.style.display = (settingsVisible || adminVisible) ? 'flex' : 'none'; // 'flex' verwenden
-             homeActionButtons.classList.toggle('hidden', !(settingsVisible || adminVisible)); // hidden Klasse auch steuern
+            const settingsVisible = settingsButton && settingsButton.style.display !== 'none';
+            const adminVisible = adminButton && adminButton.style.display !== 'none';
+            homeActionButtons.style.display = (settingsVisible || adminVisible) ? 'flex' : 'none'; // 'flex' verwenden
+            homeActionButtons.classList.toggle('hidden', !(settingsVisible || adminVisible)); // hidden Klasse auch steuern
         }
     }
     // --- ENDE KORRIGIERTE LOGIK ---
@@ -220,10 +220,23 @@ export function updateUIForMode() {
     }
 
     // Zeige Admin-Keine-Rechte-Meldung nur, wenn Admin-Seite aktiv ist
-    if (isAdmin && document.getElementById('adminView')?.classList.contains('active')) { // Sicherer Zugriff
-        const hasAnyPermission = Object.values(effectiveAdminPerms).some(perm => perm === true);
-        if (noAdminPermissionsPrompt) noAdminPermissionsPrompt.style.display = hasAnyPermission ? 'none' : 'block';
+    const adminView = document.getElementById('adminView');
+
+    if (adminView?.classList.contains('active') && noAdminPermissionsPrompt) { // Nur ausführen, wenn Admin-Seite aktiv ist
+        // Prüfe, ob IRGENDWELCHE effektiven Admin-Rechte vorhanden sind
+        const hasAnyPermission = isSysAdmin || Object.values(effectiveAdminPerms).some(perm => perm === true);
+
+        // Zeige die Meldung, wenn der Benutzer Admin-Zugriff haben SOLLTE (showAdminButton ist true),
+        // aber KEINE spezifischen Rechte hat (hasAnyPermission ist false) UND er nicht der Gast ist.
+        const shouldShowPrompt = showAdminButton && !hasAnyPermission && currentUser.mode !== GUEST_MODE;
+
+        noAdminPermissionsPrompt.style.display = shouldShowPrompt ? 'block' : 'none';
+        console.log("updateUIForMode: 'Keine Admin Rechte'-Prompt angezeigt:", shouldShowPrompt); // Debug
+    } else if (noAdminPermissionsPrompt) {
+        // Sicherstellen, dass die Meldung ausgeblendet ist, wenn die Admin-Seite nicht aktiv ist
+        noAdminPermissionsPrompt.style.display = 'none';
     }
+
 
     // Aktualisiere Footer (Benutzername, Login/Logout Button)
     const footerUser = document.getElementById('footerUser');
@@ -249,7 +262,7 @@ export function updateUIForMode() {
             if (userSelectionModal) {
                 userSelectionModal.style.display = 'flex';
             } else {
-                 console.error("FEHLER: Konnte #userSelectionModal nicht finden!"); // Spion
+                console.error("FEHLER: Konnte #userSelectionModal nicht finden!"); // Spion
             }
         };
         // --- ENDE KORREKTUR ---
@@ -258,7 +271,7 @@ export function updateUIForMode() {
     } else {
         // Code zum Anzeigen des eingeloggten Benutzers und Logout-Button
 
-// Code zum Anzeigen des eingeloggten Benutzers und Logout-Button
+        // Code zum Anzeigen des eingeloggten Benutzers und Logout-Button
         const user = USERS ? USERS[currentUser.mode] : null; // Sicherer Zugriff auf USERS
         let roleNameToDisplay = 'Unbekannt';
         let roleColor = 'text-gray-300'; // Standardfarbe
