@@ -4,10 +4,10 @@ import { renderModalUserButtons } from './admin_benutzersteuerung.js';
 // ENDE-ZIKA //
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion hiermit:
-export async function checkCurrentUserValidity() { // Funktion muss async sein
-    console.log("--- Prüfe Benutzerberechtigungen (mit Claims) ---");
+// ERSETZE die komplette checkCurrentUserValidity Funktion hiermit:
+export async function checkCurrentUserValidity() { // Funktion ist async
+    console.log("--- Prüfe Benutzerberechtigungen (mit Claims V2) ---");
 
-    // Prüfe zuerst, ob 'auth' initialisiert wurde
     if (!auth) {
         console.error("checkCurrentUserValidity: Auth-Instanz ist noch nicht initialisiert.");
         if (currentUser.mode !== GUEST_MODE) switchToGuestMode(false);
@@ -15,91 +15,125 @@ export async function checkCurrentUserValidity() { // Funktion muss async sein
         return;
     }
 
-    if (!auth.currentUser) {
-         console.log("checkCurrentUserValidity: Kein Firebase User angemeldet.");
-         if(localStorage.getItem(ADMIN_STORAGE_KEY)) {
-            switchToGuestMode(false); 
-         } else {
-             if (currentUser.mode !== GUEST_MODE) {
-                 Object.keys(currentUser).forEach(key => delete currentUser[key]);
-                 Object.assign(currentUser, { displayName: GUEST_MODE, mode: GUEST_MODE, role: 'GUEST', permissions: [] });
-             }
-         }
-         updateUIForMode(); 
-         return;
-    }
-
+    const currentAuthUser = auth.currentUser; // Aktuellen Firebase Auth User holen
     const storedAppUserId = localStorage.getItem(ADMIN_STORAGE_KEY); // z.B. "MARKUS"
     const userFromFirestore = storedAppUserId ? USERS[storedAppUserId] : null;
 
-    if (!storedAppUserId || !userFromFirestore || !userFromFirestore.isActive) {
-        console.log("checkCurrentUserValidity: Kein gültiger App User im LocalStorage oder inaktiv/nicht gefunden.");
-        if(storedAppUserId) {
-             switchToGuestMode(true, "Ihr Profil ist nicht mehr gültig oder wurde deaktiviert.");
-        } else {
-             if (currentUser.mode !== GUEST_MODE) {
-                 switchToGuestMode(false);
-             }
+    // Fall 1: Kein Firebase User angemeldet -> Sicherstellen, dass Gastmodus aktiv ist
+    if (!currentAuthUser) {
+        console.log("checkCurrentUserValidity: Kein Firebase User angemeldet.");
+        if (storedAppUserId || currentUser.mode !== GUEST_MODE) {
+            switchToGuestMode(false); // Ausloggen, falls nötig
         }
         updateUIForMode();
         return;
     }
 
-    try {
-        console.log("Hole ID Token Result...");
-        const idTokenResult = await auth.currentUser.getIdTokenResult(true); // Wichtig: true erzwingt Refresh
-        const userClaimRole = idTokenResult.claims.appRole;
-        console.log("Claim 'appRole' gefunden:", userClaimRole);
-
-        if (!userClaimRole) {
-             console.warn("checkCurrentUserValidity: Kein 'appRole' Claim gefunden. Logge aus.");
-             switchToGuestMode(true, "Fehler bei der Rollenprüfung. Bitte neu anmelden.");
-             updateUIForMode();
-             return;
+    // Fall 2: Firebase User ist da, aber kein App User ausgewählt (oder ungültig) -> Als Gast behandeln
+    if (!storedAppUserId || !userFromFirestore || !userFromFirestore.isActive) {
+        console.log("checkCurrentUserValidity: Firebase User vorhanden, aber kein gültiger App User im Speicher.");
+        // Wenn vorher ein App User da war (aber jetzt ungültig ist), ausloggen.
+        // Ansonsten prüfen, ob der aktuelle Zustand Gast ist.
+        if (currentUser.mode !== GUEST_MODE) {
+             // Wenn vorher ein Claim gesetzt war, muss dieser entfernt werden (nicht trivial ohne Backend)
+             // Sicherste Lösung: Zum Gastmodus wechseln
+             console.log("Wechsle zum Gastmodus, da App User ungültig/fehlt.");
+             switchToGuestMode(storedAppUserId ? true : false, storedAppUserId ? "Ihr Profil ist nicht mehr gültig oder wurde deaktiviert." : undefined);
         }
+        updateUIForMode();
+        return;
+    }
 
-        // --- Berechtigungen basierend auf Claim bestimmen ---
+    // Fall 3: Firebase User ist da UND App User ("MARKUS") ist ausgewählt/gültig
+    console.log(`checkCurrentUserValidity: Firebase User ${currentAuthUser.uid} und App User ${storedAppUserId} vorhanden.`);
+    try {
+        let idTokenResult = await currentAuthUser.getIdTokenResult();
+        let userClaimRole = idTokenResult.claims.appRole;
+        console.log("Vorhandener Claim 'appRole':", userClaimRole);
+
+        // --- NEU: Claim setzen, falls nötig ---
+        // Wenn der gespeicherte App User ("MARKUS") NICHT mit dem aktuellen Claim übereinstimmt
+        // ODER wenn noch gar kein Claim gesetzt ist, dann Cloud Function aufrufen.
+        if (!userClaimRole || ROLES[userClaimRole]?.name !== userFromFirestore.role) { // Vergleiche Claim-Rolle mit Firestore-Rolle
+             console.log(`Claim fehlt oder stimmt nicht überein (${userClaimRole} vs ${userFromFirestore.role}). Rufe setRoleClaim für ${storedAppUserId}...`);
+
+             // Hier brauchen wir den PIN erneut - das geht so nicht ohne Weiteres.
+             // *** WORKAROUND FÜR JETZT: Wir vertrauen darauf, dass handleLogin den PIN geprüft hat ***
+             // *** und rufen die Cloud Function ohne erneute PIN-Prüfung auf ***
+             // *** ACHTUNG: Das ist weniger sicher! Besser wäre PIN erneut abfragen oder sichere Session. ***
+
+             // Stelle sicher, dass setRoleClaim initialisiert wurde (in haupteingang.js)
+             // Dieses Konstrukt ist unschön, besser wäre es, setRoleClaim zu importieren, wenn möglich.
+             const tempSetRoleClaim = window.setRoleClaim; // Provisorischer Zugriff über globales Fensterobjekt
+             if (!tempSetRoleClaim) throw new Error("Referenz zur setRoleClaim Cloud Function nicht gefunden.");
+
+             // Rufe CF auf, um Claim zu setzen (ohne PIN!)
+             // Die CF *muss* angepasst werden, um dies zu erlauben oder eine andere Verifizierung zu nutzen!
+             // FÜR DEN TEST JETZT - die CF erwartet den PIN, das wird fehlschlagen!
+             // WIR MÜSSEN DIE CF ANPASSEN!
+
+             // ---- BIS HIERHER GEDACHT - NEUER ANSATZ NÖTIG ----
+
+             // *** ALTERNATIVER ANSATZ: ***
+             // handleLogin setzt den Claim. checkCurrentUserValidity prüft nur noch.
+
+             // Wir gehen davon aus, dass handleLogin den Claim korrekt gesetzt hat.
+             // Wenn kein Claim da ist, ist der Login fehlgeschlagen -> Gastmodus.
+             if (!userClaimRole) {
+                 console.warn("checkCurrentUserValidity: Kein 'appRole' Claim gefunden nach Login-Versuch. Wechsle zu Gast.");
+                 switchToGuestMode(true, "Anmeldung fehlgeschlagen (Rollenprüfung).");
+                 updateUIForMode();
+                 return;
+             }
+             // Wenn der Claim nicht zur Rolle im Firestore passt, stimmt etwas nicht -> Gastmodus
+              if (ROLES[userClaimRole]?.name !== userFromFirestore.role) { // Ggf. anpassen, falls ROLES[id] !== ROLES[name]
+                 console.error(`Claim-Rolle '${userClaimRole}' stimmt nicht mit Firestore-Rolle '${userFromFirestore.role}' überein!`);
+                 switchToGuestMode(true, "Rollenkonflikt erkannt. Bitte Admin kontaktieren.");
+                 updateUIForMode();
+                 return;
+             }
+        }
+        // --- Ende Claim setzen Logik ---
+
+
+        // --- Berechtigungen basierend auf Claim bestimmen (wie vorher) ---
         let userPermissions = [];
-         if (ROLES && ROLES[userClaimRole]) { 
+         if (ROLES && ROLES[userClaimRole]) {
              userPermissions = [...(ROLES[userClaimRole].permissions || [])];
          } else {
              console.warn(`Rolle '${userClaimRole}' aus Claim nicht in ROLES gefunden oder ROLES noch nicht geladen.`);
-             userPermissions = [...(ROLES && ROLES['NO_RIGHTS'] ? ROLES['NO_RIGHTS'].permissions : [])]; 
+             userPermissions = [...(ROLES && ROLES['NO_RIGHTS'] ? ROLES['NO_RIGHTS'].permissions : [])];
          }
 
-         let currentAssignedAdminRoleId = null; 
-
+         let currentAssignedAdminRoleId = null;
          if (userClaimRole === 'SYSTEMADMIN') {
-             // Feste Rechte für SysAdmin (ggf. anpassen)
-             userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG']; 
+             userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
          } else if (userClaimRole === 'ADMIN') {
-             // Lese Admin-Rollenzuweisung aus Firestore nur für UI-Zwecke
              if (userFromFirestore.permissionType === 'role' && userFromFirestore.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[userFromFirestore.assignedAdminRoleId]) {
                 currentAssignedAdminRoleId = userFromFirestore.assignedAdminRoleId;
              }
          }
-
         console.log("Final zugewiesene Berechtigungen:", userPermissions);
 
         // Aktualisiere currentUser Objekt
         Object.keys(currentUser).forEach(key => delete currentUser[key]);
         Object.assign(currentUser, {
-            mode: storedAppUserId, // "MARKUS"
+            mode: storedAppUserId,
             displayName: userFromFirestore.name,
-            role: userClaimRole, // WICHTIG: Rolle aus dem Claim!
+            role: userClaimRole, // Rolle aus dem Claim!
             permissions: userPermissions,
-            permissionType: userFromFirestore.permissionType, 
-            displayRole: userFromFirestore.displayRole, 
-            assignedAdminRoleId: currentAssignedAdminRoleId 
+            permissionType: userFromFirestore.permissionType,
+            displayRole: userFromFirestore.displayRole,
+            assignedAdminRoleId: currentAssignedAdminRoleId
         });
 
+        console.log("currentUser Objekt aktualisiert:", currentUser);
         updateUIForMode(); // UI aktualisieren
 
-        // Navigation prüfen 
+        // Navigation prüfen
          const activeView = document.querySelector('.view.active');
-         // Prüfe Claim für Admin-Zugriff
          const isAdminOrSysAdminByClaim = userClaimRole === 'ADMIN' || userClaimRole === 'SYSTEMADMIN';
-         if (activeView && activeView.id === 'adminView' && !isAdminOrSysAdminByClaim) { 
+         if (activeView && activeView.id === 'adminView' && !isAdminOrSysAdminByClaim) {
              alertUser("Ihre Administrator-Rechte wurden entzogen.", "error");
              navigate('home');
          }

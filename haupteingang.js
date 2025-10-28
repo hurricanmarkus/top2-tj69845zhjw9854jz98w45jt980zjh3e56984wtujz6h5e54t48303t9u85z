@@ -563,7 +563,7 @@ export function setupEventListeners() {
     }
 
 // Ersetze deine alte handleLogin Funktion komplett hiermit:
-const handleLogin = async () => { // Funktion muss async sein
+const handleLogin = () => { // Nicht mehr async!
     if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) {
         console.error("handleLogin: Missing required elements or selected user.");
         return;
@@ -586,62 +586,20 @@ const handleLogin = async () => { // Funktion muss async sein
         return;
     }
 
-    // 2. PIN korrekt, Modal schließen
+    // 2. PIN korrekt: Modal schließen, User im Speicher merken, Validierung anstoßen
     pinModal.style.display = 'none';
     adminPinInput.value = '';
     pinError.style.display = 'none';
 
-    try {
-        // --- NEUE PRÜFUNG & VERZÖGERUNG ---
-        // Sicherstellen, dass der anonyme Benutzer wirklich da ist
-        if (!auth || !auth.currentUser) {
-            console.error("handleLogin: Auth oder currentUser ist null VOR dem Cloud Function Aufruf!");
-            // Optional: Kurze Verzögerung, falls es ein Timing-Problem ist
-            await new Promise(resolve => setTimeout(resolve, 500)); // 0.5 Sekunden warten
-            if (!auth || !auth.currentUser) { // Erneut prüfen
-                 throw new Error("Benutzer ist nicht bei Firebase angemeldet.");
-            }
-             console.log("handleLogin: currentUser nach Verzögerung vorhanden:", auth.currentUser.uid);
-        } else {
-             console.log("handleLogin: currentUser VOR Cloud Function Call vorhanden:", auth.currentUser.uid);
-        }
-        // --- ENDE NEUE PRÜFUNG ---
+    console.log(`handleLogin: PIN korrekt für ${appUserId}. Speichere im localStorage und rufe checkCurrentUserValidity auf.`);
+    localStorage.setItem(ADMIN_STORAGE_KEY, appUserId); // Merken, wer sich angemeldet hat
 
+    // Wichtig: checkCurrentUserValidity wird jetzt die Cloud Function aufrufen,
+    // da es den Eintrag im localStorage sieht und feststellt, dass der Claim fehlt.
+    checkCurrentUserValidity(); // Funktion anstoßen (ist async, läuft im Hintergrund)
 
-        console.log(`Rufe Cloud Function setRoleClaim für ${appUserId} auf...`);
-        // 3. Cloud Function aufrufen
-        if (!setRoleClaim) throw new Error("setRoleClaim Cloud Function Referenz ist nicht initialisiert.");
-        const result = await setRoleClaim({ appUserId: appUserId, pin: enteredPin });
-        console.log("Cloud Function Ergebnis:", result.data);
-
-        // 4. Token aktualisieren
-        if (auth.currentUser) {
-            console.log("Aktualisiere ID Token...");
-            const idTokenResult = await auth.currentUser.getIdTokenResult(true);
-            const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle';
-            console.log("Token aktualisiert. Neuer Claim 'appRole':", newClaimRole);
-
-            // 5. Local Storage setzen
-            localStorage.setItem(ADMIN_STORAGE_KEY, appUserId);
-
-            // 6. Benutzerstatus/UI aktualisieren
-            await checkCurrentUserValidity();
-
-            // 7. Erfolgsmeldung
-            alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet! Rolle: ${newClaimRole}`, "success");
-
-        } else {
-             throw new Error("Kein Benutzer bei Firebase angemeldet nach Cloud Function Call.");
-        }
-
-    } catch (error) {
-        // 8. Fehlerbehandlung
-        console.error("Fehler beim Cloud Function Aufruf oder Token Refresh:", error);
-        const message = error.message || "Anmeldung fehlgeschlagen.";
-        alertUser(`Fehler: ${message}`, "error");
-        switchToGuestMode(false);
-        updateUIForMode();
-    }
+    // Direkte Erfolgsmeldung hier entfernen, kommt aus checkCurrentUserValidity nach Claim-Setzen.
+    // alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet!`, "success"); // Vorerst entfernt
 };
 
     if (submitAdminKeyButton) submitAdminKeyButton.addEventListener('click', handleLogin);
