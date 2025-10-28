@@ -571,12 +571,12 @@ const handleLogin = async () => { // Funktion muss async sein
 
     const appUserId = selectedUserForLogin; // z.B. "MARKUS"
     const enteredPin = adminPinInput.value;
-    const userFromFirestore = USERS[appUserId]; // Benutzerdaten aus Firestore holen (USERS muss durch listenForUserUpdates gefüllt sein!)
+    const userFromFirestore = USERS[appUserId];
 
     if (!userFromFirestore) {
         console.error(`handleLogin: Benutzerdaten für ${appUserId} nicht im globalen USERS Objekt gefunden!`);
         alertUser("Benutzerdaten noch nicht geladen. Bitte kurz warten.", "error");
-        return; // Verhindert Fehler, falls USERS noch leer ist
+        return;
     }
 
     // 1. Lokale PIN-Prüfung
@@ -586,22 +586,36 @@ const handleLogin = async () => { // Funktion muss async sein
         return;
     }
 
-    // 2. PIN korrekt, Modal schließen & Cloud Function
+    // 2. PIN korrekt, Modal schließen
     pinModal.style.display = 'none';
     adminPinInput.value = '';
     pinError.style.display = 'none';
 
     try {
+        // --- NEUE PRÜFUNG & VERZÖGERUNG ---
+        // Sicherstellen, dass der anonyme Benutzer wirklich da ist
+        if (!auth || !auth.currentUser) {
+            console.error("handleLogin: Auth oder currentUser ist null VOR dem Cloud Function Aufruf!");
+            // Optional: Kurze Verzögerung, falls es ein Timing-Problem ist
+            await new Promise(resolve => setTimeout(resolve, 500)); // 0.5 Sekunden warten
+            if (!auth || !auth.currentUser) { // Erneut prüfen
+                 throw new Error("Benutzer ist nicht bei Firebase angemeldet.");
+            }
+             console.log("handleLogin: currentUser nach Verzögerung vorhanden:", auth.currentUser.uid);
+        } else {
+             console.log("handleLogin: currentUser VOR Cloud Function Call vorhanden:", auth.currentUser.uid);
+        }
+        // --- ENDE NEUE PRÜFUNG ---
+
+
         console.log(`Rufe Cloud Function setRoleClaim für ${appUserId} auf...`);
         // 3. Cloud Function aufrufen
-        // Stelle sicher, dass 'setRoleClaim' oben global initialisiert wurde!
         if (!setRoleClaim) throw new Error("setRoleClaim Cloud Function Referenz ist nicht initialisiert.");
         const result = await setRoleClaim({ appUserId: appUserId, pin: enteredPin });
         console.log("Cloud Function Ergebnis:", result.data);
 
         // 4. Token aktualisieren
-        // Stelle sicher, dass 'auth' oben global initialisiert wurde!
-        if (auth && auth.currentUser) {
+        if (auth.currentUser) {
             console.log("Aktualisiere ID Token...");
             const idTokenResult = await auth.currentUser.getIdTokenResult(true);
             const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle';
@@ -610,8 +624,8 @@ const handleLogin = async () => { // Funktion muss async sein
             // 5. Local Storage setzen
             localStorage.setItem(ADMIN_STORAGE_KEY, appUserId);
 
-            // 6. Benutzerstatus/UI aktualisieren (checkCurrentUserValidity muss importiert sein!)
-            await checkCurrentUserValidity(); // await hier!
+            // 6. Benutzerstatus/UI aktualisieren
+            await checkCurrentUserValidity();
 
             // 7. Erfolgsmeldung
             alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet! Rolle: ${newClaimRole}`, "success");
@@ -625,7 +639,6 @@ const handleLogin = async () => { // Funktion muss async sein
         console.error("Fehler beim Cloud Function Aufruf oder Token Refresh:", error);
         const message = error.message || "Anmeldung fehlgeschlagen.";
         alertUser(`Fehler: ${message}`, "error");
-        // Stelle sicher, dass switchToGuestMode und updateUIForMode importiert sind!
         switchToGuestMode(false);
         updateUIForMode();
     }
