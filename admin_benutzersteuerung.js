@@ -4,7 +4,7 @@ import { db, usersCollectionRef, setButtonLoading, adminSectionsState, rolesColl
 import { logAdminAction } from './admin_protokollHistory.js';
 import { setupPermissionDependencies } from './admin_rechteverwaltung.js'; // Oder der richtige Dateiname
 import { restoreAdminScrollIfAny, rememberAdminScroll } from './admin_adminfunktionenHome.js';
-import { updateUIForMode } from './log-InOut.js';
+import { updateUIForMode, switchToGuestMode } from './log-InOut.js';
 // ENDE-ZIKA //
 
 
