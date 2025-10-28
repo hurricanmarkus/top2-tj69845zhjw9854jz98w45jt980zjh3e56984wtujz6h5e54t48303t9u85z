@@ -352,10 +352,10 @@ export async function renderUserManagement() {
         <div id="addUserFormContainer" class="p-4 border rounded-xl bg-green-50 hidden">
             <h4 class="font-bold text-lg text-green-800 mb-2">Neuen Benutzer anlegen</h4>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input type="text" id="newUserName" class="p-2 border rounded-lg" placeholder="Nickname*">
-                <input type="text" id="newUserRealName" class="p-2 border rounded-lg" placeholder="Vollständiger Name (Optional)">
+                <input type="text" id="newUserName" class="p-2 border rounded-lg" placeholder="Nickname">
+                <input type="text" id="newUserRealName" class="p-2 border rounded-lg" placeholder="Vorname Nachname">
                 <div id="newUserKeyWrapper" class="sm:col-span-1">
-                    <input type="password" id="newUserKey" class="p-2 border rounded-lg w-full" placeholder="Passwort* (mind. 4 Zeichen)">
+                    <input type="password" id="newUserKey" class="p-2 border rounded-lg w-full" placeholder="Passwort (mind. 4 Zeichen)">
                 </div>
                 <select id="newUserPermissionType" class="p-2 border rounded-lg bg-white">
                     <option value="role" selected>Rolle (Standard)</option>
@@ -369,7 +369,6 @@ export async function renderUserManagement() {
                     <div class="loading-spinner" style="display: none;"></div>
                 </button>
             </div>
-            <p class="text-xs text-gray-500 mt-2">* Pflichtfelder (außer bei "Nicht registriert")</p>
         </div>
         
         <div id="registeredUserList" class="space-y-3 pt-4 border-t mt-4"></div>
