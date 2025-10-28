@@ -222,7 +222,7 @@ export function updateUIForMode() {
             if (userSelectionModal) {
                 userSelectionModal.style.display = 'flex';
             } else {
-                 console.error("FEHLER: Konnte #userSelectionModal nicht finden!"); // Spion
+                console.error("FEHLER: Konnte #userSelectionModal nicht finden!"); // Spion
             }
         };
         // --- ENDE KORREKTUR ---
@@ -231,14 +231,34 @@ export function updateUIForMode() {
     } else {
         // Code zum Anzeigen des eingeloggten Benutzers und Logout-Button
         const user = USERS ? USERS[currentUser.mode] : null; // Sicherer Zugriff auf USERS
-        const effectiveRoleId = user?.role || user?.displayRole;
-        const roleName = (ROLES && ROLES[effectiveRoleId]?.name) || 'Unbekannt'; // Sicherer Zugriff auf ROLES
+        let roleNameToDisplay = 'Unbekannt';
+        let roleColor = 'text-gray-300'; // Standardfarbe
 
-        let roleColor = 'text-gray-300';
-        if (currentUser.role === 'SYSTEMADMIN') roleColor = 'text-purple-400 font-bold';
-        if (currentUser.role === 'ADMIN') roleColor = 'text-red-400 font-bold';
+        // --- KORRIGIERTE LOGIK FÜR ROLLENANZEIGE ---
+        if (user) { // Nur wenn Benutzerdaten vorhanden sind
+            const actualRole = user.role; // Die echte Rolle aus der DB
+            const displayRole = user.displayRole; // Die eingestellte Anzeige-Rolle
+            const permissionType = user.permissionType || 'role'; // Der Berechtigungstyp
 
-        const realNamePart = user?.realName ? `<span class="text-gray-400 italic text-xs ml-1">(${user.realName})</span>` : '';
+            if (permissionType === 'role') {
+                // Bei Typ 'role': Nimm den Namen der echten Rolle
+                roleNameToDisplay = ROLES[actualRole]?.name || 'Unbekannt';
+                // Setze Farbe basierend auf echter Rolle
+                if (actualRole === 'SYSTEMADMIN') roleColor = 'text-purple-400 font-bold';
+                else if (actualRole === 'ADMIN') roleColor = 'text-red-400 font-bold';
+                // Hier ggf. weitere Farben für andere Rollen hinzufügen
+            } else if (permissionType === 'individual') {
+                // Bei Typ 'individual': Nimm den Namen der Display-Rolle (oder "Keine Rechte")
+                const roleIdToDisplay = displayRole || 'NO_RIGHTS'; // Fallback auf NO_RIGHTS
+                roleNameToDisplay = ROLES[roleIdToDisplay]?.name || 'Keine Rechte';
+                // Setze Farbe basierend auf Display-Rolle
+                if (roleIdToDisplay === 'ADMIN') roleColor = 'text-red-400 font-bold';
+                // Hier ggf. weitere Farben für andere Display-Rollen hinzufügen
+                else roleColor = 'text-gray-300'; // Standard für individuelle ohne spezielle Anzeige
+            }
+        }
+        // --- ENDE KORREKTUR ---
+        //         const realNamePart = user?.realName ? `<span class="text-gray-400 italic text-xs ml-1">(${user.realName})</span>` : '';
         footerUser.innerHTML = `${currentUser.displayName} ${realNamePart} <span class="mx-1 text-gray-400">❖</span> <span class="${roleColor} italic">(${roleName})</span>`;
 
         const logoutButton = document.createElement('button');
