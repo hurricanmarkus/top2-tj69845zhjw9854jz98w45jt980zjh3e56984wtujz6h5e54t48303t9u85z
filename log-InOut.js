@@ -126,28 +126,56 @@ export function updateUIForMode() {
     });
 
     // Zeige/Verstecke Einstellungs- und Admin-Knopf auf der Startseite
-    const settingsButton = document.getElementById('mainSettingsButton');
+const settingsButton = document.getElementById('mainSettingsButton');
     const adminButton = document.getElementById('mainAdminButton');
-    if (settingsButton) settingsButton.style.display = 'none'; // Nur ausblenden, wenn Element existiert
-    if (adminButton) adminButton.style.display = 'none';   // Nur ausblenden, wenn Element existiert
+    const homeActionButtons = document.getElementById('homeActionButtons'); // Container holen
 
-    if (document.getElementById('homeView')?.classList.contains('active')) { // Sicherer Zugriff
-        if (isSysAdmin && adminButton) {
+    // Standardmäßig beide Buttons ausblenden
+    if (settingsButton) settingsButton.style.display = 'none';
+    if (adminButton) adminButton.style.display = 'none';
+
+    // Prüfe die Bedingungen
+    const isSysAdmin = currentUser.role === 'SYSTEMADMIN'; // Echte Rolle
+    const isAdminRole = currentUser.role === 'ADMIN';     // Echte Rolle
+    const isIndividualAdminDisplay = currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN'; // Individuell mit Admin-Anzeige
+    const showAdminButton = isSysAdmin || isAdminRole || isIndividualAdminDisplay; // Zeige Button, wenn eine der Bedingungen zutrifft
+
+    // Nur auf der Home-Seite anzeigen
+    if (document.getElementById('homeView')?.classList.contains('active')) {
+        // Admin-Button anzeigen und stylen, wenn Bedingung erfüllt
+        if (showAdminButton && adminButton) {
             adminButton.style.display = 'block';
-            adminButton.textContent = 'SYS-ADMIN';
-            adminButton.className = 'bg-purple-800 text-white text-xs font-bold py-1 px-3 rounded-lg shadow-lg hover:bg-opacity-80 transition z-10';
-        } else if (isAdmin && adminButton) {
-            adminButton.style.display = 'block';
-            adminButton.textContent = 'ADMIN';
-            adminButton.className = 'bg-red-600 text-white text-xs font-bold py-1 px-3 rounded-lg shadow-lg hover:bg-red-700 transition z-10';
+            if (isSysAdmin) { // Echter Systemadmin
+                adminButton.textContent = 'SYS-ADMIN';
+                adminButton.className = 'bg-purple-800 text-white text-xs font-bold py-1 px-3 rounded-lg shadow-lg hover:bg-opacity-80 transition z-10';
+            } else { // Echter Admin ODER Individuell mit Admin-Anzeige
+                adminButton.textContent = 'ADMIN';
+                adminButton.className = 'bg-red-600 text-white text-xs font-bold py-1 px-3 rounded-lg shadow-lg hover:bg-red-700 transition z-10';
+            }
         }
 
-        const canSeePasswords = isSysAdmin || (isAdmin && effectiveAdminPerms.canSeePasswords);
-        // Einstellungs-Button nur anzeigen, wenn eingeloggt und KEINE Admin-Passwort-Rechte
-        if (currentUser.mode !== GUEST_MODE && !canSeePasswords && settingsButton) {
-            settingsButton.style.display = 'block';
+        // Einstellungs-Button anzeigen (Bedingung bleibt wie vorher: eingeloggt, aber kein Admin/SysAdmin)
+        // ODER wenn Admin/Sysadmin KEINE Passwort-Rechte hat (selten, aber möglich)
+        [cite_start]// Hinweis: effectiveAdminPerms muss VOR diesem Block berechnet werden, wie in deinem Originalcode [cite: 3-8]
+        const canSeePasswords = isSysAdmin || (isAdminRole && effectiveAdminPerms.canSeePasswords);
+        if (currentUser.mode !== GUEST_MODE && !showAdminButton && settingsButton) { // Zeige nur an, wenn KEIN Admin-Button angezeigt wird
+             settingsButton.style.display = 'block';
+             settingsButton.className = 'bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-lg shadow-lg hover:bg-gray-700 transition z-10'; // Standard-Styling
+        } else if (currentUser.mode !== GUEST_MODE && showAdminButton && !canSeePasswords && settingsButton) {
+             // Spezialfall: Admin/Sysadmin OHNE Passwortrechte sieht trotzdem Einstellungen
+             settingsButton.style.display = 'block';
+             settingsButton.className = 'bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-lg shadow-lg hover:bg-gray-700 transition z-10';
+        }
+
+        // Container (#homeActionButtons) nur anzeigen, wenn mindestens ein Button sichtbar ist
+        if (homeActionButtons) {
+             const settingsVisible = settingsButton && settingsButton.style.display !== 'none';
+             const adminVisible = adminButton && adminButton.style.display !== 'none';
+             homeActionButtons.style.display = (settingsVisible || adminVisible) ? 'flex' : 'none'; // 'flex' verwenden
+             homeActionButtons.classList.toggle('hidden', !(settingsVisible || adminVisible)); // hidden Klasse auch steuern
         }
     }
+    // --- ENDE KORRIGIERTE LOGIK ---
 
     // Zeige/Verstecke Checklist-Einstellungskarte
     const checklistSettingsCard = document.getElementById('checklistSettingsCard');
