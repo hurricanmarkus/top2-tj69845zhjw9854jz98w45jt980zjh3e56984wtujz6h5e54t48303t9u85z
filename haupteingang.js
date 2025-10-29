@@ -249,7 +249,6 @@ async function initializeFirebase() {
             if (app && !functions) {
                 console.log("Initialisiere Firebase Functions...");
                 functions = getFunctions(app); // Keine Region angeben
-                setRoleClaim = httpsCallable(functions, 'setRoleClaim');
                 console.log("Firebase Functions initialisiert.");
             }
             // --- ENDE NEU ---
@@ -573,7 +572,7 @@ export function setupEventListeners() {
 // ERSETZE deine alte handleLogin Funktion KOMPLETT hiermit:
 const handleLogin = async () => {
     if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) {
-        console.error("handleLogin Final: Missing required elements or selected user.");
+        console.error("handleLogin FINAL-FIX: Missing required elements or selected user.");
         return;
     }
 
@@ -582,73 +581,88 @@ const handleLogin = async () => {
     const userFromFirestore = USERS[appUserId];
 
     if (!userFromFirestore) {
-        console.error(`handleLogin Final: Benutzerdaten für ${appUserId} nicht im globalen USERS Objekt gefunden!`);
-        alertUser("Benutzerdaten noch nicht geladen. Bitte kurz warten und erneut versuchen.", "error");
+        alertUser("Benutzerdaten noch nicht geladen. Bitte kurz warten.", "error");
         return;
     }
 
-    // 1. Lokale PIN-Prüfung
+    // 1. Lokale PIN-Prüfung & Modal schließen
     if (userFromFirestore.key !== enteredPin) {
         pinError.style.display = 'block';
         adminPinInput.value = '';
         return;
     }
-
-    // 2. PIN korrekt, Modal schließen
     pinModal.style.display = 'none';
     adminPinInput.value = '';
     pinError.style.display = 'none';
 
     try {
-        // --- NEU: Kurze Verzögerung nach PIN-Erfolg ---
-        console.log("handleLogin Final: PIN korrekt. Warte kurz (1 Sekunde)...");
-        await new Promise(resolve => setTimeout(resolve, 1000)); // 1 Sekunde warten
-        console.log("handleLogin Final: Wartezeit beendet.");
-        // --- ENDE NEU ---
-
-        // 3. Sicherstellen, dass Auth User vorhanden ist (Prüfung bleibt)
+        // --- 2. Auth User prüfen und ID Token holen (mit 1 Sekunde Puffer) ---
         if (!auth || !auth.currentUser) {
-            console.error("handleLogin Final: Auth oder currentUser ist null VOR dem Cloud Function Aufruf!");
-             throw new Error("Benutzer ist nicht bei Firebase angemeldet.");
+             await new Promise(resolve => setTimeout(resolve, 1000)); // 1 Sekunde warten
+             if (!auth.currentUser) throw new Error("Benutzer ist nicht bei Firebase angemeldet.");
         }
-        console.log("handleLogin Final: currentUser VOR Cloud Function Call vorhanden:", auth.currentUser.uid);
-
-
-        console.log(`Rufe Cloud Function setRoleClaim für ${appUserId} auf...`);
-        // 4. Cloud Function aufrufen (ohne manuelles getIdToken vorher)
-        if (!setRoleClaim) throw new Error("setRoleClaim Cloud Function Referenz ist nicht initialisiert.");
-        const result = await setRoleClaim({ appUserId: appUserId, pin: enteredPin });
-        console.log("Cloud Function Ergebnis:", result.data);
-
-        // 5. Token aktualisieren (um den *neuen* Claim zu holen)
-        if (auth.currentUser) {
-            console.log("Aktualisiere ID Token (force refresh)...");
-            const idTokenResult = await auth.currentUser.getIdTokenResult(true);
-            const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle zugewiesen';
-            console.log("Token aktualisiert. Neuer Claim 'appRole':", newClaimRole);
-
-            // 6. Local Storage setzen
-            localStorage.setItem(ADMIN_STORAGE_KEY, appUserId);
-
-            // 7. Benutzerstatus/UI aktualisieren
-            await checkCurrentUserValidity();
-
-            // 8. Erfolgsmeldung
-            alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet! Rolle: ${newClaimRole}`, "success");
-
-        } else {
-             throw new Error("Kein Benutzer bei Firebase angemeldet nach Cloud Function Call.");
+        
+        // Hole das AKTUELLE ID-TOKEN explizit
+        console.log("handleLogin FINAL-FIX: Hole frisches ID Token...");
+        const idToken = await auth.currentUser.getIdToken(true); // true erzwingt Refresh
+        if (!idToken) {
+            throw new Error("Konnte kein gültiges ID Token abrufen.");
         }
+        console.log("handleLogin FINAL-FIX: ID Token erfolgreich geholt. Rufe manuellen Fetch auf.");
+        // --- ENDE TOKEN HOLEN ---
+
+        // 3. Manuelle Cloud Function URL (Muss die volle HTTPS URL sein)
+        // WICHTIG: Die URL muss korrekt sein. Siehe Fehlermeldung: us-central1-top2-e9ac0
+        const functionUrl = "https://us-central1-top2-e9ac0.cloudfunctions.net/setRoleClaim";
+
+        // 4. Manuelle Anfrage mit Authorization Header senden
+        const fetchResponse = await fetch(functionUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                // Füge das Token direkt in den Authorization Header ein
+                'Authorization': `Bearer ${idToken}` 
+            },
+            body: JSON.stringify({
+                appUserId: appUserId,
+                pin: enteredPin
+            })
+        });
+
+        // 5. Ergebnis auswerten
+        if (fetchResponse.status === 401 || fetchResponse.status === 403) {
+            // Wenn der manuelle Aufruf fehlschlägt, ist das Problem tiefer (IAM/Service-Account)
+            throw new Error("Authentifizierungsfehler (401/403) beim manuellen Aufruf. Prüfe IAM/Invoker-Berechtigungen!");
+        }
+
+        const responseData = await fetchResponse.json();
+
+        // Prüfe, ob die Cloud Function einen Fehler im Body zurückgibt (z.B. Ungültiger PIN)
+        if (responseData.error) { 
+             throw new Error(responseData.error.message || responseData.error.details || "Unbekannter Fehler von der Cloud Function.");
+        }
+        // Die Funktion gibt bei Erfolg { status: "success", ... } zurück
+        if (responseData.status !== "success") {
+             throw new Error("Cloud Function scheiterte nach Authentifizierung: " + responseData.message);
+        }
+        // --- ENDE MANUELLER FETCH ---
+
+        // 6. Token aktualisieren (um den *neuen* Claim zu holen)
+        const idTokenResult = await auth.currentUser.getIdTokenResult(true);
+        const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle zugewiesen';
+        console.log("Token aktualisiert. Neuer Claim 'appRole':", newClaimRole);
+
+        // 7. Lokale Zustände aktualisieren
+        localStorage.setItem(ADMIN_STORAGE_KEY, appUserId);
+        await checkCurrentUserValidity();
+
+        // 8. Erfolgsmeldung
+        alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet! Rolle: ${newClaimRole}`, "success");
 
     } catch (error) {
         // 9. Fehlerbehandlung
-        console.error("Fehler beim Cloud Function Aufruf oder Token Refresh (Final):", error);
-        const code = error.code || 'unknown';
-        const message = error.message || "Anmeldung fehlgeschlagen.";
-        const details = error.details || '';
-        console.error(`Error Code: ${code}, Details: ${details}`);
-        alertUser(`Fehler (${code}): ${message}`, "error");
-
+        console.error("FINAL ERROR LOG:", error);
+        alertUser(`Fehler: ${error.message || 'Interner Fehler'}`, "error");
         switchToGuestMode(false);
         updateUIForMode();
     }
