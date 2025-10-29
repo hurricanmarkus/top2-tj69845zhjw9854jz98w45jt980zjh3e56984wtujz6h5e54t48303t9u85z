@@ -1,7 +1,7 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 //
 // KORREKTUR: Fehlende Firebase-Funktionen für Lösch-Logik importiert
 import { doc, updateDoc, setDoc, deleteDoc, onSnapshot, writeBatch, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { initialAuthCheckDone, adminSectionsState, rolesCollectionRef, ADMIN_ROLES, ROLES, adminRolesCollectionRef, currentUser, db, roleManagementSectionsState, alertUser, USERS } from './haupteingang.js'; // USERS importiert
+import { initialAuthCheckDone, adminSectionsState, rolesCollectionRef, ADMIN_ROLES, ROLES, adminRolesCollectionRef, currentUser, db, roleManagementSectionsState, alertUser, USERS, usersCollectionRef } from './haupteingang.js'; // USERS importiert
 import { checkCurrentUserValidity } from './log-InOut.js';
 import { logAdminAction } from './admin_protokollHistory.js';
 import { setupPermissionDependencies } from './admin_rechteverwaltung.js';
