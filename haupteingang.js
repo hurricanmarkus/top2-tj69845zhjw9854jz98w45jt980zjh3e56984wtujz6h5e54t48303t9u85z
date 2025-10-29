@@ -569,10 +569,10 @@ export function setupEventListeners() {
         });
     }
 
-// ERSETZE deine alte handleLogin Funktion KOMPLETT hiermit:
+// ERSETZE die handleLogin Funktion KOMPLETT hiermit:
 const handleLogin = async () => {
     if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) {
-        console.error("handleLogin FINAL-FIX: Missing required elements or selected user.");
+        console.error("handleLogin Final-V3: Missing required elements or selected user.");
         return;
     }
 
@@ -581,7 +581,7 @@ const handleLogin = async () => {
     const userFromFirestore = USERS[appUserId];
 
     if (!userFromFirestore) {
-        alertUser("Benutzerdaten noch nicht geladen. Bitte kurz warten.", "error");
+        alertUser("Benutzerdaten noch nicht geladen. Bitte kurz warten und erneut versuchen.", "error");
         return;
     }
 
@@ -596,61 +596,59 @@ const handleLogin = async () => {
     pinError.style.display = 'none';
 
     try {
-        // --- 2. Auth User prüfen und ID Token holen (mit 1 Sekunde Puffer) ---
+        // 2. Sicherstellen, dass Auth User vorhanden ist (Prüfung bleibt)
         if (!auth || !auth.currentUser) {
-             await new Promise(resolve => setTimeout(resolve, 1000)); // 1 Sekunde warten
-             if (!auth.currentUser) throw new Error("Benutzer ist nicht bei Firebase angemeldet.");
+            await new Promise(resolve => setTimeout(resolve, 1000)); 
+            if (!auth.currentUser) { throw new Error("Benutzer ist nicht bei Firebase angemeldet."); }
         }
         
-        // Hole das AKTUELLE ID-TOKEN explizit
-        console.log("handleLogin FINAL-FIX: Hole frisches ID Token...");
-        const idToken = await auth.currentUser.getIdToken(true); // true erzwingt Refresh
+        // --- NEU: ID Token holen VOR dem Aufruf ---
+        console.log("handleLogin Final-V3: Hole frisches ID Token...");
+        // Wir holen den Token, um ihn im Body zu senden
+        const idToken = await auth.currentUser.getIdToken(true); 
         if (!idToken) {
             throw new Error("Konnte kein gültiges ID Token abrufen.");
         }
-        console.log("handleLogin FINAL-FIX: ID Token erfolgreich geholt. Rufe manuellen Fetch auf.");
-        // --- ENDE TOKEN HOLEN ---
+        console.log("handleLogin Final-V3: ID Token erfolgreich geholt. Sende manuellen Fetch...");
+        // --- ENDE NEU ---
 
-        // 3. Manuelle Cloud Function URL (Muss die volle HTTPS URL sein)
-        // WICHTIG: Die URL muss korrekt sein. Siehe Fehlermeldung: us-central1-top2-e9ac0
+        // 3. Manuelle Cloud Function URL
         const functionUrl = "https://us-central1-top2-e9ac0.cloudfunctions.net/setRoleClaim";
 
-        // 4. Manuelle Anfrage mit Authorization Header senden
+        // 4. Manuelle Anfrage mit ID Token im Body senden
         const fetchResponse = await fetch(functionUrl, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                // Füge das Token direkt in den Authorization Header ein
-                'Authorization': `Bearer ${idToken}` 
+                'Content-Type': 'application/json', // Wichtig: JSON Header
+                // KEIN Authorization Header mehr nötig, da das Token im Body ist
             },
             body: JSON.stringify({
                 appUserId: appUserId,
-                pin: enteredPin
+                pin: enteredPin,
+                idToken: idToken // <<< DAS IST DER FIX: Token im Body mitsenden
             })
         });
 
         // 5. Ergebnis auswerten
         if (fetchResponse.status === 401 || fetchResponse.status === 403) {
-            // Wenn der manuelle Aufruf fehlschlägt, ist das Problem tiefer (IAM/Service-Account)
-            throw new Error("Authentifizierungsfehler (401/403) beim manuellen Aufruf. Prüfe IAM/Invoker-Berechtigungen!");
+            // Wenn hier ein 401 kommt, liegt es NICHT an den Daten, sondern an der IAM Invoker-Einstellung.
+            throw new Error("Authentifizierungsfehler (401/403) trotz Token im Body. Prüfe IAM!");
         }
 
         const responseData = await fetchResponse.json();
 
-        // Prüfe, ob die Cloud Function einen Fehler im Body zurückgibt (z.B. Ungültiger PIN)
+        // Prüfe auf Fehler von der Cloud Function (z.B. Ungültiger PIN)
         if (responseData.error) { 
-             throw new Error(responseData.error.message || responseData.error.details || "Unbekannter Fehler von der Cloud Function.");
+             // Wenn der Fehler hier auftritt, wurde das Token korrekt empfangen, aber die Logik in der CF schlug fehl (z.B. falscher PIN).
+             throw new Error(responseData.error.message || "Unbekannter Fehler von der Cloud Function.");
         }
-        // Die Funktion gibt bei Erfolg { status: "success", ... } zurück
         if (responseData.status !== "success") {
              throw new Error("Cloud Function scheiterte nach Authentifizierung: " + responseData.message);
         }
-        // --- ENDE MANUELLER FETCH ---
-
-        // 6. Token aktualisieren (um den *neuen* Claim zu holen)
+        
+        // 6. Finales Token aktualisieren (um den *neuen* Claim zu holen)
         const idTokenResult = await auth.currentUser.getIdTokenResult(true);
         const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle zugewiesen';
-        console.log("Token aktualisiert. Neuer Claim 'appRole':", newClaimRole);
 
         // 7. Lokale Zustände aktualisieren
         localStorage.setItem(ADMIN_STORAGE_KEY, appUserId);
@@ -661,13 +659,12 @@ const handleLogin = async () => {
 
     } catch (error) {
         // 9. Fehlerbehandlung
-        console.error("FINAL ERROR LOG:", error);
+        console.error("Fehler beim Cloud Function Aufruf oder Token Refresh (Final-V3):", error);
         alertUser(`Fehler: ${error.message || 'Interner Fehler'}`, "error");
         switchToGuestMode(false);
         updateUIForMode();
     }
 };
-
 
     if (submitAdminKeyButton) submitAdminKeyButton.addEventListener('click', handleLogin);
     if (adminPinInput) adminPinInput.addEventListener('keydown', (e) => e.key === 'Enter' && handleLogin());
