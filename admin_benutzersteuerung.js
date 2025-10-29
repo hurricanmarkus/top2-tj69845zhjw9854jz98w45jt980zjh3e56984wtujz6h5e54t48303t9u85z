@@ -731,70 +731,90 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
         }
 
         // --- Speichern der Berechtigungen Button ---
-        const savePermsButton = e.target.closest('.save-perms-button');
-        if (savePermsButton) {
-            console.log(`[CLICK] Speichern (Berechtigungen) für User ${userId} erkannt.`);
-            const permContainer = savePermsButton.closest('[data-userid]');
-            if (!permContainer) { console.error(`[CLICK] Konnte Berechtigungs-Container für User ${userId} nicht finden!`); return; }
+// admin_benutzersteuerung.js: im Event-Listener für 'click'
 
-            const typeRadio = permContainer.querySelector('input[name^="perm-type-"]:checked');
-            if (!typeRadio) { console.error(`[CLICK] Konnte Berechtigungstyp-Radiobutton für User ${userId} nicht lesen!`); return; }
-            const type = typeRadio.value;
+// --- Speichern der Berechtigungen Button ---
+const savePermsButton = e.target.closest('.save-perms-button');
+if (savePermsButton) {
+    console.log(`[CLICK] Speichern (Berechtigungen) für User ${userId} erkannt.`);
+    const permContainer = savePermsButton.closest('[data-userid]');
+    if (!permContainer) { console.error(`[CLICK] Konnte Berechtigungs-Container für User ${userId} nicht finden!`); return; }
 
-            rememberAdminScroll();
-            let updateData = { permissionType: type }; 
+    const typeRadio = permContainer.querySelector('input[name^="perm-type-"]:checked');
+    if (!typeRadio) { console.error(`[CLICK] Konnte Berechtigungstyp-Radiobutton für User ${userId} nicht lesen!`); return; }
+    const selectedType = typeRadio.value; // Der ausgewählte Typ (role oder individual)
 
-            if (type === 'role') {
-                const roleSelect = permContainer.querySelector('.user-role-select');
-                if (!roleSelect) { console.error(`[CLICK] Konnte Rollen-Select für User ${userId} nicht finden!`); return; }
-                const newRole = roleSelect.value;
-                
-                if (newRole === 'SYSTEMADMIN' && currentUser.role !== 'SYSTEMADMIN') {
-                    return alertUser("Nur Systemadmins dürfen die Rolle SYSTEMADMIN zuweisen.", "error");
-                }
+    rememberAdminScroll();
+    
+    // === KORREKTUR: Verwende adminPermissionType statt permissionType ===
+    let updateData = { adminPermissionType: selectedType }; // <-- FIX: Trennung der Logik
+    // ===================================================================
 
-                updateData = {
-                    ...updateData,
-                    role: newRole,
-                    customPermissions: [], 
-                    displayRole: null,
-                    assignedAdminRoleId: null, 
-                    adminPermissions: {}       
-                };
-
-            } else { // type === 'individual'
-                const customPermissions = Array.from(permContainer.querySelectorAll('.custom-perm-checkbox:checked')).map(cb => cb.dataset.perm);
-                const displayRoleSelect = permContainer.querySelector('.display-role-select');
-                if (!displayRoleSelect) { console.error(`[CLICK] Konnte Display-Rollen-Select für User ${userId} nicht finden!`); return; }
-                const selectedDisplayRole = displayRoleSelect.value || 'NO_RIGHTS'; 
-
-                updateData = {
-                    ...updateData, 
-                    role: 'ANGEMELDET', 
-                    customPermissions: customPermissions,
-                    displayRole: (selectedDisplayRole !== 'NO_RIGHTS' ? selectedDisplayRole : null),
-                    assignedAdminRoleId: null, 
-                    adminPermissions: {}       
-                };
-            }
-
-            console.log("[CLICK] Finale Update-Daten für Berechtigungen:", updateData);
-
-            try {
-                console.log(`[CLICK] Versuche updateDoc für User ${userId}...`);
-                await updateDoc(doc(usersCollectionRef, userId), updateData);
-                console.log(`[CLICK] updateDoc für User ${userId} erfolgreich.`);
-                await logAdminAction('user_perms_changed', `Berechtigungen für ${USERS[userId]?.name || userId} geändert.`);
-                
-                const saveBtnContainer = permContainer.querySelector('.save-perms-container');
-                if (saveBtnContainer) saveBtnContainer.classList.add('hidden');
-                alertUser("Berechtigungen gespeichert!", "success");
-            } catch (error) {
-                console.error(`[CLICK] FEHLER beim Speichern der Berechtigungen für User ${userId}:`, error);
-                alertUser(`Fehler beim Speichern: ${error.message}`, "error");
-            }
-            return; // Klick behandelt
+    if (selectedType === 'role') {
+        const roleSelect = permContainer.querySelector('.user-role-select');
+        if (!roleSelect) { console.error(`[CLICK] Konnte Rollen-Select für User ${userId} nicht finden!`); return; }
+        const newRole = roleSelect.value;
+        
+        if (newRole === 'SYSTEMADMIN' && currentUser.role !== 'SYSTEMADMIN') {
+            return alertUser("Nur Systemadmins dürfen die Rolle SYSTEMADMIN zuweisen.", "error");
         }
+
+        updateData = {
+            ...updateData,
+            assignedAdminRoleId: container.querySelector('#assigned-admin-role-select')?.value, // Sicherstellen, dass das Feld existiert
+            adminPermissions: {}, // Individuelle Rechte löschen
+            // Restliche Felder, die bei Rolle gesetzt werden
+        };
+
+    } else { // type === 'individual'
+        const customPermissions = Array.from(permContainer.querySelectorAll('.custom-perm-checkbox:checked')).map(cb => cb.dataset.perm);
+        const displayRoleSelect = permContainer.querySelector('.display-role-select');
+        if (!displayRoleSelect) { console.error(`[CLICK] Konnte Display-Rollen-Select für User ${userId} nicht finden!`); return; }
+        const selectedDisplayRole = displayRoleSelect.value || 'NO_RIGHTS'; 
+
+        const permissions = {};
+        permContainer.querySelectorAll('.admin-perm-cb').forEach(cb => {
+            permissions[cb.dataset.perm] = cb.checked;
+        });
+
+        const approvalRequired = {};
+        permContainer.querySelectorAll('.approval-cb').forEach(cb => {
+            approvalRequired[cb.dataset.perm] = cb.checked;
+        });
+        permissions.approvalRequired = approvalRequired;
+
+        updateData = {
+            ...updateData, 
+            adminPermissions: permissions, // Individuelle Admin-Rechte speichern
+            assignedAdminRoleId: null, 
+            // Der Rest der Felder für den individuellen Modus
+        };
+        // HINWEIS: Hier fehlen die Felder 'role' und 'customPermissions' in Ihrer UpdateData-Definition
+        // Dies ist der "Admin-Rechte"-Speichern-Button. Er sollte nur Admin-spezifische Felder speichern.
+
+    }
+
+    // ACHTUNG: Der Code hier muss die Speicherung des Feldes 'permissionType' und 'role' des Haupt-Benutzers
+    // übernehmen, falls Sie diese im Admin-Panel ändern dürfen.
+
+    // Da der Admin-Bereich (renderAdminUserDetails) nur den Admin-Typ steuert,
+    // sollte die Änderung nur auf adminPermissionType abzielen.
+
+    console.log("[CLICK] Finale Update-Daten für Admin-Rechte:", updateData);
+
+    try {
+        await updateDoc(doc(usersCollectionRef, userId), updateData);
+        await logAdminAction('admin_perms_updated', `Admin-Berechtigungstyp für ${USERS[userId]?.name || userId} auf ${selectedType} geändert.`);
+        
+        const saveBtnContainer = permContainer.querySelector('.save-perms-container');
+        if (saveBtnContainer) saveBtnContainer.classList.add('hidden');
+        alertUser("Berechtigungen gespeichert!", "success");
+    } catch (error) {
+        console.error(`[CLICK] FEHLER beim Speichern der Admin-Rechte für User ${userId}:`, error);
+        alertUser(`Fehler beim Speichern: ${error.message}`, "error");
+    }
+    return; // Klick behandelt
+}
 
         console.log("[CLICK] Klick innerhalb einer Karte, aber kein bekannter Button.");
 
