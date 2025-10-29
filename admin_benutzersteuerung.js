@@ -880,7 +880,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
     });
 
 } // Ende addAdminUserManagementListeners
- 
+
 export function toggleNewUserRoleField() {
     const typeSelect = document.getElementById('newUserPermissionType'); // 
     const roleSelect = document.getElementById('newUserRole'); // [cite: 770]
@@ -941,10 +941,8 @@ export function renderAdminUserDetails(userId) {
     const perms = adminUser.adminPermissions || {};
     const approvalPerms = perms.approvalRequired || {};
     
-    // === KORREKTUR für die Trennung der Logik ===
-    // Lese den Berechtigungstyp der Admin-Rechte aus dem NEUEN Feld 'adminPermissionType'.
-    // Das Feld 'permissionType' wird der Benutzersteuerung überlassen.
-    const type = adminUser.adminPermissionType || 'role'; // <-- GEÄNDERT
+    // KORREKTUR für die Trennung der Logik: Lese das dedizierte Feld für die Admin-Rechte
+    const type = adminUser.adminPermissionType || 'role'; 
 
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
     const canBeEdited = isSysAdmin; // Nur SysAdmin darf Admin-Rechte bearbeiten
@@ -1026,8 +1024,8 @@ export function renderAdminUserDetails(userId) {
                 </div>
             </div>
 
-            <div class="mt-4 pt-4 border-t ${!canBeEdited ? 'hidden' : ''}">
-                 <button id="save-admin-perms-button-${userId}" data-userid="${userId}" class="save-admin-perms-button w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            <div id="admin-save-container" class="mt-4 pt-4 border-t ${!canBeEdited ? 'hidden' : ''}">
+                 <button id="save-admin-perms-button" data-userid="${userId}" class="save-admin-perms-button w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" disabled>
                      Änderungen speichern
                  </button>
             </div>
@@ -1041,6 +1039,16 @@ export function renderAdminUserDetails(userId) {
         document.querySelectorAll('.edit-admin-user-btn').forEach(b => b.closest('.p-2')?.classList.remove('bg-indigo-100'));
     });
     
+    // Helferfunktion zum Aktivieren/Deaktivieren des Speichern-Buttons
+    const toggleSaveButton = () => {
+        const saveBtn = detailsArea.querySelector('#admin-save-container button');
+        if (saveBtn) {
+            // Wir machen den Button klickbar, wenn der Bereich sichtbar ist und man editieren darf
+            saveBtn.disabled = false; 
+            saveBtn.textContent = 'Änderungen speichern';
+        }
+    };
+    
     detailsArea.querySelectorAll('.perm-type-toggle').forEach(radio => {
         radio.addEventListener('change', (e) => {
             const newType = e.target.value;
@@ -1049,24 +1057,31 @@ export function renderAdminUserDetails(userId) {
             const individualArea = card.querySelector('.individual-perms-area');
             individualArea?.classList.toggle('hidden', newType !== 'individual');
             
-            // Wenn auf 'individuell' umgeschaltet wird, initial die Abhängigkeiten setzen
             if (newType === 'individual' && individualArea && typeof setupPermissionDependencies === 'function') {
                 setupPermissionDependencies(individualArea);
             }
+            toggleSaveButton(); // Button aktivieren
         });
     });
     
+    // Listener für alle Inputs und Checkboxen
+    detailsArea.querySelectorAll('select, input[type="text"], input[type="checkbox"]:not(.approval-cb)').forEach(input => {
+         input.addEventListener('change', toggleSaveButton);
+         input.addEventListener('input', toggleSaveButton); // Für Texteingaben und Selects
+    });
+    
     // Listener für Checkbox-Änderungen in der individuellen Ansicht
-    detailsArea.querySelectorAll('.admin-perm-cb, .approval-cb').forEach(cb => {
-         cb.addEventListener('change', (e) => {
+    detailsArea.querySelectorAll('.admin-perm-cb, .approval-cb, #assigned-admin-role-select').forEach(input => {
+         input.addEventListener('change', (e) => {
              const container = e.target.closest('.individual-perms-area');
              if (container && typeof setupPermissionDependencies === 'function') {
                  setupPermissionDependencies(container);
              }
+             toggleSaveButton(); // Button aktivieren
          });
     });
 
-    // Wichtig: Beim initialen Laden die Abhängigkeiten setzen, falls die individuelle Ansicht aktiv ist
+    // Wichtig: Beim initialen Laden die Abhängigkeiten setzen
     const individualArea = detailsArea.querySelector('.individual-perms-area:not(.hidden)');
     if (individualArea && typeof setupPermissionDependencies === 'function') {
         setupPermissionDependencies(individualArea);
