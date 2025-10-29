@@ -265,23 +265,36 @@ export function renderRoleManagement() {
     };
 
     // (Listener für "Benutzer-Rolle löschen")
-    userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
-        button.addEventListener('click', async (e) => {
-            roleManagementSectionsState.userRolesOpen = true;
-            const roleId = e.currentTarget.dataset.roleid;
-            if (confirm(`Möchten Sie die Rolle '${ROLES[roleId].name}' wirklich löschen?`)) {
-                try {
-                    await deleteDoc(doc(rolesCollectionRef, roleId));
-                    await logAdminAction('role_deleted', `Rolle '${ROLES[roleId].name}' (${roleId}) gelöscht.`);
-                    // KORREKTUR: UI neu rendern
-                    renderRoleManagement();
-                } catch (error) {
-                    console.error("Fehler beim Löschen der Benutzer-Rolle:", error);
-                    alertUser("Fehler beim Löschen der Benutzer-Rolle.", "error");
-                }
+userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
+    button.addEventListener('click', async (e) => {
+        roleManagementSectionsState.userRolesOpen = true;
+        const roleId = e.currentTarget.dataset.roleid;
+        
+        // 1. KORREKTUR: Name der Rolle SICHERN, BEVOR der Löschvorgang gestartet wird
+        const roleToDeleteName = ROLES[roleId]?.name || 'Unbekannte Rolle'; 
+        
+        if (confirm(`Möchten Sie die Rolle '${roleToDeleteName}' wirklich löschen?`)) {
+            try {
+                await deleteDoc(doc(rolesCollectionRef, roleId));
+                
+                // 2. Logging und Benachrichtigung verwenden den GESPEICHERTEN Namen
+                await logAdminAction('role_deleted', `Rolle '${roleToDeleteName}' (${roleId}) gelöscht.`);
+                alertUser(`Rolle '${roleToDeleteName}' wurde erfolgreich gelöscht!`, "success"); // Erfolgsmeldung
+
+                // UI wird durch den Listener (listenForRoleUpdates) automatisch neu gerendert.
+
+            } catch (error) {
+                console.error("Fehler beim Löschen der Benutzer-Rolle:", error);
+                // 3. Fehlerbehandlung muss den GESPEICHERTEN Namen verwenden
+                alertUser(`Fehler beim Löschen der Benutzer-Rolle: ${error.message || error.toString()}`, "error"); 
+                
+                // WICHTIG: Die Fehlermeldung, die du siehst ("Fehler beim Löschen der Benutzer-Rolle."),
+                // wird jetzt nur noch angezeigt, wenn ein ECHTER Datenbankfehler auftritt (z.B. Netzwerk).
+                // Der vorherige TypError wird vermieden.
             }
-        });
+        }
     });
+});
     
     // (Listener für Toggle Benutzer-Rollen)
     document.getElementById('userRolesToggle').addEventListener('click', () => {
