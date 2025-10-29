@@ -1,10 +1,20 @@
-import { db, auditLogCollectionRef, currentUser } from './haupteingang.js';
-import { query, orderBy, limit, onSnapshot, collection, doc, addDoc, serverTimestamp, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { db, auditLogCollectionRef, currentUser, serverTimestamp } from './haupteingang.js';
+import { query, orderBy, limit, setDoc, onSnapshot, collection, doc, addDoc, serverTimestamp, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { rememberAdminScroll, restoreAdminScrollIfAny } from './admin_adminfunktionenHome.js';
+
+// ERSETZE DEINE AKTUELLE logAdminAction FUNKTION HIERMIT:
 
 export async function logAdminAction(action, details) {
     try {
-        if (!auditLogCollectionRef) return;
+        if (!auditLogCollectionRef) {
+            console.warn("Audit log collection reference ist nicht verfügbar.");
+            return;
+        }
+
+        // 1. Clientseitig EINDEUTIGE ID generieren
+        // doc(collection) erstellt einen leeren DocumentReference mit einer neuen, eindeutigen ID
+        const newDocRef = doc(auditLogCollectionRef); 
+
         const logData = {
             action: action,
             details: details,
@@ -13,10 +23,16 @@ export async function logAdminAction(action, details) {
             performedByRole: currentUser.role,
             timestamp: serverTimestamp()
         };
-        await addDoc(auditLogCollectionRef, logData);
+
+        // 2. setDoc mit der garantierten ID verwenden (um den addDoc-Konflikt zu vermeiden)
+        await setDoc(newDocRef, logData);
+        
+        // console.log(`Protokolleintrag erfolgreich gespeichert unter ID: ${newDocRef.id}`); // Debug-Log entfernt
+
         return logData;
     } catch (error) {
-        console.error("Error logging action:", error);
+        // Dies ist die Zeile 19, die den Fehler meldet. Sie sollte jetzt nicht mehr erreicht werden.
+        console.error("Fehler beim Logging der Aktion:", error); 
     }
 }
 
