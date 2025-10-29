@@ -564,6 +564,12 @@ export async function renderUserManagement() {
 
 
 // Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
+// admin_benutzersteuerung.js
+
+// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
+// admin_benutzersteuerung.js
+
+// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
 export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions) {
     if (!area) return;
 
@@ -580,6 +586,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
         const userId = userCard?.dataset.userid;
 
         // --- Buttons AUSSERHALB der Karten ---
+        
         // Logik für "Speichern" des neuen Benutzers
         const saveNewUserButton = e.target.closest('#saveNewUserButton');
         if (saveNewUserButton) {
@@ -591,6 +598,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             const realNameInput = form.querySelector('#newUserRealName');
             const keyInput = form.querySelector('#newUserKey');
             const typeSelect = form.querySelector('#newUserPermissionType');
+            
             const roleSelect = form.querySelector('#newUserRole');
 
             const name = nameInput.value.trim();
@@ -624,7 +632,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 displayRole: null,
                 isActive: true
             };
-
             try {
                 setButtonLoading(saveNewUserButton, true);
                 const newDocRef = doc(usersCollectionRef); 
@@ -661,7 +668,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             if (list) {
                 list.classList.toggle('hidden');
                 if (icon) {
-                    icon.classList.toggle('rotate-180'); 
+                    icon.classList.toggle('rotate-180');
                 }
             }
             return; // Klick behandelt
@@ -700,7 +707,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 nameEdit.classList.remove('hidden');
                 nameEdit.querySelector('.edit-nickname-input')?.focus(); 
             }
-            return; 
+            return;
         }
 
         // Speichern nach Umbenennen Button (Häkchen)
@@ -717,9 +724,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             rememberAdminScroll();
             try {
                 // KORREKTUR: Nur noch 'name' (Nickname) aktualisieren.
-                const updateData = {
-                    name: newNickname
-                };
+                const updateData = { name: newNickname };
 
                 await updateDoc(doc(usersCollectionRef, userId), updateData);
                 await logAdminAction('user_renamed', `Benutzer ${USERS[userId]?.name || userId} umbenannt in '${newNickname}'.`);
@@ -731,7 +736,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                  console.error("Fehler beim Umbenennen:", error);
                  alertUser("Fehler beim Umbenennen.", "error");
             }
-            return; 
+            return;
         }
 
         // --- Speichern der Berechtigungen Button ---
@@ -741,7 +746,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             const permContainer = savePermsButton.closest('[data-userid]'); // HIER wird permContainer gefunden
 
             if (!permContainer) { 
-                console.error(`[CLICK] Konnte Berechtigungs-Container für User ${userId} nicht finden!`); 
+                console.error(`[CLICK] Konnte Berechtigungs-Container für User ${userId} nicht finden!`);
                 return; 
             }
 
@@ -751,8 +756,9 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
             rememberAdminScroll();
             
-            // KORREKTUR DER SCHREIB-LOGIK: Verwende adminPermissionType und setze assignedAdminRoleId sicher
-            let updateData = { adminPermissionType: selectedType }; 
+            // KORREKTUR DER SCHREIB-LOGIK: Trennung der Logik
+            // ACHTUNG: updateData MUSS hier permissionType setzen, da dieser Button in der BENUTZERVERWALTUNG ist!
+            let updateData = { permissionType: selectedType }; 
 
             if (selectedType === 'role') {
                 const roleSelect = permContainer.querySelector('.user-role-select');
@@ -765,45 +771,38 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
                 updateData = {
                     ...updateData,
-                    assignedAdminRoleId: permContainer.querySelector('#assigned-admin-role-select')?.value || null, // <-- FIX 1: Setze auf null, falls undefined
-                    adminPermissions: {}, 
+                    role: newRole, // FIX 1: Hauptrolle muss gesetzt werden
+                    customPermissions: [], // Custom Permissions leeren
+                    displayRole: null, // Display Role leeren
+                    // Admin-Rechte Felder (werden nicht angefasst)
                 };
 
-            } else { // type === 'individual'
+            } else { // type === 'individual' oder 'not_registered'
                 const customPermissions = Array.from(permContainer.querySelectorAll('.custom-perm-checkbox:checked')).map(cb => cb.dataset.perm);
                 const displayRoleSelect = permContainer.querySelector('.display-role-select');
                 if (!displayRoleSelect) { console.error(`[CLICK] Konnte Display-Rollen-Select für User ${userId} nicht finden!`); return; }
                 const selectedDisplayRole = displayRoleSelect.value || 'NO_RIGHTS'; 
-
-                const permissions = {};
-                permContainer.querySelectorAll('.admin-perm-cb').forEach(cb => {
-                    permissions[cb.dataset.perm] = cb.checked;
-                });
-
-                const approvalRequired = {};
-                permContainer.querySelectorAll('.approval-cb').forEach(cb => {
-                    approvalRequired[cb.dataset.perm] = cb.checked;
-                });
-                permissions.approvalRequired = approvalRequired;
-
+                
                 updateData = {
                     ...updateData, 
-                    adminPermissions: permissions, // Individuelle Admin-Rechte speichern
-                    assignedAdminRoleId: null, // <-- FIX 2: MUSS explizit null sein, NICHT undefined
+                    role: null, // FIX 1: Hauptrolle MUSS NULL sein
+                    customPermissions: customPermissions, // Custom Permissions speichern
+                    displayRole: selectedDisplayRole !== 'NO_RIGHTS' ? selectedDisplayRole : null,
+                    // Admin-Rechte Felder (werden nicht angefasst)
                 };
             }
 
-            console.log("[CLICK] Finale Update-Daten für Admin-Rechte:", updateData);
+            console.log("[CLICK] Finale Update-Daten für Berechtigungen:", updateData);
 
             try {
                 await updateDoc(doc(usersCollectionRef, userId), updateData);
-                await logAdminAction('admin_perms_updated', `Admin-Berechtigungstyp für ${USERS[userId]?.name || userId} auf ${selectedType} geändert.`);
+                await logAdminAction('user_perms_updated', `Berechtigungstyp für ${USERS[userId]?.name || userId} auf ${selectedType} geändert.`);
                 
                 const saveBtnContainer = permContainer.querySelector('.save-perms-container');
                 if (saveBtnContainer) saveBtnContainer.classList.add('hidden');
                 alertUser("Berechtigungen gespeichert!", "success");
             } catch (error) {
-                console.error(`[CLICK] FEHLER beim Speichern der Admin-Rechte für User ${userId}:`, error);
+                console.error(`[CLICK] FEHLER beim Speichern der Berechtigungen für User ${userId}:`, error);
                 alertUser(`Fehler beim Speichern: ${error.message}`, "error");
             }
             return; // Klick behandelt
@@ -881,7 +880,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
     });
 
 } // Ende addAdminUserManagementListeners
-
+ 
 export function toggleNewUserRoleField() {
     const typeSelect = document.getElementById('newUserPermissionType'); // 
     const roleSelect = document.getElementById('newUserRole'); // [cite: 770]
