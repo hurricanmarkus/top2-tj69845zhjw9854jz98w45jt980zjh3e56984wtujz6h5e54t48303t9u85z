@@ -3,7 +3,6 @@ import { logAdminAction } from './admin_protokollHistory.js';
 import { doc, updateDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 // KORREKTUR: Import hinzugefügt, um den Zirkelbezug aufzulösen
 import { renderAdminUserDetails } from './admin_benutzersteuerung.js'; 
-import { setupPermissionDependencies } from './admin_rechteverwaltung.js'; // Setup Dependencies hinzugefügt
 
 export function setupPermissionDependencies(container) {
     const mainToggle = container.querySelector('[data-perm="canSeeMainFunctions"]');
