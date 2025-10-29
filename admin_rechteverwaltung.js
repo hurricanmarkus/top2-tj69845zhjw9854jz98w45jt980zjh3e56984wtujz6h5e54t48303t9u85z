@@ -46,7 +46,8 @@ export async function renderAdminRightsManagement() {
         systemAdmins.forEach(sysAdmin => {
             const isSelf = sysAdmin.id === currentUser.mode; 
             const currentUserLabel = isSelf ? '<span class="bg-indigo-100 text-indigo-800 font-bold text-xs px-2 py-1 rounded-full ml-2">AKTUELL</span>' : '';
-            sysAdminListHTML += `<p class="p-2 bg-gray-100 rounded-md text-sm">${sysAdmin.name} ${currentUserLabel}</p>`;
+            // Sicherstellen, dass sysAdmin.name existiert
+            sysAdminListHTML += `<p class="p-2 bg-gray-100 rounded-md text-sm">${sysAdmin.name || 'Unbenannter SysAdmin'} ${currentUserLabel}</p>`; 
         });
         sysAdminListHTML += '</div>';
     } else {
@@ -68,16 +69,14 @@ export async function renderAdminRightsManagement() {
              <div class="mt-6 border-t pt-4">
                  ${sysAdminListHTML}
              </div>
-             <div id="admin-user-details-area" class="mt-6"></div>
+             <div id="admin-user-details-area" class="mt-6 hidden"></div> 
            `;
 
-    // --- KORRIGIERTE FILTERLOGIK ---
+    // --- Korrigierte Filterlogik (bleibt gleich) ---
     const adminUsers = Object.values(USERS || {}).filter(user => 
-        // WICHTIG: Filtere alle Benutzer, die entweder echte Admins sind oder als Admin angezeigt werden sollen.
         user.role === 'ADMIN' || 
         (user.permissionType === 'individual' && user.displayRole === 'ADMIN')
     );
-    // SysAdmins sind bereits oben.
 
     const roleUsersContainer = adminRightsArea.querySelector('#admin-role-users');
     const individualUsersContainer = adminRightsArea.querySelector('#admin-individual-users');
@@ -91,34 +90,23 @@ export async function renderAdminRightsManagement() {
          if (individualUsersContainer) individualUsersContainer.innerHTML = msg;
     } else {
         adminUsers.forEach(adminUser => {
-            
-            // NEU: Bestimme den Admin-Berechtigungstyp aus dem dedizierten Feld
-            const adminPermType = adminUser.adminPermissionType || 'role'; // <-- FIX: Nutzt neues Feld
-            
-            // NEU: Bestimme, ob die Karte in die 'Rolle'- oder 'Individuell'-Spalte soll
+            const adminPermType = adminUser.adminPermissionType || 'role';
             const targetType = adminPermType === 'role' ? 'role' : 'individual';
-
-
-            // SysAdmins dürfen Admins bearbeiten (hier sind nur Admins und Individuelle Admin-Displays)
             const canBeEdited = currentUser.role === 'SYSTEMADMIN'; 
-
             const userCard = document.createElement('div');
             userCard.className = 'p-2 border rounded-lg bg-white shadow-sm flex justify-between items-center';
-
             let userInfoHTML;
             let targetContainer = targetType === 'role' ? roleUsersContainer : individualUsersContainer;
             let roleName = 'Admin'; 
 
             if (targetType === 'role') {
-                 // Zeige die zugewiesene Admin-Rolle an, falls vorhanden
                  if (adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
                      roleName = ADMIN_ROLES[adminUser.assignedAdminRoleId].name;
                  }
-                 userInfoHTML = `<div><p class="font-bold text-gray-800">${adminUser.name}</p><p class="text-xs text-indigo-600 font-medium">${roleName}</p></div>`;
+                 userInfoHTML = `<div><p class="font-bold text-gray-800">${adminUser.name || 'Unbekannt'}</p><p class="text-xs text-indigo-600 font-medium">${roleName}</p></div>`;
             } else { // Individuell
-                 // Wenn 'Individuell', zeige den Anzeigerollen-Typ oder "Individuell" an
                  const displayRoleName = adminUser.displayRole || 'Individuell';
-                 userInfoHTML = `<div><p class="font-bold text-gray-800">${adminUser.name}</p><p class="text-xs text-indigo-600 font-medium">${displayRoleName}</p></div>`;
+                 userInfoHTML = `<div><p class="font-bold text-gray-800">${adminUser.name || 'Unbekannt'}</p><p class="text-xs text-indigo-600 font-medium">${displayRoleName}</p></div>`;
             }
 
             userCard.innerHTML = `
@@ -134,19 +122,28 @@ export async function renderAdminRightsManagement() {
              }
         });
 
-         // Füge die Listener für die neu erstellten Edit-Buttons hinzu
-         adminRightsArea.querySelectorAll('.edit-admin-user-btn').forEach(button => {
-             if (!button.dataset.listenerAttached) {
-                 button.addEventListener('click', (e) => {
-                     const userId = e.currentTarget.dataset.userid;
+        // --- KORREKTUR DES EVENT LISTENERS ---
+        // Listener wird an den übergeordneten Container gehängt (Event Delegation)
+        // Aber er prüft jetzt explizit, ob auf den Button geklickt wurde.
+        if (!adminRightsArea.dataset.editListenerAttached) {
+             adminRightsArea.addEventListener('click', (e) => {
+                 // Finde den geklickten Button ODER sein SVG-Icon
+                 const editButton = e.target.closest('.edit-admin-user-btn'); 
+                 
+                 // Nur fortfahren, wenn wirklich auf den Button geklickt wurde
+                 if (editButton) { 
+                     const userId = editButton.dataset.userid;
+                     console.log(`Edit button clicked for user: ${userId}`); // Debug
                      if (typeof renderAdminUserDetails === 'function') {
                          renderAdminUserDetails(userId); 
                      } else {
                          console.error("Funktion renderAdminUserDetails ist nicht definiert oder importiert.");
                      }
-                 });
-                 button.dataset.listenerAttached = 'true';
-             }
-         });
+                 } else {
+                     // console.log("Click detected in adminRightsArea, but not on an edit button."); // Optional: Debug
+                 }
+             });
+             adminRightsArea.dataset.editListenerAttached = 'true'; // Markieren, dass Listener hinzugefügt wurde
+        }
     }
 }
