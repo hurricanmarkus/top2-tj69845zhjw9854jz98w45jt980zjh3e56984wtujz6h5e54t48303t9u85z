@@ -65,11 +65,10 @@ export async function renderAdminRightsManagement() {
                      <div id="admin-individual-users" class="space-y-2"></div>
                  </div>
              </div>
-             <div class="mt-6 border-t pt-4">
+<div class="mt-6 border-t pt-4">
                  ${sysAdminListHTML}
              </div>
-             <div id="admin-user-details-area" class="mt-6"></div>
-           `;
+             <div id="admin-user-details-area" class="mt-6 hidden"></div>           `;
 
     // --- KORRIGIERTE FILTERLOGIK ---
     const adminUsers = Object.values(USERS || {}).filter(user => 
