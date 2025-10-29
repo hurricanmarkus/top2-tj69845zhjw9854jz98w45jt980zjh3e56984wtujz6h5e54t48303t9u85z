@@ -922,7 +922,7 @@ export function renderAdminUserDetails(userId) {
     if (detailsArea.dataset.editingUser === userId) {
         detailsArea.innerHTML = '';
         delete detailsArea.dataset.editingUser;
-        // Entferne die Hervorhebung beim Schließen (mit Optional Chaining für Sicherheit)
+        // Entferne die Hervorhebung beim Schließen
         document.querySelectorAll('.edit-admin-user-btn').forEach(b => b.closest('.p-2')?.classList.remove('bg-indigo-100'));
         return;
     }
@@ -932,7 +932,6 @@ export function renderAdminUserDetails(userId) {
     const adminRightsArea = document.getElementById('adminRightsArea');
     if (adminRightsArea) {
         const userButton = adminRightsArea.querySelector(`.edit-admin-user-btn[data-userid="${userId}"]`);
-        // Optional Chaining für Sicherheit: ?.
         userButton?.closest('.p-2')?.classList.add('bg-indigo-100'); 
     }
     
@@ -941,7 +940,7 @@ export function renderAdminUserDetails(userId) {
     const perms = adminUser.adminPermissions || {};
     const approvalPerms = perms.approvalRequired || {};
     
-    // KORREKTUR für die Trennung der Logik: Lese das dedizierte Feld für die Admin-Rechte
+    // KORREKTUR: Lese den Berechtigungstyp der Admin-Rechte aus dem NEUEN Feld 'adminPermissionType'.
     const type = adminUser.adminPermissionType || 'role'; 
 
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
@@ -1112,7 +1111,6 @@ export function renderAdminUserDetails(userId) {
                 updateData = {
                     ...updateData,
                     assignedAdminRoleId: container.querySelector('#assigned-admin-role-select')?.value || null, 
-                    // Wichtig: adminPermissions werden NICHT gelöscht, sondern nur ignoriert/zurückgesetzt
                     adminPermissions: adminUserForUpdate.adminPermissions || {},
                 };
             } else { // type === 'individual'
@@ -1125,7 +1123,7 @@ export function renderAdminUserDetails(userId) {
                 updateData = {
                     ...updateData, 
                     adminPermissions: permissions, 
-                    assignedAdminRoleId: adminUserForUpdate.assignedAdminRoleId || null, // Vorhandene Rolle beibehalten
+                    assignedAdminRoleId: adminUserForUpdate.assignedAdminRoleId || null, 
                 };
             }
             
@@ -1147,7 +1145,7 @@ export function renderAdminUserDetails(userId) {
                 
                 // 2. Wichtig: Hauptliste aktualisieren, damit die Anzeige korrekt ist
                 if (typeof renderAdminRightsManagement === 'function') {
-                    await renderAdminRightsManagement(); 
+                    await renderAdminRightsManagement();
                 }
 
             } catch (error) {
