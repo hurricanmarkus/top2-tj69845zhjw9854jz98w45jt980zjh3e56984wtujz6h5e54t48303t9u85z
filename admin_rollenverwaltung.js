@@ -230,7 +230,7 @@ export function renderRoleManagement() {
                 permissions = permissions.filter(p => p !== perm);
             }
             await updateDoc(doc(rolesCollectionRef, roleid), { permissions });
-            await logAdminAction('role_permissions_changed', `Berechtigungen für Rolle '${role.name}' geändert.`);
+            await logAdminAction('role_permissions_changed', `Berechtigungen für Rolle '${role.name}' geändert: ${perm} ${e.target.checked ? 'aktiviert' : 'deaktiviert'}.`);
             
             // KORREKTUR: UI neu rendern, um Abhängigkeiten (Checklist) neu zu berechnen
             renderRoleManagement();
