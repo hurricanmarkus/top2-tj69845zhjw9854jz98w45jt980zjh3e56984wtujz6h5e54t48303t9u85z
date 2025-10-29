@@ -1028,10 +1028,10 @@ export function renderAdminUserDetails(userId) {
         const container = e.currentTarget.closest('.p-4');
 
         const selectedType = container.querySelector('input[name^="perm-type-"]:checked').value;
+const selectedType = container.querySelector('input[name^="perm-type-"]:checked').value;
         const updateData = {
-            permissionType: selectedType
+            adminPermissionType: selectedType // <-- GEÄNDERT auf adminPermissionType
         };
-
         if (selectedType === 'role') {
             updateData.assignedAdminRoleId = container.querySelector('#assigned-admin-role-select').value;
             updateData.adminPermissions = {};
