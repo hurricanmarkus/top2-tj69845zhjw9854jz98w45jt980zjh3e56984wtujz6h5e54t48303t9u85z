@@ -1,5 +1,5 @@
-import { db, auditLogCollectionRef, currentUser, serverTimestamp } from './haupteingang.js';
-import { query, orderBy, limit, setDoc, onSnapshot, collection, doc, addDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { db, auditLogCollectionRef, currentUser } from './haupteingang.js';
+import { query, orderBy, limit, setDoc, onSnapshot, collection, doc, addDoc, getDocs, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { rememberAdminScroll, restoreAdminScrollIfAny } from './admin_adminfunktionenHome.js';
 
 // ERSETZE DEINE AKTUELLE logAdminAction FUNKTION HIERMIT:
