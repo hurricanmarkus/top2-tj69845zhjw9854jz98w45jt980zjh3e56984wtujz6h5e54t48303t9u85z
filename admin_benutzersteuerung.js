@@ -903,170 +903,168 @@ export function renderAdminUserDetails(userId) {
     const detailsArea = document.getElementById('admin-user-details-area');
     const adminUser = USERS[userId];
 
-    // ZIEL 1: Fehlerbehebung, falls Bereich oder Benutzer nicht existiert (z.B. nach Löschen/Entfernen aus der Liste)
-    if (!detailsArea || !adminUser) {
-        // Leere den Bereich, um einen hängenden Zustand zu vermeiden (Behebt den Uncaught TypeError)
-        if (detailsArea) {
-             detailsArea.innerHTML = '';
-        }
-        return;
-    }
-
-    // Beim Klicken auf den Bearbeiten-Button muss die Karte im Admin-Rechteverwaltungs-Bereich hervorgehoben werden
-    document.querySelectorAll('.edit-admin-user-btn').forEach(b => b.closest('.p-2').classList.remove('bg-indigo-100'));
-    const adminRightsArea = document.getElementById('adminRightsArea');
-    if (adminRightsArea) {
-        // Wir suchen die Button-Klasse, die die User-ID enthält
-        const userButton = adminRightsArea.querySelector(`.edit-admin-user-btn[data-userid="${userId}"]`);
-        // Der Fehler trat auf, wenn diese Zeile ausgeführt wurde, nachdem der User aus der Liste entfernt wurde.
-        // Jetzt haben wir die Prüfung am Anfang der Funktion, die das verhindert.
-        userButton?.closest('.p-2')?.classList.add('bg-indigo-100'); 
-    }
-    
-    // Vermeide unnötiges Neurendern des Detailbereichs
+    // (Code zum Schließen/Öffnen bleibt gleich)
     if (detailsArea.dataset.editingUser === userId) {
         detailsArea.innerHTML = '';
         delete detailsArea.dataset.editingUser;
         return;
     }
-    
+    document.querySelectorAll('.edit-admin-user-btn').forEach(b => b.closest('.p-2').classList.remove('bg-indigo-100'));
+    // (Kleiner Fix: Sicherstellen, dass adminRightsArea existiert, bevor querySelector aufgerufen wird)
+    const adminRightsArea = document.getElementById('adminRightsArea');
+    if (adminRightsArea) {
+        adminRightsArea.querySelector(`.edit-admin-user-btn[data-userid="${userId}"]`).closest('.p-2').classList.add('bg-indigo-100');
+    }
+    // (Ende Fix)
+
     detailsArea.dataset.editingUser = userId;
 
     const perms = adminUser.adminPermissions || {};
     const approvalPerms = perms.approvalRequired || {};
-    const type = adminUser.permissionType || 'role'; // Sollte 'role' oder 'individual' sein
-    const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
-    const canBeEdited = isSysAdmin; // Nur SysAdmin darf Admin-Rechte bearbeiten
-
-    // --- HTML-Generierung für Checkboxen (FIX für Problem 2: Rechte anzeigen) ---
-    // Da ich die ADMIN_PERMISSIONS Struktur nicht habe, verwende ich eine generische Liste
-    // Hier verwenden wir die Logik aus dem ADMIN-VIEW der haupteingang.js für die Liste der Rechte
-    // Wir nehmen die Permissions aus der ADMIN_ROLES Struktur als Grundlage (für die Checkbox-Reihenfolge)
     
-    const adminPermsKeys = [
-        'canSeePasswords', 'canSeeApprovals', 'canSeeRoleManagement', 'canViewLogs', 'canSeeUsers', 
-        'canSeeMainFunctions', 'canUseMainPush', 'canUseMainEntrance', 'canUseMainChecklist',
-        'canCreateUser', 'canDeleteUser', 'canRenameUser', 'canToggleUserActive', 'canChangeUserPermissionType',
-        'canEditUserRoles', 'canSeeSysadminLogs'
-    ];
-    
-    let permissionsHTML = '';
-    const generateCheckbox = (permKey, label, isSubItem = false, canBeApproved = false) => {
-        const isChecked = perms[permKey] || false;
-        const isApprovalChecked = approvalPerms[permKey] || false;
-        const margin = isSubItem ? 'pl-6' : '';
-        
-        return `
-            <label class="flex items-center gap-2 cursor-pointer ${margin}">
-                <input type="checkbox" class="admin-perm-cb h-4 w-4" data-perm="${permKey}" ${isChecked ? 'checked' : ''} ${!canBeEdited ? 'disabled' : ''}>
-                <span class="text-sm">${label}</span>
-                ${canBeApproved ? 
-                    `<input type="checkbox" class="approval-cb h-4 w-4 ml-auto" data-perm="${permKey}" ${isApprovalChecked ? 'checked' : ''} ${!canBeEdited ? 'disabled' : ''}>
-                     <span class="text-xs text-red-600">Genehm.</span>`
-                    : ''
-                }
-            </label>
-        `;
-    };
+    // ================== LOGIKÄNDERUNG HIER (START) ==================
+    // KORREKTUR: Standard-Berechtigungstyp auf 'role' gesetzt
+    const type = adminUser.permissionType || 'role';
+    // ================== LOGIKÄNDERUNG HIER (ENDE) ==================
 
-    // --- Generiere Rollen-Optionen ---
-    let roleOptionsHTML = Object.values(ADMIN_ROLES)
+
+    let roleOptions = Object.values(ADMIN_ROLES)
         .filter(r => r.id !== 'LEERE_ROLLE')
         .map(r => `<option value="${r.id}" ${adminUser.assignedAdminRoleId === r.id ? 'selected' : ''}>${r.name}</option>`)
         .join('');
-
-    // --- Baue den Haupt-HTML-Block ---
+    
     detailsArea.innerHTML = `
-        <div class="p-4 border-t-4 border-indigo-500 rounded-xl bg-gray-50 mt-4 relative shadow-lg" data-userid="${userId}">
+        <div class="p-4 border-t-4 border-indigo-500 rounded-xl bg-gray-50 mt-4 relative shadow-lg">
             <button id="close-details-btn" class="absolute top-2 right-3 text-2xl font-bold text-gray-400 hover:text-red-600">&times;</button>
             <p class="font-bold text-lg text-indigo-800">${adminUser.name} bearbeiten</p>
             
             <div class="mt-4 pt-3 border-t">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Berechtigungs-Typ</label>
+                
                 <div class="flex items-center gap-4">
-                    <label class="flex items-center"><input type="radio" class="perm-type-toggle" name="perm-type-${userId}" value="role" ${type === 'role' ? 'checked' : ''} ${!canBeEdited ? 'disabled' : ''}> <span class="ml-2">Rolle</span></label>
-                    <label class="flex items-center"><input type="radio" class="perm-type-toggle" name="perm-type-${userId}" value="individual" ${type === 'individual' ? 'checked' : ''} ${!canBeEdited ? 'disabled' : ''}> <span class="ml-2">Individuell</span></label>
+                    <label class="flex items-center"><input type="radio" name="perm-type-${userId}" value="role" class="perm-type-toggle" data-userid="${userId}" ${type === 'role' ? 'checked' : ''}> <span class="ml-2">Rolle</span></label>
+                    <label class="flex items-center"><input type="radio" name="perm-type-${userId}" value="individual" class="perm-type-toggle" data-userid="${userId}" ${type === 'individual' ? 'checked' : ''}> <span class="ml-2">Individuell</span></label>
                 </div>
-            </div>
+                </div>
 
             <div class="role-selection-area mt-2 ${type === 'role' ? '' : 'hidden'}">
-                <select id="assigned-admin-role-select" class="w-full p-2 border rounded-lg bg-white text-sm" data-userid="${userId}" ${!canBeEdited ? 'disabled' : ''}>${roleOptionsHTML}</select>
+                <select id="assigned-admin-role-select" class="w-full p-2 border rounded-lg bg-white text-sm" data-userid="${userId}">${roleOptions}</select>
             </div>
 
-            <div id="admin-individual-perms-area" class="individual-perms-area mt-3 space-y-3 ${type === 'individual' ? '' : 'hidden'}">
+            <div class="individual-perms-area mt-3 space-y-3 ${type === 'individual' ? '' : 'hidden'}">
                 <div class="p-3 border rounded-lg bg-white">
-                    <h5 class="font-semibold text-sm mb-2 text-gray-600">Sichtbarkeit und Hauptfunktionen</h5>
+                    <h5 class="font-semibold text-sm mb-2 text-gray-600">Sichtbarkeit von Admin-Menüpunkten</h5>
                     <div class="grid grid-cols-2 gap-2 text-sm">
-                        ${generateCheckbox('canSeePasswords', 'Passwörter')}
-                        ${generateCheckbox('canSeeApprovals', 'Genehmigungen')}
-                        ${generateCheckbox('canSeeRoleManagement', 'Rollenverwaltung')}
-                        ${generateCheckbox('canViewLogs', 'Protokolle')}
-                        ${generateCheckbox('canSeeUsers', 'Benutzersteuerung')}
+                        <label class="flex items-center gap-2"><input type="checkbox" class="admin-perm-cb" data-perm="canSeePasswords" ${perms.canSeePasswords ? 'checked' : ''}> <span>Passwörter</span></label>
+                        <label class="flex items-center gap-2"><input type="checkbox" class="admin-perm-cb" data-perm="canSeeApprovals" ${perms.canSeeApprovals ? 'checked' : ''}> <span>Genehmigungen</span></label>
+                        <label class="flex items-center gap-2"><input type="checkbox" class="admin-perm-cb" data-perm="canSeeRoleManagement" ${perms.canSeeRoleManagement ? 'checked' : ''}> <span>Rollenverwaltung</span></label>
+                        <label class="flex items-center gap-2"><input type="checkbox" class="admin-perm-cb" data-perm="canViewLogs" ${perms.canViewLogs ? 'checked' : ''}> <span>Protokolle</span></label>
+                        <label class="flex items-center col-span-2 gap-2"><input type="checkbox" class="admin-perm-cb" data-perm="canSeeUsers" ${perms.canSeeUsers ? 'checked' : ''}> <span>Benutzersteuerung</span></label>
+
+                        <div class="col-span-2 mt-2 pt-2 border-t">
+                            <label class="flex items-center gap-2 font-semibold"><input type="checkbox" class="admin-perm-cb" data-perm="canSeeMainFunctions" ${perms.canSeeMainFunctions ? 'checked' : ''}> <span>Adminfunktionen Hauptseite</span></label>
+                            <div class="pl-6 mt-1 space-y-1">
+                                <label class="flex items-center gap-2"><input type="checkbox" class="admin-perm-cb" data-perm="canUseMainPush" ${perms.canUseMainPush ? 'checked' : ''}> <span>-> Push</span></label>
+                                <label class="flex items-center gap-2"><input type="checkbox" class="admin-perm-cb" data-perm="canUseMainEntrance" ${perms.canUseMainEntrance ? 'checked' : ''}> <span>-> Eingang</span></label>
+                                <label class="flex items-center gap-2"><input type="checkbox" class="admin-perm-cb" data-perm="canUseMainChecklist" ${perms.canUseMainChecklist ? 'checked' : ''}> <span>-> Checkliste</span></label>
+                            </div>
+                        </div>
                     </div>
-                    <div class="mt-2 pt-2 border-t">
-                        <h5 class="font-semibold text-sm text-gray-600">Adminfunktionen Hauptseite</h5>
-                        ${generateCheckbox('canSeeMainFunctions', 'Hauptmenü anzeigen')}
-                        ${generateCheckbox('canUseMainPush', '-> Push-Funktion', true)}
-                        ${generateCheckbox('canUseMainEntrance', '-> Eingang öffnen', true)}
-                        ${generateCheckbox('canUseMainChecklist', '-> Checkliste', true)}
-                    </div>
-                </div>
-                 <div class="p-3 border rounded-lg bg-white">
-                    <h5 class="font-semibold text-sm mb-2 text-gray-600">Aktionen und Genehmigung</h5>
-                    <div class="grid grid-cols-1 gap-2 text-sm">
-                        ${generateCheckbox('canCreateUser', 'Benutzer anlegen', false, true)}
-                        ${generateCheckbox('canDeleteUser', 'Benutzer löschen', false, true)}
-                        ${generateCheckbox('canRenameUser', 'Benutzer umbenennen', false, true)}
-                        ${generateCheckbox('canToggleUserActive', 'Benutzer sperren/entsperren', false, true)}
-                        ${generateCheckbox('canChangeUserPermissionType', 'Berechtigungs-Typ ändern', false, true)}
-                        <div class="pt-2 border-t mt-2">
-                           ${generateCheckbox('canEditUserRoles', 'Darf Benutzer-Rollen bearbeiten')}
-                           ${generateCheckbox('canSeeSysadminLogs', 'Darf Sysadmin-Einträge sehen')}
+                    <div class="pl-6 mt-3 pt-3 border-t border-gray-200 space-y-3">
+                        <h5 class="font-semibold text-sm mb-2 text-gray-500">Aktionen in "Benutzersteuerung"</h5>
+                        <div class="grid grid-cols-2 gap-2 text-sm">
+                            <label class="flex items-center gap-2"><input type="checkbox" class="admin-perm-cb" data-perm="canCreateUser" ${perms.canCreateUser ? 'checked' : ''}> <span>Benutzer anlegen</span></label>
+                            <label class="flex items-center gap-2"><input type="checkbox" class="admin-perm-cb" data-perm="canDeleteUser" ${perms.canDeleteUser ? 'checked' : ''}> <span>Benutzer löschen</span></label>
+                            <label class="flex items-center gap-2"><input type="checkbox" class="admin-perm-cb" data-perm="canRenameUser" ${perms.canRenameUser ? 'checked' : ''}> <span>Benutzer umbenennen</span></label>
+                            <label class="flex items-center gap-2"><input type="checkbox" class="admin-perm-cb" data-perm="canToggleUserActive" ${perms.canToggleUserActive ? 'checked' : ''}> <span>Benutzer ent-/sperren</span></label>
+                            <label class="flex items-center gap-2"><input type="checkbox" class="admin-perm-cb" data-perm="canChangeUserPermissionType" ${perms.canChangeUserPermissionType ? 'checked' : ''}> <span>Berechtigungs-Typ ändern</span></label>
+                        </div>
+                        <h5 class="font-semibold text-sm mb-2 mt-3 text-gray-500">Rechte in "Rollenverwaltung"</h5>
+                        <div class="grid grid-cols-2 gap-2 text-sm">
+                            <label class="flex items-center gap-2"><input type="checkbox" class="admin-perm-cb" data-perm="canEditUserRoles" ${perms.canEditUserRoles ? 'checked' : ''}> <span>Darf Benutzer-Rollen bearbeiten</span></label>
+                        </div>
+                            <h5 class="font-semibold text-sm mb-2 mt-3 text-gray-500">Rechte in "Protokoll History"</h5>
+                        <div class="grid grid-cols-2 gap-2 text-sm">
+                            <label class="flex items-center gap-2"><input type="checkbox" class="admin-perm-cb" data-perm="canSeeSysadminLogs" ${perms.canSeeSysadminLogs ? 'checked' : ''}> <span>Darf Sysadmin-Einträge sehen</span></label>
                         </div>
                     </div>
                 </div>
+                <div class="p-3 border rounded-lg bg-white">
+                    <h5 class="font-semibold text-sm mb-2 text-gray-600">Genehmigungsprozess</h5>
+                    <p class="text-xs text-gray-500 mb-3">Wenn hier ein Haken gesetzt ist, muss die jeweilige Aktion von einem Systemadmin genehmigt werden.</p>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <label class="flex items-center gap-2"><input type="checkbox" class="approval-cb" data-perm="setAdminStatus" ${approvalPerms.setAdminStatus ? 'checked' : ''}> <span>Admin-Status setzen</span></label>
+                        <label class="flex items-center gap-2"><input type="checkbox" class="approval-cb" data-perm="createUser" ${approvalPerms.createUser ? 'checked' : ''}> <span>Benutzer anlegen</span></label>
+                        <label class="flex items-center gap-2"><input type="checkbox" class="approval-cb" data-perm="deleteUser" ${approvalPerms.deleteUser ? 'checked' : ''}> <span>Benutzer löschen</span></label>
+                        <label class="flex items-center gap-2"><input type="checkbox" class="approval-cb" data-perm="renameUser" ${approvalPerms.renameUser ? 'checked' : ''}> <span>Benutzer umbenennen</span></label>
+                        <label class="flex items-center gap-2"><input type="checkbox" class="approval-cb" data-perm="toggleUserActive" ${approvalPerms.toggleUserActive ? 'checked' : ''}> <span>Benutzer ent-/sperren</span></label>
+                        <label class="flex items-center gap-2"><input type="checkbox" class="approval-cb" data-perm="changeUserPermissionType" ${approvalPerms.changeUserPermissionType ? 'checked' : ''}> <span>Berechtigungs-Typ ändern</span></label>
+                    </div>
+                </div>
             </div>
-
-            <div class="mt-4 pt-4 border-t ${!canBeEdited ? 'hidden' : ''}">
-                 <button id="save-admin-perms-button-${userId}" data-userid="${userId}" class="save-admin-perms-button w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                     Änderungen speichern
-                 </button>
+            
+            <div class="mt-4 pt-4 border-t flex justify-end">
+                <button id="save-admin-details-btn" data-userid="${userId}" class="py-2 px-4 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition">Änderungen speichern</button>
             </div>
         </div>
     `;
     
-    // --- Listener für UI-Logik ---
+    // (Event-Listener-Logik bleibt gleich)
+    detailsArea.querySelector('#close-details-btn').addEventListener('click', () => {
+        detailsArea.innerHTML = '';
+        delete detailsArea.dataset.editingUser;
+        document.querySelectorAll('.edit-admin-user-btn').forEach(b => b.closest('.p-2').classList.remove('bg-indigo-100'));
+    });
     detailsArea.querySelectorAll('.perm-type-toggle').forEach(radio => {
         radio.addEventListener('change', (e) => {
             const type = e.target.value;
             const card = e.target.closest('.p-4');
-            card.querySelector('.role-selection-area')?.classList.toggle('hidden', type !== 'role');
-            const individualArea = card.querySelector('.individual-perms-area');
-            individualArea?.classList.toggle('hidden', type !== 'individual');
-            
-            // Wenn auf 'individuell' umgeschaltet wird, initial die Abhängigkeiten setzen
-            if (type === 'individual' && individualArea) {
-                setupPermissionDependencies(individualArea);
-            }
+            card.querySelector('.role-selection-area').classList.toggle('hidden', type !== 'role');
+            card.querySelector('.individual-perms-area').classList.toggle('hidden', type !== 'individual');
         });
     });
-    
-    // Listener für Checkbox-Änderungen in der individuellen Ansicht
-    detailsArea.querySelectorAll('.admin-perm-cb, .approval-cb').forEach(cb => {
-         cb.addEventListener('change', (e) => {
-             const permKey = e.target.dataset.perm;
-             const container = e.target.closest('.individual-perms-area');
-             
-             // Nur die Abhängigkeiten für die MainFunctions und Checkboxen prüfen
-             if (container && (permKey === 'canSeeMainFunctions' || permKey === 'canUseMainChecklist')) {
-                 setupPermissionDependencies(container);
-             }
-         });
+    detailsArea.querySelector('#save-admin-details-btn').addEventListener('click', async (e) => {
+        const userId = e.currentTarget.dataset.userid;
+        const container = e.currentTarget.closest('.p-4');
+
+        const selectedType = container.querySelector('input[name^="perm-type-"]:checked').value;
+        const updateData = {
+            permissionType: selectedType
+        };
+
+        if (selectedType === 'role') {
+            updateData.assignedAdminRoleId = container.querySelector('#assigned-admin-role-select').value;
+            updateData.adminPermissions = {};
+        } else {
+            const permissions = {};
+            container.querySelectorAll('.admin-perm-cb').forEach(cb => {
+                permissions[cb.dataset.perm] = cb.checked;
+            });
+
+            const approvalRequired = {};
+            container.querySelectorAll('.approval-cb').forEach(cb => {
+                approvalRequired[cb.dataset.perm] = cb.checked;
+            });
+            permissions.approvalRequired = approvalRequired;
+
+            updateData.adminPermissions = permissions;
+            updateData.assignedAdminRoleId = null;
+        }
+
+        await updateDoc(doc(usersCollectionRef, userId), updateData);
+        alertUser("Änderungen gespeichert!", "success");
+
+        // Rufe renderAdminRightsManagement auf, um die Listen "Rolle" vs "Individuell" zu aktualisieren
+        // (Vorausgesetzt, es wurde wie im vorigen Schritt importiert)
+        if (typeof renderAdminRightsManagement === 'function') {
+            await renderAdminRightsManagement();
+            // Stelle sicher, dass das Detailfenster offen bleibt, wenn es vorher offen war
+            if (document.getElementById('admin-user-details-area')) {
+                renderAdminUserDetails(userId);
+            }
+        }
     });
 
-    // Wichtig: Beim initialen Laden die Abhängigkeiten setzen, falls die individuelle Ansicht aktiv ist
-    const individualArea = detailsArea.querySelector('.individual-perms-area:not(.hidden)');
-    if (individualArea) {
-        setupPermissionDependencies(individualArea);
-    }
+    // Stellt sicher, dass die Abhängigkeitslogik für die Checkboxen aktiv ist
+    setupPermissionDependencies(detailsArea);
 }
