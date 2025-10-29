@@ -580,7 +580,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
         const userId = userCard?.dataset.userid;
 
         // --- Buttons AUSSERHALB der Karten ---
-        
         // Logik für "Speichern" des neuen Benutzers
         const saveNewUserButton = e.target.closest('#saveNewUserButton');
         if (saveNewUserButton) {
@@ -752,8 +751,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
             rememberAdminScroll();
             
-            // KORREKTUR DER SCHREIB-LOGIK: Verwende adminPermissionType (um Trennung zu gewährleisten)
-            let updateData = { adminPermissionType: selectedType }; // <-- FIX: Trennung der Logik
+            // KORREKTUR DER SCHREIB-LOGIK: Verwende adminPermissionType und setze assignedAdminRoleId sicher
+            let updateData = { adminPermissionType: selectedType }; 
 
             if (selectedType === 'role') {
                 const roleSelect = permContainer.querySelector('.user-role-select');
@@ -766,9 +765,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
                 updateData = {
                     ...updateData,
-                    assignedAdminRoleId: permContainer.querySelector('#assigned-admin-role-select')?.value, 
+                    assignedAdminRoleId: permContainer.querySelector('#assigned-admin-role-select')?.value || null, // <-- FIX 1: Setze auf null, falls undefined
                     adminPermissions: {}, 
-                    // Der Rest der Felder, die bei Rolle gesetzt werden
                 };
 
             } else { // type === 'individual'
@@ -791,7 +789,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 updateData = {
                     ...updateData, 
                     adminPermissions: permissions, // Individuelle Admin-Rechte speichern
-                    assignedAdminRoleId: null, 
+                    assignedAdminRoleId: null, // <-- FIX 2: MUSS explizit null sein, NICHT undefined
                 };
             }
 
