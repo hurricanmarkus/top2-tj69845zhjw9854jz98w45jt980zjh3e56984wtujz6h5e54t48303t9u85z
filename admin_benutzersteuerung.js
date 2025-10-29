@@ -1043,7 +1043,7 @@ export function renderAdminUserDetails(userId) {
     const toggleSaveButton = () => {
         const saveBtn = detailsArea.querySelector('#admin-save-container button');
         if (saveBtn) {
-            // Wir machen den Button klickbar, wenn der Bereich sichtbar ist und man editieren darf
+            // Button klickbar machen
             saveBtn.disabled = false; 
             saveBtn.textContent = 'Änderungen speichern';
         }
@@ -1085,5 +1085,80 @@ export function renderAdminUserDetails(userId) {
     const individualArea = detailsArea.querySelector('.individual-perms-area:not(.hidden)');
     if (individualArea && typeof setupPermissionDependencies === 'function') {
         setupPermissionDependencies(individualArea);
+    }
+    
+    // --- NEU: Listener für den Speichern-Button hinzufügen (Löst das Problem!) ---
+    const saveButton = detailsArea.querySelector('.save-admin-perms-button');
+    if (saveButton && !saveButton.dataset.listenerAttached) {
+        saveButton.addEventListener('click', async (e) => {
+            const userId = e.currentTarget.dataset.userid;
+            const container = e.currentTarget.closest('.p-4'); // Den Hauptcontainer holen
+            const adminUserForUpdate = USERS[userId]; // Benutzerdaten für den Log
+
+            // 1. Berechtigungs-Typ bestimmen
+            const typeRadio = container.querySelector('input[name^="perm-type-"]:checked');
+            if (!typeRadio) {
+                alertUser("Fehler: Berechtigungs-Typ konnte nicht ermittelt werden.", "error");
+                return;
+            } 
+            const selectedType = typeRadio.value;
+
+            e.currentTarget.disabled = true; // Button deaktivieren während Speichern
+            e.currentTarget.textContent = 'Speichere...';
+            
+            let updateData = { adminPermissionType: selectedType }; // Korrekter Feldname
+
+            if (selectedType === 'role') {
+                updateData = {
+                    ...updateData,
+                    assignedAdminRoleId: container.querySelector('#assigned-admin-role-select')?.value || null, 
+                    // Wichtig: adminPermissions werden NICHT gelöscht, sondern nur ignoriert/zurückgesetzt
+                    adminPermissions: adminUserForUpdate.adminPermissions || {},
+                };
+            } else { // type === 'individual'
+                const permissions = {};
+                container.querySelectorAll('.admin-perm-cb').forEach(cb => { permissions[cb.dataset.perm] = cb.checked; });
+                const approvalRequired = {};
+                container.querySelectorAll('.approval-cb').forEach(cb => { approvalRequired[cb.dataset.perm] = cb.checked; });
+                permissions.approvalRequired = approvalRequired;
+
+                updateData = {
+                    ...updateData, 
+                    adminPermissions: permissions, 
+                    assignedAdminRoleId: adminUserForUpdate.assignedAdminRoleId || null, // Vorhandene Rolle beibehalten
+                };
+            }
+            
+            // Wichtig: Entferne leere oder null-Werte, um Firebase-Fehler zu vermeiden
+            Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
+
+
+            try {
+                // Führe das Update aus
+                await updateDoc(doc(usersCollectionRef, userId), updateData);
+                await logAdminAction('admin_perms_updated', `Admin-Berechtigungen für ${adminUserForUpdate.name} (${selectedType}) geändert.`);
+                alertUser("Änderungen gespeichert!", "success");
+                
+                // Nach erfolgreicher Speicherung: UI-Aktualisierung
+                // 1. Detailansicht entfernen
+                detailsArea.innerHTML = '';
+                delete detailsArea.dataset.editingUser;
+                document.querySelectorAll('.edit-admin-user-btn').forEach(b => b.closest('.p-2')?.classList.remove('bg-indigo-100'));
+                
+                // 2. Wichtig: Hauptliste aktualisieren, damit die Anzeige korrekt ist
+                if (typeof renderAdminRightsManagement === 'function') {
+                    await renderAdminRightsManagement(); 
+                }
+
+            } catch (error) {
+                console.error("FEHLER beim Speichern der Admin-Rechte:", error);
+                alertUser(`Fehler beim Speichern: ${error.message}`, "error");
+            } finally {
+                e.currentTarget.disabled = false;
+                e.currentTarget.textContent = 'Änderungen speichern';
+            }
+        });
+        // Markiere den Listener als angehängt, um Dopplungen zu vermeiden
+        saveButton.dataset.listenerAttached = 'true';
     }
 }
