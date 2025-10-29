@@ -914,17 +914,22 @@ export function renderAdminUserDetails(userId) {
     if (!detailsArea || !adminUser) {
         if (detailsArea) {
              detailsArea.innerHTML = '';
+             detailsArea.classList.add('hidden'); // Wenn leer, verstecken
         }
         return;
     }
     
-    // Toggle Logik (Schließen, wenn bereits offen)
+    // --- ÖFFNEN/SCHLIESSEN LOGIK ---
     if (detailsArea.dataset.editingUser === userId) {
+        // Zustand: Bereits offen -> Schließen
         detailsArea.innerHTML = '';
         delete detailsArea.dataset.editingUser;
+        detailsArea.classList.add('hidden'); // NEU: Verstecken beim Schließen
         document.querySelectorAll('.edit-admin-user-btn').forEach(b => b.closest('.p-2')?.classList.remove('bg-indigo-100'));
         return;
     }
+    
+    // Zustand: Öffnen des Fensters
     
     // Hervorhebung setzen
     document.querySelectorAll('.edit-admin-user-btn').forEach(b => b.closest('.p-2')?.classList.remove('bg-indigo-100'));
@@ -935,6 +940,7 @@ export function renderAdminUserDetails(userId) {
     }
     
     detailsArea.dataset.editingUser = userId;
+    detailsArea.classList.remove('hidden'); // NEU: Sichtbar machen beim Öffnen
 
     const perms = adminUser.adminPermissions || {};
     const approvalPerms = perms.approvalRequired || {};
