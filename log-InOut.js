@@ -327,27 +327,22 @@ export function updateUIForMode() {
         let roleColor = 'text-gray-300'; // Standardfarbe
 
         // --- KORRIGIERTE LOGIK FÜR ROLLENANZEIGE ---
-        if (user) { // Nur wenn Benutzerdaten vorhanden sind
-            const actualRole = user.role; // Die echte Rolle aus der DB
-            const displayRole = user.displayRole; // Die eingestellte Anzeige-Rolle
-            const permissionType = user.permissionType || 'role'; // Der Berechtigungstyp
+if (user) { 
+            const actualRole = user.role; 
+            const displayRole = user.displayRole; 
+            const permissionType = user.permissionType || 'role'; 
+            
+            // Bestimme die effektive Rolle für die ANZEIGE
+            const effectiveDisplayRoleId = (permissionType === 'individual' && displayRole) ? displayRole : actualRole;
+            const roleObject = ROLES[effectiveDisplayRoleId] || ROLES['NO_RIGHTS'];
 
-            if (permissionType === 'role') {
-                // Bei Typ 'role': Nimm den Namen der echten Rolle
-                roleNameToDisplay = ROLES[actualRole]?.name || 'Unbekannt';
-                // Setze Farbe basierend auf echter Rolle
-                if (actualRole === 'SYSTEMADMIN') roleColor = 'text-purple-400 font-bold';
-                else if (actualRole === 'ADMIN') roleColor = 'text-red-400 font-bold';
-                // Hier ggf. weitere Farben für andere Rollen hinzufügen
-            } else if (permissionType === 'individual') {
-                // Bei Typ 'individual': Nimm den Namen der Display-Rolle (oder "Keine Rechte")
-                const roleIdToDisplay = displayRole || 'NO_RIGHTS'; // Fallback auf NO_RIGHTS
-                roleNameToDisplay = ROLES[roleIdToDisplay]?.name || 'Keine Rechte';
-                // Setze Farbe basierend auf Display-Rolle
-                if (roleIdToDisplay === 'ADMIN') roleColor = 'text-red-400 font-bold';
-                // Hier ggf. weitere Farben für andere Display-Rollen hinzufügen
-                else roleColor = 'text-gray-300'; // Standard für individuelle ohne spezielle Anzeige
-            }
+            roleNameToDisplay = roleObject.name || 'Keine Rechte';
+            
+            // Setze Farbe basierend auf effektiver Anzeige-Rolle
+            if (effectiveDisplayRoleId === 'SYSTEMADMIN') roleColor = 'text-purple-400 font-bold';
+            else if (effectiveDisplayRoleId === 'ADMIN') roleColor = 'text-red-400 font-bold';
+            else if (effectiveDisplayRoleId === 'NO_RIGHTS') roleColor = 'text-gray-300 italic';
+            else roleColor = 'text-gray-300';
         }
         // --- ENDE KORREKTUR ---
 
