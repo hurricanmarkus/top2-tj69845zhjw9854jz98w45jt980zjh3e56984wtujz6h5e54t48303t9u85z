@@ -332,6 +332,7 @@ async function initializeFirebase() {
 // --- HIER ENDET DIE FUNKTION ZUM ERSETZEN ---
 async function seedInitialData() {
     try {
+        // --- 1. Rollenprüfung und -erstellung ---
         const rolesSnapshot = await getDocs(rolesCollectionRef);
         if (rolesSnapshot.empty) {
             const batch = writeBatch(db);
@@ -352,6 +353,7 @@ async function seedInitialData() {
             }
         }
 
+        // --- 2. Admin-Rollenprüfung und -erstellung ---
         const adminRolesSnapshot = await getDocs(adminRolesCollectionRef);
         const emptyRoleDoc = doc(adminRolesCollectionRef, 'LEERE_ROLLE');
         const emptyRoleSnapshot = await getDoc(emptyRoleDoc);
@@ -359,12 +361,16 @@ async function seedInitialData() {
             await setDoc(emptyRoleDoc, { name: '** Leere Rolle**', permissions: {}, deletable: false });
         }
 
+        // --- 3. Benutzerprüfung und -erstellung ---
         const usersSnapshot = await getDocs(usersCollectionRef);
         if (usersSnapshot.empty) {
+            // Dies ist der Schreibvorgang, der den Fehler auslöst.
+            // Er wird nur ausgeführt, wenn die Sammlung leer ist.
             await setDoc(doc(usersCollectionRef, 'SYSTEMADMIN'), { name: 'Systemadmin', key: 'top2sys', role: 'SYSTEMADMIN', isActive: true });
         }
     } catch (error) {
-        console.error("Error in seedInitialData:", error);
+        // Logging anpassen, um die Fehlerquelle besser zu identifizieren
+        console.error("SCHWERER FEHLER in seedInitialData (Datenbank-Setup):", error);
         throw error;
     }
 }
