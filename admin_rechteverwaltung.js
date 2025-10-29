@@ -37,7 +37,7 @@ export async function renderAdminRightsManagement() {
         return;
     }
 
-    // --- Liste der Systemadmin-BENUTZER ---
+    // --- Liste der Systemadmin-BENUTZER (Logik bleibt gleich) ---
     let sysAdminListHTML = '<h4 class="text-lg font-semibold text-gray-700 mb-2">Übersicht Systemadmins</h4>'; 
     const systemAdmins = Object.values(USERS || {}).filter(user => user.role === 'SYSTEMADMIN');
 
@@ -71,14 +71,13 @@ export async function renderAdminRightsManagement() {
              <div id="admin-user-details-area" class="mt-6"></div>
            `;
 
-    // --- KORRIGIERTE LOGIK: Filtert ALLE Benutzer, die Admin-Zugriff haben oder anzeigen sollen ---
+    // --- KORRIGIERTE FILTERLOGIK ---
     const adminUsers = Object.values(USERS || {}).filter(user => 
-        // Echte Admins (die Rolle ist 'ADMIN')
+        // WICHTIG: Filtere alle Benutzer, die entweder echte Admins sind oder als Admin angezeigt werden sollen.
         user.role === 'ADMIN' || 
-        // ODER Individuell konfigurierte Benutzer, die den Status 'ADMIN' anzeigen sollen
         (user.permissionType === 'individual' && user.displayRole === 'ADMIN')
     );
-    // SysAdmins werden hier nicht mehr hinzugefügt, da sie in der Liste oben sind und nicht bearbeitbar sein sollen.
+    // SysAdmins sind bereits oben.
 
     const roleUsersContainer = adminRightsArea.querySelector('#admin-role-users');
     const individualUsersContainer = adminRightsArea.querySelector('#admin-individual-users');
@@ -92,9 +91,14 @@ export async function renderAdminRightsManagement() {
          if (individualUsersContainer) individualUsersContainer.innerHTML = msg;
     } else {
         adminUsers.forEach(adminUser => {
-            // Bestimme den tatsächlichen Anzeigetyp (Entweder Rolle oder Individuell)
-            const permissionType = adminUser.permissionType || 'role';
             
+            // NEU: Bestimme den Admin-Berechtigungstyp aus dem dedizierten Feld
+            const adminPermType = adminUser.adminPermissionType || 'role'; // <-- FIX: Nutzt neues Feld
+            
+            // NEU: Bestimme, ob die Karte in die 'Rolle'- oder 'Individuell'-Spalte soll
+            const targetType = adminPermType === 'role' ? 'role' : 'individual';
+
+
             // SysAdmins dürfen Admins bearbeiten (hier sind nur Admins und Individuelle Admin-Displays)
             const canBeEdited = currentUser.role === 'SYSTEMADMIN'; 
 
@@ -102,21 +106,19 @@ export async function renderAdminRightsManagement() {
             userCard.className = 'p-2 border rounded-lg bg-white shadow-sm flex justify-between items-center';
 
             let userInfoHTML;
-            let targetContainer = null;
-            let roleName = 'Admin'; // Standardmäßig 'Admin'
+            let targetContainer = targetType === 'role' ? roleUsersContainer : individualUsersContainer;
+            let roleName = 'Admin'; 
 
-            if (permissionType === 'role') {
+            if (targetType === 'role') {
                  // Zeige die zugewiesene Admin-Rolle an, falls vorhanden
                  if (adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
                      roleName = ADMIN_ROLES[adminUser.assignedAdminRoleId].name;
                  }
                  userInfoHTML = `<div><p class="font-bold text-gray-800">${adminUser.name}</p><p class="text-xs text-indigo-600 font-medium">${roleName}</p></div>`;
-                 targetContainer = roleUsersContainer;
             } else { // Individuell
-                 // Bei individuellem Admin-Display sollte die Anzeige "ADMIN" sein
+                 // Wenn 'Individuell', zeige den Anzeigerollen-Typ oder "Individuell" an
                  const displayRoleName = adminUser.displayRole || 'Individuell';
                  userInfoHTML = `<div><p class="font-bold text-gray-800">${adminUser.name}</p><p class="text-xs text-indigo-600 font-medium">${displayRoleName}</p></div>`;
-                 targetContainer = individualUsersContainer;
             }
 
             userCard.innerHTML = `
@@ -137,7 +139,6 @@ export async function renderAdminRightsManagement() {
              if (!button.dataset.listenerAttached) {
                  button.addEventListener('click', (e) => {
                      const userId = e.currentTarget.dataset.userid;
-                     // renderAdminUserDetails muss aus admin_benutzersteuerung.js importiert sein!
                      if (typeof renderAdminUserDetails === 'function') {
                          renderAdminUserDetails(userId); 
                      } else {
