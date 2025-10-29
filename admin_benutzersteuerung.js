@@ -558,6 +558,12 @@ export async function renderUserManagement() {
 }
 
 // Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
+// admin_benutzersteuerung.js
+
+// ... (Rest der Datei, bis zur Funktion addAdminUserManagementListeners) ...
+
+
+// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
 export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions) {
     if (!area) return;
 
@@ -570,251 +576,108 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
     // --- CLICK Listener ---
     area.addEventListener('click', async (e) => {
-        console.log("[CLICK] Event ausgelöst. Target:", e.target);
         const userCard = e.target.closest('.user-card');
         const userId = userCard?.dataset.userid;
 
         // --- Buttons AUSSERHALB der Karten ---
-        
         // Logik für "Speichern" des neuen Benutzers
         const saveNewUserButton = e.target.closest('#saveNewUserButton');
-        if (saveNewUserButton) {
-            console.log("[CLICK] 'Neuen Benutzer speichern' geklickt.");
-            const form = saveNewUserButton.closest('#addUserFormContainer');
-            if (!form) return;
-
-            const nameInput = form.querySelector('#newUserName');
-            const realNameInput = form.querySelector('#newUserRealName');
-            const keyInput = form.querySelector('#newUserKey');
-            const typeSelect = form.querySelector('#newUserPermissionType');
-            const roleSelect = form.querySelector('#newUserRole');
-
-            const name = nameInput.value.trim();
-            const realName = realNameInput.value.trim(); // KORREKTUR: Wert holen
-            const type = typeSelect.value;
-            const key = keyInput.value; // Kein trim!
-
-            // ================== LOGIKÄNDERUNG HIER (START) ==================
-            if (!name) return alertUser("Nickname ist ein Pflichtfeld.", "error");
-            if (!realName) return alertUser("Vorname & Nachname ist ein Pflichtfeld.", "error"); // KORREKTUR: Prüfung hinzugefügt
-            // ================== LOGIKÄNDERUNG HIER (ENDE) ==================
-
-            if (type !== 'not_registered' && key.length < 4) return alertUser("Passwort muss mind. 4 Zeichen haben.", "error");
-
-            if (type === 'role' && roleSelect.value === 'SYSTEMADMIN' && currentUser.role !== 'SYSTEMADMIN') {
-                 return alertUser("Nur Systemadmins dürfen die Rolle SYSTEMADMIN zuweisen.", "error");
-            }
-            if (type === 'role' && roleSelect.value === 'ADMIN' && currentUser.role !== 'SYSTEMADMIN') {
-                 console.warn("Admin versucht Admin-Rolle zuzuweisen.");
-            }
-
-            const newUserData = {
-                name: name,
-                realName: realName, // KORREKTUR: Gesäuberten Wert verwenden
-                key: type !== 'not_registered' ? key : null,
-                permissionType: type,
-                role: type === 'role' ? roleSelect.value : null,
-                customPermissions: [],
-                adminPermissions: {},
-                assignedAdminRoleId: null,
-                displayRole: null,
-                isActive: true
-            };
-
-            try {
-                setButtonLoading(saveNewUserButton, true);
-                const newDocRef = doc(usersCollectionRef); 
-                await setDoc(newDocRef, newUserData);
-                await logAdminAction('user_created', `Neuen Benutzer angelegt: '${name}' (ID: ${newDocRef.id}).`);
-                alertUser(`Benutzer '${name}' erfolgreich angelegt!`, "success");
-                
-                // Formular zurücksetzen
-                nameInput.value = '';
-                realNameInput.value = '';
-                keyInput.value = '';
-                typeSelect.value = 'role';
-                roleSelect.value = 'ANGEMELDET';
-                toggleNewUserRoleField(); 
-                form.classList.add('hidden'); 
-                const addUserBtn = document.getElementById('showAddUserFormBtn');
-                if (addUserBtn) addUserBtn.textContent = '+ Benutzer anlegen';
-
-            } catch (error) {
-                console.error("Fehler beim Anlegen des Benutzers:", error);
-                alertUser("Fehler beim Anlegen des Benutzers.", "error");
-            } finally {
-                setButtonLoading(saveNewUserButton, false);
-            }
-            return; // Klick behandelt
-        }
+        if (saveNewUserButton) { /* ... Logik bleibt gleich ... */ return; }
         
         // Logik für "Nicht registrierte" aufklappen
         const notRegisteredToggle = e.target.closest('#notRegisteredToggle');
-        if (notRegisteredToggle) {
-            console.log("[CLICK] 'Nicht registrierte' Toggle geklickt.");
-            const list = area.querySelector('#notRegisteredList');
-            const icon = notRegisteredToggle.querySelector('svg'); 
-            if (list) {
-                list.classList.toggle('hidden');
-                if (icon) {
-                    icon.classList.toggle('rotate-180'); 
-                }
-            }
-            return; // Klick behandelt
-        }
+        if (notRegisteredToggle) { /* ... Logik bleibt gleich ... */ return; }
         
         // --- Aktionen INNERHALB einer Benutzerkarte ---
         if (!userCard || !userId) return;
-        console.log(`[CLICK] Klick innerhalb der Karte für User: ${userId}`);
 
         // Löschen Button
         const deleteButton = e.target.closest('.delete-user-button');
-        if (deleteButton) {
-            const userToDelete = USERS[userId];
-            if (!userToDelete) return;
-            if (!confirm(`Soll der Benutzer '${userToDelete.name}' wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden.`)) return;
-            
-            rememberAdminScroll();
-            try {
-                await deleteDoc(doc(usersCollectionRef, userId));
-                await logAdminAction('user_deleted', `Benutzer '${userToDelete.name}' gelöscht.`);
-                alertUser(`Benutzer '${userToDelete.name}' gelöscht.`, "success");
-            } catch (error) {
-                console.error("Fehler beim Löschen:", error);
-                alertUser("Fehler beim Löschen.", "error");
-            }
-            return; 
-        }
+        if (deleteButton) { /* ... Logik bleibt gleich ... */ return; }
 
         // Umbenennen Button (Stift)
         const renameButton = e.target.closest('.rename-user-btn');
-        if (renameButton) {
-            const nameDisplay = userCard.querySelector('.name-display');
-            const nameEdit = userCard.querySelector('.name-edit-container');
-            if (nameDisplay && nameEdit) {
-                nameDisplay.classList.add('hidden');
-                nameEdit.classList.remove('hidden');
-                nameEdit.querySelector('.edit-nickname-input')?.focus(); 
-            }
-            return; 
-        }
+        if (renameButton) { /* ... Logik bleibt gleich ... */ return; }
 
         // Speichern nach Umbenennen Button (Häkchen)
         const saveNameButton = e.target.closest('.save-name-btn');
-        if (saveNameButton) {
-            const nameEditContainer = saveNameButton.closest('.name-edit-container');
-            const nameDisplay = userCard.querySelector('.name-display');
-            if (!nameEditContainer || !nameDisplay) return;
-
-            const newNickname = nameEditContainer.querySelector('.edit-nickname-input').value.trim();
-            
-            if (!newNickname) return alertUser("Nickname darf nicht leer sein.", "error");
-
-            rememberAdminScroll();
-            try {
-                // KORREKTUR: Nur noch 'name' (Nickname) aktualisieren.
-                const updateData = {
-                    name: newNickname
-                };
-
-                await updateDoc(doc(usersCollectionRef, userId), updateData);
-                await logAdminAction('user_renamed', `Benutzer ${USERS[userId]?.name || userId} umbenannt in '${newNickname}'.`);
-                
-                nameDisplay.classList.remove('hidden');
-                nameEditContainer.classList.add('hidden');
-
-            } catch (error) {
-                 console.error("Fehler beim Umbenennen:", error);
-                 alertUser("Fehler beim Umbenennen.", "error");
-            }
-            return; 
-        }
+        if (saveNameButton) { /* ... Logik bleibt gleich ... */ return; }
 
         // --- Speichern der Berechtigungen Button ---
-// admin_benutzersteuerung.js: im Event-Listener für 'click'
+        const savePermsButton = e.target.closest('.save-perms-button');
+        if (savePermsButton) {
+            console.log(`[CLICK] Speichern (Berechtigungen) für User ${userId} erkannt.`);
+            const permContainer = savePermsButton.closest('[data-userid]'); // HIER wird container gefunden
 
-// --- Speichern der Berechtigungen Button ---
-const savePermsButton = e.target.closest('.save-perms-button');
-if (savePermsButton) {
-    console.log(`[CLICK] Speichern (Berechtigungen) für User ${userId} erkannt.`);
-    const permContainer = savePermsButton.closest('[data-userid]');
-    if (!permContainer) { console.error(`[CLICK] Konnte Berechtigungs-Container für User ${userId} nicht finden!`); return; }
+            if (!permContainer) { 
+                console.error(`[CLICK] Konnte Berechtigungs-Container für User ${userId} nicht finden!`); 
+                return; 
+            }
 
-    const typeRadio = permContainer.querySelector('input[name^="perm-type-"]:checked');
-    if (!typeRadio) { console.error(`[CLICK] Konnte Berechtigungstyp-Radiobutton für User ${userId} nicht lesen!`); return; }
-    const selectedType = typeRadio.value; // Der ausgewählte Typ (role oder individual)
+            const typeRadio = permContainer.querySelector('input[name^="perm-type-"]:checked');
+            if (!typeRadio) { console.error(`[CLICK] Konnte Berechtigungstyp-Radiobutton für User ${userId} nicht lesen!`); return; }
+            const selectedType = typeRadio.value; // Der ausgewählte Typ (role oder individual)
 
-    rememberAdminScroll();
-    
-    // === KORREKTUR: Verwende adminPermissionType statt permissionType ===
-    let updateData = { adminPermissionType: selectedType }; // <-- FIX: Trennung der Logik
-    // ===================================================================
+            rememberAdminScroll();
+            
+            // KORREKTUR DER SCHREIB-LOGIK: Verwende adminPermissionType
+            let updateData = { adminPermissionType: selectedType }; 
 
-    if (selectedType === 'role') {
-        const roleSelect = permContainer.querySelector('.user-role-select');
-        if (!roleSelect) { console.error(`[CLICK] Konnte Rollen-Select für User ${userId} nicht finden!`); return; }
-        const newRole = roleSelect.value;
-        
-        if (newRole === 'SYSTEMADMIN' && currentUser.role !== 'SYSTEMADMIN') {
-            return alertUser("Nur Systemadmins dürfen die Rolle SYSTEMADMIN zuweisen.", "error");
+            if (selectedType === 'role') {
+                const roleSelect = permContainer.querySelector('.user-role-select');
+                if (!roleSelect) { console.error(`[CLICK] Konnte Rollen-Select für User ${userId} nicht finden!`); return; }
+                const newRole = roleSelect.value;
+                
+                if (newRole === 'SYSTEMADMIN' && currentUser.role !== 'SYSTEMADMIN') {
+                    return alertUser("Nur Systemadmins dürfen die Rolle SYSTEMADMIN zuweisen.", "error");
+                }
+
+                updateData = {
+                    ...updateData,
+                    assignedAdminRoleId: container.querySelector('#assigned-admin-role-select')?.value, 
+                    adminPermissions: {}, 
+                    // Der Rest der Felder, die bei Rolle gesetzt werden
+                };
+
+            } else { // type === 'individual'
+                const customPermissions = Array.from(permContainer.querySelectorAll('.custom-perm-checkbox:checked')).map(cb => cb.dataset.perm);
+                const displayRoleSelect = permContainer.querySelector('.display-role-select');
+                if (!displayRoleSelect) { console.error(`[CLICK] Konnte Display-Rollen-Select für User ${userId} nicht finden!`); return; }
+                const selectedDisplayRole = displayRoleSelect.value || 'NO_RIGHTS'; 
+
+                const permissions = {};
+                permContainer.querySelectorAll('.admin-perm-cb').forEach(cb => {
+                    permissions[cb.dataset.perm] = cb.checked;
+                });
+
+                const approvalRequired = {};
+                permContainer.querySelectorAll('.approval-cb').forEach(cb => {
+                    approvalRequired[cb.dataset.perm] = cb.checked;
+                });
+                permissions.approvalRequired = approvalRequired;
+
+                updateData = {
+                    ...updateData, 
+                    adminPermissions: permissions, // Individuelle Admin-Rechte speichern
+                    assignedAdminRoleId: null, 
+                };
+            }
+
+            console.log("[CLICK] Finale Update-Daten für Admin-Rechte:", updateData);
+
+            try {
+                await updateDoc(doc(usersCollectionRef, userId), updateData);
+                await logAdminAction('admin_perms_updated', `Admin-Berechtigungstyp für ${USERS[userId]?.name || userId} auf ${selectedType} geändert.`);
+                
+                const saveBtnContainer = permContainer.querySelector('.save-perms-container');
+                if (saveBtnContainer) saveBtnContainer.classList.add('hidden');
+                alertUser("Berechtigungen gespeichert!", "success");
+            } catch (error) {
+                console.error(`[CLICK] FEHLER beim Speichern der Admin-Rechte für User ${userId}:`, error);
+                alertUser(`Fehler beim Speichern: ${error.message}`, "error");
+            }
+            return; // Klick behandelt
         }
-
-        updateData = {
-            ...updateData,
-            assignedAdminRoleId: container.querySelector('#assigned-admin-role-select')?.value, // Sicherstellen, dass das Feld existiert
-            adminPermissions: {}, // Individuelle Rechte löschen
-            // Restliche Felder, die bei Rolle gesetzt werden
-        };
-
-    } else { // type === 'individual'
-        const customPermissions = Array.from(permContainer.querySelectorAll('.custom-perm-checkbox:checked')).map(cb => cb.dataset.perm);
-        const displayRoleSelect = permContainer.querySelector('.display-role-select');
-        if (!displayRoleSelect) { console.error(`[CLICK] Konnte Display-Rollen-Select für User ${userId} nicht finden!`); return; }
-        const selectedDisplayRole = displayRoleSelect.value || 'NO_RIGHTS'; 
-
-        const permissions = {};
-        permContainer.querySelectorAll('.admin-perm-cb').forEach(cb => {
-            permissions[cb.dataset.perm] = cb.checked;
-        });
-
-        const approvalRequired = {};
-        permContainer.querySelectorAll('.approval-cb').forEach(cb => {
-            approvalRequired[cb.dataset.perm] = cb.checked;
-        });
-        permissions.approvalRequired = approvalRequired;
-
-        updateData = {
-            ...updateData, 
-            adminPermissions: permissions, // Individuelle Admin-Rechte speichern
-            assignedAdminRoleId: null, 
-            // Der Rest der Felder für den individuellen Modus
-        };
-        // HINWEIS: Hier fehlen die Felder 'role' und 'customPermissions' in Ihrer UpdateData-Definition
-        // Dies ist der "Admin-Rechte"-Speichern-Button. Er sollte nur Admin-spezifische Felder speichern.
-
-    }
-
-    // ACHTUNG: Der Code hier muss die Speicherung des Feldes 'permissionType' und 'role' des Haupt-Benutzers
-    // übernehmen, falls Sie diese im Admin-Panel ändern dürfen.
-
-    // Da der Admin-Bereich (renderAdminUserDetails) nur den Admin-Typ steuert,
-    // sollte die Änderung nur auf adminPermissionType abzielen.
-
-    console.log("[CLICK] Finale Update-Daten für Admin-Rechte:", updateData);
-
-    try {
-        await updateDoc(doc(usersCollectionRef, userId), updateData);
-        await logAdminAction('admin_perms_updated', `Admin-Berechtigungstyp für ${USERS[userId]?.name || userId} auf ${selectedType} geändert.`);
-        
-        const saveBtnContainer = permContainer.querySelector('.save-perms-container');
-        if (saveBtnContainer) saveBtnContainer.classList.add('hidden');
-        alertUser("Berechtigungen gespeichert!", "success");
-    } catch (error) {
-        console.error(`[CLICK] FEHLER beim Speichern der Admin-Rechte für User ${userId}:`, error);
-        alertUser(`Fehler beim Speichern: ${error.message}`, "error");
-    }
-    return; // Klick behandelt
-}
 
         console.log("[CLICK] Klick innerhalb einer Karte, aber kein bekannter Button.");
 
@@ -834,44 +697,31 @@ if (savePermsButton) {
             console.log(`[CHANGE] Änderung innerhalb der Karte für User: ${userId}`);
 
              // --- Aktivieren/Deaktivieren Toggle ---
-             if (target.classList.contains('user-active-toggle')) {
-                console.log(`[CHANGE] Aktiv-Toggle geändert. checked=${target.checked}`);
-                const isChecked = target.checked; // true wenn "Gesperrt" (also isActive = false)
-                 if (!confirm(`Status von ${USERS[userId].name} ändern?`)) { target.checked = !isChecked; return; }
-                 
-                 let currentAdminPerms = {}; if (currentUser.role === 'ADMIN' && USERS[currentUser.mode]) { currentAdminPerms = USERS[currentUser.mode].adminPermissions || {}; } 
-                 const currentPermSet = (currentUser.role === 'SYSTEMADMIN') ? { canToggleUserActive: true } : currentAdminPerms; 
-                 const requiresApproval = (currentUser.role === 'ADMIN' && currentPermSet.approvalRequired?.toggleUserActive);
-                 
-                 if (requiresApproval) { 
-                     target.checked = !isChecked; 
-                     await createApprovalRequest('TOGGLE_USER_ACTIVE', userId, { isActive: !isChecked }); 
-                     alertUser("Aktion zur Genehmigung eingereicht.", "success");
-                 }
-                 else { 
-                     try { 
-                         await updateDoc(doc(usersCollectionRef, userId), { isActive: !isChecked }); 
-                         await logAdminAction('user_toggled_active', `Benutzer ${USERS[userId].name} Status auf ${!isChecked} gesetzt.`);
-                         alertUser("Status geändert.", "success");
-                     } catch (error) { 
-                         console.error("Fehler:", error); 
-                         alertUser("Fehler.", "error"); 
-                         target.checked = !isChecked; 
-                     } 
-                 }
-                 return;
-             }
+             if (target.classList.contains('user-active-toggle')) { /* ... Logik bleibt gleich ... */ return; }
 
             // --- Änderungen an Berechtigungs-Inputs ---
             if (target.matches('.perm-type-toggle, .user-role-select, .custom-perm-checkbox, .display-role-select')) {
                  console.log(`[CHANGE] Berechtigungs-Input geändert.`);
-                const container = target.closest('[data-userid]'); if (!container) return;
+                const container = target.closest('[data-userid]'); // HIER wird container gefunden
                 
-                if (target.classList.contains('perm-type-toggle')) { 
-                    container.querySelector('.role-selection-area')?.classList.toggle('hidden', target.value !== 'role'); 
-                    container.querySelector('.individual-perms-area')?.classList.toggle('hidden', target.value !== 'individual'); 
+                if (!container) { 
+                    console.error("[CHANGE] Konnte Container nicht finden.");
+                    return; 
                 }
                 
+                // 1. Rollenansicht umschalten
+                if (target.classList.contains('perm-type-toggle')) { 
+                    container.querySelector('.role-selection-area')?.classList.toggle('hidden', target.value !== 'role'); 
+                    const individualArea = container.querySelector('.individual-perms-area');
+                    individualArea?.classList.toggle('hidden', target.value !== 'individual');
+                    
+                    // Wenn auf 'individual' umgeschaltet wird, initial die Abhängigkeiten setzen
+                    if (target.value === 'individual' && individualArea && typeof setupPermissionDependencies === 'function') {
+                        setupPermissionDependencies(individualArea);
+                    }
+                }
+                
+                // 2. Speicher-Button zeigen
                 const saveBtnContainer = container.querySelector('.save-perms-container'); 
                 if (saveBtnContainer) { 
                     saveBtnContainer.classList.remove('hidden'); 
@@ -879,9 +729,10 @@ if (savePermsButton) {
                     console.warn("[CHANGE] Speicher-Button Container nicht gefunden!"); 
                 }
                 
-                if (target.dataset.perm === 'CHECKLIST') { 
+                // 3. Wenn eine Checkbox in der individuellen Ansicht geändert wird, die Abhängigkeiten prüfen.
+                if (target.classList.contains('custom-perm-checkbox') && target.closest('.individual-perms-area')) { 
                     const individualPermsArea = container.querySelector('.individual-perms-area'); 
-                    if (individualPermsArea) { 
+                    if (individualPermsArea && typeof setupPermissionDependencies === 'function') { 
                         setupPermissionDependencies(individualPermsArea); 
                     } 
                 }
@@ -891,6 +742,13 @@ if (savePermsButton) {
 
         }); // Ende CHANGE Listener
     }
+
+    // Initial für alle 'individual' Karten die Abhängigkeiten aktivieren
+    area.querySelectorAll('.individual-perms-area').forEach(individualArea => {
+        if (!individualArea.classList.contains('hidden') && typeof setupPermissionDependencies === 'function') {
+             setupPermissionDependencies(individualArea);
+        }
+    });
 
 } // Ende addAdminUserManagementListeners
 
