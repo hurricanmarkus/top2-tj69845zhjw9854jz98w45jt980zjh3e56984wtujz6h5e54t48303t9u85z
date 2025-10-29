@@ -580,34 +580,166 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
         const userId = userCard?.dataset.userid;
 
         // --- Buttons AUSSERHALB der Karten ---
+        
         // Logik für "Speichern" des neuen Benutzers
         const saveNewUserButton = e.target.closest('#saveNewUserButton');
-        if (saveNewUserButton) { /* ... Logik bleibt gleich ... */ return; }
+        if (saveNewUserButton) {
+            console.log("[CLICK] 'Neuen Benutzer speichern' geklickt.");
+            const form = saveNewUserButton.closest('#addUserFormContainer');
+            if (!form) return;
+
+            const nameInput = form.querySelector('#newUserName');
+            const realNameInput = form.querySelector('#newUserRealName');
+            const keyInput = form.querySelector('#newUserKey');
+            const typeSelect = form.querySelector('#newUserPermissionType');
+            const roleSelect = form.querySelector('#newUserRole');
+
+            const name = nameInput.value.trim();
+            const realName = realNameInput.value.trim(); // KORREKTUR: Wert holen
+            const type = typeSelect.value;
+            const key = keyInput.value; // Kein trim!
+
+            // ================== LOGIKÄNDERUNG HIER (START) ==================
+            if (!name) return alertUser("Nickname ist ein Pflichtfeld.", "error");
+            if (!realName) return alertUser("Vorname & Nachname ist ein Pflichtfeld.", "error"); // KORREKTUR: Prüfung hinzugefügt
+            // ================== LOGIKÄNDERUNG HIER (ENDE) ==================
+
+            if (type !== 'not_registered' && key.length < 4) return alertUser("Passwort muss mind. 4 Zeichen haben.", "error");
+
+            if (type === 'role' && roleSelect.value === 'SYSTEMADMIN' && currentUser.role !== 'SYSTEMADMIN') {
+                 return alertUser("Nur Systemadmins dürfen die Rolle SYSTEMADMIN zuweisen.", "error");
+            }
+            if (type === 'role' && roleSelect.value === 'ADMIN' && currentUser.role !== 'SYSTEMADMIN') {
+                 console.warn("Admin versucht Admin-Rolle zuzuweisen.");
+            }
+
+            const newUserData = {
+                name: name,
+                realName: realName, // KORREKTUR: Gesäuberten Wert verwenden
+                key: type !== 'not_registered' ? key : null,
+                permissionType: type,
+                role: type === 'role' ? roleSelect.value : null,
+                customPermissions: [],
+                adminPermissions: {},
+                assignedAdminRoleId: null,
+                displayRole: null,
+                isActive: true
+            };
+
+            try {
+                setButtonLoading(saveNewUserButton, true);
+                const newDocRef = doc(usersCollectionRef); 
+                await setDoc(newDocRef, newUserData);
+                await logAdminAction('user_created', `Neuen Benutzer angelegt: '${name}' (ID: ${newDocRef.id}).`);
+                alertUser(`Benutzer '${name}' erfolgreich angelegt!`, "success");
+                
+                // Formular zurücksetzen
+                nameInput.value = '';
+                realNameInput.value = '';
+                keyInput.value = '';
+                typeSelect.value = 'role';
+                roleSelect.value = 'ANGEMELDET';
+                toggleNewUserRoleField(); 
+                form.classList.add('hidden'); 
+                const addUserBtn = document.getElementById('showAddUserFormBtn');
+                if (addUserBtn) addUserBtn.textContent = '+ Benutzer anlegen';
+
+            } catch (error) {
+                console.error("Fehler beim Anlegen des Benutzers:", error);
+                alertUser("Fehler beim Anlegen des Benutzers.", "error");
+            } finally {
+                setButtonLoading(saveNewUserButton, false);
+            }
+            return; // Klick behandelt
+        }
         
         // Logik für "Nicht registrierte" aufklappen
         const notRegisteredToggle = e.target.closest('#notRegisteredToggle');
-        if (notRegisteredToggle) { /* ... Logik bleibt gleich ... */ return; }
+        if (notRegisteredToggle) {
+            console.log("[CLICK] 'Nicht registrierte' Toggle geklickt.");
+            const list = area.querySelector('#notRegisteredList');
+            const icon = notRegisteredToggle.querySelector('svg'); 
+            if (list) {
+                list.classList.toggle('hidden');
+                if (icon) {
+                    icon.classList.toggle('rotate-180'); 
+                }
+            }
+            return; // Klick behandelt
+        }
         
         // --- Aktionen INNERHALB einer Benutzerkarte ---
         if (!userCard || !userId) return;
+        console.log(`[CLICK] Klick innerhalb der Karte für User: ${userId}`);
 
         // Löschen Button
         const deleteButton = e.target.closest('.delete-user-button');
-        if (deleteButton) { /* ... Logik bleibt gleich ... */ return; }
+        if (deleteButton) {
+            const userToDelete = USERS[userId];
+            if (!userToDelete) return;
+            if (!confirm(`Soll der Benutzer '${userToDelete.name}' wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden.`)) return;
+            
+            rememberAdminScroll();
+            try {
+                await deleteDoc(doc(usersCollectionRef, userId));
+                await logAdminAction('user_deleted', `Benutzer '${userToDelete.name}' gelöscht.`);
+                alertUser(`Benutzer '${userToDelete.name}' gelöscht.`, "success");
+            } catch (error) {
+                console.error("Fehler beim Löschen:", error);
+                alertUser("Fehler beim Löschen.", "error");
+            }
+            return; 
+        }
 
         // Umbenennen Button (Stift)
         const renameButton = e.target.closest('.rename-user-btn');
-        if (renameButton) { /* ... Logik bleibt gleich ... */ return; }
+        if (renameButton) {
+            const nameDisplay = userCard.querySelector('.name-display');
+            const nameEdit = userCard.querySelector('.name-edit-container');
+            if (nameDisplay && nameEdit) {
+                nameDisplay.classList.add('hidden');
+                nameEdit.classList.remove('hidden');
+                nameEdit.querySelector('.edit-nickname-input')?.focus(); 
+            }
+            return; 
+        }
 
         // Speichern nach Umbenennen Button (Häkchen)
         const saveNameButton = e.target.closest('.save-name-btn');
-        if (saveNameButton) { /* ... Logik bleibt gleich ... */ return; }
+        if (saveNameButton) {
+            const nameEditContainer = saveNameButton.closest('.name-edit-container');
+            const nameDisplay = userCard.querySelector('.name-display');
+            if (!nameEditContainer || !nameDisplay) return;
+
+            const newNickname = nameEditContainer.querySelector('.edit-nickname-input').value.trim();
+            
+            if (!newNickname) return alertUser("Nickname darf nicht leer sein.", "error");
+
+            rememberAdminScroll();
+            try {
+                // KORREKTUR: Nur noch 'name' (Nickname) aktualisieren.
+                const updateData = {
+                    name: newNickname
+                };
+
+                await updateDoc(doc(usersCollectionRef, userId), updateData);
+                await logAdminAction('user_renamed', `Benutzer ${USERS[userId]?.name || userId} umbenannt in '${newNickname}'.`);
+                
+                nameDisplay.classList.remove('hidden');
+                nameEditContainer.classList.add('hidden');
+
+            } catch (error) {
+                 console.error("Fehler beim Umbenennen:", error);
+                 alertUser("Fehler beim Umbenennen.", "error");
+            }
+            return; 
+        }
 
         // --- Speichern der Berechtigungen Button ---
         const savePermsButton = e.target.closest('.save-perms-button');
         if (savePermsButton) {
             console.log(`[CLICK] Speichern (Berechtigungen) für User ${userId} erkannt.`);
-            const permContainer = savePermsButton.closest('[data-userid]'); // HIER wird container gefunden
+            const permContainer = savePermsButton.closest('[data-userid]'); // HIER wird permContainer gefunden
 
             if (!permContainer) { 
                 console.error(`[CLICK] Konnte Berechtigungs-Container für User ${userId} nicht finden!`); 
@@ -620,8 +752,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
             rememberAdminScroll();
             
-            // KORREKTUR DER SCHREIB-LOGIK: Verwende adminPermissionType
-            let updateData = { adminPermissionType: selectedType }; 
+            // KORREKTUR DER SCHREIB-LOGIK: Verwende adminPermissionType (um Trennung zu gewährleisten)
+            let updateData = { adminPermissionType: selectedType }; // <-- FIX: Trennung der Logik
 
             if (selectedType === 'role') {
                 const roleSelect = permContainer.querySelector('.user-role-select');
@@ -634,7 +766,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
                 updateData = {
                     ...updateData,
-                    assignedAdminRoleId: container.querySelector('#assigned-admin-role-select')?.value, 
+                    assignedAdminRoleId: permContainer.querySelector('#assigned-admin-role-select')?.value, 
                     adminPermissions: {}, 
                     // Der Rest der Felder, die bei Rolle gesetzt werden
                 };
