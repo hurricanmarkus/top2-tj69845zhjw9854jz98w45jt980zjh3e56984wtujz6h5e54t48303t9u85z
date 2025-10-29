@@ -922,7 +922,7 @@ export function renderAdminUserDetails(userId) {
     if (detailsArea.dataset.editingUser === userId) {
         detailsArea.innerHTML = '';
         delete detailsArea.dataset.editingUser;
-        // Entferne die Hervorhebung beim Schließen
+        // Entferne die Hervorhebung beim Schließen (mit Optional Chaining für Sicherheit)
         document.querySelectorAll('.edit-admin-user-btn').forEach(b => b.closest('.p-2')?.classList.remove('bg-indigo-100'));
         return;
     }
@@ -932,6 +932,7 @@ export function renderAdminUserDetails(userId) {
     const adminRightsArea = document.getElementById('adminRightsArea');
     if (adminRightsArea) {
         const userButton = adminRightsArea.querySelector(`.edit-admin-user-btn[data-userid="${userId}"]`);
+        // Optional Chaining für Sicherheit: ?.
         userButton?.closest('.p-2')?.classList.add('bg-indigo-100'); 
     }
     
@@ -940,7 +941,7 @@ export function renderAdminUserDetails(userId) {
     const perms = adminUser.adminPermissions || {};
     const approvalPerms = perms.approvalRequired || {};
     
-    // KORREKTUR: Lese den Berechtigungstyp der Admin-Rechte aus dem NEUEN Feld 'adminPermissionType'.
+    // KORREKTUR für die Trennung der Logik: Lese das dedizierte Feld für die Admin-Rechte
     const type = adminUser.adminPermissionType || 'role'; 
 
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
@@ -1087,7 +1088,7 @@ export function renderAdminUserDetails(userId) {
     }
     
     // --- NEU: Listener für den Speichern-Button hinzufügen (Löst das Problem!) ---
-    const saveButton = detailsArea.querySelector('.save-admin-perms-button');
+const saveButton = detailsArea.querySelector('.save-admin-perms-button');
     if (saveButton && !saveButton.dataset.listenerAttached) {
         saveButton.addEventListener('click', async (e) => {
             const userId = e.currentTarget.dataset.userid;
@@ -1151,10 +1152,9 @@ export function renderAdminUserDetails(userId) {
             } catch (error) {
                 console.error("FEHLER beim Speichern der Admin-Rechte:", error);
                 alertUser(`Fehler beim Speichern: ${error.message}`, "error");
-            } finally {
-                e.currentTarget.disabled = false;
-                e.currentTarget.textContent = 'Änderungen speichern';
-            }
+            } 
+            // WICHTIG: KEIN FINALLY-BLOCK HIER!
+            // Der Button wird ohnehin gelöscht, daher darf der Code ihn nicht manipulieren.
         });
         // Markiere den Listener als angehängt, um Dopplungen zu vermeiden
         saveButton.dataset.listenerAttached = 'true';
