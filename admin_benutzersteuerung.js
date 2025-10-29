@@ -558,6 +558,7 @@ export async function renderUserManagement() {
 }
 
 // Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
+// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
 export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions) {
     if (!area) return;
 
@@ -664,7 +665,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             
             rememberAdminScroll();
             try {
-                await deleteDoc(doc(usersCollectionRef, userId));
+                await deleteDoc(doc(usersCollectionRef, userId), updateData);
                 await logAdminAction('user_deleted', `Benutzer '${userToDelete.name}' gelöscht.`);
                 alertUser(`Benutzer '${userToDelete.name}' gelöscht.`, "success");
             } catch (error) {
@@ -700,7 +701,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
             rememberAdminScroll();
             try {
-                // Nur 'name' (Nickname) wird aktualisiert. 'realName' ist gesperrt.
                 const updateData = {
                     name: newNickname
                 };
@@ -757,7 +757,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
                 updateData = {
                     ...updateData, 
-                    role: userCard.dataset.role || 'ANGEMELDET', // Behält die alte Hauptrolle oder setzt sie auf Angemeldet
+                    role: userCard.dataset.role || 'ANGEMELDET', 
                     customPermissions: customPermissions,
                     displayRole: (selectedDisplayRole !== 'NO_RIGHTS' ? selectedDisplayRole : null),
                     assignedAdminRoleId: null, 
@@ -795,6 +795,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
              if (target.classList.contains('user-active-toggle')) { /* ... (Logik bleibt) ... */ return; }
 
             // --- Änderungen an Berechtigungs-Inputs ---
+            // Prüfe auf jeden relevanten Input-Typ in den Berechtigungen
             if (target.matches('.perm-type-toggle, .user-role-select, .custom-perm-checkbox, .display-role-select')) {
                 const container = target.closest('[data-userid]'); if (!container) return;
                 
@@ -814,12 +815,10 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 const saveBtnContainer = container.querySelector('.save-perms-container'); 
                 if (saveBtnContainer) { saveBtnContainer.classList.remove('hidden'); }
                 
-                // 3. KORREKTUR 2: Wenn die Haupt-Checkbox CHECKLIST oder ein Unterpunkt geändert wird, Abhängigkeiten re-aktivieren
-                if (target.dataset.perm && target.closest('.individual-perms-area')) { 
+                // 3. KORREKTUR 2: Wenn eine Checkbox in der individuellen Ansicht geändert wird, die Abhängigkeiten prüfen.
+                if (target.classList.contains('custom-perm-checkbox') && target.closest('.individual-perms-area')) { 
                     const individualPermsArea = container.querySelector('.individual-perms-area'); 
                     if (individualPermsArea) { 
-                        // setupPermissionDependencies wird hier aufgerufen, wenn CHECKLIST angeklickt wird, 
-                        // was die Unterpunkte korrekt deaktiviert/aktiviert.
                         setupPermissionDependencies(individualPermsArea); 
                     } 
                 }
@@ -829,7 +828,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
     }
 
     // KORREKTUR 3: Initial für alle 'individual' Karten die Abhängigkeiten aktivieren
-    // Dies stellt sicher, dass die CHECKLIST-Abhängigkeiten beim initialen Laden der Seite korrekt dargestellt werden.
+    // Dies ist notwendig, damit die Unterpunkte beim Laden der Benutzerliste bereits korrekt gesperrt sind.
     area.querySelectorAll('.individual-perms-area').forEach(individualArea => {
         if (!individualArea.classList.contains('hidden')) {
              setupPermissionDependencies(individualArea);
