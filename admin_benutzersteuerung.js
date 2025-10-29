@@ -1027,7 +1027,6 @@ export function renderAdminUserDetails(userId) {
         const userId = e.currentTarget.dataset.userid;
         const container = e.currentTarget.closest('.p-4');
 
-        const selectedType = container.querySelector('input[name^="perm-type-"]:checked').value;
 const selectedType = container.querySelector('input[name^="perm-type-"]:checked').value;
         const updateData = {
             adminPermissionType: selectedType // <-- GEÄNDERT auf adminPermissionType
