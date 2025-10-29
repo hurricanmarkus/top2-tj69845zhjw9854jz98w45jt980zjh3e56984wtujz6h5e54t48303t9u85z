@@ -910,7 +910,7 @@ export function renderAdminUserDetails(userId) {
     const detailsArea = document.getElementById('admin-user-details-area');
     const adminUser = USERS[userId];
 
-    // ZIEL 1: Fehlerbehebung, falls Bereich oder Benutzer nicht existiert (z.B. nach Löschen/Entfernen aus der Liste)
+    // ZIEL 1: Fehlerbehebung, falls Bereich oder Benutzer nicht existiert
     if (!detailsArea || !adminUser) {
         if (detailsArea) {
              detailsArea.innerHTML = '';
@@ -922,7 +922,6 @@ export function renderAdminUserDetails(userId) {
     if (detailsArea.dataset.editingUser === userId) {
         detailsArea.innerHTML = '';
         delete detailsArea.dataset.editingUser;
-        // Entferne die Hervorhebung beim Schließen (mit Optional Chaining für Sicherheit)
         document.querySelectorAll('.edit-admin-user-btn').forEach(b => b.closest('.p-2')?.classList.remove('bg-indigo-100'));
         return;
     }
@@ -932,7 +931,6 @@ export function renderAdminUserDetails(userId) {
     const adminRightsArea = document.getElementById('adminRightsArea');
     if (adminRightsArea) {
         const userButton = adminRightsArea.querySelector(`.edit-admin-user-btn[data-userid="${userId}"]`);
-        // Optional Chaining für Sicherheit: ?.
         userButton?.closest('.p-2')?.classList.add('bg-indigo-100'); 
     }
     
@@ -941,38 +939,124 @@ export function renderAdminUserDetails(userId) {
     const perms = adminUser.adminPermissions || {};
     const approvalPerms = perms.approvalRequired || {};
     
-    // KORREKTUR für die Trennung der Logik: Lese das dedizierte Feld für die Admin-Rechte
     const type = adminUser.adminPermissionType || 'role'; 
 
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
     const canBeEdited = isSysAdmin; // Nur SysAdmin darf Admin-Rechte bearbeiten
 
-    // --- Generator-Funktion für Checkboxen (Kurzfassung) ---
-    const generateCheckbox = (permKey, label, isSubItem = false, canBeApproved = false) => {
-        const isChecked = perms[permKey] || false;
-        const isApprovalChecked = approvalPerms[permKey] || false;
-        const margin = isSubItem ? 'pl-6' : '';
+    // --- DEFINITION ALLER RECHTE (Sortiert nach Thema) ---
+    // canBeApproved: Ob das Recht eine Genehmigung erfordert (true/false)
+    const ALL_ADMIN_PERMISSIONS = {
+        'Sichtbarkeit des Admin-Menüs': [
+            { key: 'canSeePasswords', label: 'Passwörter', canBeApproved: false },
+            { key: 'canSeeApprovals', label: 'Genehmigungen', canBeApproved: false },
+            { key: 'canSeeRoleManagement', label: 'Rollenverwaltung', canBeApproved: false },
+            { key: 'canViewLogs', label: 'Protokolle', canBeApproved: false, sublabel: 'Protokoll History' },
+            { key: 'canSeeUsers', label: 'Benutzersteuerung', canBeApproved: false },
+        ],
+        'Hauptseitenfunktionen': [
+            { key: 'canSeeMainFunctions', label: 'Hauptmenü anzeigen', canBeApproved: false },
+            { key: 'canUseMainPush', label: 'Push-Funktion nutzen', canBeApproved: false, isSubItem: true, dependency: 'canSeeMainFunctions' },
+            { key: 'canUseMainEntrance', label: 'Eingang öffnen', canBeApproved: false, isSubItem: true, dependency: 'canSeeMainFunctions' },
+            { key: 'canUseMainChecklist', label: 'Checkliste nutzen', canBeApproved: false, isSubItem: true, dependency: 'canSeeMainFunctions' },
+        ],
+        'Benutzeraktionen (Modul)': [
+            { key: 'canCreateUser', label: 'Benutzer anlegen', canBeApproved: true },
+            { key: 'canDeleteUser', label: 'Benutzer löschen', canBeApproved: true },
+            { key: 'canRenameUser', label: 'Benutzer umbenennen', canBeApproved: true },
+            { key: 'canToggleUserActive', label: 'Sperren/Entsperren', canBeApproved: true },
+            { key: 'canChangeUserPermissionType', label: 'Berechtigungs-Typ ändern', canBeApproved: true },
+        ],
+        'Erweiterte Berechtigungen': [
+            { key: 'canEditUserRoles', label: 'Benutzer-Rollen bearbeiten', canBeApproved: false, sublabel: 'Rollenverwaltung' },
+            { key: 'canSeeSysadminLogs', label: 'Sysadmin-Protokolle sehen', canBeApproved: false, sublabel: 'Protokoll History' },
+        ],
+    };
+    
+    // --- Generator für die Tabellenzeilen ---
+    const generateTableRow = (perm) => {
+        const isChecked = perms[perm.key] || false;
+        const isApprovalChecked = approvalPerms[perm.key] || false;
+        const isEditable = canBeEdited && (!perm.dependency || perms[perm.dependency]); // Nur editierbar, wenn Hauptpunkt aktiv ist
+        const opacity = !isEditable && perm.dependency ? 'opacity-50' : '';
+        const padding = perm.isSubItem ? 'pl-8' : 'pl-4';
         
+        let approvalHtml = '';
+        if (perm.canBeApproved) {
+            approvalHtml = `
+                <div class="flex justify-center items-center">
+                    <label class="switch-small">
+                        <input type="checkbox" class="approval-cb" data-perm="${perm.key}" ${isApprovalChecked ? 'checked' : ''} ${!isEditable ? 'disabled' : ''}>
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+            `;
+        } else {
+             approvalHtml = `<div class="text-center text-gray-400">—</div>`;
+        }
+
         return `
-            <label class="flex items-center gap-2 cursor-pointer ${margin}">
-                <input type="checkbox" class="admin-perm-cb h-4 w-4" data-perm="${permKey}" ${isChecked ? 'checked' : ''} ${!canBeEdited ? 'disabled' : ''}>
-                <span class="text-sm">${label}</span>
-                ${canBeApproved ? 
-                    `<input type="checkbox" class="approval-cb h-4 w-4 ml-auto" data-perm="${permKey}" ${isApprovalChecked ? 'checked' : ''} ${!canBeEdited ? 'disabled' : ''}>
-                     <span class="text-xs text-red-600">Genehm.</span>`
-                    : ''
-                }
-            </label>
+            <tr class="border-t ${opacity}" data-perm-key="${perm.key}" data-dependency="${perm.dependency || ''}">
+                <td class="py-2 ${padding} text-sm font-medium">
+                    ${perm.label} 
+                    ${perm.sublabel ? `<span class="text-xs text-gray-500 block">(${perm.sublabel})</span>` : ''}
+                </td>
+                <td class="py-2 text-center">
+                    <label class="switch">
+                        <input type="checkbox" class="admin-perm-cb" data-perm="${perm.key}" ${isChecked ? 'checked' : ''} ${!isEditable ? 'disabled' : ''}>
+                        <span class="slider round"></span>
+                    </label>
+                </td>
+                <td class="py-2 text-center">
+                    ${approvalHtml}
+                </td>
+            </tr>
         `;
     };
 
-    // --- Generiere Rollen-Optionen ---
-    let roleOptionsHTML = Object.values(ADMIN_ROLES)
-        .filter(r => r.id !== 'LEERE_ROLLE')
-        .map(r => `<option value="${r.id}" ${adminUser.assignedAdminRoleId === r.id ? 'selected' : ''}>${r.name}</option>`)
-        .join('');
+    // --- Tabellen-HTML generieren ---
+    let tableHtml = `<table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">MODUL</th>
+                <th class="px-2 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Aktiv (AN/AUS)</th>
+                <th class="px-2 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Genehmigung erf.</th>
+            </tr>
+        </thead>
+        <tbody id="permissions-table-body" class="bg-white divide-y divide-gray-200">`;
 
-    // --- Baue den Haupt-HTML-Block ---
+    Object.keys(ALL_ADMIN_PERMISSIONS).forEach(sectionTitle => {
+        tableHtml += `<tr><td colspan="3" class="bg-gray-100 font-bold text-gray-700 px-4 py-2 text-xs uppercase">${sectionTitle}</td></tr>`;
+        ALL_ADMIN_PERMISSIONS[sectionTitle].forEach(perm => {
+            tableHtml += generateTableRow(perm);
+        });
+    });
+
+    tableHtml += `</tbody></table>`;
+    
+    // --- CSS für Schieberegler (Muss im Head oder Style-Block sein) ---
+    const styleTag = document.createElement('style');
+    styleTag.textContent = `
+        .switch { position: relative; display: inline-block; width: 40px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; }
+        input:checked + .slider { background-color: #4f46e5; } /* Indigo-600 */
+        input:focus + .slider { box-shadow: 0 0 1px #4f46e5; }
+        input:checked + .slider:before { transform: translateX(16px); }
+        .slider.round { border-radius: 24px; }
+        .slider.round:before { border-radius: 50%; }
+        /* Kleinere Variante für Genehmigung */
+        .switch-small { width: 30px; height: 18px; }
+        .switch-small .slider:before { height: 12px; width: 12px; left: 3px; bottom: 3px; }
+        input:checked + .switch-small .slider:before { transform: translateX(12px); }
+    `;
+    if (!document.head.querySelector('[data-admin-styles]')) {
+         styleTag.setAttribute('data-admin-styles', '');
+         document.head.appendChild(styleTag);
+    }
+    
+    // --- Setze den gesamten HTML-Inhalt ---
     detailsArea.innerHTML = `
         <div class="p-4 border-t-4 border-indigo-500 rounded-xl bg-gray-50 mt-4 relative shadow-lg" data-userid="${userId}">
             <button id="close-details-btn" class="absolute top-2 right-3 text-2xl font-bold text-gray-400 hover:text-red-600">&times;</button>
@@ -987,39 +1071,14 @@ export function renderAdminUserDetails(userId) {
             </div>
 
             <div class="role-selection-area mt-2 ${type === 'role' ? '' : 'hidden'}">
-                <select id="assigned-admin-role-select" class="w-full p-2 border rounded-lg bg-white text-sm" data-userid="${userId}" ${!canBeEdited ? 'disabled' : ''}>${roleOptionsHTML}</select>
+                <select id="assigned-admin-role-select" class="w-full p-2 border rounded-lg bg-white text-sm" data-userid="${userId}" ${!canBeEdited ? 'disabled' : ''}>${getRoleOptionsHtml(adminUser)}</select>
             </div>
 
             <div id="admin-individual-perms-area" class="individual-perms-area mt-3 space-y-3 ${type === 'individual' ? '' : 'hidden'}">
                 <div class="p-3 border rounded-lg bg-white">
-                    <h5 class="font-semibold text-sm mb-2 text-gray-600">Sichtbarkeit und Hauptfunktionen</h5>
-                    <div class="grid grid-cols-2 gap-2 text-sm">
-                        ${generateCheckbox('canSeePasswords', 'Passwörter')}
-                        ${generateCheckbox('canSeeApprovals', 'Genehmigungen')}
-                        ${generateCheckbox('canSeeRoleManagement', 'Rollenverwaltung')}
-                        ${generateCheckbox('canViewLogs', 'Protokolle')}
-                        ${generateCheckbox('canSeeUsers', 'Benutzersteuerung')}
-                    </div>
-                    <div class="mt-2 pt-2 border-t">
-                        <h5 class="font-semibold text-sm text-gray-600">Adminfunktionen Hauptseite</h5>
-                        ${generateCheckbox('canSeeMainFunctions', 'Hauptmenü anzeigen')}
-                        ${generateCheckbox('canUseMainPush', '-> Push-Funktion', true)}
-                        ${generateCheckbox('canUseMainEntrance', '-> Eingang öffnen', true)}
-                        ${generateCheckbox('canUseMainChecklist', '-> Checkliste', true)}
-                    </div>
-                </div>
-                 <div class="p-3 border rounded-lg bg-white">
-                    <h5 class="font-semibold text-sm mb-2 text-gray-600">Aktionen und Genehmigung</h5>
-                    <div class="grid grid-cols-1 gap-2 text-sm">
-                        ${generateCheckbox('canCreateUser', 'Benutzer anlegen', false, true)}
-                        ${generateCheckbox('canDeleteUser', 'Benutzer löschen', false, true)}
-                        ${generateCheckbox('canRenameUser', 'Benutzer umbenennen', false, true)}
-                        ${generateCheckbox('canToggleUserActive', 'Benutzer sperren/entsperren', false, true)}
-                        ${generateCheckbox('canChangeUserPermissionType', 'Berechtigungs-Typ ändern', false, true)}
-                        <div class="pt-2 border-t mt-2">
-                           ${generateCheckbox('canEditUserRoles', 'Darf Benutzer-Rollen bearbeiten')}
-                           ${generateCheckbox('canSeeSysadminLogs', 'Darf Sysadmin-Einträge sehen')}
-                        </div>
+                    <h5 class="font-semibold text-sm mb-4 text-gray-600">Rechtemanagement (Individuell)</h5>
+                    <div id="permissions-table-wrapper" class="overflow-x-auto">
+                        ${tableHtml}
                     </div>
                 </div>
             </div>
@@ -1032,6 +1091,14 @@ export function renderAdminUserDetails(userId) {
         </div>
     `;
     
+    // --- Funktioniert nur einmal (Helfer für Rollen-Select) ---
+    function getRoleOptionsHtml(user) {
+        return Object.values(ADMIN_ROLES)
+            .filter(r => r.id !== 'LEERE_ROLLE')
+            .map(r => `<option value="${r.id}" ${user.assignedAdminRoleId === r.id ? 'selected' : ''}>${r.name}</option>`)
+            .join('');
+    }
+
     // --- Listener für UI-Logik ---
     detailsArea.querySelector('#close-details-btn')?.addEventListener('click', () => {
         detailsArea.innerHTML = '';
@@ -1039,74 +1106,65 @@ export function renderAdminUserDetails(userId) {
         document.querySelectorAll('.edit-admin-user-btn').forEach(b => b.closest('.p-2')?.classList.remove('bg-indigo-100'));
     });
     
-    // Helferfunktion zum Aktivieren/Deaktivieren des Speichern-Buttons
-    const toggleSaveButton = () => {
+    // Helferfunktion zum Aktivieren/Deaktivieren des Speichern-Buttons und Abhängigkeiten
+    const applyDependenciesAndActivateSave = () => {
+        const tableBody = detailsArea.querySelector('#permissions-table-body');
         const saveBtn = detailsArea.querySelector('#admin-save-container button');
+
+        // 1. Abhängigkeiten prüfen (Schieberegler sperren/entsperren)
+        if (tableBody) {
+            tableBody.querySelectorAll('tr').forEach(row => {
+                const depKey = row.dataset.dependency; // z.B. 'canSeeMainFunctions'
+                if (depKey) {
+                    // Prüfe, ob der Abhängigkeits-Checkbox (Hauptpunkt) aktiv ist
+                    const mainCheckbox = tableBody.querySelector(`.admin-perm-cb[data-perm="${depKey}"]`);
+                    const isMainActive = mainCheckbox ? mainCheckbox.checked : false;
+
+                    const currentCheckboxes = row.querySelectorAll('.admin-perm-cb, .approval-cb');
+                    
+                    // Sperre/Entsperre das Feld und setze es auf false, wenn der Hauptpunkt inaktiv ist
+                    currentCheckboxes.forEach(cb => {
+                         if (!isMainActive) {
+                            cb.disabled = true;
+                            cb.checked = false;
+                         } else {
+                            cb.disabled = !canBeEdited; // Nur editierbar, wenn canBeEdited true ist
+                         }
+                    });
+                }
+            });
+        }
+        // 2. Button aktivieren
         if (saveBtn) {
-            // Button klickbar machen
             saveBtn.disabled = false; 
             saveBtn.textContent = 'Änderungen speichern';
         }
     };
     
-    detailsArea.querySelectorAll('.perm-type-toggle').forEach(radio => {
-        radio.addEventListener('change', (e) => {
-            const newType = e.target.value;
-            const card = e.target.closest('.p-4');
-            card.querySelector('.role-selection-area')?.classList.toggle('hidden', newType !== 'role');
-            const individualArea = card.querySelector('.individual-perms-area');
-            individualArea?.classList.toggle('hidden', newType !== 'individual');
-            
-            if (newType === 'individual' && individualArea && typeof setupPermissionDependencies === 'function') {
-                setupPermissionDependencies(individualArea);
-            }
-            toggleSaveButton(); // Button aktivieren
-        });
-    });
-    
-    // Listener für alle Inputs und Checkboxen
-    detailsArea.querySelectorAll('select, input[type="text"], input[type="checkbox"]:not(.approval-cb)').forEach(input => {
-         input.addEventListener('change', toggleSaveButton);
-         input.addEventListener('input', toggleSaveButton); // Für Texteingaben und Selects
-    });
-    
-    // Listener für Checkbox-Änderungen in der individuellen Ansicht
-    detailsArea.querySelectorAll('.admin-perm-cb, .approval-cb, #assigned-admin-role-select').forEach(input => {
-         input.addEventListener('change', (e) => {
-             const container = e.target.closest('.individual-perms-area');
-             if (container && typeof setupPermissionDependencies === 'function') {
-                 setupPermissionDependencies(container);
-             }
-             toggleSaveButton(); // Button aktivieren
-         });
+    // Listener für alle Checkboxen und den Typ-Schalter (rufen applyDependenciesAndActivateSave auf)
+    detailsArea.querySelectorAll('.perm-type-toggle, .admin-perm-cb, .approval-cb, #assigned-admin-role-select').forEach(input => {
+         input.addEventListener('change', applyDependenciesAndActivateSave);
     });
 
-    // Wichtig: Beim initialen Laden die Abhängigkeiten setzen
-    const individualArea = detailsArea.querySelector('.individual-perms-area:not(.hidden)');
-    if (individualArea && typeof setupPermissionDependencies === 'function') {
-        setupPermissionDependencies(individualArea);
-    }
+    // Wichtig: Beim initialen Laden einmal ausführen
+    applyDependenciesAndActivateSave();
     
-    // --- NEU: Listener für den Speichern-Button hinzufügen (Löst das Problem!) ---
-const saveButton = detailsArea.querySelector('.save-admin-perms-button');
+    // --- Listener für den Speichern-Button hinzufügen (FINAL) ---
+    const saveButton = detailsArea.querySelector('.save-admin-perms-button');
     if (saveButton && !saveButton.dataset.listenerAttached) {
         saveButton.addEventListener('click', async (e) => {
             const userId = e.currentTarget.dataset.userid;
-            const container = e.currentTarget.closest('.p-4'); // Den Hauptcontainer holen
-            const adminUserForUpdate = USERS[userId]; // Benutzerdaten für den Log
+            const container = e.currentTarget.closest('.p-4'); 
+            const adminUserForUpdate = USERS[userId]; 
 
-            // 1. Berechtigungs-Typ bestimmen
             const typeRadio = container.querySelector('input[name^="perm-type-"]:checked');
-            if (!typeRadio) {
-                alertUser("Fehler: Berechtigungs-Typ konnte nicht ermittelt werden.", "error");
-                return;
-            } 
+            if (!typeRadio) { alertUser("Fehler: Berechtigungs-Typ konnte nicht ermittelt werden.", "error"); return; } 
             const selectedType = typeRadio.value;
 
-            e.currentTarget.disabled = true; // Button deaktivieren während Speichern
+            e.currentTarget.disabled = true;
             e.currentTarget.textContent = 'Speichere...';
             
-            let updateData = { adminPermissionType: selectedType }; // Korrekter Feldname
+            let updateData = { adminPermissionType: selectedType }; 
 
             if (selectedType === 'role') {
                 updateData = {
@@ -1116,9 +1174,14 @@ const saveButton = detailsArea.querySelector('.save-admin-perms-button');
                 };
             } else { // type === 'individual'
                 const permissions = {};
-                container.querySelectorAll('.admin-perm-cb').forEach(cb => { permissions[cb.dataset.perm] = cb.checked; });
                 const approvalRequired = {};
-                container.querySelectorAll('.approval-cb').forEach(cb => { approvalRequired[cb.dataset.perm] = cb.checked; });
+                
+                detailsArea.querySelectorAll('.admin-perm-cb').forEach(cb => { 
+                    permissions[cb.dataset.perm] = cb.checked;
+                });
+                detailsArea.querySelectorAll('.approval-cb').forEach(cb => {
+                    approvalRequired[cb.dataset.perm] = cb.checked;
+                });
                 permissions.approvalRequired = approvalRequired;
 
                 updateData = {
@@ -1128,23 +1191,19 @@ const saveButton = detailsArea.querySelector('.save-admin-perms-button');
                 };
             }
             
-            // Wichtig: Entferne leere oder null-Werte, um Firebase-Fehler zu vermeiden
             Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
 
 
             try {
-                // Führe das Update aus
                 await updateDoc(doc(usersCollectionRef, userId), updateData);
                 await logAdminAction('admin_perms_updated', `Admin-Berechtigungen für ${adminUserForUpdate.name} (${selectedType}) geändert.`);
                 alertUser("Änderungen gespeichert!", "success");
                 
                 // Nach erfolgreicher Speicherung: UI-Aktualisierung
-                // 1. Detailansicht entfernen
                 detailsArea.innerHTML = '';
                 delete detailsArea.dataset.editingUser;
                 document.querySelectorAll('.edit-admin-user-btn').forEach(b => b.closest('.p-2')?.classList.remove('bg-indigo-100'));
                 
-                // 2. Wichtig: Hauptliste aktualisieren, damit die Anzeige korrekt ist
                 if (typeof renderAdminRightsManagement === 'function') {
                     await renderAdminRightsManagement();
                 }
@@ -1152,11 +1211,10 @@ const saveButton = detailsArea.querySelector('.save-admin-perms-button');
             } catch (error) {
                 console.error("FEHLER beim Speichern der Admin-Rechte:", error);
                 alertUser(`Fehler beim Speichern: ${error.message}`, "error");
-            } 
-            // WICHTIG: KEIN FINALLY-BLOCK HIER!
-            // Der Button wird ohnehin gelöscht, daher darf der Code ihn nicht manipulieren.
+            } finally {
+                // Hier brauchen wir kein Aufräumen, da die UI komplett neu gerendert wird.
+            }
         });
-        // Markiere den Listener als angehängt, um Dopplungen zu vermeiden
         saveButton.dataset.listenerAttached = 'true';
     }
 }
