@@ -5,6 +5,7 @@ import { logAdminAction } from './admin_protokollHistory.js';
 import { setupPermissionDependencies, renderAdminRightsManagement } from './admin_rechteverwaltung.js'; // Oder der richtige Dateiname
 import { renderMainFunctionsAdminArea, restoreAdminScrollIfAny, rememberAdminScroll } from './admin_adminfunktionenHome.js';
 import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode } from './log-InOut.js';
+import { createApprovalRequest } from './admin_genehmigungsprozess.js';
 // ENDE-ZIKA //
 
 
@@ -544,6 +545,7 @@ export async function renderUserManagement() {
 
 // Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
 // Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
+
 export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions) {
     if (!area) return;
 
@@ -568,23 +570,21 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             const form = saveNewUserButton.closest('#addUserFormContainer');
             if (!form) return;
 
+            // 1. Alle Daten aus dem Formular holen (wie bisher)
             const nameInput = form.querySelector('#newUserName');
             const realNameInput = form.querySelector('#newUserRealName');
             const keyInput = form.querySelector('#newUserKey');
             const typeSelect = form.querySelector('#newUserPermissionType');
-            
             const roleSelect = form.querySelector('#newUserRole');
 
             const name = nameInput.value.trim();
-            const realName = realNameInput.value.trim(); // KORREKTUR: Wert holen
+            const realName = realNameInput.value.trim();
             const type = typeSelect.value;
             const key = keyInput.value; // Kein trim!
 
-            // ================== LOGIKÄNDERUNG HIER (START) ==================
+            // 2. Validierungen (wie bisher)
             if (!name) return alertUser("Nickname ist ein Pflichtfeld.", "error");
-            if (!realName) return alertUser("Vorname & Nachname ist ein Pflichtfeld.", "error"); // KORREKTUR: Prüfung hinzugefügt
-            // ================== LOGIKÄNDERUNG HIER (ENDE) ==================
-
+            if (!realName) return alertUser("Vorname & Nachname ist ein Pflichtfeld.", "error");
             if (type !== 'not_registered' && key.length < 4) return alertUser("Passwort muss mind. 4 Zeichen haben.", "error");
 
             if (type === 'role' && roleSelect.value === 'SYSTEMADMIN' && currentUser.role !== 'SYSTEMADMIN') {
@@ -594,9 +594,14 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                  console.warn("Admin versucht Admin-Rolle zuzuweisen.");
             }
 
+            // 3. Benutzer-Datenobjekt vorbereiten (wie bisher)
+            // WICHTIG: Wir brauchen eine ID, *bevor* wir den Antrag stellen
+            const newDocRef = doc(usersCollectionRef); 
+            const newUserId = newDocRef.id;
+
             const newUserData = {
                 name: name,
-                realName: realName, // KORREKTUR: Gesäuberten Wert verwenden
+                realName: realName, 
                 key: type !== 'not_registered' ? key : null,
                 permissionType: type,
                 role: type === 'role' ? roleSelect.value : null,
@@ -605,15 +610,61 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 assignedAdminRoleId: null,
                 displayRole: null,
                 isActive: true
+                // WICHTIG: Die ID (newUserId) ist NICHT Teil der Daten,
+                // sie ist der "Dateiname" (Referenz).
             };
+
+            // =================================================================
+            // BEGINN DER KORREKTUR (Genehmigungs-Logik)
+            // =================================================================
             try {
                 setButtonLoading(saveNewUserButton, true);
-                const newDocRef = doc(usersCollectionRef); 
-                await setDoc(newDocRef, newUserData);
-                await logAdminAction('user_created', `Neuen Benutzer angelegt: '${name}' (ID: ${newDocRef.id}).`);
-                alertUser(`Benutzer '${name}' erfolgreich angelegt!`, "success");
+
+                // 4. Prüfen, wer der aktuelle Benutzer ist
+                if (currentUser.role === 'SYSTEMADMIN') {
+                    // --- FALL 1: Systemadmin (Markus) ---
+                    console.log("Aktion: Systemadmin erstellt Benutzer direkt.");
+                    await setDoc(newDocRef, newUserData); // Direktes Speichern
+                    await logAdminAction('user_created', `Neuen Benutzer angelegt: '${name}' (ID: ${newUserId}).`);
+                    alertUser(`Benutzer '${name}' erfolgreich angelegt!`, "success");
+
+                } else if (currentUser.role === 'ADMIN') {
+                    // --- FALL 2: Admin (Jasmin) ---
+                    
+                    // 4a. Finde die BERECHTIGUNGEN des Admins (Jasmin)
+                    let effectiveAdminPerms = {};
+                    const adminUser = USERS[currentUser.mode];
+                    if (adminUser) {
+                        if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) { 
+                            effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
+                        } else {
+                            effectiveAdminPerms = adminUser.adminPermissions || {};
+                        }
+                    }
+
+                    // 4b. Prüfe, ob Genehmigung NÖTIG ist
+                    const needsApproval = effectiveAdminPerms.approvalRequired?.createUser === true;
+
+                    if (needsApproval) {
+                        // --- FALL 2a: Admin (Jasmin) braucht Genehmigung ---
+                        console.log("Aktion: Admin (Jasmin) erstellt Genehmigungsantrag.");
+                        
+                        // Erstelle einen Antrag. Die details müssen die userData UND die ID enthalten.
+                        await createApprovalRequest('CREATE_USER', newUserId, { userData: newUserData });
+                        
+                        // KEIN logAdminAction hier, der Antrag ist die Logik
+                        alertUser(`Antrag zum Erstellen von '${name}' wurde zur Genehmigung eingereicht.`, "success");
+                    
+                    } else {
+                        // --- FALL 2b: Admin (Jasmin) darf direkt erstellen ---
+                        console.log("Aktion: Admin (Jasmin) erstellt Benutzer direkt (keine Genehmigung nötig).");
+                        await setDoc(newDocRef, newUserData); // Direktes Speichern
+                        await logAdminAction('user_created', `Neuen Benutzer angelegt: '${name}' (ID: ${newUserId}).`);
+                        alertUser(`Benutzer '${name}' erfolgreich angelegt!`, "success");
+                    }
+                }
                 
-                // Formular zurücksetzen
+                // 5. Formular aufräumen (passiert in jedem Erfolgsfall)
                 nameInput.value = '';
                 realNameInput.value = '';
                 keyInput.value = '';
@@ -625,11 +676,14 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 if (addUserBtn) addUserBtn.textContent = '+ Benutzer anlegen';
 
             } catch (error) {
-                console.error("Fehler beim Anlegen des Benutzers:", error);
+                console.error("Fehler beim Anlegen des Benutzers (oder Antrags):", error);
                 alertUser("Fehler beim Anlegen des Benutzers.", "error");
             } finally {
                 setButtonLoading(saveNewUserButton, false);
             }
+            // =================================================================
+            // ENDE DER KORREKTUR
+            // =================================================================
             return; // Klick behandelt
         }
         
@@ -650,7 +704,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
         
         // --- Aktionen INNERHALB einer Benutzerkarte ---
         if (!userCard || !userId) return;
-        console.log(`[CLICK] Klick innerhalb der Karte für User: ${userId}`);
+        console.log(`[CLICK] Klick innerh. der Karte für User: ${userId}`);
 
         // Löschen Button
         const deleteButton = e.target.closest('.delete-user-button');
@@ -661,6 +715,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             
             rememberAdminScroll();
             try {
+                // HIER FEHLT NOCH DIE GENEHMIGUNGS-LOGIK FÜR "LÖSCHEN",
+                // aber das war nicht Teil deiner Frage. Aktuell wird direkt gelöscht.
                 await deleteDoc(doc(usersCollectionRef, userId));
                 await logAdminAction('user_deleted', `Benutzer '${userToDelete.name}' gelöscht.`);
                 alertUser(`Benutzer '${userToDelete.name}' gelöscht.`, "success");
@@ -697,7 +753,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
             rememberAdminScroll();
             try {
-                // KORREKTUR: Nur noch 'name' (Nickname) aktualisieren.
+                // HIER FEHLT AUCH DIE GENEHMIGUNGS-LOGIK FÜR "UMBENENNEN"
                 const updateData = { name: newNickname };
 
                 await updateDoc(doc(usersCollectionRef, userId), updateData);
@@ -769,6 +825,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             console.log("[CLICK] Finale Update-Daten für Berechtigungen:", updateData);
 
             try {
+                // HIER FEHLT AUCH DIE GENEHMIGUNGS-LOGIK FÜR "RECHTE ÄNDERN"
                 await updateDoc(doc(usersCollectionRef, userId), updateData);
                 await logAdminAction('user_perms_updated', `Berechtigungstyp für ${USERS[userId]?.name || userId} auf ${selectedType} geändert.`);
                 
@@ -776,6 +833,9 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 if (saveBtnContainer) saveBtnContainer.classList.add('hidden');
                 alertUser("Berechtigungen gespeichert!", "success");
             } catch (error) {
+                // =================================================================
+                // HIER WAR DER FEHLER (die extra runde Klammer)
+                // =================================================================
                 console.error(`[CLICK] FEHLER beim Speichern der Berechtigungen für User ${userId}:`, error);
                 alertUser(`Fehler beim Speichern: ${error.message}`, "error");
             }
@@ -797,7 +857,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             if (!userCard) return;
             const userId = userCard.dataset.userid;
             if (!userId) return;
-            console.log(`[CHANGE] Änderung innerhalb der Karte für User: ${userId}`);
+            console.log(`[CHANGE] Änderung innerh. der Karte für User: ${userId}`);
 
              // =================================================================
              // BEGINN DEINER KORREKTUR (Sperr-Button Logik)
@@ -820,6 +880,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
                 rememberAdminScroll(); // Scroll-Position merken
                 try {
+                    // HIER FEHLT AUCH DIE GENEHMIGUNGS-LOGIK FÜR "SPERREN"
                     // Update in Firestore
                     await updateDoc(doc(usersCollectionRef, userId), { isActive: newIsActive });
                     
