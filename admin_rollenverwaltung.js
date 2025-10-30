@@ -307,6 +307,10 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
     if (currentUser.role === 'SYSTEMADMIN') {
         const adminRolesContainer = document.createElement('div');
         adminRolesContainer.className = "mt-6 pl-2 border-l-4 border-gray-200";
+        
+        // =================================================================
+        // BEGINN DEINER KORREKTUR (Layout Admin-Rollen-Editor)
+        // =================================================================
         adminRolesContainer.innerHTML = `
             <div id="adminRolesToggle" class="card bg-white p-4 rounded-xl shadow cursor-pointer hover:shadow-md transition duration-200">
                 <div class="flex justify-between items-center">
@@ -344,21 +348,73 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
                                     </div>
                                     </div>
                                 
-                                <div class="pl-6 mt-3 pt-3 border-t border-gray-200 space-y-3">
-                                    <h5 class="font-semibold text-sm mb-2 text-gray-500">Aktionen in "Benutzersteuerung"</h5>
+                                <div class="pl-0 mt-3 pt-3 border-t border-gray-200 space-y-3"> <h5 class="font-semibold text-sm mb-3 text-gray-500">Aktionen und Genehmigung</h5>
                                     
                                     <div class="grid grid-cols-2 gap-4 text-sm">
-                                        <div class="flex flex-col gap-2">
-                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canCreateUser"> <span>Benutzer anlegen</span></label>
-                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canDeleteUser"> <span>Benutzer löschen</span></label>
-                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canRenameUser"> <span>Benutzer umbenennen</span></label>
+                                        <div class="flex flex-col gap-4">
+                                            <div>
+                                                <label class="flex items-center gap-2">
+                                                    <input type="checkbox" class="new-admin-perm-cb h-4 w-4" data-perm="canCreateUser">
+                                                    <span class="text-sm">Benutzer anlegen</span>
+                                                </label>
+                                                <label class="flex items-center gap-2 pl-6 mt-1">
+                                                    <input type="checkbox" class="approval-cb h-4 w-4" data-perm="createUser">
+                                                    <span class="text-xs text-red-600">Genehmigung erforderlich</span>
+                                                </label>
+                                            </div>
+                                            <div>
+                                                <label class="flex items-center gap-2">
+                                                    <input type="checkbox" class="new-admin-perm-cb h-4 w-4" data-perm="canDeleteUser">
+                                                    <span class="text-sm">Benutzer löschen</span>
+                                                </label>
+                                                <label class="flex items-center gap-2 pl-6 mt-1">
+                                                    <input type="checkbox" class="approval-cb h-4 w-4" data-perm="deleteUser">
+                                                    <span class="text-xs text-red-600">Genehmigung erforderlich</span>
+                                                </label>
+                                            </div>
+                                            <div>
+                                                <label class="flex items-center gap-2">
+                                                    <input type="checkbox" class="new-admin-perm-cb h-4 w-4" data-perm="canRenameUser">
+                                                    <span class="text-sm">Benutzer umbenennen</span>
+                                                </label>
+                                                <label class="flex items-center gap-2 pl-6 mt-1">
+                                                    <input type="checkbox" class="approval-cb h-4 w-4" data-perm="renameUser">
+                                                    <span class="text-xs text-red-600">Genehmigung erforderlich</span>
+                                                </label>
+                                            </div>
                                         </div>
-                                        <div class="flex flex-col gap-2">
-                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canToggleUserActive"> <span>Benutzer ent-/sperren</span></label>
-                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canChangeUserPermissionType"> <span>Berechtigungs-Typ ändern</span></label>
+                                        
+                                        <div class="flex flex-col gap-4">
+                                            <div>
+                                                <label class="flex items-center gap-2">
+                                                    <input type="checkbox" class="new-admin-perm-cb h-4 w-4" data-perm="canToggleUserActive">
+                                                    <span class="text-sm">Benutzer ent-/sperren</span>
+                                                </label>
+                                                <label class="flex items-center gap-2 pl-6 mt-1">
+                                                    <input type="checkbox" class="approval-cb h-4 w-4" data-perm="toggleUserActive">
+                                                    <span class="text-xs text-red-600">Genehmigung erforderlich</span>
+                                                </label>
+                                            </div>
+                                            <div>
+                                                <label class="flex items-center gap-2">
+                                                    <input type="checkbox" class="new-admin-perm-cb h-4 w-4" data-perm="canChangeUserPermissionType">
+                                                    <span class="text-sm">Berechtigungs-Typ ändern</span>
+                                                </label>
+                                                <label class="flex items-center gap-2 pl-6 mt-1">
+                                                    <input type="checkbox" class="approval-cb h-4 w-4" data-perm="changeUserPermissionType">
+                                                    <span class="text-xs text-red-600">Genehmigung erforderlich</span>
+                                                </label>
+                                            </div>
+                                            <div>
+                                                <label class="flex items-center gap-2 mt-1">
+                                                    <input type="checkbox" class="approval-cb h-4 w-4" data-perm="setAdminStatus">
+                                                    <span class="text-sm">Admin-Status setzen</span>
+                                                    <span class="text-xs text-red-600">(Genehmigung)</span>
+                                                </label>
+                                            </div>
                                         </div>
                                     </div>
-
+                                    
                                     <h5 class="font-semibold text-sm mb-2 mt-3 text-gray-500">Weitere Berechtigungen</h5>
                                     <div class="grid grid-cols-2 gap-4 text-sm">
                                         <div class="flex flex-col gap-2">
@@ -369,20 +425,9 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
                                         </div>
                                     </div>
                                 </div>
-                                </div>
-                            <div class="p-3 border rounded-lg bg-white bg-opacity-50">
-                                <h5 class="font-semibold text-sm mb-2 text-gray-600">Genehmigungsprozess</h5>
-                                <p class="text-xs text-gray-500 mb-3">Wenn hier ein Haken gesetzt ist, muss die jeweilige Aktion von einem Systemadmin genehmigt werden.</p>
-                                <div class="grid grid-cols-2 gap-2 text-sm">
-                                    <label class="flex items-center gap-2"><input type="checkbox" class="approval-cb" data-perm="setAdminStatus"> <span>Admin-Status setzen</span></label>
-                                    <label class="flex items-center gap-2"><input type="checkbox" class="approval-cb" data-perm="createUser"> <span>Benutzer anlegen</span></label>
-                                    <label class="flex items-center gap-2"><input type="checkbox" class="approval-cb" data-perm="deleteUser"> <span>Benutzer löschen</span></label>
-                                    <label class="flex items-center gap-2"><input type="checkbox" class="approval-cb" data-perm="renameUser"> <span>Benutzer umbenennen</span></label>
-                                    <label class="flex items-center gap-2"><input type="checkbox" class="approval-cb" data-perm="toggleUserActive"> <span>Benutzer ent-/sperren</span></label>
-                                    <label class="flex items-center gap-2"><input type="checkbox" class="approval-cb" data-perm="changeUserPermissionType"> <span>Berechtigungs-Typ ändern</span></label>
-                                </div>
                             </div>
-                        </div>
+                            
+                            </div>
                         <button id="saveNewAdminRoleButton" class="w-full p-2 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition mt-3">
                             <span class="button-text">Admin-Rolle speichern</span>
                             <div class="loading-spinner" style="display: none;"></div>
@@ -391,6 +436,10 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
                 </div>
                 <div id="adminRolesList" class="space-y-3 pt-4"></div>
             </div>`;
+        // =================================================================
+        // ENDE DEINER KORREKTUR
+        // =================================================================
+            
         roleManagementArea.appendChild(adminRolesContainer);
 
         // (Liste der existierenden Admin-Rollen)
@@ -453,7 +502,48 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
             showAdminRoleFormBtn.style.display = 'none';
             adminRoleForm.classList.remove('hidden');
 
+            // Abhängigkeit für Hauptmenü -> Push etc.
             setupPermissionDependencies(adminRoleForm);
+            
+            // =================================================================
+            // BEGINN KORREKTUR (JS-Abhängigkeit für Genehmigung)
+            // =================================================================
+            // NEU: Abhängigkeiten für Genehmigungs-Checkboxen einrichten
+            const setupApprovalDependencies = (form) => {
+                // Paare von [Haupt-Checkbox, Genehmigungs-Checkbox]
+                // WICHTIG: Die data-perm-Namen sind hier unterschiedlich!
+                const permPairs = [
+                    { main: 'canCreateUser', approval: 'createUser' },
+                    { main: 'canDeleteUser', approval: 'deleteUser' },
+                    { main: 'canRenameUser', approval: 'renameUser' },
+                    { main: 'canToggleUserActive', approval: 'toggleUserActive' },
+                    { main: 'canChangeUserPermissionType', approval: 'changeUserPermissionType' }
+                ];
+
+                permPairs.forEach(pair => {
+                    const mainCb = form.querySelector(`.new-admin-perm-cb[data-perm="${pair.main}"]`);
+                    const approvalCb = form.querySelector(`.approval-cb[data-perm="${pair.approval}"]`);
+
+                    if (mainCb && approvalCb) {
+                        const updateState = () => {
+                            const isMainChecked = mainCb.checked;
+                            approvalCb.disabled = !isMainChecked; // Deaktivieren, wenn Haupt-Cb aus ist
+                            if (!isMainChecked) {
+                                approvalCb.checked = false; // Haken entfernen
+                            }
+                        };
+                        
+                        mainCb.addEventListener('change', updateState);
+                        updateState(); // Initialen Status setzen
+                    }
+                });
+            };
+            
+            // Diese neue Funktion aufrufen
+            setupApprovalDependencies(adminRoleForm);
+            // =================================================================
+            // ENDE KORREKTUR
+            // =================================================================
         };
 
         // (Listener für Buttons "Admin-Rolle anlegen" und "Bearbeiten")
@@ -484,11 +574,13 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
 
 
             const permissions = {};
+            // HINWEIS: Diese Logik funktioniert weiterhin, da die Klassen gleich geblieben sind.
             document.querySelectorAll('#addAdminRoleFormContainer .new-admin-perm-cb').forEach(cb => {
                 permissions[cb.dataset.perm] = cb.checked;
             });
 
             const approvalRequired = {};
+            // HINWEIS: Diese Logik funktioniert weiterhin, da die Klassen gleich geblieben sind.
             document.querySelectorAll('#addAdminRoleFormContainer .approval-cb').forEach(cb => {
                 approvalRequired[cb.dataset.perm] = cb.checked;
             });
