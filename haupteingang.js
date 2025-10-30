@@ -376,15 +376,45 @@ async function seedInitialData() {
 }
 
 export function alertUser(message, type) {
+    // 1. Dauer und Farbe bestimmen (Standard ist Erfolg)
+    let duration = 3000; // Standard-Dauer: 3 Sekunden
+    let colorClass = 'bg-green-600'; // Standard-Farbe: Grün ('success')
+
+    // 2. Prüfen, ob ein anderer Typ gewünscht ist
+    if (type === 'error') {
+        // Normaler Fehler: Rot, 3 Sekunden
+        colorClass = 'bg-red-600';
+        duration = 3000;
+    } else if (type === 'error_long') {
+        // DEIN NEUER WUNSCH: Langer Fehler (für Sperrung)
+        // Rote Farbe
+        colorClass = 'bg-red-600';
+        // 3-fache Dauer (3000ms * 3 = 9000ms)
+        duration = 9000;
+    } else if (type === 'success') {
+        // Normaler Erfolg (nur zur Sicherheit)
+        colorClass = 'bg-green-600';
+        duration = 3000;
+    }
+    // (Wenn 'type' unbekannt ist, bleibt es beim Standard: Grün, 3 Sek)
+
+
+    // 3. Alert-Element erstellen (Dieser Teil bleibt wie vorher)
     const tempAlert = document.createElement('div');
     tempAlert.textContent = message;
-    tempAlert.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 rounded-xl text-white font-bold shadow-lg transition-opacity duration-300 z-50 text-center ${type === 'success' ? 'bg-green-600' : 'bg-red-600'}`;
+    
+    // 4. Die neuen, variablen Klassen (colorClass) zuweisen
+    tempAlert.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 rounded-xl text-white font-bold shadow-lg transition-opacity duration-300 z-50 text-center ${colorClass}`;
+    
+    // 5. Alert anzeigen (Dieser Teil bleibt wie vorher)
     document.body.appendChild(tempAlert);
     setTimeout(() => tempAlert.style.opacity = '1', 10);
+
+    // 6. Alert ausblenden (Dieser Teil nutzt jetzt die neue 'duration')
     setTimeout(() => {
         tempAlert.style.opacity = '0';
         setTimeout(() => tempAlert.remove(), 300);
-    }, 3000);
+    }, duration); // <-- Hier wird die neue Dauer (3000 oder 9000) verwendet
 }
 
 export function setButtonLoading(button, isLoading) {

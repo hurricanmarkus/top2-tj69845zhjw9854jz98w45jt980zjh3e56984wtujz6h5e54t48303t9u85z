@@ -56,9 +56,14 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     if (!userFromFirestore.isActive) {
         console.warn("checkCurrentUserValidity: Benutzer ist als INAKTIV (gesperrt) markiert. Erzwinge Logout.");
         
-        // Wir rufen switchToGuestMode mit der spezifischen Sperr-Nachricht auf.
-        // Das ist die "Live"-Logout-Logik, die du wolltest.
-        switchToGuestMode(true, "Ihr Konto wurde von einem Administrator gesperrt.");
+        // =================================================================
+        // HIER IST DEINE GEWÜNSCHTE ÄNDERUNG:
+        // Wir rufen switchToGuestMode jetzt mit dem dritten Parameter auf: 'error_long'
+        // 1. Parameter (true): Zeige eine Benachrichtigung.
+        // 2. Parameter (string): Die Nachricht, die angezeigt wird.
+        // 3. Parameter ('error_long'): Der Typ, der (in alertUser) für Rote Farbe und 9 Sekunden Dauer sorgt.
+        switchToGuestMode(true, "Ihr Konto wurde von einem Administrator gesperrt.", 'error_long');
+        // =================================================================
         
         // updateUIForMode() wird bereits von switchToGuestMode aufgerufen.
         return; // WICHTIG: Hier abbrechen.
@@ -141,12 +146,13 @@ export async function checkCurrentUserValidity() { // Funktion ist async
 
     } catch (error) {
          console.error("Fehler beim Holen des ID Tokens oder Prüfen der Claims:", error);
-         switchToGuestMode(true, "Fehler bei der Berechtigungsprüfung.");
+         // BONUS-KORREKTUR: Wenn HIER ein Fehler passiert, ist die Meldung jetzt auch rot (aber normal kurz 'error')
+         switchToGuestMode(true, "Fehler bei der Berechtigungsprüfung.", 'error');
          updateUIForMode();
     }
 }
 
-export function switchToGuestMode(showNotification = true, message = "Abgemeldet. Modus ist nun 'Gast'.") {
+export function switchToGuestMode(showNotification = true, message = "Abgemeldet. Modus ist nun 'Gast'.", type = 'success') {
     Object.keys(currentUser).forEach(key => delete currentUser[key]);
     Object.assign(currentUser, {
         displayName: GUEST_MODE,
@@ -157,7 +163,12 @@ export function switchToGuestMode(showNotification = true, message = "Abgemeldet
     localStorage.removeItem(ADMIN_STORAGE_KEY);
     updateUIForMode();
     navigate('home');
-    if (showNotification) alertUser(message, 'success');
+    
+    // HIER IST DIE ÄNDERUNG:
+    // Statt immer 'success' zu senden, verwenden wir jetzt den 'type'-Parameter,
+    // der an diese Funktion übergeben wird.
+    // Wenn kein Typ übergeben wird, ist der Standard 'success' (grün).
+    if (showNotification) alertUser(message, type);
 }
 
 // Diese Funktion gehört in log-InOut.js
