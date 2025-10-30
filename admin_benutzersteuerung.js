@@ -1028,7 +1028,7 @@ export function renderAdminUserDetails(userId) {
                     </div>
                 </div>
                 
-                <div class="p-3 border rounded-lg bg-white">
+                 <div class="p-3 border rounded-lg bg-white">
                     <h5 class="font-semibold text-sm mb-3 text-gray-600">Aktionen und Genehmigung</h5>
                     
                     <div class="grid grid-cols-2 gap-4 text-sm"> 
@@ -1042,10 +1042,21 @@ export function renderAdminUserDetails(userId) {
                         <div class="flex flex-col gap-4">
                             ${generateCheckbox('canToggleUserActive', 'Benutzer sperren/entsperren', false, true)}
                             ${generateCheckbox('canChangeUserPermissionType', 'Berechtigungs-Typ ändern', false, true)}
-                        </div>
+                            
+                            <div>
+                                <label class="flex items-center gap-2 mt-1">
+                                    <input type="checkbox" class="approval-cb h-4 w-4" data-perm="setAdminStatus" ${approvalPerms['setAdminStatus'] ? 'checked' : ''} ${!canBeEdited ? 'disabled' : ''}>
+                                    <span class="text-sm">Admin-Status setzen</span>
+                                    <span class="text-xs text-red-600">(Genehmigung)</span>
+                                </label>
+                            </div>
+                            </div>
                     </div>
                     
-                    <div class="pt-4 border-t mt-4"> <h5 class="font-semibold text-sm mb-3 text-gray-600">Weitere Berechtigungen</h5> <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div class="pt-4 border-t mt-4"> 
+                        <h5 class="font-semibold text-sm mb-3 text-gray-600">Weitere Berechtigungen</h5>
+                         
+                         <div class="grid grid-cols-2 gap-4 text-sm">
                             <div class="flex flex-col gap-4"> ${generateCheckbox('canEditUserRoles', 'Darf Benutzer-Rollen bearbeiten')}
                             </div>
                             <div class="flex flex-col gap-4"> ${generateCheckbox('canSeeSysadminLogs', 'Darf Sysadmin-Einträge sehen')}
@@ -1054,7 +1065,7 @@ export function renderAdminUserDetails(userId) {
                     </div>
 
                 </div>
-                </div>
+            </div>
 
             <div id="admin-save-container" class="mt-4 pt-4 border-t ${!canBeEdited ? 'hidden' : ''}">
                  <button id="save-admin-perms-button" data-userid="${userId}" class="save-admin-perms-button w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" disabled>
