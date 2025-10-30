@@ -299,27 +299,56 @@ export async function renderUserManagement() {
         return;
     }
 
+    // =================================================================
+    // BEGINN DER KORREKTUR (Falsches Feld wurde gelesen)
+    // =================================================================
+    
     // Admin-Berechtigungen ermitteln
     let effectiveAdminPerms = {};
     const isAdmin = currentUser.role === 'ADMIN';
     const isSysAdminEditing = currentUser.role === 'SYSTEMADMIN';
+    
     if (isAdmin) { 
-        // Logik zum Holen der Admin-Perms
+        // Lade den Admin-Benutzer (z.B. Jasmin)
         const adminUser = USERS[currentUser.mode];
         if (adminUser) {
-            if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) { 
+            
+            // KORREKTUR:
+            // Wir müssen 'adminPermissionType' prüfen, NICHT 'permissionType'
+            // 'permissionType' ist für User-Rechte (Eingang, etc.)
+            // 'adminPermissionType' ist für Admin-Rechte (User löschen, etc.)
+            
+            // FALL 1: Admin-Rechte kommen von einer ROLLE
+            if (adminUser.adminPermissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) { 
+                
                 effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
-            } else {
+                console.log("Admin-Rechte (permSet) geladen von ADMIN-ROLLE:", adminUser.assignedAdminRoleId);
+
+            // FALL 2: Admin-Rechte sind INDIVIDUELL
+            } else if (adminUser.adminPermissionType === 'individual') {
+                
                 effectiveAdminPerms = adminUser.adminPermissions || {};
+                console.log("Admin-Rechte (permSet) geladen von INDIVIDUELLEN Admin-Rechten.");
+
+            // FALL 3: Fallback (z.B. wenn 'adminPermissionType' fehlt)
+            } else {
+                effectiveAdminPerms = {};
+                 console.warn("Konnte Admin-Rechte (permSet) nicht laden. 'adminPermissionType' fehlt oder ist ungültig.");
             }
         }
     }
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
+
     const permSet = (isSysAdminEditing) ? { 
         canToggleUserActive: true, canDeleteUser: true, canRenameUser: true, 
-        canChangeUserPermissionType: true, canCreateUser: true 
-    } : effectiveAdminPerms;
+        canChangeUserPermissionType: true, canCreateUser: true,
+        // (SysAdmin braucht keine 'approvalRequired' Flags, da er alles darf)
+    } : effectiveAdminPerms; // 'permSet' enthält jetzt die korrekten Rechte inkl. 'approvalRequired'
 
     // --- HTML-Grundgerüst ---
+    // (Dieser Teil bleibt gleich, 'permSet.canCreateUser' funktioniert jetzt korrekt)
     userManagementArea.innerHTML = `
         <button id="showAddUserFormBtn" class="w-full p-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 transition shadow-md ${!permSet.canCreateUser ? 'hidden' : ''}">+ Benutzer anlegen</button>
         
@@ -359,6 +388,7 @@ export async function renderUserManagement() {
         </div>`;
 
     // Listener für "+ Benutzer anlegen" Button
+    // (Dieser Teil bleibt gleich)
     const addUserBtn = userManagementArea.querySelector('#showAddUserFormBtn');
     if (addUserBtn && !addUserBtn.dataset.listenerAttached) {
         addUserBtn.addEventListener('click', () => {
@@ -372,13 +402,15 @@ export async function renderUserManagement() {
     }
 
     // Listener für Typ-Auswahl im "Neu anlegen"-Formular
+    // (Dieser Teil bleibt gleich)
     const newUserPermTypeSelect = userManagementArea.querySelector('#newUserPermissionType');
     if (newUserPermTypeSelect && !newUserPermTypeSelect.dataset.listenerAttached) {
-        newUserPermTypeSelect.addEventListener('change', toggleNewUserRoleField); // Ruft die importierte Funktion auf
+        newUserPermTypeSelect.addEventListener('change', toggleNewUserRoleField); 
         newUserPermTypeSelect.dataset.listenerAttached = 'true';
     }
 
     // --- Daten vorbereiten ---
+    // (Dieser Teil bleibt gleich)
     const allUsers = Object.values(USERS).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     const registeredUsers = allUsers.filter(u => u.permissionType !== 'not_registered');
     const notRegisteredUsers = allUsers.filter(u => u.permissionType === 'not_registered');
@@ -388,24 +420,22 @@ export async function renderUserManagement() {
     if(registeredListContainer) registeredListContainer.innerHTML = '';
     if(notRegisteredListContainer) notRegisteredListContainer.innerHTML = '';
 
-    const notRegCountEl = userManagementArea.querySelector('#notRegisteredCount'); // Korrigierter Selektor
+    const notRegCountEl = userManagementArea.querySelector('#notRegisteredCount'); 
     if (notRegCountEl) notRegCountEl.textContent = notRegisteredUsers.length;
 
-    // Rollenoptionen für "Neu Anlegen"
     const roleOptionsHTML = Object.values(ROLES).filter(r => r.id !== 'SYSTEMADMIN' && r.id !== 'ADMIN' && r.id !== 'NO_RIGHTS').map(role => `<option value="${role.id}">${escapeHtml(role.name)}</option>`).join('');
     const newUserRoleSelect = userManagementArea.querySelector('#newUserRole');
     if (newUserRoleSelect) { newUserRoleSelect.innerHTML = roleOptionsHTML; newUserRoleSelect.value = 'ANGEMELDET'; }
 
-    // Verfügbare Berechtigungen
     const allPermissions = { 'ENTRANCE': 'Haupteingang öffnen', 'PUSHOVER': 'Push-Nachricht senden', 'CHECKLIST': 'Aktuelle Checkliste', 'CHECKLIST_SWITCH': '-> Listen umschalten', 'CHECKLIST_SETTINGS': '-> Checkliste-Einstellungen', 'ESSENSBERECHNUNG': 'Essensberechnung' };
 
-    // Optionen für Angezeigten Status (OHNE SYSTEMADMIN)
     const displayRoleOptions = Object.values(ROLES)
-        .filter(r => r.id !== 'SYSTEMADMIN') // SYSTEMADMIN herausfiltern
+        .filter(r => r.id !== 'SYSTEMADMIN') 
         .map(role => `<option value="${role.id}">${escapeHtml(role.name.replace(/-/g, '').trim())}</option>`)
         .join('');
 
     // --- Rendern der Benutzerkarten ---
+    // (Die Funktion 'createUserCardHTML' bleibt gleich)
     const createUserCardHTML = (user) => {
         const userId = user.id; 
         const isSelf = userId === currentUser.mode; 
@@ -421,13 +451,10 @@ export async function renderUserManagement() {
         } 
         if (isNotRegistered && (isAdmin || isSysAdminEditing)) canEdit = true;
 
+        // KORREKTUR: 'permSet' wird jetzt korrekt geladen, diese Logik funktioniert
         const canToggle = permSet.canToggleUserActive && canEdit && !isSelf && !isNotRegistered; 
         const canDelete = permSet.canDeleteUser && canEdit && !isSelf; 
-        
-        // Regel: Normales Recht (via canEdit) ODER (SysAdmin darf EIGENEN Namen bearbeiten)
-        // KORREKTUR: "canRenameUser" für alle, die 'permSet.canRenameUser' haben (auch Admins für normale User)
         const canRename = (permSet.canRenameUser && canEdit) || (isSysAdminEditing && isSelf); 
-        
         const canChangePerms = permSet.canChangeUserPermissionType && canEdit && !isNotRegistered;
         
         const currentUserLabel = isSelf ? '<span class="bg-indigo-100 text-indigo-800 font-bold text-xs px-2 py-1 rounded-full ml-2">AKTUELL</span>' : ''; 
@@ -513,6 +540,7 @@ export async function renderUserManagement() {
     };
 
     // Rendere registrierte Benutzer
+    // (Dieser Teil bleibt gleich)
     if (registeredUsers.length > 0 && registeredListContainer) {
         registeredUsers.forEach(user => { registeredListContainer.innerHTML += createUserCardHTML(user); });
     } else if (registeredListContainer) {
@@ -520,6 +548,7 @@ export async function renderUserManagement() {
     }
 
     // Rendere nicht registrierte Benutzer
+    // (Dieser Teil bleibt gleich)
     if (notRegisteredUsers.length > 0 && notRegisteredListContainer) {
         notRegisteredUsers.forEach(user => { notRegisteredListContainer.innerHTML += createUserCardHTML(user); });
     } else if (notRegisteredListContainer) {
@@ -527,6 +556,7 @@ export async function renderUserManagement() {
     }
 
     // --- Event Listener hinzufügen ---
+    // (Ruft die Funktion auf, die du bereits von mir hast, aber übergibt jetzt das korrekte 'permSet')
     addAdminUserManagementListeners(userManagementArea, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions);
     restoreAdminScrollIfAny();
 }

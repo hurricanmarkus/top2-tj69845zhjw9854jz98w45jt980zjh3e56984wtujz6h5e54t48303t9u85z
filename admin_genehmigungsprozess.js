@@ -1,6 +1,9 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 //
-import { onSnapshot, query, orderBy, getDocs, addDoc, doc, updateDoc, writeBatch, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { roleChangeRequestsCollectionRef, adminSectionsState, approvalRequestsCollectionRef, usersCollectionRef, db, ROLES } from './haupteingang.js';
+// KORREKTUR: Fehlende Imports hinzugefügt
+import { onSnapshot, query, orderBy, getDocs, addDoc, doc, updateDoc, writeBatch, getDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { roleChangeRequestsCollectionRef, adminSectionsState, approvalRequestsCollectionRef, usersCollectionRef, db, ROLES, USERS, currentUser, alertUser, localUpdateInProgress } from './haupteingang.js';
+import { renderUserManagement } from './admin_benutzersteuerung.js'; // KORREKTUR: Fehlender Import
+import { rememberAdminScroll } from './admin_adminfunktionenHome.js'; // KORREKTUR: Fehlender Import
 // ENDE-ZIKA //
 
 export async function createApprovalRequest(type, userId, details = {}) {
@@ -10,7 +13,8 @@ export async function createApprovalRequest(type, userId, details = {}) {
         if (type === 'CREATE_USER' && details.userData) {
             reqUserName = details.userData.name;
         } else {
-            reqUserName = USERS[userId]?.name || 'Unbekannt';
+            // KORREKTUR: Sicherer Zugriff auf USERS
+            reqUserName = (USERS && USERS[userId]?.name) || 'Unbekannt';
         }
 
         const requestData = {
@@ -21,13 +25,16 @@ export async function createApprovalRequest(type, userId, details = {}) {
             requestedByName: currentUser.displayName,
             details: details,
             status: 'pending',
-            timestamp: serverTimestamp()
+            timestamp: serverTimestamp() // KORREKTUR: serverTimestamp() importiert
         };
         await addDoc(roleChangeRequestsCollectionRef, requestData);
         alertUser('Ihre Anfrage wurde zur Genehmigung eingereicht.', 'success');
-        localUpdateInProgress = true;
+        
+        // KORREKTUR: Diese Funktionen wurden importiert und können jetzt aufgerufen werden
+        localUpdateInProgress = true; 
         rememberAdminScroll();
         renderUserManagement();
+
     } catch (error) {
         console.error("Error creating approval request:", error);
         alertUser('Fehler beim Erstellen der Anfrage.', 'error');
@@ -156,8 +163,14 @@ export async function renderApprovalProcess(snapshot = null) {
 
             switch (type) {
                 case 'CREATE_USER': {
-                    const { name, key, role, isActive, newUserId } = details.userData || {};
-                    if (newUserId) batch.set(doc(usersCollectionRef, newUserId), { name, key, role, isActive });
+                    // KORREKTUR: Stelle sicher, dass "realName" auch gesetzt wird
+                    const { name, key, role, isActive, newUserId, realName } = details.userData || {};
+                    if (newUserId) {
+                        const userData = { name, key, role, isActive, realName: realName || '' }; // Füge realName hinzu
+                        // Bereinige das Objekt von "undefined" Werten, falls sie aus alten Anfragen stammen
+                        Object.keys(userData).forEach(k => userData[k] === undefined && delete userData[k]);
+                        batch.set(doc(usersCollectionRef, newUserId), userData);
+                    }
                     break;
                 }
                 case 'DELETE_USER':
@@ -177,9 +190,11 @@ export async function renderApprovalProcess(snapshot = null) {
                     break;
                 case 'CHANGE_PERMISSION_TYPE':
                     if (details.type === 'role') {
-                        batch.update(doc(usersCollectionRef, userId), { role: details.newRole, customPermissions: [] });
+                        // KORREKTUR: Setze 'displayRole' zurück, wenn zu Rolle gewechselt wird
+                        batch.update(doc(usersCollectionRef, userId), { permissionType: 'role', role: details.newRole, customPermissions: [], displayRole: null });
                     } else {
-                        batch.update(doc(usersCollectionRef, userId), { role: null, customPermissions: details.customPermissions || [] });
+                        // KORREKTUR: Setze 'role' zurück und 'displayRole' korrekt
+                        batch.update(doc(usersCollectionRef, userId), { permissionType: 'individual', role: null, customPermissions: details.customPermissions || [], displayRole: details.displayRole || null });
                     }
                     break;
                 case 'CHANGE_CUSTOM_PERMISSIONS':

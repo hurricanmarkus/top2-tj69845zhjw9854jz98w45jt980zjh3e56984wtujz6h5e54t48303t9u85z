@@ -44,7 +44,7 @@ export let unsubscribeTemplateItems = null;
 export let adminSettings = {};
 export let selectedUserForLogin = null;
 export let adminSectionsState = { password: false, user: false, role: false, approval: false, protocol: false, adminRights: false, mainFunctions: false };
-let localUpdateInProgress = false;
+export let localUpdateInProgress = false;
 export let roleManagementSectionsState = { userRolesOpen: false, adminRolesOpen: false };
 export let ADMIN_ROLES = {};
 export let adminRolesCollectionRef;
