@@ -149,10 +149,24 @@ export function renderModalUserButtons() {
         DEFAULT: 'border-indigo-500'
     };
 
-    // Filter bleibt gleich
+    // =================================================================
+    // BEGINN DEINER KORREKTUR (Filter für leere Namen)
+    // =================================================================
+    //
+    // Der alte Filter war:
+    // const allUsers = Object.values(USERS).filter(u =>
+    //     u.name && u.permissionType !== 'not_registered'
+    // );
+    //
+    // Der NEUE Filter prüft zusätzlich, ob der Name nach dem Entfernen
+    // von Leerzeichen (trim()) nicht leer ist.
     const allUsers = Object.values(USERS).filter(u =>
-        u.name && u.permissionType !== 'not_registered'
+        u.name && u.name.trim() !== '' && u.permissionType !== 'not_registered'
     );
+    // =================================================================
+    // ENDE DEINER KORREKTUR
+    // =================================================================
+
 
     console.log("renderModalUserButtons: Anzahl User NACH Filter:", allUsers.length); // Spion bleibt
 
