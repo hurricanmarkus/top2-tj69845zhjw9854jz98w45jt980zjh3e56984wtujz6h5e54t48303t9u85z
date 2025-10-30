@@ -281,11 +281,6 @@ export function renderUserKeyList() {
 }
 
 // Ersetze diese Funktion komplett in admin_benutzersteuerung.js
-// Ersetze diese Funktion komplett in admin_benutzersteuerung.js
-// Ersetze diese Funktion komplett in admin_benutzersteuerung.js
-// Ersetze diese Funktion komplett in admin_benutzersteuerung.js
-// Ersetze diese Funktion komplett in admin_benutzersteuerung.js
-// Ersetze diese Funktion komplett in admin_benutzersteuerung.js
 export async function renderUserManagement() {
     const userManagementArea = document.getElementById('userManagementArea');
     if (!userManagementArea) {
@@ -294,7 +289,7 @@ export async function renderUserManagement() {
     }
 
     // Frühe Überprüfung der Referenzen
-    if (!roleChangeRequestsCollectionRef || !usersCollectionRef || !rolesCollectionRef) {
+    if (!approvalRequestsCollectionRef || !usersCollectionRef || !rolesCollectionRef) { // (approvalRequestsCollectionRef statt roleChange...)
         userManagementArea.innerHTML = `<p class="text-center text-red-500">Datenbankverbindung wird noch aufgebaut...</p>`;
         return;
     }
@@ -303,23 +298,33 @@ export async function renderUserManagement() {
     let effectiveAdminPerms = {};
     const isAdmin = currentUser.role === 'ADMIN';
     const isSysAdminEditing = currentUser.role === 'SYSTEMADMIN';
+    
     if (isAdmin) { 
-        // Logik zum Holen der Admin-Perms
-        const adminUser = USERS[currentUser.mode];
-        if (adminUser) {
-            if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) { 
-                effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
-            } else {
-                effectiveAdminPerms = adminUser.adminPermissions || {};
-            }
-        }
+        // =================================================================
+        // BEGINN DER KORREKTUR (Logikfehler permSet)
+        // =================================================================
+        // Wir müssen hier die ECHTEN Admin-Rechte aus dem currentUser-Objekt
+        // holen, die in checkCurrentUserValidity (V7) korrekt geladen wurden.
+        effectiveAdminPerms = currentUser.adminPermissions || {};
+        // =================================================================
+        // ENDE DER KORREKTUR
+        // =================================================================
     }
+    
+    // permSet ist jetzt korrekt, egal ob Jasmins Rechte von
+    // "Rolle" (Admin-Rechte) oder "Individuell" (Admin-Rechte) kommen.
     const permSet = (isSysAdminEditing) ? { 
+        // SysAdmin-Rechte
         canToggleUserActive: true, canDeleteUser: true, canRenameUser: true, 
-        canChangeUserPermissionType: true, canCreateUser: true 
-    } : effectiveAdminPerms;
+        canChangeUserPermissionType: true, canCreateUser: true,
+        // (approvalRequired ist bei SysAdmin egal, da er direkt schreibt)
+    } : effectiveAdminPerms; // Admin (Jasmin) Rechte
 
     // --- HTML-Grundgerüst ---
+    // (Der Rest dieser Funktion ist von hier an identisch mit dem,
+    // was du bereits hast, da die Logik in 'addAdminUserManagementListeners'
+    // jetzt mit dem korrekten 'permSet' funktioniert.)
+    
     userManagementArea.innerHTML = `
         <button id="showAddUserFormBtn" class="w-full p-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 transition shadow-md ${!permSet.canCreateUser ? 'hidden' : ''}">+ Benutzer anlegen</button>
         
@@ -527,11 +532,13 @@ export async function renderUserManagement() {
     }
 
     // --- Event Listener hinzufügen ---
+    // Die 'addAdminUserManagementListeners'-Funktion bleibt EXAKT so, wie ich
+    // sie dir im VORLETZTEN Schritt (vor der "Türsteher"-Diskussion) gegeben habe.
+    // Sie ist bereits korrekt und nutzt das 'permSet', das wir jetzt oben
+    // korrekt berechnen.
     addAdminUserManagementListeners(userManagementArea, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions);
     restoreAdminScrollIfAny();
-}
-
-// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
+}// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
 // admin_benutzersteuerung.js
 
 // ... (Rest der Datei, bis zur Funktion addAdminUserManagementListeners) ...
