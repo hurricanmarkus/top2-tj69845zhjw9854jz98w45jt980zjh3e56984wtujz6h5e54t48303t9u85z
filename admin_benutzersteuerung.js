@@ -630,7 +630,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 displayRole: null, isActive: true
             };
 
-            // --- KORRIGIERTE Logik: Nur SysAdmin darf direkt schreiben ---
             const newDocRef = doc(usersCollectionRef);
             const newUserId = newDocRef.id;
 
@@ -647,7 +646,16 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 // FALL 2: Admin mit Berechtigung muss Genehmigung anfordern
                 } else if (permSet.canCreateUser) {
                     console.log("Benutzer anlegen: Genehmigung wird angefordert (Admin).");
-                    const approvalDetails = { userData: { ...newUserData, newUserId: newUserId } };
+                    
+                    // *** BOT-LOGIK: Flag hinzufügen ***
+                    // Prüfe, ob Genehmigung laut Admin-Rolle NÖTIG ist
+                    const needsApproval = permSet.approvalRequired?.createUser === true;
+                    // Das Etikett ist das Gegenteil: autoApprove = !needsApproval
+                    const approvalDetails = { 
+                        userData: { ...newUserData, newUserId: newUserId },
+                        autoApprove: !needsApproval // <--- HIER IST DAS ETIKETT
+                    };
+                    
                     await createApprovalRequest('CREATE_USER', newUserId, approvalDetails);
                     alertUser(`Anfrage zum Anlegen von '${name}' wurde zur Genehmigung eingereicht.`, "success");
                 
@@ -667,8 +675,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
             } catch (error) {
                 console.error("Fehler beim Anlegen des Benutzers:", error);
-                // WENN DIESER FEHLER JETZT IMMER NOCH KOMMT...
-                // ...dann kommt er von createApprovalRequest (siehe unten)
                 alertUser(`Fehler: ${error.message || "Unbekannter Fehler beim Erstellen."}`, "error");
             } finally {
                 setButtonLoading(saveNewUserButton, false);
@@ -712,7 +718,14 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 // FALL 2: Admin mit Berechtigung
                 } else if (permSet.canDeleteUser) {
                     console.log(`Benutzer löschen: Genehmigung erforderlich für ${userId}.`);
-                    await createApprovalRequest('DELETE_USER', userId, {});
+                    
+                    // *** BOT-LOGIK: Flag hinzufügen ***
+                    const needsApproval = permSet.approvalRequired?.deleteUser === true;
+                    const approvalDetails = { 
+                        autoApprove: !needsApproval // <--- HIER IST DAS ETIKETT
+                    };
+                    
+                    await createApprovalRequest('DELETE_USER', userId, approvalDetails);
                     alertUser(`Anfrage zum Löschen von '${userToEdit.name}' wurde eingereicht.`, "success");
 
                 // FALL 3: Keine Berechtigung
@@ -766,7 +779,15 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 // FALL 2: Admin mit Berechtigung
                 } else if (permSet.canRenameUser) {
                     console.log(`Umbenennen: Genehmigung erforderlich für ${userId}.`);
-                    await createApprovalRequest('RENAME_USER', userId, { newName: newNickname });
+                    
+                    // *** BOT-LOGIK: Flag hinzufügen ***
+                    const needsApproval = permSet.approvalRequired?.renameUser === true;
+                    const approvalDetails = { 
+                        newName: newNickname,
+                        autoApprove: !needsApproval // <--- HIER IST DAS ETIKETT
+                    };
+                    
+                    await createApprovalRequest('RENAME_USER', userId, approvalDetails);
                     alertUser(`Anfrage zur Umbenennung von '${userToEdit.name}' wurde eingereicht.`, "success");
                     nameDisplay.classList.remove('hidden');
                     nameEditContainer.classList.add('hidden');
@@ -825,8 +846,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                     updateData = { ...updateData, role: null, customPermissions: customPermissions, displayRole: selectedDisplayRole !== 'NO_RIGHTS' ? selectedDisplayRole : null };
                     approvalDetails = { ...approvalDetails, customPermissions: customPermissions, displayRole: selectedDisplayRole };
                 }
-
-                // --- KORRIGIERTE Genehmigungs-Logik ---
                 
                 // FALL 1: Systemadmin
                 if (isSysAdmin) {
@@ -838,6 +857,11 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 // FALL 2: Admin mit Berechtigung
                 } else if (permSet.canChangeUserPermissionType) {
                     console.log(`Rechte ändern: Genehmigung erforderlich für ${userId}.`);
+                    
+                    // *** BOT-LOGIK: Flag hinzufügen ***
+                    const needsApproval = permSet.approvalRequired?.changeUserPermissionType === true;
+                    approvalDetails.autoApprove = !needsApproval; // <--- HIER IST DAS ETIKETT
+                    
                     await createApprovalRequest('CHANGE_PERMISSION_TYPE', userId, approvalDetails);
                     alertUser(`Anfrage zur Rechteänderung für '${userToEdit.name}' wurde eingereicht.`, "success");
 
@@ -905,7 +929,15 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                     // FALL 2: Admin mit Berechtigung
                     } else if (permSet.canToggleUserActive) {
                         console.log(`Sperr-Status ändern: Genehmigung erforderlich für ${userId}.`);
-                        await createApprovalRequest('TOGGLE_USER_ACTIVE', userId, { isActive: newIsActive });
+                        
+                        // *** BOT-LOGIK: Flag hinzufügen ***
+                        const needsApproval = permSet.approvalRequired?.toggleUserActive === true;
+                        const approvalDetails = { 
+                            isActive: newIsActive,
+                            autoApprove: !needsApproval // <--- HIER IST DAS ETIKETT
+                        };
+                    
+                        await createApprovalRequest('TOGGLE_USER_ACTIVE', userId, approvalDetails);
                         alertUser(`Anfrage zum ${actionText} von '${userToEdit.name}' wurde eingereicht.`, "success");
                         target.checked = !newIsLocked; // WICHTIG: Toggle zurücksetzen
 
