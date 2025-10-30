@@ -1027,21 +1027,34 @@ export function renderAdminUserDetails(userId) {
                         ${generateCheckbox('canUseMainChecklist', '-> Checkliste', true)}
                     </div>
                 </div>
-                 <div class="p-3 border rounded-lg bg-white">
-                    <h5 class="font-semibold text-sm mb-2 text-gray-600">Aktionen und Genehmigung</h5>
-                    <div class="grid grid-cols-1 gap-4 text-sm"> 
-                        ${generateCheckbox('canCreateUser', 'Benutzer anlegen', false, true)}
-                        ${generateCheckbox('canDeleteUser', 'Benutzer löschen', false, true)}
-                        ${generateCheckbox('canRenameUser', 'Benutzer umbenennen', false, true)}
-                        ${generateCheckbox('canToggleUserActive', 'Benutzer sperren/entsperren', false, true)}
-                        ${generateCheckbox('canChangeUserPermissionType', 'Berechtigungs-Typ ändern', false, true)}
-                        <div class="pt-2 border-t mt-2">
-                           ${generateCheckbox('canEditUserRoles', 'Darf Benutzer-Rollen bearbeiten')}
-                           ${generateCheckbox('canSeeSysadminLogs', 'Darf Sysadmin-Einträge sehen')}
+                
+                <div class="p-3 border rounded-lg bg-white">
+                    <h5 class="font-semibold text-sm mb-3 text-gray-600">Aktionen und Genehmigung</h5>
+                    
+                    <div class="grid grid-cols-2 gap-4 text-sm"> 
+                        
+                        <div class="flex flex-col gap-4">
+                            ${generateCheckbox('canCreateUser', 'Benutzer anlegen', false, true)}
+                            ${generateCheckbox('canDeleteUser', 'Benutzer löschen', false, true)}
+                            ${generateCheckbox('canRenameUser', 'Benutzer umbenennen', false, true)}
+                        </div>
+                        
+                        <div class="flex flex-col gap-4">
+                            ${generateCheckbox('canToggleUserActive', 'Benutzer sperren/entsperren', false, true)}
+                            ${generateCheckbox('canChangeUserPermissionType', 'Berechtigungs-Typ ändern', false, true)}
                         </div>
                     </div>
+                    
+                    <div class="pt-4 border-t mt-4"> <h5 class="font-semibold text-sm mb-3 text-gray-600">Weitere Berechtigungen</h5> <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div class="flex flex-col gap-4"> ${generateCheckbox('canEditUserRoles', 'Darf Benutzer-Rollen bearbeiten')}
+                            </div>
+                            <div class="flex flex-col gap-4"> ${generateCheckbox('canSeeSysadminLogs', 'Darf Sysadmin-Einträge sehen')}
+                            </div>
+                         </div>
+                    </div>
+
                 </div>
-            </div>
+                </div>
 
             <div id="admin-save-container" class="mt-4 pt-4 border-t ${!canBeEdited ? 'hidden' : ''}">
                  <button id="save-admin-perms-button" data-userid="${userId}" class="save-admin-perms-button w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" disabled>
@@ -1106,9 +1119,7 @@ export function renderAdminUserDetails(userId) {
         setupPermissionDependencies(individualArea);
     }
     
-    // =================================================================
-    // BEGINN DEINER NEUEN KORREKTUR (Abhängigkeit für Genehmigung)
-    // =================================================================
+    // (Abhängigkeitslogik für Genehmigungs-Checkboxen - von vorigem Schritt)
     const permsArea = detailsArea.querySelector('#admin-individual-perms-area');
     if (permsArea) {
         // Finde alle Haupt-Checkboxen
@@ -1154,9 +1165,6 @@ export function renderAdminUserDetails(userId) {
             updateApprovalCbState(); 
         });
     }
-    // =================================================================
-    // ENDE DEINER NEUEN KORREKTUR
-    // =================================================================
 
     // --- NEU: Listener für den Speichern-Button hinzufügen (Löst das Problem!) ---
 const saveButton = detailsArea.querySelector('.save-admin-perms-button');
