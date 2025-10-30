@@ -2,13 +2,13 @@
 import { onSnapshot, query, orderBy, getDocs, addDoc, doc, updateDoc, writeBatch, getDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // =================================================================
-// BEGINN DER KORREKTUR
+// BEGINN DER KORREKTUR (Kreislauf-Fehler)
 // =================================================================
 // Wir importieren die KORREKTE V2-Sammlung (approvalRequestsCollectionRef)
 // und entfernen die alte (roleChangeRequestsCollectionRef)
-import { adminSectionsState, approvalRequestsCollectionRef, usersCollectionRef, db, ROLES, USERS, currentUser, alertUser, rememberAdminScroll } from './haupteingang.js';
-// (Importiere auch USERS, currentUser, alertUser, rememberAdminScroll, da sie in der Funktion unten gebraucht werden)
-import { renderUserManagement } from './admin_benutzersteuerung.js'; // (Import für renderUserManagement)
+// WICHTIG: Die Importe für 'renderUserManagement' und 'rememberAdminScroll' sind ENTFERNT, um den Kreislauf zu brechen.
+import { adminSectionsState, approvalRequestsCollectionRef, usersCollectionRef, db, ROLES, USERS, currentUser, alertUser } from './haupteingang.js';
+// (Importiere auch USERS, currentUser, alertUser, da sie in der Funktion unten gebraucht werden)
 // =================================================================
 // ENDE DER KORREKTUR
 // =================================================================
@@ -37,7 +37,7 @@ export async function createApprovalRequest(type, userId, details = {}) {
         };
         
         // =================================================================
-        // BEGINN DER KORREKTUR (Das ist der Hauptfehler)
+        // BEGINN DER KORREKTUR (aus vorigem Schritt - bleibt gleich)
         // =================================================================
         // Wir schreiben jetzt in die KORREKTE Sammlung, auf die der V2-Bot hört.
         await addDoc(approvalRequestsCollectionRef, requestData);
@@ -50,14 +50,13 @@ export async function createApprovalRequest(type, userId, details = {}) {
             alertUser('Ihre Anfrage wurde zur Genehmigung eingereicht.', 'success');
         }
         
-        // (Diese Zeilen müssen wir entfernen oder anpassen, da sie hier nicht hingehören)
-        // localUpdateInProgress = true; // (Diese Variable ist hier nicht definiert)
-        rememberAdminScroll();
-        if (typeof renderUserManagement === 'function') {
-            renderUserManagement();
-        } else {
-            console.warn("renderUserManagement ist nicht verfügbar in createApprovalRequest");
-        }
+        // =================================================================
+        // KORREKTUR (Kreislauf-Fehler): Diese Zeilen ENTFERNT, da sie den Fehler verursachen.
+        // Die UI wird jetzt durch 'listenForUserUpdates' aktualisiert,
+        // wenn der Bot die Daten ändert.
+        // =================================================================
+        // ENTFERNT: rememberAdminScroll();
+        // ENTFERNT: if (typeof renderUserManagement === 'function') { ... }
         
     } catch (error) {
         // Diese Fehlermeldung sollte jetzt den FirebaseError (Permission Denied) anzeigen
@@ -68,22 +67,26 @@ export async function createApprovalRequest(type, userId, details = {}) {
 
 export function listenForApprovalRequests() {
     // =================================================================
-    // KORREKTUR (Zuhören)
+    // KORREKTUR (Zuhören - aus vorigem Schritt)
     // =================================================================
     // Wir müssen auch den Listener auf die KORREKTE Sammlung umstellen.
     onSnapshot(query(approvalRequestsCollectionRef, orderBy('timestamp', 'desc')), (snapshot) => {
     // =================================================================
     // ENDE KORREKTUR (Zuhören)
     // =================================================================
+        
+        // Dieser Teil ist OK, da er nur die "Genehmigungs-UI"
+        // und nicht die "Benutzer-UI" aktualisiert.
         if (adminSectionsState.approval) {
             renderApprovalProcess(snapshot);
         }
-        if (adminSectionsState.user) {
-            // Stelle sicher, dass die Funktion existiert
-            if (typeof renderUserManagement === 'function') {
-                renderUserManagement();
-            }
-        }
+
+        // =================================================================
+        // KORREKTUR (Kreislauf-Fehler): Dieser Block wird ENTFERNT,
+        // da er 'renderUserManagement' aufruft.
+        // =================================================================
+        // ENTFERNT: if (adminSectionsState.user) { ... }
+        // =================================================================
     });
 }
 
@@ -98,7 +101,7 @@ export async function renderApprovalProcess(snapshot = null) {
 
     if (!snapshot) {
         // =================================================================
-        // KORREKTUR (Laden)
+        // KORREKTUR (Laden - aus vorigem Schritt)
         // =================================================================
         // Wir müssen beim manuellen Laden die KORREKTE Sammlung abfragen.
         snapshot = await getDocs(query(approvalRequestsCollectionRef, orderBy('timestamp', 'desc')));
@@ -214,7 +217,7 @@ export async function renderApprovalProcess(snapshot = null) {
         const requestId = e.currentTarget.dataset.requestId;
         try {
             // =================================================================
-            // KORREKTUR (Aktion)
+            // KORREKTUR (Aktion - aus vorigem Schritt)
             // =================================================================
             // Holt den Antrag aus der KORREKTEN Sammlung
             const requestDoc = await getDoc(doc(approvalRequestsCollectionRef, requestId));
@@ -258,7 +261,14 @@ export async function renderApprovalProcess(snapshot = null) {
                     if (details.type === "role") {
                         updateData = { permissionType: "role", role: details.newRole, customPermissions: [], displayRole: null };
                     } else {
-                        updateData = { permissionType: "individual", role: details.newActualRole || null, customPermissions: details.customPermissions || [], displayRole: details.displayRole || null };
+                        // KORREKTUR: Stelle sicher, dass die ECHTE Rolle (role) gesetzt wird, nicht nur die Anzeige-Rolle
+                        let newActualRole = null;
+                        if (details.displayRole === 'ADMIN') newActualRole = 'ADMIN';
+                        else if (details.displayRole === 'SYSTEMADMIN') newActualRole = 'SYSTEMADMIN';
+                        else if (details.displayRole === 'NO_RIGHTS') newActualRole = 'NO_RIGHTS';
+                        else newActualRole = details.displayRole; // z.B. ANGEMELDET
+
+                        updateData = { permissionType: "individual", role: newActualRole, customPermissions: details.customPermissions || [], displayRole: details.displayRole || null };
                     }
                     batch.update(doc(usersCollectionRef, userId), updateData);
                     break;
@@ -276,7 +286,7 @@ export async function renderApprovalProcess(snapshot = null) {
             }
             
             // =================================================================
-            // KORREKTUR (Aktion)
+            // KORREKTUR (Aktion - aus vorigem Schritt)
             // =================================================================
             // Markiert den Antrag in der KORREKTEN Sammlung als 'approved'
             batch.update(doc(approvalRequestsCollectionRef, requestId), { status: 'approved', actionTakenByName: currentUser.displayName });
@@ -296,7 +306,7 @@ export async function renderApprovalProcess(snapshot = null) {
         const requestId = e.currentTarget.dataset.requestId;
         try {
             // =================================================================
-            // KORREKTUR (Aktion)
+            // KORREKTUR (Aktion - aus vorigem Schritt)
             // =================================================================
             await updateDoc(doc(approvalRequestsCollectionRef, requestId), { status: 'denied', actionTakenByName: currentUser.displayName });
             // =================================================================
@@ -314,7 +324,7 @@ export async function renderApprovalProcess(snapshot = null) {
         const requestId = e.currentTarget.dataset.requestId;
         try {
             // =================================================================
-            // KORREKTUR (Aktion)
+            // KORREKTUR (Aktion - aus vorigem Schritt)
             // =================================================================
             await updateDoc(doc(approvalRequestsCollectionRef, requestId), { status: 'withdrawn', actionTakenByName: currentUser.displayName });
             // =================================================================
