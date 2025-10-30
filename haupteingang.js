@@ -30,7 +30,6 @@ export let ROLES = {};
 export let initialAuthCheckDone = false;
 export let adminPinInput;
 export let modalUserButtons;
-export let fullScreenLoader, loaderText;
 export let adminRightsToggle;
 export let pinModal;
 export let pinError;
@@ -142,11 +141,6 @@ export const USER_COLORS = {
 
 window.onload = function () {
 
-    // =================================================================
-    // KORREKTUR: Alle Zuweisungen MÜSSEN an den Anfang.
-    // =================================================================
-
-    // Zuerst alle Elemente holen und globalen Variablen zuweisen
     modalUserButtons = document.getElementById('modalUserButtons');
     const distributionList = document.getElementById('distribution-list');
     const appHeader = document.getElementById('appHeader');
@@ -161,6 +155,7 @@ window.onload = function () {
     const adminRightsSection = document.getElementById('adminRightsSection');
     adminRightsToggle = document.getElementById('adminRightsToggle');
     submitAdminKeyButton = document.getElementById('submitAdminKeyButton');
+    // console.log("Wert von submitAdminKeyButton IN window.onload:", submitAdminKeyButton); // Logging entfernt
     const adminRightsArea = document.getElementById('adminRightsArea');
     const adminRightsToggleIcon = document.getElementById('adminRightsToggleIcon');
     const roleManagementSection = document.getElementById('roleManagementSection');
@@ -190,14 +185,6 @@ window.onload = function () {
     const mainFunctionsToggleIcon = document.getElementById('mainFunctionsToggleIcon');
     const notrufView = document.getElementById('notrufSettingsView');
 
-    // WICHTIG: Die neuen Loader-Variablen (von Problem 1)
-    fullScreenLoader = document.getElementById('fullScreenLoader');
-    loaderText = document.getElementById('loaderText');
-
-    // =================================================================
-    // Erst DANACH die Event Listener und Initialisierungen
-    // =================================================================
-
     const closeDeletedModalBtn = document.getElementById('closeDeletedListsModal');
     if (closeDeletedModalBtn) {
         closeDeletedModalBtn.addEventListener('click', () => {
@@ -205,10 +192,8 @@ window.onload = function () {
         });
     }
 
-    // Diese Reihenfolge ist jetzt sicher:
     setupEventListeners();
     initializeFirebase();
-    
     if ('serviceWorker' in navigator) {
         try {
             navigator.serviceWorker.register('/sw.js');
@@ -390,22 +375,16 @@ async function seedInitialData() {
     }
 }
 
-export function alertUser(message, type, duration = 3000) { // NEU: duration hinzugefügt
+export function alertUser(message, type) {
     const tempAlert = document.createElement('div');
     tempAlert.textContent = message;
-    
-    // NEU: Stellt sicher, dass 'error' (oder alles andere) rot wird
-    const bgColorClass = type === 'success' ? 'bg-green-600' : 'bg-red-600';
-
-    tempAlert.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 rounded-xl text-white font-bold shadow-lg transition-opacity duration-300 z-50 text-center ${bgColorClass}`;
+    tempAlert.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 rounded-xl text-white font-bold shadow-lg transition-opacity duration-300 z-50 text-center ${type === 'success' ? 'bg-green-600' : 'bg-red-600'}`;
     document.body.appendChild(tempAlert);
     setTimeout(() => tempAlert.style.opacity = '1', 10);
-    
-    // NEU: Verwendet die variable Dauer
     setTimeout(() => {
         tempAlert.style.opacity = '0';
         setTimeout(() => tempAlert.remove(), 300);
-    }, duration); // Verwendet die 'duration' Variable
+    }, 3000);
 }
 
 export function setButtonLoading(button, isLoading) {
@@ -502,10 +481,10 @@ export function navigate(targetViewName) {
 
 export function setupEventListeners() {
     // Sicherstellen, dass die Elemente existieren, bevor Listener hinzugefügt werden
-    // NEU: Auch die Loader-Elemente prüfen
-    if (!appHeader || !document.querySelector('.main-content') || !document.getElementById('entranceCard') || !document.getElementById('fullScreenLoader')) {
+    if (!appHeader || !document.querySelector('.main-content') || !document.getElementById('entranceCard')) {
         console.warn("setupEventListeners: Wichtige Elemente noch nicht bereit, versuche später erneut.");
-        setTimeout(setupEventListeners, 100); // Sicherer warten
+        // Optional: setTimeout hinzufügen, wenn das Problem häufiger auftritt
+        // setTimeout(setupEventListeners, 100);
         return;
     }
     console.log("setupEventListeners: Füge Basis-Listener hinzu...");
@@ -594,7 +573,7 @@ export function setupEventListeners() {
     }
 
 // ERSETZE die handleLogin Funktion KOMPLETT hiermit:
-// (Diese Funktion ist INNEN in setupEventListeners)
+// ERSETZE deine komplette handleLogin Funktion hiermit:
 const handleLogin = async () => {
     if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) {
         return;
@@ -616,18 +595,10 @@ const handleLogin = async () => {
         return;
     }
 
-    // 2. PIN korrekt, Modals schließen UND LOADER STARTEN
+    // 2. PIN korrekt, Modal schließen
     pinModal.style.display = 'none';
     adminPinInput.value = '';
     pinError.style.display = 'none';
-    
-    // =================================================================
-    // BEGINN DEINER KORREKTUR (Lade-Symbol)
-    // =================================================================
-    showLoadingOverlay("Anmeldung wird verarbeitet...");
-    // =================================================================
-    // ENDE DEINER KORREKTUR
-    // =================================================================
 
     try {
         // --- 3. Manuelle Cloud Function Logik (Finaler Fix) ---
@@ -646,15 +617,12 @@ const handleLogin = async () => {
         }
         if (!auth.currentUser) { throw new Error("Benutzer konnte nicht authentifiziert werden."); }
         
-        // === KORREKTUR: Lade-Text aktualisieren ===
-        showLoadingOverlay("Token wird abgerufen...");
+        // Token holen
         const idToken = await auth.currentUser.getIdToken(true); 
         if (!idToken) {
             throw new Error("Konnte kein gültiges ID Token abrufen.");
         }
         
-        // === KORREKTUR: Lade-Text aktualisieren ===
-        showLoadingOverlay("Cloud-Funktion wird aufgerufen...");
         // Manuelle Anfrage an die Cloud Function senden
         const functionUrl = "https://us-central1-top2-e9ac0.cloudfunctions.net/setRoleClaim";
 
@@ -686,8 +654,6 @@ const handleLogin = async () => {
              throw new Error("Cloud Function scheiterte: " + responseData.message);
         }
         
-        // === KORREKTUR: Lade-Text aktualisieren ===
-        showLoadingOverlay("Berechtigungen werden geprüft...");
         // 5. Finales Token aktualisieren und UI updaten
         const idTokenResult = await auth.currentUser.getIdTokenResult(true); 
         const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle zugewiesen';
@@ -697,7 +663,7 @@ const handleLogin = async () => {
         await checkCurrentUserValidity(); 
 
         // 7. Erfolgsmeldung
-        alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet!`, "success");
+        alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet! Rolle: ${newClaimRole}`, "success");
 
     } catch (error) {
         // 8. Fehlerbehandlung
@@ -706,15 +672,6 @@ const handleLogin = async () => {
         
         switchToGuestMode(false);
         updateUIForMode();
-    } finally {
-        // =================================================================
-        // BEGINN DEINER KORREKTUR (Lade-Symbol)
-        // =================================================================
-        // Loader IMMER ausblenden, egal ob Erfolg oder Fehler
-        hideLoadingOverlay();
-        // =================================================================
-        // ENDE DEINER KORREKTUR
-        // =================================================================
     }
 };
 
