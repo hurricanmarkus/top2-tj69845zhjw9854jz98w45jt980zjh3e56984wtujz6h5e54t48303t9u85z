@@ -343,25 +343,33 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
                                         </div>
                                     </div>
                                     </div>
+                                
                                 <div class="pl-6 mt-3 pt-3 border-t border-gray-200 space-y-3">
                                     <h5 class="font-semibold text-sm mb-2 text-gray-500">Aktionen in "Benutzersteuerung"</h5>
-                                    <div class="grid grid-cols-2 gap-2 text-sm">
-                                        <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canCreateUser"> <span>Benutzer anlegen</span></label>
-                                        <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canDeleteUser"> <span>Benutzer löschen</span></label>
-                                        <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canRenameUser"> <span>Benutzer umbenennen</span></label>
-                                        <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canToggleUserActive"> <span>Benutzer ent-/sperren</span></label>
-                                        <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canChangeUserPermissionType"> <span>Berechtigungs-Typ ändern</span></label>
+                                    
+                                    <div class="grid grid-cols-2 gap-4 text-sm">
+                                        <div class="flex flex-col gap-2">
+                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canCreateUser"> <span>Benutzer anlegen</span></label>
+                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canDeleteUser"> <span>Benutzer löschen</span></label>
+                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canRenameUser"> <span>Benutzer umbenennen</span></label>
+                                        </div>
+                                        <div class="flex flex-col gap-2">
+                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canToggleUserActive"> <span>Benutzer ent-/sperren</span></label>
+                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canChangeUserPermissionType"> <span>Berechtigungs-Typ ändern</span></label>
+                                        </div>
                                     </div>
-                                    <h5 class="font-semibold text-sm mb-2 mt-3 text-gray-500">Rechte in "Rollenverwaltung"</h5>
-                                    <div class="grid grid-cols-2 gap-2 text-sm">
-                                        <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canEditUserRoles"> <span>Darf Benutzer-Rollen bearbeiten</span></label>
-                                    </div>
-                                    <h5 class="font-semibold text-sm mb-2 mt-3 text-gray-500">Rechte in "Protokoll History"</h5>
-                                    <div class="grid grid-cols-2 gap-2 text-sm">
-                                        <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canSeeSysadminLogs"> <span>Darf Sysadmin-Einträge sehen</span></label>
+
+                                    <h5 class="font-semibold text-sm mb-2 mt-3 text-gray-500">Weitere Berechtigungen</h5>
+                                    <div class="grid grid-cols-2 gap-4 text-sm">
+                                        <div class="flex flex-col gap-2">
+                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canEditUserRoles"> <span>Darf Benutzer-Rollen bearbeiten</span></label>
+                                        </div>
+                                        <div class="flex flex-col gap-2">
+                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canSeeSysadminLogs"> <span>Darf Sysadmin-Einträge sehen</span></label>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                                </div>
                             <div class="p-3 border rounded-lg bg-white bg-opacity-50">
                                 <h5 class="font-semibold text-sm mb-2 text-gray-600">Genehmigungsprozess</h5>
                                 <p class="text-xs text-gray-500 mb-3">Wenn hier ein Haken gesetzt ist, muss die jeweilige Aktion von einem Systemadmin genehmigt werden.</p>
