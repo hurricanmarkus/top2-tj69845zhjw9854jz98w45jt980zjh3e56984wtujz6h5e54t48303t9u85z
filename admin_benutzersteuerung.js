@@ -1,54 +1,11 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 // TEST 2
 import { onSnapshot, doc, updateDoc, setDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { db, usersCollectionRef, setButtonLoading, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES, ADMIN_STORAGE_KEY } from './haupteingang.js';
+import { db, usersCollectionRef, setButtonLoading, checkCurrentUserValidity, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES, ADMIN_STORAGE_KEY } from './haupteingang.js';
 import { logAdminAction } from './admin_protokollHistory.js';
 import { setupPermissionDependencies, renderAdminRightsManagement } from './admin_rechteverwaltung.js'; // Oder der richtige Dateiname
 import { restoreAdminScrollIfAny, rememberAdminScroll } from './admin_adminfunktionenHome.js';
 import { updateUIForMode, switchToGuestMode } from './log-InOut.js';
 // ENDE-ZIKA //
-
-
-function checkCurrentUserValidity_COPY_V2() {
-const storedUserMode = localStorage.getItem(ADMIN_STORAGE_KEY);
-    const user = storedUserMode ? USERS[storedUserMode] : null;
-
-    if (!user || !user.isActive) {
-        switchToGuestMode(false);
-        updateUIForMode();
-        return;
-    }
-
-    // Benutzer ist gültig und aktiv
-    currentUser.mode = storedUserMode;
-    currentUser.displayName = user.name || 'Unbekannt';
-    currentUser.role = user.role; // Echte Rolle speichern
-    currentUser.assignedAdminRoleId = user.assignedAdminRoleId || null;
-    currentUser.permissionType = user.permissionType || 'role';
-    // --- NEU: DisplayRole auch speichern ---
-    currentUser.displayRole = user.displayRole || null; // Angezeigte Rolle speichern
-
-    // --- Berechtigungslogik (wie zuletzt korrigiert) ---
-    currentUser.permissions = [];
-    if (currentUser.permissionType === 'role') {
-        if (currentUser.role && ROLES[currentUser.role]) {
-            currentUser.permissions = [...(ROLES[currentUser.role].permissions || [])];
-        }
-        if (currentUser.role === 'ADMIN' && currentUser.assignedAdminRoleId && ADMIN_ROLES[currentUser.assignedAdminRoleId]) {
-            currentUser.permissions = Object.keys(ADMIN_ROLES[currentUser.assignedAdminRoleId].permissions || {}).filter(
-                key => key !== 'approvalRequired' && ADMIN_ROLES[currentUser.assignedAdminRoleId].permissions[key] === true
-            );
-        }
-        else if (currentUser.role === 'SYSTEMADMIN') {
-            currentUser.permissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
-        }
-    } else if (currentUser.permissionType === 'individual') {
-        currentUser.permissions = [...(user.customPermissions || [])];
-    }
-    // --- Ende Berechtigungslogik ---
-
-    console.log("checkCurrentUserValidity: Finale Berechtigungen:", currentUser.permissions, "DisplayRole:", currentUser.displayRole); // Debug
-    updateUIForMode();
-}
 
 
 const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
@@ -86,7 +43,7 @@ export function listenForUserUpdates() {
 
         // Verhindert ein Neuzeichnen, wenn die Änderung vom User selbst kam
         if (initialAuthCheckDone) {
-            checkCurrentUserValidity_COPY_V2();
+            checkCurrentUserValidity();
         }
         renderModalUserButtons(); // <<< Wird jetzt immer aufgerufen, wenn Daten kommen
 
