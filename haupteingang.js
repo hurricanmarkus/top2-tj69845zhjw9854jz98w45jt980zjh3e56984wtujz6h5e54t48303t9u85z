@@ -663,14 +663,15 @@ const handleLogin = async () => {
         // Manuelle Anfrage an die Cloud Function senden
         const functionUrl = "https://us-central1-top2-e9ac0.cloudfunctions.net/setRoleClaim";
 
+        // DIES IST DIE KORREKTUR FÜR V2-FUNKTIONEN:
         const fetchResponse = await fetch(functionUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                // KORREKTUR: Token im Authorization-Header senden (Standard für v2)
+                // KORREKTUR 1: Token im Authorization-Header senden (Standard für v2)
                 'Authorization': `Bearer ${idToken}`
             },
-            // KORREKTUR: Die Daten MÜSSEN in ein "data"-Objekt verpackt werden
+            // KORREKTUR 2: Die Daten MÜSSEN in ein "data"-Objekt verpackt werden
             body: JSON.stringify({
                 "data": { 
                     "appUserId": appUserId,
