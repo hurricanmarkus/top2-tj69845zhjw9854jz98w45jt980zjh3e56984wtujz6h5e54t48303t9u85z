@@ -6,7 +6,7 @@ import { renderModalUserButtons } from './admin_benutzersteuerung.js';
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
 export async function checkCurrentUserValidity() { // Funktion ist async
-    console.log("--- Prüfe Benutzerberechtigungen (V5.1 - Rote Sperre) ---");
+    console.log("--- Prüfe Benutzerberechtigungen (V5.1 - Mit Roter Sperre) ---");
 
     // Prüfe zuerst, ob 'auth' initialisiert wurde
     if (!auth) {
@@ -48,20 +48,20 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     }
 
     // =================================================================
-    // BEGINN DEINER KORREKTUR (Rote Meldung, Längere Dauer)
+    // DIES IST DIE LOGIK FÜR PROBLEM 1 (RAUSWURF BEI SPERRUNG)
     // =================================================================
     // NEU: Fall 2.5: User ist gefunden, ABER als 'inaktiv' (gesperrt) markiert.
     if (!userFromFirestore.isActive) {
         console.warn("checkCurrentUserValidity: Benutzer ist als INAKTIV (gesperrt) markiert. Erzwinge Logout.");
         
-        // NEU: Ruft switchToGuestMode mit 'error' (rot) und 6000ms Dauer auf.
+        // Ruft switchToGuestMode mit 'error' (rot) und 6000ms Dauer auf.
         switchToGuestMode(true, "Ihr Konto wurde von einem Administrator gesperrt.", 'error', 6000);
         
         // updateUIForMode() wird bereits von switchToGuestMode aufgerufen.
         return; // WICHTIG: Hier abbrechen.
     }
     // =================================================================
-    // ENDE DEINER KORREKTUR
+    // ENDE DER RAUSWURF-LOGIK
     // =================================================================
 
 
@@ -84,7 +84,7 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         let userPermissions = [];
         let currentAssignedAdminRoleId = null;
         
-        // Logik zur Rechte-Ermittlung (bleibt gleich wie in V4)
+        // Logik zur Rechte-Ermittlung
         if (user.permissionType === 'role') {
             console.log(`Lade Rechte für ROLLE: ${effectiveRole}`);
             if (effectiveRole && ROLES[effectiveRole]) {
@@ -137,7 +137,6 @@ export async function checkCurrentUserValidity() { // Funktion ist async
 
     } catch (error) {
          console.error("Fehler beim Holen des ID Tokens oder Prüfen der Claims:", error);
-         // NEU: Beim Fehler auch die rote Meldung verwenden
          switchToGuestMode(true, "Fehler bei der Berechtigungsprüfung.", 'error');
          updateUIForMode();
     }
