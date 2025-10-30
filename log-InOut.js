@@ -180,7 +180,17 @@ export function updateUIForMode() {
     if (isAdmin && USERS && USERS[currentUser.mode]) { // Zusätzliche Prüfung für USERS
         const adminUser = USERS[currentUser.mode];
         if (adminUser) {
-            if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) { // Zusätzliche Prüfung für ADMIN_ROLES
+            
+            // =================================================================
+            // BEGINN DER KORREKTUR
+            // =================================================================
+            // HIER war der Fehler. Es muss 'adminPermissionType' heißen,
+            // nicht 'permissionType'.
+            if (adminUser.adminPermissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) { // Zusätzliche Prüfung für ADMIN_ROLES
+            // =================================================================
+            // ENDE DER KORREKTUR
+            // =================================================================
+
                 effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
             } else {
                 effectiveAdminPerms = adminUser.adminPermissions || {};

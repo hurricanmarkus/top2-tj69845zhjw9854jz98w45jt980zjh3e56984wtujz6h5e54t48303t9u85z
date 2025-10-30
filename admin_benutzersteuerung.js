@@ -1228,13 +1228,22 @@ const saveButton = detailsArea.querySelector('.save-admin-perms-button');
             
             let updateData = { adminPermissionType: selectedType }; // Korrekter Feldname
 
+            // =================================================================
+            // BEGINN DER KORREKTUR (Speicherlogik)
+            // =================================================================
             if (selectedType === 'role') {
+                // Wenn Typ = Rolle:
+                // 1. Speichere die Rollen-ID
+                // 2. Lösche (setze auf null/leer) die individuellen Rechte
                 updateData = {
                     ...updateData,
                     assignedAdminRoleId: container.querySelector('#assigned-admin-role-select')?.value || null, 
-                    adminPermissions: adminUserForUpdate.adminPermissions || {},
+                    adminPermissions: {}, // HIER: Individuelle Rechte LÖSCHEN
                 };
             } else { // type === 'individual'
+                // Wenn Typ = Individuell:
+                // 1. Speichere die individuellen Rechte
+                // 2. Lösche (setze auf null) die Rollen-ID
                 const permissions = {};
                 container.querySelectorAll('.admin-perm-cb').forEach(cb => { permissions[cb.dataset.perm] = cb.checked; });
                 const approvalRequired = {};
@@ -1244,9 +1253,12 @@ const saveButton = detailsArea.querySelector('.save-admin-perms-button');
                 updateData = {
                     ...updateData, 
                     adminPermissions: permissions, 
-                    assignedAdminRoleId: adminUserForUpdate.assignedAdminRoleId || null, 
+                    assignedAdminRoleId: null, // HIER: Rollen-ID LÖSCHEN
                 };
             }
+            // =================================================================
+            // ENDE DER KORREKTUR
+            // =================================================================
             
             // Wichtig: Entferne leere oder null-Werte, um Firebase-Fehler zu vermeiden
             Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
