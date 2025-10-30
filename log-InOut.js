@@ -195,18 +195,16 @@ export function switchToGuestMode(showNotification = true, message = "Abgemeldet
 }
 
 // Diese Funktion gehört in log-InOut.js
-// Diese Funktion gehört in log-InOut.js
 export function updateUIForMode() {
     // Ermittle Admin-Status und effektive Admin-Rechte
     const isAdmin = currentUser.role === 'ADMIN';
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
 
     // =================================================================
-    // BEGINN DER KORREKTUR
+    // BEGINN DER KORREKTUR (aus vorigem Schritt - bleibt gleich)
     // =================================================================
-    // Wir berechnen 'effectiveAdminPerms' nicht mehr neu.
     // Wir holen sie direkt aus dem 'currentUser'-Objekt,
-    // das von 'checkCurrentUserValidity' (Schritt 2) korrekt befüllt wurde.
+    // das von 'checkCurrentUserValidity' korrekt befüllt wurde.
     let effectiveAdminPerms = currentUser.adminPermissions || {};
     // =================================================================
     // ENDE DER KORREKTUR
@@ -320,7 +318,22 @@ export function updateUIForMode() {
 
     if (currentUser.mode === GUEST_MODE) {
         if (guestPrompt) guestPrompt.style.display = 'block';
-    } else if (currentUser.permissions?.length === 0 && !isAdmin && !isSysAdmin) { // Sicherer Zugriff
+        
+    // =================================================================
+    // BEGINN DER KORREKTUR (Das ist dein Fehler)
+    // =================================================================
+    // ALT: } else if (currentUser.permissions?.length === 0 && !isAdmin && !isSysAdmin) {
+    // NEU: Wir entfernen die Prüfung "!isAdmin".
+    } else if (currentUser.permissions?.length === 0 && !isSysAdmin) { 
+        // Diese Bedingung bedeutet:
+        // "Wenn der Benutzer KEIN Gast ist (sonst wäre er im 'if' davor),
+        // UND er KEINE Benutzer-Rechte hat (permissions.length === 0),
+        // UND er KEIN System-Admin ist (weil die immer Rechte haben),
+        // DANN zeige die Warnung."
+        // Das trifft jetzt auch auf Jasmin zu.
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
         if (noPermissionPrompt) noPermissionPrompt.style.display = 'block';
     }
 
