@@ -568,6 +568,8 @@ export function setupEventListeners() {
     const backToSelectionButton = document.getElementById('backToSelectionButton');
     if (backToSelectionButton) backToSelectionButton.addEventListener('click', () => { if (pinModal) pinModal.style.display = 'none'; if (userSelectionModal) userSelectionModal.style.display = 'flex'; });
 
+
+
     const modalUserButtonsEl = document.getElementById('modalUserButtons');
     if (modalUserButtonsEl) {
         modalUserButtonsEl.addEventListener('click', (e) => {
@@ -605,8 +607,10 @@ export function setupEventListeners() {
         });
     }
 
-// ERSETZE die handleLogin Funktion KOMPLETT hiermit:
-// ERSETZE deine komplette handleLogin Funktion hiermit:
+// =================================================================
+// BEGINN DER KORREKTUR (handleLogin)
+// =================================================================
+// Wir ersetzen die komplette handleLogin Funktion (die innerhalb von setupEventListeners ist)
 const handleLogin = async () => {
     if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) {
         return;
@@ -663,28 +667,37 @@ const handleLogin = async () => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                // KORREKTUR: Token im Authorization-Header senden (Standard für v2)
+                'Authorization': `Bearer ${idToken}`
             },
+            // KORREKTUR: Die Daten MÜSSEN in ein "data"-Objekt verpackt werden
             body: JSON.stringify({
-                appUserId: appUserId,
-                pin: enteredPin,
-                idToken: idToken // Token im Body mitsenden (Fix für 401 Fehler)
+                "data": { 
+                    "appUserId": appUserId,
+                    "pin": enteredPin
+                }
             })
         });
 
         // 4. Ergebnis der Cloud Function auswerten
-        const responseData = await fetchResponse.json();
-
+        // Wenn der Status nicht 200 (OK) ist, war es ein Fehler
         if (fetchResponse.status !== 200) {
-            const errorMessage = responseData.error?.message || `HTTP-Fehler ${fetchResponse.status}`;
-             throw new Error(`Cloud Function Aufruf gescheitert: ${errorMessage}.`);
+            const errorData = await fetchResponse.json();
+            // Versuche, die Fehlermeldung aus der v2-Struktur zu lesen
+            const errorMessage = errorData?.error?.message || `HTTP-Fehler ${fetchResponse.status}`;
+            // (Die Konsole zeigt "Bad Request", weil der Body hier falsch war)
+            throw new Error(`Cloud Function Aufruf gescheitert: ${errorMessage}.`);
         }
         
+        // Wenn Status 200 ist, lesen wir die erfolgreiche Antwort
+        const responseData = await fetchResponse.json();
+
+        // V2 wickelt die Antwort in ein "result"-Objekt
+        const result = responseData.result; 
+        
         // Prüfe auf Fehler von der Cloud Function (z.B. Ungültiger PIN)
-        if (responseData.error) { 
-             throw new Error(responseData.error.message || "Unbekannter Fehler von der Cloud Function.");
-        }
-        if (responseData.status !== "success") {
-             throw new Error("Cloud Function scheiterte: " + responseData.message);
+        if (result.status !== "success") { 
+             throw new Error("Cloud Function meldete Fehler: " + (result.message || "Unbekannter Fehler"));
         }
         
         // 5. Finales Token aktualisieren und UI updaten
@@ -707,6 +720,9 @@ const handleLogin = async () => {
         updateUIForMode();
     }
 };
+// =================================================================
+// ENDE DER KORREKTUR
+// =================================================================
 
     if (submitAdminKeyButton) submitAdminKeyButton.addEventListener('click', handleLogin);
     if (adminPinInput) adminPinInput.addEventListener('keydown', (e) => e.key === 'Enter' && handleLogin());
