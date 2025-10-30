@@ -610,8 +610,11 @@ export function setupEventListeners() {
 // =================================================================
 // BEGINN DER KORREKTUR (handleLogin)
 // =================================================================
-// Wir ersetzen die komplette handleLogin Funktion (die innerhalb von setupEventListeners ist)
 const handleLogin = async () => {
+    
+    // *** NEUER BEWEIS: ***
+    console.log("--- FÜHRE handleLogin V3 (mit data-Umschlag) AUS ---");
+
     if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) {
         return;
     }
