@@ -24,15 +24,40 @@ export function listenForRoleUpdates() {
 
 export function listenForAdminRoleUpdates() {
     onSnapshot(adminRolesCollectionRef, (snapshot) => {
+        // 1. Alle alten Admin-Rollen aus dem Speicher löschen
         Object.keys(ADMIN_ROLES).forEach(key => delete ADMIN_ROLES[key]); 
+        
+        // 2. Die neuen, frischen Admin-Rollen aus der Datenbank einlesen
         snapshot.forEach((doc) => { ADMIN_ROLES[doc.id] = { id: doc.id, ...doc.data() }; });
         
-        // Sicherstellen, dass die Render-Funktionen existieren
+        
+        // =================================================================
+        // BEGINN DER KORREKTUR
+        // =================================================================
+        // HIER ist das neue "Signal":
+        // 3. Prüfen, ob die App schon gestartet ist
+        if (initialAuthCheckDone) {
+            // 4. SAGE DEM SYSTEM: "Berechne die Rechte des aktuellen Benutzers
+            // (z.B. Jasmin) SOFORT neu, basierend auf den frischen Rollen."
+            checkCurrentUserValidity();
+            
+            // checkCurrentUserValidity() ruft automatisch updateUIForMode() auf,
+            // welches dann die Menüpunkte (z.B. Passwörter) sofort ausblendet.
+        }
+        // =================================================================
+        // ENDE DER KORREKTUR
+        // =================================================================
+        
+
+        // Diese Zeilen bleiben wichtig, damit die "Rollenverwaltung"-Seite
+        // SICH SELBST aktualisiert, falls du gerade darauf bist.
         if (adminSectionsState.adminRights && typeof renderAdminRightsManagement === 'function') {
              // renderAdminRightsManagement(); // Dieser Import fehlt in dieser Datei, daher auskommentiert
              console.warn("renderAdminRightsManagement in listenForAdminRoleUpdates nicht aufgerufen, da Import fehlt.");
         }
         if (adminSectionsState.role && typeof renderRoleManagement === 'function') renderRoleManagement();
+    
+    
     }, (error) => {
         console.error("Error listening for admin role updates:", error);
     });
