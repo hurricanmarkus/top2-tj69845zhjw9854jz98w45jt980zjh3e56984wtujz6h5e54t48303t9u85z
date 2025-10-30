@@ -602,7 +602,6 @@ export function setupEventListeners() {
         });
     }
 
-// ERSETZE die handleLogin Funktion KOMPLETT hiermit:
 // ERSETZE deine komplette handleLogin Funktion hiermit:
 const handleLogin = async () => {
     if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) {
@@ -631,7 +630,7 @@ const handleLogin = async () => {
     pinError.style.display = 'none';
 
     try {
-        // --- 3. Manuelle Cloud Function Logik (Finaler Fix) ---
+        // --- 3. KORREKTUR: Cloud Function mit dem Firebase SDK aufrufen (NICHT fetch) ---
         
         // Sicherstellen, dass Auth User vorhanden ist
         if (!auth || !auth.currentUser) {
@@ -647,41 +646,34 @@ const handleLogin = async () => {
         }
         if (!auth.currentUser) { throw new Error("Benutzer konnte nicht authentifiziert werden."); }
         
-        // Token holen
-        const idToken = await auth.currentUser.getIdToken(true); 
-        if (!idToken) {
-            throw new Error("Konnte kein gültiges ID Token abrufen.");
-        }
+        // ID Token holen (wird vom SDK automatisch im Header mitgesendet)
+        await auth.currentUser.getIdToken(true); 
         
-        // Manuelle Anfrage an die Cloud Function senden
-        const functionUrl = "https://us-central1-top2-e9ac0.cloudfunctions.net/setRoleClaim";
+        // Prüfen, ob die Funktion initialisiert wurde (aus initializeFirebase)
+        if (!window.setRoleClaim) {
+            throw new Error("Cloud Function (setRoleClaim) ist noch nicht initialisiert. Bitte warten.");
+        }
 
-        const fetchResponse = await fetch(functionUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                appUserId: appUserId,
-                pin: enteredPin,
-                idToken: idToken // Token im Body mitsenden (Fix für 401 Fehler)
-            })
-        });
+        // Das Daten-Objekt, das wir an die 'onCall' Funktion senden.
+        // Das SDK fügt den idToken automatisch hinzu.
+        const dataToSend = {
+            appUserId: appUserId,
+            pin: enteredPin
+            // KEIN idToken hier im Body!
+        };
+
+        // Aufruf mit dem httpsCallable (dem "neuen Schlüssel")
+        const result = await window.setRoleClaim(dataToSend);
 
         // 4. Ergebnis der Cloud Function auswerten
-        const responseData = await fetchResponse.json();
+        // Bei httpsCallable ist das Ergebnis direkt das "data" Objekt
+        const responseData = result.data; 
 
-        if (fetchResponse.status !== 200) {
-            const errorMessage = responseData.error?.message || `HTTP-Fehler ${fetchResponse.status}`;
-             throw new Error(`Cloud Function Aufruf gescheitert: ${errorMessage}.`);
-        }
-        
-        // Prüfe auf Fehler von der Cloud Function (z.B. Ungültiger PIN)
-        if (responseData.error) { 
-             throw new Error(responseData.error.message || "Unbekannter Fehler von der Cloud Function.");
-        }
+        // FEHLERPRÜFUNG: Wenn die Cloud Function einen Fehler wirft (throw new HttpsError),
+        // landet der Code automatisch in der 'catch (error)' Sektion.
+        // Wir prüfen hier nur, ob die Funktion 'status: "success"' zurückgegeben hat.
         if (responseData.status !== "success") {
-             throw new Error("Cloud Function scheiterte: " + responseData.message);
+             throw new Error("Cloud Function meldete: " + (responseData.message || "Unbekannter Fehler"));
         }
         
         // 5. Finales Token aktualisieren und UI updaten
@@ -698,6 +690,9 @@ const handleLogin = async () => {
     } catch (error) {
         // 8. Fehlerbehandlung
         console.error("Fehler beim Cloud Function Aufruf oder Token Refresh:", error);
+        
+        // KORREKTUR: Zeige die Fehlermeldung der Cloud Function an
+        // (z.B. "Ungültiger PIN." oder "Benutzer nicht authentifiziert.")
         alertUser(`Fehler: ${error.message || 'Interner Fehler'}`, "error");
         
         switchToGuestMode(false);
