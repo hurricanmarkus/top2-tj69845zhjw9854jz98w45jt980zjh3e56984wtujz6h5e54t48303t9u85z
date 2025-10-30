@@ -3,7 +3,7 @@ import { onSnapshot, doc, updateDoc, setDoc, deleteDoc, getDoc } from "https://w
 import { db, usersCollectionRef, setButtonLoading, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES, ADMIN_STORAGE_KEY } from './haupteingang.js';
 import { logAdminAction } from './admin_protokollHistory.js';
 import { setupPermissionDependencies, renderAdminRightsManagement } from './admin_rechteverwaltung.js'; // Oder der richtige Dateiname
-import { restoreAdminScrollIfAny, rememberAdminScroll } from './admin_adminfunktionenHome.js';
+import { renderMainFunctionsAdminArea, restoreAdminScrollIfAny, rememberAdminScroll } from './admin_adminfunktionenHome.js';
 import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode } from './log-InOut.js';
 // ENDE-ZIKA //
 
@@ -65,6 +65,22 @@ export function listenForUserUpdates() {
              if (adminSectionsState.protocol && typeof renderProtocolHistory === 'function') {
                  renderProtocolHistory();
              }
+             
+            // =================================================================
+            // BEGINN DEINER KORREKTUR (Live-Update für Admin-Tabs)
+            // =================================================================
+            // HIER ist die neue Prüfung:
+            // Wenn der Abschnitt "Adminfunktionen Hauptseite" (mainFunctions) offen ist
+            // UND die Funktion zum Neuzeichnen existiert...
+            if (adminSectionsState.mainFunctions && typeof renderMainFunctionsAdminArea === 'function') {
+                // ...dann zeichne diesen Bereich neu, damit die Tabs (Push, Eingang etc.)
+                // basierend auf den neuen Rechten live erscheinen oder verschwinden.
+                console.log("Live-Update: Neuzeichnen der Adminfunktionen-Tabs wird ausgelöst.");
+                renderMainFunctionsAdminArea();
+            }
+            // =================================================================
+            // ENDE DEINER KORREKTUR
+            // =================================================================
         }
         // --- ENDE HINWEIS ---
 
