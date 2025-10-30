@@ -590,7 +590,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
     console.log("addAdminUserManagementListeners: Aktueller Benutzer ist SysAdmin:", isSysAdmin);
     console.log("addAdminUserManagementListeners: Geladenes permSet (für Admin):", JSON.stringify(permSet));
 
-
     // --- CLICK Listener ---
     area.addEventListener('click', async (e) => {
         const userCard = e.target.closest('.user-card');
@@ -631,24 +630,22 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 displayRole: null, isActive: true
             };
 
-            // --- KORREKTE Genehmigungs-Logik ---
-            // 'permSet.approvalRequired' kann 'undefined' sein, '?' verhindert Absturz
-            const needsApproval = permSet.approvalRequired?.createUser === true; 
+            // --- KORRIGIERTE Logik: Nur SysAdmin darf direkt schreiben ---
             const newDocRef = doc(usersCollectionRef);
             const newUserId = newDocRef.id;
 
             try {
                 setButtonLoading(saveNewUserButton, true);
 
-                // FALL 1: Systemadmin ODER (Admin hat Recht UND braucht KEINE Genehmigung)
-                if (isSysAdmin || (permSet.canCreateUser && !needsApproval)) {
-                    console.log("Benutzer anlegen: Direkter Schreibzugriff (SysAdmin oder keine Genehmigung nötig).");
+                // FALL 1: Systemadmin darf DIREKT schreiben
+                if (isSysAdmin) {
+                    console.log("Benutzer anlegen: Direkter Schreibzugriff (SysAdmin).");
                     await setDoc(newDocRef, newUserData); 
                     await logAdminAction('user_created', `Neuen Benutzer angelegt: '${name}' (ID: ${newUserId}).`);
                     alertUser(`Benutzer '${name}' erfolgreich angelegt!`, "success");
                 
-                // FALL 2: Admin hat Recht, BRAUCHT ABER Genehmigung
-                } else if (permSet.canCreateUser && needsApproval) {
+                // FALL 2: Admin mit Berechtigung muss Genehmigung anfordern
+                } else if (permSet.canCreateUser) {
                     console.log("Benutzer anlegen: Genehmigung wird angefordert (Admin).");
                     const approvalDetails = { userData: { ...newUserData, newUserId: newUserId } };
                     await createApprovalRequest('CREATE_USER', newUserId, approvalDetails);
@@ -670,6 +667,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
             } catch (error) {
                 console.error("Fehler beim Anlegen des Benutzers:", error);
+                // WENN DIESER FEHLER JETZT IMMER NOCH KOMMT...
+                // ...dann kommt er von createApprovalRequest (siehe unten)
                 alertUser(`Fehler: ${error.message || "Unbekannter Fehler beim Erstellen."}`, "error");
             } finally {
                 setButtonLoading(saveNewUserButton, false);
@@ -701,18 +700,17 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             if (!confirm(`Soll der Benutzer '${userToEdit.name}' wirklich gelöscht werden?`)) return;
             
             rememberAdminScroll();
-            const needsApproval = permSet.approvalRequired?.deleteUser === true;
             
             try {
-                // FALL 1: Systemadmin ODER (Admin + Recht + keine Genehmigung)
-                if (isSysAdmin || (permSet.canDeleteUser && !needsApproval)) {
+                // FALL 1: Systemadmin
+                if (isSysAdmin) {
                     console.log(`Benutzer löschen: Direkter Schreibzugriff für ${userId}.`);
                     await deleteDoc(doc(usersCollectionRef, userId));
                     await logAdminAction('user_deleted', `Benutzer '${userToEdit.name}' gelöscht.`);
                     alertUser(`Benutzer '${userToEdit.name}' gelöscht.`, "success");
 
-                // FALL 2: Admin + Recht + Genehmigung nötig
-                } else if (permSet.canDeleteUser && needsApproval) {
+                // FALL 2: Admin mit Berechtigung
+                } else if (permSet.canDeleteUser) {
                     console.log(`Benutzer löschen: Genehmigung erforderlich für ${userId}.`);
                     await createApprovalRequest('DELETE_USER', userId, {});
                     alertUser(`Anfrage zum Löschen von '${userToEdit.name}' wurde eingereicht.`, "success");
@@ -755,19 +753,18 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             if (!newNickname) return alertUser("Nickname darf nicht leer sein.", "error");
 
             rememberAdminScroll();
-            const needsApproval = permSet.approvalRequired?.renameUser === true;
             
             try {
-                // FALL 1: Systemadmin ODER (Admin + Recht + keine Genehmigung)
-                if (isSysAdmin || (permSet.canRenameUser && !needsApproval)) {
+                // FALL 1: Systemadmin
+                if (isSysAdmin) {
                     console.log(`Umbenennen: Direkter Schreibzugriff für ${userId}.`);
                     await updateDoc(doc(usersCollectionRef, userId), { name: newNickname });
                     await logAdminAction('user_renamed', `Benutzer ${userToEdit.name} umbenannt in '${newNickname}'.`);
                     nameDisplay.classList.remove('hidden');
                     nameEditContainer.classList.add('hidden');
 
-                // FALL 2: Admin + Recht + Genehmigung nötig
-                } else if (permSet.canRenameUser && needsApproval) {
+                // FALL 2: Admin mit Berechtigung
+                } else if (permSet.canRenameUser) {
                     console.log(`Umbenennen: Genehmigung erforderlich für ${userId}.`);
                     await createApprovalRequest('RENAME_USER', userId, { newName: newNickname });
                     alertUser(`Anfrage zur Umbenennung von '${userToEdit.name}' wurde eingereicht.`, "success");
@@ -803,7 +800,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             const selectedType = typeRadio.value; 
 
             rememberAdminScroll();
-            const needsApproval = permSet.approvalRequired?.changeUserPermissionType === true;
             
             try {
                 let updateData = { permissionType: selectedType }; 
@@ -830,17 +826,17 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                     approvalDetails = { ...approvalDetails, customPermissions: customPermissions, displayRole: selectedDisplayRole };
                 }
 
-                // --- KORREKTE Genehmigungs-Logik ---
+                // --- KORRIGIERTE Genehmigungs-Logik ---
                 
-                // FALL 1: Systemadmin ODER (Admin + Recht + keine Genehmigung)
-                if (isSysAdmin || (permSet.canChangeUserPermissionType && !needsApproval)) {
+                // FALL 1: Systemadmin
+                if (isSysAdmin) {
                     console.log(`Rechte ändern: Direkter Schreibzugriff für ${userId}.`);
                     await updateDoc(doc(usersCollectionRef, userId), updateData);
                     await logAdminAction('user_perms_updated', `Berechtigungstyp für ${userToEdit.name} auf ${selectedType} geändert.`);
                     alertUser("Berechtigungen gespeichert!", "success");
 
-                // FALL 2: Admin + Recht + Genehmigung nötig
-                } else if (permSet.canChangeUserPermissionType && needsApproval) {
+                // FALL 2: Admin mit Berechtigung
+                } else if (permSet.canChangeUserPermissionType) {
                     console.log(`Rechte ändern: Genehmigung erforderlich für ${userId}.`);
                     await createApprovalRequest('CHANGE_PERMISSION_TYPE', userId, approvalDetails);
                     alertUser(`Anfrage zur Rechteänderung für '${userToEdit.name}' wurde eingereicht.`, "success");
@@ -895,11 +891,10 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 }
 
                 rememberAdminScroll(); 
-                const needsApproval = permSet.approvalRequired?.toggleUserActive === true;
                 
                 try {
-                    // FALL 1: Systemadmin ODER (Admin + Recht + keine Genehmigung)
-                    if (isSysAdmin || (permSet.canToggleUserActive && !needsApproval)) {
+                    // FALL 1: Systemadmin
+                    if (isSysAdmin) {
                         console.log(`Sperr-Status ändern: Direkter Schreibzugriff für ${userId}.`);
                         await updateDoc(doc(usersCollectionRef, userId), { isActive: newIsActive });
                         const logMessage = `Benutzer '${userToEdit.name}' wurde ${newIsActive ? 'entsperrt' : 'gesperrt'}.`;
@@ -907,8 +902,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                         alertUser(logMessage, "success");
                         // (UI-Update passiert automatisch durch den Listener)
 
-                    // FALL 2: Admin + Recht + Genehmigung nötig
-                    } else if (permSet.canToggleUserActive && needsApproval) {
+                    // FALL 2: Admin mit Berechtigung
+                    } else if (permSet.canToggleUserActive) {
                         console.log(`Sperr-Status ändern: Genehmigung erforderlich für ${userId}.`);
                         await createApprovalRequest('TOGGLE_USER_ACTIVE', userId, { isActive: newIsActive });
                         alertUser(`Anfrage zum ${actionText} von '${userToEdit.name}' wurde eingereicht.`, "success");
@@ -957,9 +952,9 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 }
                 
                 if (target.classList.contains('custom-perm-checkbox') && target.closest('.individual-perms-area')) { 
-                    const individualPermsArea = container.querySelector('.individual-perms-area'); 
-                    if (individualPermsArea && typeof setupPermissionDependencies === 'function') { 
-                        setupPermissionDependencies(individualPermsArea); 
+                    const individualArea = container.querySelector('.individual-perms-area'); 
+                    if (individualArea && typeof setupPermissionDependencies === 'function') { 
+                        setupPermissionDependencies(individualArea); 
                     } 
                 }
                  return;
