@@ -527,6 +527,7 @@ export async function renderUserManagement() {
 // admin_benutzersteuerung.js
 
 // Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
+// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
 export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions) {
     if (!area) return;
 
@@ -765,7 +766,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             return; // Klick behandelt
         }
 
-        console.log("[CLICK] Klick innerhalb einer Karte, aber kein bekannter Button.");
+        console.log("[CLICK] Klick innerh. einer Karte, aber kein bekannter Button.");
 
     }); // Ende CLICK Listener
 
@@ -782,8 +783,57 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             if (!userId) return;
             console.log(`[CHANGE] Änderung innerhalb der Karte für User: ${userId}`);
 
+             // =================================================================
+             // BEGINN DEINER KORREKTUR (Sperr-Button Logik)
+             // =================================================================
              // --- Aktivieren/Deaktivieren Toggle ---
-             if (target.classList.contains('user-active-toggle')) { /* ... Logik bleibt gleich ... */ return; }
+             if (target.classList.contains('user-active-toggle')) {
+                const newIsLocked = target.checked; // true if locked, false if unlocked
+                const newIsActive = !newIsLocked; // Die DB speichert 'isActive'
+                const userToEdit = USERS[userId];
+
+                if (!userToEdit) return; // Sicherheits-Check
+
+                const actionText = newIsActive ? "ENTSPERREN" : "SPERREN";
+                
+                // Bestätigungs-Dialog
+                if (!confirm(`Möchten Sie den Benutzer '${userToEdit.name}' wirklich ${actionText}?`)) {
+                    target.checked = !newIsLocked; // Checkbox zurücksetzen
+                    return; // Abbruch
+                }
+
+                rememberAdminScroll(); // Scroll-Position merken
+                try {
+                    // Update in Firestore
+                    await updateDoc(doc(usersCollectionRef, userId), { isActive: newIsActive });
+                    
+                    // Aktion protokollieren
+                    const logMessage = `Benutzer '${userToEdit.name}' wurde ${newIsActive ? 'entsperrt' : 'gesperrt'}.`;
+                    await logAdminAction(newIsActive ? 'user_unlocked' : 'user_locked', logMessage);
+                    
+                    alertUser(logMessage, "success");
+                    
+                    // Optional: UI sofort aktualisieren (obwohl der Listener das auch tun würde)
+                    const card = target.closest('.user-card');
+                    if (card) {
+                        const statusText = card.querySelector('.text-sm.font-medium span'); // Finde das "JA" / "NEIN"
+                        if (statusText) {
+                            statusText.textContent = newIsActive ? 'NEIN' : 'JA';
+                            statusText.classList.toggle('text-red-700', !newIsActive);
+                            statusText.classList.toggle('text-green-700', newIsActive);
+                        }
+                    }
+
+                } catch (error) {
+                    console.error(`Fehler beim ${actionText} des Benutzers:`, error);
+                    alertUser(`Fehler: ${error.message}`, "error");
+                    target.checked = !newIsLocked; // Checkbox auch bei Fehler zurücksetzen
+                }
+                return; // Änderung behandelt
+             }
+             // =================================================================
+             // ENDE DEINER KORREKTUR
+             // =================================================================
 
             // --- Änderungen an Berechtigungs-Inputs ---
             if (target.matches('.perm-type-toggle, .user-role-select, .custom-perm-checkbox, .display-role-select')) {
