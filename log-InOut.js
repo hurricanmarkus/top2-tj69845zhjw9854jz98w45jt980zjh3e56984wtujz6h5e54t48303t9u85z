@@ -92,31 +92,50 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         let userPermissions = [];
         let currentAssignedAdminRoleId = null;
         
-        // Logik zur Rechte-Ermittlung (bleibt gleich wie in V4)
+        // Logik zur Rechte-Ermittlung
         if (user.permissionType === 'role') {
             console.log(`Lade Rechte für ROLLE: ${effectiveRole}`);
             if (effectiveRole && ROLES[effectiveRole]) {
                 userPermissions = [...(ROLES[effectiveRole].permissions || [])];
-            }
-
-            if (effectiveRole === 'ADMIN' && user.assignedAdminRoleId && ADMIN_ROLES[user.assignedAdminRoleId]) {
-                currentAssignedAdminRoleId = user.assignedAdminRoleId;
-                const adminPerms = ADMIN_ROLES[currentAssignedAdminRoleId].permissions || {};
-                const permKeys = Object.keys(adminPerms).filter(
-                    key => key !== 'approvalRequired' && adminPerms[key] === true
-                );
-                userPermissions = permKeys; 
-                console.log(`Admin-Rollen-Rechte geladen: ${permKeys.length} Rechte.`);
-            }
-            else if (effectiveRole === 'SYSTEMADMIN') {
-                userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
-                console.log("Systemadmin-Rechte geladen.");
             }
         } 
         else if (user.permissionType === 'individual') {
             userPermissions = [...(user.customPermissions || [])];
             console.log(`Lade INDIVIDUELLE Rechte: ${userPermissions.length} Rechte.`);
         }
+
+        // ================== HIER IST DIE ZWEITE KORREKTUR ==================
+        // Admin-Rechte separat laden, basierend auf 'adminPermissionType'
+        if (effectiveRole === 'ADMIN') {
+            const adminType = user.adminPermissionType || 'role'; // Prüfe das korrekte Feld
+            
+            if (adminType === 'role' && user.assignedAdminRoleId && ADMIN_ROLES[user.assignedAdminRoleId]) {
+                // Admin nutzt Admin-ROLLE
+                currentAssignedAdminRoleId = user.assignedAdminRoleId;
+                const adminPerms = ADMIN_ROLES[currentAssignedAdminRoleId].permissions || {};
+                const permKeys = Object.keys(adminPerms).filter(
+                    key => key !== 'approvalRequired' && adminPerms[key] === true
+                );
+                userPermissions = permKeys; // Überschreibe Benutzer-Rechte mit Admin-Rechten
+                console.log(`Admin-Rollen-Rechte geladen: ${permKeys.length} Rechte.`);
+                
+            } else if (adminType === 'individual') {
+                // Admin nutzt INDIVIDUELLE Admin-Rechte
+                const adminPerms = user.adminPermissions || {};
+                 const permKeys = Object.keys(adminPerms).filter(
+                    key => key !== 'approvalRequired' && adminPerms[key] === true
+                );
+                userPermissions = permKeys; // Überschreibe Benutzer-Rechte mit Admin-Rechten
+                console.log(`Individuelle Admin-Rechte geladen: ${permKeys.length} Rechte.`);
+            }
+            
+        } else if (effectiveRole === 'SYSTEMADMIN') {
+            // Systemadmin-Rechte (bleibt gleich)
+            userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
+            console.log("Systemadmin-Rechte geladen.");
+        }
+        // ================== ENDE DER ZWEITEN KORREKTUR ==================
+
         
         console.log("Final zugewiesene Berechtigungen:", userPermissions);
 
@@ -128,8 +147,13 @@ export async function checkCurrentUserValidity() { // Funktion ist async
             role: effectiveRole, 
             permissions: userPermissions,
             permissionType: userFromFirestore.permissionType,
-            displayRole: userFromFirestore.displayRole,
-            assignedAdminRoleId: currentAssignedAdminRoleId
+            // WICHTIG: Füge die Admin-Felder hinzu, damit updateUIForMode sie hat
+            adminPermissionType: userFromFirestore.adminPermissionType,
+            assignedAdminRoleId: userFromFirestore.assignedAdminRoleId,
+            adminPermissions: userFromFirestore.adminPermissions,
+            // ---
+            displayRole: userFromFirestore.displayRole
+            // assignedAdminRoleId: currentAssignedAdminRoleId (wird nicht mehr benötigt, da das ganze Objekt übergeben wird)
         });
 
         console.log("currentUser Objekt aktualisiert:", currentUser);
@@ -176,15 +200,17 @@ export function updateUIForMode() {
     const isAdmin = currentUser.role === 'ADMIN';
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
     let effectiveAdminPerms = {};
-    if (isAdmin && USERS && USERS[currentUser.mode]) { // Zusätzliche Prüfung für USERS
-        const adminUser = USERS[currentUser.mode];
-        if (adminUser) {
-            if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) { // Zusätzliche Prüfung für ADMIN_ROLES
-                effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
-            } else {
-                effectiveAdminPerms = adminUser.adminPermissions || {};
-            }
+if (isAdmin) { 
+        // Holen der Admin-Daten direkt aus dem currentUser-Objekt,
+        // das von checkCurrentUserValidity korrekt befüllt wurde.
+        const adminType = currentUser.adminPermissionType || 'role';
+        
+        if (adminType === 'role' && currentUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[currentUser.assignedAdminRoleId]) { 
+            effectiveAdminPerms = ADMIN_ROLES[currentUser.assignedAdminRoleId].permissions || {};
+        } else {
+            effectiveAdminPerms = currentUser.adminPermissions || {};
         }
+        
     } else if (isSysAdmin) {
         // SysAdmin hat implizit alle Rechte
         effectiveAdminPerms = {

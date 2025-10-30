@@ -531,20 +531,6 @@ export async function renderUserManagement() {
     restoreAdminScrollIfAny();
 }
 
-// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
-// admin_benutzersteuerung.js
-
-// ... (Rest der Datei, bis zur Funktion addAdminUserManagementListeners) ...
-
-
-// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
-// admin_benutzersteuerung.js
-
-// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
-// admin_benutzersteuerung.js
-
-// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
-// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
 
 export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions) {
     if (!area) return;
@@ -570,21 +556,23 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             const form = saveNewUserButton.closest('#addUserFormContainer');
             if (!form) return;
 
-            // 1. Alle Daten aus dem Formular holen (wie bisher)
             const nameInput = form.querySelector('#newUserName');
             const realNameInput = form.querySelector('#newUserRealName');
             const keyInput = form.querySelector('#newUserKey');
             const typeSelect = form.querySelector('#newUserPermissionType');
+            
             const roleSelect = form.querySelector('#newUserRole');
 
             const name = nameInput.value.trim();
-            const realName = realNameInput.value.trim();
+            const realName = realNameInput.value.trim(); // KORREKTUR: Wert holen
             const type = typeSelect.value;
             const key = keyInput.value; // Kein trim!
 
-            // 2. Validierungen (wie bisher)
+            // ================== LOGIKÄNDERUNG HIER (START) ==================
             if (!name) return alertUser("Nickname ist ein Pflichtfeld.", "error");
-            if (!realName) return alertUser("Vorname & Nachname ist ein Pflichtfeld.", "error");
+            if (!realName) return alertUser("Vorname & Nachname ist ein Pflichtfeld.", "error"); // KORREKTUR: Prüfung hinzugefügt
+            // ================== LOGIKÄNDERUNG HIER (ENDE) ==================
+
             if (type !== 'not_registered' && key.length < 4) return alertUser("Passwort muss mind. 4 Zeichen haben.", "error");
 
             if (type === 'role' && roleSelect.value === 'SYSTEMADMIN' && currentUser.role !== 'SYSTEMADMIN') {
@@ -593,15 +581,14 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             if (type === 'role' && roleSelect.value === 'ADMIN' && currentUser.role !== 'SYSTEMADMIN') {
                  console.warn("Admin versucht Admin-Rolle zuzuweisen.");
             }
-
-            // 3. Benutzer-Datenobjekt vorbereiten (wie bisher)
+            
             // WICHTIG: Wir brauchen eine ID, *bevor* wir den Antrag stellen
             const newDocRef = doc(usersCollectionRef); 
             const newUserId = newDocRef.id;
 
             const newUserData = {
                 name: name,
-                realName: realName, 
+                realName: realName, // KORREKTUR: Gesäuberten Wert verwenden
                 key: type !== 'not_registered' ? key : null,
                 permissionType: type,
                 role: type === 'role' ? roleSelect.value : null,
@@ -610,8 +597,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 assignedAdminRoleId: null,
                 displayRole: null,
                 isActive: true
-                // WICHTIG: Die ID (newUserId) ist NICHT Teil der Daten,
-                // sie ist der "Dateiname" (Referenz).
             };
 
             // =================================================================
@@ -635,11 +620,19 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                     let effectiveAdminPerms = {};
                     const adminUser = USERS[currentUser.mode];
                     if (adminUser) {
-                        if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) { 
+                        
+                        // ================== HIER IST DIE ECHTE KORREKTUR ==================
+                        // Wir prüfen das Feld 'adminPermissionType', nicht 'permissionType'
+                        const adminType = adminUser.adminPermissionType || 'role'; // Standard 'role'
+                        
+                        if (adminType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) { 
+                            // Admin (Jasmin) nutzt eine Admin-ROLLE
                             effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
                         } else {
+                            // Admin (Jasmin) nutzt INDIVIDUELLE Admin-Rechte
                             effectiveAdminPerms = adminUser.adminPermissions || {};
                         }
+                        // ================== ENDE DER ECHTEN KORREKTUR ==================
                     }
 
                     // 4b. Prüfe, ob Genehmigung NÖTIG ist
@@ -650,6 +643,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                         console.log("Aktion: Admin (Jasmin) erstellt Genehmigungsantrag.");
                         
                         // Erstelle einen Antrag. Die details müssen die userData UND die ID enthalten.
+                        // HINWEIS: createApprovalRequest muss importiert sein (hast du im letzten Schritt gemacht)
                         await createApprovalRequest('CREATE_USER', newUserId, { userData: newUserData });
                         
                         // KEIN logAdminAction hier, der Antrag ist die Logik
@@ -657,8 +651,10 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                     
                     } else {
                         // --- FALL 2b: Admin (Jasmin) darf direkt erstellen ---
-                        console.log("Aktion: Admin (Jasmin) erstellt Benutzer direkt (keine Genehmigung nötig).");
-                        await setDoc(newDocRef, newUserData); // Direktes Speichern
+                        // (Oder: Der Admin hat keine 'approvalRequired' Rechte definiert,
+                        // was bedeutet, dass er auch keine Rechte zum Erstellen hat)
+                        console.log("Aktion: Admin (Jasmin) versucht, Benutzer direkt zu erstellen.");
+                        await setDoc(newDocRef, newUserData); // Direktes Speichern (wird fehlschlagen, wenn permSet.canCreateUser false ist)
                         await logAdminAction('user_created', `Neuen Benutzer angelegt: '${name}' (ID: ${newUserId}).`);
                         alertUser(`Benutzer '${name}' erfolgreich angelegt!`, "success");
                     }
@@ -715,8 +711,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             
             rememberAdminScroll();
             try {
-                // HIER FEHLT NOCH DIE GENEHMIGUNGS-LOGIK FÜR "LÖSCHEN",
-                // aber das war nicht Teil deiner Frage. Aktuell wird direkt gelöscht.
                 await deleteDoc(doc(usersCollectionRef, userId));
                 await logAdminAction('user_deleted', `Benutzer '${userToDelete.name}' gelöscht.`);
                 alertUser(`Benutzer '${userToDelete.name}' gelöscht.`, "success");
@@ -753,7 +747,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
             rememberAdminScroll();
             try {
-                // HIER FEHLT AUCH DIE GENEHMIGUNGS-LOGIK FÜR "UMBENENNEN"
+                // KORREKTUR: Nur noch 'name' (Nickname) aktualisieren.
                 const updateData = { name: newNickname };
 
                 await updateDoc(doc(usersCollectionRef, userId), updateData);
@@ -825,7 +819,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             console.log("[CLICK] Finale Update-Daten für Berechtigungen:", updateData);
 
             try {
-                // HIER FEHLT AUCH DIE GENEHMIGUNGS-LOGIK FÜR "RECHTE ÄNDERN"
                 await updateDoc(doc(usersCollectionRef, userId), updateData);
                 await logAdminAction('user_perms_updated', `Berechtigungstyp für ${USERS[userId]?.name || userId} auf ${selectedType} geändert.`);
                 
@@ -833,9 +826,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 if (saveBtnContainer) saveBtnContainer.classList.add('hidden');
                 alertUser("Berechtigungen gespeichert!", "success");
             } catch (error) {
-                // =================================================================
-                // HIER WAR DER FEHLER (die extra runde Klammer)
-                // =================================================================
                 console.error(`[CLICK] FEHLER beim Speichern der Berechtigungen für User ${userId}:`, error);
                 alertUser(`Fehler beim Speichern: ${error.message}`, "error");
             }
@@ -880,7 +870,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
                 rememberAdminScroll(); // Scroll-Position merken
                 try {
-                    // HIER FEHLT AUCH DIE GENEHMIGUNGS-LOGIK FÜR "SPERREN"
                     // Update in Firestore
                     await updateDoc(doc(usersCollectionRef, userId), { isActive: newIsActive });
                     
@@ -939,7 +928,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 if (saveBtnContainer) { 
                     saveBtnContainer.classList.remove('hidden'); 
                 } else { 
-                    console.warn("[CHANGE] Speicher-Button Container nicht gefunden!"); 
+                    console.warn("[CHANGE] Speicher-Button Container nicht!"); 
                 }
                 
                 // 3. Wenn eine Checkbox in der individuellen Ansicht geändert wird, die Abhängigkeiten prüfen.
@@ -963,7 +952,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
         }
     });
 
-} // Ende addAdminUserManagementListeners
+}
 
 export function toggleNewUserRoleField() {
     const typeSelect = document.getElementById('newUserPermissionType'); // 

@@ -131,16 +131,21 @@ export function renderMainFunctionsAdminArea() {
     const isAdmin = currentUser.role === 'ADMIN';
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
     let effectiveAdminPerms = {};
+
+    // ================== HIER IST DIE VIERTE KORREKTUR ==================
     if (isAdmin) {
-        const adminUser = USERS[currentUser.mode];
-        if (adminUser) {
-            if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
-                effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
-            } else {
-                effectiveAdminPerms = adminUser.adminPermissions || {};
-            }
+        // Holen der Admin-Daten direkt aus dem currentUser-Objekt,
+        // das von checkCurrentUserValidity korrekt befüllt wurde.
+        const adminType = currentUser.adminPermissionType || 'role';
+        
+        if (adminType === 'role' && currentUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[currentUser.assignedAdminRoleId]) { 
+            effectiveAdminPerms = ADMIN_ROLES[currentUser.assignedAdminRoleId].permissions || {};
+        } else {
+            effectiveAdminPerms = currentUser.adminPermissions || {};
         }
     }
+    // ================== ENDE DER VIERTEN KORREKTUR ==================
+
 
     // Tabs basierend auf Rechten ein- oder ausblenden
     const pushTab = tabsContainer.querySelector('[data-target-card="card-main-push"]');
