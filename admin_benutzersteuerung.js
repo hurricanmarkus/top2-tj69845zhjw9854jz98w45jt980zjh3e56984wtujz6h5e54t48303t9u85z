@@ -906,6 +906,7 @@ export function toggleNewUserRoleField() {
 }
 
 // KORREKTUR: 'export' muss beibehalten werden (aus vorigem Schritt)
+// KORREKTUR: 'export' muss beibehalten werden (aus vorigem Schritt)
 export function renderAdminUserDetails(userId) {
     const detailsArea = document.getElementById('admin-user-details-area');
     const adminUser = USERS[userId];
@@ -1050,7 +1051,7 @@ export function renderAdminUserDetails(userId) {
                                     <span class="text-xs text-red-600">(Genehmigung)</span>
                                 </label>
                             </div>
-                            </div>
+                        </div>
                     </div>
                     
                     <div class="pt-4 border-t mt-4"> 
@@ -1162,9 +1163,15 @@ export function renderAdminUserDetails(userId) {
                     // ...entfernen wir auch den Haken bei der Genehmigung.
                     approvalCb.checked = false;
                     
-                    // Wir tun so, als hätte der Benutzer die Genehmigungs-Checkbox geändert,
-                    // damit der "Speichern"-Button die Änderung bemerkt.
-                    approvalCb.dispatchEvent(new Event('change', { bubbles: true }));
+                    // =================================================================
+                    // BEGINN DER KORREKTUR (SCHLEIFE ENTFERNT)
+                    // =================================================================
+                    // ENTFERNT: approvalCb.dispatchEvent(new Event('change', { bubbles: true }));
+                    // Diese Zeile hat die Endlosschleife ausgelöst, indem sie ein
+                    // 'change'-Event simuliert hat, das wiederum diese Funktion getriggert hat.
+                    // =================================================================
+                    // ENDE DER KORREKTUR
+                    // =================================================================
                 }
             };
 

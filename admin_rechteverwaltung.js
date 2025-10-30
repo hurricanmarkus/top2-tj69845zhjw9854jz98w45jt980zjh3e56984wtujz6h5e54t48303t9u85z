@@ -37,9 +37,15 @@ export function setupPermissionDependencies(container) {
                     // ...muss auch der Haken beim Unter-Punkt entfernt werden.
                     toggle.checked = false;
                     
-                    // WICHTIG: Wir simulieren ein "change"-Event, damit der "Speichern"-Button
-                    // mitbekommt, dass sich hier (durch das Entfernen des Hakens) etwas geändert hat.
-                    toggle.dispatchEvent(new Event('change', { bubbles: true }));
+                    // =================================================================
+                    // BEGINN DER KORREKTUR (SCHLEIFE ENTFERNT)
+                    // =================================================================
+                    // ENTFERNT: toggle.dispatchEvent(new Event('change', { bubbles: true }));
+                    // Diese Zeile hat die Endlosschleife ausgelöst, indem sie ein
+                    // 'change'-Event simuliert hat, das wiederum diese Funktion getriggert hat.
+                    // =================================================================
+                    // ENDE DER KORREKTUR
+                    // =================================================================
                 }
             });
         };
@@ -68,7 +74,6 @@ export function setupPermissionDependencies(container) {
     );
 
     // 2. Logik für BENUTZERSTEUERUNG (Aktuelle Checkliste -> Umschalten, Einstellungen)
-    // (Das ist der Teil, der deinen Bug behebt)
     setupToggleLogic(
         '[data-perm="CHECKLIST"]', // Hauptschalter
         [ // Unter-Schalter
