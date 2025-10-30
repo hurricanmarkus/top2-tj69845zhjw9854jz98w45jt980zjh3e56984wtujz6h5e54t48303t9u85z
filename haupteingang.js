@@ -516,8 +516,6 @@ export function setupEventListeners() {
     // Sicherstellen, dass die Elemente existieren, bevor Listener hinzugefügt werden
     if (!appHeader || !document.querySelector('.main-content') || !document.getElementById('entranceCard')) {
         console.warn("setupEventListeners: Wichtige Elemente noch nicht bereit, versuche später erneut.");
-        // Optional: setTimeout hinzufügen, wenn das Problem häufiger auftritt
-        // setTimeout(setupEventListeners, 100);
         return;
     }
     console.log("setupEventListeners: Füge Basis-Listener hinzu...");
@@ -607,129 +605,129 @@ export function setupEventListeners() {
         });
     }
 
-// =================================================================
-// BEGINN DER KORREKTUR (handleLogin)
-// =================================================================
-const handleLogin = async () => {
-    
-    // *** NEUER BEWEIS: ***
-    console.log("--- FÜHRE handleLogin V3 (mit data-Umschlag) AUS ---");
+    // =================================================================
+    // BEGINN DER KORREKTUR (handleLogin)
+    // =================================================================
+    // Wir definieren die Login-Logik HIER als 'const'
+    const handleLogin = async () => {
+        
+        // *** BEWEIS: ***
+        console.log("--- FÜHRE handleLogin V4 (Direkt im Listener) AUS ---");
 
-    if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) {
-        return;
-    }
+        if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) {
+            return;
+        }
 
-    const appUserId = selectedUserForLogin;
-    const enteredPin = adminPinInput.value;
-    const userFromFirestore = USERS[appUserId];
+        const appUserId = selectedUserForLogin;
+        const enteredPin = adminPinInput.value;
+        const userFromFirestore = USERS[appUserId];
 
-    if (!userFromFirestore) {
-        alertUser("Benutzerdaten noch nicht geladen. Bitte kurz warten und erneut versuchen.", "error");
-        return;
-    }
+        if (!userFromFirestore) {
+            alertUser("Benutzerdaten noch nicht geladen. Bitte kurz warten und erneut versuchen.", "error");
+            return;
+        }
 
-    // 1. Lokale PIN-Prüfung
-    if (userFromFirestore.key !== enteredPin) {
-        pinError.style.display = 'block';
+        // 1. Lokale PIN-Prüfung
+        if (userFromFirestore.key !== enteredPin) {
+            pinError.style.display = 'block';
+            adminPinInput.value = '';
+            return;
+        }
+
+        // 2. PIN korrekt, Modal schließen
+        pinModal.style.display = 'none';
         adminPinInput.value = '';
-        return;
-    }
+        pinError.style.display = 'none';
 
-    // 2. PIN korrekt, Modal schließen
-    pinModal.style.display = 'none';
-    adminPinInput.value = '';
-    pinError.style.display = 'none';
+        try {
+            // --- 3. Manuelle Cloud Function Logik (Finaler Fix) ---
+            
+            // Sicherstellen, dass Auth User vorhanden ist
+            if (!auth || !auth.currentUser) {
+                // Warten bis der User sicher da ist
+                await new Promise((resolve, reject) => {
+                     const unsubscribe = auth.onAuthStateChanged(user => {
+                         unsubscribe();
+                         if (user) { resolve(user); }
+                         else { reject(new Error("Benutzer ist nicht bei Firebase angemeldet.")); }
+                     });
+                     setTimeout(() => reject(new Error("Timeout beim Warten auf Auth User.")), 5000); 
+                });
+            }
+            if (!auth.currentUser) { throw new Error("Benutzer konnte nicht authentifiziert werden."); }
+            
+            // Token holen
+            const idToken = await auth.currentUser.getIdToken(true); 
+            if (!idToken) {
+                throw new Error("Konnte kein gültiges ID Token abrufen.");
+            }
+            
+            // Manuelle Anfrage an die Cloud Function senden
+            const functionUrl = "https://us-central1-top2-e9ac0.cloudfunctions.net/setRoleClaim";
 
-    try {
-        // --- 3. Manuelle Cloud Function Logik (Finaler Fix) ---
-        
-        // Sicherstellen, dass Auth User vorhanden ist
-        if (!auth || !auth.currentUser) {
-            // Warten bis der User sicher da ist
-            await new Promise((resolve, reject) => {
-                 const unsubscribe = auth.onAuthStateChanged(user => {
-                     unsubscribe();
-                     if (user) { resolve(user); }
-                     else { reject(new Error("Benutzer ist nicht bei Firebase angemeldet.")); }
-                 });
-                 setTimeout(() => reject(new Error("Timeout beim Warten auf Auth User.")), 5000); 
+            // DIES IST DIE KORREKTUR FÜR V2-FUNKTIONEN:
+            const fetchResponse = await fetch(functionUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}` // Token im Header
+                },
+                body: JSON.stringify({
+                    "data": { // <--- Der entscheidende "data"-Umschlag
+                        "appUserId": appUserId,
+                        "pin": enteredPin
+                    }
+                })
             });
+
+            // 4. Ergebnis der Cloud Function auswerten
+            if (fetchResponse.status !== 200) {
+                const errorData = await fetchResponse.json();
+                const errorMessage = errorData?.error?.message || `HTTP-Fehler ${fetchResponse.status}`;
+                throw new Error(`Cloud Function Aufruf gescheitert: ${errorMessage}.`);
+            }
+            
+            const responseData = await fetchResponse.json();
+            const result = responseData.result; 
+            
+            if (result.status !== "success") { 
+                 throw new Error("Cloud Function meldete Fehler: " + (result.message || "Unbekannter Fehler"));
+            }
+            
+            // 5. Finales Token aktualisieren und UI updaten
+            const idTokenResult = await auth.currentUser.getIdTokenResult(true); 
+            const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle zugewiesen';
+
+            // 6. Lokale Zustände aktualisieren
+            localStorage.setItem(ADMIN_STORAGE_KEY, appUserId);
+            await checkCurrentUserValidity(); 
+
+            // 7. Erfolgsmeldung
+            alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet! Rolle: ${newClaimRole}`, "success");
+
+        } catch (error) {
+            // 8. Fehlerbehandlung
+            console.error("Fehler beim Cloud Function Aufruf oder Token Refresh:", error);
+            alertUser(`Fehler: ${error.message || 'Interner Fehler'}`, "error");
+            
+            switchToGuestMode(false);
+            updateUIForMode();
         }
-        if (!auth.currentUser) { throw new Error("Benutzer konnte nicht authentifiziert werden."); }
-        
-        // Token holen
-        const idToken = await auth.currentUser.getIdToken(true); 
-        if (!idToken) {
-            throw new Error("Konnte kein gültiges ID Token abrufen.");
-        }
-        
-        // Manuelle Anfrage an die Cloud Function senden
-        const functionUrl = "https://us-central1-top2-e9ac0.cloudfunctions.net/setRoleClaim";
-
-        // DIES IST DIE KORREKTUR FÜR V2-FUNKTIONEN:
-        const fetchResponse = await fetch(functionUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                // KORREKTUR 1: Token im Authorization-Header senden (Standard für v2)
-                'Authorization': `Bearer ${idToken}`
-            },
-            // KORREKTUR 2: Die Daten MÜSSEN in ein "data"-Objekt verpackt werden
-            body: JSON.stringify({
-                "data": { 
-                    "appUserId": appUserId,
-                    "pin": enteredPin
-                }
-            })
-        });
-
-        // 4. Ergebnis der Cloud Function auswerten
-        // Wenn der Status nicht 200 (OK) ist, war es ein Fehler
-        if (fetchResponse.status !== 200) {
-            const errorData = await fetchResponse.json();
-            // Versuche, die Fehlermeldung aus der v2-Struktur zu lesen
-            const errorMessage = errorData?.error?.message || `HTTP-Fehler ${fetchResponse.status}`;
-            // (Die Konsole zeigt "Bad Request", weil der Body hier falsch war)
-            throw new Error(`Cloud Function Aufruf gescheitert: ${errorMessage}.`);
-        }
-        
-        // Wenn Status 200 ist, lesen wir die erfolgreiche Antwort
-        const responseData = await fetchResponse.json();
-
-        // V2 wickelt die Antwort in ein "result"-Objekt
-        const result = responseData.result; 
-        
-        // Prüfe auf Fehler von der Cloud Function (z.B. Ungültiger PIN)
-        if (result.status !== "success") { 
-             throw new Error("Cloud Function meldete Fehler: " + (result.message || "Unbekannter Fehler"));
-        }
-        
-        // 5. Finales Token aktualisieren und UI updaten
-        const idTokenResult = await auth.currentUser.getIdTokenResult(true); 
-        const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle zugewiesen';
-
-        // 6. Lokale Zustände aktualisieren
-        localStorage.setItem(ADMIN_STORAGE_KEY, appUserId);
-        await checkCurrentUserValidity(); 
-
-        // 7. Erfolgsmeldung
-        alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet! Rolle: ${newClaimRole}`, "success");
-
-    } catch (error) {
-        // 8. Fehlerbehandlung
-        console.error("Fehler beim Cloud Function Aufruf oder Token Refresh:", error);
-        alertUser(`Fehler: ${error.message || 'Interner Fehler'}`, "error");
-        
-        switchToGuestMode(false);
-        updateUIForMode();
+    };
+    
+    // Wir weisen die Listener HIER ZU, direkt nachdem 'handleLogin' definiert wurde.
+    if (submitAdminKeyButton && !submitAdminKeyButton.dataset.listenerAttached) {
+        submitAdminKeyButton.addEventListener('click', handleLogin);
+        submitAdminKeyButton.dataset.listenerAttached = 'true'; // Verhindert doppelte Zuweisung
     }
-};
-// =================================================================
-// ENDE DER KORREKTUR
-// =================================================================
+    if (adminPinInput && !adminPinInput.dataset.listenerAttached) {
+        adminPinInput.addEventListener('keydown', (e) => e.key === 'Enter' && handleLogin());
+        adminPinInput.dataset.listenerAttached = 'true'; // Verhindert doppelte Zuweisung
+    }
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
 
-    if (submitAdminKeyButton) submitAdminKeyButton.addEventListener('click', handleLogin);
-    if (adminPinInput) adminPinInput.addEventListener('keydown', (e) => e.key === 'Enter' && handleLogin());
 
     // --- Admin Section Toggles ---
     if (adminRightsToggle) adminRightsToggle.addEventListener('click', () => toggleAdminSection('adminRights'));
