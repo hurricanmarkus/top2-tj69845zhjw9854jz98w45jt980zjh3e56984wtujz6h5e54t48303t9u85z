@@ -6,8 +6,9 @@ import { renderModalUserButtons } from './admin_benutzersteuerung.js';
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
+// ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
 export async function checkCurrentUserValidity() { // Funktion ist async
-    console.log("--- Prüfe Benutzerberechtigungen (V3 - mit Firestore-Logik) ---");
+    console.log("--- Prüfe Benutzerberechtigungen (V4 - Live-DB hat Vorrang) ---");
 
     // Prüfe zuerst, ob 'auth' initialisiert wurde
     if (!auth) {
@@ -51,46 +52,40 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     // Fall 3: Firebase User ist da UND App User ("JASMIN") ist ausgewählt/gültig
     console.log(`checkCurrentUserValidity: Firebase User ${currentAuthUser.uid} und App User ${storedAppUserId} vorhanden.`);
     try {
-        console.log("Hole ID Token Result...");
-        // Force refresh (true) ist wichtig, um den neuesten Claim nach dem Login zu bekommen
-        const idTokenResult = await currentAuthUser.getIdTokenResult(true);
-        const userClaimRole = idTokenResult.claims.appRole; // 'appRole' aus dem Token (z.B. "NO_RIGHTS")
         
-        console.log("Alle Claims im Token:", idTokenResult.claims);
-        console.log("Rolle aus Token (Claim):", userClaimRole);
-        console.log("Rolle aus Firestore (DB):", userFromFirestore.role);
-
-        // =================================================================
-        // BEGINN DER KORREKTUR (Logik-Verschmelzung)
-        // =================================================================
-
-        // WICHTIGE SICHERHEITSPRÜFUNG:
-        // Passt der Token-Pass (Claim) zur Datenbank?
-        // (Wir ignorieren 'null' in der DB, falls der Typ 'individuell' ist)
-        if (userFromFirestore.role !== null && userClaimRole !== userFromFirestore.role) {
-            console.warn(`ROLLEN-KONFLIKT! Token-Claim: '${userClaimRole}', Firestore-DB: '${userFromFirestore.role}'.`);
-            console.warn("Das bedeutet, die Rolle wurde im Admin-Menü geändert, aber der Benutzer hat sich nicht neu angemeldet.");
-            console.warn("ERZWINGE LOGOUT, um neuen Token anzufordern.");
-             
-            // WICHTIG: Hier wird der Benutzer ausgeloggt, damit er beim nächsten
-            // Login den KORREKTEN "Pass" (Token-Claim) für seine neue Rolle (z.B. "ADMIN") bekommt.
-            switchToGuestMode(true, "Ihre Rolle wurde von einem Admin geändert. Bitte melden Sie sich erneut an.");
-            updateUIForMode();
-            return;
+        // WICHTIG: Wir brauchen das Token-Ergebnis (idTokenResult) und den
+        // Claim (userClaimRole) nicht mehr für die Berechtigungs-Logik,
+        // da wir jetzt voll der Datenbank vertrauen.
+        // Wir holen es nur, um sicherzustellen, dass der User noch gültig ist.
+        const idTokenResult = await currentAuthUser.getIdTokenResult(true);
+        if (!idTokenResult) {
+            throw new Error("Konnte kein gültiges ID Token abrufen.");
         }
+        
+        // =================================================================
+        // BEGINN DER KORREKTUR (Logout-Sperre entfernt)
+        // =================================================================
 
-        // AB HIER VERTRAUEN WIR DER FIRESTORE-DATENBANK,
-        // da der Token (falls eine Rolle gesetzt ist) dazu passt.
+        // ENTFERNT: Die "Sicherheits-Alarm"-Prüfung, die Token und DB verglichen
+        // und den Logout erzwungen hat, wurde entfernt.
+        // if (userFromFirestore.role !== null && userClaimRole !== userFromFirestore.role) {
+        //     ... (LOGOUT-BLOCK ENTFERNT) ...
+        // }
 
-        const user = userFromFirestore; // Das ist der "Source of Truth"
-        const effectiveRole = user.role || userClaimRole; // Nimm die Rolle aus der DB, oder falle zurück auf den Claim
+        // AB HIER VERTRAUEN WIR NUR NOCH DER FIRESTORE-DATENBANK
+        // (Genau wie du es wolltest)
 
-        console.log(`Effektiver Berechtigungs-Typ: ${user.permissionType}`);
+        const user = userFromFirestore; // Das ist die "Source of Truth"
+        
+        // Wir lesen die Rolle DIREKT aus der Datenbank.
+        const effectiveRole = user.role; 
+
+        console.log(`Effektiver Berechtigungs-Typ (aus DB): ${user.permissionType}`);
         
         let userPermissions = [];
         let currentAssignedAdminRoleId = null;
         
-        // DIESE LOGIK IST JETZT (fast) IDENTISCH MIT DER ALTEN _COPY_V2
+        // DIESE LOGIK IST JETZT WIEDER DIE "ALTE" (und korrekte) LOGIK
         
         if (user.permissionType === 'role') {
             console.log(`Lade Rechte für ROLLE: ${effectiveRole}`);
@@ -103,14 +98,11 @@ export async function checkCurrentUserValidity() { // Funktion ist async
             if (effectiveRole === 'ADMIN' && user.assignedAdminRoleId && ADMIN_ROLES[user.assignedAdminRoleId]) {
                 currentAssignedAdminRoleId = user.assignedAdminRoleId;
                 
-                // Nimm die Admin-Rechte (z.B. 'canSeeUsers')
                 const adminPerms = ADMIN_ROLES[currentAssignedAdminRoleId].permissions || {};
                 const permKeys = Object.keys(adminPerms).filter(
                     key => key !== 'approvalRequired' && adminPerms[key] === true
                 );
                 
-                // WICHTIG: Füge sie zu den Basis-Rechten hinzu (oder überschreibe sie, je nach Design)
-                // Wir überschreiben sie, da die Admin-Rolle Vorrang hat.
                 userPermissions = permKeys; 
                 console.log(`Admin-Rollen-Rechte geladen: ${permKeys.length} Rechte.`);
             }
@@ -120,7 +112,7 @@ export async function checkCurrentUserValidity() { // Funktion ist async
                 console.log("Systemadmin-Rechte geladen.");
             }
         } 
-        // 4. PRÜFE AUF INDIVIDUELL (Das hat vorher gefehlt!)
+        // 4. PRÜFE AUF INDIVIDUELL (Das ist der Fix für deinen Bug von vorhin)
         else if (user.permissionType === 'individual') {
             userPermissions = [...(user.customPermissions || [])];
             console.log(`Lade INDIVIDUELLE Rechte: ${userPermissions.length} Rechte.`);
@@ -137,7 +129,7 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         Object.assign(currentUser, {
             mode: storedAppUserId,
             displayName: userFromFirestore.name,
-            role: effectiveRole, // WICHTIG: Rolle aus DB/Claim!
+            role: effectiveRole, // WICHTIG: Rolle aus DB!
             permissions: userPermissions,
             // Felder aus Firestore für die UI übernehmen
             permissionType: userFromFirestore.permissionType,
