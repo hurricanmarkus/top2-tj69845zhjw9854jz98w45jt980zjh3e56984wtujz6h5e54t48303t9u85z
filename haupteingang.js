@@ -11,6 +11,7 @@ import { initializeEssensberechnungView } from './essensberechnung.js';
 import { IFTTT_URL, initializeNotrufSettingsView } from './notfall.js';
 import { PUSHOVER_TOKEN, RECIPIENT_KEYS } from './pushbenachrichtigung.js';
 import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, openTemplateModal, renderChecklistView, renderChecklistSettingsView, listenForTemplates, listenForStacks } from './checklist.js';
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js"; // <--- HIER EINFÜGEN
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
 import { renderUserKeyList } from './admin_benutzersteuerung.js'; 
 // // ENDE-ZIKA //
