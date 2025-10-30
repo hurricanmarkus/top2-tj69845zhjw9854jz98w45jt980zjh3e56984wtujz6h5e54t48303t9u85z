@@ -5,29 +5,77 @@ import { doc, updateDoc, setDoc, deleteDoc } from "https://www.gstatic.com/fireb
 import { renderAdminUserDetails } from './admin_benutzersteuerung.js'; 
 
 export function setupPermissionDependencies(container) {
-    const mainToggle = container.querySelector('[data-perm="canSeeMainFunctions"]');
-    const subToggles = [
-        container.querySelector('[data-perm="canUseMainPush"]'),
-        container.querySelector('[data-perm="canUseMainEntrance"]'),
-        container.querySelector('[data-perm="canUseMainChecklist"]')
-    ];
+    
+    // Wir erstellen eine kleine, wiederverwendbare "Helfer-im-Helfer"-Funktion,
+    // die die eigentliche Logik enthält.
+    // Sie nimmt den "Hauptschalter" (mainSelector) und die "Unter-Schalter" (subSelectors).
+    const setupToggleLogic = (mainSelector, subSelectors) => {
+        
+        // 1. Finde den Haupt-Schalter (z.B. "Aktuelle Checkliste")
+        const mainToggle = container.querySelector(mainSelector);
+        
+        // 2. Wenn es diesen Schalter im aktuellen Fenster nicht gibt, höre sofort auf.
+        if (!mainToggle) return; 
 
-    if (!mainToggle) return;
+        // 3. Finde alle Unter-Schalter (z.B. "Listen umschalten")
+        const subToggles = subSelectors.map(sel => container.querySelector(sel)).filter(Boolean); // .filter(Boolean) entfernt alle, die nicht gefunden wurden
 
-    const updateSubToggles = () => {
-        const isEnabled = mainToggle.checked;
-        subToggles.forEach(toggle => {
-            if (toggle) {
+        // 4. Wenn es keine Unter-Schalter gibt, höre auf.
+        if (subToggles.length === 0) return; 
+
+        // 5. Das ist die Funktion, die prüft, ob der Haken gesetzt ist oder nicht.
+        const updateSubToggles = () => {
+            const isEnabled = mainToggle.checked; // Ist der Haupt-Haken gesetzt? (true/false)
+            
+            subToggles.forEach(toggle => {
+                // Setze den "disabled"-Status des Unter-Schalters auf das Gegenteil von "isEnabled"
+                // (Wenn Haupt-Haken AN, ist disabled AUS)
                 toggle.disabled = !isEnabled;
+                
+                // Wenn der Haupt-Haken AUSgeschaltet wird...
                 if (!isEnabled) {
+                    // ...muss auch der Haken beim Unter-Punkt entfernt werden.
                     toggle.checked = false;
+                    
+                    // WICHTIG: Wir simulieren ein "change"-Event, damit der "Speichern"-Button
+                    // mitbekommt, dass sich hier (durch das Entfernen des Hakens) etwas geändert hat.
+                    toggle.dispatchEvent(new Event('change', { bubbles: true }));
                 }
-            }
-        });
+            });
+        };
+
+        // 6. Setze einen "Spion" (Event Listener) auf den Haupt-Schalter.
+        // Jedes Mal, wenn du ihn anklickst, wird "updateSubToggles" ausgeführt.
+        mainToggle.addEventListener('change', updateSubToggles);
+        
+        // 7. Führe die Funktion EINMAL beim Laden aus,
+        // um den korrekten Start-Zustand herzustellen.
+        updateSubToggles(); 
     };
 
-    mainToggle.addEventListener('change', updateSubToggles);
-    updateSubToggles(); // Einmal beim Laden ausführen, um den initialen Status zu setzen
+    // ---
+    // HIER WIRD DIE FUNKTION JETZT AUFGERUFEN:
+    // ---
+
+    // 1. Logik für ADMIN RECHTE (Hauptmenü -> Push, Eingang, Checkliste)
+    setupToggleLogic(
+        '[data-perm="canSeeMainFunctions"]', // Hauptschalter
+        [ // Unter-Schalter
+            '[data-perm="canUseMainPush"]',
+            '[data-perm="canUseMainEntrance"]',
+            '[data-perm="canUseMainChecklist"]'
+        ]
+    );
+
+    // 2. Logik für BENUTZERSTEUERUNG (Aktuelle Checkliste -> Umschalten, Einstellungen)
+    // (Das ist der Teil, der deinen Bug behebt)
+    setupToggleLogic(
+        '[data-perm="CHECKLIST"]', // Hauptschalter
+        [ // Unter-Schalter
+            '[data-perm="CHECKLIST_SWITCH"]',
+            '[data-perm="CHECKLIST_SETTINGS"]'
+        ]
+    );
 }
 
 export async function renderAdminRightsManagement() {
