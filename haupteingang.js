@@ -30,6 +30,7 @@ export let ROLES = {};
 export let initialAuthCheckDone = false;
 export let adminPinInput;
 export let modalUserButtons;
+export let fullScreenLoader, loaderText;
 export let adminRightsToggle;
 export let pinModal;
 export let pinError;
@@ -375,16 +376,22 @@ async function seedInitialData() {
     }
 }
 
-export function alertUser(message, type) {
+export function alertUser(message, type, duration = 3000) { // NEU: duration hinzugefügt
     const tempAlert = document.createElement('div');
     tempAlert.textContent = message;
-    tempAlert.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 rounded-xl text-white font-bold shadow-lg transition-opacity duration-300 z-50 text-center ${type === 'success' ? 'bg-green-600' : 'bg-red-600'}`;
+    
+    // NEU: Stellt sicher, dass 'error' (oder alles andere) rot wird
+    const bgColorClass = type === 'success' ? 'bg-green-600' : 'bg-red-600';
+
+    tempAlert.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 rounded-xl text-white font-bold shadow-lg transition-opacity duration-300 z-50 text-center ${bgColorClass}`;
     document.body.appendChild(tempAlert);
     setTimeout(() => tempAlert.style.opacity = '1', 10);
+    
+    // NEU: Verwendet die variable Dauer
     setTimeout(() => {
         tempAlert.style.opacity = '0';
         setTimeout(() => tempAlert.remove(), 300);
-    }, 3000);
+    }, duration); // Verwendet die 'duration' Variable
 }
 
 export function setButtonLoading(button, isLoading) {
@@ -481,10 +488,10 @@ export function navigate(targetViewName) {
 
 export function setupEventListeners() {
     // Sicherstellen, dass die Elemente existieren, bevor Listener hinzugefügt werden
-    if (!appHeader || !document.querySelector('.main-content') || !document.getElementById('entranceCard')) {
+    // NEU: Auch die Loader-Elemente prüfen
+    if (!appHeader || !document.querySelector('.main-content') || !document.getElementById('entranceCard') || !document.getElementById('fullScreenLoader')) {
         console.warn("setupEventListeners: Wichtige Elemente noch nicht bereit, versuche später erneut.");
-        // Optional: setTimeout hinzufügen, wenn das Problem häufiger auftritt
-        // setTimeout(setupEventListeners, 100);
+        setTimeout(setupEventListeners, 100); // Sicherer warten
         return;
     }
     console.log("setupEventListeners: Füge Basis-Listener hinzu...");
@@ -573,7 +580,7 @@ export function setupEventListeners() {
     }
 
 // ERSETZE die handleLogin Funktion KOMPLETT hiermit:
-// ERSETZE deine komplette handleLogin Funktion hiermit:
+// (Diese Funktion ist INNEN in setupEventListeners)
 const handleLogin = async () => {
     if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) {
         return;
@@ -595,10 +602,18 @@ const handleLogin = async () => {
         return;
     }
 
-    // 2. PIN korrekt, Modal schließen
+    // 2. PIN korrekt, Modals schließen UND LOADER STARTEN
     pinModal.style.display = 'none';
     adminPinInput.value = '';
     pinError.style.display = 'none';
+    
+    // =================================================================
+    // BEGINN DEINER KORREKTUR (Lade-Symbol)
+    // =================================================================
+    showLoadingOverlay("Anmeldung wird verarbeitet...");
+    // =================================================================
+    // ENDE DEINER KORREKTUR
+    // =================================================================
 
     try {
         // --- 3. Manuelle Cloud Function Logik (Finaler Fix) ---
@@ -617,12 +632,15 @@ const handleLogin = async () => {
         }
         if (!auth.currentUser) { throw new Error("Benutzer konnte nicht authentifiziert werden."); }
         
-        // Token holen
+        // === KORREKTUR: Lade-Text aktualisieren ===
+        showLoadingOverlay("Token wird abgerufen...");
         const idToken = await auth.currentUser.getIdToken(true); 
         if (!idToken) {
             throw new Error("Konnte kein gültiges ID Token abrufen.");
         }
         
+        // === KORREKTUR: Lade-Text aktualisieren ===
+        showLoadingOverlay("Cloud-Funktion wird aufgerufen...");
         // Manuelle Anfrage an die Cloud Function senden
         const functionUrl = "https://us-central1-top2-e9ac0.cloudfunctions.net/setRoleClaim";
 
@@ -654,6 +672,8 @@ const handleLogin = async () => {
              throw new Error("Cloud Function scheiterte: " + responseData.message);
         }
         
+        // === KORREKTUR: Lade-Text aktualisieren ===
+        showLoadingOverlay("Berechtigungen werden geprüft...");
         // 5. Finales Token aktualisieren und UI updaten
         const idTokenResult = await auth.currentUser.getIdTokenResult(true); 
         const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle zugewiesen';
@@ -663,7 +683,7 @@ const handleLogin = async () => {
         await checkCurrentUserValidity(); 
 
         // 7. Erfolgsmeldung
-        alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet! Rolle: ${newClaimRole}`, "success");
+        alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet!`, "success");
 
     } catch (error) {
         // 8. Fehlerbehandlung
@@ -672,6 +692,15 @@ const handleLogin = async () => {
         
         switchToGuestMode(false);
         updateUIForMode();
+    } finally {
+        // =================================================================
+        // BEGINN DEINER KORREKTUR (Lade-Symbol)
+        // =================================================================
+        // Loader IMMER ausblenden, egal ob Erfolg oder Fehler
+        hideLoadingOverlay();
+        // =================================================================
+        // ENDE DEINER KORREKTUR
+        // =================================================================
     }
 };
 

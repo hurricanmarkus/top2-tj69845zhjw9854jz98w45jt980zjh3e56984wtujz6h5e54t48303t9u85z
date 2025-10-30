@@ -6,7 +6,7 @@ import { renderModalUserButtons } from './admin_benutzersteuerung.js';
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
 export async function checkCurrentUserValidity() { // Funktion ist async
-    console.log("--- Prüfe Benutzerberechtigungen (V5 - Mit Live-Sperre) ---");
+    console.log("--- Prüfe Benutzerberechtigungen (V5.1 - Rote Sperre) ---");
 
     // Prüfe zuerst, ob 'auth' initialisiert wurde
     if (!auth) {
@@ -36,36 +36,32 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         return;
     }
 
-    // =================================================================
-    // BEGINN DER KORREKTUR (Live-Sperre erzwingen)
-    // =================================================================
-
     // Fall 2: Firebase User ist da, aber kein App User ausgewählt (oder ungültig/nicht gefunden)
     if (!storedAppUserId || !userFromFirestore) {
         console.log("checkCurrentUserValidity: Firebase User vorhanden, aber kein gültiger App User im Speicher oder User in Firestore nicht gefunden.");
         if (currentUser.mode !== GUEST_MODE) {
              console.log("Wechsle zum Gastmodus, da App User ungültig/fehlt.");
-             // Hier keine Benachrichtigung, da der User wahrscheinlich nur die Seite geladen hat, ohne eingeloggt zu sein
              switchToGuestMode(false); 
         }
         updateUIForMode();
         return;
     }
 
+    // =================================================================
+    // BEGINN DEINER KORREKTUR (Rote Meldung, Längere Dauer)
+    // =================================================================
     // NEU: Fall 2.5: User ist gefunden, ABER als 'inaktiv' (gesperrt) markiert.
     if (!userFromFirestore.isActive) {
         console.warn("checkCurrentUserValidity: Benutzer ist als INAKTIV (gesperrt) markiert. Erzwinge Logout.");
         
-        // Wir rufen switchToGuestMode mit der spezifischen Sperr-Nachricht auf.
-        // Das ist die "Live"-Logout-Logik, die du wolltest.
-        switchToGuestMode(true, "Ihr Konto wurde von einem Administrator gesperrt.");
+        // NEU: Ruft switchToGuestMode mit 'error' (rot) und 6000ms Dauer auf.
+        switchToGuestMode(true, "Ihr Konto wurde von einem Administrator gesperrt.", 'error', 6000);
         
         // updateUIForMode() wird bereits von switchToGuestMode aufgerufen.
         return; // WICHTIG: Hier abbrechen.
     }
-    
     // =================================================================
-    // ENDE DER KORREKTUR
+    // ENDE DEINER KORREKTUR
     // =================================================================
 
 
@@ -141,12 +137,13 @@ export async function checkCurrentUserValidity() { // Funktion ist async
 
     } catch (error) {
          console.error("Fehler beim Holen des ID Tokens oder Prüfen der Claims:", error);
-         switchToGuestMode(true, "Fehler bei der Berechtigungsprüfung.");
+         // NEU: Beim Fehler auch die rote Meldung verwenden
+         switchToGuestMode(true, "Fehler bei der Berechtigungsprüfung.", 'error');
          updateUIForMode();
     }
 }
 
-export function switchToGuestMode(showNotification = true, message = "Abgemeldet. Modus ist nun 'Gast'.") {
+export function switchToGuestMode(showNotification = true, message = "Abgemeldet. Modus ist nun 'Gast'.", type = 'success', duration = 3000) {
     Object.keys(currentUser).forEach(key => delete currentUser[key]);
     Object.assign(currentUser, {
         displayName: GUEST_MODE,
@@ -157,7 +154,9 @@ export function switchToGuestMode(showNotification = true, message = "Abgemeldet
     localStorage.removeItem(ADMIN_STORAGE_KEY);
     updateUIForMode();
     navigate('home');
-    if (showNotification) alertUser(message, 'success');
+    
+    // NEU: Übergibt 'type' and 'duration' an alertUser
+    if (showNotification) alertUser(message, type, duration);
 }
 
 // Diese Funktion gehört in log-InOut.js
