@@ -6,7 +6,7 @@ import { renderModalUserButtons } from './admin_benutzersteuerung.js';
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
 export async function checkCurrentUserValidity() { // Funktion ist async
-    console.log("--- Prüfe Benutzerberechtigungen (V7 - Token-Validierung) ---");
+    console.log("--- Prüfe Benutzerberechtigungen (V6 - Getrennte Rechte) ---");
 
     // Prüfe zuerst, ob 'auth' initialisiert wurde
     if (!auth) {
@@ -21,12 +21,13 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     // Stelle sicher, dass USERS nicht null/undefined ist, bevor darauf zugegriffen wird
     const userFromFirestore = storedAppUserId && USERS ? USERS[storedAppUserId] : null;
 
-    // Fall 1: Kein Firebase User angemeldet
+    // Fall 1: Kein Firebase User angemeldet -> Sicherstellen, dass Gastmodus aktiv ist
     if (!currentAuthUser) {
         console.log("checkCurrentUserValidity: Kein Firebase User angemeldet.");
         if (storedAppUserId || currentUser.mode !== GUEST_MODE) {
-            switchToGuestMode(false); 
+            switchToGuestMode(false); // Ausloggen, falls nötig
         }
+        // Stelle sicher, dass currentUser auf Gast gesetzt ist, falls noch nicht geschehen
         else if (currentUser.mode !== GUEST_MODE) {
              Object.keys(currentUser).forEach(key => delete currentUser[key]);
              Object.assign(currentUser, { displayName: GUEST_MODE, mode: GUEST_MODE, role: 'GUEST', permissions: [], adminPermissions: {} });
@@ -35,21 +36,28 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         return;
     }
 
-    // Fall 2: Firebase User ist da, aber kein App User ausgewählt
+
+    // Fall 2: Firebase User ist da, aber kein App User ausgewählt (oder ungültig/nicht gefunden)
     if (!storedAppUserId || !userFromFirestore) {
-        console.log("checkCurrentUserValidity: Firebase User vorhanden, aber kein gültiger App User im Speicher.");
+        console.log("checkCurrentUserValidity: Firebase User vorhanden, aber kein gültiger App User im Speicher oder User in Firestore nicht gefunden.");
         if (currentUser.mode !== GUEST_MODE) {
+             console.log("Wechsle zum Gastmodus, da App User ungültig/fehlt.");
+             // Hier keine Benachrichtigung, da der User wahrscheinlich nur die Seite geladen hat, ohne eingeloggt zu sein
              switchToGuestMode(false); 
         }
         updateUIForMode();
         return;
     }
 
-    // Fall 2.5: User ist als 'inaktiv' (gesperrt) markiert.
+    // NEU: Fall 2.5: User ist gefunden, ABER als 'inaktiv' (gesperrt) markiert.
     if (!userFromFirestore.isActive) {
         console.warn("checkCurrentUserValidity: Benutzer ist als INAKTIV (gesperrt) markiert. Erzwinge Logout.");
+        
+        // Wir rufen switchToGuestMode jetzt mit dem dritten Parameter auf: 'error_long'
         switchToGuestMode(true, "Ihr Konto wurde von einem Administrator gesperrt.", 'error_long');
-        return;
+        
+        // updateUIForMode() wird bereits von switchToGuestMode aufgerufen.
+        return; // WICHTIG: Hier abbrechen.
     }
     
 
@@ -57,37 +65,25 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     console.log(`checkCurrentUserValidity: Firebase User ${currentAuthUser.uid} und App User ${storedAppUserId} vorhanden.`);
     try {
         
-        // =================================================================
-        // BEGINN DER KORREKTUR (Der "Ausweis"-Check)
-        // =================================================================
-        
-        // 1. Hole den "Ausweis" (Token) IMMER frisch.
-        //    (true) = "Kontaktiere den Server, ignoriere den Cache"
-        const idTokenResult = await currentAuthUser.getIdTokenResult(true);
+        // Token holen, um sicherzustellen, dass die Sitzung gültig ist
+        const idTokenResult = await currentAuthUser.getIdToken(true);
         if (!idTokenResult) {
             throw new Error("Konnte kein gültiges ID Token abrufen.");
         }
+        
+        // Wir vertrauen ab hier der "Live-Datenbank" (Firestore)
+        const user = userFromFirestore; // Das ist die "Source of Truth"
+        // DANK SCHRITT 1 ist 'user.role' jetzt 'ADMIN',
+        // auch wenn 'permissionType' = 'individual' ist.
+        const effectiveRole = user.role; 
 
-        // 2. Lies den "Stempel" (Claim) vom Ausweis. Das ist die WAHRHEIT für die Security Rules.
-        const effectiveRole = idTokenResult.claims.appRole || 'NO_RIGHTS'; // z.B. 'ADMIN'
-        
-        // 3. (Debug-Log) Vergleiche den Stempel (Token) mit der Datenbank
-        if (effectiveRole !== userFromFirestore.role && userFromFirestore.role !== null) {
-             console.warn(`Rollen-Diskrepanz! Token-Rolle (Ausweis) ist '${effectiveRole}', aber DB-Rolle ist '${userFromFirestore.role}'. Vertraue dem Token.`);
-             // Dies kann passieren, wenn der Login-Prozess (die Race Condition) noch läuft.
-             // Wenn 'effectiveRole' 'NO_RIGHTS' ist, obwohl die DB 'ADMIN' sagt,
-             // wird der nächste Schritt (Admin-Rechte laden) korrekterweise fehlschlagen.
-        }
-        
-        console.log(`checkCurrentUserValidity: Gültige Rolle vom Token (Ausweis) ist: ${effectiveRole}`);
-        // =================================================================
-        // ENDE DER KORREKTUR
-        // =================================================================
-        
-        const user = userFromFirestore; 
         console.log(`Effektiver Benutzer-Typ (aus DB): ${user.permissionType}`);
         console.log(`Effektiver Admin-Typ (aus DB): ${user.adminPermissionType}`);
         
+        // =================================================================
+        // BEGINN DER KORREKTUR (Rechte-Trennung)
+        // =================================================================
+
         let userPermissions = []; // Für Eingang, Push, Checkliste...
         let adminPermissions = {}; // Für Passwörter, Benutzer sehen...
         let currentAssignedAdminRoleId = null; // Nur für Admin-Rollen
@@ -95,9 +91,9 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         // --- TEIL 1: Lade BENUTZER-Rechte (Eingang, Push...) ---
         // Diese Logik basiert auf 'permissionType'
         if (user.permissionType === 'role') {
-            console.log(`Lade BENUTZER-Rechte für ROLLE: ${user.role}`); // Lese 'user.role' (was sein soll)
-            if (user.role && ROLES[user.role]) {
-                userPermissions = [...(ROLES[user.role].permissions || [])];
+            console.log(`Lade BENUTZER-Rechte für ROLLE: ${effectiveRole}`);
+            if (effectiveRole && ROLES[effectiveRole]) {
+                userPermissions = [...(ROLES[effectiveRole].permissions || [])];
             }
         } 
         else if (user.permissionType === 'individual') {
@@ -106,13 +102,14 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         }
         
         // Sonderfall: SysAdmin bekommt immer ALLE Benutzer-Rechte
-        if (effectiveRole === 'SYSTEMADMIN') { // Prüfe den Ausweis
+        if (effectiveRole === 'SYSTEMADMIN') {
             userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
             console.log("Systemadmin BENUTZER-Rechte geladen.");
         }
 
         // --- TEIL 2: Lade ADMIN-Rechte (Passwörter, Benutzer...) ---
-        // Diese Logik läuft NUR, wenn der "Ausweis" (effectiveRole) Admin oder SysAdmin ist
+        // Diese Logik läuft NUR, wenn der User Admin oder SysAdmin ist,
+        // EGAL was 'permissionType' (für Benutzer) ist.
         if (effectiveRole === 'ADMIN') {
             // Prüfe den *Admin-Typ* ('adminPermissionType')
             if (user.adminPermissionType === 'role' && user.assignedAdminRoleId && ADMIN_ROLES[user.assignedAdminRoleId]) {
@@ -138,6 +135,9 @@ export async function checkCurrentUserValidity() { // Funktion ist async
                 canSeeSysadminLogs: true
             };
         }
+        // =================================================================
+        // ENDE DER KORREKTUR
+        // =================================================================
         
         console.log("Final zugewiesene BENUTZER-Berechtigungen:", userPermissions);
         console.log("Final zugewiesene ADMIN-Berechtigungen:", Object.keys(adminPermissions));
@@ -147,11 +147,11 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         Object.assign(currentUser, {
             mode: storedAppUserId,
             displayName: userFromFirestore.name,
-            role: effectiveRole, // <-- WICHTIG: Setze die Rolle vom "Ausweis"
+            role: effectiveRole, 
             permissions: userPermissions, // BENUTZER-Rechte
-            adminPermissions: adminPermissions, // ADMIN-Rechte
+            adminPermissions: adminPermissions, // ADMIN-Rechte (NEU!)
             permissionType: userFromFirestore.permissionType,
-            adminPermissionType: userFromFirestore.adminPermissionType,
+            adminPermissionType: userFromFirestore.adminPermissionType, // (NEU!)
             displayRole: userFromFirestore.displayRole,
             assignedAdminRoleId: currentAssignedAdminRoleId
         });
@@ -161,13 +161,15 @@ export async function checkCurrentUserValidity() { // Funktion ist async
 
         // Navigationsprüfung
          const activeView = document.querySelector('.view.active');
-         if (activeView && activeView.id === 'adminView' && effectiveRole === 'NO_RIGHTS') {
+         const isAdminOrSysAdmin = effectiveRole === 'ADMIN' || effectiveRole === 'SYSTEMADMIN';
+         if (activeView && activeView.id === 'adminView' && !isAdminOrSysAdmin) {
              alertUser("Ihre Administrator-Rechte wurden entzogen.", "error");
              navigate('home');
          }
 
     } catch (error) {
          console.error("Fehler beim Holen des ID Tokens oder Prüfen der Claims:", error);
+         // BONUS-KORREKTUR: Wenn HIER ein Fehler passiert, ist die Meldung jetzt auch rot (aber normal kurz 'error')
          switchToGuestMode(true, "Fehler bei der Berechtigungsprüfung.", 'error');
          updateUIForMode();
     }
