@@ -906,6 +906,7 @@ export function toggleNewUserRoleField() {
 }
 
 // KORREKTUR: 'export' muss beibehalten werden (aus vorigem Schritt)
+// KORREKTUR: 'export' muss beibehalten werden (aus vorigem Schritt)
 export function renderAdminUserDetails(userId) {
     const detailsArea = document.getElementById('admin-user-details-area');
     const adminUser = USERS[userId];
@@ -948,23 +949,48 @@ export function renderAdminUserDetails(userId) {
     const canBeEdited = isSysAdmin; // Nur SysAdmin darf Admin-Rechte bearbeiten
 
     // --- Generator-Funktion für Checkboxen (Kurzfassung) ---
+    // =================================================================
+    // BEGINN DEINER KORREKTUR (Layout der Genehmigungs-Checkbox)
+    // =================================================================
     const generateCheckbox = (permKey, label, isSubItem = false, canBeApproved = false) => {
         const isChecked = perms[permKey] || false;
         const isApprovalChecked = approvalPerms[permKey] || false;
-        const margin = isSubItem ? 'pl-6' : '';
-        
-        return `
+        const margin = isSubItem ? 'pl-6' : ''; // Einrückung für Haupt-Checkbox
+
+        // 1. Die Haupt-Checkbox (z.B. "Benutzer anlegen")
+        const mainCheckboxHTML = `
             <label class="flex items-center gap-2 cursor-pointer ${margin}">
                 <input type="checkbox" class="admin-perm-cb h-4 w-4" data-perm="${permKey}" ${isChecked ? 'checked' : ''} ${!canBeEdited ? 'disabled' : ''}>
                 <span class="text-sm">${label}</span>
-                ${canBeApproved ? 
-                    `<input type="checkbox" class="approval-cb h-4 w-4 ml-auto" data-perm="${permKey}" ${isApprovalChecked ? 'checked' : ''} ${!canBeEdited ? 'disabled' : ''}>
-                     <span class="text-xs text-red-600">Genehm.</span>`
-                    : ''
-                }
             </label>
         `;
+
+        // 2. Die (optionale) Genehmigungs-Checkbox
+        let approvalCheckboxHTML = '';
+        if (canBeApproved) {
+            // Wir verwenden 'pl-6' für die Einrückung (wie ein Unterpunkt)
+            // und 'mt-1' für einen kleinen Abstand nach oben.
+            const approvalMargin = 'pl-6'; 
+            approvalCheckboxHTML = `
+                <label class="flex items-center gap-2 cursor-pointer ${approvalMargin} mt-1"> 
+                    <input type="checkbox" class="approval-cb h-4 w-4" data-perm="${permKey}" ${isApprovalChecked ? 'checked' : ''} ${!canBeEdited ? 'disabled' : ''}>
+                    <span class="text-xs text-red-600">Genehmigung erforderlich</span>
+                </label>
+            `;
+        }
+
+        // 3. Wir geben einen DIV-Block zurück, der beide Zeilen enthält
+        return `
+            <div>
+                ${mainCheckboxHTML}
+                ${approvalCheckboxHTML}
+            </div>
+        `;
     };
+    // =================================================================
+    // ENDE DEINER KORREKTUR
+    // =================================================================
+
 
     // --- Generiere Rollen-Optionen ---
     let roleOptionsHTML = Object.values(ADMIN_ROLES)
@@ -1010,12 +1036,14 @@ export function renderAdminUserDetails(userId) {
                 </div>
                  <div class="p-3 border rounded-lg bg-white">
                     <h5 class="font-semibold text-sm mb-2 text-gray-600">Aktionen und Genehmigung</h5>
-                    <div class="grid grid-cols-1 gap-2 text-sm">
+                    
+                    <div class="grid grid-cols-1 gap-4 text-sm"> 
                         ${generateCheckbox('canCreateUser', 'Benutzer anlegen', false, true)}
                         ${generateCheckbox('canDeleteUser', 'Benutzer löschen', false, true)}
                         ${generateCheckbox('canRenameUser', 'Benutzer umbenennen', false, true)}
                         ${generateCheckbox('canToggleUserActive', 'Benutzer sperren/entsperren', false, true)}
                         ${generateCheckbox('canChangeUserPermissionType', 'Berechtigungs-Typ ändern', false, true)}
+                        
                         <div class="pt-2 border-t mt-2">
                            ${generateCheckbox('canEditUserRoles', 'Darf Benutzer-Rollen bearbeiten')}
                            ${generateCheckbox('canSeeSysadminLogs', 'Darf Sysadmin-Einträge sehen')}
