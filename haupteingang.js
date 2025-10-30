@@ -186,6 +186,9 @@ window.onload = function () {
     const mainFunctionsToggleIcon = document.getElementById('mainFunctionsToggleIcon');
     const notrufView = document.getElementById('notrufSettingsView');
 
+fullScreenLoader = document.getElementById('fullScreenLoader');
+    loaderText = document.getElementById('loaderText');
+
     const closeDeletedModalBtn = document.getElementById('closeDeletedListsModal');
     if (closeDeletedModalBtn) {
         closeDeletedModalBtn.addEventListener('click', () => {
