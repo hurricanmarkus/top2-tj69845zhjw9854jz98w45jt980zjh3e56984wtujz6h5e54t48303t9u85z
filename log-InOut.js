@@ -5,8 +5,9 @@ import { renderModalUserButtons } from './admin_benutzersteuerung.js';
 // ENDE-ZIKA //
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
+// ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
 export async function checkCurrentUserValidity() { // Funktion ist async
-    console.log("--- Prüfe Benutzerberechtigungen (mit Claims V2) ---");
+    console.log("--- Prüfe Benutzerberechtigungen (V3 - mit Firestore-Logik) ---");
 
     // Prüfe zuerst, ob 'auth' initialisiert wurde
     if (!auth) {
@@ -17,7 +18,7 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     }
 
     const currentAuthUser = auth.currentUser; // Aktuellen Firebase Auth User holen
-    const storedAppUserId = localStorage.getItem(ADMIN_STORAGE_KEY); // z.B. "MARKUS"
+    const storedAppUserId = localStorage.getItem(ADMIN_STORAGE_KEY); // z.B. "JASMIN"
     // Stelle sicher, dass USERS nicht null/undefined ist, bevor darauf zugegriffen wird
     const userFromFirestore = storedAppUserId && USERS ? USERS[storedAppUserId] : null;
 
@@ -47,56 +48,96 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         return;
     }
 
-    // Fall 3: Firebase User ist da UND App User ("MARKUS") ist ausgewählt/gültig
+    // Fall 3: Firebase User ist da UND App User ("JASMIN") ist ausgewählt/gültig
     console.log(`checkCurrentUserValidity: Firebase User ${currentAuthUser.uid} und App User ${storedAppUserId} vorhanden.`);
     try {
         console.log("Hole ID Token Result...");
         // Force refresh (true) ist wichtig, um den neuesten Claim nach dem Login zu bekommen
         const idTokenResult = await currentAuthUser.getIdTokenResult(true);
-// *** NEUE LOG-ZEILE: Alle Claims ausgeben ***
-    console.log("Alle Claims im Token:", idTokenResult.claims);
-        const userClaimRole = idTokenResult.claims.appRole; // 'appRole' ist der Name des Claims aus der Cloud Function
-        console.log("Claim 'appRole' gefunden:", userClaimRole);
+        const userClaimRole = idTokenResult.claims.appRole; // 'appRole' aus dem Token (z.B. "NO_RIGHTS")
+        
+        console.log("Alle Claims im Token:", idTokenResult.claims);
+        console.log("Rolle aus Token (Claim):", userClaimRole);
+        console.log("Rolle aus Firestore (DB):", userFromFirestore.role);
 
-        // Wenn kein Claim da ist, obwohl einer erwartet wird (weil storedAppUserId gesetzt ist) -> Fehler, ausloggen
-        if (!userClaimRole) {
-             console.warn("checkCurrentUserValidity: Kein 'appRole' Claim gefunden, obwohl App User ausgewählt ist. Logge aus.");
-             switchToGuestMode(true, "Fehler bei der Rollenprüfung. Bitte neu anmelden.");
-             updateUIForMode();
-             return;
+        // =================================================================
+        // BEGINN DER KORREKTUR (Logik-Verschmelzung)
+        // =================================================================
+
+        // WICHTIGE SICHERHEITSPRÜFUNG:
+        // Passt der Token-Pass (Claim) zur Datenbank?
+        // (Wir ignorieren 'null' in der DB, falls der Typ 'individuell' ist)
+        if (userFromFirestore.role !== null && userClaimRole !== userFromFirestore.role) {
+            console.warn(`ROLLEN-KONFLIKT! Token-Claim: '${userClaimRole}', Firestore-DB: '${userFromFirestore.role}'.`);
+            console.warn("Das bedeutet, die Rolle wurde im Admin-Menü geändert, aber der Benutzer hat sich nicht neu angemeldet.");
+            console.warn("ERZWINGE LOGOUT, um neuen Token anzufordern.");
+             
+            // WICHTIG: Hier wird der Benutzer ausgeloggt, damit er beim nächsten
+            // Login den KORREKTEN "Pass" (Token-Claim) für seine neue Rolle (z.B. "ADMIN") bekommt.
+            switchToGuestMode(true, "Ihre Rolle wurde von einem Admin geändert. Bitte melden Sie sich erneut an.");
+            updateUIForMode();
+            return;
         }
 
-        // --- Berechtigungen basierend auf Claim bestimmen ---
+        // AB HIER VERTRAUEN WIR DER FIRESTORE-DATENBANK,
+        // da der Token (falls eine Rolle gesetzt ist) dazu passt.
+
+        const user = userFromFirestore; // Das ist der "Source of Truth"
+        const effectiveRole = user.role || userClaimRole; // Nimm die Rolle aus der DB, oder falle zurück auf den Claim
+
+        console.log(`Effektiver Berechtigungs-Typ: ${user.permissionType}`);
+        
         let userPermissions = [];
-        // Lese Basis-Berechtigungen aus ROLES (Firestore), basierend auf dem Claim
-         if (ROLES && ROLES[userClaimRole]) { // Prüfen ob ROLES geladen ist
-             userPermissions = [...(ROLES[userClaimRole].permissions || [])];
-         } else {
-             console.warn(`Rolle '${userClaimRole}' aus Claim nicht in ROLES gefunden oder ROLES noch nicht geladen.`);
-             // Fallback zu "Keine Rechte"
-             userPermissions = [...(ROLES && ROLES['NO_RIGHTS'] ? ROLES['NO_RIGHTS'].permissions : [])]; // Sicherer Zugriff
-         }
+        let currentAssignedAdminRoleId = null;
+        
+        // DIESE LOGIK IST JETZT (fast) IDENTISCH MIT DER ALTEN _COPY_V2
+        
+        if (user.permissionType === 'role') {
+            console.log(`Lade Rechte für ROLLE: ${effectiveRole}`);
+            // 1. Lade Basis-Rechte (z.B. für 'ADMIN' -> ['ENTRANCE', 'PUSHOVER'])
+            if (effectiveRole && ROLES[effectiveRole]) {
+                userPermissions = [...(ROLES[effectiveRole].permissions || [])];
+            }
 
-         let currentAssignedAdminRoleId = null; // Zurücksetzen für UI
+            // 2. PRÜFE AUF ADMIN: Wenn Rolle ADMIN ist, lade die Admin-Rollen-Rechte
+            if (effectiveRole === 'ADMIN' && user.assignedAdminRoleId && ADMIN_ROLES[user.assignedAdminRoleId]) {
+                currentAssignedAdminRoleId = user.assignedAdminRoleId;
+                
+                // Nimm die Admin-Rechte (z.B. 'canSeeUsers')
+                const adminPerms = ADMIN_ROLES[currentAssignedAdminRoleId].permissions || {};
+                const permKeys = Object.keys(adminPerms).filter(
+                    key => key !== 'approvalRequired' && adminPerms[key] === true
+                );
+                
+                // WICHTIG: Füge sie zu den Basis-Rechten hinzu (oder überschreibe sie, je nach Design)
+                // Wir überschreiben sie, da die Admin-Rolle Vorrang hat.
+                userPermissions = permKeys; 
+                console.log(`Admin-Rollen-Rechte geladen: ${permKeys.length} Rechte.`);
+            }
+            // 3. PRÜFE AUF SYSADMIN
+            else if (effectiveRole === 'SYSTEMADMIN') {
+                userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
+                console.log("Systemadmin-Rechte geladen.");
+            }
+        } 
+        // 4. PRÜFE AUF INDIVIDUELL (Das hat vorher gefehlt!)
+        else if (user.permissionType === 'individual') {
+            userPermissions = [...(user.customPermissions || [])];
+            console.log(`Lade INDIVIDUELLE Rechte: ${userPermissions.length} Rechte.`);
+        }
+        
+        // =================================================================
+        // ENDE DER KORREKTUR
+        // =================================================================
 
-         // Überschreibe/Setze spezielle Rechte für Systemadmin oder lese Admin-Rollenzuweisung für UI
-         if (userClaimRole === 'SYSTEMADMIN') {
-             // Feste Rechte für SysAdmin (ggf. anpassen an deine Definition)
-             userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
-         } else if (userClaimRole === 'ADMIN') {
-             // Lese Admin-Rollenzuweisung aus Firestore nur für UI-Zwecke
-             if (userFromFirestore.permissionType === 'role' && userFromFirestore.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[userFromFirestore.assignedAdminRoleId]) {
-                currentAssignedAdminRoleId = userFromFirestore.assignedAdminRoleId;
-             }
-         }
         console.log("Final zugewiesene Berechtigungen:", userPermissions);
 
         // Aktualisiere currentUser Objekt
         Object.keys(currentUser).forEach(key => delete currentUser[key]);
         Object.assign(currentUser, {
-            mode: storedAppUserId, // "MARKUS" oder "JASMIN"
+            mode: storedAppUserId,
             displayName: userFromFirestore.name,
-            role: userClaimRole, // WICHTIG: Rolle aus dem Claim!
+            role: effectiveRole, // WICHTIG: Rolle aus DB/Claim!
             permissions: userPermissions,
             // Felder aus Firestore für die UI übernehmen
             permissionType: userFromFirestore.permissionType,
@@ -107,13 +148,12 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         console.log("currentUser Objekt aktualisiert:", currentUser);
         updateUIForMode(); // UI basierend auf dem aktualisierten currentUser Objekt anpassen
 
-        // Navigation prüfen (falls User auf Admin-Seite ist, aber keine Admin-Rechte mehr hat)
+        // Navigation prüfen (bleibt gleich)
          const activeView = document.querySelector('.view.active');
-         // Prüfe den Claim für Admin-Zugriff
-         const isAdminOrSysAdminByClaim = userClaimRole === 'ADMIN' || userClaimRole === 'SYSTEMADMIN';
-         if (activeView && activeView.id === 'adminView' && !isAdminOrSysAdminByClaim) {
+         const isAdminOrSysAdmin = effectiveRole === 'ADMIN' || effectiveRole === 'SYSTEMADMIN';
+         if (activeView && activeView.id === 'adminView' && !isAdminOrSysAdmin) {
              alertUser("Ihre Administrator-Rechte wurden entzogen.", "error");
-             navigate('home'); // 'navigate' muss importiert sein
+             navigate('home');
          }
 
     } catch (error) {
