@@ -1797,11 +1797,13 @@ function renderChecklistSettingsView(editListId = null) {
 }
   */
 
+// ERSETZE diese Funktion komplett in checklist.js
+
 function renderChecklistSettingsView(editListId = null) {
   const view = document.getElementById('checklistSettingsView');
   if (!view) return;
 
-  // --- Listener-Marker entfernen ---
+  // --- Listener-Marker entfernen (bleibt gleich) ---
   view.querySelector('#checklist-archive-list-btn')?.removeAttribute('data-listener-attached');
   view.querySelector('#checklist-settings-add-item-btn')?.removeAttribute('data-listener-attached');
   view.querySelector('#checklist-settings-add-text')?.removeAttribute('data-listener-attached');
@@ -1817,35 +1819,38 @@ function renderChecklistSettingsView(editListId = null) {
   view.querySelector('#checklist-save-group-assignment')?.removeAttribute('data-listener-attached');
   const templatesCard = view.querySelector('#card-templates');
   if (templatesCard) templatesCard.removeAttribute('data-primary-listener-attached');
-  delete view.dataset.tabListenersAttached; // Wichtig für die Tabs
-
-  // console.log("renderChecklistSettingsView: Starte Neuaufbau, ALLE Listener-Marker entfernt."); // Debug entfernt
+  delete view.dataset.tabListenersAttached; 
 
   window.currentUser = window.currentUser || { id: null, name: 'Gast', permissions: [] };
   window.adminSettings = window.adminSettings || {};
 
-  // --- FIX 1: listToEditId korrekt bestimmen ---
-  const activeListsObj = CHECKLISTS || {}; // Verwende das globale Objekt
-  const hasLists = Object.keys(activeListsObj).length > 0; // Nur hier definieren
-  const defaultListId = adminSettings.defaultChecklistId || null; // Bleibt unverändert
+  // --- listToEditId korrekt bestimmen (bleibt gleich) ---
+  const activeListsObj = CHECKLISTS || {};
+  const hasLists = Object.keys(activeListsObj).length > 0;
+  const defaultListId = adminSettings.defaultChecklistId || null;
   const validEditListId = (editListId && activeListsObj[editListId]) ? editListId : null;
   let listToEditId = validEditListId || view.dataset.editingListId || (hasLists ? Object.keys(activeListsObj)[0] : null);
-  // Erneut prüfen und ggf. auf null setzen
   if (listToEditId && !activeListsObj[listToEditId]) {
-      listToEditId = hasLists ? Object.keys(activeListsObj)[0] : null; // Fallback zur ersten aktiven oder null
+      listToEditId = hasLists ? Object.keys(activeListsObj)[0] : null;
   }
-  // Explizit null setzen, wenn keine Listen da sind
   if (!hasLists) {
       listToEditId = null;
   }
-  view.dataset.editingListId = listToEditId || ''; // Korrekten Wert im dataset speichern
-  // --- ENDE FIX 1 ---
+  view.dataset.editingListId = listToEditId || '';
 
   const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
+  // === KORREKTUR HIER: 'back-link-container' befüllt ===
   view.innerHTML = `
-    <div class="back-link-container w-full mb-2"></div>
+    <div class="back-link-container w-full mb-2">
+      <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition" data-target="home">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-1"><path d="m15 18-6-6 6-6" /></svg>
+        <span class="text-sm font-semibold">zurück</span>
+      </button>
+      <div class="border-t border-gray-300 mt-2"></div>
+    </div>
     <h2 class="text-2xl font-bold text-gray-800 mb-4">Checklisten‑Einstellungen</h2>
+    
     <div class="mb-6">
       <h3 class="text-sm font-semibold text-gray-500 mb-1 px-1">Verwalten</h3>
       <div id="settings-tabs" class="grid grid-cols-2 sm:grid-cols-4 gap-1 border rounded-lg bg-gray-100 p-1">
@@ -1991,9 +1996,10 @@ function renderChecklistSettingsView(editListId = null) {
       <div id="checklist-items-editor-container" class="space-y-2 mb-4"></div>
     </div>
   `;
+  // === ENDE DER HTML-ÄNDERUNG ===
 
   // --- Alle Hilfsfunktionen und Listener-Registrierungen ---
-  // (Diese bleiben gleich wie in der vorherigen Version)
+  // (Diese bleiben alle gleich)
 
   function buildEditorSwitcherOptions() {
     const groups = Object.values(CHECKLIST_GROUPS || {});
@@ -2071,7 +2077,6 @@ function renderChecklistSettingsView(editListId = null) {
       }
       if(view.dataset.selectedCategoryIdForRender) {
         catGroupSelector.value = view.dataset.selectedCategoryIdForRender;
-        // Wichtig: renderCategoryEditor muss hier aufgerufen werden, NACHDEM der Wert gesetzt wurde
         if (typeof renderCategoryEditor === 'function') {
              renderCategoryEditor(view.dataset.selectedCategoryIdForRender);
         }
@@ -2268,7 +2273,6 @@ function renderChecklistSettingsView(editListId = null) {
     if (container) container.innerHTML = '<p class="text-sm text-center text-gray-500">Keine Listen vorhanden. Bitte erstellen Sie zuerst eine Liste.</p>';
   }
 }
-
 
 function setupCategoryManagementListeners(view) {
     if (!view) return;
