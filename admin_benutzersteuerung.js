@@ -906,7 +906,6 @@ export function toggleNewUserRoleField() {
 }
 
 // KORREKTUR: 'export' muss beibehalten werden (aus vorigem Schritt)
-// KORREKTUR: 'export' muss beibehalten werden (aus vorigem Schritt)
 export function renderAdminUserDetails(userId) {
     const detailsArea = document.getElementById('admin-user-details-area');
     const adminUser = USERS[userId];
@@ -949,9 +948,7 @@ export function renderAdminUserDetails(userId) {
     const canBeEdited = isSysAdmin; // Nur SysAdmin darf Admin-Rechte bearbeiten
 
     // --- Generator-Funktion für Checkboxen (Kurzfassung) ---
-    // =================================================================
-    // BEGINN DEINER KORREKTUR (Layout der Genehmigungs-Checkbox)
-    // =================================================================
+    // (Layout-Korrektur von vorhin ist hier enthalten)
     const generateCheckbox = (permKey, label, isSubItem = false, canBeApproved = false) => {
         const isChecked = perms[permKey] || false;
         const isApprovalChecked = approvalPerms[permKey] || false;
@@ -987,10 +984,6 @@ export function renderAdminUserDetails(userId) {
             </div>
         `;
     };
-    // =================================================================
-    // ENDE DEINER KORREKTUR
-    // =================================================================
-
 
     // --- Generiere Rollen-Optionen ---
     let roleOptionsHTML = Object.values(ADMIN_ROLES)
@@ -1036,14 +1029,12 @@ export function renderAdminUserDetails(userId) {
                 </div>
                  <div class="p-3 border rounded-lg bg-white">
                     <h5 class="font-semibold text-sm mb-2 text-gray-600">Aktionen und Genehmigung</h5>
-                    
                     <div class="grid grid-cols-1 gap-4 text-sm"> 
                         ${generateCheckbox('canCreateUser', 'Benutzer anlegen', false, true)}
                         ${generateCheckbox('canDeleteUser', 'Benutzer löschen', false, true)}
                         ${generateCheckbox('canRenameUser', 'Benutzer umbenennen', false, true)}
                         ${generateCheckbox('canToggleUserActive', 'Benutzer sperren/entsperren', false, true)}
                         ${generateCheckbox('canChangeUserPermissionType', 'Berechtigungs-Typ ändern', false, true)}
-                        
                         <div class="pt-2 border-t mt-2">
                            ${generateCheckbox('canEditUserRoles', 'Darf Benutzer-Rollen bearbeiten')}
                            ${generateCheckbox('canSeeSysadminLogs', 'Darf Sysadmin-Einträge sehen')}
@@ -1109,12 +1100,64 @@ export function renderAdminUserDetails(userId) {
          });
     });
 
-    // Wichtig: Beim initialen Laden die Abhängigkeiten setzen
+    // Wichtig: Beim initialen Laden die Abhängigkeiten setzen (für Hauptmenü -> Push etc.)
     const individualArea = detailsArea.querySelector('.individual-perms-area:not(.hidden)');
     if (individualArea && typeof setupPermissionDependencies === 'function') {
         setupPermissionDependencies(individualArea);
     }
     
+    // =================================================================
+    // BEGINN DEINER NEUEN KORREKTUR (Abhängigkeit für Genehmigung)
+    // =================================================================
+    const permsArea = detailsArea.querySelector('#admin-individual-perms-area');
+    if (permsArea) {
+        // Finde alle Haupt-Checkboxen
+        permsArea.querySelectorAll('.admin-perm-cb').forEach(mainCb => {
+            // Finde den gemeinsamen <div>-Wrapper (den wir in generateCheckbox erstellt haben)
+            const wrapper = mainCb.closest('div'); 
+            if (!wrapper) return;
+            
+            // Finde die zugehörige Genehmigungs-Checkbox in DIESEM Wrapper
+            const approvalCb = wrapper.querySelector('.approval-cb');
+            if (!approvalCb) {
+                // Diese Checkbox hat keine Genehmigungs-Option (z.B. "Passwörter"),
+                // also brauchen wir hier keinen Spion.
+                return; 
+            }
+
+            // Die Funktion, die den Zustand der Genehmigungs-Checkbox aktualisiert
+            const updateApprovalCbState = () => {
+                const isMainChecked = mainCb.checked;
+                
+                // Wir prüfen, ob der Bearbeitungsmodus (canBeEdited = SysAdmin) überhaupt aktiv ist
+                if (canBeEdited) { 
+                    // Mache die Genehmigungs-Checkbox klickbar (disabled=false) ODER gesperrt (disabled=true)
+                    approvalCb.disabled = !isMainChecked;
+                }
+
+                // Wenn die Haupt-Checkbox AUS ist...
+                if (!isMainChecked) {
+                    // ...entfernen wir auch den Haken bei der Genehmigung.
+                    approvalCb.checked = false;
+                    
+                    // Wir tun so, als hätte der Benutzer die Genehmigungs-Checkbox geändert,
+                    // damit der "Speichern"-Button die Änderung bemerkt.
+                    approvalCb.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            };
+
+            // Hänge den Spion (Listener) an die Haupt-Checkbox
+            mainCb.addEventListener('change', updateApprovalCbState);
+            
+            // Führe die Funktion EINMAL beim Laden aus,
+            // um den korrekten Start-Zustand herzustellen.
+            updateApprovalCbState(); 
+        });
+    }
+    // =================================================================
+    // ENDE DEINER NEUEN KORREKTUR
+    // =================================================================
+
     // --- NEU: Listener für den Speichern-Button hinzufügen (Löst das Problem!) ---
 const saveButton = detailsArea.querySelector('.save-admin-perms-button');
     if (saveButton && !saveButton.dataset.listenerAttached) {
