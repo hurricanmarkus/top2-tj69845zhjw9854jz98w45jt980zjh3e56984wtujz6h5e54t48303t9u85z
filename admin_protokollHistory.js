@@ -43,19 +43,14 @@ export async function renderProtocolHistory() {
     // NEU: Berechtigungen des Admins prüfen
     if (currentUser.role === 'ADMIN') {
         let effectiveAdminPerms = {};
-
-        // ================== HIER IST DIE FÜNFTE KORREKTUR ==================
-        // Holen der Admin-Daten direkt aus dem currentUser-Objekt
-        const adminType = currentUser.adminPermissionType || 'role';
-        
-        if (adminType === 'role' && currentUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[currentUser.assignedAdminRoleId]) { 
-            effectiveAdminPerms = ADMIN_ROLES[currentUser.assignedAdminRoleId].permissions || {};
-        } else {
-            effectiveAdminPerms = currentUser.adminPermissions || {};
+        const adminUser = USERS[currentUser.mode];
+        if (adminUser) {
+            if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
+                effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
+            } else {
+                effectiveAdminPerms = adminUser.adminPermissions || {};
+            }
         }
-        // ================== ENDE DER FÜNFTEN KORREKTUR ==================
-
-
         // Wenn der Admin nicht die Berechtigung hat, Sysadmin-Logs zu sehen, filtern
         if (!effectiveAdminPerms.canSeeSysadminLogs) {
             // Filter: exclude SYSTEMADMIN entries

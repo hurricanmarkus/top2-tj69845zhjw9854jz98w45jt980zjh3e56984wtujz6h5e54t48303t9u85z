@@ -1,6 +1,7 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 //
 import { onSnapshot, query, orderBy, getDocs, addDoc, doc, updateDoc, writeBatch, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { roleChangeRequestsCollectionRef, adminSectionsState, approvalRequestsCollectionRef, usersCollectionRef, db, ROLES, USERS, currentUser } from './haupteingang.js';// ENDE-ZIKA //
+import { roleChangeRequestsCollectionRef, adminSectionsState, approvalRequestsCollectionRef, usersCollectionRef, db, ROLES } from './haupteingang.js';
+// ENDE-ZIKA //
 
 export async function createApprovalRequest(type, userId, details = {}) {
     try {
