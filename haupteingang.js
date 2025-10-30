@@ -142,6 +142,11 @@ export const USER_COLORS = {
 
 window.onload = function () {
 
+    // =================================================================
+    // KORREKTUR: Alle Zuweisungen MÜSSEN an den Anfang.
+    // =================================================================
+
+    // Zuerst alle Elemente holen und globalen Variablen zuweisen
     modalUserButtons = document.getElementById('modalUserButtons');
     const distributionList = document.getElementById('distribution-list');
     const appHeader = document.getElementById('appHeader');
@@ -156,7 +161,6 @@ window.onload = function () {
     const adminRightsSection = document.getElementById('adminRightsSection');
     adminRightsToggle = document.getElementById('adminRightsToggle');
     submitAdminKeyButton = document.getElementById('submitAdminKeyButton');
-    // console.log("Wert von submitAdminKeyButton IN window.onload:", submitAdminKeyButton); // Logging entfernt
     const adminRightsArea = document.getElementById('adminRightsArea');
     const adminRightsToggleIcon = document.getElementById('adminRightsToggleIcon');
     const roleManagementSection = document.getElementById('roleManagementSection');
@@ -186,8 +190,13 @@ window.onload = function () {
     const mainFunctionsToggleIcon = document.getElementById('mainFunctionsToggleIcon');
     const notrufView = document.getElementById('notrufSettingsView');
 
-fullScreenLoader = document.getElementById('fullScreenLoader');
+    // WICHTIG: Die neuen Loader-Variablen (von Problem 1)
+    fullScreenLoader = document.getElementById('fullScreenLoader');
     loaderText = document.getElementById('loaderText');
+
+    // =================================================================
+    // Erst DANACH die Event Listener und Initialisierungen
+    // =================================================================
 
     const closeDeletedModalBtn = document.getElementById('closeDeletedListsModal');
     if (closeDeletedModalBtn) {
@@ -196,8 +205,10 @@ fullScreenLoader = document.getElementById('fullScreenLoader');
         });
     }
 
+    // Diese Reihenfolge ist jetzt sicher:
     setupEventListeners();
     initializeFirebase();
+    
     if ('serviceWorker' in navigator) {
         try {
             navigator.serviceWorker.register('/sw.js');
