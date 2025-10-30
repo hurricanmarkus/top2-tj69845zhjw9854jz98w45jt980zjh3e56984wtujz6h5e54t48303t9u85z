@@ -1,7 +1,7 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 //
 // KORREKTUR: Fehlende Imports hinzugefügt
 import { onSnapshot, query, orderBy, getDocs, addDoc, doc, updateDoc, writeBatch, getDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { roleChangeRequestsCollectionRef, adminSectionsState, approvalRequestsCollectionRef, usersCollectionRef, db, ROLES, USERS, currentUser, alertUser, localUpdateInProgress } from './haupteingang.js';
+import { roleChangeRequestsCollectionRef, adminSectionsState, approvalRequestsCollectionRef, usersCollectionRef, db, ROLES, USERS, currentUser, alertUser, setLocalUpdateInProgress } from './haupteingang.js';
 import { renderUserManagement } from './admin_benutzersteuerung.js'; // KORREKTUR: Fehlender Import
 import { rememberAdminScroll } from './admin_adminfunktionenHome.js'; // KORREKTUR: Fehlender Import
 // ENDE-ZIKA //
@@ -30,12 +30,19 @@ export async function createApprovalRequest(type, userId, details = {}) {
         await addDoc(roleChangeRequestsCollectionRef, requestData);
         alertUser('Ihre Anfrage wurde zur Genehmigung eingereicht.', 'success');
         
-        // KORREKTUR: Diese Funktionen wurden importiert und können jetzt aufgerufen werden
-        localUpdateInProgress = true; 
+        // =================================================================
+        // BEGINN DER KORREKTUR (Zeile 34)
+        // =================================================================
+        // Wir rufen die neue Helfer-Funktion auf, statt die Konstante zu überschreiben
+        setLocalUpdateInProgress(true); 
+        // =================================================================
+        // ENDE DER KORREKTUR
+        // =================================================================
+        
         rememberAdminScroll();
         renderUserManagement();
 
-    } catch (error) {
+    } catch (error) { // Dies ist Zeile 39
         console.error("Error creating approval request:", error);
         alertUser('Fehler beim Erstellen der Anfrage.', 'error');
     }
