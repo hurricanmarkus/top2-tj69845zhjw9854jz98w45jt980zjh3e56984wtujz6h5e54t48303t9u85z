@@ -6,7 +6,7 @@ import { renderModalUserButtons } from './admin_benutzersteuerung.js';
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
 export async function checkCurrentUserValidity() { // Funktion ist async
-    console.log("--- Prüfe Benutzerberechtigungen (V5 - Mit Live-Sperre) ---");
+    console.log("--- Prüfe Benutzerberechtigungen (V6 - Getrennte Rechte) ---");
 
     // Prüfe zuerst, ob 'auth' initialisiert wurde
     if (!auth) {
@@ -30,15 +30,12 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         // Stelle sicher, dass currentUser auf Gast gesetzt ist, falls noch nicht geschehen
         else if (currentUser.mode !== GUEST_MODE) {
              Object.keys(currentUser).forEach(key => delete currentUser[key]);
-             Object.assign(currentUser, { displayName: GUEST_MODE, mode: GUEST_MODE, role: 'GUEST', permissions: [] });
+             Object.assign(currentUser, { displayName: GUEST_MODE, mode: GUEST_MODE, role: 'GUEST', permissions: [], adminPermissions: {} });
         }
         updateUIForMode();
         return;
     }
 
-    // =================================================================
-    // BEGINN DER KORREKTUR (Live-Sperre erzwingen)
-    // =================================================================
 
     // Fall 2: Firebase User ist da, aber kein App User ausgewählt (oder ungültig/nicht gefunden)
     if (!storedAppUserId || !userFromFirestore) {
@@ -56,70 +53,94 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     if (!userFromFirestore.isActive) {
         console.warn("checkCurrentUserValidity: Benutzer ist als INAKTIV (gesperrt) markiert. Erzwinge Logout.");
         
-        // =================================================================
-        // HIER IST DEINE GEWÜNSCHTE ÄNDERUNG:
         // Wir rufen switchToGuestMode jetzt mit dem dritten Parameter auf: 'error_long'
-        // 1. Parameter (true): Zeige eine Benachrichtigung.
-        // 2. Parameter (string): Die Nachricht, die angezeigt wird.
-        // 3. Parameter ('error_long'): Der Typ, der (in alertUser) für Rote Farbe und 9 Sekunden Dauer sorgt.
         switchToGuestMode(true, "Ihr Konto wurde von einem Administrator gesperrt.", 'error_long');
-        // =================================================================
         
         // updateUIForMode() wird bereits von switchToGuestMode aufgerufen.
         return; // WICHTIG: Hier abbrechen.
     }
     
-    // =================================================================
-    // ENDE DER KORREKTUR
-    // =================================================================
-
 
     // Fall 3: Firebase User ist da UND App User ("JASMIN") ist ausgewählt/gültig/AKTIV
     console.log(`checkCurrentUserValidity: Firebase User ${currentAuthUser.uid} und App User ${storedAppUserId} vorhanden.`);
     try {
         
         // Token holen, um sicherzustellen, dass die Sitzung gültig ist
-        const idTokenResult = await currentAuthUser.getIdTokenResult(true);
+        const idTokenResult = await currentAuthUser.getIdToken(true);
         if (!idTokenResult) {
             throw new Error("Konnte kein gültiges ID Token abrufen.");
         }
         
         // Wir vertrauen ab hier der "Live-Datenbank" (Firestore)
         const user = userFromFirestore; // Das ist die "Source of Truth"
+        // DANK SCHRITT 1 ist 'user.role' jetzt 'ADMIN',
+        // auch wenn 'permissionType' = 'individual' ist.
         const effectiveRole = user.role; 
 
-        console.log(`Effektiver Berechtigungs-Typ (aus DB): ${user.permissionType}`);
+        console.log(`Effektiver Benutzer-Typ (aus DB): ${user.permissionType}`);
+        console.log(`Effektiver Admin-Typ (aus DB): ${user.adminPermissionType}`);
         
-        let userPermissions = [];
-        let currentAssignedAdminRoleId = null;
-        
-        // Logik zur Rechte-Ermittlung (bleibt gleich wie in V4)
+        // =================================================================
+        // BEGINN DER KORREKTUR (Rechte-Trennung)
+        // =================================================================
+
+        let userPermissions = []; // Für Eingang, Push, Checkliste...
+        let adminPermissions = {}; // Für Passwörter, Benutzer sehen...
+        let currentAssignedAdminRoleId = null; // Nur für Admin-Rollen
+
+        // --- TEIL 1: Lade BENUTZER-Rechte (Eingang, Push...) ---
+        // Diese Logik basiert auf 'permissionType'
         if (user.permissionType === 'role') {
-            console.log(`Lade Rechte für ROLLE: ${effectiveRole}`);
+            console.log(`Lade BENUTZER-Rechte für ROLLE: ${effectiveRole}`);
             if (effectiveRole && ROLES[effectiveRole]) {
                 userPermissions = [...(ROLES[effectiveRole].permissions || [])];
             }
-
-            if (effectiveRole === 'ADMIN' && user.assignedAdminRoleId && ADMIN_ROLES[user.assignedAdminRoleId]) {
-                currentAssignedAdminRoleId = user.assignedAdminRoleId;
-                const adminPerms = ADMIN_ROLES[currentAssignedAdminRoleId].permissions || {};
-                const permKeys = Object.keys(adminPerms).filter(
-                    key => key !== 'approvalRequired' && adminPerms[key] === true
-                );
-                userPermissions = permKeys; 
-                console.log(`Admin-Rollen-Rechte geladen: ${permKeys.length} Rechte.`);
-            }
-            else if (effectiveRole === 'SYSTEMADMIN') {
-                userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
-                console.log("Systemadmin-Rechte geladen.");
-            }
         } 
         else if (user.permissionType === 'individual') {
+            console.log(`Lade INDIVIDUELLE BENUTZER-Rechte.`);
             userPermissions = [...(user.customPermissions || [])];
-            console.log(`Lade INDIVIDUELLE Rechte: ${userPermissions.length} Rechte.`);
         }
         
-        console.log("Final zugewiesene Berechtigungen:", userPermissions);
+        // Sonderfall: SysAdmin bekommt immer ALLE Benutzer-Rechte
+        if (effectiveRole === 'SYSTEMADMIN') {
+            userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
+            console.log("Systemadmin BENUTZER-Rechte geladen.");
+        }
+
+        // --- TEIL 2: Lade ADMIN-Rechte (Passwörter, Benutzer...) ---
+        // Diese Logik läuft NUR, wenn der User Admin oder SysAdmin ist,
+        // EGAL was 'permissionType' (für Benutzer) ist.
+        if (effectiveRole === 'ADMIN') {
+            // Prüfe den *Admin-Typ* ('adminPermissionType')
+            if (user.adminPermissionType === 'role' && user.assignedAdminRoleId && ADMIN_ROLES[user.assignedAdminRoleId]) {
+                // Admin-Rechte kommen von einer Admin-Rolle
+                console.log(`Lade ADMIN-Rechte von ROLLE: ${user.assignedAdminRoleId}`);
+                adminPermissions = ADMIN_ROLES[user.assignedAdminRoleId].permissions || {};
+                currentAssignedAdminRoleId = user.assignedAdminRoleId;
+            } else {
+                // Admin-Rechte kommen individuell (oder als Fallback)
+                console.log(`Lade INDIVIDUELLE ADMIN-Rechte.`);
+                adminPermissions = user.adminPermissions || {};
+            }
+        } 
+        else if (effectiveRole === 'SYSTEMADMIN') {
+            // SysAdmin bekommt immer ALLE Admin-Rechte
+             console.log("Systemadmin ADMIN-Rechte geladen.");
+             adminPermissions = {
+                canSeePasswords: true, canSeeUsers: true, canSeeApprovals: true, canViewLogs: true,
+                canSeeRoleManagement: true, canSeeMainFunctions: true, canEditUserRoles: true,
+                canCreateUser: true, canDeleteUser: true, canRenameUser: true,
+                canToggleUserActive: true, canChangeUserPermissionType: true,
+                canUseMainPush: true, canUseMainEntrance: true, canUseMainChecklist: true,
+                canSeeSysadminLogs: true
+            };
+        }
+        // =================================================================
+        // ENDE DER KORREKTUR
+        // =================================================================
+        
+        console.log("Final zugewiesene BENUTZER-Berechtigungen:", userPermissions);
+        console.log("Final zugewiesene ADMIN-Berechtigungen:", Object.keys(adminPermissions));
 
         // Aktualisiere currentUser Objekt
         Object.keys(currentUser).forEach(key => delete currentUser[key]);
@@ -127,8 +148,10 @@ export async function checkCurrentUserValidity() { // Funktion ist async
             mode: storedAppUserId,
             displayName: userFromFirestore.name,
             role: effectiveRole, 
-            permissions: userPermissions,
+            permissions: userPermissions, // BENUTZER-Rechte
+            adminPermissions: adminPermissions, // ADMIN-Rechte (NEU!)
             permissionType: userFromFirestore.permissionType,
+            adminPermissionType: userFromFirestore.adminPermissionType, // (NEU!)
             displayRole: userFromFirestore.displayRole,
             assignedAdminRoleId: currentAssignedAdminRoleId
         });
@@ -172,45 +195,28 @@ export function switchToGuestMode(showNotification = true, message = "Abgemeldet
 }
 
 // Diese Funktion gehört in log-InOut.js
+// Diese Funktion gehört in log-InOut.js
 export function updateUIForMode() {
     // Ermittle Admin-Status und effektive Admin-Rechte
     const isAdmin = currentUser.role === 'ADMIN';
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
-    let effectiveAdminPerms = {};
-    if (isAdmin && USERS && USERS[currentUser.mode]) { // Zusätzliche Prüfung für USERS
-        const adminUser = USERS[currentUser.mode];
-        if (adminUser) {
-            
-            // =================================================================
-            // BEGINN DER KORREKTUR
-            // =================================================================
-            // HIER war der Fehler. Es muss 'adminPermissionType' heißen,
-            // nicht 'permissionType'.
-            if (adminUser.adminPermissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) { // Zusätzliche Prüfung für ADMIN_ROLES
-            // =================================================================
-            // ENDE DER KORREKTUR
-            // =================================================================
 
-                effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
-            } else {
-                effectiveAdminPerms = adminUser.adminPermissions || {};
-            }
-        }
-    } else if (isSysAdmin) {
-        // SysAdmin hat implizit alle Rechte
-        effectiveAdminPerms = {
-            canSeePasswords: true, canSeeUsers: true, canSeeApprovals: true, canViewLogs: true,
-            canSeeRoleManagement: true, canSeeMainFunctions: true, canEditUserRoles: true,
-            canCreateUser: true, canDeleteUser: true, canRenameUser: true,
-            canToggleUserActive: true, canChangeUserPermissionType: true,
-            canUseMainPush: true, canUseMainEntrance: true, canUseMainChecklist: true,
-            canSeeSysadminLogs: true
-        };
-    }
+    // =================================================================
+    // BEGINN DER KORREKTUR
+    // =================================================================
+    // Wir berechnen 'effectiveAdminPerms' nicht mehr neu.
+    // Wir holen sie direkt aus dem 'currentUser'-Objekt,
+    // das von 'checkCurrentUserValidity' (Schritt 2) korrekt befüllt wurde.
+    let effectiveAdminPerms = currentUser.adminPermissions || {};
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
+
 
     // Zeige/Verstecke Haupt-Funktionskarten basierend auf Benutzerrechten
     document.querySelectorAll('[data-permission]').forEach(card => {
         const permission = card.dataset.permission;
+        // WICHTIG: Dies prüft 'currentUser.permissions' (BENUTZER-Rechte), nicht Admin-Rechte. Das ist korrekt.
         const hasPermission = currentUser.permissions?.includes(permission); // Sicherer Zugriff auf permissions
         if (permission === 'CHECKLIST') {
             card.style.display = hasPermission ? 'block' : 'none';
@@ -230,7 +236,7 @@ export function updateUIForMode() {
     if (adminButton) adminButton.style.display = 'none';
 
     // Prüfe die Bedingungen
-    const isAdminRole = currentUser.role === 'ADMIN';     // Echte Rolle
+    const isAdminRole = currentUser.role === 'ADMIN';     // Echte Rolle (Dank Schritt 1 jetzt korrekt)
     const isIndividualAdminDisplay = currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN'; // Individuell mit Admin-Anzeige
     const showAdminButton = isSysAdmin || isAdminRole || isIndividualAdminDisplay; // Zeige Button, wenn eine der Bedingungen zutrifft
 
@@ -250,7 +256,10 @@ export function updateUIForMode() {
 
         // Einstellungs-Button anzeigen (Bedingung bleibt wie vorher: eingeloggt, aber kein Admin/SysAdmin)
         // ODER wenn Admin/Sysadmin KEINE Passwort-Rechte hat (selten, aber möglich)
+        
+        // HIER: Nutze die 'effectiveAdminPerms', die wir oben geladen haben.
         const canSeePasswords = isSysAdmin || (isAdminRole && effectiveAdminPerms.canSeePasswords);
+        
         if (currentUser.mode !== GUEST_MODE && !showAdminButton && settingsButton) { // Zeige nur an, wenn KEIN Admin-Button angezeigt wird
             settingsButton.style.display = 'block';
             settingsButton.className = 'bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-lg shadow-lg hover:bg-gray-700 transition z-10'; // Standard-Styling
@@ -273,10 +282,12 @@ export function updateUIForMode() {
     // Zeige/Verstecke Checklist-Einstellungskarte
     const checklistSettingsCard = document.getElementById('checklistSettingsCard');
     if (checklistSettingsCard) {
+        // Prüft BENUTZER-Rechte. Das ist korrekt.
         checklistSettingsCard.style.display = currentUser.permissions?.includes('CHECKLIST_SETTINGS') ? 'flex' : 'none'; // Sicherer Zugriff
     }
 
     // --- Sicherer Zugriff auf Admin-Sektionen ---
+    // HIER: Nutze die 'effectiveAdminPerms', die wir oben geladen haben.
     const adminRightsSectionEl = document.getElementById('adminRightsSection');
     if (adminRightsSectionEl) adminRightsSectionEl.style.display = isSysAdmin ? 'block' : 'none';
 
@@ -318,6 +329,7 @@ export function updateUIForMode() {
 
     if (adminView?.classList.contains('active') && noAdminPermissionsPrompt) { // Nur ausführen, wenn Admin-Seite aktiv ist
         // Prüfe, ob IRGENDWELCHE effektiven Admin-Rechte vorhanden sind
+        // HIER: Nutze die 'effectiveAdminPerms', die wir oben geladen haben.
         const hasAnyPermission = isSysAdmin || Object.values(effectiveAdminPerms).some(perm => perm === true);
 
         // Zeige die Meldung, wenn der Benutzer Admin-Zugriff haben SOLLTE (showAdminButton ist true),
@@ -377,6 +389,7 @@ if (user) {
             const permissionType = user.permissionType || 'role'; 
             
             // Bestimme die effektive Rolle für die ANZEIGE
+            // (Dank Schritt 1 ist actualRole jetzt korrekt)
             const effectiveDisplayRoleId = (permissionType === 'individual' && displayRole) ? displayRole : actualRole;
             const roleObject = ROLES[effectiveDisplayRoleId] || ROLES['NO_RIGHTS'];
 

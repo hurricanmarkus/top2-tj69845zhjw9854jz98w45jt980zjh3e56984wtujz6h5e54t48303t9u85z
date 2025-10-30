@@ -751,15 +751,37 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                     // Admin-Rechte Felder (werden nicht angefasst)
                 };
 
-            } else { // type === 'individual' oder 'not_registered'
+            } else { // type === 'individual'
                 const customPermissions = Array.from(permContainer.querySelectorAll('.custom-perm-checkbox:checked')).map(cb => cb.dataset.perm);
                 const displayRoleSelect = permContainer.querySelector('.display-role-select');
                 if (!displayRoleSelect) { console.error(`[CLICK] Konnte Display-Rollen-Select für User ${userId} nicht finden!`); return; }
                 const selectedDisplayRole = displayRoleSelect.value || 'NO_RIGHTS'; 
                 
+                
+                // =================================================================
+                // BEGINN DER KORREKTUR (Das ist dein Hauptfehler)
+                // =================================================================
+                // Wir bestimmen die *echte* Rolle basierend auf der *angezeigten* Rolle.
+                let newActualRole = null;
+                if (selectedDisplayRole === 'ADMIN') {
+                    newActualRole = 'ADMIN'; // Sie ist jetzt OFFIZIELL Admin
+                } else if (selectedDisplayRole === 'SYSTEMADMIN') {
+                    // (Sicherheitsnetz, falls SysAdmin in der Liste auftaucht)
+                    newActualRole = 'SYSTEMADMIN'; 
+                } else if (selectedDisplayRole === 'NO_RIGHTS') {
+                    newActualRole = 'NO_RIGHTS'; //
+                } else {
+                    // Wenn 'Angezeigter Status' = 'Angemeldet',
+                    // ist die *echte* Rolle auch 'ANGEMELDET'
+                    newActualRole = selectedDisplayRole; // z.B. 'ANGEMELDET'
+                }
+                // =================================================================
+                // ENDE DER KORREKTUR
+                // =================================================================
+
                 updateData = {
                     ...updateData, 
-                    role: null, // FIX 1: Hauptrolle MUSS NULL sein
+                    role: newActualRole, // HIER: Setzt die korrekte *echte* Rolle
                     customPermissions: customPermissions, // Custom Permissions speichern
                     displayRole: selectedDisplayRole !== 'NO_RIGHTS' ? selectedDisplayRole : null,
                     // Admin-Rechte Felder (werden nicht angefasst)
