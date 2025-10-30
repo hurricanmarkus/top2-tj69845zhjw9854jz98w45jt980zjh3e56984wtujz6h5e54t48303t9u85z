@@ -5,10 +5,8 @@ import { renderModalUserButtons } from './admin_benutzersteuerung.js';
 // ENDE-ZIKA //
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
-// ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
-// ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
 export async function checkCurrentUserValidity() { // Funktion ist async
-    console.log("--- Prüfe Benutzerberechtigungen (V4 - Live-DB hat Vorrang) ---");
+    console.log("--- Prüfe Benutzerberechtigungen (V5 - Mit Live-Sperre) ---");
 
     // Prüfe zuerst, ob 'auth' initialisiert wurde
     if (!auth) {
@@ -38,46 +36,51 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         return;
     }
 
-    // Fall 2: Firebase User ist da, aber kein App User ausgewählt (oder ungültig/nicht gefunden) -> Als Gast behandeln
-    if (!storedAppUserId || !userFromFirestore || !userFromFirestore.isActive) {
-        console.log("checkCurrentUserValidity: Firebase User vorhanden, aber kein gültiger App User im Speicher oder User in Firestore nicht gefunden/inaktiv.");
+    // =================================================================
+    // BEGINN DER KORREKTUR (Live-Sperre erzwingen)
+    // =================================================================
+
+    // Fall 2: Firebase User ist da, aber kein App User ausgewählt (oder ungültig/nicht gefunden)
+    if (!storedAppUserId || !userFromFirestore) {
+        console.log("checkCurrentUserValidity: Firebase User vorhanden, aber kein gültiger App User im Speicher oder User in Firestore nicht gefunden.");
         if (currentUser.mode !== GUEST_MODE) {
              console.log("Wechsle zum Gastmodus, da App User ungültig/fehlt.");
-             switchToGuestMode(storedAppUserId ? true : false, storedAppUserId ? "Ihr Profil ist nicht mehr gültig oder wurde deaktiviert." : undefined);
+             // Hier keine Benachrichtigung, da der User wahrscheinlich nur die Seite geladen hat, ohne eingeloggt zu sein
+             switchToGuestMode(false); 
         }
         updateUIForMode();
         return;
     }
 
-    // Fall 3: Firebase User ist da UND App User ("JASMIN") ist ausgewählt/gültig
+    // NEU: Fall 2.5: User ist gefunden, ABER als 'inaktiv' (gesperrt) markiert.
+    if (!userFromFirestore.isActive) {
+        console.warn("checkCurrentUserValidity: Benutzer ist als INAKTIV (gesperrt) markiert. Erzwinge Logout.");
+        
+        // Wir rufen switchToGuestMode mit der spezifischen Sperr-Nachricht auf.
+        // Das ist die "Live"-Logout-Logik, die du wolltest.
+        switchToGuestMode(true, "Ihr Konto wurde von einem Administrator gesperrt.");
+        
+        // updateUIForMode() wird bereits von switchToGuestMode aufgerufen.
+        return; // WICHTIG: Hier abbrechen.
+    }
+    
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
+
+
+    // Fall 3: Firebase User ist da UND App User ("JASMIN") ist ausgewählt/gültig/AKTIV
     console.log(`checkCurrentUserValidity: Firebase User ${currentAuthUser.uid} und App User ${storedAppUserId} vorhanden.`);
     try {
         
-        // WICHTIG: Wir brauchen das Token-Ergebnis (idTokenResult) und den
-        // Claim (userClaimRole) nicht mehr für die Berechtigungs-Logik,
-        // da wir jetzt voll der Datenbank vertrauen.
-        // Wir holen es nur, um sicherzustellen, dass der User noch gültig ist.
+        // Token holen, um sicherzustellen, dass die Sitzung gültig ist
         const idTokenResult = await currentAuthUser.getIdTokenResult(true);
         if (!idTokenResult) {
             throw new Error("Konnte kein gültiges ID Token abrufen.");
         }
         
-        // =================================================================
-        // BEGINN DER KORREKTUR (Logout-Sperre entfernt)
-        // =================================================================
-
-        // ENTFERNT: Die "Sicherheits-Alarm"-Prüfung, die Token und DB verglichen
-        // und den Logout erzwungen hat, wurde entfernt.
-        // if (userFromFirestore.role !== null && userClaimRole !== userFromFirestore.role) {
-        //     ... (LOGOUT-BLOCK ENTFERNT) ...
-        // }
-
-        // AB HIER VERTRAUEN WIR NUR NOCH DER FIRESTORE-DATENBANK
-        // (Genau wie du es wolltest)
-
+        // Wir vertrauen ab hier der "Live-Datenbank" (Firestore)
         const user = userFromFirestore; // Das ist die "Source of Truth"
-        
-        // Wir lesen die Rolle DIREKT aus der Datenbank.
         const effectiveRole = user.role; 
 
         console.log(`Effektiver Berechtigungs-Typ (aus DB): ${user.permissionType}`);
@@ -85,43 +88,32 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         let userPermissions = [];
         let currentAssignedAdminRoleId = null;
         
-        // DIESE LOGIK IST JETZT WIEDER DIE "ALTE" (und korrekte) LOGIK
-        
+        // Logik zur Rechte-Ermittlung (bleibt gleich wie in V4)
         if (user.permissionType === 'role') {
             console.log(`Lade Rechte für ROLLE: ${effectiveRole}`);
-            // 1. Lade Basis-Rechte (z.B. für 'ADMIN' -> ['ENTRANCE', 'PUSHOVER'])
             if (effectiveRole && ROLES[effectiveRole]) {
                 userPermissions = [...(ROLES[effectiveRole].permissions || [])];
             }
 
-            // 2. PRÜFE AUF ADMIN: Wenn Rolle ADMIN ist, lade die Admin-Rollen-Rechte
             if (effectiveRole === 'ADMIN' && user.assignedAdminRoleId && ADMIN_ROLES[user.assignedAdminRoleId]) {
                 currentAssignedAdminRoleId = user.assignedAdminRoleId;
-                
                 const adminPerms = ADMIN_ROLES[currentAssignedAdminRoleId].permissions || {};
                 const permKeys = Object.keys(adminPerms).filter(
                     key => key !== 'approvalRequired' && adminPerms[key] === true
                 );
-                
                 userPermissions = permKeys; 
                 console.log(`Admin-Rollen-Rechte geladen: ${permKeys.length} Rechte.`);
             }
-            // 3. PRÜFE AUF SYSADMIN
             else if (effectiveRole === 'SYSTEMADMIN') {
                 userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
                 console.log("Systemadmin-Rechte geladen.");
             }
         } 
-        // 4. PRÜFE AUF INDIVIDUELL (Das ist der Fix für deinen Bug von vorhin)
         else if (user.permissionType === 'individual') {
             userPermissions = [...(user.customPermissions || [])];
             console.log(`Lade INDIVIDUELLE Rechte: ${userPermissions.length} Rechte.`);
         }
         
-        // =================================================================
-        // ENDE DER KORREKTUR
-        // =================================================================
-
         console.log("Final zugewiesene Berechtigungen:", userPermissions);
 
         // Aktualisiere currentUser Objekt
@@ -129,18 +121,17 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         Object.assign(currentUser, {
             mode: storedAppUserId,
             displayName: userFromFirestore.name,
-            role: effectiveRole, // WICHTIG: Rolle aus DB!
+            role: effectiveRole, 
             permissions: userPermissions,
-            // Felder aus Firestore für die UI übernehmen
             permissionType: userFromFirestore.permissionType,
             displayRole: userFromFirestore.displayRole,
             assignedAdminRoleId: currentAssignedAdminRoleId
         });
 
         console.log("currentUser Objekt aktualisiert:", currentUser);
-        updateUIForMode(); // UI basierend auf dem aktualisierten currentUser Objekt anpassen
+        updateUIForMode(); 
 
-        // Navigation prüfen (bleibt gleich)
+        // Navigationsprüfung
          const activeView = document.querySelector('.view.active');
          const isAdminOrSysAdmin = effectiveRole === 'ADMIN' || effectiveRole === 'SYSTEMADMIN';
          if (activeView && activeView.id === 'adminView' && !isAdminOrSysAdmin) {
