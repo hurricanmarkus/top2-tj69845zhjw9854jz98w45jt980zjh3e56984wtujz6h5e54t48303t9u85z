@@ -6,7 +6,7 @@ import { renderModalUserButtons } from './admin_benutzersteuerung.js';
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
 export async function checkCurrentUserValidity() { // Funktion ist async
-    console.log("--- Prüfe Benutzerberechtigungen (V6 - Fix für Admin Live-Update) ---");
+    console.log("--- Prüfe Benutzerberechtigungen (V7 - Fix für Live-Admin-Rechte-Übersetzung) ---");
 
     // Prüfe zuerst, ob 'auth' initialisiert wurde
     if (!auth) {
@@ -66,12 +66,9 @@ export async function checkCurrentUserValidity() { // Funktion ist async
 
         console.log(`Effektiver Berechtigungs-Typ (aus DB): ${user.permissionType}`);
         
-        let userPermissions = [];
+        let userPermissions = []; // Endgültige Rechte (z.B. PUSHOVER)
+        let adminPermissions = {}; // Reine Admin-Rechte (z.B. canSeeUsers)
         let currentAssignedAdminRoleId = null;
-        
-        // =================================================================
-        // BEGINN DER KORREKTUR (Fix für Admin Live-Update)
-        // =================================================================
         
         // --- LOGIK FÜR BENUTZER-RECHTE (z.B. Eingang, Checkliste) ---
         if (user.permissionType === 'role') {
@@ -86,43 +83,58 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         }
 
         // --- ZUSÄTZLICHE LOGIK FÜR ADMIN-RECHTE (z.B. canSeeUsers) ---
-        // (Diese wird jetzt ZUSÄTZLICH zur obigen Logik ausgeführt)
-        
         if (effectiveRole === 'ADMIN') {
-            const adminPermType = user.adminPermissionType || 'role'; // Prüfe Admin-Typ
+            const adminPermType = user.adminPermissionType || 'role'; 
             console.log(`Benutzer ist ADMIN. Lade Admin-Rechte (Typ: ${adminPermType})`);
 
             if (adminPermType === 'role' && user.assignedAdminRoleId && ADMIN_ROLES[user.assignedAdminRoleId]) {
                 // FALL 1: Admin nutzt eine ADMIN-ROLLE
                 currentAssignedAdminRoleId = user.assignedAdminRoleId;
-                const adminPerms = ADMIN_ROLES[currentAssignedAdminRoleId].permissions || {};
-                const permKeys = Object.keys(adminPerms).filter(
-                    key => key !== 'approvalRequired' && adminPerms[key] === true
-                );
-                // Füge die Admin-Rechte zu den normalen Rechten hinzu
-                userPermissions.push(...permKeys); 
-                console.log(`Admin-Rollen-Rechte geladen: ${permKeys.length} Rechte.`);
+                adminPermissions = ADMIN_ROLES[currentAssignedAdminRoleId].permissions || {};
             }
             else if (adminPermType === 'individual') {
-                // FALL 2: Admin nutzt INDIVIDUELLE Admin-Rechte (Das hat gefehlt!)
-                const adminPerms = user.adminPermissions || {};
-                const permKeys = Object.keys(adminPerms).filter(
-                    key => key !== 'approvalRequired' && adminPerms[key] === true
-                );
-                // Füge die individuellen Admin-Rechte zu den normalen Rechten hinzu
-                userPermissions.push(...permKeys);
-                console.log(`Individuelle Admin-Rechte geladen: ${permKeys.length} Rechte.`);
+                // FALL 2: Admin nutzt INDIVIDUELLE Admin-Rechte
+                adminPermissions = user.adminPermissions || {};
             }
+            
+            // Füge die reinen Admin-Rechte (canSeeUsers etc.) zum Array hinzu
+            const permKeys = Object.keys(adminPermissions).filter(
+                key => key !== 'approvalRequired' && adminPermissions[key] === true
+            );
+            userPermissions.push(...permKeys);
         }
         else if (effectiveRole === 'SYSTEMADMIN') {
-            // SysAdmin bekommt einfach alles (Benutzer-Rechte UND Admin-Rechte)
+            // SysAdmin bekommt einfach alles
             userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG', 'canSeePasswords', 'canSeeUsers', 'canSeeApprovals', 'canViewLogs', 'canSeeRoleManagement', 'canSeeMainFunctions', 'canEditUserRoles', 'canCreateUser', 'canDeleteUser', 'canRenameUser', 'canToggleUserActive', 'canChangeUserPermissionType', 'canUseMainPush', 'canUseMainEntrance', 'canUseMainChecklist', 'canSeeSysadminLogs'];
+            // SysAdmin bekommt auch die Admin-Rechte (für die Übersetzung unten)
+            adminPermissions = { canUseMainPush: true, canUseMainEntrance: true, canUseMainChecklist: true };
             console.log("Systemadmin-Rechte (Alle) geladen.");
         }
+
+        // =================================================================
+        // BEGINN DER KORREKTUR (Admin-Rechte in User-Rechte "übersetzen")
+        // =================================================================
+        //
+        // Dieser Block prüft, ob der Admin (oder SysAdmin) die *Admin*-Rechte hat
+        // (z.B. canUseMainPush) und fügt das *Benutzer*-Recht (z.B. PUSHOVER)
+        // zur Liste hinzu, damit die Hauptseite die Karten anzeigen kann.
         
+        if (adminPermissions.canUseMainPush) {
+            userPermissions.push('PUSHOVER');
+        }
+        if (adminPermissions.canUseMainEntrance) {
+            userPermissions.push('ENTRANCE');
+        }
+        if (adminPermissions.canUseMainChecklist) {
+            userPermissions.push('CHECKLIST');
+            // Wenn er Checkliste darf, darf er auch die Unterpunkte (optional)
+            userPermissions.push('CHECKLIST_SWITCH'); 
+            userPermissions.push('CHECKLIST_SETTINGS');
+        }
         // =================================================================
         // ENDE DER KORREKTUR
         // =================================================================
+
 
         console.log("Final zugewiesene Berechtigungen:", userPermissions);
 
@@ -132,7 +144,7 @@ export async function checkCurrentUserValidity() { // Funktion ist async
             mode: storedAppUserId,
             displayName: user.name,
             role: effectiveRole, 
-            permissions: [...new Set(userPermissions)], // Entfernt Duplikate, falls vorhanden
+            permissions: [...new Set(userPermissions)], // Entfernt Duplikate
             permissionType: user.permissionType,
             displayRole: user.displayRole,
             assignedAdminRoleId: currentAssignedAdminRoleId
