@@ -110,8 +110,6 @@ export async function renderApprovalProcess(snapshot = null) {
     approvalProcessArea.innerHTML = '';
 
     if (!snapshot) {
-        // KORREKTUR: Liest von der korrekten Sammlung
-        // ALT: snapshot = await getDocs(query(roleChangeRequestsCollectionRef, orderBy('timestamp', 'desc')));
         snapshot = await getDocs(query(approvalRequestsCollectionRef, orderBy('timestamp', 'desc')));
     }
 
@@ -128,7 +126,6 @@ export async function renderApprovalProcess(snapshot = null) {
         requestCard.className = 'p-3 border rounded-lg';
         let cardBG = 'bg-white', statusText = '', descriptionHTML = '';
         
-        // KORREKTUR: 'failed' Status hinzugefügt (falls der Bot einen Fehler hat)
         let statusActor;
         if (request.status === 'failed') {
              statusActor = ` (BOT-FEHLER: ${request.actionTakenByName || ''})`;
@@ -143,7 +140,7 @@ export async function renderApprovalProcess(snapshot = null) {
             case 'approved': cardBG = 'bg-green-50'; statusText = 'Genehmigt' + statusActor; break;
             case 'denied': cardBG = 'bg-red-50'; statusText = 'Abgelehnt' + statusActor; break;
             case 'withdrawn': cardBG = 'bg-gray-100'; statusText = 'Zurückgezogen' + statusActor; break;
-            case 'failed': cardBG = 'bg-pink-100'; statusText = 'Fehlgeschlagen' + statusActor; break; // KORREKTUR
+            case 'failed': cardBG = 'bg-pink-100'; statusText = 'Fehlgeschlagen'T + statusActor; break; 
             default: cardBG = 'bg-white'; statusText = request.status || '';
         }
         requestCard.classList.add(cardBG);
@@ -169,15 +166,32 @@ export async function renderApprovalProcess(snapshot = null) {
             case 'SET_ADMIN_STATUS':
                 descriptionHTML = `<p>Aktion: <span class="font-medium text-purple-600">Zum Admin befördern</span> für <span class="font-medium">${request.userName}</span></p>`;
                 break;
-            // KORREKTUR: 'CHANGE_PERMISSION_TYPE' Logik angepasst (war 'CHANGE_USER_ROLE')
+            
+            // =================================================================
+            // BEGINN DER KORREKTUR (Problem 3: Anzeige)
+            // =================================================================
             case 'CHANGE_PERMISSION_TYPE':
                 {
-                    let typeDetails = request.details?.type === 'role'
-                        ? `auf "Rolle" (${ROLES?.[request.details?.newRole]?.name || request.details?.newRole || 'Standard'})`
-                        : `auf "Individuell"`;
+                    let typeDetails = '';
+                    if (request.details?.type === 'role') {
+                        // Zeige die neue Rolle
+                        typeDetails = `auf "Rolle" (<span class="font-medium">${ROLES?.[request.details?.newRole]?.name || request.details?.newRole || 'Standard'}</span>)`;
+                    } else {
+                        // Zeige "Individuell" UND die neue Display-Rolle
+                        const displayRoleName = ROLES?.[request.details?.displayRole]?.name;
+                        if (displayRoleName) {
+                            typeDetails = `auf "Individuell" (Angezeigt als: <span class="font-medium">${displayRoleName}</span>)`;
+                        } else {
+                            typeDetails = `auf "Individuell"`;
+                        }
+                    }
                     descriptionHTML = `<p>Aktion: <span class="font-medium">Berechtigungstyp ändern</span> für <span class="font-medium">${request.userName}</span></p><p class="text-sm text-gray-600">Änderung: ${typeDetails}</p>`;
                 }
                 break;
+            // =================================================================
+            // ENDE DER KORREKTUR
+            // =================================================================
+
             case 'CHANGE_CUSTOM_PERMISSIONS':
                 descriptionHTML = `<p>Aktion: <span class="font-medium">Individuelle Rechte ändern</span> für <span class="font-medium">${request.userName}</span></p>`;
                 break;
@@ -187,10 +201,8 @@ export async function renderApprovalProcess(snapshot = null) {
 
         // Buttons für pending requests
         let buttonsHTML = '';
-        // KORREKTUR: SysAdmin darf auch 'failed' Anfragen löschen (aufräumen)
         if (request.status === 'pending' || request.status === 'failed') {
             if (currentUser.role === 'SYSTEMADMIN') {
-                // Bei 'failed' zeigen wir nur Ablehnen (Löschen)
                  if (request.status === 'failed') {
                     buttonsHTML = `
                     <button class="deny-request-btn py-1 px-3 text-sm font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700" data-request-id="${requestId}">Löschen (Fehler)</button>`;
@@ -221,7 +233,6 @@ export async function renderApprovalProcess(snapshot = null) {
     approvalProcessArea.querySelectorAll('.approve-request-btn').forEach(button => button.addEventListener('click', async (e) => {
         const requestId = e.currentTarget.dataset.requestId;
         try {
-            // KORREKTUR: Liest von der korrekten Sammlung
             const requestDoc = await getDoc(doc(approvalRequestsCollectionRef, requestId));
             if (!requestDoc.exists()) return;
             const request = requestDoc.data();
@@ -231,11 +242,9 @@ export async function renderApprovalProcess(snapshot = null) {
             // KORREKTUR: Logik für 'CHANGE_PERMISSION_TYPE' und 'CREATE_USER' (mit 'realName')
             switch (type) {
                 case 'CREATE_USER': {
-                    // NEU: 'realName' wird jetzt auch korrekt übernommen
                     const { name, key, role, isActive, newUserId, realName } = details.userData || {};
                     if (newUserId) {
                          const userData = { name, key, role, isActive, realName: realName || "" };
-                         // Entferne undefined Felder, um Firebase-Fehler zu vermeiden
                          Object.keys(userData).forEach((k) => (userData[k] === undefined && delete userData[k]));
                          batch.set(doc(usersCollectionRef, newUserId), userData);
                     }
@@ -258,7 +267,14 @@ export async function renderApprovalProcess(snapshot = null) {
                     if (details.type === 'role') {
                         updateData = { permissionType: 'role', role: details.newRole, customPermissions: [], displayRole: null };
                     } else {
-                        updateData = { permissionType: 'individual', role: null, customPermissions: details.customPermissions || [], displayRole: details.displayRole || null };
+                        // KORREKTUR: 'role' muss hier basierend auf 'displayRole' gesetzt werden
+                        let newActualRole = null;
+                        if (details.displayRole === 'ADMIN') newActualRole = 'ADMIN';
+                        else if (details.displayRole === 'SYSTEMADMIN') newActualRole = 'SYSTEMADMIN';
+                        else if (details.displayRole === 'NO_RIGHTS') newActualRole = 'NO_RIGHTS';
+                        else newActualRole = details.displayRole; // z.B. ANGEMELDET
+
+                        updateData = { permissionType: 'individual', role: newActualRole, customPermissions: details.customPermissions || [], displayRole: details.displayRole || null };
                     }
                     batch.update(doc(usersCollectionRef, userId), updateData);
                     break;
@@ -266,7 +282,6 @@ export async function renderApprovalProcess(snapshot = null) {
                     batch.update(doc(usersCollectionRef, userId), { customPermissions: details.permissions || [] });
                     break;
             }
-            // KORREKTUR: Schreibt in die korrekte Sammlung
             batch.update(doc(approvalRequestsCollectionRef, requestId), { status: 'approved', actionTakenByName: currentUser.displayName });
             await batch.commit();
             alertUser('Antrag genehmigt!', 'success');
@@ -280,13 +295,11 @@ export async function renderApprovalProcess(snapshot = null) {
     approvalProcessArea.querySelectorAll('.deny-request-btn').forEach(button => button.addEventListener('click', async (e) => {
         const requestId = e.currentTarget.dataset.requestId;
         try {
-            // KORREKTUR: SysAdmin, der eine 'failed' Anfrage löscht, löscht sie.
             const requestDoc = await getDoc(doc(approvalRequestsCollectionRef, requestId));
             if(requestDoc.exists() && requestDoc.data().status === 'failed') {
                  await deleteDoc(doc(approvalRequestsCollectionRef, requestId));
                  alertUser('Fehlgeschlagene Anfrage gelöscht.', 'success');
             } else {
-                 // Normales Ablehnen
                 await updateDoc(doc(approvalRequestsCollectionRef, requestId), { status: 'denied', actionTakenByName: currentUser.displayName });
                 alertUser('Antrag abgelehnt.', 'success');
             }
@@ -300,7 +313,6 @@ export async function renderApprovalProcess(snapshot = null) {
     approvalProcessArea.querySelectorAll('.withdraw-request-btn').forEach(button => button.addEventListener('click', async (e) => {
         const requestId = e.currentTarget.dataset.requestId;
         try {
-            // KORREKTUR: Schreibt in die korrekte Sammlung
             await updateDoc(doc(approvalRequestsCollectionRef, requestId), { status: 'withdrawn', actionTakenByName: currentUser.displayName });
             alertUser('Antrag zurückgezogen.', 'success');
         } catch (error) {

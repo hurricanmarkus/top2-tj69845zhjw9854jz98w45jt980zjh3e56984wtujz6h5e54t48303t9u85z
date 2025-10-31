@@ -271,8 +271,9 @@ export function renderUserKeyList() {
     });
 }
 
-export function renderUserManagement() {
-    // KORREKTUR: 'async' und 'await import' ENTFERNT
+export async function renderUserManagement() {
+    // KORREKTUR: Importiere die neue globale Variable
+    const { PENDING_REQUESTS } = await import('./haupteingang.js');
 
     const userManagementArea = document.getElementById('userManagementArea');
     if (!userManagementArea) {
@@ -401,18 +402,30 @@ export function renderUserManagement() {
 
         const isSelf = userId === currentUser.mode; 
         const isTargetSysAdmin = user.role === 'SYSTEMADMIN'; 
-        const isTargetAdmin = user.role === 'ADMIN'; 
+        
+        // =================================================================
+        // BEGINN DER KORREKTUR (Problem 1: Admin-Sperre)
+        // =================================================================
+        // Prüfe beide Arten von Admin-Status
+        const isTargetAdminRole = user.role === 'ADMIN'; 
+        const isTargetAdminDisplay = (user.permissionType === 'individual' && user.displayRole === 'ADMIN');
+        const isTargetAdmin = isTargetAdminRole || isTargetAdminDisplay; // Ist Admin, egal wie
+        // =================================================================
+        // ENDE DER KORREKTUR
+        // =================================================================
+        
         const isNotRegistered = user.permissionType === 'not_registered';
         
         let canEdit = false; 
         if (isSysAdminEditing) { 
             canEdit = !isSelf && !isTargetSysAdmin; 
         } else if (isAdmin) { 
+            // KORREKTUR: Prüft jetzt auf beide Admin-Typen
             canEdit = !isTargetSysAdmin && !isTargetAdmin; 
         } 
         if (isNotRegistered && (isAdmin || isSysAdminEditing)) canEdit = true;
         
-        // KORREKTUR: Wenn die Karte gesperrt ist, kann nichts geändert werden
+        // Wenn die Karte gesperrt ist (pending), kann nichts geändert werden
         const canToggle = permSet.canToggleUserActive && canEdit && !isSelf && !isNotRegistered && !isLocked; 
         const canDelete = permSet.canDeleteUser && canEdit && !isSelf && !isLocked; 
         const canRename = (permSet.canRenameUser && canEdit && !isLocked) || (isSysAdminEditing && isSelf && !isLocked); 
