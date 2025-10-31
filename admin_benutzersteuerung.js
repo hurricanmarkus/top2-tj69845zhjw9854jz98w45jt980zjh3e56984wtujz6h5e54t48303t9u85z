@@ -5,6 +5,7 @@ import { logAdminAction } from './admin_protokollHistory.js';
 import { setupPermissionDependencies, renderAdminRightsManagement } from './admin_rechteverwaltung.js'; // Oder der richtige Dateiname
 import { renderMainFunctionsAdminArea, restoreAdminScrollIfAny, rememberAdminScroll } from './admin_adminfunktionenHome.js';
 import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode } from './log-InOut.js';
+import { createApprovalRequest } from './admin_genehmigungsprozess.js';
 // ENDE-ZIKA //
 
 
@@ -576,13 +577,13 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             const roleSelect = form.querySelector('#newUserRole');
 
             const name = nameInput.value.trim();
-            const realName = realNameInput.value.trim(); // KORREKTUR: Wert holen
+            const realName = realNameInput.value.trim(); // 
             const type = typeSelect.value;
             const key = keyInput.value; // Kein trim!
 
             // ================== LOGIKÄNDERUNG HIER (START) ==================
             if (!name) return alertUser("Nickname ist ein Pflichtfeld.", "error");
-            if (!realName) return alertUser("Vorname & Nachname ist ein Pflichtfeld.", "error"); // KORREKTUR: Prüfung hinzugefügt
+            if (!realName) return alertUser("Vorname & Nachname ist ein Pflichtfeld.", "error"); // 
             // ================== LOGIKÄNDERUNG HIER (ENDE) ==================
 
             if (type !== 'not_registered' && key.length < 4) return alertUser("Passwort muss mind. 4 Zeichen haben.", "error");
@@ -596,7 +597,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
             const newUserData = {
                 name: name,
-                realName: realName, // KORREKTUR: Gesäuberten Wert verwenden
+                realName: realName, // 
                 key: type !== 'not_registered' ? key : null,
                 permissionType: type,
                 role: type === 'role' ? roleSelect.value : null,
@@ -606,12 +607,56 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 displayRole: null,
                 isActive: true
             };
+            
+            // =================================================================
+            // BEGINN DER KORREKTUR (Das ist die wichtigste Änderung)
+            // =================================================================
             try {
                 setButtonLoading(saveNewUserButton, true);
+                
+                // 1. Finde heraus, ob der aktuelle Admin eine Genehmigung braucht
+                // Wir lesen die Admin-Rechte aus dem currentUser-Objekt
+                const approvalRules = currentUser.adminPermissions?.approvalRequired || {};
+                
+                // Wir prüfen das spezifische Recht "Benutzer anlegen" (das Feld heißt 'createUser' in admin_rollenverwaltung.js [cite: 16, 17])
+                const needsApproval = approvalRules['createUser'] === true; 
+                
+                // Wir setzen das autoApprove-Flag für die Cloud Function
+                // Wenn KEINE Genehmigung nötig ist (!needsApproval), DANN autoApprove = true
+                const autoApproveFlag = !needsApproval; 
+
+                console.log(`[Auto-Approve Check]: NeedsApproval='${needsApproval}', Setting autoApproveFlag='${autoApproveFlag}'`);
+
+                // 2. Erzeuge eine ID für den neuen Benutzer VORAB
                 const newDocRef = doc(usersCollectionRef); 
-                await setDoc(newDocRef, newUserData);
-                await logAdminAction('user_created', `Neuen Benutzer angelegt: '${name}' (ID: ${newDocRef.id}).`);
-                alertUser(`Benutzer '${name}' erfolgreich angelegt!`, "success");
+                
+                // 3. Füge die ID zu den Benutzerdaten hinzu (wird von der Cloud Function benötigt)
+                newUserData.newUserId = newDocRef.id;
+
+                // 4. ALTE ZEILE (FALSCH): await setDoc(newDocRef, newUserData);
+                // 4. NEUE ZEILE (KORREKT): Erstelle eine Genehmigungsanfrage statt direkt zu schreiben
+                await createApprovalRequest(
+                    'CREATE_USER',      // Der Typ der Aktion
+                    newDocRef.id,       // Die ID des (zukünftigen) Benutzers
+                    { 
+                        userData: newUserData,  // Die Daten, die der "Bot" braucht
+                        autoApprove: autoApproveFlag // Das Flag, das der "Bot" prüft
+                    }
+                );
+                
+                // 5. Log-Eintrag und Erfolgsmeldung
+                // Die Erfolgsmeldung hängt davon ab, ob es sofort passiert oder nicht
+                if (autoApproveFlag) {
+                    await logAdminAction('user_created_autoapproved', `Neuen Benutzer angelegt (Auto-Approve): '${name}'.`);
+                    alertUser(`Benutzer '${name}' erfolgreich angelegt!`, "success");
+                } else {
+                    await logAdminAction('user_created_pending', `Antrag für Benutzer '${name}' eingereicht.`);
+                    alertUser(`Antrag für '${name}' wurde zur Genehmigung eingereicht.`, "success");
+                }
+
+                // =================================================================
+                // ENDE DER KORREKTUR
+                // =================================================================
                 
                 // Formular zurücksetzen
                 nameInput.value = '';
@@ -625,8 +670,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 if (addUserBtn) addUserBtn.textContent = '+ Benutzer anlegen';
 
             } catch (error) {
-                console.error("Fehler beim Anlegen des Benutzers:", error);
-                alertUser("Fehler beim Anlegen des Benutzers.", "error");
+                console.error("Fehler beim Anlegen des Benutzers (via Request):", error);
+                alertUser("Fehler beim Erstellen der Anfrage.", "error");
             } finally {
                 setButtonLoading(saveNewUserButton, false);
             }
@@ -660,14 +705,40 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             if (!confirm(`Soll der Benutzer '${userToDelete.name}' wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden.`)) return;
             
             rememberAdminScroll();
+            
+            // =================================================================
+            // KORREKTUR FÜR "LÖSCHEN"
+            // =================================================================
             try {
-                await deleteDoc(doc(usersCollectionRef, userId));
-                await logAdminAction('user_deleted', `Benutzer '${userToDelete.name}' gelöscht.`);
-                alertUser(`Benutzer '${userToDelete.name}' gelöscht.`, "success");
+                // 1. Prüfen, ob Genehmigung nötig ist
+                const approvalRules = currentUser.adminPermissions?.approvalRequired || {};
+                const needsApproval = approvalRules['deleteUser'] === true; // 'deleteUser' [cite: 16, 17]
+                const autoApproveFlag = !needsApproval;
+
+                // 2. ALTE ZEILE (FALSCH): await deleteDoc(doc(usersCollectionRef, userId));
+                // 2. NEUE ZEILE (KORREKT): Sende eine Anfrage
+                await createApprovalRequest(
+                    'DELETE_USER',  // Typ
+                    userId,         // ID des Benutzers, der gelöscht werden soll
+                    { 
+                        autoApprove: autoApproveFlag // Flag für den Bot
+                    }
+                );
+                
+                if (autoApproveFlag) {
+                    await logAdminAction('user_deleted_autoapproved', `Benutzer '${userToDelete.name}' gelöscht (Auto-Approve).`);
+                    alertUser(`Benutzer '${userToDelete.name}' gelöscht.`, "success");
+                } else {
+                    await logAdminAction('user_deleted_pending', `Antrag zum Löschen von '${userToDelete.name}' eingereicht.`);
+                    alertUser(`Antrag zum Löschen von '${userToDelete.name}' eingereicht.`, "success");
+                }
             } catch (error) {
-                console.error("Fehler beim Löschen:", error);
-                alertUser("Fehler beim Löschen.", "error");
+                console.error("Fehler beim Senden der Lösch-Anfrage:", error);
+                alertUser("Fehler beim Senden der Lösch-Anfrage.", "error");
             }
+            // =================================================================
+            // ENDE KORREKTUR "LÖSCHEN"
+            // =================================================================
             return; 
         }
 
@@ -696,20 +767,45 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             if (!newNickname) return alertUser("Nickname darf nicht leer sein.", "error");
 
             rememberAdminScroll();
+            
+            // =================================================================
+            // KORREKTUR FÜR "UMBENENNEN"
+            // =================================================================
             try {
-                // KORREKTUR: Nur noch 'name' (Nickname) aktualisieren.
-                const updateData = { name: newNickname };
+                // 1. Prüfen, ob Genehmigung nötig ist
+                const approvalRules = currentUser.adminPermissions?.approvalRequired || {};
+                const needsApproval = approvalRules['renameUser'] === true; // 'renameUser' [cite: 16, 17]
+                const autoApproveFlag = !needsApproval;
 
-                await updateDoc(doc(usersCollectionRef, userId), updateData);
-                await logAdminAction('user_renamed', `Benutzer ${USERS[userId]?.name || userId} umbenannt in '${newNickname}'.`);
+                // 2. ALTE ZEILE (FALSCH): await updateDoc(doc(usersCollectionRef, userId), updateData);
+                // 2. NEUE ZEILE (KORREKT): Sende eine Anfrage
+                await createApprovalRequest(
+                    'RENAME_USER',  // Typ
+                    userId,         // ID des Benutzers
+                    { 
+                        newName: newNickname,
+                        autoApprove: autoApproveFlag 
+                    }
+                );
+
+                if (autoApproveFlag) {
+                    await logAdminAction('user_renamed_autoapproved', `Benutzer ${USERS[userId]?.name || userId} umbenannt in '${newNickname}' (Auto-Approve).`);
+                    alertUser("Name geändert!", "success");
+                } else {
+                    await logAdminAction('user_renamed_pending', `Antrag auf Umbenennung für ${USERS[userId]?.name || userId} eingereicht.`);
+                    alertUser("Antrag auf Umbenennung eingereicht.", "success");
+                }
                 
                 nameDisplay.classList.remove('hidden');
                 nameEditContainer.classList.add('hidden');
 
             } catch (error) {
-                 console.error("Fehler beim Umbenennen:", error);
-                 alertUser("Fehler beim Umbenennen.", "error");
+                 console.error("Fehler beim Senden der Umbenennungs-Anfrage:", error);
+                 alertUser("Fehler beim Senden der Umbenennungs-Anfrage.", "error");
             }
+            // =================================================================
+            // ENDE KORREKTUR "UMBENENNEN"
+            // =================================================================
             return;
         }
 
@@ -730,9 +826,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
             rememberAdminScroll();
             
-            // KORREKTUR DER SCHREIB-LOGIK: Trennung der Logik
-            // ACHTUNG: updateData MUSS hier permissionType setzen, da dieser Button in der BENUTZERVERWALTUNG ist!
             let updateData = { permissionType: selectedType }; 
+            let detailsForRequest = { type: selectedType };
 
             if (selectedType === 'role') {
                 const roleSelect = permContainer.querySelector('.user-role-select');
@@ -745,11 +840,11 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
                 updateData = {
                     ...updateData,
-                    role: newRole, // FIX 1: Hauptrolle muss gesetzt werden
-                    customPermissions: [], // Custom Permissions leeren
-                    displayRole: null, // Display Role leeren
-                    // Admin-Rechte Felder (werden nicht angefasst)
+                    role: newRole, 
+                    customPermissions: [], 
+                    displayRole: null, 
                 };
+                detailsForRequest.newRole = newRole;
 
             } else { // type === 'individual'
                 const customPermissions = Array.from(permContainer.querySelectorAll('.custom-perm-checkbox:checked')).map(cb => cb.dataset.perm);
@@ -757,50 +852,69 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 if (!displayRoleSelect) { console.error(`[CLICK] Konnte Display-Rollen-Select für User ${userId} nicht finden!`); return; }
                 const selectedDisplayRole = displayRoleSelect.value || 'NO_RIGHTS'; 
                 
-                
-                // =================================================================
-                // BEGINN DER KORREKTUR (Das ist dein Hauptfehler)
-                // =================================================================
-                // Wir bestimmen die *echte* Rolle basierend auf der *angezeigten* Rolle.
                 let newActualRole = null;
                 if (selectedDisplayRole === 'ADMIN') {
-                    newActualRole = 'ADMIN'; // Sie ist jetzt OFFIZIELL Admin
+                    newActualRole = 'ADMIN'; 
                 } else if (selectedDisplayRole === 'SYSTEMADMIN') {
-                    // (Sicherheitsnetz, falls SysAdmin in der Liste auftaucht)
                     newActualRole = 'SYSTEMADMIN'; 
                 } else if (selectedDisplayRole === 'NO_RIGHTS') {
-                    newActualRole = 'NO_RIGHTS'; //
+                    newActualRole = 'NO_RIGHTS'; 
                 } else {
-                    // Wenn 'Angezeigter Status' = 'Angemeldet',
-                    // ist die *echte* Rolle auch 'ANGEMELDET'
-                    newActualRole = selectedDisplayRole; // z.B. 'ANGEMELDET'
+                    newActualRole = selectedDisplayRole; 
                 }
-                // =================================================================
-                // ENDE DER KORREKTUR
-                // =================================================================
 
                 updateData = {
                     ...updateData, 
-                    role: newActualRole, // HIER: Setzt die korrekte *echte* Rolle
-                    customPermissions: customPermissions, // Custom Permissions speichern
+                    role: newActualRole, 
+                    customPermissions: customPermissions, 
                     displayRole: selectedDisplayRole !== 'NO_RIGHTS' ? selectedDisplayRole : null,
-                    // Admin-Rechte Felder (werden nicht angefasst)
                 };
+                
+                detailsForRequest.customPermissions = customPermissions;
+                detailsForRequest.displayRole = selectedDisplayRole !== 'NO_RIGHTS' ? selectedDisplayRole : null;
             }
 
-            console.log("[CLICK] Finale Update-Daten für Berechtigungen:", updateData);
+            console.log("[CLICK] Finale Update-Daten (für Request):", updateData);
 
+            // =================================================================
+            // KORREKTUR FÜR "BERECHTIGUNGEN ÄNDERN"
+            // =================================================================
             try {
-                await updateDoc(doc(usersCollectionRef, userId), updateData);
-                await logAdminAction('user_perms_updated', `Berechtigungstyp für ${USERS[userId]?.name || userId} auf ${selectedType} geändert.`);
+                // 1. Prüfen, ob Genehmigung nötig ist
+                const approvalRules = currentUser.adminPermissions?.approvalRequired || {};
+                const needsApproval = approvalRules['changeUserPermissionType'] === true; // 'changeUserPermissionType' [cite: 16, 17]
+                const autoApproveFlag = !needsApproval;
+                
+                detailsForRequest.autoApprove = autoApproveFlag;
+                
+                // 2. ALTE ZEILE (FALSCH): await updateDoc(doc(usersCollectionRef, userId), updateData);
+                // 2. NEUE ZEILE (KORREKT): Sende eine Anfrage
+                // (Der Bot in index.js  muss diesen Typ "CHANGE_PERMISSION_TYPE" kennen!)
+                // (Ja, das tut er, siehe Zeile 253 in index.js)
+                await createApprovalRequest(
+                    'CHANGE_PERMISSION_TYPE', // Typ
+                    userId,                   // ID des Benutzers
+                    detailsForRequest         // Das Objekt mit allen Details
+                );
+                
+                if (autoApproveFlag) {
+                    await logAdminAction('user_perms_updated_autoapproved', `Berechtigungen für ${USERS[userId]?.name || userId} geändert (Auto-Approve).`);
+                    alertUser("Berechtigungen gespeichert!", "success");
+                } else {
+                     await logAdminAction('user_perms_updated_pending', `Antrag auf Berechtigungsänderung für ${USERS[userId]?.name || userId} eingereicht.`);
+                    alertUser("Antrag auf Berechtigungsänderung eingereicht.", "success");
+                }
                 
                 const saveBtnContainer = permContainer.querySelector('.save-perms-container');
                 if (saveBtnContainer) saveBtnContainer.classList.add('hidden');
-                alertUser("Berechtigungen gespeichert!", "success");
+                
             } catch (error) {
-                console.error(`[CLICK] FEHLER beim Speichern der Berechtigungen für User ${userId}:`, error);
-                alertUser(`Fehler beim Speichern: ${error.message}`, "error");
+                console.error(`[CLICK] FEHLER beim Senden der Berechtigungs-Anfrage für User ${userId}:`, error);
+                alertUser(`Fehler beim Senden der Anfrage: ${error.message}`, "error");
             }
+            // =================================================================
+            // ENDE KORREKTUR "BERECHTIGUNGEN ÄNDERN"
+            // =================================================================
             return; // Klick behandelt
         }
 
@@ -822,9 +936,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             console.log(`[CHANGE] Änderung innerhalb der Karte für User: ${userId}`);
 
              // =================================================================
-             // BEGINN DEINER KORREKTUR (Sperr-Button Logik)
+             // KORREKTUR FÜR "SPERREN/ENTSPERREN"
              // =================================================================
-             // --- Aktivieren/Deaktivieren Toggle ---
              if (target.classList.contains('user-active-toggle')) {
                 const newIsLocked = target.checked; // true if locked, false if unlocked
                 const newIsActive = !newIsLocked; // Die DB speichert 'isActive'
@@ -834,43 +947,57 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
                 const actionText = newIsActive ? "ENTSPERREN" : "SPERREN";
                 
-                // Bestätigungs-Dialog
                 if (!confirm(`Möchten Sie den Benutzer '${userToEdit.name}' wirklich ${actionText}?`)) {
                     target.checked = !newIsLocked; // Checkbox zurücksetzen
                     return; // Abbruch
                 }
 
-                rememberAdminScroll(); // Scroll-Position merken
+                rememberAdminScroll(); 
+                
                 try {
-                    // Update in Firestore
-                    await updateDoc(doc(usersCollectionRef, userId), { isActive: newIsActive });
+                    // 1. Prüfen, ob Genehmigung nötig ist
+                    const approvalRules = currentUser.adminPermissions?.approvalRequired || {};
+                    const needsApproval = approvalRules['toggleUserActive'] === true; // 'toggleUserActive' [cite: 16, 17]
+                    const autoApproveFlag = !needsApproval;
                     
-                    // Aktion protokollieren
-                    const logMessage = `Benutzer '${userToEdit.name}' wurde ${newIsActive ? 'entsperrt' : 'gesperrt'}.`;
-                    await logAdminAction(newIsActive ? 'user_unlocked' : 'user_locked', logMessage);
-                    
-                    alertUser(logMessage, "success");
-                    
-                    // Optional: UI sofort aktualisieren (obwohl der Listener das auch tun würde)
-                    const card = target.closest('.user-card');
-                    if (card) {
-                        const statusText = card.querySelector('.text-sm.font-medium span'); // Finde das "JA" / "NEIN"
-                        if (statusText) {
-                            statusText.textContent = newIsActive ? 'NEIN' : 'JA';
-                            statusText.classList.toggle('text-red-700', !newIsActive);
-                            statusText.classList.toggle('text-green-700', newIsActive);
+                    // 2. ALTE ZEILE (FALSCH): await updateDoc(doc(usersCollectionRef, userId), { isActive: newIsActive });
+                    // 2. NEUE ZEILE (KORREKT): Sende eine Anfrage
+                    // (Der Bot in index.js  muss diesen Typ "TOGGLE_USER_ACTIVE" kennen!)
+                    // (Ja, das tut er, siehe Zeile 248 in index.js)
+                    await createApprovalRequest(
+                        'TOGGLE_USER_ACTIVE',  // Typ
+                        userId,                // ID des Benutzers
+                        { 
+                            isActive: newIsActive, // Die neue Einstellung
+                            autoApprove: autoApproveFlag 
                         }
+                    );
+                    
+                    const logMessage = `Benutzer '${userToEdit.name}' wurde ${newIsActive ? 'entsperrt' : 'gesperrt'}.`;
+                    const logMessagePending = `Antrag zum ${newIsActive ? 'Entsperren' : 'Sperren'} von '${userToEdit.name}' eingereicht.`;
+                    
+                    if (autoApproveFlag) {
+                        await logAdminAction(newIsActive ? 'user_unlocked_autoapproved' : 'user_locked_autoapproved', logMessage);
+                        alertUser(logMessage, "success");
+                    } else {
+                        await logAdminAction(newIsActive ? 'user_unlocked_pending' : 'user_locked_pending', logMessagePending);
+                        alertUser(logMessagePending, "success");
                     }
+                    
+                    // WICHTIG: Die UI wird NICHT mehr sofort aktualisiert.
+                    // Sie wird erst aktualisiert, wenn der 'listenForUserUpdates' 
+                    // die Änderung vom Bot (oder der manuellen Genehmigung) empfängt.
+                    // Das ist das korrekte Verhalten.
 
                 } catch (error) {
-                    console.error(`Fehler beim ${actionText} des Benutzers:`, error);
+                    console.error(`Fehler beim Senden der ${actionText}-Anfrage:`, error);
                     alertUser(`Fehler: ${error.message}`, "error");
                     target.checked = !newIsLocked; // Checkbox auch bei Fehler zurücksetzen
                 }
                 return; // Änderung behandelt
              }
              // =================================================================
-             // ENDE DEINER KORREKTUR
+             // ENDE KORREKTUR "SPERREN/ENTSPERREN"
              // =================================================================
 
             // --- Änderungen an Berechtigungs-Inputs ---
@@ -889,7 +1016,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                     const individualArea = container.querySelector('.individual-perms-area');
                     individualArea?.classList.toggle('hidden', target.value !== 'individual');
                     
-                    // Wenn auf 'individual' umgeschaltet wird, initial die Abhängigkeiten setzen
                     if (target.value === 'individual' && individualArea && typeof setupPermissionDependencies === 'function') {
                         setupPermissionDependencies(individualArea);
                     }
@@ -907,7 +1033,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 if (target.classList.contains('custom-perm-checkbox') && target.closest('.individual-perms-area')) { 
                     const individualPermsArea = container.querySelector('.individual-perms-area'); 
                     if (individualPermsArea && typeof setupPermissionDependencies === 'function') { 
-                        setupPermissionDependencies(individualPermsArea); 
+                        setupPermissionDependencies(individualArea); 
                     } 
                 }
                  return;
