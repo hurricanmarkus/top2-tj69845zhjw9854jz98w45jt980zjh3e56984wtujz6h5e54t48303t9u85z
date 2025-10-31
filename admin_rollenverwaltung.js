@@ -40,8 +40,6 @@ export function listenForAdminRoleUpdates() {
         // =================================================================
         // BEGINN DER KORREKTUR (Logout-Problem)
         // =================================================================
-        // WICHTIG: snapshot.empty prüft hier nicht, da 'LEERE_ROLLE' immer da sein sollte.
-        // Wir prüfen, ob MEHR als 0 Dokumente da sind.
         if (snapshot.size > 0) { 
             // 1. Alle alten Admin-Rollen aus dem Speicher löschen
             Object.keys(ADMIN_ROLES).forEach(key => delete ADMIN_ROLES[key]); 
@@ -53,13 +51,10 @@ export function listenForAdminRoleUpdates() {
             // 3. Prüfen, ob die App schon gestartet ist
             if (initialAuthCheckDone) {
                 // 4. Rechte des aktuellen Benutzers SOFORT neu berechnen.
-                checkCurrentUserValidity();
+                checkCurrentUserValidity(); // <-- DAS IST AUCH DER SCHLÜSSEL ZUM LIVE-UPDATE
             }
 
-            // Diese Zeilen bleiben wichtig, damit die "Rollenverwaltung"-Seite
-            // SICH SELBST aktualisiert, falls du gerade darauf bist.
             if (adminSectionsState.adminRights && typeof renderAdminRightsManagement === 'function') {
-                 // renderAdminRightsManagement(); // Dieser Import fehlt in dieser Datei, daher auskommentiert
                  console.warn("renderAdminRightsManagement in listenForAdminRoleUpdates nicht aufgerufen, da Import fehlt.");
             }
             if (adminSectionsState.role && typeof renderRoleManagement === 'function') renderRoleManagement();

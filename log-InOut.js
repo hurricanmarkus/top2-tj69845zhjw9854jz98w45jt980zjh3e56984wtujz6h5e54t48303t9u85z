@@ -6,6 +6,7 @@ import { doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-
 // ENDE-ZIKA //
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
+// ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
 export async function checkCurrentUserValidity() { // Funktion ist async
     console.log("--- Prüfe Benutzerberechtigungen (V7 - Robuste Cache-Prüfung) ---");
 
@@ -20,11 +21,11 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     const currentAuthUser = auth.currentUser; // Aktuellen Firebase Auth User holen
     const storedAppUserId = localStorage.getItem(ADMIN_STORAGE_KEY); // z.B. "JASMIN"
 
-    
+
     // =================================================================
     // BEGINN DER KORREKTUR (Logout-Problem)
     // =================================================================
-    
+
     // 1. Versuche, den Benutzer aus dem SCHNELLEN CACHE (USERS) zu holen
     let userFromFirestore = storedAppUserId && USERS ? USERS[storedAppUserId] : null;
     let fetchedFromDB = false; // Ein Flag, das uns sagt, ob wir in der DB nachsehen mussten
@@ -61,7 +62,7 @@ export async function checkCurrentUserValidity() { // Funktion ist async
             // Wir fragen die DB direkt an
             const userDocRef = doc(usersCollectionRef, storedAppUserId);
             const docSnap = await getDoc(userDocRef);
-            
+
             if (docSnap.exists()) {
                 console.log(`checkCurrentUserValidity: Direkt-Abfrage erfolgreich! Benutzer ${storedAppUserId} existiert.`);
                 userFromFirestore = { id: docSnap.id, ...docSnap.data() };
@@ -84,7 +85,7 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     // ENDE DER KORREKTUR
     // =================================================================
 
-    
+
     // Fall 5: User ist gefunden
 
     // Fall 5.1: User ist gefunden, ABER als 'inaktiv' (gesperrt) markiert.
@@ -93,23 +94,23 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         switchToGuestMode(true, "Ihr Konto wurde von einem Administrator gesperrt.", 'error_long');
         return; 
     }
-    
+
 
     // Fall 5.2: Firebase User ist da UND App User ("JASMIN") ist ausgewählt/gültig/AKTIV
     console.log(`checkCurrentUserValidity: Firebase User ${currentAuthUser.uid} und App User ${storedAppUserId} vorhanden. (Aus DB geholt: ${fetchedFromDB})`);
     try {
-        
+
         const idTokenResult = await currentAuthUser.getIdToken(true); 
         if (!idTokenResult) {
             throw new Error("Konnte kein gültiges ID Token abrufen.");
         }
-        
+
         const user = userFromFirestore; 
         const effectiveRole = user.role; 
 
         console.log(`Effektiver Benutzer-Typ (aus DB): ${user.permissionType}`);
         console.log(`Effektiver Admin-Typ (aus DB): ${user.adminPermissionType}`);
-        
+
         let userPermissions = [];
         let adminPermissions = {};
         let currentAssignedAdminRoleId = null; 
@@ -125,7 +126,7 @@ export async function checkCurrentUserValidity() { // Funktion ist async
             console.log(`Lade INDIVIDUELLE BENUTZER-Rechte.`);
             userPermissions = [...(user.customPermissions || [])];
         }
-        
+
         if (effectiveRole === 'SYSTEMADMIN') {
             userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
             console.log("Systemadmin BENUTZER-Rechte geladen.");
@@ -153,7 +154,7 @@ export async function checkCurrentUserValidity() { // Funktion ist async
                 canSeeSysadminLogs: true
             };
         }
-        
+
         console.log("Final zugewiesene BENUTZER-Berechtigungen:", userPermissions);
         console.log("Final zugewiesene ADMIN-Berechtigungen:", Object.keys(adminPermissions));
 
@@ -172,12 +173,16 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         });
 
         console.log("currentUser Objekt aktualisiert:", currentUser);
+
+        // HIER PASSIERT DAS LIVE-UPDATE:
+        // updateUIForMode() wird aufgerufen, NACHDEM die neuen
+        // adminPermissions in currentUser geladen wurden.
         updateUIForMode(); 
 
         // Navigationsprüfung
          const activeView = document.querySelector('.view.active');
          const isAdminOrSysAdmin = effectiveRole === 'ADMIN' || effectiveRole === 'SYSTEMADMIN';
-         
+
          if (activeView && activeView.id === 'adminView' && !isAdminOrSysAdmin) {
              alertUser("Ihre Administrator-Rechte wurden entzogen.", "error");
              navigate('home');
