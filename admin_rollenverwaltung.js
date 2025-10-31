@@ -90,17 +90,40 @@ export function renderRoleManagement() {
     }
 
     roleManagementArea.innerHTML = '';
-    let effectiveAdminPerms = {};
+    
+    // =================================================================
+    // BEGINN DER KORREKTUR (FEHLER 2: Live-Anzeige)
+    // =================================================================
+    
+    // Diese Variablen sind korrekt und lesen aus dem aktuellen 'currentUser'
     const isAdmin = currentUser.role === 'ADMIN';
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
     
+    // HIER IST DIE KORREKTUR:
+    // Wir holen die Berechtigungen (Permissions) direkt aus dem
+    // 'currentUser'-Objekt. Dieses Objekt wird von 'checkCurrentUserValidity'
+    // (aus log-InOut.js) live aktualisiert, wenn sich Rechte ändern.
+    
+    // ALT (FEHLERHAFT):
+    /*
+    let effectiveAdminPerms = {};
     if (isAdmin && USERS && USERS[currentUser.mode]) { // Prüfen ob USERS geladen ist
         const adminUser = USERS[currentUser.mode];
         if (adminUser && adminUser.adminPermissions) {
             effectiveAdminPerms = adminUser.adminPermissions;
         }
     }
+    */
 
+    // NEU (KORREKT):
+    // 'effectiveAdminPerms' enthält jetzt SOFORT die neuen Rechte.
+    let effectiveAdminPerms = currentUser.adminPermissions || {};
+
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
+
+    // Diese Zeile liest jetzt die korrekten, neuen Rechte
     const canEditUserRoles = isSysAdmin ||
         (isAdmin && effectiveAdminPerms.canEditUserRoles);
 
@@ -158,6 +181,8 @@ export function renderRoleManagement() {
     const userRolesList = document.getElementById('userRolesList');
     Object.values(ROLES).forEach(role => {
         const isProtectedRole = ['SYSTEMADMIN', 'ADMIN', 'NO_RIGHTS'].includes(role.id);
+        
+        // 'canEditThisRole' benutzt jetzt die korrekten, neuen Rechte
         const canEditThisRole = canEditUserRoles && (!isProtectedRole || isSysAdmin);
         // (Nur SysAdmin darf geschützte Rollen bearbeiten)
         const canDeleteThisRole = canEditUserRoles && role.deletable !== false && !isProtectedRole; 
@@ -167,6 +192,8 @@ export function renderRoleManagement() {
             const perm = allRolePermissions[permKey];
             const isChecked = role.permissions?.includes(permKey) ? 'checked' : '';
             const isSubPermission = permKey === 'CHECKLIST_SWITCH' || permKey === 'CHECKLIST_SETTINGS';
+            
+            // Checkboxen werden jetzt dank 'canEditThisRole' korrekt (nicht mehr) ausgegraut
             const isDisabled = !canEditThisRole || (isSubPermission && !isChecklistEnabled) ? 'disabled' : '';
             const marginLeft = perm.indent ? 'pl-6' : '';
             return `
@@ -309,36 +336,36 @@ export function renderRoleManagement() {
     };
 
     // (Listener für "Benutzer-Rolle löschen")
-userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
-    button.addEventListener('click', async (e) => {
-        roleManagementSectionsState.userRolesOpen = true;
-        const roleId = e.currentTarget.dataset.roleid;
-        
-        // 1. KORREKTUR: Name der Rolle SICHERN, BEVOR der Löschvorgang gestartet wird
-        const roleToDeleteName = ROLES[roleId]?.name || 'Unbekannte Rolle'; 
-        
-        if (confirm(`Möchten Sie die Rolle '${roleToDeleteName}' wirklich löschen?`)) {
-            try {
-                await deleteDoc(doc(rolesCollectionRef, roleId));
-                
-                // 2. Logging und Benachrichtigung verwenden den GESPEICHERTEN Namen
-                await logAdminAction('role_deleted', `Rolle '${roleToDeleteName}' (${roleId}) gelöscht.`);
-                alertUser(`Rolle '${roleToDeleteName}' wurde erfolgreich gelöscht!`, "success"); // Erfolgsmeldung
+    userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
+        button.addEventListener('click', async (e) => {
+            roleManagementSectionsState.userRolesOpen = true;
+            const roleId = e.currentTarget.dataset.roleid;
+            
+            // 1. KORREKTUR: Name der Rolle SICHERN, BEVOR der Löschvorgang gestartet wird
+            const roleToDeleteName = ROLES[roleId]?.name || 'Unbekannte Rolle'; 
+            
+            if (confirm(`Möchten Sie die Rolle '${roleToDeleteName}' wirklich löschen?`)) {
+                try {
+                    await deleteDoc(doc(rolesCollectionRef, roleId));
+                    
+                    // 2. Logging und Benachrichtigung verwenden den GESPEICHERTEN Namen
+                    await logAdminAction('role_deleted', `Rolle '${roleToDeleteName}' (${roleId}) gelöscht.`);
+                    alertUser(`Rolle '${roleToDeleteName}' wurde erfolgreich gelöscht!`, "success"); // Erfolgsmeldung
 
-                // UI wird durch den Listener (listenForRoleUpdates) automatisch neu gerendert.
+                    // UI wird durch den Listener (listenForRoleUpdates) automatisch neu gerendert.
 
-            } catch (error) {
-                console.error("Fehler beim Löschen der Benutzer-Rolle:", error);
-                // 3. Fehlerbehandlung muss den GESPEICHERTEN Namen verwenden
-                alertUser(`Fehler beim Löschen der Benutzer-Rolle: ${error.message || error.toString()}`, "error"); 
-                
-                // WICHTIG: Die Fehlermeldung, die du siehst ("Fehler beim Löschen der Benutzer-Rolle."),
-                // wird jetzt nur noch angezeigt, wenn ein ECHTER Datenbankfehler auftritt (z.B. Netzwerk).
-                // Der vorherige TypError wird vermieden.
+                } catch (error) {
+                    console.error("Fehler beim Löschen der Benutzer-Rolle:", error);
+                    // 3. Fehlerbehandlung muss den GESPEICHERTEN Namen verwenden
+                    alertUser(`Fehler beim Löschen der Benutzer-Rolle: ${error.message || error.toString()}`, "error"); 
+                    
+                    // WICHTIG: Die Fehlermeldung, die du siehst ("Fehler beim Löschen der Benutzer-Rolle."),
+                    // wird jetzt nur noch angezeigt, wenn ein ECHTER Datenbankfehler auftritt (z.B. Netzwerk).
+                    // Der vorherige TypError wird vermieden.
+                }
             }
-        }
+        });
     });
-});
     
     // (Listener für Toggle Benutzer-Rollen)
     document.getElementById('userRolesToggle').addEventListener('click', () => {
