@@ -5,7 +5,7 @@ import { onSnapshot, query, orderBy, getDocs, addDoc, doc, updateDoc, writeBatch
 // KORREKTUR: Fehlende Imports (currentUser, alertUser, USERS) und
 // die KORREKTE Sammlung (approvalRequestsCollectionRef) hinzugefügt.
 // roleChangeRequestsCollectionRef wird NICHT MEHR importiert.
-import { adminSectionsState, approvalRequestsCollectionRef, usersCollectionRef, db, ROLES, currentUser, alertUser, USERS } from './haupteingang.js';
+import { adminSectionsState, approvalRequestsCollectionRef, usersCollectionRef, db, ROLES, currentUser, alertUser, USERS, PENDING_REQUESTS } from './haupteingang.js';
 
 // KORREKTUR: Fehlende Imports für die Render-Funktionen hinzugefügt
 import { renderUserManagement } from './admin_benutzersteuerung.js';
@@ -69,18 +69,11 @@ export async function createApprovalRequest(type, userId, details = {}) {
 // =================================================================
 
 
-// =================================================================
-// BEGINN DER KORREKTUR (FUNKTION ERSETZEN)
-// =================================================================
 export function listenForApprovalRequests() {
-    // KORREKTUR: Importiere die neue globale Variable
-    const { PENDING_REQUESTS } = await import('./haupteingang.js');
+    // KORREKTUR: 'async' und 'await import' ENTFERNT
 
     onSnapshot(query(approvalRequestsCollectionRef, orderBy('timestamp', 'desc')), (snapshot) => {
         
-        // =================================================================
-        // BEGINN DER KORREKTUR (Problem 2: Pending-Status)
-        // =================================================================
         // 1. Leere die globale Liste
         Object.keys(PENDING_REQUESTS).forEach(key => delete PENDING_REQUESTS[key]);
         
@@ -95,9 +88,6 @@ export function listenForApprovalRequests() {
                 PENDING_REQUESTS[request.userId].push(request);
             }
         });
-        // =================================================================
-        // ENDE DER KORREKTUR
-        // =================================================================
 
         // 3. Rufe die Render-Funktionen auf (wie vorher)
         if (adminSectionsState.approval) {
@@ -107,9 +97,7 @@ export function listenForApprovalRequests() {
             renderUserManagement(); // Diese Funktion wird die Sperre jetzt anzeigen
         }
     });
-}// =================================================================
-// ENDE DER KORREKTUR
-// =================================================================
+}
 
 
 // =================================================================

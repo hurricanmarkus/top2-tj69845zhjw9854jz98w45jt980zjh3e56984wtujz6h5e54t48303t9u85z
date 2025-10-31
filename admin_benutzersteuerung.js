@@ -1,6 +1,6 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 // TEST 2
 import { onSnapshot, doc, updateDoc, setDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { db, usersCollectionRef, setButtonLoading, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES, ADMIN_STORAGE_KEY } from './haupteingang.js';
+import { db, usersCollectionRef, setButtonLoading, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES, ADMIN_STORAGE_KEY, PENDING_REQUESTS } from './haupteingang.js';
 import { logAdminAction } from './admin_protokollHistory.js';
 import { setupPermissionDependencies, renderAdminRightsManagement } from './admin_rechteverwaltung.js'; // Oder der richtige Dateiname
 import { renderMainFunctionsAdminArea, restoreAdminScrollIfAny, rememberAdminScroll } from './admin_adminfunktionenHome.js';
@@ -271,9 +271,8 @@ export function renderUserKeyList() {
     });
 }
 
-export async function renderUserManagement() {
-    // KORREKTUR: Importiere die neue globale Variable
-    const { PENDING_REQUESTS } = await import('./haupteingang.js');
+export function renderUserManagement() {
+    // KORREKTUR: 'async' und 'await import' ENTFERNT
 
     const userManagementArea = document.getElementById('userManagementArea');
     if (!userManagementArea) {
@@ -396,15 +395,9 @@ export async function renderUserManagement() {
     const createUserCardHTML = (user) => {
         const userId = user.id; 
         
-        // =================================================================
-        // BEGINN DER KORREKTUR (Problem 2: Pending-Status)
-        // =================================================================
         // Prüfe, ob für diesen Benutzer eine "pending" Anfrage existiert
         const pendingRequestsForUser = PENDING_REQUESTS[userId] || [];
         const isLocked = pendingRequestsForUser.length > 0;
-        // =================================================================
-        // ENDE DER KORREKTUR
-        // =================================================================
 
         const isSelf = userId === currentUser.mode; 
         const isTargetSysAdmin = user.role === 'SYSTEMADMIN'; 
@@ -481,9 +474,6 @@ export async function renderUserManagement() {
         }
         const lockToggleHTML = !isNotRegistered ? `<label class="flex items-center ${canToggle ? 'cursor-pointer' : 'cursor-not-allowed'}"><span class="mr-2 text-sm font-medium">Gesperrt: <span class="${!user.isActive ? 'text-red-700' : 'text-green-700'} font-bold">${!user.isActive ? 'JA' : 'NEIN'}</span></span><div class="relative"><input type="checkbox" class="sr-only user-active-toggle" data-userid="${userId}" ${!user.isActive ? 'checked' : ''} ${!canToggle ? 'disabled' : ''}><div class="block bg-gray-300 w-10 h-6 rounded-full"></div><div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition"></div></div></label>` : '<div class="w-10 h-6"></div>';
         
-        // =================================================================
-        // BEGINN DER KORREKTUR (Problem 2: Pending-Status)
-        // =================================================================
         // Erzeuge die Warnmeldung, wenn die Karte gesperrt ist
         let lockedWarningHTML = '';
         if (isLocked) {
@@ -500,9 +490,6 @@ export async function renderUserManagement() {
         
         // Füge die Sperr-Klassen zur Hauptkarte hinzu
         const lockedClasses = isLocked ? 'bg-yellow-50 opacity-70 border-yellow-300' : 'bg-gray-50';
-        // =================================================================
-        // ENDE DER KORREKTUR
-        // =================================================================
 
         return `
         <div class="user-card p-3 border rounded-lg flex flex-col gap-3 ${!canEdit && !isSelf ? 'bg-gray-200 opacity-70' : lockedClasses}" data-userid="${userId}">
