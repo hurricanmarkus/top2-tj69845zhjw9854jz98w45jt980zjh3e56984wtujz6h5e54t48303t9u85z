@@ -23,6 +23,7 @@ export let ARCHIVED_CHECKLISTS = {};
 export let CHECKLIST_STACKS = {};
 export let CHECKLIST_ITEMS = {};
 export let DELETED_CHECKLISTS = {};
+export let PENDING_REQUESTS = {}
 export let submitAdminKeyButton;
 export let CHECKLIST_CATEGORIES = {};
 export let CHECKLIST_GROUPS = {};

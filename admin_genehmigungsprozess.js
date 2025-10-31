@@ -73,18 +73,41 @@ export async function createApprovalRequest(type, userId, details = {}) {
 // BEGINN DER KORREKTUR (FUNKTION ERSETZEN)
 // =================================================================
 export function listenForApprovalRequests() {
-    // KORREKTUR: Hört auf die korrekte Sammlung
-    // ALT: onSnapshot(query(roleChangeRequestsCollectionRef, orderBy('timestamp', 'desc')), (snapshot) => {
+    // KORREKTUR: Importiere die neue globale Variable
+    const { PENDING_REQUESTS } = await import('./haupteingang.js');
+
     onSnapshot(query(approvalRequestsCollectionRef, orderBy('timestamp', 'desc')), (snapshot) => {
+        
+        // =================================================================
+        // BEGINN DER KORREKTUR (Problem 2: Pending-Status)
+        // =================================================================
+        // 1. Leere die globale Liste
+        Object.keys(PENDING_REQUESTS).forEach(key => delete PENDING_REQUESTS[key]);
+        
+        // 2. Fülle sie mit allen "pending" Anfragen
+        snapshot.forEach(doc => {
+            const request = doc.data();
+            if (request.status === 'pending') {
+                // Wir speichern die Anfrage, zugeordnet zur Benutzer-ID
+                if (!PENDING_REQUESTS[request.userId]) {
+                    PENDING_REQUESTS[request.userId] = [];
+                }
+                PENDING_REQUESTS[request.userId].push(request);
+            }
+        });
+        // =================================================================
+        // ENDE DER KORREKTUR
+        // =================================================================
+
+        // 3. Rufe die Render-Funktionen auf (wie vorher)
         if (adminSectionsState.approval) {
             renderApprovalProcess(snapshot);
         }
         if (adminSectionsState.user) {
-            renderUserManagement();
+            renderUserManagement(); // Diese Funktion wird die Sperre jetzt anzeigen
         }
     });
-}
-// =================================================================
+}// =================================================================
 // ENDE DER KORREKTUR
 // =================================================================
 

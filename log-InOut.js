@@ -45,7 +45,6 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     }
 
     // 3. Fall 2: Firebase User da, aber kein App User im Speicher?
-    // (Passiert, wenn du nur die Seite lädst, ohne eingeloggt zu sein)
     if (!storedAppUserId) {
          console.log("checkCurrentUserValidity: Firebase User vorhanden, aber kein App User im Speicher.");
          if (currentUser.mode !== GUEST_MODE) {
@@ -56,12 +55,10 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     }
 
     // 4. DER WICHTIGSTE FALL: App User ist im Speicher, aber NICHT im CACHE (USERS)
-    // (Das ist dein "Race Condition"-Logout-Problem)
     if (storedAppUserId && !userFromFirestore) {
         console.warn(`checkCurrentUserValidity: Benutzer ${storedAppUserId} nicht im Cache (USERS) gefunden. Cache ist vielleicht veraltet. Versuche Direkt-Abfrage aus DB...`);
         try {
-            // Wir fragen die DB direkt an (kostet 1 Lesezugriff)
-            // (Hierfür brauchen wir die Imports 'doc' und 'getDoc')
+            // Wir fragen die DB direkt an
             const userDocRef = doc(usersCollectionRef, storedAppUserId);
             const docSnap = await getDoc(userDocRef);
             
@@ -88,16 +85,13 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     // =================================================================
 
     
-    // Fall 5: User ist gefunden (entweder im Cache oder via Direkt-Abfrage)
+    // Fall 5: User ist gefunden
 
-    // NEU: Fall 5.1: User ist gefunden, ABER als 'inaktiv' (gesperrt) markiert.
+    // Fall 5.1: User ist gefunden, ABER als 'inaktiv' (gesperrt) markiert.
     if (!userFromFirestore.isActive) {
         console.warn("checkCurrentUserValidity: Benutzer ist als INAKTIV (gesperrt) markiert. Erzwinge Logout.");
-        
-        // Wir rufen switchToGuestMode jetzt mit dem dritten Parameter auf: 'error_long'
         switchToGuestMode(true, "Ihr Konto wurde von einem Administrator gesperrt.", 'error_long');
-        
-        return; // WICHTIG: Hier abbrechen.
+        return; 
     }
     
 
@@ -105,10 +99,6 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     console.log(`checkCurrentUserValidity: Firebase User ${currentAuthUser.uid} und App User ${storedAppUserId} vorhanden. (Aus DB geholt: ${fetchedFromDB})`);
     try {
         
-        // Token holen, um sicherzustellen, dass die Sitzung gültig ist
-        // KORREKTUR: Wir erzwingen ein Token-Refresh (true),
-        // damit Änderungen an Custom Claims (die wir noch nicht nutzen)
-        // schneller übernommen werden.
         const idTokenResult = await currentAuthUser.getIdToken(true); 
         if (!idTokenResult) {
             throw new Error("Konnte kein gültiges ID Token abrufen.");
@@ -120,10 +110,6 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         console.log(`Effektiver Benutzer-Typ (aus DB): ${user.permissionType}`);
         console.log(`Effektiver Admin-Typ (aus DB): ${user.adminPermissionType}`);
         
-        // =================================================================
-        // (Dieser Block bleibt unverändert)
-        // =================================================================
-
         let userPermissions = [];
         let adminPermissions = {};
         let currentAssignedAdminRoleId = null; 
@@ -167,9 +153,6 @@ export async function checkCurrentUserValidity() { // Funktion ist async
                 canSeeSysadminLogs: true
             };
         }
-        // =================================================================
-        // ENDE DES UNVERÄNDERTEN BLOCKS
-        // =================================================================
         
         console.log("Final zugewiesene BENUTZER-Berechtigungen:", userPermissions);
         console.log("Final zugewiesene ADMIN-Berechtigungen:", Object.keys(adminPermissions));
@@ -181,7 +164,7 @@ export async function checkCurrentUserValidity() { // Funktion ist async
             displayName: userFromFirestore.name,
             role: effectiveRole, 
             permissions: userPermissions, 
-            adminPermissions: adminPermissions, // HIER werden die neuen Admin-Rechte geladen
+            adminPermissions: adminPermissions, 
             permissionType: userFromFirestore.permissionType,
             adminPermissionType: userFromFirestore.adminPermissionType, 
             displayRole: userFromFirestore.displayRole,
@@ -195,7 +178,6 @@ export async function checkCurrentUserValidity() { // Funktion ist async
          const activeView = document.querySelector('.view.active');
          const isAdminOrSysAdmin = effectiveRole === 'ADMIN' || effectiveRole === 'SYSTEMADMIN';
          
-         // KORREKTUR: Diese Prüfung MUSS NACH updateUIForMode() erfolgen
          if (activeView && activeView.id === 'adminView' && !isAdminOrSysAdmin) {
              alertUser("Ihre Administrator-Rechte wurden entzogen.", "error");
              navigate('home');

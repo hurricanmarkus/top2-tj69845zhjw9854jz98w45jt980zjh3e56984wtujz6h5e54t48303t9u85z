@@ -9,14 +9,26 @@ import { setupPermissionDependencies } from './admin_rechteverwaltung.js';
 
 export function listenForRoleUpdates() {
     onSnapshot(rolesCollectionRef, (snapshot) => {
-        Object.keys(ROLES).forEach(key => delete ROLES[key]);
-        snapshot.forEach((doc) => { ROLES[doc.id] = { id: doc.id, ...doc.data() }; });
-        if (initialAuthCheckDone) {
-            checkCurrentUserValidity();
+        
+        // =================================================================
+        // BEGINN DER KORREKTUR (Logout-Problem)
+        // =================================================================
+        if (!snapshot.empty) {
+            Object.keys(ROLES).forEach(key => delete ROLES[key]);
+            snapshot.forEach((doc) => { ROLES[doc.id] = { id: doc.id, ...doc.data() }; });
+            
+            if (initialAuthCheckDone) {
+                checkCurrentUserValidity();
+            }
+            // Sicherstellen, dass die Render-Funktion existiert, bevor sie aufgerufen wird
+            if (adminSectionsState.role && typeof renderRoleManagement === 'function') renderRoleManagement();
+        } else {
+            console.warn("listenForRoleUpdates: Leerer Snapshot empfangen. ROLES-Cache wird nicht geleert.");
         }
-        // Sicherstellen, dass die Render-Funktion existiert, bevor sie aufgerufen wird
-        if (adminSectionsState.role && typeof renderRoleManagement === 'function') renderRoleManagement();
-        // (renderAdminRightsManagement wird hier nicht benötigt, da es keine ROLES anzeigt)
+        // =================================================================
+        // ENDE DER KORREKTUR
+        // =================================================================
+
     }, (error) => {
         console.error("Error listening for role updates:", error);
     });
@@ -24,38 +36,40 @@ export function listenForRoleUpdates() {
 
 export function listenForAdminRoleUpdates() {
     onSnapshot(adminRolesCollectionRef, (snapshot) => {
-        // 1. Alle alten Admin-Rollen aus dem Speicher löschen
-        Object.keys(ADMIN_ROLES).forEach(key => delete ADMIN_ROLES[key]); 
-        
-        // 2. Die neuen, frischen Admin-Rollen aus der Datenbank einlesen
-        snapshot.forEach((doc) => { ADMIN_ROLES[doc.id] = { id: doc.id, ...doc.data() }; });
-        
         
         // =================================================================
-        // BEGINN DER KORREKTUR
+        // BEGINN DER KORREKTUR (Logout-Problem)
         // =================================================================
-        // HIER ist das neue "Signal":
-        // 3. Prüfen, ob die App schon gestartet ist
-        if (initialAuthCheckDone) {
-            // 4. SAGE DEM SYSTEM: "Berechne die Rechte des aktuellen Benutzers
-            // (z.B. Jasmin) SOFORT neu, basierend auf den frischen Rollen."
-            checkCurrentUserValidity();
+        // WICHTIG: snapshot.empty prüft hier nicht, da 'LEERE_ROLLE' immer da sein sollte.
+        // Wir prüfen, ob MEHR als 0 Dokumente da sind.
+        if (snapshot.size > 0) { 
+            // 1. Alle alten Admin-Rollen aus dem Speicher löschen
+            Object.keys(ADMIN_ROLES).forEach(key => delete ADMIN_ROLES[key]); 
             
-            // checkCurrentUserValidity() ruft automatisch updateUIForMode() auf,
-            // welches dann die Menüpunkte (z.B. Passwörter) sofort ausblendet.
+            // 2. Die neuen, frischen Admin-Rollen aus der Datenbank einlesen
+            snapshot.forEach((doc) => { ADMIN_ROLES[doc.id] = { id: doc.id, ...doc.data() }; });
+            
+            
+            // 3. Prüfen, ob die App schon gestartet ist
+            if (initialAuthCheckDone) {
+                // 4. Rechte des aktuellen Benutzers SOFORT neu berechnen.
+                checkCurrentUserValidity();
+            }
+
+            // Diese Zeilen bleiben wichtig, damit die "Rollenverwaltung"-Seite
+            // SICH SELBST aktualisiert, falls du gerade darauf bist.
+            if (adminSectionsState.adminRights && typeof renderAdminRightsManagement === 'function') {
+                 // renderAdminRightsManagement(); // Dieser Import fehlt in dieser Datei, daher auskommentiert
+                 console.warn("renderAdminRightsManagement in listenForAdminRoleUpdates nicht aufgerufen, da Import fehlt.");
+            }
+            if (adminSectionsState.role && typeof renderRoleManagement === 'function') renderRoleManagement();
+            
+        } else {
+             console.warn("listenForAdminRoleUpdates: Leerer Snapshot empfangen. ADMIN_ROLES-Cache wird nicht geleert.");
         }
         // =================================================================
         // ENDE DER KORREKTUR
         // =================================================================
-        
-
-        // Diese Zeilen bleiben wichtig, damit die "Rollenverwaltung"-Seite
-        // SICH SELBST aktualisiert, falls du gerade darauf bist.
-        if (adminSectionsState.adminRights && typeof renderAdminRightsManagement === 'function') {
-             // renderAdminRightsManagement(); // Dieser Import fehlt in dieser Datei, daher auskommentiert
-             console.warn("renderAdminRightsManagement in listenForAdminRoleUpdates nicht aufgerufen, da Import fehlt.");
-        }
-        if (adminSectionsState.role && typeof renderRoleManagement === 'function') renderRoleManagement();
     
     
     }, (error) => {

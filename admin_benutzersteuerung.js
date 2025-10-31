@@ -18,7 +18,7 @@ export function listenForUserUpdates() {
         console.error("listenForUserUpdates: FEHLER - usersCollectionRef ist nicht definiert, bevor onSnapshot aufgerufen wird!");
         return; 
     } else {
-        console.log("listenForUserUpdates: usersCollectionRef scheint gültig zu sein:", usersCollectionRef.path); // Log den Pfad
+        console.log("listenForUserUpdates: usersCollectionRef scheint gültig zu sein:", usersCollectionRef.path);
     }
 
 
@@ -60,9 +60,9 @@ export function listenForUserUpdates() {
                  if (adminSectionsState.protocol && typeof renderProtocolHistory === 'function') {
                      renderProtocolHistory();
                  }
-                if (adminSectionsState.mainFunctions && typeof renderMainFunctionsAdminArea === 'function') {
+                if (adminSectionsState.mainFunctions && typeof renderMainFunctionsArea === 'function') {
                     console.log("Live-Update: Neuzeichnen der Adminfunktionen-Tabs wird ausgelöst.");
-                    renderMainFunctionsAdminArea();
+                    renderMainFunctionsArea();
                 }
             }
 
@@ -271,13 +271,10 @@ export function renderUserKeyList() {
     });
 }
 
-// Ersetze diese Funktion komplett in admin_benutzersteuerung.js
-// Ersetze diese Funktion komplett in admin_benutzersteuerung.js
-// Ersetze diese Funktion komplett in admin_benutzersteuerung.js
-// Ersetze diese Funktion komplett in admin_benutzersteuerung.js
-// Ersetze diese Funktion komplett in admin_benutzersteuerung.js
-// Ersetze diese Funktion komplett in admin_benutzersteuerung.js
 export async function renderUserManagement() {
+    // KORREKTUR: Importiere die neue globale Variable
+    const { PENDING_REQUESTS } = await import('./haupteingang.js');
+
     const userManagementArea = document.getElementById('userManagementArea');
     if (!userManagementArea) {
         console.error("renderUserManagement: Container #userManagementArea nicht gefunden.");
@@ -295,7 +292,6 @@ export async function renderUserManagement() {
     const isAdmin = currentUser.role === 'ADMIN';
     const isSysAdminEditing = currentUser.role === 'SYSTEMADMIN';
     if (isAdmin) { 
-        // Logik zum Holen der Admin-Perms
         const adminUser = USERS[currentUser.mode];
         if (adminUser) {
             if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) { 
@@ -399,6 +395,17 @@ export async function renderUserManagement() {
     // --- Rendern der Benutzerkarten ---
     const createUserCardHTML = (user) => {
         const userId = user.id; 
+        
+        // =================================================================
+        // BEGINN DER KORREKTUR (Problem 2: Pending-Status)
+        // =================================================================
+        // Prüfe, ob für diesen Benutzer eine "pending" Anfrage existiert
+        const pendingRequestsForUser = PENDING_REQUESTS[userId] || [];
+        const isLocked = pendingRequestsForUser.length > 0;
+        // =================================================================
+        // ENDE DER KORREKTUR
+        // =================================================================
+
         const isSelf = userId === currentUser.mode; 
         const isTargetSysAdmin = user.role === 'SYSTEMADMIN'; 
         const isTargetAdmin = user.role === 'ADMIN'; 
@@ -411,15 +418,12 @@ export async function renderUserManagement() {
             canEdit = !isTargetSysAdmin && !isTargetAdmin; 
         } 
         if (isNotRegistered && (isAdmin || isSysAdminEditing)) canEdit = true;
-
-        const canToggle = permSet.canToggleUserActive && canEdit && !isSelf && !isNotRegistered; 
-        const canDelete = permSet.canDeleteUser && canEdit && !isSelf; 
         
-        // Regel: Normales Recht (via canEdit) ODER (SysAdmin darf EIGENEN Namen bearbeiten)
-        // KORREKTUR: "canRenameUser" für alle, die 'permSet.canRenameUser' haben (auch Admins für normale User)
-        const canRename = (permSet.canRenameUser && canEdit) || (isSysAdminEditing && isSelf); 
-        
-        const canChangePerms = permSet.canChangeUserPermissionType && canEdit && !isNotRegistered;
+        // KORREKTUR: Wenn die Karte gesperrt ist, kann nichts geändert werden
+        const canToggle = permSet.canToggleUserActive && canEdit && !isSelf && !isNotRegistered && !isLocked; 
+        const canDelete = permSet.canDeleteUser && canEdit && !isSelf && !isLocked; 
+        const canRename = (permSet.canRenameUser && canEdit && !isLocked) || (isSysAdminEditing && isSelf && !isLocked); 
+        const canChangePerms = permSet.canChangeUserPermissionType && canEdit && !isNotRegistered && !isLocked;
         
         const currentUserLabel = isSelf ? '<span class="bg-indigo-100 text-indigo-800 font-bold text-xs px-2 py-1 rounded-full ml-2">AKTUELL</span>' : ''; 
         const realNameDisplay = user.realName ? `<span class="text-gray-500 italic text-sm ml-1 real-name-display">(${escapeHtml(user.realName)})</span>` : '';
@@ -477,8 +481,31 @@ export async function renderUserManagement() {
         }
         const lockToggleHTML = !isNotRegistered ? `<label class="flex items-center ${canToggle ? 'cursor-pointer' : 'cursor-not-allowed'}"><span class="mr-2 text-sm font-medium">Gesperrt: <span class="${!user.isActive ? 'text-red-700' : 'text-green-700'} font-bold">${!user.isActive ? 'JA' : 'NEIN'}</span></span><div class="relative"><input type="checkbox" class="sr-only user-active-toggle" data-userid="${userId}" ${!user.isActive ? 'checked' : ''} ${!canToggle ? 'disabled' : ''}><div class="block bg-gray-300 w-10 h-6 rounded-full"></div><div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition"></div></div></label>` : '<div class="w-10 h-6"></div>';
         
+        // =================================================================
+        // BEGINN DER KORREKTUR (Problem 2: Pending-Status)
+        // =================================================================
+        // Erzeuge die Warnmeldung, wenn die Karte gesperrt ist
+        let lockedWarningHTML = '';
+        if (isLocked) {
+            const requestTypes = pendingRequestsForUser.map(r => r.type).join(', '); // z.B. "RENAME_USER"
+            lockedWarningHTML = `
+            <div class="mt-3 p-2 bg-yellow-100 border-l-4 border-yellow-400 text-yellow-800 rounded-md">
+                <p class="font-bold text-sm flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M8 1.75a.75.75 0 0 1 .75.75v3.69l1.47-1.47a.75.75 0 1 1 1.06 1.06L9.81 7.25l1.47 1.47a.75.75 0 1 1-1.06 1.06L8.75 8.31v3.69a.75.75 0 0 1-1.5 0V8.31l-1.47 1.47a.75.75 0 1 1-1.06-1.06l1.47-1.47L5.22 5.78a.75.75 0 0 1 1.06-1.06l1.47 1.47V2.5A.75.75 0 0 1 8 1.75Z" clip-rule="evenodd" /></svg>
+                    Genehmigung ausstehend
+                </p>
+                <p class="text-xs mt-1 ml-6">Aktion: ${requestTypes}</p>
+            </div>`;
+        }
+        
+        // Füge die Sperr-Klassen zur Hauptkarte hinzu
+        const lockedClasses = isLocked ? 'bg-yellow-50 opacity-70 border-yellow-300' : 'bg-gray-50';
+        // =================================================================
+        // ENDE DER KORREKTUR
+        // =================================================================
+
         return `
-        <div class="user-card p-3 border rounded-lg flex flex-col gap-3 ${!canEdit && !isSelf ? 'bg-gray-200 opacity-70' : (isNotRegistered ? 'bg-gray-50' : 'bg-gray-50')}" data-userid="${userId}">
+        <div class="user-card p-3 border rounded-lg flex flex-col gap-3 ${!canEdit && !isSelf ? 'bg-gray-200 opacity-70' : lockedClasses}" data-userid="${userId}">
             <div class="flex justify-between items-start"> 
                 <div class="flex-grow"> 
                     <div class="flex items-center gap-2 flex-wrap"> 
@@ -500,6 +527,7 @@ export async function renderUserManagement() {
             <div class="flex justify-end mt-2"> 
                 <button class="delete-user-button py-1 px-3 text-xs font-semibold bg-red-600 text-white rounded-lg ${!canDelete ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-700'}" data-userid="${userId}" ${!canDelete ? 'disabled' : ''}>Löschen</button> 
             </div>
+            ${lockedWarningHTML} 
         </div>`;
     };
 
