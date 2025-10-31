@@ -175,6 +175,8 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         console.log("currentUser Objekt aktualisiert:", currentUser);
 
         // HIER PASSIERT DAS LIVE-UPDATE:
+        // updateUIForMode() wird aufgerufen, NACHDEM die neuen
+        // adminPermissions in currentUser geladen wurden.
         updateUIForMode(); 
 
         // Navigationsprüfung
