@@ -72,13 +72,13 @@ export async function checkCurrentUserValidity() { // Funktion ist async
             } else {
                 // Der Benutzer existiert WIRKLICH nicht mehr (z.B. gelöscht)
                 console.error(`checkCurrentUserValidity: Direkt-Abfrage FEHLGESCHLAGEN. Benutzer ${storedAppUserId} existiert nicht in Firestore. Erzwinge Logout.`);
-                 switchToGuestMode(false); 
+                 switchToGuestMode(true, "Ihr Benutzerkonto konnte nicht gefunden werden. Sie wurden abgemeldet.", 'error'); 
                  updateUIForMode();
                  return;
             }
         } catch (error) {
             console.error("checkCurrentUserValidity: FEHLER bei Direkt-Abfrage:", error);
-            switchToGuestMode(false); 
+            switchToGuestMode(true, "Fehler bei der Benutzerprüfung. Sie wurden abgemeldet.", 'error'); 
             updateUIForMode();
             return;
         }
@@ -91,7 +91,6 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     // Fall 5: User ist gefunden (entweder im Cache oder via Direkt-Abfrage)
 
     // NEU: Fall 5.1: User ist gefunden, ABER als 'inaktiv' (gesperrt) markiert.
-    // (Dieser Code war vorher Fall 2.5, rückt jetzt hierher)
     if (!userFromFirestore.isActive) {
         console.warn("checkCurrentUserValidity: Benutzer ist als INAKTIV (gesperrt) markiert. Erzwinge Logout.");
         
@@ -107,7 +106,10 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     try {
         
         // Token holen, um sicherzustellen, dass die Sitzung gültig ist
-        const idTokenResult = await currentAuthUser.getIdToken(true);
+        // KORREKTUR: Wir erzwingen ein Token-Refresh (true),
+        // damit Änderungen an Custom Claims (die wir noch nicht nutzen)
+        // schneller übernommen werden.
+        const idTokenResult = await currentAuthUser.getIdToken(true); 
         if (!idTokenResult) {
             throw new Error("Konnte kein gültiges ID Token abrufen.");
         }
@@ -119,14 +121,14 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         console.log(`Effektiver Admin-Typ (aus DB): ${user.adminPermissionType}`);
         
         // =================================================================
-        // BEGINN DER KORREKTUR (Rechte-Trennung)
+        // (Dieser Block bleibt unverändert)
         // =================================================================
 
-        let userPermissions = []; // Für Eingang, Push, Checkliste...
-        let adminPermissions = {}; // Für Passwörter, Benutzer sehen...
-        let currentAssignedAdminRoleId = null; // Nur für Admin-Rollen
+        let userPermissions = [];
+        let adminPermissions = {};
+        let currentAssignedAdminRoleId = null; 
 
-        // --- TEIL 1: Lade BENUTZER-Rechte (Eingang, Push...) ---
+        // --- TEIL 1: Lade BENUTZER-Rechte ---
         if (user.permissionType === 'role') {
             console.log(`Lade BENUTZER-Rechte für ROLLE: ${effectiveRole}`);
             if (effectiveRole && ROLES[effectiveRole]) {
@@ -138,28 +140,23 @@ export async function checkCurrentUserValidity() { // Funktion ist async
             userPermissions = [...(user.customPermissions || [])];
         }
         
-        // Sonderfall: SysAdmin bekommt immer ALLE Benutzer-Rechte
         if (effectiveRole === 'SYSTEMADMIN') {
             userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
             console.log("Systemadmin BENUTZER-Rechte geladen.");
         }
 
-        // --- TEIL 2: Lade ADMIN-Rechte (Passwörter, Benutzer...) ---
+        // --- TEIL 2: Lade ADMIN-Rechte ---
         if (effectiveRole === 'ADMIN') {
-            // Prüfe den *Admin-Typ* ('adminPermissionType')
             if (user.adminPermissionType === 'role' && user.assignedAdminRoleId && ADMIN_ROLES[user.assignedAdminRoleId]) {
-                // Admin-Rechte kommen von einer Admin-Rolle
                 console.log(`Lade ADMIN-Rechte von ROLLE: ${user.assignedAdminRoleId}`);
                 adminPermissions = ADMIN_ROLES[user.assignedAdminRoleId].permissions || {};
                 currentAssignedAdminRoleId = user.assignedAdminRoleId;
             } else {
-                // Admin-Rechte kommen individuell (oder als Fallback)
                 console.log(`Lade INDIVIDUELLE ADMIN-Rechte.`);
                 adminPermissions = user.adminPermissions || {};
             }
         } 
         else if (effectiveRole === 'SYSTEMADMIN') {
-            // SysAdmin bekommt immer ALLE Admin-Rechte
              console.log("Systemadmin ADMIN-Rechte geladen.");
              adminPermissions = {
                 canSeePasswords: true, canSeeUsers: true, canSeeApprovals: true, canViewLogs: true,
@@ -171,7 +168,7 @@ export async function checkCurrentUserValidity() { // Funktion ist async
             };
         }
         // =================================================================
-        // ENDE DER KORREKTUR
+        // ENDE DES UNVERÄNDERTEN BLOCKS
         // =================================================================
         
         console.log("Final zugewiesene BENUTZER-Berechtigungen:", userPermissions);
@@ -183,10 +180,10 @@ export async function checkCurrentUserValidity() { // Funktion ist async
             mode: storedAppUserId,
             displayName: userFromFirestore.name,
             role: effectiveRole, 
-            permissions: userPermissions, // BENUTZER-Rechte
-            adminPermissions: adminPermissions, // ADMIN-Rechte (NEU!)
+            permissions: userPermissions, 
+            adminPermissions: adminPermissions, // HIER werden die neuen Admin-Rechte geladen
             permissionType: userFromFirestore.permissionType,
-            adminPermissionType: userFromFirestore.adminPermissionType, // (NEU!)
+            adminPermissionType: userFromFirestore.adminPermissionType, 
             displayRole: userFromFirestore.displayRole,
             assignedAdminRoleId: currentAssignedAdminRoleId
         });
@@ -197,6 +194,8 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         // Navigationsprüfung
          const activeView = document.querySelector('.view.active');
          const isAdminOrSysAdmin = effectiveRole === 'ADMIN' || effectiveRole === 'SYSTEMADMIN';
+         
+         // KORREKTUR: Diese Prüfung MUSS NACH updateUIForMode() erfolgen
          if (activeView && activeView.id === 'adminView' && !isAdminOrSysAdmin) {
              alertUser("Ihre Administrator-Rechte wurden entzogen.", "error");
              navigate('home');
@@ -204,7 +203,6 @@ export async function checkCurrentUserValidity() { // Funktion ist async
 
     } catch (error) {
          console.error("Fehler beim Holen des ID Tokens oder Prüfen der Claims:", error);
-         // BONUS-KORREKTUR: Wenn HIER ein Fehler passiert, ist die Meldung jetzt auch rot (aber normal kurz 'error')
          switchToGuestMode(true, "Fehler bei der Berechtigungsprüfung.", 'error');
          updateUIForMode();
     }

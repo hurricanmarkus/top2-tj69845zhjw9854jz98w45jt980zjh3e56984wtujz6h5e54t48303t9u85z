@@ -593,7 +593,16 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 setButtonLoading(saveNewUserButton, true);
                 
                 const approvalRules = currentUser.adminPermissions?.approvalRequired || {};
-                const needsApproval = approvalRules['createUser'] === true; 
+                
+                // =================================================================
+                // BEGINN DER KORREKTUR (Genehmigungs-Schlüssel)
+                // =================================================================
+                // ALT: const needsApproval = approvalRules['createUser'] === true; 
+                const needsApproval = approvalRules['canCreateUser'] === true; // KORREKTER SCHLÜSSEL
+                // =================================================================
+                // ENDE DER KORREKTUR
+                // =================================================================
+                
                 const autoApproveFlag = !needsApproval; 
 
                 console.log(`[Auto-Approve Check]: NeedsApproval='${needsApproval}', Setting autoApproveFlag='${autoApproveFlag}'`);
@@ -614,10 +623,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 // 2. Nur noch die Admin-Aktion loggen
                 if (autoApproveFlag) {
                     await logAdminAction('user_created_autoapproved', `Neuen Benutzer angelegt (Auto-Approve): '${name}'.`);
-                    // KORREKTUR: alertUser(...) HIER ENTFERNT
                 } else {
                     await logAdminAction('user_created_pending', `Antrag für Benutzer '${name}' eingereicht.`);
-                    // KORREKTUR: alertUser(...) HIER ENTFERNT
                 }
                 
                 // Formular zurücksetzen
@@ -633,7 +640,6 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
             } catch (error) {
                 console.error("Fehler beim Anlegen des Benutzers (via Request):", error);
-                // HINWEIS: alertUser MUSS im catch-Block bleiben!
                 alertUser("Fehler beim Erstellen der Anfrage.", "error");
             } finally {
                 setButtonLoading(saveNewUserButton, false);
@@ -671,7 +677,16 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             
             try {
                 const approvalRules = currentUser.adminPermissions?.approvalRequired || {};
-                const needsApproval = approvalRules['deleteUser'] === true; // 'deleteUser'
+
+                // =================================================================
+                // BEGINN DER KORREKTUR (Genehmigungs-Schlüssel)
+                // =================================================================
+                // ALT: const needsApproval = approvalRules['deleteUser'] === true;
+                const needsApproval = approvalRules['canDeleteUser'] === true; // KORREKTER SCHLÜSSEL
+                // =================================================================
+                // ENDE DER KORREKTUR
+                // =================================================================
+                
                 const autoApproveFlag = !needsApproval;
 
                 // 1. Anfrage erstellen (diese Funktion ruft alertUser auf)
@@ -686,10 +701,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 // 2. Nur noch loggen
                 if (autoApproveFlag) {
                     await logAdminAction('user_deleted_autoapproved', `Benutzer '${userToDelete.name}' gelöscht (Auto-Approve).`);
-                    // KORREKTUR: alertUser(...) HIER ENTFERNT
                 } else {
                     await logAdminAction('user_deleted_pending', `Antrag zum Löschen von '${userToDelete.name}' eingereicht.`);
-                    // KORREKTUR: alertUser(...) HIER ENTFERNT
                 }
             } catch (error) {
                 console.error("Fehler beim Senden der Lösch-Anfrage:", error);
@@ -726,7 +739,16 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             
             try {
                 const approvalRules = currentUser.adminPermissions?.approvalRequired || {};
-                const needsApproval = approvalRules['renameUser'] === true; // 'renameUser'
+
+                // =================================================================
+                // BEGINN DER KORREKTUR (Genehmigungs-Schlüssel)
+                // =================================================================
+                // ALT: const needsApproval = approvalRules['renameUser'] === true; 
+                const needsApproval = approvalRules['canRenameUser'] === true; // KORREKTER SCHLÜSSEL
+                // =================================================================
+                // ENDE DER KORREKTUR
+                // =================================================================
+                
                 const autoApproveFlag = !needsApproval;
 
                 // 1. Anfrage erstellen (diese Funktion ruft alertUser auf)
@@ -742,10 +764,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 // 2. Nur noch loggen
                 if (autoApproveFlag) {
                     await logAdminAction('user_renamed_autoapproved', `Benutzer ${USERS[userId]?.name || userId} umbenannt in '${newNickname}' (Auto-Approve).`);
-                    // KORREKTUR: alertUser(...) HIER ENTFERNT
                 } else {
                     await logAdminAction('user_renamed_pending', `Antrag auf Umbenennung für ${USERS[userId]?.name || userId} eingereicht.`);
-                    // KORREKTUR: alertUser(...) HIER ENTFERNT
                 }
                 
                 nameDisplay.classList.remove('hidden');
@@ -827,7 +847,16 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
             try {
                 const approvalRules = currentUser.adminPermissions?.approvalRequired || {};
-                const needsApproval = approvalRules['changeUserPermissionType'] === true; // 'changeUserPermissionType'
+                
+                // =================================================================
+                // BEGINN DER KORREKTUR (Genehmigungs-Schlüssel)
+                // =================================================================
+                // ALT: const needsApproval = approvalRules['changeUserPermissionType'] === true; 
+                const needsApproval = approvalRules['canChangeUserPermissionType'] === true; // KORREKTER SCHLÜSSEL
+                // =================================================================
+                // ENDE DER KORREKTUR
+                // =================================================================
+                
                 const autoApproveFlag = !needsApproval;
                 
                 detailsForRequest.autoApprove = autoApproveFlag;
@@ -842,10 +871,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 // 2. Nur noch loggen
                 if (autoApproveFlag) {
                     await logAdminAction('user_perms_updated_autoapproved', `Berechtigungen für ${USERS[userId]?.name || userId} geändert (Auto-Approve).`);
-                    // KORREKTUR: alertUser(...) HIER ENTFERNT
                 } else {
                      await logAdminAction('user_perms_updated_pending', `Antrag auf Berechtigungsänderung für ${USERS[userId]?.name || userId} eingereicht.`);
-                    // KORREKTUR: alertUser(...) HIER ENTFERNT
                 }
                 
                 const saveBtnContainer = permContainer.querySelector('.save-perms-container');
@@ -873,7 +900,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             if (!userCard) return;
             const userId = userCard.dataset.userid;
             if (!userId) return;
-            console.log(`[CHANGE] Änderung innerhalb der Karte für User: ${userId}`);
+            console.log(`[CHANGE] Änderung innerh. der Karte für User: ${userId}`);
 
              if (target.classList.contains('user-active-toggle')) {
                 const newIsLocked = target.checked; 
@@ -893,7 +920,16 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 
                 try {
                     const approvalRules = currentUser.adminPermissions?.approvalRequired || {};
-                    const needsApproval = approvalRules['toggleUserActive'] === true; // 'toggleUserActive'
+                    
+                    // =================================================================
+                    // BEGINN DER KORREKTUR (Genehmigungs-Schlüssel)
+                    // =================================================================
+                    // ALT: const needsApproval = approvalRules['toggleUserActive'] === true;
+                    const needsApproval = approvalRules['canToggleUserActive'] === true; // KORREKTER SCHLÜSSEL
+                    // =================================================================
+                    // ENDE DER KORREKTUR
+                    // =================================================================
+                    
                     const autoApproveFlag = !needsApproval;
                     
                     // 1. Anfrage erstellen (diese Funktion ruft alertUser auf)
@@ -912,10 +948,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                     // 2. Nur noch loggen
                     if (autoApproveFlag) {
                         await logAdminAction(newIsActive ? 'user_unlocked_autoapproved' : 'user_locked_autoapproved', logMessage);
-                        // KORREKTUR: alertUser(...) HIER ENTFERNT
                     } else {
                         await logAdminAction(newIsActive ? 'user_unlocked_pending' : 'user_locked_pending', logMessagePending);
-                        // KORREKTUR: alertUser(...) HIER ENTFERNT
                     }
                     
                 } catch (error) {
