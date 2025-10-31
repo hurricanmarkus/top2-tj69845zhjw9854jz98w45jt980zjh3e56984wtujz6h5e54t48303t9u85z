@@ -42,7 +42,7 @@ export function listenForUserUpdates() {
             if (initialAuthCheckDone) {
                 checkCurrentUserValidity(); // <-- DAS IST DER SCHLÜSSEL ZUM LIVE-UPDATE
             }
-            
+
             renderModalUserButtons(); 
 
             // Admin-Sektionen neu zeichnen (bleibt hier)
@@ -271,9 +271,8 @@ export function renderUserKeyList() {
     });
 }
 
-export async function renderUserManagement() {
-    // KORREKTUR: Importiere die neue globale Variable
-    const { PENDING_REQUESTS } = await import('./haupteingang.js');
+export function renderUserManagement() {
+    // 'async' und 'await import' SIND HIER KORREKT ENTFERNT
 
     const userManagementArea = document.getElementById('userManagementArea');
     if (!userManagementArea) {
@@ -309,7 +308,7 @@ export async function renderUserManagement() {
     // --- HTML-Grundgerüst ---
     userManagementArea.innerHTML = `
         <button id="showAddUserFormBtn" class="w-full p-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 transition shadow-md ${!permSet.canCreateUser ? 'hidden' : ''}">+ Benutzer anlegen</button>
-        
+
         <div id="addUserFormContainer" class="p-4 border rounded-xl bg-green-50 hidden">
             <h4 class="font-bold text-lg text-green-800 mb-2">Neuen Benutzer anlegen</h4>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -331,9 +330,9 @@ export async function renderUserManagement() {
                 </button>
             </div>
         </div>
-        
+
         <div id="registeredUserList" class="space-y-3 pt-4 border-t mt-4"></div>
-        
+
         <div class="mt-6 pt-4 border-t">
             <button id="notRegisteredToggle" class="w-full flex justify-between items-center p-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-left font-semibold text-gray-700">
                 <span>Nicht registrierte Personen (<span id="notRegisteredCount">0</span>)</span>
@@ -395,14 +394,14 @@ export async function renderUserManagement() {
     // --- Rendern der Benutzerkarten ---
     const createUserCardHTML = (user) => {
         const userId = user.id; 
-        
+
         // Prüfe, ob für diesen Benutzer eine "pending" Anfrage existiert
         const pendingRequestsForUser = PENDING_REQUESTS[userId] || [];
         const isLocked = pendingRequestsForUser.length > 0;
 
         const isSelf = userId === currentUser.mode; 
         const isTargetSysAdmin = user.role === 'SYSTEMADMIN'; 
-        
+
         // =================================================================
         // BEGINN DER KORREKTUR (Problem 1: Admin-Sperre)
         // =================================================================
@@ -413,9 +412,9 @@ export async function renderUserManagement() {
         // =================================================================
         // ENDE DER KORREKTUR
         // =================================================================
-        
+
         const isNotRegistered = user.permissionType === 'not_registered';
-        
+
         let canEdit = false; 
         if (isSysAdminEditing) { 
             canEdit = !isSelf && !isTargetSysAdmin; 
@@ -424,38 +423,38 @@ export async function renderUserManagement() {
             canEdit = !isTargetSysAdmin && !isTargetAdmin; 
         } 
         if (isNotRegistered && (isAdmin || isSysAdminEditing)) canEdit = true;
-        
+
         // Wenn die Karte gesperrt ist (pending), kann nichts geändert werden
         const canToggle = permSet.canToggleUserActive && canEdit && !isSelf && !isNotRegistered && !isLocked; 
         const canDelete = permSet.canDeleteUser && canEdit && !isSelf && !isLocked; 
         const canRename = (permSet.canRenameUser && canEdit && !isLocked) || (isSysAdminEditing && isSelf && !isLocked); 
         const canChangePerms = permSet.canChangeUserPermissionType && canEdit && !isNotRegistered && !isLocked;
-        
+
         const currentUserLabel = isSelf ? '<span class="bg-indigo-100 text-indigo-800 font-bold text-xs px-2 py-1 rounded-full ml-2">AKTUELL</span>' : ''; 
         const realNameDisplay = user.realName ? `<span class="text-gray-500 italic text-sm ml-1 real-name-display">(${escapeHtml(user.realName)})</span>` : '';
-        
+
         let roleName = 'Unbekannt'; 
         let roleColorClass = 'text-gray-500'; 
-        
+
         if (isNotRegistered) { 
             roleName = 'Nicht registriert'; 
             roleColorClass = 'text-gray-400 italic'; 
         } else { 
             const effectiveRoleId = (user.permissionType === 'role') ? user.role : (user.displayRole || 'NO_RIGHTS');
             roleName = ROLES[effectiveRoleId]?.name || 'Keine Rolle'; 
-            
+
             if (effectiveRoleId === 'SYSTEMADMIN') {
                 roleColorClass = 'text-purple-600 font-bold'; 
             } else if (effectiveRoleId === 'ADMIN') {
                 roleColorClass = 'text-red-600 font-bold'; 
             }
         }
-        
+
         let permissionsHTML = '';
         if (!isNotRegistered) {
             const permType = user.permissionType || 'role';
             let selectedDisplayRole = user.displayRole || 'NO_RIGHTS';
-            
+
             const finalDisplayRoleOptionsWithSelection = displayRoleOptions.replace(`value="${selectedDisplayRole}"`, `value="${selectedDisplayRole}" selected`);
             permissionsHTML = `
             <div class="mt-4 pt-3 border-t" data-userid="${userId}">
@@ -486,7 +485,7 @@ export async function renderUserManagement() {
             </div>`;
         }
         const lockToggleHTML = !isNotRegistered ? `<label class="flex items-center ${canToggle ? 'cursor-pointer' : 'cursor-not-allowed'}"><span class="mr-2 text-sm font-medium">Gesperrt: <span class="${!user.isActive ? 'text-red-700' : 'text-green-700'} font-bold">${!user.isActive ? 'JA' : 'NEIN'}</span></span><div class="relative"><input type="checkbox" class="sr-only user-active-toggle" data-userid="${userId}" ${!user.isActive ? 'checked' : ''} ${!canToggle ? 'disabled' : ''}><div class="block bg-gray-300 w-10 h-6 rounded-full"></div><div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition"></div></div></label>` : '<div class="w-10 h-6"></div>';
-        
+
         // Erzeuge die Warnmeldung, wenn die Karte gesperrt ist
         let lockedWarningHTML = '';
         if (isLocked) {
@@ -500,7 +499,7 @@ export async function renderUserManagement() {
                 <p class="text-xs mt-1 ml-6">Aktion: ${requestTypes}</p>
             </div>`;
         }
-        
+
         // Füge die Sperr-Klassen zur Hauptkarte hinzu
         const lockedClasses = isLocked ? 'bg-yellow-50 opacity-70 border-yellow-300' : 'bg-gray-50';
 
@@ -510,13 +509,13 @@ export async function renderUserManagement() {
                 <div class="flex-grow"> 
                     <div class="flex items-center gap-2 flex-wrap"> 
                         <div data-userid="${userId}" class="name-display font-bold text-gray-800">${escapeHtml(user.name || 'Unbenannt')} ${currentUserLabel} ${realNameDisplay}</div> 
-                        
+
                         <div data-userid="${userId}" class="name-edit-container hidden flex-grow gap-2 items-center"> 
                             <input type="text" value="${escapeHtml(user.name || '')}" class="edit-nickname-input p-1 border rounded w-full text-sm" placeholder="Nickname"> 
                             <input type="text" value="${escapeHtml(user.realName || '')}" class="edit-realname-input p-1 border rounded w-full text-sm bg-gray-100 cursor-not-allowed" placeholder="Vollständiger Name" disabled> 
                             <button class="save-name-btn p-1 ml-1 bg-green-500 text-white rounded text-xs">✔️</button> 
                         </div> 
-                        
+
                         ${canRename ? `<button class="rename-user-btn p-1" data-userid="${userId}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4 text-gray-500 hover:text-indigo-600"><path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.775a.75.75 0 0 0-.22.53l-.5 2.5a.75.75 0 0 0 .913.913l2.5-.5a.75.75 0 0 0 .53-.22l4.263-4.262a1.75 1.75 0 0 0 0-2.475Z" /><path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v9.5c0 .69.56 1.25 1.25 1.25h9.5c.69 0 1.25-.56 1.25-1.25V9.5a.75.75 0 0 1 1.5 0v5.25A2.75 2.75 0 0 1 14.25 18h-9.5A2.75 2.75 0 0 1 2 15.25v-9.5A2.75 2.75 0 0 1 4.75 3.5h5.25a.75.75 0 0 1 0 1.5H4.75Z" /></svg></button>` : ''} 
                     </div> 
                     <p class="text-xs ${roleColorClass}">${escapeHtml(roleName)}</p> 

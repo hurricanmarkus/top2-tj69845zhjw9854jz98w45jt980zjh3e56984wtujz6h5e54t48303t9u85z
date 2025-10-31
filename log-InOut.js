@@ -6,6 +6,7 @@ import { doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-
 // ENDE-ZIKA //
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
+// ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
 export async function checkCurrentUserValidity() { // Funktion ist async
     console.log("--- Prüfe Benutzerberechtigungen (V7 - Robuste Cache-Prüfung) ---");
 
@@ -174,8 +175,6 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         console.log("currentUser Objekt aktualisiert:", currentUser);
 
         // HIER PASSIERT DAS LIVE-UPDATE:
-        // updateUIForMode() wird aufgerufen, NACHDEM die neuen
-        // adminPermissions in currentUser geladen wurden.
         updateUIForMode(); 
 
         // Navigationsprüfung

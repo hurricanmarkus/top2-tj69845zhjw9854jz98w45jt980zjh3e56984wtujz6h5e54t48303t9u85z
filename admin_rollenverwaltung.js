@@ -9,14 +9,14 @@ import { setupPermissionDependencies } from './admin_rechteverwaltung.js';
 
 export function listenForRoleUpdates() {
     onSnapshot(rolesCollectionRef, (snapshot) => {
-        
+
         // =================================================================
         // BEGINN DER KORREKTUR (Logout-Problem)
         // =================================================================
         if (!snapshot.empty) {
             Object.keys(ROLES).forEach(key => delete ROLES[key]);
             snapshot.forEach((doc) => { ROLES[doc.id] = { id: doc.id, ...doc.data() }; });
-            
+
             if (initialAuthCheckDone) {
                 checkCurrentUserValidity();
             }
@@ -36,18 +36,18 @@ export function listenForRoleUpdates() {
 
 export function listenForAdminRoleUpdates() {
     onSnapshot(adminRolesCollectionRef, (snapshot) => {
-        
+
         // =================================================================
         // BEGINN DER KORREKTUR (Logout-Problem)
         // =================================================================
         if (snapshot.size > 0) { 
             // 1. Alle alten Admin-Rollen aus dem Speicher löschen
             Object.keys(ADMIN_ROLES).forEach(key => delete ADMIN_ROLES[key]); 
-            
+
             // 2. Die neuen, frischen Admin-Rollen aus der Datenbank einlesen
             snapshot.forEach((doc) => { ADMIN_ROLES[doc.id] = { id: doc.id, ...doc.data() }; });
-            
-            
+
+
             // 3. Prüfen, ob die App schon gestartet ist
             if (initialAuthCheckDone) {
                 // 4. Rechte des aktuellen Benutzers SOFORT neu berechnen.
@@ -58,15 +58,15 @@ export function listenForAdminRoleUpdates() {
                  console.warn("renderAdminRightsManagement in listenForAdminRoleUpdates nicht aufgerufen, da Import fehlt.");
             }
             if (adminSectionsState.role && typeof renderRoleManagement === 'function') renderRoleManagement();
-            
+
         } else {
              console.warn("listenForAdminRoleUpdates: Leerer Snapshot empfangen. ADMIN_ROLES-Cache wird nicht geleert.");
         }
         // =================================================================
         // ENDE DER KORREKTUR
         // =================================================================
-    
-    
+
+
     }, (error) => {
         console.error("Error listening for admin role updates:", error);
     });

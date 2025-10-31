@@ -70,13 +70,13 @@ export async function createApprovalRequest(type, userId, details = {}) {
 
 
 export function listenForApprovalRequests() {
-    // KORREKTUR: 'async' und 'await import' ENTFERNT
+    // 'async' und 'await import' SIND HIER KORREKT ENTFERNT
 
     onSnapshot(query(approvalRequestsCollectionRef, orderBy('timestamp', 'desc')), (snapshot) => {
-        
+
         // 1. Leere die globale Liste
         Object.keys(PENDING_REQUESTS).forEach(key => delete PENDING_REQUESTS[key]);
-        
+
         // 2. Fülle sie mit allen "pending" Anfragen
         snapshot.forEach(doc => {
             const request = doc.data();
@@ -98,7 +98,6 @@ export function listenForApprovalRequests() {
         }
     });
 }
-
 
 // =================================================================
 // BEGINN DER KORREKTUR (FUNKTION ERSETZEN)
@@ -125,14 +124,14 @@ export async function renderApprovalProcess(snapshot = null) {
         const requestCard = document.createElement('div');
         requestCard.className = 'p-3 border rounded-lg';
         let cardBG = 'bg-white', statusText = '', descriptionHTML = '';
-        
+
         let statusActor;
         if (request.status === 'failed') {
              statusActor = ` (BOT-FEHLER: ${request.actionTakenByName || ''})`;
         } else {
              statusActor = request.actionTakenByName ? ` (von ${request.actionTakenByName})` : '';
         }
-        
+
         const time = request.timestamp?.toDate?.().toLocaleString('de-DE') || '';
 
         switch (request.status) {
@@ -140,7 +139,7 @@ export async function renderApprovalProcess(snapshot = null) {
             case 'approved': cardBG = 'bg-green-50'; statusText = 'Genehmigt' + statusActor; break;
             case 'denied': cardBG = 'bg-red-50'; statusText = 'Abgelehnt' + statusActor; break;
             case 'withdrawn': cardBG = 'bg-gray-100'; statusText = 'Zurückgezogen' + statusActor; break;
-            case 'failed': cardBG = 'bg-pink-100'; statusText = 'Fehlgeschlagen'T + statusActor; break; 
+            case 'failed': cardBG = 'bg-pink-100'; statusText = 'Fehlgeschlagen' + statusActor; break; 
             default: cardBG = 'bg-white'; statusText = request.status || '';
         }
         requestCard.classList.add(cardBG);
@@ -166,7 +165,7 @@ export async function renderApprovalProcess(snapshot = null) {
             case 'SET_ADMIN_STATUS':
                 descriptionHTML = `<p>Aktion: <span class="font-medium text-purple-600">Zum Admin befördern</span> für <span class="font-medium">${request.userName}</span></p>`;
                 break;
-            
+
             // =================================================================
             // BEGINN DER KORREKTUR (Problem 3: Anzeige)
             // =================================================================
@@ -239,7 +238,6 @@ export async function renderApprovalProcess(snapshot = null) {
             const { type, userId, details } = request;
             let batch = writeBatch(db);
 
-            // KORREKTUR: Logik für 'CHANGE_PERMISSION_TYPE' und 'CREATE_USER' (mit 'realName')
             switch (type) {
                 case 'CREATE_USER': {
                     const { name, key, role, isActive, newUserId, realName } = details.userData || {};
@@ -319,7 +317,6 @@ export async function renderApprovalProcess(snapshot = null) {
             console.error("Error withdrawing request:", error);
         }
     }));
-}
-// =================================================================
+}// =================================================================
 // ENDE DER KORREKTUR
 // =================================================================
