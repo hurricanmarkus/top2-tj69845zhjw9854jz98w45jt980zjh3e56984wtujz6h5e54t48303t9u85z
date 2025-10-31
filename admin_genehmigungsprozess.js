@@ -172,9 +172,28 @@ export async function renderApprovalProcess(snapshot = null) {
             // KORREKTUR: 'CHANGE_PERMISSION_TYPE' Logik angepasst (war 'CHANGE_USER_ROLE')
             case 'CHANGE_PERMISSION_TYPE':
                 {
-                    let typeDetails = request.details?.type === 'role'
-                        ? `auf "Rolle" (${ROLES?.[request.details?.newRole]?.name || request.details?.newRole || 'Standard'})`
-                        : `auf "Individuell"`;
+                    // =================================================================
+                    // BEGINN DER KORREKTUR (FEHLER 3)
+                    // =================================================================
+                    let typeDetails = '';
+                    if (request.details?.type === 'role') {
+                        // Bisherige Logik für "Rolle"
+                        typeDetails = `auf "Rolle" (${ROLES?.[request.details?.newRole]?.name || request.details?.newRole || 'Standard'})`;
+                    } else {
+                        // NEUE Logik für "Individuell"
+                        typeDetails = `auf "Individuell"`;
+                        // Prüfe, ob eine displayRole (angezeigte Rolle) mitgesendet wurde
+                        if (request.details?.displayRole) {
+                            // Hänge den Text an, indem wir den Namen der Rolle aus dem ROLES-Objekt holen
+                            typeDetails += ` (Angezeigt als: ${ROLES?.[request.details?.displayRole]?.name || request.details?.displayRole})`;
+                        } else if (request.details?.displayRole === null) {
+                            // Falls die Rolle explizit entfernt wurde (auf "Keine Rechte" gesetzt)
+                             typeDetails += ` (Angezeigt als: ${ROLES['NO_RIGHTS']?.name || 'Keine Rechte'})`;
+                        }
+                    }
+                    // =================================================================
+                    // ENDE DER KORREKTUR (FEHLER 3)
+                    // =================================================================
                     descriptionHTML = `<p>Aktion: <span class="font-medium">Berechtigungstyp ändern</span> für <span class="font-medium">${request.userName}</span></p><p class="text-sm text-gray-600">Änderung: ${typeDetails}</p>`;
                 }
                 break;

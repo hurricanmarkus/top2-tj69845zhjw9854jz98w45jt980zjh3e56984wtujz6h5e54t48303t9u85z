@@ -337,7 +337,7 @@ export function renderUserManagement() {
             <button id="notRegisteredToggle" class="w-full flex justify-between items-center p-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-left font-semibold text-gray-700">
                 <span>Nicht registrierte Personen (<span id="notRegisteredCount">0</span>)</span>
                 <svg id="notRegisteredToggleIcon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5 transform transition-transform">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                 </svg>
             </button>
             <div id="notRegisteredList" class="hidden mt-2 space-y-2 pl-4 border-l-2 border-gray-200">
@@ -401,14 +401,30 @@ export function renderUserManagement() {
 
         const isSelf = userId === currentUser.mode; 
         const isTargetSysAdmin = user.role === 'SYSTEMADMIN'; 
-        const isTargetAdmin = user.role === 'ADMIN'; 
+        
+        // =================================================================
+        // BEGINN DER KORREKTUR (FEHLER 1)
+        // =================================================================
+        
+        // NEU: Prüfen, ob der ZIEL-Benutzer (user) ein Admin ist, EGAL WIE.
+        const isTargetStandardAdmin = user.role === 'ADMIN';
+        const isTargetIndividualAdmin = user.permissionType === 'individual' && user.displayRole === 'ADMIN';
+        // NEUE Variable: ist wahr, wenn EGAL WELCHE Art von Admin
+        const isTargetAnAdmin = isTargetStandardAdmin || isTargetIndividualAdmin; 
+
+        // =================================================================
+        // ENDE DER KORREKTUR (FEHLER 1)
+        // =================================================================
+
         const isNotRegistered = user.permissionType === 'not_registered';
         
         let canEdit = false; 
         if (isSysAdminEditing) { 
             canEdit = !isSelf && !isTargetSysAdmin; 
         } else if (isAdmin) { 
-            canEdit = !isTargetSysAdmin && !isTargetAdmin; 
+            // ALT: canEdit = !isTargetSysAdmin && !isTargetAdmin;
+            // NEU: Ein Admin darf keinen SysAdmin UND auch keinen anderen Admin (egal ob Rolle oder Individuell) bearbeiten.
+            canEdit = !isTargetSysAdmin && !isTargetAnAdmin; // <--- HIER DIE KORREKTUR
         } 
         if (isNotRegistered && (isAdmin || isSysAdminEditing)) canEdit = true;
         

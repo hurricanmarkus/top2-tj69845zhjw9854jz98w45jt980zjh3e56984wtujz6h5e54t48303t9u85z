@@ -4,7 +4,7 @@ import { doc, updateDoc, setDoc, deleteDoc, onSnapshot, writeBatch, query, where
 import { initialAuthCheckDone, adminSectionsState, rolesCollectionRef, ADMIN_ROLES, ROLES, adminRolesCollectionRef, currentUser, db, roleManagementSectionsState, alertUser, USERS, usersCollectionRef } from './haupteingang.js'; // USERS importiert
 import { checkCurrentUserValidity } from './log-InOut.js';
 import { logAdminAction } from './admin_protokollHistory.js';
-import { setupPermissionDependencies } from './admin_rechteverwaltung.js';
+import { setupPermissionDependencies, renderAdminRightsManagement } from './admin_rechteverwaltung.js';
 // ENDE-ZIKA //
 
 export function listenForRoleUpdates() {
@@ -54,9 +54,19 @@ export function listenForAdminRoleUpdates() {
                 checkCurrentUserValidity(); // <-- DAS IST AUCH DER SCHLÜSSEL ZUM LIVE-UPDATE
             }
 
+            // =================================================================
+            // BEGINN DER KORREKTUR (FEHLER 2: Live-Anzeige)
+            // =================================================================
+            // HIER rufen wir jetzt die importierte Funktion auf.
+            // Wenn die Admin-Rechte-Sektion offen ist, wird sie neu geladen.
             if (adminSectionsState.adminRights && typeof renderAdminRightsManagement === 'function') {
-                 console.warn("renderAdminRightsManagement in listenForAdminRoleUpdates nicht aufgerufen, da Import fehlt.");
+                 // console.warn("renderAdminRightsManagement in listenForAdminRoleUpdates nicht aufgerufen, da Import fehlt."); // <--- Dieser Kommentar kann jetzt weg
+                 renderAdminRightsManagement(); // <--- HIER IST DIE KORREKTUR
             }
+            // =================================================================
+            // ENDE DER KORREKTUR
+            // =================================================================
+
             if (adminSectionsState.role && typeof renderRoleManagement === 'function') renderRoleManagement();
             
         } else {
