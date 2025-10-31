@@ -528,14 +528,6 @@ export async function renderUserManagement() {
 // ... (Rest der Datei, bis zur Funktion addAdminUserManagementListeners) ...
 
 
-// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
-// admin_benutzersteuerung.js
-
-// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
-// admin_benutzersteuerung.js
-
-// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
-// Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
 export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions) {
     if (!area) return;
 

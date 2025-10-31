@@ -1,12 +1,13 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 //
 import { db, usersCollectionRef, setButtonLoading, adminSectionsState, modalUserButtons, ADMIN_ROLES, adminRolesCollectionRef, rolesCollectionRef, ROLES, alertUser, initialAuthCheckDone, currentUser, GUEST_MODE, adminSettings, CHECKLISTS, ADMIN_STORAGE_KEY, USERS, navigate, auth } from './haupteingang.js';
 import { renderModalUserButtons } from './admin_benutzersteuerung.js';
+import { doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ENDE-ZIKA //
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
 export async function checkCurrentUserValidity() { // Funktion ist async
-    console.log("--- Prüfe Benutzerberechtigungen (V6 - Getrennte Rechte) ---");
+    console.log("--- Prüfe Benutzerberechtigungen (V7 - Robuste Cache-Prüfung) ---");
 
     // Prüfe zuerst, ob 'auth' initialisiert wurde
     if (!auth) {
@@ -18,10 +19,17 @@ export async function checkCurrentUserValidity() { // Funktion ist async
 
     const currentAuthUser = auth.currentUser; // Aktuellen Firebase Auth User holen
     const storedAppUserId = localStorage.getItem(ADMIN_STORAGE_KEY); // z.B. "JASMIN"
-    // Stelle sicher, dass USERS nicht null/undefined ist, bevor darauf zugegriffen wird
-    const userFromFirestore = storedAppUserId && USERS ? USERS[storedAppUserId] : null;
 
-    // Fall 1: Kein Firebase User angemeldet -> Sicherstellen, dass Gastmodus aktiv ist
+    
+    // =================================================================
+    // BEGINN DER KORREKTUR (Logout-Problem)
+    // =================================================================
+    
+    // 1. Versuche, den Benutzer aus dem SCHNELLEN CACHE (USERS) zu holen
+    let userFromFirestore = storedAppUserId && USERS ? USERS[storedAppUserId] : null;
+    let fetchedFromDB = false; // Ein Flag, das uns sagt, ob wir in der DB nachsehen mussten
+
+    // 2. Fall 1: Kein Firebase User angemeldet -> Gastmodus (bleibt gleich)
     if (!currentAuthUser) {
         console.log("checkCurrentUserValidity: Kein Firebase User angemeldet.");
         if (storedAppUserId || currentUser.mode !== GUEST_MODE) {
@@ -36,33 +44,66 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         return;
     }
 
-
-    // Fall 2: Firebase User ist da, aber kein App User ausgewählt (oder ungültig/nicht gefunden)
-    if (!storedAppUserId || !userFromFirestore) {
-        console.log("checkCurrentUserValidity: Firebase User vorhanden, aber kein gültiger App User im Speicher oder User in Firestore nicht gefunden.");
-        if (currentUser.mode !== GUEST_MODE) {
-             console.log("Wechsle zum Gastmodus, da App User ungültig/fehlt.");
-             // Hier keine Benachrichtigung, da der User wahrscheinlich nur die Seite geladen hat, ohne eingeloggt zu sein
-             switchToGuestMode(false); 
-        }
-        updateUIForMode();
-        return;
+    // 3. Fall 2: Firebase User da, aber kein App User im Speicher?
+    // (Passiert, wenn du nur die Seite lädst, ohne eingeloggt zu sein)
+    if (!storedAppUserId) {
+         console.log("checkCurrentUserValidity: Firebase User vorhanden, aber kein App User im Speicher.");
+         if (currentUser.mode !== GUEST_MODE) {
+              switchToGuestMode(false); 
+         }
+         updateUIForMode();
+         return;
     }
 
-    // NEU: Fall 2.5: User ist gefunden, ABER als 'inaktiv' (gesperrt) markiert.
+    // 4. DER WICHTIGSTE FALL: App User ist im Speicher, aber NICHT im CACHE (USERS)
+    // (Das ist dein "Race Condition"-Logout-Problem)
+    if (storedAppUserId && !userFromFirestore) {
+        console.warn(`checkCurrentUserValidity: Benutzer ${storedAppUserId} nicht im Cache (USERS) gefunden. Cache ist vielleicht veraltet. Versuche Direkt-Abfrage aus DB...`);
+        try {
+            // Wir fragen die DB direkt an (kostet 1 Lesezugriff)
+            // (Hierfür brauchen wir die Imports 'doc' und 'getDoc')
+            const userDocRef = doc(usersCollectionRef, storedAppUserId);
+            const docSnap = await getDoc(userDocRef);
+            
+            if (docSnap.exists()) {
+                console.log(`checkCurrentUserValidity: Direkt-Abfrage erfolgreich! Benutzer ${storedAppUserId} existiert.`);
+                userFromFirestore = { id: docSnap.id, ...docSnap.data() };
+                fetchedFromDB = true; // Setze das Flag
+            } else {
+                // Der Benutzer existiert WIRKLICH nicht mehr (z.B. gelöscht)
+                console.error(`checkCurrentUserValidity: Direkt-Abfrage FEHLGESCHLAGEN. Benutzer ${storedAppUserId} existiert nicht in Firestore. Erzwinge Logout.`);
+                 switchToGuestMode(false); 
+                 updateUIForMode();
+                 return;
+            }
+        } catch (error) {
+            console.error("checkCurrentUserValidity: FEHLER bei Direkt-Abfrage:", error);
+            switchToGuestMode(false); 
+            updateUIForMode();
+            return;
+        }
+    }
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
+
+    
+    // Fall 5: User ist gefunden (entweder im Cache oder via Direkt-Abfrage)
+
+    // NEU: Fall 5.1: User ist gefunden, ABER als 'inaktiv' (gesperrt) markiert.
+    // (Dieser Code war vorher Fall 2.5, rückt jetzt hierher)
     if (!userFromFirestore.isActive) {
         console.warn("checkCurrentUserValidity: Benutzer ist als INAKTIV (gesperrt) markiert. Erzwinge Logout.");
         
         // Wir rufen switchToGuestMode jetzt mit dem dritten Parameter auf: 'error_long'
         switchToGuestMode(true, "Ihr Konto wurde von einem Administrator gesperrt.", 'error_long');
         
-        // updateUIForMode() wird bereits von switchToGuestMode aufgerufen.
         return; // WICHTIG: Hier abbrechen.
     }
     
 
-    // Fall 3: Firebase User ist da UND App User ("JASMIN") ist ausgewählt/gültig/AKTIV
-    console.log(`checkCurrentUserValidity: Firebase User ${currentAuthUser.uid} und App User ${storedAppUserId} vorhanden.`);
+    // Fall 5.2: Firebase User ist da UND App User ("JASMIN") ist ausgewählt/gültig/AKTIV
+    console.log(`checkCurrentUserValidity: Firebase User ${currentAuthUser.uid} und App User ${storedAppUserId} vorhanden. (Aus DB geholt: ${fetchedFromDB})`);
     try {
         
         // Token holen, um sicherzustellen, dass die Sitzung gültig ist
@@ -71,10 +112,7 @@ export async function checkCurrentUserValidity() { // Funktion ist async
             throw new Error("Konnte kein gültiges ID Token abrufen.");
         }
         
-        // Wir vertrauen ab hier der "Live-Datenbank" (Firestore)
-        const user = userFromFirestore; // Das ist die "Source of Truth"
-        // DANK SCHRITT 1 ist 'user.role' jetzt 'ADMIN',
-        // auch wenn 'permissionType' = 'individual' ist.
+        const user = userFromFirestore; 
         const effectiveRole = user.role; 
 
         console.log(`Effektiver Benutzer-Typ (aus DB): ${user.permissionType}`);
@@ -89,7 +127,6 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         let currentAssignedAdminRoleId = null; // Nur für Admin-Rollen
 
         // --- TEIL 1: Lade BENUTZER-Rechte (Eingang, Push...) ---
-        // Diese Logik basiert auf 'permissionType'
         if (user.permissionType === 'role') {
             console.log(`Lade BENUTZER-Rechte für ROLLE: ${effectiveRole}`);
             if (effectiveRole && ROLES[effectiveRole]) {
@@ -108,8 +145,6 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         }
 
         // --- TEIL 2: Lade ADMIN-Rechte (Passwörter, Benutzer...) ---
-        // Diese Logik läuft NUR, wenn der User Admin oder SysAdmin ist,
-        // EGAL was 'permissionType' (für Benutzer) ist.
         if (effectiveRole === 'ADMIN') {
             // Prüfe den *Admin-Typ* ('adminPermissionType')
             if (user.adminPermissionType === 'role' && user.assignedAdminRoleId && ADMIN_ROLES[user.assignedAdminRoleId]) {
