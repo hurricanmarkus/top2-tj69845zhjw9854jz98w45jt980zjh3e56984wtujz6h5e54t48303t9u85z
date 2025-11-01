@@ -319,9 +319,21 @@ async function initializeFirebase() {
                 console.log("Firebase meldet KEINEN User, wechsle explizit zum Gastmodus.");
                 switchToGuestMode(false);
                  initialAuthCheckDone = true;
-                 updateUIForMode(); 
+                 // updateUIForMode(); // <--- KORREKTUR: Dieser Aufruf kommt jetzt raus
             }
              // console.log("initializeFirebase: Ende des onAuthStateChanged Callbacks."); // Logging entfernt
+             
+             // =================================================================
+             // BEGINN DER KORREKTUR (Für App-Shortcuts)
+             // =================================================================
+             // ANSTATT updateUIForMode() rufen wir jetzt unsere neue Funktion auf.
+             // Diese Funktion ruft dann intern navigate() auf,
+             // und navigate() ruft updateUIForMode().
+             handleInitialNavigation();
+             // =================================================================
+             // ENDE DER KORREKTUR
+             // =================================================================
+             
         }); // Ende onAuthStateChanged
     } catch (error) {
         console.error("initializeFirebase: FEHLER bei der grundlegenden Firebase Initialisierung:", error);
@@ -896,3 +908,59 @@ const handleLogin = async () => {
 
     console.log("setupEventListeners: Alle Basis-Listener hinzugefügt.");
 } // Ende setupEventListeners
+
+// =================================================================
+// BEGINN NEUER CODE (Für App-Shortcuts)
+// =================================================================
+export function handleInitialNavigation() {
+    try {
+        // 1. Hole die "Suchparameter" aus der URL (z.B. ?view=entrance)
+        const params = new URLSearchParams(window.location.search);
+        
+        // 2. Suche nach einem Parameter namens 'view'
+        //    Das ist jetzt z.B. 'entrance', 'checklist' oder null (nichts)
+        const viewTarget = params.get('view'); 
+        
+        // 3. Prüfe, ob wir ein 'view'-Ziel gefunden haben
+        if (viewTarget) {
+            console.log(`Shortcut-Navigation erkannt: Versuche zu '${viewTarget}' zu navigieren.`);
+            
+            // 4. Prüfe, ob das eine gültige View ist (aus deinem 'views'-Objekt)
+            if (views[viewTarget]) {
+                
+                // 5. Rufe deine existierende navigate-Funktion auf
+                //    Wir verzögern es einen winzigen Moment (100ms), um sicherzustellen,
+                //    dass die Benutzeroberfläche (UI) bereit ist,
+                //    nachdem alle Lade-Checks (initialAuthCheckDone) durch sind.
+                setTimeout(() => {
+                    navigate(viewTarget);
+                }, 100); 
+            } else {
+                console.warn(`Ungültiges 'view' Ziel im Shortcut: ${viewTarget}`);
+                // Falls ungültig, lade einfach 'home' (Standard)
+                setTimeout(() => navigate('home'), 100);
+            }
+        } else {
+            // 6. Keine 'view' in der URL? Lade einfach 'home'
+            //    (Dies ist der normale Startvorgang)
+            setTimeout(() => navigate('home'), 100);
+        }
+    
+        // 7. WICHTIG: Wir müssen die URL "aufräumen".
+        //    Sonst würdest du bei jedem Neuladen der Seite (F5)
+        //    wieder zu '?view=entrance' springen, selbst wenn du
+        //    längst woanders bist.
+        if (window.history.replaceState) {
+            // Dies ändert die URL in der Adressleiste heimlich zu "/"
+            // (oder was dein start_url ist), ohne die Seite neu zu laden.
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    } catch (error) {
+         console.error("Fehler bei handleInitialNavigation:", error);
+         // Notfall-Fallback: Lade einfach 'home'
+         navigate('home');
+    }
+}
+// =================================================================
+// ENDE NEUER CODE
+// =================================================================
