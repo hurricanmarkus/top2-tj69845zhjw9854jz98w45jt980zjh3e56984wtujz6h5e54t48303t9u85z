@@ -1,12 +1,12 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 // TEST 2
 import { onSnapshot, doc, updateDoc, setDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { db, usersCollectionRef, setButtonLoading, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES, ADMIN_STORAGE_KEY, PENDING_REQUESTS } from './haupteingang.js';
-import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js'; // NEU: renderProtocolHistory importiert
+import { logAdminAction } from './admin_protokollHistory.js'; // KORRIGIERT: renderProtocolHistory entfernt
 import { setupPermissionDependencies, renderAdminRightsManagement } from './admin_rechteverwaltung.js'; // Oder der richtige Dateiname
 import { renderMainFunctionsAdminArea, restoreAdminScrollIfAny, rememberAdminScroll } from './admin_adminfunktionenHome.js';
 import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode } from './log-InOut.js';
 import { createApprovalRequest } from './admin_genehmigungsprozess.js';
-import { renderRoleManagement } from './admin_rollenverwaltung.js'; // NEU: renderRoleManagement importiert
+// KORRIGIERT: renderRoleManagement import entfernt
 // ENDE-ZIKA //
 
 
@@ -55,23 +55,21 @@ export function listenForUserUpdates() {
                 if (adminSectionsState.user && typeof renderUserManagement === 'function') {
                      renderUserManagement();
                 }
-                if (adminSectionsState.role && typeof renderRoleManagement === 'function') {
-                     renderRoleManagement();
-                }
-                 if (adminSectionsState.protocol && typeof renderProtocolHistory === 'function') {
-                     renderProtocolHistory();
-                 }
+                
                 // =================================================================
-                // BEGINN DER KORREKTUR (Tippfehler)
+                // BEGINN DER KORREKTUR (Crash-Behebung)
                 // =================================================================
-                // HIER WAR DER FEHLER: Es hieß 'renderMainFunctionsArea' statt 'renderMainFunctionsAdminArea'
-                if (adminSectionsState.mainFunctions && typeof renderMainFunctionsAdminArea === 'function') {
-                    console.log("Live-Update: Neuzeichnen der Adminfunktionen-Tabs wird ausgelöst.");
-                    renderMainFunctionsAdminArea(); // <-- KORRIGIERT
-                }
+                // Die folgenden Blöcke wurden entfernt, da sie den Crash (Circular Dependency) verursacht haben.
+                // if (adminSectionsState.role && typeof renderRoleManagement === 'function') { ... }
+                // if (adminSectionsState.protocol && typeof renderProtocolHistory === 'function') { ... }
                 // =================================================================
                 // ENDE DER KORREKTUR
                 // =================================================================
+
+                if (adminSectionsState.mainFunctions && typeof renderMainFunctionsAdminArea === 'function') {
+                    console.log("Live-Update: Neuzeichnen der Adminfunktionen-Tabs wird ausgelöst.");
+                    renderMainFunctionsAdminArea(); 
+                }
             }
 
         } else {
@@ -91,7 +89,6 @@ export function listenForUserUpdates() {
     }); 
 
 }
-
 // ERSETZE die komplette Funktion hiermit:
 // ERSETZE die komplette Funktion hiermit:
 export function renderModalUserButtons() {
