@@ -1,4 +1,6 @@
-import { db, auditLogCollectionRef, currentUser } from './haupteingang.js';
+// BEGINN DER KORREKTUR: HIER FEHLTEN USERS UND ADMIN_ROLES
+import { db, auditLogCollectionRef, currentUser, USERS, ADMIN_ROLES } from './haupteingang.js';
+// ENDE DER KORREKTUR
 import { query, orderBy, limit, setDoc, onSnapshot, collection, doc, addDoc, getDocs, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { rememberAdminScroll, restoreAdminScrollIfAny } from './admin_adminfunktionenHome.js';
 
@@ -36,11 +38,12 @@ export async function logAdminAction(action, details) {
     }
 }
 
+
+// HIER IST DIE KOMPLETT KORRIGIERTE renderProtocolHistory FUNKTION
+
 export async function renderProtocolHistory() {
     // 1. Wir leeren den Bereich (wie vorher)
     protocolHistoryArea.innerHTML = '';
-    
-    // --- KORREKTUR START ---
     
     // 2. Wir definieren die EINFACHE Abfrage, die für JEDEN funktioniert.
     //    Wir holen immer die 100 neuesten Einträge, sortiert nach Zeit.
@@ -55,6 +58,7 @@ export async function renderProtocolHistory() {
     if (currentUser.role === 'ADMIN') {
         
         // 4a. Finde die genauen Rechte für diesen Admin-Benutzer
+        //    (Dieser Code funktioniert jetzt, weil USERS und ADMIN_ROLES importiert sind)
         const adminUser = USERS[currentUser.mode];
         if (adminUser) {
             if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
@@ -65,17 +69,18 @@ export async function renderProtocolHistory() {
         }
         
         // 4b. JETZT PRÜFEN WIR: Wenn dieser Admin NICHT die Sysadmin-Logs sehen darf...
+        //    (Diese Prüfung funktioniert jetzt korrekt)
         if (!effectiveAdminPerms.canSeeSysadminLogs) {
             // ...dann setzen wir unsere "Flagge" auf 'true'.
             // Das heißt: "Achtung, später die Liste von Hand filtern!"
             mustFilterLogs = true; 
         }
+        // WICHTIG: Wenn sie das Recht HAT (canSeeSysadminLogs = true),
+        // bleibt mustFilterLogs = false. Es wird also NICHT gefiltert.
     }
     // Wenn der Benutzer ein SYSTEMADMIN ist, bleibt die Flagge 'false',
     // weil ein Systemadmin ja alles sehen darf und wir nichts filtern müssen.
     
-    // --- KORREKTUR ENDE ---
-
 
     try {
         // 5. Wir führen die EINFACHE Abfrage aus. Diese wird NICHT fehlschlagen.
@@ -90,7 +95,6 @@ export async function renderProtocolHistory() {
         logList.className = 'space-y-2';
         
         // 6. Wir fügen einen Zähler hinzu.
-        //    Wir müssen zählen, ob nach dem Filtern überhaupt Einträge übrig bleiben.
         let entriesFound = 0; 
 
         // 7. Wir gehen die Liste der Ergebnisse durch (wie vorher)
@@ -98,10 +102,8 @@ export async function renderProtocolHistory() {
             const log = docSnap.data();
             const logId = docSnap.id;
 
-            // --- KORREKTUR START ---
-            
-            // 8. HIER IST DER NEUE FILTER:
-            //    WENN unsere Flagge auf 'true' steht (also für Jasmin)
+            // 8. HIER IST DER FILTER:
+            //    WENN unsere Flagge auf 'true' steht (also nur für Admins OHNE das Recht)
             //    UND die Rolle des Eintrags 'SYSTEMADMIN' ist...
             if (mustFilterLogs && log.performedByRole === 'SYSTEMADMIN') {
                 
@@ -109,11 +111,10 @@ export async function renderProtocolHistory() {
                 // Dieser Eintrag wird also nicht zur Liste hinzugefügt.
                 return; 
             }
+            // Wenn Jasmin das Recht HAT, ist mustFilterLogs = false,
+            // und dieser "return" wird NIE ausgeführt. Sie sieht alles.
             
-            // --- KORREKTUR ENDE ---
-
             // 9. Wenn der Code hier ankommt, ist der Eintrag "erlaubt".
-            //    Wir erhöhen unseren Zähler.
             entriesFound++;
 
             // Ab hier ist alles wieder wie vorher:
@@ -133,10 +134,7 @@ export async function renderProtocolHistory() {
         });
         
         
-        // --- KORREKTUR START ---
-        
         // 10. Zum Schluss prüfen wir unseren Zähler.
-        //     Wenn der Zähler 0 ist (weil Jasmin z.B. nur Sysadmin-Logs gesehen hätte)...
         if (entriesFound === 0) {
              // ...zeigen wir eine freundliche Nachricht an.
              protocolHistoryArea.innerHTML += '<p class="text-gray-500">Keine Protokolleinträge (die Sie sehen dürfen) vorhanden.</p>';
@@ -145,9 +143,6 @@ export async function renderProtocolHistory() {
              protocolHistoryArea.appendChild(logList);
         }
         
-        // --- KORREKTUR ENDE ---
-
-
         // Der Rest der Funktion (für die Löschen-Buttons) bleibt unverändert.
         protocolHistoryArea.querySelectorAll('.delete-log-btn').forEach(button => {
             button.addEventListener('click', async (e) => {
@@ -161,9 +156,7 @@ export async function renderProtocolHistory() {
         });
 
     } catch (error) {
-        // Dieser Catch-Block wird jetzt nur noch bei ECHTEN Fehlern (wie "kein Internet") ausgelöst,
-        // nicht mehr wegen des Index-Problems.
         console.error("Error fetching protocol history:", error);
-        protocolHistoryArea.innerHTML += `<p class="text-red-500">Fehler beim Laden des Protokolls. Möglicherweise muss ein Datenbank-Index erstellt werden. Bitte prüfen Sie die Browser-Konsole auf Detail-Fehler.</p>`;
+        protocolHistoryArea.innerHTML += `<p class="text-red-500">Fehler beim Laden des Protokolls. Bitte prüfen Sie die Browser-Konsole auf Detail-Fehler.</p>`;
     }
 }
