@@ -37,12 +37,24 @@ export async function logAdminAction(action, details) {
 }
 
 export async function renderProtocolHistory() {
+    // 1. Wir leeren den Bereich (wie vorher)
     protocolHistoryArea.innerHTML = '';
-    let logQuery;
+    
+    // --- KORREKTUR START ---
+    
+    // 2. Wir definieren die EINFACHE Abfrage, die für JEDEN funktioniert.
+    //    Wir holen immer die 100 neuesten Einträge, sortiert nach Zeit.
+    const logQuery = query(auditLogCollectionRef, orderBy('timestamp', 'desc'), limit(100));
 
-    // NEU: Berechtigungen des Admins prüfen
+    // 3. Wir legen eine "Flagge" (Variable) an, die uns sagt, ob wir später filtern müssen.
+    //    Standardmäßig ist sie 'false' (also "nichts filtern").
+    let mustFilterLogs = false;
+    let effectiveAdminPerms = {}; // Hier speichern wir die Rechte
+
+    // 4. Wir prüfen, ob der aktuelle Benutzer ein 'ADMIN' ist (so wie Jasmin)
     if (currentUser.role === 'ADMIN') {
-        let effectiveAdminPerms = {};
+        
+        // 4a. Finde die genauen Rechte für diesen Admin-Benutzer
         const adminUser = USERS[currentUser.mode];
         if (adminUser) {
             if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
@@ -51,20 +63,24 @@ export async function renderProtocolHistory() {
                 effectiveAdminPerms = adminUser.adminPermissions || {};
             }
         }
-        // Wenn der Admin nicht die Berechtigung hat, Sysadmin-Logs zu sehen, filtern
+        
+        // 4b. JETZT PRÜFEN WIR: Wenn dieser Admin NICHT die Sysadmin-Logs sehen darf...
         if (!effectiveAdminPerms.canSeeSysadminLogs) {
-            // Filter: exclude SYSTEMADMIN entries
-            logQuery = query(auditLogCollectionRef, where('performedByRole', '!=', 'SYSTEMADMIN'), orderBy('performedByRole'), orderBy('timestamp', 'desc'));
+            // ...dann setzen wir unsere "Flagge" auf 'true'.
+            // Das heißt: "Achtung, später die Liste von Hand filtern!"
+            mustFilterLogs = true; 
         }
     }
+    // Wenn der Benutzer ein SYSTEMADMIN ist, bleibt die Flagge 'false',
+    // weil ein Systemadmin ja alles sehen darf und wir nichts filtern müssen.
+    
+    // --- KORREKTUR ENDE ---
 
-    // Wenn keine spezielle Abfrage für Admins erstellt wurde, zeige alles (für Systemadmins)
-    if (!logQuery) {
-        logQuery = query(auditLogCollectionRef, orderBy('timestamp', 'desc'), limit(100));
-    }
 
     try {
+        // 5. Wir führen die EINFACHE Abfrage aus. Diese wird NICHT fehlschlagen.
         const snapshot = await getDocs(logQuery);
+        
         if (!snapshot || snapshot.empty) {
             protocolHistoryArea.innerHTML += '<p class="text-gray-500">Keine Protokolleinträge vorhanden.</p>';
             return;
@@ -72,9 +88,35 @@ export async function renderProtocolHistory() {
 
         const logList = document.createElement('ul');
         logList.className = 'space-y-2';
+        
+        // 6. Wir fügen einen Zähler hinzu.
+        //    Wir müssen zählen, ob nach dem Filtern überhaupt Einträge übrig bleiben.
+        let entriesFound = 0; 
+
+        // 7. Wir gehen die Liste der Ergebnisse durch (wie vorher)
         snapshot.forEach(docSnap => {
             const log = docSnap.data();
             const logId = docSnap.id;
+
+            // --- KORREKTUR START ---
+            
+            // 8. HIER IST DER NEUE FILTER:
+            //    WENN unsere Flagge auf 'true' steht (also für Jasmin)
+            //    UND die Rolle des Eintrags 'SYSTEMADMIN' ist...
+            if (mustFilterLogs && log.performedByRole === 'SYSTEMADMIN') {
+                
+                // ...dann höre hier auf und springe zum nächsten Eintrag in der Schleife.
+                // Dieser Eintrag wird also nicht zur Liste hinzugefügt.
+                return; 
+            }
+            
+            // --- KORREKTUR ENDE ---
+
+            // 9. Wenn der Code hier ankommt, ist der Eintrag "erlaubt".
+            //    Wir erhöhen unseren Zähler.
+            entriesFound++;
+
+            // Ab hier ist alles wieder wie vorher:
             const logDate = log.timestamp?.toDate?.().toLocaleString('de-DE') || '...';
             const listItem = document.createElement('li');
             listItem.className = 'text-sm p-2 bg-gray-50 rounded-md flex justify-between items-center';
@@ -89,8 +131,24 @@ export async function renderProtocolHistory() {
             listItem.innerHTML = `<div><span class="font-mono text-xs text-gray-500">${logDate}</span><br><strong>${log.performedByName}</strong>: ${log.details}</div> ${deleteButton}`;
             logList.appendChild(listItem);
         });
-        protocolHistoryArea.appendChild(logList);
+        
+        
+        // --- KORREKTUR START ---
+        
+        // 10. Zum Schluss prüfen wir unseren Zähler.
+        //     Wenn der Zähler 0 ist (weil Jasmin z.B. nur Sysadmin-Logs gesehen hätte)...
+        if (entriesFound === 0) {
+             // ...zeigen wir eine freundliche Nachricht an.
+             protocolHistoryArea.innerHTML += '<p class="text-gray-500">Keine Protokolleinträge (die Sie sehen dürfen) vorhanden.</p>';
+        } else {
+             // ...sonst fügen wir die Liste (logList) hinzu.
+             protocolHistoryArea.appendChild(logList);
+        }
+        
+        // --- KORREKTUR ENDE ---
 
+
+        // Der Rest der Funktion (für die Löschen-Buttons) bleibt unverändert.
         protocolHistoryArea.querySelectorAll('.delete-log-btn').forEach(button => {
             button.addEventListener('click', async (e) => {
                 const logId = e.currentTarget.dataset.logId;
@@ -103,6 +161,8 @@ export async function renderProtocolHistory() {
         });
 
     } catch (error) {
+        // Dieser Catch-Block wird jetzt nur noch bei ECHTEN Fehlern (wie "kein Internet") ausgelöst,
+        // nicht mehr wegen des Index-Problems.
         console.error("Error fetching protocol history:", error);
         protocolHistoryArea.innerHTML += `<p class="text-red-500">Fehler beim Laden des Protokolls. Möglicherweise muss ein Datenbank-Index erstellt werden. Bitte prüfen Sie die Browser-Konsole auf Detail-Fehler.</p>`;
     }
