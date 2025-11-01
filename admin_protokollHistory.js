@@ -1,4 +1,4 @@
-import { db, auditLogCollectionRef, currentUser } from './haupteingang.js';
+import { db, auditLogCollectionRef, currentUser, USERS, ADMIN_ROLES } from './haupteingang.js';
 import { query, orderBy, limit, setDoc, onSnapshot, collection, doc, addDoc, getDocs, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { rememberAdminScroll, restoreAdminScrollIfAny } from './admin_adminfunktionenHome.js';
 
