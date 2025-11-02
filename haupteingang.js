@@ -13,7 +13,7 @@ import { PUSHOVER_TOKEN, RECIPIENT_KEYS } from './pushbenachrichtigung.js';
 import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, openTemplateModal, renderChecklistView, renderChecklistSettingsView, listenForTemplates, listenForStacks } from './checklist.js';
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
 import { renderUserKeyList } from './admin_benutzersteuerung.js';
-import { initializeTerminplanung, renderTerminUebersicht, renderNeuerTerminAuswahl } from './terminplanung.js';
+import { initializeTerminplanung, renderTerminUebersicht, renderNeuerTerminAuswahl, startPublicVotesListener, stopPublicVotesListener } from './terminplanung.js';
 // // ENDE-ZIKA //
 
 
@@ -228,7 +228,7 @@ async function initializeFirebase() {
         console.log("initializeFirebase: Starte Firebase Initialisierung...");
         const app = initializeApp(firebaseConfig);
         db = getFirestore(app);
-        auth = getAuth(app);
+        auth = getAuth(app); 
 
         // --- Functions Initialisierung muss in onAuthStateChanged erfolgen ---
 
@@ -264,54 +264,48 @@ async function initializeFirebase() {
         auth.onAuthStateChanged(async (user) => {
             console.log("initializeFirebase: onAuthStateChanged ausgelöst. User:", user ? user.uid : "keiner");
 
-            // --- NEU: Functions Initialisierung HIER ---
+            // --- Functions Initialisierung ---
             if (user && !window.firebaseFunctionsInitialised) {
                 const { getFunctions, httpsCallable } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js");
                 const functions = getFunctions(app);
-                // setRoleClaim muss jetzt manuell im window-Objekt verfügbar gemacht werden,
-                // da es global von handleLogin benötigt wird, die Funktion aber nur im onAuthStateChanged erstellt werden kann.
-                window.setRoleClaim = httpsCallable(functions, 'setRoleClaim');
+                window.setRoleClaim = httpsCallable(functions, 'setRoleClaim'); 
                 window.firebaseFunctionsInitialised = true;
                 console.log("Firebase Functions initialisiert und global verfügbar gemacht.");
             }
-            // --- ENDE NEU ---
-
 
             // Listener starten (unabhängig vom Login-Status)
             try {
                 console.log("initializeFirebase: Starte Daten-Listener...");
-
-                // --- Listener für App-Einstellungen (Settings) ---
-                onSnapshot(settingsDocRef, (docSnap) => {
+                
+                // ... (alle deine onSnapshot Listener für Settings) ...
+                onSnapshot(settingsDocRef, (docSnap) => { 
                     if (docSnap.exists()) {
                         adminSettings = docSnap.data();
-                        // console.log("Admin Settings geladen:", adminSettings); // Logging entfernt
                     } else {
                         console.warn("Firebase App Settings Document 'main' not found.");
                         adminSettings = {};
                     }
                 }, (error) => {
-                    console.error("Error listening to settings:", error);
+                    console.error("Error listening to settings:", error); 
                 });
 
                 onSnapshot(notrufSettingsDocRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        notrufSettings = docSnap.data();
-                        // console.log("Notruf Settings geladen"); // Logging entfernt
-                        if (!notrufSettings.modes) notrufSettings.modes = [];
-                        if (!notrufSettings.contacts) notrufSettings.contacts = [];
-                        if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
-                        if (!notrufSettings.sounds) notrufSettings.sounds = [];
-                        if (!notrufSettings.flicAssignments) notrufSettings.flicAssignments = { einfach: null, doppel: null, halten: null };
-                    } else {
-                        console.warn("Firebase Notruf Settings Document 'notruf' not found, creating default.");
-                        notrufSettings = { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } };
-                    }
+                     if (docSnap.exists()) {
+                         notrufSettings = docSnap.data();
+                         if (!notrufSettings.modes) notrufSettings.modes = [];
+                         if (!notrufSettings.contacts) notrufSettings.contacts = [];
+                         if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
+                         if (!notrufSettings.sounds) notrufSettings.sounds = [];
+                         if (!notrufSettings.flicAssignments) notrufSettings.flicAssignments = { einfach: null, doppel: null, halten: null };
+                     } else {
+                         console.warn("Firebase Notruf Settings Document 'notruf' not found, creating default.");
+                         notrufSettings = { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } };
+                     }
                 }, (error) => {
-                    console.error("Error listening to notruf settings:", error);
+                    console.error("Error listening to notruf settings:", error); 
                 });
-                // --- Ende Listener für App-Einstellungen ---
 
+                // ... (alle deine listenFor... Funktionen) ...
                 listenForRoleUpdates();
                 listenForAdminRoleUpdates();
                 listenForUserUpdates();
@@ -322,32 +316,62 @@ async function initializeFirebase() {
                 listenForChecklistCategories();
                 listenForTemplates();
                 listenForStacks();
-                initializeTerminplanung(appId);
-                // console.log("initializeFirebase: Alle Listener-Funktionen aufgerufen."); // Logging entfernt
+                
+                // =================================================================
+                // BEGINN DER KORREKTUR (Zirkelbezug + Permission-Fix)
+                // =================================================================
+                // Wir erstellen das Werkzeug-Objekt (wie vorher)
+                const terminplanungDependencies = {
+                    db: db, 
+                    alertUser: alertUser, 
+                    navigate: navigate, 
+                    currentUser: currentUser, 
+                    USERS: USERS 
+                };
+                
+                // Wir initialisieren den "Azubi", geben ihm aber
+                // noch NICHT das "Go!"-Signal.
+                initializeTerminplanung(appId, terminplanungDependencies); 
+                // =================================================================
+                // ENDE DER KORREKTUR
+                // =================================================================
 
             } catch (error) {
                 console.error("initializeFirebase: FEHLER beim Starten der Listener:", error);
                 alertUser("Fehler beim Initialisieren der Daten-Listener.", "error");
             }
 
-            // UI basierend auf User-Status aktualisieren
+            // =================================================================
+            // BEGINN DER KORREKTUR (Permission-Fix)
+            // =================================================================
             if (user) {
                 console.log("initializeFirebase: User (anonym) vorhanden. Rufe checkCurrentUserValidity auf.");
-                await checkCurrentUserValidity();
-                initialAuthCheckDone = true;
+                await checkCurrentUserValidity(); 
+                initialAuthCheckDone = true; 
+                
+                // JETZT ist der Benutzer als "Markus" oder "Gast" identifiziert.
+                // WIR GEBEN DAS "GO!"-SIGNAL:
+                startPublicVotesListener();
+                
             } else {
                 console.log("Firebase meldet KEINEN User, wechsle explizit zum Gastmodus.");
+                
+                // WIR GEBEN DAS "STOPP!"-SIGNAL:
+                stopPublicVotesListener(); 
+                
                 switchToGuestMode(false);
-                initialAuthCheckDone = true;
-                updateUIForMode();
+                 initialAuthCheckDone = true;
+                 updateUIForMode(); 
             }
-            // console.log("initializeFirebase: Ende des onAuthStateChanged Callbacks."); // Logging entfernt
+            // =================================================================
+            // ENDE DER KORREKTUR
+            // =================================================================
+            
         }); // Ende onAuthStateChanged
     } catch (error) {
         console.error("initializeFirebase: FEHLER bei der grundlegenden Firebase Initialisierung:", error);
         alertUser("Firebase konnte nicht initialisiert werden.", "error");
     }
-    // console.log("initializeFirebase: Funktion komplett beendet."); // Logging entfernt
 }
 
 // --- HIER ENDET DIE FUNKTION ZUM ERSETZEN ---

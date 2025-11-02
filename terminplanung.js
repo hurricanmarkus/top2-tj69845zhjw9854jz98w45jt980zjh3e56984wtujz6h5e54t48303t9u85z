@@ -1,19 +1,8 @@
 // =================================================================
-// NEUE DATEI: terminplanung.js
-// Hier kommt die ganze Logik für Doodle-Abstimmungen hinein
+// NEUE DATEI: terminplanung.js (VERSION 3 - MIT PERMISSION-FIX)
 // =================================================================
 
-// Importiere die Dinge, die wir brauchen werden
-import { 
-    db, 
-    auth, 
-    currentUser, 
-    alertUser, 
-    USERS, 
-    navigate 
-} from './haupteingang.js';
-    
-// Importiere Firebase-Funktionen
+// Importiere NUR Firebase-Funktionen, nichts aus haupteingang.js
 import { 
     collection, 
     doc, 
@@ -27,39 +16,63 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 
-// Diese Sammlung wird alle "Votes" (Umfragen) speichern.
-// WICHTIG: Ersetze 'DEINE_APP_ID' mit deiner echten appId-Variable,
-// aber wir können sie hier nicht direkt importieren wegen Zirkelbezügen.
-// Wir holen sie uns später über eine Funktion.
-let votesCollectionRef; 
+// =================================================================
+// 1. LOKALE SPEICHER FÜR IMPORTE
+// =================================================================
+let db_i; 
+let alertUser_i; 
+let navigate_i; 
+let currentUser_i; 
+let USERS_i; 
 
-// Diese Variable speichert alle geladenen Umfragen
+let votesCollectionRef; 
 export let VOTES = {};
+
+// =================================================================
+// NEU: HIER SPEICHERN WIR DEN AKTIVEN LISTENER
+// =================================================================
+// Diese Variable speichert die "Verbindung" zur Datenbank,
+// damit wir sie später wieder kappen können (z.B. beim Logout).
+let publicVotesListenerUnsubscribe = null;
+// =================================================================
 
 
 /**
  * 1. INITIALISIERUNG: Wird von haupteingang.js aufgerufen
- * Diese Funktion richtet die Datenbank-Referenz ein und startet den Listener.
  */
-export function initializeTerminplanung(appId) {
-    // Erstelle den Pfad zur Datenbank-Sammlung "votes"
-    // (So wie bei deinen anderen Sammlungen auch)
-    votesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
+export function initializeTerminplanung(appId, dependencies) {
+    // Wir speichern die Werkzeuge
+    db_i = dependencies.db;
+    alertUser_i = dependencies.alertUser;
+    navigate_i = dependencies.navigate;
+    currentUser_i = dependencies.currentUser;
+    USERS_i = dependencies.USERS;
     
-    // Starte den Listener, der alle öffentlichen Umfragen holt
-    listenForPublicVotes();
+    // Erstelle den Pfad zur Datenbank-Sammlung "votes"
+    votesCollectionRef = collection(db_i, 'artifacts', appId, 'public', 'data', 'votes');
+    
+    // WICHTIG: Wir starten den Listener HIER NICHT MEHR!
+    // listenForPublicVotes(); // <-- Diese Zeile ist ENTFERNT.
 }
 
 
 /**
- * 2. DATENBANK-LISTENER
- * Hört auf alle öffentlichen Umfragen und speichert sie in VOTES
+ * 2. DATENBANK-LISTENER STARTEN (NEUE FUNKTION)
+ * Diese Funktion wird jetzt vom "Chef" (haupteingang.js) aufgerufen,
+ * SOBALD DER BENUTZER EINGELOGGT IST.
  */
-function listenForPublicVotes() {
-    // 'isPublic' == true bedeutet "Öffentliche Umfragen"
+export function startPublicVotesListener() {
+    // Wenn schon ein Listener läuft, starte keinen zweiten.
+    if (publicVotesListenerUnsubscribe) {
+        console.log("Public Votes Listener läuft bereits.");
+        return; 
+    }
+
+    console.log("Starte Public Votes Listener (Benutzer ist angemeldet)...");
     const q = query(votesCollectionRef, where("isPublic", "==", true), where("status", "==", "active"));
     
-    onSnapshot(q, (snapshot) => {
+    // Wir speichern die "stop"-Funktion (den Unsubscriber)
+    publicVotesListenerUnsubscribe = onSnapshot(q, (snapshot) => {
         snapshot.docChanges().forEach((change) => {
             const voteData = change.doc.data();
             const voteId = change.doc.id;
@@ -71,31 +84,40 @@ function listenForPublicVotes() {
             }
         });
         
-        // Später: Wenn die Termin-Seite offen ist, aktualisiere sie
-        // if (document.getElementById('terminView').classList.contains('active')) {
-        //     renderTerminUebersicht();
-        // }
+        // Wenn die Termin-Seite offen ist, aktualisiere sie
+        const terminViewEl = document.getElementById('terminView');
+        if (terminViewEl && terminViewEl.classList.contains('active')) {
+             renderPublicVotesList(); 
+        }
+        
     }, (error) => {
+        // HIER ist der Fehler aufgetreten (Zeile 79 in deinem Log)
         console.error("Fehler beim Laden der öffentlichen Umfragen: ", error);
-        alertUser("Fehler beim Laden der Umfragen.", "error");
+        alertUser_i("Fehler beim Laden der Umfragen.", "error");
     });
+}
+
+/**
+ * 3. DATENBANK-LISTENER STOPPEN (NEUE FUNKTION)
+ * Wird aufgerufen, wenn der Benutzer sich ausloggt oder "Gast" wird.
+ */
+export function stopPublicVotesListener() {
+    if (publicVotesListenerUnsubscribe) {
+        console.log("Stoppe Public Votes Listener...");
+        publicVotesListenerUnsubscribe(); // Trennt die Verbindung
+        publicVotesListenerUnsubscribe = null; // Setzt zurück
+        VOTES = {}; // Leert die geladenen Umfragen
+    }
 }
 
 
 /**
- * 3. RENDER-FUNKTION: Wird von haupteingang.js aufgerufen
- * Diese Funktion baut die Haupt-Übersichtsseite für Termine auf.
+ * 4. RENDER-FUNKTION: (Unverändert)
  */
 export function renderTerminUebersicht() {
-    // Finde den Container in der (noch nicht existierenden) HTML
     const container = document.getElementById('terminView');
-    if (!container) return; // Sicherheitsabbruch
+    if (!container) return; 
     
-    // (Hier kommt der ganze HTML-Aufbau rein, den wir
-    // im nächsten Schritt machen, wenn du die index.html geschickt hast)
-    console.log("Termin-Übersicht wird jetzt geladen...");
-    
-    // Beispiel-Aufbau (Platzhalter)
     container.innerHTML = `
         <div class="p-4">
             <div class="flex justify-between items-center mb-6">
@@ -133,23 +155,19 @@ export function renderTerminUebersicht() {
         </div>
     `;
     
-    // Lade die Liste der öffentlichen Umfragen
     renderPublicVotesList();
-    
-    // Füge die Event-Listener für die neuen Buttons hinzu
     addTerminUebersichtListeners();
 }
 
 
 /**
- * 4. HELFER-FUNKTION: Zeigt die öffentlichen Umfragen an
+ * 5. HELFER-FUNKTION: Zeigt die öffentlichen Umfragen an (Unverändert)
  */
 function renderPublicVotesList() {
     const listContainer = document.getElementById('public-votes-list');
     if (!listContainer) return;
     
-    listContainer.innerHTML = ''; // Leeren
-    
+    listContainer.innerHTML = ''; 
     const publicVotes = Object.values(VOTES);
     
     if (publicVotes.length === 0) {
@@ -172,39 +190,33 @@ function renderPublicVotesList() {
 
 
 /**
- * 5. EVENT-LISTENER für die Übersichtsseite
+ * 6. EVENT-LISTENER für die Übersichtsseite (Unverändert)
  */
 function addTerminUebersichtListeners() {
-    // Klick auf "+ Neuen Termin"
     const neuerTerminBtn = document.getElementById('neuer-termin-btn');
     if (neuerTerminBtn) {
         neuerTerminBtn.addEventListener('click', () => {
-            // Navigiere zur (noch nicht existierenden) Auswahlseite
-            navigate('neuerTermin'); 
+            navigate_i('neuerTermin'); 
         });
     }
     
-    // Klick auf "Private Umfrage aufrufen"
     const privateTokenSubmit = document.getElementById('private-token-submit');
     if (privateTokenSubmit) {
         privateTokenSubmit.addEventListener('click', () => {
             const tokenInput = document.getElementById('private-token-input');
-            const token = tokenInput.value.trim().replace(/-/g, ''); // (Entfernt auch Bindestriche)
+            const token = tokenInput.value.trim().replace(/-/g, '');
             if (token.length === 8) {
-                alertUser("Suche nach Umfrage mit Token... (Funktion noch nicht gebaut)", "success");
-                // HIER kommt die Logik, um die Umfrage per Token zu laden
-                // z.B. loadVoteByToken(token);
+                alertUser_i("Suche nach Umfrage mit Token... (Funktion noch nicht gebaut)", "success");
             } else {
-                alertUser("Bitte einen 8-stelligen Token eingeben.", "error");
+                alertUser_i("Bitte einen 8-stelligen Token eingeben.", "error");
             }
         });
     }
     
-    // (Optional: Implementiere das Token-Format XXXX-XXXX beim Tippen)
     const tokenInput = document.getElementById('private-token-input');
     if(tokenInput) {
         tokenInput.addEventListener('input', (e) => {
-            let value = e.target.value.replace(/\D/g, ''); // Entfernt alles außer Zahlen (oder Buchstaben, je nach Token)
+            let value = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
              if (value.length > 8) value = value.substring(0, 8);
             
              if (value.length > 4) {
@@ -218,13 +230,12 @@ function addTerminUebersichtListeners() {
 
 
 /**
- * 6. RENDER-FUNKTION: Die "Wähle dein Doodle aus" Seite
+ * 7. RENDER-FUNKTION: Die "Wähle dein Doodle aus" Seite (Unverändert)
  */
 export function renderNeuerTerminAuswahl() {
     const container = document.getElementById('neuerTerminView');
     if (!container) return;
 
-    // Wir bauen das Doodle-Auswahl-Layout nach
     container.innerHTML = `
         <div class="p-4">
             <div class="flex justify-between items-center mb-6">
@@ -239,7 +250,8 @@ export function renderNeuerTerminAuswahl() {
             
                 <div id="create-gruppenumfrage" class="bg-white p-6 rounded-xl shadow-lg border-2 border-transparent hover:border-indigo-500 cursor-pointer transition-all">
                     <div class="w-16 h-16 bg-yellow-100 rounded-lg flex items-center justify-center mb-4">
-                         <span class="text-3xl">🗓️</span> </div>
+                         <span class="text-3xl">🗓️</span>
+                    </div>
                     <h3 class="text-xl font-bold text-gray-800 mb-2">Gruppenumfrage</h3>
                     <p class="text-sm text-gray-600">
                         Finde die Zeit, die für alle Mitglieder in deiner Gruppe am besten passt. (Klassisches Doodle)
@@ -255,33 +267,31 @@ export function renderNeuerTerminAuswahl() {
                     </div>
                     <h3 class="text-xl font-bold text-gray-800 mb-2">Eventplaner</h3>
                     <p class="text-sm text-gray-600">
-                        Erstelle Anmeldungen für Workshops, Webinare oder Events und lass Teilnehmer sich eintragen. (Noch nicht verfügbar)
+                        (Noch nicht verfügbar)
                     </p>
                     <button class="mt-4 w-full px-4 py-2 bg-gray-400 text-white font-semibold rounded-lg cursor-not-allowed">
                         Erstellen
                     </button>
                 </div>
-                
                 <div class="bg-white p-6 rounded-xl shadow-lg border-2 border-transparent opacity-50 cursor-not-allowed">
                     <div class="w-16 h-16 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
                          <span class="text-3xl">🤝</span>
                     </div>
                     <h3 class="text-xl font-bold text-gray-800 mb-2">1:1 (Eins-zu-Eins)</h3>
                     <p class="text-sm text-gray-600">
-                        Biete eine Liste deiner verfügbaren Zeiten an, damit dein Kunde auswählen kann, was ihm passt. (Noch nicht verfügbar)
-                    </s
+                        (Noch nicht verfügbar)
+                    </p>
                     <button class="mt-4 w-full px-4 py-2 bg-gray-400 text-white font-semibold rounded-lg cursor-not-allowed">
                         Erstellen
                     </button>
                 </div>
-                
                 <div class="bg-white p-6 rounded-xl shadow-lg border-2 border-transparent opacity-50 cursor-not-allowed">
                     <div class="w-16 h-16 bg-indigo-100 rounded-lg flex items-center justify-center mb-4">
                          <span class="text-3xl">🌍</span>
                     </div>
                     <h3 class="text-xl font-bold text-gray-800 mb-2">Buchungsseite</h3>
                     <p class="text-sm text-gray-600">
-                        Richte deine Buchungsseite einmal ein, teile den Link und lass Kunden Termine bei dir buchen. (Noch nicht verfügbar)
+                        (Noch nicht verfügbar)
                     </p>
                     <button class="mt-4 w-full px-4 py-2 bg-gray-400 text-white font-semibold rounded-lg cursor-not-allowed">
                         Erstellen
@@ -292,13 +302,10 @@ export function renderNeuerTerminAuswahl() {
         </div>
     `;
     
-    // Event-Listener für die "Erstellen"-Buttons
     const gruppenUmfrageBtn = document.getElementById('create-gruppenumfrage');
     if (gruppenUmfrageBtn) {
         gruppenUmfrageBtn.addEventListener('click', () => {
-            alertUser("Nächster Schritt: Erstellungs-Maske für Gruppenumfrage... (Funktion noch nicht gebaut)", "success");
-            // HIER navigieren wir dann zur Erstellungs-Maske
-            // z.B. navigate('createGruppenumfrage');
+            alertUser_i("Nächster Schritt: Erstellungs-Maske für Gruppenumfrage... (Funktion noch nicht gebaut)", "success");
         });
     }
 }
