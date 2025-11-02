@@ -7,10 +7,6 @@ import { doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
-// =================================================================
-// BEGINN DER KORREKTUR (log-InOut.js)
-// =================================================================
-
 export async function checkCurrentUserValidity() { // Funktion ist async
     console.log("--- Prüfe Benutzerberechtigungen (V7 - Robuste Cache-Prüfung) ---");
 
@@ -25,6 +21,10 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     const currentAuthUser = auth.currentUser; // Aktuellen Firebase Auth User holen
     const storedAppUserId = localStorage.getItem(ADMIN_STORAGE_KEY); // z.B. "JASMIN"
 
+
+    // =================================================================
+    // BEGINN DER KORREKTUR (Logout-Problem)
+    // =================================================================
 
     // 1. Versuche, den Benutzer aus dem SCHNELLEN CACHE (USERS) zu holen
     let userFromFirestore = storedAppUserId && USERS ? USERS[storedAppUserId] : null;
@@ -81,6 +81,9 @@ export async function checkCurrentUserValidity() { // Funktion ist async
             return;
         }
     }
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
 
 
     // Fall 5: User ist gefunden
@@ -125,13 +128,7 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         }
 
         if (effectiveRole === 'SYSTEMADMIN') {
-            // =================================================================
-            // HIER IST DIE KORREKTUR
-            // =================================================================
-            userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG', 'TERMINFINDUNG'];
-            // =================================================================
-            // ENDE DER KORREKTUR
-            // =================================================================
+            userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
             console.log("Systemadmin BENUTZER-Rechte geladen.");
         }
 
@@ -177,6 +174,9 @@ export async function checkCurrentUserValidity() { // Funktion ist async
 
         console.log("currentUser Objekt aktualisiert:", currentUser);
 
+        // HIER PASSIERT DAS LIVE-UPDATE:
+        // updateUIForMode() wird aufgerufen, NACHDEM die neuen
+        // adminPermissions in currentUser geladen wurden.
         updateUIForMode(); 
 
         // Navigationsprüfung
@@ -194,9 +194,6 @@ export async function checkCurrentUserValidity() { // Funktion ist async
          updateUIForMode();
     }
 }
-// =================================================================
-// ENDE DER KORREKTUR (log-InOut.js)
-// =================================================================
 
 export function switchToGuestMode(showNotification = true, message = "Abgemeldet. Modus ist nun 'Gast'.", type = 'success') {
     Object.keys(currentUser).forEach(key => delete currentUser[key]);
