@@ -137,7 +137,7 @@ export function renderRoleManagement() {
         'CHECKLIST': { label: 'Aktuelle Checkliste', indent: false },
         'CHECKLIST_SWITCH': { label: '-> Listen umschalten', indent: true },
         'CHECKLIST_SETTINGS': { label: '-> Checkliste-Einstellungen', indent: true },
-        'ESSENSBERECHNUNG': { label: 'Essensberechnung', indent: false }
+        'ESSENSBERECHNUNG': { label: 'Essensberechnung', indent: false },
         'TERMINFINDUNG': { label: 'Termin-Findung (Doodle)', indent: false }
     };
 
