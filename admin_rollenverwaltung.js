@@ -9,14 +9,14 @@ import { setupPermissionDependencies, renderAdminRightsManagement } from './admi
 
 export function listenForRoleUpdates() {
     onSnapshot(rolesCollectionRef, (snapshot) => {
-        
+
         // =================================================================
         // BEGINN DER KORREKTUR (Logout-Problem)
         // =================================================================
         if (!snapshot.empty) {
             Object.keys(ROLES).forEach(key => delete ROLES[key]);
             snapshot.forEach((doc) => { ROLES[doc.id] = { id: doc.id, ...doc.data() }; });
-            
+
             if (initialAuthCheckDone) {
                 checkCurrentUserValidity();
             }
@@ -36,18 +36,18 @@ export function listenForRoleUpdates() {
 
 export function listenForAdminRoleUpdates() {
     onSnapshot(adminRolesCollectionRef, (snapshot) => {
-        
+
         // =================================================================
         // BEGINN DER KORREKTUR (Logout-Problem)
         // =================================================================
-        if (snapshot.size > 0) { 
+        if (snapshot.size > 0) {
             // 1. Alle alten Admin-Rollen aus dem Speicher löschen
-            Object.keys(ADMIN_ROLES).forEach(key => delete ADMIN_ROLES[key]); 
-            
+            Object.keys(ADMIN_ROLES).forEach(key => delete ADMIN_ROLES[key]);
+
             // 2. Die neuen, frischen Admin-Rollen aus der Datenbank einlesen
             snapshot.forEach((doc) => { ADMIN_ROLES[doc.id] = { id: doc.id, ...doc.data() }; });
-            
-            
+
+
             // 3. Prüfen, ob die App schon gestartet ist
             if (initialAuthCheckDone) {
                 // 4. Rechte des aktuellen Benutzers SOFORT neu berechnen.
@@ -60,23 +60,23 @@ export function listenForAdminRoleUpdates() {
             // HIER rufen wir jetzt die importierte Funktion auf.
             // Wenn die Admin-Rechte-Sektion offen ist, wird sie neu geladen.
             if (adminSectionsState.adminRights && typeof renderAdminRightsManagement === 'function') {
-                 // console.warn("renderAdminRightsManagement in listenForAdminRoleUpdates nicht aufgerufen, da Import fehlt."); // <--- Dieser Kommentar kann jetzt weg
-                 renderAdminRightsManagement(); // <--- HIER IST DIE KORREKTUR
+                // console.warn("renderAdminRightsManagement in listenForAdminRoleUpdates nicht aufgerufen, da Import fehlt."); // <--- Dieser Kommentar kann jetzt weg
+                renderAdminRightsManagement(); // <--- HIER IST DIE KORREKTUR
             }
             // =================================================================
             // ENDE DER KORREKTUR
             // =================================================================
 
             if (adminSectionsState.role && typeof renderRoleManagement === 'function') renderRoleManagement();
-            
+
         } else {
-             console.warn("listenForAdminRoleUpdates: Leerer Snapshot empfangen. ADMIN_ROLES-Cache wird nicht geleert.");
+            console.warn("listenForAdminRoleUpdates: Leerer Snapshot empfangen. ADMIN_ROLES-Cache wird nicht geleert.");
         }
         // =================================================================
         // ENDE DER KORREKTUR
         // =================================================================
-    
-    
+
+
     }, (error) => {
         console.error("Error listening for admin role updates:", error);
     });
@@ -86,14 +86,14 @@ export function renderRoleManagement() {
     const roleManagementArea = document.getElementById('roleManagementArea');
     if (!roleManagementArea) {
         console.error("renderRoleManagement: Container #roleManagementArea nicht gefunden.");
-        return; 
+        return;
     }
 
     roleManagementArea.innerHTML = '';
     let effectiveAdminPerms = {};
     const isAdmin = currentUser.role === 'ADMIN';
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
-    
+
     if (isAdmin && USERS && USERS[currentUser.mode]) { // Prüfen ob USERS geladen ist
         const adminUser = USERS[currentUser.mode];
         if (adminUser && adminUser.adminPermissions) {
@@ -138,8 +138,9 @@ export function renderRoleManagement() {
         'CHECKLIST_SWITCH': { label: '-> Listen umschalten', indent: true },
         'CHECKLIST_SETTINGS': { label: '-> Checkliste-Einstellungen', indent: true },
         'ESSENSBERECHNUNG': { label: 'Essensberechnung', indent: false }
+        'TERMINFINDUNG': { label: 'Termin-Findung (Doodle)', indent: false }
     };
-    
+
     // (Container für neue Rollen-Rechte)
     const newRolePermsContainer = document.getElementById('newRolePermissions');
     const isNewChecklistEnabled = false; // Initial
@@ -160,8 +161,8 @@ export function renderRoleManagement() {
         const isProtectedRole = ['SYSTEMADMIN', 'ADMIN', 'NO_RIGHTS'].includes(role.id);
         const canEditThisRole = canEditUserRoles && (!isProtectedRole || isSysAdmin);
         // (Nur SysAdmin darf geschützte Rollen bearbeiten)
-        const canDeleteThisRole = canEditUserRoles && role.deletable !== false && !isProtectedRole; 
-        
+        const canDeleteThisRole = canEditUserRoles && role.deletable !== false && !isProtectedRole;
+
         const isChecklistEnabled = role.permissions?.includes('CHECKLIST');
         let permissionsCheckboxesHTML = Object.keys(allRolePermissions).map(permKey => {
             const perm = allRolePermissions[permKey];
@@ -178,7 +179,7 @@ export function renderRoleManagement() {
 
         const roleCard = document.createElement('div');
         roleCard.className = `p-3 border rounded-lg bg-white shadow-sm ${!canEditThisRole && isProtectedRole ? 'opacity-60 bg-gray-50' : ''}`;
-        
+
         // HINWEIS: Umbenennen von Benutzer-Rollen ist hier nicht implementiert, da ID = Name.
         // Das würde eine Migration erfordern. Nur Löschen ist implementiert.
         roleCard.innerHTML = `
@@ -236,7 +237,7 @@ export function renderRoleManagement() {
         const roleNameInput = document.getElementById('newRoleName');
         const roleName = roleNameInput.value.trim();
         const roleId = roleName.toUpperCase().replace(/\s/g, '');
-        
+
         if (!roleName || (ROLES[roleId] && ROLES[roleId].name === roleName)) {
             return alertUser("Bitte einen gültigen, eindeutigen Rollennamen eingeben.", "error");
         }
@@ -251,17 +252,17 @@ export function renderRoleManagement() {
             saveBtn.disabled = true;
             await setDoc(doc(rolesCollectionRef, roleId), { name: roleName, permissions, deletable: true });
             await logAdminAction('role_created', `Rolle '${roleName}' (${roleId}) erstellt.`);
-            
+
             // KORREKTUR: UI neu rendern, damit die neue Rolle erscheint
             renderRoleManagement();
-            
+
         } catch (error) {
             console.error("Fehler beim Speichern der Benutzer-Rolle:", error);
             alertUser("Fehler beim Speichern.", "error");
             saveBtn.disabled = false;
         }
     });
-    
+
     // (Listener für Checkbox-Änderungen bei existierenden Benutzer-Rollen)
     userRolesList.querySelectorAll('.role-perm-toggle').forEach(toggle => {
         toggle.addEventListener('change', async (e) => {
@@ -275,12 +276,12 @@ export function renderRoleManagement() {
             }
             await updateDoc(doc(rolesCollectionRef, roleid), { permissions });
             await logAdminAction('role_permissions_changed', `Berechtigungen für Rolle '${role.name}' geändert: ${perm} ${e.target.checked ? 'aktiviert' : 'deaktiviert'}.`);
-            
+
             // KORREKTUR: UI neu rendern, um Abhängigkeiten (Checklist) neu zu berechnen
             renderRoleManagement();
         });
     });
-    
+
     // (Handler für "Admin-Rolle löschen")
     const deleteAdminRoleHandler = async (e) => {
         roleManagementSectionsState.adminRolesOpen = true;
@@ -300,46 +301,46 @@ export function renderRoleManagement() {
 
                 await logAdminAction('admin_role_deleted', `Admin-Rolle '${roleName}' (${roleId}) gelöscht.`);
                 // KORREKTUR: UI neu rendern
-                renderRoleManagement(); 
+                renderRoleManagement();
             } catch (error) {
-                 console.error("Fehler beim Löschen der Admin-Rolle:", error);
-                 alertUser("Fehler beim Löschen der Admin-Rolle.", "error");
+                console.error("Fehler beim Löschen der Admin-Rolle:", error);
+                alertUser("Fehler beim Löschen der Admin-Rolle.", "error");
             }
         }
     };
 
     // (Listener für "Benutzer-Rolle löschen")
-userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
-    button.addEventListener('click', async (e) => {
-        roleManagementSectionsState.userRolesOpen = true;
-        const roleId = e.currentTarget.dataset.roleid;
-        
-        // 1. KORREKTUR: Name der Rolle SICHERN, BEVOR der Löschvorgang gestartet wird
-        const roleToDeleteName = ROLES[roleId]?.name || 'Unbekannte Rolle'; 
-        
-        if (confirm(`Möchten Sie die Rolle '${roleToDeleteName}' wirklich löschen?`)) {
-            try {
-                await deleteDoc(doc(rolesCollectionRef, roleId));
-                
-                // 2. Logging und Benachrichtigung verwenden den GESPEICHERTEN Namen
-                await logAdminAction('role_deleted', `Rolle '${roleToDeleteName}' (${roleId}) gelöscht.`);
-                alertUser(`Rolle '${roleToDeleteName}' wurde erfolgreich gelöscht!`, "success"); // Erfolgsmeldung
+    userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
+        button.addEventListener('click', async (e) => {
+            roleManagementSectionsState.userRolesOpen = true;
+            const roleId = e.currentTarget.dataset.roleid;
 
-                // UI wird durch den Listener (listenForRoleUpdates) automatisch neu gerendert.
+            // 1. KORREKTUR: Name der Rolle SICHERN, BEVOR der Löschvorgang gestartet wird
+            const roleToDeleteName = ROLES[roleId]?.name || 'Unbekannte Rolle';
 
-            } catch (error) {
-                console.error("Fehler beim Löschen der Benutzer-Rolle:", error);
-                // 3. Fehlerbehandlung muss den GESPEICHERTEN Namen verwenden
-                alertUser(`Fehler beim Löschen der Benutzer-Rolle: ${error.message || error.toString()}`, "error"); 
-                
-                // WICHTIG: Die Fehlermeldung, die du siehst ("Fehler beim Löschen der Benutzer-Rolle."),
-                // wird jetzt nur noch angezeigt, wenn ein ECHTER Datenbankfehler auftritt (z.B. Netzwerk).
-                // Der vorherige TypError wird vermieden.
+            if (confirm(`Möchten Sie die Rolle '${roleToDeleteName}' wirklich löschen?`)) {
+                try {
+                    await deleteDoc(doc(rolesCollectionRef, roleId));
+
+                    // 2. Logging und Benachrichtigung verwenden den GESPEICHERTEN Namen
+                    await logAdminAction('role_deleted', `Rolle '${roleToDeleteName}' (${roleId}) gelöscht.`);
+                    alertUser(`Rolle '${roleToDeleteName}' wurde erfolgreich gelöscht!`, "success"); // Erfolgsmeldung
+
+                    // UI wird durch den Listener (listenForRoleUpdates) automatisch neu gerendert.
+
+                } catch (error) {
+                    console.error("Fehler beim Löschen der Benutzer-Rolle:", error);
+                    // 3. Fehlerbehandlung muss den GESPEICHERTEN Namen verwenden
+                    alertUser(`Fehler beim Löschen der Benutzer-Rolle: ${error.message || error.toString()}`, "error");
+
+                    // WICHTIG: Die Fehlermeldung, die du siehst ("Fehler beim Löschen der Benutzer-Rolle."),
+                    // wird jetzt nur noch angezeigt, wenn ein ECHTER Datenbankfehler auftritt (z.B. Netzwerk).
+                    // Der vorherige TypError wird vermieden.
+                }
             }
-        }
+        });
     });
-});
-    
+
     // (Listener für Toggle Benutzer-Rollen)
     document.getElementById('userRolesToggle').addEventListener('click', () => {
         roleManagementSectionsState.userRolesOpen = !roleManagementSectionsState.userRolesOpen;
@@ -351,7 +352,7 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
     if (currentUser.role === 'SYSTEMADMIN') {
         const adminRolesContainer = document.createElement('div');
         adminRolesContainer.className = "mt-6 pl-2 border-l-4 border-gray-200";
-        
+
         // =================================================================
         // BEGINN DEINER KORREKTUR (Layout Admin-Rollen-Editor)
         // =================================================================
@@ -483,7 +484,7 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
         // =================================================================
         // ENDE DEINER KORREKTUR
         // =================================================================
-            
+
         roleManagementArea.appendChild(adminRolesContainer);
 
         // (Liste der existierenden Admin-Rollen)
@@ -514,7 +515,7 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
             const idInput = adminRoleForm.querySelector('#editingAdminRoleId');
             const permCheckboxes = adminRoleForm.querySelectorAll('.new-admin-perm-cb');
             const approvalCheckboxes = adminRoleForm.querySelectorAll('.approval-cb');
-            
+
             if (roleId) {
                 const role = ADMIN_ROLES[roleId];
                 if (!role) {
@@ -524,10 +525,10 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
                 formTitle.textContent = 'Admin-Rolle bearbeiten';
                 idInput.value = roleId;
                 nameInput.value = role.name;
-                
+
                 // KORREKTUR: Namensfeld NICHT sperren
-                nameInput.disabled = false; 
-                
+                nameInput.disabled = false;
+
                 permCheckboxes.forEach(cb => {
                     cb.checked = role.permissions[cb.dataset.perm] || false;
                 });
@@ -548,7 +549,7 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
 
             // Abhängigkeit für Hauptmenü -> Push etc.
             setupPermissionDependencies(adminRoleForm);
-            
+
             // =================================================================
             // BEGINN KORREKTUR (JS-Abhängigkeit für Genehmigung)
             // =================================================================
@@ -576,13 +577,13 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
                                 approvalCb.checked = false; // Haken entfernen
                             }
                         };
-                        
+
                         mainCb.addEventListener('change', updateState);
                         updateState(); // Initialen Status setzen
                     }
                 });
             };
-            
+
             // Diese neue Funktion aufrufen
             setupApprovalDependencies(adminRoleForm);
             // =================================================================
@@ -595,7 +596,7 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
         adminRolesList.querySelectorAll('.edit-admin-role-btn').forEach(button => {
             button.addEventListener('click', (e) => openAdminRoleEditor(e.currentTarget.dataset.roleid));
         });
-        
+
         // (Listener für "Löschen" (Admin-Rolle))
         adminRolesList.querySelectorAll('.delete-admin-role-button').forEach(button => {
             button.addEventListener('click', deleteAdminRoleHandler); // Korrekter Handler zugewiesen
@@ -607,7 +608,7 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
             const saveBtn = e.currentTarget;
             const roleName = document.getElementById('newAdminRoleName').value.trim();
             const editingId = document.getElementById('editingAdminRoleId').value;
-            
+
             // KORREKTUR: Beim Bearbeiten darf die ID nicht neu generiert werden.
             // Beim Erstellen die ID aus dem Namen generieren.
             const roleId = editingId ? editingId : roleName.toUpperCase().replace(/\s/g, '');
@@ -631,14 +632,14 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
             permissions.approvalRequired = approvalRequired;
 
             // (Lade-Spinner manuell, da setButtonLoading nicht importiert ist)
-            saveBtn.disabled = true; 
-            
+            saveBtn.disabled = true;
+
             try {
                 if (editingId) {
                     // KORREKTUR: 'name' und 'permissions' aktualisieren
-                    await updateDoc(doc(adminRolesCollectionRef, editingId), { 
-                        name: roleName, 
-                        permissions: permissions 
+                    await updateDoc(doc(adminRolesCollectionRef, editingId), {
+                        name: roleName,
+                        permissions: permissions
                     });
                     await logAdminAction('admin_role_edited', `Admin-Rolle '${roleName}' bearbeitet.`);
                 } else {
@@ -647,13 +648,13 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
                     await setDoc(doc(adminRolesCollectionRef, roleId), docData);
                     await logAdminAction('admin_role_created', `Admin-Rolle '${roleName}' erstellt.`);
                 }
-                
+
                 adminRoleForm.classList.add('hidden');
                 showAdminRoleFormBtn.style.display = 'block';
-                
+
                 // KORREKTUR: UI neu rendern, damit die Liste aktuell ist
                 renderRoleManagement();
-                
+
             } catch (error) {
                 console.error("Fehler beim Speichern der Admin-Rolle:", error);
                 alertUser("Fehler beim Speichern der Admin-Rolle.", "error");
