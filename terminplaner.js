@@ -770,13 +770,11 @@ async function saveVoteParticipation() {
         participantName = "Anonym";
         participantId = `anon_${Date.now()}`;
     } else if (currentUser.mode !== GUEST_MODE) {
-        // Hole den Namen aus dem (jetzt schreibgeschützten) Feld
         participantName = document.getElementById('vote-participant-name').textContent; 
         participantId = currentUser.mode;
     } else {
-        // Gast muss Namen eingeben
         participantName = document.getElementById('vote-guest-name-input').value.trim();
-        participantId = `guest_${participantName.replace(/\s/g, '_')}`; // Ersetze Leerzeichen für die ID
+        participantId = `guest_${participantName.replace(/\s/g, '_')}`; 
         if (!participantName) {
             return alertUser("Bitte gib deinen Namen als Gast ein.", "error");
         }
@@ -794,7 +792,7 @@ async function saveVoteParticipation() {
         let correctionCount = 0;
         let answerHistory = [];
         
-        // Hole den Namen, der gespeichert werden soll (entweder Gast-Name oder voller Name des Users)
+        // Hole den Namen, der gespeichert werden soll
         const user = (currentUser.mode !== GUEST_MODE) ? USERS[currentUser.mode] : null;
         const nameToSave = user ? user.realName : participantName;
         
@@ -806,7 +804,6 @@ async function saveVoteParticipation() {
             const oldAnswers = oldParticipantData.currentAnswers;
             const newAnswers = currentParticipantAnswers;
             
-            // Finde die Änderungen
             const changes = [];
             const options = currentVoteData.options;
             for (let i = 0; i < options.length; i++) {
@@ -828,21 +825,24 @@ async function saveVoteParticipation() {
             
             answerHistory = oldParticipantData.answerHistory || [];
             
-            // Nur wenn sich was geändert hat, ein Logeintrag
             if (changes.length > 0) {
                 const historyLog = { 
-                    timestamp: serverTimestamp(), // Firebase Zeitstempel
+                    // ==================================================
+                    // HIER IST DIE KORREKTUR
+                    // ==================================================
+                    timestamp: new Date(), // <-- Benutze die lokale Uhrzeit (new Date())
+                    // ==================================================
                     changes: changes,
-                    changedBy: currentUser.displayName || "Gast" // Wer hat's geändert
+                    changedBy: currentUser.displayName || "Gast" 
                 };
-                answerHistory.unshift(historyLog); // Neueste Änderung zuerst
+                answerHistory.unshift(historyLog); 
             }
 
-            correctionCount = answerHistory.length; // Zähler = Anzahl der Logs
+            correctionCount = answerHistory.length; 
             
             newParticipantsArray[existingParticipantIndex] = {
                 ...oldParticipantData, 
-                name: nameToSave, // Update auch den Namen, falls er sich geändert hat (sollte nicht, aber sicher)
+                name: nameToSave,
                 currentAnswers: newAnswers,
                 correctionCount: correctionCount,
                 answerHistory: answerHistory 
