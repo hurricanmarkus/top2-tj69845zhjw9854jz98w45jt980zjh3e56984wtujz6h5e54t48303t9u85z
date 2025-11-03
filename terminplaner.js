@@ -1,17 +1,17 @@
-// NEU: Wir importieren viel mehr Tools
+// Wir importieren 'doc', 'updateDoc', UND 'getDoc'
 import { alertUser, db, votesCollectionRef, currentUser, setButtonLoading, GUEST_MODE } from './haupteingang.js';
-import {
-    addDoc,
-    serverTimestamp,
-    getDocs,
-    getDoc,
-    query,
-    where,
-    doc,
-    updateDoc,
-    onSnapshot, // NEU: Um live zuzuhören
-    orderBy,    // NEU: Zum Sortieren
-    limit       // NEU: Um die Anzahl zu begrenzen
+import { 
+    addDoc, 
+    serverTimestamp, 
+    getDocs, 
+    getDoc, 
+    query, 
+    where, 
+    doc, 
+    updateDoc, 
+    onSnapshot, 
+    orderBy,    
+    limit       
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ----- Globale Variablen für den Zustand -----
@@ -20,32 +20,28 @@ let currentVoteData = null;
 let selectedOptionIndex = null;
 let currentParticipantAnswers = {};
 
-// NEU: Globale Variablen, um unsere "Spione" (Listener) zu speichern,
-// damit wir sie auch wieder stoppen können.
 let unsubscribePublicVotes = null;
 let unsubscribeAssignedVotes = null;
 
 
 // Diese Funktion wird von haupteingang.js aufgerufen
 export function initializeTerminplanerView() {
-
+    
     // ----- Spion für das Token-Feld -----
     const tokenInput = document.getElementById('vote-token-input');
     if (tokenInput && !tokenInput.dataset.listenerAttached) {
-        tokenInput.addEventListener('input', formatTokenInput);
+        tokenInput.addEventListener('input', (e) => formatTokenInput(e, 'vote-token-input')); 
         tokenInput.dataset.listenerAttached = 'true';
     }
 
     // ----- Spion für den "Teilnehmen"-Button -----
     const joinVoteButton = document.getElementById('join-vote-by-token-btn');
     if (joinVoteButton && !joinVoteButton.dataset.listenerAttached) {
-        joinVoteButton.addEventListener('click', joinVoteByToken);
+        joinVoteButton.addEventListener('click', joinVoteByToken); 
         joinVoteButton.dataset.listenerAttached = 'true';
     }
 
-    // ----- NEU: Delegierter Spion für die Listen -----
-    // Wir fügen einen Spion zur Hauptseite hinzu, der auf Klicks 
-    // auf die Umfrage-Karten in den Listen wartet.
+    // ----- Delegierter Spion für die Listen -----
     const mainView = document.getElementById('terminplaner-main-view');
     if (mainView && !mainView.dataset.listenerAttached) {
         mainView.addEventListener('click', (e) => {
@@ -53,8 +49,7 @@ export function initializeTerminplanerView() {
             if (pollCard) {
                 const voteId = pollCard.dataset.voteId;
                 if (voteId) {
-                    console.log(`Klick auf Umfrage-Karte, ID: ${voteId}`);
-                    joinVoteById(voteId); // Rufe unsere neue Funktion auf
+                    joinVoteById(voteId); 
                 }
             }
         });
@@ -69,7 +64,6 @@ export function initializeTerminplanerView() {
     const modal = document.getElementById('createVoteModal');
 
     if (openModalButton && closeModalButton && modal) {
-        // "+ Neuen Termin"-Button
         if (!openModalButton.dataset.listenerAttached) {
             openModalButton.addEventListener('click', () => {
                 modal.style.display = 'flex';
@@ -77,7 +71,6 @@ export function initializeTerminplanerView() {
             });
             openModalButton.dataset.listenerAttached = 'true';
         }
-        // "Schließen" (X)-Button
         if (!closeModalButton.dataset.listenerAttached) {
             closeModalButton.addEventListener('click', () => {
                 modal.style.display = 'none';
@@ -85,17 +78,15 @@ export function initializeTerminplanerView() {
             });
             closeModalButton.dataset.listenerAttached = 'true';
         }
-        // Spion für "Gruppenumfrage"
         const groupPollButton = document.getElementById('select-vote-type-group');
         if (groupPollButton && !groupPollButton.dataset.listenerAttached) {
             groupPollButton.addEventListener('click', () => {
-                modal.style.display = 'none';
+                modal.style.display = 'none'; 
                 modal.classList.add('hidden');
-                showView('create');
+                showView('create'); 
             });
             groupPollButton.dataset.listenerAttached = 'true';
         }
-        // Platzhalter-Spione
         document.getElementById('select-vote-type-event')?.addEventListener('click', () => alertUser("Eventplaner ist noch nicht verfügbar.", "error"));
         document.getElementById('select-vote-type-1on1')?.addEventListener('click', () => alertUser("1:1 ist noch nicht verfügbar.", "error"));
         document.getElementById('select-vote-type-booking')?.addEventListener('click', () => alertUser("Buchungsseite ist noch nicht verfügbar.", "error"));
@@ -107,7 +98,7 @@ export function initializeTerminplanerView() {
     if (cancelCreationButton && !cancelCreationButton.dataset.listenerAttached) {
         cancelCreationButton.addEventListener('click', () => {
             if (confirm("Möchtest du die Erstellung wirklich abbrechen? Alle Eingaben gehen verloren.")) {
-                showView('main');
+                showView('main'); 
             }
         });
         cancelCreationButton.dataset.listenerAttached = 'true';
@@ -122,14 +113,14 @@ export function initializeTerminplanerView() {
         datesContainer.addEventListener('click', (e) => {
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
-                const timesContainer = addTarget.previousElementSibling;
+                const timesContainer = addTarget.previousElementSibling; 
                 if (timesContainer) {
                     timesContainer.appendChild(createTimeInputHTML());
                 }
             }
             const removeTarget = e.target.closest('.vote-remove-time-btn');
             if (removeTarget) {
-                const timeGroup = removeTarget.parentElement;
+                const timeGroup = removeTarget.parentElement; 
                 const timesContainer = timeGroup.parentElement;
                 if (timesContainer.children.length > 1) {
                     timeGroup.remove();
@@ -142,194 +133,187 @@ export function initializeTerminplanerView() {
     }
     const saveVoteButton = document.getElementById('vote-save-group-poll-btn');
     if (saveVoteButton && !saveVoteButton.dataset.listenerAttached) {
-        saveVoteButton.addEventListener('click', saveGroupPoll);
+        saveVoteButton.addEventListener('click', saveGroupPoll); 
         saveVoteButton.dataset.listenerAttached = 'true';
     }
 
     // ----- Spione für die Abstimmungs-Seite -----
-    // (Dieser Teil bleibt unverändert)
+    
+    // "Zurück"-Button
     const cancelVoteButton = document.getElementById('cancel-vote-participation-btn');
     if (cancelVoteButton && !cancelVoteButton.dataset.listenerAttached) {
         cancelVoteButton.addEventListener('click', () => {
-            showView('main');
-            currentVoteData = null;
+            showView('main'); 
+            currentVoteData = null; 
         });
         cancelVoteButton.dataset.listenerAttached = 'true';
     }
+
+    // "Ja/Nein/Vielleicht"-Buttons
     document.querySelectorAll('.vote-answer-btn').forEach(btn => {
         if (!btn.dataset.listenerAttached) {
             btn.addEventListener('click', () => {
-                if (selectedOptionIndex === null) return;
-                const answer = btn.dataset.answer;
+                if (selectedOptionIndex === null) return; 
+                const answer = btn.dataset.answer; 
                 currentParticipantAnswers[selectedOptionIndex] = answer;
-                console.log("Antworten:", currentParticipantAnswers);
                 updatePollTableAnswers(currentVoteData);
+                document.querySelectorAll('.vote-answer-btn').forEach(b => b.classList.remove('ring-4', 'ring-indigo-500'));
+                btn.classList.add('ring-4', 'ring-indigo-500');
             });
             btn.dataset.listenerAttached = 'true';
         }
     });
+    
+    // "Abstimmung speichern"-Button
     const saveParticipationButton = document.getElementById('vote-save-participation-btn');
     if (saveParticipationButton && !saveParticipationButton.dataset.listenerAttached) {
         saveParticipationButton.addEventListener('click', saveVoteParticipation);
         saveParticipationButton.dataset.listenerAttached = 'true';
     }
+    
+    // NEU: Spion für den "EDIT"-Button
+    const editVoteButton = document.getElementById('show-edit-vote-btn');
+    if (editVoteButton && !editVoteButton.dataset.listenerAttached) {
+        editVoteButton.addEventListener('click', showInlineEditToken); // <-- Ruft die neue Inline-Funktion auf
+        editVoteButton.dataset.listenerAttached = 'true';
+    }
+    
+    
+    // ----- NEU: Spione für den INLINE Edit-Block -----
+    
+    // Spion für den "Bearbeiten"-Button im Inline-Block
+    const submitEditBtn = document.getElementById('submit-edit-token-inline-btn');
+    if (submitEditBtn && !submitEditBtn.dataset.listenerAttached) {
+        submitEditBtn.addEventListener('click', checkInlineEditToken);
+        submitEditBtn.dataset.listenerAttached = 'true';
+    }
+    
+    // Spion für die Token-Formatierung
+    const editTokenInput = document.getElementById('edit-token-input-inline');
+    if (editTokenInput && !editTokenInput.dataset.listenerAttached) {
+        editTokenInput.addEventListener('input', (e) => formatTokenInput(e, 'edit-token-input-inline'));
+        editTokenInput.dataset.listenerAttached = 'true';
+    }
+    
+    // NEU: Spion für den "Zurück zur Umfrage"-Button auf der finalen Edit-Seite
+    const cancelEditingBtn = document.getElementById('cancel-vote-editing-btn');
+    if (cancelEditingBtn && !cancelEditingBtn.dataset.listenerAttached) {
+        cancelEditingBtn.addEventListener('click', () => {
+            // Wir gehen zurück zur Abstimmungs-Ansicht
+            showView('vote');
+            // Wir müssen die Abstimmungs-Ansicht neu laden, falls
+            // der Admin in der Zwischenzeit etwas geändert hat (z.B. Termin fixiert)
+            joinVoteById(currentVoteData.id); 
+        });
+        cancelEditingBtn.dataset.listenerAttached = 'true';
+    }
 }
 
 
-// ----- NEU: SPION-FUNKTIONEN (Listener) -----
-
-/**
- * Startet den Spion für ÖFFENTLICHE Umfragen.
- * Diese Funktion wird von haupteingang.js aufgerufen.
- */
+// ----- SPION-FUNKTIONEN (Listener) -----
+// (Unverändert)
 export function listenForPublicVotes() {
-    // Stoppe den alten Spion, falls er läuft
-    if (unsubscribePublicVotes) {
-        unsubscribePublicVotes();
-    }
-
-    // Suche nach Umfragen, die 'isPublic' sind, sortiert nach Erstellungsdatum (neueste zuerst)
+    if (unsubscribePublicVotes) unsubscribePublicVotes();
     const q = query(
-        votesCollectionRef,
-        where("isPublic", "==", true),
-        orderBy("createdAt", "desc"),
-        limit(20) // Zeige maximal die 20 neuesten
+        votesCollectionRef, 
+        where("isPublic", "==", true), 
+        orderBy("createdAt", "desc"), 
+        limit(20) 
     );
-
-    // Starte den neuen Spion
     unsubscribePublicVotes = onSnapshot(q, (snapshot) => {
         const votes = [];
         snapshot.forEach(doc => {
             votes.push({ id: doc.id, ...doc.data() });
         });
-        renderPublicVotes(votes); // Übergebe die gefundenen Umfragen an die Render-Funktion
+        renderPublicVotes(votes); 
     }, (error) => {
         console.error("Fehler beim Lauschen auf öffentliche Umfragen:", error);
     });
 }
-
-/**
- * Startet den Spion für "An mich ZUGEWIESENE" Umfragen.
- * "Zugewiesen" bedeutet hier: Du hast schon mal teilgenommen.
- * Diese Funktion wird von log-InOut.js aufgerufen.
- */
+// (Unverändert)
 export function listenForAssignedVotes(userId) {
-    // Stoppe den alten Spion
-    if (unsubscribeAssignedVotes) {
-        unsubscribeAssignedVotes();
-    }
-
-    // Wenn kein Benutzer angemeldet ist (z.B. Gast oder Logout),
-    // leere die Liste und starte keinen neuen Spion.
+    if (unsubscribeAssignedVotes) unsubscribeAssignedVotes();
     if (!userId || userId === GUEST_MODE) {
-        renderAssignedVotes([]); // Leere Liste rendern
+        renderAssignedVotes([]); 
         return;
     }
-
-    // Suche nach Umfragen, bei denen deine 'userId' in der Teilnehmer-ID-Liste ('participantIds') vorkommt
     const q = query(
-        votesCollectionRef,
+        votesCollectionRef, 
         where("participantIds", "array-contains", userId),
-        orderBy("createdAt", "desc"),
+        orderBy("createdAt", "desc"), 
         limit(20)
     );
-
-    // Starte den neuen Spion
     unsubscribeAssignedVotes = onSnapshot(q, (snapshot) => {
         const votes = [];
         snapshot.forEach(doc => {
             votes.push({ id: doc.id, ...doc.data() });
         });
-        renderAssignedVotes(votes); // Übergebe die gefundenen Umfragen an die Render-Funktion
+        renderAssignedVotes(votes); 
     }, (error) => {
         console.error("Fehler beim Lauschen auf zugewiesene Umfragen:", error);
     });
 }
-
-/**
- * Stoppt den "Zugewiesen"-Spion (wird bei Logout aufgerufen).
- */
+// (Unverändert)
 export function stopAssignedVotesListener() {
     if (unsubscribeAssignedVotes) {
         unsubscribeAssignedVotes();
         unsubscribeAssignedVotes = null;
     }
-    renderAssignedVotes([]); // Leere die Liste
+    renderAssignedVotes([]); 
 }
 
 
-// ----- NEU: RENDER-FUNKTIONEN FÜR LISTEN -----
-
-/**
- * Baut die HTML-Liste für "Öffentliche Umfragen"
- */
+// ----- RENDER-FUNKTIONEN FÜR LISTEN -----
+// (Unverändert, aber mit "fixedOptionIndex"-Logik)
 function renderPublicVotes(votes) {
     const listContainer = document.getElementById('public-votes-list');
     if (!listContainer) return;
-
     if (votes.length === 0) {
-        listContainer.innerHTML = `
-            <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
-                Derzeit gibt es keine öffentlichen Umfragen.
-            </p>`;
+        listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Derzeit gibt es keine öffentlichen Umfragen.</p>`;
         return;
     }
-
     listContainer.innerHTML = votes.map(vote => {
         const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
+        const fixedTag = vote.fixedOptionIndex != null ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">FIXIERT</span>' : '';
         return `
             <div class="vote-list-item card bg-white p-3 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:bg-indigo-50"
                  data-vote-id="${vote.id}">
                 <div>
                     <span class="font-bold text-indigo-700">${vote.title}</span>
+                    ${fixedTag}
                     <span class="text-sm text-gray-500 ml-2">(${vote.participants?.length || 0} Teilnehmer)</span>
-                    <p class="text-xs text-gray-500">Erstellt von ${vote.createdBy} am ${niceDate}</p>
+                    <p class="text-xs text-gray-500">Erstellt von ${vote.createdByName} am ${niceDate}</p>
                 </div>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600">
-                    <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" />
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
             </div>
         `;
     }).join('');
 }
-
-/**
- * Baut die HTML-Liste für "An mich zugewiesen"
- */
+// (Unverändert, aber mit "fixedOptionIndex"-Logik)
 function renderAssignedVotes(votes) {
     const listContainer = document.getElementById('assigned-votes-list');
     if (!listContainer) return;
-
-    // Wenn der Benutzer Gast ist, zeige eine andere Meldung
     if (currentUser.mode === GUEST_MODE) {
-        listContainer.innerHTML = `
-            <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
-                Melde dich an, um Umfragen zu sehen, an denen du teilgenommen hast.
-            </p>`;
+         listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Melde dich an, um Umfragen zu sehen, an denen du teilgenommen hast.</p>`;
         return;
     }
-
     if (votes.length === 0) {
-        listContainer.innerHTML = `
-            <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
-                Du hast noch an keiner Umfrage teilgenommen.
-            </p>`;
+        listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Du hast noch an keiner Umfrage teilgenommen.</p>`;
         return;
     }
-
     listContainer.innerHTML = votes.map(vote => {
         const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
+        const fixedTag = vote.fixedOptionIndex != null ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">FIXIERT</span>' : '';
         return `
             <div class="vote-list-item card bg-white p-3 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:bg-indigo-50"
                  data-vote-id="${vote.id}">
                 <div>
                     <span class="font-bold text-indigo-700">${vote.title}</span>
+                    ${fixedTag}
                     <span class="text-sm text-gray-500 ml-2">(${vote.participants?.length || 0} Teilnehmer)</span>
-                    <p class="text-xs text-gray-500">Erstellt von ${vote.createdBy} am ${niceDate}</p>
+                    <p class="text-xs text-gray-500">Erstellt von ${vote.createdByName} am ${niceDate}</p>
                 </div>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600">
-                    <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" />
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
             </div>
         `;
     }).join('');
@@ -337,73 +321,48 @@ function renderAssignedVotes(votes) {
 
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per Token) -----
+// (Unverändert)
 async function joinVoteByToken() {
     const tokenInput = document.getElementById('vote-token-input');
     const joinBtn = document.getElementById('join-vote-by-token-btn');
-    const token = tokenInput.value.trim().toUpperCase();
-
+    const token = tokenInput.value.trim().toUpperCase(); 
     if (token.length !== 11 || token[4] !== ' ' || token[5] !== '-' || token[6] !== ' ') {
         alertUser("Ungültiges Token-Format. Es muss 'XXXX - XXXX' sein.", "error");
         return;
     }
-
-    setButtonLoading(joinBtn, true);
-
+    setButtonLoading(joinBtn, true); 
     try {
         const q = query(votesCollectionRef, where("token", "==", token));
         const snapshot = await getDocs(q);
-
         if (snapshot.empty) throw new Error("Umfrage nicht gefunden. Prüfe den Token.");
         if (snapshot.size > 1) throw new Error("Fehler: Mehrere Umfragen mit diesem Token gefunden. Admin kontaktieren.");
-
         const voteDoc = snapshot.docs[0];
-        currentVoteData = { id: voteDoc.id, ...voteDoc.data() };
-
+        currentVoteData = { id: voteDoc.id, ...voteDoc.data() }; 
         console.log("Umfrage gefunden:", currentVoteData);
         renderVoteView(currentVoteData);
         showView('vote');
-        tokenInput.value = '';
-
+        tokenInput.value = ''; 
     } catch (error) {
         console.error("Fehler beim Suchen der Umfrage:", error);
         alertUser(error.message, "error");
     } finally {
-        setButtonLoading(joinBtn, false);
+        setButtonLoading(joinBtn, false); 
     }
 }
 
-// ----- NEU: DATENBANK-FUNKTION (Umfrage suchen per ID) -----
-/**
- * Sucht eine Umfrage basierend auf der Datenbank-ID (aus der Liste)
- */
+// ----- DATENBANK-FUNKTION (Umfrage suchen per ID) -----
+// (Unverändert)
 async function joinVoteById(voteId) {
     try {
-        // Wir müssen die Umfrage neu laden, falls sich in der Zwischenzeit
-        // etwas geändert hat (obwohl der Listener das tun sollte, ist dies sicherer).
-
-        // Da wir 'onSnapshot' verwenden, sind die Daten in der Liste
-        // (publicVotes / assignedVotes) bereits aktuell.
-        // Wir müssen nicht extra zur Datenbank gehen.
-
-        // Finde die Umfrage in den globalen Listen (die vom Spion gefüllt wurden)
-        // TODO: Das ist nicht ideal. Besser ist, die Daten direkt aus der DB zu holen.
-
-        // BESSERER ANSATZ: Wir holen die Daten frisch aus der DB,
-        // um sicherzugehen, dass wir die aktuellsten Teilnehmer haben.
-
         const voteDocRef = doc(votesCollectionRef, voteId);
-        const voteDoc = await getDoc(voteDocRef); // NEU: Importiere 'getDoc'
-
+        const voteDoc = await getDoc(voteDocRef); 
         if (!voteDoc.exists()) {
-            throw new Error("Diese Umfrage existiert nicht mehr.");
+             throw new Error("Diese Umfrage existiert nicht mehr.");
         }
-
-        currentVoteData = { id: voteDoc.id, ...voteDoc.data() };
-
+        currentVoteData = { id: voteDoc.id, ...voteDoc.data() }; 
         console.log("Umfrage per ID geladen:", currentVoteData);
         renderVoteView(currentVoteData);
         showView('vote');
-
     } catch (error) {
         console.error("Fehler beim Laden der Umfrage per ID:", error);
         alertUser(error.message, "error");
@@ -412,6 +371,7 @@ async function joinVoteById(voteId) {
 
 
 // ----- RENDER-FUNKTION (Abstimmungs-Seite) -----
+// (Angepasst für "fixedOptionIndex" und "EDIT"-Button)
 function renderVoteView(voteData) {
     // 1. Titel und Beschreibung
     document.getElementById('vote-poll-title').textContent = voteData.title;
@@ -426,69 +386,81 @@ function renderVoteView(voteData) {
     // 2. Namensfeld
     const nameContainer = document.getElementById('vote-name-input-container');
     const nameInput = document.getElementById('vote-participant-name');
-
     let existingParticipant = null;
     if (currentUser.mode !== GUEST_MODE) {
         existingParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
     }
-
     if (voteData.isAnonymous) {
         nameContainer.classList.add('hidden');
     } else {
         nameContainer.classList.remove('hidden');
         if (existingParticipant) {
             nameInput.value = existingParticipant.name;
-            nameInput.disabled = true;
+            nameInput.disabled = true; 
         } else if (currentUser.mode !== GUEST_MODE) {
             nameInput.value = currentUser.displayName;
             nameInput.disabled = false;
         } else {
-            nameInput.value = '';
+            nameInput.value = ''; 
             nameInput.disabled = false;
         }
     }
-
+    
     // 3. Antworten laden
     currentParticipantAnswers = {};
     if (existingParticipant) {
         currentParticipantAnswers = existingParticipant.answers;
     }
-    // WICHTIG: Setze den ausgewählten Termin zurück
     selectedOptionIndex = null;
-    // Deaktiviere die Knöpfe, bis ein Termin geklickt wird
     document.getElementById('vote-selected-option-text').textContent = "Bitte wähle einen Termin aus der Tabelle aus.";
     document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.disabled = true);
+    
+    // 4. NEU: Ansichten (Teilnahme, Edit-Token) zurücksetzen
+    const participationContainer = document.getElementById('vote-participation-container');
+    const saveButton = document.getElementById('vote-save-participation-btn');
+    const editButton = document.getElementById('show-edit-vote-btn');
+    const editTokenContainer = document.getElementById('vote-edit-token-container');
 
+    // Zeige den Edit-Button (wird im Modal geprüft, ob der User darf)
+    editButton.classList.remove('hidden');
+    
+    // Verstecke den Inline-Token-Block
+    editTokenContainer.classList.add('hidden');
 
-    // 4. Die Abstimmungs-Tabelle bauen
-    updatePollTableAnswers(voteData); // Ausgelagert in eigene Funktion
+    if (voteData.fixedOptionIndex != null) {
+        // JA, EIN TERMIN IST FIXIERT
+        participationContainer.classList.add('hidden');
+        saveButton.classList.add('hidden');
+    } else {
+        // NEIN, es ist eine normale Abstimmung
+        participationContainer.classList.remove('hidden');
+        saveButton.classList.remove('hidden');
+    }
 
-    // 5. Klick-Spione für die neuen Tabellen-Zeilen hinzufügen
+    // 5. Die Abstimmungs-Tabelle bauen
+    updatePollTableAnswers(voteData); 
+    
+    // 6. Klick-Spione für die neuen Tabellen-Zeilen hinzufügen
     const optionsContainer = document.getElementById('vote-options-container');
-
-    // Entferne alte Spione (sicherheitshalber)
+    
+    // Alte Spione entfernen
     optionsContainer.querySelectorAll('.vote-option-row').forEach(row => {
-        // Trick: Klonen, um alle alten Spione zu entfernen
-        row.replaceWith(row.cloneNode(true));
+         row.replaceWith(row.cloneNode(true));
     });
-
-    // Füge Spione zu den neuen Zeilen hinzu
+    
+    // Neue Spione hinzufügen
     optionsContainer.querySelectorAll('.vote-option-row').forEach(row => {
         row.addEventListener('click', () => {
+            if (voteData.fixedOptionIndex != null) return; 
             optionsContainer.querySelectorAll('.vote-option-row').forEach(r => r.classList.remove('bg-blue-200'));
             row.classList.add('bg-blue-200');
-
             selectedOptionIndex = parseInt(row.dataset.optionIndex);
             const selectedOption = voteData.options[selectedOptionIndex];
-
             const dateObj = new Date(selectedOption.date + 'T12:00:00');
             const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
-            document.getElementById('vote-selected-option-text').textContent =
+            document.getElementById('vote-selected-option-text').textContent = 
                 `Du stimmst ab für: ${niceDate} um ${selectedOption.time} Uhr`;
-
             document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.disabled = false);
-
-            // Markiere den Button, der der aktuellen Antwort entspricht
             document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.classList.remove('ring-4', 'ring-indigo-500'));
             const currentAnswer = currentParticipantAnswers[selectedOptionIndex];
             if (currentAnswer) {
@@ -499,70 +471,78 @@ function renderVoteView(voteData) {
 }
 
 // ----- Funktion zum Aktualisieren der Tabelle -----
+// (Unverändert, aber mit "fixedOptionIndex"-Logik)
 function updatePollTableAnswers(voteData) {
     const optionsContainer = document.getElementById('vote-options-container');
 
+    if (voteData.fixedOptionIndex != null) {
+        const fixedOption = voteData.options[voteData.fixedOptionIndex];
+        if (fixedOption) {
+            const dateObj = new Date(fixedOption.date + 'T12:00:00');
+            const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+            optionsContainer.innerHTML = `
+                <div class="p-6 bg-green-100 border-l-4 border-green-500 rounded-lg text-center">
+                    <h3 class="text-xl font-bold text-green-800">Termin fixiert!</h3>
+                    <p class="text-lg text-gray-700 mt-2">
+                        Die Umfrage ist geschlossen. Der finale Termin ist:
+                    </p>
+                    <p class="text-3xl font-bold text-black mt-3">
+                        ${niceDate}
+                    </p>
+                    <p class="text-3xl font-bold text-black mt-1">
+                        ${fixedOption.time} Uhr
+                    </p>
+                </div>
+            `;
+            return; 
+        }
+    }
+    
     const optionsByDate = {};
     voteData.options.forEach((option, index) => {
         if (!optionsByDate[option.date]) {
-            optionsByDate[option.date] = [];
+            optionsByDate[option.date] = []; 
         }
         optionsByDate[option.date].push({ ...option, originalIndex: index });
     });
 
     let tableHTML = '<table class="w-full border-collapse text-sm text-left">';
-
-    // Kopfzeile der Tabelle
     tableHTML += '<thead><tr class="bg-gray-50">';
     tableHTML += '<th class="p-2 border-b sticky left-0 bg-gray-50 z-10">Termin</th>';
-
     voteData.participants.forEach(p => {
         tableHTML += `<th class="p-2 border-b text-center">${p.name}</th>`;
     });
-
-    // "Du"-Spalte nur anzeigen, wenn der Benutzer nicht schon in der Liste ist
     let showYouColumn = true;
-    if (currentUser.mode !== GUEST_MODE && voteData.participants.find(p => p.userId === currentUser.mode)) {
+    if(currentUser.mode !== GUEST_MODE && voteData.participants.find(p => p.userId === currentUser.mode)) {
         showYouColumn = false;
     }
     if (showYouColumn) {
         tableHTML += `<th class="p-2 border-b text-center font-bold text-indigo-600">Du</th>`;
     }
-
     tableHTML += '</tr></thead>';
-
-    // Zeilen der Tabelle
     tableHTML += '<tbody>';
-
     for (const date in optionsByDate) {
-        const dateObj = new Date(date + 'T12:00:00');
+        const dateObj = new Date(date + 'T12:00:00'); 
         const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
-
         tableHTML += `
             <tr class="bg-gray-100">
                 <td class="p-2 font-bold sticky left-0 bg-gray-100 z-10" colspan="${voteData.participants.length + 2}">${niceDate}</td>
             </tr>
         `;
-
         optionsByDate[date].forEach(option => {
             const isSelected = option.originalIndex === selectedOptionIndex;
-
             tableHTML += `
                 <tr class="vote-option-row ${isSelected ? 'bg-blue-200' : 'hover:bg-blue-50'} cursor-pointer" data-option-index="${option.originalIndex}">
                     <td class="p-2 border-b font-mono sticky left-0 ${isSelected ? 'bg-blue-200' : 'bg-white'} z-10">${option.time} Uhr</td>
             `;
-
-            // Antworten der gespeicherten Teilnehmer
             voteData.participants.forEach(p => {
-                const answer = p.answers[option.originalIndex];
+                const answer = p.answers[option.originalIndex]; 
                 let answerIcon = '';
                 if (answer === 'yes') answerIcon = '<span class="text-green-500 font-bold">✔</span>';
                 if (answer === 'no') answerIcon = '<span class="text-red-500 font-bold">✘</span>';
                 if (answer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold">?</span>';
                 tableHTML += `<td class="p-2 border-b text-center">${answerIcon}</td>`;
             });
-
-            // Antwort des aktuellen Benutzers (noch nicht gespeichert)
             if (showYouColumn) {
                 const currentAnswer = currentParticipantAnswers[option.originalIndex];
                 let currentIcon = '';
@@ -571,80 +551,59 @@ function updatePollTableAnswers(voteData) {
                 if (currentAnswer === 'maybe') currentIcon = '<span class="text-yellow-500 font-bold">?</span>';
                 tableHTML += `<td class="p-2 border-b text-center bg-indigo-50">${currentIcon}</td>`;
             }
-
             tableHTML += '</tr>';
         });
     }
-
     tableHTML += '</tbody></table>';
     optionsContainer.innerHTML = tableHTML;
 }
 
 
 // ----- DATENBANK-FUNKTION (Abstimmung speichern) -----
+// (Unverändert)
 async function saveVoteParticipation() {
     const saveBtn = document.getElementById('vote-save-participation-btn');
     const nameInput = document.getElementById('vote-participant-name');
     let participantName = nameInput.value.trim();
-
     if (!currentVoteData) return alertUser("Fehler: Keine Umfrage geladen.", "error");
-
     if (!currentVoteData.isAnonymous && !participantName) {
         return alertUser("Bitte gib deinen Namen ein.", "error");
     }
-
     if (currentVoteData.isAnonymous) {
         participantName = "Anonym";
     }
-
     if (Object.keys(currentParticipantAnswers).length === 0) {
         return alertUser("Du hast noch für keinen Termin abgestimmt.", "error");
     }
-
     setButtonLoading(saveBtn, true);
-
     try {
         const participantId = (currentUser.mode !== GUEST_MODE) ? currentUser.mode : participantName;
-
         let existingParticipantIndex = -1;
-
         if (currentUser.mode !== GUEST_MODE) {
-            existingParticipantIndex = currentVoteData.participants.findIndex(p => p.userId === participantId);
+             existingParticipantIndex = currentVoteData.participants.findIndex(p => p.userId === participantId);
         } else if (!currentVoteData.isAnonymous) {
-            existingParticipantIndex = currentVoteData.participants.findIndex(p => p.name === participantId);
+             existingParticipantIndex = currentVoteData.participants.findIndex(p => p.name === participantId);
         }
-
-        const newParticipantsArray = [...currentVoteData.participants];
-
+        const newParticipantsArray = [...currentVoteData.participants]; 
         if (existingParticipantIndex > -1) {
-            console.log("Aktualisiere Teilnehmer:", participantName);
             newParticipantsArray[existingParticipantIndex].answers = currentParticipantAnswers;
         } else {
-            console.log("Füge neuen Teilnehmer hinzu:", participantName);
             newParticipantsArray.push({
                 userId: participantId,
                 name: participantName,
                 answers: currentParticipantAnswers
             });
         }
-
-        // NEU: Erstelle die Liste der Teilnehmer-IDs für die Datenbank-Suche
         const participantIds = newParticipantsArray.map(p => p.userId);
-
-        // Datenbank-Update
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
         await updateDoc(voteDocRef, {
             participants: newParticipantsArray,
-            participantIds: participantIds // <-- NEU: Diese Liste speichern wir mit ab
+            participantIds: participantIds 
         });
-
         alertUser("Deine Abstimmung wurde gespeichert!", "success");
-
-        // Lokale Daten aktualisieren und Ansicht neu laden
         currentVoteData.participants = newParticipantsArray;
         currentVoteData.participantIds = participantIds;
-        renderVoteView(currentVoteData);
-
+        renderVoteView(currentVoteData); 
     } catch (error) {
         console.error("Fehler beim Speichern der Abstimmung:", error);
         alertUser("Fehler beim Speichern: " + error.message, "error");
@@ -655,6 +614,7 @@ async function saveVoteParticipation() {
 
 
 // ----- SPEICHER-FUNKTION (Erstellung) -----
+// (Wieder angepasst, um 'editToken' und 'createdBy' ID zu speichern)
 async function saveGroupPoll() {
     const saveBtn = document.getElementById('vote-save-group-poll-btn');
     saveBtn.disabled = true;
@@ -672,12 +632,12 @@ async function saveGroupPoll() {
 
         dateGroups.forEach(group => {
             const dateInput = group.querySelector('.vote-date-input');
-            const dateValue = dateInput.value;
-            if (dateValue) {
+            const dateValue = dateInput.value; 
+            if (dateValue) { 
                 const timeInputs = group.querySelectorAll('.vote-time-input');
                 timeInputs.forEach(timeInput => {
-                    const timeValue = timeInput.value;
-                    if (timeValue) {
+                    const timeValue = timeInput.value; 
+                    if (timeValue) { 
                         options.push({ date: dateValue, time: timeValue });
                         hasValidOption = true;
                     }
@@ -689,33 +649,37 @@ async function saveGroupPoll() {
         if (!hasValidOption) throw new Error("Bitte füge mindestens einen gültigen Termin (Datum + Uhrzeit) hinzu.");
 
         const token = generateVoteToken();
+        const editToken = generateVoteToken(); 
 
         const voteData = {
             title: title,
             description: description,
             type: 'group-poll',
             token: token,
+            editToken: editToken, // <-- Der Bearbeitungs-Token
             isPublic: isPublic,
             isAnonymous: isAnonymous,
-            createdBy: currentUser.displayName || currentUser.mode,
-            createdAt: serverTimestamp(),
-            options: options,
+            createdBy: currentUser.mode, // <-- Die Benutzer-ID (z.B. "JASMIN")
+            createdByName: currentUser.displayName || currentUser.mode, // Der Anzeigename
+            createdAt: serverTimestamp(), 
+            options: options, 
             participants: [],
-            participantIds: [] // NEU: Leere ID-Liste beim Erstellen
+            participantIds: [],
+            fixedOptionIndex: null // Feld für fixierten Termin
         };
 
         console.log("Speichere Umfrage in Firebase...", voteData);
         const docRef = await addDoc(votesCollectionRef, voteData);
 
-        console.log(`Umfrage erstellt! ID: ${docRef.id}, Token: ${token}`);
-        alertUser(`Umfrage erstellt! Dein Token: ${token}`, "success");
+        console.log(`Umfrage erstellt! ID: ${docRef.id}, Token: ${token}, Edit-Token: ${editToken}`);
+        alertUser(`Umfrage erstellt! Teilnahme-Token: ${token} (Zum Bearbeiten: ${editToken})`, "success");
 
-        showView('main');
+        showView('main'); 
 
     } catch (error) {
         console.error("Fehler beim Speichern der Umfrage:", error);
         alertUser(error.message, "error");
-
+    
     } finally {
         saveBtn.disabled = false;
         saveBtn.textContent = 'Umfrage erstellen und Link erhalten';
@@ -723,20 +687,83 @@ async function saveGroupPoll() {
 }
 
 
-// ----- HELFER-FUNKTIONEN -----
+// ----- NEUE FUNKTIONEN für das INLINE EDIT-MODAL -----
 
-function showView(viewName) {
+// Wird aufgerufen, wenn man auf "EDIT" klickt
+function showInlineEditToken() {
+    const editTokenContainer = document.getElementById('vote-edit-token-container');
+    const participationContainer = document.getElementById('vote-participation-container');
+    const input = document.getElementById('edit-token-input-inline');
+    
+    if (!editTokenContainer || !participationContainer || !input || !currentVoteData) return;
+    
+    // 1. Verstecke den Teilnahme-Block
+    participationContainer.classList.add('hidden');
+    
+    // 2. Zeige den Edit-Token-Block
+    editTokenContainer.classList.remove('hidden');
+
+    // 3. Prüfe, ob der aktuelle Benutzer der Ersteller ist
+    if (currentUser.mode === currentVoteData.createdBy) {
+        input.value = currentVoteData.editToken; 
+        input.disabled = true; 
+    } else {
+        input.value = ''; 
+        input.disabled = false;
+    }
+}
+
+// Wird aufgerufen, wenn man im Inline-Block auf "Bearbeiten" klickt
+function checkInlineEditToken() {
+    const input = document.getElementById('edit-token-input-inline');
+    const token = input.value.trim().toUpperCase();
+    
+    // Prüfe, ob der eingegebene Token mit dem der Umfrage übereinstimmt
+    if (currentVoteData && token === currentVoteData.editToken) {
+        alertUser("Token korrekt! Lade Bearbeitungs-Modus...", "success");
+        
+        // Zeige die (noch leere) Bearbeitungs-Ansicht
+        showView('edit');
+        
+        // Fülle die Bearbeitungs-Ansicht (im nächsten Schritt)
+        renderEditView(currentVoteData);
+        
+    } else {
+        alertUser("Falscher Bearbeitungs-Token!", "error");
+    }
+}
+
+// NEU: Platzhalter für die Render-Funktion der Bearbeitungs-Seite
+function renderEditView(voteData) {
+    // Fülle den Titel in der Bearbeitungs-Ansicht
+    document.getElementById('edit-poll-title').textContent = `"${voteData.title}" bearbeiten`;
+    
+    // TODO:
+    // Hier bauen wir im nächsten Schritt die Bearbeitungs-Logik auf:
+    // 1. Liste aller Termine mit Checkbox zum "Fixieren"
+    // 2. Liste aller Teilnehmer mit "Löschen"-Knopf
+    // 3. "Umfrage löschen"-Knopf
+}
+
+
+// ----- HELFER-FUNKTIONEN (Rest) -----
+
+function showView(viewName) { 
     document.getElementById('terminplaner-main-view').classList.add('hidden');
     document.getElementById('terminplaner-create-view').classList.add('hidden');
     document.getElementById('terminplaner-vote-view').classList.add('hidden');
-
+    // NEU: Verstecke auch die Edit-Ansicht
+    document.getElementById('terminplaner-edit-view').classList.add('hidden');
+    
     if (viewName === 'main') {
         document.getElementById('terminplaner-main-view').classList.remove('hidden');
     } else if (viewName === 'create') {
         document.getElementById('terminplaner-create-view').classList.remove('hidden');
-        resetCreateWizard();
+        resetCreateWizard(); 
     } else if (viewName === 'vote') {
         document.getElementById('terminplaner-vote-view').classList.remove('hidden');
+    } else if (viewName === 'edit') {
+       document.getElementById('terminplaner-edit-view').classList.remove('hidden');
     }
 }
 
@@ -791,9 +818,11 @@ function createTimeInputHTML() {
     return timeGroup;
 }
 
-function formatTokenInput(e) {
-    const input = e.target;
-    let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+function formatTokenInput(e, inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    
+    let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); 
     let formattedValue = '';
     if (value.length > 4) {
         formattedValue = value.substring(0, 4) + ' - ' + value.substring(4, 8);
@@ -805,10 +834,10 @@ function formatTokenInput(e) {
     input.value = formattedValue;
     const newLength = formattedValue.length;
     if (newLength > originalLength) {
-        input.selectionStart = newLength;
-        input.selectionEnd = newLength;
+         input.selectionStart = newLength;
+         input.selectionEnd = newLength;
     } else {
-        input.selectionStart = cursorPos;
-        input.selectionEnd = cursorPos;
+         input.selectionStart = cursorPos;
+         input.selectionEnd = cursorPos;
     }
 }
