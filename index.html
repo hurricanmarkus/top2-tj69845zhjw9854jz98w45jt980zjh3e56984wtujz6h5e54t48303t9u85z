@@ -1002,8 +1002,7 @@
                         <div>
                             <label for="vote-title" class="block text-sm font-bold text-gray-700 mb-1">Titel der
                                 Umfrage</label>
-                            <input type="text" id="vote-title"
-                                class="w-full p-2 border border-gray-300 rounded-lg"
+                            <input type="text" id="vote-title" class="w-full p-2 border border-gray-300 rounded-lg"
                                 placeholder="z.B. Nächstes Team-Meeting">
                         </div>
                         <div>
@@ -1014,10 +1013,9 @@
                                 placeholder="z.B. Themen: Projekt-Update, Budget..."></textarea>
                         </div>
                         <div>
-                            <label for="vote-location"
-                                class="block text-sm font-bold text-gray-700 mb-1">Ort (Optional)</label>
-                            <input type="text" id="vote-location"
-                                class="w-full p-2 border border-gray-300 rounded-lg"
+                            <label for="vote-location" class="block text-sm font-bold text-gray-700 mb-1">Ort
+                                (Optional)</label>
+                            <input type="text" id="vote-location" class="w-full p-2 border border-gray-300 rounded-lg"
                                 placeholder="z.B. Konferenzraum 1 oder Online">
                         </div>
                     </div>
@@ -1025,9 +1023,9 @@
                     <div class="card bg-white p-4 rounded-xl shadow-lg mb-6">
                         <h3 class="text-lg font-bold text-gray-800 mb-3">Termine vorschlagen</h3>
                         <div id="vote-dates-container" class="space-y-4">
-                            </div>
+                        </div>
                         <button id="vote-add-date-btn"
-                            class="w-full mt-4 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
+                            class="w-full mt-4 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition hidden">
                             + Tag hinzufügen
                         </button>
                     </div>
@@ -1143,7 +1141,7 @@
                         <label for="vote-participant-name"
                             class="block text-sm font-bold text-gray-700 mb-1">Dein Name</label>
                         <input type="text" id="vote-participant-name"
-                            class="w-full p-2 border border-gray-300 rounded-lg" placeholder="Dein Name...">
+                            class="w-full p-2 border border-gray-300 rounded-lg readonly:bg-gray-100 readonly:text-gray-500" placeholder="Dein Name..." readonly disabled>
                     </div>
 
                     <div id="vote-options-container" class="overflow-x-auto rounded-xl shadow-lg mb-6">
@@ -1155,6 +1153,7 @@
                     </button>
 
                 </div>
+                
 
 
                 <div id="terminplaner-edit-view" class="hidden">

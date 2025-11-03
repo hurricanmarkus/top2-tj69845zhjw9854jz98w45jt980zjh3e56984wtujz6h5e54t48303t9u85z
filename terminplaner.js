@@ -1,4 +1,5 @@
-import { alertUser, db, votesCollectionRef, currentUser, setButtonLoading, GUEST_MODE } from './haupteingang.js';
+// NEU: Wir importieren 'USERS' (die globale Benutzerliste), um den 'realName' zu holen
+import { alertUser, db, votesCollectionRef, currentUser, USERS, setButtonLoading, GUEST_MODE } from './haupteingang.js';
 import { 
     addDoc, 
     serverTimestamp, 
@@ -16,7 +17,6 @@ import {
 // ----- Globale Variablen für den Zustand -----
 let dateGroupIdCounter = 0;
 let currentVoteData = null;
-// selectedOptionIndex wird nicht mehr benötigt
 let currentParticipantAnswers = {};
 
 let unsubscribePublicVotes = null;
@@ -91,7 +91,8 @@ export function initializeTerminplanerView() {
     }
 
     // ----- Spione für den Erstellungs-Assistenten -----
-    // (Unverändert, bis auf Hinzufügen von 'unlimitedCheckbox')
+    
+    // "Abbrechen"-Button
     const cancelCreationButton = document.getElementById('cancel-vote-creation-btn');
     if (cancelCreationButton && !cancelCreationButton.dataset.listenerAttached) {
         cancelCreationButton.addEventListener('click', () => {
@@ -101,6 +102,7 @@ export function initializeTerminplanerView() {
         });
         cancelCreationButton.dataset.listenerAttached = 'true';
     }
+    // "Endzeit Unbegrenzt"-Checkbox
     const unlimitedCheckbox = document.getElementById('vote-end-time-unlimited');
     if (unlimitedCheckbox && !unlimitedCheckbox.dataset.listenerAttached) {
         unlimitedCheckbox.addEventListener('change', (e) => {
@@ -114,13 +116,17 @@ export function initializeTerminplanerView() {
         });
         unlimitedCheckbox.dataset.listenerAttached = 'true';
     }
+    // "+ Tag hinzufügen"-Button
     const addDateButton = document.getElementById('vote-add-date-btn');
     if (addDateButton && !addDateButton.dataset.listenerAttached) {
         addDateButton.addEventListener('click', addNewDateGroup);
         addDateButton.dataset.listenerAttached = 'true';
     }
+    
+    // Delegierter Spion für "+ Uhrzeit", "Uhrzeit entfernen" UND VALIDIERUNG
     const datesContainer = document.getElementById('vote-dates-container');
     if (datesContainer && !datesContainer.dataset.clickListenerAttached) {
+        // Klick-Spion (für Knöpfe)
         datesContainer.addEventListener('click', (e) => {
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
@@ -131,17 +137,29 @@ export function initializeTerminplanerView() {
             }
             const removeTarget = e.target.closest('.vote-remove-time-btn');
             if (removeTarget) {
-                const timeGroup = removeTarget.closest('.time-input-group'); // Finde die Elterngruppe
+                const timeGroup = removeTarget.closest('.time-input-group'); 
                 const timesContainer = timeGroup.parentElement;
                 if (timesContainer.children.length > 1) {
-                    timeGroup.remove(); // Lösche die ganze Gruppe
+                    timeGroup.remove(); 
                 } else {
                     alertUser("Du musst mindestens eine Uhrzeit pro Tag angeben.", "error");
                 }
             }
+            // Nach jeder Änderung (hinzufügen/löschen) prüfen
+            validateLastDateGroup();
         });
+        
+        // NEU: Input-Spion (für die Felder)
+        datesContainer.addEventListener('input', (e) => {
+            if (e.target.matches('.vote-date-input, .vote-time-start-input')) {
+                validateLastDateGroup();
+            }
+        });
+        
         datesContainer.dataset.clickListenerAttached = 'true';
     }
+    
+    // "Umfrage erstellen"-Button (Speichern)
     const saveVoteButton = document.getElementById('vote-save-group-poll-btn');
     if (saveVoteButton && !saveVoteButton.dataset.listenerAttached) {
         saveVoteButton.addEventListener('click', saveGroupPoll); 
@@ -345,9 +363,8 @@ function renderAssignedVotes(votes) {
 
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per Token) -----
-// (Unverändert)
+// (ERWEITERT: Prüft jetzt Start/End-Datum)
 async function joinVoteByToken() {
-    // ... (Code bleibt gleich wie vorher) ...
     const tokenInput = document.getElementById('vote-token-input');
     const joinBtn = document.getElementById('join-vote-by-token-btn');
     const token = tokenInput.value.trim().toUpperCase(); 
@@ -364,11 +381,12 @@ async function joinVoteByToken() {
         const voteDoc = snapshot.docs[0];
         const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
         const now = new Date();
-        if (voteData.startTime && now < new Date(voteData.startTime)) {
-            throw new Error(`Diese Umfrage hat noch nicht begonnen. Sie startet am ${new Date(voteData.startTime).toLocaleString('de-DE')}.`);
+        // KORREKTUR: .toDate() verwenden, da es ein Firebase Timestamp ist
+        if (voteData.startTime && now < voteData.startTime.toDate()) {
+            throw new Error(`Diese Umfrage hat noch nicht begonnen. Sie startet am ${voteData.startTime.toDate().toLocaleString('de-DE')}.`);
         }
-        if (voteData.endTime && now > new Date(voteData.endTime)) {
-            throw new Error(`Diese Umfrage ist bereits beendet (seit ${new Date(voteData.endTime).toLocaleString('de-DE')}).`);
+        if (voteData.endTime && now > voteData.endTime.toDate()) {
+            throw new Error(`Diese Umfrage ist bereits beendet (seit ${voteData.endTime.toDate().toLocaleString('de-DE')}).`);
         }
         currentVoteData = voteData; 
         console.log("Umfrage gefunden:", currentVoteData);
@@ -384,9 +402,8 @@ async function joinVoteByToken() {
 }
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per ID) -----
-// (Unverändert)
+// (ERWEITERT: Prüft jetzt Start/End-Datum)
 async function joinVoteById(voteId) {
-    // ... (Code bleibt gleich wie vorher) ...
     try {
         const voteDocRef = doc(votesCollectionRef, voteId);
         const voteDoc = await getDoc(voteDocRef); 
@@ -395,11 +412,12 @@ async function joinVoteById(voteId) {
         }
         const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
         const now = new Date();
-        if (voteData.startTime && now < new Date(voteData.startTime)) {
-            throw new Error(`Diese Umfrage hat noch nicht begonnen. Sie startet am ${new Date(voteData.startTime).toLocaleString('de-DE')}.`);
+        // KORREKTUR: .toDate() verwenden
+        if (voteData.startTime && now < voteData.startTime.toDate()) {
+            throw new Error(`Diese Umfrage hat noch nicht begonnen. Sie startet am ${voteData.startTime.toDate().toLocaleString('de-DE')}.`);
         }
-        if (voteData.endTime && now > new Date(voteData.endTime)) {
-            throw new Error(`Diese Umfrage ist bereits beendet (seit ${new Date(voteData.endTime).toLocaleString('de-DE')}).`);
+        if (voteData.endTime && now > voteData.endTime.toDate()) {
+            throw new Error(`Diese Umfrage ist bereits beendet (seit ${voteData.endTime.toDate().toLocaleString('de-DE')}).`);
         }
         currentVoteData = voteData; 
         console.log("Umfrage per ID geladen:", currentVoteData);
@@ -418,9 +436,14 @@ async function joinVoteById(voteId) {
  * STARK ANGEPASST FÜR NEUES LAYOUT
  */
 function renderVoteView(voteData) {
+    
     // 1. Titel und Ersteller (ZENTRIERT)
     document.getElementById('vote-poll-title').textContent = voteData.title;
-    document.getElementById('vote-poll-creator').textContent = `Erstellt von ${voteData.createdByName}`;
+    // NEU: Zeige den vollen Namen des Erstellers (Vor- und Nachname)
+    // Wir suchen den Ersteller (z.B. "JASMIN") in der globalen USERS-Liste
+    const creatorUser = USERS[voteData.createdBy];
+    const creatorName = creatorUser ? creatorUser.realName : voteData.createdByName; // Nimm realName, sonst den gespeicherten Namen
+    document.getElementById('vote-poll-creator').textContent = `Erstellt von ${creatorName}`;
 
     // 2. Info-Box (Beschreibung, Ort, Gültigkeit)
     const infoBox = document.getElementById('vote-info-box');
@@ -450,11 +473,12 @@ function renderVoteView(voteData) {
     }
     // Gültigkeit
     let validityText = '';
+    // KORREKTUR: .toDate() verwenden
     if (voteData.startTime) {
-        validityText = `Startet: ${new Date(voteData.startTime).toLocaleString('de-DE')}`;
+        validityText = `Startet: ${voteData.startTime.toDate().toLocaleString('de-DE', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'})} Uhr`;
     }
     if (voteData.endTime) {
-        validityText += ` | Endet: ${new Date(voteData.endTime).toLocaleString('de-DE')}`;
+        validityText += ` | Endet: ${voteData.endTime.toDate().toLocaleString('de-DE', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'})} Uhr`;
     }
     if (validityText) {
         validityEl.textContent = validityText;
@@ -463,7 +487,6 @@ function renderVoteView(voteData) {
     } else {
         validityContainer.classList.add('hidden');
     }
-    // Zeige die ganze Box, wenn mind. 1 Info da ist
     infoBox.classList.toggle('hidden', !hasInfo);
 
 
@@ -471,7 +494,7 @@ function renderVoteView(voteData) {
     const nameContainer = document.getElementById('vote-name-input-container');
     const nameInput = document.getElementById('vote-participant-name');
     let existingParticipant = null;
-    let isEditing = false; // Ist der aktuelle User schon in der Teilnehmerliste?
+    let isEditing = false; 
     
     if (currentUser.mode !== GUEST_MODE) {
         existingParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
@@ -486,8 +509,10 @@ function renderVoteView(voteData) {
             nameInput.disabled = true; 
             isEditing = true;
         } else if (currentUser.mode !== GUEST_MODE) {
-            nameInput.value = currentUser.displayName;
-            nameInput.disabled = true; // NEU: Immer gesperrt, wenn eingeloggt
+            // NEU: Nimm den vollen Namen (realName) aus der USERS-Liste
+            const currentUserFull = USERS[currentUser.mode];
+            nameInput.value = currentUserFull ? currentUserFull.realName : currentUser.displayName;
+            nameInput.disabled = true; // Wie gewünscht, nicht bearbeitbar
         } else {
             nameInput.value = ''; 
             nameInput.disabled = false; // Nur für Gäste bearbeitbar
@@ -504,40 +529,29 @@ function renderVoteView(voteData) {
     const saveButton = document.getElementById('vote-save-participation-btn');
     const editButton = document.getElementById('show-edit-vote-btn');
     
-    // Setze den Edit-Wrapper zurück
     resetEditWrapper();
     
     // 6. Prüfen, ob Termin fixiert ist
     if (voteData.fixedOptionIndex != null) {
-        // JA, EIN TERMIN IST FIXIERT
-        nameContainer.classList.add('hidden'); // Verstecke Namensfeld
-        saveButton.classList.add('hidden');    // Verstecke Speichern-Knopf
-        editButton.classList.add('hidden');    // Verstecke Edit-Knopf
-        
-        // Zeige die "Fixiert"-Nachricht
+        nameContainer.classList.add('hidden'); 
+        saveButton.classList.add('hidden');    
+        editButton.classList.add('hidden');    
         updatePollTableAnswers(voteData); 
-
     } else {
-        // NEIN, es ist eine normale Abstimmung
-        saveButton.classList.add('hidden'); // Bleibt versteckt, bis alles ausgefüllt ist
-        editButton.classList.remove('hidden'); // EDIT-Knopf anzeigen
-        
-        // Baue die Abstimmungs-Tabelle
+        saveButton.classList.add('hidden'); 
+        editButton.classList.remove('hidden'); 
         updatePollTableAnswers(voteData); 
-        
-        // Prüfe, ob der Speicher-Knopf angezeigt werden soll
         checkIfAllAnswered();
     }
 }
 
 /**
  * Baut die Abstimmungs-Tabelle neu auf und füllt sie mit allen Antworten
- * STARK ANGEPASST FÜR NEUES LAYOUT
  */
 function updatePollTableAnswers(voteData) {
     const optionsContainer = document.getElementById('vote-options-container');
 
-    // 1. Fall: Termin ist fixiert -> Zeige die grüne Box
+    // 1. Fall: Termin ist fixiert
     if (voteData.fixedOptionIndex != null) {
         const fixedOption = voteData.options[voteData.fixedOptionIndex];
         if (fixedOption) {
@@ -583,7 +597,6 @@ function updatePollTableAnswers(voteData) {
     
     // Spalten für jeden Teilnehmer
     voteData.participants.forEach(p => {
-        // Wenn der Teilnehmer der aktuelle User ist, überspringe ihn (er kommt in die "Du"-Spalte)
         if (p.userId === currentUser.mode) return; 
         tableHTML += `<th class="p-3 border-b text-center w-24">${p.name}</th>`;
     });
@@ -632,9 +645,9 @@ function updatePollTableAnswers(voteData) {
             
             // Spalte für "Du" (Interaktiv)
             const currentAnswer = currentParticipantAnswers[optionIndex];
-            const yesSelected = currentAnswer === 'yes' ? 'bg-green-200 ring-2 ring-indigo-500' : 'hover:bg-green-100';
-            const maybeSelected = currentAnswer === 'maybe' ? 'bg-yellow-200 ring-2 ring-indigo-500' : 'hover:bg-yellow-100';
-            const noSelected = currentAnswer === 'no' ? 'bg-red-200 ring-2 ring-indigo-500' : 'hover:bg-red-100';
+            const yesSelected = currentAnswer === 'yes' ? 'bg-green-200 ring-2 ring-indigo-500' : 'hover:bg-green-100 bg-opacity-50';
+            const maybeSelected = currentAnswer === 'maybe' ? 'bg-yellow-200 ring-2 ring-indigo-500' : 'hover:bg-yellow-100 bg-opacity-50';
+            const noSelected = currentAnswer === 'no' ? 'bg-red-200 ring-2 ring-indigo-500' : 'hover:bg-red-100 bg-opacity-50';
             const maybeHidden = voteData.disableMaybe ? 'hidden' : '';
 
             tableHTML += `
@@ -661,7 +674,7 @@ function updatePollTableAnswers(voteData) {
 }
 
 
-// ----- NEU: HELFER-FUNKTION zum Prüfen der Antworten -----
+// ----- HELFER-FUNKTION zum Prüfen der Antworten -----
 function checkIfAllAnswered() {
     const saveBtn = document.getElementById('vote-save-participation-btn');
     if (!currentVoteData) {
@@ -695,15 +708,20 @@ async function saveVoteParticipation() {
     const nameInput = document.getElementById('vote-participant-name');
     let participantName = nameInput.value.trim();
     if (!currentVoteData) return alertUser("Fehler: Keine Umfrage geladen.", "error");
+    
+    // NEU: Wenn das Feld gesperrt ist (weil eingeloggt), hol dir den Wert direkt
+    if (nameInput.disabled) {
+        participantName = nameInput.value;
+    }
+    
     if (!currentVoteData.isAnonymous && !participantName) {
         return alertUser("Bitte gib deinen Namen ein.", "error");
     }
     if (currentVoteData.isAnonymous) {
         participantName = "Anonym";
     }
-    // Prüfe, ob für alle Termine abgestimmt wurde
     if (Object.keys(currentParticipantAnswers).length !== currentVoteData.options.length) {
-         return alertUser("Bitte wähle für JEDEN Termin eine Antwort aus (Ja, Nein oder Vielleicht).", "error");
+         return alertUser("Bitte wähle für JEDEN Termin eine Antwort aus.", "error");
     }
     
     setButtonLoading(saveBtn, true);
@@ -719,9 +737,13 @@ async function saveVoteParticipation() {
         if (existingParticipantIndex > -1) {
             newParticipantsArray[existingParticipantIndex].answers = currentParticipantAnswers;
         } else {
+            // NEU: Wir speichern den vollen Namen (realName), wenn wir ihn haben
+             const user = (currentUser.mode !== GUEST_MODE) ? USERS[currentUser.mode] : null;
+             const nameToSave = user ? user.realName : participantName;
+            
             newParticipantsArray.push({
                 userId: participantId,
-                name: participantName,
+                name: nameToSave, // <-- Speichere den vollen Namen
                 answers: currentParticipantAnswers
             });
         }
@@ -773,17 +795,16 @@ async function saveGroupPoll() {
             const dateInput = group.querySelector('.vote-date-input');
             const dateValue = dateInput.value; 
             if (dateValue) { 
-                // Finde alle Zeit-Paare
                 const timeGroups = group.querySelectorAll('.time-input-group');
                 timeGroups.forEach(timeGroup => {
                     const timeStart = timeGroup.querySelector('.vote-time-start-input').value; 
                     const timeEnd = timeGroup.querySelector('.vote-time-end-input').value; 
                     
-                    if (timeStart) { // Nur eine Startzeit ist zwingend
+                    if (timeStart) { 
                         options.push({ 
                             date: dateValue, 
                             timeStart: timeStart,
-                            timeEnd: timeEnd || null // Speichere null, wenn leer
+                            timeEnd: timeEnd || null 
                         });
                         hasValidOption = true;
                     }
@@ -796,6 +817,10 @@ async function saveGroupPoll() {
 
         const token = generateVoteToken();
         const editToken = generateVoteToken(); 
+        
+        // NEU: Hole den vollen Namen (realName) des Erstellers
+        const creatorUser = USERS[currentUser.mode];
+        const creatorNameToSave = (creatorUser && creatorUser.realName) ? creatorUser.realName : (currentUser.displayName || currentUser.mode);
 
         const voteData = {
             title: title,
@@ -810,9 +835,9 @@ async function saveGroupPoll() {
             isPublic: isPublic,
             isAnonymous: isAnonymous,
             createdBy: currentUser.mode, 
-            createdByName: currentUser.displayName || currentUser.mode, 
+            createdByName: creatorNameToSave, // <-- NEU: Speichert den vollen Namen
             createdAt: serverTimestamp(), 
-            options: options, // NEU: Enthält jetzt {date, timeStart, timeEnd}
+            options: options, 
             participants: [],
             participantIds: [],
             fixedOptionIndex: null 
@@ -909,7 +934,6 @@ function showView(viewName) {
     } else if (viewName === 'vote') {
        document.getElementById('terminplaner-vote-view').classList.remove('hidden');
        resetEditWrapper();
-       // Die Teilnahme-Box wird jetzt von renderVoteView gesteuert
     } else if (viewName === 'edit') {
        document.getElementById('terminplaner-edit-view').classList.remove('hidden');
     }
@@ -930,8 +954,46 @@ function resetCreateWizard() {
     document.getElementById('vote-setting-disable-maybe').checked = false; 
     document.getElementById('vote-dates-container').innerHTML = '';
     dateGroupIdCounter = 0;
-    addNewDateGroup();
+    
+    // Rufe addNewDateGroup auf, ABER stelle sicher, dass die Validierung danach läuft
+    addNewDateGroup(); 
+    validateLastDateGroup(); // <-- Rufe die Validierung auf
 }
+
+// NEU: Validierungs-Logik für den "+ Tag" Button
+function validateLastDateGroup() {
+    const addDateButton = document.getElementById('vote-add-date-btn');
+    const lastGroup = document.querySelector('#vote-dates-container [data-date-group-id]:last-child');
+    
+    if (!addDateButton || !lastGroup) return; // Nichts zu tun
+
+    let allValid = true;
+
+    // 1. Prüfe Datum
+    const dateInput = lastGroup.querySelector('.vote-date-input');
+    if (!dateInput || !dateInput.value) {
+        allValid = false;
+    }
+
+    // 2. Prüfe ALLE Start-Zeiten
+    const timeInputs = lastGroup.querySelectorAll('.vote-time-start-input');
+    if (timeInputs.length === 0) {
+        allValid = false; // Muss mind. 1 Zeit haben
+    }
+    timeInputs.forEach(timeInput => {
+        if (!timeInput.value) {
+            allValid = false;
+        }
+    });
+
+    // 3. Zeige/Verstecke Button
+    if (allValid) {
+        addDateButton.classList.remove('hidden');
+    } else {
+        addDateButton.classList.add('hidden');
+    }
+}
+
 // (Unverändert)
 function getCurrentDateTimeLocalString() {
     const now = new Date();
@@ -950,31 +1012,86 @@ function generateVoteToken() {
     }
     return `${part1} - ${part2}`;
 }
-// (Unverändert)
+
+// NEU: Logik zum Kopieren von Datum und Zeiten
 function addNewDateGroup() {
     dateGroupIdCounter++;
     const datesContainer = document.getElementById('vote-dates-container');
     const newGroup = document.createElement('div');
     newGroup.className = 'p-3 border rounded-lg bg-gray-50 space-y-3';
     newGroup.dataset.dateGroupId = dateGroupIdCounter;
+
+    let newDateString = '';
+    let timesToCopy = []; // Standard ist leer
+
+    // Finde die LETZTE Gruppe (falls vorhanden)
+    const lastGroup = datesContainer.querySelector('[data-date-group-id]:last-child');
+    
+    if (lastGroup) {
+        // 1. Datum kopieren & +1 Tag
+        const lastDateInput = lastGroup.querySelector('.vote-date-input');
+        if (lastDateInput && lastDateInput.value) {
+            const lastDate = new Date(lastDateInput.value + "T12:00:00"); // T12:00 gegen Zeitzonen-Fehler
+            lastDate.setDate(lastDate.getDate() + 1); // +1 Tag
+            newDateString = formatDateToISO(lastDate); // Format YYYY-MM-DD
+        }
+
+        // 2. Uhrzeiten kopieren
+        const lastTimeGroups = lastGroup.querySelectorAll('.time-input-group');
+        timesToCopy = Array.from(lastTimeGroups).map(group => {
+            return {
+                timeStart: group.querySelector('.vote-time-start-input').value,
+                timeEnd: group.querySelector('.vote-time-end-input').value
+            };
+        });
+    }
+
+    // 3. Neue Gruppe bauen
     newGroup.innerHTML = `
         <label class="block text-sm font-bold text-gray-700">Tag ${dateGroupIdCounter}</label>
-        <input type="date" class="vote-date-input w-full p-2 border rounded-lg">
+        <input type="date" class="vote-date-input w-full p-2 border rounded-lg" value="${newDateString}">
         <div class="vote-times-container space-y-2"></div>
         <button class="vote-add-time-btn text-sm font-semibold text-indigo-600 hover:underline">+ Uhrzeit hinzufügen</button>
     `;
-    newGroup.querySelector('.vote-times-container').appendChild(createTimeInputHTML());
+
+    // 4. Gekopierte Uhrzeiten einfügen
+    const newTimesContainer = newGroup.querySelector('.vote-times-container');
+    if (timesToCopy.length > 0) {
+        timesToCopy.forEach(time => {
+            newTimesContainer.appendChild(createTimeInputHTML(time.timeStart, time.timeEnd));
+        });
+    } else {
+        // Fallback, wenn es die erste Gruppe ist
+        newTimesContainer.appendChild(createTimeInputHTML());
+    }
+    
     datesContainer.appendChild(newGroup);
+    
+    // 5. Validierung aufrufen (wird den +Tag-Button verstecken)
+    validateLastDateGroup();
 }
 
-// NEU: Erstellt jetzt "Von" und "Bis" Felder
-function createTimeInputHTML() {
+// NEU: Helfer-Funktion zum Formatieren des Datums für das 'value'-Attribut
+function formatDateToISO(date) {
+    // Helfer, um '5' zu '05' zu machen
+    const pad = (num) => String(num).padStart(2, '0');
+    
+    const year = date.getFullYear();
+    const month = pad(date.getMonth() + 1); // Monate sind 0-basiert
+    const day = pad(date.getDate());
+    
+    return `${year}-${month}-${day}`;
+}
+
+
+// NEU: Erstellt jetzt "Von" und "Bis" Felder mit Standardwerten
+function createTimeInputHTML(startTime = '', endTime = '') {
     const timeGroup = document.createElement('div');
     timeGroup.className = 'time-input-group flex items-center gap-2'; // Wichtig: Eigene Elter-Klasse
     timeGroup.innerHTML = `
-        <input type="time" class="vote-time-start-input flex-grow p-1 border rounded-lg" title="Startzeit">
+        <input type="time" class="vote-time-start-input flex-grow p-1 border rounded-lg" title="Startzeit" value="${startTime}">
         <span class="text-gray-500">-</span>
-        <input type="time" class="vote-time-end-input flex-grow p-1 border rounded-lg" title="Endzeit (optional)">
+        <input type="time" class="vote-time-end-input flex-grow p-1 border rounded-lg" title="Endzeit (optional)" value="${endTime}">
         <button class="vote-remove-time-btn p-1 text-red-500 hover:bg-red-100 rounded-full" title="Uhrzeit entfernen">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4">
                 <path fill-rule="evenodd" d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.285a1.5 1.5 0 0 0 1.493-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5Z" clip-rule="evenodd" />
