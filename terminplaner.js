@@ -1,13 +1,14 @@
 // NEU: Wir importieren viel mehr Tools
 import { alertUser, db, votesCollectionRef, currentUser, setButtonLoading, GUEST_MODE } from './haupteingang.js';
-import { 
-    addDoc, 
-    serverTimestamp, 
-    getDocs, 
-    query, 
-    where, 
-    doc, 
-    updateDoc, 
+import {
+    addDoc,
+    serverTimestamp,
+    getDocs,
+    getDoc,
+    query,
+    where,
+    doc,
+    updateDoc,
     onSnapshot, // NEU: Um live zuzuhören
     orderBy,    // NEU: Zum Sortieren
     limit       // NEU: Um die Anzahl zu begrenzen
@@ -27,7 +28,7 @@ let unsubscribeAssignedVotes = null;
 
 // Diese Funktion wird von haupteingang.js aufgerufen
 export function initializeTerminplanerView() {
-    
+
     // ----- Spion für das Token-Feld -----
     const tokenInput = document.getElementById('vote-token-input');
     if (tokenInput && !tokenInput.dataset.listenerAttached) {
@@ -38,7 +39,7 @@ export function initializeTerminplanerView() {
     // ----- Spion für den "Teilnehmen"-Button -----
     const joinVoteButton = document.getElementById('join-vote-by-token-btn');
     if (joinVoteButton && !joinVoteButton.dataset.listenerAttached) {
-        joinVoteButton.addEventListener('click', joinVoteByToken); 
+        joinVoteButton.addEventListener('click', joinVoteByToken);
         joinVoteButton.dataset.listenerAttached = 'true';
     }
 
@@ -88,9 +89,9 @@ export function initializeTerminplanerView() {
         const groupPollButton = document.getElementById('select-vote-type-group');
         if (groupPollButton && !groupPollButton.dataset.listenerAttached) {
             groupPollButton.addEventListener('click', () => {
-                modal.style.display = 'none'; 
+                modal.style.display = 'none';
                 modal.classList.add('hidden');
-                showView('create'); 
+                showView('create');
             });
             groupPollButton.dataset.listenerAttached = 'true';
         }
@@ -106,7 +107,7 @@ export function initializeTerminplanerView() {
     if (cancelCreationButton && !cancelCreationButton.dataset.listenerAttached) {
         cancelCreationButton.addEventListener('click', () => {
             if (confirm("Möchtest du die Erstellung wirklich abbrechen? Alle Eingaben gehen verloren.")) {
-                showView('main'); 
+                showView('main');
             }
         });
         cancelCreationButton.dataset.listenerAttached = 'true';
@@ -121,14 +122,14 @@ export function initializeTerminplanerView() {
         datesContainer.addEventListener('click', (e) => {
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
-                const timesContainer = addTarget.previousElementSibling; 
+                const timesContainer = addTarget.previousElementSibling;
                 if (timesContainer) {
                     timesContainer.appendChild(createTimeInputHTML());
                 }
             }
             const removeTarget = e.target.closest('.vote-remove-time-btn');
             if (removeTarget) {
-                const timeGroup = removeTarget.parentElement; 
+                const timeGroup = removeTarget.parentElement;
                 const timesContainer = timeGroup.parentElement;
                 if (timesContainer.children.length > 1) {
                     timeGroup.remove();
@@ -141,7 +142,7 @@ export function initializeTerminplanerView() {
     }
     const saveVoteButton = document.getElementById('vote-save-group-poll-btn');
     if (saveVoteButton && !saveVoteButton.dataset.listenerAttached) {
-        saveVoteButton.addEventListener('click', saveGroupPoll); 
+        saveVoteButton.addEventListener('click', saveGroupPoll);
         saveVoteButton.dataset.listenerAttached = 'true';
     }
 
@@ -150,16 +151,16 @@ export function initializeTerminplanerView() {
     const cancelVoteButton = document.getElementById('cancel-vote-participation-btn');
     if (cancelVoteButton && !cancelVoteButton.dataset.listenerAttached) {
         cancelVoteButton.addEventListener('click', () => {
-            showView('main'); 
-            currentVoteData = null; 
+            showView('main');
+            currentVoteData = null;
         });
         cancelVoteButton.dataset.listenerAttached = 'true';
     }
     document.querySelectorAll('.vote-answer-btn').forEach(btn => {
         if (!btn.dataset.listenerAttached) {
             btn.addEventListener('click', () => {
-                if (selectedOptionIndex === null) return; 
-                const answer = btn.dataset.answer; 
+                if (selectedOptionIndex === null) return;
+                const answer = btn.dataset.answer;
                 currentParticipantAnswers[selectedOptionIndex] = answer;
                 console.log("Antworten:", currentParticipantAnswers);
                 updatePollTableAnswers(currentVoteData);
@@ -186,12 +187,12 @@ export function listenForPublicVotes() {
     if (unsubscribePublicVotes) {
         unsubscribePublicVotes();
     }
-    
+
     // Suche nach Umfragen, die 'isPublic' sind, sortiert nach Erstellungsdatum (neueste zuerst)
     const q = query(
-        votesCollectionRef, 
-        where("isPublic", "==", true), 
-        orderBy("createdAt", "desc"), 
+        votesCollectionRef,
+        where("isPublic", "==", true),
+        orderBy("createdAt", "desc"),
         limit(20) // Zeige maximal die 20 neuesten
     );
 
@@ -227,9 +228,9 @@ export function listenForAssignedVotes(userId) {
 
     // Suche nach Umfragen, bei denen deine 'userId' in der Teilnehmer-ID-Liste ('participantIds') vorkommt
     const q = query(
-        votesCollectionRef, 
+        votesCollectionRef,
         where("participantIds", "array-contains", userId),
-        orderBy("createdAt", "desc"), 
+        orderBy("createdAt", "desc"),
         limit(20)
     );
 
@@ -298,10 +299,10 @@ function renderPublicVotes(votes) {
 function renderAssignedVotes(votes) {
     const listContainer = document.getElementById('assigned-votes-list');
     if (!listContainer) return;
-    
+
     // Wenn der Benutzer Gast ist, zeige eine andere Meldung
     if (currentUser.mode === GUEST_MODE) {
-         listContainer.innerHTML = `
+        listContainer.innerHTML = `
             <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
                 Melde dich an, um Umfragen zu sehen, an denen du teilgenommen hast.
             </p>`;
@@ -339,14 +340,14 @@ function renderAssignedVotes(votes) {
 async function joinVoteByToken() {
     const tokenInput = document.getElementById('vote-token-input');
     const joinBtn = document.getElementById('join-vote-by-token-btn');
-    const token = tokenInput.value.trim().toUpperCase(); 
+    const token = tokenInput.value.trim().toUpperCase();
 
     if (token.length !== 11 || token[4] !== ' ' || token[5] !== '-' || token[6] !== ' ') {
         alertUser("Ungültiges Token-Format. Es muss 'XXXX - XXXX' sein.", "error");
         return;
     }
-    
-    setButtonLoading(joinBtn, true); 
+
+    setButtonLoading(joinBtn, true);
 
     try {
         const q = query(votesCollectionRef, where("token", "==", token));
@@ -356,18 +357,18 @@ async function joinVoteByToken() {
         if (snapshot.size > 1) throw new Error("Fehler: Mehrere Umfragen mit diesem Token gefunden. Admin kontaktieren.");
 
         const voteDoc = snapshot.docs[0];
-        currentVoteData = { id: voteDoc.id, ...voteDoc.data() }; 
+        currentVoteData = { id: voteDoc.id, ...voteDoc.data() };
 
         console.log("Umfrage gefunden:", currentVoteData);
         renderVoteView(currentVoteData);
         showView('vote');
-        tokenInput.value = ''; 
+        tokenInput.value = '';
 
     } catch (error) {
         console.error("Fehler beim Suchen der Umfrage:", error);
         alertUser(error.message, "error");
     } finally {
-        setButtonLoading(joinBtn, false); 
+        setButtonLoading(joinBtn, false);
     }
 }
 
@@ -379,30 +380,30 @@ async function joinVoteById(voteId) {
     try {
         // Wir müssen die Umfrage neu laden, falls sich in der Zwischenzeit
         // etwas geändert hat (obwohl der Listener das tun sollte, ist dies sicherer).
-        
+
         // Da wir 'onSnapshot' verwenden, sind die Daten in der Liste
         // (publicVotes / assignedVotes) bereits aktuell.
         // Wir müssen nicht extra zur Datenbank gehen.
-        
+
         // Finde die Umfrage in den globalen Listen (die vom Spion gefüllt wurden)
         // TODO: Das ist nicht ideal. Besser ist, die Daten direkt aus der DB zu holen.
-        
+
         // BESSERER ANSATZ: Wir holen die Daten frisch aus der DB,
         // um sicherzugehen, dass wir die aktuellsten Teilnehmer haben.
-        
+
         const voteDocRef = doc(votesCollectionRef, voteId);
         const voteDoc = await getDoc(voteDocRef); // NEU: Importiere 'getDoc'
-        
+
         if (!voteDoc.exists()) {
-             throw new Error("Diese Umfrage existiert nicht mehr.");
+            throw new Error("Diese Umfrage existiert nicht mehr.");
         }
 
-        currentVoteData = { id: voteDoc.id, ...voteDoc.data() }; 
+        currentVoteData = { id: voteDoc.id, ...voteDoc.data() };
 
         console.log("Umfrage per ID geladen:", currentVoteData);
         renderVoteView(currentVoteData);
         showView('vote');
-        
+
     } catch (error) {
         console.error("Fehler beim Laden der Umfrage per ID:", error);
         alertUser(error.message, "error");
@@ -425,28 +426,28 @@ function renderVoteView(voteData) {
     // 2. Namensfeld
     const nameContainer = document.getElementById('vote-name-input-container');
     const nameInput = document.getElementById('vote-participant-name');
-    
+
     let existingParticipant = null;
     if (currentUser.mode !== GUEST_MODE) {
         existingParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
     }
-    
+
     if (voteData.isAnonymous) {
         nameContainer.classList.add('hidden');
     } else {
         nameContainer.classList.remove('hidden');
         if (existingParticipant) {
             nameInput.value = existingParticipant.name;
-            nameInput.disabled = true; 
+            nameInput.disabled = true;
         } else if (currentUser.mode !== GUEST_MODE) {
             nameInput.value = currentUser.displayName;
             nameInput.disabled = false;
         } else {
-            nameInput.value = ''; 
+            nameInput.value = '';
             nameInput.disabled = false;
         }
     }
-    
+
     // 3. Antworten laden
     currentParticipantAnswers = {};
     if (existingParticipant) {
@@ -461,32 +462,32 @@ function renderVoteView(voteData) {
 
     // 4. Die Abstimmungs-Tabelle bauen
     updatePollTableAnswers(voteData); // Ausgelagert in eigene Funktion
-    
+
     // 5. Klick-Spione für die neuen Tabellen-Zeilen hinzufügen
     const optionsContainer = document.getElementById('vote-options-container');
-    
+
     // Entferne alte Spione (sicherheitshalber)
     optionsContainer.querySelectorAll('.vote-option-row').forEach(row => {
-         // Trick: Klonen, um alle alten Spione zu entfernen
-         row.replaceWith(row.cloneNode(true));
+        // Trick: Klonen, um alle alten Spione zu entfernen
+        row.replaceWith(row.cloneNode(true));
     });
-    
+
     // Füge Spione zu den neuen Zeilen hinzu
     optionsContainer.querySelectorAll('.vote-option-row').forEach(row => {
         row.addEventListener('click', () => {
             optionsContainer.querySelectorAll('.vote-option-row').forEach(r => r.classList.remove('bg-blue-200'));
             row.classList.add('bg-blue-200');
-            
+
             selectedOptionIndex = parseInt(row.dataset.optionIndex);
             const selectedOption = voteData.options[selectedOptionIndex];
-            
+
             const dateObj = new Date(selectedOption.date + 'T12:00:00');
             const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
-            document.getElementById('vote-selected-option-text').textContent = 
+            document.getElementById('vote-selected-option-text').textContent =
                 `Du stimmst ab für: ${niceDate} um ${selectedOption.time} Uhr`;
-                
+
             document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.disabled = false);
-            
+
             // Markiere den Button, der der aktuellen Antwort entspricht
             document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.classList.remove('ring-4', 'ring-indigo-500'));
             const currentAnswer = currentParticipantAnswers[selectedOptionIndex];
@@ -504,37 +505,37 @@ function updatePollTableAnswers(voteData) {
     const optionsByDate = {};
     voteData.options.forEach((option, index) => {
         if (!optionsByDate[option.date]) {
-            optionsByDate[option.date] = []; 
+            optionsByDate[option.date] = [];
         }
         optionsByDate[option.date].push({ ...option, originalIndex: index });
     });
 
     let tableHTML = '<table class="w-full border-collapse text-sm text-left">';
-    
+
     // Kopfzeile der Tabelle
     tableHTML += '<thead><tr class="bg-gray-50">';
     tableHTML += '<th class="p-2 border-b sticky left-0 bg-gray-50 z-10">Termin</th>';
-    
+
     voteData.participants.forEach(p => {
         tableHTML += `<th class="p-2 border-b text-center">${p.name}</th>`;
     });
-    
+
     // "Du"-Spalte nur anzeigen, wenn der Benutzer nicht schon in der Liste ist
     let showYouColumn = true;
-    if(currentUser.mode !== GUEST_MODE && voteData.participants.find(p => p.userId === currentUser.mode)) {
+    if (currentUser.mode !== GUEST_MODE && voteData.participants.find(p => p.userId === currentUser.mode)) {
         showYouColumn = false;
     }
     if (showYouColumn) {
         tableHTML += `<th class="p-2 border-b text-center font-bold text-indigo-600">Du</th>`;
     }
-    
+
     tableHTML += '</tr></thead>';
 
     // Zeilen der Tabelle
     tableHTML += '<tbody>';
-    
+
     for (const date in optionsByDate) {
-        const dateObj = new Date(date + 'T12:00:00'); 
+        const dateObj = new Date(date + 'T12:00:00');
         const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
 
         tableHTML += `
@@ -545,7 +546,7 @@ function updatePollTableAnswers(voteData) {
 
         optionsByDate[date].forEach(option => {
             const isSelected = option.originalIndex === selectedOptionIndex;
-            
+
             tableHTML += `
                 <tr class="vote-option-row ${isSelected ? 'bg-blue-200' : 'hover:bg-blue-50'} cursor-pointer" data-option-index="${option.originalIndex}">
                     <td class="p-2 border-b font-mono sticky left-0 ${isSelected ? 'bg-blue-200' : 'bg-white'} z-10">${option.time} Uhr</td>
@@ -553,14 +554,14 @@ function updatePollTableAnswers(voteData) {
 
             // Antworten der gespeicherten Teilnehmer
             voteData.participants.forEach(p => {
-                const answer = p.answers[option.originalIndex]; 
+                const answer = p.answers[option.originalIndex];
                 let answerIcon = '';
                 if (answer === 'yes') answerIcon = '<span class="text-green-500 font-bold">✔</span>';
                 if (answer === 'no') answerIcon = '<span class="text-red-500 font-bold">✘</span>';
                 if (answer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold">?</span>';
                 tableHTML += `<td class="p-2 border-b text-center">${answerIcon}</td>`;
             });
-            
+
             // Antwort des aktuellen Benutzers (noch nicht gespeichert)
             if (showYouColumn) {
                 const currentAnswer = currentParticipantAnswers[option.originalIndex];
@@ -574,7 +575,7 @@ function updatePollTableAnswers(voteData) {
             tableHTML += '</tr>';
         });
     }
-    
+
     tableHTML += '</tbody></table>';
     optionsContainer.innerHTML = tableHTML;
 }
@@ -585,17 +586,17 @@ async function saveVoteParticipation() {
     const saveBtn = document.getElementById('vote-save-participation-btn');
     const nameInput = document.getElementById('vote-participant-name');
     let participantName = nameInput.value.trim();
-    
+
     if (!currentVoteData) return alertUser("Fehler: Keine Umfrage geladen.", "error");
-    
+
     if (!currentVoteData.isAnonymous && !participantName) {
         return alertUser("Bitte gib deinen Namen ein.", "error");
     }
-    
+
     if (currentVoteData.isAnonymous) {
         participantName = "Anonym";
     }
-    
+
     if (Object.keys(currentParticipantAnswers).length === 0) {
         return alertUser("Du hast noch für keinen Termin abgestimmt.", "error");
     }
@@ -604,16 +605,16 @@ async function saveVoteParticipation() {
 
     try {
         const participantId = (currentUser.mode !== GUEST_MODE) ? currentUser.mode : participantName;
-        
+
         let existingParticipantIndex = -1;
-        
+
         if (currentUser.mode !== GUEST_MODE) {
-             existingParticipantIndex = currentVoteData.participants.findIndex(p => p.userId === participantId);
+            existingParticipantIndex = currentVoteData.participants.findIndex(p => p.userId === participantId);
         } else if (!currentVoteData.isAnonymous) {
-             existingParticipantIndex = currentVoteData.participants.findIndex(p => p.name === participantId);
+            existingParticipantIndex = currentVoteData.participants.findIndex(p => p.name === participantId);
         }
-        
-        const newParticipantsArray = [...currentVoteData.participants]; 
+
+        const newParticipantsArray = [...currentVoteData.participants];
 
         if (existingParticipantIndex > -1) {
             console.log("Aktualisiere Teilnehmer:", participantName);
@@ -626,23 +627,23 @@ async function saveVoteParticipation() {
                 answers: currentParticipantAnswers
             });
         }
-        
+
         // NEU: Erstelle die Liste der Teilnehmer-IDs für die Datenbank-Suche
         const participantIds = newParticipantsArray.map(p => p.userId);
-        
+
         // Datenbank-Update
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
         await updateDoc(voteDocRef, {
             participants: newParticipantsArray,
             participantIds: participantIds // <-- NEU: Diese Liste speichern wir mit ab
         });
-        
+
         alertUser("Deine Abstimmung wurde gespeichert!", "success");
-        
+
         // Lokale Daten aktualisieren und Ansicht neu laden
         currentVoteData.participants = newParticipantsArray;
         currentVoteData.participantIds = participantIds;
-        renderVoteView(currentVoteData); 
+        renderVoteView(currentVoteData);
 
     } catch (error) {
         console.error("Fehler beim Speichern der Abstimmung:", error);
@@ -671,12 +672,12 @@ async function saveGroupPoll() {
 
         dateGroups.forEach(group => {
             const dateInput = group.querySelector('.vote-date-input');
-            const dateValue = dateInput.value; 
-            if (dateValue) { 
+            const dateValue = dateInput.value;
+            if (dateValue) {
                 const timeInputs = group.querySelectorAll('.vote-time-input');
                 timeInputs.forEach(timeInput => {
-                    const timeValue = timeInput.value; 
-                    if (timeValue) { 
+                    const timeValue = timeInput.value;
+                    if (timeValue) {
                         options.push({ date: dateValue, time: timeValue });
                         hasValidOption = true;
                     }
@@ -697,8 +698,8 @@ async function saveGroupPoll() {
             isPublic: isPublic,
             isAnonymous: isAnonymous,
             createdBy: currentUser.displayName || currentUser.mode,
-            createdAt: serverTimestamp(), 
-            options: options, 
+            createdAt: serverTimestamp(),
+            options: options,
             participants: [],
             participantIds: [] // NEU: Leere ID-Liste beim Erstellen
         };
@@ -709,12 +710,12 @@ async function saveGroupPoll() {
         console.log(`Umfrage erstellt! ID: ${docRef.id}, Token: ${token}`);
         alertUser(`Umfrage erstellt! Dein Token: ${token}`, "success");
 
-        showView('main'); 
+        showView('main');
 
     } catch (error) {
         console.error("Fehler beim Speichern der Umfrage:", error);
         alertUser(error.message, "error");
-    
+
     } finally {
         saveBtn.disabled = false;
         saveBtn.textContent = 'Umfrage erstellen und Link erhalten';
@@ -724,16 +725,16 @@ async function saveGroupPoll() {
 
 // ----- HELFER-FUNKTIONEN -----
 
-function showView(viewName) { 
+function showView(viewName) {
     document.getElementById('terminplaner-main-view').classList.add('hidden');
     document.getElementById('terminplaner-create-view').classList.add('hidden');
     document.getElementById('terminplaner-vote-view').classList.add('hidden');
-    
+
     if (viewName === 'main') {
         document.getElementById('terminplaner-main-view').classList.remove('hidden');
     } else if (viewName === 'create') {
         document.getElementById('terminplaner-create-view').classList.remove('hidden');
-        resetCreateWizard(); 
+        resetCreateWizard();
     } else if (viewName === 'vote') {
         document.getElementById('terminplaner-vote-view').classList.remove('hidden');
     }
@@ -792,7 +793,7 @@ function createTimeInputHTML() {
 
 function formatTokenInput(e) {
     const input = e.target;
-    let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); 
+    let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
     let formattedValue = '';
     if (value.length > 4) {
         formattedValue = value.substring(0, 4) + ' - ' + value.substring(4, 8);
@@ -804,10 +805,10 @@ function formatTokenInput(e) {
     input.value = formattedValue;
     const newLength = formattedValue.length;
     if (newLength > originalLength) {
-         input.selectionStart = newLength;
-         input.selectionEnd = newLength;
+        input.selectionStart = newLength;
+        input.selectionEnd = newLength;
     } else {
-         input.selectionStart = cursorPos;
-         input.selectionEnd = cursorPos;
+        input.selectionStart = cursorPos;
+        input.selectionEnd = cursorPos;
     }
 }
