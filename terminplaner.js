@@ -94,6 +94,7 @@ export function initializeTerminplanerView() {
 
     // ----- Spione für den Erstellungs-Assistenten -----
     
+    // "Abbrechen"-Button
     const cancelCreationButton = document.getElementById('cancel-vote-creation-btn');
     if (cancelCreationButton && !cancelCreationButton.dataset.listenerAttached) {
         cancelCreationButton.addEventListener('click', () => {
@@ -103,6 +104,7 @@ export function initializeTerminplanerView() {
         });
         cancelCreationButton.dataset.listenerAttached = 'true';
     }
+    // "Endzeit Unbegrenzt"-Checkbox
     const unlimitedCheckbox = document.getElementById('vote-end-time-unlimited');
     if (unlimitedCheckbox && !unlimitedCheckbox.dataset.listenerAttached) {
         unlimitedCheckbox.addEventListener('change', (e) => {
@@ -116,13 +118,17 @@ export function initializeTerminplanerView() {
         });
         unlimitedCheckbox.dataset.listenerAttached = 'true';
     }
+    // "+ Tag hinzufügen"-Button
     const addDateButton = document.getElementById('vote-add-date-btn');
     if (addDateButton && !addDateButton.dataset.listenerAttached) {
         addDateButton.addEventListener('click', addNewDateGroup);
         addDateButton.dataset.listenerAttached = 'true';
     }
+    
+    // Delegierter Spion für "+ Uhrzeit", "Uhrzeit entfernen" UND VALIDIERUNG
     const datesContainer = document.getElementById('vote-dates-container');
     if (datesContainer && !datesContainer.dataset.clickListenerAttached) {
+        // Klick-Spion (für Knöpfe)
         datesContainer.addEventListener('click', (e) => {
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
@@ -143,13 +149,18 @@ export function initializeTerminplanerView() {
             }
             validateLastDateGroup();
         });
+        
+        // Input-Spion (für die Felder)
         datesContainer.addEventListener('input', (e) => {
             if (e.target.matches('.vote-date-input, .vote-time-start-input')) {
                 validateLastDateGroup();
             }
         });
+        
         datesContainer.dataset.clickListenerAttached = 'true';
     }
+    
+    // "Umfrage erstellen"-Button (Speichern)
     const saveVoteButton = document.getElementById('vote-save-group-poll-btn');
     if (saveVoteButton && !saveVoteButton.dataset.listenerAttached) {
         saveVoteButton.addEventListener('click', saveGroupPoll); 
@@ -168,7 +179,7 @@ export function initializeTerminplanerView() {
         cancelVoteButton.dataset.listenerAttached = 'true';
     }
 
-    // KORREKTUR: Der Spion wird an die GANZE SEITE (terminplaner-vote-view) gehängt
+    // Delegierter Spion für die Klicks IN DER TABELLE
     const voteView = document.getElementById('terminplaner-vote-view');
     if (voteView && !voteView.dataset.listenerAttached) {
         voteView.addEventListener('click', (e) => {
@@ -245,8 +256,6 @@ export function initializeTerminplanerView() {
         cancelEditingBtn.dataset.listenerAttached = 'true';
     }
     
-    // KORREKTUR: Der Spion für den alten gelben Knopf ist jetzt ENTFERNT.
-    
     // Spion für den "Schließen"-Knopf des Korrektur-Modals
     const closeLogBtn = document.getElementById('close-correction-log-btn');
     if (closeLogBtn && !closeLogBtn.dataset.listenerAttached) {
@@ -254,7 +263,7 @@ export function initializeTerminplanerView() {
             const modal = document.getElementById('correctionLogModal');
             if (modal) {
                 modal.classList.add('hidden');
-                modal.style.display = 'none'; 
+                modal.style.display = 'none'; // Korrektur von letzter Woche
             }
         });
         closeLogBtn.dataset.listenerAttached = 'true';
@@ -263,9 +272,11 @@ export function initializeTerminplanerView() {
 
 
 // ----- SPION-FUNKTIONEN (Listener) -----
-// (Unverändert)
+
 export function listenForPublicVotes() {
-    if (unsubscribePublicVotes) unsubscribePublicVotes();
+    if (unsubscribePublicVotes) {
+        unsubscribePublicVotes();
+    }
     const q = query(
         votesCollectionRef, 
         where("isPublic", "==", true), 
@@ -282,9 +293,11 @@ export function listenForPublicVotes() {
         console.error("Fehler beim Lauschen auf öffentliche Umfragen:", error);
     });
 }
-// (Unverändert)
+
 export function listenForAssignedVotes(userId) {
-    if (unsubscribeAssignedVotes) unsubscribeAssignedVotes();
+    if (unsubscribeAssignedVotes) {
+        unsubscribeAssignedVotes();
+    }
     if (!userId || userId === GUEST_MODE) {
         renderAssignedVotes([]); 
         return;
@@ -305,7 +318,7 @@ export function listenForAssignedVotes(userId) {
         console.error("Fehler beim Lauschen auf zugewiesene Umfragen:", error);
     });
 }
-// (Unverändert)
+
 export function stopAssignedVotesListener() {
     if (unsubscribeAssignedVotes) {
         unsubscribeAssignedVotes();
@@ -316,7 +329,7 @@ export function stopAssignedVotesListener() {
 
 
 // ----- RENDER-FUNKTIONEN FÜR LISTEN -----
-// (Unverändert)
+
 function renderPublicVotes(votes) {
     const listContainer = document.getElementById('public-votes-list');
     if (!listContainer) return;
@@ -341,7 +354,7 @@ function renderPublicVotes(votes) {
         `;
     }).join('');
 }
-// (Unverändert)
+
 function renderAssignedVotes(votes) {
     const listContainer = document.getElementById('assigned-votes-list');
     if (!listContainer) return;
@@ -373,7 +386,6 @@ function renderAssignedVotes(votes) {
 
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per Token) -----
-// (Unverändert)
 async function joinVoteByToken() {
     const tokenInput = document.getElementById('vote-token-input');
     const joinBtn = document.getElementById('join-vote-by-token-btn');
@@ -411,7 +423,6 @@ async function joinVoteByToken() {
 }
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per ID) -----
-// (Unverändert)
 async function joinVoteById(voteId) {
     try {
         const voteDocRef = doc(votesCollectionRef, voteId);
@@ -439,9 +450,6 @@ async function joinVoteById(voteId) {
 
 
 // ----- RENDER-FUNKTION (Abstimmungs-Seite) -----
-/**
- * Baut die Abstimmungs-Seite (Tabelle) basierend auf den Umfragedaten auf.
- */
 function renderVoteView(voteData) {
     
     // 1. Titel und Ersteller (ZENTRIERT)
@@ -553,8 +561,6 @@ function renderVoteView(voteData) {
         updatePollTableAnswers(voteData, isVoteGridEditable); 
         checkIfAllAnswered();
     }
-    
-    // 7. Klick-Spione für die Tabellen-Zeilen (jetzt überflüssig, da in initialize)
 }
 
 /**
@@ -621,11 +627,11 @@ function updatePollTableAnswers(voteData, isEditable = false) {
     const youParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
     
     // KORREKTUR: Baue den "Du"-Header-Text
-    let youHeaderHTML = '<span class="font-bold text-indigo-600">Du</span>'; // Standard für Gast/Anonym
+    let youHeaderHTML = '<span class="font-bold text-indigo-600">Du</span>'; // Standard
     
     if (currentUser.mode !== GUEST_MODE && !voteData.isAnonymous) {
         if (youParticipant) {
-            // User hat schon teilgenommen
+            // User hat schon teilgenommen (isEditable ist false)
             const correctionCount = youParticipant.correctionCount || 0;
             const correctionText = correctionCount > 0 ? `(<span class="correction-counter cursor-pointer" data-userid="${currentUser.mode}">${correctionCount} Korrekturen</span>)` : '';
             
@@ -637,7 +643,7 @@ function updatePollTableAnswers(voteData, isEditable = false) {
                 <button class="vote-correction-btn text-xs font-semibold text-blue-600 hover:underline">Auswahl bearbeiten</button>
             `;
         } else {
-            // User nimmt gerade teil (Grid ist klickbar)
+            // User nimmt gerade teil (isEditable ist true)
             youHeaderHTML = '<span class="font-bold text-indigo-600">Du (Klicke unten)</span>';
         }
     }
@@ -775,11 +781,9 @@ async function saveVoteParticipation() {
         participantName = "Anonym";
         participantId = `anon_${Date.now()}`;
     } else if (currentUser.mode !== GUEST_MODE) {
-        // Hole den Namen aus dem (jetzt schreibgeschützten) Feld
         participantName = document.getElementById('vote-participant-name').textContent; 
         participantId = currentUser.mode;
     } else {
-        // Gast muss Namen eingeben
         participantName = document.getElementById('vote-guest-name-input').value.trim();
         participantId = `guest_${participantName.replace(/\s/g, '_')}`; 
         if (!participantName) {
@@ -799,7 +803,6 @@ async function saveVoteParticipation() {
         let correctionCount = 0;
         let answerHistory = [];
         
-        // Hole den Namen, der gespeichert werden soll
         const user = (currentUser.mode !== GUEST_MODE) ? USERS[currentUser.mode] : null;
         const nameToSave = user ? user.realName : participantName;
         
@@ -1045,9 +1048,33 @@ function renderCorrectionHistory(userId) {
     } else {
         // Baue den HTML-Inhalt für den Verlauf
         content.innerHTML = history.map(log => {
-            const timestamp = log.timestamp?.toDate().toLocaleString('de-DE', {
+            
+            // ==================================================
+            // HIER IST DIE KORREKTUR
+            // ==================================================
+            
+            // Zuerst das Datumsobjekt holen, egal welcher Typ es ist
+            let dateObject = null;
+            if (log.timestamp) {
+                // Fall 1: Es ist ein Firebase-Timestamp (hat .toDate())
+                if (typeof log.timestamp.toDate === 'function') {
+                    dateObject = log.timestamp.toDate();
+                }
+                // Fall 2: Es ist bereits ein JS-Datum (vom lokalen Speichern)
+                else {
+                    dateObject = log.timestamp;
+                }
+            }
+            
+            // Jetzt formatieren wir das Datumsobjekt, das wir haben
+            const timestamp = dateObject ? dateObject.toLocaleString('de-DE', {
                 day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-            }) || 'Unbekanntes Datum';
+            }) : 'Unbekanntes Datum';
+            
+            // ==================================================
+            // ENDE DER KORREKTUR
+            // ==================================================
+
             
             const changesHTML = log.changes.map(change => {
                 const formatAnswer = (answer) => {
