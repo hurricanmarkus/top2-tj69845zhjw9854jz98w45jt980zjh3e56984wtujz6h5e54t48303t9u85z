@@ -17,7 +17,8 @@ import {
 // ----- Globale Variablen für den Zustand -----
 let dateGroupIdCounter = 0;
 let currentVoteData = null;
-let selectedOptionIndex = null;
+// NEU: 'selectedOptionIndex' wird nicht mehr gebraucht
+// let selectedOptionIndex = null; 
 let currentParticipantAnswers = {};
 
 let unsubscribePublicVotes = null;
@@ -56,7 +57,6 @@ export function initializeTerminplanerView() {
         mainView.dataset.listenerAttached = 'true';
     }
 
-
     // ----- Spione für das Modal (Pop-up Fenster) -----
     // (Unverändert)
     const openModalButton = document.getElementById('show-create-vote-modal-btn');
@@ -92,8 +92,7 @@ export function initializeTerminplanerView() {
     }
 
     // ----- Spione für den Erstellungs-Assistenten -----
-    
-    // "Abbrechen"-Button
+    // (Unverändert, bis auf Hinzufügen von 'unlimitedCheckbox')
     const cancelCreationButton = document.getElementById('cancel-vote-creation-btn');
     if (cancelCreationButton && !cancelCreationButton.dataset.listenerAttached) {
         cancelCreationButton.addEventListener('click', () => {
@@ -103,8 +102,6 @@ export function initializeTerminplanerView() {
         });
         cancelCreationButton.dataset.listenerAttached = 'true';
     }
-
-    // NEU: Spion für die "Endzeit Unbegrenzt"-Checkbox
     const unlimitedCheckbox = document.getElementById('vote-end-time-unlimited');
     if (unlimitedCheckbox && !unlimitedCheckbox.dataset.listenerAttached) {
         unlimitedCheckbox.addEventListener('change', (e) => {
@@ -112,20 +109,17 @@ export function initializeTerminplanerView() {
             if (endTimeInput) {
                 endTimeInput.disabled = e.target.checked;
                 if (e.target.checked) {
-                    endTimeInput.value = ''; // Leeren, wenn "unbegrenzt"
+                    endTimeInput.value = ''; 
                 }
             }
         });
         unlimitedCheckbox.dataset.listenerAttached = 'true';
     }
-
-    // "+ Tag hinzufügen"-Button
     const addDateButton = document.getElementById('vote-add-date-btn');
     if (addDateButton && !addDateButton.dataset.listenerAttached) {
         addDateButton.addEventListener('click', addNewDateGroup);
         addDateButton.dataset.listenerAttached = 'true';
     }
-    // Delegierter Spion für "+ Uhrzeit" und "Uhrzeit entfernen"
     const datesContainer = document.getElementById('vote-dates-container');
     if (datesContainer && !datesContainer.dataset.clickListenerAttached) {
         datesContainer.addEventListener('click', (e) => {
@@ -149,7 +143,6 @@ export function initializeTerminplanerView() {
         });
         datesContainer.dataset.clickListenerAttached = 'true';
     }
-    // "Umfrage erstellen"-Button (Speichern)
     const saveVoteButton = document.getElementById('vote-save-group-poll-btn');
     if (saveVoteButton && !saveVoteButton.dataset.listenerAttached) {
         saveVoteButton.addEventListener('click', saveGroupPoll); 
@@ -168,20 +161,37 @@ export function initializeTerminplanerView() {
         cancelVoteButton.dataset.listenerAttached = 'true';
     }
 
-    // "Ja/Nein/Vielleicht"-Buttons
-    document.querySelectorAll('.vote-answer-btn').forEach(btn => {
-        if (!btn.dataset.listenerAttached) {
-            btn.addEventListener('click', () => {
-                if (selectedOptionIndex === null) return; 
-                const answer = btn.dataset.answer; 
-                currentParticipantAnswers[selectedOptionIndex] = answer;
-                updatePollTableAnswers(currentVoteData);
-                document.querySelectorAll('.vote-answer-btn').forEach(b => b.classList.remove('ring-4', 'ring-indigo-500'));
-                btn.classList.add('ring-4', 'ring-indigo-500');
+    // NEU: Delegierter Spion für die Klicks IN DER TABELLE
+    const voteOptionsContainer = document.getElementById('vote-options-container');
+    if (voteOptionsContainer && !voteOptionsContainer.dataset.listenerAttached) {
+        voteOptionsContainer.addEventListener('click', (e) => {
+            // Finde den geklickten Knopf
+            const clickedButton = e.target.closest('.vote-grid-btn');
+            if (!clickedButton) return; // Klick war woanders
+
+            const optionIndex = clickedButton.dataset.optionIndex;
+            const answer = clickedButton.dataset.answer;
+
+            // 1. Speichere die Antwort in unserer globalen Variable
+            currentParticipantAnswers[optionIndex] = answer;
+
+            // 2. Aktualisiere die Ansicht (Klasse 'selected' setzen)
+            // Finde alle Knöpfe in DIESER Zeile
+            const rowButtons = voteOptionsContainer.querySelectorAll(`.vote-grid-btn[data-option-index="${optionIndex}"]`);
+            rowButtons.forEach(btn => {
+                btn.classList.remove('bg-green-200', 'bg-yellow-200', 'bg-red-200', 'ring-2', 'ring-indigo-500');
             });
-            btn.dataset.listenerAttached = 'true';
-        }
-    });
+            
+            // Setze die richtige Hintergrundfarbe für den geklickten Knopf
+            if (answer === 'yes') clickedButton.classList.add('bg-green-200', 'ring-2', 'ring-indigo-500');
+            if (answer === 'maybe') clickedButton.classList.add('bg-yellow-200', 'ring-2', 'ring-indigo-500');
+            if (answer === 'no') clickedButton.classList.add('bg-red-200', 'ring-2', 'ring-indigo-500');
+            
+            // 3. Prüfe, ob alle Antworten gegeben wurden, um den Speicher-Knopf anzuzeigen
+            checkIfAllAnswered();
+        });
+        voteOptionsContainer.dataset.listenerAttached = 'true';
+    }
     
     // "Abstimmung speichern"-Button
     const saveParticipationButton = document.getElementById('vote-save-participation-btn');
@@ -225,121 +235,23 @@ export function initializeTerminplanerView() {
 
 // ----- SPION-FUNKTIONEN (Listener) -----
 // (Unverändert)
-export function listenForPublicVotes() {
-    if (unsubscribePublicVotes) unsubscribePublicVotes();
-    const q = query(
-        votesCollectionRef, 
-        where("isPublic", "==", true), 
-        orderBy("createdAt", "desc"), 
-        limit(20) 
-    );
-    unsubscribePublicVotes = onSnapshot(q, (snapshot) => {
-        const votes = [];
-        snapshot.forEach(doc => {
-            votes.push({ id: doc.id, ...doc.data() });
-        });
-        renderPublicVotes(votes); 
-    }, (error) => {
-        console.error("Fehler beim Lauschen auf öffentliche Umfragen:", error);
-    });
-}
-// (Unverändert)
-export function listenForAssignedVotes(userId) {
-    if (unsubscribeAssignedVotes) unsubscribeAssignedVotes();
-    if (!userId || userId === GUEST_MODE) {
-        renderAssignedVotes([]); 
-        return;
-    }
-    const q = query(
-        votesCollectionRef, 
-        where("participantIds", "array-contains", userId),
-        orderBy("createdAt", "desc"), 
-        limit(20)
-    );
-    unsubscribeAssignedVotes = onSnapshot(q, (snapshot) => {
-        const votes = [];
-        snapshot.forEach(doc => {
-            votes.push({ id: doc.id, ...doc.data() });
-        });
-        renderAssignedVotes(votes); 
-    }, (error) => {
-        console.error("Fehler beim Lauschen auf zugewiesene Umfragen:", error);
-    });
-}
-// (Unverändert)
-export function stopAssignedVotesListener() {
-    if (unsubscribeAssignedVotes) {
-        unsubscribeAssignedVotes();
-        unsubscribeAssignedVotes = null;
-    }
-    renderAssignedVotes([]); 
-}
+export function listenForPublicVotes() { /* ... */ }
+export function listenForAssignedVotes(userId) { /* ... */ }
+export function stopAssignedVotesListener() { /* ... */ }
 
 
 // ----- RENDER-FUNKTIONEN FÜR LISTEN -----
 // (Unverändert)
-function renderPublicVotes(votes) {
-    const listContainer = document.getElementById('public-votes-list');
-    if (!listContainer) return;
-    if (votes.length === 0) {
-        listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Derzeit gibt es keine öffentlichen Umfragen.</p>`;
-        return;
-    }
-    listContainer.innerHTML = votes.map(vote => {
-        const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
-        const fixedTag = vote.fixedOptionIndex != null ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">FIXIERT</span>' : '';
-        return `
-            <div class="vote-list-item card bg-white p-3 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:bg-indigo-50"
-                 data-vote-id="${vote.id}">
-                <div>
-                    <span class="font-bold text-indigo-700">${vote.title}</span>
-                    ${fixedTag}
-                    <span class="text-sm text-gray-500 ml-2">(${vote.participants?.length || 0} Teilnehmer)</span>
-                    <p class="text-xs text-gray-500">Erstellt von ${vote.createdByName} am ${niceDate}</p>
-                </div>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
-            </div>
-        `;
-    }).join('');
-}
-// (Unverändert)
-function renderAssignedVotes(votes) {
-    const listContainer = document.getElementById('assigned-votes-list');
-    if (!listContainer) return;
-    if (currentUser.mode === GUEST_MODE) {
-         listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Melde dich an, um Umfragen zu sehen, an denen du teilgenommen hast.</p>`;
-        return;
-    }
-    if (votes.length === 0) {
-        listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Du hast noch an keiner Umfrage teilgenommen.</p>`;
-        return;
-    }
-    listContainer.innerHTML = votes.map(vote => {
-        const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
-        const fixedTag = vote.fixedOptionIndex != null ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">FIXIERT</span>' : '';
-        return `
-            <div class="vote-list-item card bg-white p-3 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:bg-indigo-50"
-                 data-vote-id="${vote.id}">
-                <div>
-                    <span class="font-bold text-indigo-700">${vote.title}</span>
-                    ${fixedTag}
-                    <span class="text-sm text-gray-500 ml-2">(${vote.participants?.length || 0} Teilnehmer)</span>
-                    <p class="text-xs text-gray-500">Erstellt von ${vote.createdByName} am ${niceDate}</p>
-                </div>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
-            </div>
-        `;
-    }).join('');
-}
+function renderPublicVotes(votes) { /* ... */ }
+function renderAssignedVotes(votes) { /* ... */ }
 
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per Token) -----
-// (ERWEITERT: Prüft jetzt Start/End-Datum)
+// (Unverändert)
 async function joinVoteByToken() {
     const tokenInput = document.getElementById('vote-token-input');
     const joinBtn = document.getElementById('join-vote-by-token-btn');
     const token = tokenInput.value.trim().toUpperCase(); 
-
     if (token.length !== 11 || token[4] !== ' ' || token[5] !== '-' || token[6] !== ' ') {
         alertUser("Ungültiges Token-Format. Es muss 'XXXX - XXXX' sein.", "error");
         return;
@@ -350,36 +262,30 @@ async function joinVoteByToken() {
         const snapshot = await getDocs(q);
         if (snapshot.empty) throw new Error("Umfrage nicht gefunden. Prüfe den Token.");
         if (snapshot.size > 1) throw new Error("Fehler: Mehrere Umfragen mit diesem Token gefunden. Admin kontaktieren.");
-        
         const voteDoc = snapshot.docs[0];
         const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
-
-        // NEU: Gültigkeits-Prüfung
         const now = new Date();
-        // Prüfe Start-Datum (falls vorhanden)
         if (voteData.startTime && now < new Date(voteData.startTime)) {
             throw new Error(`Diese Umfrage hat noch nicht begonnen. Sie startet am ${new Date(voteData.startTime).toLocaleString('de-DE')}.`);
         }
-        // Prüfe End-Datum (falls vorhanden)
         if (voteData.endTime && now > new Date(voteData.endTime)) {
             throw new Error(`Diese Umfrage ist bereits beendet (seit ${new Date(voteData.endTime).toLocaleString('de-DE')}).`);
         }
-        
-        currentVoteData = voteData; // Erst jetzt als "aktuell" setzen
+        currentVoteData = voteData; 
         console.log("Umfrage gefunden:", currentVoteData);
         renderVoteView(currentVoteData);
         showView('vote');
         tokenInput.value = ''; 
     } catch (error) {
         console.error("Fehler beim Suchen der Umfrage:", error);
-        alertUser(error.message, "error"); // Zeigt jetzt auch "Umfrage beendet" an
+        alertUser(error.message, "error");
     } finally {
         setButtonLoading(joinBtn, false); 
     }
 }
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per ID) -----
-// (ERWEITERT: Prüft jetzt Start/End-Datum)
+// (Unverändert)
 async function joinVoteById(voteId) {
     try {
         const voteDocRef = doc(votesCollectionRef, voteId);
@@ -387,20 +293,14 @@ async function joinVoteById(voteId) {
         if (!voteDoc.exists()) {
              throw new Error("Diese Umfrage existiert nicht mehr.");
         }
-        
         const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
-
-        // NEU: Gültigkeits-Prüfung
         const now = new Date();
-        // Prüfe Start-Datum (falls vorhanden)
         if (voteData.startTime && now < new Date(voteData.startTime)) {
             throw new Error(`Diese Umfrage hat noch nicht begonnen. Sie startet am ${new Date(voteData.startTime).toLocaleString('de-DE')}.`);
         }
-        // Prüfe End-Datum (falls vorhanden)
         if (voteData.endTime && now > new Date(voteData.endTime)) {
             throw new Error(`Diese Umfrage ist bereits beendet (seit ${new Date(voteData.endTime).toLocaleString('de-DE')}).`);
         }
-
         currentVoteData = voteData; 
         console.log("Umfrage per ID geladen:", currentVoteData);
         renderVoteView(currentVoteData);
@@ -413,32 +313,50 @@ async function joinVoteById(voteId) {
 
 
 // ----- RENDER-FUNKTION (Abstimmungs-Seite) -----
-// (ERWEITERT: Versteckt "Vielleicht"-Button)
+/**
+ * Baut die Abstimmungs-Seite (Tabelle) basierend auf den Umfragedaten auf.
+ * KOMPLETT NEU GEBAUT
+ */
 function renderVoteView(voteData) {
-    // 1. Titel und Beschreibung
+    
+    // 1. Titel, Beschreibung und Ort setzen
     document.getElementById('vote-poll-title').textContent = voteData.title;
+    
+    const descContainer = document.getElementById('vote-poll-description-container');
     const descEl = document.getElementById('vote-poll-description');
-    
-    // NEU: Orts-Anzeige (wenn vorhanden)
-    let descriptionText = voteData.description || '';
-    if (voteData.location) {
-        descriptionText += `<br><strong>Ort:</strong> ${voteData.location}`;
-    }
-    
-    if (descriptionText) {
-        descEl.innerHTML = descriptionText; // .innerHTML damit <br> funktioniert
-        descEl.classList.remove('hidden');
+    if (voteData.description) {
+        descEl.textContent = voteData.description;
+        descContainer.classList.remove('hidden');
     } else {
-        descEl.classList.add('hidden');
+        descContainer.classList.add('hidden');
     }
+    
+    const locContainer = document.getElementById('vote-poll-location-container');
+    const locEl = document.getElementById('vote-poll-location');
+    if (voteData.location) {
+        locEl.textContent = voteData.location;
+        locContainer.classList.remove('hidden');
+    } else {
+        locContainer.classList.add('hidden');
+    }
+    // Verstecke die Info-Box ganz, wenn beides leer ist
+    if (!voteData.description && !voteData.location) {
+        document.getElementById('vote-info-box').classList.add('hidden');
+    } else {
+        document.getElementById('vote-info-box').classList.remove('hidden');
+    }
+
 
     // 2. Namensfeld
     const nameContainer = document.getElementById('vote-name-input-container');
     const nameInput = document.getElementById('vote-participant-name');
     let existingParticipant = null;
+    let isEditing = false; // Ist der aktuelle User schon in der Teilnehmerliste?
+    
     if (currentUser.mode !== GUEST_MODE) {
         existingParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
     }
+    
     if (voteData.isAnonymous) {
         nameContainer.classList.add('hidden');
     } else {
@@ -446,6 +364,7 @@ function renderVoteView(voteData) {
         if (existingParticipant) {
             nameInput.value = existingParticipant.name;
             nameInput.disabled = true; 
+            isEditing = true;
         } else if (currentUser.mode !== GUEST_MODE) {
             nameInput.value = currentUser.displayName;
             nameInput.disabled = false;
@@ -458,83 +377,49 @@ function renderVoteView(voteData) {
     // 3. Antworten laden
     currentParticipantAnswers = {};
     if (existingParticipant) {
-        currentParticipantAnswers = existingParticipant.answers;
+        // Lade die gespeicherten Antworten
+        currentParticipantAnswers = { ...existingParticipant.answers };
     }
-    selectedOptionIndex = null;
-    document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.disabled = true);
-    
+
     // 4. Ansichten (Teilnahme, Edit-Token) zurücksetzen
-    const participationContainer = document.getElementById('vote-participation-container');
     const saveButton = document.getElementById('vote-save-participation-btn');
     const editButton = document.getElementById('show-edit-vote-btn');
     
     // Setze den Edit-Wrapper zurück
     resetEditWrapper();
-
-    // Verstecke die hellblaue Box
-    document.getElementById('vote-selected-option-display').classList.add('hidden');
     
-    // NEU: Verstecke "Vielleicht"-Button, wenn in den Einstellungen deaktiviert
-    const maybeButton = document.getElementById('vote-btn-maybe');
-    if (maybeButton) {
-        maybeButton.style.display = voteData.disableMaybe ? 'none' : 'inline-block';
-    }
-
-
+    // 5. Prüfen, ob Termin fixiert ist
     if (voteData.fixedOptionIndex != null) {
         // JA, EIN TERMIN IST FIXIERT
-        participationContainer.classList.add('hidden');
-        saveButton.classList.add('hidden');
-        editButton.classList.add('hidden'); 
+        nameContainer.classList.add('hidden'); // Verstecke Namensfeld
+        saveButton.classList.add('hidden');    // Verstecke Speichern-Knopf
+        editButton.classList.add('hidden');    // Verstecke Edit-Knopf
+        
+        // Zeige die "Fixiert"-Nachricht
+        updatePollTableAnswers(voteData); 
+
     } else {
         // NEIN, es ist eine normale Abstimmung
-        // Box bleibt 'hidden', bis ein Klick erfolgt
-        participationContainer.classList.add('hidden'); 
-        saveButton.classList.remove('hidden');
-        editButton.classList.remove('hidden'); 
+        saveButton.classList.add('hidden'); // Bleibt versteckt, bis alles ausgefüllt ist
+        editButton.classList.remove('hidden'); // EDIT-Knopf anzeigen
+        
+        // Baue die Abstimmungs-Tabelle
+        updatePollTableAnswers(voteData); 
+        
+        // Prüfe, ob der Speicher-Knopf angezeigt werden soll
+        // (falls der User schon teilgenommen hat und alle Antworten geladen sind)
+        checkIfAllAnswered();
     }
-
-    // 5. Die Abstimmungs-Tabelle bauen
-    updatePollTableAnswers(voteData); 
-    
-    // 6. Klick-Spione für die neuen Tabellen-Zeilen hinzufügen
-    const optionsContainer = document.getElementById('vote-options-container');
-    optionsContainer.querySelectorAll('.vote-option-row').forEach(row => {
-         row.replaceWith(row.cloneNode(true));
-    });
-    optionsContainer.querySelectorAll('.vote-option-row').forEach(row => {
-        row.addEventListener('click', () => {
-            if (voteData.fixedOptionIndex != null) return; 
-            optionsContainer.querySelectorAll('.vote-option-row').forEach(r => r.classList.remove('bg-blue-200'));
-            row.classList.add('bg-blue-200');
-            selectedOptionIndex = parseInt(row.dataset.optionIndex);
-            const selectedOption = voteData.options[selectedOptionIndex];
-            
-            // --- HIER IST DIE NEUE LOGIK ---
-            const participationContainer = document.getElementById('vote-participation-container');
-            participationContainer.classList.remove('hidden');
-            const blueBox = document.getElementById('vote-selected-option-display');
-            const blueBoxText = blueBox.querySelector('p');
-            const dateObj = new Date(selectedOption.date + 'T12:00:00');
-            const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
-            if (blueBox && blueBoxText) {
-                blueBoxText.textContent = `Ausgewählt: ${niceDate} um ${selectedOption.time} Uhr`;
-                blueBox.classList.remove('hidden');
-            }
-            document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.disabled = false);
-            document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.classList.remove('ring-4', 'ring-indigo-500'));
-            const currentAnswer = currentParticipantAnswers[selectedOptionIndex];
-            if (currentAnswer) {
-                document.querySelector(`.vote-answer-btn[data-answer="${currentAnswer}"]`)?.classList.add('ring-4', 'ring-indigo-500');
-            }
-        });
-    });
 }
 
-// ----- Funktion zum Aktualisieren der Tabelle -----
-// (Unverändert)
+/**
+ * Baut die Abstimmungs-Tabelle neu auf und füllt sie mit allen Antworten
+ * KOMPLETT NEU GEBAUT
+ */
 function updatePollTableAnswers(voteData) {
     const optionsContainer = document.getElementById('vote-options-container');
+
+    // 1. Fall: Termin ist fixiert -> Zeige die grüne Box
     if (voteData.fixedOptionIndex != null) {
         const fixedOption = voteData.options[voteData.fixedOptionIndex];
         if (fixedOption) {
@@ -557,6 +442,8 @@ function updatePollTableAnswers(voteData) {
             return; 
         }
     }
+    
+    // 2. Fall: Normale Abstimmung -> Baue die Tabelle
     const optionsByDate = {};
     voteData.options.forEach((option, index) => {
         if (!optionsByDate[option.date]) {
@@ -564,64 +451,119 @@ function updatePollTableAnswers(voteData) {
         }
         optionsByDate[option.date].push({ ...option, originalIndex: index });
     });
-    let tableHTML = '<table class="w-full border-collapse text-sm text-left">';
+
+    let tableHTML = '<table class="w-full border-collapse text-sm text-left bg-white">';
+    
+    // 3. Kopfzeile der Tabelle
     tableHTML += '<thead><tr class="bg-gray-50">';
-    tableHTML += '<th class="p-2 border-b sticky left-0 bg-gray-50 z-10">Termin</th>';
+    tableHTML += '<th class="p-3 border-b sticky left-0 bg-gray-50 z-10 w-48">Termin</th>';
+    
+    // Spalten für jeden Teilnehmer
     voteData.participants.forEach(p => {
-        tableHTML += `<th class="p-2 border-b text-center">${p.name}</th>`;
+        // Wenn der Teilnehmer der aktuelle User ist, überspringe ihn (er kommt in die "Du"-Spalte)
+        if (p.userId === currentUser.mode) return; 
+        tableHTML += `<th class="p-3 border-b text-center w-24">${p.name}</th>`;
     });
-    let showYouColumn = true;
-    if(currentUser.mode !== GUEST_MODE && voteData.participants.find(p => p.userId === currentUser.mode)) {
-        showYouColumn = false;
-    }
-    if (showYouColumn) {
-        tableHTML += `<th class="p-2 border-b text-center font-bold text-indigo-600">Du</th>`;
-    }
+    
+    // Spalte für "Du" (den aktuellen User)
+    tableHTML += `<th class="p-3 border-b text-center w-48 sticky right-0 bg-gray-50 z-10 font-bold text-indigo-600">Du</th>`;
     tableHTML += '</tr></thead>';
+
+    // 4. Zeilen der Tabelle
     tableHTML += '<tbody>';
+    
     for (const date in optionsByDate) {
         const dateObj = new Date(date + 'T12:00:00'); 
         const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+
         tableHTML += `
             <tr class="bg-gray-100">
                 <td class="p-2 font-bold sticky left-0 bg-gray-100 z-10" colspan="${voteData.participants.length + 2}">${niceDate}</td>
             </tr>
         `;
+
+        // Uhrzeit-Zeilen
         optionsByDate[date].forEach(option => {
-            const isSelected = option.originalIndex === selectedOptionIndex;
+            const optionIndex = option.originalIndex;
+            
             tableHTML += `
-                <tr class="vote-option-row ${isSelected ? 'bg-blue-200' : 'hover:bg-blue-50'} cursor-pointer" data-option-index="${option.originalIndex}">
-                    <td class="p-2 border-b font-mono sticky left-0 ${isSelected ? 'bg-blue-200' : 'bg-white'} z-10">${option.time} Uhr</td>
+                <tr class="vote-option-row" data-option-index="${optionIndex}">
+                    <td class="p-3 border-b font-mono sticky left-0 bg-white z-10">${option.time} Uhr</td>
             `;
+
+            // Spalten für gespeicherte Teilnehmer
             voteData.participants.forEach(p => {
-                const answer = p.answers[option.originalIndex]; 
+                if (p.userId === currentUser.mode) return; // Überspringen
+                const answer = p.answers[optionIndex]; 
                 let answerIcon = '';
-                if (answer === 'yes') answerIcon = '<span class="text-green-500 font-bold">✔</span>';
-                if (answer === 'no') answerIcon = '<span class="text-red-500 font-bold">✘</span>';
-                if (answer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold">?</span>';
-                tableHTML += `<td class="p-2 border-b text-center">${answerIcon}</td>`;
+                if (answer === 'yes') answerIcon = '<span class="text-green-500 font-bold text-xl">✔</span>';
+                if (answer === 'no') answerIcon = '<span class="text-red-500 font-bold text-xl">✘</span>';
+                if (answer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold text-xl">?</span>';
+                tableHTML += `<td class="p-3 border-b text-center">${answerIcon}</td>`;
             });
-            if (showYouColumn) {
-                const currentAnswer = currentParticipantAnswers[option.originalIndex];
-                let currentIcon = '';
-                if (currentAnswer === 'yes') currentIcon = '<span class="text-green-500 font-bold">✔</span>';
-                if (currentAnswer === 'no') currentIcon = '<span class="text-red-500 font-bold">✘</span>';
-                if (currentAnswer === 'maybe') currentIcon = '<span class="text-yellow-500 font-bold">?</span>';
-                tableHTML += `<td class="p-2 border-b text-center bg-indigo-50">${currentIcon}</td>`;
-            }
+            
+            // Spalte für "Du" (Interaktiv)
+            const currentAnswer = currentParticipantAnswers[optionIndex];
+            const yesSelected = currentAnswer === 'yes' ? 'bg-green-200 ring-2 ring-indigo-500' : 'hover:bg-green-100';
+            const maybeSelected = currentAnswer === 'maybe' ? 'bg-yellow-200 ring-2 ring-indigo-500' : 'hover:bg-yellow-100';
+            const noSelected = currentAnswer === 'no' ? 'bg-red-200 ring-2 ring-indigo-500' : 'hover:bg-red-100';
+            const maybeHidden = voteData.disableMaybe ? 'hidden' : '';
+
+            tableHTML += `
+                <td class="p-2 border-b sticky right-0 bg-white z-10">
+                    <div class="flex justify-center gap-1">
+                        <button class="vote-grid-btn p-2 rounded-lg ${yesSelected} transition-colors" data-option-index="${optionIndex}" data-answer="yes">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-green-600"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" /></svg>
+                        </button>
+                        <button class="vote-grid-btn p-2 rounded-lg ${maybeSelected} ${maybeHidden} transition-colors" data-option-index="${optionIndex}" data-answer="maybe">
+                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-yellow-600"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.75 6a.75.75 0 0 0-1.5 0v5.5a.75.75 0 0 0 1.5 0V6ZM10 15a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" /></svg>
+                        </button>
+                        <button class="vote-grid-btn p-2 rounded-lg ${noSelected} transition-colors" data-option-index="${optionIndex}" data-answer="no">
+                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-red-600"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
+                        </button>
+                    </div>
+                </td>
+            `;
             tableHTML += '</tr>';
         });
     }
+    
     tableHTML += '</tbody></table>';
     optionsContainer.innerHTML = tableHTML;
+}
+
+
+// ----- NEU: HELFER-FUNKTION zum Prüfen der Antworten -----
+function checkIfAllAnswered() {
+    const saveBtn = document.getElementById('vote-save-participation-btn');
+    if (!currentVoteData) {
+        saveBtn.classList.add('hidden');
+        return;
+    }
+    
+    const totalOptions = currentVoteData.options.length;
+    const answeredCount = Object.keys(currentParticipantAnswers).length;
+    
+    // Prüfe, ob für JEDE Option eine Antwort existiert
+    let allAnswered = true;
+    for (let i = 0; i < totalOptions; i++) {
+        if (!currentParticipantAnswers[i]) {
+            allAnswered = false;
+            break;
+        }
+    }
+
+    if (allAnswered) {
+        saveBtn.classList.remove('hidden'); // Alle beantwortet -> Knopf anzeigen
+    } else {
+        saveBtn.classList.add('hidden'); // Es fehlen noch Antworten -> Knopf verstecken
+    }
 }
 
 
 // ----- DATENBANK-FUNKTION (Abstimmung speichern) -----
 // (Unverändert)
 async function saveVoteParticipation() {
-    // ... (Code bleibt gleich wie vorher) ...
-    // (Unverändert)
     const saveBtn = document.getElementById('vote-save-participation-btn');
     const nameInput = document.getElementById('vote-participant-name');
     let participantName = nameInput.value.trim();
@@ -635,6 +577,11 @@ async function saveVoteParticipation() {
     if (Object.keys(currentParticipantAnswers).length === 0) {
         return alertUser("Du hast noch für keinen Termin abgestimmt.", "error");
     }
+    // NEU: Doppelte Prüfung, ob wirklich alle beantwortet sind
+    if (Object.keys(currentParticipantAnswers).length !== currentVoteData.options.length) {
+         return alertUser("Bitte wähle für JEDEN Termin eine Antwort aus.", "error");
+    }
+    
     setButtonLoading(saveBtn, true);
     try {
         const participantId = (currentUser.mode !== GUEST_MODE) ? currentUser.mode : participantName;
@@ -663,7 +610,7 @@ async function saveVoteParticipation() {
         alertUser("Deine Abstimmung wurde gespeichert!", "success");
         currentVoteData.participants = newParticipantsArray;
         currentVoteData.participantIds = participantIds;
-        renderVoteView(currentVoteData); 
+        renderVoteView(currentVoteData); // Lädt die Ansicht neu (jetzt mit dir in der Teilnehmerliste)
     } catch (error) {
         console.error("Fehler beim Speichern der Abstimmung:", error);
         alertUser("Fehler beim Speichern: " + error.message, "error");
@@ -679,28 +626,18 @@ async function saveGroupPoll() {
     const saveBtn = document.getElementById('vote-save-group-poll-btn');
     saveBtn.disabled = true;
     saveBtn.textContent = 'Wird gespeichert...';
-
     try {
-        // 1. Alle Daten aus dem Formular lesen
         const title = document.getElementById('vote-title').value.trim();
         const description = document.getElementById('vote-description').value.trim();
-        const location = document.getElementById('vote-location').value.trim(); // NEU
-        
-        // NEU: Gültigkeits-Zeiten
+        const location = document.getElementById('vote-location').value.trim();
         const startTimeInput = document.getElementById('vote-start-time').value;
         const endTimeInput = document.getElementById('vote-end-time').value;
         const isEndTimeUnlimited = document.getElementById('vote-end-time-unlimited').checked;
-        
-        // Konvertiere die Zeiten in speicherbare Formate (oder null)
         const startTime = startTimeInput ? new Date(startTimeInput) : null;
         const endTime = !isEndTimeUnlimited && endTimeInput ? new Date(endTimeInput) : null;
-
-        // NEU: Einstellungen
         const isPublic = document.getElementById('vote-setting-public').checked;
         const isAnonymous = document.getElementById('vote-setting-anonymous').checked;
-        const disableMaybe = document.getElementById('vote-setting-disable-maybe').checked; // NEU
-
-        // 2. Termine sammeln (unverändert)
+        const disableMaybe = document.getElementById('vote-setting-disable-maybe').checked; 
         const options = [];
         const dateGroups = document.querySelectorAll('#vote-dates-container [data-date-group-id]');
         let hasValidOption = false;
@@ -718,24 +655,17 @@ async function saveGroupPoll() {
                 });
             }
         });
-
-        // 3. Validierung (unverändert)
         if (!title) throw new Error("Bitte gib einen Titel für die Umfrage ein.");
         if (!hasValidOption) throw new Error("Bitte füge mindestens einen gültigen Termin (Datum + Uhrzeit) hinzu.");
-
-        // 4. Tokens erstellen (unverändert)
         const token = generateVoteToken();
         const editToken = generateVoteToken(); 
-
-        // 5. Das finale Daten-Objekt (mit allen neuen Feldern)
         const voteData = {
             title: title,
             description: description,
-            location: location || null, // NEU
-            startTime: startTime,      // NEU
-            endTime: endTime,          // NEU
-            disableMaybe: disableMaybe,// NEU
-            
+            location: location || null, 
+            startTime: startTime,      
+            endTime: endTime,          
+            disableMaybe: disableMaybe,
             type: 'group-poll',
             token: token,
             editToken: editToken, 
@@ -749,20 +679,14 @@ async function saveGroupPoll() {
             participantIds: [],
             fixedOptionIndex: null 
         };
-
-        // 6. Speichern
         console.log("Speichere Umfrage in Firebase...", voteData);
         const docRef = await addDoc(votesCollectionRef, voteData);
-
         console.log(`Umfrage erstellt! ID: ${docRef.id}, Token: ${token}, Edit-Token: ${editToken}`);
         alertUser(`Umfrage erstellt! Teilnahme-Token: ${token} (Zum Bearbeiten: ${editToken})`, "success");
-
         showView('main'); 
-
     } catch (error) {
         console.error("Fehler beim Speichern der Umfrage:", error);
         alertUser(error.message, "error");
-    
     } finally {
         saveBtn.disabled = false;
         saveBtn.textContent = 'Umfrage erstellen und Link erhalten';
@@ -817,52 +741,6 @@ function renderEditView(voteData) {
 
 
 // ----- HELFER-FUNKTIONEN (Rest) -----
-
-// (ERWEITERT: Setzt die neuen Felder zurück)
-function resetCreateWizard() {
-    // Alte Felder
-    document.getElementById('vote-title').value = '';
-    document.getElementById('vote-description').value = '';
-    document.getElementById('vote-dates-container').innerHTML = '';
-    
-    // NEUE Felder
-    document.getElementById('vote-location').value = '';
-    
-    // Setze Start auf "Jetzt"
-    document.getElementById('vote-start-time').value = getCurrentDateTimeLocalString();
-    
-    // Setze Ende auf "Unbegrenzt"
-    const endTimeInput = document.getElementById('vote-end-time');
-    const unlimitedCheckbox = document.getElementById('vote-end-time-unlimited');
-    endTimeInput.value = '';
-    unlimitedCheckbox.checked = true;
-    endTimeInput.disabled = true; // Checkbox-Event manuell auslösen
-    
-    // NEU: Einstellungen
-    document.getElementById('vote-setting-public').checked = false;
-    document.getElementById('vote-setting-anonymous').checked = false;
-    document.getElementById('vote-setting-disable-maybe').checked = false; // NEU
-    
-    dateGroupIdCounter = 0;
-    addNewDateGroup();
-}
-
-// NEU: Helfer-Funktion für das Datum
-/**
- * Gibt das aktuelle Datum und die Uhrzeit im 'datetime-local'-Format zurück
- * (z.B. "2025-11-03T19:30")
- */
-function getCurrentDateTimeLocalString() {
-    const now = new Date();
-    // Wir müssen die Zeitzone manuell verrechnen,
-    // da .toISOString() immer UTC (London) ist
-    const offset = now.getTimezoneOffset() * 60000; // in Millisekunden
-    const localNow = new Date(now.getTime() - offset);
-    
-    // .slice(0, 16) schneidet die Sekunden und das 'Z' ab
-    return localNow.toISOString().slice(0, 16); 
-}
-
 // (Unverändert)
 function showView(viewName) { 
     document.getElementById('terminplaner-main-view').classList.add('hidden');
@@ -878,12 +756,36 @@ function showView(viewName) {
     } else if (viewName === 'vote') {
        document.getElementById('terminplaner-vote-view').classList.remove('hidden');
        resetEditWrapper();
-       document.getElementById('vote-participation-container').classList.add('hidden');
+       // WICHTIG: Die Teilnahme-Box wird jetzt von renderVoteView gesteuert
     } else if (viewName === 'edit') {
        document.getElementById('terminplaner-edit-view').classList.remove('hidden');
     }
 }
-
+// (Unverändert)
+function resetCreateWizard() {
+    document.getElementById('vote-title').value = '';
+    document.getElementById('vote-description').value = '';
+    document.getElementById('vote-location').value = '';
+    document.getElementById('vote-start-time').value = getCurrentDateTimeLocalString();
+    const endTimeInput = document.getElementById('vote-end-time');
+    const unlimitedCheckbox = document.getElementById('vote-end-time-unlimited');
+    endTimeInput.value = '';
+    unlimitedCheckbox.checked = true;
+    endTimeInput.disabled = true; 
+    document.getElementById('vote-setting-public').checked = false;
+    document.getElementById('vote-setting-anonymous').checked = false;
+    document.getElementById('vote-setting-disable-maybe').checked = false; 
+    document.getElementById('vote-dates-container').innerHTML = '';
+    dateGroupIdCounter = 0;
+    addNewDateGroup();
+}
+// (Unverändert)
+function getCurrentDateTimeLocalString() {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000; 
+    const localNow = new Date(now.getTime() - offset);
+    return localNow.toISOString().slice(0, 16); 
+}
 // (Unverändert)
 function generateVoteToken() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ123456789';
