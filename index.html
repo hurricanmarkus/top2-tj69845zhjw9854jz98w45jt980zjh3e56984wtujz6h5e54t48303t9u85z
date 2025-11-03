@@ -925,7 +925,7 @@
 
             </div>
 
-<div id="terminplanerView" class="view">
+            <div id="terminplanerView" class="view">
 
                 <div id="terminplaner-main-view">
                     <div class="back-link-container w-full mb-4 flex justify-between items-center">
@@ -958,7 +958,7 @@
                         <div class="flex flex-col sm:flex-row gap-2">
                             <input type="text" id="vote-token-input"
                                 class="flex-grow p-3 border-2 border-gray-300 rounded-lg text-center tracking-widest text-lg font-mono uppercase focus:ring-indigo-500 focus:border-indigo-500"
-                                placeholder="XXXX - XXXX" maxlength="10">
+                                placeholder="XXXX - XXXX" maxlength="11">
                             <button id="join-vote-by-token-btn"
                                 class="py-3 px-5 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition flex items-center justify-center">
                                 <span class="button-text">Teilnehmen</span>
@@ -984,7 +984,8 @@
                             </p>
                         </div>
                     </div>
-                </div> <div id="terminplaner-create-view" class="hidden">
+                </div>
+                <div id="terminplaner-create-view" class="hidden">
                     <div class="mb-4">
                         <div class="flex justify-between items-center">
                             <h2 class="text-2xl font-bold text-gray-800">Neue Gruppenumfrage</h2>
@@ -1000,8 +1001,7 @@
                         <div>
                             <label for="vote-title" class="block text-sm font-bold text-gray-700 mb-1">Titel der
                                 Umfrage</label>
-                            <input type="text" id="vote-title"
-                                class="w-full p-2 border border-gray-300 rounded-lg"
+                            <input type="text" id="vote-title" class="w-full p-2 border border-gray-300 rounded-lg"
                                 placeholder="z.B. Nächstes Team-Meeting">
                         </div>
                         <div>
@@ -1016,7 +1016,7 @@
                     <div class="card bg-white p-4 rounded-xl shadow-lg mb-6">
                         <h3 class="text-lg font-bold text-gray-800 mb-3">Termine vorschlagen</h3>
                         <div id="vote-dates-container" class="space-y-4">
-                            </div>
+                        </div>
                         <button id="vote-add-date-btn"
                             class="w-full mt-4 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
                             + Tag hinzufügen
@@ -1047,7 +1047,8 @@
                         Umfrage erstellen und Link erhalten
                     </button>
 
-                </div> <div id="terminplaner-vote-view" class="hidden">
+                </div>
+                <div id="terminplaner-vote-view" class="hidden">
                     <div class="mb-4">
                         <div class="flex justify-between items-center">
                             <h2 id="vote-poll-title" class="text-2xl font-bold text-gray-800">...</h2>
@@ -1062,14 +1063,14 @@
                     <div class="card bg-white p-4 rounded-xl shadow-lg mb-6">
                         <h3 class="text-lg font-bold text-gray-800 mb-3">Wähle deine Termine</h3>
                         <div id="vote-options-container" class="overflow-x-auto">
-                            </div>
+                        </div>
                     </div>
 
                     <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
                         <h3 class="text-lg font-bold text-gray-800">Deine Teilnahme</h3>
                         <div id="vote-name-input-container">
-                            <label for="vote-participant-name"
-                                class="block text-sm font-bold text-gray-700 mb-1">Dein Name</label>
+                            <label for="vote-participant-name" class="block text-sm font-bold text-gray-700 mb-1">Dein
+                                Name</label>
                             <input type="text" id="vote-participant-name"
                                 class="w-full p-2 border border-gray-300 rounded-lg" placeholder="Dein Name...">
                         </div>
@@ -1104,8 +1105,9 @@
                         Abstimmung speichern
                     </button>
 
-                </div> </div>
-                                
+                </div>
+            </div>
+
             <div id="userSelectionModal"
                 class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
                 <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-xs">
@@ -1395,7 +1397,7 @@
             </div>
         </div>
 
-<div id="createVoteModal"
+        <div id="createVoteModal"
             class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-30">
             <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-3xl">
                 <div class="flex justify-between items-center mb-6 pb-3 border-b">
@@ -1466,9 +1468,10 @@
                         </p>
                     </div>
 
-                </div> </div>
+                </div>
+            </div>
         </div>
-        
+
         <script type="module" src="haupteingang.js"></script>
         <script type="module" src="log-InOut.js"></script>
         <script type="module" src="admin_adminfunktionenHome.js"></script>
