@@ -19,7 +19,7 @@ let dateGroupIdCounter = 0;
 let currentVoteData = null;
 let currentParticipantAnswers = {};
 
-// NEU: Diese Variable steuert, ob die "Du"-Spalte klickbar ist
+// Diese Variable steuert, ob die "Du"-Spalte klickbar ist
 let isVoteGridEditable = false; 
 
 let unsubscribePublicVotes = null;
@@ -208,6 +208,12 @@ export function initializeTerminplanerView() {
                 const userId = correctionCounter.dataset.userid;
                 renderCorrectionHistory(userId);
             }
+            
+            // NEU: Fall 3: Klick auf "Auswahl bearbeiten"
+            const correctionButton = e.target.closest('.vote-correction-btn');
+            if (correctionButton) {
+                switchToEditMode();
+            }
         });
         voteOptionsContainer.dataset.listenerAttached = 'true';
     }
@@ -250,14 +256,9 @@ export function initializeTerminplanerView() {
         cancelEditingBtn.dataset.listenerAttached = 'true';
     }
     
-    // Spion für den "Korrektur"-Button
-    const correctionBtn = document.getElementById('vote-correction-btn');
-    if (correctionBtn && !correctionBtn.dataset.listenerAttached) {
-        correctionBtn.addEventListener('click', () => {
-            switchToEditMode();
-        });
-        correctionBtn.dataset.listenerAttached = 'true';
-    }
+    // NEU: Der Spion für den alten gelben Knopf WIRD GELÖSCHT
+    // const correctionBtn = document.getElementById('vote-correction-btn');
+    // ... (dieser ganze Block ist weg) ...
     
     // Spion für den "Schließen"-Knopf des Korrektur-Modals
     const closeLogBtn = document.getElementById('close-correction-log-btn');
@@ -265,12 +266,8 @@ export function initializeTerminplanerView() {
         closeLogBtn.addEventListener('click', () => {
             const modal = document.getElementById('correctionLogModal');
             if (modal) {
-                // ==================================================
-                // HIER IST DIE KORREKTUR
-                // ==================================================
                 modal.classList.add('hidden');
-                modal.style.display = 'none'; // <-- DIESE ZEILE IST NEU
-                // ==================================================
+                modal.style.display = 'none'; // Korrektur von letzter Woche
             }
         });
         closeLogBtn.dataset.listenerAttached = 'true';
@@ -279,11 +276,9 @@ export function initializeTerminplanerView() {
 
 
 // ----- SPION-FUNKTIONEN (Listener) -----
-
+// (Unverändert)
 export function listenForPublicVotes() {
-    if (unsubscribePublicVotes) {
-        unsubscribePublicVotes();
-    }
+    if (unsubscribePublicVotes) unsubscribePublicVotes();
     const q = query(
         votesCollectionRef, 
         where("isPublic", "==", true), 
@@ -300,11 +295,9 @@ export function listenForPublicVotes() {
         console.error("Fehler beim Lauschen auf öffentliche Umfragen:", error);
     });
 }
-
+// (Unverändert)
 export function listenForAssignedVotes(userId) {
-    if (unsubscribeAssignedVotes) {
-        unsubscribeAssignedVotes();
-    }
+    if (unsubscribeAssignedVotes) unsubscribeAssignedVotes();
     if (!userId || userId === GUEST_MODE) {
         renderAssignedVotes([]); 
         return;
@@ -325,7 +318,7 @@ export function listenForAssignedVotes(userId) {
         console.error("Fehler beim Lauschen auf zugewiesene Umfragen:", error);
     });
 }
-
+// (Unverändert)
 export function stopAssignedVotesListener() {
     if (unsubscribeAssignedVotes) {
         unsubscribeAssignedVotes();
@@ -336,7 +329,7 @@ export function stopAssignedVotesListener() {
 
 
 // ----- RENDER-FUNKTIONEN FÜR LISTEN -----
-
+// (Unverändert)
 function renderPublicVotes(votes) {
     const listContainer = document.getElementById('public-votes-list');
     if (!listContainer) return;
@@ -361,7 +354,7 @@ function renderPublicVotes(votes) {
         `;
     }).join('');
 }
-
+// (Unverändert)
 function renderAssignedVotes(votes) {
     const listContainer = document.getElementById('assigned-votes-list');
     if (!listContainer) return;
@@ -393,6 +386,7 @@ function renderAssignedVotes(votes) {
 
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per Token) -----
+// (Unverändert)
 async function joinVoteByToken() {
     const tokenInput = document.getElementById('vote-token-input');
     const joinBtn = document.getElementById('join-vote-by-token-btn');
@@ -430,6 +424,7 @@ async function joinVoteByToken() {
 }
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per ID) -----
+// (Unverändert)
 async function joinVoteById(voteId) {
     try {
         const voteDocRef = doc(votesCollectionRef, voteId);
@@ -457,6 +452,9 @@ async function joinVoteById(voteId) {
 
 
 // ----- RENDER-FUNKTION (Abstimmungs-Seite) -----
+/**
+ * Baut die Abstimmungs-Seite (Tabelle) basierend auf den Umfragedaten auf.
+ */
 function renderVoteView(voteData) {
     
     // 1. Titel und Ersteller (ZENTRIERT)
@@ -509,9 +507,10 @@ function renderVoteView(voteData) {
     // 3. Teilnehmer-Status-Box (NEUE LOGIK)
     const statusContainer = document.getElementById('vote-participant-status-container');
     const nameDisplay = document.getElementById('vote-participant-name');
+    const userContainer = document.getElementById('vote-user-name-container');
     const guestNameContainer = document.getElementById('vote-guest-name-container');
     const guestNameInput = document.getElementById('vote-guest-name-input');
-    const correctionBtn = document.getElementById('vote-correction-btn');
+    const correctionBtn = document.getElementById('vote-correction-btn'); // (Alter Knopf, wird nicht mehr benutzt)
     
     let existingParticipant = null;
     
@@ -519,29 +518,32 @@ function renderVoteView(voteData) {
         existingParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
     }
     
+    // Verstecke standardmäßig alles
+    statusContainer.classList.add('hidden');
+    guestNameContainer.classList.add('hidden');
+    userContainer.classList.add('hidden');
+    
     if (voteData.isAnonymous) {
-        statusContainer.classList.add('hidden');
-        guestNameContainer.classList.add('hidden');
+        // Bei anonymer Umfrage ist die ganze Box versteckt
         isVoteGridEditable = true; 
     } else if (existingParticipant) {
+        // Angemeldeter User, der schon teilgenommen hat
         statusContainer.classList.remove('hidden');
+        userContainer.classList.remove('hidden'); // Zeige "Deine Teilnahme als:"
         nameDisplay.textContent = existingParticipant.name;
-        guestNameContainer.classList.add('hidden');
-        correctionBtn.classList.remove('hidden'); 
-        isVoteGridEditable = false; 
+        isVoteGridEditable = false; // Schreibgeschützt!
     } else if (currentUser.mode !== GUEST_MODE) {
+        // Angemeldeter User, der noch NICHT teilgenommen hat
         statusContainer.classList.remove('hidden');
+        userContainer.classList.remove('hidden'); // Zeige "Deine Teilnahme als:"
         const currentUserFull = USERS[currentUser.mode];
         nameDisplay.textContent = currentUserFull ? currentUserFull.realName : currentUser.displayName;
-        guestNameContainer.classList.add('hidden');
-        correctionBtn.classList.add('hidden'); 
         isVoteGridEditable = true; 
     } else {
+        // GAST, der noch NICHT teilgenommen hat
         statusContainer.classList.remove('hidden');
-        nameDisplay.textContent = "Gast";
-        guestNameContainer.classList.remove('hidden'); 
+        guestNameContainer.classList.remove('hidden'); // Zeige Eingabefeld
         guestNameInput.value = '';
-        correctionBtn.classList.add('hidden');
         isVoteGridEditable = true; 
     }
     
@@ -633,12 +635,24 @@ function updatePollTableAnswers(voteData, isEditable = false) {
     
     // Spalte für "Du" (den aktuellen User)
     const youParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
-    const youCorrectionCount = (youParticipant && youParticipant.correctionCount > 0) ? `(${youParticipant.correctionCount} Korrekturen)` : '';
     
-    tableHTML += `<th class="p-3 border-b text-center w-48 sticky right-0 bg-gray-50 z-10 font-bold text-indigo-600">
-                    Du
-                    <br>
-                    <span class="text-xs font-normal text-gray-500 correction-counter cursor-pointer" data-userid="${currentUser.mode}">${youCorrectionCount}</span>
+    // NEU: Baue den "Du"-Header-Text
+    let youHeaderHTML = '<span class="font-bold text-indigo-600">Du</span>'; // Standard
+    if (youParticipant) {
+        const correctionCount = youParticipant.correctionCount || 0;
+        const correctionText = correctionCount > 0 ? `(${correctionCount} Korrekturen)` : '';
+        
+        youHeaderHTML = `
+            <span class="font-bold text-indigo-600">Du</span>
+            <br>
+            <span class="text-xs font-normal text-gray-500 correction-counter cursor-pointer" data-userid="${currentUser.mode}">${correctionText}</span>
+            <br>
+            <button class="vote-correction-btn text-xs font-semibold text-blue-600 hover:underline">Auswahl bearbeiten</button>
+        `;
+    }
+
+    tableHTML += `<th class="p-3 border-b text-center w-48 sticky right-0 bg-gray-50 z-10">
+                    ${youHeaderHTML}
                   </th>`;
     tableHTML += '</tr></thead>';
 
@@ -770,9 +784,11 @@ async function saveVoteParticipation() {
         participantName = "Anonym";
         participantId = `anon_${Date.now()}`;
     } else if (currentUser.mode !== GUEST_MODE) {
+        // Hole den Namen aus dem (jetzt schreibgeschützten) Feld
         participantName = document.getElementById('vote-participant-name').textContent; 
         participantId = currentUser.mode;
     } else {
+        // Gast muss Namen eingeben
         participantName = document.getElementById('vote-guest-name-input').value.trim();
         participantId = `guest_${participantName.replace(/\s/g, '_')}`; 
         if (!participantName) {
@@ -1003,9 +1019,17 @@ function checkInlineEditToken() {
 
 // ----- Funktion, die beim Klick auf "Korrektur" aufgerufen wird -----
 function switchToEditMode() {
-    document.getElementById('vote-correction-btn').classList.add('hidden');
+    // 1. Verstecke den Korrektur-Knopf (der jetzt in der Tabelle ist)
+    const correctionBtn = document.querySelector('.vote-correction-btn');
+    if (correctionBtn) correctionBtn.classList.add('hidden');
+    
+    // 2. Setze den globalen Status
     isVoteGridEditable = true;
+    
+    // 3. Baue die Tabelle neu auf, diesmal klickbar
     updatePollTableAnswers(currentVoteData, true);
+    
+    // 4. Prüfe, ob der Speicher-Knopf angezeigt werden soll
     checkIfAllAnswered();
 }
 
