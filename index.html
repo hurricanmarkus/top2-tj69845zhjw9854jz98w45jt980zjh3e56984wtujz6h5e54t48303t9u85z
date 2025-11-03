@@ -925,64 +925,129 @@
 
             </div>
 
-            <div id="terminplanerView" class="view">
-                <div class="back-link-container w-full mb-4 flex justify-between items-center">
-                    <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition"
-                        data-target="home">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
-                            class="w-5 h-5 mr-1">
-                            <path d="m15 18-6-6 6-6" />
-                        </svg>
-                        <span class="text-sm font-semibold">zurück</span>
-                    </button>
+<div id="terminplanerView" class="view">
 
-                    <button id="show-create-vote-modal-btn"
-                        class="py-2 px-4 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition shadow-sm flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
-                            <path
-                                d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-                        </svg>
-                        Neuen Termin
-                    </button>
-                </div>
+                <div id="terminplaner-main-view">
+                    <div class="back-link-container w-full mb-4 flex justify-between items-center">
+                        <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition"
+                            data-target="home">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                stroke-linejoin="round" class="w-5 h-5 mr-1">
+                                <path d="m15 18-6-6 6-6" />
+                            </svg>
+                            <span class="text-sm font-semibold">zurück</span>
+                        </button>
 
-                <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-indigo-500 mb-6">
-                    <h3 class="text-xl font-bold text-gray-800 mb-3">An Umfrage teilnehmen</h3>
-                    <p class="text-sm text-gray-600 mb-4">Gib den 8-stelligen Token ein (z.B. A1B2 - C3D4), um an
-                        einer privaten Umfrage teilzunehmen.</p>
-
-                    <div class="flex flex-col sm:flex-row gap-2">
-                        <input type="text" id="vote-token-input"
-                            class="flex-grow p-3 border-2 border-gray-300 rounded-lg text-center tracking-widest text-lg font-mono uppercase focus:ring-indigo-500 focus:border-indigo-500"
-                            placeholder="XXXX - XXXX" maxlength="10">
-                        <button id="join-vote-by-token-btn"
-                            class="py-3 px-5 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition">
-                            Teilnehmen
+                        <button id="show-create-vote-modal-btn"
+                            class="py-2 px-4 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition shadow-sm flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                                class="w-5 h-5">
+                                <path
+                                    d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                            </svg>
+                            Neuen Termin
                         </button>
                     </div>
-                </div>
 
-                <div class="mb-6">
-                    <h3 class="text-xl font-bold text-gray-800 mb-3">An mich zugewiesen</h3>
-                    <div id="assigned-votes-list" class="space-y-3">
-                        <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
-                            (Hier erscheinen bald Umfragen, die dir zugewiesen wurden)
-                        </p>
+                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-indigo-500 mb-6">
+                        <h3 class="text-xl font-bold text-gray-800 mb-3">An Umfrage teilnehmen</h3>
+                        <p class="text-sm text-gray-600 mb-4">Gib den 8-stelligen Token ein (z.B. A1B2 - C3D4), um an
+                            einer privaten Umfrage teilzunehmen.</p>
+
+                        <div class="flex flex-col sm:flex-row gap-2">
+                            <input type="text" id="vote-token-input"
+                                class="flex-grow p-3 border-2 border-gray-300 rounded-lg text-center tracking-widest text-lg font-mono uppercase focus:ring-indigo-500 focus:border-indigo-500"
+                                placeholder="XXXX - XXXX" maxlength="10">
+                            <button id="join-vote-by-token-btn"
+                                class="py-3 px-5 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition">
+                                Teilnehmen
+                            </button>
+                        </div>
                     </div>
-                </div>
 
-                <div class="mb-6">
-                    <h3 class="text-xl font-bold text-gray-800 mb-3">Öffentliche Umfragen</h3>
-                    <div id="public-votes-list" class="space-y-3">
-                        <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
-                            (Hier erscheinen bald öffentliche Umfragen)
-                        </p>
+                    <div class="mb-6">
+                        <h3 class="text-xl font-bold text-gray-800 mb-3">An mich zugewiesen</h3>
+                        <div id="assigned-votes-list" class="space-y-3">
+                            <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
+                                (Hier erscheinen bald Umfragen, die dir zugewiesen wurden)
+                            </p>
+                        </div>
                     </div>
-                </div>
 
-            </div>
+                    <div class="mb-6">
+                        <h3 class="text-xl font-bold text-gray-800 mb-3">Öffentliche Umfragen</h3>
+                        <div id="public-votes-list" class="space-y-3">
+                            <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
+                                (Hier erscheinen bald öffentliche Umfragen)
+                            </p>
+                        </div>
+                    </div>
+                </div> <div id="terminplaner-create-view" class="hidden">
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center">
+                            <h2 class="text-2xl font-bold text-gray-800">Neue Gruppenumfrage</h2>
+                            <button id="cancel-vote-creation-btn"
+                                class="py-2 px-4 bg-gray-200 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition">
+                                Abbrechen
+                            </button>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">Finde den besten Termin für deine Gruppe.</p>
+                    </div>
 
+                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
+                        <div>
+                            <label for="vote-title" class="block text-sm font-bold text-gray-700 mb-1">Titel der
+                                Umfrage</label>
+                            <input type="text" id="vote-title"
+                                class="w-full p-2 border border-gray-300 rounded-lg"
+                                placeholder="z.B. Nächstes Team-Meeting">
+                        </div>
+                        <div>
+                            <label for="vote-description"
+                                class="block text-sm font-bold text-gray-700 mb-1">Beschreibung (Optional)</label>
+                            <textarea id="vote-description" rows="2"
+                                class="w-full p-2 border border-gray-300 rounded-lg"
+                                placeholder="z.B. Themen: Projekt-Update, Budget..."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6">
+                        <h3 class="text-lg font-bold text-gray-800 mb-3">Termine vorschlagen</h3>
+                        <div id="vote-dates-container" class="space-y-4">
+                            </div>
+                        <button id="vote-add-date-btn"
+                            class="w-full mt-4 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
+                            + Tag hinzufügen
+                        </button>
+                    </div>
+
+                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
+                        <h3 class="text-lg font-bold text-gray-800 mb-1">Einstellungen</h3>
+                        <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
+                            <input type="checkbox" id="vote-setting-public" class="h-5 w-5 rounded">
+                            <div>
+                                <span class="font-semibold text-gray-700">Öffentliche Umfrage</span>
+                                <p class="text-xs text-gray-500">Jeder (auch ohne Link) kann diese Umfrage in der
+                                    App sehen und teilnehmen.</p>
+                            </div>
+                        </label>
+                        <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
+                            <input type="checkbox" id="vote-setting-anonymous" class="h-5 w-5 rounded">
+                            <div>
+                                <span class="font-semibold text-gray-700">Anonyme Umfrage</span>
+                                <p class="text-xs text-gray-500">Teilnehmer müssen keinen Namen eingeben.</p>
+                            </div>
+                        </label>
+                    </div>
+
+                    <button id="vote-save-group-poll-btn"
+                        class="w-full py-3 bg-green-600 text-white font-bold text-lg rounded-lg hover:bg-green-700 transition shadow-lg">
+                        Umfrage erstellen und Link erhalten
+                    </button>
+
+                </div> </div>
+                
             <div id="userSelectionModal"
                 class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
                 <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-xs">
