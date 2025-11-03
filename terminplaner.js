@@ -1,5 +1,7 @@
-// NEU: Wir importieren die alertUser Funktion, um den Benutzer zu benachrichtigen
-import { alertUser } from './haupteingang.js';
+// NEU: Wir importieren die Datenbank-Tools, die wir brauchen
+import { alertUser, db, votesCollectionRef, currentUser } from './haupteingang.js';
+// NEU: Wir importieren die Firebase-Befehle zum Speichern und für Zeitstempel
+import { addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // Ein Zähler, damit jede Datums-Gruppe eine eindeutige ID hat
 let dateGroupIdCounter = 0;
@@ -38,7 +40,7 @@ export function initializeTerminplanerView() {
             closeModalButton.dataset.listenerAttached = 'true';
         }
 
-        // ----- NEU: Spione für die 4 Auswahl-Karten im Modal -----
+        // ----- Spione für die 4 Auswahl-Karten im Modal -----
         
         // Spion für "Gruppenumfrage"
         const groupPollButton = document.getElementById('select-vote-type-group');
@@ -59,7 +61,7 @@ export function initializeTerminplanerView() {
 
     }
 
-    // ----- NEU: Spione für den Erstellungs-Assistenten -----
+    // ----- Spione für den Erstellungs-Assistenten -----
     
     // Spion für den "Abbrechen"-Button im Assistenten
     const cancelCreationButton = document.getElementById('cancel-vote-creation-btn');
@@ -80,7 +82,6 @@ export function initializeTerminplanerView() {
     }
 
     // Spion für "+ Uhrzeit hinzufügen" und "Uhrzeit entfernen"
-    // Wir nutzen einen "delegierten" Spion, der auf den ganzen Datums-Container lauscht
     const datesContainer = document.getElementById('vote-dates-container');
     if (datesContainer && !datesContainer.dataset.clickListenerAttached) {
         datesContainer.addEventListener('click', (e) => {
@@ -111,22 +112,128 @@ export function initializeTerminplanerView() {
         datesContainer.dataset.clickListenerAttached = 'true';
     }
 
-    // Spion für den finalen "Umfrage erstellen"-Button
+    // NEU: Spion für den finalen "Umfrage erstellen"-Button
+    // Wir rufen jetzt unsere neue Speicher-Funktion auf
     const saveVoteButton = document.getElementById('vote-save-group-poll-btn');
     if (saveVoteButton && !saveVoteButton.dataset.listenerAttached) {
-        saveVoteButton.addEventListener('click', () => {
-            // HIER kommt später die ganze Speicher-Logik (Datenbank, Token erstellen)
-            // Fürs Erste:
-            console.log("Speichere Gruppenumfrage... (Logik fehlt noch)");
-            alertUser("Umfrage gespeichert! (Simulation)", "success");
-            showMainTerminplanerView(); // Zurück zur Hauptseite
-        });
+        saveVoteButton.addEventListener('click', saveGroupPoll); // <--- HIER IST DIE ÄNDERUNG
         saveVoteButton.dataset.listenerAttached = 'true';
     }
 }
 
 
-// ----- NEUE HELFER-FUNKTIONEN -----
+// ----- NEUE SPEICHER-FUNKTION -----
+
+/**
+ * Sammelt alle Daten aus dem "Gruppenumfrage"-Assistenten und speichert sie in Firebase.
+ */
+async function saveGroupPoll() {
+    const saveBtn = document.getElementById('vote-save-group-poll-btn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Wird gespeichert...';
+
+    try {
+        // 1. Grund-Daten sammeln
+        const title = document.getElementById('vote-title').value.trim();
+        const description = document.getElementById('vote-description').value.trim();
+        const isPublic = document.getElementById('vote-setting-public').checked;
+        const isAnonymous = document.getElementById('vote-setting-anonymous').checked;
+
+        // 2. Termine (Optionen) sammeln
+        const options = [];
+        const dateGroups = document.querySelectorAll('#vote-dates-container [data-date-group-id]');
+
+        let hasValidOption = false;
+
+        dateGroups.forEach(group => {
+            const dateInput = group.querySelector('.vote-date-input');
+            const dateValue = dateInput.value; // z.B. "2025-11-10"
+
+            if (dateValue) { // Nur wenn ein Datum gesetzt ist
+                const timeInputs = group.querySelectorAll('.vote-time-input');
+                timeInputs.forEach(timeInput => {
+                    const timeValue = timeInput.value; // z.B. "14:30"
+                    if (timeValue) { // Nur wenn eine Uhrzeit gesetzt ist
+                        options.push({
+                            date: dateValue,
+                            time: timeValue
+                        });
+                        hasValidOption = true;
+                    }
+                });
+            }
+        });
+
+        // 3. Validierung (Prüfen, ob alles Nötige da ist)
+        if (!title) {
+            // Wir "werfen" einen Fehler. Das 'catch' unten wird ihn fangen.
+            throw new Error("Bitte gib einen Titel für die Umfrage ein.");
+        }
+        if (!hasValidOption) {
+            throw new Error("Bitte füge mindestens einen gültigen Termin (Datum + Uhrzeit) hinzu.");
+        }
+
+        // 4. Token erstellen (mit unserer neuen Helfer-Funktion)
+        const token = generateVoteToken();
+
+        // 5. Das finale Daten-Objekt für Firebase erstellen
+        const voteData = {
+            title: title,
+            description: description,
+            type: 'group-poll', // Damit wir später wissen, dass es eine Gruppenumfrage ist
+            token: token,
+            isPublic: isPublic,
+            isAnonymous: isAnonymous,
+            createdBy: currentUser.displayName || currentUser.mode, // Wer hat's erstellt?
+            createdAt: serverTimestamp(), // Ein Zeitstempel von der Datenbank
+            options: options, // Unser Array mit den Terminen
+            participants: []  // Eine leere Liste, bereit für Teilnehmer
+        };
+
+        // 6. In Firebase speichern
+        // Wir warten (await), bis Firebase "fertig" sagt
+        console.log("Speichere Umfrage in Firebase...", voteData);
+        const docRef = await addDoc(votesCollectionRef, voteData);
+
+        // 7. Erfolg!
+        console.log(`Umfrage erstellt! ID: ${docRef.id}, Token: ${token}`);
+        // Wir zeigen dem Benutzer den Token. (Später können wir hier einen Link anzeigen)
+        alertUser(`Umfrage erstellt! Dein Token: ${token}`, "success");
+
+        showMainTerminplanerView(); // Zurück zur Hauptansicht
+
+    } catch (error) {
+        // Falls bei Schritt 3 oder 6 etwas schiefgeht, fangen wir den Fehler hier
+        console.error("Fehler beim Speichern der Umfrage:", error);
+        alertUser(error.message, "error"); // Zeige die Fehlermeldung (z.B. "Bitte gib einen Titel ein.")
+    
+    } finally {
+        // WICHTIG: Egal ob Erfolg oder Fehler, mache den Button wieder klickbar
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Umfrage erstellen und Link erhalten';
+    }
+}
+
+
+// ----- NEUE HELFER-FUNKTION: Token-Generator -----
+
+/**
+ * Erstellt einen 8-stelligen Zufalls-Token im Format XXXX - XXXX
+ */
+function generateVoteToken() {
+    // Wir nehmen nicht alle Zeichen, um Verwechslungen (wie O und 0) zu vermeiden
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ123456789';
+    let part1 = '';
+    let part2 = '';
+    for (let i = 0; i < 4; i++) {
+        part1 += chars.charAt(Math.floor(Math.random() * chars.length));
+        part2 += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `${part1} - ${part2}`;
+}
+
+
+// ----- BESTEHENDE HELFER-FUNKTIONEN (unverändert) -----
 
 // Zeigt den Assistenten an und versteckt die Hauptseite
 function showVoteCreationWizard() {
