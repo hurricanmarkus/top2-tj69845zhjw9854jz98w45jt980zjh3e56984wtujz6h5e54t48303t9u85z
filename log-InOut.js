@@ -2,15 +2,15 @@
 import { db, usersCollectionRef, setButtonLoading, adminSectionsState, modalUserButtons, ADMIN_ROLES, adminRolesCollectionRef, rolesCollectionRef, ROLES, alertUser, initialAuthCheckDone, currentUser, GUEST_MODE, adminSettings, CHECKLISTS, ADMIN_STORAGE_KEY, USERS, navigate, auth } from './haupteingang.js';
 import { renderModalUserButtons } from './admin_benutzersteuerung.js';
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
+import { listenForAssignedVotes, stopAssignedVotesListener } from './terminplaner.js';
 // ENDE-ZIKA //
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
-export async function checkCurrentUserValidity() { // Funktion ist async
+// In log-InOut.js
+export async function checkCurrentUserValidity() { 
     console.log("--- Prüfe Benutzerberechtigungen (V7 - Robuste Cache-Prüfung) ---");
 
-    // Prüfe zuerst, ob 'auth' initialisiert wurde
     if (!auth) {
         console.error("checkCurrentUserValidity: Auth-Instanz ist noch nicht initialisiert.");
         if (currentUser.mode !== GUEST_MODE) switchToGuestMode(false);
@@ -18,25 +18,17 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         return;
     }
 
-    const currentAuthUser = auth.currentUser; // Aktuellen Firebase Auth User holen
-    const storedAppUserId = localStorage.getItem(ADMIN_STORAGE_KEY); // z.B. "JASMIN"
+    const currentAuthUser = auth.currentUser; 
+    const storedAppUserId = localStorage.getItem(ADMIN_STORAGE_KEY); 
 
-
-    // =================================================================
-    // BEGINN DER KORREKTUR (Logout-Problem)
-    // =================================================================
-
-    // 1. Versuche, den Benutzer aus dem SCHNELLEN CACHE (USERS) zu holen
     let userFromFirestore = storedAppUserId && USERS ? USERS[storedAppUserId] : null;
-    let fetchedFromDB = false; // Ein Flag, das uns sagt, ob wir in der DB nachsehen mussten
+    let fetchedFromDB = false; 
 
-    // 2. Fall 1: Kein Firebase User angemeldet -> Gastmodus (bleibt gleich)
     if (!currentAuthUser) {
         console.log("checkCurrentUserValidity: Kein Firebase User angemeldet.");
         if (storedAppUserId || currentUser.mode !== GUEST_MODE) {
-            switchToGuestMode(false); // Ausloggen, falls nötig
+            switchToGuestMode(false); 
         }
-        // Stelle sicher, dass currentUser auf Gast gesetzt ist, falls noch nicht geschehen
         else if (currentUser.mode !== GUEST_MODE) {
              Object.keys(currentUser).forEach(key => delete currentUser[key]);
              Object.assign(currentUser, { displayName: GUEST_MODE, mode: GUEST_MODE, role: 'GUEST', permissions: [], adminPermissions: {} });
@@ -45,7 +37,6 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         return;
     }
 
-    // 3. Fall 2: Firebase User da, aber kein App User im Speicher?
     if (!storedAppUserId) {
          console.log("checkCurrentUserValidity: Firebase User vorhanden, aber kein App User im Speicher.");
          if (currentUser.mode !== GUEST_MODE) {
@@ -55,21 +46,18 @@ export async function checkCurrentUserValidity() { // Funktion ist async
          return;
     }
 
-    // 4. DER WICHTIGSTE FALL: App User ist im Speicher, aber NICHT im CACHE (USERS)
     if (storedAppUserId && !userFromFirestore) {
-        console.warn(`checkCurrentUserValidity: Benutzer ${storedAppUserId} nicht im Cache (USERS) gefunden. Cache ist vielleicht veraltet. Versuche Direkt-Abfrage aus DB...`);
+        console.warn(`checkCurrentUserValidity: Benutzer ${storedAppUserId} nicht im Cache (USERS) gefunden. Versuche Direkt-Abfrage...`);
         try {
-            // Wir fragen die DB direkt an
             const userDocRef = doc(usersCollectionRef, storedAppUserId);
             const docSnap = await getDoc(userDocRef);
 
             if (docSnap.exists()) {
-                console.log(`checkCurrentUserValidity: Direkt-Abfrage erfolgreich! Benutzer ${storedAppUserId} existiert.`);
+                console.log(`checkCurrentUserValidity: Direkt-Abfrage erfolgreich!`);
                 userFromFirestore = { id: docSnap.id, ...docSnap.data() };
-                fetchedFromDB = true; // Setze das Flag
+                fetchedFromDB = true; 
             } else {
-                // Der Benutzer existiert WIRKLICH nicht mehr (z.B. gelöscht)
-                console.error(`checkCurrentUserValidity: Direkt-Abfrage FEHLGESCHLAGEN. Benutzer ${storedAppUserId} existiert nicht in Firestore. Erzwinge Logout.`);
+                console.error(`checkCurrentUserValidity: Direkt-Abfrage FEHLGESCHLAGEN. Benutzer ${storedAppUserId} existiert nicht. Erzwinge Logout.`);
                  switchToGuestMode(true, "Ihr Benutzerkonto konnte nicht gefunden werden. Sie wurden abgemeldet.", 'error'); 
                  updateUIForMode();
                  return;
@@ -81,23 +69,14 @@ export async function checkCurrentUserValidity() { // Funktion ist async
             return;
         }
     }
-    // =================================================================
-    // ENDE DER KORREKTUR
-    // =================================================================
 
-
-    // Fall 5: User ist gefunden
-
-    // Fall 5.1: User ist gefunden, ABER als 'inaktiv' (gesperrt) markiert.
     if (!userFromFirestore.isActive) {
         console.warn("checkCurrentUserValidity: Benutzer ist als INAKTIV (gesperrt) markiert. Erzwinge Logout.");
         switchToGuestMode(true, "Ihr Konto wurde von einem Administrator gesperrt.", 'error_long');
         return; 
     }
 
-
-    // Fall 5.2: Firebase User ist da UND App User ("JASMIN") ist ausgewählt/gültig/AKTIV
-    console.log(`checkCurrentUserValidity: Firebase User ${currentAuthUser.uid} und App User ${storedAppUserId} vorhanden. (Aus DB geholt: ${fetchedFromDB})`);
+    console.log(`checkCurrentUserValidity: Firebase User ${currentAuthUser.uid} und App User ${storedAppUserId} vorhanden.`);
     try {
 
         const idTokenResult = await currentAuthUser.getIdToken(true); 
@@ -108,43 +87,33 @@ export async function checkCurrentUserValidity() { // Funktion ist async
         const user = userFromFirestore; 
         const effectiveRole = user.role; 
 
-        console.log(`Effektiver Benutzer-Typ (aus DB): ${user.permissionType}`);
-        console.log(`Effektiver Admin-Typ (aus DB): ${user.adminPermissionType}`);
-
         let userPermissions = [];
         let adminPermissions = {};
         let currentAssignedAdminRoleId = null; 
 
         // --- TEIL 1: Lade BENUTZER-Rechte ---
         if (user.permissionType === 'role') {
-            console.log(`Lade BENUTZER-Rechte für ROLLE: ${effectiveRole}`);
             if (effectiveRole && ROLES[effectiveRole]) {
                 userPermissions = [...(ROLES[effectiveRole].permissions || [])];
             }
         } 
         else if (user.permissionType === 'individual') {
-            console.log(`Lade INDIVIDUELLE BENUTZER-Rechte.`);
             userPermissions = [...(user.customPermissions || [])];
         }
-
         if (effectiveRole === 'SYSTEMADMIN') {
             userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
-            console.log("Systemadmin BENUTZER-Rechte geladen.");
         }
 
         // --- TEIL 2: Lade ADMIN-Rechte ---
         if (effectiveRole === 'ADMIN') {
             if (user.adminPermissionType === 'role' && user.assignedAdminRoleId && ADMIN_ROLES[user.assignedAdminRoleId]) {
-                console.log(`Lade ADMIN-Rechte von ROLLE: ${user.assignedAdminRoleId}`);
                 adminPermissions = ADMIN_ROLES[user.assignedAdminRoleId].permissions || {};
                 currentAssignedAdminRoleId = user.assignedAdminRoleId;
             } else {
-                console.log(`Lade INDIVIDUELLE ADMIN-Rechte.`);
                 adminPermissions = user.adminPermissions || {};
             }
         } 
         else if (effectiveRole === 'SYSTEMADMIN') {
-             console.log("Systemadmin ADMIN-Rechte geladen.");
              adminPermissions = {
                 canSeePasswords: true, canSeeUsers: true, canSeeApprovals: true, canViewLogs: true,
                 canSeeRoleManagement: true, canSeeMainFunctions: true, canEditUserRoles: true,
@@ -154,9 +123,6 @@ export async function checkCurrentUserValidity() { // Funktion ist async
                 canSeeSysadminLogs: true
             };
         }
-
-        console.log("Final zugewiesene BENUTZER-Berechtigungen:", userPermissions);
-        console.log("Final zugewiesene ADMIN-Berechtigungen:", Object.keys(adminPermissions));
 
         // Aktualisiere currentUser Objekt
         Object.keys(currentUser).forEach(key => delete currentUser[key]);
@@ -174,9 +140,10 @@ export async function checkCurrentUserValidity() { // Funktion ist async
 
         console.log("currentUser Objekt aktualisiert:", currentUser);
 
-        // HIER PASSIERT DAS LIVE-UPDATE:
-        // updateUIForMode() wird aufgerufen, NACHDEM die neuen
-        // adminPermissions in currentUser geladen wurden.
+        // NEU: Starte den Spion für "An mich zugewiesen"
+        // Wir übergeben die ID des eingeloggten Benutzers
+        listenForAssignedVotes(currentUser.mode);
+
         updateUIForMode(); 
 
         // Navigationsprüfung
@@ -195,7 +162,12 @@ export async function checkCurrentUserValidity() { // Funktion ist async
     }
 }
 
+// In log-InOut.js
 export function switchToGuestMode(showNotification = true, message = "Abgemeldet. Modus ist nun 'Gast'.", type = 'success') {
+    
+    // NEU: Stoppe den Spion für "An mich zugewiesen", da wir jetzt Gast sind
+    stopAssignedVotesListener();
+
     Object.keys(currentUser).forEach(key => delete currentUser[key]);
     Object.assign(currentUser, {
         displayName: GUEST_MODE,
@@ -207,10 +179,6 @@ export function switchToGuestMode(showNotification = true, message = "Abgemeldet
     updateUIForMode();
     navigate('home');
     
-    // HIER IST DIE ÄNDERUNG:
-    // Statt immer 'success' zu senden, verwenden wir jetzt den 'type'-Parameter,
-    // der an diese Funktion übergeben wird.
-    // Wenn kein Typ übergeben wird, ist der Standard 'success' (grün).
     if (showNotification) alertUser(message, type);
 }
 

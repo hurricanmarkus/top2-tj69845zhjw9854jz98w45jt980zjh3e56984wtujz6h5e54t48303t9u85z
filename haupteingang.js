@@ -14,7 +14,7 @@ import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists,
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
 import { renderUserKeyList } from './admin_benutzersteuerung.js'; 
 // NEU: Wir importieren die Start-Funktion aus deiner neuen Datei
-import { initializeTerminplanerView } from './terminplaner.js';
+import { initializeTerminplanerView, listenForPublicVotes } from './terminplaner.js';
 // // ENDE-ZIKA //
 
 
@@ -212,6 +212,7 @@ window.onload = function () {
     }
 };
 
+// In haupteingang.js
 async function initializeFirebase() {
     try {
         console.log("initializeFirebase: Starte Firebase Initialisierung...");
@@ -238,7 +239,6 @@ async function initializeFirebase() {
         approvalRequestsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'approval-requests');
         checklistStacksCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-stacks');
         checklistTemplatesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates');
-        // NEU: Wir definieren die Sammlung (Collection) für deine "votes" (Umfragen)
         votesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
 
 
@@ -309,8 +309,16 @@ async function initializeFirebase() {
                 listenForChecklistCategories();
                 listenForTemplates();
                 listenForStacks();
-                // NEU: Wir rufen die Start-Funktion für die neue Seite auf
                 initializeTerminplanerView();
+                
+                // NEU: Starte den Spion für öffentliche Umfragen
+                // (Wir müssen prüfen, ob die Funktion schon importiert wurde)
+                if (typeof listenForPublicVotes === 'function') {
+                    listenForPublicVotes();
+                } else {
+                    console.error("Fehler: listenForPublicVotes ist nicht importiert!");
+                }
+
 
             } catch (error) {
                 console.error("initializeFirebase: FEHLER beim Starten der Listener:", error);

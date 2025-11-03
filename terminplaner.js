@@ -1,16 +1,28 @@
-// NEU: Wir importieren 'doc' und 'updateDoc', um bestehende Umfragen zu ändern
-import { alertUser, db, votesCollectionRef, currentUser, setButtonLoading } from './haupteingang.js';
-import { addDoc, serverTimestamp, getDocs, query, where, doc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+// NEU: Wir importieren viel mehr Tools
+import { alertUser, db, votesCollectionRef, currentUser, setButtonLoading, GUEST_MODE } from './haupteingang.js';
+import { 
+    addDoc, 
+    serverTimestamp, 
+    getDocs, 
+    query, 
+    where, 
+    doc, 
+    updateDoc, 
+    onSnapshot, // NEU: Um live zuzuhören
+    orderBy,    // NEU: Zum Sortieren
+    limit       // NEU: Um die Anzahl zu begrenzen
+} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ----- Globale Variablen für den Zustand -----
 let dateGroupIdCounter = 0;
-// Hier merken wir uns die Umfrage, an der wir gerade teilnehmen
 let currentVoteData = null;
-// Hier merken wir uns, welche Option (Termin) wir gerade angeklickt haben
 let selectedOptionIndex = null;
-// NEU: Hier merken wir uns die Antworten für den aktuellen Teilnehmer
-// z.B. { 0: 'yes', 1: 'no', 2: 'maybe' } (Index: Antwort)
 let currentParticipantAnswers = {};
+
+// NEU: Globale Variablen, um unsere "Spione" (Listener) zu speichern,
+// damit wir sie auch wieder stoppen können.
+let unsubscribePublicVotes = null;
+let unsubscribeAssignedVotes = null;
 
 
 // Diese Funktion wird von haupteingang.js aufgerufen
@@ -30,7 +42,27 @@ export function initializeTerminplanerView() {
         joinVoteButton.dataset.listenerAttached = 'true';
     }
 
+    // ----- NEU: Delegierter Spion für die Listen -----
+    // Wir fügen einen Spion zur Hauptseite hinzu, der auf Klicks 
+    // auf die Umfrage-Karten in den Listen wartet.
+    const mainView = document.getElementById('terminplaner-main-view');
+    if (mainView && !mainView.dataset.listenerAttached) {
+        mainView.addEventListener('click', (e) => {
+            const pollCard = e.target.closest('.vote-list-item');
+            if (pollCard) {
+                const voteId = pollCard.dataset.voteId;
+                if (voteId) {
+                    console.log(`Klick auf Umfrage-Karte, ID: ${voteId}`);
+                    joinVoteById(voteId); // Rufe unsere neue Funktion auf
+                }
+            }
+        });
+        mainView.dataset.listenerAttached = 'true';
+    }
+
+
     // ----- Spione für das Modal (Pop-up Fenster) -----
+    // (Dieser Teil bleibt unverändert)
     const openModalButton = document.getElementById('show-create-vote-modal-btn');
     const closeModalButton = document.getElementById('close-create-vote-modal-btn');
     const modal = document.getElementById('createVoteModal');
@@ -44,7 +76,6 @@ export function initializeTerminplanerView() {
             });
             openModalButton.dataset.listenerAttached = 'true';
         }
-
         // "Schließen" (X)-Button
         if (!closeModalButton.dataset.listenerAttached) {
             closeModalButton.addEventListener('click', () => {
@@ -53,7 +84,6 @@ export function initializeTerminplanerView() {
             });
             closeModalButton.dataset.listenerAttached = 'true';
         }
-
         // Spion für "Gruppenumfrage"
         const groupPollButton = document.getElementById('select-vote-type-group');
         if (groupPollButton && !groupPollButton.dataset.listenerAttached) {
@@ -64,7 +94,6 @@ export function initializeTerminplanerView() {
             });
             groupPollButton.dataset.listenerAttached = 'true';
         }
-        
         // Platzhalter-Spione
         document.getElementById('select-vote-type-event')?.addEventListener('click', () => alertUser("Eventplaner ist noch nicht verfügbar.", "error"));
         document.getElementById('select-vote-type-1on1')?.addEventListener('click', () => alertUser("1:1 ist noch nicht verfügbar.", "error"));
@@ -72,8 +101,7 @@ export function initializeTerminplanerView() {
     }
 
     // ----- Spione für den Erstellungs-Assistenten -----
-    
-    // "Abbrechen"-Button im Assistenten
+    // (Dieser Teil bleibt unverändert)
     const cancelCreationButton = document.getElementById('cancel-vote-creation-btn');
     if (cancelCreationButton && !cancelCreationButton.dataset.listenerAttached) {
         cancelCreationButton.addEventListener('click', () => {
@@ -83,15 +111,11 @@ export function initializeTerminplanerView() {
         });
         cancelCreationButton.dataset.listenerAttached = 'true';
     }
-
-    // "+ Tag hinzufügen"-Button
     const addDateButton = document.getElementById('vote-add-date-btn');
     if (addDateButton && !addDateButton.dataset.listenerAttached) {
         addDateButton.addEventListener('click', addNewDateGroup);
         addDateButton.dataset.listenerAttached = 'true';
     }
-
-    // Delegierter Spion für "+ Uhrzeit" und "Uhrzeit entfernen"
     const datesContainer = document.getElementById('vote-dates-container');
     if (datesContainer && !datesContainer.dataset.clickListenerAttached) {
         datesContainer.addEventListener('click', (e) => {
@@ -115,8 +139,6 @@ export function initializeTerminplanerView() {
         });
         datesContainer.dataset.clickListenerAttached = 'true';
     }
-
-    // "Umfrage erstellen"-Button (Speichern)
     const saveVoteButton = document.getElementById('vote-save-group-poll-btn');
     if (saveVoteButton && !saveVoteButton.dataset.listenerAttached) {
         saveVoteButton.addEventListener('click', saveGroupPoll); 
@@ -124,37 +146,27 @@ export function initializeTerminplanerView() {
     }
 
     // ----- Spione für die Abstimmungs-Seite -----
-
-    // "Zurück"-Button auf der Abstimmungs-Seite
+    // (Dieser Teil bleibt unverändert)
     const cancelVoteButton = document.getElementById('cancel-vote-participation-btn');
     if (cancelVoteButton && !cancelVoteButton.dataset.listenerAttached) {
         cancelVoteButton.addEventListener('click', () => {
-            showView('main'); // Zurück zur Hauptseite
-            currentVoteData = null; // Vergiss die geladene Umfrage
+            showView('main'); 
+            currentVoteData = null; 
         });
         cancelVoteButton.dataset.listenerAttached = 'true';
     }
-
-    // NEU: Spione für die Ja/Nein/Vielleicht-Buttons
     document.querySelectorAll('.vote-answer-btn').forEach(btn => {
         if (!btn.dataset.listenerAttached) {
             btn.addEventListener('click', () => {
-                if (selectedOptionIndex === null) return; // Sollte nicht passieren, da Button disabled ist
-
-                const answer = btn.dataset.answer; // 'yes', 'maybe', oder 'no'
-                
-                // 1. Merke dir die Antwort
+                if (selectedOptionIndex === null) return; 
+                const answer = btn.dataset.answer; 
                 currentParticipantAnswers[selectedOptionIndex] = answer;
                 console.log("Antworten:", currentParticipantAnswers);
-
-                // 2. Aktualisiere die Tabelle sofort, um die Antwort anzuzeigen
                 updatePollTableAnswers(currentVoteData);
             });
             btn.dataset.listenerAttached = 'true';
         }
     });
-    
-    // NEU: Spion für den "Abstimmung speichern"-Button
     const saveParticipationButton = document.getElementById('vote-save-participation-btn');
     if (saveParticipationButton && !saveParticipationButton.dataset.listenerAttached) {
         saveParticipationButton.addEventListener('click', saveVoteParticipation);
@@ -163,13 +175,172 @@ export function initializeTerminplanerView() {
 }
 
 
-// ----- DATENBANK-FUNKTION (Umfrage suchen) -----
+// ----- NEU: SPION-FUNKTIONEN (Listener) -----
+
+/**
+ * Startet den Spion für ÖFFENTLICHE Umfragen.
+ * Diese Funktion wird von haupteingang.js aufgerufen.
+ */
+export function listenForPublicVotes() {
+    // Stoppe den alten Spion, falls er läuft
+    if (unsubscribePublicVotes) {
+        unsubscribePublicVotes();
+    }
+    
+    // Suche nach Umfragen, die 'isPublic' sind, sortiert nach Erstellungsdatum (neueste zuerst)
+    const q = query(
+        votesCollectionRef, 
+        where("isPublic", "==", true), 
+        orderBy("createdAt", "desc"), 
+        limit(20) // Zeige maximal die 20 neuesten
+    );
+
+    // Starte den neuen Spion
+    unsubscribePublicVotes = onSnapshot(q, (snapshot) => {
+        const votes = [];
+        snapshot.forEach(doc => {
+            votes.push({ id: doc.id, ...doc.data() });
+        });
+        renderPublicVotes(votes); // Übergebe die gefundenen Umfragen an die Render-Funktion
+    }, (error) => {
+        console.error("Fehler beim Lauschen auf öffentliche Umfragen:", error);
+    });
+}
+
+/**
+ * Startet den Spion für "An mich ZUGEWIESENE" Umfragen.
+ * "Zugewiesen" bedeutet hier: Du hast schon mal teilgenommen.
+ * Diese Funktion wird von log-InOut.js aufgerufen.
+ */
+export function listenForAssignedVotes(userId) {
+    // Stoppe den alten Spion
+    if (unsubscribeAssignedVotes) {
+        unsubscribeAssignedVotes();
+    }
+
+    // Wenn kein Benutzer angemeldet ist (z.B. Gast oder Logout),
+    // leere die Liste und starte keinen neuen Spion.
+    if (!userId || userId === GUEST_MODE) {
+        renderAssignedVotes([]); // Leere Liste rendern
+        return;
+    }
+
+    // Suche nach Umfragen, bei denen deine 'userId' in der Teilnehmer-ID-Liste ('participantIds') vorkommt
+    const q = query(
+        votesCollectionRef, 
+        where("participantIds", "array-contains", userId),
+        orderBy("createdAt", "desc"), 
+        limit(20)
+    );
+
+    // Starte den neuen Spion
+    unsubscribeAssignedVotes = onSnapshot(q, (snapshot) => {
+        const votes = [];
+        snapshot.forEach(doc => {
+            votes.push({ id: doc.id, ...doc.data() });
+        });
+        renderAssignedVotes(votes); // Übergebe die gefundenen Umfragen an die Render-Funktion
+    }, (error) => {
+        console.error("Fehler beim Lauschen auf zugewiesene Umfragen:", error);
+    });
+}
+
+/**
+ * Stoppt den "Zugewiesen"-Spion (wird bei Logout aufgerufen).
+ */
+export function stopAssignedVotesListener() {
+    if (unsubscribeAssignedVotes) {
+        unsubscribeAssignedVotes();
+        unsubscribeAssignedVotes = null;
+    }
+    renderAssignedVotes([]); // Leere die Liste
+}
+
+
+// ----- NEU: RENDER-FUNKTIONEN FÜR LISTEN -----
+
+/**
+ * Baut die HTML-Liste für "Öffentliche Umfragen"
+ */
+function renderPublicVotes(votes) {
+    const listContainer = document.getElementById('public-votes-list');
+    if (!listContainer) return;
+
+    if (votes.length === 0) {
+        listContainer.innerHTML = `
+            <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
+                Derzeit gibt es keine öffentlichen Umfragen.
+            </p>`;
+        return;
+    }
+
+    listContainer.innerHTML = votes.map(vote => {
+        const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
+        return `
+            <div class="vote-list-item card bg-white p-3 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:bg-indigo-50"
+                 data-vote-id="${vote.id}">
+                <div>
+                    <span class="font-bold text-indigo-700">${vote.title}</span>
+                    <span class="text-sm text-gray-500 ml-2">(${vote.participants?.length || 0} Teilnehmer)</span>
+                    <p class="text-xs text-gray-500">Erstellt von ${vote.createdBy} am ${niceDate}</p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600">
+                    <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" />
+                </svg>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Baut die HTML-Liste für "An mich zugewiesen"
+ */
+function renderAssignedVotes(votes) {
+    const listContainer = document.getElementById('assigned-votes-list');
+    if (!listContainer) return;
+    
+    // Wenn der Benutzer Gast ist, zeige eine andere Meldung
+    if (currentUser.mode === GUEST_MODE) {
+         listContainer.innerHTML = `
+            <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
+                Melde dich an, um Umfragen zu sehen, an denen du teilgenommen hast.
+            </p>`;
+        return;
+    }
+
+    if (votes.length === 0) {
+        listContainer.innerHTML = `
+            <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
+                Du hast noch an keiner Umfrage teilgenommen.
+            </p>`;
+        return;
+    }
+
+    listContainer.innerHTML = votes.map(vote => {
+        const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
+        return `
+            <div class="vote-list-item card bg-white p-3 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:bg-indigo-50"
+                 data-vote-id="${vote.id}">
+                <div>
+                    <span class="font-bold text-indigo-700">${vote.title}</span>
+                    <span class="text-sm text-gray-500 ml-2">(${vote.participants?.length || 0} Teilnehmer)</span>
+                    <p class="text-xs text-gray-500">Erstellt von ${vote.createdBy} am ${niceDate}</p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600">
+                    <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" />
+                </svg>
+            </div>
+        `;
+    }).join('');
+}
+
+
+// ----- DATENBANK-FUNKTION (Umfrage suchen per Token) -----
 async function joinVoteByToken() {
     const tokenInput = document.getElementById('vote-token-input');
     const joinBtn = document.getElementById('join-vote-by-token-btn');
     const token = tokenInput.value.trim().toUpperCase(); 
 
-    // Prüfung 1: Ist das Format gültig? (11 Zeichen)
     if (token.length !== 11 || token[4] !== ' ' || token[5] !== '-' || token[6] !== ' ') {
         alertUser("Ungültiges Token-Format. Es muss 'XXXX - XXXX' sein.", "error");
         return;
@@ -178,24 +349,18 @@ async function joinVoteByToken() {
     setButtonLoading(joinBtn, true); 
 
     try {
-        // Prüfung 2: Gibt es diese Umfrage in der Datenbank?
         const q = query(votesCollectionRef, where("token", "==", token));
         const snapshot = await getDocs(q);
 
         if (snapshot.empty) throw new Error("Umfrage nicht gefunden. Prüfe den Token.");
         if (snapshot.size > 1) throw new Error("Fehler: Mehrere Umfragen mit diesem Token gefunden. Admin kontaktieren.");
 
-        // Erfolg!
         const voteDoc = snapshot.docs[0];
         currentVoteData = { id: voteDoc.id, ...voteDoc.data() }; 
 
         console.log("Umfrage gefunden:", currentVoteData);
-
-        // Baue die Abstimmungs-Seite auf
         renderVoteView(currentVoteData);
-        // Zeige die Abstimmungs-Seite an
         showView('vote');
-        
         tokenInput.value = ''; 
 
     } catch (error) {
@@ -206,10 +371,48 @@ async function joinVoteByToken() {
     }
 }
 
+// ----- NEU: DATENBANK-FUNKTION (Umfrage suchen per ID) -----
+/**
+ * Sucht eine Umfrage basierend auf der Datenbank-ID (aus der Liste)
+ */
+async function joinVoteById(voteId) {
+    try {
+        // Wir müssen die Umfrage neu laden, falls sich in der Zwischenzeit
+        // etwas geändert hat (obwohl der Listener das tun sollte, ist dies sicherer).
+        
+        // Da wir 'onSnapshot' verwenden, sind die Daten in der Liste
+        // (publicVotes / assignedVotes) bereits aktuell.
+        // Wir müssen nicht extra zur Datenbank gehen.
+        
+        // Finde die Umfrage in den globalen Listen (die vom Spion gefüllt wurden)
+        // TODO: Das ist nicht ideal. Besser ist, die Daten direkt aus der DB zu holen.
+        
+        // BESSERER ANSATZ: Wir holen die Daten frisch aus der DB,
+        // um sicherzugehen, dass wir die aktuellsten Teilnehmer haben.
+        
+        const voteDocRef = doc(votesCollectionRef, voteId);
+        const voteDoc = await getDoc(voteDocRef); // NEU: Importiere 'getDoc'
+        
+        if (!voteDoc.exists()) {
+             throw new Error("Diese Umfrage existiert nicht mehr.");
+        }
+
+        currentVoteData = { id: voteDoc.id, ...voteDoc.data() }; 
+
+        console.log("Umfrage per ID geladen:", currentVoteData);
+        renderVoteView(currentVoteData);
+        showView('vote');
+        
+    } catch (error) {
+        console.error("Fehler beim Laden der Umfrage per ID:", error);
+        alertUser(error.message, "error");
+    }
+}
+
 
 // ----- RENDER-FUNKTION (Abstimmungs-Seite) -----
 function renderVoteView(voteData) {
-    // 1. Titel und Beschreibung setzen
+    // 1. Titel und Beschreibung
     document.getElementById('vote-poll-title').textContent = voteData.title;
     const descEl = document.getElementById('vote-poll-description');
     if (voteData.description) {
@@ -219,25 +422,23 @@ function renderVoteView(voteData) {
         descEl.classList.add('hidden');
     }
 
-    // 2. Namensfeld anzeigen/verstecken
+    // 2. Namensfeld
     const nameContainer = document.getElementById('vote-name-input-container');
     const nameInput = document.getElementById('vote-participant-name');
     
-    // NEU: Finde heraus, ob wir schon teilgenommen haben
     let existingParticipant = null;
-    if (currentUser.mode !== 'Gast') {
+    if (currentUser.mode !== GUEST_MODE) {
         existingParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
     }
-    // TODO: Später Logik für "Namen eingeben" und wiedererkennen
-
+    
     if (voteData.isAnonymous) {
         nameContainer.classList.add('hidden');
     } else {
         nameContainer.classList.remove('hidden');
         if (existingParticipant) {
             nameInput.value = existingParticipant.name;
-            nameInput.disabled = true; // Namen sperren, wenn man schon teilgenommen hat
-        } else if (currentUser.mode !== 'Gast') {
+            nameInput.disabled = true; 
+        } else if (currentUser.mode !== GUEST_MODE) {
             nameInput.value = currentUser.displayName;
             nameInput.disabled = false;
         } else {
@@ -246,17 +447,31 @@ function renderVoteView(voteData) {
         }
     }
     
-    // NEU: Lade die Antworten des bestehenden Teilnehmers
+    // 3. Antworten laden
     currentParticipantAnswers = {};
     if (existingParticipant) {
         currentParticipantAnswers = existingParticipant.answers;
     }
+    // WICHTIG: Setze den ausgewählten Termin zurück
+    selectedOptionIndex = null;
+    // Deaktiviere die Knöpfe, bis ein Termin geklickt wird
+    document.getElementById('vote-selected-option-text').textContent = "Bitte wähle einen Termin aus der Tabelle aus.";
+    document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.disabled = true);
 
-    // 3. Die Abstimmungs-Tabelle bauen
-    updatePollTableAnswers(voteData); // NEU: Ausgelagert in eigene Funktion
+
+    // 4. Die Abstimmungs-Tabelle bauen
+    updatePollTableAnswers(voteData); // Ausgelagert in eigene Funktion
     
-    // 4. Klick-Spione für die neuen Tabellen-Zeilen hinzufügen
+    // 5. Klick-Spione für die neuen Tabellen-Zeilen hinzufügen
     const optionsContainer = document.getElementById('vote-options-container');
+    
+    // Entferne alte Spione (sicherheitshalber)
+    optionsContainer.querySelectorAll('.vote-option-row').forEach(row => {
+         // Trick: Klonen, um alle alten Spione zu entfernen
+         row.replaceWith(row.cloneNode(true));
+    });
+    
+    // Füge Spione zu den neuen Zeilen hinzu
     optionsContainer.querySelectorAll('.vote-option-row').forEach(row => {
         row.addEventListener('click', () => {
             optionsContainer.querySelectorAll('.vote-option-row').forEach(r => r.classList.remove('bg-blue-200'));
@@ -272,20 +487,17 @@ function renderVoteView(voteData) {
                 
             document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.disabled = false);
             
-            // NEU: Markiere den Button, der der aktuellen Antwort entspricht
-            document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.classList.remove('ring-4'));
+            // Markiere den Button, der der aktuellen Antwort entspricht
+            document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.classList.remove('ring-4', 'ring-indigo-500'));
             const currentAnswer = currentParticipantAnswers[selectedOptionIndex];
             if (currentAnswer) {
-                document.querySelector(`.vote-answer-btn[data-answer="${currentAnswer}"]`)?.classList.add('ring-4');
+                document.querySelector(`.vote-answer-btn[data-answer="${currentAnswer}"]`)?.classList.add('ring-4', 'ring-indigo-500');
             }
         });
     });
 }
 
-// ----- NEU: Funktion zum Aktualisieren der Tabelle -----
-/**
- * Baut die Abstimmungs-Tabelle neu auf und füllt sie mit allen Antworten
- */
+// ----- Funktion zum Aktualisieren der Tabelle -----
 function updatePollTableAnswers(voteData) {
     const optionsContainer = document.getElementById('vote-options-container');
 
@@ -299,36 +511,39 @@ function updatePollTableAnswers(voteData) {
 
     let tableHTML = '<table class="w-full border-collapse text-sm text-left">';
     
-    // Kopfzeile der Tabelle (Termin + alle Teilnehmer)
+    // Kopfzeile der Tabelle
     tableHTML += '<thead><tr class="bg-gray-50">';
     tableHTML += '<th class="p-2 border-b sticky left-0 bg-gray-50 z-10">Termin</th>';
     
-    // NEU: Teilnehmer-Spalten
     voteData.participants.forEach(p => {
         tableHTML += `<th class="p-2 border-b text-center">${p.name}</th>`;
     });
-    // NEU: Spalte für den aktuellen (noch nicht gespeicherten) Benutzer
-    tableHTML += `<th class="p-2 border-b text-center font-bold text-indigo-600">Du</th>`;
+    
+    // "Du"-Spalte nur anzeigen, wenn der Benutzer nicht schon in der Liste ist
+    let showYouColumn = true;
+    if(currentUser.mode !== GUEST_MODE && voteData.participants.find(p => p.userId === currentUser.mode)) {
+        showYouColumn = false;
+    }
+    if (showYouColumn) {
+        tableHTML += `<th class="p-2 border-b text-center font-bold text-indigo-600">Du</th>`;
+    }
     
     tableHTML += '</tr></thead>';
 
-    // Zeilen der Tabelle (Termine)
+    // Zeilen der Tabelle
     tableHTML += '<tbody>';
     
     for (const date in optionsByDate) {
         const dateObj = new Date(date + 'T12:00:00'); 
         const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
 
-        // Datums-Trenn-Zeile
         tableHTML += `
             <tr class="bg-gray-100">
                 <td class="p-2 font-bold sticky left-0 bg-gray-100 z-10" colspan="${voteData.participants.length + 2}">${niceDate}</td>
             </tr>
         `;
 
-        // Uhrzeit-Zeilen
         optionsByDate[date].forEach(option => {
-            // Prüfen, ob DIESE Zeile gerade ausgewählt ist
             const isSelected = option.originalIndex === selectedOptionIndex;
             
             tableHTML += `
@@ -336,9 +551,9 @@ function updatePollTableAnswers(voteData) {
                     <td class="p-2 border-b font-mono sticky left-0 ${isSelected ? 'bg-blue-200' : 'bg-white'} z-10">${option.time} Uhr</td>
             `;
 
-            // NEU: Antworten der gespeicherten Teilnehmer
+            // Antworten der gespeicherten Teilnehmer
             voteData.participants.forEach(p => {
-                const answer = p.answers[option.originalIndex]; // z.B. 'yes', 'no', 'maybe'
+                const answer = p.answers[option.originalIndex]; 
                 let answerIcon = '';
                 if (answer === 'yes') answerIcon = '<span class="text-green-500 font-bold">✔</span>';
                 if (answer === 'no') answerIcon = '<span class="text-red-500 font-bold">✘</span>';
@@ -346,13 +561,15 @@ function updatePollTableAnswers(voteData) {
                 tableHTML += `<td class="p-2 border-b text-center">${answerIcon}</td>`;
             });
             
-            // NEU: Antwort des aktuellen Benutzers (noch nicht gespeichert)
-            const currentAnswer = currentParticipantAnswers[option.originalIndex];
-            let currentIcon = '';
-            if (currentAnswer === 'yes') currentIcon = '<span class="text-green-500 font-bold">✔</span>';
-            if (currentAnswer === 'no') currentIcon = '<span class="text-red-500 font-bold">✘</span>';
-            if (currentAnswer === 'maybe') currentIcon = '<span class="text-yellow-500 font-bold">?</span>';
-            tableHTML += `<td class="p-2 border-b text-center bg-indigo-50">${currentIcon}</td>`;
+            // Antwort des aktuellen Benutzers (noch nicht gespeichert)
+            if (showYouColumn) {
+                const currentAnswer = currentParticipantAnswers[option.originalIndex];
+                let currentIcon = '';
+                if (currentAnswer === 'yes') currentIcon = '<span class="text-green-500 font-bold">✔</span>';
+                if (currentAnswer === 'no') currentIcon = '<span class="text-red-500 font-bold">✘</span>';
+                if (currentAnswer === 'maybe') currentIcon = '<span class="text-yellow-500 font-bold">?</span>';
+                tableHTML += `<td class="p-2 border-b text-center bg-indigo-50">${currentIcon}</td>`;
+            }
 
             tableHTML += '</tr>';
         });
@@ -360,19 +577,15 @@ function updatePollTableAnswers(voteData) {
     
     tableHTML += '</tbody></table>';
     optionsContainer.innerHTML = tableHTML;
-    
-    // WICHTIG: Die Klick-Spione müssen neu hinzugefügt werden, da die Tabelle neu gebaut wurde
-    // (Aber wir machen das in renderVoteView, nicht hier, um Schleifen zu vermeiden)
 }
 
 
-// ----- NEU: DATENBANK-FUNKTION (Abstimmung speichern) -----
+// ----- DATENBANK-FUNKTION (Abstimmung speichern) -----
 async function saveVoteParticipation() {
     const saveBtn = document.getElementById('vote-save-participation-btn');
     const nameInput = document.getElementById('vote-participant-name');
     let participantName = nameInput.value.trim();
     
-    // 1. Validierung
     if (!currentVoteData) return alertUser("Fehler: Keine Umfrage geladen.", "error");
     
     if (!currentVoteData.isAnonymous && !participantName) {
@@ -380,10 +593,9 @@ async function saveVoteParticipation() {
     }
     
     if (currentVoteData.isAnonymous) {
-        participantName = "Anonym"; // Standard-Name für anonyme
+        participantName = "Anonym";
     }
     
-    // Prüfen, ob überhaupt Antworten gegeben wurden
     if (Object.keys(currentParticipantAnswers).length === 0) {
         return alertUser("Du hast noch für keinen Termin abgestimmt.", "error");
     }
@@ -391,28 +603,22 @@ async function saveVoteParticipation() {
     setButtonLoading(saveBtn, true);
 
     try {
-        // 2. Finde den Teilnehmer in der Liste
-        // Wir nutzen die 'userId' (z.B. "JASMIN") wenn eingeloggt, sonst den Namen
-        const participantId = (currentUser.mode !== 'Gast') ? currentUser.mode : participantName;
+        const participantId = (currentUser.mode !== GUEST_MODE) ? currentUser.mode : participantName;
         
         let existingParticipantIndex = -1;
         
-        if (currentUser.mode !== 'Gast') {
-             // Suche nach UserId (besser)
+        if (currentUser.mode !== GUEST_MODE) {
              existingParticipantIndex = currentVoteData.participants.findIndex(p => p.userId === participantId);
         } else if (!currentVoteData.isAnonymous) {
-             // Suche nach Name (nur wenn Gast und nicht anonym)
              existingParticipantIndex = currentVoteData.participants.findIndex(p => p.name === participantId);
         }
         
-        const newParticipantsArray = [...currentVoteData.participants]; // Kopie erstellen
+        const newParticipantsArray = [...currentVoteData.participants]; 
 
         if (existingParticipantIndex > -1) {
-            // A. Teilnehmer AKTUALISIEREN
             console.log("Aktualisiere Teilnehmer:", participantName);
             newParticipantsArray[existingParticipantIndex].answers = currentParticipantAnswers;
         } else {
-            // B. Teilnehmer HINZUFÜGEN
             console.log("Füge neuen Teilnehmer hinzu:", participantName);
             newParticipantsArray.push({
                 userId: participantId,
@@ -421,18 +627,22 @@ async function saveVoteParticipation() {
             });
         }
         
-        // 3. Datenbank-Update
+        // NEU: Erstelle die Liste der Teilnehmer-IDs für die Datenbank-Suche
+        const participantIds = newParticipantsArray.map(p => p.userId);
+        
+        // Datenbank-Update
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
         await updateDoc(voteDocRef, {
-            participants: newParticipantsArray
+            participants: newParticipantsArray,
+            participantIds: participantIds // <-- NEU: Diese Liste speichern wir mit ab
         });
         
-        // 4. Erfolg
         alertUser("Deine Abstimmung wurde gespeichert!", "success");
         
-        // 5. Lokale Daten aktualisieren und Ansicht neu laden
+        // Lokale Daten aktualisieren und Ansicht neu laden
         currentVoteData.participants = newParticipantsArray;
-        renderVoteView(currentVoteData); // Baut die Seite neu auf (mit der gespeicherten Antwort)
+        currentVoteData.participantIds = participantIds;
+        renderVoteView(currentVoteData); 
 
     } catch (error) {
         console.error("Fehler beim Speichern der Abstimmung:", error);
@@ -462,16 +672,12 @@ async function saveGroupPoll() {
         dateGroups.forEach(group => {
             const dateInput = group.querySelector('.vote-date-input');
             const dateValue = dateInput.value; 
-
             if (dateValue) { 
                 const timeInputs = group.querySelectorAll('.vote-time-input');
                 timeInputs.forEach(timeInput => {
                     const timeValue = timeInput.value; 
                     if (timeValue) { 
-                        options.push({
-                            date: dateValue,
-                            time: timeValue
-                        });
+                        options.push({ date: dateValue, time: timeValue });
                         hasValidOption = true;
                     }
                 });
@@ -493,7 +699,8 @@ async function saveGroupPoll() {
             createdBy: currentUser.displayName || currentUser.mode,
             createdAt: serverTimestamp(), 
             options: options, 
-            participants: []  
+            participants: [],
+            participantIds: [] // NEU: Leere ID-Liste beim Erstellen
         };
 
         console.log("Speichere Umfrage in Firebase...", voteData);
@@ -515,7 +722,7 @@ async function saveGroupPoll() {
 }
 
 
-// ----- HELFER-FUNKTIONEN (unverändert) -----
+// ----- HELFER-FUNKTIONEN -----
 
 function showView(viewName) { 
     document.getElementById('terminplaner-main-view').classList.add('hidden');
@@ -540,10 +747,6 @@ function resetCreateWizard() {
     document.getElementById('vote-setting-anonymous').checked = false;
     dateGroupIdCounter = 0;
     addNewDateGroup();
-}
-
-function showMainTerminplanerView() {
-    showView('main');
 }
 
 function generateVoteToken() {
@@ -573,7 +776,6 @@ function addNewDateGroup() {
     datesContainer.appendChild(newGroup);
 }
 
-// KORREKTUR: type="time" statt type"time"
 function createTimeInputHTML() {
     const timeGroup = document.createElement('div');
     timeGroup.className = 'flex items-center gap-2';
