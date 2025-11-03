@@ -13,6 +13,8 @@ import { PUSHOVER_TOKEN, RECIPIENT_KEYS } from './pushbenachrichtigung.js';
 import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, openTemplateModal, renderChecklistView, renderChecklistSettingsView, listenForTemplates, listenForStacks } from './checklist.js';
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
 import { renderUserKeyList } from './admin_benutzersteuerung.js'; 
+// NEU: Wir importieren die Start-Funktion aus deiner neuen Datei
+import { initializeTerminplanerView } from './terminplaner.js';
 // // ENDE-ZIKA //
 
 
@@ -55,7 +57,8 @@ export let checklistsCollectionRef, checklistItemsCollectionRef;
 export let checklistGroupsCollectionRef;
 export let checklistCategoriesCollectionRef;
 export let auth;
-export let usersCollectionRef, rolesCollectionRef, roleChangeRequestsCollectionRef, settingsDocRef, auditLogCollectionRef;
+// NEU: Wir fügen "votesCollectionRef" hinzu, wie von dir gewünscht (für "vote")
+export let usersCollectionRef, rolesCollectionRef, roleChangeRequestsCollectionRef, settingsDocRef, auditLogCollectionRef, votesCollectionRef;
 export let activeDisplayMode = 'gesamt';
 export let checklistStacksCollectionRef;
 export let checklistTemplatesCollectionRef;
@@ -76,28 +79,34 @@ export const ADMIN_STORAGE_KEY = 't2_user_mode';
 export const appId = typeof __app_id !== 'undefined' ? __app_id : '20LVob88b3ovXRUyX3ra';
 export const usingEnvConfig = typeof __firebase_config !== 'undefined' && __firebase_config;
 export const firebaseConfig = usingEnvConfig ? JSON.parse(__firebase_config) : firebaseConfigFromUser;
-export const views = { home: { id: 'homeView' }, entrance: { id: 'entranceView' }, pushover: { id: 'pushoverView' }, admin: { id: 'adminView' }, userSettings: { id: 'userSettingsView' }, checklist: { id: 'checklistView' }, checklistSettings: { id: 'checklistSettingsView' }, essensberechnung: { id: 'essensberechnungView' }, notrufSettings: { id: 'notrufSettingsView' } };
+
+// NEU: Wir fügen 'terminplaner' zu unserer Liste der bekannten Seiten (Views) hinzu
+export const views = { 
+    home: { id: 'homeView' }, 
+    entrance: { id: 'entranceView' }, 
+    pushover: { id: 'pushoverView' }, 
+    admin: { id: 'adminView' }, 
+    userSettings: { id: 'userSettingsView' }, 
+    checklist: { id: 'checklistView' }, 
+    checklistSettings: { id: 'checklistSettingsView' }, 
+    essensberechnung: { id: 'essensberechnungView' }, 
+    notrufSettings: { id: 'notrufSettingsView' },
+    terminplaner: { id: 'terminplanerView' } // <-- NEU HINZUGEFÜGT
+};
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
 
 export let currentMeal = {
     name: '',
     singleProducts: [], // { id, name, weight }
     recipes: [],        // { id, name, ingredients: [{...}] }
-
-    // Die "distribution" speichert jetzt die Eingaben des Benutzers, nicht das Ergebnis
     userInputDistribution: [], // { id, portionName, personId, personName, anzahl, productInputs: [{productId, mode, value}] }
-
-    // Hier speichern wir, ob der "Rest" berechnet werden soll
     calculateRest: false,
-
-    // Das Endergebnis der Berechnung wird separat gespeichert
     finalDistribution: []
 };
 
 export let notrufSettings = {
     modes: [],
     contacts: [],
-    // Stelle sicher, dass flicAssignments immer existiert
     flicAssignments: { einfach: null, doppel: null, halten: null },
     apiTokens: [],
     sounds: []
@@ -156,7 +165,6 @@ window.onload = function () {
     const adminRightsSection = document.getElementById('adminRightsSection');
     adminRightsToggle = document.getElementById('adminRightsToggle');
     submitAdminKeyButton = document.getElementById('submitAdminKeyButton');
-    // console.log("Wert von submitAdminKeyButton IN window.onload:", submitAdminKeyButton); // Logging entfernt
     const adminRightsArea = document.getElementById('adminRightsArea');
     const adminRightsToggleIcon = document.getElementById('adminRightsToggleIcon');
     const roleManagementSection = document.getElementById('roleManagementSection');
@@ -230,6 +238,8 @@ async function initializeFirebase() {
         approvalRequestsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'approval-requests');
         checklistStacksCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-stacks');
         checklistTemplatesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates');
+        // NEU: Wir definieren die Sammlung (Collection) für deine "votes" (Umfragen)
+        votesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
 
 
         console.log("initializeFirebase: Versuche anonyme Anmeldung...");
@@ -249,8 +259,6 @@ async function initializeFirebase() {
             if (user && !window.firebaseFunctionsInitialised) {
                 const { getFunctions, httpsCallable } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js");
                 const functions = getFunctions(app);
-                // setRoleClaim muss jetzt manuell im window-Objekt verfügbar gemacht werden,
-                // da es global von handleLogin benötigt wird, die Funktion aber nur im onAuthStateChanged erstellt werden kann.
                 window.setRoleClaim = httpsCallable(functions, 'setRoleClaim'); 
                 window.firebaseFunctionsInitialised = true;
                 console.log("Firebase Functions initialisiert und global verfügbar gemacht.");
@@ -266,7 +274,6 @@ async function initializeFirebase() {
                 onSnapshot(settingsDocRef, (docSnap) => { 
                     if (docSnap.exists()) {
                         adminSettings = docSnap.data();
-                         // console.log("Admin Settings geladen:", adminSettings); // Logging entfernt
                     } else {
                         console.warn("Firebase App Settings Document 'main' not found.");
                         adminSettings = {};
@@ -278,7 +285,6 @@ async function initializeFirebase() {
                 onSnapshot(notrufSettingsDocRef, (docSnap) => {
                      if (docSnap.exists()) {
                          notrufSettings = docSnap.data();
-                         // console.log("Notruf Settings geladen"); // Logging entfernt
                          if (!notrufSettings.modes) notrufSettings.modes = [];
                          if (!notrufSettings.contacts) notrufSettings.contacts = [];
                          if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
@@ -303,7 +309,8 @@ async function initializeFirebase() {
                 listenForChecklistCategories();
                 listenForTemplates();
                 listenForStacks();
-                // console.log("initializeFirebase: Alle Listener-Funktionen aufgerufen."); // Logging entfernt
+                // NEU: Wir rufen die Start-Funktion für die neue Seite auf
+                initializeTerminplanerView();
 
             } catch (error) {
                 console.error("initializeFirebase: FEHLER beim Starten der Listener:", error);
@@ -321,13 +328,11 @@ async function initializeFirebase() {
                  initialAuthCheckDone = true;
                  updateUIForMode(); 
             }
-             // console.log("initializeFirebase: Ende des onAuthStateChanged Callbacks."); // Logging entfernt
         }); // Ende onAuthStateChanged
     } catch (error) {
         console.error("initializeFirebase: FEHLER bei der grundlegenden Firebase Initialisierung:", error);
         alertUser("Firebase konnte nicht initialisiert werden.", "error");
     }
-     // console.log("initializeFirebase: Funktion komplett beendet."); // Logging entfernt
 }
 
 // --- HIER ENDET DIE FUNKTION ZUM ERSETZEN ---
@@ -365,57 +370,41 @@ async function seedInitialData() {
         // --- 3. Benutzerprüfung und -erstellung ---
         const usersSnapshot = await getDocs(usersCollectionRef);
         if (usersSnapshot.empty) {
-            // Dies ist der Schreibvorgang, der den Fehler auslöst.
-            // Er wird nur ausgeführt, wenn die Sammlung leer ist.
             await setDoc(doc(usersCollectionRef, 'SYSTEMADMIN'), { name: 'Systemadmin', key: 'top2sys', role: 'SYSTEMADMIN', isActive: true });
         }
     } catch (error) {
-        // Logging anpassen, um die Fehlerquelle besser zu identifizieren
         console.error("SCHWERER FEHLER in seedInitialData (Datenbank-Setup):", error);
         throw error;
     }
 }
 
 export function alertUser(message, type) {
-    // 1. Dauer und Farbe bestimmen (Standard ist Erfolg)
-    let duration = 3000; // Standard-Dauer: 3 Sekunden
-    let colorClass = 'bg-green-600'; // Standard-Farbe: Grün ('success')
+    let duration = 3000; 
+    let colorClass = 'bg-green-600'; 
 
-    // 2. Prüfen, ob ein anderer Typ gewünscht ist
     if (type === 'error') {
-        // Normaler Fehler: Rot, 3 Sekunden
         colorClass = 'bg-red-600';
         duration = 3000;
     } else if (type === 'error_long') {
-        // DEIN NEUER WUNSCH: Langer Fehler (für Sperrung)
-        // Rote Farbe
         colorClass = 'bg-red-600';
-        // 3-fache Dauer (3000ms * 3 = 9000ms)
         duration = 9000;
     } else if (type === 'success') {
-        // Normaler Erfolg (nur zur Sicherheit)
         colorClass = 'bg-green-600';
         duration = 3000;
     }
-    // (Wenn 'type' unbekannt ist, bleibt es beim Standard: Grün, 3 Sek)
 
-
-    // 3. Alert-Element erstellen (Dieser Teil bleibt wie vorher)
     const tempAlert = document.createElement('div');
     tempAlert.textContent = message;
     
-    // 4. Die neuen, variablen Klassen (colorClass) zuweisen
     tempAlert.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 rounded-xl text-white font-bold shadow-lg transition-opacity duration-300 z-50 text-center ${colorClass}`;
     
-    // 5. Alert anzeigen (Dieser Teil bleibt wie vorher)
     document.body.appendChild(tempAlert);
     setTimeout(() => tempAlert.style.opacity = '1', 10);
 
-    // 6. Alert ausblenden (Dieser Teil nutzt jetzt die neue 'duration')
     setTimeout(() => {
         tempAlert.style.opacity = '0';
         setTimeout(() => tempAlert.remove(), 300);
-    }, duration); // <-- Hier wird die neue Dauer (3000 oder 9000) verwendet
+    }, duration); 
 }
 
 export function setButtonLoading(button, isLoading) {
@@ -437,26 +426,28 @@ export function navigate(targetViewName) {
     // Berechtigungsprüfung (bleibt gleich)
     const userPermissions = currentUser.permissions || [];
     const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'SYSTEMADMIN';
-    // ... (alle Berechtigungsprüfungen bleiben hier) ...
-    if (targetViewName === 'entrance' && !userPermissions.includes('ENTRANCE')) return alertUser("Zugriff verweigert (Eingang).", 'error');
-    if (targetViewName === 'pushover' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Push).", 'error');
-    if (targetViewName === 'checklist' && !userPermissions.includes('CHECKLIST')) return alertUser("Zugriff verweigert (Checkliste).", 'error');
-    if (targetViewName === 'checklistSettings' && !userPermissions.includes('CHECKLIST_SETTINGS')) return alertUser("Zugriff verweigert (Checklisten-Einstellungen).", 'error');
-    if (targetViewName === 'essensberechnung' && !userPermissions.includes('ESSENSBERECHNUNG')) return alertUser("Zugriff verweigert (Essensberechnung).", 'error');
+    
+    // NEU: Wir machen eine Ausnahme für 'terminplaner'.
+    // Diese Seite darf immer aufgerufen werden (für den Token-Beitritt).
+    if (targetViewName !== 'terminplaner') {
+        if (targetViewName === 'entrance' && !userPermissions.includes('ENTRANCE')) return alertUser("Zugriff verweigert (Eingang).", 'error');
+        if (targetViewName === 'pushover' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Push).", 'error');
+        if (targetViewName === 'checklist' && !userPermissions.includes('CHECKLIST')) return alertUser("Zugriff verweigert (Checkliste).", 'error');
+        if (targetViewName === 'checklistSettings' && !userPermissions.includes('CHECKLIST_SETTINGS')) return alertUser("Zugriff verweigert (Checklisten-Einstellungen).", 'error');
+        if (targetViewName === 'essensberechnung' && !userPermissions.includes('ESSENSBERECHNUNG')) return alertUser("Zugriff verweigert (Essensberechnung).", 'error');
 
-    if (targetViewName === 'admin') {
-        const isAdminRole = currentUser.role === 'ADMIN' || currentUser.role === 'SYSTEMADMIN'; // Echte Rolle
-        const isIndividualAdminDisplay = currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN'; // Individuell mit Admin-Anzeige
-        const allowAdminAccess = isAdminRole || isIndividualAdminDisplay; // Zugriff erlauben, wenn eine Bedingung zutrifft
+        if (targetViewName === 'admin') {
+            const isAdminRole = currentUser.role === 'ADMIN' || currentUser.role === 'SYSTEMADMIN'; 
+            const isIndividualAdminDisplay = currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN'; 
+            const allowAdminAccess = isAdminRole || isIndividualAdminDisplay; 
 
-        if (!allowAdminAccess) {
-            // Nur wenn KEINE der Bedingungen zutrifft, Zugriff verweigern
-            return alertUser("Zugriff verweigert (Admin).", 'error');
+            if (!allowAdminAccess) {
+                return alertUser("Zugriff verweigert (Admin).", 'error');
+            }
         }
-        // Wenn allowAdminAccess true ist, wird der Code nach dem if-Block normal weiter ausgeführt.
+        if (targetViewName === 'notrufSettings' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Notruf-Einstellungen).", 'error');
     }
-
-    if (targetViewName === 'notrufSettings' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Notruf-Einstellungen).", 'error');
+    // HIER ENDET DIE AUSNAHME
 
 
     // Scroll zum Anfang
@@ -480,7 +471,6 @@ export function navigate(targetViewName) {
 
     // View-spezifische Initialisierungen
     if (targetViewName === 'userSettings') {
-        // ... (Code für userSettings bleibt gleich) ...
         const userNameEl = document.getElementById('userSettingsName');
         const userKeyDisplayEl = document.getElementById('currentUserKeyDisplay');
         if (userNameEl) userNameEl.textContent = `Passwort für ${currentUser.displayName} ändern`;
@@ -493,9 +483,8 @@ export function navigate(targetViewName) {
     if (targetViewName === 'essensberechnung') {
         initializeEssensberechnungView();
     }
-    // === WICHTIG: Ruft die importierte Funktion auf ===
     if (targetViewName === 'notrufSettings') {
-        initializeNotrufSettingsView(); // Ruft die Initialisierung aus notfall.js auf
+        initializeNotrufSettingsView(); 
     }
     if (targetViewName === 'checklist') {
         const defaultListId = adminSettings.defaultChecklistId;
@@ -508,14 +497,15 @@ export function navigate(targetViewName) {
         Object.keys(adminSectionsState).forEach(key => adminSectionsState[key] = false);
         toggleAdminSection(null);
     }
+    
+    // NEU: Wir müssen nichts tun, wenn 'terminplaner' aufgerufen wird,
+    // da die Initialisierung schon in initializeFirebase() passiert.
 }
 
 export function setupEventListeners() {
     // Sicherstellen, dass die Elemente existieren, bevor Listener hinzugefügt werden
     if (!appHeader || !document.querySelector('.main-content') || !document.getElementById('entranceCard')) {
         console.warn("setupEventListeners: Wichtige Elemente noch nicht bereit, versuche später erneut.");
-        // Optional: setTimeout hinzufügen, wenn das Problem häufiger auftritt
-        // setTimeout(setupEventListeners, 100);
         return;
     }
     console.log("setupEventListeners: Füge Basis-Listener hinzu...");
@@ -554,10 +544,15 @@ export function setupEventListeners() {
     if (essensberechnungCard) essensberechnungCard.addEventListener('click', () => navigate('essensberechnung'));
 
     const currentChecklistCard = document.getElementById('currentChecklistCard');
-    if (currentChecklistCard) currentChecklistCard.addEventListener('click', () => navigate('checklist')); // Navigiert zur Default-Liste
+    if (currentChecklistCard) currentChecklistCard.addEventListener('click', () => navigate('checklist')); 
 
     const checklistSettingsCard = document.getElementById('checklistSettingsCard');
     if (checklistSettingsCard) checklistSettingsCard.addEventListener('click', () => navigate('checklistSettings'));
+
+    // NEU: Wir fügen den Listener für deine neue Terminplaner-Karte hinzu
+    const terminplanerCard = document.getElementById('terminplanerCard');
+    if (terminplanerCard) terminplanerCard.addEventListener('click', () => navigate('terminplaner'));
+
 
     // --- Modals (Login, Archived Lists etc.) ---
     const cancelSelectionButton = document.getElementById('cancelSelectionButton');
@@ -719,7 +714,7 @@ const handleLogin = async () => {
             const buttonEl = e.currentTarget;
             const delay = parseInt(buttonEl.dataset.delay, 10);
             const buttonTextEl = buttonEl.querySelector('.button-text');
-            if (!buttonTextEl || isNaN(delay)) return; // Abbruch bei fehlenden Elementen/ungültigem Delay
+            if (!buttonTextEl || isNaN(delay)) return; 
             const originalText = buttonTextEl.textContent;
 
             const sendRequest = async () => {
@@ -773,7 +768,6 @@ const handleLogin = async () => {
 
             const formData = new FormData();
             formData.append('token', PUSHOVER_TOKEN);
-            // Stelle sicher, dass RECIPIENT_KEYS definiert ist und den Wert enthält
             const recipientKey = RECIPIENT_KEYS ? RECIPIENT_KEYS[recipientSelect.value] : null;
             if (!recipientKey) {
                 alertUser('Fehler: Empfänger-Schlüssel nicht gefunden.', 'error');
@@ -838,7 +832,7 @@ const handleLogin = async () => {
     }
 
     const archivedListsContainer = document.getElementById('archivedListsContainer');
-    if (archivedListsContainer && !archivedListsContainer.dataset.listenerAttached) { // Verhindert doppelte Listener
+    if (archivedListsContainer && !archivedListsContainer.dataset.listenerAttached) { 
         archivedListsContainer.addEventListener('click', async (e) => {
             const restoreBtn = e.target.closest('.restore-archived-btn');
             const deleteBtn = e.target.closest('.delete-archived-btn');
@@ -874,15 +868,13 @@ const handleLogin = async () => {
                 }
             }
         });
-        archivedListsContainer.dataset.listenerAttached = 'true'; // Markieren, dass Listener hinzugefügt wurde
+        archivedListsContainer.dataset.listenerAttached = 'true'; 
     }
 
     // --- API Token Modal ---
     const apiTokenModal = document.getElementById('apiTokenBookModal');
     if (apiTokenModal && !apiTokenModal.dataset.listenerAttached) {
-        apiTokenModal.addEventListener('click', async (e) => {
-            // ... (Inhalt des Listeners bleibt gleich wie in der vorherigen Antwort) ...
-        });
+        // ... (Inhalt des Listeners bleibt gleich) ...
         apiTokenModal.dataset.listenerAttached = 'true';
     }
 
@@ -890,7 +882,7 @@ const handleLogin = async () => {
     // --- Sound Book Modal ---
     const soundModal = document.getElementById('soundBookModal');
     if (soundModal && !soundModal.dataset.listenerAttached) {
-        // ... (Inhalt des Listeners bleibt gleich wie in der vorherigen Antwort) ...
+        // ... (Inhalt des Listeners bleibt gleich) ...
         soundModal.dataset.listenerAttached = 'true';
     }
 

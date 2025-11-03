@@ -243,6 +243,23 @@ export function updateUIForMode() {
         }
     });
 
+    // --- NEU: Sichtbarkeit für die Terminplaner-Karte ---
+    // Wir holen uns die neue Karte
+    const terminplanerCard = document.getElementById('terminplanerCard');
+    if (terminplanerCard) {
+        // Wir prüfen, ob der Benutzer NICHT der Gast ist
+        // (Genau wie du es wolltest: "nur dann angezeigt, wenn man eingeloggt ist")
+        if (currentUser.mode !== GUEST_MODE) {
+            terminplanerCard.style.display = 'flex'; // Zeige sie als 'flex' (wie die anderen Karten)
+            terminplanerCard.classList.remove('hidden');
+        } else {
+            terminplanerCard.style.display = 'none'; // Verstecke sie für Gäste
+            terminplanerCard.classList.add('hidden');
+        }
+    }
+    // --- ENDE NEUER TEIL ---
+
+
     // Zeige/Verstecke Einstellungs- und Admin-Knopf auf der Startseite
     // --- KORRIGIERTE LOGIK für Einstellungs- und Admin-Button ---
     const settingsButton = document.getElementById('mainSettingsButton');
@@ -339,21 +356,7 @@ export function updateUIForMode() {
     if (currentUser.mode === GUEST_MODE) {
         if (guestPrompt) guestPrompt.style.display = 'block';
         
-    // =================================================================
-    // BEGINN DER KORREKTUR (Das ist dein Fehler)
-    // =================================================================
-    // ALT: } else if (currentUser.permissions?.length === 0 && !isAdmin && !isSysAdmin) {
-    // NEU: Wir entfernen die Prüfung "!isAdmin".
     } else if (currentUser.permissions?.length === 0 && !isSysAdmin) { 
-        // Diese Bedingung bedeutet:
-        // "Wenn der Benutzer KEIN Gast ist (sonst wäre er im 'if' davor),
-        // UND er KEINE Benutzer-Rechte hat (permissions.length === 0),
-        // UND er KEIN System-Admin ist (weil die immer Rechte haben),
-        // DANN zeige die Warnung."
-        // Das trifft jetzt auch auf Jasmin zu.
-    // =================================================================
-    // ENDE DER KORREKTUR
-    // =================================================================
         if (noPermissionPrompt) noPermissionPrompt.style.display = 'block';
     }
 
@@ -391,12 +394,8 @@ export function updateUIForMode() {
         loginButton.textContent = 'Anmelden';
         loginButton.className = 'font-bold text-indigo-400 hover:text-indigo-300';
 
-        // --- HIER DIE KORREKTUR ---
-        // Der onclick-Handler öffnet jetzt NUR NOCH das Modal.
-        // Das Befüllen passiert automatisch durch listenForUserUpdates.
         loginButton.onclick = () => {
             console.log("Anmelden-Button geklickt! Zeige Modal."); // Spion
-            // renderModalUserButtons(); // <<< RAUS DAMIT!
             const userSelectionModal = document.getElementById('userSelectionModal');
             if (userSelectionModal) {
                 userSelectionModal.style.display = 'flex';
@@ -404,37 +403,29 @@ export function updateUIForMode() {
                 console.error("FEHLER: Konnte #userSelectionModal nicht finden!"); // Spion
             }
         };
-        // --- ENDE KORREKTUR ---
 
         footerLogout.appendChild(loginButton);
     } else {
-        // Code zum Anzeigen des eingeloggten Benutzers und Logout-Button
-
         // Code zum Anzeigen des eingeloggten Benutzers und Logout-Button
         const user = USERS ? USERS[currentUser.mode] : null; // Sicherer Zugriff auf USERS
         let roleNameToDisplay = 'Unbekannt';
         let roleColor = 'text-gray-300'; // Standardfarbe
 
-        // --- KORRIGIERTE LOGIK FÜR ROLLENANZEIGE ---
 if (user) { 
             const actualRole = user.role; 
             const displayRole = user.displayRole; 
             const permissionType = user.permissionType || 'role'; 
             
-            // Bestimme die effektive Rolle für die ANZEIGE
-            // (Dank Schritt 1 ist actualRole jetzt korrekt)
             const effectiveDisplayRoleId = (permissionType === 'individual' && displayRole) ? displayRole : actualRole;
             const roleObject = ROLES[effectiveDisplayRoleId] || ROLES['NO_RIGHTS'];
 
             roleNameToDisplay = roleObject.name || 'Keine Rechte';
             
-            // Setze Farbe basierend auf effektiver Anzeige-Rolle
             if (effectiveDisplayRoleId === 'SYSTEMADMIN') roleColor = 'text-purple-400 font-bold';
             else if (effectiveDisplayRoleId === 'ADMIN') roleColor = 'text-red-400 font-bold';
             else if (effectiveDisplayRoleId === 'NO_RIGHTS') roleColor = 'text-gray-300 italic';
             else roleColor = 'text-gray-300';
         }
-        // --- ENDE KORREKTUR ---
 
         const realNamePart = user?.realName ? `<span class="text-gray-400 italic text-xs ml-1">(${(typeof escapeHtml === 'function' ? escapeHtml(user.realName) : user.realName)})</span>` : '';
         const displayName = (typeof escapeHtml === 'function' ? escapeHtml(currentUser.displayName || userMode) : (currentUser.displayName || userMode));
