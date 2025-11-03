@@ -39,7 +39,7 @@ export function initializeTerminplanerView() {
     // ----- Spion für den "Teilnehmen"-Button -----
     const joinVoteButton = document.getElementById('join-vote-by-token-btn');
     if (joinVoteButton && !joinVoteButton.dataset.listenerAttached) {
-        joinVoteButton.addEventListener('click', joinVoteByToken); 
+        joinVoteButton.addEventListener('click', () => joinVoteByToken(null)); // NEU: null übergeben
         joinVoteButton.dataset.listenerAttached = 'true';
     }
 
@@ -215,14 +215,14 @@ export function initializeTerminplanerView() {
                 switchToEditMode();
             }
 
-            // NEU: Fall 4: Klick auf Token-Kopier-Knopf
+            // Fall 4: Klick auf Token-Kopier-Knopf
             const copyTokenBtn = e.target.closest('#copy-vote-token-btn');
             if (copyTokenBtn) {
                 const token = document.getElementById('vote-share-token').textContent;
                 copyToClipboard(token, "Token kopiert!");
             }
 
-            // NEU: Fall 5: Klick auf URL-Kopier-Knopf
+            // Fall 5: Klick auf URL-Kopier-Knopf
             const copyUrlBtn = e.target.closest('#copy-vote-url-btn');
             if (copyUrlBtn) {
                 const url = document.getElementById('vote-share-url').value;
@@ -403,7 +403,6 @@ function renderAssignedVotes(votes) {
 
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per Token) -----
-// (ANGEPASST: Nimmt jetzt optional einen Token entgegen)
 async function joinVoteByToken(tokenFromUrl = null) {
     const tokenInput = document.getElementById('vote-token-input');
     const joinBtn = document.getElementById('join-vote-by-token-btn');
@@ -446,14 +445,12 @@ async function joinVoteByToken(tokenFromUrl = null) {
 }
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per ID) -----
-// (ANGEPASST: Nimmt jetzt optional ID entgegen)
 async function joinVoteById(voteId = null) {
     try {
         if (!voteId) {
-            // NEU: Wenn ID aus URL kommt, hole sie
             const urlParams = new URLSearchParams(window.location.search);
             voteId = urlParams.get('vote_id');
-            if (!voteId) return; // Kein ID in URL, nichts zu tun
+            if (!voteId) return; 
         }
         
         const voteDocRef = doc(votesCollectionRef, voteId);
@@ -481,9 +478,6 @@ async function joinVoteById(voteId = null) {
 
 
 // ----- RENDER-FUNKTION (Abstimmungs-Seite) -----
-/**
- * Baut die Abstimmungs-Seite (Tabelle) basierend auf den Umfragedaten auf.
- */
 function renderVoteView(voteData) {
     
     // 1. Titel und Ersteller (ZENTRIERT)
@@ -492,11 +486,10 @@ function renderVoteView(voteData) {
     const creatorName = creatorUser ? creatorUser.realName : voteData.createdByName; 
     document.getElementById('vote-poll-creator').textContent = `Erstellt von ${creatorName}`;
 
-    // 2. NEU: Share-Box füllen
+    // 2. Share-Box füllen
     document.getElementById('vote-share-token').textContent = voteData.token;
-    // Baue die URL zusammen
-    const baseUrl = window.location.origin + window.location.pathname; // z.B. https://app.com/index.html
-    const directUrl = `${baseUrl}?vote_id=${currentVoteData.id}`; // z.B. ...index.html?vote_id=ABC123
+    const baseUrl = window.location.origin + window.location.pathname; 
+    const directUrl = `${baseUrl}?vote_id=${currentVoteData.id}`; 
     document.getElementById('vote-share-url').value = directUrl;
 
 
@@ -669,8 +662,10 @@ function updatePollTableAnswers(voteData, isEditable = false) {
     
     if (currentUser.mode !== GUEST_MODE && !voteData.isAnonymous) {
         if (youParticipant) {
+            // User hat schon teilgenommen (isEditable ist false)
             const correctionCount = youParticipant.correctionCount || 0;
             const correctionText = correctionCount > 0 ? `(<span class="correction-counter cursor-pointer" data-userid="${currentUser.mode}">${correctionCount} Korrekturen</span>)` : '';
+            
             youHeaderHTML = `
                 <span class="font-bold text-indigo-600">Du</span>
                 <br>
@@ -679,6 +674,7 @@ function updatePollTableAnswers(voteData, isEditable = false) {
                 <button class="vote-correction-btn text-xs font-semibold text-blue-600 hover:underline">Auswahl bearbeiten</button>
             `;
         } else {
+            // User nimmt gerade teil (isEditable ist true)
             youHeaderHTML = '<span class="font-bold text-indigo-600">Du (Klicke unten)</span>';
         }
     }
@@ -776,11 +772,14 @@ function checkIfAllAnswered() {
         saveBtn.classList.add('hidden');
         return;
     }
+    
     if (!isVoteGridEditable) {
         saveBtn.classList.add('hidden');
         return;
     }
+    
     const totalOptions = currentVoteData.options.length;
+    
     let allAnswered = true;
     for (let i = 0; i < totalOptions; i++) {
         if (!currentParticipantAnswers[i]) {
@@ -788,6 +787,7 @@ function checkIfAllAnswered() {
             break;
         }
     }
+
     if (allAnswered) {
         saveBtn.classList.remove('hidden'); 
     } else {
@@ -1079,7 +1079,6 @@ function renderCorrectionHistory(userId) {
             // HIER IST DIE KORREKTUR
             // ==================================================
             
-            // Zuerst das Datumsobjekt holen, egal welcher Typ es ist
             let dateObject = null;
             if (log.timestamp) {
                 // Fall 1: Es ist ein Firebase-Timestamp (hat .toDate())
@@ -1087,12 +1086,11 @@ function renderCorrectionHistory(userId) {
                     dateObject = log.timestamp.toDate();
                 }
                 // Fall 2: Es ist bereits ein JS-Datum (vom lokalen Speichern)
-                else if (log.timestamp instanceof Date) { // Prüfen ob es ein Datumsobjekt ist
+                else if (log.timestamp instanceof Date) { 
                     dateObject = log.timestamp;
                 }
             }
             
-            // Jetzt formatieren wir das Datumsobjekt, das wir haben
             const timestamp = dateObject ? dateObject.toLocaleString('de-DE', {
                 day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
             }) : 'Unbekanntes Datum';
@@ -1153,6 +1151,46 @@ function renderEditView(voteData) {
 
 
 // ----- HELFER-FUNKTIONEN (Rest) -----
+
+// NEU: Funktion zum Kopieren in die Zwischenablage
+function copyToClipboard(text, successMessage) {
+    if (!navigator.clipboard) {
+        alertUser("Kopieren wird von deinem Browser nicht unterstützt. Bitte manuell kopieren.", "error");
+        return;
+    }
+    navigator.clipboard.writeText(text).then(() => {
+        alertUser(successMessage, "success");
+    }).catch(err => {
+        console.error('Fehler beim Kopieren: ', err);
+        alertUser("Kopieren fehlgeschlagen.", "error");
+    });
+}
+
+// NEU: Funktion zum Prüfen der URL auf Token/ID
+function checkUrlForToken() {
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const voteId = urlParams.get('vote_id');
+        const voteToken = urlParams.get('vote_token');
+
+        if (voteId) {
+            console.log("URL-Parameter 'vote_id' gefunden:", voteId);
+            joinVoteById(voteId); // Diese Funktion macht schon alles (laden, showView)
+        } else if (voteToken) {
+             console.log("URL-Parameter 'vote_token' gefunden:", voteToken);
+             joinVoteByToken(voteToken); // Diese Funktion macht auch alles
+        }
+        
+        // URL aufräumen, damit der Parameter weg ist
+        if (voteId || voteToken) {
+            const newUrl = window.location.origin + window.location.pathname;
+            window.history.replaceState({}, document.title, newUrl);
+        }
+    } catch (e) {
+        console.error("Fehler beim Prüfen der URL:", e);
+    }
+}
+
 function showView(viewName) { 
     document.getElementById('terminplaner-main-view').classList.add('hidden');
     document.getElementById('terminplaner-create-view').classList.add('hidden');
