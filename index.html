@@ -960,8 +960,9 @@
                                 class="flex-grow p-3 border-2 border-gray-300 rounded-lg text-center tracking-widest text-lg font-mono uppercase focus:ring-indigo-500 focus:border-indigo-500"
                                 placeholder="XXXX - XXXX" maxlength="10">
                             <button id="join-vote-by-token-btn"
-                                class="py-3 px-5 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition">
-                                Teilnehmen
+                                class="py-3 px-5 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition flex items-center justify-center">
+                                <span class="button-text">Teilnehmen</span>
+                                <div class="loading-spinner"></div>
                             </button>
                         </div>
                     </div>
@@ -1046,8 +1047,65 @@
                         Umfrage erstellen und Link erhalten
                     </button>
 
+                </div> <div id="terminplaner-vote-view" class="hidden">
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center">
+                            <h2 id="vote-poll-title" class="text-2xl font-bold text-gray-800">...</h2>
+                            <button id="cancel-vote-participation-btn"
+                                class="py-2 px-4 bg-gray-200 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition">
+                                Zurück
+                            </button>
+                        </div>
+                        <p id="vote-poll-description" class="text-sm text-gray-600 mt-1"></p>
+                    </div>
+
+                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6">
+                        <h3 class="text-lg font-bold text-gray-800 mb-3">Wähle deine Termine</h3>
+                        <div id="vote-options-container" class="overflow-x-auto">
+                            </div>
+                    </div>
+
+                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
+                        <h3 class="text-lg font-bold text-gray-800">Deine Teilnahme</h3>
+                        <div id="vote-name-input-container">
+                            <label for="vote-participant-name"
+                                class="block text-sm font-bold text-gray-700 mb-1">Dein Name</label>
+                            <input type="text" id="vote-participant-name"
+                                class="w-full p-2 border border-gray-300 rounded-lg" placeholder="Dein Name...">
+                        </div>
+                        <div id="vote-selection-container" class="space-y-3">
+                            <p class="text-sm font-bold text-gray-700">Klicke auf einen Termin in der Tabelle, um
+                                abzustimmen:</p>
+                            <p id="vote-selected-option-text" class="text-sm text-gray-600 italic">
+                                Bitte wähle einen Termin aus der Tabelle aus.
+                            </p>
+                            <div class="flex gap-2">
+                                <button data-answer="yes"
+                                    class="vote-answer-btn flex-1 py-3 bg-green-100 text-green-800 font-bold rounded-lg border-2 border-transparent hover:border-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled>
+                                    Ja
+                                </button>
+                                <button data-answer="maybe"
+                                    class="vote-answer-btn flex-1 py-3 bg-yellow-100 text-yellow-800 font-bold rounded-lg border-2 border-transparent hover:border-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled>
+                                    Vielleicht
+                                </button>
+                                <button data-answer="no"
+                                    class="vote-answer-btn flex-1 py-3 bg-red-100 text-red-800 font-bold rounded-lg border-2 border-transparent hover:border-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled>
+                                    Nein
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button id="vote-save-participation-btn"
+                        class="w-full py-3 bg-green-600 text-white font-bold text-lg rounded-lg hover:bg-green-700 transition shadow-lg">
+                        Abstimmung speichern
+                    </button>
+
                 </div> </div>
-                
+                                
             <div id="userSelectionModal"
                 class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
                 <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-xs">
