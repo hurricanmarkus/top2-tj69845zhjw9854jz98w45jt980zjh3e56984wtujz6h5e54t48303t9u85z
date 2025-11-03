@@ -143,7 +143,7 @@ export function initializeTerminplanerView() {
     const cancelVoteButton = document.getElementById('cancel-vote-participation-btn');
     if (cancelVoteButton && !cancelVoteButton.dataset.listenerAttached) {
         cancelVoteButton.addEventListener('click', () => {
-            showView('main'); // KORREKTUR: Geht jetzt immer zur Hauptseite
+            showView('main'); 
             currentVoteData = null; 
         });
         cancelVoteButton.dataset.listenerAttached = 'true';
@@ -171,12 +171,10 @@ export function initializeTerminplanerView() {
         saveParticipationButton.dataset.listenerAttached = 'true';
     }
     
-    // ----- NEU: Spione für den "Transformations-Button" -----
-    
     // Spion für den "EDIT"-Button (A)
     const editVoteButton = document.getElementById('show-edit-vote-btn');
     if (editVoteButton && !editVoteButton.dataset.listenerAttached) {
-        editVoteButton.addEventListener('click', showInlineEditToken); // <-- Ruft die neue Inline-Funktion auf
+        editVoteButton.addEventListener('click', showInlineEditToken); 
         editVoteButton.dataset.listenerAttached = 'true';
     }
     
@@ -198,10 +196,7 @@ export function initializeTerminplanerView() {
     const cancelEditingBtn = document.getElementById('cancel-vote-editing-btn');
     if (cancelEditingBtn && !cancelEditingBtn.dataset.listenerAttached) {
         cancelEditingBtn.addEventListener('click', () => {
-            // Wir gehen zurück zur Abstimmungs-Ansicht
             showView('vote');
-            // Wir müssen die Abstimmungs-Ansicht neu laden, falls
-            // der Admin in der Zwischenzeit etwas geändert hat (z.B. Termin fixiert)
             joinVoteById(currentVoteData.id); 
         });
         cancelEditingBtn.dataset.listenerAttached = 'true';
@@ -263,7 +258,7 @@ export function stopAssignedVotesListener() {
 
 
 // ----- RENDER-FUNKTIONEN FÜR LISTEN -----
-// (Unverändert, aber mit "createdByName")
+// (Unverändert)
 function renderPublicVotes(votes) {
     const listContainer = document.getElementById('public-votes-list');
     if (!listContainer) return;
@@ -288,7 +283,7 @@ function renderPublicVotes(votes) {
         `;
     }).join('');
 }
-// (Unverändert, aber mit "createdByName")
+// (Unverändert)
 function renderAssignedVotes(votes) {
     const listContainer = document.getElementById('assigned-votes-list');
     if (!listContainer) return;
@@ -370,7 +365,9 @@ async function joinVoteById(voteId) {
 
 
 // ----- RENDER-FUNKTION (Abstimmungs-Seite) -----
-// (Angepasst für "fixedOptionIndex" und "EDIT"-Button)
+/**
+ * Baut die Abstimmungs-Seite (Tabelle) basierend auf den Umfragedaten auf.
+ */
 function renderVoteView(voteData) {
     // 1. Titel und Beschreibung
     document.getElementById('vote-poll-title').textContent = voteData.title;
@@ -411,27 +408,31 @@ function renderVoteView(voteData) {
         currentParticipantAnswers = existingParticipant.answers;
     }
     selectedOptionIndex = null;
-    document.getElementById('vote-selected-option-text').textContent = "Bitte wähle einen Termin aus der Tabelle aus.";
+    // (Der Text-Container wird jetzt beim Klick gesteuert, nicht mehr hier)
     document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.disabled = true);
     
-    // 4. NEU: Ansichten (Teilnahme, Edit-Token) zurücksetzen
+    // 4. Ansichten (Teilnahme, Edit-Token) zurücksetzen
     const participationContainer = document.getElementById('vote-participation-container');
     const saveButton = document.getElementById('vote-save-participation-btn');
     const editButton = document.getElementById('show-edit-vote-btn');
     
-    // NEU: Setze den Edit-Wrapper zurück
+    // Setze den Edit-Wrapper zurück
     resetEditWrapper();
+
+    // Verstecke die hellblaue Box
+    document.getElementById('vote-selected-option-display').classList.add('hidden');
 
     if (voteData.fixedOptionIndex != null) {
         // JA, EIN TERMIN IST FIXIERT
         participationContainer.classList.add('hidden');
         saveButton.classList.add('hidden');
-        editButton.classList.add('hidden'); // EDIT-Knopf auch verstecken
+        editButton.classList.add('hidden'); 
     } else {
         // NEIN, es ist eine normale Abstimmung
-        participationContainer.classList.remove('hidden');
+        // WICHTIG: Die Box bleibt 'hidden', bis ein Klick erfolgt
+        participationContainer.classList.add('hidden');
         saveButton.classList.remove('hidden');
-        editButton.classList.remove('hidden'); // EDIT-Knopf anzeigen
+        editButton.classList.remove('hidden'); 
     }
 
     // 5. Die Abstimmungs-Tabelle bauen
@@ -445,15 +446,38 @@ function renderVoteView(voteData) {
     optionsContainer.querySelectorAll('.vote-option-row').forEach(row => {
         row.addEventListener('click', () => {
             if (voteData.fixedOptionIndex != null) return; 
+            
+            // Klick-Logik (Zeile markieren)
             optionsContainer.querySelectorAll('.vote-option-row').forEach(r => r.classList.remove('bg-blue-200'));
             row.classList.add('bg-blue-200');
+            
             selectedOptionIndex = parseInt(row.dataset.optionIndex);
             const selectedOption = voteData.options[selectedOptionIndex];
+            
+            // --- HIER IST DIE NEUE LOGIK ---
+            
+            // 1. Mache die Teilnahme-Box sichtbar
+            const participationContainer = document.getElementById('vote-participation-container');
+            participationContainer.classList.remove('hidden');
+
+            // 2. Finde die neue blaue Box und ihr Text-Element
+            const blueBox = document.getElementById('vote-selected-option-display');
+            const blueBoxText = blueBox.querySelector('p');
+            
+            // 3. Formatiere das Datum schön
             const dateObj = new Date(selectedOption.date + 'T12:00:00');
             const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
-            document.getElementById('vote-selected-option-text').textContent = 
-                `Du stimmst ab für: ${niceDate} um ${selectedOption.time} Uhr`;
+            
+            // 4. Fülle die blaue Box und zeige sie an
+            if (blueBox && blueBoxText) {
+                blueBoxText.textContent = `Ausgewählt: ${niceDate} um ${selectedOption.time} Uhr`;
+                blueBox.classList.remove('hidden');
+            }
+                
+            // 5. Aktiviere die Ja/Nein/Vielleicht-Buttons
             document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.disabled = false);
+            
+            // 6. Markiere den Button, der der aktuellen Antwort entspricht
             document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.classList.remove('ring-4', 'ring-indigo-500'));
             const currentAnswer = currentParticipantAnswers[selectedOptionIndex];
             if (currentAnswer) {
@@ -607,12 +631,11 @@ async function saveVoteParticipation() {
 
 
 // ----- SPEICHER-FUNKTION (Erstellung) -----
-// (Angepasst für 'editToken' und 'createdBy' ID)
+// (Unverändert)
 async function saveGroupPoll() {
     const saveBtn = document.getElementById('vote-save-group-poll-btn');
     saveBtn.disabled = true;
     saveBtn.textContent = 'Wird gespeichert...';
-
     try {
         const title = document.getElementById('vote-title').value.trim();
         const description = document.getElementById('vote-description').value.trim();
@@ -621,7 +644,6 @@ async function saveGroupPoll() {
         const options = [];
         const dateGroups = document.querySelectorAll('#vote-dates-container [data-date-group-id]');
         let hasValidOption = false;
-
         dateGroups.forEach(group => {
             const dateInput = group.querySelector('.vote-date-input');
             const dateValue = dateInput.value; 
@@ -636,42 +658,34 @@ async function saveGroupPoll() {
                 });
             }
         });
-
         if (!title) throw new Error("Bitte gib einen Titel für die Umfrage ein.");
         if (!hasValidOption) throw new Error("Bitte füge mindestens einen gültigen Termin (Datum + Uhrzeit) hinzu.");
-
         const token = generateVoteToken();
         const editToken = generateVoteToken(); 
-
         const voteData = {
             title: title,
             description: description,
             type: 'group-poll',
             token: token,
-            editToken: editToken, // <-- Der Bearbeitungs-Token
+            editToken: editToken, 
             isPublic: isPublic,
             isAnonymous: isAnonymous,
-            createdBy: currentUser.mode, // <-- Die Benutzer-ID (z.B. "JASMIN")
-            createdByName: currentUser.displayName || currentUser.mode, // Der Anzeigename
+            createdBy: currentUser.mode, 
+            createdByName: currentUser.displayName || currentUser.mode, 
             createdAt: serverTimestamp(), 
             options: options, 
             participants: [],
             participantIds: [],
-            fixedOptionIndex: null // Feld für fixierten Termin
+            fixedOptionIndex: null 
         };
-
         console.log("Speichere Umfrage in Firebase...", voteData);
         const docRef = await addDoc(votesCollectionRef, voteData);
-
         console.log(`Umfrage erstellt! ID: ${docRef.id}, Token: ${token}, Edit-Token: ${editToken}`);
         alertUser(`Umfrage erstellt! Teilnahme-Token: ${token} (Zum Bearbeiten: ${editToken})`, "success");
-
         showView('main'); 
-
     } catch (error) {
         console.error("Fehler beim Speichern der Umfrage:", error);
         alertUser(error.message, "error");
-    
     } finally {
         saveBtn.disabled = false;
         saveBtn.textContent = 'Umfrage erstellen und Link erhalten';
@@ -679,76 +693,54 @@ async function saveGroupPoll() {
 }
 
 
-// ----- NEUE FUNKTIONEN für das INLINE EDIT -----
-
-// Wird aufgerufen, wenn man auf "EDIT" klickt
+// ----- FUNKTIONEN für das INLINE EDIT -----
+// (Unverändert)
 function showInlineEditToken() {
     const editButton = document.getElementById('show-edit-vote-btn');
     const tokenInput = document.getElementById('edit-token-input-inline');
     const submitButton = document.getElementById('submit-edit-token-inline-btn');
-    
     if (!editButton || !tokenInput || !submitButton || !currentVoteData) return;
-    
-    // 1. Verstecke den "EDIT"-Knopf
     editButton.classList.add('hidden');
-    
-    // 2. Zeige das Eingabefeld und den "OK"-Knopf
     tokenInput.classList.remove('hidden');
     submitButton.classList.remove('hidden');
-
-    // 3. Prüfe, ob der aktuelle Benutzer der Ersteller ist
     if (currentUser.mode === currentVoteData.createdBy) {
         tokenInput.value = currentVoteData.editToken; 
         tokenInput.disabled = true; 
     } else {
         tokenInput.value = ''; 
         tokenInput.disabled = false;
-        tokenInput.focus(); // Fokus auf das Feld für Gäste
+        tokenInput.focus(); 
     }
 }
-
-// Setzt den Edit-Button auf den Standard (nur "EDIT" anzeigen) zurück
+// (Unverändert)
 function resetEditWrapper() {
     document.getElementById('show-edit-vote-btn')?.classList.remove('hidden');
     document.getElementById('edit-token-input-inline')?.classList.add('hidden');
     document.getElementById('submit-edit-token-inline-btn')?.classList.add('hidden');
 }
-
-// Wird aufgerufen, wenn man im Inline-Block auf "OK" klickt
+// (Unverändert)
 function checkInlineEditToken() {
     const input = document.getElementById('edit-token-input-inline');
     const token = input.value.trim().toUpperCase();
-    
-    // Prüfe, ob der eingegebene Token mit dem der Umfrage übereinstimmt
     if (currentVoteData && token === currentVoteData.editToken) {
         alertUser("Token korrekt! Lade Bearbeitungs-Modus...", "success");
-        
-        // Zeige die (noch leere) Bearbeitungs-Ansicht
         showView('edit');
-        
-        // Fülle die Bearbeitungs-Ansicht (im nächsten Schritt)
         renderEditView(currentVoteData);
-        
     } else {
         alertUser("Falscher Bearbeitungs-Token!", "error");
     }
 }
 
-// NEU: Platzhalter für die Render-Funktion der Bearbeitungs-Seite
+// ----- PLATZHALTER für die Bearbeitungs-Ansicht -----
+// (Unverändert)
 function renderEditView(voteData) {
-    // Fülle den Titel in der Bearbeitungs-Ansicht
     document.getElementById('edit-poll-title').textContent = `"${voteData.title}" bearbeiten`;
-    
-    // TODO:
-    // Hier bauen wir im nächsten Schritt die Bearbeitungs-Logik auf:
-    // 1. Liste aller Termine mit Checkbox zum "Fixieren"
-    // 2. Liste aller Teilnehmer mit "Löschen"-Knopf
-    // 3. "Umfrage löschen"-Knopf
+    // TODO: Nächster Schritt
 }
 
 
 // ----- HELFER-FUNKTIONEN (Rest) -----
-
+// (Unverändert)
 function showView(viewName) { 
     document.getElementById('terminplaner-main-view').classList.add('hidden');
     document.getElementById('terminplaner-create-view').classList.add('hidden');
@@ -761,14 +753,15 @@ function showView(viewName) {
         document.getElementById('terminplaner-create-view').classList.remove('hidden');
         resetCreateWizard(); 
     } else if (viewName === 'vote') {
-        document.getElementById('terminplaner-vote-view').classList.remove('hidden');
-        // NEU: Setze beim Anzeigen der Vote-Ansicht immer den Edit-Knopf zurück
-        resetEditWrapper();
+       document.getElementById('terminplaner-vote-view').classList.remove('hidden');
+       resetEditWrapper();
+       // NEU: Verstecke die Teilnahme-Box beim Laden der Ansicht
+       document.getElementById('vote-participation-container').classList.add('hidden');
     } else if (viewName === 'edit') {
        document.getElementById('terminplaner-edit-view').classList.remove('hidden');
     }
 }
-
+// (Unverändert)
 function resetCreateWizard() {
     document.getElementById('vote-title').value = '';
     document.getElementById('vote-description').value = '';
@@ -778,7 +771,7 @@ function resetCreateWizard() {
     dateGroupIdCounter = 0;
     addNewDateGroup();
 }
-
+// (Unverändert)
 function generateVoteToken() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ123456789';
     let part1 = '';
@@ -789,7 +782,7 @@ function generateVoteToken() {
     }
     return `${part1} - ${part2}`;
 }
-
+// (Unverändert)
 function addNewDateGroup() {
     dateGroupIdCounter++;
     const datesContainer = document.getElementById('vote-dates-container');
@@ -805,7 +798,7 @@ function addNewDateGroup() {
     newGroup.querySelector('.vote-times-container').appendChild(createTimeInputHTML());
     datesContainer.appendChild(newGroup);
 }
-
+// (Unverändert)
 function createTimeInputHTML() {
     const timeGroup = document.createElement('div');
     timeGroup.className = 'flex items-center gap-2';
@@ -819,12 +812,10 @@ function createTimeInputHTML() {
     `;
     return timeGroup;
 }
-
-// NEU: Die Funktion kann jetzt beide Token-Felder formatieren
+// (Unverändert)
 function formatTokenInput(e, inputId) {
     const input = document.getElementById(inputId);
     if (!input) return;
-    
     let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); 
     let formattedValue = '';
     if (value.length > 4) {
