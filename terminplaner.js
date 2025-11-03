@@ -214,6 +214,20 @@ export function initializeTerminplanerView() {
             if (correctionButton) {
                 switchToEditMode();
             }
+
+            // NEU: Fall 4: Klick auf Token-Kopier-Knopf
+            const copyTokenBtn = e.target.closest('#copy-vote-token-btn');
+            if (copyTokenBtn) {
+                const token = document.getElementById('vote-share-token').textContent;
+                copyToClipboard(token, "Token kopiert!");
+            }
+
+            // NEU: Fall 5: Klick auf URL-Kopier-Knopf
+            const copyUrlBtn = e.target.closest('#copy-vote-url-btn');
+            if (copyUrlBtn) {
+                const url = document.getElementById('vote-share-url').value;
+                copyToClipboard(url, "URL kopiert!");
+            }
         });
         voteView.dataset.listenerAttached = 'true';
     }
@@ -263,11 +277,14 @@ export function initializeTerminplanerView() {
             const modal = document.getElementById('correctionLogModal');
             if (modal) {
                 modal.classList.add('hidden');
-                modal.style.display = 'none'; // Korrektur von letzter Woche
+                modal.style.display = 'none'; 
             }
         });
         closeLogBtn.dataset.listenerAttached = 'true';
     }
+
+    // NEU: Prüfe beim Starten, ob ein Token in der URL ist
+    checkUrlForToken();
 }
 
 
@@ -386,15 +403,21 @@ function renderAssignedVotes(votes) {
 
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per Token) -----
-async function joinVoteByToken() {
+// (ANGEPASST: Nimmt jetzt optional einen Token entgegen)
+async function joinVoteByToken(tokenFromUrl = null) {
     const tokenInput = document.getElementById('vote-token-input');
     const joinBtn = document.getElementById('join-vote-by-token-btn');
-    const token = tokenInput.value.trim().toUpperCase(); 
+    
+    // Nimm den Token aus der URL, ODER aus dem Input-Feld
+    const token = (tokenFromUrl || tokenInput.value).trim().toUpperCase(); 
+
     if (token.length !== 11 || token[4] !== ' ' || token[5] !== '-' || token[6] !== ' ') {
         alertUser("Ungültiges Token-Format. Es muss 'XXXX - XXXX' sein.", "error");
         return;
     }
-    setButtonLoading(joinBtn, true); 
+    
+    if (joinBtn) setButtonLoading(joinBtn, true); 
+    
     try {
         const q = query(votesCollectionRef, where("token", "==", token));
         const snapshot = await getDocs(q);
@@ -413,18 +436,26 @@ async function joinVoteByToken() {
         console.log("Umfrage gefunden:", currentVoteData);
         renderVoteView(currentVoteData);
         showView('vote');
-        tokenInput.value = ''; 
+        if (tokenInput) tokenInput.value = ''; 
     } catch (error) {
         console.error("Fehler beim Suchen der Umfrage:", error);
         alertUser(error.message, "error");
     } finally {
-        setButtonLoading(joinBtn, false); 
+        if (joinBtn) setButtonLoading(joinBtn, false); 
     }
 }
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per ID) -----
-async function joinVoteById(voteId) {
+// (ANGEPASST: Nimmt jetzt optional ID entgegen)
+async function joinVoteById(voteId = null) {
     try {
+        if (!voteId) {
+            // NEU: Wenn ID aus URL kommt, hole sie
+            const urlParams = new URLSearchParams(window.location.search);
+            voteId = urlParams.get('vote_id');
+            if (!voteId) return; // Kein ID in URL, nichts zu tun
+        }
+        
         const voteDocRef = doc(votesCollectionRef, voteId);
         const voteDoc = await getDoc(voteDocRef); 
         if (!voteDoc.exists()) {
@@ -450,6 +481,9 @@ async function joinVoteById(voteId) {
 
 
 // ----- RENDER-FUNKTION (Abstimmungs-Seite) -----
+/**
+ * Baut die Abstimmungs-Seite (Tabelle) basierend auf den Umfragedaten auf.
+ */
 function renderVoteView(voteData) {
     
     // 1. Titel und Ersteller (ZENTRIERT)
@@ -458,7 +492,15 @@ function renderVoteView(voteData) {
     const creatorName = creatorUser ? creatorUser.realName : voteData.createdByName; 
     document.getElementById('vote-poll-creator').textContent = `Erstellt von ${creatorName}`;
 
-    // 2. Info-Box (Beschreibung, Ort, Gültigkeit)
+    // 2. NEU: Share-Box füllen
+    document.getElementById('vote-share-token').textContent = voteData.token;
+    // Baue die URL zusammen
+    const baseUrl = window.location.origin + window.location.pathname; // z.B. https://app.com/index.html
+    const directUrl = `${baseUrl}?vote_id=${currentVoteData.id}`; // z.B. ...index.html?vote_id=ABC123
+    document.getElementById('vote-share-url').value = directUrl;
+
+
+    // 3. Info-Box (Beschreibung, Ort, Gültigkeit)
     const infoBox = document.getElementById('vote-info-box');
     const descContainer = document.getElementById('vote-poll-description-container');
     const descEl = document.getElementById('vote-poll-description');
@@ -499,7 +541,7 @@ function renderVoteView(voteData) {
     infoBox.classList.toggle('hidden', !hasInfo);
 
 
-    // 3. Teilnehmer-Status-Box (ANGEPASSTE LOGIK)
+    // 4. Teilnehmer-Status-Box
     const statusContainer = document.getElementById('vote-participant-status-container');
     const nameDisplay = document.getElementById('vote-participant-name');
     const userContainer = document.getElementById('vote-user-name-container');
@@ -512,7 +554,6 @@ function renderVoteView(voteData) {
         existingParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
     }
     
-    // Verstecke standardmäßig alles
     statusContainer.classList.add('hidden');
     guestNameContainer.classList.add('hidden');
     userContainer.classList.add('hidden');
@@ -523,7 +564,7 @@ function renderVoteView(voteData) {
         statusContainer.classList.remove('hidden');
         userContainer.classList.remove('hidden'); 
         nameDisplay.textContent = existingParticipant.name;
-        isVoteGridEditable = false; // Schreibgeschützt!
+        isVoteGridEditable = false; 
     } else if (currentUser.mode !== GUEST_MODE) {
         statusContainer.classList.remove('hidden');
         userContainer.classList.remove('hidden'); 
@@ -537,19 +578,19 @@ function renderVoteView(voteData) {
         isVoteGridEditable = true; 
     }
     
-    // 4. Antworten laden
+    // 5. Antworten laden
     currentParticipantAnswers = {};
     if (existingParticipant) {
         currentParticipantAnswers = { ...existingParticipant.currentAnswers };
     }
 
-    // 5. Ansichten (Teilnahme, Edit-Token) zurücksetzen
+    // 6. Ansichten (Teilnahme, Edit-Token) zurücksetzen
     const saveButton = document.getElementById('vote-save-participation-btn');
     const editButton = document.getElementById('show-edit-vote-btn');
     
     resetEditWrapper();
     
-    // 6. Prüfen, ob Termin fixiert ist
+    // 7. Prüfen, ob Termin fixiert ist
     if (voteData.fixedOptionIndex != null) {
         statusContainer.classList.add('hidden'); 
         saveButton.classList.add('hidden');    
@@ -611,7 +652,6 @@ function updatePollTableAnswers(voteData, isEditable = false) {
     tableHTML += '<thead><tr class="bg-gray-50">';
     tableHTML += '<th class="p-3 border-b sticky left-0 bg-gray-50 z-10 w-48">Termin</th>';
     
-    // Spalten für jeden Teilnehmer (ausser dem aktuellen User)
     voteData.participants.forEach(p => {
         if (p.userId === currentUser.mode) return; 
         const correctionCount = p.correctionCount || 0;
@@ -623,18 +663,14 @@ function updatePollTableAnswers(voteData, isEditable = false) {
                       </th>`;
     });
     
-    // Spalte für "Du" (den aktuellen User)
     const youParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
     
-    // KORREKTUR: Baue den "Du"-Header-Text
-    let youHeaderHTML = '<span class="font-bold text-indigo-600">Du</span>'; // Standard
+    let youHeaderHTML = '<span class="font-bold text-indigo-600">Du</span>'; 
     
     if (currentUser.mode !== GUEST_MODE && !voteData.isAnonymous) {
         if (youParticipant) {
-            // User hat schon teilgenommen (isEditable ist false)
             const correctionCount = youParticipant.correctionCount || 0;
             const correctionText = correctionCount > 0 ? `(<span class="correction-counter cursor-pointer" data-userid="${currentUser.mode}">${correctionCount} Korrekturen</span>)` : '';
-            
             youHeaderHTML = `
                 <span class="font-bold text-indigo-600">Du</span>
                 <br>
@@ -643,7 +679,6 @@ function updatePollTableAnswers(voteData, isEditable = false) {
                 <button class="vote-correction-btn text-xs font-semibold text-blue-600 hover:underline">Auswahl bearbeiten</button>
             `;
         } else {
-            // User nimmt gerade teil (isEditable ist true)
             youHeaderHTML = '<span class="font-bold text-indigo-600">Du (Klicke unten)</span>';
         }
     }
@@ -666,7 +701,6 @@ function updatePollTableAnswers(voteData, isEditable = false) {
             </tr>
         `;
 
-        // Uhrzeit-Zeilen
         optionsByDate[date].forEach(option => {
             const optionIndex = option.originalIndex;
             const timeString = option.timeEnd ? 
@@ -678,7 +712,6 @@ function updatePollTableAnswers(voteData, isEditable = false) {
                     <td class="p-3 border-b font-mono sticky left-0 bg-white z-10">${timeString}</td>
             `;
 
-            // Spalten für gespeicherte Teilnehmer
             voteData.participants.forEach(p => {
                 if (p.userId === currentUser.mode) return; 
                 const answer = p.currentAnswers[optionIndex]; 
@@ -689,7 +722,6 @@ function updatePollTableAnswers(voteData, isEditable = false) {
                 tableHTML += `<td class="p-3 border-b text-center">${answerIcon}</td>`;
             });
             
-            // Spalte für "Du" (Interaktiv ODER Schreibgeschützt)
             const currentAnswer = currentParticipantAnswers[optionIndex];
             
             if (isEditable) {
@@ -744,16 +776,11 @@ function checkIfAllAnswered() {
         saveBtn.classList.add('hidden');
         return;
     }
-    
-    // Knopf nur anzeigen, wenn die Tabelle bearbeitbar ist
     if (!isVoteGridEditable) {
         saveBtn.classList.add('hidden');
         return;
     }
-    
     const totalOptions = currentVoteData.options.length;
-    
-    // Prüfe, ob für JEDE Option eine Antwort existiert
     let allAnswered = true;
     for (let i = 0; i < totalOptions; i++) {
         if (!currentParticipantAnswers[i]) {
@@ -761,7 +788,6 @@ function checkIfAllAnswered() {
             break;
         }
     }
-
     if (allAnswered) {
         saveBtn.classList.remove('hidden'); 
     } else {
@@ -1061,7 +1087,7 @@ function renderCorrectionHistory(userId) {
                     dateObject = log.timestamp.toDate();
                 }
                 // Fall 2: Es ist bereits ein JS-Datum (vom lokalen Speichern)
-                else {
+                else if (log.timestamp instanceof Date) { // Prüfen ob es ein Datumsobjekt ist
                     dateObject = log.timestamp;
                 }
             }
