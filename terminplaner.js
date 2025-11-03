@@ -94,7 +94,6 @@ export function initializeTerminplanerView() {
 
     // ----- Spione für den Erstellungs-Assistenten -----
     
-    // "Abbrechen"-Button
     const cancelCreationButton = document.getElementById('cancel-vote-creation-btn');
     if (cancelCreationButton && !cancelCreationButton.dataset.listenerAttached) {
         cancelCreationButton.addEventListener('click', () => {
@@ -104,7 +103,6 @@ export function initializeTerminplanerView() {
         });
         cancelCreationButton.dataset.listenerAttached = 'true';
     }
-    // "Endzeit Unbegrenzt"-Checkbox
     const unlimitedCheckbox = document.getElementById('vote-end-time-unlimited');
     if (unlimitedCheckbox && !unlimitedCheckbox.dataset.listenerAttached) {
         unlimitedCheckbox.addEventListener('change', (e) => {
@@ -118,17 +116,13 @@ export function initializeTerminplanerView() {
         });
         unlimitedCheckbox.dataset.listenerAttached = 'true';
     }
-    // "+ Tag hinzufügen"-Button
     const addDateButton = document.getElementById('vote-add-date-btn');
     if (addDateButton && !addDateButton.dataset.listenerAttached) {
         addDateButton.addEventListener('click', addNewDateGroup);
         addDateButton.dataset.listenerAttached = 'true';
     }
-    
-    // Delegierter Spion für "+ Uhrzeit", "Uhrzeit entfernen" UND VALIDIERUNG
     const datesContainer = document.getElementById('vote-dates-container');
     if (datesContainer && !datesContainer.dataset.clickListenerAttached) {
-        // Klick-Spion (für Knöpfe)
         datesContainer.addEventListener('click', (e) => {
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
@@ -149,18 +143,13 @@ export function initializeTerminplanerView() {
             }
             validateLastDateGroup();
         });
-        
-        // Input-Spion (für die Felder)
         datesContainer.addEventListener('input', (e) => {
             if (e.target.matches('.vote-date-input, .vote-time-start-input')) {
                 validateLastDateGroup();
             }
         });
-        
         datesContainer.dataset.clickListenerAttached = 'true';
     }
-    
-    // "Umfrage erstellen"-Button (Speichern)
     const saveVoteButton = document.getElementById('vote-save-group-poll-btn');
     if (saveVoteButton && !saveVoteButton.dataset.listenerAttached) {
         saveVoteButton.addEventListener('click', saveGroupPoll); 
@@ -179,10 +168,10 @@ export function initializeTerminplanerView() {
         cancelVoteButton.dataset.listenerAttached = 'true';
     }
 
-    // Delegierter Spion für die Klicks IN DER TABELLE
-    const voteOptionsContainer = document.getElementById('vote-options-container');
-    if (voteOptionsContainer && !voteOptionsContainer.dataset.listenerAttached) {
-        voteOptionsContainer.addEventListener('click', (e) => {
+    // KORREKTUR: Der Spion wird an die GANZE SEITE (terminplaner-vote-view) gehängt
+    const voteView = document.getElementById('terminplaner-vote-view');
+    if (voteView && !voteView.dataset.listenerAttached) {
+        voteView.addEventListener('click', (e) => {
             
             // Fall 1: Klick auf einen (klickbaren) Abstimm-Knopf
             const clickedButton = e.target.closest('.vote-grid-btn');
@@ -190,7 +179,7 @@ export function initializeTerminplanerView() {
                 const optionIndex = clickedButton.dataset.optionIndex;
                 const answer = clickedButton.dataset.answer;
                 currentParticipantAnswers[optionIndex] = answer;
-                const rowButtons = voteOptionsContainer.querySelectorAll(`.vote-grid-btn[data-option-index="${optionIndex}"]`);
+                const rowButtons = voteView.querySelectorAll(`.vote-grid-btn[data-option-index="${optionIndex}"]`);
                 rowButtons.forEach(btn => {
                     btn.classList.remove('bg-green-200', 'bg-yellow-200', 'bg-red-200', 'ring-2', 'ring-indigo-500');
                     btn.classList.add('bg-opacity-50'); 
@@ -209,13 +198,13 @@ export function initializeTerminplanerView() {
                 renderCorrectionHistory(userId);
             }
             
-            // NEU: Fall 3: Klick auf "Auswahl bearbeiten"
+            // Fall 3: Klick auf "Auswahl bearbeiten"
             const correctionButton = e.target.closest('.vote-correction-btn');
             if (correctionButton) {
                 switchToEditMode();
             }
         });
-        voteOptionsContainer.dataset.listenerAttached = 'true';
+        voteView.dataset.listenerAttached = 'true';
     }
     
     // "Abstimmung speichern"-Button
@@ -256,9 +245,7 @@ export function initializeTerminplanerView() {
         cancelEditingBtn.dataset.listenerAttached = 'true';
     }
     
-    // NEU: Der Spion für den alten gelben Knopf WIRD GELÖSCHT
-    // const correctionBtn = document.getElementById('vote-correction-btn');
-    // ... (dieser ganze Block ist weg) ...
+    // KORREKTUR: Der Spion für den alten gelben Knopf ist jetzt ENTFERNT.
     
     // Spion für den "Schließen"-Knopf des Korrektur-Modals
     const closeLogBtn = document.getElementById('close-correction-log-btn');
@@ -267,7 +254,7 @@ export function initializeTerminplanerView() {
             const modal = document.getElementById('correctionLogModal');
             if (modal) {
                 modal.classList.add('hidden');
-                modal.style.display = 'none'; // Korrektur von letzter Woche
+                modal.style.display = 'none'; 
             }
         });
         closeLogBtn.dataset.listenerAttached = 'true';
@@ -504,13 +491,12 @@ function renderVoteView(voteData) {
     infoBox.classList.toggle('hidden', !hasInfo);
 
 
-    // 3. Teilnehmer-Status-Box (NEUE LOGIK)
+    // 3. Teilnehmer-Status-Box (ANGEPASSTE LOGIK)
     const statusContainer = document.getElementById('vote-participant-status-container');
     const nameDisplay = document.getElementById('vote-participant-name');
     const userContainer = document.getElementById('vote-user-name-container');
     const guestNameContainer = document.getElementById('vote-guest-name-container');
     const guestNameInput = document.getElementById('vote-guest-name-input');
-    const correctionBtn = document.getElementById('vote-correction-btn'); // (Alter Knopf, wird nicht mehr benutzt)
     
     let existingParticipant = null;
     
@@ -524,25 +510,21 @@ function renderVoteView(voteData) {
     userContainer.classList.add('hidden');
     
     if (voteData.isAnonymous) {
-        // Bei anonymer Umfrage ist die ganze Box versteckt
         isVoteGridEditable = true; 
     } else if (existingParticipant) {
-        // Angemeldeter User, der schon teilgenommen hat
         statusContainer.classList.remove('hidden');
-        userContainer.classList.remove('hidden'); // Zeige "Deine Teilnahme als:"
+        userContainer.classList.remove('hidden'); 
         nameDisplay.textContent = existingParticipant.name;
         isVoteGridEditable = false; // Schreibgeschützt!
     } else if (currentUser.mode !== GUEST_MODE) {
-        // Angemeldeter User, der noch NICHT teilgenommen hat
         statusContainer.classList.remove('hidden');
-        userContainer.classList.remove('hidden'); // Zeige "Deine Teilnahme als:"
+        userContainer.classList.remove('hidden'); 
         const currentUserFull = USERS[currentUser.mode];
         nameDisplay.textContent = currentUserFull ? currentUserFull.realName : currentUser.displayName;
         isVoteGridEditable = true; 
     } else {
-        // GAST, der noch NICHT teilgenommen hat
         statusContainer.classList.remove('hidden');
-        guestNameContainer.classList.remove('hidden'); // Zeige Eingabefeld
+        guestNameContainer.classList.remove('hidden'); 
         guestNameInput.value = '';
         isVoteGridEditable = true; 
     }
@@ -571,6 +553,8 @@ function renderVoteView(voteData) {
         updatePollTableAnswers(voteData, isVoteGridEditable); 
         checkIfAllAnswered();
     }
+    
+    // 7. Klick-Spione für die Tabellen-Zeilen (jetzt überflüssig, da in initialize)
 }
 
 /**
@@ -636,19 +620,26 @@ function updatePollTableAnswers(voteData, isEditable = false) {
     // Spalte für "Du" (den aktuellen User)
     const youParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
     
-    // NEU: Baue den "Du"-Header-Text
-    let youHeaderHTML = '<span class="font-bold text-indigo-600">Du</span>'; // Standard
-    if (youParticipant) {
-        const correctionCount = youParticipant.correctionCount || 0;
-        const correctionText = correctionCount > 0 ? `(${correctionCount} Korrekturen)` : '';
-        
-        youHeaderHTML = `
-            <span class="font-bold text-indigo-600">Du</span>
-            <br>
-            <span class="text-xs font-normal text-gray-500 correction-counter cursor-pointer" data-userid="${currentUser.mode}">${correctionText}</span>
-            <br>
-            <button class="vote-correction-btn text-xs font-semibold text-blue-600 hover:underline">Auswahl bearbeiten</button>
-        `;
+    // KORREKTUR: Baue den "Du"-Header-Text
+    let youHeaderHTML = '<span class="font-bold text-indigo-600">Du</span>'; // Standard für Gast/Anonym
+    
+    if (currentUser.mode !== GUEST_MODE && !voteData.isAnonymous) {
+        if (youParticipant) {
+            // User hat schon teilgenommen
+            const correctionCount = youParticipant.correctionCount || 0;
+            const correctionText = correctionCount > 0 ? `(<span class="correction-counter cursor-pointer" data-userid="${currentUser.mode}">${correctionCount} Korrekturen</span>)` : '';
+            
+            youHeaderHTML = `
+                <span class="font-bold text-indigo-600">Du</span>
+                <br>
+                <span class="text-xs font-normal text-gray-500">${correctionText}</span>
+                <br>
+                <button class="vote-correction-btn text-xs font-semibold text-blue-600 hover:underline">Auswahl bearbeiten</button>
+            `;
+        } else {
+            // User nimmt gerade teil (Grid ist klickbar)
+            youHeaderHTML = '<span class="font-bold text-indigo-600">Du (Klicke unten)</span>';
+        }
     }
 
     tableHTML += `<th class="p-3 border-b text-center w-48 sticky right-0 bg-gray-50 z-10">
@@ -843,11 +834,7 @@ async function saveVoteParticipation() {
             
             if (changes.length > 0) {
                 const historyLog = { 
-                    // ==================================================
-                    // HIER IST DIE KORREKTUR
-                    // ==================================================
-                    timestamp: new Date(), // <-- Benutze die lokale Uhrzeit (new Date())
-                    // ==================================================
+                    timestamp: new Date(), // Benutze die lokale Uhrzeit (new Date())
                     changes: changes,
                     changedBy: currentUser.displayName || "Gast" 
                 };
@@ -1019,7 +1006,7 @@ function checkInlineEditToken() {
 
 // ----- Funktion, die beim Klick auf "Korrektur" aufgerufen wird -----
 function switchToEditMode() {
-    // 1. Verstecke den Korrektur-Knopf (der jetzt in der Tabelle ist)
+    // 1. Verstecke den "Auswahl bearbeiten"-Link
     const correctionBtn = document.querySelector('.vote-correction-btn');
     if (correctionBtn) correctionBtn.classList.add('hidden');
     
