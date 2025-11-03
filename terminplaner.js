@@ -1,7 +1,6 @@
-// NEU: Wir importieren mehr Datenbank-Tools
+// NEU: Wir importieren 'doc' und 'updateDoc', um bestehende Umfragen zu ändern
 import { alertUser, db, votesCollectionRef, currentUser, setButtonLoading } from './haupteingang.js';
-// NEU: Wir importieren die Firebase-Befehle zum Speichern und für Zeitstempel
-import { addDoc, serverTimestamp, getDocs, query, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { addDoc, serverTimestamp, getDocs, query, where, doc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ----- Globale Variablen für den Zustand -----
 let dateGroupIdCounter = 0;
@@ -9,6 +8,9 @@ let dateGroupIdCounter = 0;
 let currentVoteData = null;
 // Hier merken wir uns, welche Option (Termin) wir gerade angeklickt haben
 let selectedOptionIndex = null;
+// NEU: Hier merken wir uns die Antworten für den aktuellen Teilnehmer
+// z.B. { 0: 'yes', 1: 'no', 2: 'maybe' } (Index: Antwort)
+let currentParticipantAnswers = {};
 
 
 // Diese Funktion wird von haupteingang.js aufgerufen
@@ -24,7 +26,7 @@ export function initializeTerminplanerView() {
     // ----- Spion für den "Teilnehmen"-Button -----
     const joinVoteButton = document.getElementById('join-vote-by-token-btn');
     if (joinVoteButton && !joinVoteButton.dataset.listenerAttached) {
-        joinVoteButton.addEventListener('click', joinVoteByToken); // Ruft unsere Suchfunktion auf
+        joinVoteButton.addEventListener('click', joinVoteByToken); 
         joinVoteButton.dataset.listenerAttached = 'true';
     }
 
@@ -56,10 +58,9 @@ export function initializeTerminplanerView() {
         const groupPollButton = document.getElementById('select-vote-type-group');
         if (groupPollButton && !groupPollButton.dataset.listenerAttached) {
             groupPollButton.addEventListener('click', () => {
-                console.log("Wähle Typ: Gruppenumfrage");
                 modal.style.display = 'none'; 
                 modal.classList.add('hidden');
-                showView('create'); // Benutzt Helfer-Funktion
+                showView('create'); 
             });
             groupPollButton.dataset.listenerAttached = 'true';
         }
@@ -68,7 +69,6 @@ export function initializeTerminplanerView() {
         document.getElementById('select-vote-type-event')?.addEventListener('click', () => alertUser("Eventplaner ist noch nicht verfügbar.", "error"));
         document.getElementById('select-vote-type-1on1')?.addEventListener('click', () => alertUser("1:1 ist noch nicht verfügbar.", "error"));
         document.getElementById('select-vote-type-booking')?.addEventListener('click', () => alertUser("Buchungsseite ist noch nicht verfügbar.", "error"));
-
     }
 
     // ----- Spione für den Erstellungs-Assistenten -----
@@ -78,7 +78,7 @@ export function initializeTerminplanerView() {
     if (cancelCreationButton && !cancelCreationButton.dataset.listenerAttached) {
         cancelCreationButton.addEventListener('click', () => {
             if (confirm("Möchtest du die Erstellung wirklich abbrechen? Alle Eingaben gehen verloren.")) {
-                showView('main'); // Benutzt Helfer-Funktion
+                showView('main'); 
             }
         });
         cancelCreationButton.dataset.listenerAttached = 'true';
@@ -95,7 +95,6 @@ export function initializeTerminplanerView() {
     const datesContainer = document.getElementById('vote-dates-container');
     if (datesContainer && !datesContainer.dataset.clickListenerAttached) {
         datesContainer.addEventListener('click', (e) => {
-            
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
                 const timesContainer = addTarget.previousElementSibling; 
@@ -135,53 +134,60 @@ export function initializeTerminplanerView() {
         });
         cancelVoteButton.dataset.listenerAttached = 'true';
     }
+
+    // NEU: Spione für die Ja/Nein/Vielleicht-Buttons
+    document.querySelectorAll('.vote-answer-btn').forEach(btn => {
+        if (!btn.dataset.listenerAttached) {
+            btn.addEventListener('click', () => {
+                if (selectedOptionIndex === null) return; // Sollte nicht passieren, da Button disabled ist
+
+                const answer = btn.dataset.answer; // 'yes', 'maybe', oder 'no'
+                
+                // 1. Merke dir die Antwort
+                currentParticipantAnswers[selectedOptionIndex] = answer;
+                console.log("Antworten:", currentParticipantAnswers);
+
+                // 2. Aktualisiere die Tabelle sofort, um die Antwort anzuzeigen
+                updatePollTableAnswers(currentVoteData);
+            });
+            btn.dataset.listenerAttached = 'true';
+        }
+    });
+    
+    // NEU: Spion für den "Abstimmung speichern"-Button
+    const saveParticipationButton = document.getElementById('vote-save-participation-btn');
+    if (saveParticipationButton && !saveParticipationButton.dataset.listenerAttached) {
+        saveParticipationButton.addEventListener('click', saveVoteParticipation);
+        saveParticipationButton.dataset.listenerAttached = 'true';
+    }
 }
 
 
-// ----- KORRIGIERTE DATENBANK-FUNKTION (Umfrage suchen) -----
-
-/**
- * Sucht eine Umfrage basierend auf dem eingegebenen Token.
- */
+// ----- DATENBANK-FUNKTION (Umfrage suchen) -----
 async function joinVoteByToken() {
     const tokenInput = document.getElementById('vote-token-input');
     const joinBtn = document.getElementById('join-vote-by-token-btn');
-    const token = tokenInput.value.trim().toUpperCase(); // z.B. "A1B2 - C3D4"
+    const token = tokenInput.value.trim().toUpperCase(); 
 
-    // =================================================================
-    // HIER IST DIE KORREKTUR
-    // Prüfung 1: Ist das Format gültig?
-    // Es muss 11 Zeichen lang sein, nicht 10.
-    // =================================================================
+    // Prüfung 1: Ist das Format gültig? (11 Zeichen)
     if (token.length !== 11 || token[4] !== ' ' || token[5] !== '-' || token[6] !== ' ') {
         alertUser("Ungültiges Token-Format. Es muss 'XXXX - XXXX' sein.", "error");
         return;
     }
-    // =================================================================
-    // ENDE DER KORREKTUR
-    // =================================================================
     
-    setButtonLoading(joinBtn, true); // Lade-Spinner anzeigen
+    setButtonLoading(joinBtn, true); 
 
     try {
         // Prüfung 2: Gibt es diese Umfrage in der Datenbank?
         const q = query(votesCollectionRef, where("token", "==", token));
-        
         const snapshot = await getDocs(q);
 
-        if (snapshot.empty) {
-            // Nichts gefunden
-            throw new Error("Umfrage nicht gefunden. Prüfe den Token.");
-        }
+        if (snapshot.empty) throw new Error("Umfrage nicht gefunden. Prüfe den Token.");
+        if (snapshot.size > 1) throw new Error("Fehler: Mehrere Umfragen mit diesem Token gefunden. Admin kontaktieren.");
 
-        if (snapshot.size > 1) {
-            // Sollte nie passieren, aber sicher ist sicher
-            throw new Error("Fehler: Mehrere Umfragen mit diesem Token gefunden. Admin kontaktieren.");
-        }
-
-        // Erfolg! Wir haben genau eine Umfrage gefunden.
+        // Erfolg!
         const voteDoc = snapshot.docs[0];
-        currentVoteData = { id: voteDoc.id, ...voteDoc.data() }; // Daten merken
+        currentVoteData = { id: voteDoc.id, ...voteDoc.data() }; 
 
         console.log("Umfrage gefunden:", currentVoteData);
 
@@ -190,22 +196,18 @@ async function joinVoteByToken() {
         // Zeige die Abstimmungs-Seite an
         showView('vote');
         
-        tokenInput.value = ''; // Feld leeren
+        tokenInput.value = ''; 
 
     } catch (error) {
         console.error("Fehler beim Suchen der Umfrage:", error);
         alertUser(error.message, "error");
     } finally {
-        setButtonLoading(joinBtn, false); // Lade-Spinner ausblenden
+        setButtonLoading(joinBtn, false); 
     }
 }
 
 
 // ----- RENDER-FUNKTION (Abstimmungs-Seite) -----
-
-/**
- * Baut die Abstimmungs-Seite (Tabelle) basierend auf den Umfragedaten auf.
- */
 function renderVoteView(voteData) {
     // 1. Titel und Beschreibung setzen
     document.getElementById('vote-poll-title').textContent = voteData.title;
@@ -219,67 +221,42 @@ function renderVoteView(voteData) {
 
     // 2. Namensfeld anzeigen/verstecken
     const nameContainer = document.getElementById('vote-name-input-container');
+    const nameInput = document.getElementById('vote-participant-name');
+    
+    // NEU: Finde heraus, ob wir schon teilgenommen haben
+    let existingParticipant = null;
+    if (currentUser.mode !== 'Gast') {
+        existingParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
+    }
+    // TODO: Später Logik für "Namen eingeben" und wiedererkennen
+
     if (voteData.isAnonymous) {
         nameContainer.classList.add('hidden');
     } else {
         nameContainer.classList.remove('hidden');
-        // Versuche, den Namen des eingeloggten Benutzers vorauszufüllen
-        const nameInput = document.getElementById('vote-participant-name');
-        if (currentUser.mode !== 'Gast') {
+        if (existingParticipant) {
+            nameInput.value = existingParticipant.name;
+            nameInput.disabled = true; // Namen sperren, wenn man schon teilgenommen hat
+        } else if (currentUser.mode !== 'Gast') {
             nameInput.value = currentUser.displayName;
+            nameInput.disabled = false;
         } else {
-            nameInput.value = ''; // Leeren, falls Gast
+            nameInput.value = ''; 
+            nameInput.disabled = false;
         }
+    }
+    
+    // NEU: Lade die Antworten des bestehenden Teilnehmers
+    currentParticipantAnswers = {};
+    if (existingParticipant) {
+        currentParticipantAnswers = existingParticipant.answers;
     }
 
     // 3. Die Abstimmungs-Tabelle bauen
+    updatePollTableAnswers(voteData); // NEU: Ausgelagert in eigene Funktion
+    
+    // 4. Klick-Spione für die neuen Tabellen-Zeilen hinzufügen
     const optionsContainer = document.getElementById('vote-options-container');
-    
-    // Termine nach Datum gruppieren
-    const optionsByDate = {};
-    voteData.options.forEach((option, index) => {
-        if (!optionsByDate[option.date]) {
-            optionsByDate[option.date] = []; 
-        }
-        optionsByDate[option.date].push({ ...option, originalIndex: index });
-    });
-
-    let tableHTML = '<table class="w-full border-collapse text-sm text-left">';
-    
-    // 4. Kopfzeile der Tabelle
-    tableHTML += '<thead><tr class="bg-gray-50">';
-    tableHTML += '<th class="p-2 border-b">Termin</th>';
-    // (Hier kommen später die Teilnehmer-Namen hin)
-    tableHTML += '</tr></thead>';
-
-    // 5. Zeilen der Tabelle
-    tableHTML += '<tbody>';
-    
-    for (const date in optionsByDate) {
-        const dateObj = new Date(date + 'T12:00:00'); 
-        const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
-
-        // Datums-Trenn-Zeile
-        tableHTML += `
-            <tr class="bg-gray-100">
-                <td class="p-2 font-bold" colspan="100%">${niceDate}</td>
-            </tr>
-        `;
-
-        // Uhrzeit-Zeilen
-        optionsByDate[date].forEach(option => {
-            tableHTML += `
-                <tr class="vote-option-row hover:bg-blue-50 cursor-pointer" data-option-index="${option.originalIndex}">
-                    <td class="p-2 border-b font-mono">${option.time} Uhr</td>
-                    </tr>
-            `;
-        });
-    }
-    
-    tableHTML += '</tbody></table>';
-    optionsContainer.innerHTML = tableHTML;
-    
-    // 6. Klick-Spione für die neuen Tabellen-Zeilen hinzufügen
     optionsContainer.querySelectorAll('.vote-option-row').forEach(row => {
         row.addEventListener('click', () => {
             optionsContainer.querySelectorAll('.vote-option-row').forEach(r => r.classList.remove('bg-blue-200'));
@@ -294,12 +271,179 @@ function renderVoteView(voteData) {
                 `Du stimmst ab für: ${niceDate} um ${selectedOption.time} Uhr`;
                 
             document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.disabled = false);
+            
+            // NEU: Markiere den Button, der der aktuellen Antwort entspricht
+            document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.classList.remove('ring-4'));
+            const currentAnswer = currentParticipantAnswers[selectedOptionIndex];
+            if (currentAnswer) {
+                document.querySelector(`.vote-answer-btn[data-answer="${currentAnswer}"]`)?.classList.add('ring-4');
+            }
         });
     });
 }
 
+// ----- NEU: Funktion zum Aktualisieren der Tabelle -----
+/**
+ * Baut die Abstimmungs-Tabelle neu auf und füllt sie mit allen Antworten
+ */
+function updatePollTableAnswers(voteData) {
+    const optionsContainer = document.getElementById('vote-options-container');
 
-// ----- SPEICHER-FUNKTION (VON LETZTEM MAL) -----
+    const optionsByDate = {};
+    voteData.options.forEach((option, index) => {
+        if (!optionsByDate[option.date]) {
+            optionsByDate[option.date] = []; 
+        }
+        optionsByDate[option.date].push({ ...option, originalIndex: index });
+    });
+
+    let tableHTML = '<table class="w-full border-collapse text-sm text-left">';
+    
+    // Kopfzeile der Tabelle (Termin + alle Teilnehmer)
+    tableHTML += '<thead><tr class="bg-gray-50">';
+    tableHTML += '<th class="p-2 border-b sticky left-0 bg-gray-50 z-10">Termin</th>';
+    
+    // NEU: Teilnehmer-Spalten
+    voteData.participants.forEach(p => {
+        tableHTML += `<th class="p-2 border-b text-center">${p.name}</th>`;
+    });
+    // NEU: Spalte für den aktuellen (noch nicht gespeicherten) Benutzer
+    tableHTML += `<th class="p-2 border-b text-center font-bold text-indigo-600">Du</th>`;
+    
+    tableHTML += '</tr></thead>';
+
+    // Zeilen der Tabelle (Termine)
+    tableHTML += '<tbody>';
+    
+    for (const date in optionsByDate) {
+        const dateObj = new Date(date + 'T12:00:00'); 
+        const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+
+        // Datums-Trenn-Zeile
+        tableHTML += `
+            <tr class="bg-gray-100">
+                <td class="p-2 font-bold sticky left-0 bg-gray-100 z-10" colspan="${voteData.participants.length + 2}">${niceDate}</td>
+            </tr>
+        `;
+
+        // Uhrzeit-Zeilen
+        optionsByDate[date].forEach(option => {
+            // Prüfen, ob DIESE Zeile gerade ausgewählt ist
+            const isSelected = option.originalIndex === selectedOptionIndex;
+            
+            tableHTML += `
+                <tr class="vote-option-row ${isSelected ? 'bg-blue-200' : 'hover:bg-blue-50'} cursor-pointer" data-option-index="${option.originalIndex}">
+                    <td class="p-2 border-b font-mono sticky left-0 ${isSelected ? 'bg-blue-200' : 'bg-white'} z-10">${option.time} Uhr</td>
+            `;
+
+            // NEU: Antworten der gespeicherten Teilnehmer
+            voteData.participants.forEach(p => {
+                const answer = p.answers[option.originalIndex]; // z.B. 'yes', 'no', 'maybe'
+                let answerIcon = '';
+                if (answer === 'yes') answerIcon = '<span class="text-green-500 font-bold">✔</span>';
+                if (answer === 'no') answerIcon = '<span class="text-red-500 font-bold">✘</span>';
+                if (answer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold">?</span>';
+                tableHTML += `<td class="p-2 border-b text-center">${answerIcon}</td>`;
+            });
+            
+            // NEU: Antwort des aktuellen Benutzers (noch nicht gespeichert)
+            const currentAnswer = currentParticipantAnswers[option.originalIndex];
+            let currentIcon = '';
+            if (currentAnswer === 'yes') currentIcon = '<span class="text-green-500 font-bold">✔</span>';
+            if (currentAnswer === 'no') currentIcon = '<span class="text-red-500 font-bold">✘</span>';
+            if (currentAnswer === 'maybe') currentIcon = '<span class="text-yellow-500 font-bold">?</span>';
+            tableHTML += `<td class="p-2 border-b text-center bg-indigo-50">${currentIcon}</td>`;
+
+            tableHTML += '</tr>';
+        });
+    }
+    
+    tableHTML += '</tbody></table>';
+    optionsContainer.innerHTML = tableHTML;
+    
+    // WICHTIG: Die Klick-Spione müssen neu hinzugefügt werden, da die Tabelle neu gebaut wurde
+    // (Aber wir machen das in renderVoteView, nicht hier, um Schleifen zu vermeiden)
+}
+
+
+// ----- NEU: DATENBANK-FUNKTION (Abstimmung speichern) -----
+async function saveVoteParticipation() {
+    const saveBtn = document.getElementById('vote-save-participation-btn');
+    const nameInput = document.getElementById('vote-participant-name');
+    let participantName = nameInput.value.trim();
+    
+    // 1. Validierung
+    if (!currentVoteData) return alertUser("Fehler: Keine Umfrage geladen.", "error");
+    
+    if (!currentVoteData.isAnonymous && !participantName) {
+        return alertUser("Bitte gib deinen Namen ein.", "error");
+    }
+    
+    if (currentVoteData.isAnonymous) {
+        participantName = "Anonym"; // Standard-Name für anonyme
+    }
+    
+    // Prüfen, ob überhaupt Antworten gegeben wurden
+    if (Object.keys(currentParticipantAnswers).length === 0) {
+        return alertUser("Du hast noch für keinen Termin abgestimmt.", "error");
+    }
+
+    setButtonLoading(saveBtn, true);
+
+    try {
+        // 2. Finde den Teilnehmer in der Liste
+        // Wir nutzen die 'userId' (z.B. "JASMIN") wenn eingeloggt, sonst den Namen
+        const participantId = (currentUser.mode !== 'Gast') ? currentUser.mode : participantName;
+        
+        let existingParticipantIndex = -1;
+        
+        if (currentUser.mode !== 'Gast') {
+             // Suche nach UserId (besser)
+             existingParticipantIndex = currentVoteData.participants.findIndex(p => p.userId === participantId);
+        } else if (!currentVoteData.isAnonymous) {
+             // Suche nach Name (nur wenn Gast und nicht anonym)
+             existingParticipantIndex = currentVoteData.participants.findIndex(p => p.name === participantId);
+        }
+        
+        const newParticipantsArray = [...currentVoteData.participants]; // Kopie erstellen
+
+        if (existingParticipantIndex > -1) {
+            // A. Teilnehmer AKTUALISIEREN
+            console.log("Aktualisiere Teilnehmer:", participantName);
+            newParticipantsArray[existingParticipantIndex].answers = currentParticipantAnswers;
+        } else {
+            // B. Teilnehmer HINZUFÜGEN
+            console.log("Füge neuen Teilnehmer hinzu:", participantName);
+            newParticipantsArray.push({
+                userId: participantId,
+                name: participantName,
+                answers: currentParticipantAnswers
+            });
+        }
+        
+        // 3. Datenbank-Update
+        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
+        await updateDoc(voteDocRef, {
+            participants: newParticipantsArray
+        });
+        
+        // 4. Erfolg
+        alertUser("Deine Abstimmung wurde gespeichert!", "success");
+        
+        // 5. Lokale Daten aktualisieren und Ansicht neu laden
+        currentVoteData.participants = newParticipantsArray;
+        renderVoteView(currentVoteData); // Baut die Seite neu auf (mit der gespeicherten Antwort)
+
+    } catch (error) {
+        console.error("Fehler beim Speichern der Abstimmung:", error);
+        alertUser("Fehler beim Speichern: " + error.message, "error");
+    } finally {
+        setButtonLoading(saveBtn, false);
+    }
+}
+
+
+// ----- SPEICHER-FUNKTION (Erstellung) -----
 async function saveGroupPoll() {
     const saveBtn = document.getElementById('vote-save-group-poll-btn');
     saveBtn.disabled = true;
@@ -358,7 +502,7 @@ async function saveGroupPoll() {
         console.log(`Umfrage erstellt! ID: ${docRef.id}, Token: ${token}`);
         alertUser(`Umfrage erstellt! Dein Token: ${token}`, "success");
 
-        showView('main'); // Benutzt Helfer-Funktion
+        showView('main'); 
 
     } catch (error) {
         console.error("Fehler beim Speichern der Umfrage:", error);
@@ -373,8 +517,7 @@ async function saveGroupPoll() {
 
 // ----- HELFER-FUNKTIONEN (unverändert) -----
 
-// Helfer-Funktion zum Umschalten der Ansichten
-function showView(viewName) { // viewName kann 'main', 'create' oder 'vote' sein
+function showView(viewName) { 
     document.getElementById('terminplaner-main-view').classList.add('hidden');
     document.getElementById('terminplaner-create-view').classList.add('hidden');
     document.getElementById('terminplaner-vote-view').classList.add('hidden');
@@ -383,13 +526,12 @@ function showView(viewName) { // viewName kann 'main', 'create' oder 'vote' sein
         document.getElementById('terminplaner-main-view').classList.remove('hidden');
     } else if (viewName === 'create') {
         document.getElementById('terminplaner-create-view').classList.remove('hidden');
-        resetCreateWizard(); // Beim Anzeigen direkt zurücksetzen
+        resetCreateWizard(); 
     } else if (viewName === 'vote') {
         document.getElementById('terminplaner-vote-view').classList.remove('hidden');
     }
 }
 
-// umbenannt von showVoteCreationWizard
 function resetCreateWizard() {
     document.getElementById('vote-title').value = '';
     document.getElementById('vote-description').value = '';
@@ -400,7 +542,6 @@ function resetCreateWizard() {
     addNewDateGroup();
 }
 
-// Zeigt die Hauptseite an und versteckt den Assistenten
 function showMainTerminplanerView() {
     showView('main');
 }
@@ -432,11 +573,12 @@ function addNewDateGroup() {
     datesContainer.appendChild(newGroup);
 }
 
+// KORREKTUR: type="time" statt type"time"
 function createTimeInputHTML() {
     const timeGroup = document.createElement('div');
     timeGroup.className = 'flex items-center gap-2';
     timeGroup.innerHTML = `
-        <input type"time" class="vote-time-input flex-grow p-1 border rounded-lg">
+        <input type="time" class="vote-time-input flex-grow p-1 border rounded-lg">
         <button class="vote-remove-time-btn p-1 text-red-500 hover:bg-red-100 rounded-full" title="Uhrzeit entfernen">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4">
                 <path fill-rule="evenodd" d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.285a1.5 1.5 0 0 0 1.493-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5Z" clip-rule="evenodd" />
