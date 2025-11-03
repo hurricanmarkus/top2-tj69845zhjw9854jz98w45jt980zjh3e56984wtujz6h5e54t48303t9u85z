@@ -1272,6 +1272,80 @@
             </div>
         </div>
 
+<div id="createVoteModal"
+            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-30">
+            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-3xl">
+                <div class="flex justify-between items-center mb-6 pb-3 border-b">
+                    <h3 class="text-2xl font-bold text-gray-800">Neuen Termin erstellen</h3>
+                    <button id="close-create-vote-modal-btn"
+                        class="text-gray-400 hover:text-red-600 font-bold text-3xl">&times;</button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+
+                    <div id="select-vote-type-group"
+                        class="p-4 border rounded-lg hover:shadow-lg hover:border-indigo-500 cursor-pointer transition-all duration-200 flex flex-col items-center text-center">
+                        <div class="p-4 rounded-lg bg-yellow-100 mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                                class="w-10 h-10 text-yellow-600">
+                                <path fill-rule="evenodd"
+                                    d="M4.5 3.75a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V6.75a3 3 0 0 0-3-3H4.5ZM12 7.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm-3 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm6 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <h4 class="font-bold text-lg text-gray-800">Gruppenumfrage</h4>
+                        <p class="text-sm text-gray-600 mt-1">Finde die Zeit, die für alle Mitglieder in deiner Gruppe
+                            am besten passt.</p>
+                    </div>
+
+                    <div id="select-vote-type-event"
+                        class="p-4 border rounded-lg hover:shadow-lg hover:border-indigo-500 cursor-pointer transition-all duration-200 flex flex-col items-center text-center">
+                        <div class="p-4 rounded-lg bg-green-100 mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                                class="w-10 h-10 text-green-600">
+                                <path fill-rule="evenodd"
+                                    d="M4.5 3.75a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V6.75a3 3 0 0 0-3-3H4.5ZM12 7.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm-3 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm6 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm-3 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <h4 class="font-bold text-lg text-gray-800">Eventplaner</h4>
+                        <p class="text-sm text-gray-600 mt-1">Erstelle Anmeldungen für Workshops, Webinare oder
+                            Veranstaltungen.</p>
+                    </div>
+
+                    <div id="select-vote-type-1on1"
+                        class="p-4 border rounded-lg hover:shadow-lg hover:border-indigo-500 cursor-pointer transition-all duration-200 flex flex-col items-center text-center">
+                        <div class="p-4 rounded-lg bg-green-100 mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                                class="w-10 h-10 text-green-600">
+                                <path fill-rule="evenodd"
+                                    d="M4.5 3.75a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V6.75a3 3 0 0 0-3-3H4.5ZM7.5 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0Zm6 0a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0Z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <h4 class="font-bold text-lg text-gray-800">1:1</h4>
+                        <p class="text-sm text-gray-600 mt-1">Biete eine Liste deiner verfügbaren Zeiten an, damit
+                            jemand auswählen kann.</p>
+                    </div>
+
+                    <div id="select-vote-type-booking"
+                        class="p-4 border rounded-lg hover:shadow-lg hover:border-indigo-500 cursor-pointer transition-all duration-200 flex flex-col items-center text-center">
+                        <div class="p-4 rounded-lg bg-blue-100 mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                                class="w-10 h-10 text-blue-600">
+                                <path fill-rule="evenodd"
+                                    d="M4.5 3.75a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V6.75a3 3 0 0 0-3-3H4.5ZM9 7.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm6 3a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0Zm-3 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <h4 class="font-bold text-lg text-gray-800">Buchungsseite</h4>
+                        <p class="text-sm text-gray-600 mt-1">Lass Kunden mit wenigen Klicks Zeit bei dir buchen.
+                        </p>
+                    </div>
+
+                </div> </div>
+        </div>
+        
         <script type="module" src="haupteingang.js"></script>
         <script type="module" src="log-InOut.js"></script>
         <script type="module" src="admin_adminfunktionenHome.js"></script>
