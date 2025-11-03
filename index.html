@@ -996,6 +996,7 @@
                         </div>
                         <p class="text-sm text-gray-600 mt-1">Finde den besten Termin für deine Gruppe.</p>
                     </div>
+
                     <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
                         <div>
                             <label for="vote-title" class="block text-sm font-bold text-gray-700 mb-1">Titel der
@@ -1010,7 +1011,14 @@
                                 class="w-full p-2 border border-gray-300 rounded-lg"
                                 placeholder="z.B. Themen: Projekt-Update, Budget..."></textarea>
                         </div>
+                        <div>
+                            <label for="vote-location" class="block text-sm font-bold text-gray-700 mb-1">Ort
+                                (Optional)</label>
+                            <input type="text" id="vote-location" class="w-full p-2 border border-gray-300 rounded-lg"
+                                placeholder="z.B. Konferenzraum 1 oder Online">
+                        </div>
                     </div>
+
                     <div class="card bg-white p-4 rounded-xl shadow-lg mb-6">
                         <h3 class="text-lg font-bold text-gray-800 mb-3">Termine vorschlagen</h3>
                         <div id="vote-dates-container" class="space-y-4">
@@ -1020,6 +1028,30 @@
                             + Tag hinzufügen
                         </button>
                     </div>
+
+                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
+                        <h3 class="text-lg font-bold text-gray-800 mb-1">Gültigkeitszeitraum der Umfrage</h3>
+                        <p class="text-xs text-gray-500 mb-3">Lege fest, von wann bis wann abgestimmt werden kann.</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label for="vote-start-time" class="block text-sm font-medium text-gray-700">Startet
+                                    am</label>
+                                <input type="datetime-local" id="vote-start-time"
+                                    class="w-full p-2 border rounded-lg mt-1">
+                            </div>
+                            <div>
+                                <label for="vote-end-time" class="block text-sm font-medium text-gray-700">Endet
+                                    am</label>
+                                <input type="datetime-local" id="vote-end-time"
+                                    class="w-full p-2 border rounded-lg mt-1 disabled:bg-gray-100 disabled:cursor-not-allowed">
+                                <label class="flex items-center gap-2 mt-2">
+                                    <input type="checkbox" id="vote-end-time-unlimited" class="h-4 w-4 rounded">
+                                    <span class="text-sm text-gray-600">Unbegrenzt (offen lassen)</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
                         <h3 class="text-lg font-bold text-gray-800 mb-1">Einstellungen</h3>
                         <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
@@ -1037,17 +1069,24 @@
                                 <p class="text-xs text-gray-500">Teilnehmer müssen keinen Namen eingeben.</p>
                             </div>
                         </label>
+                        <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
+                            <input type="checkbox" id="vote-setting-disable-maybe" class="h-5 w-5 rounded">
+                            <div>
+                                <span class="font-semibold text-gray-700">"Vielleicht"-Option deaktivieren</span>
+                                <p class="text-xs text-gray-500">Erlaube nur "Ja" oder "Nein" als Antwort.</p>
+                            </div>
+                        </label>
                     </div>
+
                     <button id="vote-save-group-poll-btn"
                         class="w-full py-3 bg-green-600 text-white font-bold text-lg rounded-lg hover:bg-green-700 transition shadow-lg">
                         Umfrage erstellen und Link erhalten
                     </button>
                 </div>
+                <div id="terminplaner-vote-view" class="hidden">
 
-<div id="terminplaner-vote-view" class="hidden">
-                    
                     <div class="back-link-container w-full mb-2">
-                        <button id="cancel-vote-participation-btn" 
+                        <button id="cancel-vote-participation-btn"
                             class="flex items-center text-gray-600 hover:text-indigo-600 transition">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
                                 fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
@@ -1060,70 +1099,72 @@
 
                     <div class="flex justify-between items-center mb-4">
                         <h2 id="vote-poll-title" class="text-2xl font-bold text-gray-800 truncate">...</h2>
-                        
+
                         <div id="edit-vote-wrapper" class="flex items-center gap-2 flex-shrink-0 ml-2">
                             <button id="show-edit-vote-btn"
                                 class="py-1 px-3 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300">
                                 EDIT
                             </button>
-                            
+
                             <input type="text" id="edit-token-input-inline"
                                 class="hidden p-1 border rounded-lg text-sm font-mono uppercase w-36"
                                 placeholder="XXXX - XXXX" maxlength="11">
-                                
+
                             <button id="submit-edit-token-inline-btn"
                                 class="hidden py-1 px-3 bg-orange-500 text-white text-sm font-semibold rounded-lg hover:bg-orange-600">
                                 OK
                             </button>
                         </div>
                     </div>
-                    
+
                     <p id="vote-poll-description" class="text-sm text-gray-600 mb-4"></p>
 
                     <div class="card bg-white p-4 rounded-xl shadow-lg mb-6">
                         <h3 class="text-lg font-bold text-gray-800 mb-3">Wähle deine Termine</h3>
                         <div id="vote-options-container" class="overflow-x-auto">
-                            </div>
+                        </div>
                     </div>
 
-                    <div id="vote-participation-container" class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4 hidden">
+                    <div id="vote-participation-container"
+                        class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4 hidden">
                         <h3 class="text-lg font-bold text-gray-800">Deine Teilnahme</h3>
-                        
-                        <div id="vote-selected-option-display" class="p-3 bg-blue-50 border border-blue-200 rounded-lg text-center hidden">
-                            <p class="font-bold text-blue-800">Ausgewählt: ...</p> 
+
+                        <div id="vote-selected-option-display"
+                            class="p-3 bg-blue-50 border border-blue-200 rounded-lg text-center hidden">
+                            <p class="font-bold text-blue-800">Ausgewählt: ...</p>
                         </div>
 
                         <div id="vote-name-input-container">
-                            <label for="vote-participant-name"
-                                class="block text-sm font-bold text-gray-700 mb-1">Dein Name</label>
+                            <label for="vote-participant-name" class="block text-sm font-bold text-gray-700 mb-1">Dein
+                                Name</label>
                             <input type="text" id="vote-participant-name"
                                 class="w-full p-2 border border-gray-300 rounded-lg" placeholder="Dein Name...">
                         </div>
-                        
+
                         <div id="vote-selection-container" class="space-y-3">
                             <p id="vote-selected-option-text" class="text-sm font-bold text-gray-700">
                                 Hier ist deine Festlegung:
                             </p>
-                            <div class="flex gap-2">
+                            <div id="vote-answer-buttons" class="flex justify-center gap-2">
                                 <button data-answer="yes"
-                                    class="vote-answer-btn flex-1 py-3 bg-green-100 text-green-800 font-bold rounded-lg border-2 border-transparent hover:border-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    class="vote-answer-btn flex-auto py-3 bg-green-100 text-green-800 font-bold rounded-lg border-2 border-transparent hover:border-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                     disabled>
                                     Ja
                                 </button>
-                                <button data-answer="maybe"
-                                    class="vote-answer-btn flex-1 py-3 bg-yellow-100 text-yellow-800 font-bold rounded-lg border-2 border-transparent hover:border-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                <button id="vote-btn-maybe" data-answer="maybe"
+                                    class="vote-answer-btn flex-auto py-3 bg-yellow-100 text-yellow-800 font-bold rounded-lg border-2 border-transparent hover:border-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                     disabled>
                                     Vielleicht
                                 </button>
                                 <button data-answer="no"
-                                    class="vote-answer-btn flex-1 py-3 bg-red-100 text-red-800 font-bold rounded-lg border-2 border-transparent hover:border-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    class="vote-answer-btn flex-auto py-3 bg-red-100 text-red-800 font-bold rounded-lg border-2 border-transparent hover:border-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                     disabled>
                                     Nein
                                 </button>
                             </div>
                         </div>
                     </div>
-                    
+
                     <button id="vote-save-participation-btn"
                         class="w-full py-3 bg-green-600 text-white font-bold text-lg rounded-lg hover:bg-green-700 transition shadow-lg">
                         Abstimmung speichern
