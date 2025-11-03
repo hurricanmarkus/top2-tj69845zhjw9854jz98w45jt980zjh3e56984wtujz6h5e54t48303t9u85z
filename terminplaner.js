@@ -1,12 +1,13 @@
 // NEU: Wir importieren mehr Datenbank-Tools
 import { alertUser, db, votesCollectionRef, currentUser, setButtonLoading } from './haupteingang.js';
+// NEU: Wir importieren die Firebase-Befehle zum Speichern und für Zeitstempel
 import { addDoc, serverTimestamp, getDocs, query, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ----- Globale Variablen für den Zustand -----
 let dateGroupIdCounter = 0;
-// NEU: Hier merken wir uns die Umfrage, an der wir gerade teilnehmen
+// Hier merken wir uns die Umfrage, an der wir gerade teilnehmen
 let currentVoteData = null;
-// NEU: Hier merken wir uns, welche Option (Termin) wir gerade angeklickt haben
+// Hier merken wir uns, welche Option (Termin) wir gerade angeklickt haben
 let selectedOptionIndex = null;
 
 
@@ -20,10 +21,10 @@ export function initializeTerminplanerView() {
         tokenInput.dataset.listenerAttached = 'true';
     }
 
-    // ----- NEU: Spion für den "Teilnehmen"-Button -----
+    // ----- Spion für den "Teilnehmen"-Button -----
     const joinVoteButton = document.getElementById('join-vote-by-token-btn');
     if (joinVoteButton && !joinVoteButton.dataset.listenerAttached) {
-        joinVoteButton.addEventListener('click', joinVoteByToken); // Ruft unsere neue Suchfunktion auf
+        joinVoteButton.addEventListener('click', joinVoteByToken); // Ruft unsere Suchfunktion auf
         joinVoteButton.dataset.listenerAttached = 'true';
     }
 
@@ -55,9 +56,10 @@ export function initializeTerminplanerView() {
         const groupPollButton = document.getElementById('select-vote-type-group');
         if (groupPollButton && !groupPollButton.dataset.listenerAttached) {
             groupPollButton.addEventListener('click', () => {
+                console.log("Wähle Typ: Gruppenumfrage");
                 modal.style.display = 'none'; 
                 modal.classList.add('hidden');
-                showView('create'); // NEU: Benutzt Helfer-Funktion
+                showView('create'); // Benutzt Helfer-Funktion
             });
             groupPollButton.dataset.listenerAttached = 'true';
         }
@@ -76,7 +78,7 @@ export function initializeTerminplanerView() {
     if (cancelCreationButton && !cancelCreationButton.dataset.listenerAttached) {
         cancelCreationButton.addEventListener('click', () => {
             if (confirm("Möchtest du die Erstellung wirklich abbrechen? Alle Eingaben gehen verloren.")) {
-                showView('main'); // NEU: Benutzt Helfer-Funktion
+                showView('main'); // Benutzt Helfer-Funktion
             }
         });
         cancelCreationButton.dataset.listenerAttached = 'true';
@@ -93,6 +95,7 @@ export function initializeTerminplanerView() {
     const datesContainer = document.getElementById('vote-dates-container');
     if (datesContainer && !datesContainer.dataset.clickListenerAttached) {
         datesContainer.addEventListener('click', (e) => {
+            
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
                 const timesContainer = addTarget.previousElementSibling; 
@@ -121,7 +124,7 @@ export function initializeTerminplanerView() {
         saveVoteButton.dataset.listenerAttached = 'true';
     }
 
-    // ----- NEU: Spione für die Abstimmungs-Seite -----
+    // ----- Spione für die Abstimmungs-Seite -----
 
     // "Zurück"-Button auf der Abstimmungs-Seite
     const cancelVoteButton = document.getElementById('cancel-vote-participation-btn');
@@ -135,7 +138,7 @@ export function initializeTerminplanerView() {
 }
 
 
-// ----- NEU: DATENBANK-FUNKTION (Umfrage suchen) -----
+// ----- KORRIGIERTE DATENBANK-FUNKTION (Umfrage suchen) -----
 
 /**
  * Sucht eine Umfrage basierend auf dem eingegebenen Token.
@@ -145,20 +148,25 @@ async function joinVoteByToken() {
     const joinBtn = document.getElementById('join-vote-by-token-btn');
     const token = tokenInput.value.trim().toUpperCase(); // z.B. "A1B2 - C3D4"
 
+    // =================================================================
+    // HIER IST DIE KORREKTUR
     // Prüfung 1: Ist das Format gültig?
-    if (token.length !== 10 || token[4] !== ' ' || token[5] !== '-' || token[6] !== ' ') {
+    // Es muss 11 Zeichen lang sein, nicht 10.
+    // =================================================================
+    if (token.length !== 11 || token[4] !== ' ' || token[5] !== '-' || token[6] !== ' ') {
         alertUser("Ungültiges Token-Format. Es muss 'XXXX - XXXX' sein.", "error");
         return;
     }
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
     
     setButtonLoading(joinBtn, true); // Lade-Spinner anzeigen
 
     try {
         // Prüfung 2: Gibt es diese Umfrage in der Datenbank?
-        // Wir erstellen eine Suchanfrage (query)
         const q = query(votesCollectionRef, where("token", "==", token));
         
-        // Wir führen die Suche aus
         const snapshot = await getDocs(q);
 
         if (snapshot.empty) {
@@ -193,7 +201,7 @@ async function joinVoteByToken() {
 }
 
 
-// ----- NEU: RENDER-FUNKTION (Abstimmungs-Seite) -----
+// ----- RENDER-FUNKTION (Abstimmungs-Seite) -----
 
 /**
  * Baut die Abstimmungs-Seite (Tabelle) basierend auf den Umfragedaten auf.
@@ -224,35 +232,31 @@ function renderVoteView(voteData) {
         }
     }
 
-    // 3. Die Abstimmungs-Tabelle bauen (der komplizierte Teil)
+    // 3. Die Abstimmungs-Tabelle bauen
     const optionsContainer = document.getElementById('vote-options-container');
     
-    // Wir müssen die Termine nach Datum gruppieren
-    // z.B. { "2025-11-10": [ {time: "14:00"}, {time: "16:00"} ], ... }
+    // Termine nach Datum gruppieren
     const optionsByDate = {};
     voteData.options.forEach((option, index) => {
         if (!optionsByDate[option.date]) {
-            optionsByDate[option.date] = []; // Neues Array für dieses Datum erstellen
+            optionsByDate[option.date] = []; 
         }
-        // Wir fügen die Uhrzeit UND den originalen Index hinzu
         optionsByDate[option.date].push({ ...option, originalIndex: index });
     });
 
     let tableHTML = '<table class="w-full border-collapse text-sm text-left">';
     
-    // 4. Kopfzeile der Tabelle (Teilnehmer)
+    // 4. Kopfzeile der Tabelle
     tableHTML += '<thead><tr class="bg-gray-50">';
     tableHTML += '<th class="p-2 border-b">Termin</th>';
     // (Hier kommen später die Teilnehmer-Namen hin)
     tableHTML += '</tr></thead>';
 
-    // 5. Zeilen der Tabelle (Termine)
+    // 5. Zeilen der Tabelle
     tableHTML += '<tbody>';
     
-    // Gehe jedes Datum durch (z.B. "2025-11-10")
     for (const date in optionsByDate) {
-        // Formatiere das Datum schön (z.B. "Mo, 10.11.2025")
-        const dateObj = new Date(date + 'T12:00:00'); // 'T12:00' um Zeitzonen-Probleme zu vermeiden
+        const dateObj = new Date(date + 'T12:00:00'); 
         const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
 
         // Datums-Trenn-Zeile
@@ -262,7 +266,7 @@ function renderVoteView(voteData) {
             </tr>
         `;
 
-        // Gehe jede Uhrzeit für dieses Datum durch
+        // Uhrzeit-Zeilen
         optionsByDate[date].forEach(option => {
             tableHTML += `
                 <tr class="vote-option-row hover:bg-blue-50 cursor-pointer" data-option-index="${option.originalIndex}">
@@ -276,25 +280,19 @@ function renderVoteView(voteData) {
     optionsContainer.innerHTML = tableHTML;
     
     // 6. Klick-Spione für die neuen Tabellen-Zeilen hinzufügen
-    // (Wir müssen das hier tun, weil die Zeilen gerade erst erstellt wurden)
     optionsContainer.querySelectorAll('.vote-option-row').forEach(row => {
         row.addEventListener('click', () => {
-            // Alle anderen Zeilen de-markieren
             optionsContainer.querySelectorAll('.vote-option-row').forEach(r => r.classList.remove('bg-blue-200'));
-            // Diese Zeile markieren
             row.classList.add('bg-blue-200');
             
-            // Welchen Termin haben wir angeklickt?
             selectedOptionIndex = parseInt(row.dataset.optionIndex);
             const selectedOption = voteData.options[selectedOptionIndex];
             
-            // Zeige den Text "Du stimmst ab für..."
             const dateObj = new Date(selectedOption.date + 'T12:00:00');
             const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
             document.getElementById('vote-selected-option-text').textContent = 
                 `Du stimmst ab für: ${niceDate} um ${selectedOption.time} Uhr`;
                 
-            // Aktiviere die Ja/Nein/Vielleicht-Buttons
             document.querySelectorAll('.vote-answer-btn').forEach(btn => btn.disabled = false);
         });
     });
@@ -360,7 +358,7 @@ async function saveGroupPoll() {
         console.log(`Umfrage erstellt! ID: ${docRef.id}, Token: ${token}`);
         alertUser(`Umfrage erstellt! Dein Token: ${token}`, "success");
 
-        showView('main'); // NEU: Benutzt Helfer-Funktion
+        showView('main'); // Benutzt Helfer-Funktion
 
     } catch (error) {
         console.error("Fehler beim Speichern der Umfrage:", error);
@@ -375,7 +373,7 @@ async function saveGroupPoll() {
 
 // ----- HELFER-FUNKTIONEN (unverändert) -----
 
-// NEU: Helfer-Funktion zum Umschalten der Ansichten
+// Helfer-Funktion zum Umschalten der Ansichten
 function showView(viewName) { // viewName kann 'main', 'create' oder 'vote' sein
     document.getElementById('terminplaner-main-view').classList.add('hidden');
     document.getElementById('terminplaner-create-view').classList.add('hidden');
@@ -391,7 +389,7 @@ function showView(viewName) { // viewName kann 'main', 'create' oder 'vote' sein
     }
 }
 
-// NEU: umbenannt von showVoteCreationWizard
+// umbenannt von showVoteCreationWizard
 function resetCreateWizard() {
     document.getElementById('vote-title').value = '';
     document.getElementById('vote-description').value = '';
@@ -404,10 +402,6 @@ function resetCreateWizard() {
 
 // Zeigt die Hauptseite an und versteckt den Assistenten
 function showMainTerminplanerView() {
-    // ALT:
-    // document.getElementById('terminplaner-main-view').classList.remove('hidden');
-    // document.getElementById('terminplaner-create-view').classList.add('hidden');
-    // NEU:
     showView('main');
 }
 
@@ -442,7 +436,7 @@ function createTimeInputHTML() {
     const timeGroup = document.createElement('div');
     timeGroup.className = 'flex items-center gap-2';
     timeGroup.innerHTML = `
-        <input type="time" class="vote-time-input flex-grow p-1 border rounded-lg">
+        <input type"time" class="vote-time-input flex-grow p-1 border rounded-lg">
         <button class="vote-remove-time-btn p-1 text-red-500 hover:bg-red-100 rounded-full" title="Uhrzeit entfernen">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4">
                 <path fill-rule="evenodd" d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.285a1.5 1.5 0 0 0 1.493-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5Z" clip-rule="evenodd" />
@@ -452,38 +446,23 @@ function createTimeInputHTML() {
     return timeGroup;
 }
 
-// Die Token-Formatierungsfunktion
 function formatTokenInput(e) {
     const input = e.target;
-    // Erlaube jetzt auch Kleinbuchstaben bei der Eingabe, wandle sie aber um
-    let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); // Nur Buchstaben/Zahlen, alles groß
-
+    let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); 
     let formattedValue = '';
-
-    // Füge automatisch den Bindestrich nach 4 Zeichen ein
     if (value.length > 4) {
-        // Nimm nur die ersten 4, füge " - " hinzu, und nimm dann die nächsten 4 (bis Index 8)
         formattedValue = value.substring(0, 4) + ' - ' + value.substring(4, 8);
     } else {
         formattedValue = value;
     }
-    
-    // Setze den formatierten Wert zurück ins Feld
-    // Wir speichern die Position des Mauszeigers (Cursor)
     const cursorPos = input.selectionStart;
     const originalLength = input.value.length;
-    
     input.value = formattedValue;
-    
     const newLength = formattedValue.length;
-    
-    // Setze den Cursor intelligent zurück
-    // Wenn wir gerade den Bindestrich hinzugefügt haben (z.B. von 4 auf 8 Zeichen)
     if (newLength > originalLength) {
          input.selectionStart = newLength;
          input.selectionEnd = newLength;
     } else {
-        // Ansonsten setze ihn dorthin, wo er war (wichtig, wenn man in der Mitte etwas löscht)
          input.selectionStart = cursorPos;
          input.selectionEnd = cursorPos;
     }
