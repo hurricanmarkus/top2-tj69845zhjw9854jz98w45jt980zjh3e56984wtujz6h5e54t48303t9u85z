@@ -452,23 +452,38 @@ function createTimeInputHTML() {
     return timeGroup;
 }
 
+// Die Token-Formatierungsfunktion
 function formatTokenInput(e) {
     const input = e.target;
-    let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); 
+    // Erlaube jetzt auch Kleinbuchstaben bei der Eingabe, wandle sie aber um
+    let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); // Nur Buchstaben/Zahlen, alles groß
+
     let formattedValue = '';
+
+    // Füge automatisch den Bindestrich nach 4 Zeichen ein
     if (value.length > 4) {
+        // Nimm nur die ersten 4, füge " - " hinzu, und nimm dann die nächsten 4 (bis Index 8)
         formattedValue = value.substring(0, 4) + ' - ' + value.substring(4, 8);
     } else {
         formattedValue = value;
     }
+    
+    // Setze den formatierten Wert zurück ins Feld
+    // Wir speichern die Position des Mauszeigers (Cursor)
     const cursorPos = input.selectionStart;
     const originalLength = input.value.length;
+    
     input.value = formattedValue;
+    
     const newLength = formattedValue.length;
+    
+    // Setze den Cursor intelligent zurück
+    // Wenn wir gerade den Bindestrich hinzugefügt haben (z.B. von 4 auf 8 Zeichen)
     if (newLength > originalLength) {
          input.selectionStart = newLength;
          input.selectionEnd = newLength;
     } else {
+        // Ansonsten setze ihn dorthin, wo er war (wichtig, wenn man in der Mitte etwas löscht)
          input.selectionStart = cursorPos;
          input.selectionEnd = cursorPos;
     }
