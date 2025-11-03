@@ -1049,442 +1049,465 @@
 
                 </div>
                 <div id="terminplaner-vote-view" class="hidden">
-                    <div class="mb-4">
-                        <div class="flex justify-between items-center">
-                            <h2 id="vote-poll-title" class="text-2xl font-bold text-gray-800">...</h2>
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center gap-2">
                             <button id="cancel-vote-participation-btn"
                                 class="py-2 px-4 bg-gray-200 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition">
                                 Zurück
                             </button>
+                            <button id="show-edit-vote-btn"
+                                class="py-2 px-4 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition hidden">
+                                EDIT
+                            </button>
                         </div>
-                        <p id="vote-poll-description" class="text-sm text-gray-600 mt-1"></p>
+
+                        <h2 id="vote-poll-title" class="text-2xl font-bold text-gray-800 text-right truncate">...</h2>
                     </div>
-
-                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6">
-                        <h3 class="text-lg font-bold text-gray-800 mb-3">Wähle deine Termine</h3>
-                        <div id="vote-options-container" class="overflow-x-auto">
-                        </div>
-                    </div>
-
-                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
-                        <h3 class="text-lg font-bold text-gray-800">Deine Teilnahme</h3>
-                        <div id="vote-name-input-container">
-                            <label for="vote-participant-name" class="block text-sm font-bold text-gray-700 mb-1">Dein
-                                Name</label>
-                            <input type="text" id="vote-participant-name"
-                                class="w-full p-2 border border-gray-300 rounded-lg" placeholder="Dein Name...">
-                        </div>
-                        <div id="vote-selection-container" class="space-y-3">
-                            <p class="text-sm font-bold text-gray-700">Klicke auf einen Termin in der Tabelle, um
-                                abzustimmen:</p>
-                            <p id="vote-selected-option-text" class="text-sm text-gray-600 italic">
-                                Bitte wähle einen Termin aus der Tabelle aus.
-                            </p>
-                            <div class="flex gap-2">
-                                <button data-answer="yes"
-                                    class="vote-answer-btn flex-1 py-3 bg-green-100 text-green-800 font-bold rounded-lg border-2 border-transparent hover:border-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    disabled>
-                                    Ja
-                                </button>
-                                <button data-answer="maybe"
-                                    class="vote-answer-btn flex-1 py-3 bg-yellow-100 text-yellow-800 font-bold rounded-lg border-2 border-transparent hover:border-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    disabled>
-                                    Vielleicht
-                                </button>
-                                <button data-answer="no"
-                                    class="vote-answer-btn flex-1 py-3 bg-red-100 text-red-800 font-bold rounded-lg border-2 border-transparent hover:border-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    disabled>
-                                    Nein
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <button id="vote-save-participation-btn"
-                        class="w-full py-3 bg-green-600 text-white font-bold text-lg rounded-lg hover:bg-green-700 transition shadow-lg">
-                        Abstimmung speichern
-                    </button>
-
+                    <p id="vote-poll-description" class="text-sm text-gray-600 mt-1"></p>
                 </div>
-            </div>
 
-            <div id="userSelectionModal"
-                class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
-                <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-xs">
-                    <h3 class="text-xl font-bold mb-4 text-gray-800">Benutzer auswählen</h3>
-                    <p class="text-sm text-gray-600 mb-4">Wählen Sie den Modus, in dem Sie sich anmelden möchten.
-                    </p>
-                    <div id="modalUserButtons" class="space-y-3"></div>
-                    <div class="flex justify-end mt-4">
-                        <button id="cancelSelectionButton"
-                            class="py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition">Abbrechen</button>
+                <div class="card bg-white p-4 rounded-xl shadow-lg mb-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-3">Wähle deine Termine</h3>
+                    <div id="vote-options-container" class="overflow-x-auto">
                     </div>
                 </div>
-            </div>
 
-            <div id="pinModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
-                <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-xs">
-                    <div id="pinRegularContent">
-                        <h3 id="pinModalTitle" class="text-xl font-bold mb-4 text-gray-800">Schlüssel eingeben</h3>
-                        <p class="text-sm text-gray-600 mb-4">Geben Sie den Schlüssel für den gewählten Benutzer
-                            ein.
+                <div id="vote-participation-container" class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
+                    <h3 class="text-lg font-bold text-gray-800">Deine Teilnahme</h3>
+                    <div id="vote-name-input-container">
+                        <label for="vote-participant-name" class="block text-sm font-bold text-gray-700 mb-1">Dein
+                            Name</label>
+                        <input type="text" id="vote-participant-name"
+                            class="w-full p-2 border border-gray-300 rounded-lg" placeholder="Dein Name...">
+                    </div>
+                    <div id="vote-selection-container" class="space-y-3">
+                        <p class="text-sm font-bold text-gray-700">Klicke auf einen Termin in der Tabelle, um
+                            abzustimmen:</p>
+                        <p id="vote-selected-option-text" class="text-sm text-gray-600 italic">
+                            Bitte wähle einen Termin aus der Tabelle aus.
                         </p>
-                        <input type="password" id="adminPinInput"
-                            class="w-full p-3 border-2 border-gray-300 rounded-lg text-center tracking-widest text-lg focus:ring-blue-500 focus:border-blue-500"
-                            maxlength="20">
-                        <div id="pinError" class="text-red-500 text-sm mt-2 hidden">Falscher Schlüssel!</div>
-                        <div class="flex justify-between space-x-3 mt-6">
-                            <button id="backToSelectionButton"
-                                class="py-2 px-3 bg-gray-400 text-white font-medium rounded-lg hover:bg-gray-500 transition">Zurück</button>
-                            <button id="submitAdminKeyButton"
-                                class="py-2 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition">Bestätigen</button>
-                        </div>
-                    </div>
-                    <div id="pinLockedContent" class="hidden text-center">
-                        <h3 class="text-xl font-bold mb-4 text-red-700">Zugriff verweigert</h3>
-                        <p class="text-gray-600 mb-6">Dieser Benutzer ist gesperrt. Bitte kontaktieren Sie einen
-                            Administrator.</p>
-                        <button id="closeLockedModalButton"
-                            class="w-full py-2 px-4 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition">Zurück
-                            zur Auswahl</button>
-                    </div>
-                </div>
-            </div>
-
-
-            <div id="logoutConfirmModal"
-                class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
-                <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-xs">
-                    <h3 class="text-xl font-bold mb-4 text-gray-800">Abmelden</h3>
-                    <p class="text-sm text-gray-600 mb-6">Möchten Sie sich wirklich abmelden?</p>
-                    <div class="flex justify-between space-x-3 mt-4">
-                        <button id="confirmLogoutNo"
-                            class="flex-1 py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition">NEIN</button>
-                        <button id="confirmLogoutYes"
-                            class="flex-1 py-2 px-4 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition">JA</button>
-                    </div>
-                </div>
-            </div>
-
-        </main>
-
-        <footer id="appFooter"
-            class="flex-shrink-0 bg-gray-700 text-white border-t border-gray-600 p-2 flex justify-between items-center text-sm shadow-inner">
-            <div id="footerStatus" class="flex items-center text-xs sm:text-sm font-bold text-gray-500">
-                Status: <span class="ml-1 text-green-500">OK</span>
-            </div>
-            <div id="footerUser" class="font-medium text-xs sm:text-sm text-center">
-            </div>
-            <div id="footerLogout" class="flex items-center justify-end text-xs sm:text-sm">
-            </div>
-        </footer>
-
-        <div id="templateApplyModal"
-            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-30">
-            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-xl font-bold text-gray-800">Container-Inhalt einfügen</h3>
-                    <button id="closeTemplateModalBtn" class="text-gray-400 hover:text-red-600">&times;</button>
-                </div>
-
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">1. Quell-Typ wählen</label>
-                        <div class="grid grid-cols-2 gap-2 p-1 bg-gray-200 rounded-lg">
-                            <label class="relative flex items-center justify-center cursor-pointer">
-                                <input type="radio" name="template-type" value="Container" class="peer sr-only" checked>
-                                <span
-                                    class="w-full text-center py-1.5 px-3 rounded-md text-sm font-semibold text-gray-700 peer-checked:bg-white peer-checked:shadow">Container</span>
-                            </label>
-                            <label class="relative flex items-center justify-center cursor-pointer">
-                                <input type="radio" name="template-type" value="Schiff" class="peer sr-only">
-                                <span
-                                    class="w-full text-center py-1.5 px-3 rounded-md text-sm font-semibold text-gray-700 peer-checked:bg-white peer-checked:shadow">Schiff</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label for="template-select" class="block text-sm font-medium text-gray-700 mb-1">2. Quelle
-                            auswählen</label>
-                        <select id="template-select" class="w-full p-2 border rounded-lg bg-white">
-                            <option value="">Bitte zuerst Typ wählen...</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">3. Inhalte zum Einfügen
-                            auswählen</label>
-                        <div id="template-items-container"
-                            class="max-h-48 overflow-y-auto p-3 border rounded-lg bg-gray-50 space-y-2">
-                        </div>
-                    </div>
-                    <div id="template-mode-section" class="hidden">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">4. Einfüge-Methode</label>
-                        <div class="flex gap-4 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
-                            <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="radio" name="insert-mode" value="einfuegen" class="h-4 w-4" checked>
-                                <span>Zur Liste hinzufügen</span>
-                            </label>
-                            <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="radio" name="insert-mode" value="ersetzen" class="h-4 w-4">
-                                <span>Liste komplett ersetzen</span>
-                            </label>
+                        <div class="flex gap-2">
+                            <button data-answer="yes"
+                                class="vote-answer-btn flex-1 py-3 bg-green-100 text-green-800 font-bold rounded-lg border-2 border-transparent hover:border-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled>
+                                Ja
+                            </button>
+                            <button data-answer="maybe"
+                                class="vote-answer-btn flex-1 py-3 bg-yellow-100 text-yellow-800 font-bold rounded-lg border-2 border-transparent hover:border-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled>
+                                Vielleicht
+                            </button>
+                            <button data-answer="no"
+                                class="vote-answer-btn flex-1 py-3 bg-red-100 text-red-800 font-bold rounded-lg border-2 border-transparent hover:border-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled>
+                                Nein
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <div class="flex justify-end space-x-3 mt-6">
-                    <button id="cancel-template-modal-btn"
-                        class="py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition">Abbrechen</button>
-                    <button id="apply-template-btn"
-                        class="py-2 px-4 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition">Anwenden</button>
-                </div>
+                <button id="vote-save-participation-btn"
+                    class="w-full py-3 bg-green-600 text-white font-bold text-lg rounded-lg hover:bg-green-700 transition shadow-lg">
+                    Abstimmung speichern
+                </button>
+
+            </div>
+    </div>
+
+    <div id="userSelectionModal"
+        class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-xs">
+            <h3 class="text-xl font-bold mb-4 text-gray-800">Benutzer auswählen</h3>
+            <p class="text-sm text-gray-600 mb-4">Wählen Sie den Modus, in dem Sie sich anmelden möchten.
+            </p>
+            <div id="modalUserButtons" class="space-y-3"></div>
+            <div class="flex justify-end mt-4">
+                <button id="cancelSelectionButton"
+                    class="py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition">Abbrechen</button>
             </div>
         </div>
-        <div id="deletedListsModal"
-            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
-            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
-                <h3 class="text-xl font-bold mb-4 text-gray-800">Gelöschte Checklisten</h3>
-                <div id="deletedListsContainer" class="space-y-3 max-h-96 overflow-y-auto">
-                </div>
-                <div class="flex justify-end mt-6">
-                    <button id="closeDeletedListsModal"
-                        class="py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition">Schließen</button>
+    </div>
+
+    <div id="pinModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-xs">
+            <div id="pinRegularContent">
+                <h3 id="pinModalTitle" class="text-xl font-bold mb-4 text-gray-800">Schlüssel eingeben</h3>
+                <p class="text-sm text-gray-600 mb-4">Geben Sie den Schlüssel für den gewählten Benutzer
+                    ein.
+                </p>
+                <input type="password" id="adminPinInput"
+                    class="w-full p-3 border-2 border-gray-300 rounded-lg text-center tracking-widest text-lg focus:ring-blue-500 focus:border-blue-500"
+                    maxlength="20">
+                <div id="pinError" class="text-red-500 text-sm mt-2 hidden">Falscher Schlüssel!</div>
+                <div class="flex justify-between space-x-3 mt-6">
+                    <button id="backToSelectionButton"
+                        class="py-2 px-3 bg-gray-400 text-white font-medium rounded-lg hover:bg-gray-500 transition">Zurück</button>
+                    <button id="submitAdminKeyButton"
+                        class="py-2 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition">Bestätigen</button>
                 </div>
             </div>
-        </div>
-
-        <div id="archivedListsModal"
-            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
-            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
-                <h3 class="text-xl font-bold mb-4 text-gray-800">Archivierte Checklisten</h3>
-                <div id="archivedListsContainer" class="space-y-3 max-h-96 overflow-y-auto">
-                </div>
-                <div class="flex justify-end mt-6">
-                    <button id="closeArchivedListsModal"
-                        class="py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition">Schließen</button>
-                </div>
+            <div id="pinLockedContent" class="hidden text-center">
+                <h3 class="text-xl font-bold mb-4 text-red-700">Zugriff verweigert</h3>
+                <p class="text-gray-600 mb-6">Dieser Benutzer ist gesperrt. Bitte kontaktieren Sie einen
+                    Administrator.</p>
+                <button id="closeLockedModalButton"
+                    class="w-full py-2 px-4 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition">Zurück
+                    zur Auswahl</button>
             </div>
         </div>
+    </div>
 
-        <div id="permanentDeleteModal"
-            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-30">
-            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg">
-                <h3 class="text-xl font-bold mb-4 text-red-800">Papierkorb endgültig leeren</h3>
-                <p class="text-sm text-gray-600 mb-4">Wählen Sie die Checklisten aus, die unwiderruflich gelöscht werden
-                    sollen. Diese Aktion kann nicht rückgängig gemacht werden.</p>
 
-                <div class="p-2 border-b mb-2">
-                    <label class="flex items-center gap-3 cursor-pointer">
-                        <input type="checkbox" id="permanent-delete-select-all"
-                            class="h-5 w-5 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500">
-                        <span class="font-semibold text-gray-700">Alle auswählen / abwählen</span>
-                    </label>
-                </div>
-
-                <div id="permanentDeleteListsContainer"
-                    class="space-y-2 max-h-64 overflow-y-auto p-2 border rounded-lg bg-gray-50">
-                </div>
-
-                <div class="flex justify-between items-center space-x-3 mt-6">
-                    <button id="cancelPermanentDeleteBtn"
-                        class="flex-1 py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition">Abbrechen</button>
-                    <button id="confirmPermanentDeleteBtn"
-                        class="flex-1 py-2 px-4 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition">Auswahl
-                        endgültig löschen</button>
-                </div>
+    <div id="logoutConfirmModal"
+        class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-xs">
+            <h3 class="text-xl font-bold mb-4 text-gray-800">Abmelden</h3>
+            <p class="text-sm text-gray-600 mb-6">Möchten Sie sich wirklich abmelden?</p>
+            <div class="flex justify-between space-x-3 mt-4">
+                <button id="confirmLogoutNo"
+                    class="flex-1 py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition">NEIN</button>
+                <button id="confirmLogoutYes"
+                    class="flex-1 py-2 px-4 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition">JA</button>
             </div>
         </div>
+    </div>
 
-        <div id="contactBookModal"
-            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-30">
-            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg flex flex-col gap-4">
-                <h3 class="text-xl font-bold text-gray-800">Kontaktbuch</h3>
+    </main>
 
-                <div id="contactBookList" class="space-y-2 max-h-48 overflow-y-auto p-3 border rounded-lg bg-gray-50">
-                    <p class="text-sm text-center text-gray-400">Keine Kontakte gefunden.</p>
-                </div>
-
-                <div class="p-4 border rounded-xl bg-green-50 space-y-2">
-                    <h4 class="font-semibold text-green-800">Neuen Kontakt anlegen</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        <select id="contactIsGroup" class="p-2 border rounded-lg bg-white">
-                            <option value="User" selected>User</option>
-                            <option value="Gruppe">Gruppe</option>
-                        </select>
-                        <input type="text" id="contactName" class="p-2 border rounded-lg" placeholder="Anzeigename">
-                    </div>
-                    <input type="text" id="contactUserKey" class="w-full p-2 border rounded-lg"
-                        placeholder="User / Group Key">
-                    <button id="contactAddButton"
-                        class="w-full py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700">Hinzufügen</button>
-                </div>
-                <div class="flex justify-end space-x-3 mt-4">
-                    <button id="contactBookCloseButton"
-                        class="py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300">Schließen</button>
-                    <button id="contactBookApplyButton"
-                        class="py-2 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700">Auswahl
-                        übernehmen</button>
-                </div>
-            </div>
+    <footer id="appFooter"
+        class="flex-shrink-0 bg-gray-700 text-white border-t border-gray-600 p-2 flex justify-between items-center text-sm shadow-inner">
+        <div id="footerStatus" class="flex items-center text-xs sm:text-sm font-bold text-gray-500">
+            Status: <span class="ml-1 text-green-500">OK</span>
         </div>
-
-        <div id="apiTokenBookModal"
-            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-40">
-            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg flex flex-col gap-4">
-                <h3 class="text-xl font-bold text-gray-800">API-Token Verwalten</h3>
-                <div id="apiTokenBookList" class="space-y-2 max-h-48 overflow-y-auto p-3 border rounded-lg bg-gray-50">
-                    <p class="text-sm text-center text-gray-400">Keine Tokens gefunden.</p>
-                </div>
-                <div class="p-4 border rounded-xl bg-green-50 space-y-2">
-                    <h4 class="font-semibold text-green-800">Neuen Token anlegen</h4>
-                    <input type="text" id="apiTokenName" class="w-full p-2 border rounded-lg"
-                        placeholder="Bezeichnung (z.B. App Name)">
-                    <input type="text" id="apiTokenKey" class="w-full p-2 border rounded-lg"
-                        placeholder="API / Application Key">
-                    <button id="apiTokenAddButton"
-                        class="w-full py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700">Hinzufügen</button>
-                </div>
-                <div class="flex justify-end space-x-3 mt-4">
-                    <button id="apiTokenBookCloseButton"
-                        class="py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300">Schließen</button>
-                    <button id="apiTokenBookApplyButton"
-                        class="py-2 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700">Auswahl
-                        übernehmen</button>
-                </div>
-            </div>
+        <div id="footerUser" class="font-medium text-xs sm:text-sm text-center">
         </div>
+        <div id="footerLogout" class="flex items-center justify-end text-xs sm:text-sm">
+        </div>
+    </footer>
 
-        <div id="soundBookModal"
-            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-40">
-            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg flex flex-col gap-4">
-                <h3 class="text-xl font-bold text-gray-800">Sounds Verwalten</h3>
-                <div id="soundBookList" class="space-y-2 max-h-48 overflow-y-auto p-3 border rounded-lg bg-gray-50">
-                    <div class="flex items-center justify-between p-2 hover:bg-gray-100 rounded-md">
-                        <label class="flex items-center gap-3 cursor-pointer flex-grow">
-                            <input type="radio" name="soundSelection" value="default" class="h-4 w-4 sound-radio">
-                            <div>
-                                <span class="font-semibold text-gray-800">Standard (pushover)</span>
-                                <p class="text-xs text-gray-500 italic">Verwendet den in der Pushover-App eingestellten
-                                    Ton</p>
-                            </div>
+    <div id="templateApplyModal"
+        class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-30">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-800">Container-Inhalt einfügen</h3>
+                <button id="closeTemplateModalBtn" class="text-gray-400 hover:text-red-600">&times;</button>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">1. Quell-Typ wählen</label>
+                    <div class="grid grid-cols-2 gap-2 p-1 bg-gray-200 rounded-lg">
+                        <label class="relative flex items-center justify-center cursor-pointer">
+                            <input type="radio" name="template-type" value="Container" class="peer sr-only" checked>
+                            <span
+                                class="w-full text-center py-1.5 px-3 rounded-md text-sm font-semibold text-gray-700 peer-checked:bg-white peer-checked:shadow">Container</span>
+                        </label>
+                        <label class="relative flex items-center justify-center cursor-pointer">
+                            <input type="radio" name="template-type" value="Schiff" class="peer sr-only">
+                            <span
+                                class="w-full text-center py-1.5 px-3 rounded-md text-sm font-semibold text-gray-700 peer-checked:bg-white peer-checked:shadow">Schiff</span>
                         </label>
                     </div>
-                    <p id="sound-list-placeholder" class="text-sm text-center text-gray-400 hidden">Keine eigenen Sounds
-                        gefunden.</p>
                 </div>
-                <div class="p-4 border rounded-xl bg-green-50 space-y-2">
-                    <h4 class="font-semibold text-green-800">Neuen Sound anlegen</h4>
-                    <input type="text" id="soundCode" class="w-full p-2 border rounded-lg"
-                        placeholder="Soundcode (von Pushover)">
-                    <div class="flex items-center gap-2">
-                        <input type="checkbox" id="soundUseCustomName" class="h-4 w-4">
-                        <label for="soundUseCustomName" class="text-sm font-medium">Eigenen Anzeigenamen
-                            verwenden</label>
+
+                <div>
+                    <label for="template-select" class="block text-sm font-medium text-gray-700 mb-1">2. Quelle
+                        auswählen</label>
+                    <select id="template-select" class="w-full p-2 border rounded-lg bg-white">
+                        <option value="">Bitte zuerst Typ wählen...</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">3. Inhalte zum Einfügen
+                        auswählen</label>
+                    <div id="template-items-container"
+                        class="max-h-48 overflow-y-auto p-3 border rounded-lg bg-gray-50 space-y-2">
                     </div>
-                    <input type="text" id="soundCustomName" class="w-full p-2 border rounded-lg hidden"
-                        placeholder="Eigener Anzeigename">
-                    <button id="soundAddButton"
-                        class="w-full py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700">Hinzufügen</button>
                 </div>
-                <div class="flex justify-end space-x-3 mt-4">
-                    <button id="soundBookCloseButton"
-                        class="py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300">Schließen</button>
-                    <button id="soundBookApplyButton"
-                        class="py-2 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700">Auswahl
-                        übernehmen</button>
+                <div id="template-mode-section" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">4. Einfüge-Methode</label>
+                    <div class="flex gap-4 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="insert-mode" value="einfuegen" class="h-4 w-4" checked>
+                            <span>Zur Liste hinzufügen</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="insert-mode" value="ersetzen" class="h-4 w-4">
+                            <span>Liste komplett ersetzen</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end space-x-3 mt-6">
+                <button id="cancel-template-modal-btn"
+                    class="py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition">Abbrechen</button>
+                <button id="apply-template-btn"
+                    class="py-2 px-4 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition">Anwenden</button>
+            </div>
+        </div>
+    </div>
+    <div id="deletedListsModal"
+        class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
+            <h3 class="text-xl font-bold mb-4 text-gray-800">Gelöschte Checklisten</h3>
+            <div id="deletedListsContainer" class="space-y-3 max-h-96 overflow-y-auto">
+            </div>
+            <div class="flex justify-end mt-6">
+                <button id="closeDeletedListsModal"
+                    class="py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition">Schließen</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="archivedListsModal"
+        class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
+            <h3 class="text-xl font-bold mb-4 text-gray-800">Archivierte Checklisten</h3>
+            <div id="archivedListsContainer" class="space-y-3 max-h-96 overflow-y-auto">
+            </div>
+            <div class="flex justify-end mt-6">
+                <button id="closeArchivedListsModal"
+                    class="py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition">Schließen</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="permanentDeleteModal"
+        class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-30">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg">
+            <h3 class="text-xl font-bold mb-4 text-red-800">Papierkorb endgültig leeren</h3>
+            <p class="text-sm text-gray-600 mb-4">Wählen Sie die Checklisten aus, die unwiderruflich gelöscht werden
+                sollen. Diese Aktion kann nicht rückgängig gemacht werden.</p>
+
+            <div class="p-2 border-b mb-2">
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" id="permanent-delete-select-all"
+                        class="h-5 w-5 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500">
+                    <span class="font-semibold text-gray-700">Alle auswählen / abwählen</span>
+                </label>
+            </div>
+
+            <div id="permanentDeleteListsContainer"
+                class="space-y-2 max-h-64 overflow-y-auto p-2 border rounded-lg bg-gray-50">
+            </div>
+
+            <div class="flex justify-between items-center space-x-3 mt-6">
+                <button id="cancelPermanentDeleteBtn"
+                    class="flex-1 py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition">Abbrechen</button>
+                <button id="confirmPermanentDeleteBtn"
+                    class="flex-1 py-2 px-4 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition">Auswahl
+                    endgültig löschen</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="contactBookModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-30">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg flex flex-col gap-4">
+            <h3 class="text-xl font-bold text-gray-800">Kontaktbuch</h3>
+
+            <div id="contactBookList" class="space-y-2 max-h-48 overflow-y-auto p-3 border rounded-lg bg-gray-50">
+                <p class="text-sm text-center text-gray-400">Keine Kontakte gefunden.</p>
+            </div>
+
+            <div class="p-4 border rounded-xl bg-green-50 space-y-2">
+                <h4 class="font-semibold text-green-800">Neuen Kontakt anlegen</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <select id="contactIsGroup" class="p-2 border rounded-lg bg-white">
+                        <option value="User" selected>User</option>
+                        <option value="Gruppe">Gruppe</option>
+                    </select>
+                    <input type="text" id="contactName" class="p-2 border rounded-lg" placeholder="Anzeigename">
+                </div>
+                <input type="text" id="contactUserKey" class="w-full p-2 border rounded-lg"
+                    placeholder="User / Group Key">
+                <button id="contactAddButton"
+                    class="w-full py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700">Hinzufügen</button>
+            </div>
+            <div class="flex justify-end space-x-3 mt-4">
+                <button id="contactBookCloseButton"
+                    class="py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300">Schließen</button>
+                <button id="contactBookApplyButton"
+                    class="py-2 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700">Auswahl
+                    übernehmen</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="apiTokenBookModal"
+        class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-40">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg flex flex-col gap-4">
+            <h3 class="text-xl font-bold text-gray-800">API-Token Verwalten</h3>
+            <div id="apiTokenBookList" class="space-y-2 max-h-48 overflow-y-auto p-3 border rounded-lg bg-gray-50">
+                <p class="text-sm text-center text-gray-400">Keine Tokens gefunden.</p>
+            </div>
+            <div class="p-4 border rounded-xl bg-green-50 space-y-2">
+                <h4 class="font-semibold text-green-800">Neuen Token anlegen</h4>
+                <input type="text" id="apiTokenName" class="w-full p-2 border rounded-lg"
+                    placeholder="Bezeichnung (z.B. App Name)">
+                <input type="text" id="apiTokenKey" class="w-full p-2 border rounded-lg"
+                    placeholder="API / Application Key">
+                <button id="apiTokenAddButton"
+                    class="w-full py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700">Hinzufügen</button>
+            </div>
+            <div class="flex justify-end space-x-3 mt-4">
+                <button id="apiTokenBookCloseButton"
+                    class="py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300">Schließen</button>
+                <button id="apiTokenBookApplyButton"
+                    class="py-2 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700">Auswahl
+                    übernehmen</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="soundBookModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-40">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg flex flex-col gap-4">
+            <h3 class="text-xl font-bold text-gray-800">Sounds Verwalten</h3>
+            <div id="soundBookList" class="space-y-2 max-h-48 overflow-y-auto p-3 border rounded-lg bg-gray-50">
+                <div class="flex items-center justify-between p-2 hover:bg-gray-100 rounded-md">
+                    <label class="flex items-center gap-3 cursor-pointer flex-grow">
+                        <input type="radio" name="soundSelection" value="default" class="h-4 w-4 sound-radio">
+                        <div>
+                            <span class="font-semibold text-gray-800">Standard (pushover)</span>
+                            <p class="text-xs text-gray-500 italic">Verwendet den in der Pushover-App eingestellten
+                                Ton</p>
+                        </div>
+                    </label>
+                </div>
+                <p id="sound-list-placeholder" class="text-sm text-center text-gray-400 hidden">Keine eigenen Sounds
+                    gefunden.</p>
+            </div>
+            <div class="p-4 border rounded-xl bg-green-50 space-y-2">
+                <h4 class="font-semibold text-green-800">Neuen Sound anlegen</h4>
+                <input type="text" id="soundCode" class="w-full p-2 border rounded-lg"
+                    placeholder="Soundcode (von Pushover)">
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="soundUseCustomName" class="h-4 w-4">
+                    <label for="soundUseCustomName" class="text-sm font-medium">Eigenen Anzeigenamen
+                        verwenden</label>
+                </div>
+                <input type="text" id="soundCustomName" class="w-full p-2 border rounded-lg hidden"
+                    placeholder="Eigener Anzeigename">
+                <button id="soundAddButton"
+                    class="w-full py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700">Hinzufügen</button>
+            </div>
+            <div class="flex justify-end space-x-3 mt-4">
+                <button id="soundBookCloseButton"
+                    class="py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300">Schließen</button>
+                <button id="soundBookApplyButton"
+                    class="py-2 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700">Auswahl
+                    übernehmen</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="createVoteModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-30">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-3xl">
+            <div class="flex justify-between items-center mb-6 pb-3 border-b">
+                <h3 class="text-2xl font-bold text-gray-800">Neuen Termin erstellen</h3>
+                <button id="close-create-vote-modal-btn"
+                    class="text-gray-400 hover:text-red-600 font-bold text-3xl">&times;</button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+
+                <div id="select-vote-type-group"
+                    class="p-4 border rounded-lg hover:shadow-lg hover:border-indigo-500 cursor-pointer transition-all duration-200 flex flex-col items-center text-center">
+                    <div class="p-4 rounded-lg bg-yellow-100 mb-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                            class="w-10 h-10 text-yellow-600">
+                            <path fill-rule="evenodd"
+                                d="M4.5 3.75a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V6.75a3 3 0 0 0-3-3H4.5ZM12 7.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm-3 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm6 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"
+                                clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <h4 class="font-bold text-lg text-gray-800">Gruppenumfrage</h4>
+                    <p class="text-sm text-gray-600 mt-1">Finde die Zeit, die für alle Mitglieder in deiner Gruppe
+                        am besten passt.</p>
+                </div>
+
+                <div id="select-vote-type-event"
+                    class="p-4 border rounded-lg hover:shadow-lg hover:border-indigo-500 cursor-pointer transition-all duration-200 flex flex-col items-center text-center">
+                    <div class="p-4 rounded-lg bg-green-100 mb-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                            class="w-10 h-10 text-green-600">
+                            <path fill-rule="evenodd"
+                                d="M4.5 3.75a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V6.75a3 3 0 0 0-3-3H4.5ZM12 7.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm-3 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm6 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm-3 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"
+                                clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <h4 class="font-bold text-lg text-gray-800">Eventplaner</h4>
+                    <p class="text-sm text-gray-600 mt-1">Erstelle Anmeldungen für Workshops, Webinare oder
+                        Veranstaltungen.</p>
+                </div>
+
+                <div id="select-vote-type-1on1"
+                    class="p-4 border rounded-lg hover:shadow-lg hover:border-indigo-500 cursor-pointer transition-all duration-200 flex flex-col items-center text-center">
+                    <div class="p-4 rounded-lg bg-green-100 mb-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                            class="w-10 h-10 text-green-600">
+                            <path fill-rule="evenodd"
+                                d="M4.5 3.75a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V6.75a3 3 0 0 0-3-3H4.5ZM7.5 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0Zm6 0a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0Z"
+                                clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <h4 class="font-bold text-lg text-gray-800">1:1</h4>
+                    <p class="text-sm text-gray-600 mt-1">Biete eine Liste deiner verfügbaren Zeiten an, damit
+                        jemand auswählen kann.</p>
+                </div>
+
+                <div id="select-vote-type-booking"
+                    class="p-4 border rounded-lg hover:shadow-lg hover:border-indigo-500 cursor-pointer transition-all duration-200 flex flex-col items-center text-center">
+                    <div class="p-4 rounded-lg bg-blue-100 mb-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                            class="w-10 h-10 text-blue-600">
+                            <path fill-rule="evenodd"
+                                d="M4.5 3.75a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V6.75a3 3 0 0 0-3-3H4.5ZM9 7.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm6 3a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0Zm-3 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"
+                                clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <h4 class="font-bold text-lg text-gray-800">Buchungsseite</h4>
+                    <p class="text-sm text-gray-600 mt-1">Lass Kunden mit wenigen Klicks Zeit bei dir buchen.
+                    </p>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+<div id="editTokenModal"
+            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-40"> 
+            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm">
+                <h3 class="text-xl font-bold mb-4 text-gray-800">Bearbeitungstoken eingeben</h3>
+                <p class="text-sm text-gray-600 mb-4">Um diese Umfrage zu bearbeiten, gib bitte den 8-stelligen
+                    Bearbeitungs-Token ein.</p>
+                
+                <input type="text" id="edit-token-input"
+                    class="w-full p-3 border-2 border-gray-300 rounded-lg text-center tracking-widest text-lg font-mono uppercase focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-400"
+                    placeholder="XXXX - XXXX" maxlength="11">
+                    
+                <div class="flex justify-between space-x-3 mt-6">
+                    <button id="cancel-edit-token-btn"
+                        class="flex-1 py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition">Abbrechen</button>
+                    <button id="submit-edit-token-btn"
+                        class="flex-1 py-2 px-4 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition">Bestätigen</button>
                 </div>
             </div>
         </div>
-
-        <div id="createVoteModal"
-            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-30">
-            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-3xl">
-                <div class="flex justify-between items-center mb-6 pb-3 border-b">
-                    <h3 class="text-2xl font-bold text-gray-800">Neuen Termin erstellen</h3>
-                    <button id="close-create-vote-modal-btn"
-                        class="text-gray-400 hover:text-red-600 font-bold text-3xl">&times;</button>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-
-                    <div id="select-vote-type-group"
-                        class="p-4 border rounded-lg hover:shadow-lg hover:border-indigo-500 cursor-pointer transition-all duration-200 flex flex-col items-center text-center">
-                        <div class="p-4 rounded-lg bg-yellow-100 mb-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
-                                class="w-10 h-10 text-yellow-600">
-                                <path fill-rule="evenodd"
-                                    d="M4.5 3.75a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V6.75a3 3 0 0 0-3-3H4.5ZM12 7.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm-3 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm6 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"
-                                    clip-rule="evenodd" />
-                            </svg>
-                        </div>
-                        <h4 class="font-bold text-lg text-gray-800">Gruppenumfrage</h4>
-                        <p class="text-sm text-gray-600 mt-1">Finde die Zeit, die für alle Mitglieder in deiner Gruppe
-                            am besten passt.</p>
-                    </div>
-
-                    <div id="select-vote-type-event"
-                        class="p-4 border rounded-lg hover:shadow-lg hover:border-indigo-500 cursor-pointer transition-all duration-200 flex flex-col items-center text-center">
-                        <div class="p-4 rounded-lg bg-green-100 mb-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
-                                class="w-10 h-10 text-green-600">
-                                <path fill-rule="evenodd"
-                                    d="M4.5 3.75a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V6.75a3 3 0 0 0-3-3H4.5ZM12 7.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm-3 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm6 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm-3 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"
-                                    clip-rule="evenodd" />
-                            </svg>
-                        </div>
-                        <h4 class="font-bold text-lg text-gray-800">Eventplaner</h4>
-                        <p class="text-sm text-gray-600 mt-1">Erstelle Anmeldungen für Workshops, Webinare oder
-                            Veranstaltungen.</p>
-                    </div>
-
-                    <div id="select-vote-type-1on1"
-                        class="p-4 border rounded-lg hover:shadow-lg hover:border-indigo-500 cursor-pointer transition-all duration-200 flex flex-col items-center text-center">
-                        <div class="p-4 rounded-lg bg-green-100 mb-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
-                                class="w-10 h-10 text-green-600">
-                                <path fill-rule="evenodd"
-                                    d="M4.5 3.75a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V6.75a3 3 0 0 0-3-3H4.5ZM7.5 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0Zm6 0a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0Z"
-                                    clip-rule="evenodd" />
-                            </svg>
-                        </div>
-                        <h4 class="font-bold text-lg text-gray-800">1:1</h4>
-                        <p class="text-sm text-gray-600 mt-1">Biete eine Liste deiner verfügbaren Zeiten an, damit
-                            jemand auswählen kann.</p>
-                    </div>
-
-                    <div id="select-vote-type-booking"
-                        class="p-4 border rounded-lg hover:shadow-lg hover:border-indigo-500 cursor-pointer transition-all duration-200 flex flex-col items-center text-center">
-                        <div class="p-4 rounded-lg bg-blue-100 mb-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
-                                class="w-10 h-10 text-blue-600">
-                                <path fill-rule="evenodd"
-                                    d="M4.5 3.75a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V6.75a3 3 0 0 0-3-3H4.5ZM9 7.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm6 3a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0Zm-3 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"
-                                    clip-rule="evenodd" />
-                            </svg>
-                        </div>
-                        <h4 class="font-bold text-lg text-gray-800">Buchungsseite</h4>
-                        <p class="text-sm text-gray-600 mt-1">Lass Kunden mit wenigen Klicks Zeit bei dir buchen.
-                        </p>
-                    </div>
-
-                </div>
-            </div>
-        </div>
-
-        <script type="module" src="haupteingang.js"></script>
-        <script type="module" src="log-InOut.js"></script>
-        <script type="module" src="admin_adminfunktionenHome.js"></script>
-        <script type="module" src="admin_benutzersteuerung.js"></script>
-        <script type="module" src="admin_genehmigungsprozess.js"></script>
-        <script type="module" src="admin_protokollHistory.js"></script>
-        <script type="module" src="admin_rechteverwaltung.js"></script>
-        <script type="module" src="admin_rollenverwaltung.js"></script>
-        <script type="module" src="checklist.js"></script>
-        <script type="module" src="essensberechnung.js"></script>
-        <script type="module" src="notfall.js"></script>
-        <script type="module" src="pushbenachrichtigung.js"></script>
-        <script type="module" src="terminplaner.js"></script>
+    
+    <script type="module" src="haupteingang.js"></script>
+    <script type="module" src="log-InOut.js"></script>
+    <script type="module" src="admin_adminfunktionenHome.js"></script>
+    <script type="module" src="admin_benutzersteuerung.js"></script>
+    <script type="module" src="admin_genehmigungsprozess.js"></script>
+    <script type="module" src="admin_protokollHistory.js"></script>
+    <script type="module" src="admin_rechteverwaltung.js"></script>
+    <script type="module" src="admin_rollenverwaltung.js"></script>
+    <script type="module" src="checklist.js"></script>
+    <script type="module" src="essensberechnung.js"></script>
+    <script type="module" src="notfall.js"></script>
+    <script type="module" src="pushbenachrichtigung.js"></script>
+    <script type="module" src="terminplaner.js"></script>
 </body>
 
 </html>
