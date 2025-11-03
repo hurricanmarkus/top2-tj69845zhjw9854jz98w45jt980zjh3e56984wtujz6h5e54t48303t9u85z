@@ -143,7 +143,7 @@ export function initializeTerminplanerView() {
     const cancelVoteButton = document.getElementById('cancel-vote-participation-btn');
     if (cancelVoteButton && !cancelVoteButton.dataset.listenerAttached) {
         cancelVoteButton.addEventListener('click', () => {
-            showView('main'); 
+            showView('main'); // KORREKTUR: Geht jetzt immer zur Hauptseite
             currentVoteData = null; 
         });
         cancelVoteButton.dataset.listenerAttached = 'true';
@@ -171,31 +171,30 @@ export function initializeTerminplanerView() {
         saveParticipationButton.dataset.listenerAttached = 'true';
     }
     
-    // NEU: Spion für den "EDIT"-Button
+    // ----- NEU: Spione für den "Transformations-Button" -----
+    
+    // Spion für den "EDIT"-Button (A)
     const editVoteButton = document.getElementById('show-edit-vote-btn');
     if (editVoteButton && !editVoteButton.dataset.listenerAttached) {
         editVoteButton.addEventListener('click', showInlineEditToken); // <-- Ruft die neue Inline-Funktion auf
         editVoteButton.dataset.listenerAttached = 'true';
     }
     
-    
-    // ----- NEU: Spione für den INLINE Edit-Block -----
-    
-    // Spion für den "Bearbeiten"-Button im Inline-Block
+    // Spion für den "OK"-Button (C)
     const submitEditBtn = document.getElementById('submit-edit-token-inline-btn');
     if (submitEditBtn && !submitEditBtn.dataset.listenerAttached) {
         submitEditBtn.addEventListener('click', checkInlineEditToken);
         submitEditBtn.dataset.listenerAttached = 'true';
     }
     
-    // Spion für die Token-Formatierung
+    // Spion für die Token-Formatierung (B)
     const editTokenInput = document.getElementById('edit-token-input-inline');
     if (editTokenInput && !editTokenInput.dataset.listenerAttached) {
         editTokenInput.addEventListener('input', (e) => formatTokenInput(e, 'edit-token-input-inline'));
         editTokenInput.dataset.listenerAttached = 'true';
     }
     
-    // NEU: Spion für den "Zurück zur Umfrage"-Button auf der finalen Edit-Seite
+    // Spion für den "Zurück zur Umfrage"-Button auf der finalen Edit-Seite
     const cancelEditingBtn = document.getElementById('cancel-vote-editing-btn');
     if (cancelEditingBtn && !cancelEditingBtn.dataset.listenerAttached) {
         cancelEditingBtn.addEventListener('click', () => {
@@ -264,7 +263,7 @@ export function stopAssignedVotesListener() {
 
 
 // ----- RENDER-FUNKTIONEN FÜR LISTEN -----
-// (Unverändert, aber mit "fixedOptionIndex"-Logik)
+// (Unverändert, aber mit "createdByName")
 function renderPublicVotes(votes) {
     const listContainer = document.getElementById('public-votes-list');
     if (!listContainer) return;
@@ -289,7 +288,7 @@ function renderPublicVotes(votes) {
         `;
     }).join('');
 }
-// (Unverändert, aber mit "fixedOptionIndex"-Logik)
+// (Unverändert, aber mit "createdByName")
 function renderAssignedVotes(votes) {
     const listContainer = document.getElementById('assigned-votes-list');
     if (!listContainer) return;
@@ -419,22 +418,20 @@ function renderVoteView(voteData) {
     const participationContainer = document.getElementById('vote-participation-container');
     const saveButton = document.getElementById('vote-save-participation-btn');
     const editButton = document.getElementById('show-edit-vote-btn');
-    const editTokenContainer = document.getElementById('vote-edit-token-container');
-
-    // Zeige den Edit-Button (wird im Modal geprüft, ob der User darf)
-    editButton.classList.remove('hidden');
     
-    // Verstecke den Inline-Token-Block
-    editTokenContainer.classList.add('hidden');
+    // NEU: Setze den Edit-Wrapper zurück
+    resetEditWrapper();
 
     if (voteData.fixedOptionIndex != null) {
         // JA, EIN TERMIN IST FIXIERT
         participationContainer.classList.add('hidden');
         saveButton.classList.add('hidden');
+        editButton.classList.add('hidden'); // EDIT-Knopf auch verstecken
     } else {
         // NEIN, es ist eine normale Abstimmung
         participationContainer.classList.remove('hidden');
         saveButton.classList.remove('hidden');
+        editButton.classList.remove('hidden'); // EDIT-Knopf anzeigen
     }
 
     // 5. Die Abstimmungs-Tabelle bauen
@@ -442,13 +439,9 @@ function renderVoteView(voteData) {
     
     // 6. Klick-Spione für die neuen Tabellen-Zeilen hinzufügen
     const optionsContainer = document.getElementById('vote-options-container');
-    
-    // Alte Spione entfernen
     optionsContainer.querySelectorAll('.vote-option-row').forEach(row => {
          row.replaceWith(row.cloneNode(true));
     });
-    
-    // Neue Spione hinzufügen
     optionsContainer.querySelectorAll('.vote-option-row').forEach(row => {
         row.addEventListener('click', () => {
             if (voteData.fixedOptionIndex != null) return; 
@@ -471,7 +464,7 @@ function renderVoteView(voteData) {
 }
 
 // ----- Funktion zum Aktualisieren der Tabelle -----
-// (Unverändert, aber mit "fixedOptionIndex"-Logik)
+// (Unverändert)
 function updatePollTableAnswers(voteData) {
     const optionsContainer = document.getElementById('vote-options-container');
 
@@ -614,7 +607,7 @@ async function saveVoteParticipation() {
 
 
 // ----- SPEICHER-FUNKTION (Erstellung) -----
-// (Wieder angepasst, um 'editToken' und 'createdBy' ID zu speichern)
+// (Angepasst für 'editToken' und 'createdBy' ID)
 async function saveGroupPoll() {
     const saveBtn = document.getElementById('vote-save-group-poll-btn');
     saveBtn.disabled = true;
@@ -625,7 +618,6 @@ async function saveGroupPoll() {
         const description = document.getElementById('vote-description').value.trim();
         const isPublic = document.getElementById('vote-setting-public').checked;
         const isAnonymous = document.getElementById('vote-setting-anonymous').checked;
-
         const options = [];
         const dateGroups = document.querySelectorAll('#vote-dates-container [data-date-group-id]');
         let hasValidOption = false;
@@ -687,33 +679,42 @@ async function saveGroupPoll() {
 }
 
 
-// ----- NEUE FUNKTIONEN für das INLINE EDIT-MODAL -----
+// ----- NEUE FUNKTIONEN für das INLINE EDIT -----
 
 // Wird aufgerufen, wenn man auf "EDIT" klickt
 function showInlineEditToken() {
-    const editTokenContainer = document.getElementById('vote-edit-token-container');
-    const participationContainer = document.getElementById('vote-participation-container');
-    const input = document.getElementById('edit-token-input-inline');
+    const editButton = document.getElementById('show-edit-vote-btn');
+    const tokenInput = document.getElementById('edit-token-input-inline');
+    const submitButton = document.getElementById('submit-edit-token-inline-btn');
     
-    if (!editTokenContainer || !participationContainer || !input || !currentVoteData) return;
+    if (!editButton || !tokenInput || !submitButton || !currentVoteData) return;
     
-    // 1. Verstecke den Teilnahme-Block
-    participationContainer.classList.add('hidden');
+    // 1. Verstecke den "EDIT"-Knopf
+    editButton.classList.add('hidden');
     
-    // 2. Zeige den Edit-Token-Block
-    editTokenContainer.classList.remove('hidden');
+    // 2. Zeige das Eingabefeld und den "OK"-Knopf
+    tokenInput.classList.remove('hidden');
+    submitButton.classList.remove('hidden');
 
     // 3. Prüfe, ob der aktuelle Benutzer der Ersteller ist
     if (currentUser.mode === currentVoteData.createdBy) {
-        input.value = currentVoteData.editToken; 
-        input.disabled = true; 
+        tokenInput.value = currentVoteData.editToken; 
+        tokenInput.disabled = true; 
     } else {
-        input.value = ''; 
-        input.disabled = false;
+        tokenInput.value = ''; 
+        tokenInput.disabled = false;
+        tokenInput.focus(); // Fokus auf das Feld für Gäste
     }
 }
 
-// Wird aufgerufen, wenn man im Inline-Block auf "Bearbeiten" klickt
+// Setzt den Edit-Button auf den Standard (nur "EDIT" anzeigen) zurück
+function resetEditWrapper() {
+    document.getElementById('show-edit-vote-btn')?.classList.remove('hidden');
+    document.getElementById('edit-token-input-inline')?.classList.add('hidden');
+    document.getElementById('submit-edit-token-inline-btn')?.classList.add('hidden');
+}
+
+// Wird aufgerufen, wenn man im Inline-Block auf "OK" klickt
 function checkInlineEditToken() {
     const input = document.getElementById('edit-token-input-inline');
     const token = input.value.trim().toUpperCase();
@@ -752,7 +753,6 @@ function showView(viewName) {
     document.getElementById('terminplaner-main-view').classList.add('hidden');
     document.getElementById('terminplaner-create-view').classList.add('hidden');
     document.getElementById('terminplaner-vote-view').classList.add('hidden');
-    // NEU: Verstecke auch die Edit-Ansicht
     document.getElementById('terminplaner-edit-view').classList.add('hidden');
     
     if (viewName === 'main') {
@@ -762,6 +762,8 @@ function showView(viewName) {
         resetCreateWizard(); 
     } else if (viewName === 'vote') {
         document.getElementById('terminplaner-vote-view').classList.remove('hidden');
+        // NEU: Setze beim Anzeigen der Vote-Ansicht immer den Edit-Knopf zurück
+        resetEditWrapper();
     } else if (viewName === 'edit') {
        document.getElementById('terminplaner-edit-view').classList.remove('hidden');
     }
@@ -818,6 +820,7 @@ function createTimeInputHTML() {
     return timeGroup;
 }
 
+// NEU: Die Funktion kann jetzt beide Token-Felder formatieren
 function formatTokenInput(e, inputId) {
     const input = document.getElementById(inputId);
     if (!input) return;
