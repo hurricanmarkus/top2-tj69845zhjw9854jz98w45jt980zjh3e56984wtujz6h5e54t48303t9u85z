@@ -88,3 +88,16 @@
             background-color: #fca5a5;
             /* Hellrot */
         }
+
+        @keyframes blink-border {
+            0% { border-color: #3b82f6; } /* Blau */
+            50% { border-color: #bfdbfe; } /* Hellblau */
+            100% { border-color: #3b82f6; } /* Blau */
+        }
+        
+        .blink-border-blue {
+            border: 2px solid #3b82f6;
+            animation: blink-border 1.5s infinite;
+            padding: 0.5rem; /* Etwas Innenabstand, damit der Rahmen gut aussieht */
+            border-radius: 0.5rem; /* Abgerundete Ecken */
+        }

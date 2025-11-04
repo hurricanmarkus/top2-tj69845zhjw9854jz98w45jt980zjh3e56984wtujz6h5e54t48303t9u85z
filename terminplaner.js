@@ -499,6 +499,12 @@ export function initializeTerminplanerView() {
                 const url = document.getElementById('vote-share-url').value;
                 copyToClipboard(url, "URL kopiert!");
             }
+
+            // NEU: Spion für den "Details"-Knopf in der Abstimm-Ansicht
+            const pollHistoryBtnMain = e.target.closest('#show-poll-history-btn-main');
+            if (pollHistoryBtnMain) {
+                renderPollHistory();
+            }
         });
         voteView.dataset.listenerAttached = 'true';
     }
@@ -590,11 +596,7 @@ export function initializeTerminplanerView() {
         deletePollBtn.dataset.listenerAttached = 'true';
     }
     
-    const pollHistoryBtn = document.getElementById('show-poll-history-btn');
-    if (pollHistoryBtn && !pollHistoryBtn.dataset.listenerAttached) {
-        pollHistoryBtn.addEventListener('click', renderPollHistory);
-        pollHistoryBtn.dataset.listenerAttached = 'true';
-    }
+    // HINWEIS: Der Spion für '#show-poll-history-btn' wurde entfernt (Button existiert nicht mehr)
 
     const cancelFixDateBtn = document.getElementById('cancel-fix-date-btn');
     if (cancelFixDateBtn && !cancelFixDateBtn.dataset.listenerAttached) {
@@ -645,16 +647,14 @@ export function initializeTerminplanerView() {
         applyAssignModalBtn.dataset.listenerAttached = 'true';
     }
     
-    // ----- NEU: Spione für die neuen Bearbeiten-Funktionen -----
+    // ----- Spione für die Bearbeiten-Funktionen -----
     
-    // Spion für "Tag hinzufügen" im Bearbeiten-Modus
     const addDateButtonEdit = document.getElementById('vote-add-date-btn-edit');
     if (addDateButtonEdit && !addDateButtonEdit.dataset.listenerAttached) {
         addDateButtonEdit.addEventListener('click', addNewDateGroupEdit);
         addDateButtonEdit.dataset.listenerAttached = 'true';
     }
     
-    // Spion für "Zeit hinzufügen/entfernen" im Bearbeiten-Modus
     const datesContainerEdit = document.getElementById('vote-dates-container-edit');
     if (datesContainerEdit && !datesContainerEdit.dataset.listenerAttached) {
         datesContainerEdit.addEventListener('click', (e) => {
@@ -679,7 +679,6 @@ export function initializeTerminplanerView() {
         datesContainerEdit.dataset.listenerAttached = 'true';
     }
     
-    // Spion für die Admin-Abstimmungs-Tabelle (Punkt 2)
     const adminGridContainer = document.getElementById('edit-participant-grid-container');
     if (adminGridContainer && !adminGridContainer.dataset.listenerAttached) {
         adminGridContainer.addEventListener('click', (e) => {
@@ -689,14 +688,32 @@ export function initializeTerminplanerView() {
                 const optionIndex = clickedButton.dataset.optionIndex;
                 const newAnswer = clickedButton.dataset.answer;
                 
-                // Rufe die neue Handler-Funktion auf
                 handleAdminVoteEdit(participantId, optionIndex, newAnswer, clickedButton);
             }
         });
         adminGridContainer.dataset.listenerAttached = 'true';
     }
-    // ----- ENDE NEU -----
+
+    // NEU: Spion für die "Streichen"-Liste
+    const manageTermsList = document.getElementById('manage-existing-terms-list');
+    if (manageTermsList && !manageTermsList.dataset.listenerAttached) {
+        manageTermsList.addEventListener('click', (e) => {
+            const strikeBtn = e.target.closest('.strike-term-btn');
+            if (strikeBtn) {
+                const optionIndex = parseInt(strikeBtn.dataset.optionIndex, 10);
+                handleStrikeTerm(optionIndex, true); // true = streichen
+            }
+            
+            const restoreBtn = e.target.closest('.restore-term-btn');
+            if (restoreBtn) {
+                const optionIndex = parseInt(restoreBtn.dataset.optionIndex, 10);
+                handleStrikeTerm(optionIndex, false); // false = wiederherstellen
+            }
+        });
+        manageTermsList.dataset.listenerAttached = 'true';
+    }
 }
+
 // ----- SPION-FUNKTIONEN (Listener) -----
 
 export function listenForPublicVotes() {
@@ -928,7 +945,6 @@ function renderVoteView(voteData) {
     
     // ----- 1. DEFINITIONEN -----
     const now = new Date();
-    // Helfer, um Timestamps (von Firebase) oder JS-Dates (lokal) sicher zu lesen
     const getSafeDate = (timestamp) => {
         if (!timestamp) return null;
         if (typeof timestamp.toDate === 'function') return timestamp.toDate();
@@ -939,14 +955,11 @@ function renderVoteView(voteData) {
     const endTime = getSafeDate(voteData.endTime);
 
     const isFixed = voteData.fixedOptionIndex != null;
-    const isClosed = (endTime && now > endTime); // Abgelaufen
-    const isNotStarted = (startTime && now < startTime); // Noch nicht gestartet
-    
-    // Teilnahme ist blockiert, wenn fixiert, abgelaufen ODER noch nicht gestartet
+    const isClosed = (endTime && now > endTime); 
+    const isNotStarted = (startTime && now < startTime); 
     const isParticipationBlocked = isFixed || isClosed || isNotStarted;
 
-    // ----- 2. Titel & Ersteller (ZENTRIERT) -----
-    // (Sichere Zuweisungen)
+    // ----- 2. Titel & Ersteller (Sicher) -----
     const titleEl = document.getElementById('vote-poll-title');
     if (titleEl) titleEl.textContent = voteData.title;
     
@@ -955,7 +968,7 @@ function renderVoteView(voteData) {
     const creatorEl = document.getElementById('vote-poll-creator');
     if (creatorEl) creatorEl.textContent = `Erstellt von ${creatorName}`;
 
-    // ----- 3. Share-Box -----
+    // ----- 3. Share-Box (Sicher) -----
     const tokenEl = document.getElementById('vote-share-token');
     if (tokenEl) tokenEl.textContent = voteData.token;
     
@@ -971,6 +984,35 @@ function renderVoteView(voteData) {
     const locContainer = document.getElementById('vote-poll-location-container');
     const locEl = document.getElementById('vote-poll-location');
     
+    // NEU: Update-Box Logik (Punkt 2)
+    const updateBox = document.getElementById('poll-update-notification-box');
+    
+    // Setze Stile zurück
+    if (descContainer) descContainer.classList.remove('blink-border-blue');
+    if (locContainer) locContainer.classList.remove('blink-border-blue');
+    if (titleEl) titleEl.classList.remove('blink-border-blue'); // Titel auch
+    
+    if (voteData.pollHistory && voteData.pollHistory.length > 0) {
+        if (updateBox) updateBox.classList.remove('hidden');
+        
+        // Finde das letzte Update-Log
+        const lastUpdate = voteData.pollHistory[voteData.pollHistory.length - 1];
+        if (lastUpdate && lastUpdate.changes) {
+            // Prüfe, welche Felder im letzten Log geändert wurden
+            const changedTitle = lastUpdate.changes.some(c => c.includes('Titel'));
+            const changedDesc = lastUpdate.changes.some(c => c.includes('Beschreibung'));
+            const changedLoc = lastUpdate.changes.some(c => c.includes('Ort'));
+
+            // Wende blinkenden Rahmen an
+            if (changedTitle && titleEl) titleEl.classList.add('blink-border-blue');
+            if (changedDesc && descContainer) descContainer.classList.add('blink-border-blue');
+            if (changedLoc && locContainer) locContainer.classList.add('blink-border-blue');
+        }
+    } else {
+        if (updateBox) updateBox.classList.add('hidden');
+    }
+    // ENDE NEU
+
     let hasInfo = false;
     if (voteData.description) {
         if (descEl) descEl.textContent = voteData.description;
@@ -986,21 +1028,23 @@ function renderVoteView(voteData) {
     } else { 
         if (locContainer) locContainer.classList.add('hidden'); 
     }
-    if (infoBox) infoBox.classList.toggle('hidden', !hasInfo);
+    
+    // Zeige die Info-Box, wenn sie Inhalt hat ODER eine Update-Meldung hat
+    const hasUpdate = (voteData.pollHistory && voteData.pollHistory.length > 0);
+    if (infoBox) infoBox.classList.toggle('hidden', !hasInfo && !hasUpdate);
 
-    // ----- 5. Gültigkeits-Boxen (Anforderung 3 & 4) -----
+
+    // ----- 5. Gültigkeits-Boxen (Sicher) -----
     const validityContainer = document.getElementById('vote-poll-validity-container');
     const validityEl = document.getElementById('vote-poll-validity');
     const warningBox = document.getElementById('vote-validity-warning-box');
     const warningText = document.getElementById('vote-validity-warning-text');
     
-    // Helfer-Funktion
     const formatVoteDate = (dateObj) => {
         if (!dateObj) return '';
         return dateObj.toLocaleString('de-DE', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}) + ' Uhr';
     };
     
-    // Rote Box (Anforderung 3)
     if (isClosed && !isFixed) { 
         if (validityEl) validityEl.textContent = "TEILNAHME GESCHLOSSEN";
         if (validityContainer) {
@@ -1009,14 +1053,13 @@ function renderVoteView(voteData) {
             validityContainer.classList.remove('hidden');
         }
     } else {
-        // Normale Gültigkeit anzeigen (oder Box verstecken)
         const startTimeText = formatVoteDate(startTime);
         const endTimeText = formatVoteDate(endTime);
         let validityText = '';
         if (startTimeText) validityText = `Startet: ${startTimeText}`;
         if (endTimeText) validityText += (validityText ? ' | ' : '') + `Endet: ${endTimeText}`;
 
-        if (validityText && !isFixed) { // Zeige nicht, wenn fixiert
+        if (validityText && !isFixed) { 
             if (validityEl) validityEl.textContent = validityText;
             if (validityContainer) validityContainer.classList.remove('hidden');
         } else {
@@ -1028,8 +1071,6 @@ function renderVoteView(voteData) {
         }
     }
 
-    // Gelbe Box (Anforderung 4)
-    // *** HIER WAR WAHRSCHEINLICH DER FEHLER (Zeile 930) ***
     if (isParticipationBlocked && !isFixed) { 
         if (isNotStarted) {
             if (warningText) warningText.textContent = `Diese Umfrage hat noch nicht begonnen. Sie startet am ${formatVoteDate(startTime)}.`;
@@ -1039,15 +1080,14 @@ function renderVoteView(voteData) {
         if (warningBox) warningBox.classList.remove('hidden');
     } else {
         if (warningBox) {
-            warningBox.classList.add('hidden'); // <--- Der Code ist jetzt sicher
+            warningBox.classList.add('hidden'); 
         } else {
-            // Wenn das Element fehlt, schreibe eine Warnung statt abzustürzen
             console.warn("renderVoteView: Element 'vote-validity-warning-box' nicht gefunden.");
         }
     }
 
 
-    // ----- 6. Teilnehmer-Status-Box (angepasst für Anforderung 4) -----
+    // ----- 6. Teilnehmer-Status-Box (Sicher) -----
     const statusContainer = document.getElementById('vote-participant-status-container');
     const nameDisplay = document.getElementById('vote-participant-name');
     const userContainer = document.getElementById('vote-user-name-container');
@@ -1059,28 +1099,26 @@ function renderVoteView(voteData) {
         existingParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
     }
     
-    // Standard: Alles verstecken, Grid nicht editierbar
-    // *** HIER KÖNNTE DER FEHLER AUCH SEIN (Zeile 930+) ***
     if (statusContainer) statusContainer.classList.add('hidden');
     if (guestNameContainer) guestNameContainer.classList.add('hidden');
     if (userContainer) userContainer.classList.add('hidden');
-    isVoteGridEditable = false; // Standard
+    isVoteGridEditable = false; 
     
-    if (!isParticipationBlocked) { // Nur wenn Teilnahme erlaubt ist
+    if (!isParticipationBlocked) { 
         if (voteData.isAnonymous) {
             isVoteGridEditable = true; 
         } else if (existingParticipant) {
             if (statusContainer) statusContainer.classList.remove('hidden');
             if (userContainer) userContainer.classList.remove('hidden'); 
             if (nameDisplay) nameDisplay.textContent = existingParticipant.name;
-            isVoteGridEditable = false; // Hat schon abgestimmt -> nicht editierbar (muss "Korrektur" klicken)
+            isVoteGridEditable = false; 
         } else if (currentUser.mode !== GUEST_MODE) {
             if (statusContainer) statusContainer.classList.remove('hidden');
             if (userContainer) userContainer.classList.remove('hidden'); 
             const currentUserFull = USERS[currentUser.mode];
             if (nameDisplay) nameDisplay.textContent = currentUserFull ? currentUserFull.realName : currentUser.displayName;
             isVoteGridEditable = true; 
-        } else { // Gast
+        } else { 
             if (statusContainer) statusContainer.classList.remove('hidden');
             if (guestNameContainer) guestNameContainer.classList.remove('hidden'); 
             if (guestNameInput) guestNameInput.value = '';
@@ -1094,36 +1132,33 @@ function renderVoteView(voteData) {
         currentParticipantAnswers = { ...existingParticipant.currentAnswers };
     }
 
-    // ----- 8. Knöpfe (Speichern, Admin-Edit) -----
+    // ----- 8. Knöpfe (Speichern, Admin-Edit) (Sicher) -----
     const saveButton = document.getElementById('vote-save-participation-btn');
-    const editButton = document.getElementById('show-edit-vote-btn'); // Admin-Edit
+    const editButton = document.getElementById('show-edit-vote-btn'); 
     
-    resetEditWrapper(); // Admin-Edit-Token-Feld zurücksetzen
+    resetEditWrapper(); 
     
-    if (saveButton) saveButton.classList.add('hidden'); // Standardmäßig versteckt
+    if (saveButton) saveButton.classList.add('hidden'); 
     if (isParticipationBlocked) {
         if (saveButton) saveButton.classList.add('hidden');
     }
     
-    // Admin-Edit-Knopf
     if (editButton) {
         if (isFixed) {
-            editButton.classList.add('hidden'); // Verstecken, wenn fixiert
+            editButton.classList.add('hidden'); 
         } else {
-            editButton.classList.remove('hidden'); // Anzeigen, wenn nicht fixiert
+            editButton.classList.remove('hidden'); 
         }
     }
     
     // ----- 9. Tabelle rendern -----
-    // 'isVoteGridEditable' ist jetzt korrekt gesetzt (basierend auf Anforderung 4)
-    // 'isClosed' wird übergeben, um Korrektur-Link zu sperren (Anforderung 1)
     updatePollTableAnswers(voteData, isVoteGridEditable, isClosed); 
     
-    // Speichern-Knopf (finaler Check)
     if (!isParticipationBlocked) {
         checkIfAllAnswered();
     }
 }
+
 
 /**
  * Baut die Abstimmungs-Tabelle neu auf und füllt sie mit allen Antworten
@@ -1133,8 +1168,12 @@ function renderVoteView(voteData) {
 
 function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) {
     const optionsContainer = document.getElementById('vote-options-container');
+    if (!optionsContainer) {
+        console.error("Fehler: 'vote-options-container' nicht gefunden!");
+        return;
+    }
 
-    // 1. Fall: Termin ist fixiert (Anforderung 2)
+    // 1. Fall: Termin ist fixiert
     if (voteData.fixedOptionIndex != null) {
         const fixedOption = voteData.options[voteData.fixedOptionIndex];
         if (fixedOption) {
@@ -1144,13 +1183,11 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                 `${fixedOption.timeStart} - ${fixedOption.timeEnd} Uhr` : 
                 `${fixedOption.timeStart} Uhr`;
 
-            // ----- NEU: Logik für Teilnehmerliste (Anforderung 2) -----
             const fixedIndex = voteData.fixedOptionIndex;
             const yesNames = [];
             const maybeNames = [];
             const noNames = [];
 
-            // Sortiere Teilnehmer in die drei Listen
             voteData.participants.forEach(p => {
                 const answer = p.currentAnswers[fixedIndex];
                 if (answer === 'yes') {
@@ -1162,10 +1199,8 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                 }
             });
 
-            // Helfer-Funktion zum Erstellen der HTML-Listen
             const createListHTML = (title, names, colorClass) => {
                 if (names.length === 0) return '';
-                // `colorClass` färbt den Titel (z.B. "Zusagen")
                 return `
                     <div class="mt-2">
                         <span class="text-xs font-semibold ${colorClass}">${title} (${names.length}):</span>
@@ -1174,7 +1209,6 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                 `;
             };
             
-            // Das finale HTML für die Teilnehmerliste
             const participantsListHTML = `
                 <div class="text-left mt-4 border-t border-green-400 pt-2">
                     ${createListHTML('Zusagen', yesNames, 'text-green-800')}
@@ -1182,7 +1216,6 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                     ${createListHTML('Absagen', noNames, 'text-red-800')}
                 </div>
             `;
-            // ----- ENDE NEU: Logik für Teilnehmerliste -----
 
             optionsContainer.innerHTML = `
                 <div class="p-6 bg-green-100 border-l-4 border-green-500 rounded-lg text-center">
@@ -1199,13 +1232,11 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                     ${participantsListHTML}
                 </div>
             `;
-            return; // Wichtig: Funktion hier beenden
+            return; 
         }
     }
     
     // 2. Fall: Normale Abstimmung -> Baue die Tabelle
-    // (Der Rest der Funktion bleibt exakt gleich wie in der VORHERIGEN Antwort)
-    // Er stellt sicher, dass "Auswahl bearbeiten" bei 'isClosed=true' versteckt wird.
     
     const optionsByDate = {};
     voteData.options.forEach((option, index) => {
@@ -1240,8 +1271,6 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
         if (youParticipant) {
             const correctionCount = youParticipant.correctionCount || 0;
             const correctionText = correctionCount > 0 ? `(<span class="correction-counter cursor-pointer" data-userid="${currentUser.mode}">${correctionCount} Korrekturen</span>)` : '';
-            
-            // "Auswahl bearbeiten" nur anzeigen, wenn NICHT geschlossen
             const editButtonHtml = !isClosed ? `<br><button class="vote-correction-btn text-xs font-semibold text-blue-600 hover:underline">Auswahl bearbeiten</button>` : '';
 
             youHeaderHTML = `
@@ -1251,7 +1280,6 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                 ${editButtonHtml}
             `;
         } else {
-            // Wenn geschlossen, "Du (Geschlossen)" anzeigen
             youHeaderHTML = isClosed 
                 ? '<span class="font-bold text-gray-500">Du (Geschlossen)</span>' 
                 : '<span class="font-bold text-indigo-600">Du (Klicke unten)</span>';
@@ -1282,25 +1310,67 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                 `${option.timeStart} - ${option.timeEnd} Uhr` : 
                 `${option.timeStart} Uhr`;
             
+            // NEU: Logik für "Streichen" (Punkt 1)
+            const isStricken = option.isStricken === true;
+            const rowClasses = isStricken ? 'bg-gray-100 opacity-60' : '';
+            const cellClasses = isStricken ? 'line-through text-gray-500' : 'font-mono';
+            
             tableHTML += `
-                <tr class="vote-option-row" data-option-index="${optionIndex}">
-                    <td class="p-3 border-b font-mono sticky left-0 bg-white z-10">${timeString}</td>
+                <tr class="vote-option-row ${rowClasses}" data-option-index="${optionIndex}">
+                    <td class="p-3 border-b ${cellClasses} sticky left-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10">
+                        ${timeString} ${isStricken ? '(Gestrichen)' : ''}
+                    </td>
             `;
+            // ENDE NEU
 
             voteData.participants.forEach(p => {
                 if (p.userId === currentUser.mode) return; 
                 const answer = p.currentAnswers[optionIndex]; 
                 let answerIcon = '';
-                if (answer === 'yes') answerIcon = '<span class="text-green-500 font-bold text-xl">✔</span>';
-                if (answer === 'no') answerIcon = '<span class="text-red-500 font-bold text-xl">✘</span>';
-                if (answer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold text-xl">~</span>';
+                
+                // NEU: Logik für "Streichen" (Punkt 1)
+                if (isStricken) {
+                    answerIcon = '<span class="text-gray-400 font-bold">-</span>';
+                }
+                // ENDE NEU
+                else if (answer === 'yes') answerIcon = '<span class="text-green-500 font-bold text-xl">✔</span>';
+                else if (answer === 'no') answerIcon = '<span class="text-red-500 font-bold text-xl">✘</span>';
+                else if (answer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold text-xl">~</span>';
+                
                 tableHTML += `<td class="p-3 border-b text-center">${answerIcon}</td>`;
             });
             
             const currentAnswer = currentParticipantAnswers[optionIndex];
             
-            // 'isEditable' steuert, ob Knöpfe angezeigt werden
-            if (isEditable) {
+            // NEU: Logik für "Streichen" (Punkt 1)
+            // Wenn gestrichen, zeige deaktivierte Knöpfe (wenn editierbar) oder nur einen Strich
+            if (isStricken) {
+                if (isEditable) {
+                     tableHTML += `
+                        <td class="p-2 border-b sticky right-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10">
+                            <div class="flex justify-center gap-1">
+                                <button class="p-2 rounded-lg" disabled title="Gestrichen">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-gray-400"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" /></svg>
+                                </button>
+                                <button class="p-2 rounded-lg ${voteData.disableMaybe ? 'hidden' : ''}" disabled title="Gestrichen">
+                                     <span class="text-gray-400 font-bold text-xl w-5 h-5 flex items-center justify-center">~</span>
+                                </button>
+                                <button class="p-2 rounded-lg" disabled title="Gestrichen">
+                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-gray-400"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                } else {
+                     tableHTML += `
+                        <td class="p-3 border-b text-center sticky right-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10">
+                            <span class="text-gray-400 font-bold">-</span>
+                        </td>
+                    `;
+                }
+            }
+            // ENDE NEU
+            else if (isEditable) {
                 // MODUS: BEARBEITBAR (Knöpfe)
                 const yesSelected = currentAnswer === 'yes' ? 'bg-green-200 ring-2 ring-indigo-500' : 'hover:bg-green-100 bg-opacity-50';
                 const maybeSelected = currentAnswer === 'maybe' ? 'bg-yellow-200 ring-2 ring-indigo-500' : 'hover:bg-yellow-100 bg-opacity-50';
@@ -1345,11 +1415,12 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
 }
 
 
+
 // ----- HELFER-FUNKTION zum Prüfen der Antworten -----
 function checkIfAllAnswered() {
     const saveBtn = document.getElementById('vote-save-participation-btn');
-    if (!currentVoteData) {
-        saveBtn.classList.add('hidden');
+    if (!currentVoteData || !saveBtn) {
+        if (saveBtn) saveBtn.classList.add('hidden');
         return;
     }
     
@@ -1362,6 +1433,12 @@ function checkIfAllAnswered() {
     
     let allAnswered = true;
     for (let i = 0; i < totalOptions; i++) {
+        // NEU: Überspringe gestrichene Termine
+        if (currentVoteData.options[i].isStricken === true) {
+            continue;
+        }
+        // ENDE NEU
+
         if (!currentParticipantAnswers[i]) {
             allAnswered = false;
             break;
@@ -1374,6 +1451,7 @@ function checkIfAllAnswered() {
         saveBtn.classList.add('hidden'); 
     }
 }
+
 
 
 // ----- DATENBANK-FUNKTION (Abstimmung speichern) -----
@@ -1751,10 +1829,8 @@ function renderCorrectionHistory(userId) {
 function renderEditView(voteData) {
     document.getElementById('edit-poll-title').textContent = `"${voteData.title}" bearbeiten`;
     
-    // Helfer-Funktion, um Firebase-Timestamps ODER JS-Dates in 'datetime-local' Strings umzuwandeln
     const formatTimestampToInput = (timestamp) => {
         if (!timestamp) return '';
-        
         let dateObject = null;
         if (typeof timestamp.toDate === 'function') {
             dateObject = timestamp.toDate();
@@ -1763,11 +1839,9 @@ function renderEditView(voteData) {
         } else {
             try { dateObject = new Date(timestamp); } catch (e) { return ''; }
         }
-
         if (isNaN(dateObject.getTime())) { 
             return '';
         }
-
         const offset = dateObject.getTimezoneOffset() * 60000;
         const localDate = new Date(dateObject.getTime() - offset);
         return localDate.toISOString().slice(0, 16);
@@ -1810,21 +1884,15 @@ function renderEditView(voteData) {
         } else {
             const selectedNames = assignedIds.map(id => {
                 const user = USERS[id];
-                return user ? (user.realName || user.name) : id; // Fallback auf ID
+                return user ? (user.realName || user.name) : id; 
             }).join(', ');
             assignedDisplayEdit.textContent = selectedNames;
-            assignedDisplayEdit.title = selectedNames; // Tooltip
+            assignedDisplayEdit.title = selectedNames; 
         }
     }
     
-    // 5. "UPDATE"-Log-Button anzeigen
-    const historyContainer = document.getElementById('poll-history-log-container');
-    if (voteData.pollHistory && voteData.pollHistory.length > 0) {
-        historyContainer.classList.remove('hidden');
-    } else {
-        historyContainer.classList.add('hidden');
-    }
-
+    // 5. "UPDATE"-Log-Button wurde entfernt (ist jetzt in renderVoteView)
+    
     // 6. Gefahrenzone-Knöpfe-Status setzen
     const closeBtn = document.getElementById('vote-close-poll-btn');
     const reopenBtn = document.getElementById('vote-reopen-poll-btn');
@@ -1839,14 +1907,14 @@ function renderEditView(voteData) {
     }
 
     if (voteData.fixedOptionIndex != null) {
-        closeBtn.classList.add('hidden');
-        reopenBtn.classList.remove('hidden');
+        if (closeBtn) closeBtn.classList.add('hidden');
+        if (reopenBtn) reopenBtn.classList.remove('hidden');
     } else if (endTimeDate && endTimeDate < new Date()) {
-        closeBtn.classList.add('hidden');
-        reopenBtn.classList.remove('hidden'); 
+        if (closeBtn) closeBtn.classList.add('hidden');
+        if (reopenBtn) reopenBtn.classList.remove('hidden'); 
     } else {
-        closeBtn.classList.remove('hidden'); 
-        reopenBtn.classList.add('hidden');
+        if (closeBtn) closeBtn.classList.remove('hidden'); 
+        if (reopenBtn) reopenBtn.classList.add('hidden');
     }
 
     const selectionContainer = document.getElementById('fix-date-selection-container');
@@ -1854,19 +1922,20 @@ function renderEditView(voteData) {
     
     // ----- NEU: Ruft die neuen Render-Funktionen auf -----
     
-    // 7. Baut die Admin-Abstimmungs-Tabelle auf (Punkt 2)
+    // 7. Baut die Liste der "Bestehenden Termine" (für Streichen)
+    renderExistingTermsList(voteData);
+
+    // 8. Baut die Admin-Abstimmungs-Tabelle auf (Punkt 2)
     renderParticipantEditGrid(voteData);
     
-    // 8. Leert den "Neue Termine" Container und fügt einen leeren Slot hinzu (Punkt 1)
+    // 9. Leert den "Neue Termine" Container und fügt einen leeren Slot hinzu (Punkt 1)
     const datesContainerEdit = document.getElementById('vote-dates-container-edit');
     if (datesContainerEdit) {
         datesContainerEdit.innerHTML = ''; // Leeren
     }
-    // Wir rufen die *neue* Funktion auf, um den ersten leeren Slot zu erstellen
     addNewDateGroupEdit(true); // true = ist der erste Slot
-    
-    // ----- ENDE NEU -----
 }
+
 async function saveVoteEdits() {
     const saveBtn = document.getElementById('vote-save-changes-btn');
     setButtonLoading(saveBtn, true);
@@ -2820,4 +2889,97 @@ function handleAdminVoteEdit(participantId, optionIndex, newAnswer, clickedButto
     if (newAnswer === 'maybe') clickedButton.classList.add('bg-yellow-200', 'ring-2', 'ring-indigo-500');
     if (newAnswer === 'no') clickedButton.classList.add('bg-red-200', 'ring-2', 'ring-indigo-500');
     clickedButton.classList.remove('bg-opacity-50');
+}
+
+// ----- NEUE FUNKTIONEN FÜR "TERMINE STREICHEN" -----
+
+/**
+ * Baut die Liste der bestehenden Termine im "Bearbeiten"-Modus (Punkt 1)
+ */
+function renderExistingTermsList(voteData) {
+    const listContainer = document.getElementById('manage-existing-terms-list');
+    if (!listContainer) return;
+
+    if (!voteData.options || voteData.options.length === 0) {
+        listContainer.innerHTML = `<p class="text-sm text-center text-gray-400">Keine Termine vorhanden.</p>`;
+        return;
+    }
+
+    let listHTML = '';
+    voteData.options.forEach((option, index) => {
+        const dateObj = new Date(option.date + 'T12:00:00');
+        const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+        const timeString = option.timeEnd ? `${option.timeStart} - ${option.timeEnd}` : `${option.timeStart} Uhr`;
+
+        const isStricken = option.isStricken === true;
+
+        const textClasses = isStricken ? 'line-through text-gray-500' : 'font-semibold text-gray-800';
+        const button = isStricken ?
+            `<button class="restore-term-btn py-1 px-3 bg-green-100 text-green-700 text-sm font-semibold rounded-lg hover:bg-green-200" data-option-index="${index}">Wiederherstellen</button>` :
+            `<button class="strike-term-btn py-1 px-3 bg-red-100 text-red-700 text-sm font-semibold rounded-lg hover:bg-red-200" data-option-index="${index}">Streichen</button>`;
+
+        listHTML += `
+            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                <div>
+                    <p class="${textClasses}">${niceDate} <span class="font-mono">(${timeString})</span></p>
+                    ${isStricken ? '<p class="text-xs font-bold text-red-600">GESTREICHEN (Alle Stimmen entfernt)</p>' : ''}
+                </div>
+                ${button}
+            </div>
+        `;
+    });
+
+    listContainer.innerHTML = listHTML;
+}
+
+/**
+ * Verarbeitet den Klick auf "Streichen" / "Wiederherstellen" (Punkt 1)
+ */
+function handleStrikeTerm(optionIndex, shouldBeStricken) {
+    if (!currentVoteData || !currentVoteData.options[optionIndex]) return;
+
+    const option = currentVoteData.options[optionIndex];
+    option.isStricken = shouldBeStricken;
+
+    const optionText = option.timeEnd ? 
+        `${option.date} ${option.timeStart}-${option.timeEnd}` : 
+        `${option.date} ${option.timeStart}`;
+
+    if (shouldBeStricken) {
+        // --- TERMIN WIRD GESTRICHEN ---
+        // Gehe durch alle Teilnehmer und entferne ihre Stimmen für diesen Termin
+        currentVoteData.participants.forEach(p => {
+            const oldAnswer = p.currentAnswers[optionIndex];
+            if (oldAnswer && oldAnswer !== 'no') {
+                // Setze Stimme auf 'no' (sicherer als 'null')
+                p.currentAnswers[optionIndex] = 'no'; 
+                
+                // Füge einen Log-Eintrag hinzu
+                const historyLog = { 
+                    timestamp: new Date(),
+                    changes: [{ 
+                        optionText: optionText, 
+                        from: oldAnswer, 
+                        to: 'no' 
+                    }],
+                    changedBy: `Admin (${currentUser.displayName || 'Unbekannt'}) - Termin gestrichen` 
+                };
+                if (!p.answerHistory) p.answerHistory = [];
+                p.answerHistory.unshift(historyLog);
+                p.correctionCount = p.answerHistory.length;
+            }
+        });
+
+    } else {
+        // --- TERMIN WIRD WIEDERHERGESTELLT ---
+        // Wir setzen keine Stimmen zurück. Teilnehmer müssen ggf. neu abstimmen.
+        // Wir könnten einen Log-Eintrag hinzufügen, aber das ist optional.
+    }
+
+    // Lade beide Admin-Listen neu, um die Änderungen (gestrichen / entfernte Votes)
+    // sofort im Bearbeiten-Modus anzuzeigen
+    renderExistingTermsList(currentVoteData);
+    renderParticipantEditGrid(currentVoteData);
+    
+    alertUser(`Termin ${shouldBeStricken ? 'gestrichen' : 'wiederhergestellt'}. (Lokal geändert)`, "success");
 }
