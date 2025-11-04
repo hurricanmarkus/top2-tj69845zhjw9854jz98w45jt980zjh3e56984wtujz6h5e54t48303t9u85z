@@ -2409,7 +2409,7 @@ function createVoteCardHTML(vote, listTitle) {
         statusBox2 = `<span class="text-xs font-semibold px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">${countdownText}</span>`;
     } else {
         // Läuft unbegrenzt und ist offen
-        statusBox2 = `<span class="text-xs font-semibold px-2 py-0.5 bg-gray-200 text-gray-600 rounded-full">Unbegrenzt</span>`;
+        statusBox2 = `<span class="text-xs font-semibold px-2 py-0.5 bg-gray-200 text-gray-600 rounded-full">Zeitl. unbegrenzt</span>`;
     }
 
     // Creator-Name
