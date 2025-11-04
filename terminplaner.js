@@ -18,10 +18,7 @@ import {
 let dateGroupIdCounter = 0;
 let currentVoteData = null;
 let currentParticipantAnswers = {};
-
-// Diese Variable steuert, ob die "Du"-Spalte klickbar ist
 let isVoteGridEditable = false; 
-
 let unsubscribePublicVotes = null;
 let unsubscribeAssignedVotes = null;
 
@@ -39,7 +36,7 @@ export function initializeTerminplanerView() {
     // ----- Spion für den "Teilnehmen"-Button -----
     const joinVoteButton = document.getElementById('join-vote-by-token-btn');
     if (joinVoteButton && !joinVoteButton.dataset.listenerAttached) {
-        joinVoteButton.addEventListener('click', () => joinVoteByToken(null)); // NEU: null übergeben
+        joinVoteButton.addEventListener('click', () => joinVoteByToken(null)); // null übergeben
         joinVoteButton.dataset.listenerAttached = 'true';
     }
 
@@ -94,7 +91,6 @@ export function initializeTerminplanerView() {
 
     // ----- Spione für den Erstellungs-Assistenten -----
     
-    // "Abbrechen"-Button
     const cancelCreationButton = document.getElementById('cancel-vote-creation-btn');
     if (cancelCreationButton && !cancelCreationButton.dataset.listenerAttached) {
         cancelCreationButton.addEventListener('click', () => {
@@ -104,7 +100,6 @@ export function initializeTerminplanerView() {
         });
         cancelCreationButton.dataset.listenerAttached = 'true';
     }
-    // "Endzeit Unbegrenzt"-Checkbox
     const unlimitedCheckbox = document.getElementById('vote-end-time-unlimited');
     if (unlimitedCheckbox && !unlimitedCheckbox.dataset.listenerAttached) {
         unlimitedCheckbox.addEventListener('change', (e) => {
@@ -118,17 +113,13 @@ export function initializeTerminplanerView() {
         });
         unlimitedCheckbox.dataset.listenerAttached = 'true';
     }
-    // "+ Tag hinzufügen"-Button
     const addDateButton = document.getElementById('vote-add-date-btn');
     if (addDateButton && !addDateButton.dataset.listenerAttached) {
         addDateButton.addEventListener('click', addNewDateGroup);
         addDateButton.dataset.listenerAttached = 'true';
     }
-    
-    // Delegierter Spion für "+ Uhrzeit", "Uhrzeit entfernen" UND VALIDIERUNG
     const datesContainer = document.getElementById('vote-dates-container');
     if (datesContainer && !datesContainer.dataset.clickListenerAttached) {
-        // Klick-Spion (für Knöpfe)
         datesContainer.addEventListener('click', (e) => {
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
@@ -149,18 +140,13 @@ export function initializeTerminplanerView() {
             }
             validateLastDateGroup();
         });
-        
-        // Input-Spion (für die Felder)
         datesContainer.addEventListener('input', (e) => {
             if (e.target.matches('.vote-date-input, .vote-time-start-input')) {
                 validateLastDateGroup();
             }
         });
-        
         datesContainer.dataset.clickListenerAttached = 'true';
     }
-    
-    // "Umfrage erstellen"-Button (Speichern)
     const saveVoteButton = document.getElementById('vote-save-group-poll-btn');
     if (saveVoteButton && !saveVoteButton.dataset.listenerAttached) {
         saveVoteButton.addEventListener('click', saveGroupPoll); 
@@ -169,7 +155,6 @@ export function initializeTerminplanerView() {
 
     // ----- Spione für die Abstimmungs-Seite -----
     
-    // "Zurück"-Button
     const cancelVoteButton = document.getElementById('cancel-vote-participation-btn');
     if (cancelVoteButton && !cancelVoteButton.dataset.listenerAttached) {
         cancelVoteButton.addEventListener('click', () => {
@@ -179,12 +164,10 @@ export function initializeTerminplanerView() {
         cancelVoteButton.dataset.listenerAttached = 'true';
     }
 
-    // Delegierter Spion für die Klicks IN DER TABELLE
     const voteView = document.getElementById('terminplaner-vote-view');
     if (voteView && !voteView.dataset.listenerAttached) {
         voteView.addEventListener('click', (e) => {
             
-            // Fall 1: Klick auf einen (klickbaren) Abstimm-Knopf
             const clickedButton = e.target.closest('.vote-grid-btn');
             if (clickedButton && !clickedButton.disabled) { 
                 const optionIndex = clickedButton.dataset.optionIndex;
@@ -202,27 +185,23 @@ export function initializeTerminplanerView() {
                 checkIfAllAnswered();
             }
             
-            // Fall 2: Klick auf einen Korrektur-Zähler
             const correctionCounter = e.target.closest('.correction-counter');
             if (correctionCounter) {
                 const userId = correctionCounter.dataset.userid;
                 renderCorrectionHistory(userId);
             }
             
-            // Fall 3: Klick auf "Auswahl bearbeiten"
             const correctionButton = e.target.closest('.vote-correction-btn');
             if (correctionButton) {
                 switchToEditMode();
             }
 
-            // Fall 4: Klick auf Token-Kopier-Knopf
             const copyTokenBtn = e.target.closest('#copy-vote-token-btn');
             if (copyTokenBtn) {
                 const token = document.getElementById('vote-share-token').textContent;
                 copyToClipboard(token, "Token kopiert!");
             }
 
-            // Fall 5: Klick auf URL-Kopier-Knopf
             const copyUrlBtn = e.target.closest('#copy-vote-url-btn');
             if (copyUrlBtn) {
                 const url = document.getElementById('vote-share-url').value;
@@ -232,35 +211,30 @@ export function initializeTerminplanerView() {
         voteView.dataset.listenerAttached = 'true';
     }
     
-    // "Abstimmung speichern"-Button
     const saveParticipationButton = document.getElementById('vote-save-participation-btn');
     if (saveParticipationButton && !saveParticipationButton.dataset.listenerAttached) {
         saveParticipationButton.addEventListener('click', saveVoteParticipation);
         saveParticipationButton.dataset.listenerAttached = 'true';
     }
     
-    // Spion für den "EDIT"-Button (A)
     const editVoteButton = document.getElementById('show-edit-vote-btn');
     if (editVoteButton && !editVoteButton.dataset.listenerAttached) {
         editVoteButton.addEventListener('click', showInlineEditToken); 
         editVoteButton.dataset.listenerAttached = 'true';
     }
     
-    // Spion für den "OK"-Button (C)
     const submitEditBtn = document.getElementById('submit-edit-token-inline-btn');
     if (submitEditBtn && !submitEditBtn.dataset.listenerAttached) {
         submitEditBtn.addEventListener('click', checkInlineEditToken);
         submitEditBtn.dataset.listenerAttached = 'true';
     }
     
-    // Spion für die Token-Formatierung (B)
     const editTokenInput = document.getElementById('edit-token-input-inline');
     if (editTokenInput && !editTokenInput.dataset.listenerAttached) {
         editTokenInput.addEventListener('input', (e) => formatTokenInput(e, 'edit-token-input-inline'));
         editTokenInput.dataset.listenerAttached = 'true';
     }
     
-    // Spion für den "Zurück zur Umfrage"-Button auf der finalen Edit-Seite
     const cancelEditingBtn = document.getElementById('cancel-vote-editing-btn');
     if (cancelEditingBtn && !cancelEditingBtn.dataset.listenerAttached) {
         cancelEditingBtn.addEventListener('click', () => {
@@ -270,7 +244,6 @@ export function initializeTerminplanerView() {
         cancelEditingBtn.dataset.listenerAttached = 'true';
     }
     
-    // Spion für den "Schließen"-Knopf des Korrektur-Modals
     const closeLogBtn = document.getElementById('close-correction-log-btn');
     if (closeLogBtn && !closeLogBtn.dataset.listenerAttached) {
         closeLogBtn.addEventListener('click', () => {
@@ -283,8 +256,8 @@ export function initializeTerminplanerView() {
         closeLogBtn.dataset.listenerAttached = 'true';
     }
 
-    // NEU: Prüfe beim Starten, ob ein Token in der URL ist
-    checkUrlForToken();
+    // KORREKTUR: checkUrlForToken() wird von hier ENTFERNT
+    // checkUrlForToken(); // <-- Diese Zeile LÖSCHEN oder auskommentieren
 }
 
 
@@ -403,15 +376,19 @@ function renderAssignedVotes(votes) {
 
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per Token) -----
-async function joinVoteByToken(tokenFromUrl = null) {
+// (ANGEPASST: Ruft jetzt 'cleanUrl' auf)
+export async function joinVoteByToken(tokenFromUrl = null) {
     const tokenInput = document.getElementById('vote-token-input');
     const joinBtn = document.getElementById('join-vote-by-token-btn');
     
-    // Nimm den Token aus der URL, ODER aus dem Input-Feld
     const token = (tokenFromUrl || tokenInput.value).trim().toUpperCase(); 
 
     if (token.length !== 11 || token[4] !== ' ' || token[5] !== '-' || token[6] !== ' ') {
-        alertUser("Ungültiges Token-Format. Es muss 'XXXX - XXXX' sein.", "error");
+        // Wenn es aus der URL kam, nicht den Benutzer benachrichtigen, sondern nur in der Konsole loggen
+        if (!tokenFromUrl) {
+            alertUser("Ungültiges Token-Format. Es muss 'XXXX - XXXX' sein.", "error");
+        }
+        console.warn("Ungültiges Token-Format.");
         return;
     }
     
@@ -436,6 +413,10 @@ async function joinVoteByToken(tokenFromUrl = null) {
         renderVoteView(currentVoteData);
         showView('vote');
         if (tokenInput) tokenInput.value = ''; 
+        
+        // NEU: URL aufräumen, wenn wir per Token aus der URL kamen
+        if (tokenFromUrl) cleanUrlParams();
+        
     } catch (error) {
         console.error("Fehler beim Suchen der Umfrage:", error);
         alertUser(error.message, "error");
@@ -445,15 +426,20 @@ async function joinVoteByToken(tokenFromUrl = null) {
 }
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per ID) -----
-async function joinVoteById(voteId = null) {
+// (ANGEPASST: Ruft jetzt 'cleanUrl' auf)
+export async function joinVoteById(voteId = null) {
+    let idToLoad = voteId;
+    let isFromUrl = false;
+    
     try {
-        if (!voteId) {
+        if (!idToLoad) {
             const urlParams = new URLSearchParams(window.location.search);
-            voteId = urlParams.get('vote_id');
-            if (!voteId) return; 
+            idToLoad = urlParams.get('vote_id');
+            if (!idToLoad) return; // Kein ID in URL, nichts zu tun
+            isFromUrl = true;
         }
         
-        const voteDocRef = doc(votesCollectionRef, voteId);
+        const voteDocRef = doc(votesCollectionRef, idToLoad);
         const voteDoc = await getDoc(voteDocRef); 
         if (!voteDoc.exists()) {
              throw new Error("Diese Umfrage existiert nicht mehr.");
@@ -470,6 +456,10 @@ async function joinVoteById(voteId = null) {
         console.log("Umfrage per ID geladen:", currentVoteData);
         renderVoteView(currentVoteData);
         showView('vote');
+        
+        // NEU: URL aufräumen, wenn wir per ID aus der URL kamen
+        if (isFromUrl) cleanUrlParams();
+        
     } catch (error) {
         console.error("Fehler beim Laden der Umfrage per ID:", error);
         alertUser(error.message, "error");
@@ -662,10 +652,8 @@ function updatePollTableAnswers(voteData, isEditable = false) {
     
     if (currentUser.mode !== GUEST_MODE && !voteData.isAnonymous) {
         if (youParticipant) {
-            // User hat schon teilgenommen (isEditable ist false)
             const correctionCount = youParticipant.correctionCount || 0;
             const correctionText = correctionCount > 0 ? `(<span class="correction-counter cursor-pointer" data-userid="${currentUser.mode}">${correctionCount} Korrekturen</span>)` : '';
-            
             youHeaderHTML = `
                 <span class="font-bold text-indigo-600">Du</span>
                 <br>
@@ -674,7 +662,6 @@ function updatePollTableAnswers(voteData, isEditable = false) {
                 <button class="vote-correction-btn text-xs font-semibold text-blue-600 hover:underline">Auswahl bearbeiten</button>
             `;
         } else {
-            // User nimmt gerade teil (isEditable ist true)
             youHeaderHTML = '<span class="font-bold text-indigo-600">Du (Klicke unten)</span>';
         }
     }
@@ -1035,17 +1022,10 @@ function checkInlineEditToken() {
 
 // ----- Funktion, die beim Klick auf "Korrektur" aufgerufen wird -----
 function switchToEditMode() {
-    // 1. Verstecke den "Auswahl bearbeiten"-Link
     const correctionBtn = document.querySelector('.vote-correction-btn');
     if (correctionBtn) correctionBtn.classList.add('hidden');
-    
-    // 2. Setze den globalen Status
     isVoteGridEditable = true;
-    
-    // 3. Baue die Tabelle neu auf, diesmal klickbar
     updatePollTableAnswers(currentVoteData, true);
-    
-    // 4. Prüfe, ob der Speicher-Knopf angezeigt werden soll
     checkIfAllAnswered();
 }
 
@@ -1075,17 +1055,11 @@ function renderCorrectionHistory(userId) {
         // Baue den HTML-Inhalt für den Verlauf
         content.innerHTML = history.map(log => {
             
-            // ==================================================
-            // HIER IST DIE KORREKTUR
-            // ==================================================
-            
             let dateObject = null;
             if (log.timestamp) {
-                // Fall 1: Es ist ein Firebase-Timestamp (hat .toDate())
                 if (typeof log.timestamp.toDate === 'function') {
                     dateObject = log.timestamp.toDate();
                 }
-                // Fall 2: Es ist bereits ein JS-Datum (vom lokalen Speichern)
                 else if (log.timestamp instanceof Date) { 
                     dateObject = log.timestamp;
                 }
@@ -1094,11 +1068,6 @@ function renderCorrectionHistory(userId) {
             const timestamp = dateObject ? dateObject.toLocaleString('de-DE', {
                 day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
             }) : 'Unbekanntes Datum';
-            
-            // ==================================================
-            // ENDE DER KORREKTUR
-            // ==================================================
-
             
             const changesHTML = log.changes.map(change => {
                 const formatAnswer = (answer) => {
@@ -1155,9 +1124,23 @@ function renderEditView(voteData) {
 // NEU: Funktion zum Kopieren in die Zwischenablage
 function copyToClipboard(text, successMessage) {
     if (!navigator.clipboard) {
-        alertUser("Kopieren wird von deinem Browser nicht unterstützt. Bitte manuell kopieren.", "error");
+        // Fallback für ältere/unsichere Browser (selten)
+        try {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            alertUser(successMessage, "success");
+        } catch (err) {
+            console.error('Fallback-Kopieren fehlgeschlagen: ', err);
+            alertUser("Kopieren wird von deinem Browser nicht unterstützt.", "error");
+        }
         return;
     }
+    // Moderne Methode
     navigator.clipboard.writeText(text).then(() => {
         alertUser(successMessage, "success");
     }).catch(err => {
@@ -1175,19 +1158,29 @@ function checkUrlForToken() {
 
         if (voteId) {
             console.log("URL-Parameter 'vote_id' gefunden:", voteId);
-            joinVoteById(voteId); // Diese Funktion macht schon alles (laden, showView)
+            // Wir rufen joinVoteById auf, das async ist, aber wir müssen nicht darauf warten (es kümmert sich selbst)
+            joinVoteById(voteId); 
         } else if (voteToken) {
              console.log("URL-Parameter 'vote_token' gefunden:", voteToken);
-             joinVoteByToken(voteToken); // Diese Funktion macht auch alles
+             joinVoteByToken(voteToken); 
         }
         
         // URL aufräumen, damit der Parameter weg ist
         if (voteId || voteToken) {
-            const newUrl = window.location.origin + window.location.pathname;
-            window.history.replaceState({}, document.title, newUrl);
+            cleanUrlParams();
         }
     } catch (e) {
         console.error("Fehler beim Prüfen der URL:", e);
+    }
+}
+
+// NEU: Helfer zum Aufräumen der URL
+function cleanUrlParams() {
+    try {
+        const newUrl = window.location.origin + window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+    } catch (e) {
+        console.warn("URL konnte nicht aufgeräumt werden:", e);
     }
 }
 

@@ -14,7 +14,7 @@ import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists,
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
 import { renderUserKeyList } from './admin_benutzersteuerung.js'; 
 // NEU: Wir importieren die Start-Funktion aus deiner neuen Datei
-import { initializeTerminplanerView, listenForPublicVotes } from './terminplaner.js';
+import { initializeTerminplanerView, listenForPublicVotes, joinVoteById, joinVoteByToken } from './terminplaner.js';
 // // ENDE-ZIKA //
 
 
@@ -213,6 +213,8 @@ window.onload = function () {
 };
 
 // In haupteingang.js
+// ERSETZE DIESE FUNKTION IN haupteingang.js
+
 async function initializeFirebase() {
     try {
         console.log("initializeFirebase: Starte Firebase Initialisierung...");
@@ -239,6 +241,7 @@ async function initializeFirebase() {
         approvalRequestsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'approval-requests');
         checklistStacksCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-stacks');
         checklistTemplatesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates');
+        // Diese Zeile sollte schon von uns da sein:
         votesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
 
 
@@ -255,7 +258,7 @@ async function initializeFirebase() {
         auth.onAuthStateChanged(async (user) => {
             console.log("initializeFirebase: onAuthStateChanged ausgelöst. User:", user ? user.uid : "keiner");
 
-            // --- NEU: Functions Initialisierung HIER ---
+            // --- Functions Initialisierung HIER ---
             if (user && !window.firebaseFunctionsInitialised) {
                 const { getFunctions, httpsCallable } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js");
                 const functions = getFunctions(app);
@@ -263,12 +266,13 @@ async function initializeFirebase() {
                 window.firebaseFunctionsInitialised = true;
                 console.log("Firebase Functions initialisiert und global verfügbar gemacht.");
             }
-            // --- ENDE NEU ---
-
-
+            
             // Listener starten (unabhängig vom Login-Status)
+            // (Dieser 'try...catch'-Block ist unverändert)
             try {
                 console.log("initializeFirebase: Starte Daten-Listener...");
+                
+                // ... (alle deine onSnapshot-Listener für settings, notruf, roles, users, checklists, etc.) ...
                 
                 // --- Listener für App-Einstellungen (Settings) ---
                 onSnapshot(settingsDocRef, (docSnap) => { 
@@ -309,10 +313,9 @@ async function initializeFirebase() {
                 listenForChecklistCategories();
                 listenForTemplates();
                 listenForStacks();
-                initializeTerminplanerView();
+                initializeTerminplanerView(); // Diese Zeile MUSS HIER bleiben
                 
-                // NEU: Starte den Spion für öffentliche Umfragen
-                // (Wir müssen prüfen, ob die Funktion schon importiert wurde)
+                // Starte den Spion für öffentliche Umfragen
                 if (typeof listenForPublicVotes === 'function') {
                     listenForPublicVotes();
                 } else {
@@ -336,6 +339,36 @@ async function initializeFirebase() {
                  initialAuthCheckDone = true;
                  updateUIForMode(); 
             }
+            
+            // =================================================================
+            // NEU: URL-PRÜFUNG (NACHDEM die Authentifizierung fertig ist)
+            // =================================================================
+            // Wir prüfen, ob wir durch einen Link hierhergekommen sind,
+            // NACHDEM die App initialisiert wurde.
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const voteId = urlParams.get('vote_id');
+                const voteToken = urlParams.get('vote_token');
+
+                if (voteId) {
+                    console.log("URL-Parameter 'vote_id' gefunden, starte joinVoteById...");
+                    // Wir müssen 'await' verwenden, damit die Funktion fertig ist,
+                    // bevor der Benutzer etwas anderes klickt.
+                    await joinVoteById(voteId); 
+                } else if (voteToken) {
+                     console.log("URL-Parameter 'vote_token' gefunden, starte joinVoteByToken...");
+                     await joinVoteByToken(voteToken); 
+                } else {
+                    console.log("Keine URL-Parameter für Umfragen gefunden.");
+                }
+            } catch (e) {
+                console.error("Fehler bei der URL-Parameter-Prüfung:", e);
+                // Nicht abstürzen, einfach normal weitermachen
+            }
+            // =================================================================
+            // ENDE DER URL-PRÜFUNG
+            // =================================================================
+
         }); // Ende onAuthStateChanged
     } catch (error) {
         console.error("initializeFirebase: FEHLER bei der grundlegenden Firebase Initialisierung:", error);
