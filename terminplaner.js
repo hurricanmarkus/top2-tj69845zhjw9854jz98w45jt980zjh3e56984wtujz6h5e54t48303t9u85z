@@ -3175,10 +3175,6 @@ function handleStrikeTerm(optionIndex, shouldBeStricken) {
  * NEU: Verarbeitet den Klick auf "Ok, quittieren"
  * (KORRIGIERTE VERSION: Stoppt den Spinner zuverlässig)
  */
-/**
- * NEU: Verarbeitet den Klick auf "Ok, quittieren"
- * (KORRIGIERTE VERSION: Stoppt den Spinner zuverlässig)
- */
 async function handleAcknowledgeUpdate() {
     if (!currentVoteData || currentUser.mode === GUEST_MODE) return;
 
