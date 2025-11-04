@@ -383,7 +383,6 @@ export function stopAssignedVotesListener() {
 
 // ----- RENDER-FUNKTIONEN FÜR LISTEN -----
 
-// ERSETZE diese Funktion in terminplaner.js
 function renderPublicVotes(votes) {
     const listContainer = document.getElementById('public-votes-list');
     if (!listContainer) return;
@@ -391,11 +390,24 @@ function renderPublicVotes(votes) {
         listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Derzeit gibt es keine öffentlichen Umfragen.</p>`;
         return;
     }
-    // KORREKTUR: Benutze die neue Helfer-Funktion
-    listContainer.innerHTML = votes.map(vote => renderVoteCardHTML(vote, 'public')).join('');
+    listContainer.innerHTML = votes.map(vote => {
+        const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
+        const fixedTag = vote.fixedOptionIndex != null ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">FIXIERT</span>' : '';
+        return `
+            <div class="vote-list-item card bg-white p-3 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:bg-indigo-50"
+                 data-vote-id="${vote.id}">
+                <div>
+                    <span class="font-bold text-indigo-700">${vote.title}</span>
+                    ${fixedTag}
+                    <span class="text-sm text-gray-500 ml-2">(${vote.participants?.length || 0} Teilnehmer)</span>
+                    <p class="text-xs text-gray-500">Erstellt von ${vote.createdByName} am ${niceDate}</p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
+            </div>
+        `;
+    }).join('');
 }
 
-// ERSETZE diese Funktion in terminplaner.js
 function renderAssignedVotes(votes) {
     const listContainer = document.getElementById('assigned-votes-list');
     if (!listContainer) return;
@@ -407,8 +419,22 @@ function renderAssignedVotes(votes) {
         listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Du hast noch an keiner Umfrage teilgenommen.</p>`;
         return;
     }
-    // KORREKTUR: Benutze die neue Helfer-Funktion (Anforderung 2 & 3)
-    listContainer.innerHTML = votes.map(vote => renderVoteCardHTML(vote, 'assigned')).join('');
+    listContainer.innerHTML = votes.map(vote => {
+        const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
+        const fixedTag = vote.fixedOptionIndex != null ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">FIXIERT</span>' : '';
+        return `
+            <div class="vote-list-item card bg-white p-3 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:bg-indigo-50"
+                 data-vote-id="${vote.id}">
+                <div>
+                    <span class="font-bold text-indigo-700">${vote.title}</span>
+                    ${fixedTag}
+                    <span class="text-sm text-gray-500 ml-2">(${vote.participants?.length || 0} Teilnehmer)</span>
+                    <p class="text-xs text-gray-500">Erstellt von ${vote.createdByName} am ${niceDate}</p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
+            </div>
+        `;
+    }).join('');
 }
 
 
