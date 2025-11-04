@@ -1151,15 +1151,6 @@ function checkUrlForToken() {
     }
 }
 
-// NEU: Helfer zum Aufräumen der URL
-function cleanUrlParams() {
-    try {
-        const newUrl = window.location.origin + window.location.pathname;
-        window.history.replaceState({}, document.title, newUrl);
-    } catch (e) {
-        console.warn("URL konnte nicht aufgeräumt werden:", e);
-    }
-}
 
 function showView(viewName) { 
     document.getElementById('terminplaner-main-view').classList.add('hidden');
