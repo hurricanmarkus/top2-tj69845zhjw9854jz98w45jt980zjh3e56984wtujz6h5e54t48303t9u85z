@@ -1238,23 +1238,50 @@ function renderCorrectionHistory(userId) {
 function renderEditView(voteData) {
     document.getElementById('edit-poll-title').textContent = `"${voteData.title}" bearbeiten`;
     
+    // ==================================================
+    // HIER IST DIE KORREKTUR
+    // ==================================================
+
+    // Helfer-Funktion, um Firebase-Timestamps ODER JS-Dates in 'datetime-local' Strings umzuwandeln
+    const formatTimestampToInput = (timestamp) => {
+        if (!timestamp) return '';
+        
+        let dateObject = null;
+        if (typeof timestamp.toDate === 'function') {
+            // Fall 1: Es ist ein Firebase-Timestamp
+            dateObject = timestamp.toDate();
+        } else if (timestamp instanceof Date) {
+            // Fall 2: Es ist bereits ein JS-Date (z.B. nach 'closePollNow' oder 'saveGroupPoll')
+            dateObject = timestamp;
+        } else {
+            // Fallback, falls es ein String ist (sollte nicht passieren)
+            try { dateObject = new Date(timestamp); } catch (e) { return ''; }
+        }
+
+        if (isNaN(dateObject.getTime())) { // Prüfen, ob das Datum gültig ist
+            return '';
+        }
+
+        // Konvertiere in lokales YYYY-MM-DDTHH:MM Format
+        const offset = dateObject.getTimezoneOffset() * 60000;
+        const localDate = new Date(dateObject.getTime() - offset);
+        return localDate.toISOString().slice(0, 16);
+    };
+
     // 1. Details füllen
     document.getElementById('vote-title-edit').value = voteData.title;
     document.getElementById('vote-description-edit').value = voteData.description || '';
     document.getElementById('vote-location-edit').value = voteData.location || '';
     
-    // 2. Gültigkeit füllen
+    // 2. Gültigkeit füllen (mit der neuen Helfer-Funktion)
     const startTimeInput = document.getElementById('vote-start-time-edit');
     const endTimeInput = document.getElementById('vote-end-time-edit');
     const unlimitedCheckbox = document.getElementById('vote-end-time-unlimited-edit');
 
-    // Konvertiere Firebase-Timestamp (falls vorhanden) in datetime-local-String
-    startTimeInput.value = voteData.startTime ? 
-        new Date(voteData.startTime.toDate().getTime() - (voteData.startTime.toDate().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) 
-        : '';
+    startTimeInput.value = formatTimestampToInput(voteData.startTime);
         
     if (voteData.endTime) {
-        endTimeInput.value = new Date(voteData.endTime.toDate().getTime() - (voteData.endTime.toDate().getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+        endTimeInput.value = formatTimestampToInput(voteData.endTime);
         unlimitedCheckbox.checked = false;
         endTimeInput.disabled = false;
     } else {
@@ -1262,13 +1289,16 @@ function renderEditView(voteData) {
         unlimitedCheckbox.checked = true;
         endTimeInput.disabled = true;
     }
+    // ==================================================
+    // ENDE DER KORREKTUR
+    // ==================================================
 
     // 3. Einstellungen füllen
     document.getElementById('vote-setting-public-edit').checked = voteData.isPublic;
     document.getElementById('vote-setting-anonymous-edit').checked = voteData.isAnonymous;
     document.getElementById('vote-setting-disable-maybe-edit').checked = voteData.disableMaybe;
     
-    // 4. "UPDATE"-Log-Button anzeigen, wenn Logs vorhanden sind
+    // 4. "UPDATE"-Log-Button anzeigen
     const historyContainer = document.getElementById('poll-history-log-container');
     if (voteData.pollHistory && voteData.pollHistory.length > 0) {
         historyContainer.classList.remove('hidden');
@@ -1278,13 +1308,34 @@ function renderEditView(voteData) {
 
     // 5. Gefahrenzone-Knöpfe-Status setzen
     const closeBtn = document.getElementById('vote-close-poll-btn');
-    // Wenn die Umfrage schon geschlossen ist (Endzeit in der Vergangenheit)
-    if (voteData.endTime && voteData.endTime.toDate() < new Date()) {
+    
+    // Hier brauchen wir die gleiche "sichere" Prüfung
+    let endTimeDate = null;
+    if (voteData.endTime) {
+        if (typeof voteData.endTime.toDate === 'function') {
+            endTimeDate = voteData.endTime.toDate();
+        } else if (voteData.endTime instanceof Date) {
+            endTimeDate = voteData.endTime;
+        }
+    }
+
+    if (endTimeDate && endTimeDate < new Date()) {
         closeBtn.disabled = true;
         closeBtn.textContent = 'Teilnahme ist bereits geschlossen';
     } else {
         closeBtn.disabled = false;
         closeBtn.textContent = 'Umfrage jetzt schließen (Teilnahme beenden)';
+    }
+
+    // Temporärer Inhalt (ersetzen wir als nächstes)
+    const editContent = document.getElementById('edit-view-content');
+    if (editContent) {
+        editContent.innerHTML = `
+            <h3 class="font-bold text-lg mb-2">Termin fixieren</h3>
+            <p class="text-sm">Hier kannst du bald den finalen Termin auswählen.</p>
+            <h3 class="font-bold text-lg mt-6 mb-2">Teilnehmer verwalten</h3>
+            <p class="text-sm">Hier kannst du bald Teilnehmer löschen.</p>
+        `;
     }
 }
 
