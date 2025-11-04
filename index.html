@@ -927,76 +927,77 @@
 
             <div id="terminplanerView" class="view">
 
-<div id="terminplaner-main-view">
-                <div class="back-link-container w-full mb-4 flex justify-between items-center">
-                    <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition"
-                        data-target="home">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-                            fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
-                            stroke-linejoin="round" class="w-5 h-5 mr-1">
-                            <path d="m15 18-6-6 6-6" />
-                        </svg>
-                        <span class="text-sm font-semibold">zurück</span>
-                    </button>
+                <div id="terminplaner-main-view">
+                    <div class="back-link-container w-full mb-4 flex justify-between items-center">
+                        <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition"
+                            data-target="home">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                stroke-linejoin="round" class="w-5 h-5 mr-1">
+                                <path d="m15 18-6-6 6-6" />
+                            </svg>
+                            <span class="text-sm font-semibold">zurück</span>
+                        </button>
 
-                    <button id="show-create-vote-modal-btn"
-                        class="py-2 px-4 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition shadow-sm flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-                            class="w-5 h-5">
-                            <path
-                                d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-                        </svg>
-                        Neuen Termin
-                    </button>
-                </div>
-
-                <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-indigo-500 mb-6">
-                    <h3 class="text-xl font-bold text-gray-800 mb-3">An Umfrage teilnehmen</h3>
-                    <p class="text-sm text-gray-600 mb-4">Gib den 8-stelligen Token ein (z.B. A1B2 - C3D4), um an
-                        einer privaten Umfrage teilzunehmen.</p>
-
-                    <div class="flex flex-col sm:flex-row gap-2">
-                        <input type="text" id="vote-token-input"
-                            class="flex-grow p-3 border-2 border-gray-300 rounded-lg text-center tracking-widest text-lg font-mono uppercase focus:ring-indigo-500 focus:border-indigo-500"
-                            placeholder="XXXX - XXXX" maxlength="11">
-                        <button id="join-vote-by-token-btn"
-                            class="py-3 px-5 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition flex items-center justify-center">
-                            <span class="button-text">Teilnehmen</span>
-                            <div class="loading-spinner"></div>
+                        <button id="show-create-vote-modal-btn"
+                            class="py-2 px-4 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition shadow-sm flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                                class="w-5 h-5">
+                                <path
+                                    d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                            </svg>
+                            Neuen Termin
                         </button>
                     </div>
-                </div>
 
-                <div id="outstanding-votes-summary"
-                    class="hidden p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded-lg mb-6 cursor-pointer hover:bg-red-100">
+                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-indigo-500 mb-6">
+                        <h3 class="text-xl font-bold text-gray-800 mb-3">An Umfrage teilnehmen</h3>
+                        <p class="text-sm text-gray-600 mb-4">Gib den 8-stelligen Token ein (z.B. A1B2 - C3D4), um an
+                            einer privaten Umfrage teilzunehmen.</p>
+
+                        <div class="flex flex-col sm:flex-row gap-2">
+                            <input type="text" id="vote-token-input"
+                                class="flex-grow p-3 border-2 border-gray-300 rounded-lg text-center tracking-widest text-lg font-mono uppercase focus:ring-indigo-500 focus:border-indigo-500"
+                                placeholder="XXXX - XXXX" maxlength="11">
+                            <button id="join-vote-by-token-btn"
+                                class="py-3 px-5 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition flex items-center justify-center">
+                                <span class="button-text">Teilnehmen</span>
+                                <div class="loading-spinner"></div>
+                            </button>
+                        </div>
                     </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div id="outstanding-votes-summary"
+                        class="hidden p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded-lg">
+                    </div>
 
-                    <div class="flex flex-col">
-                        <h3 class="text-xl font-bold text-gray-800 mb-3">Mir zugewiesen</h3>
-                        <div id="assigned-votes-list" class="space-y-3">
+                    <hr class="my-6 border-t-2 border-gray-800">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                        <div class="flex flex-col">
+                            <h3 class="text-xl font-bold text-gray-800 mb-3">Mir zugewiesen</h3>
+                            <div id="assigned-votes-list" class="space-y-3">
                             </div>
-                    </div>
+                        </div>
 
-                    <div class="flex flex-col">
-                        <h3 class="text-xl font-bold text-gray-800 mb-3">Öffentliche Umfragen</h3>
-                        <div id="public-votes-list" class="space-y-3">
+                        <div class="flex flex-col">
+                            <h3 class="text-xl font-bold text-gray-800 mb-3">Öffentliche Umfragen</h3>
+                            <div id="public-votes-list" class="space-y-3">
                             </div>
-                    </div>
+                        </div>
 
-                    <div class="flex flex-col">
-                        <h3 class="text-xl font-bold text-gray-800 mb-3">Von mir erstellt</h3>
-                        <div id="created-votes-list" class="space-y-3">
+                        <div class="flex flex-col">
+                            <h3 class="text-xl font-bold text-gray-800 mb-3">Von mir erstellt</h3>
+                            <div id="created-votes-list" class="space-y-3">
                             </div>
-                    </div>
+                        </div>
 
-                    <div class="flex flex-col">
-                        <h3 class="text-xl font-bold text-gray-800 mb-3">Vergangene Umfragen</h3>
-                        <div id="past-votes-list" class="space-y-3">
+                        <div class="flex flex-col">
+                            <h3 class="text-xl font-bold text-gray-800 mb-3">Vergangene Umfragen</h3>
+                            <div id="past-votes-list" class="space-y-3">
                             </div>
+                        </div>
                     </div>
-                </div>
                 </div>
 
                 <div id="terminplaner-create-view" class="hidden">
@@ -1066,7 +1067,7 @@
                         </div>
                     </div>
 
-<div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
+                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
                         <h3 class="text-lg font-bold text-gray-800 mb-1">Einstellungen</h3>
 
                         <div class="p-2 bg-gray-50 rounded-lg">
@@ -1305,7 +1306,7 @@
                         </div>
                     </div>
 
-<div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
+                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
                         <h3 class="text-lg font-bold text-gray-800 mb-1">Einstellungen</h3>
 
                         <div class="p-2 bg-gray-50 rounded-lg">
@@ -1319,8 +1320,8 @@
                                         d="M10 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3.468 11.69A5.022 5.022 0 0 1 7.5 10h5a5.022 5.022 0 0 1 4.032 1.69l.966 1.616A2.25 2.25 0 0 1 15.53 15H4.47a2.25 2.25 0 0 1-1.968-1.694l.966-1.616Z" />
                                 </svg>
                                 <span id="vote-assigned-users-display-edit"
-                                    class="flex-grow text-sm text-gray-600 truncate"
-                                    title="Niemand ausgewählt">Niemand ausgewählt</span>
+                                    class="flex-grow text-sm text-gray-600 truncate" title="Niemand ausgewählt">Niemand
+                                    ausgewählt</span>
                                 <button id="vote-show-assign-user-modal-btn-edit"
                                     class="py-1 px-3 bg-blue-100 text-blue-600 text-sm font-semibold rounded-lg hover:bg-blue-200 transition flex-shrink-0">
                                     Auswählen

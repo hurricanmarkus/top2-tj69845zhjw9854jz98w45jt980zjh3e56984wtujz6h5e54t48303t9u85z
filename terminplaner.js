@@ -2469,6 +2469,7 @@ function renderVoteList(votes, elementId, listTitle) {
 
 /**
  * Rendert die Zusammenfassung der ausständigen Rückmeldungen (Punkt 1)
+ * (NEUE VERSION: Erzeugt klickbare Elemente statt nur Text)
  */
 function renderOutstandingSummary(outstandingPolls) {
     const summaryContainer = document.getElementById('outstanding-votes-summary');
@@ -2481,12 +2482,29 @@ function renderOutstandingSummary(outstandingPolls) {
 
     const count = outstandingPolls.length;
     const plural = count === 1 ? 'Rückmeldung' : 'Rückmeldungen';
-    const pollNames = outstandingPolls.map(p => p.title).join(', ');
+    // Dies ist der Titel in der roten Box
+    const titleHTML = `<p class="font-bold text-lg mb-1">Du hast ${count} ausständige ${plural}!</p>`;
 
-    summaryContainer.innerHTML = `
-        <p class="font-bold">Du hast ${count} ausständige ${plural}!</p>
-        <p class="text-sm mt-1">Bitte gib deine Stimme ab für: ${pollNames}</p>
-    `;
+    // NEU: Erstelle klickbare Boxen für jede ausständige Umfrage
+    const itemsHTML = outstandingPolls.map(poll => {
+        // WICHTIG: Wir verwenden 'vote-list-item' und 'data-vote-id'.
+        // Der Klick-Spion (den wir schon in initializeTerminplanerView haben)
+        // findet diese Elemente automatisch und macht sie klickbar!
+        return `
+            <div class="vote-list-item p-3 bg-white text-gray-800 rounded-lg border border-red-200 shadow-sm mt-3 cursor-pointer hover:bg-red-50 flex justify-between items-center"
+                 data-vote-id="${poll.id}">
+                
+                <span class="font-semibold">${poll.title}</span>
+                
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-red-600 flex-shrink-0 ml-2">
+                    <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" />
+                </svg>
+            </div>
+        `;
+    }).join('');
+
+    // Setze den Titel und die klickbaren Boxen zusammen
+    summaryContainer.innerHTML = titleHTML + itemsHTML;
     summaryContainer.classList.remove('hidden');
 }
 
