@@ -800,20 +800,16 @@ export async function joinVoteByToken(tokenFromUrl = null) {
         const voteDoc = snapshot.docs[0];
         const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
         
-        // ----- KORREKTUR: START-ZEIT-PRÜFUNG ENTFERNT -----
-        // Die folgende 'if'-Bedingung, die geprüft hat, ob die Umfrage
-        // schon gestartet ist, wurde entfernt.
-        // Die 'renderVoteView'-Funktion kümmert sich jetzt darum,
-        // die Warnmeldung anzuzeigen.
-        // ----- ENDE KORREKTUR -----
-        
         currentVoteData = voteData; 
         console.log("Umfrage gefunden:", currentVoteData);
         
-        navigate('terminplaner'); // Navigiere zur Terminplaner-Seite
+        navigate('terminplaner'); // Navigiere zur Terminplaner-Hauptseite
         
-        renderVoteView(currentVoteData); // Zeigt die Umfrage an (und die Warn-Box, falls nötig)
-        showView('vote'); // Zeige die Abstimmungs-Ansicht
+        // --- KORRIGIERTE REIHENFOLGE ---
+        showView('vote'); // 1. ZUERST die Detail-Ansicht zeigen
+        renderVoteView(currentVoteData); // 2. DANACH die (jetzt sichtbaren) Elemente füllen
+        // --- ENDE KORREKTUR ---
+        
         if (tokenInput) tokenInput.value = ''; 
         
         if (tokenFromUrl) cleanUrlParams();
@@ -849,21 +845,16 @@ export async function joinVoteById(voteId = null) {
         }
         
         const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
-        
-        // ----- KORREKTUR: START-ZEIT-PRÜFUNG ENTFERNT -----
-        // Die folgende 'if'-Bedingung, die geprüft hat, ob die Umfrage
-        // schon gestartet ist, wurde entfernt.
-        // Die 'renderVoteView'-Funktion kümmert sich jetzt darum,
-        // die Warnmeldung anzuzeigen.
-        // ----- ENDE KORREKTUR -----
 
         currentVoteData = voteData; 
         console.log("Umfrage per ID geladen:", currentVoteData);
         
-        navigate('terminplaner'); // Navigiere zur Terminplaner-Seite
+        navigate('terminplaner'); // Navigiere zur Terminplaner-Hauptseite
 
-        renderVoteView(currentVoteData); // Zeigt die Umfrage an (und die Warn-Box, falls nötig)
-        showView('vote'); // Zeige die Abstimmungs-Ansicht
+        // --- KORRIGIERTE REIHENFOLGE ---
+        showView('vote'); // 1. ZUERST die Detail-Ansicht zeigen
+        renderVoteView(currentVoteData); // 2. DANACH die (jetzt sichtbaren) Elemente füllen
+        // --- ENDE KORREKTUR ---
         
         if (isFromUrl) cleanUrlParams();
         
