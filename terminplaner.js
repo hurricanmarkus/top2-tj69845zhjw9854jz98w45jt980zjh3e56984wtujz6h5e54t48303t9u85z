@@ -23,8 +23,6 @@ let isVoteGridEditable = false;
 let unsubscribePublicVotes = null;
 let unsubscribeAssignedVotes = null;
 let editTokenTimer = null; // Für den 10-Sekunden-Timeout
-let unsubscribeMyVotes = null;
-let unsubscribePastVotes = null;
 
 
 // ERSETZE diese Funktion in terminplaner.js
@@ -285,11 +283,11 @@ export function initializeTerminplanerView() {
     
     const closePollBtn = document.getElementById('vote-close-poll-btn');
     if (closePollBtn && !closePollBtn.dataset.listenerAttached) {
-        // KORREKTUR: Ruft jetzt die neue Funktion auf, um die Auswahl anzuzeigen
-        closePollBtn.addEventListener('click', showFixDateSelection);
+        closePollBtn.addEventListener('click', closePollNow);
         closePollBtn.dataset.listenerAttached = 'true';
     }
 
+    // NEU: Spion für "Wieder öffnen"
     const reopenPollBtn = document.getElementById('vote-reopen-poll-btn');
     if (reopenPollBtn && !reopenPollBtn.dataset.listenerAttached) {
         reopenPollBtn.addEventListener('click', reopenPoll);
@@ -307,20 +305,6 @@ export function initializeTerminplanerView() {
         pollHistoryBtn.addEventListener('click', renderPollHistory);
         pollHistoryBtn.dataset.listenerAttached = 'true';
     }
-
-    // ----- KORREKTUR: Spione für das "Termin fixieren"-Modal -----
-    // (Diese sind NEU)
-    const cancelFixDateBtn = document.getElementById('cancel-fix-date-btn');
-    if (cancelFixDateBtn && !cancelFixDateBtn.dataset.listenerAttached) {
-        cancelFixDateBtn.addEventListener('click', hideFixDateSelection);
-        cancelFixDateBtn.dataset.listenerAttached = 'true';
-    }
-
-    const confirmFixDateBtn = document.getElementById('confirm-fix-date-btn');
-    if (confirmFixDateBtn && !confirmFixDateBtn.dataset.listenerAttached) {
-        confirmFixDateBtn.addEventListener('click', confirmAndFixDate);
-        confirmFixDateBtn.dataset.listenerAttached = 'true';
-    }
 }
 
 // ----- SPION-FUNKTIONEN (Listener) -----
@@ -329,27 +313,18 @@ export function listenForPublicVotes() {
     if (unsubscribePublicVotes) {
         unsubscribePublicVotes();
     }
-    const now = new Date();
     const q = query(
         votesCollectionRef, 
         where("isPublic", "==", true), 
-        // Anforderung 3: Nur "offene" holen (noch nicht fixiert)
-        where("fixedOptionIndex", "==", null),
         orderBy("createdAt", "desc"), 
         limit(20) 
     );
     unsubscribePublicVotes = onSnapshot(q, (snapshot) => {
         const votes = [];
         snapshot.forEach(doc => {
-            const vote = { id: doc.id, ...doc.data() };
-            
-            // Anforderung 3: Zusätzlicher Zeit-Check (darf nicht abgelaufen sein)
-            const endTime = vote.endTime?.toDate ? vote.endTime.toDate() : null;
-            if (!endTime || endTime > now) {
-                votes.push(vote);
-            }
+            votes.push({ id: doc.id, ...doc.data() });
         });
-        renderPublicVotes(votes); // Ruft die neue Render-Funktion auf
+        renderPublicVotes(votes); 
     }, (error) => {
         console.error("Fehler beim Lauschen auf öffentliche Umfragen:", error);
     });
@@ -363,27 +338,18 @@ export function listenForAssignedVotes(userId) {
         renderAssignedVotes([]); 
         return;
     }
-    const now = new Date();
     const q = query(
         votesCollectionRef, 
         where("participantIds", "array-contains", userId),
-        // Anforderung 3: Nur "offene" holen (noch nicht fixiert)
-        where("fixedOptionIndex", "==", null),
         orderBy("createdAt", "desc"), 
         limit(20)
     );
     unsubscribeAssignedVotes = onSnapshot(q, (snapshot) => {
         const votes = [];
         snapshot.forEach(doc => {
-            const vote = { id: doc.id, ...doc.data() };
-            
-            // Anforderung 3: Zusätzlicher Zeit-Check (darf nicht abgelaufen sein)
-            const endTime = vote.endTime?.toDate ? vote.endTime.toDate() : null;
-            if (!endTime || endTime > now) {
-                votes.push(vote);
-            }
+            votes.push({ id: doc.id, ...doc.data() });
         });
-        renderAssignedVotes(votes); // Ruft die neue Render-Funktion auf
+        renderAssignedVotes(votes); 
     }, (error) => {
         console.error("Fehler beim Lauschen auf zugewiesene Umfragen:", error);
     });
@@ -397,153 +363,61 @@ export function stopAssignedVotesListener() {
     renderAssignedVotes([]); 
 }
 
-export function listenForMyVotes(userId) {
-    if (unsubscribeMyVotes) {
-        unsubscribeMyVotes();
-    }
-    if (!userId || userId === GUEST_MODE) {
-        renderMyVotes([]); 
-        return;
-    }
-    const now = new Date();
-    const q = query(
-        votesCollectionRef, 
-        where("createdBy", "==", userId),
-        // Anforderung 3: Nur "offene" holen (noch nicht fixiert)
-        where("fixedOptionIndex", "==", null),
-        orderBy("createdAt", "desc"), 
-        limit(20)
-    );
-    unsubscribeMyVotes = onSnapshot(q, (snapshot) => {
-        const votes = [];
-        snapshot.forEach(doc => {
-            const vote = { id: doc.id, ...doc.data() };
-            
-            // Anforderung 3: Zusätzlicher Zeit-Check (darf nicht abgelaufen sein)
-            const endTime = vote.endTime?.toDate ? vote.endTime.toDate() : null;
-            if (!endTime || endTime > now) {
-                votes.push(vote);
-            }
-        });
-        renderMyVotes(votes); // Ruft die neue Render-Funktion auf
-    }, (error) => {
-        console.error("Fehler beim Lauschen auf 'Von mir erstellt':", error);
-    });
-}
-
-// HINZUFÜGEN: Neuer Stop-Listener für "Von mir erstellt"
-export function stopMyVotesListener() {
-    if (unsubscribeMyVotes) {
-        unsubscribeMyVotes();
-        unsubscribeMyVotes = null;
-    }
-    renderMyVotes([]); 
-}
-
-// HINZUFÜGEN: Neuer Listener für "Vergangene Umfragen" (Anforderung 3)
-// Diese Logik ist komplizierter, da wir "fixiert ODER abgelaufen"
-// UND ("von mir erstellt" ODER "an mich zugewiesen") prüfen müssen.
-// Firestore kann das nicht in einer Abfrage, wir müssen 2 Listener
-// kombinieren und client-seitig filtern.
-let pastVotesMap = new Map();
-let unsubPast1 = null;
-let unsubPast2 = null;
-
-export function listenForPastVotes(userId) {
-    if (unsubscribePastVotes) {
-        unsubscribePastVotes(); // Stoppt die alten Listener
-    }
-    if (!userId || userId === GUEST_MODE) {
-        renderPastVotes([]); 
-        return;
-    }
-    
-    pastVotesMap.clear();
-
-    const renderCombinedPastVotes = () => {
-        const now = new Date();
-        const pastVotes = [];
-        
-        pastVotesMap.forEach((vote) => {
-            const endTime = vote.endTime?.toDate ? vote.endTime.toDate() : null;
-            
-            // Anforderung 3: Ist fixiert ODER abgelaufen?
-            if (vote.fixedOptionIndex != null || (endTime && endTime < now)) {
-                 pastVotes.push(vote);
-            }
-        });
-        
-        // Sortieren nach Erstellungsdatum (oder 'fixedAt' wenn wir wollen)
-        pastVotes.sort((a, b) => {
-             const dateA = a.fixedAt?.toDate ? a.fixedAt.toDate() : (a.createdAt?.toDate ? a.createdAt.toDate() : 0);
-             const dateB = b.fixedAt?.toDate ? b.fixedAt.toDate() : (b.createdAt?.toDate ? b.createdAt.toDate() : 0);
-             return dateB - dateA;
-        });
-
-        renderPastVotes(pastVotes.slice(0, 20));
-    };
-
-    // Query 1: Alle, die ich erstellt habe
-    const qPast1 = query(votesCollectionRef, where("createdBy", "==", userId));
-    // Query 2: Alle, an denen ich teilgenommen habe
-    const qPast2 = query(votesCollectionRef, where("participantIds", "array-contains", userId));
-
-    unsubPast1 = onSnapshot(qPast1, (snapshot) => {
-        snapshot.forEach(doc => pastVotesMap.set(doc.id, { id: doc.id, ...doc.data() }));
-        renderCombinedPastVotes();
-    }, (error) => console.error("Fehler listener 'past created':", error));
-
-    unsubPast2 = onSnapshot(qPast2, (snapshot) => {
-        snapshot.forEach(doc => pastVotesMap.set(doc.id, { id: doc.id, ...doc.data() }));
-        renderCombinedPastVotes();
-    }, (error) => console.error("Fehler listener 'past assigned':", error));
-    
-    // Wir speichern die Stop-Funktionen
-    unsubscribePastVotes = () => {
-        if (unsubPast1) unsubPast1();
-        if (unsubPast2) unsubPast2();
-        unsubPast1 = null;
-        unsubPast2 = null;
-    };
-}
-
-// HINZUFÜGEN: Stop-Listener für "Vergangene"
-export function stopPastVotesListener() {
-    if (unsubscribePastVotes) {
-        unsubscribePastVotes();
-        unsubscribePastVotes = null;
-    }
-    renderPastVotes([]); 
-}
 
 // ----- RENDER-FUNKTIONEN FÜR LISTEN -----
 
-// ERSETZE diese Funktion in terminplaner.js
 function renderPublicVotes(votes) {
     const listContainer = document.getElementById('public-votes-list');
     if (!listContainer) return;
     if (votes.length === 0) {
-        listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Keine offenen öffentlichen Umfragen gefunden.</p>`;
+        listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Derzeit gibt es keine öffentlichen Umfragen.</p>`;
         return;
     }
-    // Benutze den neuen Card-Renderer, OHNE Deadline (showDeadline = false)
-    listContainer.innerHTML = votes.map(vote => renderVoteCardHTML(vote, false)).join('');
+    listContainer.innerHTML = votes.map(vote => {
+        const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
+        const fixedTag = vote.fixedOptionIndex != null ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">FIXIERT</span>' : '';
+        return `
+            <div class="vote-list-item card bg-white p-3 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:bg-indigo-50"
+                 data-vote-id="${vote.id}">
+                <div>
+                    <span class="font-bold text-indigo-700">${vote.title}</span>
+                    ${fixedTag}
+                    <span class="text-sm text-gray-500 ml-2">(${vote.participants?.length || 0} Teilnehmer)</span>
+                    <p class="text-xs text-gray-500">Erstellt von ${vote.createdByName} am ${niceDate}</p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
+            </div>
+        `;
+    }).join('');
 }
 
-// ERSETZE diese Funktion in terminplaner.js
 function renderAssignedVotes(votes) {
     const listContainer = document.getElementById('assigned-votes-list');
     if (!listContainer) return;
     if (currentUser.mode === GUEST_MODE) {
-         listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Melde dich an, um Umfragen zu sehen, an denen du teilnimmst.</p>`;
+         listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Melde dich an, um Umfragen zu sehen, an denen du teilgenommen hast.</p>`;
         return;
     }
     if (votes.length === 0) {
-        listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Keine offenen Umfragen, an denen du teilnimmst.</p>`;
+        listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Du hast noch an keiner Umfrage teilgenommen.</p>`;
         return;
     }
-    // Benutze den neuen Card-Renderer, MIT Deadline (showDeadline = true) (Anforderung 2)
-    listContainer.innerHTML = votes.map(vote => renderVoteCardHTML(vote, true)).join('');
+    listContainer.innerHTML = votes.map(vote => {
+        const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
+        const fixedTag = vote.fixedOptionIndex != null ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">FIXIERT</span>' : '';
+        return `
+            <div class="vote-list-item card bg-white p-3 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:bg-indigo-50"
+                 data-vote-id="${vote.id}">
+                <div>
+                    <span class="font-bold text-indigo-700">${vote.title}</span>
+                    ${fixedTag}
+                    <span class="text-sm text-gray-500 ml-2">(${vote.participants?.length || 0} Teilnehmer)</span>
+                    <p class="text-xs text-gray-500">Erstellt von ${vote.createdByName} am ${niceDate}</p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
+            </div>
+        `;
+    }).join('');
 }
 
 
@@ -572,23 +446,24 @@ export async function joinVoteByToken(tokenFromUrl = null) {
         const snapshot = await getDocs(q);
         if (snapshot.empty) throw new Error("Umfrage nicht gefunden. Prüfe den Token.");
         if (snapshot.size > 1) throw new Error("Fehler: Mehrere Umfragen mit diesem Token gefunden. Admin kontaktieren.");
-        
         const voteDoc = snapshot.docs[0];
         const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
+        const now = new Date();
         
-        // ----- KORREKTUR: START-ZEIT-PRÜFUNG ENTFERNT -----
-        // Die folgende 'if'-Bedingung, die geprüft hat, ob die Umfrage
-        // schon gestartet ist, wurde entfernt.
-        // Die 'renderVoteView'-Funktion kümmert sich jetzt darum,
-        // die Warnmeldung anzuzeigen.
-        // ----- ENDE KORREKTUR -----
+        // KORREKTUR: Diese Prüfung ist jetzt entfernt
+        // if (voteData.endTime && now > voteData.endTime.toDate()) { ... }
+        
+        // Nur die Start-Zeit-Prüfung bleibt
+        if (voteData.startTime && now < voteData.startTime.toDate()) {
+            throw new Error(`Diese Umfrage hat noch nicht begonnen. Sie startet am ${voteData.startTime.toDate().toLocaleString('de-DE')}.`);
+        }
         
         currentVoteData = voteData; 
         console.log("Umfrage gefunden:", currentVoteData);
         
         navigate('terminplaner'); // Navigiere zur Terminplaner-Seite
         
-        renderVoteView(currentVoteData); // Zeigt die Umfrage an (und die Warn-Box, falls nötig)
+        renderVoteView(currentVoteData);
         showView('vote'); // Zeige die Abstimmungs-Ansicht
         if (tokenInput) tokenInput.value = ''; 
         
@@ -601,8 +476,6 @@ export async function joinVoteByToken(tokenFromUrl = null) {
         if (joinBtn) setButtonLoading(joinBtn, false); 
     }
 }
-
-// ERSETZE diese Funktion in terminplaner.js
 
 // ERSETZE diese Funktion in terminplaner.js
 
@@ -623,22 +496,23 @@ export async function joinVoteById(voteId = null) {
         if (!voteDoc.exists()) {
              throw new Error("Diese Umfrage existiert nicht mehr.");
         }
-        
         const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
+        const now = new Date();
+
+        // KORREKTUR: Diese Prüfung ist jetzt entfernt
+        // if (voteData.endTime && now > voteData.endTime.toDate()) { ... }
         
-        // ----- KORREKTUR: START-ZEIT-PRÜFUNG ENTFERNT -----
-        // Die folgende 'if'-Bedingung, die geprüft hat, ob die Umfrage
-        // schon gestartet ist, wurde entfernt.
-        // Die 'renderVoteView'-Funktion kümmert sich jetzt darum,
-        // die Warnmeldung anzuzeigen.
-        // ----- ENDE KORREKTUR -----
+        // Nur die Start-Zeit-Prüfung bleibt
+        if (voteData.startTime && now < voteData.startTime.toDate()) {
+            throw new Error(`Diese Umfrage hat noch nicht begonnen. Sie startet am ${voteData.startTime.toDate().toLocaleString('de-DE')}.`);
+        }
 
         currentVoteData = voteData; 
         console.log("Umfrage per ID geladen:", currentVoteData);
         
         navigate('terminplaner'); // Navigiere zur Terminplaner-Seite
 
-        renderVoteView(currentVoteData); // Zeigt die Umfrage an (und die Warn-Box, falls nötig)
+        renderVoteView(currentVoteData);
         showView('vote'); // Zeige die Abstimmungs-Ansicht
         
         if (isFromUrl) cleanUrlParams();
@@ -654,111 +528,92 @@ export async function joinVoteById(voteId = null) {
 
 function renderVoteView(voteData) {
     
-    // ----- 1. DEFINITIONEN -----
-    const now = new Date();
-    // Helfer, um Timestamps (von Firebase) oder JS-Dates (lokal) sicher zu lesen
-    const getSafeDate = (timestamp) => {
-        if (!timestamp) return null;
-        if (typeof timestamp.toDate === 'function') return timestamp.toDate();
-        return new Date(timestamp);
-    };
-
-    const startTime = getSafeDate(voteData.startTime);
-    const endTime = getSafeDate(voteData.endTime);
-
-    const isFixed = voteData.fixedOptionIndex != null;
-    const isClosed = (endTime && now > endTime); // Abgelaufen
-    const isNotStarted = (startTime && now < startTime); // Noch nicht gestartet
-    
-    // Teilnahme ist blockiert, wenn fixiert, abgelaufen ODER noch nicht gestartet
-    const isParticipationBlocked = isFixed || isClosed || isNotStarted;
-
-    // ----- 2. Titel & Ersteller (ZENTRIERT) -----
+    // 1. Titel und Ersteller (ZENTRIERT)
     document.getElementById('vote-poll-title').textContent = voteData.title;
     const creatorUser = USERS[voteData.createdBy];
     const creatorName = creatorUser ? creatorUser.realName : voteData.createdByName; 
     document.getElementById('vote-poll-creator').textContent = `Erstellt von ${creatorName}`;
 
-    // ----- 3. Share-Box -----
+    // 2. Share-Box füllen
     document.getElementById('vote-share-token').textContent = voteData.token;
     const baseUrl = window.location.origin + window.location.pathname; 
     const directUrl = `${baseUrl}?vote_id=${currentVoteData.id}`; 
     document.getElementById('vote-share-url').value = directUrl;
 
-    // ----- 4. Info-Box (Beschreibung, Ort) -----
+
+    // 3. Info-Box (Beschreibung, Ort, Gültigkeit)
     const infoBox = document.getElementById('vote-info-box');
     const descContainer = document.getElementById('vote-poll-description-container');
     const descEl = document.getElementById('vote-poll-description');
     const locContainer = document.getElementById('vote-poll-location-container');
     const locEl = document.getElementById('vote-poll-location');
+    const validityContainer = document.getElementById('vote-poll-validity-container');
+    const validityEl = document.getElementById('vote-poll-validity');
     
     let hasInfo = false;
     if (voteData.description) {
         descEl.textContent = voteData.description;
         descContainer.classList.remove('hidden');
         hasInfo = true;
-    } else { descContainer.classList.add('hidden'); }
+    } else {
+        descContainer.classList.add('hidden');
+    }
     if (voteData.location) {
         locEl.textContent = voteData.location;
         locContainer.classList.remove('hidden');
         hasInfo = true;
-    } else { locContainer.classList.add('hidden'); }
+    } else {
+        locContainer.classList.add('hidden');
+    }
     infoBox.classList.toggle('hidden', !hasInfo);
 
-    // ----- 5. Gültigkeits-Boxen (Anforderung 3 & 4) -----
-    const validityContainer = document.getElementById('vote-poll-validity-container');
-    const validityEl = document.getElementById('vote-poll-validity');
-    const warningBox = document.getElementById('vote-validity-warning-box');
-    const warningText = document.getElementById('vote-validity-warning-text');
-    
-    // Helfer-Funktion
-    const formatVoteDate = (dateObj) => {
-        if (!dateObj) return '';
-        return dateObj.toLocaleString('de-DE', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}) + ' Uhr';
-    };
-    
-    // Rote Box (Anforderung 3)
-    // Zeige "Geschlossen" nur, wenn abgelaufen, aber noch nicht fixiert
-    if (isClosed && !isFixed) { 
-        validityEl.textContent = "TEILNAHME GESCHLOSSEN";
-        // NEU: p-3 (für Höhe) und font-bold hinzugefügt (Anforderung 3)
-        validityContainer.classList.add('text-red-700', 'bg-red-50', 'p-3', 'font-bold'); 
-        validityContainer.classList.remove('text-gray-600');
-        validityContainer.classList.remove('hidden');
-    } else {
-        // Normale Gültigkeit anzeigen (oder Box verstecken)
-        const startTimeText = formatVoteDate(startTime);
-        const endTimeText = formatVoteDate(endTime);
-        let validityText = '';
-        if (startTimeText) validityText = `Startet: ${startTimeText}`;
-        if (endTimeText) validityText += (validityText ? ' | ' : '') + `Endet: ${endTimeText}`;
-
-        if (validityText && !isFixed) { // Zeige nicht, wenn fixiert
-            validityEl.textContent = validityText;
-            validityContainer.classList.remove('hidden');
-        } else {
-            validityContainer.classList.add('hidden');
+    // KORREKTUR: Gültigkeit
+    const formatVoteDate = (timestamp) => {
+        if (!timestamp) return '';
+        let dateObject = null;
+        if (typeof timestamp.toDate === 'function') {
+            dateObject = timestamp.toDate();
+        } 
+        else if (timestamp instanceof Date) {
+            dateObject = timestamp;
         }
-        // NEU: Styling (p-3, font-bold) sicher entfernen (Anforderung 3)
-        validityContainer.classList.remove('text-red-700', 'bg-red-50', 'p-3', 'font-bold');
+        if (dateObject) {
+            return dateObject.toLocaleString('de-DE', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}) + ' Uhr';
+        }
+        return ''; 
+    };
+
+    const startTimeText = formatVoteDate(voteData.startTime);
+    const endTimeText = formatVoteDate(voteData.endTime);
+    let validityText = '';
+    
+    // NEUE LOGIK: Prüfen, ob die Zeit abgelaufen ist
+    let isClosed = voteData.endTime && (voteData.endTime.toDate ? voteData.endTime.toDate() : new Date(voteData.endTime)) < new Date();
+
+    if (isClosed) {
+        validityText = "TEILNAHME GESCHLOSSEN";
+        validityContainer.classList.add('text-red-700', 'bg-red-50'); // Rote Box
+        validityContainer.classList.remove('text-gray-600');
+    } else {
+        if (startTimeText) {
+            validityText = `Teilnahme startet: ${startTimeText}`;
+        }
+        if (endTimeText) {
+            validityText += (validityText ? ' | ' : '') + `Endet: ${endTimeText}`;
+        }
+        validityContainer.classList.remove('text-red-700', 'bg-red-50'); // Normale Box
         validityContainer.classList.add('text-gray-600');
     }
 
-    // Gelbe Box (Anforderung 4)
-    // Zeige Warnung nur, wenn blockiert, aber noch nicht fixiert
-    if (isParticipationBlocked && !isFixed) { 
-        if (isNotStarted) {
-            warningText.textContent = `Diese Umfrage hat noch nicht begonnen. Sie startet am ${formatVoteDate(startTime)}.`;
-        } else if (isClosed) {
-            warningText.textContent = `Diese Umfrage ist bereits beendet. Teilnahme und Korrekturen sind nicht mehr möglich.`;
-        }
-        warningBox.classList.remove('hidden');
+    if (validityText) {
+        validityEl.textContent = validityText;
+        validityContainer.classList.remove('hidden');
     } else {
-        warningBox.classList.add('hidden');
+        validityContainer.classList.add('hidden');
     }
 
 
-    // ----- 6. Teilnehmer-Status-Box (angepasst für Anforderung 4) -----
+    // 4. Teilnehmer-Status-Box
     const statusContainer = document.getElementById('vote-participant-status-container');
     const nameDisplay = document.getElementById('vote-participant-name');
     const userContainer = document.getElementById('vote-user-name-container');
@@ -766,84 +621,73 @@ function renderVoteView(voteData) {
     const guestNameInput = document.getElementById('vote-guest-name-input');
     
     let existingParticipant = null;
+    
     if (currentUser.mode !== GUEST_MODE) {
         existingParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
     }
     
-    // Standard: Alles verstecken, Grid nicht editierbar
     statusContainer.classList.add('hidden');
     guestNameContainer.classList.add('hidden');
     userContainer.classList.add('hidden');
-    isVoteGridEditable = false; // Standard
     
-    // NEU: Prüfe 'isParticipationBlocked' (Anforderung 4)
-    if (!isParticipationBlocked) { // Nur wenn Teilnahme erlaubt ist
-        if (voteData.isAnonymous) {
-            isVoteGridEditable = true; 
-        } else if (existingParticipant) {
-            statusContainer.classList.remove('hidden');
-            userContainer.classList.remove('hidden'); 
-            nameDisplay.textContent = existingParticipant.name;
-            isVoteGridEditable = false; // Hat schon abgestimmt -> nicht editierbar (muss "Korrektur" klicken)
-        } else if (currentUser.mode !== GUEST_MODE) {
-            statusContainer.classList.remove('hidden');
-            userContainer.classList.remove('hidden'); 
-            const currentUserFull = USERS[currentUser.mode];
-            nameDisplay.textContent = currentUserFull ? currentUserFull.realName : currentUser.displayName;
-            isVoteGridEditable = true; 
-        } else { // Gast
-            statusContainer.classList.remove('hidden');
-            guestNameContainer.classList.remove('hidden'); 
-            guestNameInput.value = '';
-            isVoteGridEditable = true; 
-        }
+    if (voteData.isAnonymous) {
+        isVoteGridEditable = true; 
+    } else if (existingParticipant) {
+        statusContainer.classList.remove('hidden');
+        userContainer.classList.remove('hidden'); 
+        nameDisplay.textContent = existingParticipant.name;
+        isVoteGridEditable = false; 
+    } else if (currentUser.mode !== GUEST_MODE) {
+        statusContainer.classList.remove('hidden');
+        userContainer.classList.remove('hidden'); 
+        const currentUserFull = USERS[currentUser.mode];
+        nameDisplay.textContent = currentUserFull ? currentUserFull.realName : currentUser.displayName;
+        isVoteGridEditable = true; 
+    } else {
+        statusContainer.classList.remove('hidden');
+        guestNameContainer.classList.remove('hidden'); 
+        guestNameInput.value = '';
+        isVoteGridEditable = true; 
     }
     
-    // ----- 7. Antworten laden -----
+    // 5. Antworten laden
     currentParticipantAnswers = {};
     if (existingParticipant) {
         currentParticipantAnswers = { ...existingParticipant.currentAnswers };
     }
 
-    // ----- 8. Knöpfe (Speichern, Admin-Edit) -----
+    // 6. Ansichten (Teilnahme, Edit-Token) zurücksetzen
     const saveButton = document.getElementById('vote-save-participation-btn');
-    const editButton = document.getElementById('show-edit-vote-btn'); // Admin-Edit
+    const editButton = document.getElementById('show-edit-vote-btn');
     
-    resetEditWrapper(); // Admin-Edit-Token-Feld zurücksetzen
+    resetEditWrapper();
     
-    saveButton.classList.add('hidden'); // Standardmäßig versteckt
-    if (isParticipationBlocked) {
-        saveButton.classList.add('hidden');
-    }
-    
-    // Admin-Edit-Knopf
-    if (isFixed) {
-        editButton.classList.add('hidden'); // Verstecken, wenn fixiert
+    // 7. Prüfen, ob Termin fixiert ist ODER GESCHLOSSEN
+    if (voteData.fixedOptionIndex != null || isClosed) {
+        statusContainer.classList.add('hidden'); 
+        saveButton.classList.add('hidden');    
+        // Edit-Button nur verstecken, wenn fixiert, aber nicht, wenn nur geschlossen
+        if(voteData.fixedOptionIndex != null) {
+            editButton.classList.add('hidden');
+        } else {
+            editButton.classList.remove('hidden');
+        }
+        updatePollTableAnswers(voteData, false); // Ansicht sperren
     } else {
-        editButton.classList.remove('hidden'); // Anzeigen, wenn nicht fixiert
-    }
-    
-    // ----- 9. Tabelle rendern -----
-    // 'isVoteGridEditable' ist jetzt korrekt gesetzt (basierend auf Anforderung 4)
-    // 'isClosed' wird übergeben, um Korrektur-Link zu sperren (Anforderung 1)
-    updatePollTableAnswers(voteData, isVoteGridEditable, isClosed); 
-    
-    // Speichern-Knopf (finaler Check)
-    if (!isParticipationBlocked) {
+        saveButton.classList.add('hidden'); 
+        editButton.classList.remove('hidden'); 
+        updatePollTableAnswers(voteData, isVoteGridEditable); 
         checkIfAllAnswered();
     }
 }
 
 /**
  * Baut die Abstimmungs-Tabelle neu auf und füllt sie mit allen Antworten
- * KORREKTUR: Akzeptiert jetzt 'isClosed', um Korrekturen zu sperren
  */
-// ERSETZE diese Funktion in terminplaner.js
-
-function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) {
+function updatePollTableAnswers(voteData, isEditable = false) {
     const optionsContainer = document.getElementById('vote-options-container');
 
-    // 1. Fall: Termin ist fixiert (Anforderung 2)
+    // 1. Fall: Termin ist fixiert
     if (voteData.fixedOptionIndex != null) {
         const fixedOption = voteData.options[voteData.fixedOptionIndex];
         if (fixedOption) {
@@ -852,47 +696,6 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
             const timeString = fixedOption.timeEnd ? 
                 `${fixedOption.timeStart} - ${fixedOption.timeEnd} Uhr` : 
                 `${fixedOption.timeStart} Uhr`;
-
-            // ----- NEU: Logik für Teilnehmerliste (Anforderung 2) -----
-            const fixedIndex = voteData.fixedOptionIndex;
-            const yesNames = [];
-            const maybeNames = [];
-            const noNames = [];
-
-            // Sortiere Teilnehmer in die drei Listen
-            voteData.participants.forEach(p => {
-                const answer = p.currentAnswers[fixedIndex];
-                if (answer === 'yes') {
-                    yesNames.push(p.name);
-                } else if (answer === 'maybe') {
-                    maybeNames.push(p.name);
-                } else if (answer === 'no') {
-                    noNames.push(p.name);
-                }
-            });
-
-            // Helfer-Funktion zum Erstellen der HTML-Listen
-            const createListHTML = (title, names, colorClass) => {
-                if (names.length === 0) return '';
-                // `colorClass` färbt den Titel (z.B. "Zusagen")
-                return `
-                    <div class="mt-2">
-                        <span class="text-xs font-semibold ${colorClass}">${title} (${names.length}):</span>
-                        <p class="text-xs text-gray-600">${names.join(', ')}</p>
-                    </div>
-                `;
-            };
-            
-            // Das finale HTML für die Teilnehmerliste
-            const participantsListHTML = `
-                <div class="text-left mt-4 border-t border-green-400 pt-2">
-                    ${createListHTML('Zusagen', yesNames, 'text-green-800')}
-                    ${createListHTML('Vielleicht', maybeNames, 'text-yellow-800')}
-                    ${createListHTML('Absagen', noNames, 'text-red-800')}
-                </div>
-            `;
-            // ----- ENDE NEU: Logik für Teilnehmerliste -----
-
             optionsContainer.innerHTML = `
                 <div class="p-6 bg-green-100 border-l-4 border-green-500 rounded-lg text-center">
                     <h3 class="text-xl font-bold text-green-800">Termin fixiert!</h3>
@@ -905,17 +708,13 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                     <p class="text-3xl font-bold text-black mt-1">
                         ${timeString}
                     </p>
-                    ${participantsListHTML}
                 </div>
             `;
-            return; // Wichtig: Funktion hier beenden
+            return; 
         }
     }
     
     // 2. Fall: Normale Abstimmung -> Baue die Tabelle
-    // (Der Rest der Funktion bleibt exakt gleich wie in der VORHERIGEN Antwort)
-    // Er stellt sicher, dass "Auswahl bearbeiten" bei 'isClosed=true' versteckt wird.
-    
     const optionsByDate = {};
     voteData.options.forEach((option, index) => {
         if (!optionsByDate[option.date]) {
@@ -949,21 +748,15 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
         if (youParticipant) {
             const correctionCount = youParticipant.correctionCount || 0;
             const correctionText = correctionCount > 0 ? `(<span class="correction-counter cursor-pointer" data-userid="${currentUser.mode}">${correctionCount} Korrekturen</span>)` : '';
-            
-            // "Auswahl bearbeiten" nur anzeigen, wenn NICHT geschlossen
-            const editButtonHtml = !isClosed ? `<br><button class="vote-correction-btn text-xs font-semibold text-blue-600 hover:underline">Auswahl bearbeiten</button>` : '';
-
             youHeaderHTML = `
                 <span class="font-bold text-indigo-600">Du</span>
                 <br>
                 <span class="text-xs font-normal text-gray-500">${correctionText}</span>
-                ${editButtonHtml}
+                <br>
+                <button class="vote-correction-btn text-xs font-semibold text-blue-600 hover:underline">Auswahl bearbeiten</button>
             `;
         } else {
-            // Wenn geschlossen, "Du (Geschlossen)" anzeigen
-            youHeaderHTML = isClosed 
-                ? '<span class="font-bold text-gray-500">Du (Geschlossen)</span>' 
-                : '<span class="font-bold text-indigo-600">Du (Klicke unten)</span>';
+            youHeaderHTML = '<span class="font-bold text-indigo-600">Du (Klicke unten)</span>';
         }
     }
 
@@ -1008,7 +801,6 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
             
             const currentAnswer = currentParticipantAnswers[optionIndex];
             
-            // 'isEditable' steuert, ob Knöpfe angezeigt werden
             if (isEditable) {
                 // MODUS: BEARBEITBAR (Knöpfe)
                 const yesSelected = currentAnswer === 'yes' ? 'bg-green-200 ring-2 ring-indigo-500' : 'hover:bg-green-100 bg-opacity-50';
@@ -1438,6 +1230,7 @@ function renderCorrectionHistory(userId) {
     modal.style.display = 'flex';
 }
 
+
 // ERSETZE diese Funktion in terminplaner.js
 
 function renderEditView(voteData) {
@@ -1514,38 +1307,23 @@ function renderEditView(voteData) {
         }
     }
 
-    // ----- KORREKTUR: NEUE LOGIK (basierend auf deinem Feedback) -----
-    if (voteData.fixedOptionIndex != null) {
-        // Fall: Termin ist fixiert. Schließen ist nicht möglich.
+    // NEUE LOGIK: Zeige "Wieder öffnen" wenn geschlossen, sonst "Schließen"
+    if (endTimeDate && endTimeDate < new Date()) {
+        // Fall: Umfrage ist geschlossen
         closeBtn.classList.add('hidden');
-        // ABER: Wiedereröffnen ist möglich (um Fixierung aufzuheben)
         reopenBtn.classList.remove('hidden');
-
-    } else if (endTimeDate && endTimeDate < new Date()) {
-        // Fall: Umfrage ist geschlossen (abgelaufen), aber nicht fixiert
-        closeBtn.classList.add('hidden');
-        reopenBtn.classList.remove('hidden'); // Zeige "Wieder öffnen"
-
     } else {
-        // Fall: Umfrage ist offen (weder fixiert noch abgelaufen)
-        closeBtn.classList.remove('hidden'); // Zeige "Schließen"
+        // Fall: Umfrage ist offen
+        closeBtn.classList.remove('hidden');
         reopenBtn.classList.add('hidden');
     }
-    // ----- ENDE DER KORREKTUR -----
-
-
-    // WICHTIG: Sicherstellen, dass die Terminauswahl (die wir per Klick öffnen)
-    // beim Neuladen der Ansicht immer versteckt ist.
-    const selectionContainer = document.getElementById('fix-date-selection-container');
-    if (selectionContainer) selectionContainer.classList.add('hidden');
-
 
     // Temporärer Inhalt (ersetzen wir als nächstes)
     const editContent = document.getElementById('edit-view-content');
     if (editContent) {
         editContent.innerHTML = `
             <h3 class="font-bold text-lg mb-2">Termin fixieren</h3>
-            <p class="text-sm">Bitte benutze den "Umfrage jetzt schließen" Knopf in der Gefahrenzone, um den finalen Termin auszuwählen.</p>
+            <p class="text-sm">Hier kannst du bald den finalen Termin auswählen.</p>
             <h3 class="font-bold text-lg mt-6 mb-2">Teilnehmer verwalten</h3>
             <p class="text-sm">Hier kannst du bald Teilnehmer löschen.</p>
         `;
@@ -1627,12 +1405,39 @@ async function saveVoteEdits() {
 // ERSETZE diese Funktion in terminplaner.js
 
 async function closePollNow() {
-    console.warn("Veraltete Funktion 'closePollNow' aufgerufen. Bitte 'showFixDateSelection' verwenden.");
-    alertUser("Ein interner Fehler ist aufgetreten (Veralteter Aufruf)", "error");
+    if (!confirm("Bist du sicher? Dadurch wird die Umfrage sofort geschlossen und niemand kann mehr teilnehmen oder korrigieren.")) {
+        return;
+    }
+
+    const closeBtn = document.getElementById('vote-close-poll-btn');
+    setButtonLoading(closeBtn, true);
+    
+    try {
+        const newEndTime = new Date(); // Setzt Endzeit auf "Jetzt"
+        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
+        
+        await updateDoc(voteDocRef, {
+            endTime: newEndTime
+        });
+        
+        // Lokale Daten aktualisieren
+        currentVoteData.endTime = newEndTime;
+        
+        alertUser("Umfrage wurde geschlossen!", "success");
+        
+        // UI der Edit-Seite aktualisieren, um den Knopf zu wechseln
+        renderEditView(currentVoteData);
+        
+    } catch (error) {
+        console.error("Fehler beim Schließen der Umfrage:", error);
+        alertUser("Fehler beim Schließen.", "error");
+    } finally {
+        setButtonLoading(closeBtn, false);
+    }
 }
 
 async function reopenPoll() {
-    if (!confirm("Bist du sicher? Dadurch wird die Umfrage wieder geöffnet und (falls gesetzt) der fixierte Termin entfernt. Jeder kann wieder teilnehmen.")) {
+    if (!confirm("Bist du sicher? Dadurch wird die Umfrage wieder geöffnet und jeder mit dem Link kann teilnehmen.")) {
         return;
     }
 
@@ -1640,20 +1445,15 @@ async function reopenPoll() {
     setButtonLoading(reopenBtn, true);
     
     try {
-        // Wir setzen die Endzeit UND den fixierten Index auf 'null'
+        // Wir setzen die Endzeit auf 'null', um sie zu öffnen
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
         
-        // NEU: 'fixedAt' wird ebenfalls entfernt (für Anforderung 3)
         await updateDoc(voteDocRef, {
-            endTime: null,
-            fixedOptionIndex: null, 
-            fixedAt: null // NEU
+            endTime: null
         });
         
         // Lokale Daten aktualisieren
         currentVoteData.endTime = null;
-        currentVoteData.fixedOptionIndex = null;
-        currentVoteData.fixedAt = null; // NEU
         
         alertUser("Umfrage wurde wieder geöffnet!", "success");
         
@@ -2000,285 +1800,4 @@ function checkInlineEditToken() {
         // Bei Fehler: UI zurücksetzen, damit man es nochmal versuchen kann
         resetEditWrapper();
     }
-}
-
-// ----- HINZUFÜGEN (GANZ AM ENDE von terminplaner.js) -----
-
-// NEU: Berechnet die beste Option basierend auf "Ja"-Stimmen und Datum
-function calculateBestOption(voteData) {
-    if (!voteData || !voteData.options || voteData.options.length === 0) {
-        return null;
-    }
-
-    let bestOption = null;
-    let maxYesVotes = -1;
-    let earliestDate = null;
-
-    voteData.options.forEach((option, index) => {
-        // 1. Zähle "Ja"-Stimmen
-        const yesVotes = voteData.participants.filter(p => p.currentAnswers[index] === 'yes').length;
-        
-        // 2. Erstelle ein vergleichbares Datum-Objekt
-        // Wichtig: Wir müssen Datum UND Startzeit kombinieren
-        const currentOptionDate = new Date(`${option.date}T${option.timeStart}`);
-
-        // 3. Logik anwenden (Deine Anforderung)
-        if (yesVotes > maxYesVotes) {
-            // Neuer Bester: Hat mehr "Ja"-Stimmen
-            maxYesVotes = yesVotes;
-            earliestDate = currentOptionDate;
-            bestOption = { index: index, ...option, yesVotes: yesVotes };
-        } else if (yesVotes === maxYesVotes) {
-            // Gleichstand: Prüfe, ob dieser Termin *früher* ist
-            if (earliestDate === null || currentOptionDate < earliestDate) {
-                earliestDate = currentOptionDate;
-                bestOption = { index: index, ...option, yesVotes: yesVotes };
-            }
-        }
-    });
-    
-    return bestOption;
-}
-
-// NEU: Zeigt die UI zur Auswahl des finalen Termins an
-function showFixDateSelection() {
-    if (!currentVoteData) return;
-
-    // 1. UI-Elemente holen
-    const selectionContainer = document.getElementById('fix-date-selection-container');
-    const listContainer = document.getElementById('final-date-options-list');
-    const closeBtn = document.getElementById('vote-close-poll-btn'); // Den originalen "Schließen"-Button
-    
-    if (!selectionContainer || !listContainer || !closeBtn) {
-        console.error("UI-Elemente für Terminfixierung nicht gefunden.");
-        return;
-    }
-
-    // 2. Button verstecken, Container anzeigen
-    closeBtn.classList.add('hidden');
-    selectionContainer.classList.remove('hidden');
-    listContainer.innerHTML = '<p class="text-sm text-gray-400 text-center">Berechne besten Termin...</p>';
-
-    // 3. Besten Termin berechnen (Deine Anforderung)
-    const suggestion = calculateBestOption(currentVoteData);
-
-    // 4. Liste der Optionen generieren
-    let optionsHTML = '';
-    currentVoteData.options.forEach((option, index) => {
-        // Zähle "Ja"-Stimmen für diese Option
-        const yesVotes = currentVoteData.participants.filter(p => p.currentAnswers[index] === 'yes').length;
-        
-        const dateObj = new Date(option.date + 'T12:00:00');
-        const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
-        const timeString = option.timeEnd ? `${option.timeStart} - ${option.timeEnd}` : `${option.timeStart} Uhr`;
-
-        // Prüfen, ob dies die vorgeschlagene Option ist
-        const isSuggestion = (suggestion && suggestion.index === index);
-        const suggestionBadge = isSuggestion ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">Vorschlag</span>' : '';
-        
-        // Radio-Button als 'checked' markieren, wenn es der Vorschlag ist
-        const isChecked = isSuggestion ? 'checked' : '';
-
-        optionsHTML += `
-            <label class="flex items-center gap-3 p-3 bg-white rounded-lg border hover:bg-indigo-50 cursor-pointer">
-                <input type="radio" name="final-date-option" value="${index}" class="h-5 w-5 text-indigo-600 focus:ring-indigo-500" ${isChecked}>
-                <div>
-                    <p class="font-semibold text-gray-800">${niceDate} <span class="font-mono">(${timeString})</span></p>
-                    <p class="text-sm text-green-600 font-medium">
-                        ${yesVotes} "Ja"-Stimme(n)
-                        ${suggestionBadge}
-                    </p>
-                </div>
-            </label>
-        `;
-    });
-    
-    if (currentVoteData.options.length === 0) {
-         listContainer.innerHTML = '<p class="text-sm text-red-500 text-center">Fehler: Diese Umfrage hat keine Termin-Optionen.</p>';
-    } else {
-         listContainer.innerHTML = optionsHTML;
-    }
-}
-
-// NEU: Versteckt die UI zur Auswahl des finalen Termins
-function hideFixDateSelection() {
-    const selectionContainer = document.getElementById('fix-date-selection-container');
-    const closeBtn = document.getElementById('vote-close-poll-btn'); // Der originale "Schließen"-Button
-    
-    if (selectionContainer) selectionContainer.classList.add('hidden');
-    if (closeBtn) closeBtn.classList.remove('hidden'); // Original-Button wieder zeigen
-}
-
-// NEU: Speichert den ausgewählten finalen Termin und schließt die Umfrage
-async function confirmAndFixDate() {
-    const confirmBtn = document.getElementById('confirm-fix-date-btn');
-    
-    // 1. Finde den ausgewählten Radio-Button
-    const selectedRadio = document.querySelector('input[name="final-date-option"]:checked');
-    if (!selectedRadio) {
-        return alertUser("Bitte wähle einen finalen Termin aus der Liste aus.", "error");
-    }
-    
-    const selectedOptionIndex = parseInt(selectedRadio.value, 10);
-    if (isNaN(selectedOptionIndex)) {
-        return alertUser("Ungültige Auswahl.", "error");
-    }
-
-    if (!confirm("Bist du sicher? Die Umfrage wird geschlossen und der Termin wird fixiert. Dies kann nicht rückgängig gemacht werden (außer durch 'Wieder öffnen').")) {
-        return;
-    }
-
-    setButtonLoading(confirmBtn, true);
-
-    try {
-        const newEndTime = new Date(); // Setzt Endzeit auf "Jetzt"
-        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
-        
-        // NEU: 'fixedAt' wird hinzugefügt (für Anforderung 3)
-        await updateDoc(voteDocRef, {
-            endTime: newEndTime,
-            fixedOptionIndex: selectedOptionIndex, // Der entscheidende neue Wert!
-            fixedAt: serverTimestamp() // NEU
-        });
-        
-        // Lokale Daten aktualisieren
-        currentVoteData.endTime = newEndTime;
-        currentVoteData.fixedOptionIndex = selectedOptionIndex;
-        currentVoteData.fixedAt = newEndTime; // Lokale Annäherung
-        
-        alertUser("Umfrage wurde geschlossen und Termin fixiert!", "success");
-        
-        // UI der Edit-Seite aufräumen
-        hideFixDateSelection();
-        
-        // UI der Edit-Seite komplett neu rendern, um Status (geschlossen) zu zeigen
-        renderEditView(currentVoteData);
-        
-        // Zurück zur (jetzt fixierten) Abstimmungs-Ansicht
-        showView('vote');
-        renderVoteView(currentVoteData);
-
-    } catch (error) {
-        console.error("Fehler beim Fixieren des Termins:", error);
-        alertUser("Fehler beim Schließen.", "error");
-    } finally {
-        setButtonLoading(confirmBtn, false);
-    }
-}
-
-// ----- HINZUFÜGEN (GANZ AM ENDE von terminplaner.js) -----
-
-// NEU: Render-Funktion für "Von mir erstellt" (Anforderung 1)
-function renderMyVotes(votes) {
-    const listContainer = document.getElementById('my-votes-list');
-    if (!listContainer) return;
-    if (currentUser.mode === GUEST_MODE) {
-         listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Melde dich an, um deine erstellten Umfragen zu sehen.</p>`;
-        return;
-    }
-    if (votes.length === 0) {
-        listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Keine offenen Umfragen von dir erstellt.</p>`;
-        return;
-    }
-    // Benutze den neuen Card-Renderer, MIT Deadline (showDeadline = true) (Anforderung 2)
-    listContainer.innerHTML = votes.map(vote => renderVoteCardHTML(vote, true)).join('');
-}
-
-// NEU: Render-Funktion für "Vergangene Umfragen" (Anforderung 1 & 3)
-function renderPastVotes(votes) {
-    const listContainer = document.getElementById('past-votes-list');
-    if (!listContainer) return;
-    if (currentUser.mode === GUEST_MODE) {
-         listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Melde dich an, um vergangene Umfragen zu sehen.</p>`;
-        return;
-    }
-    if (votes.length === 0) {
-        listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Keine vergangenen Umfragen gefunden.</p>`;
-        return;
-    }
-    // Benutze den neuen Card-Renderer, OHNE Deadline (showDeadline = false)
-    listContainer.innerHTML = votes.map(vote => renderVoteCardHTML(vote, false)).join('');
-}
-
-// NEU: Helfer-Funktion, die eine einzelne Umfrage-Karte rendert (Anforderung 2)
-function renderVoteCardHTML(vote, showDeadline = false) {
-    const niceDate = vote.createdAt?.toDate ? vote.createdAt.toDate().toLocaleDateString('de-DE') : '...';
-    
-    // Anforderung 3: Ist der Termin fixiert?
-    const fixedTag = vote.fixedOptionIndex != null 
-        ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">FIXIERT</span>' 
-        : '';
-
-    // Anforderung 2: Frist-Box
-    let deadlineHTML = '';
-    if (showDeadline && !fixedTag) { // Zeige Frist nur, wenn nicht fixiert
-        const timeRemaining = formatTimeRemaining(vote.endTime);
-        if (timeRemaining) {
-            deadlineHTML = `
-                <div class="mt-2 p-2 border rounded-md text-xs font-semibold ${timeRemaining.color}">
-                    ${timeRemaining.text}
-                </div>
-            `;
-        }
-    }
-
-    const creatorName = USERS[vote.createdBy]?.realName || vote.createdByName || 'Unbekannt';
-    const teilnehmerText = vote.participants?.length === 1 ? '1 TN' : `${vote.participants?.length || 0} TN`;
-
-    return `
-        <div class="vote-list-item card bg-white p-3 rounded-lg shadow-sm border cursor-pointer hover:bg-indigo-50"
-             data-vote-id="${vote.id}">
-            <div class="flex justify-between items-start">
-                <div class="flex-grow pr-2">
-                    <span class="font-bold text-indigo-700 break-words">${vote.title}</span>
-                    ${fixedTag}
-                    <span class="text-sm text-gray-500 ml-2">(${teilnehmerText})</span>
-                </div>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600 flex-shrink-0"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
-            </div>
-            <p class="text-xs text-gray-500 mt-1">Von ${creatorName} am ${niceDate}</p>
-            ${deadlineHTML}
-        </div>
-    `;
-}
-
-// NEU: Helfer-Funktion für die verbleibende Zeit (Anforderung 2)
-function formatTimeRemaining(endTime) {
-    if (!endTime) return null; // Keine Endzeit gesetzt
-    
-    let endDate = null;
-    if (typeof endTime.toDate === 'function') {
-        endDate = endTime.toDate();
-    } else if (endTime instanceof Date) {
-        endDate = endTime;
-    } else {
-        return null; // Ungültiges Format
-    }
-
-    const now = new Date();
-    const diffMs = endDate.getTime() - now.getTime();
-    if (diffMs <= 0) return null; // Bereits abgelaufen
-
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-    let text = '';
-    if (diffDays > 0) {
-        text = `endet in ${diffDays} Tag(en) ${diffHours} Std.`;
-    } else if (diffHours > 0) {
-        text = `endet in ${diffHours} Std. ${diffMinutes} Min.`;
-    } else {
-        text = `endet in ${diffMinutes} Min.`;
-    }
-
-    // Farb-Logik (Anforderung 2)
-    let colorClass = 'text-green-700 bg-green-100 border-green-300'; // Standard
-    if (diffDays < 1) { // Weniger als 1 Tag
-        colorClass = 'text-red-700 bg-red-100 border-red-300';
-    } else if (diffDays < 3) { // Weniger als 3 Tage
-        colorClass = 'text-yellow-700 bg-yellow-100 border-yellow-300';
-    }
-
-    return { text: text, color: colorClass };
 }

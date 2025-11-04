@@ -2,10 +2,12 @@
 import { db, usersCollectionRef, setButtonLoading, adminSectionsState, modalUserButtons, ADMIN_ROLES, adminRolesCollectionRef, rolesCollectionRef, ROLES, alertUser, initialAuthCheckDone, currentUser, GUEST_MODE, adminSettings, CHECKLISTS, ADMIN_STORAGE_KEY, USERS, navigate, auth } from './haupteingang.js';
 import { renderModalUserButtons } from './admin_benutzersteuerung.js';
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { listenForAssignedVotes, stopAssignedVotesListener, listenForMyVotes, stopMyVotesListener, listenForPastVotes, stopPastVotesListener } from './terminplaner.js';
+import { listenForAssignedVotes, stopAssignedVotesListener } from './terminplaner.js';
 // ENDE-ZIKA //
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
+// ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
+// In log-InOut.js
 export async function checkCurrentUserValidity() { 
     console.log("--- Prüfe Benutzerberechtigungen (V7 - Robuste Cache-Prüfung) ---");
 
@@ -141,12 +143,6 @@ export async function checkCurrentUserValidity() {
         // NEU: Starte den Spion für "An mich zugewiesen"
         // Wir übergeben die ID des eingeloggten Benutzers
         listenForAssignedVotes(currentUser.mode);
-        
-        // ===== HIER SIND DIE ÄNDERUNGEN (Anforderung 1) =====
-        // NEU: Starte Spione für "Von mir erstellt" und "Vergangene"
-        listenForMyVotes(currentUser.mode);
-        listenForPastVotes(currentUser.mode);
-        // ===== ENDE DER ÄNDERUNGEN =====
 
         updateUIForMode(); 
 
@@ -167,17 +163,10 @@ export async function checkCurrentUserValidity() {
 }
 
 // In log-InOut.js
-// ERSETZE die komplette 'switchToGuestMode' Funktion hiermit:
 export function switchToGuestMode(showNotification = true, message = "Abgemeldet. Modus ist nun 'Gast'.", type = 'success') {
     
     // NEU: Stoppe den Spion für "An mich zugewiesen", da wir jetzt Gast sind
     stopAssignedVotesListener();
-    
-    // ===== HIER SIND DIE ÄNDERUNGEN (Anforderung 1) =====
-    // NEU: Stoppe die anderen Spione
-    stopMyVotesListener();
-    stopPastVotesListener();
-    // ===== ENDE DER ÄNDERUNGEN =====
 
     Object.keys(currentUser).forEach(key => delete currentUser[key]);
     Object.assign(currentUser, {
