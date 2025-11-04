@@ -1244,7 +1244,7 @@
 
 
 
-                <div id="terminplaner-edit-view" class="hidden">
+<div id="terminplaner-edit-view" class="hidden">
                     <div class="mb-4">
                         <div class="flex justify-between items-center">
                             <h2 id="edit-poll-title" class="text-2xl font-bold text-gray-800">... bearbeiten</h2>
@@ -1320,8 +1320,8 @@
                                         d="M10 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3.468 11.69A5.022 5.022 0 0 1 7.5 10h5a5.022 5.022 0 0 1 4.032 1.69l.966 1.616A2.25 2.25 0 0 1 15.53 15H4.47a2.25 2.25 0 0 1-1.968-1.694l.966-1.616Z" />
                                 </svg>
                                 <span id="vote-assigned-users-display-edit"
-                                    class="flex-grow text-sm text-gray-600 truncate" title="Niemand ausgewählt">Niemand
-                                    ausgewählt</span>
+                                    class="flex-grow text-sm text-gray-600 truncate"
+                                    title="Niemand ausgewählt">Niemand ausgewählt</span>
                                 <button id="vote-show-assign-user-modal-btn-edit"
                                     class="py-1 px-3 bg-blue-100 text-blue-600 text-sm font-semibold rounded-lg hover:bg-blue-200 transition flex-shrink-0">
                                     Auswählen
@@ -1354,7 +1354,31 @@
                             class="w-full py-2 bg-yellow-500 text-black font-semibold rounded-lg hover:bg-yellow-600 transition hidden">
                             Umfrage jetzt schließen (Teilnahme beenden)
                         </button>
-
+                        
+                        <div id="fix-date-selection-container" class="hidden p-4 pt-0">
+                            <div class="border-t border-red-300 pt-4 space-y-3">
+                                <h4 class="font-bold text-lg text-gray-900">Finalen Termin auswählen & Umfrage schließen</h4>
+                                <p class="text-sm text-gray-600">
+                                    Wähle den besten Termin aus der Liste aus. Das System schlägt den Termin mit den meisten "Ja"-Stimmen vor.
+                                </p>
+                                
+                                <div id="final-date-options-list" class="space-y-2 max-h-60 overflow-y-auto p-2 border rounded-lg bg-gray-50">
+                                    <p class="text-sm text-gray-400 text-center">Lade Termin-Optionen...</p>
+                                </div>
+                                
+                                <div class="flex gap-2">
+                                    <button id="cancel-fix-date-btn"
+                                        class="w-1/2 py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition">
+                                        Abbrechen
+                                    </button>
+                                    <button id="confirm-fix-date-btn"
+                                        class="w-1/2 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition flex items-center justify-center">
+                                        <span class="button-text">Auswählen & Schließen</span>
+                                        <div class="loading-spinner"></div>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                         <button id="vote-reopen-poll-btn"
                             class="w-full py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition hidden">
                             Umfrage wieder öffnen (Teilnahme erlauben)
