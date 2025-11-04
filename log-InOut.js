@@ -2,7 +2,7 @@
 import { db, usersCollectionRef, setButtonLoading, adminSectionsState, modalUserButtons, ADMIN_ROLES, adminRolesCollectionRef, rolesCollectionRef, ROLES, alertUser, initialAuthCheckDone, currentUser, GUEST_MODE, adminSettings, CHECKLISTS, ADMIN_STORAGE_KEY, USERS, navigate, auth } from './haupteingang.js';
 import { renderModalUserButtons } from './admin_benutzersteuerung.js';
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { listenForAssignedVotes, stopAssignedVotesListener } from './terminplaner.js';
+import { listenForMyVotes, stopMyVotesListener } from './terminplaner.js';
 // ENDE-ZIKA //
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
@@ -140,9 +140,9 @@ export async function checkCurrentUserValidity() {
 
         console.log("currentUser Objekt aktualisiert:", currentUser);
 
-        // NEU: Starte den Spion für "An mich zugewiesen"
+// NEU: Starte den Spion für "An mich zugewiesen"
         // Wir übergeben die ID des eingeloggten Benutzers
-        listenForAssignedVotes(currentUser.mode);
+        listenForMyVotes(currentUser.mode);
 
         updateUIForMode(); 
 
@@ -165,8 +165,8 @@ export async function checkCurrentUserValidity() {
 // In log-InOut.js
 export function switchToGuestMode(showNotification = true, message = "Abgemeldet. Modus ist nun 'Gast'.", type = 'success') {
     
-    // NEU: Stoppe den Spion für "An mich zugewiesen", da wir jetzt Gast sind
-    stopAssignedVotesListener();
+// NEU: Stoppe den Spion für "An mich zugewiesen", da wir jetzt Gast sind
+    stopMyVotesListener();
 
     Object.keys(currentUser).forEach(key => delete currentUser[key]);
     Object.assign(currentUser, {

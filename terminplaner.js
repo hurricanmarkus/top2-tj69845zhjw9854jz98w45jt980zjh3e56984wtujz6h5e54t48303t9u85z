@@ -25,6 +25,9 @@ let unsubscribeAssignedVotes = null;
 let editTokenTimer = null; // Für den 10-Sekunden-Timeout
 let tempAssignedUserIds = []; // NEU: Für den Erstellungs-Assistenten
 let assignModalContext = 'create'; // NEU: Merkt sich 'create' or 'edit'
+let myPollsMap = new Map();
+let unsubscribeMyAssignedVotes = null;
+let unsubscribeMyCreatedVotes = null;
 
 
 // ----- VERSCHOBENE FUNKTIONEN (UM DEN FEHLER ZU BEHEBEN) -----
@@ -665,37 +668,79 @@ export function listenForPublicVotes() {
     });
 }
 
-export function listenForAssignedVotes(userId) {
-    if (unsubscribeAssignedVotes) {
-        unsubscribeAssignedVotes();
-    }
+// ERSETZE listenForAssignedVotes hiermit:
+export function listenForMyVotes(userId) {
+    // Stoppe alte Listener, falls sie laufen
+    stopMyVotesListener();
+
     if (!userId || userId === GUEST_MODE) {
-        renderAssignedVotes([]); 
+        sortAndRenderAllVotes([]); // Leere das Dashboard
         return;
     }
-    const q = query(
+
+    console.log(`[Terminplaner] Starte Listener für User: ${userId}`);
+    myPollsMap.clear(); // Setze die gesammelten Umfragen zurück
+
+    // Die Funktion, die die Daten sammelt und neu sortiert
+    const combineAndRender = () => {
+        const allMyVotes = Array.from(myPollsMap.values());
+        sortAndRenderAllVotes(allMyVotes);
+    };
+
+    // Listener 1: Umfragen, die mir ZUGEWIESEN sind (im participantIds Array)
+    const qAssigned = query(
         votesCollectionRef, 
-        where("participantIds", "array-contains", userId),
-        orderBy("createdAt", "desc"), 
-        limit(20)
+        where("participantIds", "array-contains", userId)
     );
-    unsubscribeAssignedVotes = onSnapshot(q, (snapshot) => {
-        const votes = [];
-        snapshot.forEach(doc => {
-            votes.push({ id: doc.id, ...doc.data() });
+    unsubscribeMyAssignedVotes = onSnapshot(qAssigned, (snapshot) => {
+        console.log(`[Terminplaner] ${snapshot.docs.length} zugewiesene Umfragen empfangen.`);
+        snapshot.docs.forEach(doc => {
+            myPollsMap.set(doc.id, { id: doc.id, ...doc.data() });
         });
-        renderAssignedVotes(votes); 
+        // (Wir müssen auch Dokumente entfernen, die nicht mehr im Query sind)
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === "removed") {
+                myPollsMap.delete(change.doc.id);
+            }
+        });
+        combineAndRender();
     }, (error) => {
-        console.error("Fehler beim Lauschen auf zugewiesene Umfragen:", error);
+        console.error("Fehler bei 'Mir zugewiesen'-Listener:", error);
+    });
+
+    // Listener 2: Umfragen, die VON MIR ERSTELLT wurden
+    const qCreated = query(
+        votesCollectionRef, 
+        where("createdBy", "==", userId)
+    );
+    unsubscribeMyCreatedVotes = onSnapshot(qCreated, (snapshot) => {
+        console.log(`[Terminplaner] ${snapshot.docs.length} erstellte Umfragen empfangen.`);
+        snapshot.docs.forEach(doc => {
+            myPollsMap.set(doc.id, { id: doc.id, ...doc.data() });
+        });
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === "removed") {
+                myPollsMap.delete(change.doc.id);
+            }
+        });
+        combineAndRender();
+    }, (error) => {
+        console.error("Fehler bei 'Von mir erstellt'-Listener:", error);
     });
 }
 
-export function stopAssignedVotesListener() {
-    if (unsubscribeAssignedVotes) {
-        unsubscribeAssignedVotes();
-        unsubscribeAssignedVotes = null;
+// ERSETZE stopAssignedVotesListener hiermit:
+export function stopMyVotesListener() {
+    if (unsubscribeMyAssignedVotes) {
+        unsubscribeMyAssignedVotes();
+        unsubscribeMyAssignedVotes = null;
     }
-    renderAssignedVotes([]); 
+    if (unsubscribeMyCreatedVotes) {
+        unsubscribeMyCreatedVotes();
+        unsubscribeMyCreatedVotes = null;
+    }
+    myPollsMap.clear();
+    sortAndRenderAllVotes([]); // Leere das Dashboard
 }
 
 
@@ -725,36 +770,6 @@ function renderPublicVotes(votes) {
         `;
     }).join('');
 }
-
-function renderAssignedVotes(votes) {
-    const listContainer = document.getElementById('assigned-votes-list');
-    if (!listContainer) return;
-    if (currentUser.mode === GUEST_MODE) {
-         listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Melde dich an, um Umfragen zu sehen, an denen du teilgenommen hast.</p>`;
-        return;
-    }
-    if (votes.length === 0) {
-        listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Du hast noch an keiner Umfrage teilgenommen.</p>`;
-        return;
-    }
-    listContainer.innerHTML = votes.map(vote => {
-        const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
-        const fixedTag = vote.fixedOptionIndex != null ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">FIXIERT</span>' : '';
-        return `
-            <div class="vote-list-item card bg-white p-3 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:bg-indigo-50"
-                 data-vote-id="${vote.id}">
-                <div>
-                    <span class="font-bold text-indigo-700">${vote.title}</span>
-                    ${fixedTag}
-                    <span class="text-sm text-gray-500 ml-2">(${vote.participants?.length || 0} Teilnehmer)</span>
-                    <p class="text-xs text-gray-500">Erstellt von ${vote.createdByName} am ${niceDate}</p>
-                </div>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
-            </div>
-        `;
-    }).join('');
-}
-
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per Token) -----
 // (ANGEPASST: Ruft jetzt 'cleanUrl' auf)
@@ -2269,4 +2284,233 @@ function checkInlineEditToken() {
         // Bei Fehler: UI zurücksetzen, damit man es nochmal versuchen kann
         resetEditWrapper();
     }
+}
+
+// ----- NEUE FUNKTIONEN FÜR DAS DASHBOARD (AB HIER HINZUFÜGEN) -----
+
+/**
+ * Der neue "Gehirn"-Prozess: Nimmt ALLE Umfragen und sortiert sie
+ * in die 4 Listen und die "Ausfällig"-Box.
+ */
+function sortAndRenderAllVotes(allPolls) {
+    if (currentUser.mode === GUEST_MODE) {
+        allPolls = []; // Gäste sehen keine persönlichen Umfragen
+    }
+    
+    const now = new Date();
+    // Wichtig: 'today' ist Mitternacht HEUTE. Ein Event von gestern 23:00 ist < today.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); 
+
+    const outstandingPolls = [];
+    const assignedPolls = [];
+    const createdPolls = [];
+    const pastPolls = [];
+
+    const userId = currentUser.mode;
+
+    for (const poll of allPolls) {
+        // --- 1. Status-Flaggen setzen ---
+        const isCreator = poll.createdBy === userId;
+        const isAssigned = poll.participantIds && poll.participantIds.includes(userId);
+        const hasVoted = poll.participants && poll.participants.find(p => p.userId === userId);
+        const isFixed = poll.fixedOptionIndex != null;
+        
+        let isExpired = false;
+        if (poll.endTime) {
+            const endTime = (typeof poll.endTime.toDate === 'function') ? poll.endTime.toDate() : new Date(poll.endTime);
+            if (endTime < now) {
+                isExpired = true;
+            }
+        }
+        const isClosed = isFixed || isExpired;
+
+        // --- 2. Logik für "Vergangene Umfragen" (Punkt 3) ---
+        if (isFixed) {
+            try {
+                const fixedOption = poll.options[poll.fixedOptionIndex];
+                // Kombiniere Datum (YYYY-MM-DD) und Startzeit (HH:MM)
+                const eventDateTime = new Date(`${fixedOption.date}T${fixedOption.timeStart}`);
+                
+                // "Vergangen" ist, wenn das Event-Datum VOR dem Start von HEUTE liegt (d.h. gestern oder früher)
+                if (eventDateTime < today) {
+                    pastPolls.push(poll);
+                    continue; // Diese Umfrage ist "vergangen", sie erscheint nirgendwo anders.
+                }
+            } catch (e) {
+                console.error(`Fehler bei der Datumsprüfung für 'Vergangen': ${poll.id}`, e);
+            }
+        }
+
+        // --- 3. Logik für "Ausständig" (Punkt 1) ---
+        // Ausständig = (Mir zugewiesen ODER von mir erstellt) UND (Ich habe nicht gevotet) UND (Umfrage ist offen)
+        if ((isAssigned || isCreator) && !hasVoted && !isClosed) {
+            outstandingPolls.push(poll);
+        }
+
+        // --- 4. Logik für die 2x2 Listen ---
+        if (isCreator) {
+            createdPolls.push(poll);
+        }
+        
+        // "Mir zugewiesen" soll NICHT die anzeigen, die ich selbst erstellt habe
+        if (isAssigned && !isCreator) { 
+            assignedPolls.push(poll);
+        }
+    }
+
+    // --- 5. Alles rendern ---
+    renderOutstandingSummary(outstandingPolls);
+    renderVoteList(assignedPolls, 'assigned-votes-list', 'Mir zugewiesen');
+    renderVoteList(createdPolls, 'created-votes-list', 'Von mir erstellt');
+    renderVoteList(pastPolls, 'past-votes-list', 'Vergangene Umfragen');
+    // Öffentliche Umfragen werden von ihrem eigenen Listener (listenForPublicVotes) gerendert
+}
+
+/**
+ * Erzeugt die HTML-Karte für EINE Umfrage (Punkt 2)
+ */
+function createVoteCardHTML(vote, listTitle) {
+    const userId = currentUser.mode;
+    const isCreator = vote.createdBy === userId;
+    const hasVoted = vote.participants && vote.participants.find(p => p.userId === userId);
+    const isFixed = vote.fixedOptionIndex != null;
+    
+    let endTime = null;
+    if (vote.endTime) {
+        endTime = (typeof vote.endTime.toDate === 'function') ? vote.endTime.toDate() : new Date(vote.endTime);
+    }
+    const isExpired = endTime && endTime < new Date();
+    const isClosed = isFixed || isExpired;
+    
+    let statusBox1 = ''; // Vote-Status
+    let statusBox2 = ''; // Countdown
+    
+    // --- Logik für Box 1 (Vote Status) ---
+    if (listTitle === 'Mir zugewiesen') {
+        if (hasVoted) {
+            statusBox1 = `<span class="text-xs font-bold px-2 py-0.5 bg-green-200 text-green-800 rounded-full">✓ VOTE ABGEGEBEN</span>`;
+        } else if (!isClosed) {
+            // Zeige "Ausständig" nur, wenn die Umfrage noch offen ist
+            statusBox1 = `<span class="text-xs font-bold px-2 py-0.5 bg-red-200 text-red-800 rounded-full animate-pulse">VOTE AUSSTÄNDIG</span>`;
+        }
+    } else if (listTitle === 'Von mir erstellt') {
+        if (hasVoted) {
+            statusBox1 = `<span class="text-xs font-bold px-2 py-0.5 bg-green-200 text-green-800 rounded-full">✓ VOTE ABGEGEBEN</span>`;
+        } else if (!isClosed) {
+            statusBox1 = `<span class="text-xs font-bold px-2 py-0.5 bg-gray-300 text-gray-800 rounded-full">O VOTE NICHT ABGEGEBEN</span>`;
+        }
+    }
+
+    // --- Logik für Box 2 (Countdown) ---
+    if (isFixed) {
+        statusBox2 = `<span class="text-xs font-semibold px-2 py-0.5 bg-blue-200 text-blue-800 rounded-full">Termin fixiert</span>`;
+    } else if (isExpired) {
+        statusBox2 = `<span class="text-xs font-semibold px-2 py-0.5 bg-gray-300 text-gray-700 rounded-full">Abgelaufen</span>`;
+    } else if (endTime) {
+        // Nur wenn nicht fixiert/abgelaufen UND ein Enddatum hat
+        const countdownText = formatTimeRemaining(endTime);
+        statusBox2 = `<span class="text-xs font-semibold px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">${countdownText}</span>`;
+    } else {
+        // Läuft unbegrenzt und ist offen
+        statusBox2 = `<span class="text-xs font-semibold px-2 py-0.5 bg-gray-200 text-gray-600 rounded-full">Unbegrenzt</span>`;
+    }
+
+    // Creator-Name
+    const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
+    const creatorName = (listTitle === 'Von mir erstellt') ? 'Dir' : (vote.createdByName || 'Unbekannt');
+    
+    // Kombiniere die Status-Boxen
+    const statusTags = `
+        <div class="flex flex-wrap gap-2 mt-2">
+            ${statusBox1}
+            ${statusBox2}
+        </div>
+    `;
+
+    return `
+        <div class="vote-list-item card bg-white p-3 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:bg-indigo-50"
+             data-vote-id="${vote.id}">
+            <div class="flex-grow">
+                <span class="font-bold text-indigo-700">${vote.title}</span>
+                <p class="text-xs text-gray-500">Erstellt von ${creatorName} am ${niceDate}</p>
+                ${statusTags}
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600 flex-shrink-0 ml-2"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
+        </div>
+    `;
+}
+
+/**
+ * Eine generische Funktion, die eine Liste von Umfragen
+ * in ein bestimmtes HTML-Element rendert.
+ */
+function renderVoteList(votes, elementId, listTitle) {
+    const listContainer = document.getElementById(elementId);
+    if (!listContainer) {
+        console.error(`[Terminplaner] Container ${elementId} nicht gefunden.`);
+        return;
+    }
+
+    // Sortiere nach Erstellungsdatum (Neueste zuerst)
+    votes.sort((a, b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0));
+
+    if (votes.length === 0) {
+        let text = 'Keine Umfragen in dieser Kategorie.';
+        if (listTitle === 'Mir zugewiesen') text = 'Niemand hat dich zu einer Umfrage eingeladen.';
+        if (listTitle === 'Von mir erstellt') text = 'Du hast noch keine Umfragen erstellt.';
+        if (listTitle === 'Vergangene Umfragen') text = 'Keine abgeschlossenen Umfragen mit fixiertem Termin.';
+        listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">${text}</p>`;
+        return;
+    }
+
+    listContainer.innerHTML = votes.map(vote => createVoteCardHTML(vote, listTitle)).join('');
+}
+
+/**
+ * Rendert die Zusammenfassung der ausständigen Rückmeldungen (Punkt 1)
+ */
+function renderOutstandingSummary(outstandingPolls) {
+    const summaryContainer = document.getElementById('outstanding-votes-summary');
+    if (!summaryContainer) return;
+
+    if (outstandingPolls.length === 0) {
+        summaryContainer.classList.add('hidden');
+        return;
+    }
+
+    const count = outstandingPolls.length;
+    const plural = count === 1 ? 'Rückmeldung' : 'Rückmeldungen';
+    const pollNames = outstandingPolls.map(p => p.title).join(', ');
+
+    summaryContainer.innerHTML = `
+        <p class="font-bold">Du hast ${count} ausständige ${plural}!</p>
+        <p class="text-sm mt-1">Bitte gib deine Stimme ab für: ${pollNames}</p>
+    `;
+    summaryContainer.classList.remove('hidden');
+}
+
+/**
+ * Helfer-Funktion für den Countdown (Punkt 2)
+ */
+function formatTimeRemaining(endTime) {
+    const now = new Date();
+    const diffMs = endTime.getTime() - now.getTime();
+
+    if (diffMs <= 0) return "Gerade beendet";
+
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (diffDays > 0) {
+        return `Endet in ${diffDays} Tag(en) ${diffHours} Std.`;
+    }
+    if (diffHours > 0) {
+        return `Endet in ${diffHours} Std. ${diffMinutes} Min.`;
+    }
+    if (diffMinutes > 0) {
+        return `Endet in ${diffMinutes} Min.`;
+    }
+    return "Endet in Kürze";
 }
