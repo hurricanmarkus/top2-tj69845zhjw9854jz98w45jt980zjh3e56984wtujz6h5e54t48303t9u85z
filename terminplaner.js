@@ -804,10 +804,12 @@ export async function joinVoteByToken(tokenFromUrl = null) {
         console.log("Umfrage gefunden:", currentVoteData);
         
         navigate('terminplaner'); // Navigiere zur Terminplaner-Hauptseite
-        
-        // --- KORRIGIERTE REIHENFOLGE ---
         showView('vote'); // 1. ZUERST die Detail-Ansicht zeigen
-        renderVoteView(currentVoteData); // 2. DANACH die (jetzt sichtbaren) Elemente füllen
+        
+        // --- KORREKTUR: Wir warten einen "Tick", bevor wir rendern ---
+        setTimeout(() => {
+            renderVoteView(currentVoteData); // 2. DANACH die (jetzt sichtbaren) Elemente füllen
+        }, 0); // 0 Millisekunden Verzögerung reicht aus
         // --- ENDE KORREKTUR ---
         
         if (tokenInput) tokenInput.value = ''; 
@@ -821,6 +823,7 @@ export async function joinVoteByToken(tokenFromUrl = null) {
         if (joinBtn) setButtonLoading(joinBtn, false); 
     }
 }
+
 
 // ERSETZE diese Funktion in terminplaner.js
 
@@ -850,10 +853,12 @@ export async function joinVoteById(voteId = null) {
         console.log("Umfrage per ID geladen:", currentVoteData);
         
         navigate('terminplaner'); // Navigiere zur Terminplaner-Hauptseite
-
-        // --- KORRIGIERTE REIHENFOLGE ---
         showView('vote'); // 1. ZUERST die Detail-Ansicht zeigen
-        renderVoteView(currentVoteData); // 2. DANACH die (jetzt sichtbaren) Elemente füllen
+
+        // --- KORREKTUR: Wir warten einen "Tick", bevor wir rendern ---
+        setTimeout(() => {
+            renderVoteView(currentVoteData); // 2. DANACH die (jetzt sichtbaren) Elemente füllen
+        }, 0); // 0 Millisekunden Verzögerung reicht aus
         // --- ENDE KORREKTUR ---
         
         if (isFromUrl) cleanUrlParams();
