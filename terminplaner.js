@@ -22,8 +22,6 @@ let currentParticipantAnswers = {};
 let isVoteGridEditable = false; 
 let unsubscribePublicVotes = null;
 let unsubscribeAssignedVotes = null;
-let unsubscribeCreatedVotes = null; // NEU
-let unsubscribePastVotes = null; // NEU
 let editTokenTimer = null; // Für den 10-Sekunden-Timeout
 
 
