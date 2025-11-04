@@ -1324,6 +1324,8 @@ function renderCorrectionHistory(userId) {
 
 // ERSETZE diese Funktion in terminplaner.js
 
+// ERSETZE diese Funktion in terminplaner.js
+
 function renderEditView(voteData) {
     document.getElementById('edit-poll-title').textContent = `"${voteData.title}" bearbeiten`;
     
@@ -1398,20 +1400,25 @@ function renderEditView(voteData) {
         }
     }
 
-    // KORREKTUR: NEUE LOGIK
-    // KORREKTUR: Wenn Termin fixiert ist (fixedOptionIndex), zeige KEINEN der Knöpfe an
+    // ----- KORREKTUR: NEUE LOGIK (basierend auf deinem Feedback) -----
     if (voteData.fixedOptionIndex != null) {
+        // Fall: Termin ist fixiert. Schließen ist nicht möglich.
         closeBtn.classList.add('hidden');
-        reopenBtn.classList.add('hidden');
-    } else if (endTimeDate && endTimeDate < new Date()) {
-        // Fall: Umfrage ist geschlossen (aber nicht fixiert)
-        closeBtn.classList.add('hidden');
+        // ABER: Wiedereröffnen ist möglich (um Fixierung aufzuheben)
         reopenBtn.classList.remove('hidden');
+
+    } else if (endTimeDate && endTimeDate < new Date()) {
+        // Fall: Umfrage ist geschlossen (abgelaufen), aber nicht fixiert
+        closeBtn.classList.add('hidden');
+        reopenBtn.classList.remove('hidden'); // Zeige "Wieder öffnen"
+
     } else {
-        // Fall: Umfrage ist offen
-        closeBtn.classList.remove('hidden');
+        // Fall: Umfrage ist offen (weder fixiert noch abgelaufen)
+        closeBtn.classList.remove('hidden'); // Zeige "Schließen"
         reopenBtn.classList.add('hidden');
     }
+    // ----- ENDE DER KORREKTUR -----
+
 
     // WICHTIG: Sicherstellen, dass die Terminauswahl (die wir per Klick öffnen)
     // beim Neuladen der Ansicht immer versteckt ist.
@@ -1430,6 +1437,7 @@ function renderEditView(voteData) {
         `;
     }
 }
+
 
 async function saveVoteEdits() {
     const saveBtn = document.getElementById('vote-save-changes-btn');
