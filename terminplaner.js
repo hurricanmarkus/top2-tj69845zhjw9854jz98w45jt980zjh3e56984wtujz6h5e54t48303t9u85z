@@ -500,10 +500,16 @@ export function initializeTerminplanerView() {
                 copyToClipboard(url, "URL kopiert!");
             }
 
-            // NEU: Spion für den "Details"-Knopf in der Abstimm-Ansicht
+            // Spion für den "Details"-Knopf in der Abstimm-Ansicht
             const pollHistoryBtnMain = e.target.closest('#show-poll-history-btn-main');
             if (pollHistoryBtnMain) {
                 renderPollHistory();
+            }
+
+            // NEU: Spion für den "Quittieren"-Knopf
+            const acknowledgeBtn = e.target.closest('#acknowledge-update-btn');
+            if (acknowledgeBtn) {
+                handleAcknowledgeUpdate();
             }
         });
         voteView.dataset.listenerAttached = 'true';
@@ -551,8 +557,6 @@ export function initializeTerminplanerView() {
     if (cancelEditingBtn && !cancelEditingBtn.dataset.listenerAttached) {
         cancelEditingBtn.addEventListener('click', () => {
             showView('vote');
-            // Wir müssen die Umfrage neu laden, um lokale (aber nicht gespeicherte)
-            // Änderungen an den Teilnehmer-Votes zu verwerfen
             joinVoteById(currentVoteData.id); 
         });
         cancelEditingBtn.dataset.listenerAttached = 'true';
@@ -596,8 +600,6 @@ export function initializeTerminplanerView() {
         deletePollBtn.dataset.listenerAttached = 'true';
     }
     
-    // HINWEIS: Der Spion für '#show-poll-history-btn' wurde entfernt (Button existiert nicht mehr)
-
     const cancelFixDateBtn = document.getElementById('cancel-fix-date-btn');
     if (cancelFixDateBtn && !cancelFixDateBtn.dataset.listenerAttached) {
         cancelFixDateBtn.addEventListener('click', hideFixDateSelection);
@@ -694,7 +696,6 @@ export function initializeTerminplanerView() {
         adminGridContainer.dataset.listenerAttached = 'true';
     }
 
-    // NEU: Spion für die "Streichen"-Liste
     const manageTermsList = document.getElementById('manage-existing-terms-list');
     if (manageTermsList && !manageTermsList.dataset.listenerAttached) {
         manageTermsList.addEventListener('click', (e) => {
@@ -986,30 +987,86 @@ function renderVoteView(voteData) {
     
     // NEU: Update-Box Logik (Punkt 2)
     const updateBox = document.getElementById('poll-update-notification-box');
-    
+    const updateSubtitle = document.getElementById('poll-update-subtitle');
+    const detailsBtn = document.getElementById('show-poll-history-btn-main');
+    const ackBtn = document.getElementById('acknowledge-update-btn');
+
     // Setze Stile zurück
     if (descContainer) descContainer.classList.remove('blink-border-blue');
     if (locContainer) locContainer.classList.remove('blink-border-blue');
-    if (titleEl) titleEl.classList.remove('blink-border-blue'); // Titel auch
+    if (titleEl) titleEl.classList.remove('blink-border-blue'); 
     
-    if (voteData.pollHistory && voteData.pollHistory.length > 0) {
-        if (updateBox) updateBox.classList.remove('hidden');
-        
-        // Finde das letzte Update-Log
-        const lastUpdate = voteData.pollHistory[voteData.pollHistory.length - 1];
-        if (lastUpdate && lastUpdate.changes) {
-            // Prüfe, welche Felder im letzten Log geändert wurden
-            const changedTitle = lastUpdate.changes.some(c => c.includes('Titel'));
-            const changedDesc = lastUpdate.changes.some(c => c.includes('Beschreibung'));
-            const changedLoc = lastUpdate.changes.some(c => c.includes('Ort'));
+    if (updateBox) {
+        updateBox.classList.add('hidden'); // Standardmäßig versteckt
+        // Quittiert-Stil zurücksetzen (nur Hintergrund/Rand)
+        updateBox.classList.remove('bg-transparent', 'border-gray-400'); 
+        // Normal-Stil setzen (blauer Rand/Hintergrund)
+        updateBox.classList.add('bg-blue-50', 'border-blue-500'); 
+    }
+    if (detailsBtn) {
+        // Quittiert-Stil zurücksetzen (grauer Knopf)
+        detailsBtn.classList.remove('btn-gray-acknowledged');
+        // Normal-Stil setzen (blauer Knopf)
+        detailsBtn.classList.add('bg-blue-600', 'hover:bg-blue-700'); 
+    }
+    if (ackBtn) ackBtn.classList.remove('hidden'); // Standardmäßig zeigen
+    if (updateSubtitle) updateSubtitle.classList.remove('hidden'); // Standardmäßig zeigen
 
-            // Wende blinkenden Rahmen an
-            if (changedTitle && titleEl) titleEl.classList.add('blink-border-blue');
-            if (changedDesc && descContainer) descContainer.classList.add('blink-border-blue');
-            if (changedLoc && locContainer) locContainer.classList.add('blink-border-blue');
+    let hasUpdate = false;
+    let lastUpdateTimestamp = null;
+    if (voteData.pollHistory && voteData.pollHistory.length > 0) {
+        const lastUpdate = voteData.pollHistory[voteData.pollHistory.length - 1];
+        if (lastUpdate.timestamp) {
+            lastUpdateTimestamp = getSafeDate(lastUpdate.timestamp);
+            hasUpdate = true;
         }
-    } else {
-        if (updateBox) updateBox.classList.add('hidden');
+    }
+    
+    let userHasAcknowledged = false;
+    if (hasUpdate && currentUser.mode !== GUEST_MODE) {
+        const ackArray = voteData.acknowledgedBy || [];
+        const userAckEntry = ackArray.find(a => a.userId === currentUser.mode);
+        
+        if (userAckEntry) {
+            const userAckTimestamp = getSafeDate(userAckEntry.timestamp);
+            // Hat der User eine Quittierung, die neuer oder gleich dem letzten Update ist?
+            if (userAckTimestamp && lastUpdateTimestamp && userAckTimestamp.getTime() >= lastUpdateTimestamp.getTime()) {
+                userHasAcknowledged = true;
+            }
+        }
+    }
+
+    if (hasUpdate) {
+        if (updateBox) updateBox.classList.remove('hidden');
+
+        if (userHasAcknowledged) {
+            // --- STIL: QUITTIERT ---
+            if (updateBox) {
+                // User-Wunsch: kein Fill, dunklerer strich
+                updateBox.classList.remove('bg-blue-50', 'border-blue-500');
+                updateBox.classList.add('bg-transparent', 'border-gray-400'); 
+            }
+            if (detailsBtn) {
+                // User-Wunsch: grauer Details-Button
+                detailsBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                detailsBtn.classList.add('btn-gray-acknowledged'); 
+            }
+            if (ackBtn) ackBtn.classList.add('hidden'); // User-Wunsch: Quittieren-Button weg
+            if (updateSubtitle) updateSubtitle.classList.add('hidden'); // Blinking-Text weg
+
+        } else {
+            // --- STIL: NICHT QUITTIERT (BLINKEN) ---
+            const lastUpdate = voteData.pollHistory[voteData.pollHistory.length - 1];
+            if (lastUpdate && lastUpdate.changes) {
+                const changedTitle = lastUpdate.changes.some(c => c.includes('Titel'));
+                const changedDesc = lastUpdate.changes.some(c => c.includes('Beschreibung'));
+                const changedLoc = lastUpdate.changes.some(c => c.includes('Ort'));
+
+                if (changedTitle && titleEl) titleEl.classList.add('blink-border-blue');
+                if (changedDesc && descContainer) descContainer.classList.add('blink-border-blue');
+                if (changedLoc && locContainer) locContainer.classList.add('blink-border-blue');
+            }
+        }
     }
     // ENDE NEU
 
@@ -1030,7 +1087,6 @@ function renderVoteView(voteData) {
     }
     
     // Zeige die Info-Box, wenn sie Inhalt hat ODER eine Update-Meldung hat
-    const hasUpdate = (voteData.pollHistory && voteData.pollHistory.length > 0);
     if (infoBox) infoBox.classList.toggle('hidden', !hasInfo && !hasUpdate);
 
 
@@ -1158,6 +1214,7 @@ function renderVoteView(voteData) {
         checkIfAllAnswered();
     }
 }
+
 
 
 /**
@@ -1983,27 +2040,28 @@ async function saveVoteEdits() {
         const combinedIds = new Set([...existingParticipantIds, ...newAssignedIds]);
         updateData.participantIds = Array.from(combinedIds);
         
-        // --- NEU: Speichere die (lokal geänderten) Teilnehmerdaten (Punkt 2) ---
-        // 'currentVoteData.participants' wurde von 'handleAdminVoteEdit' lokal geändert
+        // Speichere die (lokal geänderten) Teilnehmerdaten (inkl. Admin-Korrekturen)
+        // UND die (lokal geänderten) Optionen (inkl. "Streichen")
         updateData.participants = currentVoteData.participants;
-        // --- ENDE NEU ---
+        updateData.options = currentVoteData.options; // Speichert auch 'isStricken'
 
-        // 5. NEU: Neue Termine auslesen und anhängen (Punkt 1)
+        // 5. Neue Termine auslesen und anhängen
         const newOptions = [];
         const dateGroups = document.querySelectorAll('#vote-dates-container-edit [data-date-group-id]');
         dateGroups.forEach(group => {
             const dateInput = group.querySelector('.vote-date-input');
             const dateValue = dateInput.value; 
-            if (dateValue) { // Nur verarbeiten, wenn ein Datum gesetzt ist
+            if (dateValue) { 
                 const timeGroups = group.querySelectorAll('.time-input-group');
                 timeGroups.forEach(timeGroup => {
                     const timeStart = timeGroup.querySelector('.vote-time-start-input').value; 
-                    if (timeStart) { // Nur verarbeiten, wenn Startzeit gesetzt ist
+                    if (timeStart) { 
                         const timeEnd = timeGroup.querySelector('.vote-time-end-input').value; 
                         newOptions.push({ 
                             date: dateValue, 
                             timeStart: timeStart,
-                            timeEnd: timeEnd || null 
+                            timeEnd: timeEnd || null,
+                            isStricken: false // Neue Termine sind nie gestrichen
                         });
                     }
                 });
@@ -2015,16 +2073,20 @@ async function saveVoteEdits() {
             updateData.options = [...currentVoteData.options, ...newOptions];
             changes.push(`${newOptions.length} neue(r) Termin(e) hinzugefügt.`);
         }
-        // --- ENDE NEU ---
-
+        
         // 6. Log-Eintrag erstellen, WENN es Änderungen gab
         if (changes.length > 0) {
             const historyLog = {
-                timestamp: new Date(), // Lokale Zeit (vermeidet Firebase-Array-Fehler)
+                timestamp: new Date(), // Lokale Zeit
                 changedBy: USERS[currentUser.mode]?.realName || currentUser.displayName,
-                changes: changes // Array mit den Text-Änderungen
+                changes: changes
             };
             updateData.pollHistory = [...(currentVoteData.pollHistory || []), historyLog];
+            
+            // --- NEU: Quittierungs-Liste zurücksetzen ---
+            // Da es ein neues Update gibt, muss JEDER es neu quittieren.
+            updateData.acknowledgedBy = []; 
+            // --- ENDE NEU ---
         }
         
         // 7. Datenbank aktualisieren
@@ -2039,7 +2101,6 @@ async function saveVoteEdits() {
         // Zurück zur Abstimmungs-Seite (die sich jetzt selbst aktualisiert)
         showView('vote');
         
-        // WICHTIG: Verzögern, damit die Ansicht erst umschaltet
         setTimeout(() => {
             renderVoteView(currentVoteData); // Ansicht mit den neuen Daten neu laden
         }, 0);
@@ -2442,7 +2503,7 @@ function checkInlineEditToken() {
     
     // 2. Token prüfen (wie bisher)
     if (currentVoteData && token === currentVoteData.editToken) {
-        alertUser("Token korrekt! Lade Bearbeitungs-Modus...", "success");
+        alertUser("Bearbeitungsmodus AKTIV!", "success");
         
         // UI zurücksetzen (wird von showView erledigt, die resetEditWrapper aufruft)
         showView('edit');
@@ -2982,4 +3043,67 @@ function handleStrikeTerm(optionIndex, shouldBeStricken) {
     renderParticipantEditGrid(currentVoteData);
     
     alertUser(`Termin ${shouldBeStricken ? 'gestrichen' : 'wiederhergestellt'}. (Lokal geändert)`, "success");
+}
+
+/**
+ * NEU: Verarbeitet den Klick auf "Ok, quittieren"
+ */
+async function handleAcknowledgeUpdate() {
+    if (!currentVoteData || currentUser.mode === GUEST_MODE) return;
+
+    const ackBtn = document.getElementById('acknowledge-update-btn');
+    if (ackBtn) setButtonLoading(ackBtn, true);
+
+    try {
+        const getSafeDate = (timestamp) => {
+            if (!timestamp) return null;
+            if (typeof timestamp.toDate === 'function') return timestamp.toDate();
+            return new Date(timestamp);
+        };
+        
+        // 1. Finde das letzte Update-Timestamp
+        const lastUpdate = currentVoteData.pollHistory[currentVoteData.pollHistory.length - 1];
+        const lastUpdateTimestamp = getSafeDate(lastUpdate.timestamp);
+        
+        if (!lastUpdateTimestamp) {
+            throw new Error("Letzter Update-Zeitstempel nicht gefunden.");
+        }
+
+        // 2. Bereite den neuen Quittierungs-Eintrag vor
+        const newAckEntry = {
+            userId: currentUser.mode,
+            timestamp: lastUpdateTimestamp // Wichtig: Wir speichern den Zeitstempel des Updates, das quittiert wurde
+        };
+
+        // 3. Hole die alte Liste
+        let oldAckArray = currentVoteData.acknowledgedBy || [];
+        
+        // 4. Entferne den alten Eintrag für diesen User (falls vorhanden)
+        let newAckArray = oldAckArray.filter(a => a.userId !== currentUser.mode);
+        
+        // 5. Füge den neuen Eintrag hinzu
+        newAckArray.push(newAckEntry);
+
+        // 6. Speichere in Firebase
+        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
+        await updateDoc(voteDocRef, {
+            acknowledgedBy: newAckArray
+        });
+
+        // 7. Aktualisiere die lokalen Daten
+        currentVoteData.acknowledgedBy = newAckArray;
+
+        // 8. Lade die Ansicht neu, um die Stile (Blinken aus, etc.) anzuwenden
+        renderVoteView(currentVoteData);
+        
+        alertUser("Update quittiert", "success");
+
+    } catch (error) {
+        console.error("Fehler beim Quittieren des Updates:", error);
+        alertUser("Fehler beim Quittieren.", "error");
+    } finally {
+        // WICHTIG: setButtonLoading NICHT auf false setzen,
+        // da der Knopf durch renderVoteView() sowieso verschwindet.
+        // if (ackBtn) setButtonLoading(ackBtn, false); // Nicht nötig
+    }
 }

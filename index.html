@@ -1206,14 +1206,25 @@
                             <div class="flex justify-between items-center">
                                 <div>
                                     <p class="font-bold text-blue-700">Diese Umfrage wurde aktualisiert.</p>
-                                    <p class="text-sm text-blue-600">Geänderte Felder blinken blau.</p>
+                                    <p id="poll-update-subtitle" class="text-sm text-blue-600">Geänderte Felder blinken
+                                        blau.</p>
                                 </div>
-                                <button id="show-poll-history-btn-main"
-                                    class="py-1 px-3 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 flex-shrink-0 ml-2">
-                                    Details
-                                </button>
+                                <div class="flex flex-col gap-2 items-end flex-shrink-0 ml-2">
+                                    <button id="show-poll-history-btn-main"
+                                        class="py-1 px-3 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 flex-shrink-0 w-full text-center">
+                                        Details
+                                    </button>
+                                    <button id="acknowledge-update-btn"
+                                        class="py-1 px-3 bg-blue-100 text-blue-700 text-sm font-semibold rounded-lg hover:bg-blue-200 flex-shrink-0 w-full text-center">
+                                        <span class="button-text">Ok, quittieren</span>
+                                        <div class="loading-spinner"
+                                            style="border-top-color: #1d4ed8; border-right-color: transparent; border-bottom-color: transparent; border-left-color: transparent;">
+                                        </div>
+                                    </button>
+                                </div>
                             </div>
                         </div>
+
                         <div id="vote-poll-description-container" class="hidden">
                             <p class="text-sm text-gray-600" id="vote-poll-description"></p>
                         </div>
