@@ -383,8 +383,8 @@ export function stopAssignedVotesListener() {
         unsubscribeCreatedVotes = null;
     }
     renderAssignedVotes([]); 
-    renderCreatedVotes([]);
-}
+    renderC
+
 
 // ----- RENDER-FUNKTIONEN FÜR LISTEN -----
 
@@ -2195,13 +2195,9 @@ function formatTimeUntil(endDate) {
     return { text: text, colorClass: colorClass };
 }
 
-// ERSETZE die letzte Funktion (renderVoteCardHTML) in deiner terminplaner.js
-// Stelle sicher, dass dies das absolute Ende deiner Datei ist.
-
 // NEU: Zentrale Render-Funktion für eine Umfrage-Karte (Anforderung 2 & 3)
 function renderVoteCardHTML(vote, context = 'public') {
-    const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') ||
-        '...';
+    const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
     
     let fixedTag = '';
     if (vote.fixedOptionIndex != null) {
