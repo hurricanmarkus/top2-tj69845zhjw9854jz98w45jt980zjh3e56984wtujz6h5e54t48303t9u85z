@@ -1280,6 +1280,7 @@ function renderVoteView(voteData) {
  */
 // ERSETZE diese Funktion in terminplaner.js
 
+// 1-ZU-1 ERSETZEN (Behebt den Ladefehler)
 function updatePollTableAnswers(voteData, isEditable = false, isBlocked = false) {
     const optionsContainer = document.getElementById('vote-options-container');
     if (!optionsContainer) {
@@ -1293,8 +1294,8 @@ function updatePollTableAnswers(voteData, isEditable = false, isBlocked = false)
         if (fixedOption) {
             const dateObj = new Date(fixedOption.date + 'T12:00:00');
             const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
-            const timeString = fixedOption.timeEnd ?
-                `${fixedOption.timeStart} - ${fixedOption.timeEnd} Uhr` :
+            const timeString = fixedOption.timeEnd ? 
+                `${fixedOption.timeStart} - ${fixedOption.timeEnd} Uhr` : 
                 `${fixedOption.timeStart} Uhr`;
 
             const fixedIndex = voteData.fixedOptionIndex;
@@ -1322,7 +1323,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isBlocked = false)
                     </div>
                 `;
             };
-
+            
             const participantsListHTML = `
                 <div class="text-left mt-4 border-t border-green-400 pt-2">
                     ${createListHTML('Zusagen', yesNames, 'text-green-800')}
@@ -1346,28 +1347,28 @@ function updatePollTableAnswers(voteData, isEditable = false, isBlocked = false)
                     ${participantsListHTML}
                 </div>
             `;
-            return;
+            return; 
         }
     }
-
+    
     // 2. Fall: Normale Abstimmung -> Baue die Tabelle
-
+    
     const optionsByDate = {};
     voteData.options.forEach((option, index) => {
         if (!optionsByDate[option.date]) {
-            optionsByDate[option.date] = [];
+            optionsByDate[option.date] = []; 
         }
         optionsByDate[option.date].push({ ...option, originalIndex: index });
     });
 
     let tableHTML = '<table class="w-full border-collapse text-sm text-left bg-white">';
-
+    
     // 3. Kopfzeile der Tabelle
     tableHTML += '<thead><tr class="bg-gray-50">';
     tableHTML += '<th class="p-3 border-b sticky left-0 bg-gray-50 z-10 w-48">Termin</th>';
-
+    
     voteData.participants.forEach(p => {
-        if (p.userId === currentUser.mode) return;
+        if (p.userId === currentUser.mode) return; 
         const correctionCount = p.correctionCount || 0;
         const correctionText = correctionCount > 0 ? `(${correctionCount} Korrekturen)` : '';
         tableHTML += `<th class="p-3 border-b text-center w-24">
@@ -1376,15 +1377,17 @@ function updatePollTableAnswers(voteData, isEditable = false, isBlocked = false)
                         <span class="text-xs font-normal text-gray-500 correction-counter cursor-pointer" data-userid="${p.userId}">${correctionText}</span>
                       </th>`;
     });
-
+    
     const youParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
-
-    let youHeaderHTML = '<span class="font-bold text-indigo-600">Du</span>';
-
+    
+    let youHeaderHTML = '<span class="font-bold text-indigo-600">Du</span>'; 
+    
     if (currentUser.mode !== GUEST_MODE && !voteData.isAnonymous) {
         if (youParticipant) {
             const correctionCount = youParticipant.correctionCount || 0;
             const correctionText = correctionCount > 0 ? `(<span class="correction-counter cursor-pointer" data-userid="${currentUser.mode}">${correctionCount} Korrekturen</span>)` : '';
+            
+            // HIER IST DIE KORREKTUR: '!isBlocked'
             const editButtonHtml = !isBlocked ? `<br><button class="vote-correction-btn text-xs font-semibold text-blue-600 hover:underline">Auswahl bearbeiten</button>` : '';
 
             youHeaderHTML = `
@@ -1394,8 +1397,9 @@ function updatePollTableAnswers(voteData, isEditable = false, isBlocked = false)
                 ${editButtonHtml}
             `;
         } else {
-            youHeaderHTML = isClosed
-                ? '<span class="font-bold text-gray-500">Du (Geschlossen)</span>'
+            // HIER IST DIE KORREKTUR: 'isBlocked'
+            youHeaderHTML = isBlocked 
+                ? '<span class="font-bold text-gray-500">Du (Geschlossen)</span>' 
                 : '<span class="font-bold text-indigo-600">Du (Klicke unten)</span>';
         }
     }
@@ -1407,9 +1411,9 @@ function updatePollTableAnswers(voteData, isEditable = false, isBlocked = false)
 
     // 4. Zeilen der Tabelle
     tableHTML += '<tbody>';
-
+    
     for (const date in optionsByDate) {
-        const dateObj = new Date(date + 'T12:00:00');
+        const dateObj = new Date(date + 'T12:00:00'); 
         const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
 
         tableHTML += `
@@ -1420,47 +1424,41 @@ function updatePollTableAnswers(voteData, isEditable = false, isBlocked = false)
 
         optionsByDate[date].forEach(option => {
             const optionIndex = option.originalIndex;
-            const timeString = option.timeEnd ?
-                `${option.timeStart} - ${option.timeEnd} Uhr` :
+            const timeString = option.timeEnd ? 
+                `${option.timeStart} - ${option.timeEnd} Uhr` : 
                 `${option.timeStart} Uhr`;
-
-            // NEU: Logik für "Streichen" (Punkt 1)
+            
             const isStricken = option.isStricken === true;
             const rowClasses = isStricken ? 'bg-gray-100 opacity-60' : '';
             const cellClasses = isStricken ? 'line-through text-gray-500' : 'font-mono';
-
+            
             tableHTML += `
                 <tr class="vote-option-row ${rowClasses}" data-option-index="${optionIndex}">
                     <td class="p-3 border-b ${cellClasses} sticky left-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10">
                         ${timeString} ${isStricken ? '(Gestrichen)' : ''}
                     </td>
             `;
-            // ENDE NEU
 
             voteData.participants.forEach(p => {
-                if (p.userId === currentUser.mode) return;
-                const answer = p.currentAnswers[optionIndex];
+                if (p.userId === currentUser.mode) return; 
+                const answer = p.currentAnswers[optionIndex]; 
                 let answerIcon = '';
-
-                // NEU: Logik für "Streichen" (Punkt 1)
+                
                 if (isStricken) {
                     answerIcon = '<span class="text-gray-400 font-bold">-</span>';
                 }
-                // ENDE NEU
                 else if (answer === 'yes') answerIcon = '<span class="text-green-500 font-bold text-xl">✔</span>';
                 else if (answer === 'no') answerIcon = '<span class="text-red-500 font-bold text-xl">✘</span>';
                 else if (answer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold text-xl">~</span>';
-
+                
                 tableHTML += `<td class="p-3 border-b text-center">${answerIcon}</td>`;
             });
-
+            
             const currentAnswer = currentParticipantAnswers[optionIndex];
-
-            // NEU: Logik für "Streichen" (Punkt 1)
-            // Wenn gestrichen, zeige deaktivierte Knöpfe (wenn editierbar) oder nur einen Strich
+            
             if (isStricken) {
                 if (isEditable) {
-                    tableHTML += `
+                     tableHTML += `
                         <td class="p-2 border-b sticky right-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10">
                             <div class="flex justify-center gap-1">
                                 <button class="p-2 rounded-lg" disabled title="Gestrichen">
@@ -1471,19 +1469,19 @@ function updatePollTableAnswers(voteData, isEditable = false, isBlocked = false)
                                 </button>
                                 <button class="p-2 rounded-lg" disabled title="Gestrichen">
                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-gray-400"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
+
                                 </button>
                             </div>
                         </td>
                     `;
                 } else {
-                    tableHTML += `
+                     tableHTML += `
                         <td class="p-3 border-b text-center sticky right-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10">
                             <span class="text-gray-400 font-bold">-</span>
                         </td>
                     `;
                 }
             }
-            // ENDE NEU
             else if (isEditable) {
                 // MODUS: BEARBEITBAR (Knöpfe)
                 const yesSelected = currentAnswer === 'yes' ? 'bg-green-200 ring-2 ring-indigo-500' : 'hover:bg-green-100 bg-opacity-50';
@@ -1512,18 +1510,18 @@ function updatePollTableAnswers(voteData, isEditable = false, isBlocked = false)
                 if (currentAnswer === 'yes') answerIcon = '<span class="text-green-500 font-bold text-xl">✔</span>';
                 if (currentAnswer === 'no') answerIcon = '<span class="text-red-500 font-bold text-xl">✘</span>';
                 if (currentAnswer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold text-xl">~</span>';
-
+                
                 tableHTML += `
                     <td class="p-3 border-b text-center sticky right-0 bg-white z-10">
                         ${answerIcon}
                     </td>
                 `;
             }
-
+            
             tableHTML += '</tr>';
         });
     }
-
+    
     tableHTML += '</tbody></table>';
     optionsContainer.innerHTML = tableHTML;
 }
