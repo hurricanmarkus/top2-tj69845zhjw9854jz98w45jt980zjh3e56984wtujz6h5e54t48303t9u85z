@@ -582,17 +582,32 @@ export function initializeTerminplanerView() {
         saveChangesBtn.dataset.listenerAttached = 'true';
     }
     
-    const closePollBtn = document.getElementById('vote-close-poll-btn');
-    if (closePollBtn && !closePollBtn.dataset.listenerAttached) {
-        closePollBtn.addEventListener('click', showFixDateSelection);
-        closePollBtn.dataset.listenerAttached = 'true';
+// NEU: Listener für die "Gefahrenzone"-Knöpfe
+    const fixDateBtn = document.getElementById('vote-fix-date-btn');
+    if (fixDateBtn && !fixDateBtn.dataset.listenerAttached) {
+        fixDateBtn.addEventListener('click', (e) => {
+            const action = e.currentTarget.dataset.action;
+            if (action === 'fix') {
+                showFixDateSelection(); // Zeige die Auswahl
+            } else if (action === 'unfix') {
+                unfixPollDate(); // Hebe die Fixierung auf
+            }
+        });
+        fixDateBtn.dataset.listenerAttached = 'true';
     }
 
-    const reopenPollBtn = document.getElementById('vote-reopen-poll-btn');
-    if (reopenPollBtn && !reopenPollBtn.dataset.listenerAttached) {
-        reopenPollBtn.addEventListener('click', reopenPoll);
-        reopenPollBtn.dataset.listenerAttached = 'true';
+    const toggleManualCloseBtn = document.getElementById('vote-toggle-manual-close-btn');
+    if (toggleManualCloseBtn && !toggleManualCloseBtn.dataset.listenerAttached) {
+        toggleManualCloseBtn.addEventListener('click', toggleManualPollClose);
+        toggleManualCloseBtn.dataset.listenerAttached = 'true';
     }
+    
+    const reopenExpiredPollBtn = document.getElementById('vote-reopen-expired-poll-btn');
+    if (reopenExpiredPollBtn && !reopenExpiredPollBtn.dataset.listenerAttached) {
+        reopenExpiredPollBtn.addEventListener('click', reopenExpiredPoll);
+        reopenExpiredPollBtn.dataset.listenerAttached = 'true';
+    }
+    // ENDE NEU
     
     const deletePollBtn = document.getElementById('vote-delete-poll-btn');
     if (deletePollBtn && !deletePollBtn.dataset.listenerAttached) {
@@ -993,7 +1008,6 @@ export async function joinVoteById(voteId = null) {
 
 
 // ERSETZE diese Funktion in terminplaner.js
-
 function renderVoteView(voteData) {
     
     // ----- 1. DEFINITIONEN -----
@@ -1008,9 +1022,14 @@ function renderVoteView(voteData) {
     const endTime = getSafeDate(voteData.endTime);
 
     const isFixed = voteData.fixedOptionIndex != null;
-    const isClosed = (endTime && now > endTime); 
+    const isClosedByTime = (endTime && now > endTime); 
+    const isManuallyClosed = voteData.isManuallyClosed === true; // NEU
     const isNotStarted = (startTime && now < startTime); 
-    const isParticipationBlocked = isFixed || isClosed || isNotStarted;
+    
+    // NEU: isClosed (für Logik) vs isParticipationBlocked (für UI)
+    const isClosed = isClosedByTime || isManuallyClosed; // Ist die Umfrage "zu"?
+    const isParticipationBlocked = isFixed || isClosed || isNotStarted; // Darf man abstimmen?
+
 
     // ----- 2. Titel & Ersteller (Sicher) -----
     const titleEl = document.getElementById('vote-poll-title');
@@ -1037,7 +1056,6 @@ function renderVoteView(voteData) {
     const locContainer = document.getElementById('vote-poll-location-container');
     const locEl = document.getElementById('vote-poll-location');
     
-    // NEU: Update-Box Logik (Punkt 2)
     const updateBox = document.getElementById('poll-update-notification-box');
     const updateSubtitle = document.getElementById('poll-update-subtitle');
     const detailsBtn = document.getElementById('show-poll-history-btn-main');
@@ -1050,19 +1068,15 @@ function renderVoteView(voteData) {
     
     if (updateBox) {
         updateBox.classList.add('hidden'); // Standardmäßig versteckt
-        // Quittiert-Stil zurücksetzen (nur Hintergrund/Rand)
         updateBox.classList.remove('bg-transparent', 'border-gray-400'); 
-        // Normal-Stil setzen (blauer Rand/Hintergrund)
         updateBox.classList.add('bg-blue-50', 'border-blue-500'); 
     }
     if (detailsBtn) {
-        // Quittiert-Stil zurücksetzen (grauer Knopf)
         detailsBtn.classList.remove('btn-gray-acknowledged');
-        // Normal-Stil setzen (blauer Knopf)
         detailsBtn.classList.add('bg-blue-600', 'hover:bg-blue-700'); 
     }
-    if (ackBtn) ackBtn.classList.remove('hidden'); // Standardmäßig zeigen
-    if (updateSubtitle) updateSubtitle.classList.remove('hidden'); // Standardmäßig zeigen
+    if (ackBtn) ackBtn.classList.remove('hidden'); 
+    if (updateSubtitle) updateSubtitle.classList.remove('hidden');
 
     let hasUpdate = false;
     let lastUpdateTimestamp = null;
@@ -1081,7 +1095,6 @@ function renderVoteView(voteData) {
         
         if (userAckEntry) {
             const userAckTimestamp = getSafeDate(userAckEntry.timestamp);
-            // Hat der User eine Quittierung, die neuer oder gleich dem letzten Update ist?
             if (userAckTimestamp && lastUpdateTimestamp && userAckTimestamp.getTime() >= lastUpdateTimestamp.getTime()) {
                 userHasAcknowledged = true;
             }
@@ -1092,22 +1105,18 @@ function renderVoteView(voteData) {
         if (updateBox) updateBox.classList.remove('hidden');
 
         if (userHasAcknowledged) {
-            // --- STIL: QUITTIERT ---
             if (updateBox) {
-                // User-Wunsch: kein Fill, dunklerer strich
                 updateBox.classList.remove('bg-blue-50', 'border-blue-500');
                 updateBox.classList.add('bg-transparent', 'border-gray-400'); 
             }
             if (detailsBtn) {
-                // User-Wunsch: grauer Details-Button
                 detailsBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
                 detailsBtn.classList.add('btn-gray-acknowledged'); 
             }
-            if (ackBtn) ackBtn.classList.add('hidden'); // User-Wunsch: Quittieren-Button weg
-            if (updateSubtitle) updateSubtitle.classList.add('hidden'); // Blinking-Text weg
+            if (ackBtn) ackBtn.classList.add('hidden'); 
+            if (updateSubtitle) updateSubtitle.classList.add('hidden'); 
 
         } else {
-            // --- STIL: NICHT QUITTIERT (BLINKEN) ---
             const lastUpdate = voteData.pollHistory[voteData.pollHistory.length - 1];
             if (lastUpdate && lastUpdate.changes) {
                 const changedTitle = lastUpdate.changes.some(c => c.includes('Titel'));
@@ -1120,7 +1129,6 @@ function renderVoteView(voteData) {
             }
         }
     }
-    // ENDE NEU
 
     let hasInfo = false;
     if (voteData.description) {
@@ -1138,7 +1146,6 @@ function renderVoteView(voteData) {
         if (locContainer) locContainer.classList.add('hidden'); 
     }
     
-    // Zeige die Info-Box, wenn sie Inhalt hat ODER eine Update-Meldung hat
     if (infoBox) infoBox.classList.toggle('hidden', !hasInfo && !hasUpdate);
 
 
@@ -1153,6 +1160,7 @@ function renderVoteView(voteData) {
         return dateObj.toLocaleString('de-DE', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}) + ' Uhr';
     };
     
+    // NEU: 'isClosed' (beinhaltet jetzt 'isManuallyClosed')
     if (isClosed && !isFixed) { 
         if (validityEl) validityEl.textContent = "TEILNAHME GESCHLOSSEN";
         if (validityContainer) {
@@ -1179,11 +1187,14 @@ function renderVoteView(voteData) {
         }
     }
 
+    // NEU: Logik erweitert um 'isManuallyClosed'
     if (isParticipationBlocked && !isFixed) { 
         if (isNotStarted) {
             if (warningText) warningText.textContent = `Diese Umfrage hat noch nicht begonnen. Sie startet am ${formatVoteDate(startTime)}.`;
-        } else if (isClosed) {
+        } else if (isClosedByTime) {
             if (warningText) warningText.textContent = `Diese Umfrage ist bereits beendet. Teilnahme und Korrekturen sind nicht mehr möglich.`;
+        } else if (isManuallyClosed) { // NEU
+            if (warningText) warningText.textContent = `Diese Umfrage wurde vom Ersteller beendet. Teilnahme und Korrekturen sind nicht mehr möglich.`;
         }
         if (warningBox) warningBox.classList.remove('hidden');
     } else {
@@ -1260,6 +1271,7 @@ function renderVoteView(voteData) {
     }
     
     // ----- 9. Tabelle rendern -----
+    // NEU: 'isClosed' wird korrekt übergeben
     updatePollTableAnswers(voteData, isVoteGridEditable, isClosed); 
     
     if (!isParticipationBlocked) {
@@ -1757,16 +1769,12 @@ async function saveGroupPoll() {
             options: options, 
             participants: [],
             
-            // --- NEUE ÄNDERUNGEN ---
-            // Wir füllen 'participantIds' vorab mit den zugewiesenen IDs,
-            // damit 'listenForAssignedVotes' (das 'participantIds' abfragt) sie sofort findet.
             participantIds: [...tempAssignedUserIds],
-            // Wir speichern die Zuweisungen auch in einem separaten Feld zur Referenz.
             assignedUserIds: [...tempAssignedUserIds],
-            // --- ENDE NEUE ÄNDERUNGEN ---
-
+            
             fixedOptionIndex: null,
-            pollHistory: [] // NEU: Feld für den Bearbeitungs-Log
+            pollHistory: [],
+            isManuallyClosed: false // NEU: Standardwert für deine neue Logik
         };
         console.log("Speichere Umfrage in Firebase...", voteData);
         const docRef = await addDoc(votesCollectionRef, voteData);
@@ -1781,6 +1789,7 @@ async function saveGroupPoll() {
         saveBtn.textContent = 'Umfrage erstellen und Link erhalten';
     }
 }
+
 
 
 // ----- FUNKTIONEN für das INLINE EDIT -----
@@ -1934,7 +1943,6 @@ function renderCorrectionHistory(userId) {
 }
 
 // ERSETZE diese Funktion in terminplaner.js
-
 function renderEditView(voteData) {
     document.getElementById('edit-poll-title').textContent = `"${voteData.title}" bearbeiten`;
     
@@ -2000,41 +2008,73 @@ function renderEditView(voteData) {
         }
     }
     
-    // 5. "UPDATE"-Log-Button wurde entfernt (ist jetzt in renderVoteView)
+    // 5. "UPDATE"-Log-Button (wird in renderVoteView gehandhabt)
     
-    // 6. Gefahrenzone-Knöpfe-Status setzen
-    const closeBtn = document.getElementById('vote-close-poll-btn');
-    const reopenBtn = document.getElementById('vote-reopen-poll-btn');
+    // 6. Gefahrenzone-Knöpfe-Status setzen (DEINE NEUE LOGIK)
+    const fixBtn = document.getElementById('vote-fix-date-btn');
+    const manualCloseBtn = document.getElementById('vote-toggle-manual-close-btn');
+    const reopenExpiredBtn = document.getElementById('vote-reopen-expired-poll-btn');
     
-    let endTimeDate = null;
-    if (voteData.endTime) {
-        if (typeof voteData.endTime.toDate === 'function') {
-            endTimeDate = voteData.endTime.toDate();
-        } else if (voteData.endTime instanceof Date) {
-            endTimeDate = voteData.endTime;
-        }
+    if (!fixBtn || !manualCloseBtn || !reopenExpiredBtn) {
+        console.error("Fehler: Knöpfe der Gefahrenzone nicht gefunden!");
+        return;
     }
 
-    // ----- KORRIGIERTE LOGIK (Punkt 3) -----
-    if (voteData.fixedOptionIndex != null) {
-        // Fall: Termin ist fixiert.
-        if (closeBtn) closeBtn.classList.add('hidden'); // Fixieren-Knopf verstecken
-        if (reopenBtn) reopenBtn.classList.remove('hidden'); // "Wieder öffnen" anzeigen
+    // Standardmäßig alles in den Grundzustand (sichtbar/aktiviert)
+    fixBtn.classList.remove('hidden');
+    manualCloseBtn.classList.remove('hidden');
+    reopenExpiredBtn.classList.add('hidden'); // Dieser ist standardmäßig versteckt
     
+    fixBtn.disabled = false;
+    manualCloseBtn.disabled = false;
+
+    // ----- DEINE NEUE LOGIK HIER -----
+    
+    if (voteData.fixedOptionIndex != null) {
+        // Fall 1: Termin ist FIXIERT
+        fixBtn.textContent = 'Tag & Zeit AUFHEBEN';
+        fixBtn.dataset.action = 'unfix';
+        fixBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+        fixBtn.classList.add('bg-green-600', 'hover:bg-green-700'); // Aufheben ist "positiv"
+
+        // Regel: Wenn fixiert, ist "Umfrage beenden/freigeben" deaktiviert
+        manualCloseBtn.disabled = true;
+        manualCloseBtn.classList.add('opacity-50', 'cursor-not-allowed');
+
     } else {
-        // Fall: Termin ist NICHT fixiert.
-        
-        // Der Admin darf IMMER einen Termin fixieren, egal ob abgelaufen oder offen.
-        if (closeBtn) closeBtn.classList.remove('hidden'); 
-        
-        // Zeige "Wieder öffnen" NUR, wenn die Umfrage abgelaufen ist.
-        if (endTimeDate && endTimeDate < new Date()) {
-            if (reopenBtn) reopenBtn.classList.remove('hidden'); // Abgelaufen -> "Wieder öffnen" anzeigen
+        // Fall 2: Termin ist NICHT fixIERT
+        fixBtn.textContent = 'Tag & Zeit fixieren';
+        fixBtn.dataset.action = 'fix';
+        fixBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+        fixBtn.classList.add('bg-blue-600', 'hover:bg-blue-700'); // Fixieren ist "blau"
+
+        // Regel: "Umfrage beenden/freigeben" ist aktiviert
+        manualCloseBtn.disabled = false;
+        manualCloseBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+
+        // Prüfe den Zustand von "Umfrage beenden"
+        if (voteData.isManuallyClosed === true) {
+            manualCloseBtn.textContent = 'Umfrage freigeben';
+            manualCloseBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600', 'text-black');
+            manualCloseBtn.classList.add('bg-green-600', 'hover:bg-green-700', 'text-white'); // Freigeben ist "grün"
         } else {
-            if (reopenBtn) reopenBtn.classList.add('hidden'); // Noch offen -> "Wieder öffnen" verstecken
+            manualCloseBtn.textContent = 'Umfrage beenden';
+            manualCloseBtn.classList.add('bg-yellow-500', 'hover:bg-yellow-600', 'text-black');
+            manualCloseBtn.classList.remove('bg-green-600', 'hover:bg-green-700', 'text-white'); // Beenden ist "gelb"
+        }
+        
+        // Prüfe, ob "Wieder öffnen (abgelaufen)" angezeigt werden muss
+        let endTimeDate = null;
+        if (voteData.endTime) {
+            if (typeof voteData.endTime.toDate === 'function') endTimeDate = voteData.endTime.toDate();
+            else if (voteData.endTime instanceof Date) endTimeDate = voteData.endTime;
+        }
+        
+        if (endTimeDate && endTimeDate < new Date()) {
+            reopenExpiredBtn.classList.remove('hidden'); // Zeige Knopf, wenn abgelaufen
         }
     }
-    // ----- ENDE KORRIGIERTE LOGIK -----
+    // ----- ENDE DEINE NEUE LOGIK -----
 
     const selectionContainer = document.getElementById('fix-date-selection-container');
     if (selectionContainer) selectionContainer.classList.add('hidden');
@@ -2042,10 +2082,10 @@ function renderEditView(voteData) {
     // 7. Baut die Liste der "Bestehenden Termine" (für Streichen)
     renderExistingTermsList(voteData);
 
-    // 8. Baut die Admin-Abstimmungs-Tabelle auf (Punkt 2)
+    // 8. Baut die Admin-Abstimmungs-Tabelle auf
     renderParticipantEditGrid(voteData);
     
-    // 9. Leert den "Neue Termine" Container und fügt einen leeren Slot hinzu (Punkt 1)
+    // 9. Leert den "Neue Termine" Container und fügt einen leeren Slot hinzu
     const datesContainerEdit = document.getElementById('vote-dates-container-edit');
     if (datesContainerEdit) {
         datesContainerEdit.innerHTML = ''; // Leeren
@@ -2174,46 +2214,112 @@ async function saveVoteEdits() {
 }
 
 
-// ERSETZE diese Funktion in terminplaner.js
+// --- NEUE FUNKTIONEN FÜR GEFAHRENZONE ---
 
-async function closePollNow() {
-    console.warn("Veraltete Funktion 'closePollNow' aufgerufen. Bitte 'showFixDateSelection' verwenden.");
-    alertUser("Ein interner Fehler ist aufgetreten (Veralteter Aufruf)", "error");
-}
-
-async function reopenPoll() {
-    if (!confirm("Bist du sicher? Dadurch wird die Umfrage wieder geöffnet und (falls gesetzt) der fixierte Termin entfernt. Jeder kann wieder teilnehmen.")) {
+/**
+ * Hebt die Fixierung eines Termins auf (Knopf: "Tag & Zeit AUFHEBEN")
+ */
+async function unfixPollDate() {
+    if (!confirm("Bist du sicher? Der fixierte Termin wird entfernt, aber die Umfrage bleibt (falls manuell beendet) geschlossen. Teilnehmer müssen nicht neu abstimmen.")) {
         return;
     }
 
-    const reopenBtn = document.getElementById('vote-reopen-poll-btn');
-    setButtonLoading(reopenBtn, true);
+    const fixBtn = document.getElementById('vote-fix-date-btn');
+    if (fixBtn) setButtonLoading(fixBtn, true);
     
     try {
-        // Wir setzen die Endzeit UND den fixierten Index auf 'null'
+        // Wir setzen NUR den fixierten Index auf 'null'
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
         
         await updateDoc(voteDocRef, {
-            endTime: null,
-            fixedOptionIndex: null // KORREKTUR: Auch den fixierten Termin aufheben
+            fixedOptionIndex: null 
         });
         
-        // Lokale Daten aktualisieren
+        currentVoteData.fixedOptionIndex = null; 
+        
+        alertUser("Termin-Fixierung wurde aufgehoben!", "success");
+        renderEditView(currentVoteData); // UI der Edit-Seite aktualisieren
+        
+    } catch (error) {
+        console.error("Fehler beim Aufheben der Fixierung:", error);
+        alertUser("Fehler beim Aufheben der Fixierung.", "error");
+    } finally {
+        if (fixBtn) setButtonLoading(fixBtn, false);
+    }
+}
+
+/**
+ * Öffnet eine durch Zeit abgelaufene Umfrage wieder (Knopf: "Umfrage wieder öffnen")
+ */
+async function reopenExpiredPoll() {
+    if (!confirm("Bist du sicher? Das Zeitlimit (Endet am) wird entfernt und die Umfrage wird wieder geöffnet.")) {
+        return;
+    }
+
+    const reopenBtn = document.getElementById('vote-reopen-expired-poll-btn');
+    if (reopenBtn) setButtonLoading(reopenBtn, true);
+    
+    try {
+        // Wir setzen NUR die Endzeit auf 'null'
+        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
+        
+        await updateDoc(voteDocRef, {
+            endTime: null
+        });
+        
         currentVoteData.endTime = null;
-        currentVoteData.fixedOptionIndex = null; // KORREKTUR: Auch lokal aufheben
         
-        alertUser("Umfrage wurde wieder geöffnet!", "success");
-        
-        // UI der Edit-Seite aktualisieren, um den Knopf zu wechseln
-        renderEditView(currentVoteData);
+        alertUser("Umfrage wurde wieder geöffnet (Zeitlimit entfernt)!", "success");
+        renderEditView(currentVoteData); // UI der Edit-Seite aktualisieren
         
     } catch (error) {
         console.error("Fehler beim Wiedereröffnen der Umfrage:", error);
         alertUser("Fehler beim Wiedereröffnen.", "error");
     } finally {
-        setButtonLoading(reopenBtn, false);
+        if (reopenBtn) setButtonLoading(reopenBtn, false);
     }
 }
+
+/**
+ * Schaltet den "isManuallyClosed"-Status um (Knopf: "Umfrage beenden" / "Umfrage freigeben")
+ */
+async function toggleManualPollClose() {
+    const isCurrentlyClosed = currentVoteData.isManuallyClosed === true;
+    const newStatus = !isCurrentlyClosed;
+    
+    const message = newStatus ?
+        "Möchtest du die Umfrage wirklich beenden? Die Teilnahme ist dann nicht mehr möglich (genau wie bei 'Endet am'), aber du kannst später noch einen Termin fixieren." :
+        "Möchtest du die Umfrage wieder freigeben? Teilnehmer können dann wieder abstimmen und korrigieren.";
+        
+    if (!confirm(message)) {
+        return;
+    }
+
+    const manualCloseBtn = document.getElementById('vote-toggle-manual-close-btn');
+    if (manualCloseBtn) setButtonLoading(manualCloseBtn, true);
+    
+    try {
+        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
+        
+        await updateDoc(voteDocRef, {
+            isManuallyClosed: newStatus
+        });
+        
+        currentVoteData.isManuallyClosed = newStatus;
+        
+        alertUser(`Umfrage wurde ${newStatus ? 'beendet' : 'wieder freigegeben'}!`, "success");
+        renderEditView(currentVoteData); // UI der Edit-Seite aktualisieren
+        
+    } catch (error)
+ {
+        console.error("Fehler beim Umschalten des Status:", error);
+        alertUser("Fehler beim Umschalten.", "error");
+    } finally {
+        if (manualCloseBtn) setButtonLoading(manualCloseBtn, false);
+    }
+}
+
+// --- ENDE NEUE FUNKTIONEN ---
 
 async function deletePoll() {
     const confirmation = prompt(`Um die Umfrage "${currentVoteData.title}" endgültig zu löschen, gib bitte LÖSCHEN ein:`);
