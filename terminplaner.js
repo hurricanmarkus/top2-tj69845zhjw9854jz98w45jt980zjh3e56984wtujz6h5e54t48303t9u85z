@@ -23,6 +23,7 @@ let isVoteGridEditable = false;
 let unsubscribePublicVotes = null;
 let unsubscribeAssignedVotes = null;
 let editTokenTimer = null; // Für den 10-Sekunden-Timeout
+let tempAssignedUserIds = [];
 
 
 // ERSETZE diese Funktion in terminplaner.js
@@ -283,11 +284,11 @@ export function initializeTerminplanerView() {
     
     const closePollBtn = document.getElementById('vote-close-poll-btn');
     if (closePollBtn && !closePollBtn.dataset.listenerAttached) {
-        closePollBtn.addEventListener('click', closePollNow);
+        // KORREKTUR: Ruft jetzt die neue Funktion auf, um die Auswahl anzuzeigen
+        closePollBtn.addEventListener('click', showFixDateSelection);
         closePollBtn.dataset.listenerAttached = 'true';
     }
 
-    // NEU: Spion für "Wieder öffnen"
     const reopenPollBtn = document.getElementById('vote-reopen-poll-btn');
     if (reopenPollBtn && !reopenPollBtn.dataset.listenerAttached) {
         reopenPollBtn.addEventListener('click', reopenPoll);
@@ -305,6 +306,46 @@ export function initializeTerminplanerView() {
         pollHistoryBtn.addEventListener('click', renderPollHistory);
         pollHistoryBtn.dataset.listenerAttached = 'true';
     }
+
+    // ----- KORREKTUR: Spione für das "Termin fixieren"-Modal -----
+    // (Diese sind NEU)
+    const cancelFixDateBtn = document.getElementById('cancel-fix-date-btn');
+    if (cancelFixDateBtn && !cancelFixDateBtn.dataset.listenerAttached) {
+        cancelFixDateBtn.addEventListener('click', hideFixDateSelection);
+        cancelFixDateBtn.dataset.listenerAttached = 'true';
+    }
+
+    const confirmFixDateBtn = document.getElementById('confirm-fix-date-btn');
+    if (confirmFixDateBtn && !confirmFixDateBtn.dataset.listenerAttached) {
+        confirmFixDateBtn.addEventListener('click', confirmAndFixDate);
+        confirmFixDateBtn.dataset.listenerAttached = 'true';
+    }
+    
+    // ----- NEU: Spione für das Zuweisen-Modal -----
+    const showAssignModalBtn = document.getElementById('vote-show-assign-user-modal-btn');
+    if (showAssignModalBtn && !showAssignModalBtn.dataset.listenerAttached) {
+        showAssignModalBtn.addEventListener('click', openAssignUserModal);
+        showAssignModalBtn.dataset.listenerAttached = 'true';
+    }
+    
+    const closeAssignModalBtn = document.getElementById('assign-user-modal-close-btn');
+    if (closeAssignModalBtn && !closeAssignModalBtn.dataset.listenerAttached) {
+        closeAssignModalBtn.addEventListener('click', closeAssignUserModal);
+        closeAssignModalBtn.dataset.listenerAttached = 'true';
+    }
+    
+    const cancelAssignModalBtn = document.getElementById('assign-user-modal-cancel-btn');
+    if (cancelAssignModalBtn && !cancelAssignModalBtn.dataset.listenerAttached) {
+        cancelAssignModalBtn.addEventListener('click', closeAssignUserModal);
+        cancelAssignModalBtn.dataset.listenerAttached = 'true';
+    }
+    
+    const applyAssignModalBtn = document.getElementById('assign-user-modal-apply-btn');
+    if (applyAssignModalBtn && !applyAssignModalBtn.dataset.listenerAttached) {
+        applyAssignModalBtn.addEventListener('click', applyAssignedUsers);
+        applyAssignModalBtn.dataset.listenerAttached = 'true';
+    }
+    // ----- ENDE NEU -----
 }
 
 // ----- SPION-FUNKTIONEN (Listener) -----
@@ -997,7 +1038,6 @@ async function saveVoteParticipation() {
 }
 
 
-// ----- SPEICHER-FUNKTION (Erstellung) -----
 async function saveGroupPoll() {
     const saveBtn = document.getElementById('vote-save-group-poll-btn');
     saveBtn.disabled = true;
@@ -1061,7 +1101,15 @@ async function saveGroupPoll() {
             createdAt: serverTimestamp(), 
             options: options, 
             participants: [],
-            participantIds: [],
+            
+            // --- NEUE ÄNDERUNGEN ---
+            // Wir füllen 'participantIds' vorab mit den zugewiesenen IDs,
+            // damit 'listenForAssignedVotes' (das 'participantIds' abfragt) sie sofort findet.
+            participantIds: [...tempAssignedUserIds],
+            // Wir speichern die Zuweisungen auch in einem separaten Feld zur Referenz.
+            assignedUserIds: [...tempAssignedUserIds],
+            // --- ENDE NEUE ÄNDERUNGEN ---
+
             fixedOptionIndex: null,
             pollHistory: [] // NEU: Feld für den Bearbeitungs-Log
         };
@@ -1586,6 +1634,7 @@ function showView(viewName) {
        document.getElementById('terminplaner-edit-view').classList.remove('hidden');
     }
 }
+
 function resetCreateWizard() {
     document.getElementById('vote-title').value = '';
     document.getElementById('vote-description').value = '';
@@ -1600,11 +1649,20 @@ function resetCreateWizard() {
     document.getElementById('vote-setting-anonymous').checked = false;
     document.getElementById('vote-setting-disable-maybe').checked = false; 
     document.getElementById('vote-dates-container').innerHTML = '';
+    
+    // NEU: Zuweisungen zurücksetzen
+    tempAssignedUserIds = [];
+    const assignedDisplay = document.getElementById('vote-assigned-users-display');
+    if (assignedDisplay) {
+        assignedDisplay.textContent = "Niemand ausgewählt";
+        assignedDisplay.title = "Niemand ausgewählt";
+    }
+    // ENDE NEU
+    
     dateGroupIdCounter = 0;
     addNewDateGroup(); 
     validateLastDateGroup(); 
 }
-
 function validateLastDateGroup() {
     const addDateButton = document.getElementById('vote-add-date-btn');
     const lastGroup = document.querySelector('#vote-dates-container [data-date-group-id]:last-child');
@@ -1801,3 +1859,98 @@ function checkInlineEditToken() {
         resetEditWrapper();
     }
 }
+
+// ----- NEUE FUNKTIONEN FÜR ZUWEISUNGS-MODAL -----
+
+/**
+ * Öffnet das Modal zur Auswahl von registrierten Benutzern.
+ */
+function openAssignUserModal() {
+    const modal = document.getElementById('assignUserModal');
+    const listContainer = document.getElementById('assign-user-list');
+    if (!modal || !listContainer) return;
+
+    listContainer.innerHTML = ''; // Vorherigen Inhalt leeren
+
+    // Filtere alle Benutzer, die "registriert" sind (ein Passwort haben)
+    // und nicht der Ersteller (currentUser) selbst sind.
+    const registeredUsers = Object.values(USERS).filter(user => 
+        user.key && 
+        user.isActive && 
+        user.id !== currentUser.mode // Man muss sich nicht selbst zuweisen
+    );
+
+    if (registeredUsers.length === 0) {
+        listContainer.innerHTML = '<p class="text-sm text-center text-gray-400">Keine anderen registrierten Benutzer gefunden.</p>';
+    } else {
+        // Sortiere alphabetisch nach 'realName' oder 'name'
+        registeredUsers.sort((a, b) => {
+            const nameA = a.realName || a.name || '';
+            const nameB = b.realName || b.name || '';
+            return nameA.localeCompare(nameB);
+        });
+        
+        registeredUsers.forEach(user => {
+            // Prüfen, ob dieser Benutzer bereits in der temporären Liste ist
+            const isChecked = tempAssignedUserIds.includes(user.id) ? 'checked' : '';
+            const userName = user.realName ? `${user.realName} <span class="text-xs text-gray-500">(${user.name})</span>` : user.name;
+
+            listContainer.innerHTML += `
+                <label class="flex items-center gap-3 p-3 bg-white rounded-lg border hover:bg-indigo-50 cursor-pointer">
+                    <input type="checkbox" value="${user.id}" class="assign-user-checkbox h-5 w-5 text-indigo-600 focus:ring-indigo-500" ${isChecked}>
+                    <div>
+                        <span class="font-semibold text-gray-800">${userName}</span>
+                    </div>
+                </label>
+            `;
+        });
+    }
+
+    modal.style.display = 'flex';
+    modal.classList.remove('hidden');
+}
+
+/**
+ * Schließt das Modal, ohne Änderungen zu speichern.
+ */
+function closeAssignUserModal() {
+    const modal = document.getElementById('assignUserModal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.classList.add('hidden');
+    }
+}
+
+/**
+ * Übernimmt die Auswahl aus dem Modal, aktualisiert die temporäre Liste
+ * und die Anzeige im Erstellungs-Assistenten.
+ */
+function applyAssignedUsers() {
+    const checkedBoxes = document.querySelectorAll('#assign-user-list .assign-user-checkbox:checked');
+    
+    // 1. Baue die neue ID-Liste auf
+    tempAssignedUserIds = Array.from(checkedBoxes).map(box => box.value);
+    
+    // 2. Aktualisiere die Anzeige im Erstellungs-Assistenten
+    const assignedDisplay = document.getElementById('vote-assigned-users-display');
+    if (assignedDisplay) {
+        if (tempAssignedUserIds.length === 0) {
+            assignedDisplay.textContent = "Niemand ausgewählt";
+            assignedDisplay.title = "Niemand ausgewählt";
+        } else {
+            // Hole die Namen der ausgewählten Benutzer
+            const selectedNames = tempAssignedUserIds.map(id => {
+                const user = USERS[id];
+                return user ? (user.realName || user.name) : id; // Fallback auf ID
+            }).join(', ');
+            
+            assignedDisplay.textContent = selectedNames;
+            assignedDisplay.title = selectedNames; // Tooltip
+        }
+    }
+
+    // 3. Schließe das Modal
+    closeAssignUserModal();
+}
+
+// ----- ENDE NEUE FUNKTIONEN -----
