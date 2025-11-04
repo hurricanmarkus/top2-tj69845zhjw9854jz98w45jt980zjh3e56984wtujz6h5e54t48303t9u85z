@@ -24,6 +24,7 @@ let unsubscribePublicVotes = null;
 let unsubscribeAssignedVotes = null;
 let editTokenTimer = null; // Für den 10-Sekunden-Timeout
 let tempAssignedUserIds = []; // NEU: Für den Erstellungs-Assistenten
+let assignModalContext = 'create'; // NEU: Merkt sich 'create' or 'edit'
 
 
 // ----- VERSCHOBENE FUNKTIONEN (UM DEN FEHLER ZU BEHEBEN) -----
@@ -191,6 +192,7 @@ async function confirmAndFixDate() {
 
 /**
  * Öffnet das Modal zur Auswahl von registrierten Benutzern.
+ * (MODIFIZIERT: Liest jetzt den 'assignModalContext')
  */
 function openAssignUserModal() {
     const modal = document.getElementById('assignUserModal');
@@ -198,6 +200,17 @@ function openAssignUserModal() {
     if (!modal || !listContainer) return;
 
     listContainer.innerHTML = ''; // Vorherigen Inhalt leeren
+
+    // NEU: Entscheiden, welche IDs geladen werden sollen
+    // Im 'create'-Modus nehmen wir die IDs aus der temporären Variable.
+    // Im 'edit'-Modus nehmen wir die IDs aus den aktuell geladenen Umfragedaten.
+    let currentlyAssignedIds = [];
+    if (assignModalContext === 'create') {
+        currentlyAssignedIds = [...tempAssignedUserIds];
+    } else if (assignModalContext === 'edit' && currentVoteData) {
+        currentlyAssignedIds = [...(currentVoteData.assignedUserIds || [])];
+    }
+    // ENDE NEU
 
     // Filtere alle Benutzer, die "registriert" sind (ein Passwort haben)
     // und nicht der Ersteller (currentUser) selbst sind.
@@ -218,8 +231,8 @@ function openAssignUserModal() {
         });
         
         registeredUsers.forEach(user => {
-            // Prüfen, ob dieser Benutzer bereits in der temporären Liste ist
-            const isChecked = tempAssignedUserIds.includes(user.id) ? 'checked' : '';
+            // MODIFIZIERT: Prüft die 'currentlyAssignedIds'-Liste
+            const isChecked = currentlyAssignedIds.includes(user.id) ? 'checked' : '';
             const userName = user.realName ? `${user.realName} <span class="text-xs text-gray-500">(${user.name})</span>` : user.name;
 
             listContainer.innerHTML += `
@@ -251,39 +264,51 @@ function closeAssignUserModal() {
 /**
  * Übernimmt die Auswahl aus dem Modal, aktualisiert die temporäre Liste
  * und die Anzeige im Erstellungs-Assistenten.
+ * (MODIFIZIERT: Speichert je nach Kontext)
  */
 function applyAssignedUsers() {
     const checkedBoxes = document.querySelectorAll('#assign-user-list .assign-user-checkbox:checked');
     
     // 1. Baue die neue ID-Liste auf
-    tempAssignedUserIds = Array.from(checkedBoxes).map(box => box.value);
+    const newIds = Array.from(checkedBoxes).map(box => box.value);
     
-    // 2. Aktualisiere die Anzeige im Erstellungs-Assistenten
-    const assignedDisplay = document.getElementById('vote-assigned-users-display');
-    if (assignedDisplay) {
-        if (tempAssignedUserIds.length === 0) {
-            assignedDisplay.textContent = "Niemand ausgewählt";
-            assignedDisplay.title = "Niemand ausgewählt";
-        } else {
-            // Hole die Namen der ausgewählten Benutzer
-            const selectedNames = tempAssignedUserIds.map(id => {
-                const user = USERS[id];
-                return user ? (user.realName || user.name) : id; // Fallback auf ID
-            }).join(', ');
-            
+    // 2. Hole die Namen der ausgewählten Benutzer
+    let selectedNames = "Niemand ausgewählt";
+    if (newIds.length > 0) {
+        selectedNames = newIds.map(id => {
+            const user = USERS[id];
+            return user ? (user.realName || user.name) : id; // Fallback auf ID
+        }).join(', ');
+    }
+
+    // 3. Entscheide, wo die Daten gespeichert werden sollen
+    if (assignModalContext === 'create') {
+        // Im "Erstellen"-Modus: Speichere in der temporären Variable
+        tempAssignedUserIds = newIds;
+        
+        const assignedDisplay = document.getElementById('vote-assigned-users-display');
+        if (assignedDisplay) {
             assignedDisplay.textContent = selectedNames;
             assignedDisplay.title = selectedNames; // Tooltip
         }
+
+    } else if (assignModalContext === 'edit' && currentVoteData) {
+        // Im "Bearbeiten"-Modus: Speichere direkt in den geladenen Umfragedaten
+        currentVoteData.assignedUserIds = newIds;
+        
+        const assignedDisplayEdit = document.getElementById('vote-assigned-users-display-edit');
+        if (assignedDisplayEdit) {
+            assignedDisplayEdit.textContent = selectedNames;
+            assignedDisplayEdit.title = selectedNames; // Tooltip
+        }
     }
 
-    // 3. Schließe das Modal
+    // 4. Schließe das Modal
     closeAssignUserModal();
 }
 
 // ----- ENDE VERSCHOBENE FUNKTIONEN -----
 
-
-// ERSETZE diese Funktion in terminplaner.js
 
 export function initializeTerminplanerView() {
     
@@ -541,8 +566,6 @@ export function initializeTerminplanerView() {
     
     const closePollBtn = document.getElementById('vote-close-poll-btn');
     if (closePollBtn && !closePollBtn.dataset.listenerAttached) {
-        // KORREKTUR: Ruft jetzt die neue Funktion auf, um die Auswahl anzuzeigen
-        // (Diese Funktion ist jetzt oben definiert, der Fehler ist behoben)
         closePollBtn.addEventListener('click', showFixDateSelection);
         closePollBtn.dataset.listenerAttached = 'true';
     }
@@ -566,7 +589,6 @@ export function initializeTerminplanerView() {
     }
 
     // ----- KORREKTUR: Spione für das "Termin fixieren"-Modal -----
-    // (Diese sind NEU)
     const cancelFixDateBtn = document.getElementById('cancel-fix-date-btn');
     if (cancelFixDateBtn && !cancelFixDateBtn.dataset.listenerAttached) {
         cancelFixDateBtn.addEventListener('click', hideFixDateSelection);
@@ -579,11 +601,26 @@ export function initializeTerminplanerView() {
         confirmFixDateBtn.dataset.listenerAttached = 'true';
     }
     
-    // ----- NEU: Spione für das Zuweisen-Modal -----
+    // ----- Spione für das Zuweisen-Modal -----
     const showAssignModalBtn = document.getElementById('vote-show-assign-user-modal-btn');
     if (showAssignModalBtn && !showAssignModalBtn.dataset.listenerAttached) {
-        showAssignModalBtn.addEventListener('click', openAssignUserModal);
+        // MODIFIZIERT: Setzt den Kontext, bevor das Modal geöffnet wird
+        showAssignModalBtn.addEventListener('click', () => {
+            assignModalContext = 'create';
+            openAssignUserModal();
+        });
         showAssignModalBtn.dataset.listenerAttached = 'true';
+    }
+    
+    // NEU: Spion für den "Bearbeiten"-Zuweisen-Knopf
+    const showAssignModalBtnEdit = document.getElementById('vote-show-assign-user-modal-btn-edit');
+    if (showAssignModalBtnEdit && !showAssignModalBtnEdit.dataset.listenerAttached) {
+        // MODIFIZIERT: Setzt den Kontext, bevor das Modal geöffnet wird
+        showAssignModalBtnEdit.addEventListener('click', () => {
+            assignModalContext = 'edit';
+            openAssignUserModal();
+        });
+        showAssignModalBtnEdit.dataset.listenerAttached = 'true';
     }
     
     const closeAssignModalBtn = document.getElementById('assign-user-modal-close-btn');
@@ -603,7 +640,6 @@ export function initializeTerminplanerView() {
         applyAssignModalBtn.addEventListener('click', applyAssignedUsers);
         applyAssignModalBtn.dataset.listenerAttached = 'true';
     }
-    // ----- ENDE NEU -----
 }
 
 // ----- SPION-FUNKTIONEN (Listener) -----
@@ -1700,8 +1736,26 @@ function renderEditView(voteData) {
     document.getElementById('vote-setting-public-edit').checked = voteData.isPublic;
     document.getElementById('vote-setting-anonymous-edit').checked = voteData.isAnonymous;
     document.getElementById('vote-setting-disable-maybe-edit').checked = voteData.disableMaybe;
+
+    // 4. NEU: Zugewiesene Benutzer laden
+    const assignedDisplayEdit = document.getElementById('vote-assigned-users-display-edit');
+    const assignedIds = voteData.assignedUserIds || [];
+    if (assignedDisplayEdit) {
+        if (assignedIds.length === 0) {
+            assignedDisplayEdit.textContent = "Niemand ausgewählt";
+            assignedDisplayEdit.title = "Niemand ausgewählt";
+        } else {
+            const selectedNames = assignedIds.map(id => {
+                const user = USERS[id];
+                return user ? (user.realName || user.name) : id; // Fallback auf ID
+            }).join(', ');
+            assignedDisplayEdit.textContent = selectedNames;
+            assignedDisplayEdit.title = selectedNames; // Tooltip
+        }
+    }
+    // ENDE NEU
     
-    // 4. "UPDATE"-Log-Button anzeigen
+    // 5. "UPDATE"-Log-Button anzeigen
     const historyContainer = document.getElementById('poll-history-log-container');
     if (voteData.pollHistory && voteData.pollHistory.length > 0) {
         historyContainer.classList.remove('hidden');
@@ -1709,11 +1763,10 @@ function renderEditView(voteData) {
         historyContainer.classList.add('hidden');
     }
 
-    // 5. Gefahrenzone-Knöpfe-Status setzen
+    // 6. Gefahrenzone-Knöpfe-Status setzen
     const closeBtn = document.getElementById('vote-close-poll-btn');
     const reopenBtn = document.getElementById('vote-reopen-poll-btn');
     
-    // Helfer-Funktion, um das End-Datum sicher zu prüfen
     let endTimeDate = null;
     if (voteData.endTime) {
         if (typeof voteData.endTime.toDate === 'function') {
@@ -1723,33 +1776,21 @@ function renderEditView(voteData) {
         }
     }
 
-    // ----- KORREKTUR: NEUE LOGIK (basierend auf deinem Feedback) -----
     if (voteData.fixedOptionIndex != null) {
-        // Fall: Termin ist fixiert. Schließen ist nicht möglich.
         closeBtn.classList.add('hidden');
-        // ABER: Wiedereröffnen ist möglich (um Fixierung aufzuheben)
         reopenBtn.classList.remove('hidden');
-
     } else if (endTimeDate && endTimeDate < new Date()) {
-        // Fall: Umfrage ist geschlossen (abgelaufen), aber nicht fixiert
         closeBtn.classList.add('hidden');
-        reopenBtn.classList.remove('hidden'); // Zeige "Wieder öffnen"
-
+        reopenBtn.classList.remove('hidden'); 
     } else {
-        // Fall: Umfrage ist offen (weder fixiert noch abgelaufen)
-        closeBtn.classList.remove('hidden'); // Zeige "Schließen"
+        closeBtn.classList.remove('hidden'); 
         reopenBtn.classList.add('hidden');
     }
-    // ----- ENDE DER KORREKTUR -----
 
-
-    // WICHTIG: Sicherstellen, dass die Terminauswahl (die wir per Klick öffnen)
-    // beim Neuladen der Ansicht immer versteckt ist.
     const selectionContainer = document.getElementById('fix-date-selection-container');
     if (selectionContainer) selectionContainer.classList.add('hidden');
 
-
-    // Temporärer Inhalt (ersetzen wir als nächstes)
+    // Dieser Teil wird durch deine `index.html` bereits abgedeckt, aber ich lasse ihn als Fallback drin.
     const editContent = document.getElementById('edit-view-content');
     if (editContent) {
         editContent.innerHTML = `
@@ -1794,29 +1835,39 @@ async function saveVoteEdits() {
 
         updateData.startTime = newStartTime ? new Date(newStartTime) : null;
         updateData.endTime = !isUnlimited && newEndTime ? new Date(newEndTime) : null;
-        // (Wir loggen Gültigkeitsänderungen vorerst nicht im Detail)
         
         // 3. Einstellungen lesen
         updateData.isPublic = document.getElementById('vote-setting-public-edit').checked;
         updateData.isAnonymous = document.getElementById('vote-setting-anonymous-edit').checked;
         updateData.disableMaybe = document.getElementById('vote-setting-disable-maybe-edit').checked;
+
+        // 4. NEU: Teilnehmer-Listen speichern
+        // Hole die 'assignedUserIds', die wir im Modal in 'currentVoteData' gespeichert haben
+        const newAssignedIds = currentVoteData.assignedUserIds || [];
+        updateData.assignedUserIds = newAssignedIds;
         
-        // 4. Log-Eintrag erstellen, WENN es Änderungen gab
+        // Kombiniere die neuen zugewiesenen IDs mit IDs von Leuten, die bereits abgestimmt haben,
+        // damit 'listenForAssignedVotes' für alle funktioniert.
+        const existingParticipantIds = currentVoteData.participants.map(p => p.userId);
+        const combinedIds = new Set([...existingParticipantIds, ...newAssignedIds]);
+        updateData.participantIds = Array.from(combinedIds);
+        // ENDE NEU
+
+        // 5. Log-Eintrag erstellen, WENN es Änderungen gab
         if (changes.length > 0) {
             const historyLog = {
                 timestamp: new Date(), // Lokale Zeit (vermeidet Firebase-Array-Fehler)
                 changedBy: USERS[currentUser.mode]?.realName || currentUser.displayName,
                 changes: changes // Array mit den Text-Änderungen
             };
-            // Füge den neuen Log-Eintrag zum bestehenden Verlauf hinzu
             updateData.pollHistory = [...(currentVoteData.pollHistory || []), historyLog];
         }
         
-        // 5. Datenbank aktualisieren
+        // 6. Datenbank aktualisieren
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
         await updateDoc(voteDocRef, updateData);
         
-        // 6. Lokale Daten aktualisieren
+        // 7. Lokale Daten aktualisieren
         currentVoteData = { ...currentVoteData, ...updateData };
         
         alertUser("Änderungen gespeichert!", "success");
@@ -1832,7 +1883,6 @@ async function saveVoteEdits() {
         setButtonLoading(saveBtn, false);
     }
 }
-
 // ERSETZE diese Funktion in terminplaner.js
 
 async function closePollNow() {

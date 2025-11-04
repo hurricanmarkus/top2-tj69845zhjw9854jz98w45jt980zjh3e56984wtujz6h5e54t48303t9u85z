@@ -1053,16 +1053,8 @@
                         </div>
                     </div>
 
-                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
+<div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
                         <h3 class="text-lg font-bold text-gray-800 mb-1">Einstellungen</h3>
-                        <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
-                            <input type="checkbox" id="vote-setting-public" class="h-5 w-5 rounded">
-                            <div>
-                                <span class="font-semibold text-gray-700">Öffentliche Umfrage</span>
-                                <p class="text-xs text-gray-500">Jeder (auch ohne Link) kann diese Umfrage in der
-                                    App sehen und teilnehmen.</p>
-                            </div>
-                        </label>
 
                         <div class="p-2 bg-gray-50 rounded-lg">
                             <label class="block font-semibold text-gray-700">Teilnehmer zuweisen</label>
@@ -1082,6 +1074,14 @@
                                 </button>
                             </div>
                         </div>
+                        <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
+                            <input type="checkbox" id="vote-setting-public" class="h-5 w-5 rounded">
+                            <div>
+                                <span class="font-semibold text-gray-700">Öffentliche Umfrage</span>
+                                <p class="text-xs text-gray-500">Jeder (auch ohne Link) kann diese Umfrage in der
+                                    App sehen und teilnehmen.</p>
+                            </div>
+                        </label>
                         <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
                             <input type="checkbox" id="vote-setting-anonymous" class="h-5 w-5 rounded">
                             <div>
@@ -1103,6 +1103,7 @@
                         Umfrage erstellen und Link erhalten
                     </button>
                 </div>
+
 
                 <div id="terminplaner-vote-view" class="hidden">
 
@@ -1291,8 +1292,28 @@
                         </div>
                     </div>
 
-                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
+<div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
                         <h3 class="text-lg font-bold text-gray-800 mb-1">Einstellungen</h3>
+
+                        <div class="p-2 bg-gray-50 rounded-lg">
+                            <label class="block font-semibold text-gray-700">Teilnehmer zuweisen</label>
+                            <p class="text-xs text-gray-500 mb-2">Wähle Benutzer aus, die diese Umfrage in ihrer Liste
+                                sehen sollen.</p>
+                            <div class="flex items-center gap-2 p-2 bg-white border rounded-lg">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                                    class="w-5 h-5 text-gray-400 flex-shrink-0">
+                                    <path
+                                        d="M10 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3.468 11.69A5.022 5.022 0 0 1 7.5 10h5a5.022 5.022 0 0 1 4.032 1.69l.966 1.616A2.25 2.25 0 0 1 15.53 15H4.47a2.25 2.25 0 0 1-1.968-1.694l.966-1.616Z" />
+                                </svg>
+                                <span id="vote-assigned-users-display-edit"
+                                    class="flex-grow text-sm text-gray-600 truncate"
+                                    title="Niemand ausgewählt">Niemand ausgewählt</span>
+                                <button id="vote-show-assign-user-modal-btn-edit"
+                                    class="py-1 px-3 bg-blue-100 text-blue-600 text-sm font-semibold rounded-lg hover:bg-blue-200 transition flex-shrink-0">
+                                    Auswählen
+                                </button>
+                            </div>
+                        </div>
                         <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
                             <input type="checkbox" id="vote-setting-public-edit" class="h-5 w-5 rounded">
                             <span class="font-semibold text-gray-700">Öffentliche Umfrage</span>
