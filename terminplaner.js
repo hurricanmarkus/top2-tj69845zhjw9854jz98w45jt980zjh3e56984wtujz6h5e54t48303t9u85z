@@ -1262,13 +1262,13 @@ function renderVoteView(voteData) {
         if (saveButton) saveButton.classList.add('hidden');
     }
     
+    // --- HIER IST DIE KORREKTUR ---
     if (editButton) {
-        if (isFixed) {
-            editButton.classList.add('hidden'); 
-        } else {
-            editButton.classList.remove('hidden'); 
-        }
+        // Die alte Bedingung (if (isFixed) { ... }) wurde entfernt.
+        // Der Knopf wird jetzt immer angezeigt.
+        editButton.classList.remove('hidden'); 
     }
+    // --- ENDE DER KORREKTUR ---
     
     // ----- 9. Tabelle rendern -----
     // NEU: 'isClosed' wird korrekt übergeben
@@ -1278,6 +1278,7 @@ function renderVoteView(voteData) {
         checkIfAllAnswered();
     }
 }
+
 
 
 
