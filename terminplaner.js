@@ -2242,6 +2242,56 @@ async function toggleManualPollClose() {
 
 // --- ENDE NEUE FUNKTIONEN ---
 
+/**
+ * NEU: Hebt die Fixierung eines Termins auf (setzt fixedOptionIndex auf null)
+ */
+async function unfixPollDate() {
+    if (!currentVoteData) return;
+
+    // 1. Sicherheitsabfrage
+    if (!confirm("Bist du sicher? Die Termin-Fixierung wird aufgehoben. Du kannst danach einen neuen Termin fixieren oder die Umfrage manuell wieder freigeben.")) {
+        return;
+    }
+
+    // 2. Knopf finden und sperren
+    const fixBtn = document.getElementById('vote-fix-date-btn');
+    if (fixBtn) {
+        fixBtn.disabled = true;
+        fixBtn.textContent = 'Wird aufgehoben...';
+    }
+
+    try {
+        // 3. Den Pfad zu unserer Umfrage in der Datenbank holen
+        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
+        
+        // 4. Firebase anweisen, die Fixierung aufzuheben
+        await updateDoc(voteDocRef, {
+            fixedOptionIndex: null // Wir setzen das Feld einfach auf 'null' zurück
+        });
+        
+        // 5. Unsere lokalen Daten (die wir im Browser haben) auch aktualisieren
+        currentVoteData.fixedOptionIndex = null;
+        
+        // 6. Erfolg melden
+        alertUser("Termin-Fixierung wurde aufgehoben!", "success");
+        
+        // 7. Die Bearbeiten-Ansicht neu laden.
+        // Diese Funktion wird sehen, dass 'fixedOptionIndex' jetzt 'null' ist
+        // und die Knöpfe automatisch korrekt anzeigen.
+        renderEditView(currentVoteData);
+
+    } catch (error) {
+        console.error("Fehler beim Aufheben der Fixierung:", error);
+        alertUser("Fehler beim Aufheben.", "error");
+        
+        // 8. Bei Fehler den Knopf wieder zurücksetzen
+        if (fixBtn) {
+            fixBtn.disabled = false;
+            fixBtn.textContent = 'Tag & Zeit AUFHEBEN';
+        }
+    }
+}
+
 async function deletePoll() {
     const confirmation = prompt(`Um die Umfrage "${currentVoteData.title}" endgültig zu löschen, gib bitte LÖSCHEN ein:`);
     if (confirmation !== 'LÖSCHEN') {
