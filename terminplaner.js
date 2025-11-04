@@ -21,6 +21,7 @@ let currentParticipantAnswers = {};
 let isVoteGridEditable = false; 
 let unsubscribePublicVotes = null;
 let unsubscribeAssignedVotes = null;
+let editTokenTimer = null; // Für den 10-Sekunden-Timeout
 
 
 // ERSETZE diese Funktion in terminplaner.js
@@ -1038,36 +1039,68 @@ async function saveGroupPoll() {
 
 // ----- FUNKTIONEN für das INLINE EDIT -----
 function showInlineEditToken() {
+    // 0. Alten Timer stoppen, falls einer läuft (falls man schnell doppelt klickt)
+    if (editTokenTimer) {
+        clearInterval(editTokenTimer);
+    }
+
     const editButton = document.getElementById('show-edit-vote-btn');
     const tokenInput = document.getElementById('edit-token-input-inline');
     const submitButton = document.getElementById('submit-edit-token-inline-btn');
     if (!editButton || !tokenInput || !submitButton || !currentVoteData) return;
+
+    // 1. UI-Elemente anzeigen
     editButton.classList.add('hidden');
     tokenInput.classList.remove('hidden');
     submitButton.classList.remove('hidden');
+
+    // 2. Token-Feld füllen (wie bisher)
     if (currentUser.mode === currentVoteData.createdBy) {
         tokenInput.value = currentVoteData.editToken; 
         tokenInput.disabled = true; 
     } else {
         tokenInput.value = ''; 
         tokenInput.disabled = false;
-        tokenInput.focus(); 
+        tokenInput.focus(); // Fokus auf das Feld für Gäste
     }
+
+    // 3. Den Timer starten
+    let counter = 10; // 10 Sekunden
+    submitButton.textContent = `OK (${counter})`; // Sofort den Zähler anzeigen
+    submitButton.disabled = false; // Sicherstellen, dass der Knopf klickbar ist
+
+    editTokenTimer = setInterval(() => {
+        counter--;
+        if (counter > 0) {
+            // Zähler aktualisieren
+            submitButton.textContent = `OK (${counter})`;
+        } else {
+            // Zeit abgelaufen
+            clearInterval(editTokenTimer);
+            editTokenTimer = null;
+            resetEditWrapper(); // UI zurücksetzen (versteckt das Feld)
+            alertUser("Zeit abgelaufen. Bitte erneut versuchen.", "error");
+        }
+    }, 1000); // Jede Sekunde
 }
+
+
 function resetEditWrapper() {
+    // 1. UI zurücksetzen
     document.getElementById('show-edit-vote-btn')?.classList.remove('hidden');
     document.getElementById('edit-token-input-inline')?.classList.add('hidden');
-    document.getElementById('submit-edit-token-inline-btn')?.classList.add('hidden');
-}
-function checkInlineEditToken() {
-    const input = document.getElementById('edit-token-input-inline');
-    const token = input.value.trim().toUpperCase();
-    if (currentVoteData && token === currentVoteData.editToken) {
-        alertUser("Token korrekt! Lade Bearbeitungs-Modus...", "success");
-        showView('edit');
-        renderEditView(currentVoteData);
-    } else {
-        alertUser("Falscher Bearbeitungs-Token!", "error");
+    
+    const submitButton = document.getElementById('submit-edit-token-inline-btn');
+    if (submitButton) {
+        submitButton.classList.add('hidden');
+        submitButton.textContent = 'OK'; // Text auf Standard zurücksetzen
+        submitButton.disabled = false; // Knopf wieder aktivieren
+    }
+    
+    // 2. Timer stoppen, falls er noch läuft!
+    if (editTokenTimer) {
+        clearInterval(editTokenTimer);
+        editTokenTimer = null;
     }
 }
 
@@ -1406,5 +1439,29 @@ function cleanUrlParams() {
         console.log("URL-Parameter aufgeräumt.");
     } catch (e) {
         console.warn("URL konnte nicht aufgeräumt werden:", e);
+    }
+}
+
+function checkInlineEditToken() {
+    // 1. Timer stoppen, sobald geklickt wird
+    if (editTokenTimer) {
+        clearInterval(editTokenTimer);
+        editTokenTimer = null;
+    }
+    
+    const input = document.getElementById('edit-token-input-inline');
+    const token = input.value.trim().toUpperCase();
+    
+    // 2. Token prüfen (wie bisher)
+    if (currentVoteData && token === currentVoteData.editToken) {
+        alertUser("Token korrekt! Lade Bearbeitungs-Modus...", "success");
+        
+        // UI zurücksetzen (wird von showView erledigt, die resetEditWrapper aufruft)
+        showView('edit');
+        renderEditView(currentVoteData);
+    } else {
+        alertUser("Falscher Bearbeitungs-Token!", "error");
+        // Bei Fehler: UI zurücksetzen, damit man es nochmal versuchen kann
+        resetEditWrapper();
     }
 }
