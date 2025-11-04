@@ -2319,6 +2319,95 @@ function renderPollHistory() {
 
 // ----- HELFER-FUNKTIONEN (Rest) -----
 
+// --- NEUE FUNKTIONEN FÜR GEFAHRENZONE ---
+
+/**
+ * Hebt die Fixierung eines Termins auf (Knopf: "Tag & Zeit AUFHEBEN")
+ */
+async function unfixPollDate() {
+    if (!confirm("Bist du sicher? Der fixierte Termin wird entfernt, aber die Umfrage bleibt (falls manuell beendet) geschlossen. Teilnehmer müssen nicht neu abstimmen.")) {
+        return;
+    }
+
+    const fixBtn = document.getElementById('vote-fix-date-btn');
+    if (fixBtn) setButtonLoading(fixBtn, true);
+    
+    try {
+        // Wir setzen NUR den fixierten Index auf 'null'
+        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
+        
+        await updateDoc(voteDocRef, {
+            fixedOptionIndex: null 
+        });
+        
+        currentVoteData.fixedOptionIndex = null; 
+        
+        alertUser("Termin-Fixierung wurde aufgehoben!", "success");
+        renderEditView(currentVoteData); // UI der Edit-Seite aktualisieren
+        
+    } catch (error) {
+        console.error("Fehler beim Aufheben der Fixierung:", error);
+        alertUser("Fehler beim Aufheben der Fixierung.", "error");
+    } finally {
+        if (fixBtn) setButtonLoading(fixBtn, false);
+    }
+}
+
+/**
+ * Öffnet eine durch Zeit abgelaufene Umfrage wieder (Knopf: "Umfrage wieder öffnen")
+ */
+async function reopenExpiredPoll() {
+    // Diese Funktion ist leer, da wir den Knopf in Schritt 3 entfernt haben,
+    // aber wir lassen sie hier (falls sie doch noch irgendwo aufgerufen wird),
+    // damit sie keinen Fehler verursacht. Du kannst sie auch löschen,
+    // WENN du Schritt 3 von vorhin (Knopf löschen) gemacht hast.
+    
+    // Zur Sicherheit: Wenn du Schritt 3 (Knopf löschen) gemacht hast,
+    // kannst du diese Funktion "reopenExpiredPoll" einfach komplett LÖSCHEN.
+    
+    // Wenn du sie nicht löschen willst, lass sie so leer stehen:
+}
+
+/**
+ * Schaltet den "isManuallyClosed"-Status um (Knopf: "Umfrage beenden" / "Umfrage freigeben")
+ */
+async function toggleManualPollClose() {
+    const isCurrentlyClosed = currentVoteData.isManuallyClosed === true;
+    const newStatus = !isCurrentlyClosed;
+    
+    const message = newStatus ?
+        "Möchtest du die Umfrage wirklich beenden? Die Teilnahme ist dann nicht mehr möglich (genau wie bei 'Endet am'), aber du kannst später noch einen Termin fixieren." :
+        "Möchtest du die Umfrage wieder freigeben? Teilnehmer können dann wieder abstimmen und korrigieren.";
+        
+    if (!confirm(message)) {
+        return;
+    }
+
+    const manualCloseBtn = document.getElementById('vote-toggle-manual-close-btn');
+    if (manualCloseBtn) setButtonLoading(manualCloseBtn, true);
+    
+    try {
+        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
+        
+        await updateDoc(voteDocRef, {
+            isManuallyClosed: newStatus
+        });
+        
+        currentVoteData.isManuallyClosed = newStatus;
+        
+        alertUser(`Umfrage wurde ${newStatus ? 'beendet' : 'wieder freigegeben'}!`, "success");
+        renderEditView(currentVoteData); // UI der Edit-Seite aktualisieren
+        
+    } catch (error)
+ {
+        console.error("Fehler beim Umschalten des Status:", error);
+        alertUser("Fehler beim Umschalten.", "error");
+    } finally {
+        if (manualCloseBtn) setButtonLoading(manualCloseBtn, false);
+    }
+}
+
+// --- ENDE NEUE FUNKTIONEN ---vote
 
 // NEU: Funktion zum Prüfen der URL auf Token/ID
 // (Diese Funktion wird in haupteingang.js aufgerufen, nicht hier)
