@@ -1125,33 +1125,6 @@ function renderEditView(voteData) {
 
 // ----- HELFER-FUNKTIONEN (Rest) -----
 
-// NEU: Funktion zum Kopieren in die Zwischenablage
-function copyToClipboard(text, successMessage) {
-    if (!navigator.clipboard) {
-        // Fallback für ältere/unsichere Browser (selten)
-        try {
-            const textArea = document.createElement("textarea");
-            textArea.value = text;
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textArea);
-            alertUser(successMessage, "success");
-        } catch (err) {
-            console.error('Fallback-Kopieren fehlgeschlagen: ', err);
-            alertUser("Kopieren wird von deinem Browser nicht unterstützt.", "error");
-        }
-        return;
-    }
-    // Moderne Methode
-    navigator.clipboard.writeText(text).then(() => {
-        alertUser(successMessage, "success");
-    }).catch(err => {
-        console.error('Fehler beim Kopieren: ', err);
-        alertUser("Kopieren fehlgeschlagen.", "error");
-    });
-}
 
 // NEU: Funktion zum Prüfen der URL auf Token/ID
 function checkUrlForToken() {
