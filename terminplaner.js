@@ -23,7 +23,8 @@ let unsubscribePublicVotes = null;
 let unsubscribeAssignedVotes = null;
 
 
-// Diese Funktion wird von haupteingang.js aufgerufen
+// ERSETZE diese Funktion in terminplaner.js
+
 export function initializeTerminplanerView() {
     
     // ----- Spion für das Token-Feld -----
@@ -256,8 +257,7 @@ export function initializeTerminplanerView() {
         closeLogBtn.dataset.listenerAttached = 'true';
     }
 
-    // KORREKTUR: checkUrlForToken() wird von hier ENTFERNT
-    // checkUrlForToken(); // <-- Diese Zeile LÖSCHEN oder auskommentieren
+    // KORREKTUR: checkUrlForToken() WURDE VON HIER ENTFERNT
 }
 
 
@@ -377,14 +377,16 @@ function renderAssignedVotes(votes) {
 
 // ----- DATENBANK-FUNKTION (Umfrage suchen per Token) -----
 // (ANGEPASST: Ruft jetzt 'cleanUrl' auf)
+// ERSETZE diese Funktion in terminplaner.js
+
 export async function joinVoteByToken(tokenFromUrl = null) {
     const tokenInput = document.getElementById('vote-token-input');
     const joinBtn = document.getElementById('join-vote-by-token-btn');
     
+    // Nimm den Token aus der URL, ODER aus dem Input-Feld
     const token = (tokenFromUrl || tokenInput.value).trim().toUpperCase(); 
 
     if (token.length !== 11 || token[4] !== ' ' || token[5] !== '-' || token[6] !== ' ') {
-        // Wenn es aus der URL kam, nicht den Benutzer benachrichtigen, sondern nur in der Konsole loggen
         if (!tokenFromUrl) {
             alertUser("Ungültiges Token-Format. Es muss 'XXXX - XXXX' sein.", "error");
         }
@@ -425,17 +427,18 @@ export async function joinVoteByToken(tokenFromUrl = null) {
     }
 }
 
-// ----- DATENBANK-FUNKTION (Umfrage suchen per ID) -----
-// (ANGEPASST: Ruft jetzt 'cleanUrl' auf)
+// ERSETZE diese Funktion in terminplaner.js
+
 export async function joinVoteById(voteId = null) {
     let idToLoad = voteId;
     let isFromUrl = false;
     
     try {
         if (!idToLoad) {
+            // Dies ist ein Fallback, sollte aber von haupteingang.js aufgerufen werden
             const urlParams = new URLSearchParams(window.location.search);
             idToLoad = urlParams.get('vote_id');
-            if (!idToLoad) return; // Kein ID in URL, nichts zu tun
+            if (!idToLoad) return; 
             isFromUrl = true;
         }
         
@@ -465,6 +468,7 @@ export async function joinVoteById(voteId = null) {
         alertUser(error.message, "error");
     }
 }
+
 
 
 // ----- RENDER-FUNKTION (Abstimmungs-Seite) -----
@@ -1344,5 +1348,48 @@ function formatTokenInput(e, inputId) {
     } else {
          input.selectionStart = cursorPos;
          input.selectionEnd = cursorPos;
+    }
+}
+
+// HINZUFÜGEN (GANZ AM ENDE von terminplaner.js)
+
+// ----- HELFER-FUNKTIONEN (Rest) -----
+
+// NEU: Funktion zum Kopieren in die Zwischenablage
+function copyToClipboard(text, successMessage) {
+    if (!navigator.clipboard) {
+        // Fallback für ältere/unsichere Browser (selten)
+        try {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            alertUser(successMessage, "success");
+        } catch (err) {
+            console.error('Fallback-Kopieren fehlgeschlagen: ', err);
+            alertUser("Kopieren wird von deinem Browser nicht unterstützt.", "error");
+        }
+        return;
+    }
+    // Moderne Methode
+    navigator.clipboard.writeText(text).then(() => {
+        alertUser(successMessage, "success");
+    }).catch(err => {
+        console.error('Fehler beim Kopieren: ', err);
+        alertUser("Kopieren fehlgeschlagen.", "error");
+    });
+}
+
+// NEU: Helfer zum Aufräumen der URL
+function cleanUrlParams() {
+    try {
+        const newUrl = window.location.origin + window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+        console.log("URL-Parameter aufgeräumt.");
+    } catch (e) {
+        console.warn("URL konnte nicht aufgeräumt werden:", e);
     }
 }

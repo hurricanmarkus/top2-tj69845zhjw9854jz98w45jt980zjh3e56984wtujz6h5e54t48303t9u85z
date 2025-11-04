@@ -213,7 +213,7 @@ window.onload = function () {
 };
 
 // In haupteingang.js
-// ERSETZE DIESE FUNKTION IN haupteingang.js
+// ERSETZE diese komplette Funktion in haupteingang.js
 
 async function initializeFirebase() {
     try {
@@ -241,7 +241,7 @@ async function initializeFirebase() {
         approvalRequestsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'approval-requests');
         checklistStacksCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-stacks');
         checklistTemplatesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates');
-        // Diese Zeile sollte schon von uns da sein:
+        // Diese Zeile MUSS hier sein
         votesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
 
 
@@ -268,13 +268,9 @@ async function initializeFirebase() {
             }
             
             // Listener starten (unabhängig vom Login-Status)
-            // (Dieser 'try...catch'-Block ist unverändert)
             try {
                 console.log("initializeFirebase: Starte Daten-Listener...");
                 
-                // ... (alle deine onSnapshot-Listener für settings, notruf, roles, users, checklists, etc.) ...
-                
-                // --- Listener für App-Einstellungen (Settings) ---
                 onSnapshot(settingsDocRef, (docSnap) => { 
                     if (docSnap.exists()) {
                         adminSettings = docSnap.data();
@@ -301,7 +297,6 @@ async function initializeFirebase() {
                 }, (error) => {
                     console.error("Error listening to notruf settings:", error); 
                 });
-                // --- Ende Listener für App-Einstellungen ---
 
                 listenForRoleUpdates();
                 listenForAdminRoleUpdates();
@@ -315,7 +310,6 @@ async function initializeFirebase() {
                 listenForStacks();
                 initializeTerminplanerView(); // Diese Zeile MUSS HIER bleiben
                 
-                // Starte den Spion für öffentliche Umfragen
                 if (typeof listenForPublicVotes === 'function') {
                     listenForPublicVotes();
                 } else {
@@ -343,27 +337,26 @@ async function initializeFirebase() {
             // =================================================================
             // NEU: URL-PRÜFUNG (NACHDEM die Authentifizierung fertig ist)
             // =================================================================
-            // Wir prüfen, ob wir durch einen Link hierhergekommen sind,
-            // NACHDEM die App initialisiert wurde.
             try {
                 const urlParams = new URLSearchParams(window.location.search);
                 const voteId = urlParams.get('vote_id');
                 const voteToken = urlParams.get('vote_token');
+                
+                // Wir prüfen, ob die Parameter *gerade eben* verarbeitet wurden
+                // (um Endlosschleifen beim Neuladen zu verhindern)
+                const isUrlClean = !voteId && !voteToken;
 
-                if (voteId) {
-                    console.log("URL-Parameter 'vote_id' gefunden, starte joinVoteById...");
-                    // Wir müssen 'await' verwenden, damit die Funktion fertig ist,
-                    // bevor der Benutzer etwas anderes klickt.
-                    await joinVoteById(voteId); 
-                } else if (voteToken) {
-                     console.log("URL-Parameter 'vote_token' gefunden, starte joinVoteByToken...");
-                     await joinVoteByToken(voteToken); 
-                } else {
-                    console.log("Keine URL-Parameter für Umfragen gefunden.");
+                if (!isUrlClean) {
+                    if (voteId) {
+                        console.log("URL-Parameter 'vote_id' gefunden, starte joinVoteById...");
+                        await joinVoteById(voteId); 
+                    } else if (voteToken) {
+                        console.log("URL-Parameter 'vote_token' gefunden, starte joinVoteByToken...");
+                        await joinVoteByToken(voteToken); 
+                    }
                 }
             } catch (e) {
                 console.error("Fehler bei der URL-Parameter-Prüfung:", e);
-                // Nicht abstürzen, einfach normal weitermachen
             }
             // =================================================================
             // ENDE DER URL-PRÜFUNG
