@@ -337,7 +337,10 @@ export function initializeTerminplanerView() {
             if (pollCard) {
                 const voteId = pollCard.dataset.voteId;
                 if (voteId) {
-                    joinVoteById(voteId); 
+                    // KORREKTUR: Wir rufen joinVoteById jetzt mit Verzögerung auf
+                    setTimeout(() => {
+                        joinVoteById(voteId);
+                    }, 0);
                 }
             }
         });
@@ -536,12 +539,14 @@ export function initializeTerminplanerView() {
         closeLogBtn.dataset.listenerAttached = 'true';
     }
 
-    // ----- NEU: Spione für die Bearbeitungs-Seite (Ansicht 4) -----
+    // ----- Spione für die Bearbeitungs-Seite (Ansicht 4) -----
 
     const cancelEditingBtn = document.getElementById('cancel-vote-editing-btn');
     if (cancelEditingBtn && !cancelEditingBtn.dataset.listenerAttached) {
         cancelEditingBtn.addEventListener('click', () => {
             showView('vote');
+            // Wir müssen die Umfrage neu laden, um lokale (aber nicht gespeicherte)
+            // Änderungen an den Teilnehmer-Votes zu verwerfen
             joinVoteById(currentVoteData.id); 
         });
         cancelEditingBtn.dataset.listenerAttached = 'true';
@@ -591,7 +596,6 @@ export function initializeTerminplanerView() {
         pollHistoryBtn.dataset.listenerAttached = 'true';
     }
 
-    // ----- KORREKTUR: Spione für das "Termin fixieren"-Modal -----
     const cancelFixDateBtn = document.getElementById('cancel-fix-date-btn');
     if (cancelFixDateBtn && !cancelFixDateBtn.dataset.listenerAttached) {
         cancelFixDateBtn.addEventListener('click', hideFixDateSelection);
@@ -604,10 +608,9 @@ export function initializeTerminplanerView() {
         confirmFixDateBtn.dataset.listenerAttached = 'true';
     }
     
-    // ----- Spione für das Zuweisen-Modal -----
+    // --- Spione für das Zuweisen-Modal ---
     const showAssignModalBtn = document.getElementById('vote-show-assign-user-modal-btn');
     if (showAssignModalBtn && !showAssignModalBtn.dataset.listenerAttached) {
-        // MODIFIZIERT: Setzt den Kontext, bevor das Modal geöffnet wird
         showAssignModalBtn.addEventListener('click', () => {
             assignModalContext = 'create';
             openAssignUserModal();
@@ -615,10 +618,8 @@ export function initializeTerminplanerView() {
         showAssignModalBtn.dataset.listenerAttached = 'true';
     }
     
-    // NEU: Spion für den "Bearbeiten"-Zuweisen-Knopf
     const showAssignModalBtnEdit = document.getElementById('vote-show-assign-user-modal-btn-edit');
     if (showAssignModalBtnEdit && !showAssignModalBtnEdit.dataset.listenerAttached) {
-        // MODIFIZIERT: Setzt den Kontext, bevor das Modal geöffnet wird
         showAssignModalBtnEdit.addEventListener('click', () => {
             assignModalContext = 'edit';
             openAssignUserModal();
@@ -643,8 +644,59 @@ export function initializeTerminplanerView() {
         applyAssignModalBtn.addEventListener('click', applyAssignedUsers);
         applyAssignModalBtn.dataset.listenerAttached = 'true';
     }
+    
+    // ----- NEU: Spione für die neuen Bearbeiten-Funktionen -----
+    
+    // Spion für "Tag hinzufügen" im Bearbeiten-Modus
+    const addDateButtonEdit = document.getElementById('vote-add-date-btn-edit');
+    if (addDateButtonEdit && !addDateButtonEdit.dataset.listenerAttached) {
+        addDateButtonEdit.addEventListener('click', addNewDateGroupEdit);
+        addDateButtonEdit.dataset.listenerAttached = 'true';
+    }
+    
+    // Spion für "Zeit hinzufügen/entfernen" im Bearbeiten-Modus
+    const datesContainerEdit = document.getElementById('vote-dates-container-edit');
+    if (datesContainerEdit && !datesContainerEdit.dataset.listenerAttached) {
+        datesContainerEdit.addEventListener('click', (e) => {
+            const addTarget = e.target.closest('.vote-add-time-btn');
+            if (addTarget) {
+                const timesContainer = addTarget.previousElementSibling; 
+                if (timesContainer) {
+                    timesContainer.appendChild(createTimeInputHTML());
+                }
+            }
+            const removeTarget = e.target.closest('.vote-remove-time-btn');
+            if (removeTarget) {
+                const timeGroup = removeTarget.closest('.time-input-group'); 
+                const timesContainer = timeGroup.parentElement;
+                if (timesContainer.children.length > 1) {
+                    timeGroup.remove(); 
+                } else {
+                    alertUser("Du musst mindestens eine Uhrzeit pro Tag angeben.", "error");
+                }
+            }
+        });
+        datesContainerEdit.dataset.listenerAttached = 'true';
+    }
+    
+    // Spion für die Admin-Abstimmungs-Tabelle (Punkt 2)
+    const adminGridContainer = document.getElementById('edit-participant-grid-container');
+    if (adminGridContainer && !adminGridContainer.dataset.listenerAttached) {
+        adminGridContainer.addEventListener('click', (e) => {
+            const clickedButton = e.target.closest('.admin-vote-grid-btn');
+            if (clickedButton && !clickedButton.disabled) {
+                const participantId = clickedButton.dataset.participantId;
+                const optionIndex = clickedButton.dataset.optionIndex;
+                const newAnswer = clickedButton.dataset.answer;
+                
+                // Rufe die neue Handler-Funktion auf
+                handleAdminVoteEdit(participantId, optionIndex, newAnswer, clickedButton);
+            }
+        });
+        adminGridContainer.dataset.listenerAttached = 'true';
+    }
+    // ----- ENDE NEU -----
 }
-
 // ----- SPION-FUNKTIONEN (Listener) -----
 
 export function listenForPublicVotes() {
@@ -1748,7 +1800,7 @@ function renderEditView(voteData) {
     document.getElementById('vote-setting-anonymous-edit').checked = voteData.isAnonymous;
     document.getElementById('vote-setting-disable-maybe-edit').checked = voteData.disableMaybe;
 
-    // 4. NEU: Zugewiesene Benutzer laden
+    // 4. Zugewiesene Benutzer laden
     const assignedDisplayEdit = document.getElementById('vote-assigned-users-display-edit');
     const assignedIds = voteData.assignedUserIds || [];
     if (assignedDisplayEdit) {
@@ -1764,7 +1816,6 @@ function renderEditView(voteData) {
             assignedDisplayEdit.title = selectedNames; // Tooltip
         }
     }
-    // ENDE NEU
     
     // 5. "UPDATE"-Log-Button anzeigen
     const historyContainer = document.getElementById('poll-history-log-container');
@@ -1800,19 +1851,22 @@ function renderEditView(voteData) {
 
     const selectionContainer = document.getElementById('fix-date-selection-container');
     if (selectionContainer) selectionContainer.classList.add('hidden');
-
-    // Dieser Teil wird durch deine `index.html` bereits abgedeckt, aber ich lasse ihn als Fallback drin.
-    const editContent = document.getElementById('edit-view-content');
-    if (editContent) {
-        editContent.innerHTML = `
-            <h3 class="font-bold text-lg mb-2">Termin fixieren</h3>
-            <p class="text-sm">Bitte benutze den "Umfrage jetzt schließen" Knopf in der Gefahrenzone, um den finalen Termin auszuwählen.</p>
-            <h3 class="font-bold text-lg mt-6 mb-2">Teilnehmer verwalten</h3>
-            <p class="text-sm">Hier kannst du bald Teilnehmer löschen.</p>
-        `;
+    
+    // ----- NEU: Ruft die neuen Render-Funktionen auf -----
+    
+    // 7. Baut die Admin-Abstimmungs-Tabelle auf (Punkt 2)
+    renderParticipantEditGrid(voteData);
+    
+    // 8. Leert den "Neue Termine" Container und fügt einen leeren Slot hinzu (Punkt 1)
+    const datesContainerEdit = document.getElementById('vote-dates-container-edit');
+    if (datesContainerEdit) {
+        datesContainerEdit.innerHTML = ''; // Leeren
     }
+    // Wir rufen die *neue* Funktion auf, um den ersten leeren Slot zu erstellen
+    addNewDateGroupEdit(true); // true = ist der erste Slot
+    
+    // ----- ENDE NEU -----
 }
-
 async function saveVoteEdits() {
     const saveBtn = document.getElementById('vote-save-changes-btn');
     setButtonLoading(saveBtn, true);
@@ -1852,19 +1906,49 @@ async function saveVoteEdits() {
         updateData.isAnonymous = document.getElementById('vote-setting-anonymous-edit').checked;
         updateData.disableMaybe = document.getElementById('vote-setting-disable-maybe-edit').checked;
 
-        // 4. NEU: Teilnehmer-Listen speichern
-        // Hole die 'assignedUserIds', die wir im Modal in 'currentVoteData' gespeichert haben
+        // 4. Teilnehmer-Listen speichern
         const newAssignedIds = currentVoteData.assignedUserIds || [];
         updateData.assignedUserIds = newAssignedIds;
         
-        // Kombiniere die neuen zugewiesenen IDs mit IDs von Leuten, die bereits abgestimmt haben,
-        // damit 'listenForAssignedVotes' für alle funktioniert.
         const existingParticipantIds = currentVoteData.participants.map(p => p.userId);
         const combinedIds = new Set([...existingParticipantIds, ...newAssignedIds]);
         updateData.participantIds = Array.from(combinedIds);
-        // ENDE NEU
+        
+        // --- NEU: Speichere die (lokal geänderten) Teilnehmerdaten (Punkt 2) ---
+        // 'currentVoteData.participants' wurde von 'handleAdminVoteEdit' lokal geändert
+        updateData.participants = currentVoteData.participants;
+        // --- ENDE NEU ---
 
-        // 5. Log-Eintrag erstellen, WENN es Änderungen gab
+        // 5. NEU: Neue Termine auslesen und anhängen (Punkt 1)
+        const newOptions = [];
+        const dateGroups = document.querySelectorAll('#vote-dates-container-edit [data-date-group-id]');
+        dateGroups.forEach(group => {
+            const dateInput = group.querySelector('.vote-date-input');
+            const dateValue = dateInput.value; 
+            if (dateValue) { // Nur verarbeiten, wenn ein Datum gesetzt ist
+                const timeGroups = group.querySelectorAll('.time-input-group');
+                timeGroups.forEach(timeGroup => {
+                    const timeStart = timeGroup.querySelector('.vote-time-start-input').value; 
+                    if (timeStart) { // Nur verarbeiten, wenn Startzeit gesetzt ist
+                        const timeEnd = timeGroup.querySelector('.vote-time-end-input').value; 
+                        newOptions.push({ 
+                            date: dateValue, 
+                            timeStart: timeStart,
+                            timeEnd: timeEnd || null 
+                        });
+                    }
+                });
+            }
+        });
+        
+        if (newOptions.length > 0) {
+            // Hänge die neuen Optionen an die bestehenden an
+            updateData.options = [...currentVoteData.options, ...newOptions];
+            changes.push(`${newOptions.length} neue(r) Termin(e) hinzugefügt.`);
+        }
+        // --- ENDE NEU ---
+
+        // 6. Log-Eintrag erstellen, WENN es Änderungen gab
         if (changes.length > 0) {
             const historyLog = {
                 timestamp: new Date(), // Lokale Zeit (vermeidet Firebase-Array-Fehler)
@@ -1874,18 +1958,22 @@ async function saveVoteEdits() {
             updateData.pollHistory = [...(currentVoteData.pollHistory || []), historyLog];
         }
         
-        // 6. Datenbank aktualisieren
+        // 7. Datenbank aktualisieren
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
         await updateDoc(voteDocRef, updateData);
         
-        // 7. Lokale Daten aktualisieren
+        // 8. Lokale Daten aktualisieren
         currentVoteData = { ...currentVoteData, ...updateData };
         
         alertUser("Änderungen gespeichert!", "success");
         
         // Zurück zur Abstimmungs-Seite (die sich jetzt selbst aktualisiert)
         showView('vote');
-        renderVoteView(currentVoteData); // Ansicht mit den neuen Daten neu laden
+        
+        // WICHTIG: Verzögern, damit die Ansicht erst umschaltet
+        setTimeout(() => {
+            renderVoteView(currentVoteData); // Ansicht mit den neuen Daten neu laden
+        }, 0);
 
     } catch (error) {
         console.error("Fehler beim Speichern der Änderungen:", error);
@@ -1894,6 +1982,8 @@ async function saveVoteEdits() {
         setButtonLoading(saveBtn, false);
     }
 }
+
+
 // ERSETZE diese Funktion in terminplaner.js
 
 async function closePollNow() {
@@ -2087,8 +2177,17 @@ function resetCreateWizard() {
 
 function validateLastDateGroup() {
     const addDateButton = document.getElementById('vote-add-date-btn');
+    // NEU: Stelle sicher, dass wir im "Erstellen"-Modus sind
+    if (!addDateButton || addDateButton.classList.contains('hidden')) {
+        // Wenn der "Erstellen"-Button versteckt ist, sind wir
+        // entweder im Bearbeiten-Modus oder die Funktion wurde fälschlich aufgerufen.
+        // Im Bearbeiten-Modus brauchen wir diese Validierung nicht (der Knopf ist immer sichtbar).
+        return; 
+    }
+
     const lastGroup = document.querySelector('#vote-dates-container [data-date-group-id]:last-child');
-    if (!addDateButton || !lastGroup) return; 
+    if (!lastGroup) return; 
+
     let allValid = true;
     const dateInput = lastGroup.querySelector('.vote-date-input');
     if (!dateInput || !dateInput.value) {
@@ -2103,12 +2202,16 @@ function validateLastDateGroup() {
             allValid = false;
         }
     });
+    
+    // HINWEIS: Dieser Teil wird jetzt nur noch für die "Erstellen"-Seite ausgeführt
     if (allValid) {
         addDateButton.classList.remove('hidden');
     } else {
         addDateButton.classList.add('hidden');
     }
 }
+
+
 function getCurrentDateTimeLocalString() {
     const now = new Date();
     const offset = now.getTimezoneOffset() * 60000; 
@@ -2534,4 +2637,187 @@ function formatTimeRemaining(endTime) {
         return `Endet in ${diffMinutes} Min.`;
     }
     return "Endet in Kürze";
+}
+
+// ----- NEUE FUNKTIONEN FÜR BEARBEITEN-MODUS -----
+
+/**
+ * Fügt eine neue (leere) Datums/Zeit-Gruppe im "Bearbeiten"-Modus hinzu.
+ * Fast identisch mit 'addNewDateGroup', aber zielt auf '-edit'-Container.
+ */
+function addNewDateGroupEdit(isFirst = false) {
+    dateGroupIdCounter++; // Wir nutzen den globalen Zähler weiter
+    const datesContainer = document.getElementById('vote-dates-container-edit');
+    if (!datesContainer) return;
+
+    // Wenn es nicht der erste Slot ist und der letzte Slot leer ist, füge keinen neuen hinzu
+    const lastDateInput = datesContainer.querySelector('.vote-date-input:last-of-type');
+    if (!isFirst && lastDateInput && !lastDateInput.value) {
+        alertUser("Bitte fülle erst den letzten Termin aus, bevor du einen neuen hinzufügst.", "info");
+        return;
+    }
+
+    const newGroup = document.createElement('div');
+    newGroup.className = 'p-3 border rounded-lg bg-gray-50 space-y-3';
+    newGroup.dataset.dateGroupId = dateGroupIdCounter; // Eindeutige ID
+    
+    newGroup.innerHTML = `
+        <label class="block text-sm font-bold text-gray-700">Neuer Termin (Tag ${dateGroupIdCounter})</label>
+        <input type="date" class="vote-date-input w-full p-2 border rounded-lg" value="">
+        <div class="vote-times-container space-y-2"></div>
+        <button class="vote-add-time-btn text-sm font-semibold text-indigo-600 hover:underline">+ Uhrzeit hinzufügen</button>
+    `;
+    
+    const newTimesContainer = newGroup.querySelector('.vote-times-container');
+    newTimesContainer.appendChild(createTimeInputHTML()); // Fügt einen leeren Zeit-Slot hinzu
+    
+    datesContainer.appendChild(newGroup);
+}
+
+/**
+ * Baut die Admin-Tabelle, um Teilnehmer-Votes zu bearbeiten (Punkt 2)
+ */
+function renderParticipantEditGrid(voteData) {
+    const container = document.getElementById('edit-participant-grid-container');
+    if (!container) return;
+
+    const participants = voteData.participants;
+    if (!participants || participants.length === 0) {
+        container.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Noch keine Teilnehmer haben abgestimmt.</p>`;
+        return;
+    }
+
+    // Baue die Kopfzeile (Alle Teilnehmer)
+    let tableHTML = '<table class="w-full border-collapse text-sm text-left bg-white">';
+    tableHTML += '<thead><tr class="bg-gray-50">';
+    tableHTML += '<th class="p-3 border-b sticky left-0 bg-gray-50 z-10 w-48">Termin</th>';
+    
+    participants.forEach(p => {
+        tableHTML += `<th class="p-3 border-b text-center w-36">${p.name}</th>`;
+    });
+    tableHTML += '</tr></thead>';
+
+    // Baue die Zeilen (Alle Termine)
+    tableHTML += '<tbody>';
+    
+    // Sortiere Optionen nach Datum (genau wie in der Hauptansicht)
+    const optionsByDate = {};
+    voteData.options.forEach((option, index) => {
+        if (!optionsByDate[option.date]) {
+            optionsByDate[option.date] = []; 
+        }
+        optionsByDate[option.date].push({ ...option, originalIndex: index });
+    });
+
+    for (const date in optionsByDate) {
+        const dateObj = new Date(date + 'T12:00:00'); 
+        const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+
+        tableHTML += `
+            <tr class="bg-gray-100">
+                <td class="p-2 font-bold sticky left-0 bg-gray-100 z-10" colspan="${participants.length + 1}">${niceDate}</td>
+            </tr>
+        `;
+
+        optionsByDate[date].forEach(option => {
+            const optionIndex = option.originalIndex;
+            const timeString = option.timeEnd ? 
+                `${option.timeStart} - ${option.timeEnd} Uhr` : 
+                `${option.timeStart} Uhr`;
+            
+            tableHTML += `<tr class="vote-option-row" data-option-index="${optionIndex}">
+                            <td class="p-3 border-b font-mono sticky left-0 bg-white z-10">${timeString}</td>`;
+
+            // Für JEDEN Teilnehmer, erstelle die 3 Knöpfe
+            participants.forEach(p => {
+                const participantId = p.userId;
+                const currentAnswer = p.currentAnswers[optionIndex];
+                
+                const yesSelected = currentAnswer === 'yes' ? 'bg-green-200 ring-2 ring-indigo-500' : 'hover:bg-green-100 bg-opacity-50';
+                const maybeSelected = currentAnswer === 'maybe' ? 'bg-yellow-200 ring-2 ring-indigo-500' : 'hover:bg-yellow-100 bg-opacity-50';
+                const noSelected = currentAnswer === 'no' ? 'bg-red-200 ring-2 ring-indigo-500' : 'hover:bg-red-100 bg-opacity-50';
+                const maybeHidden = voteData.disableMaybe ? 'hidden' : '';
+
+                tableHTML += `
+                    <td class="p-2 border-b">
+                        <div class="flex justify-center gap-1">
+                            <button class="admin-vote-grid-btn p-2 rounded-lg ${yesSelected} transition-colors" data-participant-id="${participantId}" data-option-index="${optionIndex}" data-answer="yes" title="Ja">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-green-600"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" /></svg>
+                            </button>
+                            <button class="admin-vote-grid-btn p-2 rounded-lg ${maybeSelected} ${maybeHidden} transition-colors" data-participant-id="${participantId}" data-option-index="${optionIndex}" data-answer="maybe" title="Vielleicht">
+                                 <span class="text-yellow-600 font-bold text-xl w-5 h-5 flex items-center justify-center">~</span>
+                            </button>
+                            <button class="admin-vote-grid-btn p-2 rounded-lg ${noSelected} transition-colors" data-participant-id="${participantId}" data-option-index="${optionIndex}" data-answer="no" title="Nein">
+                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-red-600"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
+                            </button>
+                        </div>
+                    </td>
+                `;
+            });
+            
+            tableHTML += '</tr>';
+        });
+    }
+    
+    tableHTML += '</tbody></table>';
+    container.innerHTML = tableHTML;
+}
+
+/**
+ * Verarbeitet den Klick eines Admins auf die Abstimmungs-Tabelle (Punkt 2)
+ * Aktualisiert die LOKALEN Daten und protokolliert die Änderung.
+ */
+function handleAdminVoteEdit(participantId, optionIndex, newAnswer, clickedButton) {
+    if (!currentVoteData || !currentVoteData.participants) return;
+    
+    // 1. Finde den Teilnehmer im LOKALEN Objekt
+    const participantIndex = currentVoteData.participants.findIndex(p => p.userId === participantId);
+    if (participantIndex === -1) {
+        console.error("Teilnehmer für Admin-Edit nicht gefunden:", participantId);
+        return;
+    }
+    
+    const participant = currentVoteData.participants[participantIndex];
+    const oldAnswer = participant.currentAnswers[optionIndex] || 'keine';
+    
+    if (oldAnswer === newAnswer) {
+        return; // Nichts zu tun
+    }
+
+    console.log(`Admin ändert Vote für ${participant.name}: Option ${optionIndex} von ${oldAnswer} zu ${newAnswer}`);
+
+    // 2. Erstelle den Log-Eintrag (wie von dir gewünscht)
+    const option = currentVoteData.options[optionIndex];
+    const optionText = option.timeEnd ? 
+        `${option.date} ${option.timeStart}-${option.timeEnd}` : 
+        `${option.date} ${option.timeStart}`;
+        
+    const historyLog = { 
+        timestamp: new Date(), // Lokale Zeit
+        changes: [{ 
+            optionText: optionText, 
+            from: oldAnswer, 
+            to: newAnswer 
+        }],
+        // Protokolliert, dass der Admin (currentUser) die Änderung gemacht hat
+        changedBy: `Admin (${currentUser.displayName || 'Unbekannt'})` 
+    };
+    
+    // 3. Aktualisiere die LOKALEN Daten (wird erst beim Klick auf "Speichern" gesendet)
+    participant.currentAnswers[optionIndex] = newAnswer;
+    if (!participant.answerHistory) participant.answerHistory = [];
+    participant.answerHistory.unshift(historyLog); // Fügt den Log-Eintrag hinzu
+    participant.correctionCount = participant.answerHistory.length;
+    
+    // 4. Aktualisiere die UI (Knöpfe in der Zeile)
+    const rowButtons = clickedButton.parentElement.querySelectorAll(`.admin-vote-grid-btn[data-participant-id="${participantId}"][data-option-index="${optionIndex}"]`);
+    rowButtons.forEach(btn => {
+        btn.classList.remove('bg-green-200', 'bg-yellow-200', 'bg-red-200', 'ring-2', 'ring-indigo-500');
+        btn.classList.add('bg-opacity-50'); 
+    });
+    
+    if (newAnswer === 'yes') clickedButton.classList.add('bg-green-200', 'ring-2', 'ring-indigo-500');
+    if (newAnswer === 'maybe') clickedButton.classList.add('bg-yellow-200', 'ring-2', 'ring-indigo-500');
+    if (newAnswer === 'no') clickedButton.classList.add('bg-red-200', 'ring-2', 'ring-indigo-500');
+    clickedButton.classList.remove('bg-opacity-50');
 }
