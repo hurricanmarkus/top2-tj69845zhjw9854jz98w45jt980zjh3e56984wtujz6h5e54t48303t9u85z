@@ -384,7 +384,7 @@ export function stopAssignedVotesListener() {
     }
     renderAssignedVotes([]); 
     renderCreatedVotes([]);
-
+}
 
 // ----- RENDER-FUNKTIONEN FÜR LISTEN -----
 
