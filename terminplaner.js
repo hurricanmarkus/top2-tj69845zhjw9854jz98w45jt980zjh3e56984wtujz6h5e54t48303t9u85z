@@ -58,6 +58,7 @@ export function initializeTerminplanerView() {
         mainView.dataset.listenerAttached = 'true';
     }
 
+
     // ----- Spione für das Modal (Pop-up Fenster) -----
     const openModalButton = document.getElementById('show-create-vote-modal-btn');
     const closeModalButton = document.getElementById('close-create-vote-modal-btn');
@@ -251,19 +252,15 @@ export function initializeTerminplanerView() {
 
     // ----- NEU: Spione für die Bearbeitungs-Seite (Ansicht 4) -----
 
-    // Spion für "Zurück zur Umfrage"
     const cancelEditingBtn = document.getElementById('cancel-vote-editing-btn');
     if (cancelEditingBtn && !cancelEditingBtn.dataset.listenerAttached) {
         cancelEditingBtn.addEventListener('click', () => {
-            // Prüfen, ob ungespeicherte Änderungen vorhanden sind (optional, aber gut)
-            // Fürs Erste: Einfach zurück zur Abstimmungs-Ansicht
             showView('vote');
-            joinVoteById(currentVoteData.id); // Neu laden, falls etwas fixiert wurde
+            joinVoteById(currentVoteData.id); 
         });
         cancelEditingBtn.dataset.listenerAttached = 'true';
     }
     
-    // Spion für "Unbegrenzt"-Checkbox (auf Edit-Seite)
     const unlimitedEditCheckbox = document.getElementById('vote-end-time-unlimited-edit');
     if (unlimitedEditCheckbox && !unlimitedEditCheckbox.dataset.listenerAttached) {
         unlimitedEditCheckbox.addEventListener('change', (e) => {
@@ -278,28 +275,31 @@ export function initializeTerminplanerView() {
         unlimitedEditCheckbox.dataset.listenerAttached = 'true';
     }
     
-    // Spion für "Änderungen speichern"
     const saveChangesBtn = document.getElementById('vote-save-changes-btn');
     if (saveChangesBtn && !saveChangesBtn.dataset.listenerAttached) {
         saveChangesBtn.addEventListener('click', saveVoteEdits);
         saveChangesBtn.dataset.listenerAttached = 'true';
     }
     
-    // Spion für "Umfrage schließen"
     const closePollBtn = document.getElementById('vote-close-poll-btn');
     if (closePollBtn && !closePollBtn.dataset.listenerAttached) {
         closePollBtn.addEventListener('click', closePollNow);
         closePollBtn.dataset.listenerAttached = 'true';
     }
+
+    // NEU: Spion für "Wieder öffnen"
+    const reopenPollBtn = document.getElementById('vote-reopen-poll-btn');
+    if (reopenPollBtn && !reopenPollBtn.dataset.listenerAttached) {
+        reopenPollBtn.addEventListener('click', reopenPoll);
+        reopenPollBtn.dataset.listenerAttached = 'true';
+    }
     
-    // Spion für "Umfrage löschen"
     const deletePollBtn = document.getElementById('vote-delete-poll-btn');
     if (deletePollBtn && !deletePollBtn.dataset.listenerAttached) {
         deletePollBtn.addEventListener('click', deletePoll);
         deletePollBtn.dataset.listenerAttached = 'true';
     }
     
-    // Spion für "UPDATE" (Logbuch)
     const pollHistoryBtn = document.getElementById('show-poll-history-btn');
     if (pollHistoryBtn && !pollHistoryBtn.dataset.listenerAttached) {
         pollHistoryBtn.addEventListener('click', renderPollHistory);
@@ -449,23 +449,22 @@ export async function joinVoteByToken(tokenFromUrl = null) {
         const voteDoc = snapshot.docs[0];
         const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
         const now = new Date();
+        
+        // KORREKTUR: Diese Prüfung ist jetzt entfernt
+        // if (voteData.endTime && now > voteData.endTime.toDate()) { ... }
+        
+        // Nur die Start-Zeit-Prüfung bleibt
         if (voteData.startTime && now < voteData.startTime.toDate()) {
             throw new Error(`Diese Umfrage hat noch nicht begonnen. Sie startet am ${voteData.startTime.toDate().toLocaleString('de-DE')}.`);
         }
-        if (voteData.endTime && now > voteData.endTime.toDate()) {
-            throw new Error(`Diese Umfrage ist bereits beendet (seit ${voteData.endTime.toDate().toLocaleString('de-DE')}).`);
-        }
+        
         currentVoteData = voteData; 
         console.log("Umfrage gefunden:", currentVoteData);
         
-        // ==================================================
-        // HIER IST DIE KORREKTUR
-        // ==================================================
-        navigate('terminplaner'); // Zuerst zur Hauptseite des Terminplaners navigieren
-        // ==================================================
-
+        navigate('terminplaner'); // Navigiere zur Terminplaner-Seite
+        
         renderVoteView(currentVoteData);
-        showView('vote');
+        showView('vote'); // Zeige die Abstimmungs-Ansicht
         if (tokenInput) tokenInput.value = ''; 
         
         if (tokenFromUrl) cleanUrlParams();
@@ -477,7 +476,6 @@ export async function joinVoteByToken(tokenFromUrl = null) {
         if (joinBtn) setButtonLoading(joinBtn, false); 
     }
 }
-
 
 // ERSETZE diese Funktion in terminplaner.js
 
@@ -500,23 +498,22 @@ export async function joinVoteById(voteId = null) {
         }
         const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
         const now = new Date();
+
+        // KORREKTUR: Diese Prüfung ist jetzt entfernt
+        // if (voteData.endTime && now > voteData.endTime.toDate()) { ... }
+        
+        // Nur die Start-Zeit-Prüfung bleibt
         if (voteData.startTime && now < voteData.startTime.toDate()) {
             throw new Error(`Diese Umfrage hat noch nicht begonnen. Sie startet am ${voteData.startTime.toDate().toLocaleString('de-DE')}.`);
         }
-        if (voteData.endTime && now > voteData.endTime.toDate()) {
-            throw new Error(`Diese Umfrage ist bereits beendet (seit ${voteData.endTime.toDate().toLocaleString('de-DE')}).`);
-        }
+
         currentVoteData = voteData; 
         console.log("Umfrage per ID geladen:", currentVoteData);
         
-        // ==================================================
-        // HIER IST DIE KORREKTUR
-        // ==================================================
-        navigate('terminplaner'); // Zuerst zur Hauptseite des Terminplaners navigieren
-        // ==================================================
+        navigate('terminplaner'); // Navigiere zur Terminplaner-Seite
 
         renderVoteView(currentVoteData);
-        showView('vote');
+        showView('vote'); // Zeige die Abstimmungs-Ansicht
         
         if (isFromUrl) cleanUrlParams();
         
@@ -527,6 +524,7 @@ export async function joinVoteById(voteId = null) {
 }
 
 
+// ERSETZE diese Funktion in terminplaner.js
 
 function renderVoteView(voteData) {
     
@@ -553,7 +551,6 @@ function renderVoteView(voteData) {
     const validityEl = document.getElementById('vote-poll-validity');
     
     let hasInfo = false;
-    // Beschreibung
     if (voteData.description) {
         descEl.textContent = voteData.description;
         descContainer.classList.remove('hidden');
@@ -561,7 +558,6 @@ function renderVoteView(voteData) {
     } else {
         descContainer.classList.add('hidden');
     }
-    // Ort
     if (voteData.location) {
         locEl.textContent = voteData.location;
         locContainer.classList.remove('hidden');
@@ -569,56 +565,52 @@ function renderVoteView(voteData) {
     } else {
         locContainer.classList.add('hidden');
     }
-    // Verstecke die Info-Box (die graue), wenn beides leer ist
     infoBox.classList.toggle('hidden', !hasInfo);
 
-    // ==================================================
-    // HIER IST DIE KORREKTUR FÜR "INVALID DATE"
-    // ==================================================
-    
-    // Helfer-Funktion, um das Datum zu formatieren, egal ob Firebase-Timestamp or JS-Date
+    // KORREKTUR: Gültigkeit
     const formatVoteDate = (timestamp) => {
         if (!timestamp) return '';
         let dateObject = null;
-        
-        // Prüfen, ob es ein Firebase Timestamp-Objekt ist (hat .toDate())
         if (typeof timestamp.toDate === 'function') {
             dateObject = timestamp.toDate();
         } 
-        // Prüfen, ob es ein JS Date-Objekt ist (das wir lokal erstellt haben)
         else if (timestamp instanceof Date) {
             dateObject = timestamp;
         }
-        
-        // Wenn wir ein gültiges Datum haben, formatieren wir es
         if (dateObject) {
             return dateObject.toLocaleString('de-DE', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}) + ' Uhr';
         }
-        return ''; // Fallback, falls das Format unerwartet ist
+        return ''; 
     };
 
     const startTimeText = formatVoteDate(voteData.startTime);
     const endTimeText = formatVoteDate(voteData.endTime);
-
     let validityText = '';
-    if (startTimeText) {
-        // NEU: Text angepasst
-        validityText = `Teilnahme startet: ${startTimeText}`;
-    }
-    if (endTimeText) {
-        validityText += (validityText ? ' | ' : '') + `Endet: ${endTimeText}`;
-    }
     
-    // NEU: Gültigkeit wird jetzt in den separaten Container geschrieben
+    // NEUE LOGIK: Prüfen, ob die Zeit abgelaufen ist
+    let isClosed = voteData.endTime && (voteData.endTime.toDate ? voteData.endTime.toDate() : new Date(voteData.endTime)) < new Date();
+
+    if (isClosed) {
+        validityText = "TEILNAHME GESCHLOSSEN";
+        validityContainer.classList.add('text-red-700', 'bg-red-50'); // Rote Box
+        validityContainer.classList.remove('text-gray-600');
+    } else {
+        if (startTimeText) {
+            validityText = `Teilnahme startet: ${startTimeText}`;
+        }
+        if (endTimeText) {
+            validityText += (validityText ? ' | ' : '') + `Endet: ${endTimeText}`;
+        }
+        validityContainer.classList.remove('text-red-700', 'bg-red-50'); // Normale Box
+        validityContainer.classList.add('text-gray-600');
+    }
+
     if (validityText) {
         validityEl.textContent = validityText;
         validityContainer.classList.remove('hidden');
     } else {
         validityContainer.classList.add('hidden');
     }
-    // ==================================================
-    // ENDE DER KORREKTUR
-    // ==================================================
 
 
     // 4. Teilnehmer-Status-Box
@@ -670,12 +662,17 @@ function renderVoteView(voteData) {
     
     resetEditWrapper();
     
-    // 7. Prüfen, ob Termin fixiert ist
-    if (voteData.fixedOptionIndex != null) {
+    // 7. Prüfen, ob Termin fixiert ist ODER GESCHLOSSEN
+    if (voteData.fixedOptionIndex != null || isClosed) {
         statusContainer.classList.add('hidden'); 
         saveButton.classList.add('hidden');    
-        editButton.classList.add('hidden');    
-        updatePollTableAnswers(voteData, false); 
+        // Edit-Button nur verstecken, wenn fixiert, aber nicht, wenn nur geschlossen
+        if(voteData.fixedOptionIndex != null) {
+            editButton.classList.add('hidden');
+        } else {
+            editButton.classList.remove('hidden');
+        }
+        updatePollTableAnswers(voteData, false); // Ansicht sperren
     } else {
         saveButton.classList.add('hidden'); 
         editButton.classList.remove('hidden'); 
@@ -1234,35 +1231,28 @@ function renderCorrectionHistory(userId) {
 }
 
 
-// ----- PLATZHALTER für die Bearbeitungs-Ansicht -----
+// ERSETZE diese Funktion in terminplaner.js
+
 function renderEditView(voteData) {
     document.getElementById('edit-poll-title').textContent = `"${voteData.title}" bearbeiten`;
     
-    // ==================================================
-    // HIER IST DIE KORREKTUR
-    // ==================================================
-
     // Helfer-Funktion, um Firebase-Timestamps ODER JS-Dates in 'datetime-local' Strings umzuwandeln
     const formatTimestampToInput = (timestamp) => {
         if (!timestamp) return '';
         
         let dateObject = null;
         if (typeof timestamp.toDate === 'function') {
-            // Fall 1: Es ist ein Firebase-Timestamp
             dateObject = timestamp.toDate();
         } else if (timestamp instanceof Date) {
-            // Fall 2: Es ist bereits ein JS-Date (z.B. nach 'closePollNow' oder 'saveGroupPoll')
             dateObject = timestamp;
         } else {
-            // Fallback, falls es ein String ist (sollte nicht passieren)
             try { dateObject = new Date(timestamp); } catch (e) { return ''; }
         }
 
-        if (isNaN(dateObject.getTime())) { // Prüfen, ob das Datum gültig ist
+        if (isNaN(dateObject.getTime())) { 
             return '';
         }
 
-        // Konvertiere in lokales YYYY-MM-DDTHH:MM Format
         const offset = dateObject.getTimezoneOffset() * 60000;
         const localDate = new Date(dateObject.getTime() - offset);
         return localDate.toISOString().slice(0, 16);
@@ -1273,7 +1263,7 @@ function renderEditView(voteData) {
     document.getElementById('vote-description-edit').value = voteData.description || '';
     document.getElementById('vote-location-edit').value = voteData.location || '';
     
-    // 2. Gültigkeit füllen (mit der neuen Helfer-Funktion)
+    // 2. Gültigkeit füllen
     const startTimeInput = document.getElementById('vote-start-time-edit');
     const endTimeInput = document.getElementById('vote-end-time-edit');
     const unlimitedCheckbox = document.getElementById('vote-end-time-unlimited-edit');
@@ -1289,9 +1279,6 @@ function renderEditView(voteData) {
         unlimitedCheckbox.checked = true;
         endTimeInput.disabled = true;
     }
-    // ==================================================
-    // ENDE DER KORREKTUR
-    // ==================================================
 
     // 3. Einstellungen füllen
     document.getElementById('vote-setting-public-edit').checked = voteData.isPublic;
@@ -1308,8 +1295,9 @@ function renderEditView(voteData) {
 
     // 5. Gefahrenzone-Knöpfe-Status setzen
     const closeBtn = document.getElementById('vote-close-poll-btn');
+    const reopenBtn = document.getElementById('vote-reopen-poll-btn');
     
-    // Hier brauchen wir die gleiche "sichere" Prüfung
+    // Helfer-Funktion, um das End-Datum sicher zu prüfen
     let endTimeDate = null;
     if (voteData.endTime) {
         if (typeof voteData.endTime.toDate === 'function') {
@@ -1319,12 +1307,15 @@ function renderEditView(voteData) {
         }
     }
 
+    // NEUE LOGIK: Zeige "Wieder öffnen" wenn geschlossen, sonst "Schließen"
     if (endTimeDate && endTimeDate < new Date()) {
-        closeBtn.disabled = true;
-        closeBtn.textContent = 'Teilnahme ist bereits geschlossen';
+        // Fall: Umfrage ist geschlossen
+        closeBtn.classList.add('hidden');
+        reopenBtn.classList.remove('hidden');
     } else {
-        closeBtn.disabled = false;
-        closeBtn.textContent = 'Umfrage jetzt schließen (Teilnahme beenden)';
+        // Fall: Umfrage ist offen
+        closeBtn.classList.remove('hidden');
+        reopenBtn.classList.add('hidden');
     }
 
     // Temporärer Inhalt (ersetzen wir als nächstes)
@@ -1411,6 +1402,8 @@ async function saveVoteEdits() {
     }
 }
 
+// ERSETZE diese Funktion in terminplaner.js
+
 async function closePollNow() {
     if (!confirm("Bist du sicher? Dadurch wird die Umfrage sofort geschlossen und niemand kann mehr teilnehmen oder korrigieren.")) {
         return;
@@ -1432,7 +1425,7 @@ async function closePollNow() {
         
         alertUser("Umfrage wurde geschlossen!", "success");
         
-        // UI der Edit-Seite aktualisieren
+        // UI der Edit-Seite aktualisieren, um den Knopf zu wechseln
         renderEditView(currentVoteData);
         
     } catch (error) {
@@ -1440,6 +1433,38 @@ async function closePollNow() {
         alertUser("Fehler beim Schließen.", "error");
     } finally {
         setButtonLoading(closeBtn, false);
+    }
+}
+
+async function reopenPoll() {
+    if (!confirm("Bist du sicher? Dadurch wird die Umfrage wieder geöffnet und jeder mit dem Link kann teilnehmen.")) {
+        return;
+    }
+
+    const reopenBtn = document.getElementById('vote-reopen-poll-btn');
+    setButtonLoading(reopenBtn, true);
+    
+    try {
+        // Wir setzen die Endzeit auf 'null', um sie zu öffnen
+        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
+        
+        await updateDoc(voteDocRef, {
+            endTime: null
+        });
+        
+        // Lokale Daten aktualisieren
+        currentVoteData.endTime = null;
+        
+        alertUser("Umfrage wurde wieder geöffnet!", "success");
+        
+        // UI der Edit-Seite aktualisieren, um den Knopf zu wechseln
+        renderEditView(currentVoteData);
+        
+    } catch (error) {
+        console.error("Fehler beim Wiedereröffnen der Umfrage:", error);
+        alertUser("Fehler beim Wiedereröffnen.", "error");
+    } finally {
+        setButtonLoading(reopenBtn, false);
     }
 }
 

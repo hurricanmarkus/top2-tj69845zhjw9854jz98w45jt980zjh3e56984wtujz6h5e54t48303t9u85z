@@ -1210,7 +1210,7 @@
 
 
 
-<div id="terminplaner-edit-view" class="hidden">
+                <div id="terminplaner-edit-view" class="hidden">
                     <div class="mb-4">
                         <div class="flex justify-between items-center">
                             <h2 id="edit-poll-title" class="text-2xl font-bold text-gray-800">... bearbeiten</h2>
@@ -1224,7 +1224,8 @@
                     <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
                         <h3 class="text-lg font-bold text-gray-800 mb-1">Details</h3>
                         <div>
-                            <label for="vote-title-edit" class="block text-sm font-bold text-gray-700 mb-1">Titel</label>
+                            <label for="vote-title-edit"
+                                class="block text-sm font-bold text-gray-700 mb-1">Titel</label>
                             <input type="text" id="vote-title-edit"
                                 class="w-full p-2 border border-gray-300 rounded-lg">
                         </div>
@@ -1252,7 +1253,8 @@
                         <h3 class="text-lg font-bold text-gray-800 mb-1">Gültigkeitszeitraum</h3>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <label for="vote-start-time-edit" class="block text-sm font-medium text-gray-700">Startet
+                                <label for="vote-start-time-edit"
+                                    class="block text-sm font-medium text-gray-700">Startet
                                     am</label>
                                 <input type="datetime-local" id="vote-start-time-edit"
                                     class="w-full p-2 border rounded-lg mt-1">
@@ -1293,10 +1295,17 @@
 
                     <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4 border-t-4 border-red-500">
                         <h3 class="text-lg font-bold text-red-700 mb-1">Gefahrenzone</h3>
+
                         <button id="vote-close-poll-btn"
-                            class="w-full py-2 bg-yellow-500 text-black font-semibold rounded-lg hover:bg-yellow-600 transition">
+                            class="w-full py-2 bg-yellow-500 text-black font-semibold rounded-lg hover:bg-yellow-600 transition hidden">
                             Umfrage jetzt schließen (Teilnahme beenden)
                         </button>
+
+                        <button id="vote-reopen-poll-btn"
+                            class="w-full py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition hidden">
+                            Umfrage wieder öffnen (Teilnahme erlauben)
+                        </button>
+
                         <button id="vote-delete-poll-btn"
                             class="w-full py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">
                             Diese Umfrage endgültig löschen
