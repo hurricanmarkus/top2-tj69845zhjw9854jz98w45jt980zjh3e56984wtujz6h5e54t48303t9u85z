@@ -604,12 +604,6 @@ export function initializeTerminplanerView() {
         toggleManualCloseBtn.dataset.listenerAttached = 'true';
     }
     
-    const reopenExpiredPollBtn = document.getElementById('vote-reopen-expired-poll-btn');
-    if (reopenExpiredPollBtn && !reopenExpiredPollBtn.dataset.listenerAttached) {
-        reopenExpiredPollBtn.addEventListener('click', reopenExpiredPoll);
-        reopenExpiredPollBtn.dataset.listenerAttached = 'true';
-    }
-    // ENDE NEU
     
     const deletePollBtn = document.getElementById('vote-delete-poll-btn');
     if (deletePollBtn && !deletePollBtn.dataset.listenerAttached) {
@@ -2016,9 +2010,9 @@ function renderEditView(voteData) {
     // 6. Gefahrenzone-Knöpfe-Status setzen (DEINE NEUE LOGIK)
     const fixBtn = document.getElementById('vote-fix-date-btn');
     const manualCloseBtn = document.getElementById('vote-toggle-manual-close-btn');
-    const reopenExpiredBtn = document.getElementById('vote-reopen-expired-poll-btn');
     
-    if (!fixBtn || !manualCloseBtn || !reopenExpiredBtn) {
+    // KORREKTUR: Alle Verweise auf 'reopenExpiredBtn' sind entfernt
+    if (!fixBtn || !manualCloseBtn) {
         console.error("Fehler: Knöpfe der Gefahrenzone nicht gefunden!");
         return;
     }
@@ -2026,7 +2020,6 @@ function renderEditView(voteData) {
     // Standardmäßig alles in den Grundzustand (sichtbar/aktiviert)
     fixBtn.classList.remove('hidden');
     manualCloseBtn.classList.remove('hidden');
-    reopenExpiredBtn.classList.add('hidden'); // Dieser ist standardmäßig versteckt
     
     fixBtn.disabled = false;
     manualCloseBtn.disabled = false;
@@ -2066,16 +2059,7 @@ function renderEditView(voteData) {
             manualCloseBtn.classList.remove('bg-green-600', 'hover:bg-green-700', 'text-white'); // Beenden ist "gelb"
         }
         
-        // Prüfe, ob "Wieder öffnen (abgelaufen)" angezeigt werden muss
-        let endTimeDate = null;
-        if (voteData.endTime) {
-            if (typeof voteData.endTime.toDate === 'function') endTimeDate = voteData.endTime.toDate();
-            else if (voteData.endTime instanceof Date) endTimeDate = voteData.endTime;
-        }
-        
-        if (endTimeDate && endTimeDate < new Date()) {
-            reopenExpiredBtn.classList.remove('hidden'); // Zeige Knopf, wenn abgelaufen
-        }
+        // KORREKTUR: Die Logik für 'reopenExpiredBtn' ist entfernt
     }
     // ----- ENDE DEINE NEUE LOGIK -----
 
@@ -2216,72 +2200,6 @@ async function saveVoteEdits() {
     }
 }
 
-
-// --- NEUE FUNKTIONEN FÜR GEFAHRENZONE ---
-
-/**
- * Hebt die Fixierung eines Termins auf (Knopf: "Tag & Zeit AUFHEBEN")
- */
-async function unfixPollDate() {
-    if (!confirm("Bist du sicher? Der fixierte Termin wird entfernt, aber die Umfrage bleibt (falls manuell beendet) geschlossen. Teilnehmer müssen nicht neu abstimmen.")) {
-        return;
-    }
-
-    const fixBtn = document.getElementById('vote-fix-date-btn');
-    if (fixBtn) setButtonLoading(fixBtn, true);
-    
-    try {
-        // Wir setzen NUR den fixierten Index auf 'null'
-        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
-        
-        await updateDoc(voteDocRef, {
-            fixedOptionIndex: null 
-        });
-        
-        currentVoteData.fixedOptionIndex = null; 
-        
-        alertUser("Termin-Fixierung wurde aufgehoben!", "success");
-        renderEditView(currentVoteData); // UI der Edit-Seite aktualisieren
-        
-    } catch (error) {
-        console.error("Fehler beim Aufheben der Fixierung:", error);
-        alertUser("Fehler beim Aufheben der Fixierung.", "error");
-    } finally {
-        if (fixBtn) setButtonLoading(fixBtn, false);
-    }
-}
-
-/**
- * Öffnet eine durch Zeit abgelaufene Umfrage wieder (Knopf: "Umfrage wieder öffnen")
- */
-async function reopenExpiredPoll() {
-    if (!confirm("Bist du sicher? Das Zeitlimit (Endet am) wird entfernt und die Umfrage wird wieder geöffnet.")) {
-        return;
-    }
-
-    const reopenBtn = document.getElementById('vote-reopen-expired-poll-btn');
-    if (reopenBtn) setButtonLoading(reopenBtn, true);
-    
-    try {
-        // Wir setzen NUR die Endzeit auf 'null'
-        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
-        
-        await updateDoc(voteDocRef, {
-            endTime: null
-        });
-        
-        currentVoteData.endTime = null;
-        
-        alertUser("Umfrage wurde wieder geöffnet (Zeitlimit entfernt)!", "success");
-        renderEditView(currentVoteData); // UI der Edit-Seite aktualisieren
-        
-    } catch (error) {
-        console.error("Fehler beim Wiedereröffnen der Umfrage:", error);
-        alertUser("Fehler beim Wiedereröffnen.", "error");
-    } finally {
-        if (reopenBtn) setButtonLoading(reopenBtn, false);
-    }
-}
 
 /**
  * Schaltet den "isManuallyClosed"-Status um (Knopf: "Umfrage beenden" / "Umfrage freigeben")
