@@ -215,6 +215,8 @@ window.onload = function () {
 // In haupteingang.js
 // ERSETZE diese komplette Funktion in haupteingang.js
 
+// ERSETZE diese komplette Funktion in haupteingang.js
+
 async function initializeFirebase() {
     try {
         console.log("initializeFirebase: Starte Firebase Initialisierung...");

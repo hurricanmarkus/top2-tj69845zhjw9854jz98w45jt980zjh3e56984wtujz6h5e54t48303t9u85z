@@ -1,5 +1,5 @@
 // Wir importieren 'doc', 'updateDoc', UND 'getDoc'
-import { alertUser, db, votesCollectionRef, currentUser, USERS, setButtonLoading, GUEST_MODE } from './haupteingang.js';
+import { alertUser, db, votesCollectionRef, currentUser, USERS, setButtonLoading, GUEST_MODE, navigate } from './haupteingang.js';
 import { 
     addDoc, 
     serverTimestamp, 
@@ -383,7 +383,6 @@ export async function joinVoteByToken(tokenFromUrl = null) {
     const tokenInput = document.getElementById('vote-token-input');
     const joinBtn = document.getElementById('join-vote-by-token-btn');
     
-    // Nimm den Token aus der URL, ODER aus dem Input-Feld
     const token = (tokenFromUrl || tokenInput.value).trim().toUpperCase(); 
 
     if (token.length !== 11 || token[4] !== ' ' || token[5] !== '-' || token[6] !== ' ') {
@@ -412,11 +411,17 @@ export async function joinVoteByToken(tokenFromUrl = null) {
         }
         currentVoteData = voteData; 
         console.log("Umfrage gefunden:", currentVoteData);
+        
+        // ==================================================
+        // HIER IST DIE KORREKTUR
+        // ==================================================
+        navigate('terminplaner'); // Zuerst zur Hauptseite des Terminplaners navigieren
+        // ==================================================
+
         renderVoteView(currentVoteData);
         showView('vote');
         if (tokenInput) tokenInput.value = ''; 
         
-        // NEU: URL aufräumen, wenn wir per Token aus der URL kamen
         if (tokenFromUrl) cleanUrlParams();
         
     } catch (error) {
@@ -427,6 +432,7 @@ export async function joinVoteByToken(tokenFromUrl = null) {
     }
 }
 
+
 // ERSETZE diese Funktion in terminplaner.js
 
 export async function joinVoteById(voteId = null) {
@@ -435,7 +441,6 @@ export async function joinVoteById(voteId = null) {
     
     try {
         if (!idToLoad) {
-            // Dies ist ein Fallback, sollte aber von haupteingang.js aufgerufen werden
             const urlParams = new URLSearchParams(window.location.search);
             idToLoad = urlParams.get('vote_id');
             if (!idToLoad) return; 
@@ -457,10 +462,16 @@ export async function joinVoteById(voteId = null) {
         }
         currentVoteData = voteData; 
         console.log("Umfrage per ID geladen:", currentVoteData);
+        
+        // ==================================================
+        // HIER IST DIE KORREKTUR
+        // ==================================================
+        navigate('terminplaner'); // Zuerst zur Hauptseite des Terminplaners navigieren
+        // ==================================================
+
         renderVoteView(currentVoteData);
         showView('vote');
         
-        // NEU: URL aufräumen, wenn wir per ID aus der URL kamen
         if (isFromUrl) cleanUrlParams();
         
     } catch (error) {
@@ -1314,6 +1325,10 @@ function formatTokenInput(e, inputId) {
          input.selectionEnd = cursorPos;
     }
 }
+
+// HINZUFÜGEN (GANZ AM ENDE von terminplaner.js)
+
+// ----- HELFER-FUNKTIONEN (Rest) -----
 
 // HINZUFÜGEN (GANZ AM ENDE von terminplaner.js)
 
