@@ -474,9 +474,6 @@ export async function joinVoteByToken(tokenFromUrl = null) {
     }
 }
 
-// ERSETZE diese Funktion in terminplaner.js
-
-// ERSETZE diese Funktion in terminplaner.js
 
 export async function joinVoteById(voteId = null) {
     let idToLoad = voteId;
@@ -2198,9 +2195,13 @@ function formatTimeUntil(endDate) {
     return { text: text, colorClass: colorClass };
 }
 
+// ERSETZE die letzte Funktion (renderVoteCardHTML) in deiner terminplaner.js
+// Stelle sicher, dass dies das absolute Ende deiner Datei ist.
+
 // NEU: Zentrale Render-Funktion für eine Umfrage-Karte (Anforderung 2 & 3)
 function renderVoteCardHTML(vote, context = 'public') {
-    const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
+    const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') ||
+        '...';
     
     let fixedTag = '';
     if (vote.fixedOptionIndex != null) {
