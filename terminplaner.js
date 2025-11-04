@@ -482,7 +482,6 @@ export async function joinVoteById(voteId = null) {
 
 
 
-// ----- RENDER-FUNKTION (Abstimmungs-Seite) -----
 function renderVoteView(voteData) {
     
     // 1. Titel und Ersteller (ZENTRIERT)
@@ -508,6 +507,7 @@ function renderVoteView(voteData) {
     const validityEl = document.getElementById('vote-poll-validity');
     
     let hasInfo = false;
+    // Beschreibung
     if (voteData.description) {
         descEl.textContent = voteData.description;
         descContainer.classList.remove('hidden');
@@ -515,6 +515,7 @@ function renderVoteView(voteData) {
     } else {
         descContainer.classList.add('hidden');
     }
+    // Ort
     if (voteData.location) {
         locEl.textContent = voteData.location;
         locContainer.classList.remove('hidden');
@@ -522,21 +523,56 @@ function renderVoteView(voteData) {
     } else {
         locContainer.classList.add('hidden');
     }
+    // Verstecke die Info-Box (die graue), wenn beides leer ist
+    infoBox.classList.toggle('hidden', !hasInfo);
+
+    // ==================================================
+    // HIER IST DIE KORREKTUR FÜR "INVALID DATE"
+    // ==================================================
+    
+    // Helfer-Funktion, um das Datum zu formatieren, egal ob Firebase-Timestamp or JS-Date
+    const formatVoteDate = (timestamp) => {
+        if (!timestamp) return '';
+        let dateObject = null;
+        
+        // Prüfen, ob es ein Firebase Timestamp-Objekt ist (hat .toDate())
+        if (typeof timestamp.toDate === 'function') {
+            dateObject = timestamp.toDate();
+        } 
+        // Prüfen, ob es ein JS Date-Objekt ist (das wir lokal erstellt haben)
+        else if (timestamp instanceof Date) {
+            dateObject = timestamp;
+        }
+        
+        // Wenn wir ein gültiges Datum haben, formatieren wir es
+        if (dateObject) {
+            return dateObject.toLocaleString('de-DE', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}) + ' Uhr';
+        }
+        return ''; // Fallback, falls das Format unerwartet ist
+    };
+
+    const startTimeText = formatVoteDate(voteData.startTime);
+    const endTimeText = formatVoteDate(voteData.endTime);
+
     let validityText = '';
-    if (voteData.startTime) {
-        validityText = `Startet: ${voteData.startTime.toDate().toLocaleString('de-DE', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'})} Uhr`;
+    if (startTimeText) {
+        // NEU: Text angepasst
+        validityText = `Teilnahme startet: ${startTimeText}`;
     }
-    if (voteData.endTime) {
-        validityText += ` | Endet: ${voteData.endTime.toDate().toLocaleString('de-DE', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'})} Uhr`;
+    if (endTimeText) {
+        validityText += (validityText ? ' | ' : '') + `Endet: ${endTimeText}`;
     }
+    
+    // NEU: Gültigkeit wird jetzt in den separaten Container geschrieben
     if (validityText) {
         validityEl.textContent = validityText;
         validityContainer.classList.remove('hidden');
-        hasInfo = true;
     } else {
         validityContainer.classList.add('hidden');
     }
-    infoBox.classList.toggle('hidden', !hasInfo);
+    // ==================================================
+    // ENDE DER KORREKTUR
+    // ==================================================
 
 
     // 4. Teilnehmer-Status-Box
