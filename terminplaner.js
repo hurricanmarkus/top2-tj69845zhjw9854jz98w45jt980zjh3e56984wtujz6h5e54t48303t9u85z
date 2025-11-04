@@ -1438,7 +1438,6 @@ function renderEditView(voteData) {
     }
 }
 
-
 async function saveVoteEdits() {
     const saveBtn = document.getElementById('vote-save-changes-btn');
     setButtonLoading(saveBtn, true);
