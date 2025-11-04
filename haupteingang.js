@@ -14,7 +14,7 @@ import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists,
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
 import { renderUserKeyList } from './admin_benutzersteuerung.js'; 
 // NEU: Wir importieren die Start-Funktion aus deiner neuen Datei
-import { initializeTerminplanerView, listenForPublicVotes, joinVoteById, joinVoteByToken } from './terminplaner.js';
+import { initializeTerminplanerView, listenForPublicVotes, listenForPastVotes, joinVoteById, joinVoteByToken } from './terminplaner.js';
 // // ENDE-ZIKA //
 
 
@@ -44,6 +44,8 @@ export let tempSelectedApiTokenId = null; // Für das Bearbeiten-Formular
 export let tempSelectedSoundId = null;
 // Für das Bearbeiten-Formular
 export let unsubscribeTemplateItems = null;
+export let unsubscribeCreatedVotes = null;
+export let unsubscribePastVotes = null;
 export let adminSettings = {};
 export let selectedUserForLogin = null;
 export let adminSectionsState = { password: false, user: false, role: false, approval: false, protocol: false, adminRights: false, mainFunctions: false };
@@ -315,6 +317,11 @@ async function initializeFirebase() {
                 if (typeof listenForPublicVotes === 'function') {
                     listenForPublicVotes();
                 } else {
+                    if (typeof listenForPastVotes === 'function') {
+                    listenForPastVotes(); // NEU: Starte den Listener für vergangene Umfragen
+                } else {
+                    console.error("Fehler: listenForPastVotes ist nicht importiert!");
+                }
                     console.error("Fehler: listenForPublicVotes ist nicht importiert!");
                 }
 

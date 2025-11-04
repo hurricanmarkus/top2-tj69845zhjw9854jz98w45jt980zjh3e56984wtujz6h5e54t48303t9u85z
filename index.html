@@ -927,8 +927,7 @@
 
             <div id="terminplanerView" class="view">
 
-                <div id="terminplaner-main-view">
-                    <div class="back-link-container w-full mb-4 flex justify-between items-center">
+<div class="back-link-container w-full mb-4 flex justify-between items-center">
                         <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition"
                             data-target="home">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
@@ -967,24 +966,45 @@
                         </div>
                     </div>
 
-                    <div class="mb-6">
-                        <h3 class="text-xl font-bold text-gray-800 mb-3">An mich zugewiesen</h3>
-                        <div id="assigned-votes-list" class="space-y-3">
-                            <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
-                                (Hier erscheinen bald Umfragen, die dir zugewiesen wurden)
-                            </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8">
+            
+                        <div class="flex flex-col space-y-3">
+                            <h3 class="text-xl font-bold text-gray-800">Mir zugewiesen</h3>
+                            <div id="assigned-votes-list" class="space-y-3">
+                                <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
+                                    (Hier erscheinen Umfragen, an denen du teilnimmst)
+                                </p>
+                            </div>
                         </div>
-                    </div>
-
-                    <div class="mb-6">
-                        <h3 class="text-xl font-bold text-gray-800 mb-3">Öffentliche Umfragen</h3>
-                        <div id="public-votes-list" class="space-y-3">
-                            <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
-                                (Hier erscheinen bald öffentliche Umfragen)
-                            </p>
+            
+                        <div class="flex flex-col space-y-3">
+                            <h3 class="text-xl font-bold text-gray-800">Öffentliche Umfragen</h3>
+                            <div id="public-votes-list" class="space-y-3">
+                                <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
+                                    (Hier erscheinen öffentliche Umfragen)
+                                </p>
+                            </div>
                         </div>
+            
+                        <div class="flex flex-col space-y-3">
+                            <h3 class="text-xl font-bold text-gray-800">Von mir erstellt</h3>
+                            <div id="created-votes-list" class="space-y-3">
+                                <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
+                                    (Hier erscheinen Umfragen, die du erstellt hast)
+                                </p>
+                            </div>
+                        </div>
+            
+                        <div class="flex flex-col space-y-3">
+                            <h3 class="text-xl font-bold text-gray-800">Vergangene Umfragen</h3>
+                            <div id="past-votes-list" class="space-y-3">
+                                <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
+                                    (Hier erscheinen abgeschlossene/fixierte Umfragen)
+                                </p>
+                            </div>
+                        </div>
+            
                     </div>
-                </div>
 
                 <div id="terminplaner-create-view" class="hidden">
                     <div class="mb-4">

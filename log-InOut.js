@@ -2,7 +2,7 @@
 import { db, usersCollectionRef, setButtonLoading, adminSectionsState, modalUserButtons, ADMIN_ROLES, adminRolesCollectionRef, rolesCollectionRef, ROLES, alertUser, initialAuthCheckDone, currentUser, GUEST_MODE, adminSettings, CHECKLISTS, ADMIN_STORAGE_KEY, USERS, navigate, auth } from './haupteingang.js';
 import { renderModalUserButtons } from './admin_benutzersteuerung.js';
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { listenForAssignedVotes, stopAssignedVotesListener } from './terminplaner.js';
+import { listenForAssignedVotes, stopAssignedVotesListener, listenForCreatedVotes } from './terminplaner.js';
 // ENDE-ZIKA //
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
@@ -143,6 +143,7 @@ export async function checkCurrentUserValidity() {
         // NEU: Starte den Spion für "An mich zugewiesen"
         // Wir übergeben die ID des eingeloggten Benutzers
         listenForAssignedVotes(currentUser.mode);
+        listenForCreatedVotes(currentUser.mode); // NEU: Starte den Spion für "Von mir erstellt"
 
         updateUIForMode(); 
 

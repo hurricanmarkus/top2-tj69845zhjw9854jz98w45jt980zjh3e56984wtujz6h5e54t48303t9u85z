@@ -22,6 +22,8 @@ let currentParticipantAnswers = {};
 let isVoteGridEditable = false; 
 let unsubscribePublicVotes = null;
 let unsubscribeAssignedVotes = null;
+let unsubscribeCreatedVotes = null; // NEU
+let unsubscribePastVotes = null; // NEU
 let editTokenTimer = null; // Für den 10-Sekunden-Timeout
 
 
@@ -375,12 +377,18 @@ export function stopAssignedVotesListener() {
         unsubscribeAssignedVotes();
         unsubscribeAssignedVotes = null;
     }
+    // NEU: Auch den "Erstellt"-Listener stoppen
+    if (unsubscribeCreatedVotes) {
+        unsubscribeCreatedVotes();
+        unsubscribeCreatedVotes = null;
+    }
     renderAssignedVotes([]); 
-}
+    renderC
 
 
 // ----- RENDER-FUNKTIONEN FÜR LISTEN -----
 
+// ERSETZE diese Funktion in terminplaner.js
 function renderPublicVotes(votes) {
     const listContainer = document.getElementById('public-votes-list');
     if (!listContainer) return;
@@ -388,24 +396,11 @@ function renderPublicVotes(votes) {
         listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Derzeit gibt es keine öffentlichen Umfragen.</p>`;
         return;
     }
-    listContainer.innerHTML = votes.map(vote => {
-        const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
-        const fixedTag = vote.fixedOptionIndex != null ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">FIXIERT</span>' : '';
-        return `
-            <div class="vote-list-item card bg-white p-3 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:bg-indigo-50"
-                 data-vote-id="${vote.id}">
-                <div>
-                    <span class="font-bold text-indigo-700">${vote.title}</span>
-                    ${fixedTag}
-                    <span class="text-sm text-gray-500 ml-2">(${vote.participants?.length || 0} Teilnehmer)</span>
-                    <p class="text-xs text-gray-500">Erstellt von ${vote.createdByName} am ${niceDate}</p>
-                </div>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
-            </div>
-        `;
-    }).join('');
+    // KORREKTUR: Benutze die neue Helfer-Funktion
+    listContainer.innerHTML = votes.map(vote => renderVoteCardHTML(vote, 'public')).join('');
 }
 
+// ERSETZE diese Funktion in terminplaner.js
 function renderAssignedVotes(votes) {
     const listContainer = document.getElementById('assigned-votes-list');
     if (!listContainer) return;
@@ -417,22 +412,8 @@ function renderAssignedVotes(votes) {
         listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Du hast noch an keiner Umfrage teilgenommen.</p>`;
         return;
     }
-    listContainer.innerHTML = votes.map(vote => {
-        const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
-        const fixedTag = vote.fixedOptionIndex != null ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">FIXIERT</span>' : '';
-        return `
-            <div class="vote-list-item card bg-white p-3 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:bg-indigo-50"
-                 data-vote-id="${vote.id}">
-                <div>
-                    <span class="font-bold text-indigo-700">${vote.title}</span>
-                    ${fixedTag}
-                    <span class="text-sm text-gray-500 ml-2">(${vote.participants?.length || 0} Teilnehmer)</span>
-                    <p class="text-xs text-gray-500">Erstellt von ${vote.createdByName} am ${niceDate}</p>
-                </div>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
-            </div>
-        `;
-    }).join('');
+    // KORREKTUR: Benutze die neue Helfer-Funktion (Anforderung 2 & 3)
+    listContainer.innerHTML = votes.map(vote => renderVoteCardHTML(vote, 'assigned')).join('');
 }
 
 
@@ -2047,4 +2028,244 @@ async function confirmAndFixDate() {
     } finally {
         setButtonLoading(confirmBtn, false);
     }
+}
+
+// HINZUFÜGEN (GANZ AM ENDE von terminplaner.js)
+
+// ----- NEU: Listener für "Von mir erstellt" -----
+export function listenForCreatedVotes(userId) {
+    if (unsubscribeCreatedVotes) {
+        unsubscribeCreatedVotes();
+    }
+    if (!userId || userId === GUEST_MODE) {
+        renderCreatedVotes([]);
+        return;
+    }
+    const q = query(
+        votesCollectionRef,
+        where("createdBy", "==", userId),
+        where("fixedOptionIndex", "==", null), // Zeige nur offene/nicht-fixierte
+        orderBy("createdAt", "desc"),
+        limit(20)
+    );
+    unsubscribeCreatedVotes = onSnapshot(q, (snapshot) => {
+        const votes = [];
+        snapshot.forEach(doc => {
+            // Wir filtern zusätzlich abgelaufene (endTime) raus
+            const data = doc.data();
+            const endTime = data.endTime;
+            if (endTime && typeof endTime.toDate === 'function' && endTime.toDate() < new Date()) {
+                // Diese Umfrage ist abgelaufen, aber nicht fixiert -> nicht anzeigen
+            } else {
+                votes.push({ id: doc.id, ...data });
+            }
+        });
+        renderCreatedVotes(votes);
+    }, (error) => {
+        console.error("Fehler beim Lauschen auf erstellte Umfragen:", error);
+    });
+}
+
+// ----- NEU: Listener für "Vergangene Umfragen" -----
+export function listenForPastVotes() {
+    if (unsubscribePastVotes) {
+        unsubscribePastVotes();
+    }
+    const now = new Date();
+    // Zeige alle, die fixiert SIND
+    const qFixed = query(
+        votesCollectionRef,
+        where("fixedOptionIndex", "!=", null), 
+        orderBy("fixedOptionIndex"), // Braucht Firebase Index
+        orderBy("createdAt", "desc"), 
+        limit(10)
+    );
+
+    // Wir brauchen einen zweiten Query für "abgelaufen, aber nicht fixiert"
+    // (Diese werden aktuell in "Von mir erstellt" und "Zugewiesen" einfach ausgeblendet)
+    // Für "Vergangene" holen wir sie
+    const qExpired = query(
+        votesCollectionRef,
+        where("endTime", "<", now),
+        where("fixedOptionIndex", "==", null), // Nur die, die NICHT fixiert sind
+        orderBy("endTime", "desc"),
+        limit(10)
+    );
+
+    let pastVotes = {};
+    
+    // Listener 1: Fixierte
+    unsubscribePastVotes = onSnapshot(qFixed, (snapshot) => {
+        snapshot.forEach(doc => {
+            pastVotes[doc.id] = { id: doc.id, ...doc.data() };
+        });
+        // Sortiere und rendere die kombinierte Liste
+        renderPastVotes(Object.values(pastVotes).sort((a, b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0)));
+    }, (error) => {
+        console.error("Fehler beim Lauschen auf fixierte Umfragen:", error);
+    });
+    
+    // Listener 2: Abgelaufene (noch nicht gestoppt)
+    const unsubscribeExpired = onSnapshot(qExpired, (snapshot) => {
+        snapshot.forEach(doc => {
+            pastVotes[doc.id] = { id: doc.id, ...doc.data(), isExpired: true }; // Markieren als abgelaufen
+        });
+         // Sortiere und rendere die kombinierte Liste
+        renderPastVotes(Object.values(pastVotes).sort((a, b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0)));
+    }, (error) => {
+        console.error("Fehler beim Lauschen auf abgelaufene Umfragen:", error);
+    });
+    
+    // Wir müssen beide Listener stoppen, wenn die Funktion neu aufgerufen wird
+    const originalUnsubscribe = unsubscribePastVotes;
+    unsubscribePastVotes = () => {
+        originalUnsubscribe();
+        unsubscribeExpired();
+    };
+}
+
+
+// ----- NEU: Render-Funktion für "Von mir erstellt" -----
+function renderCreatedVotes(votes) {
+    const listContainer = document.getElementById('created-votes-list');
+    if (!listContainer) return;
+    if (currentUser.mode === GUEST_MODE) {
+         listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Melde dich an, um deine erstellten Umfragen zu sehen.</p>`;
+        return;
+    }
+    if (votes.length === 0) {
+        listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Du hast noch keine (offenen) Umfragen erstellt.</p>`;
+        return;
+    }
+    // Benutze die neue Helfer-Funktion
+    listContainer.innerHTML = votes.map(vote => renderVoteCardHTML(vote, 'created')).join('');
+}
+
+// ----- NEU: Render-Funktion für "Vergangene Umfragen" -----
+function renderPastVotes(votes) {
+    const listContainer = document.getElementById('past-votes-list');
+    if (!listContainer) return;
+    if (votes.length === 0) {
+        listContainer.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Keine vergangenen (fixierten oder abgelaufenen) Umfragen gefunden.</p>`;
+        return;
+    }
+    // Benutze die neue Helfer-Funktion
+    listContainer.innerHTML = votes.map(vote => renderVoteCardHTML(vote, 'past')).join('');
+}
+
+
+// ----- HINZUFÜGEN (GANZ AM ENDE von terminplaner.js) -----
+
+// NEU: Helfer-Funktion für die Zeitberechnung (Anforderung 3)
+function formatTimeUntil(endDate) {
+    if (!endDate) return null;
+    
+    let date = endDate;
+    if (typeof endDate.toDate === 'function') {
+        date = endDate.toDate();
+    }
+
+    const now = new Date();
+    const diff = date.getTime() - now.getTime();
+
+    if (diff <= 0) return null; // Abgelaufen
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+    let text = 'Endet in ';
+    let colorClass = 'bg-green-100 text-green-800'; // Standard: > 3 Tage
+
+    if (days > 0) {
+        text += `${days} Tag(en)`;
+        if (days < 3) {
+            colorClass = 'bg-yellow-100 text-yellow-800'; // Weniger als 3 Tage
+        }
+        if (days > 2) {
+             // Zeige Stunden nur, wenn es "knapp" wird (unter 3 Tagen)
+        } else {
+             text += ` ${hours} Std.`;
+        }
+    } else if (hours > 0) {
+        text += `${hours} Std. ${minutes} Min.`;
+        colorClass = 'bg-red-100 text-red-800'; // Weniger als 1 Tag
+    } else {
+        text += `${minutes} Min.`;
+        colorClass = 'bg-red-100 text-red-800'; // Weniger als 1 Stunde
+    }
+
+    return { text: text, colorClass: colorClass };
+}
+
+// NEU: Zentrale Render-Funktion für eine Umfrage-Karte (Anforderung 2 & 3)
+function renderVoteCardHTML(vote, context = 'public') {
+    const niceDate = vote.createdAt?.toDate().toLocaleDateString('de-DE') || '...';
+    
+    let fixedTag = '';
+    if (vote.fixedOptionIndex != null) {
+        fixedTag = '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">FIXIERT</span>';
+    } else if (context === 'past' && vote.isExpired) {
+        fixedTag = '<span class="ml-2 bg-red-100 text-red-800 text-xs font-bold px-2 py-0.5 rounded-full">ABGELAUFEN</span>';
+    }
+
+    const participantCount = vote.participants?.length || 0;
+
+    let statusBoxHTML = '';
+    let expiryBoxHTML = '';
+
+    // Anforderung 3: Ablauf-Box (für "zugewiesen" und "erstellt")
+    // Priorisiert (kommt vor der Status-Box)
+    if (context === 'assigned' || context === 'created') {
+        const timeInfo = formatTimeUntil(vote.endTime);
+        if (timeInfo && !vote.fixedOptionIndex) { // Zeige nicht, wenn fixiert
+            expiryBoxHTML = `
+                <div class="mt-2 text-xs font-semibold px-2 py-1 rounded-md ${timeInfo.colorClass}">
+                    ${timeInfo.text}
+                </div>
+            `;
+        }
+    }
+
+    // Anforderung 2: Status-Box (nur für "zugewiesen")
+    if (context === 'assigned' && !vote.fixedOptionIndex) {
+        const hasParticipated = vote.participants.some(p => p.userId === currentUser.mode);
+        if (hasParticipated) {
+            statusBoxHTML = `
+                <div class="mt-2 text-xs font-semibold px-2 py-1 rounded-md bg-blue-100 text-blue-800">
+                    Antworten abgesendet
+                </div>
+            `;
+        } else {
+            // Zeige "Antworten fehlen" nur, wenn die Ablauf-Box nicht schon "dringend" (rot) ist
+            if (!expiryBoxHTML.includes('bg-red-100')) {
+                 statusBoxHTML = `
+                    <div class="mt-2 text-xs font-semibold px-2 py-1 rounded-md bg-gray-100 text-gray-800">
+                        Antworten fehlen
+                    </div>
+                `;
+            }
+        }
+    }
+    
+    // Vergangene Umfragen (grau)
+    let cardClasses = "bg-white p-3 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:bg-indigo-50";
+    if (context === 'past') {
+         cardClasses = "bg-gray-50 p-3 rounded-lg shadow-sm border flex justify-between items-center cursor-pointer hover:bg-gray-100 opacity-75";
+    }
+
+    return `
+        <div class="vote-list-item card ${cardClasses}" data-vote-id="${vote.id}">
+            <div>
+                <span class="font-bold text-indigo-700">${vote.title}</span>
+                ${fixedTag}
+                <span class="text-sm text-gray-500 ml-2">(${participantCount} Teilnehmer)</span>
+                <p class="text-xs text-gray-500">Erstellt von ${vote.createdByName} am ${niceDate}</p>
+                
+                ${expiryBoxHTML}
+                ${statusBoxHTML}
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-indigo-600"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
+        </div>
+    `;
 }
