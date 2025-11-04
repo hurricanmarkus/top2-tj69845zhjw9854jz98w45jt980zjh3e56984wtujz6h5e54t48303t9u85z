@@ -3047,6 +3047,7 @@ function handleStrikeTerm(optionIndex, shouldBeStricken) {
 
 /**
  * NEU: Verarbeitet den Klick auf "Ok, quittieren"
+ * (KORRIGIERTE VERSION: Stoppt den Spinner zuverlässig)
  */
 async function handleAcknowledgeUpdate() {
     if (!currentVoteData || currentUser.mode === GUEST_MODE) return;
@@ -3102,8 +3103,10 @@ async function handleAcknowledgeUpdate() {
         console.error("Fehler beim Quittieren des Updates:", error);
         alertUser("Fehler beim Quittieren.", "error");
     } finally {
-        // WICHTIG: setButtonLoading NICHT auf false setzen,
-        // da der Knopf durch renderVoteView() sowieso verschwindet.
-        // if (ackBtn) setButtonLoading(ackBtn, false); // Nicht nötig
+        // --- KORREKTUR ---
+        // Wir stoppen den Lade-Spinner in JEDEM Fall (auch bei Fehler),
+        // damit er nicht hängen bleibt.
+        if (ackBtn) setButtonLoading(ackBtn, false);
+        // --- ENDE KORREKTUR ---
     }
 }
