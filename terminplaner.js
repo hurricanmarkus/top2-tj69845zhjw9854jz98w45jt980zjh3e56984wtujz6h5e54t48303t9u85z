@@ -9,6 +9,7 @@ import {
     where, 
     doc, 
     updateDoc, 
+    deleteDoc,
     onSnapshot, 
     orderBy,    
     limit       
@@ -56,7 +57,6 @@ export function initializeTerminplanerView() {
         });
         mainView.dataset.listenerAttached = 'true';
     }
-
 
     // ----- Spione für das Modal (Pop-up Fenster) -----
     const openModalButton = document.getElementById('show-create-vote-modal-btn');
@@ -237,15 +237,6 @@ export function initializeTerminplanerView() {
         editTokenInput.dataset.listenerAttached = 'true';
     }
     
-    const cancelEditingBtn = document.getElementById('cancel-vote-editing-btn');
-    if (cancelEditingBtn && !cancelEditingBtn.dataset.listenerAttached) {
-        cancelEditingBtn.addEventListener('click', () => {
-            showView('vote');
-            joinVoteById(currentVoteData.id); 
-        });
-        cancelEditingBtn.dataset.listenerAttached = 'true';
-    }
-    
     const closeLogBtn = document.getElementById('close-correction-log-btn');
     if (closeLogBtn && !closeLogBtn.dataset.listenerAttached) {
         closeLogBtn.addEventListener('click', () => {
@@ -258,9 +249,63 @@ export function initializeTerminplanerView() {
         closeLogBtn.dataset.listenerAttached = 'true';
     }
 
-    // KORREKTUR: checkUrlForToken() WURDE VON HIER ENTFERNT
-}
+    // ----- NEU: Spione für die Bearbeitungs-Seite (Ansicht 4) -----
 
+    // Spion für "Zurück zur Umfrage"
+    const cancelEditingBtn = document.getElementById('cancel-vote-editing-btn');
+    if (cancelEditingBtn && !cancelEditingBtn.dataset.listenerAttached) {
+        cancelEditingBtn.addEventListener('click', () => {
+            // Prüfen, ob ungespeicherte Änderungen vorhanden sind (optional, aber gut)
+            // Fürs Erste: Einfach zurück zur Abstimmungs-Ansicht
+            showView('vote');
+            joinVoteById(currentVoteData.id); // Neu laden, falls etwas fixiert wurde
+        });
+        cancelEditingBtn.dataset.listenerAttached = 'true';
+    }
+    
+    // Spion für "Unbegrenzt"-Checkbox (auf Edit-Seite)
+    const unlimitedEditCheckbox = document.getElementById('vote-end-time-unlimited-edit');
+    if (unlimitedEditCheckbox && !unlimitedEditCheckbox.dataset.listenerAttached) {
+        unlimitedEditCheckbox.addEventListener('change', (e) => {
+            const endTimeInput = document.getElementById('vote-end-time-edit');
+            if (endTimeInput) {
+                endTimeInput.disabled = e.target.checked;
+                if (e.target.checked) {
+                    endTimeInput.value = ''; 
+                }
+            }
+        });
+        unlimitedEditCheckbox.dataset.listenerAttached = 'true';
+    }
+    
+    // Spion für "Änderungen speichern"
+    const saveChangesBtn = document.getElementById('vote-save-changes-btn');
+    if (saveChangesBtn && !saveChangesBtn.dataset.listenerAttached) {
+        saveChangesBtn.addEventListener('click', saveVoteEdits);
+        saveChangesBtn.dataset.listenerAttached = 'true';
+    }
+    
+    // Spion für "Umfrage schließen"
+    const closePollBtn = document.getElementById('vote-close-poll-btn');
+    if (closePollBtn && !closePollBtn.dataset.listenerAttached) {
+        closePollBtn.addEventListener('click', closePollNow);
+        closePollBtn.dataset.listenerAttached = 'true';
+    }
+    
+    // Spion für "Umfrage löschen"
+    const deletePollBtn = document.getElementById('vote-delete-poll-btn');
+    if (deletePollBtn && !deletePollBtn.dataset.listenerAttached) {
+        deletePollBtn.addEventListener('click', deletePoll);
+        deletePollBtn.dataset.listenerAttached = 'true';
+    }
+    
+    // Spion für "UPDATE" (Logbuch)
+    const pollHistoryBtn = document.getElementById('show-poll-history-btn');
+    if (pollHistoryBtn && !pollHistoryBtn.dataset.listenerAttached) {
+        pollHistoryBtn.addEventListener('click', renderPollHistory);
+        pollHistoryBtn.dataset.listenerAttached = 'true';
+    }
+}
 
 // ----- SPION-FUNKTIONEN (Listener) -----
 
@@ -1020,7 +1065,8 @@ async function saveGroupPoll() {
             options: options, 
             participants: [],
             participantIds: [],
-            fixedOptionIndex: null 
+            fixedOptionIndex: null,
+            pollHistory: [] // NEU: Feld für den Bearbeitungs-Log
         };
         console.log("Speichere Umfrage in Firebase...", voteData);
         const docRef = await addDoc(votesCollectionRef, voteData);
@@ -1191,17 +1237,231 @@ function renderCorrectionHistory(userId) {
 // ----- PLATZHALTER für die Bearbeitungs-Ansicht -----
 function renderEditView(voteData) {
     document.getElementById('edit-poll-title').textContent = `"${voteData.title}" bearbeiten`;
-    const editContent = document.getElementById('edit-view-content');
-    if (editContent) {
-        editContent.innerHTML = `
-            <h3 class="font-bold text-lg mb-2">Termin fixieren</h3>
-            <p class="text-sm">Hier kannst du bald den finalen Termin auswählen.</p>
-            <h3 class="font-bold text-lg mt-6 mb-2">Teilnehmer verwalten</h3>
-            <p class="text-sm">Hier kannst du bald Teilnehmer löschen.</p>
-        `;
+    
+    // 1. Details füllen
+    document.getElementById('vote-title-edit').value = voteData.title;
+    document.getElementById('vote-description-edit').value = voteData.description || '';
+    document.getElementById('vote-location-edit').value = voteData.location || '';
+    
+    // 2. Gültigkeit füllen
+    const startTimeInput = document.getElementById('vote-start-time-edit');
+    const endTimeInput = document.getElementById('vote-end-time-edit');
+    const unlimitedCheckbox = document.getElementById('vote-end-time-unlimited-edit');
+
+    // Konvertiere Firebase-Timestamp (falls vorhanden) in datetime-local-String
+    startTimeInput.value = voteData.startTime ? 
+        new Date(voteData.startTime.toDate().getTime() - (voteData.startTime.toDate().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) 
+        : '';
+        
+    if (voteData.endTime) {
+        endTimeInput.value = new Date(voteData.endTime.toDate().getTime() - (voteData.endTime.toDate().getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+        unlimitedCheckbox.checked = false;
+        endTimeInput.disabled = false;
+    } else {
+        endTimeInput.value = '';
+        unlimitedCheckbox.checked = true;
+        endTimeInput.disabled = true;
+    }
+
+    // 3. Einstellungen füllen
+    document.getElementById('vote-setting-public-edit').checked = voteData.isPublic;
+    document.getElementById('vote-setting-anonymous-edit').checked = voteData.isAnonymous;
+    document.getElementById('vote-setting-disable-maybe-edit').checked = voteData.disableMaybe;
+    
+    // 4. "UPDATE"-Log-Button anzeigen, wenn Logs vorhanden sind
+    const historyContainer = document.getElementById('poll-history-log-container');
+    if (voteData.pollHistory && voteData.pollHistory.length > 0) {
+        historyContainer.classList.remove('hidden');
+    } else {
+        historyContainer.classList.add('hidden');
+    }
+
+    // 5. Gefahrenzone-Knöpfe-Status setzen
+    const closeBtn = document.getElementById('vote-close-poll-btn');
+    // Wenn die Umfrage schon geschlossen ist (Endzeit in der Vergangenheit)
+    if (voteData.endTime && voteData.endTime.toDate() < new Date()) {
+        closeBtn.disabled = true;
+        closeBtn.textContent = 'Teilnahme ist bereits geschlossen';
+    } else {
+        closeBtn.disabled = false;
+        closeBtn.textContent = 'Umfrage jetzt schließen (Teilnahme beenden)';
     }
 }
 
+async function saveVoteEdits() {
+    const saveBtn = document.getElementById('vote-save-changes-btn');
+    setButtonLoading(saveBtn, true);
+
+    try {
+        const updateData = {};
+        const changes = []; // Für das Logbuch
+        
+        // 1. Details lesen
+        const newTitle = document.getElementById('vote-title-edit').value.trim();
+        const newDesc = document.getElementById('vote-description-edit').value.trim();
+        const newLoc = document.getElementById('vote-location-edit').value.trim();
+
+        if (newTitle !== currentVoteData.title) {
+            updateData.title = newTitle;
+            changes.push(`Titel geändert: von "${currentVoteData.title}" zu "${newTitle}"`);
+        }
+        if (newDesc !== (currentVoteData.description || '')) {
+            updateData.description = newDesc;
+            changes.push(`Beschreibung geändert.`);
+        }
+        if (newLoc !== (currentVoteData.location || '')) {
+            updateData.location = newLoc || null;
+            changes.push(`Ort geändert.`);
+        }
+
+        // 2. Gültigkeit lesen
+        const newStartTime = document.getElementById('vote-start-time-edit').value;
+        const newEndTime = document.getElementById('vote-end-time-edit').value;
+        const isUnlimited = document.getElementById('vote-end-time-unlimited-edit').checked;
+
+        updateData.startTime = newStartTime ? new Date(newStartTime) : null;
+        updateData.endTime = !isUnlimited && newEndTime ? new Date(newEndTime) : null;
+        // (Wir loggen Gültigkeitsänderungen vorerst nicht im Detail)
+        
+        // 3. Einstellungen lesen
+        updateData.isPublic = document.getElementById('vote-setting-public-edit').checked;
+        updateData.isAnonymous = document.getElementById('vote-setting-anonymous-edit').checked;
+        updateData.disableMaybe = document.getElementById('vote-setting-disable-maybe-edit').checked;
+        
+        // 4. Log-Eintrag erstellen, WENN es Änderungen gab
+        if (changes.length > 0) {
+            const historyLog = {
+                timestamp: new Date(), // Lokale Zeit (vermeidet Firebase-Array-Fehler)
+                changedBy: USERS[currentUser.mode]?.realName || currentUser.displayName,
+                changes: changes // Array mit den Text-Änderungen
+            };
+            // Füge den neuen Log-Eintrag zum bestehenden Verlauf hinzu
+            updateData.pollHistory = [...(currentVoteData.pollHistory || []), historyLog];
+        }
+        
+        // 5. Datenbank aktualisieren
+        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
+        await updateDoc(voteDocRef, updateData);
+        
+        // 6. Lokale Daten aktualisieren
+        currentVoteData = { ...currentVoteData, ...updateData };
+        
+        alertUser("Änderungen gespeichert!", "success");
+        
+        // Zurück zur Abstimmungs-Seite (die sich jetzt selbst aktualisiert)
+        showView('vote');
+        renderVoteView(currentVoteData); // Ansicht mit den neuen Daten neu laden
+
+    } catch (error) {
+        console.error("Fehler beim Speichern der Änderungen:", error);
+        alertUser("Speichern fehlgeschlagen.", "error");
+    } finally {
+        setButtonLoading(saveBtn, false);
+    }
+}
+
+async function closePollNow() {
+    if (!confirm("Bist du sicher? Dadurch wird die Umfrage sofort geschlossen und niemand kann mehr teilnehmen oder korrigieren.")) {
+        return;
+    }
+
+    const closeBtn = document.getElementById('vote-close-poll-btn');
+    setButtonLoading(closeBtn, true);
+    
+    try {
+        const newEndTime = new Date(); // Setzt Endzeit auf "Jetzt"
+        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
+        
+        await updateDoc(voteDocRef, {
+            endTime: newEndTime
+        });
+        
+        // Lokale Daten aktualisieren
+        currentVoteData.endTime = newEndTime;
+        
+        alertUser("Umfrage wurde geschlossen!", "success");
+        
+        // UI der Edit-Seite aktualisieren
+        renderEditView(currentVoteData);
+        
+    } catch (error) {
+        console.error("Fehler beim Schließen der Umfrage:", error);
+        alertUser("Fehler beim Schließen.", "error");
+    } finally {
+        setButtonLoading(closeBtn, false);
+    }
+}
+
+async function deletePoll() {
+    const confirmation = prompt(`Um die Umfrage "${currentVoteData.title}" endgültig zu löschen, gib bitte LÖSCHEN ein:`);
+    if (confirmation !== 'LÖSCHEN') {
+        alertUser("Löschvorgang abgebrochen.", "info");
+        return;
+    }
+    
+    const deleteBtn = document.getElementById('vote-delete-poll-btn');
+    setButtonLoading(deleteBtn, true);
+
+    try {
+        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
+        await deleteDoc(voteDocRef);
+        
+        alertUser("Umfrage wurde endgültig gelöscht.", "success");
+        
+        // Zurück zur Hauptseite
+        showView('main');
+        currentVoteData = null;
+
+    } catch (error) {
+        console.error("Fehler beim Löschen der Umfrage:", error);
+        alertUser("Fehler beim Löschen.", "error");
+        setButtonLoading(deleteBtn, false);
+    }
+}
+
+function renderPollHistory() {
+    if (!currentVoteData || !currentVoteData.pollHistory || currentVoteData.pollHistory.length === 0) {
+        return alertUser("Kein Bearbeitungsverlauf gefunden.", "info");
+    }
+
+    const modal = document.getElementById('correctionLogModal');
+    const title = document.getElementById('correction-log-title');
+    const content = document.getElementById('correction-log-content');
+    
+    title.textContent = "Bearbeitungs-Verlauf (Details)";
+    
+    content.innerHTML = currentVoteData.pollHistory.map(log => {
+        // Umgang mit Firebase Timestamp ODER lokalem Datum
+        let dateObject = null;
+        if (log.timestamp) {
+            if (typeof log.timestamp.toDate === 'function') dateObject = log.timestamp.toDate();
+            else if (log.timestamp instanceof Date) dateObject = log.timestamp;
+        }
+        
+        const timestamp = dateObject ? dateObject.toLocaleString('de-DE', {
+            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        }) : 'Unbekanntes Datum';
+
+        // Änderungen auflisten
+        const changesHTML = log.changes.map(changeText => {
+            return `<li class="text-sm">${changeText}</li>`;
+        }).join('');
+
+        return `
+            <div class="p-3 bg-white rounded-lg shadow-sm border">
+                <p class="text-xs font-semibold text-gray-700">
+                    Änderung am ${timestamp} Uhr (von ${log.changedBy})
+                </p>
+                <ul class="list-disc list-inside mt-2">
+                    ${changesHTML}
+                </ul>
+            </div>
+        `;
+    }).reverse().join(''); // .reverse(), damit Älteste oben sind
+
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+}
 
 // ----- HELFER-FUNKTIONEN (Rest) -----
 
