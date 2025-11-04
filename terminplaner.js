@@ -440,8 +440,6 @@ function renderAssignedVotes(votes) {
 // (ANGEPASST: Ruft jetzt 'cleanUrl' auf)
 // ERSETZE diese Funktion in terminplaner.js
 
-// ERSETZE diese Funktion in terminplaner.js
-
 export async function joinVoteByToken(tokenFromUrl = null) {
     const tokenInput = document.getElementById('vote-token-input');
     const joinBtn = document.getElementById('join-vote-by-token-btn');
@@ -463,23 +461,24 @@ export async function joinVoteByToken(tokenFromUrl = null) {
         const snapshot = await getDocs(q);
         if (snapshot.empty) throw new Error("Umfrage nicht gefunden. Prüfe den Token.");
         if (snapshot.size > 1) throw new Error("Fehler: Mehrere Umfragen mit diesem Token gefunden. Admin kontaktieren.");
-        
         const voteDoc = snapshot.docs[0];
         const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
+        const now = new Date();
         
-        // ----- KORREKTUR: START-ZEIT-PRÜFUNG ENTFERNT -----
-        // Die folgende 'if'-Bedingung, die geprüft hat, ob die Umfrage
-        // schon gestartet ist, wurde entfernt.
-        // Die 'renderVoteView'-Funktion kümmert sich jetzt darum,
-        // die Warnmeldung anzuzeigen.
-        // ----- ENDE KORREKTUR -----
+        // KORREKTUR: Diese Prüfung ist jetzt entfernt
+        // if (voteData.endTime && now > voteData.endTime.toDate()) { ... }
+        
+        // Nur die Start-Zeit-Prüfung bleibt
+        if (voteData.startTime && now < voteData.startTime.toDate()) {
+            throw new Error(`Diese Umfrage hat noch nicht begonnen. Sie startet am ${voteData.startTime.toDate().toLocaleString('de-DE')}.`);
+        }
         
         currentVoteData = voteData; 
         console.log("Umfrage gefunden:", currentVoteData);
         
         navigate('terminplaner'); // Navigiere zur Terminplaner-Seite
         
-        renderVoteView(currentVoteData); // Zeigt die Umfrage an (und die Warn-Box, falls nötig)
+        renderVoteView(currentVoteData);
         showView('vote'); // Zeige die Abstimmungs-Ansicht
         if (tokenInput) tokenInput.value = ''; 
         
