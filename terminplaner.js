@@ -377,13 +377,8 @@ export function stopAssignedVotesListener() {
         unsubscribeAssignedVotes();
         unsubscribeAssignedVotes = null;
     }
-    // NEU: Auch den "Erstellt"-Listener stoppen
-    if (unsubscribeCreatedVotes) {
-        unsubscribeCreatedVotes();
-        unsubscribeCreatedVotes = null;
-    }
     renderAssignedVotes([]); 
-    renderC
+}
 
 
 // ----- RENDER-FUNKTIONEN FÜR LISTEN -----
