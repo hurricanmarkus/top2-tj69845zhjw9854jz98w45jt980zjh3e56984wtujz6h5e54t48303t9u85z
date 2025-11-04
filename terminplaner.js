@@ -847,16 +847,23 @@ function renderVoteView(voteData) {
     const isParticipationBlocked = isFixed || isClosed || isNotStarted;
 
     // ----- 2. Titel & Ersteller (ZENTRIERT) -----
-    document.getElementById('vote-poll-title').textContent = voteData.title;
+    // (Sichere Zuweisungen)
+    const titleEl = document.getElementById('vote-poll-title');
+    if (titleEl) titleEl.textContent = voteData.title;
+    
     const creatorUser = USERS[voteData.createdBy];
     const creatorName = creatorUser ? creatorUser.realName : voteData.createdByName; 
-    document.getElementById('vote-poll-creator').textContent = `Erstellt von ${creatorName}`;
+    const creatorEl = document.getElementById('vote-poll-creator');
+    if (creatorEl) creatorEl.textContent = `Erstellt von ${creatorName}`;
 
     // ----- 3. Share-Box -----
-    document.getElementById('vote-share-token').textContent = voteData.token;
+    const tokenEl = document.getElementById('vote-share-token');
+    if (tokenEl) tokenEl.textContent = voteData.token;
+    
     const baseUrl = window.location.origin + window.location.pathname; 
     const directUrl = `${baseUrl}?vote_id=${currentVoteData.id}`; 
-    document.getElementById('vote-share-url').value = directUrl;
+    const urlEl = document.getElementById('vote-share-url');
+    if (urlEl) urlEl.value = directUrl;
 
     // ----- 4. Info-Box (Beschreibung, Ort) -----
     const infoBox = document.getElementById('vote-info-box');
@@ -867,16 +874,20 @@ function renderVoteView(voteData) {
     
     let hasInfo = false;
     if (voteData.description) {
-        descEl.textContent = voteData.description;
-        descContainer.classList.remove('hidden');
+        if (descEl) descEl.textContent = voteData.description;
+        if (descContainer) descContainer.classList.remove('hidden');
         hasInfo = true;
-    } else { descContainer.classList.add('hidden'); }
+    } else { 
+        if (descContainer) descContainer.classList.add('hidden'); 
+    }
     if (voteData.location) {
-        locEl.textContent = voteData.location;
-        locContainer.classList.remove('hidden');
+        if (locEl) locEl.textContent = voteData.location;
+        if (locContainer) locContainer.classList.remove('hidden');
         hasInfo = true;
-    } else { locContainer.classList.add('hidden'); }
-    infoBox.classList.toggle('hidden', !hasInfo);
+    } else { 
+        if (locContainer) locContainer.classList.add('hidden'); 
+    }
+    if (infoBox) infoBox.classList.toggle('hidden', !hasInfo);
 
     // ----- 5. Gültigkeits-Boxen (Anforderung 3 & 4) -----
     const validityContainer = document.getElementById('vote-poll-validity-container');
@@ -891,13 +902,13 @@ function renderVoteView(voteData) {
     };
     
     // Rote Box (Anforderung 3)
-    // Zeige "Geschlossen" nur, wenn abgelaufen, aber noch nicht fixiert
     if (isClosed && !isFixed) { 
-        validityEl.textContent = "TEILNAHME GESCHLOSSEN";
-        // NEU: p-3 (für Höhe) und font-bold hinzugefügt (Anforderung 3)
-        validityContainer.classList.add('text-red-700', 'bg-red-50', 'p-3', 'font-bold'); 
-        validityContainer.classList.remove('text-gray-600');
-        validityContainer.classList.remove('hidden');
+        if (validityEl) validityEl.textContent = "TEILNAHME GESCHLOSSEN";
+        if (validityContainer) {
+            validityContainer.classList.add('text-red-700', 'bg-red-50', 'p-3', 'font-bold'); 
+            validityContainer.classList.remove('text-gray-600');
+            validityContainer.classList.remove('hidden');
+        }
     } else {
         // Normale Gültigkeit anzeigen (oder Box verstecken)
         const startTimeText = formatVoteDate(startTime);
@@ -907,27 +918,33 @@ function renderVoteView(voteData) {
         if (endTimeText) validityText += (validityText ? ' | ' : '') + `Endet: ${endTimeText}`;
 
         if (validityText && !isFixed) { // Zeige nicht, wenn fixiert
-            validityEl.textContent = validityText;
-            validityContainer.classList.remove('hidden');
+            if (validityEl) validityEl.textContent = validityText;
+            if (validityContainer) validityContainer.classList.remove('hidden');
         } else {
-            validityContainer.classList.add('hidden');
+            if (validityContainer) validityContainer.classList.add('hidden');
         }
-        // NEU: Styling (p-3, font-bold) sicher entfernen (Anforderung 3)
-        validityContainer.classList.remove('text-red-700', 'bg-red-50', 'p-3', 'font-bold');
-        validityContainer.classList.add('text-gray-600');
+        if (validityContainer) {
+            validityContainer.classList.remove('text-red-700', 'bg-red-50', 'p-3', 'font-bold');
+            validityContainer.classList.add('text-gray-600');
+        }
     }
 
     // Gelbe Box (Anforderung 4)
-    // Zeige Warnung nur, wenn blockiert, aber noch nicht fixiert
+    // *** HIER WAR WAHRSCHEINLICH DER FEHLER (Zeile 930) ***
     if (isParticipationBlocked && !isFixed) { 
         if (isNotStarted) {
-            warningText.textContent = `Diese Umfrage hat noch nicht begonnen. Sie startet am ${formatVoteDate(startTime)}.`;
+            if (warningText) warningText.textContent = `Diese Umfrage hat noch nicht begonnen. Sie startet am ${formatVoteDate(startTime)}.`;
         } else if (isClosed) {
-            warningText.textContent = `Diese Umfrage ist bereits beendet. Teilnahme und Korrekturen sind nicht mehr möglich.`;
+            if (warningText) warningText.textContent = `Diese Umfrage ist bereits beendet. Teilnahme und Korrekturen sind nicht mehr möglich.`;
         }
-        warningBox.classList.remove('hidden');
+        if (warningBox) warningBox.classList.remove('hidden');
     } else {
-        warningBox.classList.add('hidden');
+        if (warningBox) {
+            warningBox.classList.add('hidden'); // <--- Der Code ist jetzt sicher
+        } else {
+            // Wenn das Element fehlt, schreibe eine Warnung statt abzustürzen
+            console.warn("renderVoteView: Element 'vote-validity-warning-box' nicht gefunden.");
+        }
     }
 
 
@@ -944,30 +961,30 @@ function renderVoteView(voteData) {
     }
     
     // Standard: Alles verstecken, Grid nicht editierbar
-    statusContainer.classList.add('hidden');
-    guestNameContainer.classList.add('hidden');
-    userContainer.classList.add('hidden');
+    // *** HIER KÖNNTE DER FEHLER AUCH SEIN (Zeile 930+) ***
+    if (statusContainer) statusContainer.classList.add('hidden');
+    if (guestNameContainer) guestNameContainer.classList.add('hidden');
+    if (userContainer) userContainer.classList.add('hidden');
     isVoteGridEditable = false; // Standard
     
-    // NEU: Prüfe 'isParticipationBlocked' (Anforderung 4)
     if (!isParticipationBlocked) { // Nur wenn Teilnahme erlaubt ist
         if (voteData.isAnonymous) {
             isVoteGridEditable = true; 
         } else if (existingParticipant) {
-            statusContainer.classList.remove('hidden');
-            userContainer.classList.remove('hidden'); 
-            nameDisplay.textContent = existingParticipant.name;
+            if (statusContainer) statusContainer.classList.remove('hidden');
+            if (userContainer) userContainer.classList.remove('hidden'); 
+            if (nameDisplay) nameDisplay.textContent = existingParticipant.name;
             isVoteGridEditable = false; // Hat schon abgestimmt -> nicht editierbar (muss "Korrektur" klicken)
         } else if (currentUser.mode !== GUEST_MODE) {
-            statusContainer.classList.remove('hidden');
-            userContainer.classList.remove('hidden'); 
+            if (statusContainer) statusContainer.classList.remove('hidden');
+            if (userContainer) userContainer.classList.remove('hidden'); 
             const currentUserFull = USERS[currentUser.mode];
-            nameDisplay.textContent = currentUserFull ? currentUserFull.realName : currentUser.displayName;
+            if (nameDisplay) nameDisplay.textContent = currentUserFull ? currentUserFull.realName : currentUser.displayName;
             isVoteGridEditable = true; 
         } else { // Gast
-            statusContainer.classList.remove('hidden');
-            guestNameContainer.classList.remove('hidden'); 
-            guestNameInput.value = '';
+            if (statusContainer) statusContainer.classList.remove('hidden');
+            if (guestNameContainer) guestNameContainer.classList.remove('hidden'); 
+            if (guestNameInput) guestNameInput.value = '';
             isVoteGridEditable = true; 
         }
     }
@@ -984,16 +1001,18 @@ function renderVoteView(voteData) {
     
     resetEditWrapper(); // Admin-Edit-Token-Feld zurücksetzen
     
-    saveButton.classList.add('hidden'); // Standardmäßig versteckt
+    if (saveButton) saveButton.classList.add('hidden'); // Standardmäßig versteckt
     if (isParticipationBlocked) {
-        saveButton.classList.add('hidden');
+        if (saveButton) saveButton.classList.add('hidden');
     }
     
     // Admin-Edit-Knopf
-    if (isFixed) {
-        editButton.classList.add('hidden'); // Verstecken, wenn fixiert
-    } else {
-        editButton.classList.remove('hidden'); // Anzeigen, wenn nicht fixiert
+    if (editButton) {
+        if (isFixed) {
+            editButton.classList.add('hidden'); // Verstecken, wenn fixiert
+        } else {
+            editButton.classList.remove('hidden'); // Anzeigen, wenn nicht fixiert
+        }
     }
     
     // ----- 9. Tabelle rendern -----
