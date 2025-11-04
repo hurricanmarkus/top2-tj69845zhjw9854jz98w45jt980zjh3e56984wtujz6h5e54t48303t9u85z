@@ -383,7 +383,7 @@ export function stopAssignedVotesListener() {
         unsubscribeCreatedVotes = null;
     }
     renderAssignedVotes([]); 
-    renderC
+    renderCreatedVotes([]);
 
 
 // ----- RENDER-FUNKTIONEN FÜR LISTEN -----
