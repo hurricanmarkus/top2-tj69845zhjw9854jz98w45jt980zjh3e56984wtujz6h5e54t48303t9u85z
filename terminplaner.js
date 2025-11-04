@@ -283,11 +283,11 @@ export function initializeTerminplanerView() {
     
     const closePollBtn = document.getElementById('vote-close-poll-btn');
     if (closePollBtn && !closePollBtn.dataset.listenerAttached) {
-        closePollBtn.addEventListener('click', closePollNow);
+        // KORREKTUR: Ruft jetzt die neue Funktion auf, um die Auswahl anzuzeigen
+        closePollBtn.addEventListener('click', showFixDateSelection);
         closePollBtn.dataset.listenerAttached = 'true';
     }
 
-    // NEU: Spion für "Wieder öffnen"
     const reopenPollBtn = document.getElementById('vote-reopen-poll-btn');
     if (reopenPollBtn && !reopenPollBtn.dataset.listenerAttached) {
         reopenPollBtn.addEventListener('click', reopenPoll);
@@ -305,7 +305,22 @@ export function initializeTerminplanerView() {
         pollHistoryBtn.addEventListener('click', renderPollHistory);
         pollHistoryBtn.dataset.listenerAttached = 'true';
     }
+
+    // ----- KORREKTUR: Spione für das "Termin fixieren"-Modal -----
+    // (Diese sind NEU)
+    const cancelFixDateBtn = document.getElementById('cancel-fix-date-btn');
+    if (cancelFixDateBtn && !cancelFixDateBtn.dataset.listenerAttached) {
+        cancelFixDateBtn.addEventListener('click', hideFixDateSelection);
+        cancelFixDateBtn.dataset.listenerAttached = 'true';
+    }
+
+    const confirmFixDateBtn = document.getElementById('confirm-fix-date-btn');
+    if (confirmFixDateBtn && !confirmFixDateBtn.dataset.listenerAttached) {
+        confirmFixDateBtn.addEventListener('click', confirmAndFixDate);
+        confirmFixDateBtn.dataset.listenerAttached = 'true';
+    }
 }
+
 
 // ----- SPION-FUNKTIONEN (Listener) -----
 
@@ -523,9 +538,6 @@ export async function joinVoteById(voteId = null) {
     }
 }
 
-
-// ERSETZE diese Funktion in terminplaner.js
-
 function renderVoteView(voteData) {
     
     // 1. Titel und Ersteller (ZENTRIERT)
@@ -658,7 +670,7 @@ function renderVoteView(voteData) {
 
     // 6. Ansichten (Teilnahme, Edit-Token) zurücksetzen
     const saveButton = document.getElementById('vote-save-participation-btn');
-    const editButton = document.getElementById('show-edit-vote-btn');
+    const editButton = document.getElementById('show-edit-vote-btn'); // Dies ist der "EDIT" (Admin) Knopf
     
     resetEditWrapper();
     
@@ -666,25 +678,25 @@ function renderVoteView(voteData) {
     if (voteData.fixedOptionIndex != null || isClosed) {
         statusContainer.classList.add('hidden'); 
         saveButton.classList.add('hidden');    
-        // Edit-Button nur verstecken, wenn fixiert, aber nicht, wenn nur geschlossen
-        if(voteData.fixedOptionIndex != null) {
-            editButton.classList.add('hidden');
-        } else {
-            editButton.classList.remove('hidden');
-        }
-        updatePollTableAnswers(voteData, false); // Ansicht sperren
+        
+        // KORREKTUR: "Bearbeiten" (Korrektur) auch verstecken, wenn geschlossen (isClosed)
+        // (Dies ist der 'show-edit-vote-btn', der Admin-Edit-Knopf)
+        editButton.classList.add('hidden'); 
+        
+        // KORREKTUR: Wir übergeben 'isClosed', damit die Tabelle weiß, 
+        // ob der "Auswahl bearbeiten"-Link angezeigt werden darf.
+        updatePollTableAnswers(voteData, false, isClosed); // Ansicht sperren
     } else {
         saveButton.classList.add('hidden'); 
-        editButton.classList.remove('hidden'); 
-        updatePollTableAnswers(voteData, isVoteGridEditable); 
+        editButton.classList.remove('hidden'); // Admin-Edit-Knopf anzeigen
+        
+        // KORREKTUR: 'isClosed' ist hier 'false'
+        updatePollTableAnswers(voteData, isVoteGridEditable, false); 
         checkIfAllAnswered();
     }
 }
 
-/**
- * Baut die Abstimmungs-Tabelle neu auf und füllt sie mit allen Antworten
- */
-function updatePollTableAnswers(voteData, isEditable = false) {
+function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) {
     const optionsContainer = document.getElementById('vote-options-container');
 
     // 1. Fall: Termin ist fixiert
@@ -748,15 +760,22 @@ function updatePollTableAnswers(voteData, isEditable = false) {
         if (youParticipant) {
             const correctionCount = youParticipant.correctionCount || 0;
             const correctionText = correctionCount > 0 ? `(<span class="correction-counter cursor-pointer" data-userid="${currentUser.mode}">${correctionCount} Korrekturen</span>)` : '';
+            
+            // KORREKTUR: Zeige den "Auswahl bearbeiten"-Button nur an,
+            // wenn die Umfrage NICHT geschlossen (isClosed) ist.
+            const editButtonHtml = !isClosed ? `<br><button class="vote-correction-btn text-xs font-semibold text-blue-600 hover:underline">Auswahl bearbeiten</button>` : '';
+
             youHeaderHTML = `
                 <span class="font-bold text-indigo-600">Du</span>
                 <br>
                 <span class="text-xs font-normal text-gray-500">${correctionText}</span>
-                <br>
-                <button class="vote-correction-btn text-xs font-semibold text-blue-600 hover:underline">Auswahl bearbeiten</button>
+                ${editButtonHtml}
             `;
         } else {
-            youHeaderHTML = '<span class="font-bold text-indigo-600">Du (Klicke unten)</span>';
+            // KORREKTUR: Wenn Umfrage geschlossen ist, kann man nicht mehr teilnehmen
+            youHeaderHTML = isClosed 
+                ? '<span class="font-bold text-gray-500">Du (Geschlossen)</span>' 
+                : '<span class="font-bold text-indigo-600">Du (Klicke unten)</span>';
         }
     }
 
@@ -801,6 +820,8 @@ function updatePollTableAnswers(voteData, isEditable = false) {
             
             const currentAnswer = currentParticipantAnswers[optionIndex];
             
+            // KORREKTUR: 'isEditable' prüft jetzt auch, ob die Umfrage NICHT geschlossen ist.
+            // (wird in renderVoteView() schon korrekt auf 'false' gesetzt, wenn 'isClosed')
             if (isEditable) {
                 // MODUS: BEARBEITBAR (Knöpfe)
                 const yesSelected = currentAnswer === 'yes' ? 'bg-green-200 ring-2 ring-indigo-500' : 'hover:bg-green-100 bg-opacity-50';
@@ -1307,9 +1328,13 @@ function renderEditView(voteData) {
         }
     }
 
-    // NEUE LOGIK: Zeige "Wieder öffnen" wenn geschlossen, sonst "Schließen"
-    if (endTimeDate && endTimeDate < new Date()) {
-        // Fall: Umfrage ist geschlossen
+    // KORREKTUR: NEUE LOGIK
+    // KORREKTUR: Wenn Termin fixiert ist (fixedOptionIndex), zeige KEINEN der Knöpfe an
+    if (voteData.fixedOptionIndex != null) {
+        closeBtn.classList.add('hidden');
+        reopenBtn.classList.add('hidden');
+    } else if (endTimeDate && endTimeDate < new Date()) {
+        // Fall: Umfrage ist geschlossen (aber nicht fixiert)
         closeBtn.classList.add('hidden');
         reopenBtn.classList.remove('hidden');
     } else {
@@ -1318,12 +1343,18 @@ function renderEditView(voteData) {
         reopenBtn.classList.add('hidden');
     }
 
+    // WICHTIG: Sicherstellen, dass die Terminauswahl (die wir per Klick öffnen)
+    // beim Neuladen der Ansicht immer versteckt ist.
+    const selectionContainer = document.getElementById('fix-date-selection-container');
+    if (selectionContainer) selectionContainer.classList.add('hidden');
+
+
     // Temporärer Inhalt (ersetzen wir als nächstes)
     const editContent = document.getElementById('edit-view-content');
     if (editContent) {
         editContent.innerHTML = `
             <h3 class="font-bold text-lg mb-2">Termin fixieren</h3>
-            <p class="text-sm">Hier kannst du bald den finalen Termin auswählen.</p>
+            <p class="text-sm">Bitte benutze den "Umfrage jetzt schließen" Knopf in der Gefahrenzone, um den finalen Termin auszuwählen.</p>
             <h3 class="font-bold text-lg mt-6 mb-2">Teilnehmer verwalten</h3>
             <p class="text-sm">Hier kannst du bald Teilnehmer löschen.</p>
         `;
@@ -1405,39 +1436,12 @@ async function saveVoteEdits() {
 // ERSETZE diese Funktion in terminplaner.js
 
 async function closePollNow() {
-    if (!confirm("Bist du sicher? Dadurch wird die Umfrage sofort geschlossen und niemand kann mehr teilnehmen oder korrigieren.")) {
-        return;
-    }
-
-    const closeBtn = document.getElementById('vote-close-poll-btn');
-    setButtonLoading(closeBtn, true);
-    
-    try {
-        const newEndTime = new Date(); // Setzt Endzeit auf "Jetzt"
-        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
-        
-        await updateDoc(voteDocRef, {
-            endTime: newEndTime
-        });
-        
-        // Lokale Daten aktualisieren
-        currentVoteData.endTime = newEndTime;
-        
-        alertUser("Umfrage wurde geschlossen!", "success");
-        
-        // UI der Edit-Seite aktualisieren, um den Knopf zu wechseln
-        renderEditView(currentVoteData);
-        
-    } catch (error) {
-        console.error("Fehler beim Schließen der Umfrage:", error);
-        alertUser("Fehler beim Schließen.", "error");
-    } finally {
-        setButtonLoading(closeBtn, false);
-    }
+    console.warn("Veraltete Funktion 'closePollNow' aufgerufen. Bitte 'showFixDateSelection' verwenden.");
+    alertUser("Ein interner Fehler ist aufgetreten (Veralteter Aufruf)", "error");
 }
 
 async function reopenPoll() {
-    if (!confirm("Bist du sicher? Dadurch wird die Umfrage wieder geöffnet und jeder mit dem Link kann teilnehmen.")) {
+    if (!confirm("Bist du sicher? Dadurch wird die Umfrage wieder geöffnet und (falls gesetzt) der fixierte Termin entfernt. Jeder kann wieder teilnehmen.")) {
         return;
     }
 
@@ -1445,15 +1449,17 @@ async function reopenPoll() {
     setButtonLoading(reopenBtn, true);
     
     try {
-        // Wir setzen die Endzeit auf 'null', um sie zu öffnen
+        // Wir setzen die Endzeit UND den fixierten Index auf 'null'
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
         
         await updateDoc(voteDocRef, {
-            endTime: null
+            endTime: null,
+            fixedOptionIndex: null // KORREKTUR: Auch den fixierten Termin aufheben
         });
         
         // Lokale Daten aktualisieren
         currentVoteData.endTime = null;
+        currentVoteData.fixedOptionIndex = null; // KORREKTUR: Auch lokal aufheben
         
         alertUser("Umfrage wurde wieder geöffnet!", "success");
         
@@ -1799,5 +1805,166 @@ function checkInlineEditToken() {
         alertUser("Falscher Bearbeitungs-Token!", "error");
         // Bei Fehler: UI zurücksetzen, damit man es nochmal versuchen kann
         resetEditWrapper();
+    }
+}
+
+// ----- HINZUFÜGEN (GANZ AM ENDE von terminplaner.js) -----
+
+// NEU: Berechnet die beste Option basierend auf "Ja"-Stimmen und Datum
+function calculateBestOption(voteData) {
+    if (!voteData || !voteData.options || voteData.options.length === 0) {
+        return null;
+    }
+
+    let bestOption = null;
+    let maxYesVotes = -1;
+    let earliestDate = null;
+
+    voteData.options.forEach((option, index) => {
+        // 1. Zähle "Ja"-Stimmen
+        const yesVotes = voteData.participants.filter(p => p.currentAnswers[index] === 'yes').length;
+        
+        // 2. Erstelle ein vergleichbares Datum-Objekt
+        // Wichtig: Wir müssen Datum UND Startzeit kombinieren
+        const currentOptionDate = new Date(`${option.date}T${option.timeStart}`);
+
+        // 3. Logik anwenden (Deine Anforderung)
+        if (yesVotes > maxYesVotes) {
+            // Neuer Bester: Hat mehr "Ja"-Stimmen
+            maxYesVotes = yesVotes;
+            earliestDate = currentOptionDate;
+            bestOption = { index: index, ...option, yesVotes: yesVotes };
+        } else if (yesVotes === maxYesVotes) {
+            // Gleichstand: Prüfe, ob dieser Termin *früher* ist
+            if (earliestDate === null || currentOptionDate < earliestDate) {
+                earliestDate = currentOptionDate;
+                bestOption = { index: index, ...option, yesVotes: yesVotes };
+            }
+        }
+    });
+    
+    return bestOption;
+}
+
+// NEU: Zeigt die UI zur Auswahl des finalen Termins an
+function showFixDateSelection() {
+    if (!currentVoteData) return;
+
+    // 1. UI-Elemente holen
+    const selectionContainer = document.getElementById('fix-date-selection-container');
+    const listContainer = document.getElementById('final-date-options-list');
+    const closeBtn = document.getElementById('vote-close-poll-btn'); // Den originalen "Schließen"-Button
+    
+    if (!selectionContainer || !listContainer || !closeBtn) {
+        console.error("UI-Elemente für Terminfixierung nicht gefunden.");
+        return;
+    }
+
+    // 2. Button verstecken, Container anzeigen
+    closeBtn.classList.add('hidden');
+    selectionContainer.classList.remove('hidden');
+    listContainer.innerHTML = '<p class="text-sm text-gray-400 text-center">Berechne besten Termin...</p>';
+
+    // 3. Besten Termin berechnen (Deine Anforderung)
+    const suggestion = calculateBestOption(currentVoteData);
+
+    // 4. Liste der Optionen generieren
+    let optionsHTML = '';
+    currentVoteData.options.forEach((option, index) => {
+        // Zähle "Ja"-Stimmen für diese Option
+        const yesVotes = currentVoteData.participants.filter(p => p.currentAnswers[index] === 'yes').length;
+        
+        const dateObj = new Date(option.date + 'T12:00:00');
+        const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+        const timeString = option.timeEnd ? `${option.timeStart} - ${option.timeEnd}` : `${option.timeStart} Uhr`;
+
+        // Prüfen, ob dies die vorgeschlagene Option ist
+        const isSuggestion = (suggestion && suggestion.index === index);
+        const suggestionBadge = isSuggestion ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">Vorschlag</span>' : '';
+        
+        // Radio-Button als 'checked' markieren, wenn es der Vorschlag ist
+        const isChecked = isSuggestion ? 'checked' : '';
+
+        optionsHTML += `
+            <label class="flex items-center gap-3 p-3 bg-white rounded-lg border hover:bg-indigo-50 cursor-pointer">
+                <input type="radio" name="final-date-option" value="${index}" class="h-5 w-5 text-indigo-600 focus:ring-indigo-500" ${isChecked}>
+                <div>
+                    <p class="font-semibold text-gray-800">${niceDate} <span class="font-mono">(${timeString})</span></p>
+                    <p class="text-sm text-green-600 font-medium">
+                        ${yesVotes} "Ja"-Stimme(n)
+                        ${suggestionBadge}
+                    </p>
+                </div>
+            </label>
+        `;
+    });
+    
+    if (currentVoteData.options.length === 0) {
+         listContainer.innerHTML = '<p class="text-sm text-red-500 text-center">Fehler: Diese Umfrage hat keine Termin-Optionen.</p>';
+    } else {
+         listContainer.innerHTML = optionsHTML;
+    }
+}
+
+// NEU: Versteckt die UI zur Auswahl des finalen Termins
+function hideFixDateSelection() {
+    const selectionContainer = document.getElementById('fix-date-selection-container');
+    const closeBtn = document.getElementById('vote-close-poll-btn'); // Der originale "Schließen"-Button
+    
+    if (selectionContainer) selectionContainer.classList.add('hidden');
+    if (closeBtn) closeBtn.classList.remove('hidden'); // Original-Button wieder zeigen
+}
+
+// NEU: Speichert den ausgewählten finalen Termin und schließt die Umfrage
+async function confirmAndFixDate() {
+    const confirmBtn = document.getElementById('confirm-fix-date-btn');
+    
+    // 1. Finde den ausgewählten Radio-Button
+    const selectedRadio = document.querySelector('input[name="final-date-option"]:checked');
+    if (!selectedRadio) {
+        return alertUser("Bitte wähle einen finalen Termin aus der Liste aus.", "error");
+    }
+    
+    const selectedOptionIndex = parseInt(selectedRadio.value, 10);
+    if (isNaN(selectedOptionIndex)) {
+        return alertUser("Ungültige Auswahl.", "error");
+    }
+
+    if (!confirm("Bist du sicher? Die Umfrage wird geschlossen und der Termin wird fixiert. Dies kann nicht rückgängig gemacht werden (außer durch 'Wieder öffnen').")) {
+        return;
+    }
+
+    setButtonLoading(confirmBtn, true);
+
+    try {
+        const newEndTime = new Date(); // Setzt Endzeit auf "Jetzt"
+        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
+        
+        await updateDoc(voteDocRef, {
+            endTime: newEndTime,
+            fixedOptionIndex: selectedOptionIndex // Der entscheidende neue Wert!
+        });
+        
+        // Lokale Daten aktualisieren
+        currentVoteData.endTime = newEndTime;
+        currentVoteData.fixedOptionIndex = selectedOptionIndex;
+        
+        alertUser("Umfrage wurde geschlossen und Termin fixiert!", "success");
+        
+        // UI der Edit-Seite aufräumen
+        hideFixDateSelection();
+        
+        // UI der Edit-Seite komplett neu rendern, um Status (geschlossen) zu zeigen
+        renderEditView(currentVoteData);
+        
+        // Zurück zur (jetzt fixierten) Abstimmungs-Ansicht
+        showView('vote');
+        renderVoteView(currentVoteData);
+
+    } catch (error) {
+        console.error("Fehler beim Fixieren des Termins:", error);
+        alertUser("Fehler beim Schließen.", "error");
+    } finally {
+        setButtonLoading(confirmBtn, false);
     }
 }
