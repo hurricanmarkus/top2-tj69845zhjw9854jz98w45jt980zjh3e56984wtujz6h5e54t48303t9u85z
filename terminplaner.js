@@ -75,15 +75,16 @@ function showFixDateSelection() {
     // 1. UI-Elemente holen
     const selectionContainer = document.getElementById('fix-date-selection-container');
     const listContainer = document.getElementById('final-date-options-list');
-    const closeBtn = document.getElementById('vote-close-poll-btn'); // Den originalen "Schließen"-Button
+    // KORREKTUR: Wir holen den *neuen* "Tag & Zeit fixieren"-Knopf statt des alten "Schließen"-Knopfes
+    const fixBtn = document.getElementById('vote-fix-date-btn'); 
     
-    if (!selectionContainer || !listContainer || !closeBtn) {
+    if (!selectionContainer || !listContainer || !fixBtn) {
         console.error("UI-Elemente für Terminfixierung nicht gefunden.");
         return;
     }
 
     // 2. Button verstecken, Container anzeigen
-    closeBtn.classList.add('hidden');
+    fixBtn.classList.add('hidden'); // KORREKTUR: Verstecke den *neuen* Knopf
     selectionContainer.classList.remove('hidden');
     listContainer.innerHTML = '<p class="text-sm text-gray-400 text-center">Berechne besten Termin...</p>';
 
@@ -131,10 +132,11 @@ function showFixDateSelection() {
 // NEU: Versteckt die UI zur Auswahl des finalen Termins
 function hideFixDateSelection() {
     const selectionContainer = document.getElementById('fix-date-selection-container');
-    const closeBtn = document.getElementById('vote-close-poll-btn'); // Der originale "Schließen"-Button
+    // KORREKTUR: Wir holen den *neuen* "Tag & Zeit fixieren"-Knopf
+    const fixBtn = document.getElementById('vote-fix-date-btn'); 
     
     if (selectionContainer) selectionContainer.classList.add('hidden');
-    if (closeBtn) closeBtn.classList.remove('hidden'); // Original-Button wieder zeigen
+    if (fixBtn) fixBtn.classList.remove('hidden'); // KORREKTUR: Original-Button wieder zeigen
 }
 
 // NEU: Speichert den ausgewählten finalen Termin und schließt die Umfrage
