@@ -14,7 +14,7 @@ import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists,
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
 import { renderUserKeyList } from './admin_benutzersteuerung.js'; 
 // NEU: Wir importieren die Start-Funktion aus deiner neuen Datei
-import { initializeTerminplanerView, listenForPublicVotes, joinVoteById, joinVoteByToken } from './terminplaner.js';
+import { initializeTerminplanerView, listenForPublicVotes, listenForMyVotes, listenForPastVotes, joinVoteById, joinVoteByToken } from './terminplaner.js';
 // // ENDE-ZIKA //
 
 

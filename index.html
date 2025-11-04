@@ -967,24 +967,54 @@
                         </div>
                     </div>
 
-                    <div class="mb-6">
-                        <h3 class="text-xl font-bold text-gray-800 mb-3">An mich zugewiesen</h3>
-                        <div id="assigned-votes-list" class="space-y-3">
+<div id="pending-votes-section" class="mb-6 hidden">
+                        <h3 class="text-xl font-bold text-red-700 mb-3">🔥 Meine ausständige Rückmeldungen</h3>
+                        <div id="pending-votes-list" class="space-y-3">
                             <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
-                                (Hier erscheinen bald Umfragen, die dir zugewiesen wurden)
+                                (Dieses Modul ist für eine zukünftige Version geplant.)
                             </p>
                         </div>
                     </div>
 
-                    <div class="mb-6">
-                        <h3 class="text-xl font-bold text-gray-800 mb-3">Öffentliche Umfragen</h3>
-                        <div id="public-votes-list" class="space-y-3">
-                            <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
-                                (Hier erscheinen bald öffentliche Umfragen)
-                            </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        
+                        <div class="mb-6">
+                            <h3 class="text-xl font-bold text-gray-800 mb-3">Offen (Teilgenommen)</h3>
+                            <div id="assigned-votes-list" class="space-y-3">
+                                <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
+                                    (Lade...)
+                                </p>
+                            </div>
                         </div>
+
+                        <div class="mb-6">
+                            <h3 class="text-xl font-bold text-gray-800 mb-3">Offen (Öffentlich)</h3>
+                            <div id="public-votes-list" class="space-y-3">
+                                <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
+                                    (Lade...)
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="mb-6">
+                            <h3 class="text-xl font-bold text-gray-800 mb-3">Offen (Von mir erstellt)</h3>
+                            <div id="my-votes-list" class="space-y-3">
+                                <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
+                                    (Lade...)
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="mb-6">
+                            <h3 class="text-xl font-bold text-gray-800 mb-3">Vergangene Umfragen</h3>
+                            <div id="past-votes-list" class="space-y-3">
+                                <p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">
+                                    (Lade...)
+                                </p>
+                            </div>
+                        </div>
+
                     </div>
-                </div>
 
                 <div id="terminplaner-create-view" class="hidden">
                     <div class="mb-4">
