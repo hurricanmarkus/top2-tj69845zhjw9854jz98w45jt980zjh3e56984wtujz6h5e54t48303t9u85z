@@ -22,8 +22,6 @@ let currentParticipantAnswers = {};
 let isVoteGridEditable = false; 
 let unsubscribePublicVotes = null;
 let unsubscribeAssignedVotes = null;
-let unsubscribeCreatedVotes = null; // NEU
-let unsubscribePastVotes = null; // NEU
 let editTokenTimer = null; // Für den 10-Sekunden-Timeout
 
 
@@ -497,8 +495,6 @@ export async function joinVoteByToken(tokenFromUrl = null) {
 
 // ERSETZE diese Funktion in terminplaner.js
 
-// ERSETZE diese Funktion in terminplaner.js
-
 export async function joinVoteById(voteId = null) {
     let idToLoad = voteId;
     let isFromUrl = false;
@@ -516,22 +512,23 @@ export async function joinVoteById(voteId = null) {
         if (!voteDoc.exists()) {
              throw new Error("Diese Umfrage existiert nicht mehr.");
         }
-        
         const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
+        const now = new Date();
+
+        // KORREKTUR: Diese Prüfung ist jetzt entfernt
+        // if (voteData.endTime && now > voteData.endTime.toDate()) { ... }
         
-        // ----- KORREKTUR: START-ZEIT-PRÜFUNG ENTFERNT -----
-        // Die folgende 'if'-Bedingung, die geprüft hat, ob die Umfrage
-        // schon gestartet ist, wurde entfernt.
-        // Die 'renderVoteView'-Funktion kümmert sich jetzt darum,
-        // die Warnmeldung anzuzeigen.
-        // ----- ENDE KORREKTUR -----
+        // Nur die Start-Zeit-Prüfung bleibt
+        if (voteData.startTime && now < voteData.startTime.toDate()) {
+            throw new Error(`Diese Umfrage hat noch nicht begonnen. Sie startet am ${voteData.startTime.toDate().toLocaleString('de-DE')}.`);
+        }
 
         currentVoteData = voteData; 
         console.log("Umfrage per ID geladen:", currentVoteData);
         
         navigate('terminplaner'); // Navigiere zur Terminplaner-Seite
 
-        renderVoteView(currentVoteData); // Zeigt die Umfrage an (und die Warn-Box, falls nötig)
+        renderVoteView(currentVoteData);
         showView('vote'); // Zeige die Abstimmungs-Ansicht
         
         if (isFromUrl) cleanUrlParams();
