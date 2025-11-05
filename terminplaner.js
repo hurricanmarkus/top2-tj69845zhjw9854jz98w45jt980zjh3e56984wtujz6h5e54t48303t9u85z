@@ -322,7 +322,7 @@ function applyAssignedUsers() {
 export function initializeTerminplanerView() {
     
 // Knopf für Gäste verstecken ODER wenn keine Berechtigung
-    const createVoteButton = document.getElementById('show-create-vote-modal-btn');
+const createVoteButton = document.getElementById('show-create-vote-modal-btn');
     if (createVoteButton) {
         // Prüfen, ob der User die Berechtigung hat (SysAdmins haben sie implizit immer)
         // Wir stellen sicher, dass currentUser.permissions existiert, bevor wir .includes aufrufen

@@ -8,7 +8,6 @@ export function setupPermissionDependencies(container) {
     
     // Wir erstellen eine kleine, wiederverwendbare "Helfer-im-Helfer"-Funktion,
     // die die eigentliche Logik enthält.
-    // Sie nimmt den "Hauptschalter" (mainSelector) und die "Unter-Schalter" (subSelectors).
     const setupToggleLogic = (mainSelector, subSelectors) => {
         
         // 1. Finde den Haupt-Schalter (z.B. "Aktuelle Checkliste")
@@ -23,40 +22,49 @@ export function setupPermissionDependencies(container) {
         // 4. Wenn es keine Unter-Schalter gibt, höre auf.
         if (subToggles.length === 0) return; 
 
-        // 5. Das ist die Funktion, die prüft, ob der Haken gesetzt ist oder nicht.
-        const updateSubToggles = () => {
-            const isEnabled = mainToggle.checked; // Ist der Haupt-Haken gesetzt? (true/false)
-            
+        // =================================================================
+        // BEGINN DER ÄNDERUNG (Logik für Auto-Check)
+        // =================================================================
+
+        // Diese Funktion steuert NUR das (De)Aktivieren (disabled)
+        // und das Abwählen, wenn der Hauptpunkt aus ist.
+        const updateDisabledState = () => {
+            const isEnabled = mainToggle.checked; 
             subToggles.forEach(toggle => {
-                // Setze den "disabled"-Status des Unter-Schalters auf das Gegenteil von "isEnabled"
-                // (Wenn Haupt-Haken AN, ist disabled AUS)
-                toggle.disabled = !isEnabled;
                 
-                // Wenn der Haupt-Haken AUSgeschaltet wird...
-                if (!isEnabled) {
-                    // ...muss auch der Haken beim Unter-Punkt entfernt werden.
+                // Wir müssen auch prüfen, ob der Hauptschalter selbst vielleicht deaktiviert ist
+                const canEnableSubToggles = isEnabled && !mainToggle.disabled;
+
+                toggle.disabled = !canEnableSubToggles;
+                
+                if (!canEnableSubToggles) {
                     toggle.checked = false;
-                    
-                    // =================================================================
-                    // BEGINN DER KORREKTUR (SCHLEIFE ENTFERNT)
-                    // =================================================================
-                    // ENTFERNT: toggle.dispatchEvent(new Event('change', { bubbles: true }));
-                    // Diese Zeile hat die Endlosschleife ausgelöst, indem sie ein
-                    // 'change'-Event simuliert hat, das wiederum diese Funktion getriggert hat.
-                    // =================================================================
-                    // ENDE DER KORREKTUR
-                    // =================================================================
                 }
             });
         };
 
-        // 6. Setze einen "Spion" (Event Listener) auf den Haupt-Schalter.
-        // Jedes Mal, wenn du ihn anklickst, wird "updateSubToggles" ausgeführt.
-        mainToggle.addEventListener('change', updateSubToggles);
+        // Wir teilen die Logik auf:
+        // 1. Der 'change'-Listener (der "Spion" für Klicks) macht jetzt MEHR
+        mainToggle.addEventListener('change', () => {
+            // a) Führe die normale (De)Aktivierungs-Logik aus
+            updateDisabledState();
+
+            // b) PRÜFE: Wenn der Hauptschalter gerade ANgeschaltet wurde...
+            if (mainToggle.checked) {
+                // ...dann schalte alle Unter-Schalter auch AN.
+                subToggles.forEach(toggle => {
+                    toggle.checked = true;
+                });
+            }
+            // (Wenn er ausgeschaltet wird, regelt updateDisabledState das Abwählen)
+        });
         
-        // 7. Führe die Funktion EINMAL beim Laden aus,
-        // um den korrekten Start-Zustand herzustellen.
-        updateSubToggles(); 
+        // 2. Führe die (De)Aktivierungs-Logik EINMAL beim Laden aus
+        updateDisabledState(); 
+
+        // =================================================================
+        // ENDE DER ÄNDERUNG
+        // =================================================================
     };
 
     // ---
@@ -90,6 +98,7 @@ export function setupPermissionDependencies(container) {
         ]
     );
 }
+
 
 
 export async function renderAdminRightsManagement() {
