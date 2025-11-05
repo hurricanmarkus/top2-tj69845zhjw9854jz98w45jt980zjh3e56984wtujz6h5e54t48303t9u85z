@@ -1402,9 +1402,7 @@ function renderVoteView(voteData) {
  * Baut die Abstimmungs-Tabelle neu auf und füllt sie mit allen Antworten
  * KORREKTUR: Akzeptiert jetzt 'isClosed', um Korrekturen zu sperren
  */
-// ERSETZE diese Funktion in terminplaner.js
-
-// ERSETZE diese Funktion in terminplaner.js
+// ERSETZE diese Funktion (erneut) in terminplaner.js
 
 function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) {
     const optionsContainer = document.getElementById('vote-options-container');
@@ -1415,6 +1413,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
 
     // 1. Fall: Termin ist fixiert
     if (voteData.fixedOptionIndex != null) {
+        // ... (Dieser Teil ist korrekt und bleibt unverändert) ...
         const fixedOption = voteData.options[voteData.fixedOptionIndex];
         if (fixedOption) {
             const dateObj = new Date(fixedOption.date + 'T12:00:00');
@@ -1491,12 +1490,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
     // 3. Kopfzeile der Tabelle
     tableHTML += '<thead><tr class="bg-gray-50">';
     
-    // --- KORREKTUR 1 HIER ---
-    // 'w-48' (fixe Breite) wurde entfernt.
-    // 'whitespace-nowrap' (kein Zeilenumbruch) wurde hinzugefügt, damit die Spalte schmal wird.
-    // 'border-r border-gray-300' (rechte Trennlinie) wurde hinzugefügt.
     tableHTML += '<th class="p-3 border-b sticky left-0 bg-gray-50 z-10 whitespace-nowrap border-r border-gray-300">Termin</th>';
-    // --- ENDE KORREKTUR 1 ---
     
     voteData.participants.forEach(p => {
         if (p.userId === currentUser.mode) return; 
@@ -1513,10 +1507,15 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
     
     let youHeaderHTML = '<span class="font-bold text-indigo-600">Du</span>'; 
     
-    if (currentUser.mode !== GUEST_MODE && !voteData.isAnonymous) {
+
+    // --- HIER IST DIE KORREKTUR ---
+    // Wir prüfen NUR NOCH, ob du eingeloggt bist, nicht mehr ob die Umfrage anonym ist.
+    if (currentUser.mode !== GUEST_MODE) { 
         if (youParticipant) {
+            // Wenn wir dich gefunden haben (egal ob Name "Markus" or "Anonym")
             const correctionCount = youParticipant.correctionCount || 0;
             const correctionText = correctionCount > 0 ? `(<span class="correction-counter cursor-pointer" data-userid="${currentUser.mode}">${correctionCount} Korrekturen</span>)` : '';
+            // Zeige den Knopf an (solange die Umfrage nicht geschlossen/fixiert ist)
             const editButtonHtml = !isClosed ? `<br><button class="vote-correction-btn text-xs font-semibold text-blue-600 hover:underline">Auswahl bearbeiten</button>` : '';
 
             youHeaderHTML = `
@@ -1526,37 +1525,33 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                 ${editButtonHtml}
             `;
         } else {
+            // Wenn du eingeloggt bist, aber noch nicht gevotet hast
             youHeaderHTML = isClosed 
                 ? '<span class="font-bold text-gray-500">Du (Geschlossen)</span>' 
                 : '<span class="font-bold text-indigo-600">Du (Klicke unten)</span>';
         }
     }
+    // --- ENDE DER KORREKTUR ---
 
-    // --- KORREKTUR 2 HIER ---
-    // 'w-48' (fixe Breite) wurde beibehalten, damit die Knöpfe Platz haben.
-    // 'border-l border-gray-300' (linke Trennlinie) wurde hinzugefügt.
+
     tableHTML += `<th class="p-3 border-b text-center w-48 sticky right-0 bg-gray-50 z-10 border-l border-gray-300">
                     ${youHeaderHTML}
                   </th>`;
-    // --- ENDE KORREKTUR 2 ---
                   
     tableHTML += '</tr></thead>';
 
-    // 4. Zeilen der Tabelle
+    // 4. Zeilen der Tabelle (Dieser Teil bleibt unverändert)
     tableHTML += '<tbody>';
     
     for (const date in optionsByDate) {
         const dateObj = new Date(date + 'T12:00:00'); 
         const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
 
-        // --- KORREKTUR 3 HIER ---
-        // 'whitespace-nowrap' und 'border-r border-gray-300' zur Datums-Zelle hinzugefügt.
         tableHTML += `
             <tr class="bg-gray-100">
                 <td class="p-2 font-bold sticky left-0 bg-gray-100 z-10 whitespace-nowrap border-r border-gray-300" colspan="${voteData.participants.length + 2}">${niceDate}</td>
             </tr>
         `;
-        // --- ENDE KORREKTUR 3 ---
 
         optionsByDate[date].forEach(option => {
             const optionIndex = option.originalIndex;
@@ -1568,15 +1563,12 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
             const rowClasses = isStricken ? 'bg-gray-100 opacity-60' : '';
             const cellClasses = isStricken ? 'line-through text-gray-500' : 'font-mono';
             
-            // --- KORREKTUR 4 HIER ---
-            // 'whitespace-nowrap' und 'border-r border-gray-300' zur Zeit-Zelle hinzugefügt.
             tableHTML += `
                 <tr class="vote-option-row ${rowClasses}" data-option-index="${optionIndex}">
                     <td class="p-3 border-b ${cellClasses} sticky left-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10 whitespace-nowrap border-r border-gray-300">
                         ${timeString} ${isStricken ? '(Gestrichen)' : ''}
                     </td>
             `;
-            // --- ENDE KORREKTUR 4 ---
 
             voteData.participants.forEach(p => {
                 if (p.userId === currentUser.mode) return; 
@@ -1596,8 +1588,6 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
             const currentAnswer = currentParticipantAnswers[optionIndex];
             
             if (isStricken) {
-                // --- KORREKTUR 5 HIER (Gestrichen-Modus) ---
-                // 'border-l border-gray-300' zur "Du"-Zelle hinzugefügt.
                 if (isEditable) {
                      tableHTML += `
                         <td class="p-2 border-b sticky right-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10 border-l border-gray-300">
@@ -1621,7 +1611,6 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                         </td>
                     `;
                 }
-                // --- ENDE KORREKTUR 5 ---
             }
             else if (isEditable) {
                 // MODUS: BEARBEITBAR (Knöpfe)
@@ -1630,8 +1619,6 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                 const noSelected = currentAnswer === 'no' ? 'bg-red-200 ring-2 ring-indigo-500' : 'hover:bg-red-100 bg-opacity-50';
                 const maybeHidden = voteData.disableMaybe ? 'hidden' : '';
 
-                // --- KORREKTUR 6 HIER (Bearbeiten-Modus) ---
-                // 'border-l border-gray-300' zur "Du"-Zelle hinzugefügt.
                 tableHTML += `
                     <td class="p-2 border-b sticky right-0 bg-white z-10 border-l border-gray-300">
                         <div class="flex justify-center gap-1">
@@ -1647,7 +1634,6 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                         </div>
                     </td>
                 `;
-                // --- ENDE KORREKTUR 6 ---
             } else {
                 // MODUS: SCHREIBGESCHÜTZT (Symbole)
                 let answerIcon = '';
@@ -1655,14 +1641,11 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                 if (currentAnswer === 'no') answerIcon = '<span class="text-red-500 font-bold text-xl">✘</span>';
                 if (currentAnswer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold text-xl">~</span>';
                 
-                // --- KORREKTUR 7 HIER (Nur-Lesen-Modus) ---
-                // 'border-l border-gray-300' zur "Du"-Zelle hinzugefügt.
                 tableHTML += `
                     <td class="p-3 border-b text-center sticky right-0 bg-white z-10 border-l border-gray-300">
                         ${answerIcon}
                     </td>
                 `;
-                // --- ENDE KORREKTUR 7 ---
             }
             
             tableHTML += '</tr>';
@@ -1672,6 +1655,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
     tableHTML += '</tbody></table>';
     optionsContainer.innerHTML = tableHTML;
 }
+
 
 
 
