@@ -162,16 +162,18 @@ async function confirmAndFixDate() {
     setButtonLoading(confirmBtn, true);
 
     try {
-        const newEndTime = new Date(); // Setzt Endzeit auf "Jetzt"
+        // --- KORREKTUR HIER ---
+        // Die Zeile "const newEndTime = new Date();" wurde entfernt.
+        
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
         
         await updateDoc(voteDocRef, {
-            endTime: newEndTime,
+            // "endTime: newEndTime," wurde entfernt.
             fixedOptionIndex: selectedOptionIndex // Der entscheidende neue Wert!
         });
         
         // Lokale Daten aktualisieren
-        currentVoteData.endTime = newEndTime;
+        // "currentVoteData.endTime = newEndTime;" wurde entfernt.
         currentVoteData.fixedOptionIndex = selectedOptionIndex;
         
         alertUser("Umfrage wurde geschlossen und Termin fixiert!", "success");
