@@ -8,6 +8,7 @@ export function setupPermissionDependencies(container) {
     
     // Wir erstellen eine kleine, wiederverwendbare "Helfer-im-Helfer"-Funktion,
     // die die eigentliche Logik enthält.
+    // Sie nimmt den "Hauptschalter" (mainSelector) und die "Unter-Schalter" (subSelectors).
     const setupToggleLogic = (mainSelector, subSelectors) => {
         
         // 1. Finde den Haupt-Schalter (z.B. "Aktuelle Checkliste")
@@ -22,49 +23,40 @@ export function setupPermissionDependencies(container) {
         // 4. Wenn es keine Unter-Schalter gibt, höre auf.
         if (subToggles.length === 0) return; 
 
-        // =================================================================
-        // BEGINN DER ÄNDERUNG (Logik für Auto-Check)
-        // =================================================================
+        // 5. Das ist die Funktion, die prüft, ob der Haken gesetzt ist oder nicht.
+        const updateSubToggles = () => {
+            // =================================================================
+            // BEGINN DER KORREKTUR (Rückgängig machen)
+            // =================================================================
 
-        // Diese Funktion steuert NUR das (De)Aktivieren (disabled)
-        // und das Abwählen, wenn der Hauptpunkt aus ist.
-        const updateDisabledState = () => {
-            const isEnabled = mainToggle.checked; 
+            // Wir prüfen auch, ob der Hauptschalter selbst deaktiviert ist
+            const isEnabled = mainToggle.checked && !mainToggle.disabled; 
+            
             subToggles.forEach(toggle => {
+                // Setze den "disabled"-Status des Unter-Schalters auf das Gegenteil von "isEnabled"
+                // (Wenn Haupt-Haken AN, ist disabled AUS)
+                toggle.disabled = !isEnabled;
                 
-                // Wir müssen auch prüfen, ob der Hauptschalter selbst vielleicht deaktiviert ist
-                const canEnableSubToggles = isEnabled && !mainToggle.disabled;
-
-                toggle.disabled = !canEnableSubToggles;
-                
-                if (!canEnableSubToggles) {
+                // Wenn der Haupt-Haken AUSgeschaltet wird...
+                if (!isEnabled) {
+                    // ...muss auch der Haken beim Unter-Punkt entfernt werden.
                     toggle.checked = false;
                 }
+                
+                // Die Logik, die den Haken automatisch SETZT, wurde entfernt.
             });
+            // =================================================================
+            // ENDE DER KORREKTUR
+            // =================================================================
         };
 
-        // Wir teilen die Logik auf:
-        // 1. Der 'change'-Listener (der "Spion" für Klicks) macht jetzt MEHR
-        mainToggle.addEventListener('change', () => {
-            // a) Führe die normale (De)Aktivierungs-Logik aus
-            updateDisabledState();
-
-            // b) PRÜFE: Wenn der Hauptschalter gerade ANgeschaltet wurde...
-            if (mainToggle.checked) {
-                // ...dann schalte alle Unter-Schalter auch AN.
-                subToggles.forEach(toggle => {
-                    toggle.checked = true;
-                });
-            }
-            // (Wenn er ausgeschaltet wird, regelt updateDisabledState das Abwählen)
-        });
+        // 6. Setze einen "Spion" (Event Listener) auf den Haupt-Schalter.
+        // Jedes Mal, wenn du ihn anklickst, wird "updateSubToggles" ausgeführt.
+        mainToggle.addEventListener('change', updateSubToggles);
         
-        // 2. Führe die (De)Aktivierungs-Logik EINMAL beim Laden aus
-        updateDisabledState(); 
-
-        // =================================================================
-        // ENDE DER ÄNDERUNG
-        // =================================================================
+        // 7. Führe die Funktion EINMAL beim Laden aus,
+        // um den korrekten Start-Zustand herzustellen.
+        updateSubToggles(); 
     };
 
     // ---
@@ -98,6 +90,7 @@ export function setupPermissionDependencies(container) {
         ]
     );
 }
+
 
 
 
