@@ -1130,13 +1130,28 @@
                                     <p class="text-xs text-gray-500">Verhindert Beeinflussung durch andere.</p>
                                 </div>
                             </label>
-                            
+
                             <div id="vote-setting-hide-answers-mode-wrapper" class="hidden flex-grow">
-                                <select id="vote-setting-hide-answers-mode" class="w-full p-2 border border-gray-300 rounded-lg bg-white">
+                                <select id="vote-setting-hide-answers-mode"
+                                    class="w-full p-2 border border-gray-300 rounded-lg bg-white">
                                     <option value="bis_umfragenabschluss" selected>bis Umfrageabschluss</option>
                                     <option value="bis_stimmabgabe_mit_korrektur">bis zur eigenen Stimmabgabe</option>
-                                    <option value="bis_stimmabgabe_ohne_korrektur">bis zur eignen Stimmabgabe (Korrekturen verbieten)</option>
+                                    <option value="bis_stimmabgabe_ohne_korrektur">bis zur eignen Stimmabgabe
+                                        (Korrekturen verbieten)</option>
                                 </select>
+                            </div>
+                        </div>
+                        <div class="p-3 bg-gray-50 rounded-lg">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <span id="vote-setting-access-text" class="font-semibold text-gray-700">Diese
+                                        Umfrage können nur angemeldete Benutzer sehen.</span>
+                                    <input type="hidden" id="vote-setting-access-mode" value="registered">
+                                </div>
+                                <button id="vote-setting-access-btn"
+                                    class="py-1 px-3 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300 flex-shrink-0 ml-2">
+                                    ändern...
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -1272,7 +1287,8 @@
                             </p>
                         </div>
                     </div>
-                    <div id="vote-hidden-answers-infobox" class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-lg mb-6">
+                    <div id="vote-hidden-answers-infobox"
+                        class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-lg mb-6">
                         <p class="font-bold">Antworten sind versteckt</p>
                         <p id="vote-hidden-answers-infobox-text" class="text-sm"></p>
                     </div>
@@ -1455,13 +1471,26 @@
                                 <input type="checkbox" id="vote-setting-hide-answers-edit" class="h-5 w-5 rounded">
                                 <span class="font-semibold text-gray-700">Antworten verstecken</span>
                             </label>
-                            
+
                             <div id="vote-setting-hide-answers-mode-wrapper-edit" class="hidden flex-grow">
-                                <select id="vote-setting-hide-answers-mode-edit" class="w-full p-2 border border-gray-300 rounded-lg bg-white">
+                                <select id="vote-setting-hide-answers-mode-edit"
+                                    class="w-full p-2 border border-gray-300 rounded-lg bg-white">
                                     <option value="bis_umfragenabschluss" selected>bis Umfrageabschluss</option>
                                     <option value="bis_stimmabgabe_mit_korrektur">bis zur eigenen Stimmabgabe</option>
-                                    <option value="bis_stimmabgabe_ohne_korrektur">bis zur eignen Stimmabgabe (Korrekturen verbieten)</option>
+                                    <option value="bis_stimmabgabe_ohne_korrektur">bis zur eignen Stimmabgabe
+                                        (Korrekturen verbieten)</option>
                                 </select>
+                            </div>
+                        </div>
+<div class="p-3 bg-gray-50 rounded-lg">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <span id="vote-setting-access-text-edit" class="font-semibold text-gray-700">Diese Umfrage können nur angemeldete Benutzer sehen.</span>
+                                    <input type="hidden" id="vote-setting-access-mode-edit" value="registered">
+                                </div>
+                                <button id="vote-setting-access-btn-edit" class="py-1 px-3 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300 flex-shrink-0 ml-2">
+                                    ändern...
+                                </button>
                             </div>
                         </div>
                     </div>
