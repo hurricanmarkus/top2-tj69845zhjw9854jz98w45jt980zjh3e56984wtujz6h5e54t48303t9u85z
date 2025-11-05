@@ -131,9 +131,6 @@ export function renderRoleManagement() {
         </div>`;
     roleManagementArea.appendChild(userRolesContainer);
 
-    // =================================================================
-    // BEGINN DER ÄNDERUNG (1 von 2)
-    // =================================================================
     const allRolePermissions = {
         'ENTRANCE': { label: 'Haupteingang öffnen', indent: false },
         'PUSHOVER': { label: 'Push-Nachricht senden', indent: false },
@@ -141,12 +138,9 @@ export function renderRoleManagement() {
         'CHECKLIST_SWITCH': { label: '-> Listen umschalten', indent: true },
         'CHECKLIST_SETTINGS': { label: '-> Checkliste-Einstellungen', indent: true },
         'ESSENSBERECHNUNG': { label: 'Essensberechnung', indent: false },
-        'TERMINPLANER': { label: 'Termin finden', indent: false }, // <-- NEU
-        'TERMINPLANER_CREATE': { label: '-> Neuen Termin anlegen', indent: true } // <-- NEU
+        'TERMINPLANER': { label: 'Termin finden', indent: false }, 
+        'TERMINPLANER_CREATE': { label: '-> Neuen Termin anlegen', indent: true } 
     };
-    // =================================================================
-    // ENDE DER ÄNDERUNG (1 von 2)
-    // =================================================================
     
     // (Container für neue Rollen-Rechte)
     const newRolePermsContainer = document.getElementById('newRolePermissions');
@@ -173,25 +167,45 @@ export function renderRoleManagement() {
         // (Nur SysAdmin darf geschützte Rollen bearbeiten)
         const canDeleteThisRole = canEditUserRoles && role.deletable !== false && !isProtectedRole; 
         
-        // (Diese Logik wird jetzt von der neuen setupCheckboxDependencies-Funktion übernommen)
-        // const isChecklistEnabled = role.permissions?.includes('CHECKLIST'); 
+        // =================================================================
+        // BEGINN DER ÄNDERUNG (Systemadmin-Sonderfall)
+        // =================================================================
         
-        let permissionsCheckboxesHTML = Object.keys(allRolePermissions).map(permKey => {
-            const perm = allRolePermissions[permKey];
-            const isChecked = role.permissions?.includes(permKey) ? 'checked' : '';
+        let permissionsCheckboxesHTML = ''; // Variable hier definieren
+
+        if (role.id === 'SYSTEMADMIN') {
+            // Wenn es die Systemadmin-Rolle ist, zeige deinen Spezialtext an
+            permissionsCheckboxesHTML = `<p class="text-sm font-semibold text-purple-700 italic p-2 bg-purple-50 rounded-lg">Alle Rechte freigeschaltet</p>`;
+        } else {
+            // Ansonsten (für alle anderen Rollen, inkl. ADMIN und NO_RIGHTS), 
+            // baue die Checkboxen wie bisher
             
-            // (Wir setzen 'disabled' erstmal nur auf Basis der Editier-Rechte)
-            const isDisabled = !canEditThisRole ? 'disabled' : '';
-            const marginLeft = perm.indent ? 'pl-6' : '';
+            // (Wir müssen 'isChecklistEnabled' hier definieren, da es nur im 'else'-Block gebraucht wird)
+            const isChecklistEnabled = role.permissions?.includes('CHECKLIST'); 
             
-            return `
-                <label class="flex items-center gap-2 ${canEditThisRole ? 'cursor-pointer' : ''} ${marginLeft} ${isDisabled ? 'opacity-50' : ''}">
-                    <input type="checkbox" class="role-perm-toggle" data-roleid="${role.id}" data-perm="${permKey}" ${isChecked} ${isDisabled}> 
-                    <span>${perm.label}</span>
-                </label>`;
-        }).join('');
+            permissionsCheckboxesHTML = Object.keys(allRolePermissions).map(permKey => {
+                const perm = allRolePermissions[permKey];
+                const isChecked = role.permissions?.includes(permKey) ? 'checked' : '';
+                
+                // Wir müssen 'disabled' hier korrekt setzen, damit die setupCheckboxDependencies-Funktion
+                // (die weiter unten kommt) weiß, ob sie die Unterpunkte sperren soll.
+                const isSubPermission = permKey.startsWith('CHECKLIST_') || permKey.startsWith('TERMINPLANER_');
+                const isDisabled = !canEditThisRole || (isSubPermission && !isChecklistEnabled) ? 'disabled' : '';
+                
+                const marginLeft = perm.indent ? 'pl-6' : '';
+                return `
+                    <label class="flex items-center gap-2 ${canEditThisRole ? 'cursor-pointer' : ''} ${marginLeft} ${isDisabled ? 'opacity-50' : ''}">
+                        <input type="checkbox" class="role-perm-toggle" data-roleid="${role.id}" data-perm="${permKey}" ${isChecked} ${isDisabled}> 
+                        <span>${perm.label}</span>
+                    </label>`;
+            }).join('');
+        }
+        // =================================================================
+        // ENDE DER ÄNDERUNG
+        // =================================================================
 
         const roleCard = document.createElement('div');
+        // Die "Gesperrt"-Optik (opacity-60) bleibt für 'SYSTEMADMIN' erhalten, das ist korrekt
         roleCard.className = `p-3 border rounded-lg bg-white shadow-sm ${!canEditThisRole && isProtectedRole ? 'opacity-60 bg-gray-50' : ''}`;
         
         roleCard.innerHTML = `
@@ -204,11 +218,7 @@ export function renderRoleManagement() {
         userRolesList.appendChild(roleCard);
     });
 
-    // =================================================================
-    // BEGINN DER ÄNDERUNG (2 von 2)
-    // =================================================================
-    // (Checkbox-Abhängigkeiten für Haupt/Unter-Punkte)
-    // Wir machen die alte Funktion schlau genug, um ALLE Paare zu verwalten.
+    // (Checkbox-Abhängigkeiten für CHECKLIST und TERMINPLANER)
     const setupCheckboxDependencies = (container) => {
         
         // Helfer-Funktion für ein Abhängigkeits-Paar
@@ -222,23 +232,19 @@ export function renderRoleManagement() {
 
             // Die Logik, die die Unter-Punkte (de)aktiviert
             const toggleSubPermissions = () => {
-                // Prüfe nur, ob die Haupt-Checkbox selbst editierbar ist
-                if (!mainCheckbox.disabled) {
-                    const isEnabled = mainCheckbox.checked; // Ist der Haupt-Haken AN?
+                // Prüfe, ob die Haupt-Checkbox selbst editierbar UND angehakt ist
+                const isEnabled = mainCheckbox.checked && !mainCheckbox.disabled;
+                
+                subCheckboxes.forEach(subCb => {
+                    subCb.disabled = !isEnabled; // (De)aktiviere die Unter-Checkbox
                     
-                    subCheckboxes.forEach(subCb => {
-                        subCb.disabled = !isEnabled; // (De)aktiviere die Unter-Checkbox
-                        
-                        if (!isEnabled) { // Wenn Haupt-Haken AUS ist
-                            if (subCb.checked) { // ...und Unter-Haken noch AN ist
-                                subCb.checked = false; // ...mache den Unter-Haken AUS
-                                // Wir lösen ein 'change'-Event aus, falls die Checkbox, die wir ändern,
-                                // selbst ein Hauptschalter für etwas anderes ist (Kaskadierung).
-                                subCb.dispatchEvent(new Event('change', { bubbles: true }));
-                            }
+                    if (!isEnabled) { // Wenn Haupt-Haken AUS oder GESPERRT ist
+                        if (subCb.checked) { // ...und Unter-Haken noch AN ist
+                            subCb.checked = false; // ...mache den Unter-Haken AUS
+                            subCb.dispatchEvent(new Event('change', { bubbles: true }));
                         }
-                    });
-                }
+                    }
+                });
             };
             
             // Hänge den "Spion" an die Haupt-Checkbox
@@ -250,11 +256,7 @@ export function renderRoleManagement() {
         // Hier definieren wir alle unsere Abhängigkeiten:
         setupPair('CHECKLIST', ['CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS']);
         setupPair('TERMINPLANER', ['TERMINPLANER_CREATE']);
-        // (Man könnte hier beliebig viele weitere Paare hinzufügen)
     };
-    // =================================================================
-    // ENDE DER ÄNDERUNG (2 von 2)
-    // =================================================================
 
     userRolesList.querySelectorAll('.p-3.border').forEach(card => setupCheckboxDependencies(card));
     setupCheckboxDependencies(document.getElementById('addRoleFormContainer'));
@@ -367,10 +369,6 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
                 console.error("Fehler beim Löschen der Benutzer-Rolle:", error);
                 // 3. Fehlerbehandlung muss den GESPEICHERTEN Namen verwenden
                 alertUser(`Fehler beim Löschen der Benutzer-Rolle: ${error.message || error.toString()}`, "error"); 
-                
-                // WICHTIG: Die Fehlermeldung, die du siehst ("Fehler beim Löschen der Benutzer-Rolle."),
-                // wird jetzt nur noch angezeigt, wenn ein ECHTER Datenbankfehler auftritt (z.B. Netzwerk).
-                // Der vorherige TypError wird vermieden.
             }
         }
     });
@@ -388,9 +386,6 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
         const adminRolesContainer = document.createElement('div');
         adminRolesContainer.className = "mt-6 pl-2 border-l-4 border-gray-200";
         
-        // =================================================================
-        // BEGINN DEINER KORREKTUR (Layout Admin-Rollen-Editor)
-        // =================================================================
         adminRolesContainer.innerHTML = `
             <div id="adminRolesToggle" class="card bg-white p-4 rounded-xl shadow cursor-pointer hover:shadow-md transition duration-200">
                 <div class="flex justify-between items-center">
@@ -516,9 +511,6 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
                 </div>
                 <div id="adminRolesList" class="space-y-3 pt-4"></div>
             </div>`;
-        // =================================================================
-        // ENDE DEINER KORREKTUR
-        // =================================================================
             
         roleManagementArea.appendChild(adminRolesContainer);
 
