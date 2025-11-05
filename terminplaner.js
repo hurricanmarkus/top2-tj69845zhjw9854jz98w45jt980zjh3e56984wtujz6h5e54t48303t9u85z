@@ -29,6 +29,7 @@ let myPollsMap = new Map();
 let unsubscribeMyAssignedVotes = null;
 let unsubscribeMyCreatedVotes = null;
 let isParticipantChoosingAnonymous = false;
+let unsubscribeCurrentVote = null; // NEU: Spion für die aktuell geöffnete Umfrage
 
 
 // ----- VERSCHOBENE FUNKTIONEN (UM DEN FEHLER ZU BEHEBEN) -----
@@ -318,40 +319,37 @@ function applyAssignedUsers() {
 // ----- ENDE VERSCHOBENE FUNKTIONEN -----
 
 
-// ERSETZE diese komplette Funktion in terminplaner.js
 export function initializeTerminplanerView() {
     
-// Knopf für Gäste verstecken ODER wenn keine Berechtigung
-    const createVoteButton = document.getElementById('show-create-vote-modal-btn');
-    if (createVoteButton) {
-        // Prüfen, ob der User die Berechtigung hat (SysAdmins haben sie implizit immer)
-        // Wir stellen sicher, dass currentUser.permissions existiert, bevor wir .includes aufrufen
-        const permissions = currentUser.permissions || [];
-        const hasCreatePermission = permissions.includes('TERMINPLANER_CREATE') || currentUser.role === 'SYSTEMADMIN';
-        
-        if (currentUser.mode === GUEST_MODE || !hasCreatePermission) {
-            // Verstecke den Knopf, wenn der User Gast ist ODER die Berechtigung nicht hat
-            createVoteButton.classList.add('hidden');
-        } else {
-            // Zeige den Knopf nur an, wenn eingeloggt UND Berechtigung vorhanden
-            createVoteButton.classList.remove('hidden');
-        }
-    }
+    // =================================================================
+    // BEGINN DER ÄNDERUNG (Berechtigungs-Prüfung)
+    // =================================================================
+    
+    // HINWEIS: Der Code-Block, der hier stand, um den 'createVoteButton'
+    // zu steuern, wurde ENTFERNT.
+    // Diese Logik ist jetzt ZENTRAL in 'log-InOut.js' -> 'updateUIForMode',
+    // damit sie auch auf Live-Rechte-Änderungen reagiert.
+    
+    // =================================================================
+    // ENDE DER ÄNDERUNG
+    // =================================================================
 
-    // --- Logik für die Haupt-URL-Share-Box ---
+    // --- NEU: Logik für die Haupt-URL-Share-Box ---
     const mainUrlInput = document.getElementById('main-share-url');
     if (mainUrlInput) {
-        mainUrlInput.value = window.location.origin + window.location.pathname + '?view=terminplaner';
+        // Fülle das Feld mit der Basis-URL der App
+        mainUrlInput.value = window.location.origin + window.location.pathname;
     }
     const copyMainUrlBtn = document.getElementById('copy-main-url-btn');
     if (copyMainUrlBtn && !copyMainUrlBtn.dataset.listenerAttached) {
         copyMainUrlBtn.addEventListener('click', () => {
             if (mainUrlInput.value) {
-                copyToClipboard(mainUrlInput.value, "Terminplaner-URL kopiert!");
+                copyToClipboard(mainUrlInput.value, "Startseiten-URL kopiert!");
             }
         });
         copyMainUrlBtn.dataset.listenerAttached = 'true';
     }
+    // --- ENDE NEU ---
     
     // ----- Spion für das Token-Feld -----
     const tokenInput = document.getElementById('vote-token-input');
@@ -450,7 +448,6 @@ export function initializeTerminplanerView() {
     const datesContainer = document.getElementById('vote-dates-container');
     if (datesContainer && !datesContainer.dataset.clickListenerAttached) {
         datesContainer.addEventListener('click', (e) => {
-            // Uhrzeit hinzufügen
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
                 const timesContainer = addTarget.previousElementSibling; 
@@ -458,7 +455,6 @@ export function initializeTerminplanerView() {
                     timesContainer.appendChild(createTimeInputHTML());
                 }
             }
-            // Uhrzeit entfernen
             const removeTarget = e.target.closest('.vote-remove-time-btn');
             if (removeTarget) {
                 const timeGroup = removeTarget.closest('.time-input-group'); 
@@ -469,21 +465,6 @@ export function initializeTerminplanerView() {
                     alertUser("Du musst mindestens eine Uhrzeit pro Tag angeben.", "error");
                 }
             }
-
-            // --- KORREKTUR: "Tag löschen"-Knopf (Erstellen-Modus) ---
-            const removeDayTarget = e.target.closest('.vote-remove-day-btn');
-            if (removeDayTarget) {
-                const dayGroup = removeDayTarget.closest('[data-date-group-id]');
-                if (dayGroup) {
-                    dayGroup.remove();
-                    // Prüfe alle Löschen-Knöpfe neu (um den letzten auszublenden)
-                    updateDeleteDayButtons('vote-dates-container'); 
-                    // Prüfe, ob der "Tag hinzufügen"-Knopf angezeigt werden soll
-                    validateLastDateGroup(); 
-                }
-            }
-            // --- ENDE KORREKTUR ---
-
             validateLastDateGroup();
         });
         datesContainer.addEventListener('input', (e) => {
@@ -569,14 +550,22 @@ export function initializeTerminplanerView() {
     
     const cancelVoteButton = document.getElementById('cancel-vote-participation-btn');
     if (cancelVoteButton && !cancelVoteButton.dataset.listenerAttached) {
+        // =================================================================
+        // BEGINN DER ÄNDERUNG (Live-Spion stoppen)
+        // =================================================================
         cancelVoteButton.addEventListener('click', () => {
+            stopCurrentVoteListener(); // <-- NEU: Stoppt den Live-Spion
             showView('main'); 
             currentVoteData = null; 
         });
+        // =================================================================
+        // ENDE DER ÄNDERUNG
+        // =================================================================
         cancelVoteButton.dataset.listenerAttached = 'true';
     }
 
     const voteView = document.getElementById('terminplaner-vote-view');
+    // ... (Rest der Funktion bleibt gleich) ...
     if (voteView && !voteView.dataset.listenerAttached) {
         voteView.addEventListener('click', (e) => {
             
@@ -719,10 +708,19 @@ export function initializeTerminplanerView() {
 
     const cancelEditingBtn = document.getElementById('cancel-vote-editing-btn');
     if (cancelEditingBtn && !cancelEditingBtn.dataset.listenerAttached) {
+        // =================================================================
+        // BEGINN DER ÄNDERUNG (Live-Spion starten)
+        // =================================================================
         cancelEditingBtn.addEventListener('click', () => {
+            // Wir stoppen den Spion NICHT, sondern gehen zurück zur 'vote'-Ansicht
+            // und rufen 'joinVoteById' auf. 'joinVoteById' startet
+            // den Spion 'listenToCurrentVote' automatisch neu.
             showView('vote');
             joinVoteById(currentVoteData.id); 
         });
+        // =================================================================
+        // ENDE DER ÄNDERUNG
+        // =================================================================
         cancelEditingBtn.dataset.listenerAttached = 'true';
     }
     
@@ -785,6 +783,7 @@ export function initializeTerminplanerView() {
     }
     
     // --- Spione für das Zuweisen-Modal ---
+    // ... (unverändert) ...
     const showAssignModalBtn = document.getElementById('vote-show-assign-user-modal-btn');
     if (showAssignModalBtn && !showAssignModalBtn.dataset.listenerAttached) {
         showAssignModalBtn.addEventListener('click', () => {
@@ -818,6 +817,7 @@ export function initializeTerminplanerView() {
     }
     
     // ----- Spione für die Bearbeiten-Funktionen -----
+    // ... (unverändert) ...
     const addDateButtonEdit = document.getElementById('vote-add-date-btn-edit');
     if (addDateButtonEdit && !addDateButtonEdit.dataset.listenerAttached) {
         addDateButtonEdit.addEventListener('click', addNewDateGroupEdit);
@@ -826,7 +826,6 @@ export function initializeTerminplanerView() {
     const datesContainerEdit = document.getElementById('vote-dates-container-edit');
     if (datesContainerEdit && !datesContainerEdit.dataset.listenerAttached) {
         datesContainerEdit.addEventListener('click', (e) => {
-            // Uhrzeit hinzufügen
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
                 const timesContainer = addTarget.previousElementSibling; 
@@ -834,7 +833,6 @@ export function initializeTerminplanerView() {
                     timesContainer.appendChild(createTimeInputHTML());
                 }
             }
-            // Uhrzeit entfernen
             const removeTarget = e.target.closest('.vote-remove-time-btn');
             if (removeTarget) {
                 const timeGroup = removeTarget.closest('.time-input-group'); 
@@ -844,28 +842,6 @@ export function initializeTerminplanerView() {
                 } else {
                     alertUser("Du musst mindestens eine Uhrzeit pro Tag angeben.", "error");
                 }
-            }
-
-            // --- KORREKTUR: "Tag löschen"-Knopf (Bearbeiten-Modus) ---
-            const removeDayTarget = e.target.closest('.vote-remove-day-btn');
-            if (removeDayTarget) {
-                const dayGroup = removeDayTarget.closest('[data-date-group-id]');
-                if (dayGroup) {
-                    dayGroup.remove();
-                    // Prüfe alle Löschen-Knöpfe neu (um den letzten auszublenden)
-                    updateDeleteDayButtons('vote-dates-container-edit'); 
-                    // Prüfe, ob der "Tag hinzufügen"-Knopf angezeigt werden soll
-                    validateLastDateGroupEdit(); 
-                }
-            }
-            // --- ENDE KORREKTUR ---
-
-            validateLastDateGroupEdit();
-        });
-        
-        datesContainerEdit.addEventListener('input', (e) => {
-            if (e.target.matches('.vote-date-input, .vote-time-start-input')) {
-                validateLastDateGroupEdit();
             }
         });
         datesContainerEdit.dataset.listenerAttached = 'true';
@@ -1016,6 +992,65 @@ export function stopMyVotesListener() {
     sortAndRenderAllVotes([]); // Leere das Dashboard
 }
 
+/**
+ * Stoppt den Live-Spion für die aktuell geöffnete Umfrage.
+ */
+function stopCurrentVoteListener() {
+    if (unsubscribeCurrentVote) {
+        console.log("[Terminplaner] Stoppe Live-Spion für die geöffnete Umfrage.");
+        unsubscribeCurrentVote();
+        unsubscribeCurrentVote = null;
+    }
+}
+
+/**
+ * Startet einen Live-Spion (onSnapshot) für eine spezifische Umfrage-ID.
+ * Diese Funktion übernimmt jetzt das Rendern der Abstimmungs-Ansicht.
+ */
+function listenToCurrentVote(voteId) {
+    // 1. Alten Spion stoppen
+    stopCurrentVoteListener();
+
+    console.log(`[Terminplaner] Starte Live-Spion für Umfrage-ID: ${voteId}`);
+    
+    // 2. Neuen Spion (onSnapshot) an das Dokument hängen
+    unsubscribeCurrentVote = onSnapshot(
+        doc(votesCollectionRef, voteId), 
+        (docSnap) => {
+            if (docSnap.exists()) {
+                // 3. Daten gefunden -> UI live aktualisieren
+                console.log("[Terminplaner] Live-Update für Umfrage empfangen!");
+                currentVoteData = { id: docSnap.id, ...docSnap.data() };
+                
+                // 4. Prüfen, ob wir uns noch auf der Abstimm-Seite befinden
+                const voteView = document.getElementById('terminplaner-vote-view');
+                if (voteView && voteView.classList.contains('active')) {
+                    // Nur wenn die Ansicht aktiv ist, rendern wir sie neu
+                    renderVoteView(currentVoteData);
+                } else {
+                    // Wenn der Benutzer z.B. auf die "Bearbeiten"-Seite gewechselt ist,
+                    // stoppen wir den Spion, um unnötige Neu-Renderings zu vermeiden.
+                    stopCurrentVoteListener();
+                }
+                
+            } else {
+                // 5. Umfrage wurde gelöscht, während wir zuschauen
+                console.warn("[Terminplaner] Live-Update: Geöffnete Umfrage wurde gelöscht!");
+                stopCurrentVoteListener();
+                alertUser("Diese Umfrage wurde vom Ersteller gelöscht.", "error");
+                showView('main'); // Zurück zur Hauptseite
+            }
+        }, 
+        (error) => {
+            // 6. Fehlerbehandlung (z.B. keine Berechtigung)
+            console.error("[Terminplaner] Fehler beim Live-Spion für Umfrage:", error);
+            stopCurrentVoteListener();
+            alertUser("Fehler beim Laden der Umfrage-Updates.", "error");
+            showView('main');
+        }
+    );
+}
+
 
 // ----- RENDER-FUNKTIONEN FÜR LISTEN -----
 
@@ -1123,38 +1158,28 @@ export async function joinVoteByToken(tokenFromUrl = null) {
         if (snapshot.size > 1) throw new Error("Fehler: Mehrere Umfragen mit diesem Token gefunden. Admin kontaktieren.");
         
         const voteDoc = snapshot.docs[0];
-        const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
+        const voteId = voteDoc.id; // Nur die ID holen
         
-        // --- NEUE PRÜFUNG: GÄSTE BLOCKIEREN ---
-        // (accessPolicy === 'registered' ODER (fallback) accessPolicy ist null/undefined)
-        // UND der User ist Gast
-        const isRegisteredOnly = voteData.accessPolicy === 'registered' || !voteData.accessPolicy;
-        if (isRegisteredOnly && currentUser.mode === GUEST_MODE) {
-            throw new Error("Diese Umfrage ist nur für angemeldete Benutzer verfügbar. Bitte melde dich über den Modus-Bereich unten an.");
-        }
-        // --- ENDE NEUE PRÜFUNG ---
+        // --- ÄNDERUNG ---
+        // Wir rufen jetzt die Haupt-Funktion 'joinVoteById' auf,
+        // die sich um die Berechtigungs-Prüfung und den Live-Spion kümmert.
         
-        currentVoteData = voteData; 
-        console.log("Umfrage gefunden:", currentVoteData);
-        
-        navigate('terminplaner'); 
-        showView('vote'); 
-        
-        setTimeout(() => {
-            renderVoteView(currentVoteData); 
-        }, 0); 
+        // (Wir müssen 'await' verwenden, falls joinVoteById einen Fehler wirft,
+        // z.B. wenn ein Gast versucht, einer privaten Umfrage beizutreten)
+        await joinVoteById(voteId); 
         
         if (tokenInput) tokenInput.value = ''; 
-        
-        if (tokenFromUrl) cleanUrlParams();
+        if (tokenFromUrl) cleanUrlParams(); // (wird von joinVoteById auch gemacht, aber doppelt schadet nicht)
         
     } catch (error) {
-        console.error("Fehler beim Suchen der Umfrage:", error);
+        // Fehler, die von getDocs ODER joinVoteById kommen, werden hier gefangen
+        console.error("Fehler beim Suchen der Umfrage per Token:", error);
         alertUser(error.message, "error_long"); // Längere Anzeige
     } finally {
         if (joinBtn) setButtonLoading(joinBtn, false); 
     }
 }
+
 
 
 // ERSETZE diese Funktion in terminplaner.js
@@ -1173,6 +1198,8 @@ export async function joinVoteById(voteId = null) {
             isFromUrl = true;
         }
         
+        // --- ÄNDERUNG (1 von 2) ---
+        // Wir verwenden getDoc HIER nur noch für die *erste* Berechtigungsprüfung
         const voteDocRef = doc(votesCollectionRef, idToLoad);
         const voteDoc = await getDoc(voteDocRef); 
         if (!voteDoc.exists()) {
@@ -1181,23 +1208,26 @@ export async function joinVoteById(voteId = null) {
         
         const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
 
-        // --- NEUE PRÜFUNG: GÄSTE BLOCKIEREN ---
-        // (accessPolicy === 'registered' ODER (fallback) accessPolicy ist null/undefined)
-        // UND der User ist Gast
+        // --- NEUE PRÜFUNG: GÄSTE BLOCKIEREN (bleibt gleich) ---
         const isRegisteredOnly = voteData.accessPolicy === 'registered' || !voteData.accessPolicy;
         if (isRegisteredOnly && currentUser.mode === GUEST_MODE) {
             throw new Error("Diese Umfrage ist nur für angemeldete Benutzer verfügbar. Bitte melde dich über den Modus-Bereich unten an.");
         }
         // --- ENDE NEUE PRÜFUNG ---
 
+        // (Die 'currentVoteData'-Zuweisung hier ist nur für den ersten Moment)
         currentVoteData = voteData; 
-        console.log("Umfrage per ID geladen:", currentVoteData);
+        console.log("Umfrage per ID geladen (Initial-Check):", currentVoteData.id);
         
         navigate('terminplaner'); 
         showView('vote'); 
 
+        // --- ÄNDERUNG (2 von 2) ---
+        // Wir rufen nicht mehr 'renderVoteView' auf.
+        // Wir starten stattdessen den LIVE-SPION.
+        // Der Spion ruft dann 'renderVoteView' selbst auf (zum ersten Mal und bei jedem Update).
         setTimeout(() => {
-            renderVoteView(currentVoteData); 
+            listenToCurrentVote(idToLoad); 
         }, 0); 
         
         if (isFromUrl) cleanUrlParams();
@@ -1207,6 +1237,7 @@ export async function joinVoteById(voteId = null) {
         alertUser(error.message, "error_long"); // Längere Anzeige
     }
 }
+
 
 // ERSETZE diese Funktion in terminplaner.js
 function renderVoteView(voteData) {

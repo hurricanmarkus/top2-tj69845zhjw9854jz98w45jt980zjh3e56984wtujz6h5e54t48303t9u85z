@@ -184,6 +184,7 @@ export function switchToGuestMode(showNotification = true, message = "Abgemeldet
 
 // Diese Funktion gehört in log-InOut.js
 // Diese Funktion gehört in log-InOut.js
+// Diese Funktion gehört in log-InOut.js
 export function updateUIForMode() {
     // Ermittle Admin-Status und effektive Admin-Rechte
     const isAdmin = currentUser.role === 'ADMIN';
@@ -227,13 +228,35 @@ export function updateUIForMode() {
     // =================================================================
 
 
-    // --- NEU: Sichtbarkeit für die Terminplaner-Karte ---
-    //
-    // DER ALTE CODE-BLOCK, DER HIER STAND, WURDE ENTFERNT.
-    // Die Schleife oben (querySelectorAll) übernimmt jetzt
-    // die Steuerung für die 'terminplanerCard'.
-    //
-    // --- ENDE NEUER TEIL ---
+    // --- (Hier war der alte, falsche Code-Block für Terminplaner, der jetzt entfernt ist) ---
+
+
+    // =================================================================
+    // NEUER TEIL FÜR TERMINPLANER (LIVE-BERECHTIGUNG)
+    // =================================================================
+    // Steuert den "+ Neuen Termin" Knopf auf der Terminplaner-Seite
+    const createVoteButton = document.getElementById('show-create-vote-modal-btn');
+    if (createVoteButton) {
+        // Finde heraus, ob die Terminplaner-Seite gerade aktiv ist
+        const isTerminplanerActive = document.getElementById('terminplanerView')?.classList.contains('active');
+        
+        // Prüfe die Berechtigung
+        const permissions = currentUser.permissions || [];
+        const hasCreatePermission = permissions.includes('TERMINPLANER_CREATE') || currentUser.role === 'SYSTEMADMIN';
+        
+        // Bedingungen für die Anzeige:
+        // 1. Man ist NICHT Gast
+        // 2. Man hat die BERECHTIGUNG
+        // 3. Die TERMINPLANER-SEITE ist gerade überhaupt sichtbar
+        if (currentUser.mode !== GUEST_MODE && hasCreatePermission && isTerminplanerActive) {
+            createVoteButton.style.display = 'flex'; // 'flex', da er ein Icon hat
+        } else {
+            createVoteButton.style.display = 'none';
+        }
+    }
+    // =================================================================
+    // ENDE NEUER TEIL
+    // =================================================================
 
 
     // Zeige/Verstecke Einstellungs- und Admin-Knopf auf der Startseite
@@ -445,3 +468,4 @@ if (user) {
         }
     }
 }
+
