@@ -328,6 +328,23 @@ export function initializeTerminplanerView() {
             createVoteButton.classList.remove('hidden');
         }
     }
+
+    // --- NEU: Logik für die Haupt-URL-Share-Box ---
+    const mainUrlInput = document.getElementById('main-share-url');
+    if (mainUrlInput) {
+        // Fülle das Feld mit der Basis-URL der App
+        mainUrlInput.value = window.location.origin + window.location.pathname;
+    }
+    const copyMainUrlBtn = document.getElementById('copy-main-url-btn');
+    if (copyMainUrlBtn && !copyMainUrlBtn.dataset.listenerAttached) {
+        copyMainUrlBtn.addEventListener('click', () => {
+            if (mainUrlInput.value) {
+                copyToClipboard(mainUrlInput.value, "Startseiten-URL kopiert!");
+            }
+        });
+        copyMainUrlBtn.dataset.listenerAttached = 'true';
+    }
+    // --- ENDE NEU ---
     
     // ----- Spion für das Token-Feld -----
     const tokenInput = document.getElementById('vote-token-input');
@@ -506,7 +523,7 @@ export function initializeTerminplanerView() {
         hideAnswersCheckboxEdit.dataset.listenerAttached = 'true';
     }
     
-    // --- NEU: Spione für "Sichtbarkeit" (Erstellen & Bearbeiten) ---
+    // Spione für "Sichtbarkeit" (Erstellen & Bearbeiten)
     const accessBtn = document.getElementById('vote-setting-access-btn');
     if (accessBtn && !accessBtn.dataset.listenerAttached) {
         accessBtn.addEventListener('click', () => {
@@ -522,7 +539,6 @@ export function initializeTerminplanerView() {
         });
         accessBtnEdit.dataset.listenerAttached = 'true';
     }
-    // --- ENDE NEU ---
 
 
     // ----- Spione für die Abstimmungs-Seite -----
@@ -841,6 +857,7 @@ export function initializeTerminplanerView() {
         manageTermsList.dataset.listenerAttached = 'true';
     }
 }
+
 
 
 
