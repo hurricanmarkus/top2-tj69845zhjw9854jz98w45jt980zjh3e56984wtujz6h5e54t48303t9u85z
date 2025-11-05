@@ -318,6 +318,17 @@ function applyAssignedUsers() {
 
 export function initializeTerminplanerView() {
     
+    // --- NEUE PRÜFUNG: Knopf für Gäste verstecken ---
+    const createVoteButton = document.getElementById('show-create-vote-modal-btn');
+    if (createVoteButton) {
+        if (currentUser.mode === GUEST_MODE) {
+            createVoteButton.classList.add('hidden');
+        } else {
+            createVoteButton.classList.remove('hidden');
+        }
+    }
+    // --- ENDE NEUE PRÜFUNG ---
+    
     // ----- Spion für das Token-Feld -----
     const tokenInput = document.getElementById('vote-token-input');
     if (tokenInput && !tokenInput.dataset.listenerAttached) {
@@ -471,7 +482,7 @@ export function initializeTerminplanerView() {
         anonymousCheckboxEdit.dataset.listenerAttached = 'true';
     }
 
-    // --- NEUER SPION FÜR "ANTWORTEN VERSTECKEN" (ERSTELLEN) ---
+    // --- Spion für "Antworten verstecken" (Erstellen) ---
     const hideAnswersCheckbox = document.getElementById('vote-setting-hide-answers');
     if (hideAnswersCheckbox && !hideAnswersCheckbox.dataset.listenerAttached) {
         hideAnswersCheckbox.addEventListener('change', (e) => {
@@ -483,7 +494,7 @@ export function initializeTerminplanerView() {
         hideAnswersCheckbox.dataset.listenerAttached = 'true';
     }
     
-    // --- NEUER SPION FÜR "ANTWORTEN VERSTECKEN" (BEARBEITEN) ---
+    // --- Spion für "Antworten verstecken" (Bearbeiten) ---
     const hideAnswersCheckboxEdit = document.getElementById('vote-setting-hide-answers-edit');
     if (hideAnswersCheckboxEdit && !hideAnswersCheckboxEdit.dataset.listenerAttached) {
         hideAnswersCheckboxEdit.addEventListener('change', (e) => {
@@ -817,6 +828,7 @@ export function initializeTerminplanerView() {
         manageTermsList.dataset.listenerAttached = 'true';
     }
 }
+
 
 
 // ----- SPION-FUNKTIONEN (Listener) -----
