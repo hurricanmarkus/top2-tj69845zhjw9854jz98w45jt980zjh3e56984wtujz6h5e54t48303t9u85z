@@ -331,10 +331,9 @@ export function initializeTerminplanerView() {
         }
     }
 
-    // --- KORREKTUR 1: Logik für die Haupt-URL-Share-Box ---
+    // --- Logik für die Haupt-URL-Share-Box ---
     const mainUrlInput = document.getElementById('main-share-url');
     if (mainUrlInput) {
-        // Fülle das Feld mit der Basis-URL + dem Parameter für diese Ansicht
         mainUrlInput.value = window.location.origin + window.location.pathname + '?view=terminplaner';
     }
     const copyMainUrlBtn = document.getElementById('copy-main-url-btn');
@@ -346,7 +345,6 @@ export function initializeTerminplanerView() {
         });
         copyMainUrlBtn.dataset.listenerAttached = 'true';
     }
-    // --- ENDE KORREKTUR 1 ---
     
     // ----- Spion für das Token-Feld -----
     const tokenInput = document.getElementById('vote-token-input');
@@ -445,6 +443,7 @@ export function initializeTerminplanerView() {
     const datesContainer = document.getElementById('vote-dates-container');
     if (datesContainer && !datesContainer.dataset.clickListenerAttached) {
         datesContainer.addEventListener('click', (e) => {
+            // Uhrzeit hinzufügen
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
                 const timesContainer = addTarget.previousElementSibling; 
@@ -452,6 +451,7 @@ export function initializeTerminplanerView() {
                     timesContainer.appendChild(createTimeInputHTML());
                 }
             }
+            // Uhrzeit entfernen
             const removeTarget = e.target.closest('.vote-remove-time-btn');
             if (removeTarget) {
                 const timeGroup = removeTarget.closest('.time-input-group'); 
@@ -462,6 +462,21 @@ export function initializeTerminplanerView() {
                     alertUser("Du musst mindestens eine Uhrzeit pro Tag angeben.", "error");
                 }
             }
+
+            // --- KORREKTUR: "Tag löschen"-Knopf (Erstellen-Modus) ---
+            const removeDayTarget = e.target.closest('.vote-remove-day-btn');
+            if (removeDayTarget) {
+                const dayGroup = removeDayTarget.closest('[data-date-group-id]');
+                if (dayGroup) {
+                    dayGroup.remove();
+                    // Prüfe alle Löschen-Knöpfe neu (um den letzten auszublenden)
+                    updateDeleteDayButtons('vote-dates-container'); 
+                    // Prüfe, ob der "Tag hinzufügen"-Knopf angezeigt werden soll
+                    validateLastDateGroup(); 
+                }
+            }
+            // --- ENDE KORREKTUR ---
+
             validateLastDateGroup();
         });
         datesContainer.addEventListener('input', (e) => {
@@ -555,7 +570,6 @@ export function initializeTerminplanerView() {
     }
 
     const voteView = document.getElementById('terminplaner-vote-view');
-    // ... (Rest der Funktion bleibt gleich) ...
     if (voteView && !voteView.dataset.listenerAttached) {
         voteView.addEventListener('click', (e) => {
             
@@ -805,6 +819,7 @@ export function initializeTerminplanerView() {
     const datesContainerEdit = document.getElementById('vote-dates-container-edit');
     if (datesContainerEdit && !datesContainerEdit.dataset.listenerAttached) {
         datesContainerEdit.addEventListener('click', (e) => {
+            // Uhrzeit hinzufügen
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
                 const timesContainer = addTarget.previousElementSibling; 
@@ -812,6 +827,7 @@ export function initializeTerminplanerView() {
                     timesContainer.appendChild(createTimeInputHTML());
                 }
             }
+            // Uhrzeit entfernen
             const removeTarget = e.target.closest('.vote-remove-time-btn');
             if (removeTarget) {
                 const timeGroup = removeTarget.closest('.time-input-group'); 
@@ -822,18 +838,29 @@ export function initializeTerminplanerView() {
                     alertUser("Du musst mindestens eine Uhrzeit pro Tag angeben.", "error");
                 }
             }
-            // --- KORREKTUR 2: Validierung auch hier aufrufen ---
+
+            // --- KORREKTUR: "Tag löschen"-Knopf (Bearbeiten-Modus) ---
+            const removeDayTarget = e.target.closest('.vote-remove-day-btn');
+            if (removeDayTarget) {
+                const dayGroup = removeDayTarget.closest('[data-date-group-id]');
+                if (dayGroup) {
+                    dayGroup.remove();
+                    // Prüfe alle Löschen-Knöpfe neu (um den letzten auszublenden)
+                    updateDeleteDayButtons('vote-dates-container-edit'); 
+                    // Prüfe, ob der "Tag hinzufügen"-Knopf angezeigt werden soll
+                    validateLastDateGroupEdit(); 
+                }
+            }
+            // --- ENDE KORREKTUR ---
+
             validateLastDateGroupEdit();
         });
         
-        // --- KORREKTUR 2: Input-Listener HINZUGEFÜGT ---
         datesContainerEdit.addEventListener('input', (e) => {
             if (e.target.matches('.vote-date-input, .vote-time-start-input')) {
                 validateLastDateGroupEdit();
             }
         });
-        // --- ENDE KORREKTUR 2 ---
-        
         datesContainerEdit.dataset.listenerAttached = 'true';
     }
     const adminGridContainer = document.getElementById('edit-participant-grid-container');
@@ -868,6 +895,7 @@ export function initializeTerminplanerView() {
         manageTermsList.dataset.listenerAttached = 'true';
     }
 }
+
 
 
 
@@ -2981,6 +3009,9 @@ function generateVoteToken() {
     }
     return `${part1} - ${part2}`;
 }
+
+
+// ERSETZE diese Funktion in terminplaner.js
 function addNewDateGroup() {
     dateGroupIdCounter++;
     const datesContainer = document.getElementById('vote-dates-container');
@@ -3005,14 +3036,25 @@ function addNewDateGroup() {
             };
         });
     }
+
+    // --- KORREKTUR: HTML für den "Tag löschen" Knopf hinzugefügt ---
     newGroup.innerHTML = `
-        <label class="block text-sm font-bold text-gray-700">Tag ${dateGroupIdCounter}</label>
+        <div class="flex justify-between items-center">
+            <label class="block text-sm font-bold text-gray-700">Tag ${dateGroupIdCounter}</label>
+            <button class="vote-remove-day-btn p-1 text-red-500 hover:bg-red-100 rounded-full hidden" title="Diesen Tag entfernen">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                    <path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.58.22-2.365.468a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193v-.443A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd" />
+                </svg>
+            </button>
+        </div>
         <input type="date" class="vote-date-input w-full p-2 border rounded-lg" value="${newDateString}">
         <div class="vote-times-container space-y-2"></div>
         <button class="vote-add-time-btn text-sm font-semibold text-indigo-600 hover:underline">+ Uhrzeit hinzufügen</button>
     `;
+    // --- ENDE KORREKTUR ---
+
     const newTimesContainer = newGroup.querySelector('.vote-times-container');
-    if (timesToCopy.length > 0) {
+    if (timesToCopy.length > 0 && timesToCopy.some(t => t.timeStart)) {
         timesToCopy.forEach(time => {
             newTimesContainer.appendChild(createTimeInputHTML(time.timeStart, time.timeEnd));
         });
@@ -3021,7 +3063,12 @@ function addNewDateGroup() {
     }
     datesContainer.appendChild(newGroup);
     validateLastDateGroup();
+
+    // --- KORREKTUR: Ruft die Helfer-Funktion auf ---
+    updateDeleteDayButtons('vote-dates-container');
 }
+
+
 function formatDateToISO(date) {
     const pad = (num) => String(num).padStart(2, '0');
     const year = date.getFullYear();
@@ -3065,6 +3112,35 @@ function formatTokenInput(e, inputId) {
          input.selectionStart = cursorPos;
          input.selectionEnd = cursorPos;
     }
+}
+
+// HINZUFÜGEN (NEUE FUNKTION) in terminplaner.js
+/**
+ * NEU: Überprüft die Anzahl der Datums-Blöcke und blendet die "Tag löschen"-Knöpfe
+ * ein oder aus, um sicherzustellen, dass der letzte Block nicht gelöscht werden kann.
+ */
+function updateDeleteDayButtons(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    // 1. Zähle alle Blöcke, die ein "data-date-group-id" haben
+    const dayBlocks = container.querySelectorAll('[data-date-group-id]');
+    const count = dayBlocks.length;
+
+    // 2. Gehe jeden Block einzeln durch
+    dayBlocks.forEach(block => {
+        const deleteBtn = block.querySelector('.vote-remove-day-btn');
+        if (deleteBtn) {
+            // 3. Wenn die Gesamtanzahl größer als 1 ist...
+            if (count > 1) {
+                // ...zeige den Löschen-Knopf an
+                deleteBtn.classList.remove('hidden');
+            } else {
+                // ...sonst (wenn es der letzte ist) verstecke ihn
+                deleteBtn.classList.add('hidden');
+            }
+        }
+    });
 }
 
 // ERSETZE 'copyToClipboard' UND 'cleanUrlParams' in terminplaner.js durch DIESE EINE FUNKTION
@@ -3430,6 +3506,7 @@ function formatTimeRemaining(endTime) {
  * Fügt eine neue (leere) Datums/Zeit-Gruppe im "Bearbeiten"-Modus hinzu.
  * KORRIGIERT: Kopiert jetzt den letzten Eintrag, wie im "Erstellen"-Modus.
  */
+// ERSETZE diese Funktion in terminplaner.js
 function addNewDateGroupEdit(isFirst = false) {
     dateGroupIdCounter++; // Wir nutzen den globalen Zähler weiter
     const datesContainer = document.getElementById('vote-dates-container-edit');
@@ -3446,21 +3523,17 @@ function addNewDateGroupEdit(isFirst = false) {
     newGroup.className = 'p-3 border rounded-lg bg-gray-50 space-y-3';
     newGroup.dataset.dateGroupId = dateGroupIdCounter; // Eindeutige ID
     
-    // --- KORREKTUR 4: Logik zum Kopieren HINZUGEFÜGT ---
     let newDateString = '';
     let timesToCopy = []; 
-    // Wir suchen den letzten Block im "Neue Termine" Container
     const lastGroup = datesContainer.querySelector('[data-date-group-id]:last-child');
     
     if (lastGroup) {
         const lastDateInput = lastGroup.querySelector('.vote-date-input');
         if (lastDateInput && lastDateInput.value) {
-            // Datum gefunden, +1 Tag rechnen
             const lastDate = new Date(lastDateInput.value + "T12:00:00"); 
             lastDate.setDate(lastDate.getDate() + 1); 
             newDateString = formatDateToISO(lastDate); 
         }
-        // Zeiten kopieren
         const lastTimeGroups = lastGroup.querySelectorAll('.time-input-group');
         timesToCopy = Array.from(lastTimeGroups).map(group => {
             return {
@@ -3469,32 +3542,38 @@ function addNewDateGroupEdit(isFirst = false) {
             };
         });
     }
-    // --- ENDE KORREKTUR 4 ---
     
+    // --- KORREKTUR: HTML für den "Tag löschen" Knopf hinzugefügt ---
     newGroup.innerHTML = `
-        <label class="block text-sm font-bold text-gray-700">Neuer Termin (Tag ${dateGroupIdCounter})</label>
+        <div class="flex justify-between items-center">
+            <label class="block text-sm font-bold text-gray-700">Neuer Termin (Tag ${dateGroupIdCounter})</label>
+            <button class="vote-remove-day-btn p-1 text-red-500 hover:bg-red-100 rounded-full hidden" title="Diesen Tag entfernen">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                    <path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.58.22-2.365.468a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193v-.443A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd" />
+                </svg>
+            </button>
+        </div>
         <input type="date" class="vote-date-input w-full p-2 border rounded-lg" value="${newDateString}">
         <div class="vote-times-container space-y-2"></div>
         <button class="vote-add-time-btn text-sm font-semibold text-indigo-600 hover:underline">+ Uhrzeit hinzufügen</button>
     `;
+    // --- ENDE KORREKTUR ---
     
     const newTimesContainer = newGroup.querySelector('.vote-times-container');
     
-    // --- KORREKTUR 4: Logik zum Einfügen HINZUGEFÜGT ---
     if (timesToCopy.length > 0 && timesToCopy.some(t => t.timeStart)) {
-        // Nur kopieren, wenn mindestens eine Startzeit vorhanden war
         timesToCopy.forEach(time => {
             newTimesContainer.appendChild(createTimeInputHTML(time.timeStart, time.timeEnd));
         });
     } else {
-        newTimesContainer.appendChild(createTimeInputHTML()); // Fügt einen leeren Zeit-Slot hinzu
+        newTimesContainer.appendChild(createTimeInputHTML());
     }
-    // --- ENDE KORREKTUR 4 ---
     
     datesContainer.appendChild(newGroup);
-    
-    // Validierung aufrufen, um den "Tag hinzufügen"-Button ggf. zu verstecken
     validateLastDateGroupEdit();
+
+    // --- KORREKTUR: Ruft die Helfer-Funktion auf ---
+    updateDeleteDayButtons('vote-dates-container-edit');
 }
 
 /**
