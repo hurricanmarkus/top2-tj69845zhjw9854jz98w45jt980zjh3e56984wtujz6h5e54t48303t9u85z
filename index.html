@@ -1098,13 +1098,23 @@
                                     App sehen und teilnehmen.</p>
                             </div>
                         </label>
-                        <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
-                            <input type="checkbox" id="vote-setting-anonymous" class="h-5 w-5 rounded">
-                            <div>
-                                <span class="font-semibold text-gray-700">Anonyme Umfrage</span>
-                                <p class="text-xs text-gray-500">Teilnehmer müssen keinen Namen eingeben.</p>
+                        <div class="p-2 bg-gray-50 rounded-lg flex flex-col md:flex-row gap-3">
+                            <label class="flex items-center gap-3 cursor-pointer flex-shrink-0">
+                                <input type="checkbox" id="vote-setting-anonymous" class="h-5 w-5 rounded">
+                                <div>
+                                    <span class="font-semibold text-gray-700">Anonyme Umfrage</span>
+                                    <p class="text-xs text-gray-500">Teilnehmer müssen keinen Namen eingeben.</p>
+                                </div>
+                            </label>
+
+                            <div id="vote-setting-anonymous-mode-wrapper" class="hidden flex-grow">
+                                <select id="vote-setting-anonymous-mode"
+                                    class="w-full p-2 border border-gray-300 rounded-lg bg-white">
+                                    <option value="erzwingen" selected>Erzwingen (Alle sind "Anonym")</option>
+                                    <option value="ermöglichen">Ermöglichen (Jeder kann "Anonym" wählen)</option>
+                                </select>
                             </div>
-                        </label>
+                        </div>
                         <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
                             <input type="checkbox" id="vote-setting-disable-maybe" class="h-5 w-5 rounded">
                             <div>
@@ -1248,15 +1258,30 @@
 
                     <div id="vote-participant-status-container"
                         class="card bg-white p-4 rounded-xl shadow-lg mb-6 hidden">
+
                         <div id="vote-guest-name-container" class="hidden">
                             <label for="vote-guest-name-input" class="block text-sm font-bold text-gray-700 mb-1">Dein
                                 Name (als Gast)</label>
-                            <input type="text" id="vote-guest-name-input"
-                                class="w-full p-2 border border-gray-300 rounded-lg" placeholder="Vor- und Nachname...">
+                            <div class="flex items-center gap-2">
+                                <input type="text" id="vote-guest-name-input"
+                                    class="flex-grow p-2 border border-gray-300 rounded-lg"
+                                    placeholder="Vor- und Nachname...">
+                                <button id="vote-guest-change-to-anon-btn"
+                                    class="hidden py-1 px-3 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300 flex-shrink-0">
+                                    Anonym teilnehmen
+                                </button>
+                            </div>
                         </div>
+
                         <div id="vote-user-name-container" class="hidden">
                             <label class="block text-sm font-bold text-gray-700">Deine Teilnahme als:</label>
-                            <p id="vote-participant-name" class="text-lg font-bold text-gray-800"></p>
+                            <div class="flex items-center justify-between gap-2">
+                                <p id="vote-participant-name" class="text-lg font-bold text-gray-800"></p>
+                                <button id="vote-user-change-to-anon-btn"
+                                    class="hidden py-1 px-3 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300 flex-shrink-0">
+                                    Ändern
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -1386,10 +1411,20 @@
                             <input type="checkbox" id="vote-setting-public-edit" class="h-5 w-5 rounded">
                             <span class="font-semibold text-gray-700">Öffentliche Umfrage</span>
                         </label>
-                        <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
-                            <input type="checkbox" id="vote-setting-anonymous-edit" class="h-5 w-5 rounded">
-                            <span class="font-semibold text-gray-700">Anonyme Umfrage</span>
-                        </label>
+                        <div class="p-2 bg-gray-50 rounded-lg flex flex-col md:flex-row gap-3">
+                            <label class="flex items-center gap-3 cursor-pointer flex-shrink-0">
+                                <input type="checkbox" id="vote-setting-anonymous-edit" class="h-5 w-5 rounded">
+                                <span class="font-semibold text-gray-700">Anonyme Umfrage</span>
+                            </label>
+
+                            <div id="vote-setting-anonymous-mode-wrapper-edit" class="hidden flex-grow">
+                                <select id="vote-setting-anonymous-mode-edit"
+                                    class="w-full p-2 border border-gray-300 rounded-lg bg-white">
+                                    <option value="erzwingen" selected>Erzwingen (Alle sind "Anonym")</option>
+                                    <option value="ermöglichen">Ermöglichen (Jeder kann "Anonym" wählen)</option>
+                                </select>
+                            </div>
+                        </div>
                         <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
                             <input type="checkbox" id="vote-setting-disable-maybe-edit" class="h-5 w-5 rounded">
                             <span class="font-semibold text-gray-700">"Vielleicht"-Option deaktivieren</span>

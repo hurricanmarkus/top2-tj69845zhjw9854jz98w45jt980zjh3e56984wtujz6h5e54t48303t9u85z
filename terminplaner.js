@@ -28,6 +28,7 @@ let assignModalContext = 'create'; // NEU: Merkt sich 'create' or 'edit'
 let myPollsMap = new Map();
 let unsubscribeMyAssignedVotes = null;
 let unsubscribeMyCreatedVotes = null;
+let isParticipantChoosingAnonymous = false;
 
 
 // ----- VERSCHOBENE FUNKTIONEN (UM DEN FEHLER ZU BEHEBEN) -----
@@ -446,6 +447,31 @@ export function initializeTerminplanerView() {
         saveVoteButton.addEventListener('click', saveGroupPoll); 
         saveVoteButton.dataset.listenerAttached = 'true';
     }
+    
+    // --- NEUER SPION FÜR ANONYM-CHECKBOX (ERSTELLEN) ---
+    const anonymousCheckbox = document.getElementById('vote-setting-anonymous');
+    if (anonymousCheckbox && !anonymousCheckbox.dataset.listenerAttached) {
+        anonymousCheckbox.addEventListener('change', (e) => {
+            const wrapper = document.getElementById('vote-setting-anonymous-mode-wrapper');
+            if (wrapper) {
+                wrapper.classList.toggle('hidden', !e.target.checked);
+            }
+        });
+        anonymousCheckbox.dataset.listenerAttached = 'true';
+    }
+    
+    // --- NEUER SPION FÜR ANONYM-CHECKBOX (BEARBEITEN) ---
+    const anonymousCheckboxEdit = document.getElementById('vote-setting-anonymous-edit');
+    if (anonymousCheckboxEdit && !anonymousCheckboxEdit.dataset.listenerAttached) {
+        anonymousCheckboxEdit.addEventListener('change', (e) => {
+            const wrapper = document.getElementById('vote-setting-anonymous-mode-wrapper-edit');
+            if (wrapper) {
+                wrapper.classList.toggle('hidden', !e.target.checked);
+            }
+        });
+        anonymousCheckboxEdit.dataset.listenerAttached = 'true';
+    }
+
 
     // ----- Spione für die Abstimmungs-Seite -----
     
@@ -461,6 +487,52 @@ export function initializeTerminplanerView() {
     const voteView = document.getElementById('terminplaner-vote-view');
     if (voteView && !voteView.dataset.listenerAttached) {
         voteView.addEventListener('click', (e) => {
+            
+            // "Ändern"-Knopf für Benutzer
+            const userChangeBtn = e.target.closest('#vote-user-change-to-anon-btn');
+            if (userChangeBtn) {
+                const nameDisplay = document.getElementById('vote-participant-name');
+                if (isParticipantChoosingAnonymous) {
+                    // Zurück zum Namen
+                    isParticipantChoosingAnonymous = false;
+                    const currentUserFull = USERS[currentUser.mode];
+                    nameDisplay.textContent = currentUserFull ? currentUserFull.realName : currentUser.displayName;
+                    userChangeBtn.textContent = 'Ändern';
+                    userChangeBtn.classList.remove('bg-blue-600', 'text-white');
+                    userChangeBtn.classList.add('bg-gray-200', 'text-gray-700');
+                } else {
+                    // Zu "Anonym" wechseln
+                    isParticipantChoosingAnonymous = true;
+                    nameDisplay.textContent = 'Anonym';
+                    userChangeBtn.textContent = 'Meinen Namen verwenden';
+                    userChangeBtn.classList.add('bg-blue-600', 'text-white');
+                    userChangeBtn.classList.remove('bg-gray-200', 'text-gray-700');
+                }
+                return; // Klick ist erledigt
+            }
+            
+            // "Ändern"-Knopf für Gäste
+            const guestChangeBtn = e.target.closest('#vote-guest-change-to-anon-btn');
+            if (guestChangeBtn) {
+                const guestInput = document.getElementById('vote-guest-name-input');
+                if (isParticipantChoosingAnonymous) {
+                    // Zurück zum Namen-Eingabefeld
+                    isParticipantChoosingAnonymous = false;
+                    guestInput.disabled = false;
+                    guestInput.value = '';
+                    guestInput.placeholder = 'Vor- und Nachname...';
+                    guestChangeBtn.textContent = 'Anonym teilnehmen';
+                } else {
+                    // Zu "Anonym" wechseln
+                    isParticipantChoosingAnonymous = true;
+                    guestInput.disabled = true;
+                    guestInput.value = 'Anonym';
+                    guestInput.placeholder = '';
+                    guestChangeBtn.textContent = 'Namen eingeben';
+                }
+                return; // Klick ist erledigt
+            }
+            
             
             const clickedButton = e.target.closest('.vote-grid-btn');
             if (clickedButton && !clickedButton.disabled) { 
@@ -1006,6 +1078,9 @@ export async function joinVoteById(voteId = null) {
 // ERSETZE diese Funktion in terminplaner.js
 function renderVoteView(voteData) {
     
+    // ----- 0. Globale Variable zurücksetzen -----
+    isParticipantChoosingAnonymous = false;
+    
     // ----- 1. DEFINITIONEN -----
     const now = new Date();
     const getSafeDate = (timestamp) => {
@@ -1019,12 +1094,11 @@ function renderVoteView(voteData) {
 
     const isFixed = voteData.fixedOptionIndex != null;
     const isClosedByTime = (endTime && now > endTime); 
-    const isManuallyClosed = voteData.isManuallyClosed === true; // NEU
+    const isManuallyClosed = voteData.isManuallyClosed === true; 
     const isNotStarted = (startTime && now < startTime); 
     
-    // NEU: isClosed (für Logik) vs isParticipationBlocked (für UI)
-    const isClosed = isClosedByTime || isManuallyClosed; // Ist die Umfrage "zu"?
-    const isParticipationBlocked = isFixed || isClosed || isNotStarted; // Darf man abstimmen?
+    const isClosed = isClosedByTime || isManuallyClosed; 
+    const isParticipationBlocked = isFixed || isClosed || isNotStarted; 
 
 
     // ----- 2. Titel & Ersteller (Sicher) -----
@@ -1063,7 +1137,7 @@ function renderVoteView(voteData) {
     if (titleEl) titleEl.classList.remove('blink-border-blue'); 
     
     if (updateBox) {
-        updateBox.classList.add('hidden'); // Standardmäßig versteckt
+        updateBox.classList.add('hidden'); 
         updateBox.classList.remove('bg-transparent', 'border-gray-400'); 
         updateBox.classList.add('bg-blue-50', 'border-blue-500'); 
     }
@@ -1156,7 +1230,6 @@ function renderVoteView(voteData) {
         return dateObj.toLocaleString('de-DE', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}) + ' Uhr';
     };
     
-    // NEU: 'isClosed' (beinhaltet jetzt 'isManuallyClosed')
     if (isClosed && !isFixed) { 
         if (validityEl) validityEl.textContent = "TEILNAHME GESCHLOSSEN";
         if (validityContainer) {
@@ -1183,13 +1256,12 @@ function renderVoteView(voteData) {
         }
     }
 
-    // NEU: Logik erweitert um 'isManuallyClosed'
     if (isParticipationBlocked && !isFixed) { 
         if (isNotStarted) {
             if (warningText) warningText.textContent = `Diese Umfrage hat noch nicht begonnen. Sie startet am ${formatVoteDate(startTime)}.`;
         } else if (isClosedByTime) {
             if (warningText) warningText.textContent = `Diese Umfrage ist bereits beendet. Teilnahme und Korrekturen sind nicht mehr möglich.`;
-        } else if (isManuallyClosed) { // NEU
+        } else if (isManuallyClosed) { 
             if (warningText) warningText.textContent = `Diese Umfrage wurde vom Ersteller beendet. Teilnahme und Korrekturen sind nicht mehr möglich.`;
         }
         if (warningBox) warningBox.classList.remove('hidden');
@@ -1197,49 +1269,102 @@ function renderVoteView(voteData) {
         if (warningBox) {
             warningBox.classList.add('hidden'); 
         } else {
-            console.warn("renderVoteView: Element 'vote-validity-warning-box' nicht gefunden.");
+            // console.warn("renderVoteView: Element 'vote-validity-warning-box' nicht gefunden.");
         }
     }
 
 
-    // ----- 6. Teilnehmer-Status-Box (Sicher) -----
+    // ----- 6. Teilnehmer-Status-Box (Komplett NEU) -----
     const statusContainer = document.getElementById('vote-participant-status-container');
     const nameDisplay = document.getElementById('vote-participant-name');
     const userContainer = document.getElementById('vote-user-name-container');
+    const userChangeBtn = document.getElementById('vote-user-change-to-anon-btn');
     const guestNameContainer = document.getElementById('vote-guest-name-container');
     const guestNameInput = document.getElementById('vote-guest-name-input');
+    const guestChangeBtn = document.getElementById('vote-guest-change-to-anon-btn');
     
     let existingParticipant = null;
     if (currentUser.mode !== GUEST_MODE) {
         existingParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
     }
     
+    // Verstecke standardmäßig alles
     if (statusContainer) statusContainer.classList.add('hidden');
     if (guestNameContainer) guestNameContainer.classList.add('hidden');
     if (userContainer) userContainer.classList.add('hidden');
+    if (userChangeBtn) userChangeBtn.classList.add('hidden');
+    if (guestChangeBtn) guestChangeBtn.classList.add('hidden');
+    
+    // Setze Eingabefelder zurück
+    if (guestNameInput) {
+        guestNameInput.disabled = false;
+        guestNameInput.value = '';
+        guestNameInput.placeholder = 'Vor- und Nachname...';
+    }
+    if (userChangeBtn) {
+        userChangeBtn.textContent = 'Ändern';
+        userChangeBtn.classList.remove('bg-blue-600', 'text-white');
+        userChangeBtn.classList.add('bg-gray-200', 'text-gray-700');
+    }
+    
     isVoteGridEditable = false; 
     
-    if (!isParticipationBlocked) { 
-        if (voteData.isAnonymous) {
-            isVoteGridEditable = true; 
-        } else if (existingParticipant) {
+    // Fall: Teilnahme ist blockiert (zu, fixiert, etc.)
+    if (isParticipationBlocked) {
+        // Nichts tun, alles bleibt versteckt, Teilnahme nicht möglich
+    } 
+    // Fall: Teilnahme ist möglich
+    else {
+        // Finde heraus, ob wir bereits abgestimmt haben (und ob "Anonym" erzwungen wird)
+        if (existingParticipant) {
+             // A. Wir haben schon abgestimmt
             if (statusContainer) statusContainer.classList.remove('hidden');
-            if (userContainer) userContainer.classList.remove('hidden'); 
+            if (userContainer) userContainer.classList.remove('hidden');
             if (nameDisplay) nameDisplay.textContent = existingParticipant.name;
-            isVoteGridEditable = false; 
-        } else if (currentUser.mode !== GUEST_MODE) {
+            isVoteGridEditable = false; // Man kann den Namen nicht mehr ändern
+        
+        } else {
+            // B. Wir haben noch nicht abgestimmt
+            isVoteGridEditable = true; // Wir dürfen die Tabelle ausfüllen
             if (statusContainer) statusContainer.classList.remove('hidden');
-            if (userContainer) userContainer.classList.remove('hidden'); 
-            const currentUserFull = USERS[currentUser.mode];
-            if (nameDisplay) nameDisplay.textContent = currentUserFull ? currentUserFull.realName : currentUser.displayName;
-            isVoteGridEditable = true; 
-        } else { 
-            if (statusContainer) statusContainer.classList.remove('hidden');
-            if (guestNameContainer) guestNameContainer.classList.remove('hidden'); 
-            if (guestNameInput) guestNameInput.value = '';
-            isVoteGridEditable = true; 
+            
+            // B.1: Anonym-Modus "Erzwingen"
+            if (voteData.isAnonymous && voteData.anonymousMode === 'erzwingen') {
+                if (userContainer) userContainer.classList.remove('hidden');
+                if (nameDisplay) nameDisplay.textContent = 'Anonym';
+                // Der "Ändern"-Knopf bleibt versteckt
+            
+            // B.2: Anonym-Modus "Ermöglichen"
+            } else if (voteData.isAnonymous && voteData.anonymousMode === 'ermöglichen') {
+                
+                if (currentUser.mode !== GUEST_MODE) {
+                    // Benutzer ist eingeloggt
+                    if (userContainer) userContainer.classList.remove('hidden');
+                    const currentUserFull = USERS[currentUser.mode];
+                    if (nameDisplay) nameDisplay.textContent = currentUserFull ? currentUserFull.realName : currentUser.displayName;
+                    if (userChangeBtn) userChangeBtn.classList.remove('hidden'); // "Ändern"-Knopf anzeigen
+                } else {
+                    // Benutzer ist Gast
+                    if (guestNameContainer) guestNameContainer.classList.remove('hidden');
+                    if (guestChangeBtn) guestChangeBtn.classList.remove('hidden'); // "Anonym teilnehmen"-Knopf anzeigen
+                }
+                
+            // B.3: Kein Anonym-Modus (Standard)
+            } else {
+                if (currentUser.mode !== GUEST_MODE) {
+                    // Benutzer ist eingeloggt
+                    if (userContainer) userContainer.classList.remove('hidden');
+                    const currentUserFull = USERS[currentUser.mode];
+                    if (nameDisplay) nameDisplay.textContent = currentUserFull ? currentUserFull.realName : currentUser.displayName;
+                } else {
+                    // Benutzer ist Gast
+                    if (guestNameContainer) guestNameContainer.classList.remove('hidden');
+                    // Der "Ändern"-Knopf bleibt versteckt
+                }
+            }
         }
     }
+    
     
     // ----- 7. Antworten laden -----
     currentParticipantAnswers = {};
@@ -1258,16 +1383,11 @@ function renderVoteView(voteData) {
         if (saveButton) saveButton.classList.add('hidden');
     }
     
-    // --- HIER IST DIE KORREKTUR ---
     if (editButton) {
-        // Die alte Bedingung (if (isFixed) { ... }) wurde entfernt.
-        // Der Knopf wird jetzt immer angezeigt.
         editButton.classList.remove('hidden'); 
     }
-    // --- ENDE DER KORREKTUR ---
     
     // ----- 9. Tabelle rendern -----
-    // NEU: 'isClosed' wird korrekt übergeben
     updatePollTableAnswers(voteData, isVoteGridEditable, isClosed); 
     
     if (!isParticipationBlocked) {
@@ -1601,22 +1721,54 @@ async function saveVoteParticipation() {
     let participantName = '';
     let participantId = '';
     
-    if (currentVoteData.isAnonymous) {
+    // --- NEUE LOGIK HIER ---
+    
+    // Fall 1: Der Benutzer hat im "Ermöglichen"-Modus "Anonym" gewählt
+    if (isParticipantChoosingAnonymous) {
         participantName = "Anonym";
-        participantId = `anon_${Date.now()}`;
-    } else if (currentUser.mode !== GUEST_MODE) {
-        participantName = document.getElementById('vote-participant-name').textContent; 
-        participantId = currentUser.mode;
+        // Erzeuge eine ID basierend auf dem Modus (Gast/User), um anonyme Doppel-Votes zu verhindern
+        if (currentUser.mode !== GUEST_MODE) {
+            participantId = currentUser.mode; // Der User kann nur 1x abstimmen (als "Anonym")
+        } else {
+            participantId = `guest_anon_${Date.now()}`; // Gäste können mehrfach anonym abstimmen
+        }
+        
+    // Fall 2: Der "Erzwingen"-Modus ist aktiv
+    } else if (currentVoteData.isAnonymous && currentVoteData.anonymousMode === 'erzwingen') {
+        participantName = "Anonym";
+        if (currentUser.mode !== GUEST_MODE) {
+            participantId = currentUser.mode; 
+        } else {
+            participantId = `guest_anon_${Date.now()}`;
+        }
+        
+    // Fall 3: Standard-Modus (kein "Anonym" gewählt)
     } else {
-        participantName = document.getElementById('vote-guest-name-input').value.trim();
-        participantId = `guest_${participantName.replace(/\s/g, '_')}`; 
-        if (!participantName) {
-            return alertUser("Bitte gib deinen Namen als Gast ein.", "error");
+        if (currentUser.mode !== GUEST_MODE) {
+            participantName = document.getElementById('vote-participant-name').textContent; 
+            participantId = currentUser.mode;
+        } else {
+            participantName = document.getElementById('vote-guest-name-input').value.trim();
+            participantId = `guest_${participantName.replace(/\s/g, '_')}`; 
+            if (!participantName) {
+                return alertUser("Bitte gib deinen Namen als Gast ein.", "error");
+            }
+        }
+    }
+    // --- ENDE NEUE LOGIK ---
+    
+
+    // Zähle nur die nicht-gestrichenen Optionen
+    const activeOptions = currentVoteData.options.filter(opt => !opt.isStricken);
+    let answeredCount = 0;
+    for (let i = 0; i < currentVoteData.options.length; i++) {
+        if (!currentVoteData.options[i].isStricken && currentParticipantAnswers[i]) {
+            answeredCount++;
         }
     }
 
-    if (Object.keys(currentParticipantAnswers).length !== currentVoteData.options.length) {
-         return alertUser("Bitte wähle für JEDEN Termin eine Antwort aus.", "error");
+    if (answeredCount !== activeOptions.length) {
+         return alertUser("Bitte wähle für JEDEN (nicht-gestrichenen) Termin eine Antwort aus.", "error");
     }
     
     setButtonLoading(saveBtn, true);
@@ -1627,8 +1779,13 @@ async function saveVoteParticipation() {
         let correctionCount = 0;
         let answerHistory = [];
         
-        const user = (currentUser.mode !== GUEST_MODE) ? USERS[currentUser.mode] : null;
-        const nameToSave = user ? user.realName : participantName;
+        // --- NEUE LOGIK HIER ---
+        // Wenn "Anonym" erzwungen oder gewählt wird, speichern wir den Namen "Anonym".
+        // Ansonsten holen wir den Namen aus dem (nicht-anonymen) Feld.
+        const nameToSave = (isParticipantChoosingAnonymous || (currentVoteData.isAnonymous && currentVoteData.anonymousMode === 'erzwingen')) 
+            ? "Anonym" 
+            : participantName;
+        // --- ENDE NEUE LOGIK ---
         
         if (existingParticipantIndex > -1) {
             // A. Teilnehmer AKTUALISIEREN
@@ -1692,8 +1849,6 @@ async function saveVoteParticipation() {
         
         const participantIds = newParticipantsArray.map(p => p.userId);
         
-        // NEU: Stelle sicher, dass ZUGWIESENE IDs nicht verloren gehen,
-        // auch wenn sie noch nicht abgestimmt haben.
         currentVoteData.assignedUserIds?.forEach(assignedId => {
             if (!participantIds.includes(assignedId)) {
                 participantIds.push(assignedId);
@@ -1704,7 +1859,7 @@ async function saveVoteParticipation() {
         
         await updateDoc(voteDocRef, {
             participants: newParticipantsArray,
-            participantIds: participantIds // Aktualisiere mit der kombinierten Liste
+            participantIds: participantIds 
         });
         
         alertUser("Deine Abstimmung wurde gespeichert!", "success");
@@ -1723,6 +1878,7 @@ async function saveVoteParticipation() {
 }
 
 
+
 // ----- SPEICHER-FUNKTION (Erstellung) -----
 async function saveGroupPoll() {
     const saveBtn = document.getElementById('vote-save-group-poll-btn');
@@ -1738,8 +1894,13 @@ async function saveGroupPoll() {
         const startTime = startTimeInput ? new Date(startTimeInput) : null;
         const endTime = !isEndTimeUnlimited && endTimeInput ? new Date(endTimeInput) : null;
         const isPublic = document.getElementById('vote-setting-public').checked;
-        const isAnonymous = document.getElementById('vote-setting-anonymous').checked;
         const disableMaybe = document.getElementById('vote-setting-disable-maybe').checked; 
+        
+        // --- NEUE ÄNDERUNGEN HIER ---
+        const isAnonymous = document.getElementById('vote-setting-anonymous').checked;
+        const anonymousMode = document.getElementById('vote-setting-anonymous-mode').value; // 'erzwingen' or 'ermöglichen'
+        // --- ENDE NEUE ÄNDERUNGEN ---
+        
         const options = [];
         const dateGroups = document.querySelectorAll('#vote-dates-container [data-date-group-id]');
         let hasValidOption = false;
@@ -1781,7 +1942,12 @@ async function saveGroupPoll() {
             token: token,
             editToken: editToken, 
             isPublic: isPublic,
+            
+            // --- NEUE ÄNDERUNGEN HIER ---
             isAnonymous: isAnonymous,
+            anonymousMode: isAnonymous ? anonymousMode : null, // Speichere Modus nur, wenn Anonym aktiv ist
+            // --- ENDE NEUE ÄNDERUNGEN ---
+            
             createdBy: currentUser.mode, 
             createdByName: creatorNameToSave, 
             createdAt: serverTimestamp(), 
@@ -1793,7 +1959,7 @@ async function saveGroupPoll() {
             
             fixedOptionIndex: null,
             pollHistory: [],
-            isManuallyClosed: false // NEU: Standardwert für deine neue Logik
+            isManuallyClosed: false 
         };
         console.log("Speichere Umfrage in Firebase...", voteData);
         const docRef = await addDoc(votesCollectionRef, voteData);
@@ -2007,8 +2173,24 @@ function renderEditView(voteData) {
 
     // 3. Einstellungen füllen
     document.getElementById('vote-setting-public-edit').checked = voteData.isPublic;
-    document.getElementById('vote-setting-anonymous-edit').checked = voteData.isAnonymous;
     document.getElementById('vote-setting-disable-maybe-edit').checked = voteData.disableMaybe;
+    
+    // --- NEUE ÄNDERUNGEN HIER ---
+    const anonymousCheckboxEdit = document.getElementById('vote-setting-anonymous-edit');
+    const anonymousWrapperEdit = document.getElementById('vote-setting-anonymous-mode-wrapper-edit');
+    const anonymousModeEdit = document.getElementById('vote-setting-anonymous-mode-edit');
+
+    anonymousCheckboxEdit.checked = voteData.isAnonymous;
+    if (voteData.isAnonymous) {
+        anonymousWrapperEdit.classList.remove('hidden');
+        // Setze den Modus, fallback auf 'erzwingen', falls alter Datenstand
+        anonymousModeEdit.value = voteData.anonymousMode || 'erzwingen';
+    } else {
+        anonymousWrapperEdit.classList.add('hidden');
+        anonymousModeEdit.value = 'erzwingen'; // Standard
+    }
+    // --- ENDE NEUE ÄNDERUNGEN ---
+
 
     // 4. Zugewiesene Benutzer laden
     const assignedDisplayEdit = document.getElementById('vote-assigned-users-display-edit');
@@ -2102,6 +2284,7 @@ function renderEditView(voteData) {
     addNewDateGroupEdit(true); // true = ist der erste Slot
 }
 
+
 async function saveVoteEdits() {
     const saveBtn = document.getElementById('vote-save-changes-btn');
     setButtonLoading(saveBtn, true);
@@ -2138,8 +2321,16 @@ async function saveVoteEdits() {
         
         // 3. Einstellungen lesen
         updateData.isPublic = document.getElementById('vote-setting-public-edit').checked;
-        updateData.isAnonymous = document.getElementById('vote-setting-anonymous-edit').checked;
         updateData.disableMaybe = document.getElementById('vote-setting-disable-maybe-edit').checked;
+        
+        // --- NEUE ÄNDERUNGEN HIER ---
+        updateData.isAnonymous = document.getElementById('vote-setting-anonymous-edit').checked;
+        if (updateData.isAnonymous) {
+            updateData.anonymousMode = document.getElementById('vote-setting-anonymous-mode-edit').value;
+        } else {
+            updateData.anonymousMode = null;
+        }
+        // --- ENDE NEUE ÄNDERUNGEN ---
 
         // 4. Teilnehmer-Listen speichern
         const newAssignedIds = currentVoteData.assignedUserIds || [];
@@ -2221,6 +2412,7 @@ async function saveVoteEdits() {
         setButtonLoading(saveBtn, false);
     }
 }
+
 
 
 /**
@@ -2440,6 +2632,7 @@ function showView(viewName) {
        document.getElementById('terminplaner-edit-view').classList.remove('hidden');
     }
 }
+
 function resetCreateWizard() {
     document.getElementById('vote-title').value = '';
     document.getElementById('vote-description').value = '';
@@ -2451,9 +2644,20 @@ function resetCreateWizard() {
     unlimitedCheckbox.checked = true;
     endTimeInput.disabled = true; 
     document.getElementById('vote-setting-public').checked = false;
-    document.getElementById('vote-setting-anonymous').checked = false;
     document.getElementById('vote-setting-disable-maybe').checked = false; 
     document.getElementById('vote-dates-container').innerHTML = '';
+    
+    // --- NEUE ÄNDERUNGEN HIER ---
+    document.getElementById('vote-setting-anonymous').checked = false;
+    const anonWrapper = document.getElementById('vote-setting-anonymous-mode-wrapper');
+    if (anonWrapper) {
+        anonWrapper.classList.add('hidden');
+    }
+    const anonMode = document.getElementById('vote-setting-anonymous-mode');
+    if (anonMode) {
+        anonMode.value = 'erzwingen'; // Standard zurücksetzen
+    }
+    // --- ENDE NEUE ÄNDERUNGEN ---
     
     // NEU: Zuweisungen zurücksetzen
     tempAssignedUserIds = [];
