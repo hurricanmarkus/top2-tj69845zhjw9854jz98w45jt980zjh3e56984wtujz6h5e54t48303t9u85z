@@ -316,7 +316,19 @@ function applyAssignedUsers() {
 // ----- ENDE VERSCHOBENE FUNKTIONEN -----
 
 
+// ERSETZE diese Funktion in terminplaner.js
 export function initializeTerminplanerView() {
+    
+    // --- HIER IST DER KORRIGIERTE CODE WIEDER DRIN ---
+    const createVoteButton = document.getElementById('show-create-vote-modal-btn');
+    if (createVoteButton) {
+        if (currentUser.mode === GUEST_MODE) {
+            createVoteButton.classList.add('hidden');
+        } else {
+            createVoteButton.classList.remove('hidden');
+        }
+    }
+    // --- ENDE DES KORRIGIERTEN CODES ---
     
     // ----- Spion für das Token-Feld -----
     const tokenInput = document.getElementById('vote-token-input');
