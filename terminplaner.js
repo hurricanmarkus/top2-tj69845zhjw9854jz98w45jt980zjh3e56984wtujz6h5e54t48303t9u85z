@@ -1763,13 +1763,9 @@ async function saveVoteParticipation() {
         let correctionCount = 0;
         let answerHistory = [];
         
-        // --- NEUE LOGIK HIER ---
-        // Wenn "Anonym" erzwungen oder gewählt wird, speichern wir den Namen "Anonym".
-        // Ansonsten holen wir den Namen aus dem (nicht-anonymen) Feld.
         const nameToSave = (isParticipantChoosingAnonymous || (currentVoteData.isAnonymous && currentVoteData.anonymousMode === 'erzwingen')) 
             ? "Anonym" 
             : participantName;
-        // --- ENDE NEUE LOGIK ---
         
         if (existingParticipantIndex > -1) {
             // A. Teilnehmer AKTUALISIEREN
@@ -1802,9 +1798,12 @@ async function saveVoteParticipation() {
             
             if (changes.length > 0) {
                 const historyLog = { 
-                    timestamp: new Date(), // Benutze die lokale Uhrzeit (new Date())
+                    timestamp: new Date(), 
                     changes: changes,
-                    changedBy: currentUser.displayName || "Gast" 
+                    // --- KORREKTUR HIER ---
+                    // Wir verwenden 'nameToSave', das "Anonym" oder den echten Namen enthält.
+                    changedBy: nameToSave 
+                    // --- ENDE KORREKTUR ---
                 };
                 answerHistory.unshift(historyLog); 
             }
@@ -1860,7 +1859,6 @@ async function saveVoteParticipation() {
         setButtonLoading(saveBtn, false);
     }
 }
-
 
 
 // ----- SPEICHER-FUNKTION (Erstellung) -----
