@@ -128,7 +128,7 @@
                     </div>
                 </div>
 
-                <div id="terminplanerCard"
+                <div id="terminplanerCard" data-permission="TERMINPLANER"
                     class="card bg-white p-4 rounded-xl shadow-lg flex items-center space-x-4 hover:shadow-xl transition duration-200 cursor-pointer w-full border-t-4 border-cyan-500 hidden">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
                         class="w-10 h-10 text-cyan-500 flex-shrink-0">
@@ -949,8 +949,9 @@
                             Neuen Termin
                         </button>
                     </div>
-<div class="flex justify-center mb-4">
-                        <div class="p-3 bg-gray-100 border border-gray-300 rounded-lg inline-flex flex-wrap gap-x-4 gap-y-2 justify-center">
+                    <div class="flex justify-center mb-4">
+                        <div
+                            class="p-3 bg-gray-100 border border-gray-300 rounded-lg inline-flex flex-wrap gap-x-4 gap-y-2 justify-center">
 
                             <div class="flex items-center gap-2">
                                 <span class="text-sm font-semibold text-gray-700">Direkt-URL (Startseite):</span>
@@ -1503,13 +1504,15 @@
                                 </select>
                             </div>
                         </div>
-<div class="p-3 bg-gray-50 rounded-lg">
+                        <div class="p-3 bg-gray-50 rounded-lg">
                             <div class="flex justify-between items-center">
                                 <div>
-                                    <span id="vote-setting-access-text-edit" class="font-semibold text-gray-700">Diese Umfrage können nur angemeldete Benutzer sehen.</span>
+                                    <span id="vote-setting-access-text-edit" class="font-semibold text-gray-700">Diese
+                                        Umfrage können nur angemeldete Benutzer sehen.</span>
                                     <input type="hidden" id="vote-setting-access-mode-edit" value="registered">
                                 </div>
-                                <button id="vote-setting-access-btn-edit" class="py-1 px-3 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300 flex-shrink-0 ml-2">
+                                <button id="vote-setting-access-btn-edit"
+                                    class="py-1 px-3 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300 flex-shrink-0 ml-2">
                                     ändern...
                                 </button>
                             </div>

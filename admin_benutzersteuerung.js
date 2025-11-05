@@ -390,8 +390,23 @@ export function renderUserManagement() {
     const newUserRoleSelect = userManagementArea.querySelector('#newUserRole');
     if (newUserRoleSelect) { newUserRoleSelect.innerHTML = roleOptionsHTML; newUserRoleSelect.value = 'ANGEMELDET'; }
 
+    // =================================================================
+    // BEGINN DER ÄNDERUNG
+    // =================================================================
     // Verfügbare Berechtigungen
-    const allPermissions = { 'ENTRANCE': 'Haupteingang öffnen', 'PUSHOVER': 'Push-Nachricht senden', 'CHECKLIST': 'Aktuelle Checkliste', 'CHECKLIST_SWITCH': '-> Listen umschalten', 'CHECKLIST_SETTINGS': '-> Checkliste-Einstellungen', 'ESSENSBERECHNUNG': 'Essensberechnung' };
+    const allPermissions = { 
+        'ENTRANCE': 'Haupteingang öffnen', 
+        'PUSHOVER': 'Push-Nachricht senden', 
+        'CHECKLIST': 'Aktuelle Checkliste', 
+        'CHECKLIST_SWITCH': '-> Listen umschalten', 
+        'CHECKLIST_SETTINGS': '-> Checkliste-Einstellungen', 
+        'ESSENSBERECHNUNG': 'Essensberechnung',
+        'TERMINPLANER': 'Termin finden', // <-- NEU
+        'TERMINPLANER_CREATE': '-> Neuen Termin anlegen' // <-- NEU
+    };
+    // =================================================================
+    // ENDE DER ÄNDERUNG
+    // =================================================================
 
     // Optionen für Angezeigten Status (OHNE SYSTEMADMIN)
     const displayRoleOptions = Object.values(ROLES)
@@ -468,6 +483,20 @@ export function renderUserManagement() {
             let selectedDisplayRole = user.displayRole || 'NO_RIGHTS';
             
             const finalDisplayRoleOptionsWithSelection = displayRoleOptions.replace(`value="${selectedDisplayRole}"`, `value="${selectedDisplayRole}" selected`);
+            
+            // Diese Schleife erstellt jetzt automatisch die neuen Checkboxen
+            // basierend auf der von uns geänderten 'allPermissions'-Liste.
+            const allPermissionsHTML = Object.keys(allPermissions).map(permKey => {
+                // Hier prüfen wir, ob die Berechtigung eingerückt werden soll
+                const isSubPermission = permKey.startsWith('CHECKLIST_') || permKey.startsWith('TERMINPLANER_');
+                const marginLeft = isSubPermission ? 'pl-6' : '';
+                
+                return `<label class="flex items-center ${marginLeft}">
+                           <input type="checkbox" class="custom-perm-checkbox h-4 w-4" data-perm="${permKey}" ${(user.customPermissions || []).includes(permKey) ? 'checked' : ''} ${!canChangePerms ? 'disabled' : ''}>
+                           <span class="ml-2 text-sm">${escapeHtml(allPermissions[permKey])}</span>
+                        </label>`;
+            }).join('');
+
             permissionsHTML = `
             <div class="mt-4 pt-3 border-t" data-userid="${userId}">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Berechtigungs-Typ</label>
@@ -488,7 +517,7 @@ export function renderUserManagement() {
                          </select>
                     </div>
                     <div class="space-y-2 mt-3 pt-3 border-t">
-                        ${Object.keys(allPermissions).map(permKey => `<label class="flex items-center ${permKey.startsWith('CHECKLIST_') ? 'pl-6' : ''}"><input type="checkbox" class="custom-perm-checkbox h-4 w-4" data-perm="${permKey}" ${(user.customPermissions || []).includes(permKey) ? 'checked' : ''} ${!canChangePerms ? 'disabled' : ''}><span class="ml-2 text-sm">${escapeHtml(allPermissions[permKey])}</span></label>`).join('')}
+                        ${allPermissionsHTML} 
                     </div>
                 </div>
                 <div class="flex justify-end mt-3 hidden save-perms-container">
@@ -560,6 +589,7 @@ export function renderUserManagement() {
     addAdminUserManagementListeners(userManagementArea, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions);
     restoreAdminScrollIfAny();
 }
+
 
 // Ersetze DIESE Funktion komplett in admin_benutzersteuerung.js
 // admin_benutzersteuerung.js

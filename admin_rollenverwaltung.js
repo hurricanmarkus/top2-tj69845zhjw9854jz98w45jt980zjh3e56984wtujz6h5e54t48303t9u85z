@@ -131,14 +131,22 @@ export function renderRoleManagement() {
         </div>`;
     roleManagementArea.appendChild(userRolesContainer);
 
+    // =================================================================
+    // BEGINN DER ÄNDERUNG (1 von 2)
+    // =================================================================
     const allRolePermissions = {
         'ENTRANCE': { label: 'Haupteingang öffnen', indent: false },
         'PUSHOVER': { label: 'Push-Nachricht senden', indent: false },
         'CHECKLIST': { label: 'Aktuelle Checkliste', indent: false },
         'CHECKLIST_SWITCH': { label: '-> Listen umschalten', indent: true },
         'CHECKLIST_SETTINGS': { label: '-> Checkliste-Einstellungen', indent: true },
-        'ESSENSBERECHNUNG': { label: 'Essensberechnung', indent: false }
+        'ESSENSBERECHNUNG': { label: 'Essensberechnung', indent: false },
+        'TERMINPLANER': { label: 'Termin finden', indent: false }, // <-- NEU
+        'TERMINPLANER_CREATE': { label: '-> Neuen Termin anlegen', indent: true } // <-- NEU
     };
+    // =================================================================
+    // ENDE DER ÄNDERUNG (1 von 2)
+    // =================================================================
     
     // (Container für neue Rollen-Rechte)
     const newRolePermsContainer = document.getElementById('newRolePermissions');
@@ -146,8 +154,11 @@ export function renderRoleManagement() {
     Object.keys(allRolePermissions).forEach(permKey => {
         const perm = allRolePermissions[permKey];
         const marginLeft = perm.indent ? 'pl-6' : '';
-        const isSubPermission = permKey === 'CHECKLIST_SWITCH' || permKey === 'CHECKLIST_SETTINGS';
-        const isDisabled = isSubPermission && !isNewChecklistEnabled ? 'disabled' : '';
+        
+        // (Diese Logik für 'disabled' müssen wir gleich in der setupCheckboxDependencies-Funktion verallgemeinern)
+        const isSubPermission = permKey.startsWith('CHECKLIST_') || permKey.startsWith('TERMINPLANER_');
+        const isDisabled = isSubPermission ? 'disabled' : ''; // Alle Unterpunkte sind anfangs deaktiviert
+        
         newRolePermsContainer.innerHTML += `
             <label class="flex items-center gap-2 cursor-pointer ${marginLeft}">
                 <input type="checkbox" id="newRolePerm-${permKey}" data-perm="${permKey}" class="h-4 w-4 new-role-perm-cb" ${isDisabled}> <span>${perm.label}</span>
@@ -162,13 +173,17 @@ export function renderRoleManagement() {
         // (Nur SysAdmin darf geschützte Rollen bearbeiten)
         const canDeleteThisRole = canEditUserRoles && role.deletable !== false && !isProtectedRole; 
         
-        const isChecklistEnabled = role.permissions?.includes('CHECKLIST');
+        // (Diese Logik wird jetzt von der neuen setupCheckboxDependencies-Funktion übernommen)
+        // const isChecklistEnabled = role.permissions?.includes('CHECKLIST'); 
+        
         let permissionsCheckboxesHTML = Object.keys(allRolePermissions).map(permKey => {
             const perm = allRolePermissions[permKey];
             const isChecked = role.permissions?.includes(permKey) ? 'checked' : '';
-            const isSubPermission = permKey === 'CHECKLIST_SWITCH' || permKey === 'CHECKLIST_SETTINGS';
-            const isDisabled = !canEditThisRole || (isSubPermission && !isChecklistEnabled) ? 'disabled' : '';
+            
+            // (Wir setzen 'disabled' erstmal nur auf Basis der Editier-Rechte)
+            const isDisabled = !canEditThisRole ? 'disabled' : '';
             const marginLeft = perm.indent ? 'pl-6' : '';
+            
             return `
                 <label class="flex items-center gap-2 ${canEditThisRole ? 'cursor-pointer' : ''} ${marginLeft} ${isDisabled ? 'opacity-50' : ''}">
                     <input type="checkbox" class="role-perm-toggle" data-roleid="${role.id}" data-perm="${permKey}" ${isChecked} ${isDisabled}> 
@@ -179,8 +194,6 @@ export function renderRoleManagement() {
         const roleCard = document.createElement('div');
         roleCard.className = `p-3 border rounded-lg bg-white shadow-sm ${!canEditThisRole && isProtectedRole ? 'opacity-60 bg-gray-50' : ''}`;
         
-        // HINWEIS: Umbenennen von Benutzer-Rollen ist hier nicht implementiert, da ID = Name.
-        // Das würde eine Migration erfordern. Nur Löschen ist implementiert.
         roleCard.innerHTML = `
             <div class="flex justify-between items-center mb-2">
                 <p class="font-bold text-gray-800">${role.name}</p>
@@ -191,34 +204,57 @@ export function renderRoleManagement() {
         userRolesList.appendChild(roleCard);
     });
 
-    // (Checkbox-Abhängigkeiten für CHECKLIST)
+    // =================================================================
+    // BEGINN DER ÄNDERUNG (2 von 2)
+    // =================================================================
+    // (Checkbox-Abhängigkeiten für Haupt/Unter-Punkte)
+    // Wir machen die alte Funktion schlau genug, um ALLE Paare zu verwalten.
     const setupCheckboxDependencies = (container) => {
-        const checklistCheckbox = container.querySelector('[data-perm="CHECKLIST"]');
-        const switchCheckbox = container.querySelector('[data-perm="CHECKLIST_SWITCH"]');
-        const settingsCheckbox = container.querySelector('[data-perm="CHECKLIST_SETTINGS"]');
+        
+        // Helfer-Funktion für ein Abhängigkeits-Paar
+        const setupPair = (mainPerm, subPerms) => {
+            const mainCheckbox = container.querySelector(`[data-perm="${mainPerm}"]`);
+            if (!mainCheckbox) return; // Haupt-Checkbox nicht gefunden
 
-        if (!checklistCheckbox || !switchCheckbox || !settingsCheckbox) return;
-        const toggleSubPermissions = () => {
-            if (!checklistCheckbox.disabled) {
-                const isEnabled = checklistCheckbox.checked;
-                switchCheckbox.disabled = !isEnabled;
-                settingsCheckbox.disabled = !isEnabled;
+            // Finde alle Unter-Checkboxen
+            const subCheckboxes = subPerms.map(perm => container.querySelector(`[data-perm="${perm}"]`)).filter(Boolean);
+            if (subCheckboxes.length === 0) return; // Keine Unter-Checkboxen gefunden
 
-                if (!isEnabled) {
-                    if (switchCheckbox.checked) {
-                        switchCheckbox.checked = false;
-                        switchCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-                    if (settingsCheckbox.checked) {
-                        settingsCheckbox.checked = false;
-                        settingsCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
+            // Die Logik, die die Unter-Punkte (de)aktiviert
+            const toggleSubPermissions = () => {
+                // Prüfe nur, ob die Haupt-Checkbox selbst editierbar ist
+                if (!mainCheckbox.disabled) {
+                    const isEnabled = mainCheckbox.checked; // Ist der Haupt-Haken AN?
+                    
+                    subCheckboxes.forEach(subCb => {
+                        subCb.disabled = !isEnabled; // (De)aktiviere die Unter-Checkbox
+                        
+                        if (!isEnabled) { // Wenn Haupt-Haken AUS ist
+                            if (subCb.checked) { // ...und Unter-Haken noch AN ist
+                                subCb.checked = false; // ...mache den Unter-Haken AUS
+                                // Wir lösen ein 'change'-Event aus, falls die Checkbox, die wir ändern,
+                                // selbst ein Hauptschalter für etwas anderes ist (Kaskadierung).
+                                subCb.dispatchEvent(new Event('change', { bubbles: true }));
+                            }
+                        }
+                    });
                 }
-            }
+            };
+            
+            // Hänge den "Spion" an die Haupt-Checkbox
+            mainCheckbox.addEventListener('change', toggleSubPermissions);
+            // Führe die Logik einmal beim Laden aus, um den Start-Zustand herzustellen
+            toggleSubPermissions(); 
         };
-        checklistCheckbox.addEventListener('change', toggleSubPermissions);
-        toggleSubPermissions();
+
+        // Hier definieren wir alle unsere Abhängigkeiten:
+        setupPair('CHECKLIST', ['CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS']);
+        setupPair('TERMINPLANER', ['TERMINPLANER_CREATE']);
+        // (Man könnte hier beliebig viele weitere Paare hinzufügen)
     };
+    // =================================================================
+    // ENDE DER ÄNDERUNG (2 von 2)
+    // =================================================================
 
     userRolesList.querySelectorAll('.p-3.border').forEach(card => setupCheckboxDependencies(card));
     setupCheckboxDependencies(document.getElementById('addRoleFormContainer'));
@@ -276,7 +312,7 @@ export function renderRoleManagement() {
             await updateDoc(doc(rolesCollectionRef, roleid), { permissions });
             await logAdminAction('role_permissions_changed', `Berechtigungen für Rolle '${role.name}' geändert: ${perm} ${e.target.checked ? 'aktiviert' : 'deaktiviert'}.`);
             
-            // KORREKTUR: UI neu rendern, um Abhängigkeiten (Checklist) neu zu berechnen
+            // KORREKTUR: UI neu rendern, um Abhängigkeiten (Checklist, Terminplaner) neu zu berechnen
             renderRoleManagement();
         });
     });

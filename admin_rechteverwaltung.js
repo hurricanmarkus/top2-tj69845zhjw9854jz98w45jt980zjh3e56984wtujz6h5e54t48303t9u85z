@@ -81,7 +81,16 @@ export function setupPermissionDependencies(container) {
             '[data-perm="CHECKLIST_SETTINGS"]'
         ]
     );
+
+    // 3. (NEU) Logik für TERMINPLANER (Hauptansicht -> Erstellen)
+    setupToggleLogic(
+        '[data-perm="TERMINPLANER"]', // Hauptschalter
+        [ // Unter-Schalter
+            '[data-perm="TERMINPLANER_CREATE"]'
+        ]
+    );
 }
+
 
 export async function renderAdminRightsManagement() {
     const adminRightsArea = document.getElementById('adminRightsArea');

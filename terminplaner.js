@@ -321,12 +321,19 @@ function applyAssignedUsers() {
 // ERSETZE diese komplette Funktion in terminplaner.js
 export function initializeTerminplanerView() {
     
-    // Knopf für Gäste verstecken
+// Knopf für Gäste verstecken ODER wenn keine Berechtigung
     const createVoteButton = document.getElementById('show-create-vote-modal-btn');
     if (createVoteButton) {
-        if (currentUser.mode === GUEST_MODE) {
+        // Prüfen, ob der User die Berechtigung hat (SysAdmins haben sie implizit immer)
+        // Wir stellen sicher, dass currentUser.permissions existiert, bevor wir .includes aufrufen
+        const permissions = currentUser.permissions || [];
+        const hasCreatePermission = permissions.includes('TERMINPLANER_CREATE') || currentUser.role === 'SYSTEMADMIN';
+        
+        if (currentUser.mode === GUEST_MODE || !hasCreatePermission) {
+            // Verstecke den Knopf, wenn der User Gast ist ODER die Berechtigung nicht hat
             createVoteButton.classList.add('hidden');
         } else {
+            // Zeige den Knopf nur an, wenn eingeloggt UND Berechtigung vorhanden
             createVoteButton.classList.remove('hidden');
         }
     }
