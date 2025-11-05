@@ -217,6 +217,8 @@ window.onload = function () {
 
 // ERSETZE diese komplette Funktion in haupteingang.js
 
+// ERSETZE diese komplette Funktion in haupteingang.js
+
 async function initializeFirebase() {
     try {
         console.log("initializeFirebase: Starte Firebase Initialisierung...");
@@ -310,7 +312,10 @@ async function initializeFirebase() {
                 listenForChecklistCategories();
                 listenForTemplates();
                 listenForStacks();
-                initializeTerminplanerView(); // Diese Zeile MUSS HIER bleiben
+                
+                // --- KORREKTUR TEIL 1: ---
+                // Die nächste Zeile wurde HIER ENTFERNT (sie war an der falschen Stelle)
+                // initializeTerminplanerView(); 
                 
                 if (typeof listenForPublicVotes === 'function') {
                     listenForPublicVotes();
@@ -329,23 +334,30 @@ async function initializeFirebase() {
                 console.log("initializeFirebase: User (anonym) vorhanden. Rufe checkCurrentUserValidity auf.");
                 await checkCurrentUserValidity(); 
                 initialAuthCheckDone = true; 
+                
+                // --- KORREKTUR TEIL 2: HIER HINZUGEFÜGT ---
+                // Wird ausgeführt, NACHDEM der Login (z.B. "Markus") geladen wurde.
+                initializeTerminplanerView(); 
+                
             } else {
                 console.log("Firebase meldet KEINEN User, wechsle explizit zum Gastmodus.");
                 switchToGuestMode(false);
                  initialAuthCheckDone = true;
                  updateUIForMode(); 
+                 
+                // --- KORREKTUR TEIL 3: AUCH HIER HINZUGEFÜGT ---
+                // Wird ausgeführt, NACHDEM der Gast-Modus bestätigt wurde.
+                 initializeTerminplanerView(); 
             }
             
             // =================================================================
-            // NEU: URL-PRÜFUNG (NACHDEM die Authentifizierung fertig ist)
+            // URL-PRÜFUNG (NACHDEM die Authentifizierung fertig ist)
             // =================================================================
             try {
                 const urlParams = new URLSearchParams(window.location.search);
                 const voteId = urlParams.get('vote_id');
                 const voteToken = urlParams.get('vote_token');
                 
-                // Wir prüfen, ob die Parameter *gerade eben* verarbeitet wurden
-                // (um Endlosschleifen beim Neuladen zu verhindern)
                 const isUrlClean = !voteId && !voteToken;
 
                 if (!isUrlClean) {
@@ -370,6 +382,7 @@ async function initializeFirebase() {
         alertUser("Firebase konnte nicht initialisiert werden.", "error");
     }
 }
+
 
 // --- HIER ENDET DIE FUNKTION ZUM ERSETZEN ---
 async function seedInitialData() {

@@ -318,17 +318,6 @@ function applyAssignedUsers() {
 
 export function initializeTerminplanerView() {
     
-    // --- NEUE PRÜFUNG: Knopf für Gäste verstecken ---
-    const createVoteButton = document.getElementById('show-create-vote-modal-btn');
-    if (createVoteButton) {
-        if (currentUser.mode === GUEST_MODE) {
-            createVoteButton.classList.add('hidden');
-        } else {
-            createVoteButton.classList.remove('hidden');
-        }
-    }
-    // --- ENDE NEUE PRÜFUNG ---
-    
     // ----- Spion für das Token-Feld -----
     const tokenInput = document.getElementById('vote-token-input');
     if (tokenInput && !tokenInput.dataset.listenerAttached) {
