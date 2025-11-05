@@ -183,6 +183,7 @@ export function switchToGuestMode(showNotification = true, message = "Abgemeldet
 }
 
 // Diese Funktion gehört in log-InOut.js
+// Diese Funktion gehört in log-InOut.js
 export function updateUIForMode() {
     // Ermittle Admin-Status und effektive Admin-Rechte
     const isAdmin = currentUser.role === 'ADMIN';
@@ -199,32 +200,39 @@ export function updateUIForMode() {
     // =================================================================
 
 
+    // =================================================================
+    // BEGINN DER KORREKTUR (Die "Verbindung")
+    // =================================================================
     // Zeige/Verstecke Haupt-Funktionskarten basierend auf Benutzerrechten
     document.querySelectorAll('[data-permission]').forEach(card => {
         const permission = card.dataset.permission;
-        // WICHTIG: Dies prüft 'currentUser.permissions' (BENUTZER-Rechte), nicht Admin-Rechte. Das ist korrekt.
-        const hasPermission = currentUser.permissions?.includes(permission); // Sicherer Zugriff auf permissions
+        // Wir holen die Berechtigungen (sicher, falls 'permissions' mal nicht existiert)
+        const userPermissions = currentUser.permissions || [];
+        const hasPermission = userPermissions.includes(permission);
+        
+        // ERLAUBT = Der Benutzer hat die Berechtigung ODER er ist Systemadmin
+        // (Systemadmin darf immer alles sehen, egal was in den Rollen steht)
+        const isAllowed = hasPermission || currentUser.role === 'SYSTEMADMIN';
+
         if (permission === 'CHECKLIST') {
-            card.style.display = hasPermission ? 'block' : 'none';
+            card.style.display = isAllowed ? 'block' : 'none';
         } else {
-            card.style.display = hasPermission ? 'flex' : 'none';
+            // Dies gilt jetzt für PUSHOVER, ENTRANCE, ESSENSBERECHNUNG
+            // und (NEU) TERMINPLANER, da sie alle 'flex' sind.
+            card.style.display = isAllowed ? 'flex' : 'none';
         }
     });
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
+
 
     // --- NEU: Sichtbarkeit für die Terminplaner-Karte ---
-    // Wir holen uns die neue Karte
-    const terminplanerCard = document.getElementById('terminplanerCard');
-    if (terminplanerCard) {
-        // Wir prüfen, ob der Benutzer NICHT der Gast ist
-        // (Genau wie du es wolltest: "nur dann angezeigt, wenn man eingeloggt ist")
-        if (currentUser.mode !== GUEST_MODE) {
-            terminplanerCard.style.display = 'flex'; // Zeige sie als 'flex' (wie die anderen Karten)
-            terminplanerCard.classList.remove('hidden');
-        } else {
-            terminplanerCard.style.display = 'none'; // Verstecke sie für Gäste
-            terminplanerCard.classList.add('hidden');
-        }
-    }
+    //
+    // DER ALTE CODE-BLOCK, DER HIER STAND, WURDE ENTFERNT.
+    // Die Schleife oben (querySelectorAll) übernimmt jetzt
+    // die Steuerung für die 'terminplanerCard'.
+    //
     // --- ENDE NEUER TEIL ---
 
 
@@ -286,7 +294,9 @@ export function updateUIForMode() {
     const checklistSettingsCard = document.getElementById('checklistSettingsCard');
     if (checklistSettingsCard) {
         // Prüft BENUTZER-Rechte. Das ist korrekt.
-        checklistSettingsCard.style.display = currentUser.permissions?.includes('CHECKLIST_SETTINGS') ? 'flex' : 'none'; // Sicherer Zugriff
+        // (Wir fügen die SysAdmin-Ausnahme hinzu)
+        const hasChecklistSettingsPerm = (currentUser.permissions || []).includes('CHECKLIST_SETTINGS') || currentUser.role === 'SYSTEMADMIN';
+        checklistSettingsCard.style.display = hasChecklistSettingsPerm ? 'flex' : 'none';
     }
 
     // --- Sicherer Zugriff auf Admin-Sektionen ---
@@ -324,7 +334,7 @@ export function updateUIForMode() {
     if (currentUser.mode === GUEST_MODE) {
         if (guestPrompt) guestPrompt.style.display = 'block';
         
-    } else if (currentUser.permissions?.length === 0 && !isSysAdmin) { 
+    } else if ((currentUser.permissions || []).length === 0 && !isSysAdmin) { // Sicherer Zugriff
         if (noPermissionPrompt) noPermissionPrompt.style.display = 'block';
     }
 
