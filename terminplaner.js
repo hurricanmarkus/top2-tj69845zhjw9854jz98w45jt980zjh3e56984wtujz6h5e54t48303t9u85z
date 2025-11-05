@@ -1284,6 +1284,8 @@ function renderVoteView(voteData) {
  */
 // ERSETZE diese Funktion in terminplaner.js
 
+// ERSETZE diese Funktion in terminplaner.js
+
 function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) {
     const optionsContainer = document.getElementById('vote-options-container');
     if (!optionsContainer) {
@@ -1368,7 +1370,13 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
     
     // 3. Kopfzeile der Tabelle
     tableHTML += '<thead><tr class="bg-gray-50">';
-    tableHTML += '<th class="p-3 border-b sticky left-0 bg-gray-50 z-10 w-48">Termin</th>';
+    
+    // --- KORREKTUR 1 HIER ---
+    // 'w-48' (fixe Breite) wurde entfernt.
+    // 'whitespace-nowrap' (kein Zeilenumbruch) wurde hinzugefügt, damit die Spalte schmal wird.
+    // 'border-r border-gray-300' (rechte Trennlinie) wurde hinzugefügt.
+    tableHTML += '<th class="p-3 border-b sticky left-0 bg-gray-50 z-10 whitespace-nowrap border-r border-gray-300">Termin</th>';
+    // --- ENDE KORREKTUR 1 ---
     
     voteData.participants.forEach(p => {
         if (p.userId === currentUser.mode) return; 
@@ -1404,9 +1412,14 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
         }
     }
 
-    tableHTML += `<th class="p-3 border-b text-center w-48 sticky right-0 bg-gray-50 z-10">
+    // --- KORREKTUR 2 HIER ---
+    // 'w-48' (fixe Breite) wurde beibehalten, damit die Knöpfe Platz haben.
+    // 'border-l border-gray-300' (linke Trennlinie) wurde hinzugefügt.
+    tableHTML += `<th class="p-3 border-b text-center w-48 sticky right-0 bg-gray-50 z-10 border-l border-gray-300">
                     ${youHeaderHTML}
                   </th>`;
+    // --- ENDE KORREKTUR 2 ---
+                  
     tableHTML += '</tr></thead>';
 
     // 4. Zeilen der Tabelle
@@ -1416,11 +1429,14 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
         const dateObj = new Date(date + 'T12:00:00'); 
         const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
 
+        // --- KORREKTUR 3 HIER ---
+        // 'whitespace-nowrap' und 'border-r border-gray-300' zur Datums-Zelle hinzugefügt.
         tableHTML += `
             <tr class="bg-gray-100">
-                <td class="p-2 font-bold sticky left-0 bg-gray-100 z-10" colspan="${voteData.participants.length + 2}">${niceDate}</td>
+                <td class="p-2 font-bold sticky left-0 bg-gray-100 z-10 whitespace-nowrap border-r border-gray-300" colspan="${voteData.participants.length + 2}">${niceDate}</td>
             </tr>
         `;
+        // --- ENDE KORREKTUR 3 ---
 
         optionsByDate[date].forEach(option => {
             const optionIndex = option.originalIndex;
@@ -1428,29 +1444,28 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                 `${option.timeStart} - ${option.timeEnd} Uhr` : 
                 `${option.timeStart} Uhr`;
             
-            // NEU: Logik für "Streichen" (Punkt 1)
             const isStricken = option.isStricken === true;
             const rowClasses = isStricken ? 'bg-gray-100 opacity-60' : '';
             const cellClasses = isStricken ? 'line-through text-gray-500' : 'font-mono';
             
+            // --- KORREKTUR 4 HIER ---
+            // 'whitespace-nowrap' und 'border-r border-gray-300' zur Zeit-Zelle hinzugefügt.
             tableHTML += `
                 <tr class="vote-option-row ${rowClasses}" data-option-index="${optionIndex}">
-                    <td class="p-3 border-b ${cellClasses} sticky left-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10">
+                    <td class="p-3 border-b ${cellClasses} sticky left-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10 whitespace-nowrap border-r border-gray-300">
                         ${timeString} ${isStricken ? '(Gestrichen)' : ''}
                     </td>
             `;
-            // ENDE NEU
+            // --- ENDE KORREKTUR 4 ---
 
             voteData.participants.forEach(p => {
                 if (p.userId === currentUser.mode) return; 
                 const answer = p.currentAnswers[optionIndex]; 
                 let answerIcon = '';
                 
-                // NEU: Logik für "Streichen" (Punkt 1)
                 if (isStricken) {
                     answerIcon = '<span class="text-gray-400 font-bold">-</span>';
                 }
-                // ENDE NEU
                 else if (answer === 'yes') answerIcon = '<span class="text-green-500 font-bold text-xl">✔</span>';
                 else if (answer === 'no') answerIcon = '<span class="text-red-500 font-bold text-xl">✘</span>';
                 else if (answer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold text-xl">~</span>';
@@ -1460,12 +1475,12 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
             
             const currentAnswer = currentParticipantAnswers[optionIndex];
             
-            // NEU: Logik für "Streichen" (Punkt 1)
-            // Wenn gestrichen, zeige deaktivierte Knöpfe (wenn editierbar) oder nur einen Strich
             if (isStricken) {
+                // --- KORREKTUR 5 HIER (Gestrichen-Modus) ---
+                // 'border-l border-gray-300' zur "Du"-Zelle hinzugefügt.
                 if (isEditable) {
                      tableHTML += `
-                        <td class="p-2 border-b sticky right-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10">
+                        <td class="p-2 border-b sticky right-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10 border-l border-gray-300">
                             <div class="flex justify-center gap-1">
                                 <button class="p-2 rounded-lg" disabled title="Gestrichen">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-gray-400"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" /></svg>
@@ -1481,13 +1496,13 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                     `;
                 } else {
                      tableHTML += `
-                        <td class="p-3 border-b text-center sticky right-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10">
+                        <td class="p-3 border-b text-center sticky right-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10 border-l border-gray-300">
                             <span class="text-gray-400 font-bold">-</span>
                         </td>
                     `;
                 }
+                // --- ENDE KORREKTUR 5 ---
             }
-            // ENDE NEU
             else if (isEditable) {
                 // MODUS: BEARBEITBAR (Knöpfe)
                 const yesSelected = currentAnswer === 'yes' ? 'bg-green-200 ring-2 ring-indigo-500' : 'hover:bg-green-100 bg-opacity-50';
@@ -1495,8 +1510,10 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                 const noSelected = currentAnswer === 'no' ? 'bg-red-200 ring-2 ring-indigo-500' : 'hover:bg-red-100 bg-opacity-50';
                 const maybeHidden = voteData.disableMaybe ? 'hidden' : '';
 
+                // --- KORREKTUR 6 HIER (Bearbeiten-Modus) ---
+                // 'border-l border-gray-300' zur "Du"-Zelle hinzugefügt.
                 tableHTML += `
-                    <td class="p-2 border-b sticky right-0 bg-white z-10">
+                    <td class="p-2 border-b sticky right-0 bg-white z-10 border-l border-gray-300">
                         <div class="flex justify-center gap-1">
                             <button class="vote-grid-btn p-2 rounded-lg ${yesSelected} transition-colors" data-option-index="${optionIndex}" data-answer="yes" title="Ja">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-green-600"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" /></svg>
@@ -1510,6 +1527,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                         </div>
                     </td>
                 `;
+                // --- ENDE KORREKTUR 6 ---
             } else {
                 // MODUS: SCHREIBGESCHÜTZT (Symbole)
                 let answerIcon = '';
@@ -1517,11 +1535,14 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
                 if (currentAnswer === 'no') answerIcon = '<span class="text-red-500 font-bold text-xl">✘</span>';
                 if (currentAnswer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold text-xl">~</span>';
                 
+                // --- KORREKTUR 7 HIER (Nur-Lesen-Modus) ---
+                // 'border-l border-gray-300' zur "Du"-Zelle hinzugefügt.
                 tableHTML += `
-                    <td class="p-3 border-b text-center sticky right-0 bg-white z-10">
+                    <td class="p-3 border-b text-center sticky right-0 bg-white z-10 border-l border-gray-300">
                         ${answerIcon}
                     </td>
                 `;
+                // --- ENDE KORREKTUR 7 ---
             }
             
             tableHTML += '</tr>';
@@ -1531,6 +1552,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false) 
     tableHTML += '</tbody></table>';
     optionsContainer.innerHTML = tableHTML;
 }
+
 
 
 
