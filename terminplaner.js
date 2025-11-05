@@ -1233,7 +1233,6 @@ function renderVoteView(voteData) {
 
 
     // ----- 5. Gültigkeits-Boxen (Sicher) -----
-    // (Dieser Abschnitt bleibt logisch gleich wie vorher)
     const validityContainer = document.getElementById('vote-poll-validity-container');
     const validityEl = document.getElementById('vote-poll-validity');
     const warningBox = document.getElementById('vote-validity-warning-box');
@@ -1242,7 +1241,10 @@ function renderVoteView(voteData) {
         if (!dateObj) return '';
         return dateObj.toLocaleString('de-DE', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}) + ' Uhr';
     };
-    if (isClosed && !isFixed) { 
+    
+    // --- KORREKTUR HIER ---
+    // 'isClosed' wurde zu 'isPollClosed' geändert, um den Tippfehler zu beheben.
+    if (isPollClosed && !isFixed) { 
         if (validityEl) validityEl.textContent = "TEILNAHME GESCHLOSSEN";
         if (validityContainer) {
             validityContainer.classList.add('text-red-700', 'bg-red-50', 'p-3', 'font-bold'); 
@@ -1250,6 +1252,7 @@ function renderVoteView(voteData) {
             validityContainer.classList.remove('hidden');
         }
     } else {
+    // --- ENDE KORREKTUR ---
         const startTimeText = formatVoteDate(startTime);
         const endTimeText = formatVoteDate(endTime);
         let validityText = '';
@@ -1266,6 +1269,7 @@ function renderVoteView(voteData) {
             validityContainer.classList.add('text-gray-600');
         }
     }
+    
     if (isParticipationBlocked && !isFixed) { 
         if (isNotStarted) {
             if (warningText) warningText.textContent = `Diese Umfrage hat noch nicht begonnen. Sie startet am ${formatVoteDate(startTime)}.`;
@@ -1284,7 +1288,6 @@ function renderVoteView(voteData) {
     }
 
     // ----- 6. Teilnehmer-Status-Box (Logik von Anonym bleibt) -----
-    // (Dieser Abschnitt bleibt logisch gleich wie vorher)
     const statusContainer = document.getElementById('vote-participant-status-container');
     const nameDisplay = document.getElementById('vote-participant-name');
     const userContainer = document.getElementById('vote-user-name-container');
@@ -1418,6 +1421,7 @@ function renderVoteView(voteData) {
         checkIfAllAnswered();
     }
 }
+
 
 
 
