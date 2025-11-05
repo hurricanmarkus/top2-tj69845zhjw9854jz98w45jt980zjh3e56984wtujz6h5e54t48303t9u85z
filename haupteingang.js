@@ -212,13 +212,7 @@ window.onload = function () {
     }
 };
 
-// In haupteingang.js
 // ERSETZE diese komplette Funktion in haupteingang.js
-
-// ERSETZE diese komplette Funktion in haupteingang.js
-
-// ERSETZE diese komplette Funktion in haupteingang.js
-
 async function initializeFirebase() {
     try {
         console.log("initializeFirebase: Starte Firebase Initialisierung...");
@@ -313,10 +307,6 @@ async function initializeFirebase() {
                 listenForTemplates();
                 listenForStacks();
                 
-                // --- KORREKTUR TEIL 1: ---
-                // Die nächste Zeile wurde HIER ENTFERNT (sie war an der falschen Stelle)
-                // initializeTerminplanerView(); 
-                
                 if (typeof listenForPublicVotes === 'function') {
                     listenForPublicVotes();
                 } else {
@@ -334,9 +324,6 @@ async function initializeFirebase() {
                 console.log("initializeFirebase: User (anonym) vorhanden. Rufe checkCurrentUserValidity auf.");
                 await checkCurrentUserValidity(); 
                 initialAuthCheckDone = true; 
-                
-                // --- KORREKTUR TEIL 2: HIER HINZUGEFÜGT ---
-                // Wird ausgeführt, NACHDEM der Login (z.B. "Markus") geladen wurde.
                 initializeTerminplanerView(); 
                 
             } else {
@@ -344,9 +331,6 @@ async function initializeFirebase() {
                 switchToGuestMode(false);
                  initialAuthCheckDone = true;
                  updateUIForMode(); 
-                 
-                // --- KORREKTUR TEIL 3: AUCH HIER HINZUGEFÜGT ---
-                // Wird ausgeführt, NACHDEM der Gast-Modus bestätigt wurde.
                  initializeTerminplanerView(); 
             }
             
@@ -358,7 +342,13 @@ async function initializeFirebase() {
                 const voteId = urlParams.get('vote_id');
                 const voteToken = urlParams.get('vote_token');
                 
-                const isUrlClean = !voteId && !voteToken;
+                // --- KORREKTUR FÜR PROBLEM 1 ---
+                // Wir lesen einen neuen Parameter namens 'view' aus.
+                const view = urlParams.get('view'); 
+                
+                // --- KORREKTUR FÜR PROBLEM 1 ---
+                // Wir prüfen jetzt auch auf 'view'.
+                const isUrlClean = !voteId && !voteToken && !view;
 
                 if (!isUrlClean) {
                     if (voteId) {
@@ -367,6 +357,15 @@ async function initializeFirebase() {
                     } else if (voteToken) {
                         console.log("URL-Parameter 'vote_token' gefunden, starte joinVoteByToken...");
                         await joinVoteByToken(voteToken); 
+                    
+                    // --- KORREKTUR FÜR PROBLEM 1 ---
+                    // Wenn 'view' gleich 'terminplaner' ist...
+                    } else if (view === 'terminplaner') {
+                        console.log("URL-Parameter 'view=terminplaner' gefunden, navigiere...");
+                        // ...navigieren wir zur Terminplaner-Ansicht...
+                        navigate('terminplaner');
+                        // ...und rufen unsere neue Funktion auf, um die URL zu säubern.
+                        cleanUrlParams();
                     }
                 }
             } catch (e) {
@@ -454,6 +453,17 @@ export function alertUser(message, type) {
         tempAlert.style.opacity = '0';
         setTimeout(() => tempAlert.remove(), 300);
     }, duration); 
+}
+
+// HINZUFÜGEN zu haupteingang.js (z.B. nach der alertUser Funktion)
+export function cleanUrlParams() {
+    try {
+        const newUrl = window.location.origin + window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+        console.log("URL-Parameter aufgeräumt.");
+    } catch (e) {
+        console.warn("URL konnte nicht aufgeräumt werden:", e);
+    }
 }
 
 export function setButtonLoading(button, isLoading) {

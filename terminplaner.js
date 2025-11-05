@@ -318,7 +318,7 @@ function applyAssignedUsers() {
 // ----- ENDE VERSCHOBENE FUNKTIONEN -----
 
 
-// ERSETZE diese Funktion in terminplaner.js
+// ERSETZE diese komplette Funktion in terminplaner.js
 export function initializeTerminplanerView() {
     
     // Knopf für Gäste verstecken
@@ -331,22 +331,22 @@ export function initializeTerminplanerView() {
         }
     }
 
-    // --- NEU: Logik für die Haupt-URL-Share-Box ---
+    // --- KORREKTUR 1: Logik für die Haupt-URL-Share-Box ---
     const mainUrlInput = document.getElementById('main-share-url');
     if (mainUrlInput) {
-        // Fülle das Feld mit der Basis-URL der App
-        mainUrlInput.value = window.location.origin + window.location.pathname;
+        // Fülle das Feld mit der Basis-URL + dem Parameter für diese Ansicht
+        mainUrlInput.value = window.location.origin + window.location.pathname + '?view=terminplaner';
     }
     const copyMainUrlBtn = document.getElementById('copy-main-url-btn');
     if (copyMainUrlBtn && !copyMainUrlBtn.dataset.listenerAttached) {
         copyMainUrlBtn.addEventListener('click', () => {
             if (mainUrlInput.value) {
-                copyToClipboard(mainUrlInput.value, "Startseiten-URL kopiert!");
+                copyToClipboard(mainUrlInput.value, "Terminplaner-URL kopiert!");
             }
         });
         copyMainUrlBtn.dataset.listenerAttached = 'true';
     }
-    // --- ENDE NEU ---
+    // --- ENDE KORREKTUR 1 ---
     
     // ----- Spion für das Token-Feld -----
     const tokenInput = document.getElementById('vote-token-input');
@@ -764,7 +764,6 @@ export function initializeTerminplanerView() {
     }
     
     // --- Spione für das Zuweisen-Modal ---
-    // ... (unverändert) ...
     const showAssignModalBtn = document.getElementById('vote-show-assign-user-modal-btn');
     if (showAssignModalBtn && !showAssignModalBtn.dataset.listenerAttached) {
         showAssignModalBtn.addEventListener('click', () => {
@@ -798,7 +797,6 @@ export function initializeTerminplanerView() {
     }
     
     // ----- Spione für die Bearbeiten-Funktionen -----
-    // ... (unverändert) ...
     const addDateButtonEdit = document.getElementById('vote-add-date-btn-edit');
     if (addDateButtonEdit && !addDateButtonEdit.dataset.listenerAttached) {
         addDateButtonEdit.addEventListener('click', addNewDateGroupEdit);
@@ -824,7 +822,18 @@ export function initializeTerminplanerView() {
                     alertUser("Du musst mindestens eine Uhrzeit pro Tag angeben.", "error");
                 }
             }
+            // --- KORREKTUR 2: Validierung auch hier aufrufen ---
+            validateLastDateGroupEdit();
         });
+        
+        // --- KORREKTUR 2: Input-Listener HINZUGEFÜGT ---
+        datesContainerEdit.addEventListener('input', (e) => {
+            if (e.target.matches('.vote-date-input, .vote-time-start-input')) {
+                validateLastDateGroupEdit();
+            }
+        });
+        // --- ENDE KORREKTUR 2 ---
+        
         datesContainerEdit.dataset.listenerAttached = 'true';
     }
     const adminGridContainer = document.getElementById('edit-participant-grid-container');
@@ -2327,7 +2336,7 @@ function renderEditView(voteData) {
         hideAnswersModeEdit.value = 'bis_umfragenabschluss'; 
     }
     
-    // --- NEU: "Sichtbarkeit" laden ---
+    // --- "Sichtbarkeit" laden ---
     const accessModeEdit = document.getElementById('vote-setting-access-mode-edit');
     const accessTextEdit = document.getElementById('vote-setting-access-text-edit');
     const currentAccessPolicy = voteData.accessPolicy || 'registered'; // Fallback für alte Umfragen
@@ -2338,11 +2347,9 @@ function renderEditView(voteData) {
     } else {
         accessTextEdit.innerHTML = 'Diese Umfrage können <span class="text-red-600 font-bold">nur angemeldete Benutzer</span> sehen.';
     }
-    // --- ENDE NEU ---
 
 
     // 4. Zugewiesene Benutzer laden
-    // ... (unverändert) ...
     const assignedDisplayEdit = document.getElementById('vote-assigned-users-display-edit');
     const assignedIds = voteData.assignedUserIds || [];
     if (assignedDisplayEdit) {
@@ -2362,7 +2369,6 @@ function renderEditView(voteData) {
     // 5. "UPDATE"-Log-Button
     
     // 6. Gefahrenzone-Knöpfe
-    // ... (unverändert) ...
     const fixBtn = document.getElementById('vote-fix-date-btn');
     const manualCloseBtn = document.getElementById('vote-toggle-manual-close-btn');
     
@@ -2412,8 +2418,14 @@ function renderEditView(voteData) {
     if (datesContainerEdit) {
         datesContainerEdit.innerHTML = ''; 
     }
-    addNewDateGroupEdit(true); 
+    addNewDateGroupEdit(true); // Fügt die erste leere Gruppe hinzu
+    
+    // KORREKTUR 2: Button initial verstecken und Validierung aufrufen
+    const addDateButtonEdit = document.getElementById('vote-add-date-btn-edit');
+    if (addDateButtonEdit) addDateButtonEdit.classList.add('hidden');
+    validateLastDateGroupEdit();
 }
+
 
 
 
@@ -2673,23 +2685,26 @@ function toggleAccessPolicy(modeInputId, textDisplayId) {
     }
 }
 
+// ERSETZE diese Funktion in terminplaner.js
 async function deletePoll() {
+    // 1. Sicherheitsabfrage
     const confirmation = prompt(`Um die Umfrage "${currentVoteData.title}" endgültig zu löschen, gib bitte LÖSCHEN ein:`);
     if (confirmation !== 'LÖSCHEN') {
         alertUser("Löschvorgang abgebrochen.", "info");
         return;
     }
     
+    // 2. Knopf sperren
     const deleteBtn = document.getElementById('vote-delete-poll-btn');
-    // Stelle sicher, dass der Knopf existiert, bevor wir ihn sperren
     if (deleteBtn) setButtonLoading(deleteBtn, true);
 
     try {
+        // 3. Datenbank-Befehl zum Löschen
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
         await deleteDoc(voteDocRef);
         
+        // 4. Erfolg melden und zur Hauptseite zurückkehren
         alertUser("Umfrage wurde endgültig gelöscht.", "success");
-        
         showView('main');
         currentVoteData = null;
 
@@ -2697,12 +2712,11 @@ async function deletePoll() {
         console.error("Fehler beim Löschen der Umfrage:", error);
         alertUser("Fehler beim Löschen.", "error");
     } finally {
-        // NEU: Dieser Block wird IMMER ausgeführt (nach try oder catch)
-        // Wir stellen sicher, dass der Knopf (falls er noch existiert)
-        // wieder freigegeben wird, auch wenn der User zur 'main' Ansicht wechselt.
+        // 5. Knopf wieder freigeben (falls der User auf der Seite bleibt)
         if (deleteBtn) setButtonLoading(deleteBtn, false);
     }
 }
+
 
 function renderPollHistory() {
     if (!currentVoteData || !currentVoteData.pollHistory || currentVoteData.pollHistory.length === 0) {
@@ -2800,6 +2814,7 @@ function showView(viewName) {
     }
 }
 
+// ERSETZE diese Funktion in terminplaner.js
 function resetCreateWizard() {
     document.getElementById('vote-title').value = '';
     document.getElementById('vote-description').value = '';
@@ -2836,7 +2851,7 @@ function resetCreateWizard() {
         hideMode.value = 'bis_umfragenabschluss'; 
     }
     
-    // --- NEU: "Sichtbarkeit" zurücksetzen ---
+    // --- "Sichtbarkeit" zurücksetzen ---
     const accessMode = document.getElementById('vote-setting-access-mode');
     if (accessMode) {
         accessMode.value = 'registered';
@@ -2845,7 +2860,6 @@ function resetCreateWizard() {
     if (accessText) {
         accessText.innerHTML = 'Diese Umfrage können <span class="text-red-600 font-bold">nur angemeldete Benutzer</span> sehen.';
     }
-    // --- ENDE NEU ---
     
     // Zuweisungen zurücksetzen
     tempAssignedUserIds = [];
@@ -2857,33 +2871,44 @@ function resetCreateWizard() {
     
     dateGroupIdCounter = 0;
     addNewDateGroup(); 
+    
+    // KORREKTUR 2: Button initial verstecken
+    const addDateButton = document.getElementById('vote-add-date-btn');
+    if(addDateButton) addDateButton.classList.add('hidden');
+    
     validateLastDateGroup(); 
 }
 
 
 
+// ERSETZE diese Funktion in terminplaner.js
 function validateLastDateGroup() {
     const addDateButton = document.getElementById('vote-add-date-btn');
-    // NEU: Stelle sicher, dass wir im "Erstellen"-Modus sind
-    if (!addDateButton || addDateButton.classList.contains('hidden')) {
-        // Wenn der "Erstellen"-Button versteckt ist, sind wir
-        // entweder im Bearbeiten-Modus oder die Funktion wurde fälschlich aufgerufen.
-        // Im Bearbeiten-Modus brauchen wir diese Validierung nicht (der Knopf ist immer sichtbar).
+    if (!addDateButton) {
+        // Knopf nicht gefunden, Abbruch
         return; 
     }
 
+    // KORREKTUR 2: Die fehlerhafte 'if'-Abfrage wurde hier entfernt.
+
     const lastGroup = document.querySelector('#vote-dates-container [data-date-group-id]:last-child');
-    if (!lastGroup) return; 
+    if (!lastGroup) {
+        // Keine Datums-Gruppe gefunden (sollte nicht passieren, da resetCreateWizard eine hinzufügt)
+         addDateButton.classList.add('hidden');
+        return; 
+    }
 
     let allValid = true;
     const dateInput = lastGroup.querySelector('.vote-date-input');
     if (!dateInput || !dateInput.value) {
         allValid = false;
     }
+    
     const timeInputs = lastGroup.querySelectorAll('.vote-time-start-input');
     if (timeInputs.length === 0) {
         allValid = false; 
     }
+    
     timeInputs.forEach(timeInput => {
         if (!timeInput.value) {
             allValid = false;
@@ -2898,6 +2923,47 @@ function validateLastDateGroup() {
     }
 }
 
+
+// HINZUFÜGEN (NEUE FUNKTION) in terminplaner.js (z.B. nach validateLastDateGroup)
+/**
+ * NEU: Validiert die letzte Datums-Gruppe im "Bearbeiten"-Modus.
+ */
+function validateLastDateGroupEdit() {
+    const addDateButton = document.getElementById('vote-add-date-btn-edit');
+    if (!addDateButton) {
+        return; 
+    }
+
+    const lastGroup = document.querySelector('#vote-dates-container-edit [data-date-group-id]:last-child');
+    if (!lastGroup) {
+        // Wenn keine Gruppe da ist (z.B. frisch geladen), Knopf anzeigen
+         addDateButton.classList.remove('hidden');
+        return; 
+    }
+
+    let allValid = true;
+    const dateInput = lastGroup.querySelector('.vote-date-input');
+    if (!dateInput || !dateInput.value) {
+        allValid = false;
+    }
+    
+    const timeInputs = lastGroup.querySelectorAll('.vote-time-start-input');
+    if (timeInputs.length === 0) {
+        allValid = false; 
+    }
+    
+    timeInputs.forEach(timeInput => {
+        if (!timeInput.value) {
+            allValid = false;
+        }
+    });
+    
+    if (allValid) {
+        addDateButton.classList.remove('hidden');
+    } else {
+        addDateButton.classList.add('hidden');
+    }
+}
 
 function getCurrentDateTimeLocalString() {
     const now = new Date();
@@ -3001,14 +3067,7 @@ function formatTokenInput(e, inputId) {
     }
 }
 
-// HINZUFÜGEN (GANZ AM ENDE von terminplaner.js)
-
-// ----- HELFER-FUNKTIONEN (Rest) -----
-
-// HINZUFÜGEN (GANZ AM ENDE von terminplaner.js)
-
-// ----- HELFER-FUNKTIONEN (Rest) -----
-
+// ERSETZE 'copyToClipboard' UND 'cleanUrlParams' in terminplaner.js durch DIESE EINE FUNKTION
 // NEU: Funktion zum Kopieren in die Zwischenablage
 function copyToClipboard(text, successMessage) {
     if (!navigator.clipboard) {
@@ -3366,33 +3425,76 @@ function formatTimeRemaining(endTime) {
  * Fügt eine neue (leere) Datums/Zeit-Gruppe im "Bearbeiten"-Modus hinzu.
  * Fast identisch mit 'addNewDateGroup', aber zielt auf '-edit'-Container.
  */
+// ERSETZE diese Funktion in terminplaner.js
+/**
+ * Fügt eine neue (leere) Datums/Zeit-Gruppe im "Bearbeiten"-Modus hinzu.
+ * KORRIGIERT: Kopiert jetzt den letzten Eintrag, wie im "Erstellen"-Modus.
+ */
 function addNewDateGroupEdit(isFirst = false) {
     dateGroupIdCounter++; // Wir nutzen den globalen Zähler weiter
     const datesContainer = document.getElementById('vote-dates-container-edit');
     if (!datesContainer) return;
 
     // Wenn es nicht der erste Slot ist und der letzte Slot leer ist, füge keinen neuen hinzu
-    const lastDateInput = datesContainer.querySelector('.vote-date-input:last-of-type');
-    if (!isFirst && lastDateInput && !lastDateInput.value) {
+    const lastDateInputValidation = datesContainer.querySelector('.vote-date-input:last-of-type');
+    if (!isFirst && lastDateInputValidation && !lastDateInputValidation.value) {
         alertUser("Bitte fülle erst den letzten Termin aus, bevor du einen neuen hinzufügst.", "info");
         return;
     }
-
+    
     const newGroup = document.createElement('div');
     newGroup.className = 'p-3 border rounded-lg bg-gray-50 space-y-3';
     newGroup.dataset.dateGroupId = dateGroupIdCounter; // Eindeutige ID
     
+    // --- KORREKTUR 4: Logik zum Kopieren HINZUGEFÜGT ---
+    let newDateString = '';
+    let timesToCopy = []; 
+    // Wir suchen den letzten Block im "Neue Termine" Container
+    const lastGroup = datesContainer.querySelector('[data-date-group-id]:last-child');
+    
+    if (lastGroup) {
+        const lastDateInput = lastGroup.querySelector('.vote-date-input');
+        if (lastDateInput && lastDateInput.value) {
+            // Datum gefunden, +1 Tag rechnen
+            const lastDate = new Date(lastDateInput.value + "T12:00:00"); 
+            lastDate.setDate(lastDate.getDate() + 1); 
+            newDateString = formatDateToISO(lastDate); 
+        }
+        // Zeiten kopieren
+        const lastTimeGroups = lastGroup.querySelectorAll('.time-input-group');
+        timesToCopy = Array.from(lastTimeGroups).map(group => {
+            return {
+                timeStart: group.querySelector('.vote-time-start-input').value,
+                timeEnd: group.querySelector('.vote-time-end-input').value
+            };
+        });
+    }
+    // --- ENDE KORREKTUR 4 ---
+    
     newGroup.innerHTML = `
         <label class="block text-sm font-bold text-gray-700">Neuer Termin (Tag ${dateGroupIdCounter})</label>
-        <input type="date" class="vote-date-input w-full p-2 border rounded-lg" value="">
+        <input type="date" class="vote-date-input w-full p-2 border rounded-lg" value="${newDateString}">
         <div class="vote-times-container space-y-2"></div>
         <button class="vote-add-time-btn text-sm font-semibold text-indigo-600 hover:underline">+ Uhrzeit hinzufügen</button>
     `;
     
     const newTimesContainer = newGroup.querySelector('.vote-times-container');
-    newTimesContainer.appendChild(createTimeInputHTML()); // Fügt einen leeren Zeit-Slot hinzu
+    
+    // --- KORREKTUR 4: Logik zum Einfügen HINZUGEFÜGT ---
+    if (timesToCopy.length > 0 && timesToCopy.some(t => t.timeStart)) {
+        // Nur kopieren, wenn mindestens eine Startzeit vorhanden war
+        timesToCopy.forEach(time => {
+            newTimesContainer.appendChild(createTimeInputHTML(time.timeStart, time.timeEnd));
+        });
+    } else {
+        newTimesContainer.appendChild(createTimeInputHTML()); // Fügt einen leeren Zeit-Slot hinzu
+    }
+    // --- ENDE KORREKTUR 4 ---
     
     datesContainer.appendChild(newGroup);
+    
+    // Validierung aufrufen, um den "Tag hinzufügen"-Button ggf. zu verstecken
+    validateLastDateGroupEdit();
 }
 
 /**
