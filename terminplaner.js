@@ -1198,8 +1198,13 @@ export async function joinVoteById(voteId = null) {
             isFromUrl = true;
         }
         
-        // --- ÄNDERUNG (1 von 2) ---
-        // Wir verwenden getDoc HIER nur noch für die *erste* Berechtigungsprüfung
+        // --- HINTERGRUND ---
+        // Bisher hat diese Funktion die Daten geholt, aber NICHT
+        // die Seite gezeichnet ('renderVoteView'). Das hat sie
+        // dem 'listenToCurrentVote'-Spion überlassen.
+        // Das führt zu einer Verzögerung (Race Condition), in der
+        // die Seite leer ist (Symptom 1).
+        
         const voteDocRef = doc(votesCollectionRef, idToLoad);
         const voteDoc = await getDoc(voteDocRef); 
         if (!voteDoc.exists()) {
@@ -1208,27 +1213,29 @@ export async function joinVoteById(voteId = null) {
         
         const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
 
-        // --- NEUE PRÜFUNG: GÄSTE BLOCKIEREN (bleibt gleich) ---
         const isRegisteredOnly = voteData.accessPolicy === 'registered' || !voteData.accessPolicy;
         if (isRegisteredOnly && currentUser.mode === GUEST_MODE) {
             throw new Error("Diese Umfrage ist nur für angemeldete Benutzer verfügbar. Bitte melde dich über den Modus-Bereich unten an.");
         }
-        // --- ENDE NEUE PRÜFUNG ---
 
-        // (Die 'currentVoteData'-Zuweisung hier ist nur für den ersten Moment)
+        // 1. Globale Variable (korrekt) setzen
         currentVoteData = voteData; 
         console.log("Umfrage per ID geladen (Initial-Check):", currentVoteData.id);
         
         navigate('terminplaner'); 
         showView('vote'); 
 
-        // --- ÄNDERUNG (2 von 2) ---
-        // Wir rufen nicht mehr 'renderVoteView' auf.
-        // Wir starten stattdessen den LIVE-SPION.
-        // Der Spion ruft dann 'renderVoteView' selbst auf (zum ersten Mal und bei jedem Update).
-        setTimeout(() => {
-            listenToCurrentVote(idToLoad); 
-        }, 0); 
+        // --- KORREKTUR (1 von 2) ---
+        // Rufe renderVoteView SOFORT mit den Snapshot-Daten auf.
+        // Dies behebt das "leere Ansicht"-Problem (Symptom 1).
+        renderVoteView(currentVoteData);
+        // --- ENDE KORREKTUR (1 von 2) ---
+
+        // --- KORREKTUR (2 von 2) ---
+        // Entferne das 'setTimeout'. Der Listener soll sofort starten,
+        // um nach Updates zu suchen.
+        listenToCurrentVote(idToLoad); 
+        // --- ENDE KORREKTUR (2 von 2) ---
         
         if (isFromUrl) cleanUrlParams();
         
@@ -1237,6 +1244,7 @@ export async function joinVoteById(voteId = null) {
         alertUser(error.message, "error_long"); // Längere Anzeige
     }
 }
+
 
 
 // ERSETZE diese Funktion in terminplaner.js
@@ -2494,8 +2502,6 @@ function renderEditView(voteData) {
 
 
 
-
-
 async function saveVoteEdits() {
     const saveBtn = document.getElementById('vote-save-changes-btn');
     setButtonLoading(saveBtn, true);
@@ -2504,8 +2510,7 @@ async function saveVoteEdits() {
         const updateData = {};
         const changes = []; // Für das Logbuch
         
-        // 1. Details lesen
-        // ... (unverändert) ...
+        // 1. Details lesen (unverändert)
         const newTitle = document.getElementById('vote-title-edit').value.trim();
         const newDesc = document.getElementById('vote-description-edit').value.trim();
         const newLoc = document.getElementById('vote-location-edit').value.trim();
@@ -2522,19 +2527,17 @@ async function saveVoteEdits() {
             changes.push(`Ort geändert.`);
         }
 
-        // 2. Gültigkeit lesen
-        // ... (unverändert) ...
+        // 2. Gültigkeit lesen (unverändert)
         const newStartTime = document.getElementById('vote-start-time-edit').value;
         const newEndTime = document.getElementById('vote-end-time-edit').value;
         const isUnlimited = document.getElementById('vote-end-time-unlimited-edit').checked;
         updateData.startTime = newStartTime ? new Date(newStartTime) : null;
         updateData.endTime = !isUnlimited && newEndTime ? new Date(newEndTime) : null;
         
-        // 3. Einstellungen lesen
+        // 3. Einstellungen lesen (unverändert)
         updateData.isPublic = document.getElementById('vote-setting-public-edit').checked;
         updateData.disableMaybe = document.getElementById('vote-setting-disable-maybe-edit').checked;
         
-        // Anonym-Einstellungen
         updateData.isAnonymous = document.getElementById('vote-setting-anonymous-edit').checked;
         if (updateData.isAnonymous) {
             updateData.anonymousMode = document.getElementById('vote-setting-anonymous-mode-edit').value;
@@ -2542,7 +2545,6 @@ async function saveVoteEdits() {
             updateData.anonymousMode = null;
         }
 
-        // "Antworten verstecken"
         updateData.hideAnswers = document.getElementById('vote-setting-hide-answers-edit').checked;
         if (updateData.hideAnswers) {
             updateData.hideAnswersMode = document.getElementById('vote-setting-hide-answers-mode-edit').value;
@@ -2550,12 +2552,9 @@ async function saveVoteEdits() {
             updateData.hideAnswersMode = null;
         }
         
-        // --- NEU: "Sichtbarkeit" speichern ---
         updateData.accessPolicy = document.getElementById('vote-setting-access-mode-edit').value;
-        // --- ENDE NEU ---
 
-        // 4. Teilnehmer-Listen speichern
-        // ... (unverändert) ...
+        // 4. Teilnehmer-Listen speichern (unverändert)
         const newAssignedIds = currentVoteData.assignedUserIds || [];
         updateData.assignedUserIds = newAssignedIds;
         const existingParticipantIds = currentVoteData.participants.map(p => p.userId);
@@ -2564,8 +2563,7 @@ async function saveVoteEdits() {
         updateData.participants = currentVoteData.participants;
         updateData.options = currentVoteData.options; 
 
-        // 5. Neue Termine auslesen und anhängen
-        // ... (unverändert) ...
+        // 5. Neue Termine auslesen und anhängen (unverändert)
         const newOptions = [];
         const dateGroups = document.querySelectorAll('#vote-dates-container-edit [data-date-group-id]');
         dateGroups.forEach(group => {
@@ -2592,8 +2590,7 @@ async function saveVoteEdits() {
             changes.push(`${newOptions.length} neue(r) Termin(e) hinzugefügt.`);
         }
         
-        // 6. Log-Eintrag erstellen
-        // ... (unverändert) ...
+        // 6. Log-Eintrag erstellen (unverändert)
         if (changes.length > 0) {
             const historyLog = {
                 timestamp: new Date(), 
@@ -2604,20 +2601,34 @@ async function saveVoteEdits() {
             updateData.acknowledgedBy = []; 
         }
         
-        // 7. Datenbank aktualisieren
+        // 7. Datenbank aktualisieren (unverändert)
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
         await updateDoc(voteDocRef, updateData);
         
-        // 8. Lokale Daten aktualisieren
-        currentVoteData = { ...currentVoteData, ...updateData };
+        // --- KORREKTUR (1 von 2) ---
+        // 8. Lokale Daten NICHT manuell aktualisieren.
+        // Der 'onSnapshot' Listener (von 'listenToCurrentVote')
+        // wird diese Änderung automatisch erkennen und
+        // 'currentVoteData' mit den FRISCHEN Daten von der
+        // Datenbank aktualisieren und 'renderVoteView' aufrufen.
+        //
+        // ENTFERNT: currentVoteData = { ...currentVoteData, ...updateData };
+        // --- ENDE KORREKTUR (1 von 2) ---
         
         alertUser("Änderungen gespeichert!", "success");
         
+        // (unverändert)
         showView('vote');
         
-        setTimeout(() => {
-            renderVoteView(currentVoteData); 
-        }, 0);
+        // --- KORREKTUR (2 von 2) ---
+        // 9. Den manuellen 'renderVoteView'-Aufruf entfernen.
+        // Der 'onSnapshot'-Listener übernimmt das.
+        //
+        // ENTFERNT:
+        // setTimeout(() => {
+        //    renderVoteView(currentVoteData); 
+        // }, 0);
+        // --- ENDE KORREKTUR (2 von 2) ---
 
     } catch (error) {
         console.error("Fehler beim Speichern der Änderungen:", error);
@@ -2626,7 +2637,6 @@ async function saveVoteEdits() {
         setButtonLoading(saveBtn, false);
     }
 }
-
 
 
 
