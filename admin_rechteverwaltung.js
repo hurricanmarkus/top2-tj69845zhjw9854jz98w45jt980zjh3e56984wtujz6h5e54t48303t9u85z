@@ -29,15 +29,37 @@ export function setupPermissionDependencies(container) {
             const isEnabled = mainToggle.checked && !mainToggle.disabled; 
             
             subToggles.forEach(toggle => {
-                // Setze den "disabled"-Status des Unter-Schalters auf das Gegenteil von "isEnabled"
-                // (Wenn Haupt-Haken AN, ist disabled AUS)
+                
+                // =================================================================
+                // BEGINN DER KORREKTUR (Kaskadierungs-Logik)
+                // =================================================================
+
+                // 1. Speichere den alten Zustand (war die Checkbox vorher deaktiviert?)
+                const wasDisabled = toggle.disabled;
+                
+                // 2. Setze den neuen Zustand
                 toggle.disabled = !isEnabled;
                 
-                // Wenn der Haupt-Haken AUSgeschaltet wird...
+                // 3. Wenn der Haupt-Haken AUSgeschaltet wird...
                 if (!isEnabled) {
                     // ...muss auch der Haken beim Unter-Punkt entfernt werden.
                     toggle.checked = false;
                 }
+                
+                // 4. (HIER IST DIE LÖSUNG)
+                // Wenn sich der 'disabled'-Status dieser Checkbox geändert hat
+                // (z.B. weil der Haupt-Haken sie gerade deaktiviert hat)...
+                if (toggle.disabled !== wasDisabled) {
+                    
+                    // ...dann löse künstlich ein 'change'-Event bei IHR SELBST aus.
+                    // Das sorgt dafür, dass, wenn DIESE Checkbox auch
+                    // eine "Haupt-Checkbox" für andere (Enkel-)Punkte ist,
+                    // deren 'updateSubToggles'-Funktion ebenfalls aufgerufen wird.
+                    toggle.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                // =================================================================
+                // ENDE DER KORREKTUR
+                // =================================================================
             });
         };
 
@@ -54,15 +76,14 @@ export function setupPermissionDependencies(container) {
     // HIER WIRD DIE FUNKTION JETZT AUFGERUFEN:
     // ---
 
-    // 1. Logik für ADMIN RECHTE (Hauptmenü -> Push, Eingang, Checkliste)
+    // 1. Logik für ADMIN RECHTE (Hauptmenü -> Push, Eingang, Checkliste, Terminplaner)
     setupToggleLogic(
         '[data-perm="canSeeMainFunctions"]', // Hauptschalter
         [ // Unter-Schalter
             '[data-perm="canUseMainPush"]',
             '[data-perm="canUseMainEntrance"]',
             '[data-perm="canUseMainChecklist"]',
-            // KORREKTUR: Hauptschalter für Terminplaner hinzugefügt
-            '[data-perm="canUseMainTerminplaner"]' 
+            '[data-perm="canUseMainTerminplaner"]' // <-- Dieser wird jetzt korrekt (de)aktiviert
         ]
     );
 
@@ -83,22 +104,18 @@ export function setupPermissionDependencies(container) {
         ]
     );
     
-    // =================================================================
-    // BEGINN DER KORREKTUR (Neue Abhängigkeit)
-    // =================================================================
-    // 4. (NEU) Logik für ADMINFUNKTIONEN (Terminplaner -> Token-Sichtbarkeit)
+    // 4. Logik für ADMINFUNKTIONEN (Terminplaner -> Token-Sichtbarkeit)
+    // Diese Regel wird jetzt durch die Kaskadierung (Korrektur oben)
+    // automatisch ausgelöst, wenn Regel 1 läuft.
     setupToggleLogic(
-        // HINWEIS: Wir verwenden hier den NEUEN Schlüssel 'canUseMainTerminplaner'
         '[data-perm="canUseMainTerminplaner"]', // Hauptschalter
         [ // Unter-Schalter
             '[data-perm="canViewParticipationToken"]',
             '[data-perm="canViewEditToken"]'
         ]
     );
-    // =================================================================
-    // ENDE DER KORREKTUR
-    // =================================================================
 }
+
 
 
 
