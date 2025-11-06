@@ -316,7 +316,7 @@ export function renderMainFunctionsAdminArea() {
 // (Diese Funktion ist in der GLEICHEN Datei admin_adminfunktionenHome.js)
 // ----------------------------------------------------------------
 
-function renderAdminVotesTable() {
+export function renderAdminVotesTable() {
     const tbody = document.getElementById('terminplaner-admin-tbody');
     const searchInput = document.getElementById('terminplaner-admin-search');
     // Wichtig: Prüfen, ob USERS (aus den Imports) geladen ist
