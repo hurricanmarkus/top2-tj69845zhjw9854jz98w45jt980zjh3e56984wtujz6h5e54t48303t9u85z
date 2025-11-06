@@ -25,42 +25,29 @@ export function setupPermissionDependencies(container) {
 
         // 5. Das ist die Funktion, die prüft, ob der Haken gesetzt ist oder nicht.
         const updateSubToggles = () => {
+            // =================================================================
+            // BEGINN DER KORREKTUR (Rückgängig machen)
+            // =================================================================
+
             // Wir prüfen auch, ob der Hauptschalter selbst deaktiviert ist
             const isEnabled = mainToggle.checked && !mainToggle.disabled; 
             
             subToggles.forEach(toggle => {
-                
-                // =================================================================
-                // BEGINN DER KORREKTUR (Kaskadierungs-Logik)
-                // =================================================================
-
-                // 1. Speichere den alten Zustand (war die Checkbox vorher deaktiviert?)
-                const wasDisabled = toggle.disabled;
-                
-                // 2. Setze den neuen Zustand
+                // Setze den "disabled"-Status des Unter-Schalters auf das Gegenteil von "isEnabled"
+                // (Wenn Haupt-Haken AN, ist disabled AUS)
                 toggle.disabled = !isEnabled;
                 
-                // 3. Wenn der Haupt-Haken AUSgeschaltet wird...
+                // Wenn der Haupt-Haken AUSgeschaltet wird...
                 if (!isEnabled) {
                     // ...muss auch der Haken beim Unter-Punkt entfernt werden.
                     toggle.checked = false;
                 }
                 
-                // 4. (HIER IST DIE LÖSUNG)
-                // Wenn sich der 'disabled'-Status dieser Checkbox geändert hat
-                // (z.B. weil der Haupt-Haken sie gerade deaktiviert hat)...
-                if (toggle.disabled !== wasDisabled) {
-                    
-                    // ...dann löse künstlich ein 'change'-Event bei IHR SELBST aus.
-                    // Das sorgt dafür, dass, wenn DIESE Checkbox auch
-                    // eine "Haupt-Checkbox" für andere (Enkel-)Punkte ist,
-                    // deren 'updateSubToggles'-Funktion ebenfalls aufgerufen wird.
-                    toggle.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-                // =================================================================
-                // ENDE DER KORREKTUR
-                // =================================================================
+                // Die Logik, die den Haken automatisch SETZT, wurde entfernt.
             });
+            // =================================================================
+            // ENDE DER KORREKTUR
+            // =================================================================
         };
 
         // 6. Setze einen "Spion" (Event Listener) auf den Haupt-Schalter.
@@ -76,14 +63,13 @@ export function setupPermissionDependencies(container) {
     // HIER WIRD DIE FUNKTION JETZT AUFGERUFEN:
     // ---
 
-    // 1. Logik für ADMIN RECHTE (Hauptmenü -> Push, Eingang, Checkliste, Terminplaner)
+    // 1. Logik für ADMIN RECHTE (Hauptmenü -> Push, Eingang, Checkliste)
     setupToggleLogic(
         '[data-perm="canSeeMainFunctions"]', // Hauptschalter
         [ // Unter-Schalter
             '[data-perm="canUseMainPush"]',
             '[data-perm="canUseMainEntrance"]',
-            '[data-perm="canUseMainChecklist"]',
-            '[data-perm="canUseMainTerminplaner"]' // <-- Dieser wird jetzt korrekt (de)aktiviert
+            '[data-perm="canUseMainChecklist"]'
         ]
     );
 
@@ -96,27 +82,14 @@ export function setupPermissionDependencies(container) {
         ]
     );
 
-    // 3. Logik für TERMINPLANER (Hauptansicht -> Erstellen)
+    // 3. (NEU) Logik für TERMINPLANER (Hauptansicht -> Erstellen)
     setupToggleLogic(
         '[data-perm="TERMINPLANER"]', // Hauptschalter
         [ // Unter-Schalter
             '[data-perm="TERMINPLANER_CREATE"]'
         ]
     );
-    
-    // 4. Logik für ADMINFUNKTIONEN (Terminplaner -> Token-Sichtbarkeit)
-    // Diese Regel wird jetzt durch die Kaskadierung (Korrektur oben)
-    // automatisch ausgelöst, wenn Regel 1 läuft.
-    setupToggleLogic(
-        '[data-perm="canUseMainTerminplaner"]', // Hauptschalter
-        [ // Unter-Schalter
-            '[data-perm="canViewParticipationToken"]',
-            '[data-perm="canViewEditToken"]'
-        ]
-    );
 }
-
-
 
 
 

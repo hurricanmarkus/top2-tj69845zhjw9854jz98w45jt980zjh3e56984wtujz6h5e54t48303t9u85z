@@ -1085,6 +1085,7 @@ export function toggleNewUserRoleField() {
 }
 
 // KORREKTUR: 'export' muss beibehalten werden (aus vorigem Schritt)
+// KORREKTUR: 'export' muss beibehalten werden (aus vorigem Schritt)
 export function renderAdminUserDetails(userId) {
     const detailsArea = document.getElementById('admin-user-details-area');
     const adminUser = USERS[userId];
@@ -1195,12 +1196,7 @@ export function renderAdminUserDetails(userId) {
                         ${generateCheckbox('canUseMainPush', '-> Push-Funktion', true)}
                         ${generateCheckbox('canUseMainEntrance', '-> Eingang öffnen', true)}
                         ${generateCheckbox('canUseMainChecklist', '-> Checkliste', true)}
-                        
-                        ${generateCheckbox('canUseMainTerminplaner', '-> Termin finden', true)}
-                        <div class="pl-12 mt-1 space-y-1"> ${generateCheckbox('canViewParticipationToken', '--> Umfrage-Token anzeigen', false)}
-                            ${generateCheckbox('canViewEditToken', '--> EDIT-Token anzeigen', false)}
-                        </div>
-                        </div>
+                    </div>
                 </div>
                 
                  <div class="p-3 border rounded-lg bg-white">
@@ -1283,6 +1279,7 @@ export function renderAdminUserDetails(userId) {
     });
     
     // Listener für alle Inputs und Checkboxen
+    // KORREKTUR: .approval-cb (das neue Dropdown) muss auch 'change' überwachen
     detailsArea.querySelectorAll('select, input[type="text"], input[type="checkbox"]').forEach(input => {
          input.addEventListener('change', toggleSaveButton);
          input.addEventListener('input', toggleSaveButton); // Für Texteingaben
@@ -1323,6 +1320,7 @@ export function renderAdminUserDetails(userId) {
                     approvalCb.disabled = !isMainChecked;
                 }
 
+                // KORREKTUR: Diese Logik gilt nur für Checkboxen, nicht für unser Dropdown
                 if (approvalCb.tagName === 'INPUT' && !isMainChecked) {
                     approvalCb.checked = false;
                 }
@@ -1361,10 +1359,11 @@ const saveButton = detailsArea.querySelector('.save-admin-perms-button');
                 };
             } else { // type === 'individual'
                 const permissions = {};
-                // Diese Logik sammelt ALLE Checkboxen,
-                // inklusive der neuen 'canUseMainTerminplaner' usw.
                 container.querySelectorAll('.admin-perm-cb').forEach(cb => { permissions[cb.dataset.perm] = cb.checked; });
                 
+                // =================================================================
+                // BEGINN DER KORREKTUR (Speicherlogik für Dropdown)
+                // =================================================================
                 const approvalRequired = {};
                 container.querySelectorAll('.approval-cb').forEach(el => {
                     const perm = el.dataset.perm;
@@ -1377,6 +1376,10 @@ const saveButton = detailsArea.querySelector('.save-admin-perms-button');
                         approvalRequired[perm] = (el.value === 'true');
                     }
                 });
+                // =================================================================
+                // ENDE DER KORREKTUR
+                // =================================================================
+
                 permissions.approvalRequired = approvalRequired;
 
                 updateData = {

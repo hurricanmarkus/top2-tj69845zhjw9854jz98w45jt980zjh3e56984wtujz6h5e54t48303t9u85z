@@ -1,17 +1,10 @@
-// =================================================================
-// BEGINN DER ÄNDERUNG (Importe)
-// =================================================================
 // 1. Importiere die benötigten Firebase-Funktionen DIREKT von Firebase
 import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, getDocs, writeBatch, addDoc, query, where, serverTimestamp, orderBy, limit, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // 2. Importiere die Variablen/Funktionen, die tatsächlich aus haupteingang.js kommen
 import {
-    db, USERS, ADMIN_ROLES, DELETED_CHECKLISTS, alertUser, adminSectionsState, currentUser,
-    votesCollectionRef // <-- NEU: Importiert, um auf Umfragen zuzugreifen
+    db, USERS, ADMIN_ROLES, DELETED_CHECKLISTS, alertUser, adminSectionsState, currentUser // logAdminAction hinzugefügt, falls benötigt
 } from './haupteingang.js';
-// =================================================================
-// ENDE DER ÄNDERUNG
-// =================================================================
 
 // 3. Importiere die benötigten Render-Funktionen aus ihren jeweiligen Dateien
 import { renderUserKeyList, renderUserManagement } from './admin_benutzersteuerung.js';
@@ -130,9 +123,6 @@ export function restoreAdminScrollIfAny() {
     }
 }
 
-// =================================================================
-// BEGINN DER ÄNDERUNG (Funktion renderMainFunctionsAdminArea)
-// =================================================================
 export function renderMainFunctionsAdminArea() {
     const tabsContainer = document.getElementById('main-functions-tabs');
     if (!tabsContainer) return;
@@ -142,10 +132,8 @@ export function renderMainFunctionsAdminArea() {
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
     let effectiveAdminPerms = {};
     if (isAdmin) {
-        // KORREKTUR: Sicherer Zugriff auf USERS
-        const adminUser = USERS ? USERS[currentUser.mode] : null;
+        const adminUser = USERS[currentUser.mode];
         if (adminUser) {
-            // KORREKTUR: Sicherer Zugriff auf ADMIN_ROLES
             if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
                 effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
             } else {
@@ -158,29 +146,11 @@ export function renderMainFunctionsAdminArea() {
     const pushTab = tabsContainer.querySelector('[data-target-card="card-main-push"]');
     const entranceTab = tabsContainer.querySelector('[data-target-card="card-main-entrance"]');
     const checklistTab = tabsContainer.querySelector('[data-target-card="card-main-checklist"]');
-    
-    // =================================================================
-    // BEGINN DER KORREKTUR (Logik für neuen Tab)
-    // =================================================================
-    // 1. Finde den neuen Tab-Knopf, den wir in index.html hinzugefügt haben
-    const terminplanerTab = tabsContainer.querySelector('[data-target-card="card-main-terminplaner"]');
-    // =================================================================
-    // ENDE DER KORREKTUR
-    // =================================================================
 
     if (pushTab) pushTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainPush) ? 'block' : 'none';
     if (entranceTab) entranceTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainEntrance) ? 'block' : 'none';
     if (checklistTab) checklistTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainChecklist) ? 'block' : 'none';
-
-    // =================================================================
-    // BEGINN DER KORREKTUR (Logik für neuen Tab)
-    // =================================================================
-    // 2. Wende die Berechtigungs-Logik auf den neuen Knopf an
-    if (terminplanerTab) terminplanerTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainTerminplaner) ? 'block' : 'none';
-    // =================================================================
-    // ENDE DER KORREKTUR
-    // =================================================================
-
+    // --- ENDE DER ÄNDERUNG ---
 
     const deletePermanentlyBtn = document.getElementById('permanently-delete-items-btn');
     if (deletePermanentlyBtn && !deletePermanentlyBtn.dataset.listenerAttached) {
@@ -228,51 +198,26 @@ export function renderMainFunctionsAdminArea() {
     tabsContainer.dataset.listenerAttached = 'true';
 }
 
-// =================================================================
-// ENDE DER ÄNDERUNG
-// =================================================================
-
-// =================================================================
-// BEGINN DER ÄNDERUNG (Funktion toggleAdminSection)
-// =================================================================
 export function toggleAdminSection(section) {
     Object.keys(adminSectionsState).forEach(key => {
         adminSectionsState[key] = key === section ? !adminSectionsState[key] : false;
     });
 
-    // (Die 'getElementById'-Aufrufe müssen hier sein, da sie in der Originaldatei fehlen)
-    const adminRightsArea = document.getElementById('adminRightsArea');
-    const passwordManagementArea = document.getElementById('passwordManagementArea');
-    const userManagementArea = document.getElementById('userManagementArea');
-    const roleManagementArea = document.getElementById('roleManagementArea');
-    const approvalProcessArea = document.getElementById('approvalProcessArea');
-    const protocolHistoryArea = document.getElementById('protocolHistoryArea');
-    const mainFunctionsArea = document.getElementById('mainFunctionsArea');
+    adminRightsArea.style.display = adminSectionsState.adminRights ? 'flex' : 'none';
+    passwordManagementArea.style.display = adminSectionsState.password ? 'flex' : 'none';
+    userManagementArea.style.display = adminSectionsState.user ? 'flex' : 'none';
+    roleManagementArea.style.display = adminSectionsState.role ? 'flex' : 'none';
+    approvalProcessArea.style.display = adminSectionsState.approval ? 'flex' : 'none';
+    protocolHistoryArea.style.display = adminSectionsState.protocol ? 'flex' : 'none';
+    mainFunctionsArea.style.display = adminSectionsState.mainFunctions ? 'flex' : 'none';
 
-    const adminRightsToggleIcon = document.getElementById('adminRightsToggleIcon');
-    const passwordToggleIcon = document.getElementById('passwordToggleIcon');
-    const userManagementToggleIcon = document.getElementById('userManagementToggleIcon');
-    const roleToggleIcon = document.getElementById('roleToggleIcon');
-    const approvalToggleIcon = document.getElementById('approvalToggleIcon');
-    const protocolHistoryToggleIcon = document.getElementById('protocolHistoryToggleIcon');
-    const mainFunctionsToggleIcon = document.getElementById('mainFunctionsToggleIcon');
-    
-    // (Sicherheitsprüfungen, falls Elemente nicht gefunden werden)
-    if (adminRightsArea) adminRightsArea.style.display = adminSectionsState.adminRights ? 'flex' : 'none';
-    if (passwordManagementArea) passwordManagementArea.style.display = adminSectionsState.password ? 'flex' : 'none';
-    if (userManagementArea) userManagementArea.style.display = adminSectionsState.user ? 'flex' : 'none';
-    if (roleManagementArea) roleManagementArea.style.display = adminSectionsState.role ? 'flex' : 'none';
-    if (approvalProcessArea) approvalProcessArea.style.display = adminSectionsState.approval ? 'flex' : 'none';
-    if (protocolHistoryArea) protocolHistoryArea.style.display = adminSectionsState.protocol ? 'flex' : 'none';
-    if (mainFunctionsArea) mainFunctionsArea.style.display = adminSectionsState.mainFunctions ? 'flex' : 'none';
-
-    if (adminRightsToggleIcon) adminRightsToggleIcon.classList.toggle('rotate-180', adminSectionsState.adminRights);
-    if (passwordToggleIcon) passwordToggleIcon.classList.toggle('rotate-180', adminSectionsState.password);
-    if (userManagementToggleIcon) userManagementToggleIcon.classList.toggle('rotate-180', adminSectionsState.user);
-    if (roleToggleIcon) roleToggleIcon.classList.toggle('rotate-180', adminSectionsState.role);
-    if (approvalToggleIcon) approvalToggleIcon.classList.toggle('rotate-180', adminSectionsState.approval);
-    if (protocolHistoryToggleIcon) protocolHistoryToggleIcon.classList.toggle('rotate-180', adminSectionsState.protocol);
-    if (mainFunctionsToggleIcon) mainFunctionsToggleIcon.classList.toggle('rotate-180', adminSectionsState.mainFunctions);
+    adminRightsToggleIcon.classList.toggle('rotate-180', adminSectionsState.adminRights);
+    passwordToggleIcon.classList.toggle('rotate-180', adminSectionsState.password);
+    userManagementToggleIcon.classList.toggle('rotate-180', adminSectionsState.user);
+    roleToggleIcon.classList.toggle('rotate-180', adminSectionsState.role);
+    approvalToggleIcon.classList.toggle('rotate-180', adminSectionsState.approval);
+    protocolHistoryToggleIcon.classList.toggle('rotate-180', adminSectionsState.protocol);
+    mainFunctionsToggleIcon.classList.toggle('rotate-180', adminSectionsState.mainFunctions);
 
     if (adminSectionsState.adminRights) renderAdminRightsManagement();
     if (adminSectionsState.password) renderUserKeyList();
@@ -280,225 +225,5 @@ export function toggleAdminSection(section) {
     if (adminSectionsState.role) renderRoleManagement();
     if (adminSectionsState.approval) renderApprovalProcess();
     if (adminSectionsState.protocol) renderProtocolHistory();
-    
-    // --- Diese Logik ist NEU ---
-    if (adminSectionsState.mainFunctions) {
-        renderMainFunctionsAdminArea();
-        listenForAdminVotes(); // Starte den Live-Spion für die Umfragen-Tabelle
-    } else {
-        listenForAdminVotes(true); // Stoppe den Spion, wenn die Sektion geschlossen wird
-    }
+    if (adminSectionsState.mainFunctions) renderMainFunctionsAdminArea();
 }
-// =================================================================
-// ENDE DER ÄNDERUNG
-// =================================================================
-
-
-// =================================================================
-// BEGINN DER ÄNDERUNG (Neue Funktionen)
-// Füge diese Funktionen ganz am Ende der Datei hinzu.
-// =================================================================
-
-let allPollsData = []; // Speichert alle Umfragen im Cache
-let unsubscribeAdminVotes = null; // Der Live-Spion
-
-/**
- * Helfer-Funktion: Formatiert die verbleibende Zeit.
- */
-function formatTimeRemaining(endTime) {
-    if (!endTime) return 'Unbegrenzt';
-    
-    const now = new Date();
-    // Prüfe, ob endTime ein Firebase Timestamp ist
-    const endDate = (typeof endTime.toDate === 'function') ? endTime.toDate() : new Date(endTime);
-    
-    const diffMs = endDate.getTime() - now.getTime();
-
-    if (diffMs <= 0) return "Beendet";
-
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    
-    if (diffDays > 0) return `~${diffDays} T. ${diffHours} Std.`;
-    
-    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    if (diffHours > 0) return `~${diffHours} Std. ${diffMinutes} Min.`;
-    
-    if (diffMinutes > 0) return `~${diffMinutes} Min.`;
-    
-    return "Endet bald";
-}
-
-/**
- * Startet (oder stoppt) den Live-Spion (onSnapshot) für ALLE Umfragen.
- */
-function listenForAdminVotes(stopListener = false) {
-    // Wenn die Sektion geschlossen wird, stoppe den Spion
-    if (stopListener) {
-        if (unsubscribeAdminVotes) {
-            console.log("Stoppe Admin-Umfragen-Listener.");
-            unsubscribeAdminVotes();
-            unsubscribeAdminVotes = null;
-        }
-        return;
-    }
-
-    // Wenn der Spion schon läuft, starte ihn nicht nochmal
-    if (unsubscribeAdminVotes) return; 
-
-    console.log("Starte Admin-Umfragen-Listener...");
-    // Prüfen, ob die votesCollectionRef (aus den Imports) verfügbar ist
-    if (!votesCollectionRef) {
-        console.error("Fehler: votesCollectionRef ist nicht importiert oder initialisiert!");
-        return;
-    }
-    
-    const q = query(votesCollectionRef, orderBy('createdAt', 'desc'));
-    
-    unsubscribeAdminVotes = onSnapshot(q, (snapshot) => {
-        allPollsData = []; // Cache leeren
-        snapshot.forEach(doc => {
-            allPollsData.push({ id: doc.id, ...doc.data() });
-        });
-        console.log(`Admin-Listener: ${allPollsData.length} Umfragen geladen.`);
-        // Rufe die Render-Funktion auf, um die Tabelle mit den neuen Daten zu füllen
-        renderAdminVotesTable(); 
-    }, (error) => {
-        console.error("Fehler beim Laden der Admin-Umfragen:", error);
-        const tbody = document.getElementById('terminplaner-admin-tbody');
-        if (tbody) tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-red-500">Fehler: ${error.message}</td></tr>`;
-    });
-}
-
-/**
- * Rendert die HTML-Tabelle basierend auf den gecachten 'allPollsData'
- * und dem aktuellen Suchbegriff.
- */
-function renderAdminVotesTable() {
-    const tbody = document.getElementById('terminplaner-admin-tbody');
-    const searchInput = document.getElementById('terminplaner-admin-search');
-    // Wichtig: Prüfen, ob USERS (aus den Imports) geladen ist
-    if (!tbody || !USERS) {
-        console.warn("renderAdminVotesTable: Abbruch, tbody oder USERS-Cache noch nicht bereit.");
-        return; 
-    }
-
-    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
-    const now = new Date();
-
-    // 1. Filtere die Daten basierend auf der Suche
-    const filteredPolls = allPollsData.filter(poll => {
-        if (searchTerm === '') return true; // Kein Filter = zeige alle
-        
-        // Finde den vollen Namen des Autors (falls vorhanden)
-        const authorRealName = USERS[poll.createdBy]?.realName || '';
-
-        // Erstelle einen durchsuchbaren Text-String
-        const searchString = [
-            poll.title,
-            poll.createdByName,
-            authorRealName,
-            poll.location,
-            poll.token,
-            poll.editToken
-        ].join(' ').toLowerCase();
-        
-        return searchString.includes(searchTerm);
-    });
-
-    if (filteredPolls.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-gray-500">Keine Umfragen gefunden${searchTerm ? ' (für diesen Filter)' : ''}.</td></tr>`;
-        return;
-    }
-
-    // 2. Baue die HTML-Zeilen
-    tbody.innerHTML = filteredPolls.map(poll => {
-        // --- Daten für jede Spalte aufbereiten ---
-        const getSafeDate = (timestamp) => {
-            if (!timestamp) return null;
-            if (typeof timestamp.toDate === 'function') return timestamp.toDate();
-            // Fallback für Daten, die vielleicht schon als JS-Datum gespeichert wurden
-            if (timestamp instanceof Date) return timestamp; 
-            // Fallback für ISO-Strings (z.B. aus alten Backups)
-            return new Date(timestamp);
-        };
-
-        const startTime = getSafeDate(poll.startTime);
-        const endTime = getSafeDate(poll.endTime);
-        const isFixed = poll.fixedOptionIndex != null;
-        const isClosedByTime = (endTime && now > endTime);
-        const isManuallyClosed = poll.isManuallyClosed === true;
-        const isNotStarted = (startTime && now < startTime);
-
-        // 1. Status
-        let statusText = '';
-        if (isFixed) statusText = '<span class="font-bold text-green-600">Fixiert</span>';
-        else if (isClosedByTime) statusText = '<span class="text-red-600">Beendet</span>';
-        else if (isManuallyClosed) statusText = '<span class="text-red-600">Beendet (Manuell)</span>';
-        else if (isNotStarted) statusText = '<span class="text-blue-600">Startet bald</span>';
-        else statusText = '<span class="text-yellow-600">Aktiv</span>';
-        
-        // 2. Autor (Voller Name, wenn verfügbar)
-        const autorName = USERS[poll.createdBy]?.realName || poll.createdByName || 'Unbekannt';
-        
-        // 3. Titel
-        const titel = poll.title || '---';
-        
-        // 4. Ort
-        const ort = poll.location || '---';
-
-        // 5. Dauer & 6. Gültig bis
-        const dauerText = formatTimeRemaining(poll.endTime);
-        const gueltigBisText = endTime ? endTime.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Unbegrenzt';
-
-        // 7. Öffentlich
-        const oeffentlichText = poll.isPublic ? 'Ja' : 'Nein';
-        
-        // 8. Anonym
-        let anonymText = 'Nein';
-        if (poll.isAnonymous) {
-            anonymText = poll.anonymousMode === 'erzwingen' ? 'Ja (Erzwungen)' : 'Ja (Möglich)';
-        }
-        
-        // 9. Vielleicht-Option
-        const vielleichtText = poll.disableMaybe ? 'Deaktiviert' : 'Aktiv';
-        
-        // 10. Antworten verstecken
-        let verstecktText = 'Nein';
-        if (poll.hideAnswers) {
-            if (poll.hideAnswersMode === 'bis_umfragenabschluss') verstecktText = 'Ja (Bis Abschluss)';
-            else if (poll.hideAnswersMode === 'bis_stimmabgabe_mit_korrektur') verstecktText = 'Ja (Bis Abgabe)';
-            else if (poll.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur') verstecktText = 'Ja (Bis Abgabe, keine Korr.)';
-            else verstecktText = 'Ja';
-        }
-
-        // 11. Nur Benutzer
-        const nurBenutzerText = (poll.accessPolicy === 'registered' || !poll.accessPolicy) ? 'Ja' : 'Nein (Gäste erlaubt)';
-
-        // 12. & 13. Tokens
-        const umfrageToken = poll.token || '---';
-        const editToken = poll.editToken || '---';
-
-        // HTML-Zeile bauen
-        return `
-            <tr class="hover:bg-gray-50 border-t border-gray-300">
-                <td class="p-2 border-b border-gray-300">${statusText}</td>
-                <td class="p-2 border-b border-gray-300">${autorName}</td>
-                <td class="p-2 border-b border-gray-300 font-semibold">${titel}</td>
-                <td class="p-2 border-b border-gray-300">${ort}</td>
-                <td class="p-2 border-b border-gray-300">${dauerText}</td>
-                <td class="p-2 border-b border-gray-300">${gueltigBisText}</td>
-                <td class="p-2 border-b border-gray-300">${oeffentlichText}</td>
-                <td class="p-2 border-b border-gray-300">${anonymText}</td>
-                <td class="p-2 border-b border-gray-300">${vielleichtText}</td>
-                <td class="p-2 border-b border-gray-300">${verstecktText}</td>
-                <td class="p-2 border-b border-gray-300">${nurBenutzerText}</td>
-                <td class="p-2 border-b border-gray-300 font-mono">${umfrageToken}</td>
-                <td class="p-2 border-b border-gray-300 font-mono">${editToken}</td>
-            </tr>
-        `;
-    }).join('');
-}
-// =================================================================
-// ENDE DER ÄNDERUNG
-// =================================================================
