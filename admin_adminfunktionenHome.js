@@ -152,26 +152,33 @@ export function renderMainFunctionsAdminArea() {
         }
     }
     
-    // NEU: Wir holen auch die *Benutzer*-Berechtigungen
-    const userPermissions = currentUser.permissions || [];
+    // (Benutzer-Berechtigungen werden hier nicht mehr für den Tab gebraucht)
+    // const userPermissions = currentUser.permissions || [];
 
     // Tabs basierend auf Rechten ein- oder ausblenden
     const pushTab = tabsContainer.querySelector('[data-target-card="card-main-push"]');
     const entranceTab = tabsContainer.querySelector('[data-target-card="card-main-entrance"]');
     const checklistTab = tabsContainer.querySelector('[data-target-card="card-main-checklist"]');
     
-    // 1. (NEU) Finde den neuen Tab-Button (den wir unten dynamisch hinzufügen)
+    // 1. Finde den neuen Tab-Button (den wir unten dynamisch hinzufügen)
     let terminplanerTab = tabsContainer.querySelector('[data-target-card="card-main-terminplaner"]');
 
     if (pushTab) pushTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainPush) ? 'block' : 'none';
     if (entranceTab) entranceTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainEntrance) ? 'block' : 'none';
     if (checklistTab) checklistTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainChecklist) ? 'block' : 'none';
     
-    // 2. (NEU) Prüfe die Benutzer-Berechtigung "TERMINPLANER"
-    // Ein Admin soll diesen Tab nur sehen, wenn er selbst die Funktion auch nutzen darf.
-    const canSeeTerminplaner = userPermissions.includes('TERMINPLANER') || isSysAdmin;
+    // =================================================================
+    // BEGINN DER FEHLERBEHEBUNG (Bug 1: Tab-Sichtbarkeit)
+    // =================================================================
+    // 2. (KORRIGIERT) Prüfe die ADMIN-Berechtigung "canUseMainTerminplaner"
+    //    statt der Benutzer-Berechtigung "TERMINPLANER".
+    // ALT: const canSeeTerminplaner = userPermissions.includes('TERMINPLANER') || isSysAdmin;
+    const canSeeTerminplaner = isSysAdmin || effectiveAdminPerms.canUseMainTerminplaner;
+    // =================================================================
+    // ENDE DER FEHLERBEHEBUNG
+    // =================================================================
 
-    // 3. (NEU) Den Tab-Button dynamisch erstellen, falls er fehlt
+    // 3. Den Tab-Button dynamisch erstellen, falls er fehlt
     if (canSeeTerminplaner && !terminplanerTab) {
         tabsContainer.insertAdjacentHTML('beforeend', `
             <button data-target-card="card-main-terminplaner"
@@ -181,7 +188,7 @@ export function renderMainFunctionsAdminArea() {
         terminplanerTab = tabsContainer.querySelector('[data-target-card="card-main-terminplaner"]');
     }
     
-    // 4. (NEU) Den Tab-Button anzeigen oder verstecken
+    // 4. Den Tab-Button anzeigen oder verstecken
     if (terminplanerTab) {
         terminplanerTab.style.display = canSeeTerminplaner ? 'block' : 'none';
     }
@@ -204,8 +211,18 @@ export function renderMainFunctionsAdminArea() {
     }
 
     // =================================================================
-    // BEGINN DER ÄNDERUNG (Neue Tabellen-Card HTML)
+    // BEGINN DER FEHLERBEHEBUNG (Bug 2: Token-Spalten-Header)
     // =================================================================
+    
+    // NEU: Berechtigungen für Token-Spalten holen
+    const canSeePollToken = isSysAdmin || effectiveAdminPerms.canSeePollToken;
+    const canSeePollEditToken = isSysAdmin || effectiveAdminPerms.canSeePollEditToken;
+
+    // NEU: colspan (Spaltenbreite für Lade-Text) anpassen
+    let colspan = 11; // 13 (original) - 2 (tokens)
+    if (canSeePollToken) colspan++;
+    if (canSeePollEditToken) colspan++;
+
     const contentArea = document.getElementById('main-functions-content-area');
     if (contentArea && !document.getElementById('card-main-terminplaner')) {
         const terminplanerCard = document.createElement('div');
@@ -235,13 +252,14 @@ export function renderMainFunctionsAdminArea() {
                                 <th class="p-2 border-b border-gray-300">Vielleicht-Opt.</th>
                                 <th class="p-2 border-b border-gray-300">Antw. versteckt</th>
                                 <th class="p-2 border-b border-gray-300">Nur Benutzer</th>
-                                <th class="p-2 border-b border-gray-300">Umfrage-TOKEN</th>
-                                <th class="p-2 border-b border-gray-300">EDIT-Token</th>
+                                
+                                ${canSeePollToken ? `<th class="p-2 border-b border-gray-300">Umfrage-TOKEN</th>` : ''}
+                                ${canSeePollEditToken ? `<th class="p-2 border-b border-gray-300">EDIT-Token</th>` : ''}
                             </tr>
                         </thead>
                         <tbody id="terminplaner-admin-tbody">
                             <tr>
-                                <td colspan="13" class="p-4 text-center text-gray-500">
+                                <td colspan="${colspan}" class="p-4 text-center text-gray-500">
                                     Lade Umfrage-Daten...
                                 </td>
                             </tr>
@@ -256,15 +274,13 @@ export function renderMainFunctionsAdminArea() {
         const searchInput = document.getElementById('terminplaner-admin-search');
         if (searchInput && !searchInput.dataset.listenerAttached) {
             searchInput.addEventListener('input', () => {
-                // Wir rufen die Render-Funktion auf, die wir unten definieren.
-                // Sie wird die Tabelle basierend auf dem Suchbegriff neu filtern.
                 renderAdminVotesTable(); 
             });
             searchInput.dataset.listenerAttached = 'true';
         }
     }
     // =================================================================
-    // ENDE DER ÄNDERUNG
+    // ENDE DER FEHLERBEHEBUNG
     // =================================================================
 
 
@@ -298,6 +314,167 @@ export function renderMainFunctionsAdminArea() {
     });
     tabsContainer.dataset.listenerAttached = 'true';
 }
+
+// ----------------------------------------------------------------
+// (Diese Funktion ist in der GLEICHEN Datei admin_adminfunktionenHome.js)
+// ----------------------------------------------------------------
+
+function renderAdminVotesTable() {
+    const tbody = document.getElementById('terminplaner-admin-tbody');
+    const searchInput = document.getElementById('terminplaner-admin-search');
+    // Wichtig: Prüfen, ob USERS (aus den Imports) geladen ist
+    if (!tbody || !USERS) {
+        console.warn("renderAdminVotesTable: Abbruch, tbody oder USERS-Cache noch nicht bereit.");
+        return; 
+    }
+
+    // =================================================================
+    // BEGINN DER FEHLERBEHEBUNG (Bug 2: Token-Spalten-Inhalt)
+    // =================================================================
+    
+    // NEU: Admin-Rechte holen, um zu entscheiden, ob Spalten angezeigt werden
+    const isAdmin = currentUser.role === 'ADMIN';
+    const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
+    let effectiveAdminPerms = {};
+    if (isAdmin) {
+        const adminUser = USERS[currentUser.mode];
+        if (adminUser) {
+            if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
+                effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
+            } else {
+                effectiveAdminPerms = adminUser.adminPermissions || {};
+            }
+        }
+    }
+    const canSeePollToken = isSysAdmin || effectiveAdminPerms.canSeePollToken;
+    const canSeePollEditToken = isSysAdmin || effectiveAdminPerms.canSeePollEditToken;
+    
+    // NEU: colspan (Spaltenbreite für Lade-Text) anpassen
+    let colspan = 11; // 13 (original) - 2 (tokens)
+    if (canSeePollToken) colspan++;
+    if (canSeePollEditToken) colspan++;
+    // ENDE NEU
+
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+    const now = new Date();
+
+    // 1. Filtere die Daten basierend auf der Suche
+    const filteredPolls = allPollsData.filter(poll => {
+        if (searchTerm === '') return true; // Kein Filter = zeige alle
+        
+        // Finde den vollen Namen des Autors (falls vorhanden)
+        const authorRealName = USERS[poll.createdBy]?.realName || '';
+
+        // Erstelle einen durchsuchbaren Text-String
+        const searchString = [
+            poll.title,
+            poll.createdByName,
+            authorRealName,
+            poll.location,
+            poll.token,
+            poll.editToken
+        ].join(' ').toLowerCase();
+        
+        return searchString.includes(searchTerm);
+    });
+
+    if (filteredPolls.length === 0) {
+        // KORRIGIERT: colspan
+        tbody.innerHTML = `<tr><td colspan="${colspan}" class="p-4 text-center text-gray-500">Keine Umfragen gefunden${searchTerm ? ' (für diesen Filter)' : ''}.</td></tr>`;
+        return;
+    }
+
+    // 2. Baue die HTML-Zeilen
+    tbody.innerHTML = filteredPolls.map(poll => {
+        // --- Daten für jede Spalte aufbereiten ---
+        const getSafeDate = (timestamp) => {
+            if (!timestamp) return null;
+            if (typeof timestamp.toDate === 'function') return timestamp.toDate();
+            if (timestamp instanceof Date) return timestamp; 
+            return new Date(timestamp);
+        };
+
+        const startTime = getSafeDate(poll.startTime);
+        const endTime = getSafeDate(poll.endTime);
+        const isFixed = poll.fixedOptionIndex != null;
+        const isClosedByTime = (endTime && now > endTime);
+        const isManuallyClosed = poll.isManuallyClosed === true;
+        const isNotStarted = (startTime && now < startTime);
+
+        // 1. Status
+        let statusText = '';
+        if (isFixed) statusText = '<span class="font-bold text-green-600">Fixiert</span>';
+        else if (isClosedByTime) statusText = '<span class="text-red-600">Beendet</span>';
+        else if (isManuallyClosed) statusText = '<span class="text-red-600">Beendet (Manuell)</span>';
+        else if (isNotStarted) statusText = '<span class="text-blue-600">Startet bald</span>';
+        else statusText = '<span class="text-yellow-600">Aktiv</span>';
+        
+        // 2. Autor (Voller Name, wenn verfügbar)
+        const autorName = USERS[poll.createdBy]?.realName || poll.createdByName || 'Unbekannt';
+        
+        // 3. Titel
+        const titel = poll.title || '---';
+        
+        // 4. Ort
+        const ort = poll.location || '---';
+
+        // 5. Dauer & 6. Gültig bis
+        const dauerText = formatTimeRemaining(poll.endTime);
+        const gueltigBisText = endTime ? endTime.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Unbegrenzt';
+
+        // 7. Öffentlich
+        const oeffentlichText = poll.isPublic ? 'Ja' : 'Nein';
+        
+        // 8. Anonym
+        let anonymText = 'Nein';
+        if (poll.isAnonymous) {
+            anonymText = poll.anonymousMode === 'erzwingen' ? 'Ja (Erzwungen)' : 'Ja (Möglich)';
+        }
+        
+        // 9. Vielleicht-Option
+        const vielleichtText = poll.disableMaybe ? 'Deaktiviert' : 'Aktiv';
+        
+        // 10. Antworten verstecken
+        let verstecktText = 'Nein';
+        if (poll.hideAnswers) {
+            if (poll.hideAnswersMode === 'bis_umfragenabschluss') verstecktText = 'Ja (Bis Abschluss)';
+            else if (poll.hideAnswersMode === 'bis_stimmabgabe_mit_korrektur') verstecktText = 'Ja (Bis Abgabe)';
+            else if (poll.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur') verstecktText = 'Ja (Bis Abgabe, keine Korr.)';
+            else verstecktText = 'Ja';
+        }
+
+        // 11. Nur Benutzer
+        const nurBenutzerText = (poll.accessPolicy === 'registered' || !poll.accessPolicy) ? 'Ja' : 'Nein (Gäste erlaubt)';
+
+        // 12. & 13. Tokens
+        const umfrageToken = poll.token || '---';
+        const editToken = poll.editToken || '---';
+
+        // HTML-Zeile bauen
+        return `
+            <tr class="hover:bg-gray-50 border-t border-gray-300">
+                <td class="p-2 border-b border-gray-300">${statusText}</td>
+                <td class="p-2 border-b border-gray-300">${autorName}</td>
+                <td class="p-2 border-b border-gray-300 font-semibold">${titel}</td>
+                <td class="p-2 border-b border-gray-300">${ort}</td>
+                <td class="p-2 border-b border-gray-300">${dauerText}</td>
+                <td class="p-2 border-b border-gray-300">${gueltigBisText}</td>
+                <td class="p-2 border-b border-gray-300">${oeffentlichText}</td>
+                <td class="p-2 border-b border-gray-300">${anonymText}</td>
+                <td class="p-2 border-b border-gray-300">${vielleichtText}</td>
+                <td class="p-2 border-b border-gray-300">${verstecktText}</td>
+                <td class="p-2 border-b border-gray-300">${nurBenutzerText}</td>
+                
+                ${canSeePollToken ? `<td class="p-2 border-b border-gray-300 font-mono">${umfrageToken}</td>` : ''}
+                ${canSeePollEditToken ? `<td class="p-2 border-b border-gray-300 font-mono">${editToken}</td>` : ''}
+            </tr>
+        `;
+    }).join('');
+    // =================================================================
+    // ENDE DER FEHLERBEHEBUNG
+    // =================================================================
+}
+
 // =================================================================
 // ENDE DER ÄNDERUNG
 // =================================================================

@@ -167,10 +167,6 @@ export function renderRoleManagement() {
         // (Nur SysAdmin darf geschützte Rollen bearbeiten)
         const canDeleteThisRole = canEditUserRoles && role.deletable !== false && !isProtectedRole; 
         
-        // =================================================================
-        // BEGINN DER ÄNDERUNG (Systemadmin-Sonderfall)
-        // =================================================================
-        
         let permissionsCheckboxesHTML = ''; // Variable hier definieren
 
         if (role.id === 'SYSTEMADMIN') {
@@ -182,6 +178,7 @@ export function renderRoleManagement() {
             
             // (Wir müssen 'isChecklistEnabled' hier definieren, da es nur im 'else'-Block gebraucht wird)
             const isChecklistEnabled = role.permissions?.includes('CHECKLIST'); 
+            const isTerminplanerEnabled = role.permissions?.includes('TERMINPLANER'); // NEU
             
             permissionsCheckboxesHTML = Object.keys(allRolePermissions).map(permKey => {
                 const perm = allRolePermissions[permKey];
@@ -189,20 +186,23 @@ export function renderRoleManagement() {
                 
                 // Wir müssen 'disabled' hier korrekt setzen, damit die setupCheckboxDependencies-Funktion
                 // (die weiter unten kommt) weiß, ob sie die Unterpunkte sperren soll.
-                const isSubPermission = permKey.startsWith('CHECKLIST_') || permKey.startsWith('TERMINPLANER_');
-                const isDisabled = !canEditThisRole || (isSubPermission && !isChecklistEnabled) ? 'disabled' : '';
+                let isDisabled = !canEditThisRole;
+                if (permKey.startsWith('CHECKLIST_') && !isChecklistEnabled) {
+                    isDisabled = true;
+                }
+                if (permKey.startsWith('TERMINPLANER_') && !isTerminplanerEnabled) { // NEU
+                    isDisabled = true;
+                }
                 
+                const disabledAttr = isDisabled ? 'disabled' : '';
                 const marginLeft = perm.indent ? 'pl-6' : '';
                 return `
-                    <label class="flex items-center gap-2 ${canEditThisRole ? 'cursor-pointer' : ''} ${marginLeft} ${isDisabled ? 'opacity-50' : ''}">
-                        <input type="checkbox" class="role-perm-toggle" data-roleid="${role.id}" data-perm="${permKey}" ${isChecked} ${isDisabled}> 
+                    <label class="flex items-center gap-2 ${canEditThisRole ? 'cursor-pointer' : ''} ${marginLeft} ${disabledAttr ? 'opacity-50' : ''}">
+                        <input type="checkbox" class="role-perm-toggle" data-roleid="${role.id}" data-perm="${permKey}" ${isChecked} ${disabledAttr}> 
                         <span>${perm.label}</span>
                     </label>`;
             }).join('');
         }
-        // =================================================================
-        // ENDE DER ÄNDERUNG
-        // =================================================================
 
         const roleCard = document.createElement('div');
         // Die "Gesperrt"-Optik (opacity-60) bleibt für 'SYSTEMADMIN' erhalten, das ist korrekt
@@ -285,12 +285,9 @@ export function renderRoleManagement() {
         });
 
         try {
-            //setButtonLoading(saveBtn, true); // (setButtonLoading nicht importiert, daher manuell)
             saveBtn.disabled = true;
             await setDoc(doc(rolesCollectionRef, roleId), { name: roleName, permissions, deletable: true });
             await logAdminAction('role_created', `Rolle '${roleName}' (${roleId}) erstellt.`);
-            
-            // KORREKTUR: UI neu rendern, damit die neue Rolle erscheint
             renderRoleManagement();
             
         } catch (error) {
@@ -313,8 +310,6 @@ export function renderRoleManagement() {
             }
             await updateDoc(doc(rolesCollectionRef, roleid), { permissions });
             await logAdminAction('role_permissions_changed', `Berechtigungen für Rolle '${role.name}' geändert: ${perm} ${e.target.checked ? 'aktiviert' : 'deaktiviert'}.`);
-            
-            // KORREKTUR: UI neu rendern, um Abhängigkeiten (Checklist, Terminplaner) neu zu berechnen
             renderRoleManagement();
         });
     });
@@ -337,7 +332,6 @@ export function renderRoleManagement() {
                 await batch.commit();
 
                 await logAdminAction('admin_role_deleted', `Admin-Rolle '${roleName}' (${roleId}) gelöscht.`);
-                // KORREKTUR: UI neu rendern
                 renderRoleManagement(); 
             } catch (error) {
                  console.error("Fehler beim Löschen der Admin-Rolle:", error);
@@ -347,32 +341,24 @@ export function renderRoleManagement() {
     };
 
     // (Listener für "Benutzer-Rolle löschen")
-userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
-    button.addEventListener('click', async (e) => {
-        roleManagementSectionsState.userRolesOpen = true;
-        const roleId = e.currentTarget.dataset.roleid;
-        
-        // 1. KORREKTUR: Name der Rolle SICHERN, BEVOR der Löschvorgang gestartet wird
-        const roleToDeleteName = ROLES[roleId]?.name || 'Unbekannte Rolle'; 
-        
-        if (confirm(`Möchten Sie die Rolle '${roleToDeleteName}' wirklich löschen?`)) {
-            try {
-                await deleteDoc(doc(rolesCollectionRef, roleId));
-                
-                // 2. Logging und Benachrichtigung verwenden den GESPEICHERTEN Namen
-                await logAdminAction('role_deleted', `Rolle '${roleToDeleteName}' (${roleId}) gelöscht.`);
-                alertUser(`Rolle '${roleToDeleteName}' wurde erfolgreich gelöscht!`, "success"); // Erfolgsmeldung
-
-                // UI wird durch den Listener (listenForRoleUpdates) automatisch neu gerendert.
-
-            } catch (error) {
-                console.error("Fehler beim Löschen der Benutzer-Rolle:", error);
-                // 3. Fehlerbehandlung muss den GESPEICHERTEN Namen verwenden
-                alertUser(`Fehler beim Löschen der Benutzer-Rolle: ${error.message || error.toString()}`, "error"); 
+    userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
+        button.addEventListener('click', async (e) => {
+            roleManagementSectionsState.userRolesOpen = true;
+            const roleId = e.currentTarget.dataset.roleid;
+            const roleToDeleteName = ROLES[roleId]?.name || 'Unbekannte Rolle'; 
+            
+            if (confirm(`Möchten Sie die Rolle '${roleToDeleteName}' wirklich löschen?`)) {
+                try {
+                    await deleteDoc(doc(rolesCollectionRef, roleId));
+                    await logAdminAction('role_deleted', `Rolle '${roleToDeleteName}' (${roleId}) gelöscht.`);
+                    alertUser(`Rolle '${roleToDeleteName}' wurde erfolgreich gelöscht!`, "success"); 
+                } catch (error) {
+                    console.error("Fehler beim Löschen der Benutzer-Rolle:", error);
+                    alertUser(`Fehler beim Löschen der Benutzer-Rolle: ${error.message || error.toString()}`, "error"); 
+                }
             }
-        }
+        });
     });
-});
     
     // (Listener für Toggle Benutzer-Rollen)
     document.getElementById('userRolesToggle').addEventListener('click', () => {
@@ -386,6 +372,9 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
         const adminRolesContainer = document.createElement('div');
         adminRolesContainer.className = "mt-6 pl-2 border-l-4 border-gray-200";
         
+        // =================================================================
+        // BEGINN DER ÄNDERUNG (HTML für Admin-Rollen)
+        // =================================================================
         adminRolesContainer.innerHTML = `
             <div id="adminRolesToggle" class="card bg-white p-4 rounded-xl shadow cursor-pointer hover:shadow-md transition duration-200">
                 <div class="flex justify-between items-center">
@@ -415,13 +404,20 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
                                     
                                     <div class="col-span-2 mt-2 pt-2 border-t">
                                         <label class="flex items-center gap-2 font-semibold"><input type="checkbox" class="new-admin-perm-cb" data-perm="canSeeMainFunctions"> <span>Adminfunktionen Hauptseite</span></label>
+                                        
                                         <div class="pl-6 mt-1 space-y-1">
                                             <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainPush"> <span>-> Push</span></label>
                                             <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainEntrance"> <span>-> Eingang</span></label>
                                             <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainChecklist"> <span>-> Checkliste</span></label>
+                                            
+                                            <div class="pt-1"> <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainTerminplaner"> <span>-> Termin finden</span></label>
+                                                <div class="pl-6 mt-1 space-y-1"> <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canSeePollToken"> <span>-> Umfrage-Token anzeigen</span></label>
+                                                    <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canSeePollEditToken"> <span>-> EDIT-Token anzeigen</span></label>
+                                                </div>
+                                            </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                    </div>
+                                </div>
                                 
                                 <div class="pl-0 mt-3 pt-3 border-t border-gray-200 space-y-3"> <h5 class="font-semibold text-sm mb-3 text-gray-500">Aktionen und Genehmigung</h5>
                                     
@@ -511,6 +507,9 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
                 </div>
                 <div id="adminRolesList" class="space-y-3 pt-4"></div>
             </div>`;
+        // =================================================================
+        // ENDE DER ÄNDERUNG
+        // =================================================================
             
         roleManagementArea.appendChild(adminRolesContainer);
 
@@ -552,8 +551,6 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
                 formTitle.textContent = 'Admin-Rolle bearbeiten';
                 idInput.value = roleId;
                 nameInput.value = role.name;
-                
-                // KORREKTUR: Namensfeld NICHT sperren
                 nameInput.disabled = false; 
                 
                 permCheckboxes.forEach(cb => {
@@ -575,15 +572,11 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
             adminRoleForm.classList.remove('hidden');
 
             // Abhängigkeit für Hauptmenü -> Push etc.
+            // Diese Funktion ruft jetzt unsere neue Logik aus Schritt 1 auf!
             setupPermissionDependencies(adminRoleForm);
             
-            // =================================================================
-            // BEGINN KORREKTUR (JS-Abhängigkeit für Genehmigung)
-            // =================================================================
-            // NEU: Abhängigkeiten für Genehmigungs-Checkboxen einrichten
+            // Abhängigkeiten für Genehmigungs-Checkboxen einrichten
             const setupApprovalDependencies = (form) => {
-                // Paare von [Haupt-Checkbox, Genehmigungs-Checkbox]
-                // WICHTIG: Die data-perm-Namen sind hier unterschiedlich!
                 const permPairs = [
                     { main: 'canCreateUser', approval: 'createUser' },
                     { main: 'canDeleteUser', approval: 'deleteUser' },
@@ -599,23 +592,19 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
                     if (mainCb && approvalCb) {
                         const updateState = () => {
                             const isMainChecked = mainCb.checked;
-                            approvalCb.disabled = !isMainChecked; // Deaktivieren, wenn Haupt-Cb aus ist
+                            approvalCb.disabled = !isMainChecked; 
                             if (!isMainChecked) {
-                                approvalCb.checked = false; // Haken entfernen
+                                approvalCb.checked = false; 
                             }
                         };
                         
                         mainCb.addEventListener('change', updateState);
-                        updateState(); // Initialen Status setzen
+                        updateState(); 
                     }
                 });
             };
             
-            // Diese neue Funktion aufrufen
             setupApprovalDependencies(adminRoleForm);
-            // =================================================================
-            // ENDE KORREKTUR
-            // =================================================================
         };
 
         // (Listener für Buttons "Admin-Rolle anlegen" und "Bearbeiten")
@@ -626,7 +615,7 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
         
         // (Listener für "Löschen" (Admin-Rolle))
         adminRolesList.querySelectorAll('.delete-admin-role-button').forEach(button => {
-            button.addEventListener('click', deleteAdminRoleHandler); // Korrekter Handler zugewiesen
+            button.addEventListener('click', deleteAdminRoleHandler); 
         });
 
         // (Listener für "Speichern" (Admin-Rolle Editor))
@@ -635,42 +624,32 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
             const saveBtn = e.currentTarget;
             const roleName = document.getElementById('newAdminRoleName').value.trim();
             const editingId = document.getElementById('editingAdminRoleId').value;
-            
-            // KORREKTUR: Beim Bearbeiten darf die ID nicht neu generiert werden.
-            // Beim Erstellen die ID aus dem Namen generieren.
             const roleId = editingId ? editingId : roleName.toUpperCase().replace(/\s/g, '');
 
             if (!roleName) return alertUser("Bitte gültigen Namen eingeben.", "error");
-            // Prüfen, ob ID schon existiert (NUR beim NEU anlegen)
             if (!editingId && ADMIN_ROLES[roleId]) return alertUser("Eine Rolle mit diesem Namen (oder ID) existiert bereits.", "error");
 
-
             const permissions = {};
-            // HINWEIS: Diese Logik funktioniert weiterhin, da die Klassen gleich geblieben sind.
             document.querySelectorAll('#addAdminRoleFormContainer .new-admin-perm-cb').forEach(cb => {
                 permissions[cb.dataset.perm] = cb.checked;
             });
 
             const approvalRequired = {};
-            // HINWEIS: Diese Logik funktioniert weiterhin, da die Klassen gleich geblieben sind.
             document.querySelectorAll('#addAdminRoleFormContainer .approval-cb').forEach(cb => {
                 approvalRequired[cb.dataset.perm] = cb.checked;
             });
             permissions.approvalRequired = approvalRequired;
 
-            // (Lade-Spinner manuell, da setButtonLoading nicht importiert ist)
             saveBtn.disabled = true; 
             
             try {
                 if (editingId) {
-                    // KORREKTUR: 'name' und 'permissions' aktualisieren
                     await updateDoc(doc(adminRolesCollectionRef, editingId), { 
                         name: roleName, 
                         permissions: permissions 
                     });
                     await logAdminAction('admin_role_edited', `Admin-Rolle '${roleName}' bearbeitet.`);
                 } else {
-                    // (Logik für NEU anlegen)
                     const docData = { name: roleName, permissions, deletable: true };
                     await setDoc(doc(adminRolesCollectionRef, roleId), docData);
                     await logAdminAction('admin_role_created', `Admin-Rolle '${roleName}' erstellt.`);
@@ -678,8 +657,6 @@ userRolesList.querySelectorAll('.delete-role-button').forEach(button => {
                 
                 adminRoleForm.classList.add('hidden');
                 showAdminRoleFormBtn.style.display = 'block';
-                
-                // KORREKTUR: UI neu rendern, damit die Liste aktuell ist
                 renderRoleManagement();
                 
             } catch (error) {

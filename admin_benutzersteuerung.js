@@ -1084,8 +1084,6 @@ export function toggleNewUserRoleField() {
     if (selectedType === 'not_registered') keyInput.value = ''; // [cite: 778]
 }
 
-// KORREKTUR: 'export' muss beibehalten werden (aus vorigem Schritt)
-// KORREKTUR: 'export' muss beibehalten werden (aus vorigem Schritt)
 export function renderAdminUserDetails(userId) {
     const detailsArea = document.getElementById('admin-user-details-area');
     const adminUser = USERS[userId];
@@ -1162,7 +1160,9 @@ export function renderAdminUserDetails(userId) {
         .map(r => `<option value="${r.id}" ${adminUser.assignedAdminRoleId === r.id ? 'selected' : ''}>${r.name}</option>`)
         .join('');
 
-    // --- Baue den Haupt-HTML-Block ---
+    // =================================================================
+    // BEGINN DER ÄNDERUNG (HTML für Individuelle Rechte)
+    // =================================================================
     detailsArea.innerHTML = `
         <div class="p-4 border-t-4 border-indigo-500 rounded-xl bg-gray-50 mt-4 relative shadow-lg" data-userid="${userId}">
             <button id="close-details-btn" class="absolute top-2 right-3 text-2xl font-bold text-gray-400 hover:text-red-600">&times;</button>
@@ -1190,14 +1190,20 @@ export function renderAdminUserDetails(userId) {
                         ${generateCheckbox('canViewLogs', 'Protokolle')}
                         ${generateCheckbox('canSeeUsers', 'Benutzersteuerung')}
                     </div>
+                    
                     <div class="mt-2 pt-2 border-t">
                         <h5 class="font-semibold text-sm text-gray-600">Adminfunktionen Hauptseite</h5>
                         ${generateCheckbox('canSeeMainFunctions', 'Hauptmenü anzeigen')}
                         ${generateCheckbox('canUseMainPush', '-> Push-Funktion', true)}
                         ${generateCheckbox('canUseMainEntrance', '-> Eingang öffnen', true)}
                         ${generateCheckbox('canUseMainChecklist', '-> Checkliste', true)}
+                        
+                        ${generateCheckbox('canUseMainTerminplaner', '-> Termin finden', true)}
+                        <div class="pl-6"> ${generateCheckbox('canSeePollToken', '-> Umfrage-Token anzeigen', true)}
+                            ${generateCheckbox('canSeePollEditToken', '-> EDIT-Token anzeigen', true)}
+                        </div>
+                        </div>
                     </div>
-                </div>
                 
                  <div class="p-3 border rounded-lg bg-white">
                     <h5 class="font-semibold text-sm mb-3 text-gray-600">Aktionen und Genehmigung</h5>
@@ -1246,6 +1252,9 @@ export function renderAdminUserDetails(userId) {
             </div>
         </div>
     `;
+    // =================================================================
+    // ENDE DER ÄNDERUNG
+    // =================================================================
     
     // --- Listener für UI-Logik ---
     detailsArea.querySelector('#close-details-btn')?.addEventListener('click', () => {
@@ -1279,7 +1288,6 @@ export function renderAdminUserDetails(userId) {
     });
     
     // Listener für alle Inputs und Checkboxen
-    // KORREKTUR: .approval-cb (das neue Dropdown) muss auch 'change' überwachen
     detailsArea.querySelectorAll('select, input[type="text"], input[type="checkbox"]').forEach(input => {
          input.addEventListener('change', toggleSaveButton);
          input.addEventListener('input', toggleSaveButton); // Für Texteingaben
@@ -1289,6 +1297,7 @@ export function renderAdminUserDetails(userId) {
     detailsArea.querySelectorAll('.admin-perm-cb, .approval-cb').forEach(input => {
          input.addEventListener('change', (e) => {
              const container = e.target.closest('.individual-perms-area');
+             // Diese Funktion ruft jetzt unsere neue Logik aus Schritt 1 auf!
              if (container && typeof setupPermissionDependencies === 'function') {
                  setupPermissionDependencies(container);
              }
@@ -1299,6 +1308,7 @@ export function renderAdminUserDetails(userId) {
     // Wichtig: Beim initialen Laden die Abhängigkeiten setzen
     const individualArea = detailsArea.querySelector('.individual-perms-area:not(.hidden)');
     if (individualArea && typeof setupPermissionDependencies === 'function') {
+        // Diese Funktion ruft jetzt unsere neue Logik aus Schritt 1 auf!
         setupPermissionDependencies(individualArea);
     }
     
@@ -1320,7 +1330,6 @@ export function renderAdminUserDetails(userId) {
                     approvalCb.disabled = !isMainChecked;
                 }
 
-                // KORREKTUR: Diese Logik gilt nur für Checkboxen, nicht für unser Dropdown
                 if (approvalCb.tagName === 'INPUT' && !isMainChecked) {
                     approvalCb.checked = false;
                 }
@@ -1332,7 +1341,7 @@ export function renderAdminUserDetails(userId) {
     }
 
     // --- Listener für den Speichern-Button hinzufügen ---
-const saveButton = detailsArea.querySelector('.save-admin-perms-button');
+    const saveButton = detailsArea.querySelector('.save-admin-perms-button');
     if (saveButton && !saveButton.dataset.listenerAttached) {
         saveButton.addEventListener('click', async (e) => {
             const userId = e.currentTarget.dataset.userid;
@@ -1361,24 +1370,15 @@ const saveButton = detailsArea.querySelector('.save-admin-perms-button');
                 const permissions = {};
                 container.querySelectorAll('.admin-perm-cb').forEach(cb => { permissions[cb.dataset.perm] = cb.checked; });
                 
-                // =================================================================
-                // BEGINN DER KORREKTUR (Speicherlogik für Dropdown)
-                // =================================================================
                 const approvalRequired = {};
                 container.querySelectorAll('.approval-cb').forEach(el => {
                     const perm = el.dataset.perm;
                     if (el.tagName === 'INPUT' && el.type === 'checkbox') {
-                        // Normale Checkboxen (z.B. canRenameUser)
                         approvalRequired[perm] = el.checked;
                     } else if (el.tagName === 'SELECT') {
-                        // Unser neues Dropdown (setAdminStatus)
-                        // Speichere den Boolean-Wert, nicht den String "true"
                         approvalRequired[perm] = (el.value === 'true');
                     }
                 });
-                // =================================================================
-                // ENDE DER KORREKTUR
-                // =================================================================
 
                 permissions.approvalRequired = approvalRequired;
 
@@ -1390,7 +1390,6 @@ const saveButton = detailsArea.querySelector('.save-admin-perms-button');
             }
             
             Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
-
 
             try {
                 await updateDoc(doc(usersCollectionRef, userId), updateData);
