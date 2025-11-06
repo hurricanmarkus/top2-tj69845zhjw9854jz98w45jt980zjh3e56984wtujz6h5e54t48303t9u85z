@@ -142,8 +142,10 @@ export function renderMainFunctionsAdminArea() {
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
     let effectiveAdminPerms = {};
     if (isAdmin) {
-        const adminUser = USERS[currentUser.mode];
+        // KORREKTUR: Sicherer Zugriff auf USERS
+        const adminUser = USERS ? USERS[currentUser.mode] : null;
         if (adminUser) {
+            // KORREKTUR: Sicherer Zugriff auf ADMIN_ROLES
             if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
                 effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
             } else {
@@ -151,42 +153,34 @@ export function renderMainFunctionsAdminArea() {
             }
         }
     }
-    
-    // NEU: Wir holen auch die *Benutzer*-Berechtigungen
-    const userPermissions = currentUser.permissions || [];
 
     // Tabs basierend auf Rechten ein- oder ausblenden
     const pushTab = tabsContainer.querySelector('[data-target-card="card-main-push"]');
     const entranceTab = tabsContainer.querySelector('[data-target-card="card-main-entrance"]');
     const checklistTab = tabsContainer.querySelector('[data-target-card="card-main-checklist"]');
     
-    // 1. (NEU) Finde den neuen Tab-Button (den wir unten dynamisch hinzufügen)
-    let terminplanerTab = tabsContainer.querySelector('[data-target-card="card-main-terminplaner"]');
+    // =================================================================
+    // BEGINN DER KORREKTUR (Logik für neuen Tab)
+    // =================================================================
+    // 1. Finde den neuen Tab-Knopf, den wir in index.html hinzugefügt haben
+    const terminplanerTab = tabsContainer.querySelector('[data-target-card="card-main-terminplaner"]');
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
 
     if (pushTab) pushTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainPush) ? 'block' : 'none';
     if (entranceTab) entranceTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainEntrance) ? 'block' : 'none';
     if (checklistTab) checklistTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainChecklist) ? 'block' : 'none';
-    
-    // 2. (NEU) Prüfe die Benutzer-Berechtigung "TERMINPLANER"
-    // Ein Admin soll diesen Tab nur sehen, wenn er selbst die Funktion auch nutzen darf.
-    const canSeeTerminplaner = userPermissions.includes('TERMINPLANER') || isSysAdmin;
 
-    // 3. (NEU) Den Tab-Button dynamisch erstellen, falls er fehlt
-    if (canSeeTerminplaner && !terminplanerTab) {
-        tabsContainer.insertAdjacentHTML('beforeend', `
-            <button data-target-card="card-main-terminplaner"
-                    class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">Termin finden</button>
-        `);
-        // Button neu suchen, da wir ihn gerade erst erstellt haben
-        terminplanerTab = tabsContainer.querySelector('[data-target-card="card-main-terminplaner"]');
-    }
-    
-    // 4. (NEU) Den Tab-Button anzeigen oder verstecken
-    if (terminplanerTab) {
-        terminplanerTab.style.display = canSeeTerminplaner ? 'block' : 'none';
-    }
+    // =================================================================
+    // BEGINN DER KORREKTUR (Logik für neuen Tab)
+    // =================================================================
+    // 2. Wende die Berechtigungs-Logik auf den neuen Knopf an
+    if (terminplanerTab) terminplanerTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainTerminplaner) ? 'block' : 'none';
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
 
-    // --- ENDE DER ÄNDERUNG ---
 
     const deletePermanentlyBtn = document.getElementById('permanently-delete-items-btn');
     if (deletePermanentlyBtn && !deletePermanentlyBtn.dataset.listenerAttached) {
@@ -202,71 +196,6 @@ export function renderMainFunctionsAdminArea() {
         });
         deletePermanentlyBtn.dataset.listenerAttached = 'true';
     }
-
-    // =================================================================
-    // BEGINN DER ÄNDERUNG (Neue Tabellen-Card HTML)
-    // =================================================================
-    const contentArea = document.getElementById('main-functions-content-area');
-    if (contentArea && !document.getElementById('card-main-terminplaner')) {
-        const terminplanerCard = document.createElement('div');
-        terminplanerCard.id = 'card-main-terminplaner';
-        terminplanerCard.className = 'main-functions-card hidden';
-        terminplanerCard.innerHTML = `
-            <div class="p-4 bg-gray-50 rounded-lg">
-                <h3 class="text-lg font-bold text-gray-800 mb-3">Übersicht aller Umfragen</h3>
-                
-                <input type="text" id="terminplaner-admin-search" 
-                       class="w-full p-2 border border-gray-300 rounded-lg mb-4" 
-                       placeholder="Tabelle durchsuchen (nach Titel, Autor, Token...)"
-                >
-                
-                <div class="overflow-x-auto w-full border border-gray-300 rounded-lg">
-                    <table id="terminplaner-admin-table" class="min-w-full bg-white text-xs" style="border-collapse: collapse;">
-                        <thead class="bg-gray-100">
-                            <tr class="text-left">
-                                <th class="p-2 border-b border-gray-300">Status</th>
-                                <th class="p-2 border-b border-gray-300">Autor</th>
-                                <th class="p-2 border-b border-gray-300">Titel</th>
-                                <th class="p-2 border-b border-gray-300">Ort</th>
-                                <th class="p-2 border-b border-gray-300">Dauer noch</th>
-                                <th class="p-2 border-b border-gray-300">Gültig bis</th>
-                                <th class="p-2 border-b border-gray-300">Öffentlich</th>
-                                <th class="p-2 border-b border-gray-300">Anonym</th>
-                                <th class="p-2 border-b border-gray-300">Vielleicht-Opt.</th>
-                                <th class="p-2 border-b border-gray-300">Antw. versteckt</th>
-                                <th class="p-2 border-b border-gray-300">Nur Benutzer</th>
-                                <th class="p-2 border-b border-gray-300">Umfrage-TOKEN</th>
-                                <th class="p-2 border-b border-gray-300">EDIT-Token</th>
-                            </tr>
-                        </thead>
-                        <tbody id="terminplaner-admin-tbody">
-                            <tr>
-                                <td colspan="13" class="p-4 text-center text-gray-500">
-                                    Lade Umfrage-Daten...
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-        contentArea.appendChild(terminplanerCard);
-
-        // Listener für die neue Suchleiste hinzufügen
-        const searchInput = document.getElementById('terminplaner-admin-search');
-        if (searchInput && !searchInput.dataset.listenerAttached) {
-            searchInput.addEventListener('input', () => {
-                // Wir rufen die Render-Funktion auf, die wir unten definieren.
-                // Sie wird die Tabelle basierend auf dem Suchbegriff neu filtern.
-                renderAdminVotesTable(); 
-            });
-            searchInput.dataset.listenerAttached = 'true';
-        }
-    }
-    // =================================================================
-    // ENDE DER ÄNDERUNG
-    // =================================================================
-
 
     if (tabsContainer.dataset.listenerAttached === 'true') return;
 
@@ -298,6 +227,7 @@ export function renderMainFunctionsAdminArea() {
     });
     tabsContainer.dataset.listenerAttached = 'true';
 }
+
 // =================================================================
 // ENDE DER ÄNDERUNG
 // =================================================================
