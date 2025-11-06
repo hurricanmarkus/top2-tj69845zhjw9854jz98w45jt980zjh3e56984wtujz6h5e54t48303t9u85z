@@ -25,10 +25,6 @@ export function setupPermissionDependencies(container) {
 
         // 5. Das ist die Funktion, die prüft, ob der Haken gesetzt ist oder nicht.
         const updateSubToggles = () => {
-            // =================================================================
-            // BEGINN DER KORREKTUR (Rückgängig machen)
-            // =================================================================
-
             // Wir prüfen auch, ob der Hauptschalter selbst deaktiviert ist
             const isEnabled = mainToggle.checked && !mainToggle.disabled; 
             
@@ -42,12 +38,7 @@ export function setupPermissionDependencies(container) {
                     // ...muss auch der Haken beim Unter-Punkt entfernt werden.
                     toggle.checked = false;
                 }
-                
-                // Die Logik, die den Haken automatisch SETZT, wurde entfernt.
             });
-            // =================================================================
-            // ENDE DER KORREKTUR
-            // =================================================================
         };
 
         // 6. Setze einen "Spion" (Event Listener) auf den Haupt-Schalter.
@@ -69,7 +60,9 @@ export function setupPermissionDependencies(container) {
         [ // Unter-Schalter
             '[data-perm="canUseMainPush"]',
             '[data-perm="canUseMainEntrance"]',
-            '[data-perm="canUseMainChecklist"]'
+            '[data-perm="canUseMainChecklist"]',
+            // KORREKTUR: Hauptschalter für Terminplaner hinzugefügt
+            '[data-perm="canUseMainTerminplaner"]' 
         ]
     );
 
@@ -82,14 +75,31 @@ export function setupPermissionDependencies(container) {
         ]
     );
 
-    // 3. (NEU) Logik für TERMINPLANER (Hauptansicht -> Erstellen)
+    // 3. Logik für TERMINPLANER (Hauptansicht -> Erstellen)
     setupToggleLogic(
         '[data-perm="TERMINPLANER"]', // Hauptschalter
         [ // Unter-Schalter
             '[data-perm="TERMINPLANER_CREATE"]'
         ]
     );
+    
+    // =================================================================
+    // BEGINN DER KORREKTUR (Neue Abhängigkeit)
+    // =================================================================
+    // 4. (NEU) Logik für ADMINFUNKTIONEN (Terminplaner -> Token-Sichtbarkeit)
+    setupToggleLogic(
+        // HINWEIS: Wir verwenden hier den NEUEN Schlüssel 'canUseMainTerminplaner'
+        '[data-perm="canUseMainTerminplaner"]', // Hauptschalter
+        [ // Unter-Schalter
+            '[data-perm="canViewParticipationToken"]',
+            '[data-perm="canViewEditToken"]'
+        ]
+    );
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
 }
+
 
 
 

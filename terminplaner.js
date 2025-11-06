@@ -1247,7 +1247,6 @@ export async function joinVoteById(voteId = null) {
 
 
 
-// ERSETZE diese Funktion in terminplaner.js
 function renderVoteView(voteData) {
     
     // ----- 0. Globale Variable zurücksetzen -----
@@ -1275,6 +1274,22 @@ function renderVoteView(voteData) {
     const youParticipant = (currentUser.mode !== GUEST_MODE) ? 
         voteData.participants.find(p => p.userId === currentUser.mode) : 
         null;
+        
+    // =================================================================
+    // BEGINN DER KORREKTUR (Rechte-Prüfung)
+    // =================================================================
+    // 1. Hole die Admin-Rechte des aktuellen Benutzers
+    const adminPerms = currentUser.adminPermissions || {};
+    // 2. Prüfe, ob der Benutzer der Ersteller ist
+    const isCreator = currentVoteData.createdBy === currentUser.mode;
+    // 3. Prüfe, ob der Benutzer ein Systemadmin ist
+    const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
+    
+    // 4. Definiere die Berechtigung, den Teilnahme-Token zu sehen
+    const canViewParticipationToken = isCreator || isSysAdmin || adminPerms.canViewParticipationToken;
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
 
     // ----- 2. Titel & Ersteller (Sicher) -----
     const titleEl = document.getElementById('vote-poll-title');
@@ -1287,7 +1302,17 @@ function renderVoteView(voteData) {
 
     // ----- 3. Share-Box (Sicher) -----
     const tokenEl = document.getElementById('vote-share-token');
-    if (tokenEl) tokenEl.textContent = voteData.token;
+    
+    // =================================================================
+    // BEGINN DER KORREKTUR (Token anzeigen/verstecken)
+    // =================================================================
+    if (tokenEl) {
+        // Zeige den Token NUR an, wenn die Berechtigung (Schritt 1) wahr ist
+        tokenEl.textContent = canViewParticipationToken ? voteData.token : 'XXXX - XXXX';
+    }
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
     
     const baseUrl = window.location.origin + window.location.pathname; 
     const directUrl = `${baseUrl}?vote_id=${currentVoteData.id}`; 
@@ -1320,12 +1345,9 @@ function renderVoteView(voteData) {
         detailsBtn.classList.add('bg-blue-600', 'hover:bg-blue-700'); 
     }
     
-    // --- KORREKTUR HIER ---
-    // Der "Quittieren"-Knopf wird standardmäßig versteckt.
     if (ackBtn) {
         ackBtn.classList.add('hidden');
     }
-    // --- ENDE KORREKTUR ---
     
     if (updateSubtitle) updateSubtitle.classList.remove('hidden');
 
@@ -1369,13 +1391,9 @@ function renderVoteView(voteData) {
 
         } else {
             // Benutzer hat NOCH NICHT quittiert
-            
-            // --- KORREKTUR HIER ---
-            // Wir zeigen den Knopf nur, wenn der Benutzer KEIN Gast ist.
             if (currentUser.mode !== GUEST_MODE) {
                 if (ackBtn) ackBtn.classList.remove('hidden');
             }
-            // --- ENDE KORREKTUR ---
             
             // Blink-Logik (unverändert)
             const lastUpdate = voteData.pollHistory[voteData.pollHistory.length - 1];
@@ -1594,6 +1612,7 @@ function renderVoteView(voteData) {
         checkIfAllAnswered();
     }
 }
+
 
 
 
@@ -2201,15 +2220,34 @@ function showInlineEditToken() {
     tokenInput.classList.remove('hidden');
     submitButton.classList.remove('hidden');
 
-    // 2. Token-Feld füllen (wie bisher)
-    if (currentUser.mode === currentVoteData.createdBy) {
+    // =================================================================
+    // BEGINN DER KORREKTUR (EDIT-Token Rechte-Prüfung)
+    // =================================================================
+    // 2. Token-Feld füllen (basierend auf Rechten)
+    
+    // 2a. Hole die Admin-Rechte
+    const adminPerms = currentUser.adminPermissions || {};
+    // 2b. Prüfe, ob Ersteller
+    const isCreator = currentUser.mode === currentVoteData.createdBy;
+    // 2c. Prüfe, ob Systemadmin
+    const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
+    
+    // 2d. Definiere die Berechtigung, den EDIT-Token zu sehen
+    const canViewEditToken = isCreator || isSysAdmin || adminPerms.canViewEditToken;
+
+    if (canViewEditToken) {
+        // Ersteller, SysAdmin oder Admin mit Recht: Token anzeigen, Feld sperren
         tokenInput.value = currentVoteData.editToken; 
         tokenInput.disabled = true; 
     } else {
+        // Normaler Benutzer (oder Admin ohne Recht): Leeres Feld, Eingabe erforderlich
         tokenInput.value = ''; 
         tokenInput.disabled = false;
-        tokenInput.focus(); // Fokus auf das Feld für Gäste
+        tokenInput.focus(); // Fokus auf das Feld
     }
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
 
     // 3. Den Timer starten
     let counter = 10; // 10 Sekunden
@@ -2230,6 +2268,7 @@ function showInlineEditToken() {
         }
     }, 1000); // Jede Sekunde
 }
+
 
 
 function resetEditWrapper() {
