@@ -130,9 +130,6 @@ export function restoreAdminScrollIfAny() {
     }
 }
 
-// =================================================================
-// BEGINN DER ÄNDERUNG (Funktion renderMainFunctionsAdminArea)
-// =================================================================
 export function renderMainFunctionsAdminArea() {
     const tabsContainer = document.getElementById('main-functions-tabs');
     if (!tabsContainer) return;
@@ -476,10 +473,6 @@ function renderAdminVotesTable() {
 }
 
 // =================================================================
-// ENDE DER ÄNDERUNG
-// =================================================================
-
-// =================================================================
 // BEGINN DER ÄNDERUNG (Funktion toggleAdminSection)
 // =================================================================
 export function toggleAdminSection(section) {
@@ -616,136 +609,3 @@ function listenForAdminVotes(stopListener = false) {
         if (tbody) tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-red-500">Fehler: ${error.message}</td></tr>`;
     });
 }
-
-/**
- * Rendert die HTML-Tabelle basierend auf den gecachten 'allPollsData'
- * und dem aktuellen Suchbegriff.
- */
-function renderAdminVotesTable() {
-    const tbody = document.getElementById('terminplaner-admin-tbody');
-    const searchInput = document.getElementById('terminplaner-admin-search');
-    // Wichtig: Prüfen, ob USERS (aus den Imports) geladen ist
-    if (!tbody || !USERS) {
-        console.warn("renderAdminVotesTable: Abbruch, tbody oder USERS-Cache noch nicht bereit.");
-        return; 
-    }
-
-    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
-    const now = new Date();
-
-    // 1. Filtere die Daten basierend auf der Suche
-    const filteredPolls = allPollsData.filter(poll => {
-        if (searchTerm === '') return true; // Kein Filter = zeige alle
-        
-        // Finde den vollen Namen des Autors (falls vorhanden)
-        const authorRealName = USERS[poll.createdBy]?.realName || '';
-
-        // Erstelle einen durchsuchbaren Text-String
-        const searchString = [
-            poll.title,
-            poll.createdByName,
-            authorRealName,
-            poll.location,
-            poll.token,
-            poll.editToken
-        ].join(' ').toLowerCase();
-        
-        return searchString.includes(searchTerm);
-    });
-
-    if (filteredPolls.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-gray-500">Keine Umfragen gefunden${searchTerm ? ' (für diesen Filter)' : ''}.</td></tr>`;
-        return;
-    }
-
-    // 2. Baue die HTML-Zeilen
-    tbody.innerHTML = filteredPolls.map(poll => {
-        // --- Daten für jede Spalte aufbereiten ---
-        const getSafeDate = (timestamp) => {
-            if (!timestamp) return null;
-            if (typeof timestamp.toDate === 'function') return timestamp.toDate();
-            // Fallback für Daten, die vielleicht schon als JS-Datum gespeichert wurden
-            if (timestamp instanceof Date) return timestamp; 
-            // Fallback für ISO-Strings (z.B. aus alten Backups)
-            return new Date(timestamp);
-        };
-
-        const startTime = getSafeDate(poll.startTime);
-        const endTime = getSafeDate(poll.endTime);
-        const isFixed = poll.fixedOptionIndex != null;
-        const isClosedByTime = (endTime && now > endTime);
-        const isManuallyClosed = poll.isManuallyClosed === true;
-        const isNotStarted = (startTime && now < startTime);
-
-        // 1. Status
-        let statusText = '';
-        if (isFixed) statusText = '<span class="font-bold text-green-600">Fixiert</span>';
-        else if (isClosedByTime) statusText = '<span class="text-red-600">Beendet</span>';
-        else if (isManuallyClosed) statusText = '<span class="text-red-600">Beendet (Manuell)</span>';
-        else if (isNotStarted) statusText = '<span class="text-blue-600">Startet bald</span>';
-        else statusText = '<span class="text-yellow-600">Aktiv</span>';
-        
-        // 2. Autor (Voller Name, wenn verfügbar)
-        const autorName = USERS[poll.createdBy]?.realName || poll.createdByName || 'Unbekannt';
-        
-        // 3. Titel
-        const titel = poll.title || '---';
-        
-        // 4. Ort
-        const ort = poll.location || '---';
-
-        // 5. Dauer & 6. Gültig bis
-        const dauerText = formatTimeRemaining(poll.endTime);
-        const gueltigBisText = endTime ? endTime.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Unbegrenzt';
-
-        // 7. Öffentlich
-        const oeffentlichText = poll.isPublic ? 'Ja' : 'Nein';
-        
-        // 8. Anonym
-        let anonymText = 'Nein';
-        if (poll.isAnonymous) {
-            anonymText = poll.anonymousMode === 'erzwingen' ? 'Ja (Erzwungen)' : 'Ja (Möglich)';
-        }
-        
-        // 9. Vielleicht-Option
-        const vielleichtText = poll.disableMaybe ? 'Deaktiviert' : 'Aktiv';
-        
-        // 10. Antworten verstecken
-        let verstecktText = 'Nein';
-        if (poll.hideAnswers) {
-            if (poll.hideAnswersMode === 'bis_umfragenabschluss') verstecktText = 'Ja (Bis Abschluss)';
-            else if (poll.hideAnswersMode === 'bis_stimmabgabe_mit_korrektur') verstecktText = 'Ja (Bis Abgabe)';
-            else if (poll.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur') verstecktText = 'Ja (Bis Abgabe, keine Korr.)';
-            else verstecktText = 'Ja';
-        }
-
-        // 11. Nur Benutzer
-        const nurBenutzerText = (poll.accessPolicy === 'registered' || !poll.accessPolicy) ? 'Ja' : 'Nein (Gäste erlaubt)';
-
-        // 12. & 13. Tokens
-        const umfrageToken = poll.token || '---';
-        const editToken = poll.editToken || '---';
-
-        // HTML-Zeile bauen
-        return `
-            <tr class="hover:bg-gray-50 border-t border-gray-300">
-                <td class="p-2 border-b border-gray-300">${statusText}</td>
-                <td class="p-2 border-b border-gray-300">${autorName}</td>
-                <td class="p-2 border-b border-gray-300 font-semibold">${titel}</td>
-                <td class="p-2 border-b border-gray-300">${ort}</td>
-                <td class="p-2 border-b border-gray-300">${dauerText}</td>
-                <td class="p-2 border-b border-gray-300">${gueltigBisText}</td>
-                <td class="p-2 border-b border-gray-300">${oeffentlichText}</td>
-                <td class="p-2 border-b border-gray-300">${anonymText}</td>
-                <td class="p-2 border-b border-gray-300">${vielleichtText}</td>
-                <td class="p-2 border-b border-gray-300">${verstecktText}</td>
-                <td class="p-2 border-b border-gray-300">${nurBenutzerText}</td>
-                <td class="p-2 border-b border-gray-300 font-mono">${umfrageToken}</td>
-                <td class="p-2 border-b border-gray-300 font-mono">${editToken}</td>
-            </tr>
-        `;
-    }).join('');
-}
-// =================================================================
-// ENDE DER ÄNDERUNG
-// =================================================================
