@@ -3,7 +3,8 @@ import { onSnapshot, doc, updateDoc, setDoc, deleteDoc, getDoc } from "https://w
 import { db, usersCollectionRef, setButtonLoading, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES, ADMIN_STORAGE_KEY, PENDING_REQUESTS } from './haupteingang.js';
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js'; // NEU: renderProtocolHistory importiert
 import { setupPermissionDependencies, renderAdminRightsManagement } from './admin_rechteverwaltung.js'; // Oder der richtige Dateiname
-import { renderMainFunctionsAdminArea, restoreAdminScrollIfAny, rememberAdminScroll } from './admin_adminfunktionenHome.js';
+// NEU: renderAdminVotesTable importiert
+import { renderMainFunctionsAdminArea, restoreAdminScrollIfAny, rememberAdminScroll, renderAdminVotesTable } from './admin_adminfunktionenHome.js';
 import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode } from './log-InOut.js';
 import { createApprovalRequest } from './admin_genehmigungsprozess.js';
 import { renderRoleManagement } from './admin_rollenverwaltung.js'; // NEU: renderRoleManagement importiert
@@ -19,12 +20,12 @@ export function listenForUserUpdates() {
         console.error("listenForUserUpdates: FEHLER - usersCollectionRef ist nicht definiert, bevor onSnapshot aufgerufen wird!");
         return; 
     } else {
-        console.log("listenForUserUpdates: usersCollectionRef scheint gültig zu sein:", usersCollectionRef.path);
+        // console.log("listenForUserUpdates: usersCollectionRef scheint gültig zu sein:", usersCollectionRef.path);
     }
 
 
     onSnapshot(usersCollectionRef, (snapshot) => {
-        console.log("listenForUserUpdates: onSnapshot hat Daten empfangen!", snapshot.size, "Dokumente");
+        // console.log("listenForUserUpdates: onSnapshot hat Daten empfangen!", snapshot.size, "Dokumente");
 
         // =================================================================
         // BEGINN DER KORREKTUR (Logout-Problem)
@@ -34,7 +35,7 @@ export function listenForUserUpdates() {
         if (!snapshot.empty) { 
             Object.keys(USERS).forEach(key => delete USERS[key]);
             snapshot.forEach((doc) => {
-                 console.log("listenForUserUpdates: Verarbeite Dokument:", doc.id, doc.data());
+                 // console.log("listenForUserUpdates: Verarbeite Dokument:", doc.id, doc.data());
                  USERS[doc.id] = { id: doc.id, ...doc.data() };
             });
 
@@ -64,13 +65,25 @@ export function listenForUserUpdates() {
                 // =================================================================
                 // BEGINN DER KORREKTUR (Tippfehler)
                 // =================================================================
-                // HIER WAR DER FEHLER: Es hieß 'renderMainFunctionsArea' statt 'renderMainFunctionsAdminArea'
                 if (adminSectionsState.mainFunctions && typeof renderMainFunctionsAdminArea === 'function') {
-                    console.log("Live-Update: Neuzeichnen der Adminfunktionen-Tabs wird ausgelöst.");
+                    console.log("Live-Update (User): Neuzeichnen der Adminfunktionen-Tabs wird ausgelöst.");
                     renderMainFunctionsAdminArea(); // <-- KORRIGIERT
                 }
                 // =================================================================
                 // ENDE DER KORREKTUR
+                // =================================================================
+                
+                // =================================================================
+                // BEGINN DER ÄNDERUNG (LIVE-UPDATE FÜR ADMIN-FUNKTIONEN)
+                // =================================================================
+                // NEU: Rendert auch den Tabellen-INHALT neu, wenn ein Benutzer (und damit
+                // seine individuellen Admin-Rechte) geändert wird.
+                if (adminSectionsState.mainFunctions && typeof renderAdminVotesTable === 'function') {
+                     console.log("Live-Update (User): Neuzeichnen der Admin-Umfragetabelle...");
+                     renderAdminVotesTable(); 
+                }
+                // =================================================================
+                // ENDE DER ÄNDERUNG
                 // =================================================================
             }
 

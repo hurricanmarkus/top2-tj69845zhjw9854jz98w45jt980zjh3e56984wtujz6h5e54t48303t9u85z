@@ -5,6 +5,7 @@ import { initialAuthCheckDone, adminSectionsState, rolesCollectionRef, ADMIN_ROL
 import { checkCurrentUserValidity } from './log-InOut.js';
 import { logAdminAction } from './admin_protokollHistory.js';
 import { setupPermissionDependencies, renderAdminRightsManagement } from './admin_rechteverwaltung.js';
+import { renderMainFunctionsAdminArea, renderAdminVotesTable } from './admin_adminfunktionenHome.js';
 // ENDE-ZIKA //
 
 export function listenForRoleUpdates() {
@@ -60,14 +61,32 @@ export function listenForAdminRoleUpdates() {
             // HIER rufen wir jetzt die importierte Funktion auf.
             // Wenn die Admin-Rechte-Sektion offen ist, wird sie neu geladen.
             if (adminSectionsState.adminRights && typeof renderAdminRightsManagement === 'function') {
-                 // console.warn("renderAdminRightsManagement in listenForAdminRoleUpdates nicht aufgerufen, da Import fehlt."); // <--- Dieser Kommentar kann jetzt weg
-                 renderAdminRightsManagement(); // <--- HIER IST DIE KORREKTUR
+                 renderAdminRightsManagement(); 
             }
             // =================================================================
             // ENDE DER KORREKTUR
             // =================================================================
 
             if (adminSectionsState.role && typeof renderRoleManagement === 'function') renderRoleManagement();
+            
+            // =================================================================
+            // BEGINN DER ÄNDERUNG (LIVE-UPDATE FÜR ADMIN-FUNKTIONEN)
+            // =================================================================
+            // NEU: Prüfen, ob der Tab "Adminfunktionen Hauptseite" offen ist
+            // und die Funktionen importiert wurden.
+            if (adminSectionsState.mainFunctions && typeof renderMainFunctionsAdminArea === 'function') {
+                console.log("Live-Update (Admin-Rolle): Neuzeichnen der Adminfunktionen-Tabs...");
+                // Zeichnet die TABS ("Termin finden") und die TABELLEN-KÖPFE (TH) neu
+                renderMainFunctionsAdminArea(); 
+            }
+            if (adminSectionsState.mainFunctions && typeof renderAdminVotesTable === 'function') {
+                 console.log("Live-Update (Admin-Rolle): Neuzeichnen der Admin-Umfragetabelle...");
+                 // Zeichnet den TABELLEN-INHALT (TBODY) neu (mit korrekter Spaltenanzahl)
+                 renderAdminVotesTable(); 
+            }
+            // =================================================================
+            // ENDE DER ÄNDERUNG
+            // =================================================================
             
         } else {
              console.warn("listenForAdminRoleUpdates: Leerer Snapshot empfangen. ADMIN_ROLES-Cache wird nicht geleert.");
