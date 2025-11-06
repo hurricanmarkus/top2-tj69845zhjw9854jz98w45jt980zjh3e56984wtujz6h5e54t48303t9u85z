@@ -149,43 +149,29 @@ export function renderMainFunctionsAdminArea() {
         }
     }
     
-    // (Benutzer-Berechtigungen werden hier nicht mehr für den Tab gebraucht)
-    // const userPermissions = currentUser.permissions || [];
-
     // Tabs basierend auf Rechten ein- oder ausblenden
     const pushTab = tabsContainer.querySelector('[data-target-card="card-main-push"]');
     const entranceTab = tabsContainer.querySelector('[data-target-card="card-main-entrance"]');
     const checklistTab = tabsContainer.querySelector('[data-target-card="card-main-checklist"]');
     
-    // 1. Finde den neuen Tab-Button (den wir unten dynamisch hinzufügen)
     let terminplanerTab = tabsContainer.querySelector('[data-target-card="card-main-terminplaner"]');
 
     if (pushTab) pushTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainPush) ? 'block' : 'none';
     if (entranceTab) entranceTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainEntrance) ? 'block' : 'none';
     if (checklistTab) checklistTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainChecklist) ? 'block' : 'none';
     
-    // =================================================================
-    // BEGINN DER FEHLERBEHEBUNG (Bug 1: Tab-Sichtbarkeit)
-    // =================================================================
-    // 2. (KORRIGIERT) Prüfe die ADMIN-Berechtigung "canUseMainTerminplaner"
-    //    statt der Benutzer-Berechtigung "TERMINPLANER".
-    // ALT: const canSeeTerminplaner = userPermissions.includes('TERMINPLANER') || isSysAdmin;
     const canSeeTerminplaner = isSysAdmin || effectiveAdminPerms.canUseMainTerminplaner;
-    // =================================================================
-    // ENDE DER FEHLERBEHEBUNG
-    // =================================================================
 
-    // 3. Den Tab-Button dynamisch erstellen, falls er fehlt
+    // Den Tab-Button dynamisch erstellen, falls er fehlt
     if (canSeeTerminplaner && !terminplanerTab) {
         tabsContainer.insertAdjacentHTML('beforeend', `
             <button data-target-card="card-main-terminplaner"
                     class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">Termin finden</button>
         `);
-        // Button neu suchen, da wir ihn gerade erst erstellt haben
         terminplanerTab = tabsContainer.querySelector('[data-target-card="card-main-terminplaner"]');
     }
     
-    // 4. Den Tab-Button anzeigen oder verstecken
+    // Den Tab-Button anzeigen oder verstecken
     if (terminplanerTab) {
         terminplanerTab.style.display = canSeeTerminplaner ? 'block' : 'none';
     }
@@ -208,23 +194,38 @@ export function renderMainFunctionsAdminArea() {
     }
 
     // =================================================================
-    // BEGINN DER FEHLERBEHEBUNG (Bug 2: Token-Spalten-Header)
+    // BEGINN DER KORREKTUR (LIVE-NEUZEICHNEN)
     // =================================================================
     
-    // NEU: Berechtigungen für Token-Spalten holen
+    // Berechtigungen für Token-Spalten holen
     const canSeePollToken = isSysAdmin || effectiveAdminPerms.canSeePollToken;
     const canSeePollEditToken = isSysAdmin || effectiveAdminPerms.canSeePollEditToken;
 
-    // NEU: colspan (Spaltenbreite für Lade-Text) anpassen
+    // colspan (Spaltenbreite für Lade-Text) anpassen
     let colspan = 11; // 13 (original) - 2 (tokens)
     if (canSeePollToken) colspan++;
     if (canSeePollEditToken) colspan++;
 
     const contentArea = document.getElementById('main-functions-content-area');
-    if (contentArea && !document.getElementById('card-main-terminplaner')) {
+
+    // --- HIER IST DIE MAGIE ---
+    // 1. Finde die *alte* Karte (falls sie existiert)
+    const existingCard = document.getElementById('card-main-terminplaner');
+    // 2. Entferne sie, damit wir sie gleich mit den NEUEN Rechten neu bauen können
+    if (existingCard) {
+        existingCard.remove();
+    }
+    // 3. Die 'if'-Bedingung prüft jetzt nur noch, ob der Container da ist,
+    //    nicht mehr, ob die Karte *fehlt*.
+    if (contentArea) {
         const terminplanerCard = document.createElement('div');
         terminplanerCard.id = 'card-main-terminplaner';
-        terminplanerCard.className = 'main-functions-card hidden';
+        
+        // 4. Prüfen, ob die Karte überhaupt sichtbar sein soll (basierend auf dem Tab-Button)
+        const isTargetCard = tabsContainer.querySelector('.settings-tab-btn.bg-white[data-target-card="card-main-terminplaner"]');
+        terminplanerCard.className = `main-functions-card ${isTargetCard ? '' : 'hidden'}`;
+        
+        // 5. Baue das HTML mit den *aktuellen* Berechtigungen (canSeePollToken etc.)
         terminplanerCard.innerHTML = `
             <div class="p-4 bg-gray-50 rounded-lg">
                 <h3 class="text-lg font-bold text-gray-800 mb-3">Übersicht aller Umfragen</h3>
@@ -277,7 +278,7 @@ export function renderMainFunctionsAdminArea() {
         }
     }
     // =================================================================
-    // ENDE DER FEHLERBEHEBUNG
+    // ENDE DER KORREKTUR
     // =================================================================
 
 
@@ -311,6 +312,7 @@ export function renderMainFunctionsAdminArea() {
     });
     tabsContainer.dataset.listenerAttached = 'true';
 }
+
 
 // ----------------------------------------------------------------
 // (Diese Funktion ist in der GLEICHEN Datei admin_adminfunktionenHome.js)
