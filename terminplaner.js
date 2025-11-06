@@ -2160,28 +2160,10 @@ async function saveGroupPoll() {
             isManuallyClosed: false 
         };
         console.log("Speichere Umfrage in Firebase...", voteData);
-        
-        // =================================================================
-        // BEGINN DER ÄNDERUNG (Problem 1)
-        // =================================================================
-        
-        // Wir warten, bis die Umfrage erstellt ist und bekommen die Referenz (ID) zurück
         const docRef = await addDoc(votesCollectionRef, voteData);
-        
         console.log(`Umfrage erstellt! ID: ${docRef.id}, Token: ${token}, Edit-Token: ${editToken}`);
-        alertUser(`Umfrage erstellt!`, "success_short"); // Kürzere Erfolgsmeldung
-        
-        // Statt zur Hauptseite zu gehen...
-        // showView('main'); 
-        
-        // ...öffnen wir die Umfrage DIREKT mit der neuen ID.
-        // Dies startet den Live-Spion (listenToCurrentVote) sofort korrekt.
-        joinVoteById(docRef.id);
-        
-        // =================================================================
-        // ENDE DER ÄNDERUNG
-        // =================================================================
-        
+        alertUser(`Umfrage erstellt! Teilnahme-Token: ${token} (Zum Bearbeiten: ${editToken})`, "success");
+        showView('main'); 
     } catch (error) {
         console.error("Fehler beim Speichern der Umfrage:", error);
         alertUser(error.message, "error");
@@ -2190,7 +2172,6 @@ async function saveGroupPoll() {
         saveBtn.textContent = 'Umfrage erstellen und Link erhalten';
     }
 }
-
 
 
 
@@ -2627,28 +2608,16 @@ async function saveVoteEdits() {
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
         await updateDoc(voteDocRef, updateData);
         
-        // 8. Lokale Daten aktualisieren (wird gleich vom Spion überschrieben, aber schadet nicht)
+        // 8. Lokale Daten aktualisieren
         currentVoteData = { ...currentVoteData, ...updateData };
         
         alertUser("Änderungen gespeichert!", "success");
         
-        // =================================================================
-        // BEGINN DER ÄNDERUNG (Problem 2)
-        // =================================================================
+        showView('vote');
         
-        // Statt die Ansicht manuell mit alten Daten zu rendern...
-        // showView('vote');
-        // setTimeout(() => {
-        //     renderVoteView(currentVoteData); 
-        // }, 0);
-        
-        // ...rufen wir 'joinVoteById' auf. Diese Funktion startet
-        // den Live-Spion (listenToCurrentVote) korrekt neu.
-        joinVoteById(currentVoteData.id);
-        
-        // =================================================================
-        // ENDE DER ÄNDERUNG
-        // =================================================================
+        setTimeout(() => {
+            renderVoteView(currentVoteData); 
+        }, 0);
 
     } catch (error) {
         console.error("Fehler beim Speichern der Änderungen:", error);
@@ -2657,7 +2626,6 @@ async function saveVoteEdits() {
         setButtonLoading(saveBtn, false);
     }
 }
-
 
 
 
@@ -2894,28 +2862,6 @@ function checkUrlForToken() {
 
 
 function showView(viewName) { 
-    // =================================================================
-    // BEGINN DER ÄNDERUNG (Problem 2)
-    // =================================================================
-    
-    // Prüfen, ob wir die Abstimmungs-Ansicht (vote) ODER die Bearbeiten-Ansicht (edit) verlassen.
-    const voteView = document.getElementById('terminplaner-vote-view');
-    const editView = document.getElementById('terminplaner-edit-view');
-    
-    const isLeavingVoteArea = 
-        (voteView && voteView.classList.contains('active') && viewName !== 'vote') ||
-        (editView && editView.classList.contains('active') && viewName !== 'edit');
-
-    if (isLeavingVoteArea && viewName !== 'vote' && viewName !== 'edit') {
-        // Wenn wir zu 'main' oder 'create' wechseln:
-        console.log("[Terminplaner] Verlasse Abstimmungs-Ansicht. Stoppe Spion und lösche Daten.");
-        stopCurrentVoteListener(); // Stoppt den Live-Spion
-        currentVoteData = null; // Leert die "hängengebliebenen" Daten
-    }
-    // =================================================================
-    // ENDE DER ÄNDERUNG
-    // =================================================================
-
     document.getElementById('terminplaner-main-view').classList.add('hidden');
     document.getElementById('terminplaner-create-view').classList.add('hidden');
     document.getElementById('terminplaner-vote-view').classList.add('hidden');
@@ -2933,7 +2879,6 @@ function showView(viewName) {
        document.getElementById('terminplaner-edit-view').classList.remove('hidden');
     }
 }
-
 
 // ERSETZE diese Funktion in terminplaner.js
 function resetCreateWizard() {
