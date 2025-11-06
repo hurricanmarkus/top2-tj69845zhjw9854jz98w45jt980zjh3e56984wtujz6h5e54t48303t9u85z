@@ -14,7 +14,7 @@ import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists,
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
 import { renderUserKeyList } from './admin_benutzersteuerung.js'; 
 // NEU: Wir importieren die Start-Funktion aus deiner neuen Datei
-import { initializeTerminplanerView, listenForPublicVotes, joinVoteById, joinVoteByToken, stopCurrentVoteListener, clearCurrentVoteData } from './terminplaner.js';
+import { initializeTerminplanerView, listenForPublicVotes, joinVoteById, joinVoteByToken } from './terminplaner.js';
 // // ENDE-ZIKA //
 
 
@@ -476,25 +476,6 @@ export function setButtonLoading(button, isLoading) {
 
 export function navigate(targetViewName) {
     console.log(`Navigiere zu: ${targetViewName}`); // Log Navigation
-
-    // =================================================================
-    // BEGINN DER KORREKTUR (Problem 2: "Falsche Umfrage")
-    // =================================================================
-    // Prüfen, ob wir die Terminplaner-Seite (vote oder edit) gerade verlassen
-    const terminplanerView = document.getElementById('terminplanerView');
-    if (terminplanerView && terminplanerView.classList.contains('active') && targetViewName !== 'terminplaner') {
-        
-        // Wir verlassen den Terminplaner (z.B. durch Klick auf Header-Logo)
-        console.log("[HAUPTEINGANG] Verlasse Terminplaner -> Stoppe Spion & leere Cache.");
-        
-        // Rufe die importierten Aufräum-Funktionen auf
-        stopCurrentVoteListener();
-        clearCurrentVoteData();
-    }
-    // =================================================================
-    // ENDE DER KORREKTUR
-    // =================================================================
-
     const targetView = views[targetViewName];
     if (!targetView) {
         console.error(`Navigation fehlgeschlagen: View "${targetViewName}" nicht gefunden.`);
@@ -579,7 +560,6 @@ export function navigate(targetViewName) {
     // NEU: Wir müssen nichts tun, wenn 'terminplaner' aufgerufen wird,
     // da die Initialisierung schon in initializeFirebase() passiert.
 }
-
 
 export function setupEventListeners() {
     // Sicherstellen, dass die Elemente existieren, bevor Listener hinzugefügt werden
