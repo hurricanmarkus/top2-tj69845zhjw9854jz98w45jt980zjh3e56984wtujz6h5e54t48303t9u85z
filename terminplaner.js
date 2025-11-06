@@ -995,12 +995,20 @@ export function stopMyVotesListener() {
 /**
  * Stoppt den Live-Spion für die aktuell geöffnete Umfrage.
  */
-function stopCurrentVoteListener() {
+export function stopCurrentVoteListener() {
     if (unsubscribeCurrentVote) {
         console.log("[Terminplaner] Stoppe Live-Spion für die geöffnete Umfrage.");
         unsubscribeCurrentVote();
         unsubscribeCurrentVote = null;
     }
+}
+
+
+/**
+ * NEU: Leert die globale Variable, um "Hängenbleiben" zu verhindern.
+ */
+export function clearCurrentVoteData() {
+    currentVoteData = null;
 }
 
 /**
@@ -1198,8 +1206,11 @@ export async function joinVoteById(voteId = null) {
             isFromUrl = true;
         }
         
-        // --- ÄNDERUNG (1 von 2) ---
-        // Wir verwenden getDoc HIER nur noch für die *erste* Berechtigungsprüfung
+        // =================================================================
+        // BEGINN DER KORREKTUR (Problem 1: "Leere Umfrage")
+        // =================================================================
+        
+        // 1. Wir holen die Daten (getDoc) NUR für die Berechtigungsprüfung
         const voteDocRef = doc(votesCollectionRef, idToLoad);
         const voteDoc = await getDoc(voteDocRef); 
         if (!voteDoc.exists()) {
@@ -1208,27 +1219,32 @@ export async function joinVoteById(voteId = null) {
         
         const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
 
-        // --- NEUE PRÜFUNG: GÄSTE BLOCKIEREN (bleibt gleich) ---
+        // 2. Berechtigungs-Prüfung (bleibt gleich)
         const isRegisteredOnly = voteData.accessPolicy === 'registered' || !voteData.accessPolicy;
         if (isRegisteredOnly && currentUser.mode === GUEST_MODE) {
             throw new Error("Diese Umfrage ist nur für angemeldete Benutzer verfügbar. Bitte melde dich über den Modus-Bereich unten an.");
         }
-        // --- ENDE NEUE PRÜFUNG ---
-
-        // (Die 'currentVoteData'-Zuweisung hier ist nur für den ersten Moment)
-        currentVoteData = voteData; 
-        console.log("Umfrage per ID geladen (Initial-Check):", currentVoteData.id);
         
+        // 3. (WICHTIG!) Wir setzen 'currentVoteData' HIER NICHT.
+        // Das Setzen von 'currentVoteData = voteData;' wird ENTFERNT.
+        // 'voteData' von getDoc ist möglicherweise unvollständig (wegen serverTimestamp).
+        
+        console.log("Umfrage per ID angefordert (Initial-Check bestanden):", idToLoad);
+        
+        // 4. Wir navigieren zur (noch leeren) Ansicht
         navigate('terminplaner'); 
         showView('vote'); 
 
-        // --- ÄNDERUNG (2 von 2) ---
-        // Wir rufen nicht mehr 'renderVoteView' auf.
-        // Wir starten stattdessen den LIVE-SPION.
-        // Der Spion ruft dann 'renderVoteView' selbst auf (zum ersten Mal und bei jedem Update).
+        // 5. Wir starten den LIVE-SPION.
+        // NUR der Spion darf 'currentVoteData' setzen und 'renderVoteView' aufrufen.
+        // Das garantiert, dass wir die vollen, fertigen Daten von der DB bekommen.
         setTimeout(() => {
             listenToCurrentVote(idToLoad); 
         }, 0); 
+        
+        // =================================================================
+        // ENDE DER KORREKTUR
+        // =================================================================
         
         if (isFromUrl) cleanUrlParams();
         
@@ -2162,26 +2178,20 @@ async function saveGroupPoll() {
         console.log("Speichere Umfrage in Firebase...", voteData);
         
         // =================================================================
-        // BEGINN DER ÄNDERUNG (Problem 1)
+        // BEGINN DER KORREKTUR (Problem 1 & Regression)
         // =================================================================
         
-        // Wir warten, bis die Umfrage erstellt ist und bekommen die Referenz (ID) zurück
         const docRef = await addDoc(votesCollectionRef, voteData);
-        
         console.log(`Umfrage erstellt! ID: ${docRef.id}, Token: ${token}, Edit-Token: ${editToken}`);
         
-        // Wir zeigen NICHT mehr die Tokens in der Haupt-Warnung an
-        alertUser(`Umfrage erstellt!`, "success_short"); // Kürzere Erfolgsmeldung
+        // KORREKTUR: Die Token-Anzeige wird wiederhergestellt
+        alertUser(`Umfrage erstellt! Teilnahme-Token: ${token} (Zum Bearbeiten: ${editToken})`, "success_long"); // Längere Anzeige
         
-        // Statt zur Hauptseite zu gehen...
-        // showView('main'); 
-        
-        // ...öffnen wir die Umfrage DIREKT mit der neuen ID.
-        // Dies startet den Live-Spion (listenToCurrentVote) sofort korrekt.
+        // Wir öffnen die Umfrage direkt, um das "Leere Umfrage"-Problem zu beheben
         joinVoteById(docRef.id);
         
         // =================================================================
-        // ENDE DER ÄNDERUNG
+        // ENDE DER KORREKTUR
         // =================================================================
         
     } catch (error) {
@@ -2192,6 +2202,7 @@ async function saveGroupPoll() {
         saveBtn.textContent = 'Umfrage erstellen und Link erhalten';
     }
 }
+
 
 
 
@@ -2893,28 +2904,14 @@ function checkUrlForToken() {
 
 function showView(viewName) { 
     // =================================================================
-    // BEGINN DER ÄNDERUNG (Problem 2 & 3)
+    // BEGINN DER KORREKTUR (Problem 2)
     // =================================================================
-    
-    // Prüfen, ob wir die Abstimmungs-Ansicht (vote) ODER die Bearbeiten-Ansicht (edit) verlassen.
-    const voteView = document.getElementById('terminplaner-vote-view');
-    const editView = document.getElementById('terminplaner-edit-view');
-    
-    const isLeavingVoteArea = 
-        (voteView && voteView.classList.contains('active') && viewName !== 'vote') ||
-        (editView && editView.classList.contains('active') && viewName !== 'edit');
-
-    // Wir prüfen auch, ob wir *innerhalb* des Umfrage-Modus wechseln (z.B. von 'vote' zu 'edit')
-    const isStayingInVoteArea = (viewName === 'vote' || viewName === 'edit');
-
-    if (isLeavingVoteArea && !isStayingInVoteArea) {
-        // Wenn wir zu 'main' oder 'create' wechseln:
-        console.log("[Terminplaner] Verlasse Abstimmungs-Ansicht. Stoppe Spion und lösche Daten.");
-        stopCurrentVoteListener(); // Stoppt den Live-Spion
-        currentVoteData = null; // Leert die "hängengebliebenen" Daten
-    }
+    // Die Aufräum-Logik (stopCurrentVoteListener/clearCurrentVoteData)
+    // wurde von hier entfernt.
+    // Sie lebt jetzt in der 'navigate'-Funktion in 'haupteingang.js',
+    // damit sie auch funktioniert, wenn man über den Header navigiert.
     // =================================================================
-    // ENDE DER ÄNDERUNG
+    // ENDE DER KORREKTUR
     // =================================================================
 
     document.getElementById('terminplaner-main-view').classList.add('hidden');
