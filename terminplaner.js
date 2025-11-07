@@ -318,7 +318,6 @@ function applyAssignedUsers() {
 
 // ----- ENDE VERSCHOBENE FUNKTIONEN -----
 
-
 export function initializeTerminplanerView() {
     
     // =================================================================
@@ -357,6 +356,22 @@ export function initializeTerminplanerView() {
     const tokenInput = document.getElementById('vote-token-input');
     if (tokenInput && !tokenInput.dataset.listenerAttached) {
         tokenInput.addEventListener('input', (e) => formatTokenInput(e, 'vote-token-input')); 
+        
+        // =========================================================
+        // START BUG 4 FIX (Teil 1)
+        // =========================================================
+        tokenInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                // Verhindere das Standard-Enter-Verhalten (falls es in einem Formular wäre)
+                e.preventDefault(); 
+                // Rufe die Funktion auf, die auch der Knopf aufruft
+                joinVoteByToken(null); 
+            }
+        });
+        // =========================================================
+        // END BUG 4 FIX (Teil 1)
+        // =========================================================
+        
         tokenInput.dataset.listenerAttached = 'true';
     }
 
@@ -691,6 +706,22 @@ export function initializeTerminplanerView() {
     const editTokenInput = document.getElementById('edit-token-input-inline');
     if (editTokenInput && !editTokenInput.dataset.listenerAttached) {
         editTokenInput.addEventListener('input', (e) => formatTokenInput(e, 'edit-token-input-inline'));
+        
+        // =========================================================
+        // START BUG 4 FIX (Teil 2)
+        // =========================================================
+        editTokenInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                // Verhindere das Standard-Enter-Verhalten
+                e.preventDefault();
+                // Rufe die Funktion auf, die auch der "OK"-Knopf aufruft
+                checkInlineEditToken();
+            }
+        });
+        // =========================================================
+        // END BUG 4 FIX (Teil 2)
+        // =========================================================
+        
         editTokenInput.dataset.listenerAttached = 'true';
     }
     
@@ -880,7 +911,6 @@ export function initializeTerminplanerView() {
         manageTermsList.dataset.listenerAttached = 'true';
     }
 }
-
 
 
 

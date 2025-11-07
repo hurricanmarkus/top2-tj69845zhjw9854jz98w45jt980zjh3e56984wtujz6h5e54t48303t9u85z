@@ -6,10 +6,9 @@ import { listenForMyVotes, stopMyVotesListener } from './terminplaner.js';
 // ENDE-ZIKA //
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
-// ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
 // In log-InOut.js
 export async function checkCurrentUserValidity() { 
-    console.log("--- Prüfe Benutzerberechtigungen (V7 - Robuste Cache-Prüfung) ---");
+    console.log("--- Prüfe Benutzerberechtigungen (V8 - Mismatch-Erkennung) ---");
 
     if (!auth) {
         console.error("checkCurrentUserValidity: Auth-Instanz ist noch nicht initialisiert.");
@@ -79,10 +78,47 @@ export async function checkCurrentUserValidity() {
     console.log(`checkCurrentUserValidity: Firebase User ${currentAuthUser.uid} und App User ${storedAppUserId} vorhanden.`);
     try {
 
-        const idTokenResult = await currentAuthUser.getIdToken(true); 
+        // =========================================================
+        // START BUG 1 FIX
+        // =========================================================
+        
+        // 1. Hole das ID-Token. 'true' erzwingt eine Erneuerung vom Server,
+        //    aber es holt KEINE neuen Custom Claims, die es nicht kennt.
+        //    Es holt nur die, die der Auth-Server *kennt*.
+        const idTokenResult = await currentAuthUser.getIdTokenResult(true); 
         if (!idTokenResult) {
             throw new Error("Konnte kein gültiges ID Token abrufen.");
         }
+
+        // 2. Lese die Rolle aus dem Token (der alte "Ausweis")
+        //    Wir verwenden 'appRole', wie in 'handleLogin' definiert.
+        const tokenRole = idTokenResult.claims.appRole || null;
+
+        // 3. Lese die Rolle aus Firestore (die neue, live geänderte Rolle)
+        const firestoreRole = userFromFirestore.role || null;
+
+        // 4. Vergleiche!
+        //    Wir ignorieren den Fall, wo beide 'null' sind (z.B. bei 'not_registered')
+        if (tokenRole !== firestoreRole && (tokenRole || firestoreRole)) {
+            console.warn(`CHECK-MISMATCH! Rolle im Token: '${tokenRole}', Rolle in Firestore: '${firestoreRole}'`);
+            
+            // 5. Erzwinge Logout, damit der Benutzer sich neu anmelden MUSS,
+            //    um ein korrektes Token (neuen "Ausweis") zu bekommen.
+            switchToGuestMode(
+                true, 
+                "Ihre Benutzer-Berechtigungen wurden von einem Admin geändert. Bitte melden Sie sich erneut an, um die Änderungen zu übernehmen.", 
+                "info" // "info" ist besser als "error"
+            );
+            
+            // WICHTIG: Hier abbrechen, damit der Rest der Funktion nicht
+            // die UI mit falschen Rechten (halb alt, halb neu) aufbaut.
+            return; 
+        }
+        
+        // =========================================================
+        // END BUG 1 FIX
+        // =========================================================
+
 
         const user = userFromFirestore; 
         const effectiveRole = user.role; 
