@@ -467,55 +467,39 @@ if (user) {
     }
     
     // =================================================================
-    // START: HIER IST DEINE NEUE ÄNDERUNG
+    // START: HIER IST DIE KORREKTUR FÜR DEINEN BUG
     // =================================================================
-    // Versteckt die persönlichen Listen für Gäste auf der Haupt-Terminplanerseite
+    // Wir entfernen die Steuerung der Terminplaner-Listen für Gäste
+    // aus dieser Funktion. Das macht jetzt terminplaner.js allein.
     
-    // 1. Finde die Elemente (nur wenn die Haupt-Terminplaner-Ansicht existiert)
     const terminplanerMainView = document.getElementById('terminplaner-main-view');
     if (terminplanerMainView) {
-        // Finde die Elemente anhand ihrer IDs oder Struktur
         
-        // Die Share-Box (hat keine ID, wir finden sie über das Kind-Input-Feld)
         const mainShareUrlInput = document.getElementById('main-share-url');
-        // Wir suchen das Elternelement, das die CSS-Klassen 'p-3' und 'bg-gray-100' hat
         const mainShareBox = mainShareUrlInput ? mainShareUrlInput.closest('.p-3.bg-gray-100') : null;
         
-        // Die "Ausständig"-Box
-        const outstandingSummary = document.getElementById('outstanding-votes-summary');
-        
-        // Die Trennlinie (HR)
+        // const outstandingSummary = document.getElementById('outstanding-votes-summary'); // <- ENTFERNT
         const divider = terminplanerMainView.querySelector('.my-6.border-t-2.border-gray-800');
-        
-        // Das Grid-Layout, das alle 4 Listen enthält
-        // (Wir müssen 'md:' mit '\\' escapen, damit der Selektor funktioniert)
         const listsGrid = terminplanerMainView.querySelector('.grid.grid-cols-1.md\\:grid-cols-2.gap-6'); 
 
-        // 2. Prüfe, ob der Benutzer ein Gast ist
         const isGuest = (currentUser.mode === GUEST_MODE);
 
-        // 3. Wende die Sichtbarkeit an
-        // Wir verwenden 'style.display', da dies 'hidden' überschreibt und sicherstellt,
-        // dass die Elemente versteckt oder angezeigt werden, egal was vorher war.
-        
         if (mainShareBox) {
-            // Die Share-Box ist laut HTML ein 'inline-flex'
             mainShareBox.style.display = isGuest ? 'none' : 'inline-flex'; 
         }
-        if (outstandingSummary) {
-            // Die "Ausständig"-Box ist ein normaler 'block'
-            outstandingSummary.style.display = isGuest ? 'none' : 'block'; 
-        }
+        
+        // if (outstandingSummary) { // <- BLOCK ENTFERNT
+        //     outstandingSummary.style.display = isGuest ? 'none' : 'block'; 
+        // }
+        
         if (divider) {
-            // Die Trennlinie ist ein 'block'
             divider.style.display = isGuest ? 'none' : 'block';
         }
         if (listsGrid) {
-            // Der Listen-Container ist ein 'grid'
             listsGrid.style.display = isGuest ? 'none' : 'grid'; 
         }
     }
     // =================================================================
-    // ENDE: HIER IST DEINE NEUE ÄNDERUNG
+    // ENDE: KORREKTUR
     // =================================================================
 }

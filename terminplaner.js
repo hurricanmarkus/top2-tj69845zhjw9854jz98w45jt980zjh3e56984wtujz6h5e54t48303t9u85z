@@ -3592,13 +3592,18 @@ function renderVoteList(votes, elementId, listTitle) {
 /**
  * Rendert die Zusammenfassung der ausständigen Rückmeldungen (Punkt 1)
  * (NEUE VERSION: Erzeugt klickbare "Chips", die in einer Zeile umbrechen)
+ * (KORRIGIERT: Verwendet style.display statt classList, um den Bug zu beheben)
  */
 function renderOutstandingSummary(outstandingPolls) {
     const summaryContainer = document.getElementById('outstanding-votes-summary');
     if (!summaryContainer) return;
 
     if (outstandingPolls.length === 0) {
-        summaryContainer.classList.add('hidden');
+        // ================================================
+        // KORREKTUR HIER:
+        // summaryContainer.classList.add('hidden');
+        summaryContainer.style.display = 'none'; // <- Robustere Methode
+        // ================================================
         return;
     }
 
@@ -3634,7 +3639,12 @@ function renderOutstandingSummary(outstandingPolls) {
 
     // Setze den Titel und den Container mit den Chips zusammen
     summaryContainer.innerHTML = titleHTML + itemsContainerHTML;
-    summaryContainer.classList.remove('hidden');
+    
+    // ================================================
+    // KORREKTUR HIER:
+    // summaryContainer.classList.remove('hidden');
+    summaryContainer.style.display = 'block'; // <- Robustere Methode
+    // ================================================
 }
 
 /**
