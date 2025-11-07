@@ -2268,6 +2268,46 @@ function switchToEditMode() {
 function renderCorrectionHistory(userId) {
     if (!userId || !currentVoteData) return;
     
+    // =================================================================
+    // BEGINN DER KORREKTUR: Status-Prüfungen hinzufügen
+    // =================================================================
+    
+    // 1. Definitionen (kopiert von renderVoteView), um den Umfrage-Status zu kennen
+    const now = new Date();
+    const getSafeDate = (timestamp) => {
+        if (!timestamp) return null;
+        if (typeof timestamp.toDate === 'function') return timestamp.toDate();
+        return new Date(timestamp);
+    };
+    const endTime = getSafeDate(currentVoteData.endTime);
+    const isFixed = currentVoteData.fixedOptionIndex != null;
+    const isClosedByTime = (endTime && now > endTime); 
+    const isManuallyClosed = currentVoteData.isManuallyClosed === true; 
+    const isPollClosed = isFixed || isClosedByTime || isManuallyClosed;
+    
+    // Finde den Teilnehmer, der sich das GERADE ANSCHAUT (nicht der, dessen Log wir öffnen)
+    const youParticipant = (currentUser.mode !== GUEST_MODE) ? 
+        currentVoteData.participants.find(p => p.userId === currentUser.mode) : 
+        null;
+
+    // 2. Logik zum Verstecken (kopiert von renderVoteView)
+    let shouldHideDetails = false; // Standard: Details anzeigen
+    if (currentVoteData.hideAnswers && !isPollClosed) {
+        // Die Funktion ist aktiv UND die Umfrage ist noch nicht zu
+        
+        if (currentVoteData.hideAnswersMode === 'bis_umfragenabschluss') {
+            shouldHideDetails = true;
+        } 
+        else if (currentVoteData.hideAnswersMode === 'bis_stimmabgabe_mit_korrektur' || currentVoteData.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur') {
+            if (!youParticipant) { // Wenn du (der Betrachter) noch NICHT abgestimmt hast
+                shouldHideDetails = true;
+            }
+        }
+    }
+    // =================================================================
+    // ENDE DER KORREKTUR
+    // =================================================================
+    
     const modal = document.getElementById('correctionLogModal');
     const title = document.getElementById('correction-log-title');
     const content = document.getElementById('correction-log-content');
@@ -2303,21 +2343,40 @@ function renderCorrectionHistory(userId) {
                 day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
             }) : 'Unbekanntes Datum';
             
+            // =================================================================
+            // BEGINN DER KORREKTUR: 'changesHTML' wird jetzt bedingt gerendert
+            // =================================================================
             const changesHTML = log.changes.map(change => {
-                const formatAnswer = (answer) => {
-                    if (answer === 'yes') return '<span class="text-green-600 font-bold">Ja</span>';
-                    if (answer === 'no') return '<span class="text-red-600 font-bold">Nein</span>';
-                    if (answer === 'maybe') return '<span class="text-yellow-600 font-bold">Vielleicht</span>';
-                    return '<span class="text-gray-500 italic">keine</span>';
-                };
                 
-                return `
-                    <li class="text-sm">
-                        <strong>${change.optionText}:</strong> 
-                        geändert von ${formatAnswer(change.from)} auf ${formatAnswer(change.to)}
-                    </li>
-                `;
+                // HIER IST DIE NEUE PRÜFUNG
+                if (shouldHideDetails) {
+                    // Versteckte Version
+                     return `
+                        <li class="text-sm">
+                            <strong>${change.optionText}:</strong> 
+                            <span class="text-gray-500 italic">Antwort geändert (Details versteckt)</span>
+                        </li>
+                    `;
+                } else {
+                    // Sichtbare Version (wie es vorher war)
+                    const formatAnswer = (answer) => {
+                        if (answer === 'yes') return '<span class="text-green-600 font-bold">Ja</span>';
+                        if (answer === 'no') return '<span class="text-red-600 font-bold">Nein</span>';
+                        if (answer === 'maybe') return '<span class="text-yellow-600 font-bold">Vielleicht</span>';
+                        return '<span class="text-gray-500 italic">keine</span>';
+                    };
+                    
+                    return `
+                        <li class="text-sm">
+                            <strong>${change.optionText}:</strong> 
+                            geändert von ${formatAnswer(change.from)} auf ${formatAnswer(change.to)}
+                        </li>
+                    `;
+                }
             }).join('');
+            // =================================================================
+            // ENDE DER KORREKTUR
+            // =================================================================
             
             return `
                 <div class="p-3 bg-white rounded-lg shadow-sm border">
@@ -2336,6 +2395,7 @@ function renderCorrectionHistory(userId) {
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
 }
+
 
 // ERSETZE diese Funktion in terminplaner.js
 function renderEditView(voteData) {
