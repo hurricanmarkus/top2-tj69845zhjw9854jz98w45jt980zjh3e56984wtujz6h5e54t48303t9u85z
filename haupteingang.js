@@ -261,6 +261,16 @@ async function initializeFirebase() {
                 const { getFunctions, httpsCallable } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js");
                 const functions = getFunctions(app);
                 window.setRoleClaim = httpsCallable(functions, 'setRoleClaim'); 
+                
+                // =========================================================
+                // START BUG 5 FIX (Lösung B)
+                // =========================================================
+                // Wir definieren hier die "Telefonnummer" zu unserem neuen Mitarbeiter
+                window.checkVoteToken = httpsCallable(functions, 'checkVoteToken');
+                // =========================================================
+                // END BUG 5 FIX
+                // =========================================================
+                
                 window.firebaseFunctionsInitialised = true;
                 console.log("Firebase Functions initialisiert und global verfügbar gemacht.");
             }
@@ -381,6 +391,7 @@ async function initializeFirebase() {
         alertUser("Firebase konnte nicht initialisiert werden.", "error");
     }
 }
+
 
 
 // --- HIER ENDET DIE FUNKTION ZUM ERSETZEN ---

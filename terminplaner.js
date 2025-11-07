@@ -1199,76 +1199,76 @@ export async function joinVoteByToken(tokenFromUrl = null) {
     
     try {
         // =========================================================
-        // START BUG 5 FIX (LOGIK-ÄNDERUNG)
+        // START BUG 5 FIX (LÖSUNG B)
         // =========================================================
         
-        // 1. Standard-Versuch: Abfrage an die Datenbank
-        const q = query(votesCollectionRef, where("token", "==", token));
-        const snapshot = await getDocs(q);
-        
-        if (snapshot.empty) {
-             // 2. Standard-Abfrage findet nichts.
-             //    Wir werfen einen speziellen Fehler, damit unser Workaround anspringt.
-             throw new Error("Umfrage nicht gefunden.");
-        }
-       
-        if (snapshot.size > 1) throw new Error("Fehler: Mehrere Umfragen mit diesem Token gefunden. Admin kontaktieren.");
-        
-        const voteDoc = snapshot.docs[0];
-        const voteId = voteDoc.id; // Nur die ID holen
-        
-        await joinVoteById(voteId); 
-        
-        if (tokenInput) tokenInput.value = ''; 
-        if (tokenFromUrl) cleanUrlParams(); // (wird von joinVoteById auch gemacht, aber doppelt schadet nicht)
-        
-    } catch (error) {
-        
-        // 3. CATCH-BLOCK: Hier fangen wir den Fehler ab
-        console.warn("Fehler bei Standard-Token-Suche:", error.message);
+        let voteId = null;
 
-        // 4. Prüfen, ob der Workaround greifen soll:
-        //    (Fehler ist "permissions" ODER "nicht gefunden") UND (Benutzer ist Gast)
-        const isPermissionError = error.message.includes('insufficient permissions');
-        const isNotFoundError = error.message.includes('Umfrage nicht gefunden');
-        
-        if ((isPermissionError || isNotFoundError) && currentUser.mode === GUEST_MODE) {
+        // 1. Prüfen: Ist der Benutzer ein Gast oder ein Mitglied?
+        if (currentUser.mode === GUEST_MODE) {
+            // ----- LOGIK FÜR GÄSTE -----
+            console.log("joinVoteByToken: GAST-Modus. Rufe Cloud Function 'checkVoteToken' an...");
             
-            console.log("GAST-WORKAROUND: Starte lokale Suche in 'publicVotesList'...");
-            
-            // 5. Durchsuche die lokal gespeicherte Liste der öffentlichen Umfragen
-            const foundInPublicList = publicVotesList.find(vote => vote.token === token);
-            
-            if (foundInPublicList) {
-                // 6. GEFUNDEN! Wir haben die ID. Jetzt rufen wir joinVoteById auf.
-                //    Dieser Aufruf wird funktionieren, da der Direkt-Link auch funktioniert.
-                console.log(`GAST-WORKAROUND: Umfrage ${foundInPublicList.id} in öffentlicher Liste gefunden!`);
-                
-                // Wir müssen 'await' verwenden, damit der 'finally'-Block wartet
-                await joinVoteById(foundInPublicList.id);
-                if (tokenInput) tokenInput.value = '';
-                
+            if (!window.checkVoteToken) {
+                throw new Error("Cloud Function 'checkVoteToken' ist nicht initialisiert.");
+            }
+
+            // 2. Rufe unseren neuen "Mitarbeiter" (die Cloud Function) an
+            //    Wir müssen 'await' benutzen, um auf die Antwort zu warten
+            const result = await window.checkVoteToken({ token: token });
+
+            // 3. Werte die Antwort des "Mitarbeiters" aus
+            if (result.data && result.data.status === 'success') {
+                voteId = result.data.voteId;
+                console.log(`Cloud Function erfolgreich: Gast darf Umfrage ${voteId} sehen.`);
             } else {
-                // 7. NICHT GEFUNDEN: Auch die lokale Suche half nicht.
-                console.warn("GAST-WORKAROUND: Token nicht in öffentlicher Liste gefunden.");
-                alertUser("Umfrage nicht gefunden oder sie ist nicht öffentlich.", "error_long");
+                // Dies sollte nicht passieren, wenn die Function korrekt funktioniert,
+                // aber als Sicherheitsnetz
+                throw new Error("Antwort von Cloud Function war ungültig.");
             }
 
         } else {
-            // 8. Es ist ein anderer Fehler ODER der Benutzer ist kein Gast.
-            //    Zeige den originalen Fehler an.
-            console.error("Fehler beim Suchen der Umfrage per Token:", error);
-            alertUser(error.message, "error_long"); // Längere Anzeige
+            // ----- LOGIK FÜR MITGLIEDER (wie bisher) -----
+            console.log("joinVoteByToken: MITGLIEDS-Modus. Starte direkte DB-Suche...");
+            
+            // 4. Mitglieder dürfen selbst suchen (query)
+            const q = query(votesCollectionRef, where("token", "==", token));
+            const snapshot = await getDocs(q);
+        
+            if (snapshot.empty) {
+                 throw new Error("Eine Umfrage mit diesem Token wurde nicht gefunden.");
+            }
+            if (snapshot.size > 1) {
+                throw new Error("Fehler: Mehrere Umfragen mit diesem Token gefunden. Admin kontaktieren.");
+            }
+            
+            voteId = snapshot.docs[0].id;
+        }
+
+        // 5. Egal ob Gast oder Mitglied, beide haben jetzt (hoffentlich) eine voteId.
+        //    Wir rufen die Funktion auf, die den Direkt-Link verarbeitet.
+        if (voteId) {
+            await joinVoteById(voteId); 
+            
+            if (tokenInput) tokenInput.value = ''; 
+            if (tokenFromUrl) cleanUrlParams();
+        } else {
+            throw new Error("Konnte die Umfrage-ID nicht ermitteln.");
         }
         
-        // =========================================================
-        // END BUG 5 FIX
-        // =========================================================
+    } catch (error) {
+        // 6. Fehlerbehandlung (z.B. wenn die Cloud Function einen Fehler wirft)
+        console.error("Fehler beim Suchen der Umfrage per Token:", error);
+        
+        // Zeige die Fehlermeldung, die von unserer Cloud Function kommt!
+        // (z.B. "Diese Umfrage ist nur für angemeldete Benutzer.")
+        alertUser(error.message, "error_long");
         
     } finally {
         if (joinBtn) setButtonLoading(joinBtn, false); 
     }
 }
+
 
 
 
