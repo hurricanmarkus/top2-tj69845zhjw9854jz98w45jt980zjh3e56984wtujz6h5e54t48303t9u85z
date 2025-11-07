@@ -1112,14 +1112,23 @@
                                 </button>
                             </div>
                         </div>
-                        <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
-                            <input type="checkbox" id="vote-setting-public" class="h-5 w-5 rounded">
-                            <div>
-                                <span class="font-semibold text-gray-700">Öffentliche Umfrage</span>
-                                <p class="text-xs text-gray-500">Jeder (auch ohne Link) kann diese Umfrage in der
-                                    App sehen und teilnehmen.</p>
+                        <div class="p-2 bg-gray-50 rounded-lg flex flex-col md:flex-row gap-3">
+                            <label class="flex items-center gap-3 cursor-pointer flex-shrink-0">
+                                <input type="checkbox" id="vote-setting-public" class="h-5 w-5 rounded">
+                                <div>
+                                    <span class="font-semibold text-gray-700">Öffentliche Umfrage</span>
+                                    <p class="text-xs text-gray-500">In der "Öffentlich"-Liste anzeigen.</p>
+                                </div>
+                            </label>
+
+                            <div id="vote-setting-access-mode-wrapper" class="hidden flex-grow">
+                                <select id="vote-setting-access-mode"
+                                    class="w-full p-2 border border-gray-300 rounded-lg bg-white">
+                                    <option value="registered" selected>Sichtbar für ANGEMELDETE Benutzer</option>
+                                    <option value="guests">Sichtbar für ALLE Benutzer</option>
+                                </select>
                             </div>
-                        </label>
+                        </div>
                         <div class="p-2 bg-gray-50 rounded-lg flex flex-col md:flex-row gap-3">
                             <label class="flex items-center gap-3 cursor-pointer flex-shrink-0">
                                 <input type="checkbox" id="vote-setting-anonymous" class="h-5 w-5 rounded">
@@ -1161,19 +1170,6 @@
                                     <option value="bis_stimmabgabe_ohne_korrektur">bis zur eignen Stimmabgabe
                                         (Korrekturen verbieten)</option>
                                 </select>
-                            </div>
-                        </div>
-                        <div class="p-3 bg-gray-50 rounded-lg">
-                            <div class="flex justify-between items-center">
-                                <div>
-                                    <span id="vote-setting-access-text" class="font-semibold text-gray-700">Diese
-                                        Umfrage können nur angemeldete Benutzer sehen.</span>
-                                    <input type="hidden" id="vote-setting-access-mode" value="registered">
-                                </div>
-                                <button id="vote-setting-access-btn"
-                                    class="py-1 px-3 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300 flex-shrink-0 ml-2">
-                                    ändern...
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -1466,10 +1462,20 @@
                                 </button>
                             </div>
                         </div>
-                        <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
-                            <input type="checkbox" id="vote-setting-public-edit" class="h-5 w-5 rounded">
-                            <span class="font-semibold text-gray-700">Öffentliche Umfrage</span>
-                        </label>
+                        <div class="p-2 bg-gray-50 rounded-lg flex flex-col md:flex-row gap-3">
+                            <label class="flex items-center gap-3 cursor-pointer flex-shrink-0">
+                                <input type="checkbox" id="vote-setting-public-edit" class="h-5 w-5 rounded">
+                                <span class="font-semibold text-gray-700">Öffentliche Umfrage</span>
+                            </label>
+
+                            <div id="vote-setting-access-mode-wrapper-edit" class="hidden flex-grow">
+                                <select id="vote-setting-access-mode-edit"
+                                    class="w-full p-2 border border-gray-300 rounded-lg bg-white">
+                                    <option value="registered" selected>Sichtbar für ANGEMELDETE Benutzer</option>
+                                    <option value="guests">Sichtbar für ALLE Benutzer</option>
+                                </select>
+                            </div>
+                        </div>
                         <div class="p-2 bg-gray-50 rounded-lg flex flex-col md:flex-row gap-3">
                             <label class="flex items-center gap-3 cursor-pointer flex-shrink-0">
                                 <input type="checkbox" id="vote-setting-anonymous-edit" class="h-5 w-5 rounded">
@@ -1502,19 +1508,6 @@
                                     <option value="bis_stimmabgabe_ohne_korrektur">bis zur eignen Stimmabgabe
                                         (Korrekturen verbieten)</option>
                                 </select>
-                            </div>
-                        </div>
-                        <div class="p-3 bg-gray-50 rounded-lg">
-                            <div class="flex justify-between items-center">
-                                <div>
-                                    <span id="vote-setting-access-text-edit" class="font-semibold text-gray-700">Diese
-                                        Umfrage können nur angemeldete Benutzer sehen.</span>
-                                    <input type="hidden" id="vote-setting-access-mode-edit" value="registered">
-                                </div>
-                                <button id="vote-setting-access-btn-edit"
-                                    class="py-1 px-3 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300 flex-shrink-0 ml-2">
-                                    ändern...
-                                </button>
                             </div>
                         </div>
                     </div>
