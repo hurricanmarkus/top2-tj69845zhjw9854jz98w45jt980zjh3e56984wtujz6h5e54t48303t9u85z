@@ -951,21 +951,36 @@ export function listenForPublicVotes() {
             votes.push({ id: doc.id, ...doc.data() });
         });
         
-        // --- NEUE FILTERUNG FÜR GÄSTE ---
-        let filteredVotes = votes;
-        // Wenn der Benutzer ein Gast ist...
-        if (currentUser.mode === GUEST_MODE) {
-            // ...zeige nur Umfragen, die 'guests' erlauben (oder alte Umfragen ohne die Einstellung)
-            filteredVotes = votes.filter(vote => vote.accessPolicy !== 'registered');
-        }
-        // --- ENDE NEUE FILTERUNG ---
+        // =================================================================
+        // BEGINN DER KORREKTUR (Sicherer Filter für Gäste)
+        // =================================================================
         
-        renderPublicVotes(filteredVotes); // Übergebe die gefilterte Liste
+        let filteredVotes = []; // Starte mit einer leeren Liste
+        
+        if (currentUser.mode === GUEST_MODE) {
+            // --- Logik für GÄSTE ---
+            // Gäste dürfen NUR die Umfragen sehen, die explizit
+            // als "Sichtbar für ALLE Benutzer" (guests) markiert sind.
+            filteredVotes = votes.filter(vote => vote.accessPolicy === 'guests');
+            
+        } else {
+            // --- Logik für ANGEMELDETE BENUTZER ---
+            // Angemeldete Benutzer dürfen alle öffentlichen Umfragen sehen,
+            // egal ob 'guests' (alle) oder 'registered' (nur angemeldete).
+            filteredVotes = votes; // Nimm alle Ergebnisse aus der 'isPublic: true'-Abfrage
+        }
+        
+        // =================================================================
+        // ENDE DER KORREKTUR
+        // =================================================================
+        
+        renderPublicVotes(filteredVotes); // Übergebe die (jetzt korrekt) gefilterte Liste
         
     }, (error) => {
         console.error("Fehler beim Lauschen auf öffentliche Umfragen:", error);
     });
 }
+
 
 // ERSETZE listenForAssignedVotes hiermit:
 export function listenForMyVotes(userId) {
