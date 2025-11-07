@@ -35,7 +35,7 @@ let publicVotesList = []; // NEU: Cache für Gäste-Token-Suche
 
 // ----- VERSCHOBENE FUNKTIONEN (UM DEN FEHLER ZU BEHEBEN) -----
 
-// NEU: Berechnet die beste Option basierend auf "Ja"-Stimmen und Datum
+// NEU: Berechnet die beste Option basierend auf "Ja" (Prio 1), "Vielleicht" (Prio 2) und Datum (Prio 3)
 function calculateBestOption(voteData) {
     if (!voteData || !voteData.options || voteData.options.length === 0) {
         return null;
@@ -43,33 +43,63 @@ function calculateBestOption(voteData) {
 
     let bestOption = null;
     let maxYesVotes = -1;
+    let maxMaybeVotes = -1; // NEU: Wir brauchen einen Zähler für "Vielleicht"
     let earliestDate = null;
 
     voteData.options.forEach((option, index) => {
         // 1. Zähle "Ja"-Stimmen
         const yesVotes = voteData.participants.filter(p => p.currentAnswers[index] === 'yes').length;
         
-        // 2. Erstelle ein vergleichbares Datum-Objekt
-        // Wichtig: Wir müssen Datum UND Startzeit kombinieren
+        // 2. Zähle "Vielleicht"-Stimmen (NEU)
+        const maybeVotes = voteData.participants.filter(p => p.currentAnswers[index] === 'maybe').length;
+
+        // 3. Erstelle ein vergleichbares Datum-Objekt
         const currentOptionDate = new Date(`${option.date}T${option.timeStart}`);
 
-        // 3. Logik anwenden (Deine Anforderung)
+        // 4. Logik anwenden (DEINE NEUE ANFORDERUNG)
+
+        // PRÜFUNG 1: Hat dieser Termin MEHR "Ja"-Stimmen als der bisher beste?
         if (yesVotes > maxYesVotes) {
-            // Neuer Bester: Hat mehr "Ja"-Stimmen
+            // --- Fall 1: Eindeutig neuer Bester (mehr Ja-Stimmen) ---
+            // Alle Zähler zurücksetzen auf die Werte dieses Termins
             maxYesVotes = yesVotes;
+            maxMaybeVotes = maybeVotes; // Wichtig: auch den Maybe-Zähler setzen!
             earliestDate = currentOptionDate;
-            bestOption = { index: index, ...option, yesVotes: yesVotes };
+            bestOption = { index: index, ...option, yesVotes: yesVotes, maybeVotes: maybeVotes };
+        
+        // PRÜFUNG 2: Ist die "Ja"-Stimmen-Anzahl GLEICH dem bisher besten?
         } else if (yesVotes === maxYesVotes) {
-            // Gleichstand: Prüfe, ob dieser Termin *früher* ist
-            if (earliestDate === null || currentOptionDate < earliestDate) {
-                earliestDate = currentOptionDate;
-                bestOption = { index: index, ...option, yesVotes: yesVotes };
+            // --- Fall 2: Gleichstand bei Ja-Stimmen ---
+            // Jetzt "Vielleicht" prüfen (Priorität 2)
+            
+            // PRÜFUNG 2a: Hat er MEHR "Vielleicht"-Stimmen als der bisher beste?
+            if (maybeVotes > maxMaybeVotes) {
+                // Neuer Bester, weil "Vielleicht" gewinnt
+                maxMaybeVotes = maybeVotes;
+                earliestDate = currentOptionDate; // Datum auch neu setzen
+                bestOption = { index: index, ...option, yesVotes: yesVotes, maybeVotes: maybeVotes };
+            
+            // PRÜFUNG 2b: Ist "Vielleicht" auch GLEICH?
+            } else if (maybeVotes === maxMaybeVotes) {
+                // --- Fall 3: Gleichstand bei Ja UND Vielleicht ---
+                // Jetzt das Datum als letzten Tie-Breaker prüfen (Priorität 3)
+                
+                if (earliestDate === null || currentOptionDate < earliestDate) {
+                    // Neuer Bester, weil Datum früher ist
+                    earliestDate = currentOptionDate;
+                    bestOption = { index: index, ...option, yesVotes: yesVotes, maybeVotes: maybeVotes };
+                }
+                
+                // (Wenn das Datum später ist, passiert nichts, der alte 'bestOption' bleibt)
             }
+            // (Wenn maybeVotes < maxMaybeVotes, passiert nichts)
         }
+        // (Wenn yesVotes < maxYesVotes, passiert nichts)
     });
     
     return bestOption;
 }
+
 
 // NEU: Zeigt die UI zur Auswahl des finalen Termins an
 function showFixDateSelection() {
