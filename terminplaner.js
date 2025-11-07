@@ -459,9 +459,17 @@ export function initializeTerminplanerView() {
             });
             groupPollButton.dataset.listenerAttached = 'true';
         }
-        document.getElementById('select-vote-type-event')?.addEventListener('click', () => alertUser("Eventplaner ist noch nicht verfügbar.", "error"));
-        document.getElementById('select-vote-type-1on1')?.addEventListener('click', () => alertUser("1:1 ist noch nicht verfügbar.", "error"));
-        document.getElementById('select-vote-type-booking')?.addEventListener('click', () => alertUser("Buchungsseite ist noch nicht verfügbar.", "error"));
+        
+        // =========================================================
+        // START KORREKTUR (BUG 6)
+        // =========================================================
+        // Die folgenden Zeilen werden entfernt, da die IDs nicht mehr existieren
+        // document.getElementById('select-vote-type-event')?.addEventListener('click', () => alertUser("Eventplaner ist noch nicht verfügbar.", "error"));
+        // document.getElementById('select-vote-type-1on1')?.addEventListener('click', () => alertUser("1:1 ist noch nicht verfügbar.", "error"));
+        // document.getElementById('select-vote-type-booking')?.addEventListener('click', () => alertUser("Buchungsseite ist noch nicht verfügbar.", "error"));
+        // =========================================================
+        // ENDE KORREKTUR
+        // =========================================================
     }
 
     // ----- Spione für den Erstellungs-Assistenten -----
@@ -942,6 +950,7 @@ export function initializeTerminplanerView() {
         manageTermsList.dataset.listenerAttached = 'true';
     }
 }
+
 
 
 
