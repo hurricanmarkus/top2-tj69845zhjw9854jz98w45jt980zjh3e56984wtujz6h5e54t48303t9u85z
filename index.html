@@ -1981,6 +1981,44 @@
             </div>
         </div>
         <script type="module" src="haupteingang.js"></script>
+        <div id="voteCreatedModal"
+    class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md flex flex-col gap-4">
+        
+        <h3 class="text-2xl font-bold text-green-700">Umfrage erfolgreich erstellt!</h3>
+        
+        <p class="text-sm text-gray-600">
+            Deine Umfrage ist jetzt live. Hier sind deine Zugangs-Tokens.
+        </p>
+
+        <div class="space-y-3 p-4 bg-gray-50 border rounded-lg">
+            <div>
+                <label class="block text-sm font-bold text-gray-700">Umfrage-Token (zum Teilen):</label>
+                <code id="new-vote-token-display" class="block w-full p-2 bg-white border rounded-md text-lg font-mono text-indigo-700 tracking-widest">...</code>
+            </div>
+            <div>
+                <label class="block text-sm font-bold text-gray-700">EDIT-Token (Nicht weitergeben!):</label>
+                <code id="new-edit-token-display" class="block w-full p-2 bg-white border rounded-md text-lg font-mono text-red-700 tracking-widest">...</code>
+            </div>
+        </div>
+        
+        <div class="text-xs text-gray-600 space-y-2">
+            <p>
+                <strong>Tipp 1:</strong> Den <strong>Umfrage-Token</strong> siehst du jederzeit, wenn du die Umfrage öffnest. Dort kannst du ihn kopieren und weitergeben.
+            </p>
+            <p>
+                <strong>Tipp 2:</strong> Den <strong>EDIT-Token</strong> (nur für dich!) kannst du in der Umfrage über den 'EDIT'-Knopf (für 10 Sek.) wieder einblenden.
+            </p>
+        </div>
+
+        <div class="flex justify-end mt-4">
+            <button id="close-vote-created-modal-btn"
+                class="py-2 px-6 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700">
+                Verstanden
+            </button>
+        </div>
+    </div>
+</div>
 </body>
 
 </html>

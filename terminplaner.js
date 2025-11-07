@@ -2172,8 +2172,16 @@ async function saveGroupPoll() {
         };
         console.log("Speichere Umfrage in Firebase...", voteData);
         const docRef = await addDoc(votesCollectionRef, voteData);
-        console.log(`Umfrage erstellt! ID: ${docRef.id}, Token: ${token}, Edit-Token: ${editToken}`);
-        alertUser(`Umfrage erstellt! Teilnahme-Token: ${token} (Zum Bearbeiten: ${editToken})`, "success");
+        
+        // =========================================================
+        // HIER IST DIE ÄNDERUNG:
+        // Wir entfernen die alte 'alertUser'-Zeile...
+        // alertUser(`Umfrage erstellt! Teilnahme-Token: ${token} (Zum Bearbeiten: ${editToken})`, "success");
+        
+        // ...und rufen stattdessen unser neues Modal auf:
+        showVoteCreatedModal(token, editToken);
+        // =========================================================
+        
         showView('main'); 
     } catch (error) {
         console.error("Fehler beim Speichern der Umfrage:", error);
@@ -2183,6 +2191,7 @@ async function saveGroupPoll() {
         saveBtn.textContent = 'Umfrage erstellen und Link erhalten';
     }
 }
+
 
 
 
@@ -3317,6 +3326,51 @@ function checkInlineEditToken() {
         alertUser("Falscher Bearbeitungs-Token!", "error");
         // Bei Fehler: UI zurücksetzen, damit man es nochmal versuchen kann
         resetEditWrapper();
+    }
+}
+
+
+/**
+ * NEU: Zeigt das Modal (Pop-up) an, das erscheint,
+ * wenn eine Umfrage erfolgreich erstellt wurde.
+ */
+function showVoteCreatedModal(voteToken, editToken) {
+    // 1. Finde die Elemente in der HTML
+    const modal = document.getElementById('voteCreatedModal');
+    const voteTokenDisplay = document.getElementById('new-vote-token-display');
+    const editTokenDisplay = document.getElementById('new-edit-token-display');
+    const closeBtn = document.getElementById('close-vote-created-modal-btn');
+
+    if (!modal || !voteTokenDisplay || !editTokenDisplay || !closeBtn) {
+        console.error("Fehler: Das 'Umfrage erstellt'-Modal oder seine Teile wurden nicht gefunden!");
+        // Notfall-Meldung, falls das Modal kaputt ist
+        alert(`Umfrage erstellt!\nToken: ${voteToken}\nEdit-Token: ${editToken}`);
+        return;
+    }
+
+    // 2. Fülle die Tokens in die Code-Felder
+    voteTokenDisplay.textContent = voteToken;
+    editTokenDisplay.textContent = editToken;
+
+    // 3. Setze den Klick-Listener auf den "Verstanden"-Knopf
+    // Wir nutzen 'onclick', damit wir sicher sind, dass nur EINE Aktion passiert.
+    closeBtn.onclick = () => {
+        hideVoteCreatedModal();
+    };
+
+    // 4. Zeige das Modal an (mache es sichtbar)
+    modal.style.display = 'flex';
+    modal.classList.remove('hidden');
+}
+
+/**
+ * NEU: Versteckt das "Umfrage erstellt"-Modal
+ */
+function hideVoteCreatedModal() {
+    const modal = document.getElementById('voteCreatedModal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.classList.add('hidden');
     }
 }
 
