@@ -337,8 +337,10 @@ export function initializeTerminplanerView() {
     // --- NEU: Logik für die Haupt-URL-Share-Box ---
     const mainUrlInput = document.getElementById('main-share-url');
     if (mainUrlInput) {
-        // Fülle das Feld mit der Basis-URL der App
-        mainUrlInput.value = window.location.origin + window.location.pathname;
+        // --- KORREKTUR HIER ---
+        // Wir fügen den Hinweis "?view=terminplaner" hinzu,
+        // damit der Link direkt zu dieser Ansicht führt.
+        mainUrlInput.value = window.location.origin + window.location.pathname + '?view=terminplaner';
     }
     const copyMainUrlBtn = document.getElementById('copy-main-url-btn');
     if (copyMainUrlBtn && !copyMainUrlBtn.dataset.listenerAttached) {
@@ -878,6 +880,7 @@ export function initializeTerminplanerView() {
         manageTermsList.dataset.listenerAttached = 'true';
     }
 }
+
 
 
 
