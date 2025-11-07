@@ -2605,30 +2605,31 @@ async function saveVoteEdits() {
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
         await updateDoc(voteDocRef, updateData);
         
-        // --- KORREKTUR (1 von 2) ---
-        // 8. Lokale Daten NICHT manuell aktualisieren.
-        // Der 'onSnapshot' Listener (von 'listenToCurrentVote')
-        // wird diese Änderung automatisch erkennen und
-        // 'currentVoteData' mit den FRISCHEN Daten von der
-        // Datenbank aktualisieren und 'renderVoteView' aufrufen.
-        //
-        // ENTFERNT: currentVoteData = { ...currentVoteData, ...updateData };
-        // --- ENDE KORREKTUR (1 von 2) ---
+        // Lokale Daten (currentVoteData) werden NICHT manuell angefasst.
+        // Der 'onSnapshot'-Listener, den wir gleich neu starten, macht das.
         
         alertUser("Änderungen gespeichert!", "success");
         
-        // (unverändert)
-        showView('vote');
+        // =================================================================
+        // BEGINN DER KORREKTUR (Behebt den "Stale Data"-Bug)
+        // =================================================================
         
-        // --- KORREKTUR (2 von 2) ---
-        // 9. Den manuellen 'renderVoteView'-Aufruf entfernen.
-        // Der 'onSnapshot'-Listener übernimmt das.
-        //
-        // ENTFERNT:
-        // setTimeout(() => {
-        //    renderVoteView(currentVoteData); 
-        // }, 0);
-        // --- ENDE KORREKTUR (2 von 2) ---
+        // Wir rufen NICHT mehr `showView('vote')` auf.
+        // Stattdessen rufen wir `joinVoteById` auf. Diese Funktion
+        // macht drei Dinge:
+        // 1. Sie wechselt die Ansicht zu 'vote'.
+        // 2. Sie holt die absolut frischen Daten (die wir gerade gespeichert haben).
+        // 3. Sie startet den Live-Spion (`listenToCurrentVote`) neu,
+        //    den wir beim Betreten der Edit-Seite gestoppt haben.
+        
+        joinVoteById(currentVoteData.id);
+        
+        // =================================================================
+        // ENDE DER KORREKTUR
+        // =================================================================
+
+        // Die alten, entfernten Kommentare und der `setTimeout`
+        // (die in deiner Datei standen) sind jetzt korrekt entfernt.
 
     } catch (error) {
         console.error("Fehler beim Speichern der Änderungen:", error);
@@ -2637,6 +2638,7 @@ async function saveVoteEdits() {
         setButtonLoading(saveBtn, false);
     }
 }
+
 
 
 
