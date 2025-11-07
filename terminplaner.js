@@ -450,18 +450,6 @@ export function initializeTerminplanerView() {
     const datesContainer = document.getElementById('vote-dates-container');
     if (datesContainer && !datesContainer.dataset.clickListenerAttached) {
         datesContainer.addEventListener('click', (e) => {
-            // NEU: Spion für "Tag löschen"
-            const removeDayBtn = e.target.closest('.vote-remove-day-btn');
-            if (removeDayBtn) {
-                const dayGroup = removeDayBtn.closest('[data-date-group-id]');
-                if (dayGroup) {
-                    dayGroup.remove();
-                    updateDeleteDayButtons('vote-dates-container'); // Zählt neu, welcher Knopf versteckt werden muss
-                    validateLastDateGroup(); // Prüft, ob der "+ Tag" Knopf gezeigt werden darf
-                }
-                return; // Klick ist erledigt
-            }
-
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
                 const timesContainer = addTarget.previousElementSibling; 
@@ -494,38 +482,6 @@ export function initializeTerminplanerView() {
         saveVoteButton.dataset.listenerAttached = 'true';
     }
     
-    // =================================================================
-    // BEGINN DER KORREKTUR (Neue Spione)
-    // =================================================================
-
-    // Spion für "Öffentliche Umfrage" (Erstellen)
-    const publicCheckbox = document.getElementById('vote-setting-public');
-    if (publicCheckbox && !publicCheckbox.dataset.listenerAttached) {
-        publicCheckbox.addEventListener('change', (e) => {
-            const wrapper = document.getElementById('vote-setting-access-mode-wrapper');
-            if (wrapper) {
-                wrapper.classList.toggle('hidden', !e.target.checked);
-            }
-        });
-        publicCheckbox.dataset.listenerAttached = 'true';
-    }
-
-    // Spion für "Öffentliche Umfrage" (Bearbeiten)
-    const publicCheckboxEdit = document.getElementById('vote-setting-public-edit');
-    if (publicCheckboxEdit && !publicCheckboxEdit.dataset.listenerAttached) {
-        publicCheckboxEdit.addEventListener('change', (e) => {
-            const wrapper = document.getElementById('vote-setting-access-mode-wrapper-edit');
-            if (wrapper) {
-                wrapper.classList.toggle('hidden', !e.target.checked);
-            }
-        });
-        publicCheckboxEdit.dataset.listenerAttached = 'true';
-    }
-
-    // =================================================================
-    // ENDE DER KORREKTUR
-    // =================================================================
-
     // Spion für Anonym-Checkbox (Erstellen)
     const anonymousCheckbox = document.getElementById('vote-setting-anonymous');
     if (anonymousCheckbox && !anonymousCheckbox.dataset.listenerAttached) {
@@ -574,8 +530,22 @@ export function initializeTerminplanerView() {
         hideAnswersCheckboxEdit.dataset.listenerAttached = 'true';
     }
     
-    // Spione für "Sichtbarkeit" (Erstellen & Bearbeiten) -> ENTFERNT
-    // Die alten Spione für 'accessBtn' und 'accessBtnEdit' werden hier nicht mehr hinzugefügt.
+    // Spione für "Sichtbarkeit" (Erstellen & Bearbeiten)
+    const accessBtn = document.getElementById('vote-setting-access-btn');
+    if (accessBtn && !accessBtn.dataset.listenerAttached) {
+        accessBtn.addEventListener('click', () => {
+            toggleAccessPolicy('vote-setting-access-mode', 'vote-setting-access-text');
+        });
+        accessBtn.dataset.listenerAttached = 'true';
+    }
+    
+    const accessBtnEdit = document.getElementById('vote-setting-access-btn-edit');
+    if (accessBtnEdit && !accessBtnEdit.dataset.listenerAttached) {
+        accessBtnEdit.addEventListener('click', () => {
+            toggleAccessPolicy('vote-setting-access-mode-edit', 'vote-setting-access-text-edit');
+        });
+        accessBtnEdit.dataset.listenerAttached = 'true';
+    }
 
 
     // ----- Spione für die Abstimmungs-Seite -----
@@ -857,19 +827,7 @@ export function initializeTerminplanerView() {
     }
     const datesContainerEdit = document.getElementById('vote-dates-container-edit');
     if (datesContainerEdit && !datesContainerEdit.dataset.listenerAttached) {
-        // NEU: Spion für "Tag löschen" im Bearbeiten-Modus
         datesContainerEdit.addEventListener('click', (e) => {
-            const removeDayBtn = e.target.closest('.vote-remove-day-btn');
-            if (removeDayBtn) {
-                const dayGroup = removeDayBtn.closest('[data-date-group-id]');
-                if (dayGroup) {
-                    dayGroup.remove();
-                    updateDeleteDayButtons('vote-dates-container-edit'); 
-                    validateLastDateGroupEdit(); 
-                }
-                return; // Klick ist erledigt
-            }
-
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
                 const timesContainer = addTarget.previousElementSibling; 
@@ -886,11 +844,6 @@ export function initializeTerminplanerView() {
                 } else {
                     alertUser("Du musst mindestens eine Uhrzeit pro Tag angeben.", "error");
                 }
-            }
-        });
-        datesContainerEdit.addEventListener('input', (e) => {
-             if (e.target.matches('.vote-date-input, .vote-time-start-input')) {
-                validateLastDateGroupEdit();
             }
         });
         datesContainerEdit.dataset.listenerAttached = 'true';
@@ -951,36 +904,21 @@ export function listenForPublicVotes() {
             votes.push({ id: doc.id, ...doc.data() });
         });
         
-        // =================================================================
-        // BEGINN DER KORREKTUR (Sicherer Filter für Gäste)
-        // =================================================================
-        
-        let filteredVotes = []; // Starte mit einer leeren Liste
-        
+        // --- NEUE FILTERUNG FÜR GÄSTE ---
+        let filteredVotes = votes;
+        // Wenn der Benutzer ein Gast ist...
         if (currentUser.mode === GUEST_MODE) {
-            // --- Logik für GÄSTE ---
-            // Gäste dürfen NUR die Umfragen sehen, die explizit
-            // als "Sichtbar für ALLE Benutzer" (guests) markiert sind.
-            filteredVotes = votes.filter(vote => vote.accessPolicy === 'guests');
-            
-        } else {
-            // --- Logik für ANGEMELDETE BENUTZER ---
-            // Angemeldete Benutzer dürfen alle öffentlichen Umfragen sehen,
-            // egal ob 'guests' (alle) oder 'registered' (nur angemeldete).
-            filteredVotes = votes; // Nimm alle Ergebnisse aus der 'isPublic: true'-Abfrage
+            // ...zeige nur Umfragen, die 'guests' erlauben (oder alte Umfragen ohne die Einstellung)
+            filteredVotes = votes.filter(vote => vote.accessPolicy !== 'registered');
         }
+        // --- ENDE NEUE FILTERUNG ---
         
-        // =================================================================
-        // ENDE DER KORREKTUR
-        // =================================================================
-        
-        renderPublicVotes(filteredVotes); // Übergebe die (jetzt korrekt) gefilterte Liste
+        renderPublicVotes(filteredVotes); // Übergebe die gefilterte Liste
         
     }, (error) => {
         console.error("Fehler beim Lauschen auf öffentliche Umfragen:", error);
     });
 }
-
 
 // ERSETZE listenForAssignedVotes hiermit:
 export function listenForMyVotes(userId) {
@@ -2138,6 +2076,7 @@ async function saveVoteParticipation() {
 
 
 
+// ----- SPEICHER-FUNKTION (Erstellung) -----
 async function saveGroupPoll() {
     const saveBtn = document.getElementById('vote-save-group-poll-btn');
     saveBtn.disabled = true;
@@ -2151,6 +2090,7 @@ async function saveGroupPoll() {
         const isEndTimeUnlimited = document.getElementById('vote-end-time-unlimited').checked;
         const startTime = startTimeInput ? new Date(startTimeInput) : null;
         const endTime = !isEndTimeUnlimited && endTimeInput ? new Date(endTimeInput) : null;
+        const isPublic = document.getElementById('vote-setting-public').checked;
         const disableMaybe = document.getElementById('vote-setting-disable-maybe').checked; 
         
         // Anonym-Einstellungen
@@ -2161,18 +2101,9 @@ async function saveGroupPoll() {
         const hideAnswers = document.getElementById('vote-setting-hide-answers').checked;
         const hideAnswersMode = document.getElementById('vote-setting-hide-answers-mode').value;
         
-        // =================================================================
-        // BEGINN DER KORREKTUR (Neue Felder auslesen)
-        // =================================================================
-        
-        // --- NEU: "Öffentlich" lesen ---
-        const isPublic = document.getElementById('vote-setting-public').checked;
-        // --- NEU: Das Dropdown auslesen und als 'accessPolicy' verwenden ---
+        // --- NEU: "Sichtbarkeit" lesen ---
         const accessPolicy = document.getElementById('vote-setting-access-mode').value; // 'registered' or 'guests'
-
-        // =================================================================
-        // ENDE DER KORREKTUR
-        // =================================================================
+        // --- ENDE NEU ---
         
         const options = [];
         const dateGroups = document.querySelectorAll('#vote-dates-container [data-date-group-id]');
@@ -2214,6 +2145,7 @@ async function saveGroupPoll() {
             type: 'group-poll',
             token: token,
             editToken: editToken, 
+            isPublic: isPublic,
             
             isAnonymous: isAnonymous,
             anonymousMode: isAnonymous ? anonymousMode : null, 
@@ -2221,20 +2153,9 @@ async function saveGroupPoll() {
             hideAnswers: hideAnswers,
             hideAnswersMode: hideAnswers ? hideAnswersMode : null,
             
-            // =================================================================
-            // BEGINN DER KORREKTUR (Neue Felder speichern)
-            // =================================================================
-
-            // --- NEU: Speichert, ob die Umfrage öffentlich ist ---
-            isPublic: isPublic,
-            // --- NEU: Speichert, wer sie sehen darf (wenn sie öffentlich ist) ---
-            // Wir speichern 'accessPolicy', da unsere Filterfunktion (listenForPublicVotes)
-            // bereits nach diesem Feld sucht.
-            accessPolicy: isPublic ? accessPolicy : 'registered', // Nicht-öffentliche sind standardmäßig 'registered'
-
-            // =================================================================
-            // ENDE DER KORREKTUR
-            // =================================================================
+            // --- NEU: "Sichtbarkeit" speichern ---
+            accessPolicy: accessPolicy,
+            // --- ENDE NEU ---
             
             createdBy: currentUser.mode, 
             createdByName: creatorNameToSave, 
@@ -2262,7 +2183,6 @@ async function saveGroupPoll() {
         saveBtn.textContent = 'Umfrage erstellen und Link erhalten';
     }
 }
-
 
 
 
@@ -2522,31 +2442,8 @@ function renderEditView(voteData) {
     }
 
     // 3. Einstellungen füllen
+    document.getElementById('vote-setting-public-edit').checked = voteData.isPublic;
     document.getElementById('vote-setting-disable-maybe-edit').checked = voteData.disableMaybe;
-    
-    // =================================================================
-    // BEGINN DER KORREKTUR (Neue Felder laden)
-    // =================================================================
-
-    // "Öffentliche Umfrage" laden
-    const publicCheckboxEdit = document.getElementById('vote-setting-public-edit');
-    const publicWrapperEdit = document.getElementById('vote-setting-access-mode-wrapper-edit');
-    const publicModeEdit = document.getElementById('vote-setting-access-mode-edit');
-
-    publicCheckboxEdit.checked = voteData.isPublic;
-    if (voteData.isPublic) {
-        // Haken ist gesetzt: Zeige Dropdown und wähle den gespeicherten Wert
-        publicWrapperEdit.classList.remove('hidden');
-        publicModeEdit.value = voteData.accessPolicy || 'registered'; // 'registered' als Standard für alte Umfragen
-    } else {
-        // Haken ist nicht gesetzt: Verstecke Dropdown
-        publicWrapperEdit.classList.add('hidden');
-        publicModeEdit.value = 'registered'; // Setze auf Standard zurück
-    }
-
-    // =================================================================
-    // ENDE DER KORREKTUR
-    // =================================================================
     
     // Anonym-Einstellungen
     const anonymousCheckboxEdit = document.getElementById('vote-setting-anonymous-edit');
@@ -2576,8 +2473,19 @@ function renderEditView(voteData) {
         hideAnswersModeEdit.value = 'bis_umfragenabschluss'; 
     }
     
-    // --- "Sichtbarkeit" (ALT) laden -> ENTFERNT
+    // --- "Sichtbarkeit" laden ---
+    const accessModeEdit = document.getElementById('vote-setting-access-mode-edit');
+    const accessTextEdit = document.getElementById('vote-setting-access-text-edit');
+    const currentAccessPolicy = voteData.accessPolicy || 'registered'; // Fallback für alte Umfragen
     
+    accessModeEdit.value = currentAccessPolicy;
+    if (currentAccessPolicy === 'guests') {
+        accessTextEdit.innerHTML = 'Diese Umfrage können <span class="text-green-600 font-bold">ALLE sehen</span>. (auch nicht angemeldete Personen/Gäste)';
+    } else {
+        accessTextEdit.innerHTML = 'Diese Umfrage können <span class="text-red-600 font-bold">nur angemeldete Benutzer</span> sehen.';
+    }
+
+
     // 4. Zugewiesene Benutzer laden
     const assignedDisplayEdit = document.getElementById('vote-assigned-users-display-edit');
     const assignedIds = voteData.assignedUserIds || [];
@@ -2657,7 +2565,6 @@ function renderEditView(voteData) {
 
 
 
-
 async function saveVoteEdits() {
     const saveBtn = document.getElementById('vote-save-changes-btn');
     setButtonLoading(saveBtn, true);
@@ -2690,7 +2597,8 @@ async function saveVoteEdits() {
         updateData.startTime = newStartTime ? new Date(newStartTime) : null;
         updateData.endTime = !isUnlimited && newEndTime ? new Date(newEndTime) : null;
         
-        // 3. Einstellungen lesen
+        // 3. Einstellungen lesen (unverändert)
+        updateData.isPublic = document.getElementById('vote-setting-public-edit').checked;
         updateData.disableMaybe = document.getElementById('vote-setting-disable-maybe-edit').checked;
         
         updateData.isAnonymous = document.getElementById('vote-setting-anonymous-edit').checked;
@@ -2707,20 +2615,7 @@ async function saveVoteEdits() {
             updateData.hideAnswersMode = null;
         }
         
-        // =================================================================
-        // BEGINN DER KORREKTUR (Neue Felder auslesen - Bearbeiten)
-        // =================================================================
-
-        updateData.isPublic = document.getElementById('vote-setting-public-edit').checked;
-        const accessPolicyEdit = document.getElementById('vote-setting-access-mode-edit').value;
-        
-        // Wir speichern 'accessPolicy', da unsere Filterfunktion (listenForPublicVotes)
-        // bereits nach diesem Feld sucht.
-        updateData.accessPolicy = updateData.isPublic ? accessPolicyEdit : 'registered';
-
-        // =================================================================
-        // ENDE DER KORREKTUR
-        // =================================================================
+        updateData.accessPolicy = document.getElementById('vote-setting-access-mode-edit').value;
 
         // 4. Teilnehmer-Listen speichern (unverändert)
         const newAssignedIds = currentVoteData.assignedUserIds || [];
@@ -2773,14 +2668,31 @@ async function saveVoteEdits() {
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
         await updateDoc(voteDocRef, updateData);
         
-        // (Wie beim letzten Bugfix: Wir verlassen uns darauf, dass der
-        // Spion die Daten neu lädt, wenn wir zu 'joinVoteById' zurückkehren)
+        // Lokale Daten (currentVoteData) werden NICHT manuell angefasst.
+        // Der 'onSnapshot'-Listener, den wir gleich neu starten, macht das.
         
         alertUser("Änderungen gespeichert!", "success");
         
-        // Kehre zur Abstimm-Ansicht zurück und starte den Spion neu
+        // =================================================================
+        // BEGINN DER KORREKTUR (Behebt den "Stale Data"-Bug)
+        // =================================================================
+        
+        // Wir rufen NICHT mehr `showView('vote')` auf.
+        // Stattdessen rufen wir `joinVoteById` auf. Diese Funktion
+        // macht drei Dinge:
+        // 1. Sie wechselt die Ansicht zu 'vote'.
+        // 2. Sie holt die absolut frischen Daten (die wir gerade gespeichert haben).
+        // 3. Sie startet den Live-Spion (`listenToCurrentVote`) neu,
+        //    den wir beim Betreten der Edit-Seite gestoppt haben.
+        
         joinVoteById(currentVoteData.id);
+        
+        // =================================================================
+        // ENDE DER KORREKTUR
+        // =================================================================
 
+        // Die alten, entfernten Kommentare und der `setTimeout`
+        // (die in deiner Datei standen) sind jetzt korrekt entfernt.
 
     } catch (error) {
         console.error("Fehler beim Speichern der Änderungen:", error);
@@ -2789,7 +2701,6 @@ async function saveVoteEdits() {
         setButtonLoading(saveBtn, false);
     }
 }
-
 
 
 
@@ -3055,27 +2966,9 @@ function resetCreateWizard() {
     endTimeInput.value = '';
     unlimitedCheckbox.checked = true;
     endTimeInput.disabled = true; 
+    document.getElementById('vote-setting-public').checked = false;
     document.getElementById('vote-setting-disable-maybe').checked = false; 
     document.getElementById('vote-dates-container').innerHTML = '';
-    
-    // =================================================================
-    // BEGINN DER KORREKTUR (Neue Felder zurücksetzen)
-    // =================================================================
-
-    // "Öffentliche Umfrage" zurücksetzen
-    document.getElementById('vote-setting-public').checked = false;
-    const publicWrapper = document.getElementById('vote-setting-access-mode-wrapper');
-    if (publicWrapper) {
-        publicWrapper.classList.add('hidden');
-    }
-    const publicMode = document.getElementById('vote-setting-access-mode');
-    if (publicMode) {
-        publicMode.value = 'registered'; // Standardwert
-    }
-
-    // =================================================================
-    // ENDE DER KORREKTUR
-    // =================================================================
     
     // Anonym-Einstellungen zurücksetzen
     document.getElementById('vote-setting-anonymous').checked = false;
@@ -3099,7 +2992,15 @@ function resetCreateWizard() {
         hideMode.value = 'bis_umfragenabschluss'; 
     }
     
-    // --- "Sichtbarkeit" (ALT) zurücksetzen -> ENTFERNT
+    // --- "Sichtbarkeit" zurücksetzen ---
+    const accessMode = document.getElementById('vote-setting-access-mode');
+    if (accessMode) {
+        accessMode.value = 'registered';
+    }
+    const accessText = document.getElementById('vote-setting-access-text');
+    if (accessText) {
+        accessText.innerHTML = 'Diese Umfrage können <span class="text-red-600 font-bold">nur angemeldete Benutzer</span> sehen.';
+    }
     
     // Zuweisungen zurücksetzen
     tempAssignedUserIds = [];
@@ -3118,7 +3019,6 @@ function resetCreateWizard() {
     
     validateLastDateGroup(); 
 }
-
 
 
 
