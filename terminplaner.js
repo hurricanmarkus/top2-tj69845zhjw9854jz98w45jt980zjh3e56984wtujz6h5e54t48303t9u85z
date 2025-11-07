@@ -30,6 +30,7 @@ let unsubscribeMyAssignedVotes = null;
 let unsubscribeMyCreatedVotes = null;
 let isParticipantChoosingAnonymous = false;
 let unsubscribeCurrentVote = null; // NEU: Spion für die aktuell geöffnete Umfrage
+let publicVotesList = []; // NEU: Cache für Gäste-Token-Suche
 
 
 // ----- VERSCHOBENE FUNKTIONEN (UM DEN FEHLER ZU BEHEBEN) -----
@@ -942,13 +943,25 @@ export function listenForPublicVotes() {
             filteredVotes = votes.filter(vote => vote.accessPolicy !== 'registered');
         }
         // --- ENDE NEUE FILTERUNG ---
-        
+
+        // =========================================================
+        // START BUG 5 FIX
+        // =========================================================
+        // Speichere die Rohdaten (vor dem Filtern), damit der
+        // Gast-Workaround ALLE öffentlichen Umfragen durchsuchen kann.
+        publicVotesList = votes; 
+        // =========================================================
+        // END BUG 5 FIX
+        // =========================================================
+
         renderPublicVotes(filteredVotes); // Übergebe die gefilterte Liste
         
     }, (error) => {
         console.error("Fehler beim Lauschen auf öffentliche Umfragen:", error);
+        publicVotesList = []; // Bei Fehler leeren
     });
 }
+
 
 // ERSETZE listenForAssignedVotes hiermit:
 export function listenForMyVotes(userId) {
@@ -1185,29 +1198,73 @@ export async function joinVoteByToken(tokenFromUrl = null) {
     if (joinBtn) setButtonLoading(joinBtn, true); 
     
     try {
+        // =========================================================
+        // START BUG 5 FIX (LOGIK-ÄNDERUNG)
+        // =========================================================
+        
+        // 1. Standard-Versuch: Abfrage an die Datenbank
         const q = query(votesCollectionRef, where("token", "==", token));
         const snapshot = await getDocs(q);
-        if (snapshot.empty) throw new Error("Umfrage nicht gefunden. Prüfe den Token.");
+        
+        if (snapshot.empty) {
+             // 2. Standard-Abfrage findet nichts.
+             //    Wir werfen einen speziellen Fehler, damit unser Workaround anspringt.
+             throw new Error("Umfrage nicht gefunden.");
+        }
+       
         if (snapshot.size > 1) throw new Error("Fehler: Mehrere Umfragen mit diesem Token gefunden. Admin kontaktieren.");
         
         const voteDoc = snapshot.docs[0];
         const voteId = voteDoc.id; // Nur die ID holen
         
-        // --- ÄNDERUNG ---
-        // Wir rufen jetzt die Haupt-Funktion 'joinVoteById' auf,
-        // die sich um die Berechtigungs-Prüfung und den Live-Spion kümmert.
-        
-        // (Wir müssen 'await' verwenden, falls joinVoteById einen Fehler wirft,
-        // z.B. wenn ein Gast versucht, einer privaten Umfrage beizutreten)
         await joinVoteById(voteId); 
         
         if (tokenInput) tokenInput.value = ''; 
         if (tokenFromUrl) cleanUrlParams(); // (wird von joinVoteById auch gemacht, aber doppelt schadet nicht)
         
     } catch (error) {
-        // Fehler, die von getDocs ODER joinVoteById kommen, werden hier gefangen
-        console.error("Fehler beim Suchen der Umfrage per Token:", error);
-        alertUser(error.message, "error_long"); // Längere Anzeige
+        
+        // 3. CATCH-BLOCK: Hier fangen wir den Fehler ab
+        console.warn("Fehler bei Standard-Token-Suche:", error.message);
+
+        // 4. Prüfen, ob der Workaround greifen soll:
+        //    (Fehler ist "permissions" ODER "nicht gefunden") UND (Benutzer ist Gast)
+        const isPermissionError = error.message.includes('insufficient permissions');
+        const isNotFoundError = error.message.includes('Umfrage nicht gefunden');
+        
+        if ((isPermissionError || isNotFoundError) && currentUser.mode === GUEST_MODE) {
+            
+            console.log("GAST-WORKAROUND: Starte lokale Suche in 'publicVotesList'...");
+            
+            // 5. Durchsuche die lokal gespeicherte Liste der öffentlichen Umfragen
+            const foundInPublicList = publicVotesList.find(vote => vote.token === token);
+            
+            if (foundInPublicList) {
+                // 6. GEFUNDEN! Wir haben die ID. Jetzt rufen wir joinVoteById auf.
+                //    Dieser Aufruf wird funktionieren, da der Direkt-Link auch funktioniert.
+                console.log(`GAST-WORKAROUND: Umfrage ${foundInPublicList.id} in öffentlicher Liste gefunden!`);
+                
+                // Wir müssen 'await' verwenden, damit der 'finally'-Block wartet
+                await joinVoteById(foundInPublicList.id);
+                if (tokenInput) tokenInput.value = '';
+                
+            } else {
+                // 7. NICHT GEFUNDEN: Auch die lokale Suche half nicht.
+                console.warn("GAST-WORKAROUND: Token nicht in öffentlicher Liste gefunden.");
+                alertUser("Umfrage nicht gefunden oder sie ist nicht öffentlich.", "error_long");
+            }
+
+        } else {
+            // 8. Es ist ein anderer Fehler ODER der Benutzer ist kein Gast.
+            //    Zeige den originalen Fehler an.
+            console.error("Fehler beim Suchen der Umfrage per Token:", error);
+            alertUser(error.message, "error_long"); // Längere Anzeige
+        }
+        
+        // =========================================================
+        // END BUG 5 FIX
+        // =========================================================
+        
     } finally {
         if (joinBtn) setButtonLoading(joinBtn, false); 
     }
