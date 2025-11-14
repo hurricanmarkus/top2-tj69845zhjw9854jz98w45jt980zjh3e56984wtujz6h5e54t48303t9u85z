@@ -17,6 +17,8 @@ import {
 
 // ----- Globale Variablen für den Zustand -----
 let dateGroupIdCounter = 0;
+let invitedGuests = {}; 
+let guestTokenMap = {}; 
 let currentVoteData = null;
 let currentParticipantAnswers = {};
 let isVoteGridEditable = false; 
@@ -35,6 +37,219 @@ let originalOptionsOnEditLoad = []; // NEU: Für Änderungs-Log (P5)
 
 
 // ----- VERSCHOBENE FUNKTIONEN (UM DEN FEHLER ZU BEHEBEN) -----
+
+
+// ============================================
+// PROBLEM 1: GÄSTE-TOKEN-SYSTEM
+// ============================================
+
+// KOPIERE DIESE VARIABLEN AM ANFANG DER DATEI (nach den anderen globalen Variablen):
+let invitedGuests = {}; // Speichert: { "Name": "TOKEN" }
+let guestTokenMap = {}; // Speichert: { "TOKEN": { name: "Name", createdAt: ... } }
+
+/**
+ * Generiert einen eindeutigen 8-stelligen Token (Format: XXXX - XXXX)
+ */
+function generateUniqueToken() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let token = '';
+  for (let i = 0; i < 8; i++) {
+    token += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return token.substring(0, 4) + ' - ' + token.substring(4, 8);
+}
+
+/**
+ * Prüft, ob ein Token bereits existiert
+ */
+function isTokenUnique(token) {
+  return !guestTokenMap[token];
+}
+
+/**
+ * Öffnet das Modal zur Verwaltung eingeladener Gäste
+ */
+function openInvitedGuestsModal() {
+  const modal = document.getElementById('invitedGuestsModal');
+  const guestsList = document.getElementById('invited-guests-list');
+  
+  if (!modal || !guestsList) return;
+  
+  guestsList.innerHTML = '';
+  
+  if (Object.keys(invitedGuests).length === 0) {
+    guestsList.innerHTML = '<p style="color: #9ca3af; font-size: 0.875rem;">Noch keine Gäste eingeladen</p>';
+  } else {
+    Object.keys(invitedGuests).forEach(guestName => {
+      const guestToken = invitedGuests[guestName];
+      const item = document.createElement('div');
+      item.className = 'invited-guest-item';
+      item.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span class="invited-guest-item-name">${guestName}</span>
+          <button class="remove-guest-btn" data-guest-name="${guestName}" onclick="removeInvitedGuest('${guestName}')">✕</button>
+        </div>
+        <div class="invited-guest-item-token">Token: ${guestToken}</div>
+      `;
+      guestsList.appendChild(item);
+    });
+  }
+  
+  modal.style.display = 'flex';
+  modal.classList.remove('hidden');
+}
+
+/**
+ * Schließt das Gäste-Modal
+ */
+function closeInvitedGuestsModal() {
+  const modal = document.getElementById('invitedGuestsModal');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.add('hidden');
+  }
+}
+
+/**
+ * Fügt einen neuen Gast hinzu
+ */
+function addInvitedGuest() {
+  const input = document.getElementById('invited-guest-name-input');
+  
+  if (!input || !input.value.trim()) {
+    alertUser('Bitte geben Sie einen Namen ein', 'error');
+    return;
+  }
+  
+  const guestName = input.value.trim();
+  
+  if (invitedGuests[guestName]) {
+    alertUser(`${guestName} ist bereits eingeladen`, 'error');
+    input.value = '';
+    return;
+  }
+  
+  let newToken = generateUniqueToken();
+  while (!isTokenUnique(newToken)) {
+    newToken = generateUniqueToken();
+  }
+  
+  invitedGuests[guestName] = newToken;
+  guestTokenMap[newToken] = { name: guestName, createdAt: new Date() };
+  
+  input.value = '';
+  openInvitedGuestsModal();
+  alertUser(`${guestName} hinzugefügt! Token: ${newToken}`, 'success');
+}
+
+/**
+ * Entfernt einen Gast aus der Liste
+ */
+function removeInvitedGuest(guestName) {
+  const token = invitedGuests[guestName];
+  delete invitedGuests[guestName];
+  if (token) delete guestTokenMap[token];
+  
+  openInvitedGuestsModal();
+  alertUser(`${guestName} wurde entfernt`, 'success');
+}
+
+// ============================================
+// PROBLEM 2: MOBILE ÜBERSICHT
+// ============================================
+
+/**
+ * Rendert die Teilnehmer-Übersicht mobile-freundlich
+ */
+function renderMobileParticipantsResults(voteData) {
+  const resultsContainer = document.getElementById('vote-results-container');
+  if (!resultsContainer) return;
+  
+  const participants = voteData.participants || [];
+  
+  if (participants.length === 0) {
+    resultsContainer.innerHTML = '<p style="text-align: center; color: #9ca3af; padding: 1rem;">Noch keine Teilnehmer haben abgestimmt.</p>';
+    return;
+  }
+  
+  const sortedParticipants = [...participants].sort((a, b) => 
+    (a.name || '').localeCompare(b.name || '')
+  );
+  
+  let html = '';
+  
+  sortedParticipants.forEach(participant => {
+    const voteTime = participant.votedAt 
+      ? new Date(participant.votedAt.toDate ? participant.votedAt.toDate() : participant.votedAt)
+      : null;
+    
+    const voteTimeStr = voteTime 
+      ? voteTime.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+      : 'Unbekannt';
+    
+    const correctionCount = participant.correctionCount || 0;
+    const correctionBadge = correctionCount > 0 
+      ? `<span class="participant-corrections-badge">${correctionCount} Änderung${correctionCount !== 1 ? 'en' : ''}</span>`
+      : '';
+    
+    // Zähle Antworten
+    const answers = participant.currentAnswers || {};
+    let answerSummary = '';
+    Object.values(answers).forEach(ans => {
+      if (ans === 'yes') answerSummary += '✔ ';
+      else if (ans === 'maybe') answerSummary += '~ ';
+      else if (ans === 'no') answerSummary += '✘ ';
+    });
+    
+    const isOwnAnswer = participant.userId === currentUser.mode;
+    const cardClass = isOwnAnswer ? 'participant-result-card own-answer' : 'participant-result-card';
+    
+    html += `
+      <div class="${cardClass}">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span class="participant-name">${participant.name}</span>
+          ${isOwnAnswer ? '<span style="background-color: #3b82f6; color: white; padding: 0.25rem 0.75rem; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 600;">DEINE ANTWORT</span>' : ''}
+        </div>
+        <div class="participant-timestamp">📅 ${voteTimeStr}</div>
+        <div class="participant-answers-summary">${answerSummary.trim()}${correctionBadge}</div>
+      </div>
+    `;
+  });
+  
+  resultsContainer.innerHTML = html;
+}
+
+// ============================================
+// PROBLEM 3: ÄNDERUNGS-HIGHLIGHTING
+// ============================================
+
+/**
+ * Hebt ein Element mit blauem Rahmen hervor
+ */
+function highlightChangedElement(element, duration = 3000) {
+  if (!element) return;
+  
+  element.classList.add('highlight-changed');
+  element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  
+  setTimeout(() => {
+    element.classList.remove('highlight-changed');
+  }, duration);
+}
+
+/**
+ * Hebt mehrere Elemente hervor
+ */
+function highlightMultipleElements(elements, duration = 3000) {
+  if (!elements || elements.length === 0) return;
+  
+  elements.forEach((element, index) => {
+    setTimeout(() => {
+      highlightChangedElement(element, duration);
+    }, index * 200);
+  });
+}
+
 
 // NEU: Berechnet die beste Option basierend auf "Ja" (Prio 1), "Vielleicht" (Prio 2) und Datum (Prio 3)
 function calculateBestOption(voteData) {
