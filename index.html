@@ -1199,14 +1199,14 @@
                         </button>
                     </div>
 
-                    <div class="relative flex justify-center items-center mb-4">
-                        <div class="text-center">
+                    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
+
+                        <div class="text-center sm:text-left flex-grow min-w-0">
                             <h2 id="vote-poll-title" class="text-2xl font-bold text-gray-800 truncate">...</h2>
                             <p id="vote-poll-creator" class="text-sm text-gray-500 mt-1">Erstellt von ...</p>
                         </div>
 
-                        <div id="edit-vote-wrapper"
-                            class="absolute right-0 top-0 flex items-center gap-2 flex-shrink-0 ml-2">
+                        <div id="edit-vote-wrapper" class="flex items-center gap-2 flex-shrink-0 justify-center">
                             <button id="show-edit-vote-btn"
                                 class="py-1 px-3 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300">
                                 EDIT
@@ -1219,6 +1219,7 @@
                                 OK
                             </button>
                         </div>
+
                     </div>
 
                     <div class="flex justify-center mb-4">
@@ -1864,45 +1865,50 @@
             </div>
         </div>
 
-<div id="createVoteModal"
-    class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-30">
-    <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-3xl">
-        <div class="flex justify-between items-center mb-6 pb-3 border-b">
-            <h3 class="text-2xl font-bold text-gray-800">Neuen Termin erstellen</h3>
-            <button id="close-create-vote-modal-btn"
-                class="text-gray-400 hover:text-red-600 font-bold text-3xl">&times;</button>
+        <div id="createVoteModal"
+            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-30">
+            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-3xl">
+                <div class="flex justify-between items-center mb-6 pb-3 border-b">
+                    <h3 class="text-2xl font-bold text-gray-800">Neuen Termin erstellen</h3>
+                    <button id="close-create-vote-modal-btn"
+                        class="text-gray-400 hover:text-red-600 font-bold text-3xl">&times;</button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    <div id="select-vote-type-group"
+                        class="p-4 border rounded-lg hover:shadow-lg hover:border-indigo-500 cursor-pointer transition-all duration-200 flex flex-col items-center text-center">
+                        <div class="p-4 rounded-lg bg-yellow-100 mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                                class="w-10 h-10 text-yellow-600">
+                                <path fill-rule="evenodd"
+                                    d="M4.5 3.75a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V6.75a3 3 0 0 0-3-3H4.5ZM12 7.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm-3 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm6 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <h4 class="font-bold text-lg text-gray-800">Termin MatchFinder</h4>
+                        <p class="text-sm text-gray-600 mt-1">Finde schnell den perfekten Termin, der für alle in deiner
+                            Gruppe passt.</p>
+                    </div>
+
+                    <div id="select-vote-type-survey"
+                        class="p-4 border rounded-lg opacity-50 cursor-not-allowed transition-all duration-200 flex flex-col items-center text-center">
+                        <div class="p-4 rounded-lg bg-gray-100 mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                                class="w-10 h-10 text-gray-400">
+                                <path fill-rule="evenodd"
+                                    d="M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM3 12a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Zm0 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <h4 class="font-bold text-lg text-gray-800">Allgemeine Umfragen</h4>
+                        <p class="text-sm text-gray-600 mt-1">Diese Application ist noch nicht verfügbar. Coming soon.
+                        </p>
+                    </div>
+
+                </div>
+            </div>
         </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-            <div id="select-vote-type-group"
-                class="p-4 border rounded-lg hover:shadow-lg hover:border-indigo-500 cursor-pointer transition-all duration-200 flex flex-col items-center text-center">
-                <div class="p-4 rounded-lg bg-yellow-100 mb-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
-                        class="w-10 h-10 text-yellow-600">
-                        <path fill-rule="evenodd"
-                            d="M4.5 3.75a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V6.75a3 3 0 0 0-3-3H4.5ZM12 7.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm-3 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm6 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"
-                            clip-rule="evenodd" />
-                    </svg>
-                </div>
-                <h4 class="font-bold text-lg text-gray-800">Termin MatchFinder</h4>
-                <p class="text-sm text-gray-600 mt-1">Finde schnell den perfekten Termin, der für alle in deiner Gruppe passt.</p>
-            </div>
-
-            <div id="select-vote-type-survey"
-                class="p-4 border rounded-lg opacity-50 cursor-not-allowed transition-all duration-200 flex flex-col items-center text-center">
-                <div class="p-4 rounded-lg bg-gray-100 mb-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-10 h-10 text-gray-400">
-                      <path fill-rule="evenodd" d="M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM3 12a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Zm0 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd" />
-                    </svg>
-                </div>
-                <h4 class="font-bold text-lg text-gray-800">Allgemeine Umfragen</h4>
-                <p class="text-sm text-gray-600 mt-1">Diese Application ist noch nicht verfügbar. Coming soon.</p>
-            </div>
-            
-            </div>
-    </div>
-</div>
 
 
         <div id="correctionLogModal"
@@ -1948,43 +1954,47 @@
         </div>
         <script type="module" src="haupteingang.js"></script>
         <div id="voteCreatedModal"
-    class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
-    <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md flex flex-col gap-4">
-        
-        <h3 class="text-2xl font-bold text-green-700">Umfrage erfolgreich erstellt!</h3>
-        
-        <p class="text-sm text-gray-600">
-            Deine Umfrage ist jetzt live. Hier sind deine Zugangs-Tokens.
-        </p>
+            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
+            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md flex flex-col gap-4">
 
-        <div class="space-y-3 p-4 bg-gray-50 border rounded-lg">
-            <div>
-                <label class="block text-sm font-bold text-gray-700">Umfrage-Token (zum Teilen):</label>
-                <code id="new-vote-token-display" class="block w-full p-2 bg-white border rounded-md text-lg font-mono text-indigo-700 tracking-widest">...</code>
-            </div>
-            <div>
-                <label class="block text-sm font-bold text-gray-700">EDIT-Token (Nicht weitergeben!):</label>
-                <code id="new-edit-token-display" class="block w-full p-2 bg-white border rounded-md text-lg font-mono text-red-700 tracking-widest">...</code>
-            </div>
-        </div>
-        
-        <div class="text-xs text-gray-600 space-y-2">
-            <p>
-                <strong>Tipp 1:</strong> Den <strong>Umfrage-Token</strong> siehst du jederzeit, wenn du die Umfrage öffnest. Dort kannst du ihn kopieren und weitergeben.
-            </p>
-            <p>
-                <strong>Tipp 2:</strong> Den <strong>EDIT-Token</strong> (nur für dich!) kannst du in der Umfrage über den 'EDIT'-Knopf (für 10 Sek.) wieder einblenden.
-            </p>
-        </div>
+                <h3 class="text-2xl font-bold text-green-700">Umfrage erfolgreich erstellt!</h3>
 
-        <div class="flex justify-end mt-4">
-            <button id="close-vote-created-modal-btn"
-                class="py-2 px-6 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700">
-                Verstanden
-            </button>
+                <p class="text-sm text-gray-600">
+                    Deine Umfrage ist jetzt live. Hier sind deine Zugangs-Tokens.
+                </p>
+
+                <div class="space-y-3 p-4 bg-gray-50 border rounded-lg">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700">Umfrage-Token (zum Teilen):</label>
+                        <code id="new-vote-token-display"
+                            class="block w-full p-2 bg-white border rounded-md text-lg font-mono text-indigo-700 tracking-widest">...</code>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700">EDIT-Token (Nicht weitergeben!):</label>
+                        <code id="new-edit-token-display"
+                            class="block w-full p-2 bg-white border rounded-md text-lg font-mono text-red-700 tracking-widest">...</code>
+                    </div>
+                </div>
+
+                <div class="text-xs text-gray-600 space-y-2">
+                    <p>
+                        <strong>Tipp 1:</strong> Den <strong>Umfrage-Token</strong> siehst du jederzeit, wenn du die
+                        Umfrage öffnest. Dort kannst du ihn kopieren und weitergeben.
+                    </p>
+                    <p>
+                        <strong>Tipp 2:</strong> Den <strong>EDIT-Token</strong> (nur für dich!) kannst du in der
+                        Umfrage über den 'EDIT'-Knopf (für 10 Sek.) wieder einblenden.
+                    </p>
+                </div>
+
+                <div class="flex justify-end mt-4">
+                    <button id="close-vote-created-modal-btn"
+                        class="py-2 px-6 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700">
+                        Verstanden
+                    </button>
+                </div>
+            </div>
         </div>
-    </div>
-</div>
 </body>
 
 </html>
