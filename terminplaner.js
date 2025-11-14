@@ -382,7 +382,6 @@ function applyAssignedUsers() {
 }
 
 // ----- ENDE VERSCHOBENE FUNKTIONEN -----
-
 export function initializeTerminplanerView() {
     
     // =================================================================
@@ -493,17 +492,6 @@ export function initializeTerminplanerView() {
             });
             groupPollButton.dataset.listenerAttached = 'true';
         }
-        
-        // =========================================================
-        // START KORREKTUR (BUG 6)
-        // =========================================================
-        // Die folgenden Zeilen werden entfernt, da die IDs nicht mehr existieren
-        // document.getElementById('select-vote-type-event')?.addEventListener('click', () => alertUser("Eventplaner ist noch nicht verfügbar.", "error"));
-        // document.getElementById('select-vote-type-1on1')?.addEventListener('click', () => alertUser("1:1 ist noch nicht verfügbar.", "error"));
-        // document.getElementById('select-vote-type-booking')?.addEventListener('click', () => alertUser("Buchungsseite ist noch nicht verfügbar.", "error"));
-        // =========================================================
-        // ENDE KORREKTUR
-        // =========================================================
     }
 
     // ----- Spione für den Erstellungs-Assistenten -----
@@ -640,22 +628,15 @@ export function initializeTerminplanerView() {
     
     const cancelVoteButton = document.getElementById('cancel-vote-participation-btn');
     if (cancelVoteButton && !cancelVoteButton.dataset.listenerAttached) {
-        // =================================================================
-        // BEGINN DER ÄNDERUNG (Live-Spion stoppen)
-        // =================================================================
         cancelVoteButton.addEventListener('click', () => {
-            stopCurrentVoteListener(); // <-- NEU: Stoppt den Live-Spion
+            stopCurrentVoteListener(); // Stoppt den Live-Spion
             showView('main'); 
             currentVoteData = null; 
         });
-        // =================================================================
-        // ENDE DER ÄNDERUNG
-        // =================================================================
         cancelVoteButton.dataset.listenerAttached = 'true';
     }
 
     const voteView = document.getElementById('terminplaner-vote-view');
-    // ... (Rest der Funktion bleibt gleich) ...
     if (voteView && !voteView.dataset.listenerAttached) {
         voteView.addEventListener('click', (e) => {
             
@@ -705,12 +686,8 @@ export function initializeTerminplanerView() {
             }
             
             
-            // =================================================================
-            // START PROBLEM 4 KORREKTUR (Neues Karten-Layout)
-            // =================================================================
-            // Der alte 'vote-grid-btn'-Listener wird angepasst,
-            // um mit den neuen Karten zu funktionieren.
-            const clickedButton = e.target.closest('.vote-card-btn'); // Neuer Klassenname
+            // Klick auf Abstimm-Knopf
+            const clickedButton = e.target.closest('.vote-card-btn');
             if (clickedButton && !clickedButton.disabled) { 
                 const optionIndex = clickedButton.dataset.optionIndex;
                 const answer = clickedButton.dataset.answer;
@@ -753,17 +730,15 @@ export function initializeTerminplanerView() {
                 // Prüfe, ob der "Speichern"-Knopf angezeigt werden soll
                 checkIfAllAnswered();
             }
-            // =================================================================
-            // ENDE PROBLEM 4 KORREKTUR
-            // =================================================================
             
-            
+            // Klick auf Korrektur-Zähler (in der Tabelle)
             const correctionCounter = e.target.closest('.correction-counter');
             if (correctionCounter) {
                 const userId = correctionCounter.dataset.userid;
                 renderCorrectionHistory(userId);
             }
             
+            // Klick auf "Bearbeiten"-Knopf (neben "Deine Antwort")
             const correctionButton = e.target.closest('.vote-correction-btn');
             if (correctionButton) {
                 switchToEditMode();
@@ -792,22 +767,11 @@ export function initializeTerminplanerView() {
             }
             
             // =================================================================
-            // START: NEUER LISTENER FÜR "DETAILS ANZEIGEN" (Akkordeon)
+            // START: LISTENER FÜR "DETAILS ANZEIGEN" (Akkordeon)
             // =================================================================
-            const detailsBtn = e.target.closest('.vote-toggle-details-btn');
-            if (detailsBtn) {
-                const detailsContainer = detailsBtn.closest('.vote-time-row').querySelector('.vote-participant-details');
-                if (detailsContainer) {
-                    detailsContainer.classList.toggle('hidden');
-                    if (detailsContainer.classList.contains('hidden')) {
-                        detailsBtn.innerHTML = 'Details ▼';
-                    } else {
-                        detailsBtn.innerHTML = 'Verbergen ▲';
-                    }
-                }
-            }
+            // DIESER LISTENER WURDE ENTFERNT, DA WIR DAS AKKORDEON NICHT MEHR NUTZEN
             // =================================================================
-            // ENDE: NEUER LISTENER
+            // ENDE: LISTENER
             // =================================================================
         });
         voteView.dataset.listenerAttached = 'true';
@@ -835,20 +799,12 @@ export function initializeTerminplanerView() {
     if (editTokenInput && !editTokenInput.dataset.listenerAttached) {
         editTokenInput.addEventListener('input', (e) => formatTokenInput(e, 'edit-token-input-inline'));
         
-        // =========================================================
-        // START BUG 4 FIX (Teil 2)
-        // =========================================================
         editTokenInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
-                // Verhindere das Standard-Enter-Verhalten
                 e.preventDefault();
-                // Rufe die Funktion auf, die auch der "OK"-Knopf aufruft
                 checkInlineEditToken();
             }
         });
-        // =========================================================
-        // END BUG 4 FIX (Teil 2)
-        // =========================================================
         
         editTokenInput.dataset.listenerAttached = 'true';
     }
@@ -869,18 +825,9 @@ export function initializeTerminplanerView() {
 
     const cancelEditingBtn = document.getElementById('cancel-vote-editing-btn');
     if (cancelEditingBtn && !cancelEditingBtn.dataset.listenerAttached) {
-        // =================================================================
-        // BEGINN PROBLEM 1 KORREKTUR (Live-Spion neu starten)
-        // =================================================================
         cancelEditingBtn.addEventListener('click', () => {
-            // Wir stoppen den Spion NICHT, sondern gehen zurück zur 'vote'-Ansicht
-            // und rufen 'joinVoteById' auf. 'joinVoteById' startet
-            // den Spion 'listenToCurrentVote' automatisch neu.
             joinVoteById(currentVoteData.id); 
         });
-        // =================================================================
-        // ENDE PROBLEM 1 KORREKTUR
-        // =================================================================
         cancelEditingBtn.dataset.listenerAttached = 'true';
     }
     
@@ -943,7 +890,6 @@ export function initializeTerminplanerView() {
     }
     
     // --- Spione für das Zuweisen-Modal ---
-    // ... (unverändert) ...
     const showAssignModalBtn = document.getElementById('vote-show-assign-user-modal-btn');
     if (showAssignModalBtn && !showAssignModalBtn.dataset.listenerAttached) {
         showAssignModalBtn.addEventListener('click', () => {
@@ -977,7 +923,6 @@ export function initializeTerminplanerView() {
     }
     
     // ----- Spione für die Bearbeiten-Funktionen -----
-    // ... (unverändert) ...
     const addDateButtonEdit = document.getElementById('vote-add-date-btn-edit');
     if (addDateButtonEdit && !addDateButtonEdit.dataset.listenerAttached) {
         addDateButtonEdit.addEventListener('click', addNewDateGroupEdit);
@@ -1038,6 +983,7 @@ export function initializeTerminplanerView() {
         manageTermsList.dataset.listenerAttached = 'true';
     }
 }
+
 
 
 
@@ -1857,8 +1803,8 @@ function renderVoteView(voteData) {
 
 
 /**
- * Baut die Abstimmungs-KARTEN (Layout: Akkordeon pro Tag)
- * KORREKTUR: Problem 1, 2, 4 - Kompakt (wenig scrollen) + Details (Namen)
+ * Baut die Abstimmungs-KARTEN (Layout: Hybrid-Tabelle pro Tag)
+ * KORREKTUR: Problem 1, 2, 4 - Tabellarisch, Kompakt, Namen sichtbar, Mobil-Scroll
  */
 function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, forceHidden = false) {
     const optionsContainer = document.getElementById('vote-options-container');
@@ -1874,6 +1820,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
 
     // 1. Fall: Termin ist fixiert (Dieser Teil bleibt unverändert)
     if (voteData.fixedOptionIndex != null) {
+        // ... (Code für fixierten Termin bleibt gleich) ...
         const fixedOption = voteData.options[voteData.fixedOptionIndex];
         if (fixedOption) {
             const dateObj = new Date(fixedOption.date + 'T12:00:00');
@@ -1936,7 +1883,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
     }
     
     // =================================================================
-    // START PROBLEM 1, 2, 4 KORREKTUR (Akkordeon-Layout)
+    // START PROBLEM 1, 2, 4 KORREKTUR (Hybrid-Tabelle)
     // =================================================================
 
     // 2. Fall: Normale Abstimmung -> Baue die "Tages-Karten"
@@ -1967,6 +1914,8 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
         }
     }
     
+    // Finde die ANDEREN Teilnehmer (für die Tabellenköpfe)
+    const otherParticipants = voteData.participants.filter(p => p.userId !== currentUser.mode);
 
     // ÄUSSERE SCHLEIFE: Erstellt eine Karte pro TAG
     for (const date in optionsByDate) {
@@ -1977,9 +1926,13 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
         cardsHTML += `<h3 class="text-xl font-bold text-gray-800 sticky top-0 bg-gray-100 z-10 p-2 -mx-2">${niceDate}</h3>`;
 
         // Die "Tages-Karte"
-        cardsHTML += `<div class="card bg-white rounded-xl border shadow-lg">`;
+        cardsHTML += `<div class="card bg-white rounded-xl border shadow-lg p-4 space-y-4">`;
         
-        // INNERE SCHLEIFE: Erstellt eine Zeile pro UHRZEIT
+        
+        // --- TEIL 1: "DEINE ABSTIMMUNG" (Immer mobilfreundlich) ---
+        cardsHTML += `<div><h5 class="text-sm font-semibold text-gray-700 mb-2">Deine Abstimmung:</h5>`;
+        cardsHTML += `<div class="space-y-3">`;
+
         optionsByDate[date].forEach((option, index) => {
             const optionIndex = option.originalIndex;
             const timeString = option.timeEnd ? 
@@ -1988,13 +1941,11 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
             
             const isStricken = option.isStricken === true;
             const timeClasses = isStricken ? 'line-through text-gray-500' : 'text-indigo-700';
-            
-            // --- A. Baue "Deine Antwort"-Sektion ---
-            let yourAnswerHTML = '';
             const currentAnswer = currentParticipantAnswers[optionIndex];
 
+            let yourAnswerHTML = '';
+
             if (isStricken) {
-                // Termin GESTRICHEN
                 yourAnswerHTML = `<div class="p-3 bg-red-50 rounded-lg text-center">
                                     <span class="text-sm font-bold text-red-600">TERMIN GESTRICHEN</span>
                                   </div>`;
@@ -2005,8 +1956,6 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
                 const noSelected = currentAnswer === 'no' ? 'bg-red-600 text-white ring-2 ring-offset-2 ring-red-600' : 'bg-red-100 text-red-800 hover:bg-red-200';
                 const maybeHidden = voteData.disableMaybe ? 'hidden' : '';
 
-                // KORREKTUR (Problem 1): 'flex-wrap' erlaubt Umbruch auf Handys
-                // 'flex-grow' und 'flex-basis-0' teilen den Platz fair auf
                 yourAnswerHTML = `
                     <div class="vote-card-button-group flex flex-row flex-wrap gap-2">
                         <button class="vote-card-btn p-3 rounded-lg font-bold transition-all flex-grow flex-basis-0 min-w-[70px] ${yesSelected}" data-option-index="${optionIndex}" data-answer="yes">
@@ -2037,72 +1986,97 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
                     </div>
                 `;
             } else if (isClosed) {
-                // Modus: Geschlossen, nicht teilgenommen
                 yourAnswerHTML = `<p class="text-center font-semibold text-gray-500 p-3 bg-gray-100 rounded-lg">Geschlossen</p>`;
             } else {
-                 // Modus: Gast, muss Namen eingeben
                  yourAnswerHTML = `<p class="text-center font-semibold text-gray-500 p-3 bg-gray-100 rounded-lg">Bitte oben abstimmen</p>`;
             }
 
-
-            // --- B. Baue "Antworten der Anderen" (Akkordeon) ---
-            
-            // B.1 - Kompakte Ansicht (immer sichtbar)
-            // Ruft die NEUE Helfer-Funktion (nur Zahlen) auf
-            const othersAnswerCompactHTML = getOthersVoteSummaryCompactHTML(voteData, optionIndex, forceHidden, isStricken);
-            
-            // B.2 - Detail-Ansicht (standardmäßig versteckt)
-            // Ruft die ALTE Helfer-Funktion (mit Namen) auf
-            const othersAnswerDetailsHTML = getOthersVoteSummaryHTML(voteData, optionIndex, forceHidden, isStricken);
-
-            
-            // B.3 - Setze das Akkordeon zusammen
-            let othersAnswerHTML = '';
-            if (!forceHidden && !isStricken) { // Zeige Akkordeon nur, wenn es was anzuzeigen gibt
-                othersAnswerHTML = `
-                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                        <div class="flex-grow">
-                            ${othersAnswerCompactHTML}
-                        </div>
-                        <div class="flex-shrink-0 text-center sm:text-right">
-                            <button class="vote-toggle-details-btn text-sm font-semibold text-blue-600 hover:underline">
-                                Details ▼
-                            </button>
-                        </div>
-                    </div>
-                    <div class="vote-participant-details hidden mt-3">
-                        ${othersAnswerDetailsHTML}
-                    </div>
-                `;
-            } else {
-                // Wenn versteckt oder gestrichen, zeige nur die kompakte Box (ohne "Details"-Knopf)
-                othersAnswerHTML = othersAnswerCompactHTML;
-            }
-
-
-            
-            // --- C. Setze die "Uhrzeit-ZEILE" zusammen ---
-            // 'border-t' fügt eine Trennlinie hinzu (außer beim ersten Element)
-            const borderClass = index === 0 ? '' : 'border-t'; 
-
-            // NEUES LAYOUT: Gestapelt (Problem 1 & 2)
+            // Baue die "Deine Abstimmung"-ZEILE
             cardsHTML += `
-                <div class="vote-time-row p-4 ${borderClass}">
-                    
-                    <h4 class="text-lg font-bold ${timeClasses} mb-3">${timeString}</h4>
-
-                    <div class="mb-3">
+                <div class="vote-time-row-your-vote flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 ${index === 0 ? '' : 'border-t'}">
+                    <div class="flex-shrink-0 mb-2 sm:mb-0 sm:w-1/3">
+                        <h4 class="text-lg font-bold ${timeClasses}">${timeString}</h4>
+                    </div>
+                    <div class="w-full sm:w-auto">
                         ${yourAnswerHTML}
                     </div>
-
-                    <div>
-                        <h5 class="text-sm font-semibold text-gray-700 mb-2">Antworten der Anderen:</h5>
-                        ${othersAnswerHTML}
-                    </div>
-                    
                 </div>
             `;
         });
+
+        cardsHTML += `</div></div>`; // Ende "Deine Abstimmung"
+        
+
+        // --- TEIL 2: "ERGEBNISSE DER ANDEREN" (Scrollbare Tabelle) ---
+        
+        if (forceHidden) {
+            cardsHTML += `<div><h5 class="text-sm font-semibold text-gray-700 mb-2">Ergebnisse der Anderen:</h5>
+                            <div class="p-2 bg-gray-50 rounded-lg text-center">
+                                <span class="text-sm text-gray-500 italic">Antworten sind bis zur Stimmabgabe/Abschluss versteckt.</span>
+                            </div>
+                          </div>`;
+        } else if (otherParticipants.length === 0) {
+            cardsHTML += `<div><h5 class="text-sm font-semibold text-gray-700 mb-2">Ergebnisse der Anderen:</h5>
+                            <div class="p-2 bg-gray-50 rounded-lg text-center">
+                                <span class="text-sm text-gray-400">Bisher keine anderen Stimmen</span>
+                            </div>
+                          </div>`;
+        } else {
+            // Baue die Tabelle nur, wenn es was anzuzeigen gibt
+            cardsHTML += `<div><h5 class="text-sm font-semibold text-gray-700 mb-2">Ergebnisse der Anderen:</h5>`;
+            
+            // Der Wrapper, der horizontales Scrollen auf Mobilgeräten ermöglicht
+            cardsHTML += `<div class="w-full overflow-x-auto rounded-lg border shadow-inner bg-gray-50">`;
+            cardsHTML += `<table class="w-full border-collapse text-sm">`;
+            
+            // Tabellenkopf (Namen)
+            cardsHTML += `<thead><tr class="bg-gray-100">`;
+            cardsHTML += `<th class="p-2 border-b border-r text-left font-semibold sticky left-0 bg-gray-100 z-10">Termin</th>`; // Sticky Header
+            
+            otherParticipants.forEach(p => {
+                const correctionCount = p.correctionCount || 0;
+                const correctionText = correctionCount > 0 
+                    ? ` <span class="correction-counter text-blue-600 cursor-pointer" data-userid="${p.userId}">(${correctionCount})</span>` 
+                    : '';
+                cardsHTML += `<th class="p-2 border-b font-semibold min-w-[100px]">${p.name}${correctionText}</th>`;
+            });
+            cardsHTML += `</tr></thead>`;
+
+            // Tabellenkörper (Stimmen)
+            cardsHTML += `<tbody>`;
+            optionsByDate[date].forEach(option => {
+                const optionIndex = option.originalIndex;
+                const timeString = option.timeStart; // Nur die Zeit, Datum ist ja oben
+                const isStricken = option.isStricken === true;
+                
+                cardsHTML += `<tr class="vote-time-row-others ${isStricken ? 'bg-gray-200 opacity-60' : 'bg-white'}">`;
+                // Sticky Zeit-Spalte
+                cardsHTML += `<td class="p-2 border-b border-r font-mono font-semibold ${isStricken ? 'line-through' : ''} sticky left-0 z-10 ${isStricken ? 'bg-gray-200' : 'bg-white'}">${timeString}</td>`;
+
+                // Stimmen-Symbole
+                otherParticipants.forEach(p => {
+                    const answer = p.currentAnswers[optionIndex];
+                    let answerIcon = '';
+                    
+                    if (isStricken) {
+                        answerIcon = '<span class="text-gray-400 font-bold">-</span>';
+                    } else if (answer === 'yes') {
+                        answerIcon = '<span class="text-green-500 font-bold text-xl">✔</span>';
+                    } else if (answer === 'no') {
+                        answerIcon = '<span class="text-red-500 font-bold text-xl">✘</span>';
+                    } else if (answer === 'maybe') {
+                        answerIcon = '<span class="text-yellow-500 font-bold text-xl">~</span>';
+                    }
+                    
+                    cardsHTML += `<td class="p-2 border-b text-center">${answerIcon}</td>`;
+                });
+                
+                cardsHTML += `</tr>`;
+            });
+            cardsHTML += `</tbody></table></div>`; // Ende Tabelle & Scroll-Wrapper
+            cardsHTML += `</div>`; // Ende "Ergebnisse der Anderen"
+        }
+
         
         // Tages-Karte schließen
         cardsHTML += `</div>`;
@@ -2113,6 +2087,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
     // ENDE PROBLEM 1, 2, 4 KORREKTUR
     // =================================================================
 }
+
 
 
 
@@ -2161,156 +2136,7 @@ function checkIfAllAnswered() {
 
 
 
-/**
- * NEU (Problem 4 Kompromiss): Erstellt die KOMPAKTE Zusammenfassung (nur Zahlen)
- * (z.B. "✔ 3 | ~ 1 | ✘ 0") für die Standardansicht.
- */
-function getOthersVoteSummaryCompactHTML(voteData, optionIndex, forceHidden, isStricken) {
-    // 1. Fall: Antworten sind versteckt
-    if (forceHidden) {
-        return `<div class="p-2 bg-gray-50 rounded-lg text-center">
-                    <span class="text-sm text-gray-500 italic">Antworten versteckt</span>
-                </div>`;
-    }
-    
-    // 2. Fall: Termin ist gestrichen
-    if (isStricken) {
-        return `<div class="p-2 bg-gray-100 rounded-lg text-center">
-                    <span class="text-sm font-semibold text-gray-500">- (Gestrichen) -</span>
-                </div>`;
-    }
 
-    // 3. Fall: Antworten zählen
-    let yesCount = 0;
-    let maybeCount = 0;
-    let noCount = 0;
-    let hasVotes = false;
-    
-    voteData.participants.forEach(p => {
-        if (p.userId === currentUser.mode) return; // "Du" nicht hier auflisten
-        
-        const answer = p.currentAnswers[optionIndex];
-        if (answer === 'yes') yesCount++;
-        else if (answer === 'maybe') maybeCount++;
-        else if (answer === 'no') noCount++;
-    });
-
-    if (yesCount > 0 || maybeCount > 0 || noCount > 0) {
-        hasVotes = true;
-    }
-
-    // 4. HTML für die Anzeige
-    const yesHTML = `
-        <div class="flex items-center gap-1 ${yesCount === 0 ? 'opacity-30' : ''}">
-            <span class="text-green-600 font-bold text-lg">✔</span>
-            <span class="font-bold text-gray-800">${yesCount}</span>
-        </div>`;
-        
-    const maybeHTML = voteData.disableMaybe ? '' : `
-        <div class="flex items-center gap-1 ${maybeCount === 0 ? 'opacity-30' : ''}">
-            <span class="text-yellow-500 font-bold text-lg">~</span>
-            <span class="font-bold text-gray-800">${maybeCount}</span>
-        </div>`;
-        
-    const noHTML = `
-        <div class="flex items-center gap-1 ${noCount === 0 ? 'opacity-30' : ''}">
-            <span class="text-red-600 font-bold text-lg">✘</span>
-            <span class="font-bold text-gray-800">${noCount}</span>
-        </div>`;
-
-    if (!hasVotes) {
-        return `<div class="p-2 bg-gray-50 rounded-lg text-center">
-                    <span class="text-sm text-gray-400">Keine anderen Stimmen</span>
-                </div>`;
-    }
-
-    // "flex gap-3 sm:gap-4" = Abstand zwischen den Zählern
-    return `
-        <div class="flex items-center justify-center sm:justify-start gap-3 sm:gap-4 p-2 bg-gray-50 rounded-lg">
-            ${yesHTML}
-            ${maybeHTML}
-            ${noHTML}
-        </div>
-    `;
-}
-
-
-
-
-/**
- * NEU (Problem 2 & 4): Erstellt die detaillierte Liste der Stimmen (mit Namen)
- * für das neue Karten-Layout.
- */
-function getOthersVoteSummaryHTML(voteData, optionIndex, forceHidden, isStricken) {
-    // 1. Fall: Antworten sind versteckt
-    if (forceHidden) {
-        return `<div class="p-2 bg-gray-50 rounded-lg text-center">
-                    <span class="text-sm text-gray-500 italic">Antworten sind bis zur Stimmabgabe/Abschluss versteckt.</span>
-                </div>`;
-    }
-    
-    // 2. Fall: Termin ist gestrichen
-    if (isStricken) {
-        return `<div class="p-2 bg-gray-100 rounded-lg text-center">
-                    <span class="text-sm font-semibold text-gray-500">- (Gestrichen) -</span>
-                </div>`;
-    }
-
-    // 3. Fall: Antworten zählen (Namen sammeln)
-    const yesNames = [];
-    const maybeNames = [];
-    const noNames = [];
-    
-    voteData.participants.forEach(p => {
-        if (p.userId === currentUser.mode) return; // "Du" nicht hier auflisten
-        
-        // Name mit Korrektur-Counter
-        const correctionCount = p.correctionCount || 0;
-        const correctionText = correctionCount > 0 
-            ? ` <span class="correction-counter text-blue-600 cursor-pointer" data-userid="${p.userId}">(${correctionCount})</span>` 
-            : '';
-        const nameHTML = `${p.name}${correctionText}`; // z.B. "Markus (1)"
-
-        const answer = p.currentAnswers[optionIndex];
-        if (answer === 'yes') yesNames.push(nameHTML);
-        else if (answer === 'maybe') maybeNames.push(nameHTML);
-        else if (answer === 'no') noNames.push(nameHTML);
-    });
-
-    // 4. Helfer-Funktion, um die Liste zu erstellen (wie bei "Termin fixiert")
-    const createListHTML = (icon, title, names, colorClass) => {
-        if (names.length === 0) return '';
-        return `
-            <div class="flex items-start gap-2">
-                <span class="${colorClass} font-bold text-lg">${icon}</span>
-                <div class="text-sm">
-                    <span class="font-semibold ${colorClass}">${title} (${names.length}):</span>
-                    <p class="text-gray-700 leading-snug">${names.join(', ')}</p>
-                </div>
-            </div>
-        `;
-    };
-
-    // 5. HTML für die Anzeige
-    const yesHTML = createListHTML('✔', 'Zusagen', yesNames, 'text-green-600');
-    const maybeHTML = voteData.disableMaybe ? '' : createListHTML('~', 'Vielleicht', maybeNames, 'text-yellow-600');
-    const noHTML = createListHTML('✘', 'Absagen', noNames, 'text-red-600');
-
-    if (yesNames.length === 0 && maybeNames.length === 0 && noNames.length === 0) {
-        return `<div class="p-2 bg-gray-50 rounded-lg text-center">
-                    <span class="text-sm text-gray-400">Bisher keine anderen Stimmen</span>
-                </div>`;
-    }
-
-    // Zeigt die 3 Listen (Ja, Vielleicht, Nein) untereinander an
-    return `
-        <div class="space-y-2 p-3 bg-gray-50 rounded-lg">
-            ${yesHTML}
-            ${maybeHTML}
-            ${noHTML}
-        </div>
-    `;
-}
 
 
 
