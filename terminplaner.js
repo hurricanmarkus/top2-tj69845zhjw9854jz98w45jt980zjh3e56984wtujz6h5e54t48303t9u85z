@@ -1839,8 +1839,8 @@ function renderVoteView(voteData) {
 
 
 /**
- * Baut die Abstimmungs-Tabelle (NEU: KARTEN-LAYOUT) neu auf
- * KORREKTUR: Problem 4 - Mobile Ansicht
+ * Baut die Abstimmungs-KARTEN (NEUES Layout: Pro Tag)
+ * KORREKTUR: Problem 1, 2, 4 - Mobilansicht, Scrollen, Vergleichbarkeit
  */
 function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, forceHidden = false) {
     const optionsContainer = document.getElementById('vote-options-container');
@@ -1850,20 +1850,19 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
     }
     
     // =================================================================
-    // START PROBLEM 4 KORREKTUR
+    // START PROBLEM 4 KORREKTUR (Neues Layout)
     // =================================================================
-    // Wir entfernen die "overflow-x-auto" Klasse, die für die Tabelle war,
-    // und fügen Klassen für ein Karten-Layout hinzu.
-    optionsContainer.classList.remove('overflow-x-auto', 'rounded-xl', 'shadow-lg', 'mb-6');
+    // Wir entfernen die alten Tabellen/Karten-Klassen
+    optionsContainer.classList.remove('overflow-x-auto', 'rounded-xl', 'shadow-lg');
+    // Wir fügen Klassen für ein "Stapel"-Layout hinzu
     optionsContainer.classList.add('space-y-4', 'mb-6');
     // =================================================================
     // ENDE PROBLEM 4 KORREKTUR
     // =================================================================
 
 
-    // 1. Fall: Termin ist fixiert
+    // 1. Fall: Termin ist fixiert (Dieser Teil bleibt unverändert)
     if (voteData.fixedOptionIndex != null) {
-        // ... (Dieser Teil ist korrekt und bleibt unverändert) ...
         const fixedOption = voteData.options[voteData.fixedOptionIndex];
         if (fixedOption) {
             const dateObj = new Date(fixedOption.date + 'T12:00:00');
@@ -1929,7 +1928,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
     // START PROBLEM 4 KORREKTUR (Neues Karten-Layout)
     // =================================================================
 
-    // 2. Fall: Normale Abstimmung -> Baue die Karten
+    // 2. Fall: Normale Abstimmung -> Baue die "Tages-Karten"
     
     // Sortiere Optionen nach Datum
     const optionsByDate = {};
@@ -1942,12 +1941,12 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
 
     let cardsHTML = '';
     
+    // Finde den Teilnehmer (DICH)
     const youParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
     let correctionButtonHTML = '';
     
     // Prüfe, ob "Korrektur"-Knopf angezeigt werden soll
     if (youParticipant && !isEditable && !isClosed) {
-        // Prüfe, ob Korrekturen verboten sind
         const correctionsForbidden = (voteData.hideAnswers && voteData.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur');
         
         if (correctionsForbidden) {
@@ -1958,6 +1957,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
     }
     
 
+    // ÄUSSERE SCHLEIFE: Erstellt eine Karte pro TAG
     for (const date in optionsByDate) {
         const dateObj = new Date(date + 'T12:00:00'); 
         const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit' });
@@ -1965,15 +1965,17 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
         // Datums-Titel
         cardsHTML += `<h3 class="text-xl font-bold text-gray-800 sticky top-0 bg-gray-100 z-10 p-2 -mx-2">${niceDate}</h3>`;
 
-        // Iteriere durch alle Zeiten für dieses Datum
-        optionsByDate[date].forEach(option => {
+        // Die "Tages-Karte"
+        cardsHTML += `<div class="card bg-white rounded-xl border shadow-lg">`;
+        
+        // INNERE SCHLEIFE: Erstellt eine Zeile pro UHRZEIT
+        optionsByDate[date].forEach((option, index) => {
             const optionIndex = option.originalIndex;
             const timeString = option.timeEnd ? 
                 `${option.timeStart} - ${option.timeEnd} Uhr` : 
                 `${option.timeStart} Uhr`;
             
             const isStricken = option.isStricken === true;
-            const cardClasses = isStricken ? 'bg-gray-100 opacity-60' : 'bg-white shadow-lg';
             const timeClasses = isStricken ? 'line-through text-gray-500' : 'text-indigo-700';
             
             // --- A. Baue "Deine Antwort"-Sektion ---
@@ -1981,7 +1983,10 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
             const currentAnswer = currentParticipantAnswers[optionIndex];
 
             if (isStricken) {
-                yourAnswerHTML = `<p class="text-center font-bold text-red-600 p-4 bg-red-50 rounded-lg">TERMIN GESTRICHEN</p>`;
+                // Termin GESTRICHEN
+                yourAnswerHTML = `<div class="p-3 bg-red-50 rounded-lg text-center">
+                                    <span class="text-sm font-bold text-red-600">TERMIN GESTRICHEN</span>
+                                  </div>`;
             } else if (isEditable) {
                 // Modus: Abstimm-Knöpfe
                 const yesSelected = currentAnswer === 'yes' ? 'bg-green-600 text-white ring-2 ring-offset-2 ring-green-600' : 'bg-green-100 text-green-800 hover:bg-green-200';
@@ -1989,112 +1994,75 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
                 const noSelected = currentAnswer === 'no' ? 'bg-red-600 text-white ring-2 ring-offset-2 ring-red-600' : 'bg-red-100 text-red-800 hover:bg-red-200';
                 const maybeHidden = voteData.disableMaybe ? 'hidden' : '';
 
+                // 'grid-cols-3' oder 'grid-cols-2' (wenn "Maybe" wegfällt)
                 yourAnswerHTML = `
-                    <div class="vote-card-button-group grid grid-cols-3 gap-2 ${maybeHidden ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}">
+                    <div class="vote-card-button-group grid ${maybeHidden ? 'grid-cols-2' : 'grid-cols-3'} gap-2">
                         <button class="vote-card-btn p-3 rounded-lg font-bold transition-all ${yesSelected}" data-option-index="${optionIndex}" data-answer="yes">
-                            ✔ Ja
+                            ✔ <span class="hidden sm:inline">Ja</span>
                         </button>
                         <button class="vote-card-btn p-3 rounded-lg font-bold transition-all ${maybeSelected} ${maybeHidden}" data-option-index="${optionIndex}" data-answer="maybe">
-                            ~ Vielleicht
+                            ~ <span class="hidden sm:inline">Vielleicht</span>
                         </button>
                         <button class="vote-card-btn p-3 rounded-lg font-bold transition-all ${noSelected}" data-option-index="${optionIndex}" data-answer="no">
-                            ✘ Nein
+                            ✘ <span class="hidden sm:inline">Nein</span>
                         </button>
                     </div>
                 `;
             } else if (youParticipant) {
                 // Modus: Gespeicherte Antwort anzeigen
                 let answerIcon = '';
-                if (currentAnswer === 'yes') answerIcon = '<span class="text-green-600 font-bold text-xl">✔ Du hast mit JA gestimmt</span>';
-                else if (currentAnswer === 'no') answerIcon = '<span class="text-red-600 font-bold text-xl">✘ Du hast mit NEIN gestimmt</span>';
-                else if (currentAnswer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold text-xl">~ Du hast mit VIELLEICHT gestimmt</span>';
-                else answerIcon = '<span class="text-gray-500 font-bold text-xl">? Du hast nicht geantwortet</span>';
+                if (currentAnswer === 'yes') answerIcon = '<span class="text-green-600 font-bold text-lg">✔ Du hast mit JA gestimmt</span>';
+                else if (currentAnswer === 'no') answerIcon = '<span class="text-red-600 font-bold text-lg">✘ Du hast mit NEIN gestimmt</span>';
+                else if (currentAnswer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold text-lg">~ Du hast mit VIELLEICHT gestimmt</span>';
+                else answerIcon = '<span class="text-gray-500 font-bold text-lg">? Du hast nicht geantwortet</span>';
                 
                 yourAnswerHTML = `
                     <div class="p-3 bg-indigo-50 rounded-lg text-center">
                         ${answerIcon}
-                        <div class="mt-2">
+                        <div class="mt-1">
                             ${correctionButtonHTML}
                         </div>
                     </div>
                 `;
             } else if (isClosed) {
-                yourAnswerHTML = `<p class="text-center font-semibold text-gray-500 p-3 bg-gray-100 rounded-lg">Abstimmung geschlossen (nicht teilgenommen)</p>`;
+                // Modus: Geschlossen, nicht teilgenommen
+                yourAnswerHTML = `<p class="text-center font-semibold text-gray-500 p-3 bg-gray-100 rounded-lg">Geschlossen</p>`;
             } else {
-                 yourAnswerHTML = `<p class="text-center font-semibold text-gray-500 p-3 bg-gray-100 rounded-lg">Bitte oben Namen eintragen, um abzustimmen</p>`;
+                 // Modus: Gast, muss Namen eingeben
+                 yourAnswerHTML = `<p class="text-center font-semibold text-gray-500 p-3 bg-gray-100 rounded-lg">Bitte oben abstimmen</p>`;
             }
 
 
             // --- B. Baue "Antworten der Anderen"-Sektion ---
-            let othersAnswerHTML = '';
-            if (forceHidden) {
-                othersAnswerHTML = `<p class="text-sm text-center text-gray-500 italic p-2 bg-gray-50 rounded-lg">Antworten sind bis zur Stimmabgabe/Abschluss versteckt.</p>`;
-            } else if (isStricken) {
-                othersAnswerHTML = ''; // Bei gestrichenen Terminen keine Antworten anzeigen
-            } else {
-                const yesVotes = [];
-                const maybeVotes = [];
-                const noVotes = [];
-                
-                voteData.participants.forEach(p => {
-                    if (p.userId === currentUser.mode) return; // "Du" nicht hier auflisten
-                    
-                    // Name mit Korrektur-Counter
-                    const correctionCount = p.correctionCount || 0;
-                    const correctionText = correctionCount > 0 
-                        ? ` <span class="correction-counter text-blue-600 cursor-pointer" data-userid="${p.userId}">(${correctionCount})</span>` 
-                        : '';
-                    const nameHTML = `${p.name}${correctionText}`;
+            // Ruft die NEUE Helfer-Funktion auf
+            const othersAnswerHTML = getOthersVoteSummaryHTML(voteData, optionIndex, forceHidden, isStricken);
 
-                    const answer = p.currentAnswers[optionIndex];
-                    if (answer === 'yes') yesVotes.push(nameHTML);
-                    else if (answer === 'maybe') maybeVotes.push(nameHTML);
-                    else if (answer === 'no') noVotes.push(nameHTML);
-                });
+            
+            // --- C. Setze die "Uhrzeit-ZEILE" zusammen ---
+            // 'border-t' fügt eine Trennlinie hinzu (außer beim ersten Element)
+            const borderClass = index === 0 ? '' : 'border-t'; 
 
-                const createListHTML = (icon, names, colorClass) => {
-                    if (names.length === 0) return '';
-                    return `
-                        <div class="flex items-start gap-2">
-                            <span class="${colorClass} font-bold text-lg">${icon}</span>
-                            <div class="text-sm">
-                                <span class="font-semibold ${colorClass}">${names.length} Stimme(n):</span>
-                                <span class="text-gray-700">${names.join(', ')}</span>
-                            </div>
-                        </div>
-                    `;
-                };
-                
-                const yesHTML = createListHTML('✔', yesVotes, 'text-green-600');
-                const maybeHTML = voteData.disableMaybe ? '' : createListHTML('~', maybeVotes, 'text-yellow-600');
-                const noHTML = createListHTML('✘', noVotes, 'text-red-600');
-                
-                if (yesVotes.length === 0 && maybeVotes.length === 0 && noVotes.length === 0) {
-                     othersAnswerHTML = `<p class="text-sm text-center text-gray-400 p-2">Bisher keine anderen Stimmen.</p>`;
-                } else {
-                     othersAnswerHTML = `
-                        <div class="space-y-2 pt-3 border-t">
-                            ${yesHTML}
-                            ${maybeHTML}
-                            ${noHTML}
-                        </div>
-                    `;
-                }
-            }
-
-            // --- C. Setze die Karte zusammen ---
             cardsHTML += `
-                <div class="vote-option-row card rounded-xl border ${cardClasses}" data-option-index="${optionIndex}">
-                    <div class="p-4">
-                        <h4 class="text-xl font-bold ${timeClasses}">${timeString}</h4>
+                <div class="vote-time-row flex flex-col md:flex-row md:items-center md:justify-between p-3 ${borderClass}">
+                    
+                    <div class="flex-shrink-0 mb-2 md:mb-0 md:w-1/4">
+                        <h4 class="text-lg font-bold ${timeClasses}">${timeString}</h4>
                     </div>
-                    <div class="p-4 space-y-3">
-                        ${yourAnswerHTML}
+
+                    <div class="flex-grow mb-3 md:mb-0 md:mx-4 md:w-1/2">
                         ${othersAnswerHTML}
                     </div>
+
+                    <div class="flex-shrink-0 w-full md:w-auto md:max-w-xs">
+                        ${yourAnswerHTML}
+                    </div>
+                    
                 </div>
             `;
         });
+        
+        // Tages-Karte schließen
+        cardsHTML += `</div>`;
     }
 
     optionsContainer.innerHTML = cardsHTML;
@@ -2102,6 +2070,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
     // ENDE PROBLEM 4 KORREKTUR
     // =================================================================
 }
+
 
 
 
@@ -2143,6 +2112,88 @@ function checkIfAllAnswered() {
     } else {
         saveBtn.classList.add('hidden'); 
     }
+}
+
+
+/**
+ * NEU (Problem 4): Erstellt die kompakte Zusammenfassung der Stimmen
+ * (z.B. "✔ 3 | ~ 1 | ✘ 0") für das neue Karten-Layout.
+ */
+function getOthersVoteSummaryHTML(voteData, optionIndex, forceHidden, isStricken) {
+    // 1. Fall: Antworten sind versteckt
+    if (forceHidden) {
+        return `<div class="p-2 bg-gray-50 rounded-lg text-center">
+                    <span class="text-sm text-gray-500 italic">Antworten versteckt</span>
+                </div>`;
+    }
+    
+    // 2. Fall: Termin ist gestrichen
+    if (isStricken) {
+        return `<div class="p-2 bg-gray-100 rounded-lg text-center">
+                    <span class="text-sm font-semibold text-gray-500">- (Gestrichen) -</span>
+                </div>`;
+    }
+
+    // 3. Fall: Antworten zählen
+    const yesVotes = [];
+    const maybeVotes = [];
+    const noVotes = [];
+    
+    voteData.participants.forEach(p => {
+        if (p.userId === currentUser.mode) return; // "Du" nicht hier auflisten
+        
+        // Name mit Korrektur-Counter
+        const correctionCount = p.correctionCount || 0;
+        const correctionText = correctionCount > 0 
+            ? ` <span class="correction-counter text-blue-600 cursor-pointer" data-userid="${p.userId}">(${correctionCount})</span>` 
+            : '';
+        const nameHTML = `${p.name}${correctionText}`; // z.B. "Markus (1)"
+
+        const answer = p.currentAnswers[optionIndex];
+        if (answer === 'yes') yesVotes.push(nameHTML);
+        else if (answer === 'maybe') maybeVotes.push(nameHTML);
+        else if (answer === 'no') noVotes.push(nameHTML);
+    });
+
+    // 4. Tooltip-Text für Desktop (Namen anzeigen bei Mouse-Over)
+    const yesTitle = yesVotes.length > 0 ? `Ja: ${yesVotes.join(', ')}` : '';
+    const maybeTitle = maybeVotes.length > 0 ? `Vielleicht: ${maybeVotes.join(', ')}` : '';
+    const noTitle = noVotes.length > 0 ? `Nein: ${noVotes.join(', ')}` : '';
+    const fullTitle = [yesTitle, maybeTitle, noTitle].filter(Boolean).join(' | '); // z.B. "Ja: Markus | Nein: Jasmin"
+
+    // 5. HTML für die Anzeige
+    const yesHTML = `
+        <div class="flex items-center gap-1 ${yesVotes.length === 0 ? 'opacity-30' : ''}" title="${fullTitle}">
+            <span class="text-green-600 font-bold text-lg">✔</span>
+            <span class="font-bold text-gray-800">${yesVotes.length}</span>
+        </div>`;
+        
+    const maybeHTML = voteData.disableMaybe ? '' : `
+        <div class="flex items-center gap-1 ${maybeVotes.length === 0 ? 'opacity-30' : ''}" title="${fullTitle}">
+            <span class="text-yellow-500 font-bold text-lg">~</span>
+            <span class="font-bold text-gray-800">${maybeVotes.length}</span>
+        </div>`;
+        
+    const noHTML = `
+        <div class="flex items-center gap-1 ${noVotes.length === 0 ? 'opacity-30' : ''}" title="${fullTitle}">
+            <span class="text-red-600 font-bold text-lg">✘</span>
+            <span class="font-bold text-gray-800">${noVotes.length}</span>
+        </div>`;
+
+    if (yesVotes.length === 0 && maybeVotes.length === 0 && noVotes.length === 0) {
+        return `<div class="p-2 bg-gray-50 rounded-lg text-center">
+                    <span class="text-sm text-gray-400">Keine anderen Stimmen</span>
+                </div>`;
+    }
+
+    // "flex gap-3 sm:gap-4" = Abstand zwischen den Zählern
+    return `
+        <div class="flex items-center justify-center sm:justify-start gap-3 sm:gap-4 p-2 bg-gray-50 rounded-lg">
+            ${yesHTML}
+            ${maybeHTML}
+            ${noHTML}
+        </div>
+    `;
 }
 
 
