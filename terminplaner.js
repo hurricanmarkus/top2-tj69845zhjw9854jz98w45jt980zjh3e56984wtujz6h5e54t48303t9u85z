@@ -758,14 +758,12 @@ export function initializeTerminplanerView() {
             // =================================================================
             
             
-            // Dieser Listener ist Teil des neuen Layouts (P4)
             const correctionCounter = e.target.closest('.correction-counter');
             if (correctionCounter) {
                 const userId = correctionCounter.dataset.userid;
                 renderCorrectionHistory(userId);
             }
             
-            // Dieser Listener ist Teil des neuen Layouts (P4)
             const correctionButton = e.target.closest('.vote-correction-btn');
             if (correctionButton) {
                 switchToEditMode();
@@ -792,6 +790,25 @@ export function initializeTerminplanerView() {
             if (acknowledgeBtn) {
                 handleAcknowledgeUpdate();
             }
+            
+            // =================================================================
+            // START: NEUER LISTENER FÜR "DETAILS ANZEIGEN" (Akkordeon)
+            // =================================================================
+            const detailsBtn = e.target.closest('.vote-toggle-details-btn');
+            if (detailsBtn) {
+                const detailsContainer = detailsBtn.closest('.vote-time-row').querySelector('.vote-participant-details');
+                if (detailsContainer) {
+                    detailsContainer.classList.toggle('hidden');
+                    if (detailsContainer.classList.contains('hidden')) {
+                        detailsBtn.innerHTML = 'Details ▼';
+                    } else {
+                        detailsBtn.innerHTML = 'Verbergen ▲';
+                    }
+                }
+            }
+            // =================================================================
+            // ENDE: NEUER LISTENER
+            // =================================================================
         });
         voteView.dataset.listenerAttached = 'true';
     }
@@ -1021,6 +1038,7 @@ export function initializeTerminplanerView() {
         manageTermsList.dataset.listenerAttached = 'true';
     }
 }
+
 
 
 
@@ -1839,8 +1857,8 @@ function renderVoteView(voteData) {
 
 
 /**
- * Baut die Abstimmungs-KARTEN (Layout: Pro Tag, gestapelt)
- * KORREKTUR: Problem 1, 2, 4 - Mobilansicht, Scrollen, Vergleichbarkeit, Namen
+ * Baut die Abstimmungs-KARTEN (Layout: Akkordeon pro Tag)
+ * KORREKTUR: Problem 1, 2, 4 - Kompakt (wenig scrollen) + Details (Namen)
  */
 function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, forceHidden = false) {
     const optionsContainer = document.getElementById('vote-options-container');
@@ -1918,7 +1936,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
     }
     
     // =================================================================
-    // START PROBLEM 1 & 2 KORREKTUR (Layout & Namen)
+    // START PROBLEM 1, 2, 4 KORREKTUR (Akkordeon-Layout)
     // =================================================================
 
     // 2. Fall: Normale Abstimmung -> Baue die "Tages-Karten"
@@ -2027,9 +2045,40 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
             }
 
 
-            // --- B. Baue "Antworten der Anderen"-Sektion ---
-            // Ruft die NEUE Helfer-Funktion (Problem 2) auf, die die Namen anzeigt
-            const othersAnswerHTML = getOthersVoteSummaryHTML(voteData, optionIndex, forceHidden, isStricken);
+            // --- B. Baue "Antworten der Anderen" (Akkordeon) ---
+            
+            // B.1 - Kompakte Ansicht (immer sichtbar)
+            // Ruft die NEUE Helfer-Funktion (nur Zahlen) auf
+            const othersAnswerCompactHTML = getOthersVoteSummaryCompactHTML(voteData, optionIndex, forceHidden, isStricken);
+            
+            // B.2 - Detail-Ansicht (standardmäßig versteckt)
+            // Ruft die ALTE Helfer-Funktion (mit Namen) auf
+            const othersAnswerDetailsHTML = getOthersVoteSummaryHTML(voteData, optionIndex, forceHidden, isStricken);
+
+            
+            // B.3 - Setze das Akkordeon zusammen
+            let othersAnswerHTML = '';
+            if (!forceHidden && !isStricken) { // Zeige Akkordeon nur, wenn es was anzuzeigen gibt
+                othersAnswerHTML = `
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div class="flex-grow">
+                            ${othersAnswerCompactHTML}
+                        </div>
+                        <div class="flex-shrink-0 text-center sm:text-right">
+                            <button class="vote-toggle-details-btn text-sm font-semibold text-blue-600 hover:underline">
+                                Details ▼
+                            </button>
+                        </div>
+                    </div>
+                    <div class="vote-participant-details hidden mt-3">
+                        ${othersAnswerDetailsHTML}
+                    </div>
+                `;
+            } else {
+                // Wenn versteckt oder gestrichen, zeige nur die kompakte Box (ohne "Details"-Knopf)
+                othersAnswerHTML = othersAnswerCompactHTML;
+            }
+
 
             
             // --- C. Setze die "Uhrzeit-ZEILE" zusammen ---
@@ -2061,9 +2110,10 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
 
     optionsContainer.innerHTML = cardsHTML;
     // =================================================================
-    // ENDE PROBLEM 1 & 2 KORREKTUR
+    // ENDE PROBLEM 1, 2, 4 KORREKTUR
     // =================================================================
 }
+
 
 
 
@@ -2108,6 +2158,83 @@ function checkIfAllAnswered() {
         saveBtn.classList.add('hidden'); 
     }
 }
+
+
+
+/**
+ * NEU (Problem 4 Kompromiss): Erstellt die KOMPAKTE Zusammenfassung (nur Zahlen)
+ * (z.B. "✔ 3 | ~ 1 | ✘ 0") für die Standardansicht.
+ */
+function getOthersVoteSummaryCompactHTML(voteData, optionIndex, forceHidden, isStricken) {
+    // 1. Fall: Antworten sind versteckt
+    if (forceHidden) {
+        return `<div class="p-2 bg-gray-50 rounded-lg text-center">
+                    <span class="text-sm text-gray-500 italic">Antworten versteckt</span>
+                </div>`;
+    }
+    
+    // 2. Fall: Termin ist gestrichen
+    if (isStricken) {
+        return `<div class="p-2 bg-gray-100 rounded-lg text-center">
+                    <span class="text-sm font-semibold text-gray-500">- (Gestrichen) -</span>
+                </div>`;
+    }
+
+    // 3. Fall: Antworten zählen
+    let yesCount = 0;
+    let maybeCount = 0;
+    let noCount = 0;
+    let hasVotes = false;
+    
+    voteData.participants.forEach(p => {
+        if (p.userId === currentUser.mode) return; // "Du" nicht hier auflisten
+        
+        const answer = p.currentAnswers[optionIndex];
+        if (answer === 'yes') yesCount++;
+        else if (answer === 'maybe') maybeCount++;
+        else if (answer === 'no') noCount++;
+    });
+
+    if (yesCount > 0 || maybeCount > 0 || noCount > 0) {
+        hasVotes = true;
+    }
+
+    // 4. HTML für die Anzeige
+    const yesHTML = `
+        <div class="flex items-center gap-1 ${yesCount === 0 ? 'opacity-30' : ''}">
+            <span class="text-green-600 font-bold text-lg">✔</span>
+            <span class="font-bold text-gray-800">${yesCount}</span>
+        </div>`;
+        
+    const maybeHTML = voteData.disableMaybe ? '' : `
+        <div class="flex items-center gap-1 ${maybeCount === 0 ? 'opacity-30' : ''}">
+            <span class="text-yellow-500 font-bold text-lg">~</span>
+            <span class="font-bold text-gray-800">${maybeCount}</span>
+        </div>`;
+        
+    const noHTML = `
+        <div class="flex items-center gap-1 ${noCount === 0 ? 'opacity-30' : ''}">
+            <span class="text-red-600 font-bold text-lg">✘</span>
+            <span class="font-bold text-gray-800">${noCount}</span>
+        </div>`;
+
+    if (!hasVotes) {
+        return `<div class="p-2 bg-gray-50 rounded-lg text-center">
+                    <span class="text-sm text-gray-400">Keine anderen Stimmen</span>
+                </div>`;
+    }
+
+    // "flex gap-3 sm:gap-4" = Abstand zwischen den Zählern
+    return `
+        <div class="flex items-center justify-center sm:justify-start gap-3 sm:gap-4 p-2 bg-gray-50 rounded-lg">
+            ${yesHTML}
+            ${maybeHTML}
+            ${noHTML}
+        </div>
+    `;
+}
+
+
 
 
 /**
