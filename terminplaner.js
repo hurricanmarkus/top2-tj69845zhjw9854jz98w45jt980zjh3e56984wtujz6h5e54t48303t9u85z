@@ -31,6 +31,7 @@ let unsubscribeMyCreatedVotes = null;
 let isParticipantChoosingAnonymous = false;
 let unsubscribeCurrentVote = null; // NEU: Spion für die aktuell geöffnete Umfrage
 let publicVotesList = []; // NEU: Cache für Gäste-Token-Suche
+let originalOptionsOnEditLoad = []; // NEU: Für Änderungs-Log (P5)
 
 
 // ----- VERSCHOBENE FUNKTIONEN (UM DEN FEHLER ZU BEHEBEN) -----
@@ -121,33 +122,62 @@ function showFixDateSelection() {
     selectionContainer.classList.remove('hidden');
     listContainer.innerHTML = '<p class="text-sm text-gray-400 text-center">Berechne besten Termin...</p>';
 
+    // =================================================================
+    // START PROBLEM 2 KORREKTUR
+    // =================================================================
+
     // 3. Besten Termin berechnen (Deine Anforderung)
     const suggestion = calculateBestOption(currentVoteData);
 
-    // 4. Liste der Optionen generieren
-    let optionsHTML = '';
-    currentVoteData.options.forEach((option, index) => {
+    // 4. Liste der Optionen zum Sortieren vorbereiten
+    let displayOptions = currentVoteData.options.map((option, index) => {
         // Zähle "Ja"-Stimmen für diese Option
         const yesVotes = currentVoteData.participants.filter(p => p.currentAnswers[index] === 'yes').length;
-        
         const dateObj = new Date(option.date + 'T12:00:00');
         const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
         const timeString = option.timeEnd ? `${option.timeStart} - ${option.timeEnd}` : `${option.timeStart} Uhr`;
-
-        // Prüfen, ob dies die vorgeschlagene Option ist
         const isSuggestion = (suggestion && suggestion.index === index);
-        const suggestionBadge = isSuggestion ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">Vorschlag</span>' : '';
+
+        return {
+            ...option,
+            originalIndex: index,
+            yesVotes: yesVotes,
+            niceDate: niceDate,
+            timeString: timeString,
+            isSuggestion: isSuggestion,
+            sortDate: new Date(`${option.date}T${option.timeStart}`) // Datum-Objekt zum Sortieren
+        };
+    });
+
+    // 5. Optionen sortieren: Vorschlag zuerst, dann nach Datum
+    displayOptions.sort((a, b) => {
+        if (a.isSuggestion && !b.isSuggestion) return -1; // a ist Vorschlag, b nicht -> a zuerst
+        if (!a.isSuggestion && b.isSuggestion) return 1;  // b ist Vorschlag, a nicht -> b zuerst
         
-        // Radio-Button als 'checked' markieren, wenn es der Vorschlag ist
-        const isChecked = isSuggestion ? 'checked' : '';
+        // Beide sind Vorschlag ODER beide sind nicht Vorschlag -> nach Datum sortieren
+        return a.sortDate - b.sortDate;
+    });
+
+    // 6. Liste der Optionen generieren
+    let optionsHTML = '';
+    displayOptions.forEach(option => {
+        const index = option.originalIndex; // Wichtig: den Original-Index für den 'value' verwenden
+        
+        const suggestionBadge = option.isSuggestion ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">Vorschlag</span>' : '';
+        const isChecked = option.isSuggestion ? 'checked' : '';
+        
+        // NEU: CSS-Klassen für Hervorhebung
+        const itemClasses = option.isSuggestion 
+            ? 'flex items-center gap-3 p-3 bg-green-50 rounded-lg border-2 border-green-400 cursor-pointer'
+            : 'flex items-center gap-3 p-3 bg-white rounded-lg border hover:bg-indigo-50 cursor-pointer';
 
         optionsHTML += `
-            <label class="flex items-center gap-3 p-3 bg-white rounded-lg border hover:bg-indigo-50 cursor-pointer">
+            <label class="${itemClasses}">
                 <input type="radio" name="final-date-option" value="${index}" class="h-5 w-5 text-indigo-600 focus:ring-indigo-500" ${isChecked}>
                 <div>
-                    <p class="font-semibold text-gray-800">${niceDate} <span class="font-mono">(${timeString})</span></p>
+                    <p class="font-semibold text-gray-800">${option.niceDate} <span class="font-mono">(${option.timeString})</span></p>
                     <p class="text-sm text-green-600 font-medium">
-                        ${yesVotes} "Ja"-Stimme(n)
+                        ${option.yesVotes} "Ja"-Stimme(n)
                         ${suggestionBadge}
                     </p>
                 </div>
@@ -160,7 +190,11 @@ function showFixDateSelection() {
     } else {
          listContainer.innerHTML = optionsHTML;
     }
+    // =================================================================
+    // ENDE PROBLEM 2 KORREKTUR
+    // =================================================================
 }
+
 
 // NEU: Versteckt die UI zur Auswahl des finalen Termins
 function hideFixDateSelection() {
@@ -502,7 +536,7 @@ export function initializeTerminplanerView() {
         addDateButton.dataset.listenerAttached = 'true';
     }
     const datesContainer = document.getElementById('vote-dates-container');
-    if (datesContainer && !datesContainer.dataset.clickListenerAttached) {
+    if (datesContainer && !datesContainer.clickListenerAttached) {
         datesContainer.addEventListener('click', (e) => {
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
@@ -671,29 +705,67 @@ export function initializeTerminplanerView() {
             }
             
             
-            const clickedButton = e.target.closest('.vote-grid-btn');
+            // =================================================================
+            // START PROBLEM 4 KORREKTUR (Neues Karten-Layout)
+            // =================================================================
+            // Der alte 'vote-grid-btn'-Listener wird angepasst,
+            // um mit den neuen Karten zu funktionieren.
+            const clickedButton = e.target.closest('.vote-card-btn'); // Neuer Klassenname
             if (clickedButton && !clickedButton.disabled) { 
                 const optionIndex = clickedButton.dataset.optionIndex;
                 const answer = clickedButton.dataset.answer;
+                
+                // Setze die Antwort in unserem lokalen Speicher
                 currentParticipantAnswers[optionIndex] = answer;
-                const rowButtons = voteView.querySelectorAll(`.vote-grid-btn[data-option-index="${optionIndex}"]`);
-                rowButtons.forEach(btn => {
-                    btn.classList.remove('bg-green-200', 'bg-yellow-200', 'bg-red-200', 'ring-2', 'ring-indigo-500');
-                    btn.classList.add('bg-opacity-50'); 
-                });
-                if (answer === 'yes') clickedButton.classList.add('bg-green-200', 'ring-2', 'ring-indigo-500');
-                if (answer === 'maybe') clickedButton.classList.add('bg-yellow-200', 'ring-2', 'ring-indigo-500');
-                if (answer === 'no') clickedButton.classList.add('bg-red-200', 'ring-2', 'ring-indigo-500');
-                clickedButton.classList.remove('bg-opacity-50'); 
+                
+                // Finde alle Knöpfe für DIESE KARTE
+                const buttonGroup = clickedButton.closest('.vote-card-button-group');
+                if (buttonGroup) {
+                    const allButtonsInGroup = buttonGroup.querySelectorAll('.vote-card-btn');
+                    
+                    // Setze alle Knöpfe in dieser Gruppe zurück
+                    allButtonsInGroup.forEach(btn => {
+                        btn.classList.remove('bg-green-600', 'text-white', 'ring-2', 'ring-offset-2', 'ring-green-600');
+                        btn.classList.remove('bg-yellow-500', 'text-white', 'ring-2', 'ring-offset-2', 'ring-yellow-500');
+                        btn.classList.remove('bg-red-600', 'text-white', 'ring-2', 'ring-offset-2', 'ring-red-600');
+                        
+                        // Standard-Aussehen (nicht ausgewählt)
+                        if (btn.dataset.answer === 'yes') btn.classList.add('bg-green-100', 'text-green-800', 'hover:bg-green-200');
+                        if (btn.dataset.answer === 'maybe') btn.classList.add('bg-yellow-100', 'text-yellow-800', 'hover:bg-yellow-200');
+                        if (btn.dataset.answer === 'no') btn.classList.add('bg-red-100', 'text-red-800', 'hover:bg-red-200');
+                    });
+                }
+                
+                // Hebe den geklickten Knopf hervor
+                if (answer === 'yes') {
+                    clickedButton.classList.remove('bg-green-100', 'text-green-800', 'hover:bg-green-200');
+                    clickedButton.classList.add('bg-green-600', 'text-white', 'ring-2', 'ring-offset-2', 'ring-green-600');
+                }
+                if (answer === 'maybe') {
+                    clickedButton.classList.remove('bg-yellow-100', 'text-yellow-800', 'hover:bg-yellow-200');
+                    clickedButton.classList.add('bg-yellow-500', 'text-white', 'ring-2', 'ring-offset-2', 'ring-yellow-500');
+                }
+                if (answer === 'no') {
+                    clickedButton.classList.remove('bg-red-100', 'text-red-800', 'hover:bg-red-200');
+                    clickedButton.classList.add('bg-red-600', 'text-white', 'ring-2', 'ring-offset-2', 'ring-red-600');
+                }
+
+                // Prüfe, ob der "Speichern"-Knopf angezeigt werden soll
                 checkIfAllAnswered();
             }
+            // =================================================================
+            // ENDE PROBLEM 4 KORREKTUR
+            // =================================================================
             
+            
+            // Dieser Listener ist Teil des neuen Layouts (P4)
             const correctionCounter = e.target.closest('.correction-counter');
             if (correctionCounter) {
                 const userId = correctionCounter.dataset.userid;
                 renderCorrectionHistory(userId);
             }
             
+            // Dieser Listener ist Teil des neuen Layouts (P4)
             const correctionButton = e.target.closest('.vote-correction-btn');
             if (correctionButton) {
                 switchToEditMode();
@@ -781,17 +853,16 @@ export function initializeTerminplanerView() {
     const cancelEditingBtn = document.getElementById('cancel-vote-editing-btn');
     if (cancelEditingBtn && !cancelEditingBtn.dataset.listenerAttached) {
         // =================================================================
-        // BEGINN DER ÄNDERUNG (Live-Spion starten)
+        // BEGINN PROBLEM 1 KORREKTUR (Live-Spion neu starten)
         // =================================================================
         cancelEditingBtn.addEventListener('click', () => {
             // Wir stoppen den Spion NICHT, sondern gehen zurück zur 'vote'-Ansicht
             // und rufen 'joinVoteById' auf. 'joinVoteById' startet
             // den Spion 'listenToCurrentVote' automatisch neu.
-            showView('vote');
             joinVoteById(currentVoteData.id); 
         });
         // =================================================================
-        // ENDE DER ÄNDERUNG
+        // ENDE PROBLEM 1 KORREKTUR
         // =================================================================
         cancelEditingBtn.dataset.listenerAttached = 'true';
     }
@@ -1433,11 +1504,27 @@ function renderVoteView(voteData) {
     const updateSubtitle = document.getElementById('poll-update-subtitle');
     const detailsBtn = document.getElementById('show-poll-history-btn-main');
     const ackBtn = document.getElementById('acknowledge-update-btn');
+    
+    // =================================================================
+    // START PROBLEM 5 KORREKTUR (Blinken)
+    // =================================================================
+    const optionsContainer = document.getElementById('vote-options-container'); // NEU
+    // =================================================================
+    // ENDE PROBLEM 5 KORREKTUR
+    // =================================================================
+
 
     // Setze Stile zurück
     if (descContainer) descContainer.classList.remove('blink-border-blue');
     if (locContainer) locContainer.classList.remove('blink-border-blue');
     if (titleEl) titleEl.classList.remove('blink-border-blue'); 
+    // =================================================================
+    // START PROBLEM 5 KORREKTUR (Blinken)
+    // =================================================================
+    if (optionsContainer) optionsContainer.classList.remove('blink-border-blue'); // NEU
+    // =================================================================
+    // ENDE PROBLEM 5 KORREKTUR
+    // =================================================================
     
     if (updateBox) {
         updateBox.classList.add('hidden'); 
@@ -1501,20 +1588,41 @@ function renderVoteView(voteData) {
             
             // --- KORREKTUR HIER ---
             // Wir zeigen den Knopf nur, wenn der Benutzer KEIN Gast ist.
+            // (Problem 5: Quittieren für Gäste ist von Problem 3 abhängig und nicht lösbar)
             if (currentUser.mode !== GUEST_MODE) {
                 if (ackBtn) ackBtn.classList.remove('hidden');
             }
             // --- ENDE KORREKTUR ---
             
-            // Blink-Logik (unverändert)
+            // Blink-Logik
             const lastUpdate = voteData.pollHistory[voteData.pollHistory.length - 1];
             if (lastUpdate && lastUpdate.changes) {
                 const changedTitle = lastUpdate.changes.some(c => c.includes('Titel'));
                 const changedDesc = lastUpdate.changes.some(c => c.includes('Beschreibung'));
                 const changedLoc = lastUpdate.changes.some(c => c.includes('Ort'));
+                
+                // =================================================================
+                // START PROBLEM 5 KORREKTUR (Blinken)
+                // =================================================================
+                // Prüfe auf "Termin", "GESTRICHEN" oder "WIEDERHERGESTELLT"
+                const changedTerms = lastUpdate.changes.some(c => 
+                    c.includes('Termin') || c.includes('GESTRICHEN') || c.includes('WIEDERHERGESTELLT')
+                );
+                // =================================================================
+                // ENDE PROBLEM 5 KORREKTUR
+                // =================================================================
+
                 if (changedTitle && titleEl) titleEl.classList.add('blink-border-blue');
                 if (changedDesc && descContainer) descContainer.classList.add('blink-border-blue');
                 if (changedLoc && locContainer) locContainer.classList.add('blink-border-blue');
+
+                // =================================================================
+                // START PROBLEM 5 KORREKTUR (Blinken)
+                // =================================================================
+                if (changedTerms && optionsContainer) optionsContainer.classList.add('blink-border-blue'); // NEU
+                // =================================================================
+                // ENDE PROBLEM 5 KORREKTUR
+                // =================================================================
             }
         }
     }
@@ -1731,17 +1839,27 @@ function renderVoteView(voteData) {
 
 
 /**
- * Baut die Abstimmungs-Tabelle neu auf und füllt sie mit allen Antworten
- * KORREKTUR: Akzeptiert jetzt 'isClosed', um Korrekturen zu sperren
+ * Baut die Abstimmungs-Tabelle (NEU: KARTEN-LAYOUT) neu auf
+ * KORREKTUR: Problem 4 - Mobile Ansicht
  */
-// ERSETZE diese Funktion in terminplaner.js
-// NEUE SIGNATUR: Akzeptiert 'forceHidden' als viertes Argument
 function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, forceHidden = false) {
     const optionsContainer = document.getElementById('vote-options-container');
     if (!optionsContainer) {
         console.error("Fehler: 'vote-options-container' nicht gefunden!");
         return;
     }
+    
+    // =================================================================
+    // START PROBLEM 4 KORREKTUR
+    // =================================================================
+    // Wir entfernen die "overflow-x-auto" Klasse, die für die Tabelle war,
+    // und fügen Klassen für ein Karten-Layout hinzu.
+    optionsContainer.classList.remove('overflow-x-auto', 'rounded-xl', 'shadow-lg', 'mb-6');
+    optionsContainer.classList.add('space-y-4', 'mb-6');
+    // =================================================================
+    // ENDE PROBLEM 4 KORREKTUR
+    // =================================================================
+
 
     // 1. Fall: Termin ist fixiert
     if (voteData.fixedOptionIndex != null) {
@@ -1789,7 +1907,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
             `;
 
             optionsContainer.innerHTML = `
-                <div class="p-6 bg-green-100 border-l-4 border-green-500 rounded-lg text-center">
+                <div class="p-6 bg-green-100 border-l-4 border-green-500 rounded-lg text-center shadow-lg">
                     <h3 class="text-xl font-bold text-green-800">Termin fixiert!</h3>
                     <p class="text-lg text-gray-700 mt-2">
                         Die Umfrage ist geschlossen. Der finale Termin ist:
@@ -1807,8 +1925,13 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
         }
     }
     
-    // 2. Fall: Normale Abstimmung -> Baue die Tabelle
+    // =================================================================
+    // START PROBLEM 4 KORREKTUR (Neues Karten-Layout)
+    // =================================================================
+
+    // 2. Fall: Normale Abstimmung -> Baue die Karten
     
+    // Sortiere Optionen nach Datum
     const optionsByDate = {};
     voteData.options.forEach((option, index) => {
         if (!optionsByDate[option.date]) {
@@ -1817,82 +1940,32 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
         optionsByDate[option.date].push({ ...option, originalIndex: index });
     });
 
-    let tableHTML = '<table class="w-full border-collapse text-sm text-left bg-white">';
-    
-    // 3. Kopfzeile der Tabelle
-    tableHTML += '<thead><tr class="bg-gray-50">';
-    
-    tableHTML += '<th class="p-3 border-b sticky left-0 bg-gray-50 z-10 whitespace-nowrap border-r border-gray-300">Termin</th>';
-    
-    voteData.participants.forEach(p => {
-        if (p.userId === currentUser.mode) return; 
-        const correctionCount = p.correctionCount || 0;
-        const correctionText = correctionCount > 0 ? `(${correctionCount} Korrekturen)` : '';
-        tableHTML += `<th class="p-3 border-b text-center w-24">
-                        ${p.name}
-                        <br>
-                        <span class="text-xs font-normal text-gray-500 correction-counter cursor-pointer" data-userid="${p.userId}">${correctionText}</span>
-                      </th>`;
-    });
+    let cardsHTML = '';
     
     const youParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
+    let correctionButtonHTML = '';
     
-    let youHeaderHTML = '<span class="font-bold text-indigo-600">Du</span>'; 
-    
-
-    if (currentUser.mode !== GUEST_MODE) { 
-        if (youParticipant) {
-            const correctionCount = youParticipant.correctionCount || 0;
-            const correctionText = correctionCount > 0 ? `(<span class="correction-counter cursor-pointer" data-userid="${currentUser.mode}">${correctionCount} Korrekturen</span>)` : '';
-            
-            // --- NEUE LOGIK: Korrektur-Knopf steuern ---
-            let editButtonHtml = '';
-            // Prüfe, ob Umfrage offen ist
-            if (!isClosed) { 
-                // Prüfe, ob Korrekturen verboten sind
-                const correctionsForbidden = (voteData.hideAnswers && voteData.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur');
-                
-                if (correctionsForbidden) {
-                    editButtonHtml = '<br><span class="text-xs font-semibold text-gray-500">(Korrektur deaktiviert)</span>';
-                } else {
-                    editButtonHtml = `<br><button class="vote-correction-btn text-xs font-semibold text-blue-600 hover:underline">Auswahl bearbeiten</button>`;
-                }
-            }
-            // --- ENDE NEUE LOGIK ---
-
-            youHeaderHTML = `
-                <span class="font-bold text-indigo-600">Du</span>
-                <br>
-                <span class="text-xs font-normal text-gray-500">${correctionText}</span>
-                ${editButtonHtml}
-            `;
+    // Prüfe, ob "Korrektur"-Knopf angezeigt werden soll
+    if (youParticipant && !isEditable && !isClosed) {
+        // Prüfe, ob Korrekturen verboten sind
+        const correctionsForbidden = (voteData.hideAnswers && voteData.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur');
+        
+        if (correctionsForbidden) {
+            correctionButtonHTML = '<span class="text-xs font-semibold text-gray-500">(Korrektur für diese Umfrage deaktiviert)</span>';
         } else {
-            youHeaderHTML = isClosed 
-                ? '<span class="font-bold text-gray-500">Du (Geschlossen)</span>' 
-                : '<span class="font-bold text-indigo-600">Du (Klicke unten)</span>';
+            correctionButtonHTML = `<button class="vote-correction-btn text-sm font-semibold text-blue-600 hover:underline">Antworten bearbeiten</button>`;
         }
     }
-
-
-    tableHTML += `<th class="p-3 border-b text-center w-48 sticky right-0 bg-gray-50 z-10 border-l border-gray-300">
-                    ${youHeaderHTML}
-                  </th>`;
-                  
-    tableHTML += '</tr></thead>';
-
-    // 4. Zeilen der Tabelle
-    tableHTML += '<tbody>';
     
+
     for (const date in optionsByDate) {
         const dateObj = new Date(date + 'T12:00:00'); 
-        const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+        const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit' });
 
-        tableHTML += `
-            <tr class="bg-gray-100">
-                <td class="p-2 font-bold sticky left-0 bg-gray-100 z-10 whitespace-nowrap border-r border-gray-300" colspan="${voteData.participants.length + 2}">${niceDate}</td>
-            </tr>
-        `;
+        // Datums-Titel
+        cardsHTML += `<h3 class="text-xl font-bold text-gray-800 sticky top-0 bg-gray-100 z-10 p-2 -mx-2">${niceDate}</h3>`;
 
+        // Iteriere durch alle Zeiten für dieses Datum
         optionsByDate[date].forEach(option => {
             const optionIndex = option.originalIndex;
             const timeString = option.timeEnd ? 
@@ -1900,106 +1973,136 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
                 `${option.timeStart} Uhr`;
             
             const isStricken = option.isStricken === true;
-            const rowClasses = isStricken ? 'bg-gray-100 opacity-60' : '';
-            const cellClasses = isStricken ? 'line-through text-gray-500' : 'font-mono';
+            const cardClasses = isStricken ? 'bg-gray-100 opacity-60' : 'bg-white shadow-lg';
+            const timeClasses = isStricken ? 'line-through text-gray-500' : 'text-indigo-700';
             
-            tableHTML += `
-                <tr class="vote-option-row ${rowClasses}" data-option-index="${optionIndex}">
-                    <td class="p-3 border-b ${cellClasses} sticky left-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10 whitespace-nowrap border-r border-gray-300">
-                        ${timeString} ${isStricken ? '(Gestrichen)' : ''}
-                    </td>
-            `;
-
-            voteData.participants.forEach(p => {
-                if (p.userId === currentUser.mode) return; 
-                const answer = p.currentAnswers[optionIndex]; 
-                let answerIcon = '';
-                
-                // --- NEUE LOGIK: Antworten verstecken ---
-                if (forceHidden) {
-                    answerIcon = '<span class="text-gray-400 italic text-xs">Versteckt</span>';
-                }
-                // --- ENDE NEUE LOGIK ---
-                else if (isStricken) {
-                    answerIcon = '<span class="text-gray-400 font-bold">-</span>';
-                }
-                else if (answer === 'yes') answerIcon = '<span class="text-green-500 font-bold text-xl">✔</span>';
-                else if (answer === 'no') answerIcon = '<span class="text-red-500 font-bold text-xl">✘</span>';
-                else if (answer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold text-xl">~</span>';
-                
-                tableHTML += `<td class="p-3 border-b text-center">${answerIcon}</td>`;
-            });
-            
+            // --- A. Baue "Deine Antwort"-Sektion ---
+            let yourAnswerHTML = '';
             const currentAnswer = currentParticipantAnswers[optionIndex];
-            
+
             if (isStricken) {
-                if (isEditable) {
-                     tableHTML += `
-                        <td class="p-2 border-b sticky right-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10 border-l border-gray-300">
-                            <div class="flex justify-center gap-1">
-                                <button class="p-2 rounded-lg" disabled title="Gestrichen">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-gray-400"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" /></svg>
-                                </button>
-                                <button class="p-2 rounded-lg ${voteData.disableMaybe ? 'hidden' : ''}" disabled title="Gestrichen">
-                                     <span class="text-gray-400 font-bold text-xl w-5 h-5 flex items-center justify-center">~</span>
-                                </button>
-                                <button class="p-2 rounded-lg" disabled title="Gestrichen">
-                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-gray-400"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
-                                </button>
-                            </div>
-                        </td>
-                    `;
-                } else {
-                     tableHTML += `
-                        <td class="p-3 border-b text-center sticky right-0 ${isStricken ? 'bg-gray-100' : 'bg-white'} z-10 border-l border-gray-300">
-                            <span class="text-gray-400 font-bold">-</span>
-                        </td>
-                    `;
-                }
-            }
-            else if (isEditable) {
-                // MODUS: BEARBEITBAR (Knöpfe)
-                const yesSelected = currentAnswer === 'yes' ? 'bg-green-200 ring-2 ring-indigo-500' : 'hover:bg-green-100 bg-opacity-50';
-                const maybeSelected = currentAnswer === 'maybe' ? 'bg-yellow-200 ring-2 ring-indigo-500' : 'hover:bg-yellow-100 bg-opacity-50';
-                const noSelected = currentAnswer === 'no' ? 'bg-red-200 ring-2 ring-indigo-500' : 'hover:bg-red-100 bg-opacity-50';
+                yourAnswerHTML = `<p class="text-center font-bold text-red-600 p-4 bg-red-50 rounded-lg">TERMIN GESTRICHEN</p>`;
+            } else if (isEditable) {
+                // Modus: Abstimm-Knöpfe
+                const yesSelected = currentAnswer === 'yes' ? 'bg-green-600 text-white ring-2 ring-offset-2 ring-green-600' : 'bg-green-100 text-green-800 hover:bg-green-200';
+                const maybeSelected = currentAnswer === 'maybe' ? 'bg-yellow-500 text-white ring-2 ring-offset-2 ring-yellow-500' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200';
+                const noSelected = currentAnswer === 'no' ? 'bg-red-600 text-white ring-2 ring-offset-2 ring-red-600' : 'bg-red-100 text-red-800 hover:bg-red-200';
                 const maybeHidden = voteData.disableMaybe ? 'hidden' : '';
 
-                tableHTML += `
-                    <td class="p-2 border-b sticky right-0 bg-white z-10 border-l border-gray-300">
-                        <div class="flex justify-center gap-1">
-                            <button class="vote-grid-btn p-2 rounded-lg ${yesSelected} transition-colors" data-option-index="${optionIndex}" data-answer="yes" title="Ja">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-green-600"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" /></svg>
-                            </button>
-                            <button class="vote-grid-btn p-2 rounded-lg ${maybeSelected} ${maybeHidden} transition-colors" data-option-index="${optionIndex}" data-answer="maybe" title="Vielleicht">
-                                 <span class="text-yellow-600 font-bold text-xl w-5 h-5 flex items-center justify-center">~</span>
-                            </button>
-                            <button class="vote-grid-btn p-2 rounded-lg ${noSelected} transition-colors" data-option-index="${optionIndex}" data-answer="no" title="Nein">
-                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-red-600"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
-                            </button>
-                        </div>
-                    </td>
+                yourAnswerHTML = `
+                    <div class="vote-card-button-group grid grid-cols-3 gap-2 ${maybeHidden ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}">
+                        <button class="vote-card-btn p-3 rounded-lg font-bold transition-all ${yesSelected}" data-option-index="${optionIndex}" data-answer="yes">
+                            ✔ Ja
+                        </button>
+                        <button class="vote-card-btn p-3 rounded-lg font-bold transition-all ${maybeSelected} ${maybeHidden}" data-option-index="${optionIndex}" data-answer="maybe">
+                            ~ Vielleicht
+                        </button>
+                        <button class="vote-card-btn p-3 rounded-lg font-bold transition-all ${noSelected}" data-option-index="${optionIndex}" data-answer="no">
+                            ✘ Nein
+                        </button>
+                    </div>
                 `;
-            } else {
-                // MODUS: SCHREIBGESCHÜTZT (Symbole)
+            } else if (youParticipant) {
+                // Modus: Gespeicherte Antwort anzeigen
                 let answerIcon = '';
-                if (currentAnswer === 'yes') answerIcon = '<span class="text-green-500 font-bold text-xl">✔</span>';
-                if (currentAnswer === 'no') answerIcon = '<span class="text-red-500 font-bold text-xl">✘</span>';
-                if (currentAnswer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold text-xl">~</span>';
+                if (currentAnswer === 'yes') answerIcon = '<span class="text-green-600 font-bold text-xl">✔ Du hast mit JA gestimmt</span>';
+                else if (currentAnswer === 'no') answerIcon = '<span class="text-red-600 font-bold text-xl">✘ Du hast mit NEIN gestimmt</span>';
+                else if (currentAnswer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold text-xl">~ Du hast mit VIELLEICHT gestimmt</span>';
+                else answerIcon = '<span class="text-gray-500 font-bold text-xl">? Du hast nicht geantwortet</span>';
                 
-                tableHTML += `
-                    <td class="p-3 border-b text-center sticky right-0 bg-white z-10 border-l border-gray-300">
+                yourAnswerHTML = `
+                    <div class="p-3 bg-indigo-50 rounded-lg text-center">
                         ${answerIcon}
-                    </td>
+                        <div class="mt-2">
+                            ${correctionButtonHTML}
+                        </div>
+                    </div>
                 `;
+            } else if (isClosed) {
+                yourAnswerHTML = `<p class="text-center font-semibold text-gray-500 p-3 bg-gray-100 rounded-lg">Abstimmung geschlossen (nicht teilgenommen)</p>`;
+            } else {
+                 yourAnswerHTML = `<p class="text-center font-semibold text-gray-500 p-3 bg-gray-100 rounded-lg">Bitte oben Namen eintragen, um abzustimmen</p>`;
             }
-            
-            tableHTML += '</tr>';
+
+
+            // --- B. Baue "Antworten der Anderen"-Sektion ---
+            let othersAnswerHTML = '';
+            if (forceHidden) {
+                othersAnswerHTML = `<p class="text-sm text-center text-gray-500 italic p-2 bg-gray-50 rounded-lg">Antworten sind bis zur Stimmabgabe/Abschluss versteckt.</p>`;
+            } else if (isStricken) {
+                othersAnswerHTML = ''; // Bei gestrichenen Terminen keine Antworten anzeigen
+            } else {
+                const yesVotes = [];
+                const maybeVotes = [];
+                const noVotes = [];
+                
+                voteData.participants.forEach(p => {
+                    if (p.userId === currentUser.mode) return; // "Du" nicht hier auflisten
+                    
+                    // Name mit Korrektur-Counter
+                    const correctionCount = p.correctionCount || 0;
+                    const correctionText = correctionCount > 0 
+                        ? ` <span class="correction-counter text-blue-600 cursor-pointer" data-userid="${p.userId}">(${correctionCount})</span>` 
+                        : '';
+                    const nameHTML = `${p.name}${correctionText}`;
+
+                    const answer = p.currentAnswers[optionIndex];
+                    if (answer === 'yes') yesVotes.push(nameHTML);
+                    else if (answer === 'maybe') maybeVotes.push(nameHTML);
+                    else if (answer === 'no') noVotes.push(nameHTML);
+                });
+
+                const createListHTML = (icon, names, colorClass) => {
+                    if (names.length === 0) return '';
+                    return `
+                        <div class="flex items-start gap-2">
+                            <span class="${colorClass} font-bold text-lg">${icon}</span>
+                            <div class="text-sm">
+                                <span class="font-semibold ${colorClass}">${names.length} Stimme(n):</span>
+                                <span class="text-gray-700">${names.join(', ')}</span>
+                            </div>
+                        </div>
+                    `;
+                };
+                
+                const yesHTML = createListHTML('✔', yesVotes, 'text-green-600');
+                const maybeHTML = voteData.disableMaybe ? '' : createListHTML('~', maybeVotes, 'text-yellow-600');
+                const noHTML = createListHTML('✘', noVotes, 'text-red-600');
+                
+                if (yesVotes.length === 0 && maybeVotes.length === 0 && noVotes.length === 0) {
+                     othersAnswerHTML = `<p class="text-sm text-center text-gray-400 p-2">Bisher keine anderen Stimmen.</p>`;
+                } else {
+                     othersAnswerHTML = `
+                        <div class="space-y-2 pt-3 border-t">
+                            ${yesHTML}
+                            ${maybeHTML}
+                            ${noHTML}
+                        </div>
+                    `;
+                }
+            }
+
+            // --- C. Setze die Karte zusammen ---
+            cardsHTML += `
+                <div class="vote-option-row card rounded-xl border ${cardClasses}" data-option-index="${optionIndex}">
+                    <div class="p-4">
+                        <h4 class="text-xl font-bold ${timeClasses}">${timeString}</h4>
+                    </div>
+                    <div class="p-4 space-y-3">
+                        ${yourAnswerHTML}
+                        ${othersAnswerHTML}
+                    </div>
+                </div>
+            `;
         });
     }
-    
-    tableHTML += '</tbody></table>';
-    optionsContainer.innerHTML = tableHTML;
+
+    optionsContainer.innerHTML = cardsHTML;
+    // =================================================================
+    // ENDE PROBLEM 4 KORREKTUR
+    // =================================================================
 }
+
 
 
 
@@ -2536,6 +2639,21 @@ function renderCorrectionHistory(userId) {
 function renderEditView(voteData) {
     document.getElementById('edit-poll-title').textContent = `"${voteData.title}" bearbeiten`;
     
+    // =================================================================
+    // START PROBLEM 5 KORREKTUR (Änderungs-Log)
+    // =================================================================
+    // Wir speichern eine Kopie der Optionen, WIE SIE BEIM LADEN WAREN.
+    // JSON.parse/stringify ist der einfachste Weg für eine tiefe Kopie ohne Timestamps.
+    try {
+        originalOptionsOnEditLoad = JSON.parse(JSON.stringify(voteData.options || []));
+    } catch (e) {
+        console.error("Fehler beim Klonen der Optionen für Edit-Log:", e);
+        originalOptionsOnEditLoad = [];
+    }
+    // =================================================================
+    // ENDE PROBLEM 5 KORREKTUR
+    // =================================================================
+    
     const formatTimestampToInput = (timestamp) => {
         if (!timestamp) return '';
         let dateObject = null;
@@ -2700,6 +2818,7 @@ function renderEditView(voteData) {
 
 
 
+
 async function saveVoteEdits() {
     const saveBtn = document.getElementById('vote-save-changes-btn');
     setButtonLoading(saveBtn, true);
@@ -2759,9 +2878,8 @@ async function saveVoteEdits() {
         const combinedIds = new Set([...existingParticipantIds, ...newAssignedIds]);
         updateData.participantIds = Array.from(combinedIds);
         updateData.participants = currentVoteData.participants;
-        updateData.options = currentVoteData.options; 
-
-        // 5. Neue Termine auslesen und anhängen (unverändert)
+        
+        // 5. Neue Termine auslesen und anhängen
         const newOptions = [];
         const dateGroups = document.querySelectorAll('#vote-dates-container-edit [data-date-group-id]');
         dateGroups.forEach(group => {
@@ -2783,10 +2901,40 @@ async function saveVoteEdits() {
                 });
             }
         });
+        
+        // Wir setzen die Optionen zusammen (alte + neue)
+        updateData.options = [...currentVoteData.options, ...newOptions];
+        
         if (newOptions.length > 0) {
-            updateData.options = [...currentVoteData.options, ...newOptions];
             changes.push(`${newOptions.length} neue(r) Termin(e) hinzugefügt.`);
         }
+        
+        // =================================================================
+        // START PROBLEM 5 KORREKTUR (Änderungs-Log)
+        // =================================================================
+        // Vergleiche die 'updateData.options' mit den 'originalOptionsOnEditLoad'
+        if (originalOptionsOnEditLoad.length > 0 && updateData.options) {
+            
+            // Prüfe nur die Länge der *Original*-Liste, um neue nicht fälschlich zu prüfen
+            for (let index = 0; index < originalOptionsOnEditLoad.length; index++) {
+                const originalOpt = originalOptionsOnEditLoad[index];
+                const updatedOpt = updateData.options[index];
+                
+                if (originalOpt && updatedOpt) { // Stelle sicher, dass beide existieren
+                    const optionText = updatedOpt.timeEnd ? `${updatedOpt.date} ${updatedOpt.timeStart}-${updatedOpt.timeEnd}` : `${updatedOpt.date} ${updatedOpt.timeStart}`;
+                    
+                    if (updatedOpt.isStricken === true && originalOpt.isStricken !== true) {
+                        changes.push(`Termin GESTRICHEN: ${optionText}`);
+                    } else if (updatedOpt.isStricken !== true && originalOpt.isStricken === true) {
+                        changes.push(`Termin WIEDERHERGESTELLT: ${optionText}`);
+                    }
+                }
+            }
+        }
+        // =================================================================
+        // ENDE PROBLEM 5 KORREKTUR
+        // =================================================================
+
         
         // 6. Log-Eintrag erstellen (unverändert)
         if (changes.length > 0) {
@@ -2809,7 +2957,7 @@ async function saveVoteEdits() {
         alertUser("Änderungen gespeichert!", "success");
         
         // =================================================================
-        // BEGINN DER KORREKTUR (Behebt den "Stale Data"-Bug)
+        // BEGINN PROBLEM 1 KORREKTUR (Behebt den "Stale Data"-Bug)
         // =================================================================
         
         // Wir rufen NICHT mehr `showView('vote')` auf.
@@ -2823,11 +2971,8 @@ async function saveVoteEdits() {
         joinVoteById(currentVoteData.id);
         
         // =================================================================
-        // ENDE DER KORREKTUR
+        // ENDE PROBLEM 1 KORREKTUR
         // =================================================================
-
-        // Die alten, entfernten Kommentare und der `setTimeout`
-        // (die in deiner Datei standen) sind jetzt korrekt entfernt.
 
     } catch (error) {
         console.error("Fehler beim Speichern der Änderungen:", error);
@@ -2836,6 +2981,7 @@ async function saveVoteEdits() {
         setButtonLoading(saveBtn, false);
     }
 }
+
 
 
 
