@@ -14,7 +14,7 @@ import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists,
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
 import { renderUserKeyList } from './admin_benutzersteuerung.js'; 
 // NEU: Wir importieren die Start-Funktion aus deiner neuen Datei
-import { initializeTerminplanerView, listenForPublicVotes, joinVoteById, joinVoteByToken } from './terminplaner.js';
+import { initializeTerminplanerView, listenForPublicVotes, joinVoteById, joinVoteByToken, joinVoteAsGuest } from './terminplaner.js';
 // // ENDE-ZIKA //
 
 
@@ -345,36 +345,54 @@ async function initializeFirebase() {
             }
             
             // =================================================================
-            // URL-PRÜFUNG (NACHDEM die Authentifizierung fertig ist)
+            // URL-PRÜFUNG (Problem 3 Anpassung)
             // =================================================================
             try {
                 const urlParams = new URLSearchParams(window.location.search);
                 const voteId = urlParams.get('vote_id');
                 const voteToken = urlParams.get('vote_token');
-                
-                // --- KORREKTUR FÜR PROBLEM 1 ---
-                // Wir lesen einen neuen Parameter namens 'view' aus.
                 const view = urlParams.get('view'); 
                 
-                // --- KORREKTUR FÜR PROBLEM 1 ---
-                // Wir prüfen jetzt auch auf 'view'.
-                const isUrlClean = !voteId && !voteToken && !view;
+                // =================================================================
+                // START NEU (P3): Gast-Link-Parameter
+                // =================================================================
+                const guestId = urlParams.get('guest_id');
+                // =================================================================
+                // ENDE NEU (P3)
+                // =================================================================
+
+                // Prüfe, ob die URL "sauber" ist
+                const isUrlClean = !voteId && !voteToken && !view && !guestId;
 
                 if (!isUrlClean) {
-                    if (voteId) {
+                    
+                    // =================================================================
+                    // START NEU (P3): Priorisierte Prüfung für Gast-Links
+                    // =================================================================
+                    // Fall 1: Wichtigster Fall - Ein Gast-per-Link
+                    if (voteId && guestId) {
+                        console.log("[P3] URL-Parameter 'vote_id' UND 'guest_id' gefunden, starte joinVoteAsGuest...");
+                        await joinVoteAsGuest(voteId, guestId); 
+                        // (cleanUrlParams() wird von joinVoteAsGuest intern aufgerufen)
+                    
+                    // Fall 2: Normaler Beitritt per ID
+                    } else if (voteId) {
+                    // =================================================================
+                    // ENDE NEU (P3)
+                    // =================================================================
+                    
                         console.log("URL-Parameter 'vote_id' gefunden, starte joinVoteById...");
                         await joinVoteById(voteId); 
+                    
+                    // Fall 3: Normaler Beitritt per Token
                     } else if (voteToken) {
                         console.log("URL-Parameter 'vote_token' gefunden, starte joinVoteByToken...");
                         await joinVoteByToken(voteToken); 
                     
-                    // --- KORREKTUR FÜR PROBLEM 1 ---
-                    // Wenn 'view' gleich 'terminplaner' ist...
+                    // Fall 4: Navigation zur Ansicht
                     } else if (view === 'terminplaner') {
                         console.log("URL-Parameter 'view=terminplaner' gefunden, navigiere...");
-                        // ...navigieren wir zur Terminplaner-Ansicht...
                         navigate('terminplaner');
-                        // ...und rufen unsere neue Funktion auf, um die URL zu säubern.
                         cleanUrlParams();
                     }
                 }
@@ -391,6 +409,7 @@ async function initializeFirebase() {
         alertUser("Firebase konnte nicht initialisiert werden.", "error");
     }
 }
+
 
 
 

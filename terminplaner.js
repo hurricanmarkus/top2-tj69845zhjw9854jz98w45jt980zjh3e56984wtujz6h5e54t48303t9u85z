@@ -32,6 +32,11 @@ let isParticipantChoosingAnonymous = false;
 let unsubscribeCurrentVote = null; // NEU: Spion für die aktuell geöffnete Umfrage
 let publicVotesList = []; // NEU: Cache für Gäste-Token-Suche
 let originalOptionsOnEditLoad = []; // NEU: Für Änderungs-Log (P5)
+let tempPreRegisteredGuests = []; // NEU (P3): Speichert Gäste-Namen beim Erstellen
+let currentGuestInfo = null; // NEU (P3): Speichert, wenn sich ein Gast per Link anmeldet
+
+
+
 
 
 // ----- VERSCHOBENE FUNKTIONEN (UM DEN FEHLER ZU BEHEBEN) -----
@@ -492,6 +497,17 @@ export function initializeTerminplanerView() {
             });
             groupPollButton.dataset.listenerAttached = 'true';
         }
+        
+        // =========================================================
+        // START KORREKTUR (BUG 6)
+        // =========================================================
+        // Die folgenden Zeilen werden entfernt, da die IDs nicht mehr existieren
+        // document.getElementById('select-vote-type-event')?.addEventListener('click', () => alertUser("Eventplaner ist noch nicht verfügbar.", "error"));
+        // document.getElementById('select-vote-type-1on1')?.addEventListener('click', () => alertUser("1:1 ist noch nicht verfügbar.", "error"));
+        // document.getElementById('select-vote-type-booking')?.addEventListener('click', () => alertUser("Buchungsseite ist noch nicht verfügbar.", "error"));
+        // =========================================================
+        // ENDE KORREKTUR
+        // =========================================================
     }
 
     // ----- Spione für den Erstellungs-Assistenten -----
@@ -623,20 +639,63 @@ export function initializeTerminplanerView() {
         accessBtnEdit.dataset.listenerAttached = 'true';
     }
 
+    // =================================================================
+    // START NEU (P3): Listener für "Gast hinzufügen" (Erstellen-Ansicht)
+    // =================================================================
+    const addGuestBtn = document.getElementById('vote-add-guest-btn-admin');
+    if (addGuestBtn && !addGuestBtn.dataset.listenerAttached) {
+        addGuestBtn.addEventListener('click', () => {
+            const input = document.getElementById('vote-guest-name-input-admin');
+            const name = input.value.trim();
+            if (name) {
+                tempPreRegisteredGuests.push({ id: generateGuestId(), name: name });
+                renderPreRegisteredGuestList('vote-guest-list-admin', false);
+                input.value = '';
+            } else {
+                alertUser("Bitte einen Namen für den Gast eingeben.", "error");
+            }
+        });
+        addGuestBtn.dataset.listenerAttached = 'true';
+    }
+    
+    // Delegierter Listener für "Gast löschen" (Erstellen-Ansicht)
+    const guestListContainer = document.getElementById('vote-guest-list-admin');
+    if (guestListContainer && !guestListContainer.dataset.listenerAttached) {
+        guestListContainer.addEventListener('click', (e) => {
+            const deleteBtn = e.target.closest('.delete-guest-btn');
+            if (deleteBtn) {
+                const guestId = deleteBtn.dataset.guestId;
+                tempPreRegisteredGuests = tempPreRegisteredGuests.filter(g => g.id !== guestId);
+                renderPreRegisteredGuestList('vote-guest-list-admin', false);
+            }
+        });
+        guestListContainer.dataset.listenerAttached = 'true';
+    }
+    // =================================================================
+    // ENDE NEU (P3)
+    // =================================================================
+
 
     // ----- Spione für die Abstimmungs-Seite -----
     
     const cancelVoteButton = document.getElementById('cancel-vote-participation-btn');
     if (cancelVoteButton && !cancelVoteButton.dataset.listenerAttached) {
+        // =================================================================
+        // BEGINN DER ÄNDERUNG (Live-Spion stoppen)
+        // =================================================================
         cancelVoteButton.addEventListener('click', () => {
-            stopCurrentVoteListener(); // Stoppt den Live-Spion
+            stopCurrentVoteListener(); // <-- NEU: Stoppt den Live-Spion
             showView('main'); 
             currentVoteData = null; 
         });
+        // =================================================================
+        // ENDE DER ÄNDERUNG
+        // =================================================================
         cancelVoteButton.dataset.listenerAttached = 'true';
     }
 
     const voteView = document.getElementById('terminplaner-vote-view');
+    // ... (Inhalt des Listeners bleibt gleich) ...
     if (voteView && !voteView.dataset.listenerAttached) {
         voteView.addEventListener('click', (e) => {
             
@@ -686,8 +745,11 @@ export function initializeTerminplanerView() {
             }
             
             
-            // Klick auf Abstimm-Knopf
-            const clickedButton = e.target.closest('.vote-card-btn');
+            // =================================================================
+            // START KORREKTUR (Problem 4 - Hybrid-Layout)
+            // =================================================================
+            // Wir hören jetzt auf '.vote-card-btn' statt '.vote-grid-btn'
+            const clickedButton = e.target.closest('.vote-card-btn'); 
             if (clickedButton && !clickedButton.disabled) { 
                 const optionIndex = clickedButton.dataset.optionIndex;
                 const answer = clickedButton.dataset.answer;
@@ -730,15 +792,17 @@ export function initializeTerminplanerView() {
                 // Prüfe, ob der "Speichern"-Knopf angezeigt werden soll
                 checkIfAllAnswered();
             }
+            // =================================================================
+            // ENDE KORREKTUR (Problem 4)
+            // =================================================================
             
-            // Klick auf Korrektur-Zähler (in der Tabelle)
+            
             const correctionCounter = e.target.closest('.correction-counter');
             if (correctionCounter) {
                 const userId = correctionCounter.dataset.userid;
                 renderCorrectionHistory(userId);
             }
             
-            // Klick auf "Bearbeiten"-Knopf (neben "Deine Antwort")
             const correctionButton = e.target.closest('.vote-correction-btn');
             if (correctionButton) {
                 switchToEditMode();
@@ -765,14 +829,6 @@ export function initializeTerminplanerView() {
             if (acknowledgeBtn) {
                 handleAcknowledgeUpdate();
             }
-            
-            // =================================================================
-            // START: LISTENER FÜR "DETAILS ANZEIGEN" (Akkordeon)
-            // =================================================================
-            // DIESER LISTENER WURDE ENTFERNT, DA WIR DAS AKKORDEON NICHT MEHR NUTZEN
-            // =================================================================
-            // ENDE: LISTENER
-            // =================================================================
         });
         voteView.dataset.listenerAttached = 'true';
     }
@@ -799,12 +855,20 @@ export function initializeTerminplanerView() {
     if (editTokenInput && !editTokenInput.dataset.listenerAttached) {
         editTokenInput.addEventListener('input', (e) => formatTokenInput(e, 'edit-token-input-inline'));
         
+        // =========================================================
+        // START BUG 4 FIX (Teil 2)
+        // =========================================================
         editTokenInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
+                // Verhindere das Standard-Enter-Verhalten
                 e.preventDefault();
+                // Rufe die Funktion auf, die auch der "OK"-Knopf aufruft
                 checkInlineEditToken();
             }
         });
+        // =========================================================
+        // END BUG 4 FIX (Teil 2)
+        // =========================================================
         
         editTokenInput.dataset.listenerAttached = 'true';
     }
@@ -825,9 +889,18 @@ export function initializeTerminplanerView() {
 
     const cancelEditingBtn = document.getElementById('cancel-vote-editing-btn');
     if (cancelEditingBtn && !cancelEditingBtn.dataset.listenerAttached) {
+        // =================================================================
+        // BEGINN DER ÄNDERUNG (Live-Spion starten)
+        // =================================================================
         cancelEditingBtn.addEventListener('click', () => {
+            // Wir stoppen den Spion NICHT, sondern gehen zurück zur 'vote'-Ansicht
+            // und rufen 'joinVoteById' auf. 'joinVoteById' startet
+            // den Spion 'listenToCurrentVote' automatisch neu.
             joinVoteById(currentVoteData.id); 
         });
+        // =================================================================
+        // ENDE DER ÄNDERUNG
+        // =================================================================
         cancelEditingBtn.dataset.listenerAttached = 'true';
     }
     
@@ -982,6 +1055,51 @@ export function initializeTerminplanerView() {
         });
         manageTermsList.dataset.listenerAttached = 'true';
     }
+
+    // =================================================================
+    // START NEU (P3): Listener für "Gast hinzufügen" (Bearbeiten-Ansicht)
+    // =================================================================
+    const addGuestBtnEdit = document.getElementById('vote-add-guest-btn-admin-edit');
+    if (addGuestBtnEdit && !addGuestBtnEdit.dataset.listenerAttached) {
+        addGuestBtnEdit.addEventListener('click', () => {
+            const input = document.getElementById('vote-guest-name-input-admin-edit');
+            const name = input.value.trim();
+            if (name) {
+                tempPreRegisteredGuests.push({ id: generateGuestId(), name: name });
+                // Wichtig: 'true' übergeben, damit die "Link kopieren"-Knöpfe angezeigt werden!
+                renderPreRegisteredGuestList('vote-guest-list-admin-edit', true); 
+                input.value = '';
+            } else {
+                alertUser("Bitte einen Namen für den Gast eingeben.", "error");
+            }
+        });
+        addGuestBtnEdit.dataset.listenerAttached = 'true';
+    }
+    
+    // Delegierter Listener für "Gast löschen" & "Link kopieren" (Bearbeiten-Ansicht)
+    const guestListContainerEdit = document.getElementById('vote-guest-list-admin-edit');
+    if (guestListContainerEdit && !guestListContainerEdit.dataset.listenerAttached) {
+        guestListContainerEdit.addEventListener('click', (e) => {
+            // "Löschen" Knopf
+            const deleteBtn = e.target.closest('.delete-guest-btn');
+            if (deleteBtn) {
+                const guestId = deleteBtn.dataset.guestId;
+                tempPreRegisteredGuests = tempPreRegisteredGuests.filter(g => g.id !== guestId);
+                renderPreRegisteredGuestList('vote-guest-list-admin-edit', true);
+            }
+            
+            // "Link kopieren" Knopf
+            const copyBtn = e.target.closest('.copy-guest-link-btn');
+            if (copyBtn) {
+                const url = copyBtn.dataset.url;
+                copyToClipboard(url, "Einladungs-Link für Gast kopiert!");
+            }
+        });
+        guestListContainerEdit.dataset.listenerAttached = 'true';
+    }
+    // =================================================================
+    // ENDE NEU (P3)
+    // =================================================================
 }
 
 
@@ -1436,9 +1554,22 @@ function renderVoteView(voteData) {
     const isPollClosed = isFixed || isClosedByTime || isManuallyClosed; // Gesamter "Geschlossen"-Status
     const isParticipationBlocked = isPollClosed || isNotStarted; // Darf man überhaupt abstimmen?
 
-    const youParticipant = (currentUser.mode !== GUEST_MODE) ? 
-        voteData.participants.find(p => p.userId === currentUser.mode) : 
-        null;
+    // =================================================================
+    // START NEU (P3): Prüfen, ob der Gast bereits abgestimmt hat
+    // =================================================================
+    let youParticipant = null;
+    
+    if (currentGuestInfo && currentGuestInfo.voteId === voteData.id) {
+        // Fall 1: Wir sind ein Gast-per-Link
+        youParticipant = voteData.participants.find(p => p.userId === currentGuestInfo.id);
+    } else if (currentUser.mode !== GUEST_MODE) {
+        // Fall 2: Wir sind ein registrierter Benutzer
+        youParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
+    }
+    // Fall 3: Wir sind ein normaler Gast (youParticipant bleibt null)
+    // =================================================================
+    // ENDE NEU (P3)
+    // =================================================================
 
     // ----- 2. Titel & Ersteller (Sicher) -----
     const titleEl = document.getElementById('vote-poll-title');
@@ -1468,27 +1599,13 @@ function renderVoteView(voteData) {
     const updateSubtitle = document.getElementById('poll-update-subtitle');
     const detailsBtn = document.getElementById('show-poll-history-btn-main');
     const ackBtn = document.getElementById('acknowledge-update-btn');
-    
-    // =================================================================
-    // START PROBLEM 5 KORREKTUR (Blinken)
-    // =================================================================
-    const optionsContainer = document.getElementById('vote-options-container'); // NEU
-    // =================================================================
-    // ENDE PROBLEM 5 KORREKTUR
-    // =================================================================
-
+    const optionsContainer = document.getElementById('vote-options-container'); 
 
     // Setze Stile zurück
     if (descContainer) descContainer.classList.remove('blink-border-blue');
     if (locContainer) locContainer.classList.remove('blink-border-blue');
     if (titleEl) titleEl.classList.remove('blink-border-blue'); 
-    // =================================================================
-    // START PROBLEM 5 KORREKTUR (Blinken)
-    // =================================================================
-    if (optionsContainer) optionsContainer.classList.remove('blink-border-blue'); // NEU
-    // =================================================================
-    // ENDE PROBLEM 5 KORREKTUR
-    // =================================================================
+    if (optionsContainer) optionsContainer.classList.remove('blink-border-blue');
     
     if (updateBox) {
         updateBox.classList.add('hidden'); 
@@ -1499,14 +1616,9 @@ function renderVoteView(voteData) {
         detailsBtn.classList.remove('btn-gray-acknowledged');
         detailsBtn.classList.add('bg-blue-600', 'hover:bg-blue-700'); 
     }
-    
-    // --- KORREKTUR HIER ---
-    // Der "Quittieren"-Knopf wird standardmäßig versteckt.
     if (ackBtn) {
         ackBtn.classList.add('hidden');
     }
-    // --- ENDE KORREKTUR ---
-    
     if (updateSubtitle) updateSubtitle.classList.remove('hidden');
 
     let hasUpdate = false;
@@ -1519,10 +1631,21 @@ function renderVoteView(voteData) {
         }
     }
     
+    // =================================================================
+    // START NEU (P3): Quittieren für Gast-per-Link
+    // =================================================================
     let userHasAcknowledged = false;
-    if (hasUpdate && currentUser.mode !== GUEST_MODE) {
+    let ackCheckId = null; // ID, nach der wir im 'acknowledgedBy' Array suchen
+    
+    if (currentUser.mode !== GUEST_MODE) {
+        ackCheckId = currentUser.mode; // Registrierter User
+    } else if (currentGuestInfo && currentGuestInfo.voteId === voteData.id) {
+        ackCheckId = currentGuestInfo.id; // Gast-per-Link
+    }
+    
+    if (hasUpdate && ackCheckId) { // Nur prüfen, wenn wir einen User/Gast haben
         const ackArray = voteData.acknowledgedBy || [];
-        const userAckEntry = ackArray.find(a => a.userId === currentUser.mode);
+        const userAckEntry = ackArray.find(a => a.userId === ackCheckId);
         if (userAckEntry) {
             const userAckTimestamp = getSafeDate(userAckEntry.timestamp);
             if (userAckTimestamp && lastUpdateTimestamp && userAckTimestamp.getTime() >= lastUpdateTimestamp.getTime()) {
@@ -1530,6 +1653,9 @@ function renderVoteView(voteData) {
             }
         }
     }
+    // =================================================================
+    // ENDE NEU (P3)
+    // =================================================================
 
     if (hasUpdate) {
         if (updateBox) updateBox.classList.remove('hidden');
@@ -1544,49 +1670,35 @@ function renderVoteView(voteData) {
                 detailsBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
                 detailsBtn.classList.add('btn-gray-acknowledged'); 
             }
-            // ackBtn bleibt versteckt (wurde oben schon gesetzt)
             if (updateSubtitle) updateSubtitle.classList.add('hidden'); 
 
         } else {
             // Benutzer hat NOCH NICHT quittiert
             
-            // --- KORREKTUR HIER ---
-            // Wir zeigen den Knopf nur, wenn der Benutzer KEIN Gast ist.
-            // (Problem 5: Quittieren für Gäste ist von Problem 3 abhängig und nicht lösbar)
-            if (currentUser.mode !== GUEST_MODE) {
+            // =================================================================
+            // START NEU (P3): Quittier-Knopf für alle (außer anonyme Gäste)
+            // =================================================================
+            if (ackCheckId) { // Zeige Knopf, wenn wir registriert ODER Gast-per-Link sind
                 if (ackBtn) ackBtn.classList.remove('hidden');
             }
-            // --- ENDE KORREKTUR ---
+            // =================================================================
+            // ENDE NEU (P3)
+            // =================================================================
             
-            // Blink-Logik
+            // Blink-Logik (unverändert)
             const lastUpdate = voteData.pollHistory[voteData.pollHistory.length - 1];
             if (lastUpdate && lastUpdate.changes) {
                 const changedTitle = lastUpdate.changes.some(c => c.includes('Titel'));
                 const changedDesc = lastUpdate.changes.some(c => c.includes('Beschreibung'));
                 const changedLoc = lastUpdate.changes.some(c => c.includes('Ort'));
-                
-                // =================================================================
-                // START PROBLEM 5 KORREKTUR (Blinken)
-                // =================================================================
-                // Prüfe auf "Termin", "GESTRICHEN" oder "WIEDERHERGESTELLT"
                 const changedTerms = lastUpdate.changes.some(c => 
                     c.includes('Termin') || c.includes('GESTRICHEN') || c.includes('WIEDERHERGESTELLT')
                 );
-                // =================================================================
-                // ENDE PROBLEM 5 KORREKTUR
-                // =================================================================
-
+                
                 if (changedTitle && titleEl) titleEl.classList.add('blink-border-blue');
                 if (changedDesc && descContainer) descContainer.classList.add('blink-border-blue');
                 if (changedLoc && locContainer) locContainer.classList.add('blink-border-blue');
-
-                // =================================================================
-                // START PROBLEM 5 KORREKTUR (Blinken)
-                // =================================================================
-                if (changedTerms && optionsContainer) optionsContainer.classList.add('blink-border-blue'); // NEU
-                // =================================================================
-                // ENDE PROBLEM 5 KORREKTUR
-                // =================================================================
+                if (changedTerms && optionsContainer) optionsContainer.classList.add('blink-border-blue');
             }
         }
     }
@@ -1610,6 +1722,8 @@ function renderVoteView(voteData) {
 
 
     // ----- 5. Gültigkeits-Boxen (Sicher) -----
+    // (Dieser Teil bleibt unverändert)
+    // ...
     const validityContainer = document.getElementById('vote-poll-validity-container');
     const validityEl = document.getElementById('vote-poll-validity');
     const warningBox = document.getElementById('vote-validity-warning-box');
@@ -1618,7 +1732,6 @@ function renderVoteView(voteData) {
         if (!dateObj) return '';
         return dateObj.toLocaleString('de-DE', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}) + ' Uhr';
     };
-    
     if (isPollClosed && !isFixed) { 
         if (validityEl) validityEl.textContent = "TEILNAHME GESCHLOSSEN";
         if (validityContainer) {
@@ -1643,7 +1756,6 @@ function renderVoteView(voteData) {
             validityContainer.classList.add('text-gray-600');
         }
     }
-    
     if (isParticipationBlocked && !isFixed) { 
         if (isNotStarted) {
             if (warningText) warningText.textContent = `Diese Umfrage hat noch nicht begonnen. Sie startet am ${formatVoteDate(startTime)}.`;
@@ -1656,8 +1768,6 @@ function renderVoteView(voteData) {
     } else {
         if (warningBox) {
             warningBox.classList.add('hidden'); 
-        } else {
-            // console.warn("renderVoteView: Element 'vote-validity-warning-box' nicht gefunden.");
         }
     }
 
@@ -1691,13 +1801,34 @@ function renderVoteView(voteData) {
         // Nichts tun
     } 
     else {
-        if (youParticipant) {
+        // =================================================================
+        // START NEU (P3): Logik für Gast-per-Link
+        // =================================================================
+        if (currentGuestInfo && currentGuestInfo.voteId === voteData.id) {
+            // Fall 1: Wir sind ein GAST-PER-LINK
+            if (statusContainer) statusContainer.classList.remove('hidden');
+            if (userContainer) userContainer.classList.remove('hidden'); // Zeige den "User"-Container
+            
+            if (youParticipant) {
+                // Gast-per-Link hat bereits abgestimmt
+                if (nameDisplay) nameDisplay.textContent = youParticipant.name;
+                isVoteGridEditable = false;
+            } else {
+                // Gast-per-Link stimmt zum ersten Mal ab
+                if (nameDisplay) nameDisplay.textContent = currentGuestInfo.name;
+                isVoteGridEditable = true; 
+            }
+            // (Buttons für Anonym/Namen ändern bleiben versteckt)
+            
+        } else if (youParticipant) {
+            // Fall 2: Wir sind ein REGISTRIERTER USER und haben abgestimmt
             if (statusContainer) statusContainer.classList.remove('hidden');
             if (userContainer) userContainer.classList.remove('hidden');
             if (nameDisplay) nameDisplay.textContent = youParticipant.name;
             isVoteGridEditable = false; 
         
         } else {
+            // Fall 3: Wir haben noch nicht abgestimmt (als User oder normaler Gast)
             isVoteGridEditable = true; 
             if (statusContainer) statusContainer.classList.remove('hidden');
             
@@ -1726,6 +1857,9 @@ function renderVoteView(voteData) {
                 }
             }
         }
+        // =================================================================
+        // ENDE NEU (P3)
+        // =================================================================
     }
     
     // ----- 7. Antworten laden (Sicher) -----
@@ -1746,40 +1880,35 @@ function renderVoteView(voteData) {
         editButton.classList.remove('hidden'); 
     }
     
-    // ----- 9. NEUE LOGIK: "Antworten verstecken" & Infobox -----
+    // ----- 9. "Antworten verstecken" & Infobox -----
+    // (Dieser Teil bleibt unverändert)
+    // ...
     let shouldShowHidden = false;
     let infoText = "";
     const hiddenInfoBox = document.getElementById('vote-hidden-answers-infobox');
     const hiddenInfoBoxText = document.getElementById('vote-hidden-answers-infobox-text');
-
     if (voteData.hideAnswers && !isPollClosed) {
-        // Die Funktion ist aktiv UND die Umfrage ist noch nicht zu
-        
         if (voteData.hideAnswersMode === 'bis_umfragenabschluss') {
             shouldShowHidden = true;
             infoText = "Die Antworten aller Teilnehmer sind bis zum Abschluss der Umfrage versteckt.";
         } 
         else if (voteData.hideAnswersMode === 'bis_stimmabgabe_mit_korrektur') {
-            if (!youParticipant) { // Wenn du noch NICHT abgestimmt hast
+            if (!youParticipant) {
                 shouldShowHidden = true;
                 infoText = "Die Antworten werden sichtbar, sobald du deine Stimme abgegeben hast. Du kannst deine Stimme danach korrigieren.";
             } else {
-                // Du hast schon abgestimmt, also ist shouldShowHidden = false
                 infoText = "Du hast abgestimmt. Die Antworten sind jetzt für dich sichtbar.";
             }
         }
         else if (voteData.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur') {
-             if (!youParticipant) { // Wenn du noch NICHT abgestimmt hast
+             if (!youParticipant) {
                 shouldShowHidden = true;
                 infoText = "Die Antworten werden sichtbar, sobald du deine Stimme abgegeben hast. Achtung: Korrekturen sind danach nicht mehr möglich.";
             } else {
-                // Du hast schon abgestimmt, also ist shouldShowHidden = false
                 infoText = "Du hast abgestimmt. Die Antworten sind jetzt für dich sichtbar. Korrekturen sind nicht möglich.";
             }
         }
     }
-    
-    // Zeige die gelbe Infobox, wenn ein Text dafür generiert wurde
     if (infoText && hiddenInfoBox && hiddenInfoBoxText) {
         hiddenInfoBoxText.textContent = infoText;
         hiddenInfoBox.classList.remove('hidden');
@@ -1788,13 +1917,13 @@ function renderVoteView(voteData) {
     }
 
     // ----- 10. Tabelle rendern -----
-    // Wir übergeben die neue Variable 'shouldShowHidden' an die Funktion
     updatePollTableAnswers(voteData, isVoteGridEditable, isPollClosed, shouldShowHidden); 
     
     if (!isParticipationBlocked) {
         checkIfAllAnswered();
     }
 }
+
 
 
 
@@ -2148,8 +2277,16 @@ async function saveVoteParticipation() {
     let participantName = '';
     let participantId = '';
     
-    // Logik für Namensfindung
-    if (isParticipantChoosingAnonymous) {
+    // =================================================================
+    // START NEU (P3): Namen und ID für Gast-per-Link ermitteln
+    // =================================================================
+    if (currentGuestInfo && currentGuestInfo.voteId === currentVoteData.id) {
+        // Fall 1: Wir sind ein GAST-PER-LINK
+        participantName = currentGuestInfo.name;
+        participantId = currentGuestInfo.id;
+        
+    } else if (isParticipantChoosingAnonymous) {
+        // Fall 2: Wir sind ein REGISTRIERTER USER oder NORMALER GAST, der ANONYM wählt
         participantName = "Anonym";
         if (currentUser.mode !== GUEST_MODE) {
             participantId = currentUser.mode; 
@@ -2157,6 +2294,7 @@ async function saveVoteParticipation() {
             participantId = `guest_anon_${Date.now()}`; 
         }
     } else if (currentVoteData.isAnonymous && currentVoteData.anonymousMode === 'erzwingen') {
+        // Fall 3: Anonymität ist ERZWUNGEN
         participantName = "Anonym";
         if (currentUser.mode !== GUEST_MODE) {
             participantId = currentUser.mode; 
@@ -2164,6 +2302,7 @@ async function saveVoteParticipation() {
             participantId = `guest_anon_${Date.now()}`;
         }
     } else {
+        // Fall 4: Normaler User oder normaler Gast, der seinen NAMEN eingibt
         if (currentUser.mode !== GUEST_MODE) {
             participantName = document.getElementById('vote-participant-name').textContent; 
             participantId = currentUser.mode;
@@ -2175,6 +2314,9 @@ async function saveVoteParticipation() {
             }
         }
     }
+    // =================================================================
+    // ENDE NEU (P3)
+    // =================================================================
 
     // Zähle aktive Optionen
     const activeOptions = currentVoteData.options.filter(opt => !opt.isStricken);
@@ -2194,18 +2336,26 @@ async function saveVoteParticipation() {
         
         // --- NEUE PRÜFUNG: Korrektur verboten? ---
         if (existingParticipantIndex > -1 && currentVoteData.hideAnswers && currentVoteData.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur') {
-            // Der Benutzer existiert bereits (d.h. er korrigiert) UND der Modus verbietet Korrekturen
             throw new Error("Speichern fehlgeschlagen: Diese Umfrage erlaubt keine Korrekturen nach der ersten Stimmabgabe.");
         }
-        // --- ENDE NEUE PRÜFUNG ---
 
         const newParticipantsArray = [...currentVoteData.participants]; 
         let correctionCount = 0;
         let answerHistory = [];
         
-        const nameToSave = (isParticipantChoosingAnonymous || (currentVoteData.isAnonymous && currentVoteData.anonymousMode === 'erzwingen')) 
-            ? "Anonym" 
-            : participantName;
+        // =================================================================
+        // START NEU (P3): Korrekten Namen für die Speicherung ermitteln
+        // =================================================================
+        let nameToSave = participantName; // Standard ist der Name, den wir oben ermittelt haben
+        
+        // Überschreibe den Namen, wenn Anonymität erzwungen/gewählt wurde
+        if (isParticipantChoosingAnonymous || (currentVoteData.isAnonymous && currentVoteData.anonymousMode === 'erzwingen')) {
+            // (Gast-per-Link kann NICHT anonym sein, daher ist diese Prüfung sicher)
+            nameToSave = "Anonym";
+        }
+        // =================================================================
+        // ENDE NEU (P3)
+        // =================================================================
         
         if (existingParticipantIndex > -1) {
             // A. Teilnehmer AKTUALISIEREN
@@ -2291,7 +2441,7 @@ async function saveVoteParticipation() {
 
     } catch (error) {
         console.error("Fehler beim Speichern der Abstimmung:", error);
-        alertUser("Fehler beim Speichern: " + error.message, "error_long"); // Längere Anzeige für die Fehlermeldung
+        alertUser("Fehler beim Speichern: " + error.message, "error_long");
     } finally {
         setButtonLoading(saveBtn, false);
     }
@@ -2299,11 +2449,12 @@ async function saveVoteParticipation() {
 
 
 
+
 // ----- SPEICHER-FUNKTION (Erstellung) -----
 async function saveGroupPoll() {
     const saveBtn = document.getElementById('vote-save-group-poll-btn');
-    saveBtn.disabled = true;
-    saveBtn.textContent = 'Wird gespeichert...';
+    setButtonLoading(saveBtn, true); // setButtonLoading statt manueller DOM-Manipulation
+    
     try {
         const title = document.getElementById('vote-title').value.trim();
         const description = document.getElementById('vote-description').value.trim();
@@ -2324,9 +2475,8 @@ async function saveGroupPoll() {
         const hideAnswers = document.getElementById('vote-setting-hide-answers').checked;
         const hideAnswersMode = document.getElementById('vote-setting-hide-answers-mode').value;
         
-        // --- NEU: "Sichtbarkeit" lesen ---
-        const accessPolicy = document.getElementById('vote-setting-access-mode').value; // 'registered' or 'guests'
-        // --- ENDE NEU ---
+        // "Sichtbarkeit"
+        const accessPolicy = document.getElementById('vote-setting-access-mode').value;
         
         const options = [];
         const dateGroups = document.querySelectorAll('#vote-dates-container [data-date-group-id]');
@@ -2376,9 +2526,7 @@ async function saveGroupPoll() {
             hideAnswers: hideAnswers,
             hideAnswersMode: hideAnswers ? hideAnswersMode : null,
             
-            // --- NEU: "Sichtbarkeit" speichern ---
             accessPolicy: accessPolicy,
-            // --- ENDE NEU ---
             
             createdBy: currentUser.mode, 
             createdByName: creatorNameToSave, 
@@ -2389,6 +2537,14 @@ async function saveGroupPoll() {
             participantIds: [...tempAssignedUserIds],
             assignedUserIds: [...tempAssignedUserIds],
             
+            // =================================================================
+            // START NEU (P3): Gäste-Liste speichern
+            // =================================================================
+            preRegisteredGuests: [...tempPreRegisteredGuests],
+            // =================================================================
+            // ENDE NEU (P3)
+            // =================================================================
+            
             fixedOptionIndex: null,
             pollHistory: [],
             isManuallyClosed: false 
@@ -2396,24 +2552,17 @@ async function saveGroupPoll() {
         console.log("Speichere Umfrage in Firebase...", voteData);
         const docRef = await addDoc(votesCollectionRef, voteData);
         
-        // =========================================================
-        // HIER IST DIE ÄNDERUNG:
-        // Wir entfernen die alte 'alertUser'-Zeile...
-        // alertUser(`Umfrage erstellt! Teilnahme-Token: ${token} (Zum Bearbeiten: ${editToken})`, "success");
-        
-        // ...und rufen stattdessen unser neues Modal auf:
         showVoteCreatedModal(token, editToken);
-        // =========================================================
         
         showView('main'); 
     } catch (error) {
         console.error("Fehler beim Speichern der Umfrage:", error);
         alertUser(error.message, "error");
     } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Umfrage erstellen und Link erhalten';
+        setButtonLoading(saveBtn, false); // Spinner stoppen
     }
 }
+
 
 
 
@@ -2633,20 +2782,12 @@ function renderCorrectionHistory(userId) {
 function renderEditView(voteData) {
     document.getElementById('edit-poll-title').textContent = `"${voteData.title}" bearbeiten`;
     
-    // =================================================================
-    // START PROBLEM 5 KORREKTUR (Änderungs-Log)
-    // =================================================================
-    // Wir speichern eine Kopie der Optionen, WIE SIE BEIM LADEN WAREN.
-    // JSON.parse/stringify ist der einfachste Weg für eine tiefe Kopie ohne Timestamps.
     try {
         originalOptionsOnEditLoad = JSON.parse(JSON.stringify(voteData.options || []));
     } catch (e) {
         console.error("Fehler beim Klonen der Optionen für Edit-Log:", e);
         originalOptionsOnEditLoad = [];
     }
-    // =================================================================
-    // ENDE PROBLEM 5 KORREKTUR
-    // =================================================================
     
     const formatTimestampToInput = (timestamp) => {
         if (!timestamp) return '';
@@ -2692,11 +2833,10 @@ function renderEditView(voteData) {
     document.getElementById('vote-setting-public-edit').checked = voteData.isPublic;
     document.getElementById('vote-setting-disable-maybe-edit').checked = voteData.disableMaybe;
     
-    // Anonym-Einstellungen
+    // (Anonym-Einstellungen laden...)
     const anonymousCheckboxEdit = document.getElementById('vote-setting-anonymous-edit');
     const anonymousWrapperEdit = document.getElementById('vote-setting-anonymous-mode-wrapper-edit');
     const anonymousModeEdit = document.getElementById('vote-setting-anonymous-mode-edit');
-
     anonymousCheckboxEdit.checked = voteData.isAnonymous;
     if (voteData.isAnonymous) {
         anonymousWrapperEdit.classList.remove('hidden');
@@ -2706,11 +2846,10 @@ function renderEditView(voteData) {
         anonymousModeEdit.value = 'erzwingen'; 
     }
     
-    // "Antworten verstecken" laden
+    // ("Antworten verstecken" laden...)
     const hideAnswersCheckboxEdit = document.getElementById('vote-setting-hide-answers-edit');
     const hideAnswersWrapperEdit = document.getElementById('vote-setting-hide-answers-mode-wrapper-edit');
     const hideAnswersModeEdit = document.getElementById('vote-setting-hide-answers-mode-edit');
-
     hideAnswersCheckboxEdit.checked = voteData.hideAnswers;
     if (voteData.hideAnswers) {
         hideAnswersWrapperEdit.classList.remove('hidden');
@@ -2720,11 +2859,10 @@ function renderEditView(voteData) {
         hideAnswersModeEdit.value = 'bis_umfragenabschluss'; 
     }
     
-    // --- "Sichtbarkeit" laden ---
+    // ("Sichtbarkeit" laden...)
     const accessModeEdit = document.getElementById('vote-setting-access-mode-edit');
     const accessTextEdit = document.getElementById('vote-setting-access-text-edit');
-    const currentAccessPolicy = voteData.accessPolicy || 'registered'; // Fallback für alte Umfragen
-    
+    const currentAccessPolicy = voteData.accessPolicy || 'registered';
     accessModeEdit.value = currentAccessPolicy;
     if (currentAccessPolicy === 'guests') {
         accessTextEdit.innerHTML = 'Diese Umfrage können <span class="text-green-600 font-bold">ALLE sehen</span>. (auch nicht angemeldete Personen/Gäste)';
@@ -2750,12 +2888,22 @@ function renderEditView(voteData) {
         }
     }
     
-    // 5. "UPDATE"-Log-Button
+    // =================================================================
+    // START NEU (P3): Gäste-Liste laden
+    // =================================================================
+    // Wir kopieren die Gäste aus den Daten in unsere temporäre Variable
+    tempPreRegisteredGuests = [...(voteData.preRegisteredGuests || [])];
+    // Wir rendern die Liste (isEditMode = true, damit Links angezeigt werden)
+    renderPreRegisteredGuestList('vote-guest-list-admin-edit', true);
+    // =================================================================
+    // ENDE NEU (P3)
+    // =================================================================
     
     // 6. Gefahrenzone-Knöpfe
+    // (Dieser Teil bleibt unverändert)
+    // ...
     const fixBtn = document.getElementById('vote-fix-date-btn');
     const manualCloseBtn = document.getElementById('vote-toggle-manual-close-btn');
-    
     if (!fixBtn || !manualCloseBtn) {
         console.error("Fehler: Knöpfe der Gefahrenzone nicht gefunden!");
         return;
@@ -2804,11 +2952,11 @@ function renderEditView(voteData) {
     }
     addNewDateGroupEdit(true); // Fügt die erste leere Gruppe hinzu
     
-    // KORREKTUR 2: Button initial verstecken und Validierung aufrufen
     const addDateButtonEdit = document.getElementById('vote-add-date-btn-edit');
     if (addDateButtonEdit) addDateButtonEdit.classList.add('hidden');
     validateLastDateGroupEdit();
 }
+
 
 
 
@@ -2821,7 +2969,7 @@ async function saveVoteEdits() {
         const updateData = {};
         const changes = []; // Für das Logbuch
         
-        // 1. Details lesen (unverändert)
+        // 1. Details lesen
         const newTitle = document.getElementById('vote-title-edit').value.trim();
         const newDesc = document.getElementById('vote-description-edit').value.trim();
         const newLoc = document.getElementById('vote-location-edit').value.trim();
@@ -2838,34 +2986,31 @@ async function saveVoteEdits() {
             changes.push(`Ort geändert.`);
         }
 
-        // 2. Gültigkeit lesen (unverändert)
+        // 2. Gültigkeit lesen
         const newStartTime = document.getElementById('vote-start-time-edit').value;
         const newEndTime = document.getElementById('vote-end-time-edit').value;
         const isUnlimited = document.getElementById('vote-end-time-unlimited-edit').checked;
         updateData.startTime = newStartTime ? new Date(newStartTime) : null;
         updateData.endTime = !isUnlimited && newEndTime ? new Date(newEndTime) : null;
         
-        // 3. Einstellungen lesen (unverändert)
+        // 3. Einstellungen lesen
         updateData.isPublic = document.getElementById('vote-setting-public-edit').checked;
         updateData.disableMaybe = document.getElementById('vote-setting-disable-maybe-edit').checked;
-        
         updateData.isAnonymous = document.getElementById('vote-setting-anonymous-edit').checked;
         if (updateData.isAnonymous) {
             updateData.anonymousMode = document.getElementById('vote-setting-anonymous-mode-edit').value;
         } else {
             updateData.anonymousMode = null;
         }
-
         updateData.hideAnswers = document.getElementById('vote-setting-hide-answers-edit').checked;
         if (updateData.hideAnswers) {
             updateData.hideAnswersMode = document.getElementById('vote-setting-hide-answers-mode-edit').value;
         } else {
             updateData.hideAnswersMode = null;
         }
-        
         updateData.accessPolicy = document.getElementById('vote-setting-access-mode-edit').value;
 
-        // 4. Teilnehmer-Listen speichern (unverändert)
+        // 4. Teilnehmer-Listen speichern
         const newAssignedIds = currentVoteData.assignedUserIds || [];
         updateData.assignedUserIds = newAssignedIds;
         const existingParticipantIds = currentVoteData.participants.map(p => p.userId);
@@ -2873,6 +3018,14 @@ async function saveVoteEdits() {
         updateData.participantIds = Array.from(combinedIds);
         updateData.participants = currentVoteData.participants;
         
+        // =================================================================
+        // START NEU (P3): Gäste-Liste speichern
+        // =================================================================
+        updateData.preRegisteredGuests = [...tempPreRegisteredGuests];
+        // =================================================================
+        // ENDE NEU (P3)
+        // =================================================================
+
         // 5. Neue Termine auslesen und anhängen
         const newOptions = [];
         const dateGroups = document.querySelectorAll('#vote-dates-container-edit [data-date-group-id]');
@@ -2896,25 +3049,19 @@ async function saveVoteEdits() {
             }
         });
         
-        // Wir setzen die Optionen zusammen (alte + neue)
         updateData.options = [...currentVoteData.options, ...newOptions];
         
         if (newOptions.length > 0) {
             changes.push(`${newOptions.length} neue(r) Termin(e) hinzugefügt.`);
         }
         
-        // =================================================================
-        // START PROBLEM 5 KORREKTUR (Änderungs-Log)
-        // =================================================================
-        // Vergleiche die 'updateData.options' mit den 'originalOptionsOnEditLoad'
+        // 6. Änderungen an Terminen (Streichen/Wiederherstellen) protokollieren
         if (originalOptionsOnEditLoad.length > 0 && updateData.options) {
-            
-            // Prüfe nur die Länge der *Original*-Liste, um neue nicht fälschlich zu prüfen
             for (let index = 0; index < originalOptionsOnEditLoad.length; index++) {
                 const originalOpt = originalOptionsOnEditLoad[index];
                 const updatedOpt = updateData.options[index];
                 
-                if (originalOpt && updatedOpt) { // Stelle sicher, dass beide existieren
+                if (originalOpt && updatedOpt) {
                     const optionText = updatedOpt.timeEnd ? `${updatedOpt.date} ${updatedOpt.timeStart}-${updatedOpt.timeEnd}` : `${updatedOpt.date} ${updatedOpt.timeStart}`;
                     
                     if (updatedOpt.isStricken === true && originalOpt.isStricken !== true) {
@@ -2925,12 +3072,9 @@ async function saveVoteEdits() {
                 }
             }
         }
-        // =================================================================
-        // ENDE PROBLEM 5 KORREKTUR
-        // =================================================================
 
         
-        // 6. Log-Eintrag erstellen (unverändert)
+        // 7. Log-Eintrag erstellen
         if (changes.length > 0) {
             const historyLog = {
                 timestamp: new Date(), 
@@ -2941,32 +3085,14 @@ async function saveVoteEdits() {
             updateData.acknowledgedBy = []; 
         }
         
-        // 7. Datenbank aktualisieren (unverändert)
+        // 8. Datenbank aktualisieren
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
         await updateDoc(voteDocRef, updateData);
         
-        // Lokale Daten (currentVoteData) werden NICHT manuell angefasst.
-        // Der 'onSnapshot'-Listener, den wir gleich neu starten, macht das.
-        
         alertUser("Änderungen gespeichert!", "success");
         
-        // =================================================================
-        // BEGINN PROBLEM 1 KORREKTUR (Behebt den "Stale Data"-Bug)
-        // =================================================================
-        
-        // Wir rufen NICHT mehr `showView('vote')` auf.
-        // Stattdessen rufen wir `joinVoteById` auf. Diese Funktion
-        // macht drei Dinge:
-        // 1. Sie wechselt die Ansicht zu 'vote'.
-        // 2. Sie holt die absolut frischen Daten (die wir gerade gespeichert haben).
-        // 3. Sie startet den Live-Spion (`listenToCurrentVote`) neu,
-        //    den wir beim Betreten der Edit-Seite gestoppt haben.
-        
+        // 9. Zurück zur Abstimm-Ansicht (startet Live-Spion neu)
         joinVoteById(currentVoteData.id);
-        
-        // =================================================================
-        // ENDE PROBLEM 1 KORREKTUR
-        // =================================================================
 
     } catch (error) {
         console.error("Fehler beim Speichern der Änderungen:", error);
@@ -2975,6 +3101,7 @@ async function saveVoteEdits() {
         setButtonLoading(saveBtn, false);
     }
 }
+
 
 
 
@@ -3217,6 +3344,18 @@ function showView(viewName) {
     document.getElementById('terminplaner-vote-view').classList.add('hidden');
     document.getElementById('terminplaner-edit-view').classList.add('hidden');
     
+    // =================================================================
+    // START NEU (P3): Gast-Sitzung löschen
+    // =================================================================
+    // Wenn wir zu irgendeiner Ansicht außer der "vote"-Ansicht wechseln,
+    // beenden wir die spezielle Gast-Sitzung.
+    if (viewName !== 'vote') {
+        currentGuestInfo = null;
+    }
+    // =================================================================
+    // ENDE NEU (P3)
+    // =================================================================
+    
     if (viewName === 'main') {
         document.getElementById('terminplaner-main-view').classList.remove('hidden');
     } else if (viewName === 'create') {
@@ -3229,6 +3368,7 @@ function showView(viewName) {
        document.getElementById('terminplaner-edit-view').classList.remove('hidden');
     }
 }
+
 
 // ERSETZE diese Funktion in terminplaner.js
 function resetCreateWizard() {
@@ -3285,6 +3425,15 @@ function resetCreateWizard() {
         assignedDisplay.title = "Niemand ausgewählt";
     }
     
+    // =================================================================
+    // START NEU (P3): Gäste-Liste zurücksetzen
+    // =================================================================
+    tempPreRegisteredGuests = [];
+    renderPreRegisteredGuestList('vote-guest-list-admin', false);
+    // =================================================================
+    // ENDE NEU (P3)
+    // =================================================================
+    
     dateGroupIdCounter = 0;
     addNewDateGroup(); 
     
@@ -3294,6 +3443,7 @@ function resetCreateWizard() {
     
     validateLastDateGroup(); 
 }
+
 
 
 
@@ -3570,6 +3720,109 @@ function cleanUrlParams() {
         console.warn("URL konnte nicht aufgeräumt werden:", e);
     }
 }
+
+
+/**
+ * NEU (P3): Erzeugt eine zufällige, einzigartige ID für einen Gast.
+ */
+function generateGuestId() {
+    return 'guest_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
+}
+
+/**
+ * NEU (P3): Zeichnet die Liste der vor-registrierten Gäste im Admin-Panel.
+ * (Wird für Erstellen & Bearbeiten-Ansicht genutzt)
+ */
+function renderPreRegisteredGuestList(containerId, isEditMode = false) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (tempPreRegisteredGuests.length === 0) {
+        container.innerHTML = '<p class="text-sm text-center text-gray-400">Noch keine Gäste für diese Umfrage hinzugefügt.</p>';
+        return;
+    }
+
+    container.innerHTML = tempPreRegisteredGuests.map(guest => {
+        let linkHTML = '';
+        if (isEditMode && currentVoteData && currentVoteData.id) {
+            // Nur im "Bearbeiten"-Modus (wo die voteId existiert) den Link-Button anzeigen
+            const baseUrl = window.location.origin + window.location.pathname; 
+            const directUrl = `${baseUrl}?vote_id=${currentVoteData.id}&guest_id=${guest.id}`;
+            linkHTML = `
+                <button class="copy-guest-link-btn p-1 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200" 
+                        data-url="${directUrl}" title="Einladungs-Link kopieren">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                        <path d="M7.25 9.25a.75.75 0 0 1 0 1.5H5.051a.75.75 0 0 1 0-1.5H7.25ZM9.25 4.5a.75.75 0 0 0 1.5 0V2.299a.75.75 0 0 0-1.5 0V4.5Zm1.87.89a.75.75 0 0 1 1.06 0l1.44 1.44a.75.75 0 0 1-1.06 1.06l-1.44-1.44a.75.75 0 0 1 0-1.06ZM15 7.25a.75.75 0 0 0 0 1.5h2.199a.75.75 0 0 0 0-1.5H15ZM4.5 9.25a.75.75 0 0 0-1.5 0v2.199a.75.75 0 0 0 1.5 0V9.25Zm1.81 1.87a.75.75 0 0 1 0 1.06l-1.44 1.44a.75.75 0 0 1-1.06-1.06l1.44-1.44a.75.75 0 0 1 1.06 0ZM9.25 15a.75.75 0 0 1 1.5 0v2.199a.75.75 0 0 1-1.5 0V15Zm1.87 1.81a.75.75 0 0 0 1.06 0l1.44-1.44a.75.75 0 0 0-1.06-1.06l-1.44 1.44a.75.75 0 0 0 0 1.06ZM15 12.75a.75.75 0 0 1 0-1.5h2.199a.75.75 0 0 1 0 1.5H15Z" />
+                    </svg>
+                </button>`;
+        } else {
+            // Im "Erstellen"-Modus (wo die voteId noch nicht existiert)
+            linkHTML = `<span class="text-xs text-gray-400 italic">(Link nach Speichern verfügbar)</span>`;
+        }
+
+        return `
+            <div class="flex items-center justify-between p-2 bg-gray-50 rounded-lg border">
+                <span class="font-semibold text-gray-700">${guest.name}</span>
+                <div class="flex items-center gap-2">
+                    ${linkHTML}
+                    <button class="delete-guest-btn p-1 bg-red-100 text-red-600 rounded-lg hover:bg-red-200" 
+                            data-guest-id="${guest.id}" title="Gast entfernen">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                            <path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.58.22-2.365.468a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193v-.443A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * NEU (P3): Tritt einer Umfrage über einen speziellen Gast-Link bei.
+ * (Wird von haupteingang.js aufgerufen)
+ */
+export async function joinVoteAsGuest(voteId, guestId) {
+    console.log(`[P3] Versuche Beitritt als Gast: voteId=${voteId}, guestId=${guestId}`);
+    try {
+        const voteDocRef = doc(votesCollectionRef, voteId);
+        const voteDoc = await getDoc(voteDocRef); 
+        
+        if (!voteDoc.exists()) {
+             throw new Error("Diese Umfrage existiert nicht mehr.");
+        }
+        
+        const voteData = { id: voteDoc.id, ...voteDoc.data() }; 
+        const guests = voteData.preRegisteredGuests || [];
+        
+        const foundGuest = guests.find(g => g.id === guestId);
+        
+        if (foundGuest) {
+            // Gast gefunden!
+            console.log(`[P3] Gast ${foundGuest.name} in Umfrage gefunden.`);
+            
+            // Setze die globale Variable, die renderVoteView und saveVoteParticipation verwenden
+            currentGuestInfo = {
+                id: foundGuest.id,
+                name: foundGuest.name,
+                voteId: voteId
+            };
+            
+            // Rufe die normale "Beitreten"-Funktion auf.
+            // Diese wird jetzt (dank currentGuestInfo) anders gerendert.
+            await joinVoteById(voteId);
+            
+        } else {
+            // Gast-ID nicht in dieser Umfrage gefunden
+            throw new Error("Dieser Gast-Einladungslink ist ungültig oder abgelaufen.");
+        }
+    } catch (error) {
+        console.error("Fehler beim Laden der Umfrage per Gast-Link:", error);
+        alertUser(error.message, "error_long");
+        cleanUrlParams(); // URL aufräumen
+    }
+}
+
+
 
 function checkInlineEditToken() {
     // 1. Timer stoppen, sobald geklickt wird
@@ -4261,11 +4514,25 @@ function handleStrikeTerm(optionIndex, shouldBeStricken) {
 }
 
 /**
- * NEU: Verarbeitet den Klick auf "Ok, quittieren"
- * (KORRIGIERTE VERSION: Stoppt den Spinner zuverlässig)
+ * NEU (P3): Verarbeitet den Klick auf "Ok, quittieren"
+ * (Funktioniert jetzt auch für Gäste-per-Link)
  */
 async function handleAcknowledgeUpdate() {
-    if (!currentVoteData || currentUser.mode === GUEST_MODE) return;
+    
+    // =================================================================
+    // START NEU (P3): ID für Quittierung ermitteln
+    // =================================================================
+    let ackUserId = null;
+    if (currentUser.mode !== GUEST_MODE) {
+        ackUserId = currentUser.mode; // Registrierter User
+    } else if (currentGuestInfo && currentGuestInfo.voteId === currentVoteData.id) {
+        ackUserId = currentGuestInfo.id; // Gast-per-Link
+    }
+    
+    if (!currentVoteData || !ackUserId) return;
+    // =================================================================
+    // ENDE NEU (P3)
+    // =================================================================
 
     const ackBtn = document.getElementById('acknowledge-update-btn');
     if (ackBtn) setButtonLoading(ackBtn, true);
@@ -4287,15 +4554,15 @@ async function handleAcknowledgeUpdate() {
 
         // 2. Bereite den neuen Quittierungs-Eintrag vor
         const newAckEntry = {
-            userId: currentUser.mode,
-            timestamp: lastUpdateTimestamp // Wichtig: Wir speichern den Zeitstempel des Updates, das quittiert wurde
+            userId: ackUserId, // Verwende die ermittelte ID
+            timestamp: lastUpdateTimestamp
         };
 
         // 3. Hole die alte Liste
         let oldAckArray = currentVoteData.acknowledgedBy || [];
         
         // 4. Entferne den alten Eintrag für diesen User (falls vorhanden)
-        let newAckArray = oldAckArray.filter(a => a.userId !== currentUser.mode);
+        let newAckArray = oldAckArray.filter(a => a.userId !== ackUserId);
         
         // 5. Füge den neuen Eintrag hinzu
         newAckArray.push(newAckEntry);
@@ -4309,7 +4576,7 @@ async function handleAcknowledgeUpdate() {
         // 7. Aktualisiere die lokalen Daten
         currentVoteData.acknowledgedBy = newAckArray;
 
-        // 8. Lade die Ansicht neu, um die Stile (Blinken aus, etc.) anzuwenden
+        // 8. Lade die Ansicht neu
         renderVoteView(currentVoteData);
         
         alertUser("Update quittiert", "success");
@@ -4318,10 +4585,6 @@ async function handleAcknowledgeUpdate() {
         console.error("Fehler beim Quittieren des Updates:", error);
         alertUser("Fehler beim Quittieren.", "error");
     } finally {
-        // --- KORREKTUR ---
-        // Wir stoppen den Lade-Spinner in JEDEM Fall (auch bei Fehler),
-        // damit er nicht hängen bleibt.
         if (ackBtn) setButtonLoading(ackBtn, false);
-        // --- ENDE KORREKTUR ---
     }
 }
