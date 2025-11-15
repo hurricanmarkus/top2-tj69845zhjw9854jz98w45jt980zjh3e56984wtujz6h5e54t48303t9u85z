@@ -397,6 +397,20 @@ function applyAssignedUsers() {
 
 
 export function initializeTerminplanerView() {
+    
+    // =================================================================
+    // BEGINN DER ÄNDERUNG (Berechtigungs-Prüfung)
+    // =================================================================
+    
+    // HINWEIS: Der Code-Block, der hier stand, um den 'createVoteButton'
+    // zu steuern, wurde ENTFERNT.
+    // Diese Logik ist jetzt ZENTRAL in 'log-InOut.js' -> 'updateUIForMode',
+    // damit sie auch auf Live-Rechte-Änderungen reagiert.
+    
+    // =================================================================
+    // ENDE DER ÄNDERUNG
+    // =================================================================
+
     // --- NEU: Logik für die Haupt-URL-Share-Box ---
     const mainUrlInput = document.getElementById('main-share-url');
     if (mainUrlInput) {
@@ -415,27 +429,27 @@ export function initializeTerminplanerView() {
         copyMainUrlBtn.dataset.listenerAttached = 'true';
     }
     // --- ENDE NEU ---
-
+    
     // ----- Spion für das Token-Feld -----
     const tokenInput = document.getElementById('vote-token-input');
     if (tokenInput && !tokenInput.dataset.listenerAttached) {
-        tokenInput.addEventListener('input', (e) => formatTokenInput(e, 'vote-token-input'));
-
+        tokenInput.addEventListener('input', (e) => formatTokenInput(e, 'vote-token-input')); 
+        
         // =========================================================
         // START BUG 4 FIX (Teil 1)
         // =========================================================
         tokenInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 // Verhindere das Standard-Enter-Verhalten (falls es in einem Formular wäre)
-                e.preventDefault();
+                e.preventDefault(); 
                 // Rufe die Funktion auf, die auch der Knopf aufruft
-                joinVoteByToken(null);
+                joinVoteByToken(null); 
             }
         });
         // =========================================================
         // END BUG 4 FIX (Teil 1)
         // =========================================================
-
+        
         tokenInput.dataset.listenerAttached = 'true';
     }
 
@@ -486,21 +500,21 @@ export function initializeTerminplanerView() {
         const groupPollButton = document.getElementById('select-vote-type-group');
         if (groupPollButton && !groupPollButton.dataset.listenerAttached) {
             groupPollButton.addEventListener('click', () => {
-                modal.style.display = 'none';
+                modal.style.display = 'none'; 
                 modal.classList.add('hidden');
-                showView('create');
+                showView('create'); 
             });
             groupPollButton.dataset.listenerAttached = 'true';
         }
     }
 
     // ----- Spione für den Erstellungs-Assistenten -----
-
+    
     const cancelCreationButton = document.getElementById('cancel-vote-creation-btn');
     if (cancelCreationButton && !cancelCreationButton.dataset.listenerAttached) {
         cancelCreationButton.addEventListener('click', () => {
             if (confirm("Möchtest du die Erstellung wirklich abbrechen? Alle Eingaben gehen verloren.")) {
-                showView('main');
+                showView('main'); 
             }
         });
         cancelCreationButton.dataset.listenerAttached = 'true';
@@ -512,7 +526,7 @@ export function initializeTerminplanerView() {
             if (endTimeInput) {
                 endTimeInput.disabled = e.target.checked;
                 if (e.target.checked) {
-                    endTimeInput.value = '';
+                    endTimeInput.value = ''; 
                 }
             }
         });
@@ -528,17 +542,17 @@ export function initializeTerminplanerView() {
         datesContainer.addEventListener('click', (e) => {
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
-                const timesContainer = addTarget.previousElementSibling;
+                const timesContainer = addTarget.previousElementSibling; 
                 if (timesContainer) {
                     timesContainer.appendChild(createTimeInputHTML());
                 }
             }
             const removeTarget = e.target.closest('.vote-remove-time-btn');
             if (removeTarget) {
-                const timeGroup = removeTarget.closest('.time-input-group');
+                const timeGroup = removeTarget.closest('.time-input-group'); 
                 const timesContainer = timeGroup.parentElement;
                 if (timesContainer.children.length > 1) {
-                    timeGroup.remove();
+                    timeGroup.remove(); 
                 } else {
                     alertUser("Du musst mindestens eine Uhrzeit pro Tag angeben.", "error");
                 }
@@ -554,10 +568,10 @@ export function initializeTerminplanerView() {
     }
     const saveVoteButton = document.getElementById('vote-save-group-poll-btn');
     if (saveVoteButton && !saveVoteButton.dataset.listenerAttached) {
-        saveVoteButton.addEventListener('click', saveGroupPoll);
+        saveVoteButton.addEventListener('click', saveGroupPoll); 
         saveVoteButton.dataset.listenerAttached = 'true';
     }
-
+    
     // Spion für Anonym-Checkbox (Erstellen)
     const anonymousCheckbox = document.getElementById('vote-setting-anonymous');
     if (anonymousCheckbox && !anonymousCheckbox.dataset.listenerAttached) {
@@ -569,7 +583,7 @@ export function initializeTerminplanerView() {
         });
         anonymousCheckbox.dataset.listenerAttached = 'true';
     }
-
+    
     // Spion für Anonym-Checkbox (Bearbeiten)
     const anonymousCheckboxEdit = document.getElementById('vote-setting-anonymous-edit');
     if (anonymousCheckboxEdit && !anonymousCheckboxEdit.dataset.listenerAttached) {
@@ -593,7 +607,7 @@ export function initializeTerminplanerView() {
         });
         hideAnswersCheckbox.dataset.listenerAttached = 'true';
     }
-
+    
     // Spion für "Antworten verstecken" (Bearbeiten)
     const hideAnswersCheckboxEdit = document.getElementById('vote-setting-hide-answers-edit');
     if (hideAnswersCheckboxEdit && !hideAnswersCheckboxEdit.dataset.listenerAttached) {
@@ -605,7 +619,7 @@ export function initializeTerminplanerView() {
         });
         hideAnswersCheckboxEdit.dataset.listenerAttached = 'true';
     }
-
+    
     // Spione für "Sichtbarkeit" (Erstellen & Bearbeiten)
     const accessBtn = document.getElementById('vote-setting-access-btn');
     if (accessBtn && !accessBtn.dataset.listenerAttached) {
@@ -614,7 +628,7 @@ export function initializeTerminplanerView() {
         });
         accessBtn.dataset.listenerAttached = 'true';
     }
-
+    
     const accessBtnEdit = document.getElementById('vote-setting-access-btn-edit');
     if (accessBtnEdit && !accessBtnEdit.dataset.listenerAttached) {
         accessBtnEdit.addEventListener('click', () => {
@@ -624,7 +638,7 @@ export function initializeTerminplanerView() {
     }
 
     // =================================================================
-    // START NEU (P3): Listener für "Gast hinzufügen" (Erstellen-Ansicht)
+    // START NEU (P3 & P2): Listener für "Gast hinzufügen" (Erstellen-Ansicht)
     // =================================================================
     const addGuestBtn = document.getElementById('vote-add-guest-btn-admin');
     if (addGuestBtn && !addGuestBtn.dataset.listenerAttached) {
@@ -640,8 +654,17 @@ export function initializeTerminplanerView() {
             }
         });
         addGuestBtn.dataset.listenerAttached = 'true';
-    }
 
+        // KORREKTUR (Problem 2): Enter-Taste für Gast-Input (Erstellen)
+        const guestInput = document.getElementById('vote-guest-name-input-admin');
+        guestInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault(); // Verhindert Formular-Absenden
+                addGuestBtn.click(); // Löst den Klick auf den "+ Gast"-Button aus
+            }
+        });
+    }
+    
     // Delegierter Listener für "Gast löschen" (Erstellen-Ansicht)
     const guestListContainer = document.getElementById('vote-guest-list-admin');
     if (guestListContainer && !guestListContainer.dataset.listenerAttached) {
@@ -656,12 +679,12 @@ export function initializeTerminplanerView() {
         guestListContainer.dataset.listenerAttached = 'true';
     }
     // =================================================================
-    // ENDE NEU (P3)
+    // ENDE NEU (P3 & P2)
     // =================================================================
 
 
     // ----- Spione für die Abstimmungs-Seite -----
-
+    
     const cancelVoteButton = document.getElementById('cancel-vote-participation-btn');
     if (cancelVoteButton && !cancelVoteButton.dataset.listenerAttached) {
         // =================================================================
@@ -669,8 +692,8 @@ export function initializeTerminplanerView() {
         // =================================================================
         cancelVoteButton.addEventListener('click', () => {
             stopCurrentVoteListener(); // <-- NEU: Stoppt den Live-Spion
-            showView('main');
-            currentVoteData = null;
+            showView('main'); 
+            currentVoteData = null; 
         });
         // =================================================================
         // ENDE DER ÄNDERUNG
@@ -682,7 +705,7 @@ export function initializeTerminplanerView() {
     // ... (Inhalt des Listeners bleibt gleich) ...
     if (voteView && !voteView.dataset.listenerAttached) {
         voteView.addEventListener('click', (e) => {
-
+            
             // "Ändern"-Knopf für Benutzer
             const userChangeBtn = e.target.closest('#vote-user-change-to-anon-btn');
             if (userChangeBtn) {
@@ -705,7 +728,7 @@ export function initializeTerminplanerView() {
                 }
                 return; // Klick ist erledigt
             }
-
+            
             // "Ändern"-Knopf für Gäste
             const guestChangeBtn = e.target.closest('#vote-guest-change-to-anon-btn');
             if (guestChangeBtn) {
@@ -727,38 +750,38 @@ export function initializeTerminplanerView() {
                 }
                 return; // Klick ist erledigt
             }
-
-
+            
+            
             // =================================================================
             // START KORREKTUR (Problem 4 - Hybrid-Layout)
             // =================================================================
             // Wir hören jetzt auf '.vote-card-btn' statt '.vote-grid-btn'
-            const clickedButton = e.target.closest('.vote-card-btn');
-            if (clickedButton && !clickedButton.disabled) {
+            const clickedButton = e.target.closest('.vote-card-btn'); 
+            if (clickedButton && !clickedButton.disabled) { 
                 const optionIndex = clickedButton.dataset.optionIndex;
                 const answer = clickedButton.dataset.answer;
-
+                
                 // Setze die Antwort in unserem lokalen Speicher
                 currentParticipantAnswers[optionIndex] = answer;
-
+                
                 // Finde alle Knöpfe für DIESE KARTE
                 const buttonGroup = clickedButton.closest('.vote-card-button-group');
                 if (buttonGroup) {
                     const allButtonsInGroup = buttonGroup.querySelectorAll('.vote-card-btn');
-
+                    
                     // Setze alle Knöpfe in dieser Gruppe zurück
                     allButtonsInGroup.forEach(btn => {
                         btn.classList.remove('bg-green-600', 'text-white', 'ring-2', 'ring-offset-2', 'ring-green-600');
                         btn.classList.remove('bg-yellow-500', 'text-white', 'ring-2', 'ring-offset-2', 'ring-yellow-500');
                         btn.classList.remove('bg-red-600', 'text-white', 'ring-2', 'ring-offset-2', 'ring-red-600');
-
+                        
                         // Standard-Aussehen (nicht ausgewählt)
                         if (btn.dataset.answer === 'yes') btn.classList.add('bg-green-100', 'text-green-800', 'hover:bg-green-200');
                         if (btn.dataset.answer === 'maybe') btn.classList.add('bg-yellow-100', 'text-yellow-800', 'hover:bg-yellow-200');
                         if (btn.dataset.answer === 'no') btn.classList.add('bg-red-100', 'text-red-800', 'hover:bg-red-200');
                     });
                 }
-
+                
                 // Hebe den geklickten Knopf hervor
                 if (answer === 'yes') {
                     clickedButton.classList.remove('bg-green-100', 'text-green-800', 'hover:bg-green-200');
@@ -779,14 +802,14 @@ export function initializeTerminplanerView() {
             // =================================================================
             // ENDE KORREKTUR (Problem 4)
             // =================================================================
-
-
+            
+            
             const correctionCounter = e.target.closest('.correction-counter');
             if (correctionCounter) {
                 const userId = correctionCounter.dataset.userid;
                 renderCorrectionHistory(userId);
             }
-
+            
             const correctionButton = e.target.closest('.vote-correction-btn');
             if (correctionButton) {
                 switchToEditMode();
@@ -816,29 +839,29 @@ export function initializeTerminplanerView() {
         });
         voteView.dataset.listenerAttached = 'true';
     }
-
+    
     const saveParticipationButton = document.getElementById('vote-save-participation-btn');
     if (saveParticipationButton && !saveParticipationButton.dataset.listenerAttached) {
         saveParticipationButton.addEventListener('click', saveVoteParticipation);
         saveParticipationButton.dataset.listenerAttached = 'true';
     }
-
+    
     const editVoteButton = document.getElementById('show-edit-vote-btn');
     if (editVoteButton && !editVoteButton.dataset.listenerAttached) {
-        editVoteButton.addEventListener('click', showInlineEditToken);
+        editVoteButton.addEventListener('click', showInlineEditToken); 
         editVoteButton.dataset.listenerAttached = 'true';
     }
-
+    
     const submitEditBtn = document.getElementById('submit-edit-token-inline-btn');
     if (submitEditBtn && !submitEditBtn.dataset.listenerAttached) {
         submitEditBtn.addEventListener('click', checkInlineEditToken);
         submitEditBtn.dataset.listenerAttached = 'true';
     }
-
+    
     const editTokenInput = document.getElementById('edit-token-input-inline');
     if (editTokenInput && !editTokenInput.dataset.listenerAttached) {
         editTokenInput.addEventListener('input', (e) => formatTokenInput(e, 'edit-token-input-inline'));
-
+        
         // =========================================================
         // START BUG 4 FIX (Teil 2)
         // =========================================================
@@ -853,17 +876,17 @@ export function initializeTerminplanerView() {
         // =========================================================
         // END BUG 4 FIX (Teil 2)
         // =========================================================
-
+        
         editTokenInput.dataset.listenerAttached = 'true';
     }
-
+    
     const closeLogBtn = document.getElementById('close-correction-log-btn');
     if (closeLogBtn && !closeLogBtn.dataset.listenerAttached) {
         closeLogBtn.addEventListener('click', () => {
             const modal = document.getElementById('correctionLogModal');
             if (modal) {
                 modal.classList.add('hidden');
-                modal.style.display = 'none';
+                modal.style.display = 'none'; 
             }
         });
         closeLogBtn.dataset.listenerAttached = 'true';
@@ -884,18 +907,18 @@ export function initializeTerminplanerView() {
             // =================================================================
             // ENDE KORREKTUR (Problem 3)
             // =================================================================
-
+            
             // Wir stoppen den Spion NICHT, sondern gehen zurück zur 'vote'-Ansicht
             // und rufen 'joinVoteById' auf. 'joinVoteById' startet
             // den Spion 'listenToCurrentVote' automatisch neu.
-            joinVoteById(currentVoteData.id);
+            joinVoteById(currentVoteData.id); 
         });
         // =================================================================
         // ENDE DER ÄNDERUNG
         // =================================================================
         cancelEditingBtn.dataset.listenerAttached = 'true';
     }
-
+    
     const unlimitedEditCheckbox = document.getElementById('vote-end-time-unlimited-edit');
     if (unlimitedEditCheckbox && !unlimitedEditCheckbox.dataset.listenerAttached) {
         unlimitedEditCheckbox.addEventListener('change', (e) => {
@@ -903,19 +926,19 @@ export function initializeTerminplanerView() {
             if (endTimeInput) {
                 endTimeInput.disabled = e.target.checked;
                 if (e.target.checked) {
-                    endTimeInput.value = '';
+                    endTimeInput.value = ''; 
                 }
             }
         });
         unlimitedEditCheckbox.dataset.listenerAttached = 'true';
     }
-
+    
     const saveChangesBtn = document.getElementById('vote-save-changes-btn');
     if (saveChangesBtn && !saveChangesBtn.dataset.listenerAttached) {
         saveChangesBtn.addEventListener('click', saveVoteEdits);
         saveChangesBtn.dataset.listenerAttached = 'true';
     }
-
+    
     const fixDateBtn = document.getElementById('vote-fix-date-btn');
     if (fixDateBtn && !fixDateBtn.dataset.listenerAttached) {
         fixDateBtn.addEventListener('click', (e) => {
@@ -934,14 +957,14 @@ export function initializeTerminplanerView() {
         toggleManualCloseBtn.addEventListener('click', toggleManualPollClose);
         toggleManualCloseBtn.dataset.listenerAttached = 'true';
     }
-
-
+    
+    
     const deletePollBtn = document.getElementById('vote-delete-poll-btn');
     if (deletePollBtn && !deletePollBtn.dataset.listenerAttached) {
         deletePollBtn.addEventListener('click', deletePoll);
         deletePollBtn.dataset.listenerAttached = 'true';
     }
-
+    
     const cancelFixDateBtn = document.getElementById('cancel-fix-date-btn');
     if (cancelFixDateBtn && !cancelFixDateBtn.dataset.listenerAttached) {
         cancelFixDateBtn.addEventListener('click', hideFixDateSelection);
@@ -953,7 +976,7 @@ export function initializeTerminplanerView() {
         confirmFixDateBtn.addEventListener('click', confirmAndFixDate);
         confirmFixDateBtn.dataset.listenerAttached = 'true';
     }
-
+    
     // --- Spione für das Zuweisen-Modal ---
     // (Bleiben unverändert)
     // ...
@@ -988,7 +1011,7 @@ export function initializeTerminplanerView() {
         applyAssignModalBtn.addEventListener('click', applyAssignedUsers);
         applyAssignModalBtn.dataset.listenerAttached = 'true';
     }
-
+    
     // ----- Spione für die Bearbeiten-Funktionen -----
     // (Bleiben unverändert)
     // ...
@@ -1000,19 +1023,20 @@ export function initializeTerminplanerView() {
     const datesContainerEdit = document.getElementById('vote-dates-container-edit');
     if (datesContainerEdit && !datesContainerEdit.dataset.listenerAttached) {
         datesContainerEdit.addEventListener('click', (e) => {
+            // ... (Logik für add/remove time bleibt gleich) ...
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
-                const timesContainer = addTarget.previousElementSibling;
+                const timesContainer = addTarget.previousElementSibling; 
                 if (timesContainer) {
                     timesContainer.appendChild(createTimeInputHTML());
                 }
             }
             const removeTarget = e.target.closest('.vote-remove-time-btn');
             if (removeTarget) {
-                const timeGroup = removeTarget.closest('.time-input-group');
+                const timeGroup = removeTarget.closest('.time-input-group'); 
                 const timesContainer = timeGroup.parentElement;
                 if (timesContainer.children.length > 1) {
-                    timeGroup.remove();
+                    timeGroup.remove(); 
                 } else {
                     alertUser("Du musst mindestens eine Uhrzeit pro Tag angeben.", "error");
                 }
@@ -1023,12 +1047,12 @@ export function initializeTerminplanerView() {
     const adminGridContainer = document.getElementById('edit-participant-grid-container');
     if (adminGridContainer && !adminGridContainer.dataset.listenerAttached) {
         adminGridContainer.addEventListener('click', (e) => {
+            // ... (Logik für Admin-Grid bleibt gleich) ...
             const clickedButton = e.target.closest('.admin-vote-grid-btn');
             if (clickedButton && !clickedButton.disabled) {
                 const participantId = clickedButton.dataset.participantId;
                 const optionIndex = clickedButton.dataset.optionIndex;
                 const newAnswer = clickedButton.dataset.answer;
-
                 handleAdminVoteEdit(participantId, optionIndex, newAnswer, clickedButton);
             }
         });
@@ -1037,12 +1061,13 @@ export function initializeTerminplanerView() {
     const manageTermsList = document.getElementById('manage-existing-terms-list');
     if (manageTermsList && !manageTermsList.dataset.listenerAttached) {
         manageTermsList.addEventListener('click', (e) => {
+            // ... (Logik für strike/restore term bleibt gleich) ...
             const strikeBtn = e.target.closest('.strike-term-btn');
             if (strikeBtn) {
                 const optionIndex = parseInt(strikeBtn.dataset.optionIndex, 10);
                 handleStrikeTerm(optionIndex, true); // true = streichen
             }
-
+            
             const restoreBtn = e.target.closest('.restore-term-btn');
             if (restoreBtn) {
                 const optionIndex = parseInt(restoreBtn.dataset.optionIndex, 10);
@@ -1053,7 +1078,7 @@ export function initializeTerminplanerView() {
     }
 
     // =================================================================
-    // START NEU (P3): Listener für "Gast hinzufügen" (Bearbeiten-Ansicht)
+    // START NEU (P3 & P2): Listener für "Gast hinzufügen" (Bearbeiten-Ansicht)
     // =================================================================
     const addGuestBtnEdit = document.getElementById('vote-add-guest-btn-admin-edit');
     if (addGuestBtnEdit && !addGuestBtnEdit.dataset.listenerAttached) {
@@ -1063,17 +1088,26 @@ export function initializeTerminplanerView() {
             if (name) {
                 tempPreRegisteredGuests.push({ id: generateGuestId(), name: name });
                 // Wichtig: 'true' übergeben, damit die "Link kopieren"-Knöpfe angezeigt werden!
-                renderPreRegisteredGuestList('vote-guest-list-admin-edit', true);
+                renderPreRegisteredGuestList('vote-guest-list-admin-edit', true); 
                 input.value = '';
-
+                
                 setEditChanges(true); // <--- LÖST SPEICHERN-LEISTE AUS
             } else {
                 alertUser("Bitte einen Namen für den Gast eingeben.", "error");
             }
         });
         addGuestBtnEdit.dataset.listenerAttached = 'true';
+        
+        // KORREKTUR (Problem 2): Enter-Taste für Gast-Input (Bearbeiten)
+        const guestInputEdit = document.getElementById('vote-guest-name-input-admin-edit');
+        guestInputEdit.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault(); // Verhindert Formular-Absenden
+                addGuestBtnEdit.click(); // Löst den Klick auf den "+ Gast"-Button aus
+            }
+        });
     }
-
+    
     // Delegierter Listener für "Gast löschen" & "Link kopieren" (Bearbeiten-Ansicht)
     const guestListContainerEdit = document.getElementById('vote-guest-list-admin-edit');
     if (guestListContainerEdit && !guestListContainerEdit.dataset.listenerAttached) {
@@ -1084,10 +1118,10 @@ export function initializeTerminplanerView() {
                 const guestId = deleteBtn.dataset.guestId;
                 tempPreRegisteredGuests = tempPreRegisteredGuests.filter(g => g.id !== guestId);
                 renderPreRegisteredGuestList('vote-guest-list-admin-edit', true);
-
+                
                 setEditChanges(true); // <--- LÖST SPEICHERN-LEISTE AUS
             }
-
+            
             // "Link kopieren" Knopf
             const copyBtn = e.target.closest('.copy-guest-link-btn');
             if (copyBtn) {
@@ -1098,7 +1132,7 @@ export function initializeTerminplanerView() {
         guestListContainerEdit.dataset.listenerAttached = 'true';
     }
     // =================================================================
-    // ENDE NEU (P3)
+    // ENDE NEU (P3 & P2)
     // =================================================================
 
     // =================================================================
@@ -1118,7 +1152,7 @@ export function initializeTerminplanerView() {
             if (e.target.closest('.copy-guest-link-btn, #cancel-fix-date-btn')) {
                 return;
             }
-
+            
             // Jede Eingabe in Input/Textarea/Select löst die Leiste aus
             if (e.type === 'input' && e.target.matches('input, textarea, select')) {
                 setEditChanges(true);
@@ -1145,6 +1179,7 @@ export function initializeTerminplanerView() {
     // ENDE NEU (P3)
     // =================================================================
 }
+
 
 
 
@@ -1571,10 +1606,10 @@ export async function joinVoteById(voteId = null, bypassPermissionCheck = false)
 
 // ERSETZE diese Funktion in terminplaner.js
 function renderVoteView(voteData) {
-
+    
     // ----- 0. Globale Variable zurücksetzen -----
     isParticipantChoosingAnonymous = false;
-
+    
     // ----- 1. DEFINITIONEN -----
     const now = new Date();
     const getSafeDate = (timestamp) => {
@@ -1587,18 +1622,16 @@ function renderVoteView(voteData) {
     const endTime = getSafeDate(voteData.endTime);
 
     const isFixed = voteData.fixedOptionIndex != null;
-    const isClosedByTime = (endTime && now > endTime);
-    const isManuallyClosed = voteData.isManuallyClosed === true;
-    const isNotStarted = (startTime && now < startTime);
-
+    const isClosedByTime = (endTime && now > endTime); 
+    const isManuallyClosed = voteData.isManuallyClosed === true; 
+    const isNotStarted = (startTime && now < startTime); 
+    
     const isPollClosed = isFixed || isClosedByTime || isManuallyClosed; // Gesamter "Geschlossen"-Status
     const isParticipationBlocked = isPollClosed || isNotStarted; // Darf man überhaupt abstimmen?
 
-    // =================================================================
-    // START NEU (P3): Prüfen, ob der Gast bereits abgestimmt hat
-    // =================================================================
+    // (P3) Prüfen, ob der Gast bereits abgestimmt hat
     let youParticipant = null;
-
+    
     if (currentGuestInfo && currentGuestInfo.voteId === voteData.id) {
         // Fall 1: Wir sind ein Gast-per-Link
         youParticipant = voteData.participants.find(p => p.userId === currentGuestInfo.id);
@@ -1607,27 +1640,37 @@ function renderVoteView(voteData) {
         youParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
     }
     // Fall 3: Wir sind ein normaler Gast (youParticipant bleibt null)
-    // =================================================================
-    // ENDE NEU (P3)
-    // =================================================================
 
     // ----- 2. Titel & Ersteller (Sicher) -----
     const titleEl = document.getElementById('vote-poll-title');
     if (titleEl) titleEl.textContent = voteData.title;
-
+    
     const creatorUser = USERS[voteData.createdBy];
-    const creatorName = creatorUser ? creatorUser.realName : voteData.createdByName;
+    const creatorName = creatorUser ? creatorUser.realName : voteData.createdByName; 
     const creatorEl = document.getElementById('vote-poll-creator');
     if (creatorEl) creatorEl.textContent = `Erstellt von ${creatorName}`;
 
     // ----- 3. Share-Box (Sicher) -----
     const tokenEl = document.getElementById('vote-share-token');
     if (tokenEl) tokenEl.textContent = voteData.token;
-
-    const baseUrl = window.location.origin + window.location.pathname;
-    const directUrl = `${baseUrl}?vote_id=${currentVoteData.id}`;
+    
+    const baseUrl = window.location.origin + window.location.pathname; 
+    const directUrl = `${baseUrl}?vote_id=${currentVoteData.id}`; 
     const urlEl = document.getElementById('vote-share-url');
     if (urlEl) urlEl.value = directUrl;
+
+    // =================================================================
+    // START KORREKTUR (Problem 4 - Share-Box für Gast-Link verstecken)
+    // =================================================================
+    const shareBox = document.getElementById('vote-share-box');
+    if (shareBox) {
+        // Verstecke die Box, wenn wir ein Gast-per-Link sind
+        const isGuestPerLink = (currentGuestInfo && currentGuestInfo.voteId === voteData.id);
+        shareBox.style.display = isGuestPerLink ? 'none' : 'inline-flex';
+    }
+    // =================================================================
+    // ENDE KORREKTUR (Problem 4)
+    // =================================================================
 
     // ----- 4. Info-Box (Beschreibung, Ort, Updates) -----
     const infoBox = document.getElementById('vote-info-box');
@@ -1639,22 +1682,22 @@ function renderVoteView(voteData) {
     const updateSubtitle = document.getElementById('poll-update-subtitle');
     const detailsBtn = document.getElementById('show-poll-history-btn-main');
     const ackBtn = document.getElementById('acknowledge-update-btn');
-    const optionsContainer = document.getElementById('vote-options-container');
+    const optionsContainer = document.getElementById('vote-options-container'); 
 
     // Setze Stile zurück
     if (descContainer) descContainer.classList.remove('blink-border-blue');
     if (locContainer) locContainer.classList.remove('blink-border-blue');
-    if (titleEl) titleEl.classList.remove('blink-border-blue');
+    if (titleEl) titleEl.classList.remove('blink-border-blue'); 
     if (optionsContainer) optionsContainer.classList.remove('blink-border-blue');
-
+    
     if (updateBox) {
-        updateBox.classList.add('hidden');
-        updateBox.classList.remove('bg-transparent', 'border-gray-400');
-        updateBox.classList.add('bg-blue-50', 'border-blue-500');
+        updateBox.classList.add('hidden'); 
+        updateBox.classList.remove('bg-transparent', 'border-gray-400'); 
+        updateBox.classList.add('bg-blue-50', 'border-blue-500'); 
     }
     if (detailsBtn) {
         detailsBtn.classList.remove('btn-gray-acknowledged');
-        detailsBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        detailsBtn.classList.add('bg-blue-600', 'hover:bg-blue-700'); 
     }
     if (ackBtn) {
         ackBtn.classList.add('hidden');
@@ -1670,19 +1713,17 @@ function renderVoteView(voteData) {
             hasUpdate = true;
         }
     }
-
-    // =================================================================
-    // START NEU (P3): Quittieren für Gast-per-Link
-    // =================================================================
+    
+    // (P3) Quittieren für Gast-per-Link
     let userHasAcknowledged = false;
     let ackCheckId = null; // ID, nach der wir im 'acknowledgedBy' Array suchen
-
+    
     if (currentUser.mode !== GUEST_MODE) {
         ackCheckId = currentUser.mode; // Registrierter User
     } else if (currentGuestInfo && currentGuestInfo.voteId === voteData.id) {
         ackCheckId = currentGuestInfo.id; // Gast-per-Link
     }
-
+    
     if (hasUpdate && ackCheckId) { // Nur prüfen, wenn wir einen User/Gast haben
         const ackArray = voteData.acknowledgedBy || [];
         const userAckEntry = ackArray.find(a => a.userId === ackCheckId);
@@ -1693,9 +1734,6 @@ function renderVoteView(voteData) {
             }
         }
     }
-    // =================================================================
-    // ENDE NEU (P3)
-    // =================================================================
 
     if (hasUpdate) {
         if (updateBox) updateBox.classList.remove('hidden');
@@ -1704,37 +1742,32 @@ function renderVoteView(voteData) {
             // Benutzer hat bereits quittiert
             if (updateBox) {
                 updateBox.classList.remove('bg-blue-50', 'border-blue-500');
-                updateBox.classList.add('bg-transparent', 'border-gray-400');
+                updateBox.classList.add('bg-transparent', 'border-gray-400'); 
             }
             if (detailsBtn) {
                 detailsBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
-                detailsBtn.classList.add('btn-gray-acknowledged');
+                detailsBtn.classList.add('btn-gray-acknowledged'); 
             }
-            if (updateSubtitle) updateSubtitle.classList.add('hidden');
+            if (updateSubtitle) updateSubtitle.classList.add('hidden'); 
 
         } else {
             // Benutzer hat NOCH NICHT quittiert
-
-            // =================================================================
-            // START NEU (P3): Quittier-Knopf für alle (außer anonyme Gäste)
-            // =================================================================
+            
+            // (P3) Quittier-Knopf für alle (außer anonyme Gäste)
             if (ackCheckId) { // Zeige Knopf, wenn wir registriert ODER Gast-per-Link sind
                 if (ackBtn) ackBtn.classList.remove('hidden');
             }
-            // =================================================================
-            // ENDE NEU (P3)
-            // =================================================================
-
-            // Blink-Logik (unverändert)
+            
+            // Blink-Logik (P5)
             const lastUpdate = voteData.pollHistory[voteData.pollHistory.length - 1];
             if (lastUpdate && lastUpdate.changes) {
                 const changedTitle = lastUpdate.changes.some(c => c.includes('Titel'));
                 const changedDesc = lastUpdate.changes.some(c => c.includes('Beschreibung'));
                 const changedLoc = lastUpdate.changes.some(c => c.includes('Ort'));
-                const changedTerms = lastUpdate.changes.some(c =>
+                const changedTerms = lastUpdate.changes.some(c => 
                     c.includes('Termin') || c.includes('GESTRICHEN') || c.includes('WIEDERHERGESTELLT')
                 );
-
+                
                 if (changedTitle && titleEl) titleEl.classList.add('blink-border-blue');
                 if (changedDesc && descContainer) descContainer.classList.add('blink-border-blue');
                 if (changedLoc && locContainer) locContainer.classList.add('blink-border-blue');
@@ -1748,34 +1781,33 @@ function renderVoteView(voteData) {
         if (descEl) descEl.textContent = voteData.description;
         if (descContainer) descContainer.classList.remove('hidden');
         hasInfo = true;
-    } else {
-        if (descContainer) descContainer.classList.add('hidden');
+    } else { 
+        if (descContainer) descContainer.classList.add('hidden'); 
     }
     if (voteData.location) {
         if (locEl) locEl.textContent = voteData.location;
         if (locContainer) locContainer.classList.remove('hidden');
         hasInfo = true;
-    } else {
-        if (locContainer) locContainer.classList.add('hidden');
+    } else { 
+        if (locContainer) locContainer.classList.add('hidden'); 
     }
     if (infoBox) infoBox.classList.toggle('hidden', !hasInfo && !hasUpdate);
 
 
     // ----- 5. Gültigkeits-Boxen (Sicher) -----
-    // (Dieser Teil bleibt unverändert)
-    // ...
     const validityContainer = document.getElementById('vote-poll-validity-container');
     const validityEl = document.getElementById('vote-poll-validity');
     const warningBox = document.getElementById('vote-validity-warning-box');
     const warningText = document.getElementById('vote-validity-warning-text');
     const formatVoteDate = (dateObj) => {
         if (!dateObj) return '';
-        return dateObj.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+        return dateObj.toLocaleString('de-DE', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}) + ' Uhr';
     };
-    if (isPollClosed && !isFixed) {
+    
+    if (isPollClosed && !isFixed) { 
         if (validityEl) validityEl.textContent = "TEILNAHME GESCHLOSSEN";
         if (validityContainer) {
-            validityContainer.classList.add('text-red-700', 'bg-red-50', 'p-3', 'font-bold');
+            validityContainer.classList.add('text-red-700', 'bg-red-50', 'p-3', 'font-bold'); 
             validityContainer.classList.remove('text-gray-600');
             validityContainer.classList.remove('hidden');
         }
@@ -1785,7 +1817,7 @@ function renderVoteView(voteData) {
         let validityText = '';
         if (startTimeText) validityText = `Startet: ${startTimeText}`;
         if (endTimeText) validityText += (validityText ? ' | ' : '') + `Endet: ${endTimeText}`;
-        if (validityText && !isFixed) {
+        if (validityText && !isFixed) { 
             if (validityEl) validityEl.textContent = validityText;
             if (validityContainer) validityContainer.classList.remove('hidden');
         } else {
@@ -1796,22 +1828,23 @@ function renderVoteView(voteData) {
             validityContainer.classList.add('text-gray-600');
         }
     }
-    if (isParticipationBlocked && !isFixed) {
+    
+    if (isParticipationBlocked && !isFixed) { 
         if (isNotStarted) {
             if (warningText) warningText.textContent = `Diese Umfrage hat noch nicht begonnen. Sie startet am ${formatVoteDate(startTime)}.`;
         } else if (isClosedByTime) {
             if (warningText) warningText.textContent = `Diese Umfrage ist bereits beendet. Teilnahme und Korrekturen sind nicht mehr möglich.`;
-        } else if (isManuallyClosed) {
+        } else if (isManuallyClosed) { 
             if (warningText) warningText.textContent = `Diese Umfrage wurde vom Ersteller beendet. Teilnahme und Korrekturen sind nicht mehr möglich.`;
         }
         if (warningBox) warningBox.classList.remove('hidden');
     } else {
         if (warningBox) {
-            warningBox.classList.add('hidden');
+            warningBox.classList.add('hidden'); 
         }
     }
 
-    // ----- 6. Teilnehmer-Status-Box (Logik von Anonym bleibt) -----
+    // ----- 6. Teilnehmer-Status-Box (P3 Logik) -----
     const statusContainer = document.getElementById('vote-participant-status-container');
     const nameDisplay = document.getElementById('vote-participant-name');
     const userContainer = document.getElementById('vote-user-name-container');
@@ -1819,7 +1852,7 @@ function renderVoteView(voteData) {
     const guestNameContainer = document.getElementById('vote-guest-name-container');
     const guestNameInput = document.getElementById('vote-guest-name-input');
     const guestChangeBtn = document.getElementById('vote-guest-change-to-anon-btn');
-
+    
     if (statusContainer) statusContainer.classList.add('hidden');
     if (guestNameContainer) guestNameContainer.classList.add('hidden');
     if (userContainer) userContainer.classList.add('hidden');
@@ -1835,20 +1868,18 @@ function renderVoteView(voteData) {
         userChangeBtn.classList.remove('bg-blue-600', 'text-white');
         userChangeBtn.classList.add('bg-gray-200', 'text-gray-700');
     }
-    isVoteGridEditable = false;
-
+    isVoteGridEditable = false; 
+    
     if (isParticipationBlocked) {
         // Nichts tun
-    }
+    } 
     else {
-        // =================================================================
-        // START NEU (P3): Logik für Gast-per-Link
-        // =================================================================
+        // (P3) Logik für Gast-per-Link
         if (currentGuestInfo && currentGuestInfo.voteId === voteData.id) {
             // Fall 1: Wir sind ein GAST-PER-LINK
             if (statusContainer) statusContainer.classList.remove('hidden');
             if (userContainer) userContainer.classList.remove('hidden'); // Zeige den "User"-Container
-
+            
             if (youParticipant) {
                 // Gast-per-Link hat bereits abgestimmt
                 if (nameDisplay) nameDisplay.textContent = youParticipant.name;
@@ -1856,37 +1887,37 @@ function renderVoteView(voteData) {
             } else {
                 // Gast-per-Link stimmt zum ersten Mal ab
                 if (nameDisplay) nameDisplay.textContent = currentGuestInfo.name;
-                isVoteGridEditable = true;
+                isVoteGridEditable = true; 
             }
             // (Buttons für Anonym/Namen ändern bleiben versteckt)
-
+            
         } else if (youParticipant) {
             // Fall 2: Wir sind ein REGISTRIERTER USER und haben abgestimmt
             if (statusContainer) statusContainer.classList.remove('hidden');
             if (userContainer) userContainer.classList.remove('hidden');
             if (nameDisplay) nameDisplay.textContent = youParticipant.name;
-            isVoteGridEditable = false;
-
+            isVoteGridEditable = false; 
+        
         } else {
             // Fall 3: Wir haben noch nicht abgestimmt (als User oder normaler Gast)
-            isVoteGridEditable = true;
+            isVoteGridEditable = true; 
             if (statusContainer) statusContainer.classList.remove('hidden');
-
+            
             if (voteData.isAnonymous && voteData.anonymousMode === 'erzwingen') {
                 if (userContainer) userContainer.classList.remove('hidden');
                 if (nameDisplay) nameDisplay.textContent = 'Anonym';
-
+            
             } else if (voteData.isAnonymous && voteData.anonymousMode === 'ermöglichen') {
                 if (currentUser.mode !== GUEST_MODE) {
                     if (userContainer) userContainer.classList.remove('hidden');
                     const currentUserFull = USERS[currentUser.mode];
                     if (nameDisplay) nameDisplay.textContent = currentUserFull ? currentUserFull.realName : currentUser.displayName;
-                    if (userChangeBtn) userChangeBtn.classList.remove('hidden');
+                    if (userChangeBtn) userChangeBtn.classList.remove('hidden'); 
                 } else {
                     if (guestNameContainer) guestNameContainer.classList.remove('hidden');
-                    if (guestChangeBtn) guestChangeBtn.classList.remove('hidden');
+                    if (guestChangeBtn) guestChangeBtn.classList.remove('hidden'); 
                 }
-
+                
             } else {
                 if (currentUser.mode !== GUEST_MODE) {
                     if (userContainer) userContainer.classList.remove('hidden');
@@ -1897,11 +1928,8 @@ function renderVoteView(voteData) {
                 }
             }
         }
-        // =================================================================
-        // ENDE NEU (P3)
-        // =================================================================
     }
-
+    
     // ----- 7. Antworten laden (Sicher) -----
     currentParticipantAnswers = {};
     if (youParticipant) {
@@ -1910,19 +1938,17 @@ function renderVoteView(voteData) {
 
     // ----- 8. Knöpfe (Speichern, Admin-Edit) (Sicher) -----
     const saveButton = document.getElementById('vote-save-participation-btn');
-    const editButton = document.getElementById('show-edit-vote-btn');
-    resetEditWrapper();
-    if (saveButton) saveButton.classList.add('hidden');
+    const editButton = document.getElementById('show-edit-vote-btn'); 
+    resetEditWrapper(); 
+    if (saveButton) saveButton.classList.add('hidden'); 
     if (isParticipationBlocked) {
         if (saveButton) saveButton.classList.add('hidden');
     }
     if (editButton) {
-        editButton.classList.remove('hidden');
+        editButton.classList.remove('hidden'); 
     }
-
+    
     // ----- 9. "Antworten verstecken" & Infobox -----
-    // (Dieser Teil bleibt unverändert)
-    // ...
     let shouldShowHidden = false;
     let infoText = "";
     const hiddenInfoBox = document.getElementById('vote-hidden-answers-infobox');
@@ -1931,7 +1957,7 @@ function renderVoteView(voteData) {
         if (voteData.hideAnswersMode === 'bis_umfragenabschluss') {
             shouldShowHidden = true;
             infoText = "Die Antworten aller Teilnehmer sind bis zum Abschluss der Umfrage versteckt.";
-        }
+        } 
         else if (voteData.hideAnswersMode === 'bis_stimmabgabe_mit_korrektur') {
             if (!youParticipant) {
                 shouldShowHidden = true;
@@ -1941,7 +1967,7 @@ function renderVoteView(voteData) {
             }
         }
         else if (voteData.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur') {
-            if (!youParticipant) {
+             if (!youParticipant) {
                 shouldShowHidden = true;
                 infoText = "Die Antworten werden sichtbar, sobald du deine Stimme abgegeben hast. Achtung: Korrekturen sind danach nicht mehr möglich.";
             } else {
@@ -1957,12 +1983,13 @@ function renderVoteView(voteData) {
     }
 
     // ----- 10. Tabelle rendern -----
-    updatePollTableAnswers(voteData, isVoteGridEditable, isPollClosed, shouldShowHidden);
-
+    updatePollTableAnswers(voteData, isVoteGridEditable, isPollClosed, shouldShowHidden); 
+    
     if (!isParticipationBlocked) {
         checkIfAllAnswered();
     }
 }
+
 
 
 
@@ -3820,7 +3847,7 @@ function setEditChanges(changed) {
 
 /**
  * NEU (P3): Zeichnet die Liste der vor-registrierten Gäste im Admin-Panel.
- * (KORRIGIERT FÜR P1: Zeigt "Link kopieren" als Text)
+ * (KORRIGIERT FÜR P1 & P3: Zeigt "Link kopieren" als Text, ohne Icon)
  */
 function renderPreRegisteredGuestList(containerId, isEditMode = false) {
     const container = document.getElementById(containerId);
@@ -3835,23 +3862,20 @@ function renderPreRegisteredGuestList(containerId, isEditMode = false) {
         let linkHTML = '';
         if (isEditMode && currentVoteData && currentVoteData.id) {
             // Nur im "Bearbeiten"-Modus (wo die voteId existiert) den Link-Button anzeigen
-            const baseUrl = window.location.origin + window.location.pathname;
+            const baseUrl = window.location.origin + window.location.pathname; 
             const directUrl = `${baseUrl}?vote_id=${currentVoteData.id}&guest_id=${guest.id}`;
-
+            
             // =================================================================
-            // START KORREKTUR (Problem 1)
+            // START KORREKTUR (Problem 3 - Icon entfernt)
             // =================================================================
             linkHTML = `
-                <button class="copy-guest-link-btn py-1 px-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200
-                               flex items-center gap-1 text-sm font-semibold" 
+                <button class="copy-guest-link-btn py-1 px-3 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200
+                               text-sm font-semibold" 
                         data-url="${directUrl}" title="Einladungs-Link kopieren">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
-                        <path d="M7.25 9.25a.75.75 0 0 1 0 1.5H5.051a.75.75 0 0 1 0-1.5H7.25ZM9.25 4.5a.75.75 0 0 0 1.5 0V2.299a.75.75 0 0 0-1.5 0V4.5Zm1.87.89a.75.75 0 0 1 1.06 0l1.44 1.44a.75.75 0 0 1-1.06 1.06l-1.44-1.44a.75.75 0 0 1 0-1.06ZM15 7.25a.75.75 0 0 0 0 1.5h2.199a.75.75 0 0 0 0-1.5H15ZM4.5 9.25a.75.75 0 0 0-1.5 0v2.199a.75.75 0 0 0 1.5 0V9.25Zm1.81 1.87a.75.75 0 0 1 0 1.06l-1.44 1.44a.75.75 0 0 1-1.06-1.06l1.44-1.44a.75.75 0 0 1 1.06 0ZM9.25 15a.75.75 0 0 1 1.5 0v2.199a.75.75 0 0 1-1.5 0V15Zm1.87 1.81a.75.75 0 0 0 1.06 0l1.44-1.44a.75.75 0 0 0-1.06-1.06l-1.44 1.44a.75.75 0 0 0 0 1.06ZM15 12.75a.75.75 0 0 1 0-1.5h2.199a.75.75 0 0 1 0 1.5H15Z" />
-                    </svg>
-                    <span>Link kopieren</span>
+                    Link kopieren
                 </button>`;
             // =================================================================
-            // ENDE KORREKTUR (Problem 1)
+            // ENDE KORREKTUR (Problem 3)
             // =================================================================
         } else {
             // Im "Erstellen"-Modus (wo die voteId noch nicht existiert)
@@ -3874,6 +3898,7 @@ function renderPreRegisteredGuestList(containerId, isEditMode = false) {
         `;
     }).join('');
 }
+
 
 
 /**
