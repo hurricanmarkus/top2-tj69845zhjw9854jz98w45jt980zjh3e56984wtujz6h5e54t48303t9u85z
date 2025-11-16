@@ -3,6 +3,55 @@ import { populatePersonDropdown } from './checklist.js';
 
 let editingPortionId = null;
 
+
+/**
+ * NEU: Speichert die aktuelle Mahlzeit im sessionStorage.
+ */
+function saveMealToSession() {
+    try {
+        if (sessionStorage) {
+            sessionStorage.setItem('currentMealData', JSON.stringify(currentMeal));
+            console.log("Mahlzeit im sessionStorage gespeichert.");
+        }
+    } catch (e) {
+        console.error("Fehler beim Speichern im sessionStorage:", e);
+    }
+}
+
+/**
+ * NEU: Leert die Mahlzeit, den sessionStorage und lädt die Ansicht neu.
+ */
+function clearMealData() {
+    if (confirm("Bist du sicher? Alle Eingaben für diese Mahlzeit werden gelöscht.")) {
+        // 1. Leere das globale Objekt
+        Object.assign(currentMeal, {
+            name: '',
+            singleProducts: [],
+            recipes: [],
+            userInputDistribution: [],
+            calculateRest: false,
+            finalDistribution: []
+        });
+        
+        // 2. Leere den Speicher
+        if (sessionStorage) {
+            sessionStorage.removeItem('currentMealData');
+        }
+        
+        // 3. Leere die Ergebnis-Boxen
+        const resultsTable = document.getElementById('results-table');
+        if (resultsTable) resultsTable.innerHTML = '<p class="text-sm text-gray-500 text-center">Bitte eine Ansicht (Gesamt, Rest oder eine Portion) auswählen, um das Ergebnis anzuzeigen.</p>';
+        const switcher = document.getElementById('calculation-view-switcher');
+        if (switcher) switcher.innerHTML = '';
+        
+        // 4. Lade die Ansicht neu (dies rendert die leeren Felder)
+        initializeEssensberechnungView();
+        
+        alertUser("Formular geleert. Du kannst eine neue Mahlzeit starten.", "success");
+    }
+}
+
+
 function setDefaultPortionName() {
     const personId = document.getElementById('person-select').value;
     const nameInput = document.getElementById('portion-name');
@@ -42,24 +91,14 @@ function setupEssensberechnungListeners() {
     const view = document.getElementById('essensberechnungView');
     if (view.dataset.listenerAttached === 'true') return;
 
-    // =================================================================
-    // START KORREKTUR (Inhalt bei Fokus markieren)
-    // =================================================================
-    // Dieser neue Listener reagiert, wenn ein Feld den Fokus erhält (z.B. per Tab-Taste oder Klick).
+    // (P1 - Inhalt bei Fokus markieren)
     view.addEventListener('focusin', (e) => {
-        // Wir prüfen, ob das fokussierte Element ein Text- oder Zahlen-Eingabefeld ist.
         if (e.target.matches('input[type="text"], input[type="number"]')) {
-            // Wenn ja, markieren wir den gesamten Inhalt des Feldes.
-            // Ein kleiner Timeout ist nötig, damit der Klick-Fokus-Vorgang
-            // abgeschlossen ist, bevor das Markieren passiert (verhindert Probleme).
             setTimeout(() => {
                 e.target.select();
-            }, 0); // 0ms Timeout reicht aus.
+            }, 0); 
         }
     });
-    // =================================================================
-    // ENDE KORREKTUR
-    // =================================================================
 
     // ----- Helper-Funktion zum Zurücksetzen des Formulars -----
     const resetPortionForm = () => {
@@ -89,6 +128,12 @@ function setupEssensberechnungListeners() {
         document.getElementById('portion-definition-form').classList.remove('bg-yellow-50');
         setDefaultPortionName();
         renderDistributionList();
+        
+        // =================================================================
+        // NEU: Speichern nach Formular-Reset
+        // =================================================================
+        saveMealToSession();
+        // =================================================================
     };
 
     view.addEventListener('keydown', (e) => {
@@ -111,6 +156,16 @@ function setupEssensberechnungListeners() {
     if (personSelectForEvent) {
         personSelectForEvent.addEventListener('change', setDefaultPortionName);
     }
+    
+    // =================================================================
+    // NEU: Listener für "Neue Mahlzeit"-Knopf
+    // =================================================================
+    const newMealBtn = document.getElementById('new-meal-btn');
+    if (newMealBtn && !newMealBtn.dataset.listenerAttached) {
+        newMealBtn.addEventListener('click', clearMealData);
+        newMealBtn.dataset.listenerAttached = 'true';
+    }
+    // =================================================================
 
     // ----- Haupt-Click-Listener -----
     view.addEventListener('click', (e) => {
@@ -127,6 +182,7 @@ function setupEssensberechnungListeners() {
                 renderMealComposition();
                 renderDistributionInputs();
                 nameInput.focus();
+                saveMealToSession(); // <-- NEU: Speichern
             }
         }
         if (e.target.closest('.delete-recipe-btn')) {
@@ -135,6 +191,7 @@ function setupEssensberechnungListeners() {
                 currentMeal.recipes = currentMeal.recipes.filter(r => r.id !== recipeId);
                 renderMealComposition();
                 renderDistributionInputs();
+                saveMealToSession(); // <-- NEU: Speichern
             }
         }
         if (e.target.closest('.delete-single-product-btn')) {
@@ -142,6 +199,7 @@ function setupEssensberechnungListeners() {
             currentMeal.singleProducts = currentMeal.singleProducts.filter(p => p.id !== productId);
             renderMealComposition();
             renderDistributionInputs();
+            saveMealToSession(); // <-- NEU: Speichern
         }
         if (e.target.closest('#add-recipe-btn')) {
             const recipeName = prompt("Wie soll das neue Rezept heißen?");
@@ -149,9 +207,9 @@ function setupEssensberechnungListeners() {
                 currentMeal.recipes.push({ id: Date.now(), name: recipeName.trim(), ingredients: [], calculatedFinalWeight: 0 });
                 renderMealComposition();
                 renderDistributionInputs();
+                saveMealToSession(); // <-- NEU: Speichern
             }
         }
-        // ERSETZE DEN KOMPLETTEN if-BLOCK FÜR ".add-ingredient-btn"
 
         if (e.target.closest('.add-ingredient-btn')) {
             const recipeId = parseInt(e.target.closest('.add-ingredient-btn').dataset.recipeId);
@@ -164,14 +222,10 @@ function setupEssensberechnungListeners() {
             if (name && weight > 0) {
                 const recipe = currentMeal.recipes.find(r => r.id === recipeId);
                 if (recipe) {
-                    // 1. Daten aktualisieren
                     recipe.ingredients.push({ id: Date.now(), name, weight });
-
-                    // 2. Den Bereich komplett neu zeichnen
                     renderMealComposition();
+                    saveMealToSession(); // <-- NEU: Speichern
 
-                    // 3. JETZT ERST das neue Eingabefeld im neu gezeichneten
-                    //    Bereich suchen und den Fokus darauf setzen.
                     const newRecipeCard = view.querySelector(`.recipe-card[data-recipe-id="${recipeId}"]`);
                     if (newRecipeCard) {
                         const newNameInput = newRecipeCard.querySelector('.ingredient-name');
@@ -189,6 +243,7 @@ function setupEssensberechnungListeners() {
             if (recipe) {
                 recipe.ingredients = recipe.ingredients.filter(i => i.id !== ingredientId);
                 renderMealComposition();
+                saveMealToSession(); // <-- NEU: Speichern
             }
         }
 
@@ -308,6 +363,7 @@ function setupEssensberechnungListeners() {
             });
 
             resetPortionForm();
+            // (Speichern passiert in resetPortionForm)
         }
 
         // --- Portion zur Definitions-Liste hinzufügen ---
@@ -344,6 +400,7 @@ function setupEssensberechnungListeners() {
             });
 
             resetPortionForm();
+            // (Speichern passiert in resetPortionForm)
         }
 
         // --- Eine Portions-Definition wieder aus der Liste löschen ---
@@ -354,11 +411,13 @@ function setupEssensberechnungListeners() {
                 currentMeal.userInputDistribution = currentMeal.userInputDistribution.filter(p => p.id !== editingPortionId);
                 // Setze das Formular zurück
                 resetPortionForm();
+                // (Speichern passiert in resetPortionForm)
             }
         }
         // --- Finale Berechnung für alles in der Liste starten ---
         if (e.target.closest('#run-calculation-btn')) {
             calculateAndRenderDistribution();
+            saveMealToSession(); // <-- NEU: Speichern
         }
 
         // --- Interaktive Buttons im Ergebnisbereich ---
@@ -378,6 +437,7 @@ function setupEssensberechnungListeners() {
 
     view.dataset.listenerAttached = 'true';
 }
+
 
 function renderMealComposition() {
     const singleProductsList = document.getElementById('single-products-list');

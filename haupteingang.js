@@ -95,14 +95,29 @@ export const views = {
 };
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
 
-export let currentMeal = {
-    name: '',
-    singleProducts: [], // { id, name, weight }
-    recipes: [],        // { id, name, ingredients: [{...}] }
-    userInputDistribution: [], // { id, portionName, personId, personName, anzahl, productInputs: [{productId, mode, value}] }
-    calculateRest: false,
-    finalDistribution: []
-};
+export let currentMeal = (() => {
+    // Versuche, eine gespeicherte Mahlzeit aus dem sessionStorage zu laden
+    try {
+        const savedMeal = sessionStorage.getItem('currentMealData');
+        if (savedMeal) {
+            console.log("Gespeicherte Mahlzeit aus session-Storage geladen.");
+            return JSON.parse(savedMeal); // Lade den gespeicherten Stand
+        }
+    } catch (e) {
+        console.error("Fehler beim Laden der Mahlzeit aus sessionStorage:", e);
+        sessionStorage.removeItem('currentMealData');
+    }
+    
+    // Wenn nichts gefunden wurde, starte mit einer leeren Mahlzeit
+    return {
+        name: '',
+        singleProducts: [], // { id, name, weight }
+        recipes: [],        // { id, name, ingredients: [{...}] }
+        userInputDistribution: [], // { id, portionName, personId, personName, anzahl, productInputs: [{productId, mode, value}] }
+        calculateRest: false,
+        finalDistribution: []
+    };
+})(); // Die Funktion wird sofort ausgeführt und gibt das Objekt zurück
 
 export let notrufSettings = {
     modes: [],
@@ -261,15 +276,7 @@ async function initializeFirebase() {
                 const { getFunctions, httpsCallable } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js");
                 const functions = getFunctions(app);
                 window.setRoleClaim = httpsCallable(functions, 'setRoleClaim'); 
-                
-                // =========================================================
-                // START BUG 5 FIX (Lösung B)
-                // =========================================================
-                // Wir definieren hier die "Telefonnummer" zu unserem neuen Mitarbeiter
                 window.checkVoteToken = httpsCallable(functions, 'checkVoteToken');
-                // =========================================================
-                // END BUG 5 FIX
-                // =========================================================
                 
                 window.firebaseFunctionsInitialised = true;
                 console.log("Firebase Functions initialisiert und global verfügbar gemacht.");
@@ -345,52 +352,38 @@ async function initializeFirebase() {
             }
             
             // =================================================================
-            // URL-PRÜFUNG (Problem 3 Anpassung)
+            // URL-PRÜFUNG (KORRIGIERT: Lädt letzte Ansicht)
             // =================================================================
+            let navigatedByUrl = false; // Merker, ob ein Link uns navigiert hat
             try {
                 const urlParams = new URLSearchParams(window.location.search);
                 const voteId = urlParams.get('vote_id');
                 const voteToken = urlParams.get('vote_token');
                 const view = urlParams.get('view'); 
-                
-                // =================================================================
-                // START NEU (P3): Gast-Link-Parameter
-                // =================================================================
                 const guestId = urlParams.get('guest_id');
-                // =================================================================
-                // ENDE NEU (P3)
-                // =================================================================
 
-                // Prüfe, ob die URL "sauber" ist
                 const isUrlClean = !voteId && !voteToken && !view && !guestId;
 
                 if (!isUrlClean) {
+                    navigatedByUrl = true; // Ein Link wurde verwendet
                     
-                    // =================================================================
-                    // START NEU (P3): Priorisierte Prüfung für Gast-Links
-                    // =================================================================
-                    // Fall 1: Wichtigster Fall - Ein Gast-per-Link
                     if (voteId && guestId) {
+                        // Fall 1: Wichtigster Fall - Ein Gast-per-Link
                         console.log("[P3] URL-Parameter 'vote_id' UND 'guest_id' gefunden, starte joinVoteAsGuest...");
                         await joinVoteAsGuest(voteId, guestId); 
-                        // (cleanUrlParams() wird von joinVoteAsGuest intern aufgerufen)
                     
-                    // Fall 2: Normaler Beitritt per ID
                     } else if (voteId) {
-                    // =================================================================
-                    // ENDE NEU (P3)
-                    // =================================================================
-                    
+                        // Fall 2: Normaler Beitritt per ID
                         console.log("URL-Parameter 'vote_id' gefunden, starte joinVoteById...");
                         await joinVoteById(voteId); 
                     
-                    // Fall 3: Normaler Beitritt per Token
                     } else if (voteToken) {
+                        // Fall 3: Normaler Beitritt per Token
                         console.log("URL-Parameter 'vote_token' gefunden, starte joinVoteByToken...");
                         await joinVoteByToken(voteToken); 
                     
-                    // Fall 4: Navigation zur Ansicht
                     } else if (view === 'terminplaner') {
+                        // Fall 4: Navigation zur Ansicht
                         console.log("URL-Parameter 'view=terminplaner' gefunden, navigiere...");
                         navigate('terminplaner');
                         cleanUrlParams();
@@ -399,8 +392,22 @@ async function initializeFirebase() {
             } catch (e) {
                 console.error("Fehler bei der URL-Parameter-Prüfung:", e);
             }
+            
             // =================================================================
-            // ENDE DER URL-PRÜFUNG
+            // START KORREKTUR (Letzte Ansicht wiederherstellen)
+            // =================================================================
+            // Wenn wir NICHT über einen Link gekommen sind, versuchen wir, die letzte Ansicht zu laden
+            if (!navigatedByUrl && sessionStorage) {
+                const lastView = sessionStorage.getItem('lastActiveView');
+                // Stelle die Ansicht nur wieder her, wenn es nicht die Startseite ist
+                // und die Ansicht in unserer Liste bekannt ist.
+                if (lastView && lastView !== 'home' && views[lastView]) {
+                    console.log(`Letzte Ansicht [${lastView}] aus sessionStorage wiederhergestellt.`);
+                    navigate(lastView);
+                }
+            }
+            // =================================================================
+            // ENDE KORREKTUR
             // =================================================================
 
         }); // Ende onAuthStateChanged
@@ -409,6 +416,7 @@ async function initializeFirebase() {
         alertUser("Firebase konnte nicht initialisiert werden.", "error");
     }
 }
+
 
 
 
@@ -512,12 +520,22 @@ export function navigate(targetViewName) {
         return;
     }
 
+    // =================================================================
+    // START KORREKTUR (Letzte Ansicht speichern)
+    // =================================================================
+    // Speichere die Ziel-Ansicht im Kurzzeitgedächtnis
+    if (sessionStorage) {
+        sessionStorage.setItem('lastActiveView', targetViewName);
+    }
+    // =================================================================
+    // ENDE KORREKTUR
+    // =================================================================
+
     // Berechtigungsprüfung (bleibt gleich)
     const userPermissions = currentUser.permissions || [];
     const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'SYSTEMADMIN';
     
-    // NEU: Wir machen eine Ausnahme für 'terminplaner'.
-    // Diese Seite darf immer aufgerufen werden (für den Token-Beitritt).
+    // (P3) Ausnahme für 'terminplaner'
     if (targetViewName !== 'terminplaner') {
         if (targetViewName === 'entrance' && !userPermissions.includes('ENTRANCE')) return alertUser("Zugriff verweigert (Eingang).", 'error');
         if (targetViewName === 'pushover' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Push).", 'error');
@@ -536,7 +554,6 @@ export function navigate(targetViewName) {
         }
         if (targetViewName === 'notrufSettings' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Notruf-Einstellungen).", 'error');
     }
-    // HIER ENDET DIE AUSNAHME
 
 
     // Scroll zum Anfang
@@ -586,10 +603,8 @@ export function navigate(targetViewName) {
         Object.keys(adminSectionsState).forEach(key => adminSectionsState[key] = false);
         toggleAdminSection(null);
     }
-    
-    // NEU: Wir müssen nichts tun, wenn 'terminplaner' aufgerufen wird,
-    // da die Initialisierung schon in initializeFirebase() passiert.
 }
+
 
 export function setupEventListeners() {
     // Sicherstellen, dass die Elemente existieren, bevor Listener hinzugefügt werden
