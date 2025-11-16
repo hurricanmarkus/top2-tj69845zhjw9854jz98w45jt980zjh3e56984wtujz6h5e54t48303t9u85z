@@ -42,6 +42,25 @@ function setupEssensberechnungListeners() {
     const view = document.getElementById('essensberechnungView');
     if (view.dataset.listenerAttached === 'true') return;
 
+    // =================================================================
+    // START KORREKTUR (Inhalt bei Fokus markieren)
+    // =================================================================
+    // Dieser neue Listener reagiert, wenn ein Feld den Fokus erhält (z.B. per Tab-Taste oder Klick).
+    view.addEventListener('focusin', (e) => {
+        // Wir prüfen, ob das fokussierte Element ein Text- oder Zahlen-Eingabefeld ist.
+        if (e.target.matches('input[type="text"], input[type="number"]')) {
+            // Wenn ja, markieren wir den gesamten Inhalt des Feldes.
+            // Ein kleiner Timeout ist nötig, damit der Klick-Fokus-Vorgang
+            // abgeschlossen ist, bevor das Markieren passiert (verhindert Probleme).
+            setTimeout(() => {
+                e.target.select();
+            }, 0); // 0ms Timeout reicht aus.
+        }
+    });
+    // =================================================================
+    // ENDE KORREKTUR
+    // =================================================================
+
     // ----- Helper-Funktion zum Zurücksetzen des Formulars -----
     const resetPortionForm = () => {
         editingPortionId = null;
