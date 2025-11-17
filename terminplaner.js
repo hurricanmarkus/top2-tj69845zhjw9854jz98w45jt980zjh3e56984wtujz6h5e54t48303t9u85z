@@ -129,7 +129,7 @@ function showFixDateSelection() {
     listContainer.innerHTML = '<p class="text-sm text-gray-400 text-center">Berechne besten Termin...</p>';
 
     // =================================================================
-    // START PROBLEM 2 KORREKTUR
+    // START PROBLEM 2 KORREKTUR (UND REQUEST 2/3/4)
     // =================================================================
 
     // 3. Besten Termin berechnen (Deine Anforderung)
@@ -165,11 +165,31 @@ function showFixDateSelection() {
     });
 
     // 6. Liste der Optionen generieren
-    let optionsHTML = '';
+    
+    // =================================================================
+    // START KORREKTUR (Request 2/3/4)
+    // =================================================================
+    // Füge "Keine Einigung" als erste Option hinzu
+    let optionsHTML = `
+        <label class="flex items-center gap-3 p-3 bg-white rounded-lg border hover:bg-yellow-50 cursor-pointer">
+            <input type="radio" name="final-date-option" value="-99" class="h-5 w-5 text-indigo-600 focus:ring-indigo-500">
+            <div>
+                <p class="font-semibold text-yellow-800">Keine Einigung</p>
+                <p class="text-sm text-gray-600">
+                    Umfrage schließen (ohne Terminfindung)
+                </p>
+            </div>
+        </label>
+    `;
+    // =================================================================
+    // ENDE KORREKTUR
+    // =================================================================
+
     displayOptions.forEach(option => {
         const index = option.originalIndex; // Wichtig: den Original-Index für den 'value' verwenden
 
         const suggestionBadge = option.isSuggestion ? '<span class="ml-2 bg-green-200 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">Vorschlag</span>' : '';
+        // HIER: Der Vorschlag ist standardmäßig 'checked'
         const isChecked = option.isSuggestion ? 'checked' : '';
 
         // NEU: CSS-Klassen für Hervorhebung
@@ -202,6 +222,7 @@ function showFixDateSelection() {
 }
 
 
+
 // NEU: Versteckt die UI zur Auswahl des finalen Termins
 function hideFixDateSelection() {
     const selectionContainer = document.getElementById('fix-date-selection-container');
@@ -222,7 +243,10 @@ async function confirmAndFixDate() {
         return alertUser("Bitte wähle einen finalen Termin aus der Liste aus.", "error");
     }
 
+    // WICHTIG: value kann jetzt "-99" (Keine Einigung) oder eine Zahl (0, 1, 2...) sein
     const selectedOptionIndex = parseInt(selectedRadio.value, 10);
+    
+    // Wir prüfen nur, ob es eine gültige Zahl ist (isNaN = Is Not a Number)
     if (isNaN(selectedOptionIndex)) {
         return alertUser("Ungültige Auswahl.", "error");
     }
@@ -234,18 +258,14 @@ async function confirmAndFixDate() {
     setButtonLoading(confirmBtn, true);
 
     try {
-        // --- KORREKTUR HIER ---
-        // Die Zeile "const newEndTime = new Date();" wurde entfernt.
-
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
 
         await updateDoc(voteDocRef, {
-            // "endTime: newEndTime," wurde entfernt.
-            fixedOptionIndex: selectedOptionIndex // Der entscheidende neue Wert!
+            // Wir speichern einfach den Wert, den wir bekommen haben (-99 oder 0, 1, 2...)
+            fixedOptionIndex: selectedOptionIndex 
         });
 
         // Lokale Daten aktualisieren
-        // "currentVoteData.endTime = newEndTime;" wurde entfernt.
         currentVoteData.fixedOptionIndex = selectedOptionIndex;
 
         alertUser("Umfrage wurde geschlossen und Termin fixiert!", "success");
@@ -267,6 +287,7 @@ async function confirmAndFixDate() {
         setButtonLoading(confirmBtn, false);
     }
 }
+
 
 // ----- NEUE FUNKTIONEN FÜR ZUWEISUNGS-MODAL -----
 // Öffnet das Modal zur Auswahl von registrierten Benutzern.
@@ -1008,9 +1029,14 @@ export function initializeTerminplanerView() {
         addDateButtonEdit.addEventListener('click', addNewDateGroupEdit);
         addDateButtonEdit.dataset.listenerAttached = 'true';
     }
+    
+    // =================================================================
+    // START KORREKTUR (Request 1)
+    // =================================================================
     const datesContainerEdit = document.getElementById('vote-dates-container-edit');
     if (datesContainerEdit && !datesContainerEdit.dataset.listenerAttached) {
         datesContainerEdit.addEventListener('click', (e) => {
+            // "Uhrzeit hinzufügen"
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
                 const timesContainer = addTarget.previousElementSibling; 
@@ -1018,6 +1044,8 @@ export function initializeTerminplanerView() {
                     timesContainer.appendChild(createTimeInputHTML());
                 }
             }
+            
+            // "Uhrzeit entfernen"
             const removeTarget = e.target.closest('.vote-remove-time-btn');
             if (removeTarget) {
                 const timeGroup = removeTarget.closest('.time-input-group'); 
@@ -1028,23 +1056,33 @@ export function initializeTerminplanerView() {
                     alertUser("Du musst mindestens eine Uhrzeit pro Tag angeben.", "error");
                 }
             }
+            
+            // "Tag entfernen" (Dieser Teil hat gefehlt)
+            const removeDayTarget = e.target.closest('.vote-remove-day-btn');
+            if (removeDayTarget) {
+                const dayGroup = removeDayTarget.closest('[data-date-group-id]');
+                if (dayGroup) {
+                    dayGroup.remove();
+                    // Wichtig: Buttons und Validierung neu prüfen
+                    updateDeleteDayButtons('vote-dates-container-edit'); 
+                    validateLastDateGroupEdit();
+                }
+            }
         });
         
-        // =================================================================
-        // START KORREKTUR (Request 2)
-        // =================================================================
-        // HIER IST DEIN FEHLENDER LISTENER:
+        // "Eintippen" (Dieser Listener war vorher schon da, ist korrekt)
         datesContainerEdit.addEventListener('input', (e) => {
             if (e.target.matches('.vote-date-input, .vote-time-start-input')) {
                 validateLastDateGroupEdit();
             }
         });
-        // =================================================================
-        // ENDE KORREKTUR
-        // =================================================================
         
         datesContainerEdit.dataset.listenerAttached = 'true';
     }
+    // =================================================================
+    // ENDE KORREKTUR
+    // =================================================================
+
 
     // =================================================================
     // START KORREKTUR (Listener für Teilnehmer-Bearbeitung - Request 1)
@@ -2088,8 +2126,26 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
     optionsContainer.classList.add('space-y-4', 'mb-6');
 
 
-    // 1. Fall: Termin ist fixiert (Dieser Teil bleibt unverändert)
+    // =================================================================
+    // START KORREKTUR (Request 2/3/4)
+    // =================================================================
+    // 1. Fall: Termin ist fixiert (oder keine Einigung)
     if (voteData.fixedOptionIndex != null) {
+        
+        // 1a. NEU: Fall "Keine Einigung"
+        if (voteData.fixedOptionIndex === -99) {
+            optionsContainer.innerHTML = `
+                <div class="p-6 bg-yellow-100 border-l-4 border-yellow-500 rounded-lg text-center shadow-lg">
+                    <h3 class="text-xl font-bold text-yellow-800">Keine Einigung</h3>
+                    <p class="text-lg text-gray-700 mt-2">
+                        Die Umfrage ist geschlossen. Es konnte kein passender Termin gefunden werden.
+                    </p>
+                </div>
+            `;
+            return; // Wichtig: Hier beenden
+        }
+        
+        // 1b. Fall "Normaler fixierter Termin"
         const fixedOption = voteData.options[voteData.fixedOptionIndex];
         if (fixedOption) {
             const dateObj = new Date(fixedOption.date + 'T12:00:00');
@@ -2150,6 +2206,10 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
             return;
         }
     }
+    // =================================================================
+    // ENDE KORREKTUR
+    // =================================================================
+
 
     // =================================================================
     // START PROBLEM 1, 2, 4 KORREKTUR (Hybrid-Tabelle)
@@ -2356,6 +2416,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
     // ENDE PROBLEM 1, 2, 4 KORREKTUR
     // =================================================================
 }
+
 
 
 
