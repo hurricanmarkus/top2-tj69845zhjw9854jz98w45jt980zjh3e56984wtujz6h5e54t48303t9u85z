@@ -211,7 +211,10 @@ function showFixDateSelection() {
         `;
     });
 
-    if (currentVoteData.options.length === 0) {
+    if (currentVoteData.options.length === 0 && optionsHTML.includes("-99")) {
+        // Wenn keine Optionen da sind, zeige NUR "Keine Einigung"
+        listContainer.innerHTML = optionsHTML;
+    } else if (currentVoteData.options.length === 0) {
         listContainer.innerHTML = '<p class="text-sm text-red-500 text-center">Fehler: Diese Umfrage hat keine Termin-Optionen.</p>';
     } else {
         listContainer.innerHTML = optionsHTML;
@@ -220,6 +223,7 @@ function showFixDateSelection() {
     // ENDE PROBLEM 2 KORREKTUR
     // =================================================================
 }
+
 
 
 
@@ -1031,7 +1035,7 @@ export function initializeTerminplanerView() {
     }
     
     // =================================================================
-    // START KORREKTUR (Request 1)
+    // START KORREKTUR (Request 1 - Bugfix)
     // =================================================================
     const datesContainerEdit = document.getElementById('vote-dates-container-edit');
     if (datesContainerEdit && !datesContainerEdit.dataset.listenerAttached) {
@@ -1281,7 +1285,8 @@ export function initializeTerminplanerView() {
             }
             // Bestimmte Klicks (Knöpfe) lösen die Leiste aus
             // (Wir haben .save-participant-name-btn und .delete-participant-btn hinzugefügt)
-            if (e.type === 'click' && e.target.closest('.delete-guest-btn, .strike-term-btn, .restore-term-btn, .admin-vote-grid-btn, #vote-add-guest-btn-admin-edit, #vote-add-date-btn-edit, .vote-add-time-btn, .vote-remove-time-btn, #vote-setting-access-btn-edit, #vote-show-assign-user-modal-btn-edit, .save-participant-name-btn, .delete-participant-btn')) {
+            // (Wir haben .vote-remove-day-btn hinzugefügt)
+            if (e.type === 'click' && e.target.closest('.delete-guest-btn, .strike-term-btn, .restore-term-btn, .admin-vote-grid-btn, #vote-add-guest-btn-admin-edit, #vote-add-date-btn-edit, .vote-add-time-btn, .vote-remove-time-btn, .vote-remove-day-btn, #vote-setting-access-btn-edit, #vote-show-assign-user-modal-btn-edit, .save-participant-name-btn, .delete-participant-btn')) {
                 setEditChanges(true);
                 return;
             }
@@ -1296,6 +1301,7 @@ export function initializeTerminplanerView() {
     // ENDE NEU (P3)
     // =================================================================
 }
+
 
 
 
@@ -2127,12 +2133,14 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
 
 
     // =================================================================
-    // START KORREKTUR (Request 2/3/4)
+    // START KORREKTUR (Request 2 - "Keine Einigung" Bugfix)
     // =================================================================
+    
     // 1. Fall: Termin ist fixiert (oder keine Einigung)
     if (voteData.fixedOptionIndex != null) {
         
-        // 1a. NEU: Fall "Keine Einigung"
+        // 1a. NEU: Fall "Keine Einigung" (fixedOptionIndex === -99)
+        // Diese Prüfung MUSS VOR der "fixedOption"-Prüfung stattfinden.
         if (voteData.fixedOptionIndex === -99) {
             optionsContainer.innerHTML = `
                 <div class="p-6 bg-yellow-100 border-l-4 border-yellow-500 rounded-lg text-center shadow-lg">
@@ -2145,9 +2153,11 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
             return; // Wichtig: Hier beenden
         }
         
-        // 1b. Fall "Normaler fixierter Termin"
+        // 1b. Fall "Normaler fixierter Termin" (z.B. 0, 1, 2...)
         const fixedOption = voteData.options[voteData.fixedOptionIndex];
-        if (fixedOption) {
+        
+        // Prüfe, ob der Index gültig ist
+        if (fixedOption) { 
             const dateObj = new Date(fixedOption.date + 'T12:00:00');
             const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
             const timeString = fixedOption.timeEnd ?
@@ -2205,6 +2215,9 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
             `;
             return;
         }
+        // (Wenn fixedOption nicht gefunden wird (z.B. alter Index),
+        // fällt es durch zu Fall 2, was in Ordnung ist, da die
+        // Umfrage als "offen" angezeigt wird, bis der Admin es korrigiert)
     }
     // =================================================================
     // ENDE KORREKTUR
@@ -2416,6 +2429,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
     // ENDE PROBLEM 1, 2, 4 KORREKTUR
     // =================================================================
 }
+
 
 
 
@@ -3837,27 +3851,32 @@ function formatTokenInput(e, inputId) {
     }
 }
 
-// HINZUFÜGEN (NEUE FUNKTION) in terminplaner.js
 // NEU: Überprüft die Anzahl der Datums-Blöcke und blendet die "Tag löschen"-Knöpfe
-// ein oder aus, um sicherzustellen, dass der letzte Block nicht gelöscht werden kann.
+// ein oder aus.
+// KORRIGIERT: Erlaubt das Löschen des letzten Blocks im "Bearbeiten"-Modus.
 function updateDeleteDayButtons(containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // 1. Zähle alle Blöcke, die ein "data-date-group-id" haben
+    // 1. Zähle alle Blöcke
     const dayBlocks = container.querySelectorAll('[data-date-group-id]');
     const count = dayBlocks.length;
 
-    // 2. Gehe jeden Block einzeln durch
+    // 2. Bestimme die Mindestanzahl
+    // Im "Erstellen"-Modus (vote-dates-container) muss MINDESTENS 1 Tag bleiben.
+    // Im "Bearbeiten"-Modus (vote-dates-container-edit) dürfen ALLE gelöscht werden (minCount = 0).
+    const isEditMode = (containerId === 'vote-dates-container-edit');
+    const minCount = isEditMode ? 0 : 1;
+
+    // 3. Gehe jeden Block einzeln durch
     dayBlocks.forEach(block => {
         const deleteBtn = block.querySelector('.vote-remove-day-btn');
         if (deleteBtn) {
-            // 3. Wenn die Gesamtanzahl größer als 1 ist
-            if (count > 1) {
-                // zeige den Löschen-Knopf an
+            // 4. Zeige den Knopf nur, wenn die Anzahl der Blöcke GRÖSSER als die Mindestanzahl ist
+            if (count > minCount) {
                 deleteBtn.classList.remove('hidden');
             } else {
-                // sonst (wenn es der letzte ist) verstecke ihn
+                // Sonst (es ist der letzte Block im Erstellen-Modus) verstecke ihn
                 deleteBtn.classList.add('hidden');
             }
         }
