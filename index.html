@@ -1397,244 +1397,325 @@
 
 
 
-                <div id="terminplaner-edit-view" class="hidden">
-                    <div class="mb-4">
-                        <div class="flex justify-between items-center">
-                            <h2 id="edit-poll-title" class="text-2xl font-bold text-gray-800">... bearbeiten</h2>
-                            <button id="cancel-vote-editing-btn"
-                                class="py-2 px-4 bg-gray-200 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition">
-                                Zurück zur Umfrage
-                            </button>
-                        </div>
+<div id="terminplaner-edit-view" class="hidden">
+    <div class="mb-4">
+        <div class="flex justify-between items-center">
+            <h2 id="edit-poll-title" class="text-2xl font-bold text-gray-800">... bearbeiten</h2>
+            <button id="cancel-vote-editing-btn"
+                class="py-2 px-4 bg-gray-200 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition">
+                Zurück zur Umfrage
+            </button>
+        </div>
+    </div>
+
+    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
+        <h3 class="text-lg font-bold text-gray-800 mb-1">Details</h3>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-2 md:items-center">
+            <label for="vote-title-edit" class="block text-sm font-bold text-gray-700">Titel</label>
+            <input type="text" id="vote-title-edit"
+                class="w-full p-2 border border-gray-300 rounded-lg md:col-span-3">
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <label for="vote-description-edit"
+                class="block text-sm font-bold text-gray-700">Beschreibung</label>
+            <textarea id="vote-description-edit" rows="2"
+                class="w-full p-2 border border-gray-300 rounded-lg md:col-span-3"></textarea>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-2 md:items-center">
+            <label for="vote-location-edit" class="block text-sm font-bold text-gray-700">Ort</label>
+            <input type="text" id="vote-location-edit"
+                class="w-full p-2 border border-gray-300 rounded-lg md:col-span-3">
+        </div>
+    </div>
+
+    <div class="card bg-white rounded-xl shadow-lg mb-6">
+        <button
+            class="accordion-toggle w-full flex justify-between items-center p-4 cursor-pointer hover:bg-gray-50 rounded-xl"
+            data-toggle-target="#existing-terms-area">
+            <h3 class="text-lg font-bold text-gray-800">Bestehende Termine verwalten</h3>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                class="w-5 h-5 accordion-icon transition-transform">
+                <path fill-rule="evenodd"
+                    d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
+                    clip-rule="evenodd" />
+            </svg>
+        </button>
+        <div id="existing-terms-area" class="accordion-content hidden p-4 pt-0">
+            <div class="border-t pt-4">
+                <p class="text-xs text-gray-500 mb-3">Hier kannst du Termine streichen. Gestreichene Termine
+                    werden auf der Abstimm-Seite markiert und alle Stimmen dafür werden entfernt (lokal
+                    gespeichert, bis du auf "Änderungen speichern" klickst).</p>
+                <div id="manage-existing-terms-list" class="space-y-2 max-h-72 overflow-y-auto pr-2">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card bg-white rounded-xl shadow-lg mb-6">
+        <button
+            class="accordion-toggle w-full flex justify-between items-center p-4 cursor-pointer hover:bg-gray-50 rounded-xl"
+            data-toggle-target="#new-terms-area">
+            <h3 class="text-lg font-bold text-gray-800">Weitere Termine vorschlagen</h3>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                class="w-5 h-5 accordion-icon transition-transform">
+                <path fill-rule="evenodd"
+                    d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
+                    clip-rule="evenodd" />
+            </svg>
+        </button>
+        <div id="new-terms-area" class="accordion-content hidden p-4 pt-0">
+            <div class="border-t pt-4">
+                <p class="text-xs text-gray-500 mb-3">Du kannst hier <strong>neue</strong> Termine hinzufügen.
+                    Bestehende Termine können aus Sicherheitsgründen nicht geändert oder gelöscht werden. Wenn
+                    du einen Termin hinzufügst, müssen alle Teilnehmer erneut abstimmen (für diesen neuen
+                    Termin).</p>
+                <div id="vote-dates-container-edit" class="space-y-4">
+                </div>
+                <button id="vote-add-date-btn-edit"
+                    class="w-full mt-4 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
+                    + Tag hinzufügen
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card bg-white rounded-xl shadow-lg mb-6">
+        <button
+            class="accordion-toggle w-full flex justify-between items-center p-4 cursor-pointer hover:bg-gray-50 rounded-xl"
+            data-toggle-target="#participant-edit-area">
+            <h3 class="text-lg font-bold text-gray-800">Teilnehmer-Abstimmungen bearbeiten</h3>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                class="w-5 h-5 accordion-icon transition-transform">
+                <path fill-rule="evenodd"
+                    d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
+                    clip-rule="evenodd" />
+            </svg>
+        </button>
+        <div id="participant-edit-area" class="accordion-content hidden p-4 pt-0">
+            <div class="border-t pt-4">
+                <p class="text-xs text-gray-500 mb-3">Du kannst hier die Abstimmungen für andere Teilnehmer
+                    korrigieren. Jede Änderung wird im Korrektur-Verlauf des Teilnehmers protokolliert und
+                    sofort **lokal** gespeichert. Klicke am Ende auf "Änderungen speichern", um alles in die
+                    Datenbank zu schreiben.</p>
+                <div id="edit-participant-grid-container" class="space-y-3">
                     </div>
+            </div>
+        </div>
+    </div>
 
-                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
-                        <h3 class="text-lg font-bold text-gray-800 mb-1">Details</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-2 md:items-center">
-                            <label for="vote-title-edit" class="block text-sm font-bold text-gray-700">Titel</label>
-                            <input type="text" id="vote-title-edit"
-                                class="w-full p-2 border border-gray-300 rounded-lg md:col-span-3">
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
-                            <label for="vote-description-edit"
-                                class="block text-sm font-bold text-gray-700">Beschreibung</label>
-                            <textarea id="vote-description-edit" rows="2"
-                                class="w-full p-2 border border-gray-300 rounded-lg md:col-span-3"></textarea>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-2 md:items-center">
-                            <label for="vote-location-edit" class="block text-sm font-bold text-gray-700">Ort</label>
-                            <input type="text" id="vote-location-edit"
-                                class="w-full p-2 border border-gray-300 rounded-lg md:col-span-3">
-                        </div>
+    <div class="card bg-white rounded-xl shadow-lg mb-6">
+        <button
+            class="accordion-toggle w-full flex justify-between items-center p-4 cursor-pointer hover:bg-gray-50 rounded-xl"
+            data-toggle-target="#validity-area">
+            <h3 class="text-lg font-bold text-gray-800">Gültigkeitszeitraum</h3>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                class="w-5 h-5 accordion-icon transition-transform">
+                <path fill-rule="evenodd"
+                    d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
+                    clip-rule="evenodd" />
+            </svg>
+        </button>
+        <div id="validity-area" class="accordion-content hidden p-4 pt-0">
+            <div class="border-t pt-4 space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label for="vote-start-time-edit"
+                            class="block text-sm font-medium text-gray-700">Startet
+                            am</label>
+                        <input type="datetime-local" id="vote-start-time-edit"
+                            class="w-full p-2 border rounded-lg mt-1">
                     </div>
-
-                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6">
-                        <h3 class="text-lg font-bold text-gray-800 mb-3">Bestehende Termine verwalten</h3>
-                        <p class="text-xs text-gray-500 mb-3">Hier kannst du Termine streichen. Gestreichene Termine
-                            werden auf der Abstimm-Seite markiert und alle Stimmen dafür werden entfernt (lokal
-                            gespeichert, bis du auf "Änderungen speichern" klickst).</p>
-                        <div id="manage-existing-terms-list" class="space-y-2">
-                        </div>
-                    </div>
-
-                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6">
-                        <h3 class="text-lg font-bold text-gray-800 mb-3">Weitere Termine vorschlagen</h3>
-                        <p class="text-xs text-gray-500 mb-3">Du kannst hier <strong>neue</strong> Termine hinzufügen.
-                            Bestehende Termine können aus Sicherheitsgründen nicht geändert oder gelöscht werden. Wenn
-                            du einen Termin hinzufügst, müssen alle Teilnehmer erneut abstimmen (für diesen neuen
-                            Termin).</p>
-                        <div id="vote-dates-container-edit" class="space-y-4">
-                        </div>
-                        <button id="vote-add-date-btn-edit"
-                            class="w-full mt-4 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
-                            + Tag hinzufügen
-                        </button>
-                    </div>
-                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6">
-                        <h3 class="text-lg font-bold text-gray-800 mb-3">Teilnehmer-Abstimmungen bearbeiten</h3>
-                        <p class="text-xs text-gray-500 mb-3">Du kannst hier die Abstimmungen für andere Teilnehmer
-                            korrigieren. Jede Änderung wird im Korrektur-Verlauf des Teilnehmers protokolliert und
-                            sofort **lokal** gespeichert. Klicke am Ende auf "Änderungen speichern", um alles in die
-                            Datenbank zu schreiben.</p>
-                        <div id="edit-participant-grid-container" class="overflow-x-auto rounded-xl shadow-lg">
-                        </div>
-                    </div>
-
-
-                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
-                        <h3 class="text-lg font-bold text-gray-800 mb-1">Gültigkeitszeitraum</h3>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label for="vote-start-time-edit"
-                                    class="block text-sm font-medium text-gray-700">Startet
-                                    am</label>
-                                <input type="datetime-local" id="vote-start-time-edit"
-                                    class="w-full p-2 border rounded-lg mt-1">
-                            </div>
-                            <div>
-                                <label for="vote-end-time-edit" class="block text-sm font-medium text-gray-700">Endet
-                                    am</label>
-                                <input type="datetime-local" id="vote-end-time-edit"
-                                    class="w-full p-2 border rounded-lg mt-1 disabled:bg-gray-100 disabled:cursor-not-allowed">
-                                <label class="flex items-center gap-2 mt-2">
-                                    <input type="checkbox" id="vote-end-time-unlimited-edit" class="h-4 w-4 rounded">
-                                    <span class="text-sm text-gray-600">Unbegrenzt (offen lassen)</span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
-                        <h3 class="text-lg font-bold text-gray-800 mb-1">Einstellungen</h3>
-
-                        <div class="p-2 bg-gray-50 rounded-lg">
-                            <label class="block font-semibold text-gray-700">Teilnehmer zuweisen</label>
-                            <p class="text-xs text-gray-500 mb-2">Wähle Benutzer aus, die diese Umfrage in ihrer Liste
-                                sehen sollen.</p>
-                            <div class="flex items-center gap-2 p-2 bg-white border rounded-lg">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-                                    class="w-5 h-5 text-gray-400 flex-shrink-0">
-                                    <path
-                                        d="M10 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3.468 11.69A5.022 5.022 0 0 1 7.5 10h5a5.022 5.022 0 0 1 4.032 1.69l.966 1.616A2.25 2.25 0 0 1 15.53 15H4.47a2.25 2.25 0 0 1-1.968-1.694l.966-1.616Z" />
-                                </svg>
-                                <span id="vote-assigned-users-display-edit"
-                                    class="flex-grow text-sm text-gray-600 truncate" title="Niemand ausgewählt">Niemand
-                                    ausgewählt</span>
-                                <button id="vote-show-assign-user-modal-btn-edit"
-                                    class="py-1 px-3 bg-blue-100 text-blue-600 text-sm font-semibold rounded-lg hover:bg-blue-200 transition flex-shrink-0">
-                                    Auswählen
-                                </button>
-                            </div>
-                        </div>
-                        <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
-                            <input type="checkbox" id="vote-setting-public-edit" class="h-5 w-5 rounded">
-                            <span class="font-semibold text-gray-700">Öffentliche Umfrage</span>
+                    <div>
+                        <label for="vote-end-time-edit" class="block text-sm font-medium text-gray-700">Endet
+                            am</label>
+                        <input type="datetime-local" id="vote-end-time-edit"
+                            class="w-full p-2 border rounded-lg mt-1 disabled:bg-gray-100 disabled:cursor-not-allowed">
+                        <label class="flex items-center gap-2 mt-2">
+                            <input type="checkbox" id="vote-end-time-unlimited-edit" class="h-4 w-4 rounded">
+                            <span class="text-sm text-gray-600">Unbegrenzt (offen lassen)</span>
                         </label>
-                        <div class="p-2 bg-gray-50 rounded-lg flex flex-col md:flex-row gap-3">
-                            <label class="flex items-center gap-3 cursor-pointer flex-shrink-0">
-                                <input type="checkbox" id="vote-setting-anonymous-edit" class="h-5 w-5 rounded">
-                                <span class="font-semibold text-gray-700">Anonyme Umfrage</span>
-                            </label>
-
-                            <div id="vote-setting-anonymous-mode-wrapper-edit" class="hidden flex-grow">
-                                <select id="vote-setting-anonymous-mode-edit"
-                                    class="w-full p-2 border border-gray-300 rounded-lg bg-white">
-                                    <option value="erzwingen" selected>Erzwingen (Alle sind "Anonym")</option>
-                                    <option value="ermöglichen">Ermöglichen (Jeder kann "Anonym" wählen)</option>
-                                </select>
-                            </div>
-                        </div>
-                        <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
-                            <input type="checkbox" id="vote-setting-disable-maybe-edit" class="h-5 w-5 rounded">
-                            <span class="font-semibold text-gray-700">"Vielleicht"-Option deaktivieren</span>
-                        </label>
-                        <div class="p-2 bg-gray-50 rounded-lg flex flex-col md:flex-row gap-3">
-                            <label class="flex items-center gap-3 cursor-pointer flex-shrink-0">
-                                <input type="checkbox" id="vote-setting-hide-answers-edit" class="h-5 w-5 rounded">
-                                <span class="font-semibold text-gray-700">Antworten verstecken</span>
-                            </label>
-
-                            <div id="vote-setting-hide-answers-mode-wrapper-edit" class="hidden flex-grow">
-                                <select id="vote-setting-hide-answers-mode-edit"
-                                    class="w-full p-2 border border-gray-300 rounded-lg bg-white">
-                                    <option value="bis_umfragenabschluss" selected>bis Umfrageabschluss</option>
-                                    <option value="bis_stimmabgabe_mit_korrektur">bis zur eigenen Stimmabgabe</option>
-                                    <option value="bis_stimmabgabe_ohne_korrektur">bis zur eignen Stimmabgabe
-                                        (Korrekturen verbieten)</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="p-3 bg-gray-50 rounded-lg">
-                            <div class="flex justify-between items-center">
-                                <div>
-                                    <span id="vote-setting-access-text-edit" class="font-semibold text-gray-700">Diese
-                                        Umfrage können nur angemeldete Benutzer sehen.</span>
-                                    <input type="hidden" id="vote-setting-access-mode-edit" value="registered">
-                                </div>
-                                <button id="vote-setting-access-btn-edit"
-                                    class="py-1 px-3 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300 flex-shrink-0 ml-2">
-                                    ändern...
-                                </button>
-                            </div>
-                        </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-
-<div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4 border-t-4 border-cyan-500">
-                        <h3 class="text-lg font-bold text-gray-800 mb-1">Gäste per Link einladen (Optional)</h3>
-                        <p class="text-xs text-gray-500 mb-3">
-                            Füge Gäste hinzu oder kopiere die Links für bestehende Gäste, um sie einzuladen.
-                        </p>
-
-                        <div class="flex flex-col sm:flex-row gap-2">
-                            <input type="text" id="vote-guest-name-input-admin-edit"
-                                class="flex-grow p-2 border border-gray-300 rounded-lg"
-                                placeholder="Name des Gastes (z.B. Max Mustermann)">
-                            <button id="vote-add-guest-btn-admin-edit"
-                                class="py-2 px-4 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-700 transition flex-shrink-0">
-                                + Gast hinzufügen
-                            </button>
-                        </div>
-                        
-                        <div id="vote-guest-list-admin-edit" class="space-y-2 pt-2 border-t">
-                            </div>
-                    </div>
-
-
-                    <button id="vote-save-changes-btn"
-                        class="w-full py-3 bg-green-600 text-white font-bold text-lg rounded-lg hover:bg-green-700 transition shadow-lg mb-6">
-                        Änderungen speichern
-                    </button>
-
-                    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4 border-t-4 border-red-500">
-                        <h3 class="text-lg font-bold text-red-700 mb-1">Gefahrenzone</h3>
-
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <button id="vote-fix-date-btn"
-                                class="w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition"
-                                data-action="fix">
-                                Tag & Zeit fixieren
-                            </button>
-                            <button id="vote-toggle-manual-close-btn"
-                                class="w-full py-2 px-4 bg-yellow-500 text-black font-semibold rounded-lg hover:bg-yellow-600 transition">
-                                Umfrage beenden
-                            </button>
-                        </div>
-
-                        <div id="fix-date-selection-container" class="hidden p-4 pt-0">
-                            <div class="border-t border-red-300 pt-4 space-y-3">
-                                <h4 class="font-bold text-lg text-gray-900">Finalen Termin auswählen & Umfrage schließen
-                                </h4>
-                                <p class="text-sm text-gray-600">
-                                    Wähle den besten Termin aus der Liste aus. Das System schlägt den Termin mit den
-                                    meisten "Ja"-Stimmen vor.
-                                </p>
-
-                                <div id="final-date-options-list"
-                                    class="space-y-2 max-h-60 overflow-y-auto p-2 border rounded-lg bg-gray-50">
-                                    <p class="text-sm text-gray-400 text-center">Lade Termin-Optionen...</p>
-                                </div>
-
-                                <div class="flex gap-2">
-                                    <button id="cancel-fix-date-btn"
-                                        class="w-1/2 py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition">
-                                        Abbrechen
-                                    </button>
-                                    <button id="confirm-fix-date-btn"
-                                        class="w-1/2 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition flex items-center justify-center">
-                                        <span class="button-text">Auswählen & Schließen</span>
-                                        <div class="loading-spinner"></div>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <button id="vote-delete-poll-btn"
-                            class="w-full py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">
-                            Diese Umfrage endgültig löschen
+    <div class="card bg-white rounded-xl shadow-lg mb-6">
+        <button
+            class="accordion-toggle w-full flex justify-between items-center p-4 cursor-pointer hover:bg-gray-50 rounded-xl"
+            data-toggle-target="#settings-area">
+            <h3 class="text-lg font-bold text-gray-800">Einstellungen</h3>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                class="w-5 h-5 accordion-icon transition-transform">
+                <path fill-rule="evenodd"
+                    d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
+                    clip-rule="evenodd" />
+            </svg>
+        </button>
+        <div id="settings-area" class="accordion-content hidden p-4 pt-0">
+            <div class="border-t pt-4 space-y-4">
+                <div class="p-2 bg-gray-50 rounded-lg">
+                    <label class="block font-semibold text-gray-700">Teilnehmer zuweisen</label>
+                    <p class="text-xs text-gray-500 mb-2">Wähle Benutzer aus, die diese Umfrage in ihrer Liste
+                        sehen sollen.</p>
+                    <div class="flex items-center gap-2 p-2 bg-white border rounded-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                            class="w-5 h-5 text-gray-400 flex-shrink-0">
+                            <path
+                                d="M10 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3.468 11.69A5.022 5.022 0 0 1 7.5 10h5a5.022 5.022 0 0 1 4.032 1.69l.966 1.616A2.25 2.25 0 0 1 15.53 15H4.47a2.25 2.25 0 0 1-1.968-1.694l.966-1.616Z" />
+                        </svg>
+                        <span id="vote-assigned-users-display-edit"
+                            class="flex-grow text-sm text-gray-600 truncate" title="Niemand ausgewählt">Niemand
+                            ausgewählt</span>
+                        <button id="vote-show-assign-user-modal-btn-edit"
+                            class="py-1 px-3 bg-blue-100 text-blue-600 text-sm font-semibold rounded-lg hover:bg-blue-200 transition flex-shrink-0">
+                            Auswählen
                         </button>
                     </div>
                 </div>
+                <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
+                    <input type="checkbox" id="vote-setting-public-edit" class="h-5 w-5 rounded">
+                    <span class="font-semibold text-gray-700">Öffentliche Umfrage</span>
+                </label>
+                <div class="p-2 bg-gray-50 rounded-lg flex flex-col md:flex-row gap-3">
+                    <label class="flex items-center gap-3 cursor-pointer flex-shrink-0">
+                        <input type="checkbox" id="vote-setting-anonymous-edit" class="h-5 w-5 rounded">
+                        <span class="font-semibold text-gray-700">Anonyme Umfrage</span>
+                    </label>
+
+                    <div id="vote-setting-anonymous-mode-wrapper-edit" class="hidden flex-grow">
+                        <select id="vote-setting-anonymous-mode-edit"
+                            class="w-full p-2 border border-gray-300 rounded-lg bg-white">
+                            <option value="erzwingen" selected>Erzwingen (Alle sind "Anonym")</option>
+                            <option value="ermöglichen">Ermöglichen (Jeder kann "Anonym" wählen)</option>
+                        </select>
+                    </div>
+                </div>
+                <label class="flex items-center gap-3 p-2 bg-gray-50 rounded-lg cursor-pointer">
+                    <input type="checkbox" id="vote-setting-disable-maybe-edit" class="h-5 w-5 rounded">
+                    <span class="font-semibold text-gray-700">"Vielleicht"-Option deaktivieren</span>
+                </label>
+                <div class="p-2 bg-gray-50 rounded-lg flex flex-col md:flex-row gap-3">
+                    <label class="flex items-center gap-3 cursor-pointer flex-shrink-0">
+                        <input type="checkbox" id="vote-setting-hide-answers-edit" class="h-5 w-5 rounded">
+                        <span class="font-semibold text-gray-700">Antworten verstecken</span>
+                    </label>
+
+                    <div id="vote-setting-hide-answers-mode-wrapper-edit" class="hidden flex-grow">
+                        <select id="vote-setting-hide-answers-mode-edit"
+                            class="w-full p-2 border border-gray-300 rounded-lg bg-white">
+                            <option value="bis_umfragenabschluss" selected>bis Umfrageabschluss</option>
+                            <option value="bis_stimmabgabe_mit_korrektur">bis zur eigenen Stimmabgabe</option>
+                            <option value="bis_stimmabgabe_ohne_korrektur">bis zur eignen Stimmabgabe
+                                (Korrekturen verbieten)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="p-3 bg-gray-50 rounded-lg">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <span id="vote-setting-access-text-edit" class="font-semibold text-gray-700">Diese
+                                Umfrage können nur angemeldete Benutzer sehen.</span>
+                            <input type="hidden" id="vote-setting-access-mode-edit" value="registered">
+                        </div>
+                        <button id="vote-setting-access-btn-edit"
+                            class="py-1 px-3 bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-300 flex-shrink-0 ml-2">
+                            ändern...
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card bg-white rounded-xl shadow-lg mb-6 border-t-4 border-cyan-500">
+        <button
+            class="accordion-toggle w-full flex justify-between items-center p-4 cursor-pointer hover:bg-gray-50 rounded-xl"
+            data-toggle-target="#guests-area">
+            <h3 class="text-lg font-bold text-gray-800">Gäste per Link einladen</h3>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                class="w-5 h-5 accordion-icon transition-transform">
+                <path fill-rule="evenodd"
+                    d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
+                    clip-rule="evenodd" />
+            </svg>
+        </button>
+        <div id="guests-area" class="accordion-content hidden p-4 pt-0">
+            <div class="border-t pt-4 space-y-4">
+                <p class="text-xs text-gray-500 mb-3">
+                    Füge Gäste hinzu oder kopiere die Links für bestehende Gäste, um sie einzuladen.
+                </p>
+
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <input type="text" id="vote-guest-name-input-admin-edit"
+                        class="flex-grow p-2 border border-gray-300 rounded-lg"
+                        placeholder="Name des Gastes (z.B. Max Mustermann)">
+                    <button id="vote-add-guest-btn-admin-edit"
+                        class="py-2 px-4 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-700 transition flex-shrink-0">
+                        + Gast hinzufügen
+                    </button>
+                </div>
+
+                <div id="vote-guest-list-admin-edit" class="space-y-2 pt-2 border-t">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button id="vote-save-changes-btn"
+        class="w-full py-3 bg-green-600 text-white font-bold text-lg rounded-lg hover:bg-green-700 transition shadow-lg mb-6">
+        Änderungen speichern
+    </button>
+
+    <div class="card bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4 border-t-4 border-red-500">
+        <h3 class="text-lg font-bold text-red-700 mb-1">Gefahrenzone</h3>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <button id="vote-fix-date-btn"
+                class="w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition"
+                data-action="fix">
+                Tag & Zeit fixieren
+            </button>
+            <button id="vote-toggle-manual-close-btn"
+                class="w-full py-2 px-4 bg-yellow-500 text-black font-semibold rounded-lg hover:bg-yellow-600 transition">
+                Umfrage beenden
+            </button>
+        </div>
+
+        <div id="fix-date-selection-container" class="hidden p-4 pt-0">
+            <div class="border-t border-red-300 pt-4 space-y-3">
+                <h4 class="font-bold text-lg text-gray-900">Finalen Termin auswählen & Umfrage schließen
+                </h4>
+                <p class="text-sm text-gray-600">
+                    Wähle den besten Termin aus der Liste aus. Das System schlägt den Termin mit den
+                    meisten "Ja"-Stimmen vor.
+                </p>
+
+                <div id="final-date-options-list"
+                    class="space-y-2 max-h-60 overflow-y-auto p-2 border rounded-lg bg-gray-50">
+                    <p class="text-sm text-gray-400 text-center">Lade Termin-Optionen...</p>
+                </div>
+
+                <div class="flex gap-2">
+                    <button id="cancel-fix-date-btn"
+                        class="w-1/2 py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition">
+                        Abbrechen
+                    </button>
+                    <button id="confirm-fix-date-btn"
+                        class="w-1/2 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition flex items-center justify-center">
+                        <span class="button-text">Auswählen & Schließen</span>
+                        <div class="loading-spinner"></div>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <button id="vote-delete-poll-btn"
+            class="w-full py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">
+            Diese Umfrage endgültig löschen
+        </button>
+    </div>
+</div>
 
             </div>
             <div id="userSelectionModal"

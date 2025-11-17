@@ -1031,9 +1031,15 @@ export function initializeTerminplanerView() {
         });
         datesContainerEdit.dataset.listenerAttached = 'true';
     }
+
+    // =================================================================
+    // START KORREKTUR (Listener für Teilnehmer-Bearbeitung)
+    // =================================================================
     const adminGridContainer = document.getElementById('edit-participant-grid-container');
     if (adminGridContainer && !adminGridContainer.dataset.listenerAttached) {
         adminGridContainer.addEventListener('click', (e) => {
+            
+            // 1. Klick auf einen Abstimm-Knopf
             const clickedButton = e.target.closest('.admin-vote-grid-btn');
             if (clickedButton && !clickedButton.disabled) {
                 const participantId = clickedButton.dataset.participantId;
@@ -1041,9 +1047,42 @@ export function initializeTerminplanerView() {
                 const newAnswer = clickedButton.dataset.answer;
                 handleAdminVoteEdit(participantId, optionIndex, newAnswer, clickedButton);
             }
+
+            // 2. Klick auf "Name bearbeiten"
+            const editNameBtn = e.target.closest('.edit-participant-name-btn');
+            if (editNameBtn) {
+                const participantId = editNameBtn.dataset.participantId;
+                toggleParticipantNameEdit(participantId, true); // true = Bearbeiten-Modus
+            }
+
+            // 3. Klick auf "Name speichern"
+            const saveNameBtn = e.target.closest('.save-participant-name-btn');
+            if (saveNameBtn) {
+                const participantId = saveNameBtn.dataset.participantId;
+                handleSaveParticipantName(participantId);
+            }
+
+            // 4. Klick auf "Namen-Bearbeitung Abbrechen"
+            const cancelNameBtn = e.target.closest('.cancel-participant-name-btn');
+            if (cancelNameBtn) {
+                const participantId = cancelNameBtn.dataset.participantId;
+                toggleParticipantNameEdit(participantId, false); // false = Ansichts-Modus
+            }
+
+            // 5. Klick auf "Teilnehmer löschen"
+            const deleteParticipantBtn = e.target.closest('.delete-participant-btn');
+            if (deleteParticipantBtn) {
+                const participantId = deleteParticipantBtn.dataset.participantId;
+                handleDeleteParticipant(participantId);
+            }
         });
         adminGridContainer.dataset.listenerAttached = 'true';
     }
+    // =================================================================
+    // ENDE KORREKTUR
+    // =================================================================
+
+
     const manageTermsList = document.getElementById('manage-existing-terms-list');
     if (manageTermsList && !manageTermsList.dataset.listenerAttached) {
         manageTermsList.addEventListener('click', (e) => {
@@ -1133,6 +1172,31 @@ export function initializeTerminplanerView() {
     if (editViewContainer && !editViewContainer.dataset.listenerAttached) {
         // Delegierter Listener für fast alle Änderungen
         const handleChange = (e) => {
+
+            // =================================================================
+            // START KORREKTUR (Akkordeon-Logik)
+            // =================================================================
+            // 1. Prüfe, ob ein Akkordeon-Knopf geklickt wurde
+            const accordionToggle = e.target.closest('.accordion-toggle');
+            if (accordionToggle) {
+                const targetId = accordionToggle.dataset.toggleTarget;
+                const targetArea = document.querySelector(targetId);
+                const icon = accordionToggle.querySelector('.accordion-icon');
+                
+                if (targetArea) {
+                    targetArea.classList.toggle('hidden');
+                    if (icon) {
+                        icon.classList.toggle('rotate-180');
+                    }
+                }
+                return; // WICHTIG: Stoppe hier, damit das Aufklappen nicht die "Speichern"-Leiste auslöst
+            }
+            // =================================================================
+            // ENDE KORREKTUR
+            // =================================================================
+
+            // 2. Prüfe auf andere Änderungen (die die "Speichern"-Leiste auslösen)
+            
             // Ignoriere Klicks auf "Link kopieren" oder "Abbrechen"
             if (e.target.closest('.copy-guest-link-btn, #cancel-fix-date-btn')) {
                 return;
@@ -1149,7 +1213,8 @@ export function initializeTerminplanerView() {
                 return;
             }
             // Bestimmte Klicks (Knöpfe) lösen die Leiste aus
-            if (e.type === 'click' && e.target.closest('.delete-guest-btn, .strike-term-btn, .restore-term-btn, .admin-vote-grid-btn, #vote-add-guest-btn-admin-edit, #vote-add-date-btn-edit, .vote-add-time-btn, .vote-remove-time-btn, #vote-setting-access-btn-edit, #vote-show-assign-user-modal-btn-edit')) {
+            // (Wir haben .save-participant-name-btn und .delete-participant-btn hinzugefügt)
+            if (e.type === 'click' && e.target.closest('.delete-guest-btn, .strike-term-btn, .restore-term-btn, .admin-vote-grid-btn, #vote-add-guest-btn-admin-edit, #vote-add-date-btn-edit, .vote-add-time-btn, .vote-remove-time-btn, #vote-setting-access-btn-edit, #vote-show-assign-user-modal-btn-edit, .save-participant-name-btn, .delete-participant-btn')) {
                 setEditChanges(true);
                 return;
             }
@@ -2823,7 +2888,6 @@ function renderCorrectionHistory(userId) {
 }
 
 
-// ERSETZE diese Funktion in terminplaner.js
 function renderEditView(voteData) {
     // =================================================================
     // START KORREKTUR (Problem 3)
@@ -2833,6 +2897,17 @@ function renderEditView(voteData) {
     // =================================================================
     // ENDE KORREKTUR (Problem 3)
     // =================================================================
+    
+    // =================================================================
+    // START KORREKTUR (Akkordeon zurücksetzen)
+    // =================================================================
+    // Schließe alle einklappbaren Bereiche und setze die Pfeile zurück
+    document.querySelectorAll('#terminplaner-edit-view .accordion-content').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('#terminplaner-edit-view .accordion-icon').forEach(el => el.classList.remove('rotate-180'));
+    // =================================================================
+    // ENDE KORREKTUR
+    // =================================================================
+
 
     document.getElementById('edit-poll-title').textContent = `"${voteData.title}" bearbeiten`;
 
@@ -4310,7 +4385,11 @@ function addNewDateGroupEdit(isFirst = false) {
     // --- KORREKTUR: Ruft die Helfer-Funktion auf ---
     updateDeleteDayButtons('vote-dates-container-edit');
 }
-// Baut die Admin-Tabelle, um Teilnehmer-Votes zu bearbeiten (Punkt 2)
+
+
+
+// Baut die Admin-Tabelle, um Teilnehmer-Votes zu bearbeiten
+// KORRIGIERTE VERSION: Baut jetzt Karten pro Teilnehmer für bessere Übersicht
 function renderParticipantEditGrid(voteData) {
     const container = document.getElementById('edit-participant-grid-container');
     if (!container) return;
@@ -4321,19 +4400,6 @@ function renderParticipantEditGrid(voteData) {
         return;
     }
 
-    // Baue die Kopfzeile (Alle Teilnehmer)
-    let tableHTML = '<table class="w-full border-collapse text-sm text-left bg-white">';
-    tableHTML += '<thead><tr class="bg-gray-50">';
-    tableHTML += '<th class="p-3 border-b sticky left-0 bg-gray-50 z-10 w-48">Termin</th>';
-
-    participants.forEach(p => {
-        tableHTML += `<th class="p-3 border-b text-center w-36">${p.name}</th>`;
-    });
-    tableHTML += '</tr></thead>';
-
-    // Baue die Zeilen (Alle Termine)
-    tableHTML += '<tbody>';
-
     // Sortiere Optionen nach Datum (genau wie in der Hauptansicht)
     const optionsByDate = {};
     voteData.options.forEach((option, index) => {
@@ -4343,59 +4409,118 @@ function renderParticipantEditGrid(voteData) {
         optionsByDate[option.date].push({ ...option, originalIndex: index });
     });
 
-    for (const date in optionsByDate) {
-        const dateObj = new Date(date + 'T12:00:00');
-        const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+    let participantCardsHTML = '';
 
-        tableHTML += `
-            <tr class="bg-gray-100">
-                <td class="p-2 font-bold sticky left-0 bg-gray-100 z-10" colspan="${participants.length + 1}">${niceDate}</td>
-            </tr>
+    // ÄUSSERE SCHLEIFE: Gehe jeden Teilnehmer durch
+    participants.forEach(p => {
+        const participantId = p.userId;
+
+        // --- 1. Header der Teilnehmer-Karte (mit Bearbeiten/Löschen-Knöpfen) ---
+        participantCardsHTML += `
+            <div class="participant-edit-card bg-white rounded-lg border shadow-md" data-participant-id="${participantId}">
+                <div class="p-3 bg-gray-50 rounded-t-lg border-b flex justify-between items-center">
+                    
+                    <div class="participant-name-display-wrapper flex-grow">
+                        <span class="text-lg font-bold text-gray-800 participant-name-display">${p.name}</span>
+                    </div>
+                    
+                    <div class="participant-name-edit-wrapper hidden flex-grow flex gap-2">
+                        <input type="text" value="${p.name}" 
+                               class="participant-name-input flex-grow p-1 border rounded-lg text-lg">
+                        <button class="save-participant-name-btn p-1 bg-green-100 text-green-700 rounded-lg hover:bg-green-200"
+                                data-participant-id="${participantId}" title="Speichern">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                                <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        <button class="cancel-participant-name-btn p-1 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                                data-participant-id="${participantId}" title="Abbrechen">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                                <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="participant-controls-display-wrapper flex items-center gap-2 flex-shrink-0 ml-4">
+                        <button class="edit-participant-name-btn py-1 px-2 bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg hover:bg-blue-200"
+                                data-participant-id="${participantId}">
+                            Name ändern
+                        </button>
+                        <button class="delete-participant-btn p-1 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
+                                data-participant-id="${participantId}" title="Diesen Teilnehmer komplett entfernen">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                                <path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.58.22-2.365.468a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193v-.443A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-4 space-y-4 max-h-72 overflow-y-auto">
         `;
 
-        optionsByDate[date].forEach(option => {
-            const optionIndex = option.originalIndex;
-            const timeString = option.timeEnd ?
-                `${option.timeStart} - ${option.timeEnd} Uhr` :
-                `${option.timeStart} Uhr`;
+        // INNERE SCHLEIFE: Gehe jeden TAG durch
+        for (const date in optionsByDate) {
+            const dateObj = new Date(date + 'T12:00:00');
+            const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
 
-            tableHTML += `<tr class="vote-option-row" data-option-index="${optionIndex}">
-                            <td class="p-3 border-b font-mono sticky left-0 bg-white z-10">${timeString}</td>`;
+            participantCardsHTML += `
+                <div class="date-group space-y-2">
+                    <h5 class="text-sm font-bold text-gray-700 border-b pb-1">${niceDate}</h5>
+            `;
 
-            // Für JEDEN Teilnehmer, erstelle die 3 Knöpfe
-            participants.forEach(p => {
-                const participantId = p.userId;
+            // INNERE SCHLEIFE 2: Gehe jede UHRZEIT durch
+            optionsByDate[date].forEach(option => {
+                const optionIndex = option.originalIndex;
+                const timeString = option.timeEnd ?
+                    `${option.timeStart} - ${option.timeEnd}` :
+                    `${option.timeStart} Uhr`;
+
                 const currentAnswer = p.currentAnswers[optionIndex];
+                const isStricken = option.isStricken === true;
 
                 const yesSelected = currentAnswer === 'yes' ? 'bg-green-200 ring-2 ring-indigo-500' : 'hover:bg-green-100 bg-opacity-50';
                 const maybeSelected = currentAnswer === 'maybe' ? 'bg-yellow-200 ring-2 ring-indigo-500' : 'hover:bg-yellow-100 bg-opacity-50';
                 const noSelected = currentAnswer === 'no' ? 'bg-red-200 ring-2 ring-indigo-500' : 'hover:bg-red-100 bg-opacity-50';
                 const maybeHidden = voteData.disableMaybe ? 'hidden' : '';
 
-                tableHTML += `
-                    <td class="p-2 border-b">
+                participantCardsHTML += `
+                    <div class="flex items-center justify-between gap-2 ${isStricken ? 'opacity-50' : ''}">
+                        <span class="font-mono text-sm ${isStricken ? 'line-through' : ''}">${timeString}</span>
+                        
                         <div class="flex justify-center gap-1">
-                            <button class="admin-vote-grid-btn p-2 rounded-lg ${yesSelected} transition-colors" data-participant-id="${participantId}" data-option-index="${optionIndex}" data-answer="yes" title="Ja">
+                            <button class="admin-vote-grid-btn p-2 rounded-lg ${yesSelected} transition-colors" 
+                                    data-participant-id="${participantId}" data-option-index="${optionIndex}" data-answer="yes" 
+                                    title="Ja" ${isStricken ? 'disabled' : ''}>
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-green-600"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" /></svg>
                             </button>
-                            <button class="admin-vote-grid-btn p-2 rounded-lg ${maybeSelected} ${maybeHidden} transition-colors" data-participant-id="${participantId}" data-option-index="${optionIndex}" data-answer="maybe" title="Vielleicht">
+                            <button class="admin-vote-grid-btn p-2 rounded-lg ${maybeSelected} ${maybeHidden} transition-colors" 
+                                    data-participant-id="${participantId}" data-option-index="${optionIndex}" data-answer="maybe" 
+                                    title="Vielleicht" ${isStricken ? 'disabled' : ''}>
                                  <span class="text-yellow-600 font-bold text-xl w-5 h-5 flex items-center justify-center">~</span>
                             </button>
-                            <button class="admin-vote-grid-btn p-2 rounded-lg ${noSelected} transition-colors" data-participant-id="${participantId}" data-option-index="${optionIndex}" data-answer="no" title="Nein">
+                            <button class="admin-vote-grid-btn p-2 rounded-lg ${noSelected} transition-colors" 
+                                    data-participant-id="${participantId}" data-option-index="${optionIndex}" data-answer="no" 
+                                    title="Nein" ${isStricken ? 'disabled' : ''}>
                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-red-600"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
                             </button>
                         </div>
-                    </td>
+                    </div>
                 `;
             });
 
-            tableHTML += '</tr>';
-        });
-    }
+            participantCardsHTML += `</div>`; // Ende date-group
+        }
+        
+        participantCardsHTML += `</div></div>`; // Ende Abstimmungs-Bereich & Teilnehmer-Karte
+    });
 
-    tableHTML += '</tbody></table>';
-    container.innerHTML = tableHTML;
+    container.innerHTML = participantCardsHTML;
 }
+
+
+
+
+
 
 // Verarbeitet den Klick eines Admins auf die Abstimmungs-Tabelle (Punkt 2)
 // Aktualisiert die LOKALEN Daten und protokolliert die Änderung.
@@ -4454,8 +4579,13 @@ function handleAdminVoteEdit(participantId, optionIndex, newAnswer, clickedButto
     clickedButton.classList.remove('bg-opacity-50');
 }
 
-// ----- NEUE FUNKTIONEN FÜR "TERMINE STREICHEN" -----
-// Baut die Liste der bestehenden Termine im "Bearbeiten"-Modus (Punkt 1)
+
+
+
+
+
+// Baut die Liste der bestehenden Termine im "Bearbeiten"-Modus
+// KORRIGIERTE VERSION: Gruppiert Termine wieder nach Datum
 function renderExistingTermsList(voteData) {
     const listContainer = document.getElementById('manage-existing-terms-list');
     if (!listContainer) return;
@@ -4465,32 +4595,58 @@ function renderExistingTermsList(voteData) {
         return;
     }
 
-    let listHTML = '';
+    // 1. Sortiere Optionen nach Datum
+    const optionsByDate = {};
     voteData.options.forEach((option, index) => {
-        const dateObj = new Date(option.date + 'T12:00:00');
-        const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
-        const timeString = option.timeEnd ? `${option.timeStart} - ${option.timeEnd}` : `${option.timeStart} Uhr`;
-
-        const isStricken = option.isStricken === true;
-
-        const textClasses = isStricken ? 'line-through text-gray-500' : 'font-semibold text-gray-800';
-        const button = isStricken ?
-            `<button class="restore-term-btn py-1 px-3 bg-green-100 text-green-700 text-sm font-semibold rounded-lg hover:bg-green-200" data-option-index="${index}">Wiederherstellen</button>` :
-            `<button class="strike-term-btn py-1 px-3 bg-red-100 text-red-700 text-sm font-semibold rounded-lg hover:bg-red-200" data-option-index="${index}">Streichen</button>`;
-
-        listHTML += `
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
-                <div>
-                    <p class="${textClasses}">${niceDate} <span class="font-mono">(${timeString})</span></p>
-                    ${isStricken ? '<p class="text-xs font-bold text-red-600">GESTREICHEN (Alle Stimmen entfernt)</p>' : ''}
-                </div>
-                ${button}
-            </div>
-        `;
+        // Benutze den Original-Index als Schlüssel, um die Option im voteData-Objekt zu finden
+        const optionWithIndex = { ...option, originalIndex: index };
+        if (!optionsByDate[option.date]) {
+            optionsByDate[option.date] = [];
+        }
+        optionsByDate[option.date].push(optionWithIndex);
     });
+
+    let listHTML = '';
+
+    // 2. Gehe jeden TAG durch
+    for (const date in optionsByDate) {
+        const dateObj = new Date(date + 'T12:00:00');
+        const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit' });
+
+        // Datums-Titel
+        listHTML += `<h4 class="text-md font-bold text-gray-800 sticky top-0 bg-gray-100 z-10 p-2 -mx-2">${niceDate}</h4>`;
+
+        // 3. Gehe jede UHRZEIT an diesem Tag durch
+        optionsByDate[date].forEach(option => {
+            const index = option.originalIndex; // Wichtig: der Original-Index
+            const timeString = option.timeEnd ? `${option.timeStart} - ${option.timeEnd}` : `${option.timeStart} Uhr`;
+            
+            // Hole den aktuellsten "isStricken"-Status direkt aus dem Haupt-Datenobjekt
+            const isStricken = currentVoteData.options[index].isStricken === true;
+
+            const textClasses = isStricken ? 'line-through text-gray-500' : 'font-semibold text-gray-800';
+            const button = isStricken ?
+                `<button class="restore-term-btn py-1 px-3 bg-green-100 text-green-700 text-sm font-semibold rounded-lg hover:bg-green-200" data-option-index="${index}">Wiederherstellen</button>` :
+                `<button class="strike-term-btn py-1 px-3 bg-red-100 text-red-700 text-sm font-semibold rounded-lg hover:bg-red-200" data-option-index="${index}">Streichen</button>`;
+
+            listHTML += `
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                    <div>
+                        <p class="${textClasses}">${timeString}</p>
+                        ${isStricken ? '<p class="text-xs font-bold text-red-600">GESTREICHEN (Stimmen entfernt)</p>' : ''}
+                    </div>
+                    ${button}
+                </div>
+            `;
+        });
+    }
 
     listContainer.innerHTML = listHTML;
 }
+
+
+
+
 
 // Verarbeitet den Klick auf "Streichen" / "Wiederherstellen" (Punkt 1)
 function handleStrikeTerm(optionIndex, shouldBeStricken) {
@@ -4541,6 +4697,111 @@ function handleStrikeTerm(optionIndex, shouldBeStricken) {
 
     alertUser(`Termin ${shouldBeStricken ? 'gestrichen' : 'wiederhergestellt'}. (Lokal geändert)`, "success");
 }
+
+
+
+
+
+// NEU: Schaltet die UI für die Namensbearbeitung eines Teilnehmers um
+function toggleParticipantNameEdit(participantId, isEditing) {
+    const card = document.querySelector(`.participant-edit-card[data-participant-id="${participantId}"]`);
+    if (!card) return;
+
+    const displayWrapper = card.querySelector('.participant-name-display-wrapper');
+    const controlsWrapper = card.querySelector('.participant-controls-display-wrapper');
+    const editWrapper = card.querySelector('.participant-name-edit-wrapper');
+    
+    if (isEditing) {
+        // Zeige Bearbeiten-Modus
+        displayWrapper.classList.add('hidden');
+        controlsWrapper.classList.add('hidden');
+        editWrapper.classList.remove('hidden');
+        // Setze den Wert im Input-Feld (falls er vorher geändert wurde)
+        const nameDisplay = displayWrapper.querySelector('.participant-name-display').textContent;
+        editWrapper.querySelector('.participant-name-input').value = nameDisplay;
+    } else {
+        // Zeige Anzeige-Modus
+        displayWrapper.classList.remove('hidden');
+        controlsWrapper.classList.remove('hidden');
+        editWrapper.classList.add('hidden');
+    }
+}
+
+// NEU: Speichert den neuen Namen eines Teilnehmers (lokal)
+function handleSaveParticipantName(participantId) {
+    const card = document.querySelector(`.participant-edit-card[data-participant-id="${participantId}"]`);
+    if (!card || !currentVoteData) return;
+
+    const input = card.querySelector('.participant-name-input');
+    const newName = input.value.trim();
+
+    if (!newName) {
+        return alertUser("Der Name darf nicht leer sein.", "error");
+    }
+
+    const participantIndex = currentVoteData.participants.findIndex(p => p.userId === participantId);
+    if (participantIndex === -1) return;
+
+    const oldName = currentVoteData.participants[participantIndex].name;
+    if (oldName === newName) {
+        // Nichts geändert, einfach UI zurücksetzen
+        toggleParticipantNameEdit(participantId, false);
+        return;
+    }
+
+    // 1. Lokale Daten aktualisieren
+    currentVoteData.participants[participantIndex].name = newName;
+    
+    // 2. UI (Anzeige) aktualisieren
+    card.querySelector('.participant-name-display').textContent = newName;
+
+    // 3. Log-Eintrag (optional, aber gut für die Nachverfolgung)
+    // Wir fügen es nicht zum Verlauf des Teilnehmers hinzu, sondern zum Verlauf der Umfrage!
+    const changeMessage = `Name von Teilnehmer "${oldName}" (ID: ${participantId}) zu "${newName}" geändert.`;
+    console.log(changeMessage);
+    // (Diese Änderung wird beim Klick auf "Änderungen speichern" in das pollHistory geschrieben)
+
+    // 4. UI zurücksetzen
+    toggleParticipantNameEdit(participantId, false);
+
+    // 5. "Speichern"-Leiste auslösen
+    setEditChanges(true); 
+}
+
+// NEU: Löscht einen Teilnehmer (lokal)
+function handleDeleteParticipant(participantId) {
+    if (!currentVoteData) return;
+    
+    const participantIndex = currentVoteData.participants.findIndex(p => p.userId === participantId);
+    if (participantIndex === -1) return;
+
+    const participantName = currentVoteData.participants[participantIndex].name;
+
+    // Sicherheitsabfrage
+    if (!confirm(`Bist du sicher, dass du den Teilnehmer "${participantName}" und alle seine Stimmen aus dieser Umfrage entfernen möchtest?\n\nDiese Aktion wird erst nach dem Klick auf "Änderungen speichern" endgültig.`)) {
+        return;
+    }
+
+    // 1. Aus lokalen Daten entfernen
+    currentVoteData.participants.splice(participantIndex, 1);
+    
+    // 2. Log-Eintrag
+    const changeMessage = `Teilnehmer "${participantName}" (ID: ${participantId}) entfernt.`;
+    console.log(changeMessage);
+
+    // 3. "Speichern"-Leiste auslösen
+    setEditChanges(true);
+    
+    // 4. Teilnehmer-Liste neu rendern
+    renderParticipantEditGrid(currentVoteData);
+    
+    alertUser(`Teilnehmer "${participantName}" wurde entfernt (lokal).`, "success");
+}
+
+
+
+
+
 // NEU (P3): Verarbeitet den Klick auf "Ok, quittieren"
 // (Funktioniert jetzt auch für Gäste-per-Link)
 async function handleAcknowledgeUpdate() {
