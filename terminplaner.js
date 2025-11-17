@@ -1029,11 +1029,25 @@ export function initializeTerminplanerView() {
                 }
             }
         });
+        
+        // =================================================================
+        // START KORREKTUR (Request 2)
+        // =================================================================
+        // HIER IST DEIN FEHLENDER LISTENER:
+        datesContainerEdit.addEventListener('input', (e) => {
+            if (e.target.matches('.vote-date-input, .vote-time-start-input')) {
+                validateLastDateGroupEdit();
+            }
+        });
+        // =================================================================
+        // ENDE KORREKTUR
+        // =================================================================
+        
         datesContainerEdit.dataset.listenerAttached = 'true';
     }
 
     // =================================================================
-    // START KORREKTUR (Listener für Teilnehmer-Bearbeitung)
+    // START KORREKTUR (Listener für Teilnehmer-Bearbeitung - Request 1)
     // =================================================================
     const adminGridContainer = document.getElementById('edit-participant-grid-container');
     if (adminGridContainer && !adminGridContainer.dataset.listenerAttached) {
@@ -1074,6 +1088,20 @@ export function initializeTerminplanerView() {
             if (deleteParticipantBtn) {
                 const participantId = deleteParticipantBtn.dataset.participantId;
                 handleDeleteParticipant(participantId);
+            }
+            
+            // 6. NEU: Klick auf den Namen zum Ein/Ausklappen
+            const nameToggle = e.target.closest('.participant-name-toggle');
+            if (nameToggle) {
+                // Finde die ID aus dem Elternelement
+                const participantId = nameToggle.closest('.participant-edit-card').dataset.participantId;
+                const content = document.getElementById(`participant-content-${participantId}`);
+                const icon = nameToggle.querySelector('.participant-toggle-icon');
+                
+                if (content) {
+                    content.classList.toggle('hidden');
+                    icon.classList.toggle('rotate-180');
+                }
             }
         });
         adminGridContainer.dataset.listenerAttached = 'true';
@@ -1198,7 +1226,8 @@ export function initializeTerminplanerView() {
             // 2. Prüfe auf andere Änderungen (die die "Speichern"-Leiste auslösen)
             
             // Ignoriere Klicks auf "Link kopieren" oder "Abbrechen"
-            if (e.target.closest('.copy-guest-link-btn, #cancel-fix-date-btn')) {
+            // (Wir ignorieren auch den Klick auf den Namen-Toggle)
+            if (e.target.closest('.copy-guest-link-btn, #cancel-fix-date-btn, .participant-name-toggle')) {
                 return;
             }
             
@@ -1229,6 +1258,7 @@ export function initializeTerminplanerView() {
     // ENDE NEU (P3)
     // =================================================================
 }
+
 
 
 
@@ -4389,7 +4419,7 @@ function addNewDateGroupEdit(isFirst = false) {
 
 
 // Baut die Admin-Tabelle, um Teilnehmer-Votes zu bearbeiten
-// KORRIGIERTE VERSION: Baut jetzt Karten pro Teilnehmer für bessere Übersicht
+// KORRIGIERTE VERSION (V3): Baut jetzt Karten pro Teilnehmer, die per Klick auf den Namen einklappbar sind
 function renderParticipantEditGrid(voteData) {
     const container = document.getElementById('edit-participant-grid-container');
     if (!container) return;
@@ -4414,14 +4444,20 @@ function renderParticipantEditGrid(voteData) {
     // ÄUSSERE SCHLEIFE: Gehe jeden Teilnehmer durch
     participants.forEach(p => {
         const participantId = p.userId;
+        const contentId = `participant-content-${participantId}`;
 
         // --- 1. Header der Teilnehmer-Karte (mit Bearbeiten/Löschen-Knöpfen) ---
         participantCardsHTML += `
             <div class="participant-edit-card bg-white rounded-lg border shadow-md" data-participant-id="${participantId}">
                 <div class="p-3 bg-gray-50 rounded-t-lg border-b flex justify-between items-center">
                     
-                    <div class="participant-name-display-wrapper flex-grow">
-                        <span class="text-lg font-bold text-gray-800 participant-name-display">${p.name}</span>
+                    <div class="participant-name-display-wrapper flex-grow flex items-center gap-2">
+                        <div class="participant-name-toggle flex-grow flex items-center gap-2 cursor-pointer" data-participant-id="${participantId}">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 participant-toggle-icon transition-transform flex-shrink-0">
+                                <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+                            </svg>
+                            <span class="text-lg font-bold text-gray-800 participant-name-display">${p.name}</span>
+                        </div>
                     </div>
                     
                     <div class="participant-name-edit-wrapper hidden flex-grow flex gap-2">
@@ -4455,7 +4491,7 @@ function renderParticipantEditGrid(voteData) {
                     </div>
                 </div>
 
-                <div class="p-4 space-y-4 max-h-72 overflow-y-auto">
+                <div id="${contentId}" class="p-4 space-y-4 max-h-72 overflow-y-auto hidden">
         `;
 
         // INNERE SCHLEIFE: Gehe jeden TAG durch
@@ -4516,6 +4552,7 @@ function renderParticipantEditGrid(voteData) {
 
     container.innerHTML = participantCardsHTML;
 }
+
 
 
 
