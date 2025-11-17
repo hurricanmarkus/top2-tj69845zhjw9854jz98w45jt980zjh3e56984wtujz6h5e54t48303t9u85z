@@ -35,7 +35,6 @@ let originalOptionsOnEditLoad = []; // NEU: Für Änderungs-Log (P5)
 let tempPreRegisteredGuests = []; // NEU (P3): Speichert Gäste-Namen beim Erstellen
 let currentGuestInfo = null; // NEU (P3): Speichert, wenn sich ein Gast per Link anmeldet
 let hasEditChanges = false;
-let editViewAccordionState = { details: true, validity: false, settings: false, guests: false, existingTerms: false, newTerms: false, participants: false };
 
 
 
@@ -270,11 +269,8 @@ async function confirmAndFixDate() {
 }
 
 // ----- NEUE FUNKTIONEN FÜR ZUWEISUNGS-MODAL -----
-
-/**
- * Öffnet das Modal zur Auswahl von registrierten Benutzern.
- * (MODIFIZIERT: Liest jetzt den 'assignModalContext')
- */
+// Öffnet das Modal zur Auswahl von registrierten Benutzern.
+// (MODIFIZIERT: Liest jetzt den 'assignModalContext')
 function openAssignUserModal() {
     const modal = document.getElementById('assignUserModal');
     const listContainer = document.getElementById('assign-user-list');
@@ -331,9 +327,7 @@ function openAssignUserModal() {
     modal.classList.remove('hidden');
 }
 
-/**
- * Schließt das Modal, ohne Änderungen zu speichern.
- */
+// Schließt das Modal, ohne Änderungen zu speichern.
 function closeAssignUserModal() {
     const modal = document.getElementById('assignUserModal');
     if (modal) {
@@ -342,11 +336,9 @@ function closeAssignUserModal() {
     }
 }
 
-/**
- * Übernimmt die Auswahl aus dem Modal, aktualisiert die temporäre Liste
- * und die Anzeige im Erstellungs-Assistenten.
- * (MODIFIZIERT FÜR P3: Löst Speicher-Leiste aus)
- */
+// Übernimmt die Auswahl aus dem Modal, aktualisiert die temporäre Liste
+// und die Anzeige im Erstellungs-Assistenten.
+// (MODIFIZIERT FÜR P3: Löst Speicher-Leiste aus)
 function applyAssignedUsers() {
     const checkedBoxes = document.querySelectorAll('#assign-user-list .assign-user-checkbox:checked');
 
@@ -398,9 +390,26 @@ function applyAssignedUsers() {
 
 
 export function initializeTerminplanerView() {
-// --- NEU: Logik für die Haupt-URL-Share-Box ---
+    
+    // =================================================================
+    // BEGINN DER ÄNDERUNG (Berechtigungs-Prüfung)
+    // =================================================================
+    
+    // HINWEIS: Der Code-Block, der hier stand, um den 'createVoteButton'
+    // zu steuern, wurde ENTFERNT.
+    // Diese Logik ist jetzt ZENTRAL in 'log-InOut.js' -> 'updateUIForMode',
+    // damit sie auch auf Live-Rechte-Änderungen reagiert.
+    
+    // =================================================================
+    // ENDE DER ÄNDERUNG
+    // =================================================================
+
+    // --- NEU: Logik für die Haupt-URL-Share-Box ---
     const mainUrlInput = document.getElementById('main-share-url');
     if (mainUrlInput) {
+        // --- KORREKTUR HIER ---
+        // Wir fügen den Hinweis "?view=terminplaner" hinzu,
+        // damit der Link direkt zu dieser Ansicht führt.
         mainUrlInput.value = window.location.origin + window.location.pathname + '?view=terminplaner';
     }
     const copyMainUrlBtn = document.getElementById('copy-main-url-btn');
@@ -412,17 +421,28 @@ export function initializeTerminplanerView() {
         });
         copyMainUrlBtn.dataset.listenerAttached = 'true';
     }
+    // --- ENDE NEU ---
     
     // ----- Spion für das Token-Feld -----
     const tokenInput = document.getElementById('vote-token-input');
     if (tokenInput && !tokenInput.dataset.listenerAttached) {
         tokenInput.addEventListener('input', (e) => formatTokenInput(e, 'vote-token-input')); 
+        
+        // =========================================================
+        // START BUG 4 FIX (Teil 1)
+        // =========================================================
         tokenInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
+                // Verhindere das Standard-Enter-Verhalten (falls es in einem Formular wäre)
                 e.preventDefault(); 
+                // Rufe die Funktion auf, die auch der Knopf aufruft
                 joinVoteByToken(null); 
             }
         });
+        // =========================================================
+        // END BUG 4 FIX (Teil 1)
+        // =========================================================
+        
         tokenInput.dataset.listenerAttached = 'true';
     }
 
@@ -545,8 +565,7 @@ export function initializeTerminplanerView() {
         saveVoteButton.dataset.listenerAttached = 'true';
     }
     
-    // (Spione für Anonym, HideAnswers, AccessPolicy...)
-    // ...
+    // Spion für Anonym-Checkbox (Erstellen)
     const anonymousCheckbox = document.getElementById('vote-setting-anonymous');
     if (anonymousCheckbox && !anonymousCheckbox.dataset.listenerAttached) {
         anonymousCheckbox.addEventListener('change', (e) => {
@@ -557,6 +576,8 @@ export function initializeTerminplanerView() {
         });
         anonymousCheckbox.dataset.listenerAttached = 'true';
     }
+    
+    // Spion für Anonym-Checkbox (Bearbeiten)
     const anonymousCheckboxEdit = document.getElementById('vote-setting-anonymous-edit');
     if (anonymousCheckboxEdit && !anonymousCheckboxEdit.dataset.listenerAttached) {
         anonymousCheckboxEdit.addEventListener('change', (e) => {
@@ -567,6 +588,8 @@ export function initializeTerminplanerView() {
         });
         anonymousCheckboxEdit.dataset.listenerAttached = 'true';
     }
+
+    // Spion für "Antworten verstecken" (Erstellen)
     const hideAnswersCheckbox = document.getElementById('vote-setting-hide-answers');
     if (hideAnswersCheckbox && !hideAnswersCheckbox.dataset.listenerAttached) {
         hideAnswersCheckbox.addEventListener('change', (e) => {
@@ -577,6 +600,8 @@ export function initializeTerminplanerView() {
         });
         hideAnswersCheckbox.dataset.listenerAttached = 'true';
     }
+    
+    // Spion für "Antworten verstecken" (Bearbeiten)
     const hideAnswersCheckboxEdit = document.getElementById('vote-setting-hide-answers-edit');
     if (hideAnswersCheckboxEdit && !hideAnswersCheckboxEdit.dataset.listenerAttached) {
         hideAnswersCheckboxEdit.addEventListener('change', (e) => {
@@ -587,6 +612,8 @@ export function initializeTerminplanerView() {
         });
         hideAnswersCheckboxEdit.dataset.listenerAttached = 'true';
     }
+    
+    // Spione für "Sichtbarkeit" (Erstellen & Bearbeiten)
     const accessBtn = document.getElementById('vote-setting-access-btn');
     if (accessBtn && !accessBtn.dataset.listenerAttached) {
         accessBtn.addEventListener('click', () => {
@@ -594,6 +621,7 @@ export function initializeTerminplanerView() {
         });
         accessBtn.dataset.listenerAttached = 'true';
     }
+    
     const accessBtnEdit = document.getElementById('vote-setting-access-btn-edit');
     if (accessBtnEdit && !accessBtnEdit.dataset.listenerAttached) {
         accessBtnEdit.addEventListener('click', () => {
@@ -602,7 +630,9 @@ export function initializeTerminplanerView() {
         accessBtnEdit.dataset.listenerAttached = 'true';
     }
 
-    // (P3 & P2): Listener für "Gast hinzufügen" (Erstellen-Ansicht)
+    // =================================================================
+    // START NEU (P3 & P2): Listener für "Gast hinzufügen" (Erstellen-Ansicht)
+    // =================================================================
     const addGuestBtn = document.getElementById('vote-add-guest-btn-admin');
     if (addGuestBtn && !addGuestBtn.dataset.listenerAttached) {
         addGuestBtn.addEventListener('click', () => {
@@ -618,12 +648,12 @@ export function initializeTerminplanerView() {
         });
         addGuestBtn.dataset.listenerAttached = 'true';
 
-        // (Problem 2): Enter-Taste für Gast-Input (Erstellen)
+        // KORREKTUR (Problem 2): Enter-Taste für Gast-Input (Erstellen)
         const guestInput = document.getElementById('vote-guest-name-input-admin');
         guestInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
-                e.preventDefault(); 
-                addGuestBtn.click(); 
+                e.preventDefault(); // Verhindert Formular-Absenden
+                addGuestBtn.click(); // Löst den Klick auf den "+ Gast"-Button aus
             }
         });
     }
@@ -641,17 +671,26 @@ export function initializeTerminplanerView() {
         });
         guestListContainer.dataset.listenerAttached = 'true';
     }
+    // =================================================================
+    // ENDE NEU (P3 & P2)
+    // =================================================================
 
 
     // ----- Spione für die Abstimmungs-Seite -----
     
     const cancelVoteButton = document.getElementById('cancel-vote-participation-btn');
     if (cancelVoteButton && !cancelVoteButton.dataset.listenerAttached) {
+        // =================================================================
+        // BEGINN DER ÄNDERUNG (Live-Spion stoppen)
+        // =================================================================
         cancelVoteButton.addEventListener('click', () => {
-            stopCurrentVoteListener(); 
+            stopCurrentVoteListener(); // <-- NEU: Stoppt den Live-Spion
             showView('main'); 
             currentVoteData = null; 
         });
+        // =================================================================
+        // ENDE DER ÄNDERUNG
+        // =================================================================
         cancelVoteButton.dataset.listenerAttached = 'true';
     }
 
@@ -662,9 +701,9 @@ export function initializeTerminplanerView() {
             // "Ändern"-Knopf für Benutzer
             const userChangeBtn = e.target.closest('#vote-user-change-to-anon-btn');
             if (userChangeBtn) {
-                // ... (Logik bleibt gleich) ...
                 const nameDisplay = document.getElementById('vote-participant-name');
                 if (isParticipantChoosingAnonymous) {
+                    // Zurück zum Namen
                     isParticipantChoosingAnonymous = false;
                     const currentUserFull = USERS[currentUser.mode];
                     nameDisplay.textContent = currentUserFull ? currentUserFull.realName : currentUser.displayName;
@@ -672,56 +711,70 @@ export function initializeTerminplanerView() {
                     userChangeBtn.classList.remove('bg-blue-600', 'text-white');
                     userChangeBtn.classList.add('bg-gray-200', 'text-gray-700');
                 } else {
+                    // Zu "Anonym" wechseln
                     isParticipantChoosingAnonymous = true;
                     nameDisplay.textContent = 'Anonym';
                     userChangeBtn.textContent = 'Meinen Namen verwenden';
                     userChangeBtn.classList.add('bg-blue-600', 'text-white');
                     userChangeBtn.classList.remove('bg-gray-200', 'text-gray-700');
                 }
-                return;
+                return; // Klick ist erledigt
             }
             
             // "Ändern"-Knopf für Gäste
             const guestChangeBtn = e.target.closest('#vote-guest-change-to-anon-btn');
             if (guestChangeBtn) {
-                // ... (Logik bleibt gleich) ...
                 const guestInput = document.getElementById('vote-guest-name-input');
                 if (isParticipantChoosingAnonymous) {
+                    // Zurück zum Namen-Eingabefeld
                     isParticipantChoosingAnonymous = false;
                     guestInput.disabled = false;
                     guestInput.value = '';
                     guestInput.placeholder = 'Vor- und Nachname...';
                     guestChangeBtn.textContent = 'Anonym teilnehmen';
                 } else {
+                    // Zu "Anonym" wechseln
                     isParticipantChoosingAnonymous = true;
                     guestInput.disabled = true;
                     guestInput.value = 'Anonym';
                     guestInput.placeholder = '';
                     guestChangeBtn.textContent = 'Namen eingeben';
                 }
-                return;
+                return; // Klick ist erledigt
             }
             
             
-            // Klick auf Abstimm-Knopf
-            const clickedButton = e.target.closest('.vote-card-btn');
+            // =================================================================
+            // START KORREKTUR (Problem 4 - Hybrid-Layout)
+            // =================================================================
+            // Wir hören jetzt auf '.vote-card-btn' statt '.vote-grid-btn'
+            const clickedButton = e.target.closest('.vote-card-btn'); 
             if (clickedButton && !clickedButton.disabled) { 
-                // ... (Logik für Hybrid-Tabelle bleibt gleich) ...
                 const optionIndex = clickedButton.dataset.optionIndex;
                 const answer = clickedButton.dataset.answer;
+                
+                // Setze die Antwort in unserem lokalen Speicher
                 currentParticipantAnswers[optionIndex] = answer;
+                
+                // Finde alle Knöpfe für DIESE KARTE
                 const buttonGroup = clickedButton.closest('.vote-card-button-group');
                 if (buttonGroup) {
                     const allButtonsInGroup = buttonGroup.querySelectorAll('.vote-card-btn');
+                    
+                    // Setze alle Knöpfe in dieser Gruppe zurück
                     allButtonsInGroup.forEach(btn => {
                         btn.classList.remove('bg-green-600', 'text-white', 'ring-2', 'ring-offset-2', 'ring-green-600');
                         btn.classList.remove('bg-yellow-500', 'text-white', 'ring-2', 'ring-offset-2', 'ring-yellow-500');
                         btn.classList.remove('bg-red-600', 'text-white', 'ring-2', 'ring-offset-2', 'ring-red-600');
+                        
+                        // Standard-Aussehen (nicht ausgewählt)
                         if (btn.dataset.answer === 'yes') btn.classList.add('bg-green-100', 'text-green-800', 'hover:bg-green-200');
                         if (btn.dataset.answer === 'maybe') btn.classList.add('bg-yellow-100', 'text-yellow-800', 'hover:bg-yellow-200');
                         if (btn.dataset.answer === 'no') btn.classList.add('bg-red-100', 'text-red-800', 'hover:bg-red-200');
                     });
                 }
+                
+                // Hebe den geklickten Knopf hervor
                 if (answer === 'yes') {
                     clickedButton.classList.remove('bg-green-100', 'text-green-800', 'hover:bg-green-200');
                     clickedButton.classList.add('bg-green-600', 'text-white', 'ring-2', 'ring-offset-2', 'ring-green-600');
@@ -734,39 +787,43 @@ export function initializeTerminplanerView() {
                     clickedButton.classList.remove('bg-red-100', 'text-red-800', 'hover:bg-red-200');
                     clickedButton.classList.add('bg-red-600', 'text-white', 'ring-2', 'ring-offset-2', 'ring-red-600');
                 }
+
+                // Prüfe, ob der "Speichern"-Knopf angezeigt werden soll
                 checkIfAllAnswered();
             }
+            // =================================================================
+            // ENDE KORREKTUR (Problem 4)
+            // =================================================================
             
-            // Klick auf Korrektur-Zähler (in der Tabelle)
+            
             const correctionCounter = e.target.closest('.correction-counter');
             if (correctionCounter) {
                 const userId = correctionCounter.dataset.userid;
                 renderCorrectionHistory(userId);
             }
             
-            // Klick auf "Bearbeiten"-Knopf (neben "Deine Antwort")
             const correctionButton = e.target.closest('.vote-correction-btn');
             if (correctionButton) {
                 switchToEditMode();
             }
 
-            // Klick auf "Kopieren" Knöpfe
             const copyTokenBtn = e.target.closest('#copy-vote-token-btn');
             if (copyTokenBtn) {
                 const token = document.getElementById('vote-share-token').textContent;
                 copyToClipboard(token, "Token kopiert!");
             }
+
             const copyUrlBtn = e.target.closest('#copy-vote-url-btn');
             if (copyUrlBtn) {
                 const url = document.getElementById('vote-share-url').value;
                 copyToClipboard(url, "URL kopiert!");
             }
 
-            // Klick auf "Details" / "Quittieren"
             const pollHistoryBtnMain = e.target.closest('#show-poll-history-btn-main');
             if (pollHistoryBtnMain) {
                 renderPollHistory();
             }
+
             const acknowledgeBtn = e.target.closest('#acknowledge-update-btn');
             if (acknowledgeBtn) {
                 handleAcknowledgeUpdate();
@@ -775,34 +832,46 @@ export function initializeTerminplanerView() {
         voteView.dataset.listenerAttached = 'true';
     }
     
-    // (Restliche Listener für Speichern, Edit-Token, Logs...)
-    // ...
     const saveParticipationButton = document.getElementById('vote-save-participation-btn');
     if (saveParticipationButton && !saveParticipationButton.dataset.listenerAttached) {
         saveParticipationButton.addEventListener('click', saveVoteParticipation);
         saveParticipationButton.dataset.listenerAttached = 'true';
     }
+    
     const editVoteButton = document.getElementById('show-edit-vote-btn');
     if (editVoteButton && !editVoteButton.dataset.listenerAttached) {
         editVoteButton.addEventListener('click', showInlineEditToken); 
         editVoteButton.dataset.listenerAttached = 'true';
     }
+    
     const submitEditBtn = document.getElementById('submit-edit-token-inline-btn');
     if (submitEditBtn && !submitEditBtn.dataset.listenerAttached) {
         submitEditBtn.addEventListener('click', checkInlineEditToken);
         submitEditBtn.dataset.listenerAttached = 'true';
     }
+    
     const editTokenInput = document.getElementById('edit-token-input-inline');
     if (editTokenInput && !editTokenInput.dataset.listenerAttached) {
         editTokenInput.addEventListener('input', (e) => formatTokenInput(e, 'edit-token-input-inline'));
+        
+        // =========================================================
+        // START BUG 4 FIX (Teil 2)
+        // =========================================================
         editTokenInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
+                // Verhindere das Standard-Enter-Verhalten
                 e.preventDefault();
+                // Rufe die Funktion auf, die auch der "OK"-Knopf aufruft
                 checkInlineEditToken();
             }
         });
+        // =========================================================
+        // END BUG 4 FIX (Teil 2)
+        // =========================================================
+        
         editTokenInput.dataset.listenerAttached = 'true';
     }
+    
     const closeLogBtn = document.getElementById('close-correction-log-btn');
     if (closeLogBtn && !closeLogBtn.dataset.listenerAttached) {
         closeLogBtn.addEventListener('click', () => {
@@ -815,23 +884,33 @@ export function initializeTerminplanerView() {
         closeLogBtn.dataset.listenerAttached = 'true';
     }
 
-
     // ----- Spione für die Bearbeitungs-Seite (Ansicht 4) -----
 
     const cancelEditingBtn = document.getElementById('cancel-vote-editing-btn');
     if (cancelEditingBtn && !cancelEditingBtn.dataset.listenerAttached) {
+        // =================================================================
+        // BEGINN DER ÄNDERUNG (Live-Spion starten)
+        // =================================================================
         cancelEditingBtn.addEventListener('click', () => {
-            // (P3) Verstecke die Leiste beim Abbrechen
-            setEditChanges(false); 
+            // =================================================================
+            // START KORREKTUR (Problem 3)
+            // =================================================================
+            setEditChanges(false); // Verstecke die Leiste beim Abbrechen
+            // =================================================================
+            // ENDE KORREKTUR (Problem 3)
+            // =================================================================
             
-            // (P1) Starte Live-Spion neu
+            // Wir stoppen den Spion NICHT, sondern gehen zurück zur 'vote'-Ansicht
+            // und rufen 'joinVoteById' auf. 'joinVoteById' startet
+            // den Spion 'listenToCurrentVote' automatisch neu.
             joinVoteById(currentVoteData.id); 
         });
+        // =================================================================
+        // ENDE DER ÄNDERUNG
+        // =================================================================
         cancelEditingBtn.dataset.listenerAttached = 'true';
     }
     
-    // (Restliche Listener für Edit-View... bleiben gleich)
-    // ...
     const unlimitedEditCheckbox = document.getElementById('vote-end-time-unlimited-edit');
     if (unlimitedEditCheckbox && !unlimitedEditCheckbox.dataset.listenerAttached) {
         unlimitedEditCheckbox.addEventListener('change', (e) => {
@@ -845,11 +924,13 @@ export function initializeTerminplanerView() {
         });
         unlimitedEditCheckbox.dataset.listenerAttached = 'true';
     }
+    
     const saveChangesBtn = document.getElementById('vote-save-changes-btn');
     if (saveChangesBtn && !saveChangesBtn.dataset.listenerAttached) {
         saveChangesBtn.addEventListener('click', saveVoteEdits);
         saveChangesBtn.dataset.listenerAttached = 'true';
     }
+    
     const fixDateBtn = document.getElementById('vote-fix-date-btn');
     if (fixDateBtn && !fixDateBtn.dataset.listenerAttached) {
         fixDateBtn.addEventListener('click', (e) => {
@@ -862,21 +943,26 @@ export function initializeTerminplanerView() {
         });
         fixDateBtn.dataset.listenerAttached = 'true';
     }
+
     const toggleManualCloseBtn = document.getElementById('vote-toggle-manual-close-btn');
     if (toggleManualCloseBtn && !toggleManualCloseBtn.dataset.listenerAttached) {
         toggleManualCloseBtn.addEventListener('click', toggleManualPollClose);
         toggleManualCloseBtn.dataset.listenerAttached = 'true';
     }
+    
+    
     const deletePollBtn = document.getElementById('vote-delete-poll-btn');
     if (deletePollBtn && !deletePollBtn.dataset.listenerAttached) {
         deletePollBtn.addEventListener('click', deletePoll);
         deletePollBtn.dataset.listenerAttached = 'true';
     }
+    
     const cancelFixDateBtn = document.getElementById('cancel-fix-date-btn');
     if (cancelFixDateBtn && !cancelFixDateBtn.dataset.listenerAttached) {
         cancelFixDateBtn.addEventListener('click', hideFixDateSelection);
         cancelFixDateBtn.dataset.listenerAttached = 'true';
     }
+
     const confirmFixDateBtn = document.getElementById('confirm-fix-date-btn');
     if (confirmFixDateBtn && !confirmFixDateBtn.dataset.listenerAttached) {
         confirmFixDateBtn.addEventListener('click', confirmAndFixDate);
@@ -884,8 +970,6 @@ export function initializeTerminplanerView() {
     }
     
     // --- Spione für das Zuweisen-Modal ---
-    // (Bleiben unverändert)
-    // ...
     const showAssignModalBtn = document.getElementById('vote-show-assign-user-modal-btn');
     if (showAssignModalBtn && !showAssignModalBtn.dataset.listenerAttached) {
         showAssignModalBtn.addEventListener('click', () => {
@@ -919,8 +1003,6 @@ export function initializeTerminplanerView() {
     }
     
     // ----- Spione für die Bearbeiten-Funktionen -----
-    // (Bleiben unverändert)
-    // ...
     const addDateButtonEdit = document.getElementById('vote-add-date-btn-edit');
     if (addDateButtonEdit && !addDateButtonEdit.dataset.listenerAttached) {
         addDateButtonEdit.addEventListener('click', addNewDateGroupEdit);
@@ -929,7 +1011,6 @@ export function initializeTerminplanerView() {
     const datesContainerEdit = document.getElementById('vote-dates-container-edit');
     if (datesContainerEdit && !datesContainerEdit.dataset.listenerAttached) {
         datesContainerEdit.addEventListener('click', (e) => {
-            // ... (Logik für add/remove time bleibt gleich) ...
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
                 const timesContainer = addTarget.previousElementSibling; 
@@ -948,27 +1029,11 @@ export function initializeTerminplanerView() {
                 }
             }
         });
-        
-        // =================================================================
-        // START KORREKTUR (Problem 3 - max 1 Tag)
-        // =================================================================
-        // Dieser Listener hat gefehlt. Er prüft, ob der "Tag hinzufügen"-Knopf
-        // angezeigt werden soll, nachdem du getippt hast.
-        datesContainerEdit.addEventListener('input', (e) => {
-            if (e.target.matches('.vote-date-input, .vote-time-start-input')) {
-                validateLastDateGroupEdit();
-            }
-        });
-        // =================================================================
-        // ENDE KORREKTUR
-        // =================================================================
-        
         datesContainerEdit.dataset.listenerAttached = 'true';
     }
     const adminGridContainer = document.getElementById('edit-participant-grid-container');
     if (adminGridContainer && !adminGridContainer.dataset.listenerAttached) {
         adminGridContainer.addEventListener('click', (e) => {
-            // ... (Logik für Admin-Grid bleibt gleich) ...
             const clickedButton = e.target.closest('.admin-vote-grid-btn');
             if (clickedButton && !clickedButton.disabled) {
                 const participantId = clickedButton.dataset.participantId;
@@ -976,27 +1041,12 @@ export function initializeTerminplanerView() {
                 const newAnswer = clickedButton.dataset.answer;
                 handleAdminVoteEdit(participantId, optionIndex, newAnswer, clickedButton);
             }
-            // (P3): Listener für "Name bearbeiten" / "Löschen"
-            const editNameBtn = e.target.closest('.edit-participant-name-btn');
-            if (editNameBtn) {
-                const participantId = editNameBtn.dataset.participantId;
-                handleEditParticipantName(participantId);
-                return; // Klick verarbeitet
-            }
-            
-            const deleteVoteBtn = e.target.closest('.delete-participant-vote-btn');
-            if (deleteVoteBtn) {
-                const participantId = deleteVoteBtn.dataset.participantId;
-                handleDeleteParticipant(participantId);
-                return; // Klick verarbeitet
-            }
         });
         adminGridContainer.dataset.listenerAttached = 'true';
     }
     const manageTermsList = document.getElementById('manage-existing-terms-list');
     if (manageTermsList && !manageTermsList.dataset.listenerAttached) {
         manageTermsList.addEventListener('click', (e) => {
-            // ... (Logik für strike/restore term bleibt gleich) ...
             const strikeBtn = e.target.closest('.strike-term-btn');
             if (strikeBtn) {
                 const optionIndex = parseInt(strikeBtn.dataset.optionIndex, 10);
@@ -1012,7 +1062,9 @@ export function initializeTerminplanerView() {
         manageTermsList.dataset.listenerAttached = 'true';
     }
 
-    // (P3 & P2): Listener für "Gast hinzufügen" (Bearbeiten-Ansicht)
+    // =================================================================
+    // START NEU (P3 & P2): Listener für "Gast hinzufügen" (Bearbeiten-Ansicht)
+    // =================================================================
     const addGuestBtnEdit = document.getElementById('vote-add-guest-btn-admin-edit');
     if (addGuestBtnEdit && !addGuestBtnEdit.dataset.listenerAttached) {
         addGuestBtnEdit.addEventListener('click', () => {
@@ -1020,8 +1072,10 @@ export function initializeTerminplanerView() {
             const name = input.value.trim();
             if (name) {
                 tempPreRegisteredGuests.push({ id: generateGuestId(), name: name });
+                // Wichtig: 'true' übergeben, damit die "Link kopieren"-Knöpfe angezeigt werden!
                 renderPreRegisteredGuestList('vote-guest-list-admin-edit', true); 
                 input.value = '';
+                
                 setEditChanges(true); // <--- LÖST SPEICHERN-LEISTE AUS
             } else {
                 alertUser("Bitte einen Namen für den Gast eingeben.", "error");
@@ -1033,8 +1087,8 @@ export function initializeTerminplanerView() {
         const guestInputEdit = document.getElementById('vote-guest-name-input-admin-edit');
         guestInputEdit.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
-                e.preventDefault(); 
-                addGuestBtnEdit.click(); 
+                e.preventDefault(); // Verhindert Formular-Absenden
+                addGuestBtnEdit.click(); // Löst den Klick auf den "+ Gast"-Button aus
             }
         });
     }
@@ -1049,6 +1103,7 @@ export function initializeTerminplanerView() {
                 const guestId = deleteBtn.dataset.guestId;
                 tempPreRegisteredGuests = tempPreRegisteredGuests.filter(g => g.id !== guestId);
                 renderPreRegisteredGuestList('vote-guest-list-admin-edit', true);
+                
                 setEditChanges(true); // <--- LÖST SPEICHERN-LEISTE AUS
             }
             
@@ -1061,8 +1116,13 @@ export function initializeTerminplanerView() {
         });
         guestListContainerEdit.dataset.listenerAttached = 'true';
     }
+    // =================================================================
+    // ENDE NEU (P3 & P2)
+    // =================================================================
 
-    // (P3): Listener für "Speichern"-Leiste und Änderungserkennung
+    // =================================================================
+    // START NEU (P3): Listener für "Speichern"-Leiste und Änderungserkennung
+    // =================================================================
     const stickySaveBtn = document.getElementById('sticky-save-button');
     if (stickySaveBtn && !stickySaveBtn.dataset.listenerAttached) {
         stickySaveBtn.addEventListener('click', saveVoteEdits);
@@ -1071,11 +1131,10 @@ export function initializeTerminplanerView() {
 
     const editViewContainer = document.getElementById('terminplaner-edit-view');
     if (editViewContainer && !editViewContainer.dataset.listenerAttached) {
-        
         // Delegierter Listener für fast alle Änderungen
         const handleChange = (e) => {
             // Ignoriere Klicks auf "Link kopieren" oder "Abbrechen"
-            if (e.target.closest('.copy-guest-link-btn, #cancel-fix-date-btn, .accordion-toggle')) {
+            if (e.target.closest('.copy-guest-link-btn, #cancel-fix-date-btn')) {
                 return;
             }
             
@@ -1090,7 +1149,7 @@ export function initializeTerminplanerView() {
                 return;
             }
             // Bestimmte Klicks (Knöpfe) lösen die Leiste aus
-            if (e.type === 'click' && e.target.closest('.delete-guest-btn, .strike-term-btn, .restore-term-btn, .admin-vote-grid-btn, #vote-add-guest-btn-admin-edit, #vote-add-date-btn-edit, .vote-add-time-btn, .vote-remove-time-btn, #vote-setting-access-btn-edit, #vote-show-assign-user-modal-btn-edit, #vote-fix-date-btn, #vote-toggle-manual-close-btn, .edit-participant-name-btn, .delete-participant-vote-btn')) {
+            if (e.type === 'click' && e.target.closest('.delete-guest-btn, .strike-term-btn, .restore-term-btn, .admin-vote-grid-btn, #vote-add-guest-btn-admin-edit, #vote-add-date-btn-edit, .vote-add-time-btn, .vote-remove-time-btn, #vote-setting-access-btn-edit, #vote-show-assign-user-modal-btn-edit')) {
                 setEditChanges(true);
                 return;
             }
@@ -1100,21 +1159,11 @@ export function initializeTerminplanerView() {
         editViewContainer.addEventListener('change', handleChange);
         editViewContainer.addEventListener('click', handleChange);
         editViewContainer.dataset.listenerAttached = 'true';
-        
-        // (P3) Akkordeon-Klick-Listener
-        // Wir verwenden einen delegierten Listener für alle Akkordeon-Knöpfe
-        editViewContainer.addEventListener('click', (e) => {
-            const toggleBtn = e.target.closest('.accordion-toggle');
-            if (toggleBtn) {
-                // Finde den Sektionsnamen aus der ID des Knopfes
-                // z.B. "edit-section-toggle-validity" -> "validity"
-                const sectionName = toggleBtn.id.split('-').pop();
-                toggleEditViewSection(sectionName);
-            }
-        });
     }
+    // =================================================================
+    // ENDE NEU (P3)
+    // =================================================================
 }
-
 
 
 
@@ -1245,9 +1294,7 @@ export function stopMyVotesListener() {
     sortAndRenderAllVotes([]); // Leere das Dashboard
 }
 
-/**
- * Stoppt den Live-Spion für die aktuell geöffnete Umfrage.
- */
+// Stoppt den Live-Spion für die aktuell geöffnete Umfrage.
 function stopCurrentVoteListener() {
     if (unsubscribeCurrentVote) {
         console.log("[Terminplaner] Stoppe Live-Spion für die geöffnete Umfrage.");
@@ -1256,10 +1303,8 @@ function stopCurrentVoteListener() {
     }
 }
 
-/**
- * Startet einen Live-Spion (onSnapshot) für eine spezifische Umfrage-ID.
- * Diese Funktion übernimmt jetzt das Rendern der Abstimmungs-Ansicht.
- */
+// Startet einen Live-Spion (onSnapshot) für eine spezifische Umfrage-ID.
+// Diese Funktion übernimmt jetzt das Rendern der Abstimmungs-Ansicht.
 function listenToCurrentVote(voteId) {
     // 1. Alten Spion stoppen
     stopCurrentVoteListener();
@@ -1934,10 +1979,8 @@ function renderVoteView(voteData) {
 
 
 
-/**
- * Baut die Abstimmungs-KARTEN (Layout: Hybrid-Tabelle pro Tag)
- * KORREKTUR: Problem 1, 2, 4 - Tabellarisch, Kompakt, Namen sichtbar, Mobil-Scroll
- */
+// Baut die Abstimmungs-KARTEN (Layout: Hybrid-Tabelle pro Tag)
+// KORREKTUR: Problem 1, 2, 4 - Tabellarisch, Kompakt, Namen sichtbar, Mobil-Scroll
 function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, forceHidden = false) {
     const optionsContainer = document.getElementById('vote-options-container');
     if (!optionsContainer) {
@@ -1952,7 +1995,6 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
 
     // 1. Fall: Termin ist fixiert (Dieser Teil bleibt unverändert)
     if (voteData.fixedOptionIndex != null) {
-        // ... (Code für fixierten Termin bleibt gleich) ...
         const fixedOption = voteData.options[voteData.fixedOptionIndex];
         if (fixedOption) {
             const dateObj = new Date(fixedOption.date + 'T12:00:00');
@@ -2783,18 +2825,24 @@ function renderCorrectionHistory(userId) {
 
 // ERSETZE diese Funktion in terminplaner.js
 function renderEditView(voteData) {
-    // (P3) Verstecke die "Speichern"-Leiste beim Laden
+    // =================================================================
+    // START KORREKTUR (Problem 3)
+    // =================================================================
+    // Verstecke die "Speichern"-Leiste, wenn die Seite geladen wird
     setEditChanges(false);
+    // =================================================================
+    // ENDE KORREKTUR (Problem 3)
+    // =================================================================
 
     document.getElementById('edit-poll-title').textContent = `"${voteData.title}" bearbeiten`;
-    
+
     try {
         originalOptionsOnEditLoad = JSON.parse(JSON.stringify(voteData.options || []));
     } catch (e) {
         console.error("Fehler beim Klonen der Optionen für Edit-Log:", e);
         originalOptionsOnEditLoad = [];
     }
-    
+
     const formatTimestampToInput = (timestamp) => {
         if (!timestamp) return '';
         let dateObject = null;
@@ -2805,48 +2853,26 @@ function renderEditView(voteData) {
         } else {
             try { dateObject = new Date(timestamp); } catch (e) { return ''; }
         }
-        if (isNaN(dateObject.getTime())) { 
+        if (isNaN(dateObject.getTime())) {
             return '';
         }
         const offset = dateObject.getTimezoneOffset() * 60000;
         const localDate = new Date(dateObject.getTime() - offset);
         return localDate.toISOString().slice(0, 16);
     };
-    
-    // (P3) Akkordeon-Status zurücksetzen
-    // Setze alle Akkordeon-Menüs auf "geschlossen", AUSSER "details"
-    for (const sectionName in editViewAccordionState) {
-        // =================================================================
-        // START KORREKTUR (Problem 1, 2, 4)
-        // =================================================================
-        // "details" soll standardmäßig offen sein, der Rest geschlossen.
-        const shouldBeOpen = (sectionName === 'details');
-        editViewAccordionState[sectionName] = shouldBeOpen; 
-        
-        const content = document.getElementById(`edit-section-content-${sectionName}`);
-        const icon = document.getElementById(`edit-section-icon-${sectionName}`);
-        
-        if (content && icon) {
-            content.classList.toggle('hidden', !shouldBeOpen); // Visuell umschalten
-            icon.classList.toggle('rotate-180', shouldBeOpen); // Icon drehen
-        }
-        // =================================================================
-        // ENDE KORREKTUR
-        // =================================================================
-    }
 
-    // 1. KORREKTUR (Problem 1): Details füllen (war vorher kaputt)
+    // 1. Details füllen
     document.getElementById('vote-title-edit').value = voteData.title;
     document.getElementById('vote-description-edit').value = voteData.description || '';
     document.getElementById('vote-location-edit').value = voteData.location || '';
-    
+
     // 2. Gültigkeit füllen
     const startTimeInput = document.getElementById('vote-start-time-edit');
     const endTimeInput = document.getElementById('vote-end-time-edit');
     const unlimitedCheckbox = document.getElementById('vote-end-time-unlimited-edit');
 
     startTimeInput.value = formatTimestampToInput(voteData.startTime);
-        
+
     if (voteData.endTime) {
         endTimeInput.value = formatTimestampToInput(voteData.endTime);
         unlimitedCheckbox.checked = false;
@@ -2860,8 +2886,8 @@ function renderEditView(voteData) {
     // 3. Einstellungen füllen
     document.getElementById('vote-setting-public-edit').checked = voteData.isPublic;
     document.getElementById('vote-setting-disable-maybe-edit').checked = voteData.disableMaybe;
-    
-    // (Anonym-Einstellungen laden...)
+
+    // (Anonym-Einstellungen laden)
     const anonymousCheckboxEdit = document.getElementById('vote-setting-anonymous-edit');
     const anonymousWrapperEdit = document.getElementById('vote-setting-anonymous-mode-wrapper-edit');
     const anonymousModeEdit = document.getElementById('vote-setting-anonymous-mode-edit');
@@ -2871,10 +2897,10 @@ function renderEditView(voteData) {
         anonymousModeEdit.value = voteData.anonymousMode || 'erzwingen';
     } else {
         anonymousWrapperEdit.classList.add('hidden');
-        anonymousModeEdit.value = 'erzwingen'; 
+        anonymousModeEdit.value = 'erzwingen';
     }
-    
-    // ("Antworten verstecken" laden...)
+
+    // ("Antworten verstecken" laden)
     const hideAnswersCheckboxEdit = document.getElementById('vote-setting-hide-answers-edit');
     const hideAnswersWrapperEdit = document.getElementById('vote-setting-hide-answers-mode-wrapper-edit');
     const hideAnswersModeEdit = document.getElementById('vote-setting-hide-answers-mode-edit');
@@ -2884,10 +2910,10 @@ function renderEditView(voteData) {
         hideAnswersModeEdit.value = voteData.hideAnswersMode || 'bis_umfragenabschluss';
     } else {
         hideAnswersWrapperEdit.classList.add('hidden');
-        hideAnswersModeEdit.value = 'bis_umfragenabschluss'; 
+        hideAnswersModeEdit.value = 'bis_umfragenabschluss';
     }
-    
-    // ("Sichtbarkeit" laden...)
+
+    // ("Sichtbarkeit" laden)
     const accessModeEdit = document.getElementById('vote-setting-access-mode-edit');
     const accessTextEdit = document.getElementById('vote-setting-access-text-edit');
     const currentAccessPolicy = voteData.accessPolicy || 'registered';
@@ -2909,20 +2935,18 @@ function renderEditView(voteData) {
         } else {
             const selectedNames = assignedIds.map(id => {
                 const user = USERS[id];
-                return user ? (user.realName || user.name) : id; 
+                return user ? (user.realName || user.name) : id;
             }).join(', ');
             assignedDisplayEdit.textContent = selectedNames;
-            assignedDisplayEdit.title = selectedNames; 
+            assignedDisplayEdit.title = selectedNames;
         }
     }
-    
+
     // 5. Gäste-Liste laden (P3)
     tempPreRegisteredGuests = [...(voteData.preRegisteredGuests || [])];
     renderPreRegisteredGuestList('vote-guest-list-admin-edit', true);
-    
+
     // 6. Gefahrenzone-Knöpfe
-    // (Dieser Teil bleibt unverändert)
-    // ...
     const fixBtn = document.getElementById('vote-fix-date-btn');
     const manualCloseBtn = document.getElementById('vote-toggle-manual-close-btn');
     if (!fixBtn || !manualCloseBtn) {
@@ -2937,48 +2961,46 @@ function renderEditView(voteData) {
         fixBtn.textContent = 'Tag & Zeit AUFHEBEN';
         fixBtn.dataset.action = 'unfix';
         fixBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
-        fixBtn.classList.add('bg-green-600', 'hover:bg-green-700'); 
+        fixBtn.classList.add('bg-green-600', 'hover:bg-green-700');
         manualCloseBtn.disabled = true;
         manualCloseBtn.classList.add('opacity-50', 'cursor-not-allowed');
     } else {
         fixBtn.textContent = 'Tag & Zeit fixieren';
         fixBtn.dataset.action = 'fix';
         fixBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
-        fixBtn.classList.add('bg-blue-600', 'hover:bg-blue-700'); 
+        fixBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
         manualCloseBtn.disabled = false;
         manualCloseBtn.classList.remove('opacity-50', 'cursor-not-allowed');
         if (voteData.isManuallyClosed === true) {
             manualCloseBtn.textContent = 'Umfrage freigeben';
             manualCloseBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600', 'text-black');
-            manualCloseBtn.classList.add('bg-green-600', 'hover:bg-green-700', 'text-white'); 
+            manualCloseBtn.classList.add('bg-green-600', 'hover:bg-green-700', 'text-white');
         } else {
             manualCloseBtn.textContent = 'Umfrage beenden';
             manualCloseBtn.classList.add('bg-yellow-500', 'hover:bg-yellow-600', 'text-black');
-            manualCloseBtn.classList.remove('bg-green-600', 'hover:bg-green-700', 'text-white'); 
+            manualCloseBtn.classList.remove('bg-green-600', 'hover:bg-green-700', 'text-white');
         }
     }
     const selectionContainer = document.getElementById('fix-date-selection-container');
     if (selectionContainer) selectionContainer.classList.add('hidden');
-    
-    // 7. Baut die Liste der "Bestehenden Termine" (P1 - Gruppiert)
+
+    // 7. Baut die Liste der "Bestehenden Termine"
     renderExistingTermsList(voteData);
 
-    // 8. Baut die Admin-Abstimmungs-Tabelle (P3 - Neue Tabelle)
+    // 8. Baut die Admin-Abstimmungs-Tabelle
     renderParticipantEditGrid(voteData);
-    
+
     // 9. Leert den "Neue Termine" Container
     const datesContainerEdit = document.getElementById('vote-dates-container-edit');
     if (datesContainerEdit) {
-        datesContainerEdit.innerHTML = ''; 
+        datesContainerEdit.innerHTML = '';
     }
     addNewDateGroupEdit(true); // Fügt die erste leere Gruppe hinzu
-    
+
     const addDateButtonEdit = document.getElementById('vote-add-date-btn-edit');
     if (addDateButtonEdit) addDateButtonEdit.classList.add('hidden');
     validateLastDateGroupEdit();
 }
-
-
 
 
 
@@ -3139,9 +3161,7 @@ async function saveVoteEdits() {
 
 
 
-/**
- * Schaltet den "isManuallyClosed"-Status um (Knopf: "Umfrage beenden" / "Umfrage freigeben")
- */
+// Schaltet den "isManuallyClosed"-Status um (Knopf: "Umfrage beenden" / "Umfrage freigeben")
 async function toggleManualPollClose() {
     const isCurrentlyClosed = currentVoteData.isManuallyClosed === true;
     const newStatus = !isCurrentlyClosed;
@@ -3179,9 +3199,7 @@ async function toggleManualPollClose() {
 
 // --- ENDE NEUE FUNKTIONEN ---
 
-/**
- * NEU: Hebt die Fixierung eines Termins auf (setzt fixedOptionIndex auf null)
- */
+// NEU: Hebt die Fixierung eines Termins auf (setzt fixedOptionIndex auf null)
 async function unfixPollDate() {
     if (!currentVoteData) return;
 
@@ -3229,10 +3247,6 @@ async function unfixPollDate() {
     }
 }
 
-/**
- * NEU: Schaltet die Zugriffs-Richtlinie (nur registrierte / alle) um
- * Wird von den "ändern..."-Knöpfen aufgerufen
- */
 function toggleAccessPolicy(modeInputId, textDisplayId) {
     const modeInput = document.getElementById(modeInputId);
     const textDisplay = document.getElementById(textDisplayId);
@@ -3339,34 +3353,6 @@ function renderPollHistory() {
 // ----- HELFER-FUNKTIONEN (Rest) -----
 
 
-
-// NEU: Funktion zum Prüfen der URL auf Token/ID
-// (Diese Funktion wird in haupteingang.js aufgerufen, nicht hier)
-/*
-function checkUrlForToken() {
-    try {
-        const urlParams = new URLSearchParams(window.location.search);
-        const voteId = urlParams.get('vote_id');
-        const voteToken = urlParams.get('vote_token');
-
-        if (voteId) {
-            console.log("URL-Parameter 'vote_id' gefunden:", voteId);
-            // Wir rufen joinVoteById auf, das async ist, aber wir müssen nicht darauf warten (es kümmert sich selbst)
-            joinVoteById(voteId); 
-        } else if (voteToken) {
-             console.log("URL-Parameter 'vote_token' gefunden:", voteToken);
-             joinVoteByToken(voteToken); 
-        }
-        
-        // URL aufräumen, damit der Parameter weg ist
-        if (voteId || voteToken) {
-            cleanUrlParams();
-        }
-    } catch (e) {
-        console.error("Fehler beim Prüfen der URL:", e);
-    }
-}
-*/
 
 
 function showView(viewName) {
@@ -3526,9 +3512,7 @@ function validateLastDateGroup() {
 
 
 // HINZUFÜGEN (NEUE FUNKTION) in terminplaner.js (z.B. nach validateLastDateGroup)
-/**
- * NEU: Validiert die letzte Datums-Gruppe im "Bearbeiten"-Modus.
- */
+// NEU: Validiert die letzte Datums-Gruppe im "Bearbeiten"-Modus.
 function validateLastDateGroupEdit() {
     const addDateButton = document.getElementById('vote-add-date-btn-edit');
     if (!addDateButton) {
@@ -3688,10 +3672,8 @@ function formatTokenInput(e, inputId) {
 }
 
 // HINZUFÜGEN (NEUE FUNKTION) in terminplaner.js
-/**
- * NEU: Überprüft die Anzahl der Datums-Blöcke und blendet die "Tag löschen"-Knöpfe
- * ein oder aus, um sicherzustellen, dass der letzte Block nicht gelöscht werden kann.
- */
+// NEU: Überprüft die Anzahl der Datums-Blöcke und blendet die "Tag löschen"-Knöpfe
+// ein oder aus, um sicherzustellen, dass der letzte Block nicht gelöscht werden kann.
 function updateDeleteDayButtons(containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -3704,12 +3686,12 @@ function updateDeleteDayButtons(containerId) {
     dayBlocks.forEach(block => {
         const deleteBtn = block.querySelector('.vote-remove-day-btn');
         if (deleteBtn) {
-            // 3. Wenn die Gesamtanzahl größer als 1 ist...
+            // 3. Wenn die Gesamtanzahl größer als 1 ist
             if (count > 1) {
-                // ...zeige den Löschen-Knopf an
+                // zeige den Löschen-Knopf an
                 deleteBtn.classList.remove('hidden');
             } else {
-                // ...sonst (wenn es der letzte ist) verstecke ihn
+                // sonst (wenn es der letzte ist) verstecke ihn
                 deleteBtn.classList.add('hidden');
             }
         }
@@ -3757,17 +3739,15 @@ function cleanUrlParams() {
 }
 
 
-/**
- * NEU (P3): Erzeugt eine zufällige, einzigartige ID für einen Gast.
- */
+ // NEU (P3): Erzeugt eine zufällige, einzigartige ID für einen Gast.
 function generateGuestId() {
     return 'guest_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
 }
 
 
-/**
- * NEU (P3): Zeigt die "Änderungen speichern"-Leiste am unteren Rand an oder versteckt sie.
- */
+
+// NEU (P3): Zeigt die "Änderungen speichern"-Leiste am unteren Rand an oder versteckt sie.
+
 function toggleStickySaveBar(show) {
     const bar = document.getElementById('sticky-save-bar');
     if (bar) {
@@ -3780,10 +3760,8 @@ function toggleStickySaveBar(show) {
     }
 }
 
-/**
- * NEU (P3): Setzt den "Geändert"-Status und zeigt/versteckt die Leiste.
- * Dies ist der zentrale Umschalter für die Speicher-Leiste.
- */
+// NEU (P3): Setzt den "Geändert"-Status und zeigt/versteckt die Leiste.
+// Dies ist der zentrale Umschalter für die Speicher-Leiste.
 function setEditChanges(changed) {
     if (changed && !hasEditChanges) {
         // Nur beim ersten Mal auslösen
@@ -3799,60 +3777,8 @@ function setEditChanges(changed) {
 
 
 
-/**
- * NEU (P3): Schaltet die Akkordeon-Menüs in der Edit-Ansicht um.
- */
-function toggleEditViewSection(sectionName) {
-    if (editViewAccordionState.hasOwnProperty(sectionName)) {
-        editViewAccordionState[sectionName] = !editViewAccordionState[sectionName];
-        const content = document.getElementById(`edit-section-content-${sectionName}`);
-        const icon = document.getElementById(`edit-section-icon-${sectionName}`);
-        
-        if (content && icon) {
-            content.classList.toggle('hidden', !editViewAccordionState[sectionName]);
-            icon.classList.toggle('rotate-180', editViewAccordionState[sectionName]);
-        }
-    }
-}
-
-/**
- * NEU (P3): Fragt nach einem neuen Namen für einen Teilnehmer und aktualisiert lokal.
- */
-function handleEditParticipantName(participantId) {
-    const participantIndex = currentVoteData.participants.findIndex(p => p.userId === participantId);
-    if (participantIndex === -1) return;
-    
-    const oldName = currentVoteData.participants[participantIndex].name;
-    const newName = prompt(`Bitte neuen Namen für "${oldName}" eingeben:`, oldName);
-    
-    if (newName && newName.trim() && newName.trim() !== oldName) {
-        currentVoteData.participants[participantIndex].name = newName.trim();
-        renderParticipantEditGrid(currentVoteData); // Zeichnet die Tabelle neu
-        setEditChanges(true); // Zeigt die "Speichern"-Leiste
-        alertUser("Name lokal geändert. Bitte 'Änderungen speichern' klicken.", "info");
-    }
-}
-
-/**
- * NEU (P3): Löscht einen Teilnehmer und seine Stimmen lokal.
- */
-function handleDeleteParticipant(participantId) {
-    const participant = currentVoteData.participants.find(p => p.userId === participantId);
-    if (!participant) return;
-    
-    if (confirm(`Möchtest du wirklich den Teilnehmer "${participant.name}" und alle seine Stimmen löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) {
-        currentVoteData.participants = currentVoteData.participants.filter(p => p.userId !== participantId);
-        renderParticipantEditGrid(currentVoteData); // Zeichnet die Tabelle neu
-        setEditChanges(true); // Zeigt die "Speichern"-Leiste
-        alertUser("Teilnehmer lokal gelöscht. Bitte 'Änderungen speichern' klicken.", "info");
-    }
-}
-
-
-/**
- * NEU (P3): Zeichnet die Liste der vor-registrierten Gäste im Admin-Panel.
- * (KORRIGIERT FÜR P1 & P3: Zeigt "Link kopieren" als Text, ohne Icon)
- */
+// NEU (P3): Zeichnet die Liste der vor-registrierten Gäste im Admin-Panel.
+// (KORRIGIERT FÜR P1 & P3: Zeigt "Link kopieren" als Text, ohne Icon)
 function renderPreRegisteredGuestList(containerId, isEditMode = false) {
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -3905,10 +3831,10 @@ function renderPreRegisteredGuestList(containerId, isEditMode = false) {
 
 
 
-/**
- * NEU (P3): Tritt einer Umfrage über einen speziellen Gast-Link bei.
- * (KORRIGIERT FÜR P2: Nutzt den Permission-Bypass)
- */
+
+// NEU (P3): Tritt einer Umfrage über einen speziellen Gast-Link bei.
+// (KORRIGIERT FÜR P2: Nutzt den Permission-Bypass)
+
 export async function joinVoteAsGuest(voteId, guestId) {
     console.log(`[P3] Versuche Beitritt als Gast: voteId=${voteId}, guestId=${guestId}`);
     try {
@@ -3984,10 +3910,8 @@ function checkInlineEditToken() {
 }
 
 
-/**
- * NEU: Zeigt das Modal (Pop-up) an, das erscheint,
- * wenn eine Umfrage erfolgreich erstellt wurde.
- */
+// NEU: Zeigt das Modal (Pop-up) an, das erscheint,
+// wenn eine Umfrage erfolgreich erstellt wurde.
 function showVoteCreatedModal(voteToken, editToken) {
     // 1. Finde die Elemente in der HTML
     const modal = document.getElementById('voteCreatedModal');
@@ -4017,9 +3941,7 @@ function showVoteCreatedModal(voteToken, editToken) {
     modal.classList.remove('hidden');
 }
 
-/**
- * NEU: Versteckt das "Umfrage erstellt"-Modal
- */
+// NEU: Versteckt das "Umfrage erstellt"-Modal
 function hideVoteCreatedModal() {
     const modal = document.getElementById('voteCreatedModal');
     if (modal) {
@@ -4029,11 +3951,9 @@ function hideVoteCreatedModal() {
 }
 
 // ----- NEUE FUNKTIONEN FÜR DAS DASHBOARD (AB HIER HINZUFÜGEN) -----
+// Der neue "Gehirn"-Prozess: Nimmt ALLE Umfragen und sortiert sie
+// in die 4 Listen und die "Ausfällig"-Box.
 
-/**
- * Der neue "Gehirn"-Prozess: Nimmt ALLE Umfragen und sortiert sie
- * in die 4 Listen und die "Ausfällig"-Box.
- */
 function sortAndRenderAllVotes(allPolls) {
     if (currentUser.mode === GUEST_MODE) {
         allPolls = []; // Gäste sehen keine persönlichen Umfragen
@@ -4109,9 +4029,7 @@ function sortAndRenderAllVotes(allPolls) {
     // Öffentliche Umfragen werden von ihrem eigenen Listener (listenForPublicVotes) gerendert
 }
 
-/**
- * Erzeugt die HTML-Karte für EINE Umfrage (Punkt 2)
- */
+// Erzeugt die HTML-Karte für EINE Umfrage (Punkt 2)
 function createVoteCardHTML(vote, listTitle) {
     const userId = currentUser.mode;
     const isCreator = vote.createdBy === userId;
@@ -4183,11 +4101,9 @@ function createVoteCardHTML(vote, listTitle) {
     `;
 }
 
-/**
- * Eine generische Funktion, die eine Liste von Umfragen
- * in ein bestimmtes HTML-Element rendert.
- * (NEUE VERSION: Sortiert "bald ablaufend" nach oben)
- */
+// Eine generische Funktion, die eine Liste von Umfragen
+// in ein bestimmtes HTML-Element rendert.
+// (NEUE VERSION: Sortiert "bald ablaufend" nach oben)
 function renderVoteList(votes, elementId, listTitle) {
     const listContainer = document.getElementById(elementId);
     if (!listContainer) {
@@ -4243,11 +4159,9 @@ function renderVoteList(votes, elementId, listTitle) {
     listContainer.innerHTML = sortedVotes.map(vote => createVoteCardHTML(vote, listTitle)).join('');
 }
 
-/**
- * Rendert die Zusammenfassung der ausständigen Rückmeldungen (Punkt 1)
- * (NEUE VERSION: Erzeugt klickbare "Chips", die in einer Zeile umbrechen)
- * (KORRIGIERT: Verwendet style.display statt classList, um den Bug zu beheben)
- */
+// Rendert die Zusammenfassung der ausständigen Rückmeldungen (Punkt 1)
+// (NEUE VERSION: Erzeugt klickbare "Chips", die in einer Zeile umbrechen)
+// (KORRIGIERT: Verwendet style.display statt classList, um den Bug zu beheben)
 function renderOutstandingSummary(outstandingPolls) {
     const summaryContainer = document.getElementById('outstanding-votes-summary');
     if (!summaryContainer) return;
@@ -4301,9 +4215,8 @@ function renderOutstandingSummary(outstandingPolls) {
     // ================================================
 }
 
-/**
- * Helfer-Funktion für den Countdown (Punkt 2)
- */
+
+// Helfer-Funktion für den Countdown (Punkt 2)
 function formatTimeRemaining(endTime) {
     const now = new Date();
     const diffMs = endTime.getTime() - now.getTime();
@@ -4327,17 +4240,8 @@ function formatTimeRemaining(endTime) {
 }
 
 // ----- NEUE FUNKTIONEN FÜR BEARBEITEN-MODUS -----
-
-/**
- * Fügt eine neue (leere) Datums/Zeit-Gruppe im "Bearbeiten"-Modus hinzu.
- * Fast identisch mit 'addNewDateGroup', aber zielt auf '-edit'-Container.
- */
-// ERSETZE diese Funktion in terminplaner.js
-/**
- * Fügt eine neue (leere) Datums/Zeit-Gruppe im "Bearbeiten"-Modus hinzu.
- * KORRIGIERT: Kopiert jetzt den letzten Eintrag, wie im "Erstellen"-Modus.
- */
-// ERSETZE diese Funktion in terminplaner.js
+// Fügt eine neue (leere) Datums/Zeit-Gruppe im "Bearbeiten"-Modus hinzu.
+// KORRIGIERT: Kopiert jetzt den letzten Eintrag, wie im "Erstellen"-Modus.
 function addNewDateGroupEdit(isFirst = false) {
     dateGroupIdCounter++; // Wir nutzen den globalen Zähler weiter
     const datesContainer = document.getElementById('vote-dates-container-edit');
@@ -4406,13 +4310,7 @@ function addNewDateGroupEdit(isFirst = false) {
     // --- KORREKTUR: Ruft die Helfer-Funktion auf ---
     updateDeleteDayButtons('vote-dates-container-edit');
 }
-
-/**
- * Baut die Admin-Tabelle, um Teilnehmer-Votes zu bearbeiten
- * KORRIGIERT (P3):
- * - Fügt "Name bearbeiten" und "Löschen" Knöpfe hinzu
- * - Macht Header und erste Spalte "sticky" für bessere Übersicht
- */
+// Baut die Admin-Tabelle, um Teilnehmer-Votes zu bearbeiten (Punkt 2)
 function renderParticipantEditGrid(voteData) {
     const container = document.getElementById('edit-participant-grid-container');
     if (!container) return;
@@ -4422,73 +4320,60 @@ function renderParticipantEditGrid(voteData) {
         container.innerHTML = `<p class="text-sm text-center text-gray-500 p-4 bg-gray-50 rounded-lg">Noch keine Teilnehmer haben abgestimmt.</p>`;
         return;
     }
-    
-    // (P3) CSS-Klassen für Sticky-Effekt
-    const thClasses = "p-3 border-b border-r text-center font-semibold sticky top-0 z-20 bg-gray-100 min-w-[200px]";
-    const tdStickyClasses = "p-3 border-b border-r font-mono sticky left-0 z-10 bg-white";
 
     // Baue die Kopfzeile (Alle Teilnehmer)
-    let tableHTML = '<div class="w-full overflow-x-auto rounded-lg border shadow-inner">'; // Scroll-Container
-    tableHTML += '<table class="w-full border-collapse text-sm text-left bg-white">';
-    tableHTML += '<thead><tr class="bg-gray-100">';
-    tableHTML += `<th class="${thClasses} sticky left-0 z-30">Termin</th>`; // Oberste linke Ecke
-    
+    let tableHTML = '<table class="w-full border-collapse text-sm text-left bg-white">';
+    tableHTML += '<thead><tr class="bg-gray-50">';
+    tableHTML += '<th class="p-3 border-b sticky left-0 bg-gray-50 z-10 w-48">Termin</th>';
+
     participants.forEach(p => {
-        tableHTML += `<th class="${thClasses}">
-                        <div class="flex flex-col items-center justify-center gap-1">
-                            <span>${p.name}</span>
-                            <div class="flex gap-2">
-                                <button class="edit-participant-name-btn text-xs font-medium text-blue-600 hover:underline" data-participant-id="${p.userId}">Namen ändern</button>
-                                <button class="delete-participant-vote-btn text-xs font-medium text-red-600 hover:underline" data-participant-id="${p.userId}">Löschen</button>
-                            </div>
-                        </div>
-                      </th>`;
+        tableHTML += `<th class="p-3 border-b text-center w-36">${p.name}</th>`;
     });
     tableHTML += '</tr></thead>';
 
     // Baue die Zeilen (Alle Termine)
     tableHTML += '<tbody>';
-    
+
     // Sortiere Optionen nach Datum (genau wie in der Hauptansicht)
     const optionsByDate = {};
     voteData.options.forEach((option, index) => {
         if (!optionsByDate[option.date]) {
-            optionsByDate[option.date] = []; 
+            optionsByDate[option.date] = [];
         }
         optionsByDate[option.date].push({ ...option, originalIndex: index });
     });
 
     for (const date in optionsByDate) {
-        const dateObj = new Date(date + 'T12:00:00'); 
+        const dateObj = new Date(date + 'T12:00:00');
         const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
 
         tableHTML += `
-            <tr class="bg-gray-50">
-                <td class="p-2 font-bold sticky left-0 bg-gray-50 z-10 border-r" colspan="${participants.length + 1}">${niceDate}</td>
+            <tr class="bg-gray-100">
+                <td class="p-2 font-bold sticky left-0 bg-gray-100 z-10" colspan="${participants.length + 1}">${niceDate}</td>
             </tr>
         `;
 
         optionsByDate[date].forEach(option => {
             const optionIndex = option.originalIndex;
-            const timeString = option.timeEnd ? 
-                `${option.timeStart} - ${option.timeEnd}` : 
+            const timeString = option.timeEnd ?
+                `${option.timeStart} - ${option.timeEnd} Uhr` :
                 `${option.timeStart} Uhr`;
-            
+
             tableHTML += `<tr class="vote-option-row" data-option-index="${optionIndex}">
-                            <td class="${tdStickyClasses}">${timeString}</td>`;
+                            <td class="p-3 border-b font-mono sticky left-0 bg-white z-10">${timeString}</td>`;
 
             // Für JEDEN Teilnehmer, erstelle die 3 Knöpfe
             participants.forEach(p => {
                 const participantId = p.userId;
                 const currentAnswer = p.currentAnswers[optionIndex];
-                
+
                 const yesSelected = currentAnswer === 'yes' ? 'bg-green-200 ring-2 ring-indigo-500' : 'hover:bg-green-100 bg-opacity-50';
                 const maybeSelected = currentAnswer === 'maybe' ? 'bg-yellow-200 ring-2 ring-indigo-500' : 'hover:bg-yellow-100 bg-opacity-50';
                 const noSelected = currentAnswer === 'no' ? 'bg-red-200 ring-2 ring-indigo-500' : 'hover:bg-red-100 bg-opacity-50';
                 const maybeHidden = voteData.disableMaybe ? 'hidden' : '';
 
                 tableHTML += `
-                    <td class="p-2 border-b border-r">
+                    <td class="p-2 border-b">
                         <div class="flex justify-center gap-1">
                             <button class="admin-vote-grid-btn p-2 rounded-lg ${yesSelected} transition-colors" data-participant-id="${participantId}" data-option-index="${optionIndex}" data-answer="yes" title="Ja">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-green-600"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" /></svg>
@@ -4503,20 +4388,17 @@ function renderParticipantEditGrid(voteData) {
                     </td>
                 `;
             });
-            
+
             tableHTML += '</tr>';
         });
     }
-    
-    tableHTML += '</tbody></table></div>'; // Ende Tabelle & Scroll-Container
+
+    tableHTML += '</tbody></table>';
     container.innerHTML = tableHTML;
 }
 
-
-/**
- * Verarbeitet den Klick eines Admins auf die Abstimmungs-Tabelle (Punkt 2)
- * Aktualisiert die LOKALEN Daten und protokolliert die Änderung.
- */
+// Verarbeitet den Klick eines Admins auf die Abstimmungs-Tabelle (Punkt 2)
+// Aktualisiert die LOKALEN Daten und protokolliert die Änderung.
 function handleAdminVoteEdit(participantId, optionIndex, newAnswer, clickedButton) {
     if (!currentVoteData || !currentVoteData.participants) return;
 
@@ -4573,11 +4455,7 @@ function handleAdminVoteEdit(participantId, optionIndex, newAnswer, clickedButto
 }
 
 // ----- NEUE FUNKTIONEN FÜR "TERMINE STREICHEN" -----
-
-/**
- * Baut die Liste der bestehenden Termine im "Bearbeiten"-Modus
- * KORRIGIERT (P1): Gruppiert jetzt nach Datum
- */
+// Baut die Liste der bestehenden Termine im "Bearbeiten"-Modus (Punkt 1)
 function renderExistingTermsList(voteData) {
     const listContainer = document.getElementById('manage-existing-terms-list');
     if (!listContainer) return;
@@ -4587,56 +4465,34 @@ function renderExistingTermsList(voteData) {
         return;
     }
 
-    // 1. Termine nach Datum gruppieren
-    const optionsByDate = {};
-    voteData.options.forEach((option, index) => {
-        if (!optionsByDate[option.date]) {
-            optionsByDate[option.date] = []; 
-        }
-        optionsByDate[option.date].push({ ...option, originalIndex: index });
-    });
-
     let listHTML = '';
-    
-    // 2. Durch die gruppierten Tage iterieren
-    for (const date in optionsByDate) {
-        const dateObj = new Date(date + 'T12:00:00');
-        const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit' });
-        
-        // Datums-Überschrift
-        listHTML += `<h4 class="text-md font-bold text-gray-800 pt-2">${niceDate}</h4>`;
+    voteData.options.forEach((option, index) => {
+        const dateObj = new Date(option.date + 'T12:00:00');
+        const niceDate = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+        const timeString = option.timeEnd ? `${option.timeStart} - ${option.timeEnd}` : `${option.timeStart} Uhr`;
 
-        // 3. Durch die Uhrzeiten für diesen Tag iterieren
-        optionsByDate[date].forEach(option => {
-            const index = option.originalIndex;
-            const timeString = option.timeEnd ? `${option.timeStart} - ${option.timeEnd}` : `${option.timeStart} Uhr`;
+        const isStricken = option.isStricken === true;
 
-            const isStricken = option.isStricken === true;
+        const textClasses = isStricken ? 'line-through text-gray-500' : 'font-semibold text-gray-800';
+        const button = isStricken ?
+            `<button class="restore-term-btn py-1 px-3 bg-green-100 text-green-700 text-sm font-semibold rounded-lg hover:bg-green-200" data-option-index="${index}">Wiederherstellen</button>` :
+            `<button class="strike-term-btn py-1 px-3 bg-red-100 text-red-700 text-sm font-semibold rounded-lg hover:bg-red-200" data-option-index="${index}">Streichen</button>`;
 
-            const textClasses = isStricken ? 'line-through text-gray-500' : 'font-semibold text-gray-800';
-            const button = isStricken ?
-                `<button class="restore-term-btn py-1 px-3 bg-green-100 text-green-700 text-sm font-semibold rounded-lg hover:bg-green-200" data-option-index="${index}">Wiederherstellen</button>` :
-                `<button class="strike-term-btn py-1 px-3 bg-red-100 text-red-700 text-sm font-semibold rounded-lg hover:bg-red-200" data-option-index="${index}">Streichen</button>`;
-
-            listHTML += `
-                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
-                    <div>
-                        <p class="${textClasses}"><span class="font-mono">${timeString}</span></p>
-                        ${isStricken ? '<p class="text-xs font-bold text-red-600">GESTRICHEN</p>' : ''}
-                    </div>
-                    ${button}
+        listHTML += `
+            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                <div>
+                    <p class="${textClasses}">${niceDate} <span class="font-mono">(${timeString})</span></p>
+                    ${isStricken ? '<p class="text-xs font-bold text-red-600">GESTREICHEN (Alle Stimmen entfernt)</p>' : ''}
                 </div>
-            `;
-        });
-    }
+                ${button}
+            </div>
+        `;
+    });
 
     listContainer.innerHTML = listHTML;
 }
 
-
-/**
- * Verarbeitet den Klick auf "Streichen" / "Wiederherstellen" (Punkt 1)
- */
+// Verarbeitet den Klick auf "Streichen" / "Wiederherstellen" (Punkt 1)
 function handleStrikeTerm(optionIndex, shouldBeStricken) {
     if (!currentVoteData || !currentVoteData.options[optionIndex]) return;
 
@@ -4685,11 +4541,8 @@ function handleStrikeTerm(optionIndex, shouldBeStricken) {
 
     alertUser(`Termin ${shouldBeStricken ? 'gestrichen' : 'wiederhergestellt'}. (Lokal geändert)`, "success");
 }
-
-/**
- * NEU (P3): Verarbeitet den Klick auf "Ok, quittieren"
- * (Funktioniert jetzt auch für Gäste-per-Link)
- */
+// NEU (P3): Verarbeitet den Klick auf "Ok, quittieren"
+// (Funktioniert jetzt auch für Gäste-per-Link)
 async function handleAcknowledgeUpdate() {
 
     // =================================================================
