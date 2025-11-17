@@ -35,7 +35,7 @@ let originalOptionsOnEditLoad = []; // NEU: Für Änderungs-Log (P5)
 let tempPreRegisteredGuests = []; // NEU (P3): Speichert Gäste-Namen beim Erstellen
 let currentGuestInfo = null; // NEU (P3): Speichert, wenn sich ein Gast per Link anmeldet
 let hasEditChanges = false;
-let editViewAccordionState = { validity: false, settings: false, guests: false, existingTerms: false, newTerms: false, participants: false };
+let editViewAccordionState = { details: true, validity: false, settings: false, guests: false, existingTerms: false, newTerms: false, participants: false };
 
 
 
@@ -398,26 +398,9 @@ function applyAssignedUsers() {
 
 
 export function initializeTerminplanerView() {
-    
-    // =================================================================
-    // BEGINN DER ÄNDERUNG (Berechtigungs-Prüfung)
-    // =================================================================
-    
-    // HINWEIS: Der Code-Block, der hier stand, um den 'createVoteButton'
-    // zu steuern, wurde ENTFERNT.
-    // Diese Logik ist jetzt ZENTRAL in 'log-InOut.js' -> 'updateUIForMode',
-    // damit sie auch auf Live-Rechte-Änderungen reagiert.
-    
-    // =================================================================
-    // ENDE DER ÄNDERUNG
-    // =================================================================
-
-    // --- NEU: Logik für die Haupt-URL-Share-Box ---
+// --- NEU: Logik für die Haupt-URL-Share-Box ---
     const mainUrlInput = document.getElementById('main-share-url');
     if (mainUrlInput) {
-        // --- KORREKTUR HIER ---
-        // Wir fügen den Hinweis "?view=terminplaner" hinzu,
-        // damit der Link direkt zu dieser Ansicht führt.
         mainUrlInput.value = window.location.origin + window.location.pathname + '?view=terminplaner';
     }
     const copyMainUrlBtn = document.getElementById('copy-main-url-btn');
@@ -429,28 +412,17 @@ export function initializeTerminplanerView() {
         });
         copyMainUrlBtn.dataset.listenerAttached = 'true';
     }
-    // --- ENDE NEU ---
     
     // ----- Spion für das Token-Feld -----
     const tokenInput = document.getElementById('vote-token-input');
     if (tokenInput && !tokenInput.dataset.listenerAttached) {
         tokenInput.addEventListener('input', (e) => formatTokenInput(e, 'vote-token-input')); 
-        
-        // =========================================================
-        // START BUG 4 FIX (Teil 1)
-        // =========================================================
         tokenInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
-                // Verhindere das Standard-Enter-Verhalten (falls es in einem Formular wäre)
                 e.preventDefault(); 
-                // Rufe die Funktion auf, die auch der Knopf aufruft
                 joinVoteByToken(null); 
             }
         });
-        // =========================================================
-        // END BUG 4 FIX (Teil 1)
-        // =========================================================
-        
         tokenInput.dataset.listenerAttached = 'true';
     }
 
@@ -573,7 +545,8 @@ export function initializeTerminplanerView() {
         saveVoteButton.dataset.listenerAttached = 'true';
     }
     
-    // Spion für Anonym-Checkbox (Erstellen)
+    // (Spione für Anonym, HideAnswers, AccessPolicy...)
+    // ...
     const anonymousCheckbox = document.getElementById('vote-setting-anonymous');
     if (anonymousCheckbox && !anonymousCheckbox.dataset.listenerAttached) {
         anonymousCheckbox.addEventListener('change', (e) => {
@@ -584,8 +557,6 @@ export function initializeTerminplanerView() {
         });
         anonymousCheckbox.dataset.listenerAttached = 'true';
     }
-    
-    // Spion für Anonym-Checkbox (Bearbeiten)
     const anonymousCheckboxEdit = document.getElementById('vote-setting-anonymous-edit');
     if (anonymousCheckboxEdit && !anonymousCheckboxEdit.dataset.listenerAttached) {
         anonymousCheckboxEdit.addEventListener('change', (e) => {
@@ -596,8 +567,6 @@ export function initializeTerminplanerView() {
         });
         anonymousCheckboxEdit.dataset.listenerAttached = 'true';
     }
-
-    // Spion für "Antworten verstecken" (Erstellen)
     const hideAnswersCheckbox = document.getElementById('vote-setting-hide-answers');
     if (hideAnswersCheckbox && !hideAnswersCheckbox.dataset.listenerAttached) {
         hideAnswersCheckbox.addEventListener('change', (e) => {
@@ -608,8 +577,6 @@ export function initializeTerminplanerView() {
         });
         hideAnswersCheckbox.dataset.listenerAttached = 'true';
     }
-    
-    // Spion für "Antworten verstecken" (Bearbeiten)
     const hideAnswersCheckboxEdit = document.getElementById('vote-setting-hide-answers-edit');
     if (hideAnswersCheckboxEdit && !hideAnswersCheckboxEdit.dataset.listenerAttached) {
         hideAnswersCheckboxEdit.addEventListener('change', (e) => {
@@ -620,8 +587,6 @@ export function initializeTerminplanerView() {
         });
         hideAnswersCheckboxEdit.dataset.listenerAttached = 'true';
     }
-    
-    // Spione für "Sichtbarkeit" (Erstellen & Bearbeiten)
     const accessBtn = document.getElementById('vote-setting-access-btn');
     if (accessBtn && !accessBtn.dataset.listenerAttached) {
         accessBtn.addEventListener('click', () => {
@@ -629,7 +594,6 @@ export function initializeTerminplanerView() {
         });
         accessBtn.dataset.listenerAttached = 'true';
     }
-    
     const accessBtnEdit = document.getElementById('vote-setting-access-btn-edit');
     if (accessBtnEdit && !accessBtnEdit.dataset.listenerAttached) {
         accessBtnEdit.addEventListener('click', () => {
@@ -638,9 +602,7 @@ export function initializeTerminplanerView() {
         accessBtnEdit.dataset.listenerAttached = 'true';
     }
 
-    // =================================================================
-    // START NEU (P3 & P2): Listener für "Gast hinzufügen" (Erstellen-Ansicht)
-    // =================================================================
+    // (P3 & P2): Listener für "Gast hinzufügen" (Erstellen-Ansicht)
     const addGuestBtn = document.getElementById('vote-add-guest-btn-admin');
     if (addGuestBtn && !addGuestBtn.dataset.listenerAttached) {
         addGuestBtn.addEventListener('click', () => {
@@ -656,12 +618,12 @@ export function initializeTerminplanerView() {
         });
         addGuestBtn.dataset.listenerAttached = 'true';
 
-        // KORREKTUR (Problem 2): Enter-Taste für Gast-Input (Erstellen)
+        // (Problem 2): Enter-Taste für Gast-Input (Erstellen)
         const guestInput = document.getElementById('vote-guest-name-input-admin');
         guestInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
-                e.preventDefault(); // Verhindert Formular-Absenden
-                addGuestBtn.click(); // Löst den Klick auf den "+ Gast"-Button aus
+                e.preventDefault(); 
+                addGuestBtn.click(); 
             }
         });
     }
@@ -679,40 +641,30 @@ export function initializeTerminplanerView() {
         });
         guestListContainer.dataset.listenerAttached = 'true';
     }
-    // =================================================================
-    // ENDE NEU (P3 & P2)
-    // =================================================================
 
 
     // ----- Spione für die Abstimmungs-Seite -----
     
     const cancelVoteButton = document.getElementById('cancel-vote-participation-btn');
     if (cancelVoteButton && !cancelVoteButton.dataset.listenerAttached) {
-        // =================================================================
-        // BEGINN DER ÄNDERUNG (Live-Spion stoppen)
-        // =================================================================
         cancelVoteButton.addEventListener('click', () => {
-            stopCurrentVoteListener(); // <-- NEU: Stoppt den Live-Spion
+            stopCurrentVoteListener(); 
             showView('main'); 
             currentVoteData = null; 
         });
-        // =================================================================
-        // ENDE DER ÄNDERUNG
-        // =================================================================
         cancelVoteButton.dataset.listenerAttached = 'true';
     }
 
     const voteView = document.getElementById('terminplaner-vote-view');
-    // ... (Inhalt des Listeners bleibt gleich) ...
     if (voteView && !voteView.dataset.listenerAttached) {
         voteView.addEventListener('click', (e) => {
             
             // "Ändern"-Knopf für Benutzer
             const userChangeBtn = e.target.closest('#vote-user-change-to-anon-btn');
             if (userChangeBtn) {
+                // ... (Logik bleibt gleich) ...
                 const nameDisplay = document.getElementById('vote-participant-name');
                 if (isParticipantChoosingAnonymous) {
-                    // Zurück zum Namen
                     isParticipantChoosingAnonymous = false;
                     const currentUserFull = USERS[currentUser.mode];
                     nameDisplay.textContent = currentUserFull ? currentUserFull.realName : currentUser.displayName;
@@ -720,70 +672,56 @@ export function initializeTerminplanerView() {
                     userChangeBtn.classList.remove('bg-blue-600', 'text-white');
                     userChangeBtn.classList.add('bg-gray-200', 'text-gray-700');
                 } else {
-                    // Zu "Anonym" wechseln
                     isParticipantChoosingAnonymous = true;
                     nameDisplay.textContent = 'Anonym';
                     userChangeBtn.textContent = 'Meinen Namen verwenden';
                     userChangeBtn.classList.add('bg-blue-600', 'text-white');
                     userChangeBtn.classList.remove('bg-gray-200', 'text-gray-700');
                 }
-                return; // Klick ist erledigt
+                return;
             }
             
             // "Ändern"-Knopf für Gäste
             const guestChangeBtn = e.target.closest('#vote-guest-change-to-anon-btn');
             if (guestChangeBtn) {
+                // ... (Logik bleibt gleich) ...
                 const guestInput = document.getElementById('vote-guest-name-input');
                 if (isParticipantChoosingAnonymous) {
-                    // Zurück zum Namen-Eingabefeld
                     isParticipantChoosingAnonymous = false;
                     guestInput.disabled = false;
                     guestInput.value = '';
                     guestInput.placeholder = 'Vor- und Nachname...';
                     guestChangeBtn.textContent = 'Anonym teilnehmen';
                 } else {
-                    // Zu "Anonym" wechseln
                     isParticipantChoosingAnonymous = true;
                     guestInput.disabled = true;
                     guestInput.value = 'Anonym';
                     guestInput.placeholder = '';
                     guestChangeBtn.textContent = 'Namen eingeben';
                 }
-                return; // Klick ist erledigt
+                return;
             }
             
             
-            // =================================================================
-            // START KORREKTUR (Problem 4 - Hybrid-Layout)
-            // =================================================================
-            // Wir hören jetzt auf '.vote-card-btn' statt '.vote-grid-btn'
-            const clickedButton = e.target.closest('.vote-card-btn'); 
+            // Klick auf Abstimm-Knopf
+            const clickedButton = e.target.closest('.vote-card-btn');
             if (clickedButton && !clickedButton.disabled) { 
+                // ... (Logik für Hybrid-Tabelle bleibt gleich) ...
                 const optionIndex = clickedButton.dataset.optionIndex;
                 const answer = clickedButton.dataset.answer;
-                
-                // Setze die Antwort in unserem lokalen Speicher
                 currentParticipantAnswers[optionIndex] = answer;
-                
-                // Finde alle Knöpfe für DIESE KARTE
                 const buttonGroup = clickedButton.closest('.vote-card-button-group');
                 if (buttonGroup) {
                     const allButtonsInGroup = buttonGroup.querySelectorAll('.vote-card-btn');
-                    
-                    // Setze alle Knöpfe in dieser Gruppe zurück
                     allButtonsInGroup.forEach(btn => {
                         btn.classList.remove('bg-green-600', 'text-white', 'ring-2', 'ring-offset-2', 'ring-green-600');
                         btn.classList.remove('bg-yellow-500', 'text-white', 'ring-2', 'ring-offset-2', 'ring-yellow-500');
                         btn.classList.remove('bg-red-600', 'text-white', 'ring-2', 'ring-offset-2', 'ring-red-600');
-                        
-                        // Standard-Aussehen (nicht ausgewählt)
                         if (btn.dataset.answer === 'yes') btn.classList.add('bg-green-100', 'text-green-800', 'hover:bg-green-200');
                         if (btn.dataset.answer === 'maybe') btn.classList.add('bg-yellow-100', 'text-yellow-800', 'hover:bg-yellow-200');
                         if (btn.dataset.answer === 'no') btn.classList.add('bg-red-100', 'text-red-800', 'hover:bg-red-200');
                     });
                 }
-                
-                // Hebe den geklickten Knopf hervor
                 if (answer === 'yes') {
                     clickedButton.classList.remove('bg-green-100', 'text-green-800', 'hover:bg-green-200');
                     clickedButton.classList.add('bg-green-600', 'text-white', 'ring-2', 'ring-offset-2', 'ring-green-600');
@@ -796,43 +734,39 @@ export function initializeTerminplanerView() {
                     clickedButton.classList.remove('bg-red-100', 'text-red-800', 'hover:bg-red-200');
                     clickedButton.classList.add('bg-red-600', 'text-white', 'ring-2', 'ring-offset-2', 'ring-red-600');
                 }
-
-                // Prüfe, ob der "Speichern"-Knopf angezeigt werden soll
                 checkIfAllAnswered();
             }
-            // =================================================================
-            // ENDE KORREKTUR (Problem 4)
-            // =================================================================
             
-            
+            // Klick auf Korrektur-Zähler (in der Tabelle)
             const correctionCounter = e.target.closest('.correction-counter');
             if (correctionCounter) {
                 const userId = correctionCounter.dataset.userid;
                 renderCorrectionHistory(userId);
             }
             
+            // Klick auf "Bearbeiten"-Knopf (neben "Deine Antwort")
             const correctionButton = e.target.closest('.vote-correction-btn');
             if (correctionButton) {
                 switchToEditMode();
             }
 
+            // Klick auf "Kopieren" Knöpfe
             const copyTokenBtn = e.target.closest('#copy-vote-token-btn');
             if (copyTokenBtn) {
                 const token = document.getElementById('vote-share-token').textContent;
                 copyToClipboard(token, "Token kopiert!");
             }
-
             const copyUrlBtn = e.target.closest('#copy-vote-url-btn');
             if (copyUrlBtn) {
                 const url = document.getElementById('vote-share-url').value;
                 copyToClipboard(url, "URL kopiert!");
             }
 
+            // Klick auf "Details" / "Quittieren"
             const pollHistoryBtnMain = e.target.closest('#show-poll-history-btn-main');
             if (pollHistoryBtnMain) {
                 renderPollHistory();
             }
-
             const acknowledgeBtn = e.target.closest('#acknowledge-update-btn');
             if (acknowledgeBtn) {
                 handleAcknowledgeUpdate();
@@ -841,46 +775,34 @@ export function initializeTerminplanerView() {
         voteView.dataset.listenerAttached = 'true';
     }
     
+    // (Restliche Listener für Speichern, Edit-Token, Logs...)
+    // ...
     const saveParticipationButton = document.getElementById('vote-save-participation-btn');
     if (saveParticipationButton && !saveParticipationButton.dataset.listenerAttached) {
         saveParticipationButton.addEventListener('click', saveVoteParticipation);
         saveParticipationButton.dataset.listenerAttached = 'true';
     }
-    
     const editVoteButton = document.getElementById('show-edit-vote-btn');
     if (editVoteButton && !editVoteButton.dataset.listenerAttached) {
         editVoteButton.addEventListener('click', showInlineEditToken); 
         editVoteButton.dataset.listenerAttached = 'true';
     }
-    
     const submitEditBtn = document.getElementById('submit-edit-token-inline-btn');
     if (submitEditBtn && !submitEditBtn.dataset.listenerAttached) {
         submitEditBtn.addEventListener('click', checkInlineEditToken);
         submitEditBtn.dataset.listenerAttached = 'true';
     }
-    
     const editTokenInput = document.getElementById('edit-token-input-inline');
     if (editTokenInput && !editTokenInput.dataset.listenerAttached) {
         editTokenInput.addEventListener('input', (e) => formatTokenInput(e, 'edit-token-input-inline'));
-        
-        // =========================================================
-        // START BUG 4 FIX (Teil 2)
-        // =========================================================
         editTokenInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
-                // Verhindere das Standard-Enter-Verhalten
                 e.preventDefault();
-                // Rufe die Funktion auf, die auch der "OK"-Knopf aufruft
                 checkInlineEditToken();
             }
         });
-        // =========================================================
-        // END BUG 4 FIX (Teil 2)
-        // =========================================================
-        
         editTokenInput.dataset.listenerAttached = 'true';
     }
-    
     const closeLogBtn = document.getElementById('close-correction-log-btn');
     if (closeLogBtn && !closeLogBtn.dataset.listenerAttached) {
         closeLogBtn.addEventListener('click', () => {
@@ -893,33 +815,23 @@ export function initializeTerminplanerView() {
         closeLogBtn.dataset.listenerAttached = 'true';
     }
 
+
     // ----- Spione für die Bearbeitungs-Seite (Ansicht 4) -----
 
     const cancelEditingBtn = document.getElementById('cancel-vote-editing-btn');
     if (cancelEditingBtn && !cancelEditingBtn.dataset.listenerAttached) {
-        // =================================================================
-        // BEGINN DER ÄNDERUNG (Live-Spion starten)
-        // =================================================================
         cancelEditingBtn.addEventListener('click', () => {
-            // =================================================================
-            // START KORREKTUR (Problem 3)
-            // =================================================================
-            setEditChanges(false); // Verstecke die Leiste beim Abbrechen
-            // =================================================================
-            // ENDE KORREKTUR (Problem 3)
-            // =================================================================
+            // (P3) Verstecke die Leiste beim Abbrechen
+            setEditChanges(false); 
             
-            // Wir stoppen den Spion NICHT, sondern gehen zurück zur 'vote'-Ansicht
-            // und rufen 'joinVoteById' auf. 'joinVoteById' startet
-            // den Spion 'listenToCurrentVote' automatisch neu.
+            // (P1) Starte Live-Spion neu
             joinVoteById(currentVoteData.id); 
         });
-        // =================================================================
-        // ENDE DER ÄNDERUNG
-        // =================================================================
         cancelEditingBtn.dataset.listenerAttached = 'true';
     }
     
+    // (Restliche Listener für Edit-View... bleiben gleich)
+    // ...
     const unlimitedEditCheckbox = document.getElementById('vote-end-time-unlimited-edit');
     if (unlimitedEditCheckbox && !unlimitedEditCheckbox.dataset.listenerAttached) {
         unlimitedEditCheckbox.addEventListener('change', (e) => {
@@ -933,13 +845,11 @@ export function initializeTerminplanerView() {
         });
         unlimitedEditCheckbox.dataset.listenerAttached = 'true';
     }
-    
     const saveChangesBtn = document.getElementById('vote-save-changes-btn');
     if (saveChangesBtn && !saveChangesBtn.dataset.listenerAttached) {
         saveChangesBtn.addEventListener('click', saveVoteEdits);
         saveChangesBtn.dataset.listenerAttached = 'true';
     }
-    
     const fixDateBtn = document.getElementById('vote-fix-date-btn');
     if (fixDateBtn && !fixDateBtn.dataset.listenerAttached) {
         fixDateBtn.addEventListener('click', (e) => {
@@ -952,26 +862,21 @@ export function initializeTerminplanerView() {
         });
         fixDateBtn.dataset.listenerAttached = 'true';
     }
-
     const toggleManualCloseBtn = document.getElementById('vote-toggle-manual-close-btn');
     if (toggleManualCloseBtn && !toggleManualCloseBtn.dataset.listenerAttached) {
         toggleManualCloseBtn.addEventListener('click', toggleManualPollClose);
         toggleManualCloseBtn.dataset.listenerAttached = 'true';
     }
-    
-    
     const deletePollBtn = document.getElementById('vote-delete-poll-btn');
     if (deletePollBtn && !deletePollBtn.dataset.listenerAttached) {
         deletePollBtn.addEventListener('click', deletePoll);
         deletePollBtn.dataset.listenerAttached = 'true';
     }
-    
     const cancelFixDateBtn = document.getElementById('cancel-fix-date-btn');
     if (cancelFixDateBtn && !cancelFixDateBtn.dataset.listenerAttached) {
         cancelFixDateBtn.addEventListener('click', hideFixDateSelection);
         cancelFixDateBtn.dataset.listenerAttached = 'true';
     }
-
     const confirmFixDateBtn = document.getElementById('confirm-fix-date-btn');
     if (confirmFixDateBtn && !confirmFixDateBtn.dataset.listenerAttached) {
         confirmFixDateBtn.addEventListener('click', confirmAndFixDate);
@@ -1043,6 +948,21 @@ export function initializeTerminplanerView() {
                 }
             }
         });
+        
+        // =================================================================
+        // START KORREKTUR (Problem 3 - max 1 Tag)
+        // =================================================================
+        // Dieser Listener hat gefehlt. Er prüft, ob der "Tag hinzufügen"-Knopf
+        // angezeigt werden soll, nachdem du getippt hast.
+        datesContainerEdit.addEventListener('input', (e) => {
+            if (e.target.matches('.vote-date-input, .vote-time-start-input')) {
+                validateLastDateGroupEdit();
+            }
+        });
+        // =================================================================
+        // ENDE KORREKTUR
+        // =================================================================
+        
         datesContainerEdit.dataset.listenerAttached = 'true';
     }
     const adminGridContainer = document.getElementById('edit-participant-grid-container');
@@ -1056,9 +976,7 @@ export function initializeTerminplanerView() {
                 const newAnswer = clickedButton.dataset.answer;
                 handleAdminVoteEdit(participantId, optionIndex, newAnswer, clickedButton);
             }
-            // =================================================================
-            // START NEU (P3): Listener für "Name bearbeiten" / "Löschen"
-            // =================================================================
+            // (P3): Listener für "Name bearbeiten" / "Löschen"
             const editNameBtn = e.target.closest('.edit-participant-name-btn');
             if (editNameBtn) {
                 const participantId = editNameBtn.dataset.participantId;
@@ -1072,9 +990,6 @@ export function initializeTerminplanerView() {
                 handleDeleteParticipant(participantId);
                 return; // Klick verarbeitet
             }
-            // =================================================================
-            // ENDE NEU (P3)
-            // =================================================================
         });
         adminGridContainer.dataset.listenerAttached = 'true';
     }
@@ -2898,26 +2813,29 @@ function renderEditView(voteData) {
         return localDate.toISOString().slice(0, 16);
     };
     
-    // =================================================================
-    // START NEU (P3): Akkordeon-Status zurücksetzen
-    // =================================================================
-    // Setze alle Akkordeon-Menüs auf "geschlossen"
+    // (P3) Akkordeon-Status zurücksetzen
+    // Setze alle Akkordeon-Menüs auf "geschlossen", AUSSER "details"
     for (const sectionName in editViewAccordionState) {
-        editViewAccordionState[sectionName] = false; // Logik-Status zurücksetzen
+        // =================================================================
+        // START KORREKTUR (Problem 1, 2, 4)
+        // =================================================================
+        // "details" soll standardmäßig offen sein, der Rest geschlossen.
+        const shouldBeOpen = (sectionName === 'details');
+        editViewAccordionState[sectionName] = shouldBeOpen; 
         
         const content = document.getElementById(`edit-section-content-${sectionName}`);
         const icon = document.getElementById(`edit-section-icon-${sectionName}`);
         
         if (content && icon) {
-            content.classList.add('hidden'); // Visuell schließen
-            icon.classList.remove('rotate-180'); // Icon zurückdrehen
+            content.classList.toggle('hidden', !shouldBeOpen); // Visuell umschalten
+            icon.classList.toggle('rotate-180', shouldBeOpen); // Icon drehen
         }
+        // =================================================================
+        // ENDE KORREKTUR
+        // =================================================================
     }
-    // =================================================================
-    // ENDE NEU (P3)
-    // =================================================================
 
-    // 1. Details füllen (jetzt IN "Gültigkeitszeitraum")
+    // 1. KORREKTUR (Problem 1): Details füllen (war vorher kaputt)
     document.getElementById('vote-title-edit').value = voteData.title;
     document.getElementById('vote-description-edit').value = voteData.description || '';
     document.getElementById('vote-location-edit').value = voteData.location || '';
@@ -3059,6 +2977,7 @@ function renderEditView(voteData) {
     if (addDateButtonEdit) addDateButtonEdit.classList.add('hidden');
     validateLastDateGroupEdit();
 }
+
 
 
 
