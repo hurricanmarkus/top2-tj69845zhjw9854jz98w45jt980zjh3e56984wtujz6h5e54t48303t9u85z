@@ -1107,7 +1107,7 @@ export function initializeTerminplanerView() {
                 handleDeleteParticipant(participantId);
             }
             
-            // 6. NEU: Klick auf den Namen zum Ein/Ausklappen
+            // 6. Klick auf den Namen zum Ein/Ausklappen
             const nameToggle = e.target.closest('.participant-name-toggle');
             if (nameToggle) {
                 // Finde die ID aus dem Elternelement
@@ -1240,6 +1240,22 @@ export function initializeTerminplanerView() {
             // ENDE KORREKTUR
             // =================================================================
 
+            // =================================================================
+            // START KORREKTUR (Manuelles Hinzufügen)
+            // =================================================================
+            // 1b. Prüfe, ob der "Manuell Hinzufügen"-Knopf geklickt wurde
+            if (e.target.closest('#add-new-participant-btn')) {
+                handleAddNewParticipant();
+                // handleAddNewParticipant ruft setEditChanges(true) intern auf.
+                // Wir stoppen hier, damit der Klick nicht fälschlicherweise
+                // von der nächsten if-Bedingung erneut erfasst wird.
+                return; 
+            }
+            // =================================================================
+            // ENDE KORREKTUR
+            // =================================================================
+
+
             // 2. Prüfe auf andere Änderungen (die die "Speichern"-Leiste auslösen)
             
             // Ignoriere Klicks auf "Link kopieren" oder "Abbrechen"
@@ -1259,10 +1275,8 @@ export function initializeTerminplanerView() {
                 return;
             }
             // Bestimmte Klicks (Knöpfe) lösen die Leiste aus
-            // (Wir haben .save-participant-name-btn und .delete-participant-btn hinzugefügt)
-            // (Wir haben .vote-remove-day-btn hinzugefügt)
-            // (Wir haben #add-new-participant-btn hinzugefügt)
-            if (e.type === 'click' && e.target.closest('.delete-guest-btn, .strike-term-btn, .restore-term-btn, .admin-vote-grid-btn, #vote-add-guest-btn-admin-edit, #vote-add-date-btn-edit, .vote-add-time-btn, .vote-remove-time-btn, .vote-remove-day-btn, #vote-setting-access-btn-edit, #vote-show-assign-user-modal-btn-edit, .save-participant-name-btn, .delete-participant-btn, #add-new-participant-btn')) {
+            // (Wir haben #add-new-participant-btn entfernt, da es oben separat behandelt wird)
+            if (e.type === 'click' && e.target.closest('.delete-guest-btn, .strike-term-btn, .restore-term-btn, .admin-vote-grid-btn, #vote-add-guest-btn-admin-edit, #vote-add-date-btn-edit, .vote-add-time-btn, .vote-remove-time-btn, .vote-remove-day-btn, #vote-setting-access-btn-edit, #vote-show-assign-user-modal-btn-edit, .save-participant-name-btn, .delete-participant-btn')) {
                 setEditChanges(true);
                 return;
             }
@@ -1277,6 +1291,7 @@ export function initializeTerminplanerView() {
     // ENDE NEU (P3)
     // =================================================================
 }
+
 
 
 
