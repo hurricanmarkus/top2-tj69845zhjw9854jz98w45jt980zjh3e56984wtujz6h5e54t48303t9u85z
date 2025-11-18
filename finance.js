@@ -83,11 +83,11 @@ function listenForFinanceData() {
     // Sicherstellen, dass wir angemeldet sind
     if (!currentUser || !currentUser.mode) {
         console.warn("Finance: Kein Benutzer angemeldet.");
+        renderFinanceList(true); // NEU: Render als Leerzustand
         return;
     }
 
     // Lade alles, wo der User beteiligt ist
-    // Wir nutzen die korrekt initialisierte financeCollectionRef
     const q = query(
         financeCollectionRef,
         where('participants', 'array-contains', currentUser.mode)
@@ -130,8 +130,11 @@ function updateDashboard() {
 }
 
 // --- Haupt-Rendering Funktion ---
-function renderFinanceList() {
+// AKZEPTIERT JETZT EINEN OPTIONALEN FLAG FÜR LEEREN ZUSTAND
+function renderFinanceList(forceEmpty = false) {
     const container = document.getElementById('finance-list-container');
+    if (!container) return; // Wichtig: Falls der Container fehlt, hier abbrechen
+    
     container.innerHTML = '';
 
     if (currentFilter === 'smart') {
@@ -143,15 +146,14 @@ function renderFinanceList() {
 
     if (currentFilter === 'open') {
         filteredData = financeData.filter(item => item.status !== 'paid');
-        // Sortiere nach Datum (älteste zuerst bei Schulden = Dringlichkeit)
         filteredData.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
     } else if (currentFilter === 'history') {
         filteredData = financeData.filter(item => item.status === 'paid');
-        // Sortiere nach Datum (neueste zuerst)
         filteredData.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
     }
 
-    if (filteredData.length === 0) {
+    // WENN LEER ODER KEIN USER (forceEmpty)
+    if (filteredData.length === 0 || forceEmpty) {
         container.innerHTML = `<div class="text-center p-8 text-gray-400">Keine Einträge in dieser Ansicht.</div>`;
         return;
     }
