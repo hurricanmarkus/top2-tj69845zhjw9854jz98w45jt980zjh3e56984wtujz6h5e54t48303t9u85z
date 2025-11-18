@@ -127,3 +127,43 @@
             background-color: #6b7280;
             /* Tailwind gray-500 */
         }
+
+        /* --- ZAHLUNGSVERWALTUNG STYLES --- */
+
+/* Status Farben */
+.payment-status-open {
+    background-color: #fee2e2; /* Red-100 */
+    color: #991b1b; /* Red-800 */
+}
+.payment-status-pending {
+    background-color: #fef3c7; /* Amber-100 */
+    color: #92400e; /* Amber-800 */
+}
+.payment-status-paid {
+    background-color: #dcfce7; /* Green-100 */
+    color: #166534; /* Green-800 */
+}
+
+/* Druck-Ansicht: Versteckt alles außer dem Modal-Inhalt, wenn gedruckt wird */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    #paymentDetailModal, #paymentDetailModal * {
+        visibility: visible;
+    }
+    #paymentDetailModal {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        background: white;
+        box-shadow: none;
+    }
+    /* Verstecke Knöpfe beim Drucken */
+    .no-print {
+        display: none !important;
+    }
+}
