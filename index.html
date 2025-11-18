@@ -1497,6 +1497,20 @@
                     korrigieren. Jede Änderung wird im Korrektur-Verlauf des Teilnehmers protokolliert und
                     sofort **lokal** gespeichert. Klicke am Ende auf "Änderungen speichern", um alles in die
                     Datenbank zu schreiben.</p>
+
+                <div class="p-3 bg-green-50 border border-green-200 rounded-lg mb-4 space-y-2">
+                    <label for="new-participant-name-input" class="block text-sm font-bold text-green-800">Neuen
+                        Teilnehmer (manuell) hinzufügen</label>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input type="text" id="new-participant-name-input"
+                            class="flex-grow p-2 border border-gray-300 rounded-lg"
+                            placeholder="Name (z.B. Oma Erna)">
+                        <button id="add-new-participant-btn"
+                            class="py-2 px-4 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition flex-shrink-0">
+                            + Hinzufügen
+                        </button>
+                    </div>
+                </div>
                 <div id="edit-participant-grid-container" class="space-y-3">
                     </div>
             </div>
@@ -1716,6 +1730,7 @@
         </button>
     </div>
 </div>
+
 
             </div>
             <div id="userSelectionModal"

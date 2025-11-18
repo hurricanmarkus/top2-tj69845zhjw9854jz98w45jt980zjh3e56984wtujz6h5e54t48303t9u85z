@@ -514,6 +514,7 @@ export function initializeTerminplanerView() {
     const datesContainer = document.getElementById('vote-dates-container');
     if (datesContainer && !datesContainer.clickListenerAttached) {
         datesContainer.addEventListener('click', (e) => {
+            // "Uhrzeit hinzufügen"
             const addTarget = e.target.closest('.vote-add-time-btn');
             if (addTarget) {
                 const timesContainer = addTarget.previousElementSibling; 
@@ -521,6 +522,7 @@ export function initializeTerminplanerView() {
                     timesContainer.appendChild(createTimeInputHTML());
                 }
             }
+            // "Uhrzeit entfernen"
             const removeTarget = e.target.closest('.vote-remove-time-btn');
             if (removeTarget) {
                 const timeGroup = removeTarget.closest('.time-input-group'); 
@@ -531,7 +533,16 @@ export function initializeTerminplanerView() {
                     alertUser("Du musst mindestens eine Uhrzeit pro Tag angeben.", "error");
                 }
             }
-            validateLastDateGroup();
+            // "Tag entfernen"
+            const removeDayTarget = e.target.closest('.vote-remove-day-btn');
+            if (removeDayTarget) {
+                const dayGroup = removeDayTarget.closest('[data-date-group-id]');
+                if (dayGroup) {
+                    dayGroup.remove();
+                    updateDeleteDayButtons('vote-dates-container'); 
+                    validateLastDateGroup();
+                }
+            }
         });
         datesContainer.addEventListener('input', (e) => {
             if (e.target.matches('.vote-date-input, .vote-time-start-input')) {
@@ -944,11 +955,19 @@ export function initializeTerminplanerView() {
         cancelFixDateBtn.dataset.listenerAttached = 'true';
     }
 
+    // =================================================================
+    // START KORREKTUR (Bugfix: Falscher Button-Listener)
+    // =================================================================
+    // Der "Auswählen & Schließen"-Knopf muss die "saveVoteEdits"-Funktion aufrufen,
+    // damit er ALLE Änderungen speichert (nicht nur den fixierten Termin).
     const confirmFixDateBtn = document.getElementById('confirm-fix-date-btn');
     if (confirmFixDateBtn && !confirmFixDateBtn.dataset.listenerAttached) {
-        confirmFixDateBtn.addEventListener('click', confirmAndFixDate);
+        confirmFixDateBtn.addEventListener('click', saveVoteEdits); // <--- HIER IST DIE ÄNDERUNG
         confirmFixDateBtn.dataset.listenerAttached = 'true';
     }
+    // =================================================================
+    // ENDE KORREKTUR
+    // =================================================================
     
     // --- Spione für das Zuweisen-Modal ---
     const showAssignModalBtn = document.getElementById('vote-show-assign-user-modal-btn');
@@ -1242,7 +1261,8 @@ export function initializeTerminplanerView() {
             // Bestimmte Klicks (Knöpfe) lösen die Leiste aus
             // (Wir haben .save-participant-name-btn und .delete-participant-btn hinzugefügt)
             // (Wir haben .vote-remove-day-btn hinzugefügt)
-            if (e.type === 'click' && e.target.closest('.delete-guest-btn, .strike-term-btn, .restore-term-btn, .admin-vote-grid-btn, #vote-add-guest-btn-admin-edit, #vote-add-date-btn-edit, .vote-add-time-btn, .vote-remove-time-btn, .vote-remove-day-btn, #vote-setting-access-btn-edit, #vote-show-assign-user-modal-btn-edit, .save-participant-name-btn, .delete-participant-btn')) {
+            // (Wir haben #add-new-participant-btn hinzugefügt)
+            if (e.type === 'click' && e.target.closest('.delete-guest-btn, .strike-term-btn, .restore-term-btn, .admin-vote-grid-btn, #vote-add-guest-btn-admin-edit, #vote-add-date-btn-edit, .vote-add-time-btn, .vote-remove-time-btn, .vote-remove-day-btn, #vote-setting-access-btn-edit, #vote-show-assign-user-modal-btn-edit, .save-participant-name-btn, .delete-participant-btn, #add-new-participant-btn')) {
                 setEditChanges(true);
                 return;
             }
@@ -1257,6 +1277,7 @@ export function initializeTerminplanerView() {
     // ENDE NEU (P3)
     // =================================================================
 }
+
 
 
 
@@ -4869,6 +4890,59 @@ function toggleParticipantNameEdit(participantId, isEditing) {
         editWrapper.classList.add('hidden');
     }
 }
+
+
+
+// NEU: Fügt einen manuellen Teilnehmer zur lokalen "currentVoteData" hinzu
+function handleAddNewParticipant() {
+    if (!currentVoteData) return;
+
+    const input = document.getElementById('new-participant-name-input');
+    if (!input) return;
+
+    const name = input.value.trim();
+
+    // 1. Prüfen, ob ein Name eingegeben wurde
+    if (!name) {
+        alertUser("Bitte einen Namen für den neuen Teilnehmer eingeben.", "error");
+        return;
+    }
+
+    // 2. Prüfen, ob der Name bereits existiert (um Duplikate zu vermeiden)
+    const isDuplicate = currentVoteData.participants.some(p => p.name.toLowerCase() === name.toLowerCase());
+    if (isDuplicate) {
+        alertUser(`Ein Teilnehmer mit dem Namen "${name}" existiert bereits.`, "error");
+        return;
+    }
+
+    // 3. Eindeutige ID erstellen (damit wir sie von Gästen/Usern unterscheiden können)
+    const participantId = `manual_${Date.now()}`;
+
+    // 4. Das neue Teilnehmer-Objekt erstellen
+    const newParticipant = {
+        userId: participantId,
+        name: name,
+        currentAnswers: {}, // Beginnt mit leeren Antworten
+        correctionCount: 0,
+        answerHistory: []
+    };
+
+    // 5. Den Teilnehmer zu unserem LOKALEN Array hinzufügen
+    currentVoteData.participants.push(newParticipant);
+
+    // 6. Die Teilnehmer-Liste neu zeichnen (damit der neue Name erscheint)
+    renderParticipantEditGrid(currentVoteData);
+
+    // 7. Das Eingabefeld leeren
+    input.value = '';
+
+    // 8. Die "Speichern"-Leiste anzeigen
+    setEditChanges(true);
+
+    alertUser(`Teilnehmer "${name}" hinzugefügt. Du kannst jetzt seine Stimmen eintragen.`, "success");
+}
+
+
 
 // NEU: Speichert den neuen Namen eines Teilnehmers (lokal)
 function handleSaveParticipantName(participantId) {
