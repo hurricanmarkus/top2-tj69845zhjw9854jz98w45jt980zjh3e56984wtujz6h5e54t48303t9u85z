@@ -238,58 +238,14 @@ function hideFixDateSelection() {
 }
 
 // NEU: Speichert den ausgewählten finalen Termin und schließt die Umfrage
+// ----- HINWEIS: DIESE FUNKTION IST VERALTET (DEPRECATED) -----
+// Der Knopf "confirm-fix-date-btn" sollte stattdessen saveVoteEdits() aufrufen.
+// Falls er es doch tut, leiten wir zur neuen Funktion weiter, um Datenverlust zu verhindern.
 async function confirmAndFixDate() {
-    const confirmBtn = document.getElementById('confirm-fix-date-btn');
-
-    // 1. Finde den ausgewählten Radio-Button
-    const selectedRadio = document.querySelector('input[name="final-date-option"]:checked');
-    if (!selectedRadio) {
-        return alertUser("Bitte wähle einen finalen Termin aus der Liste aus.", "error");
-    }
-
-    // WICHTIG: value kann jetzt "-99" (Keine Einigung) oder eine Zahl (0, 1, 2...) sein
-    const selectedOptionIndex = parseInt(selectedRadio.value, 10);
+    console.warn("DEPRECATED: confirmAndFixDate() wurde aufgerufen. Rufe stattdessen saveVoteEdits() auf.");
     
-    // Wir prüfen nur, ob es eine gültige Zahl ist (isNaN = Is Not a Number)
-    if (isNaN(selectedOptionIndex)) {
-        return alertUser("Ungültige Auswahl.", "error");
-    }
-
-    if (!confirm("Bist du sicher? Die Umfrage wird geschlossen und der Termin wird fixiert. Dies kann nicht rückgängig gemacht werden (außer durch 'Wieder öffnen').")) {
-        return;
-    }
-
-    setButtonLoading(confirmBtn, true);
-
-    try {
-        const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
-
-        await updateDoc(voteDocRef, {
-            // Wir speichern einfach den Wert, den wir bekommen haben (-99 oder 0, 1, 2...)
-            fixedOptionIndex: selectedOptionIndex 
-        });
-
-        // Lokale Daten aktualisieren
-        currentVoteData.fixedOptionIndex = selectedOptionIndex;
-
-        alertUser("Umfrage wurde geschlossen und Termin fixiert!", "success");
-
-        // UI der Edit-Seite aufräumen
-        hideFixDateSelection();
-
-        // UI der Edit-Seite komplett neu rendern, um Status (geschlossen) zu zeigen
-        renderEditView(currentVoteData);
-
-        // Zurück zur (jetzt fixierten) Abstimmungs-Ansicht
-        showView('vote');
-        renderVoteView(currentVoteData);
-
-    } catch (error) {
-        console.error("Fehler beim Fixieren des Termins:", error);
-        alertUser("Fehler beim Schließen.", "error");
-    } finally {
-        setButtonLoading(confirmBtn, false);
-    }
+    // Leite den Klick einfach an die neue, bessere Funktion weiter
+    await saveVoteEdits();
 }
 
 
@@ -3189,16 +3145,72 @@ function renderEditView(voteData) {
 
 async function saveVoteEdits() {
     const saveBtn = document.getElementById('vote-save-changes-btn');
-    setButtonLoading(saveBtn, true);
-    // (Auch den Sticky Button sperren)
     const stickySaveBtn = document.getElementById('sticky-save-button');
-    if (stickySaveBtn) stickySaveBtn.disabled = true;
+    
+    setButtonLoading(saveBtn, true);
+    if (stickySaveBtn) setButtonLoading(stickySaveBtn, true);
 
     try {
         const updateData = {};
         const changes = []; // Für das Logbuch
 
-        // 1. Details lesen
+        // =================================================================
+        // START KORREKTUR (Bugfix: Speichern ignoriert Termin-Fixierung)
+        // =================================================================
+        
+        // 1. Prüfen, ob der "Termin fixieren"-Bereich offen UND eine Auswahl getroffen wurde
+        let selectedOptionIndex = null; // null bedeutet "keine Änderung"
+        const selectionContainer = document.getElementById('fix-date-selection-container');
+        
+        // Prüfung: Ist der "Termin fixieren"-Container überhaupt sichtbar?
+        if (selectionContainer && !selectionContainer.classList.contains('hidden')) {
+            // Der Bereich ist offen. Hat der User etwas ausgewählt?
+            const selectedRadio = document.querySelector('input[name="final-date-option"]:checked');
+            
+            if (selectedRadio) {
+                // Ja, der User hat eine finale Option (oder "Keine Einigung") gewählt.
+                selectedOptionIndex = parseInt(selectedRadio.value, 10);
+
+                if (isNaN(selectedOptionIndex)) {
+                     // Sollte nicht passieren, aber sicher ist sicher
+                     throw new Error("Ungültige Termin-Fixierungs-Auswahl.");
+                }
+
+                // 2. Sicherheitsabfrage, da dies die Umfrage schließt
+                const confirmMsg = selectedOptionIndex === -99
+                    ? "Du hast 'Keine Einigung' ausgewählt.\n\nBist du sicher, dass du alle Änderungen speichern UND die Umfrage schließen möchtest?"
+                    : "Du hast einen finalen Termin ausgewählt.\n\nBist du sicher, dass du alle Änderungen speichern UND die Umfrage schließen möchtest?";
+
+                if (!confirm(confirmMsg)) {
+                    // User hat "Abbrechen" geklickt
+                    setButtonLoading(saveBtn, false);
+                    if (stickySaveBtn) setButtonLoading(stickySaveBtn, false);
+                    return; // Funktion hier beenden
+                }
+                
+                // User hat "OK" geklickt, wir speichern den Index
+                updateData.fixedOptionIndex = selectedOptionIndex;
+                
+            } else {
+                 // Bereich ist offen, aber nichts ausgewählt.
+                 // Dies war wahrscheinlich ein Klick auf "Auswählen & Schließen" (der jetzt hier landet)
+                 // Wir müssen den User warnen.
+                 alertUser("Bitte wähle einen finalen Termin oder 'Keine Einigung' aus der Liste aus.", "error");
+                 setButtonLoading(saveBtn, false);
+                 if (stickySaveBtn) setButtonLoading(stickySaveBtn, false);
+                 return; // Funktion hier beenden
+            }
+        }
+        // WICHTIG: Wenn der Container versteckt war, bleibt selectedOptionIndex = null
+        // und updateData.fixedOptionIndex wird NICHT gesetzt.
+        // Ein normaler "Speichern"-Klick fixiert also NIEMALS versehentlich einen Termin.
+        
+        // =================================================================
+        // ENDE KORREKTUR
+        // =================================================================
+
+
+        // 3. Details lesen
         const newTitle = document.getElementById('vote-title-edit').value.trim();
         const newDesc = document.getElementById('vote-description-edit').value.trim();
         const newLoc = document.getElementById('vote-location-edit').value.trim();
@@ -3215,14 +3227,14 @@ async function saveVoteEdits() {
             changes.push(`Ort geändert.`);
         }
 
-        // 2. Gültigkeit lesen
+        // 4. Gültigkeit lesen
         const newStartTime = document.getElementById('vote-start-time-edit').value;
         const newEndTime = document.getElementById('vote-end-time-edit').value;
         const isUnlimited = document.getElementById('vote-end-time-unlimited-edit').checked;
         updateData.startTime = newStartTime ? new Date(newStartTime) : null;
         updateData.endTime = !isUnlimited && newEndTime ? new Date(newEndTime) : null;
 
-        // 3. Einstellungen lesen
+        // 5. Einstellungen lesen
         updateData.isPublic = document.getElementById('vote-setting-public-edit').checked;
         updateData.disableMaybe = document.getElementById('vote-setting-disable-maybe-edit').checked;
         updateData.isAnonymous = document.getElementById('vote-setting-anonymous-edit').checked;
@@ -3239,7 +3251,7 @@ async function saveVoteEdits() {
         }
         updateData.accessPolicy = document.getElementById('vote-setting-access-mode-edit').value;
 
-        // 4. Teilnehmer-Listen speichern
+        // 6. Teilnehmer-Listen speichern
         const newAssignedIds = currentVoteData.assignedUserIds || [];
         updateData.assignedUserIds = newAssignedIds;
         const existingParticipantIds = currentVoteData.participants.map(p => p.userId);
@@ -3250,7 +3262,7 @@ async function saveVoteEdits() {
         // (P3) Gäste-Liste speichern
         updateData.preRegisteredGuests = [...tempPreRegisteredGuests];
 
-        // 5. Neue Termine auslesen und anhängen
+        // 7. Neue Termine auslesen und anhängen
         const newOptions = [];
         const dateGroups = document.querySelectorAll('#vote-dates-container-edit [data-date-group-id]');
         dateGroups.forEach(group => {
@@ -3279,7 +3291,7 @@ async function saveVoteEdits() {
             changes.push(`${newOptions.length} neue(r) Termin(e) hinzugefügt.`);
         }
 
-        // 6. Änderungen an Terminen (Streichen/Wiederherstellen) protokollieren
+        // 8. Änderungen an Terminen (Streichen/Wiederherstellen) protokollieren
         if (originalOptionsOnEditLoad.length > 0 && updateData.options) {
             for (let index = 0; index < originalOptionsOnEditLoad.length; index++) {
                 const originalOpt = originalOptionsOnEditLoad[index];
@@ -3296,9 +3308,22 @@ async function saveVoteEdits() {
                 }
             }
         }
+        
+        // 9. Log-Eintrag für "Termin fixiert" hinzufügen (falls geschehen)
+        if (selectedOptionIndex !== null && !isNaN(selectedOptionIndex)) {
+            if (selectedOptionIndex === -99) {
+                changes.push('Umfrage als "Keine Einigung" geschlossen.');
+            } else {
+                // Finde die Option in der (potenziell neuen) Optionsliste
+                const fixedOpt = updateData.options[selectedOptionIndex];
+                if(fixedOpt) {
+                    changes.push(`Termin fixiert auf: ${fixedOpt.date} ${fixedOpt.timeStart}`);
+                }
+            }
+        }
 
 
-        // 7. Log-Eintrag erstellen
+        // 10. Log-Eintrag erstellen (wenn es Änderungen gab)
         if (changes.length > 0) {
             const historyLog = {
                 timestamp: new Date(),
@@ -3306,34 +3331,35 @@ async function saveVoteEdits() {
                 changes: changes
             };
             updateData.pollHistory = [...(currentVoteData.pollHistory || []), historyLog];
-            updateData.acknowledgedBy = [];
+            updateData.acknowledgedBy = []; // Quittierungen zurücksetzen
         }
 
-        // 8. Datenbank aktualisieren
+        // 11. Datenbank aktualisieren
         const voteDocRef = doc(votesCollectionRef, currentVoteData.id);
         await updateDoc(voteDocRef, updateData);
 
         alertUser("Änderungen gespeichert!", "success");
 
-        // 9. Zurück zur Abstimm-Ansicht (startet Live-Spion neu)
+        // 12. Zurück zur Abstimm-Ansicht (startet Live-Spion neu)
+        // WICHTIG: Wir müssen die 'currentVoteData' lokal aktualisieren, bevor wir
+        // 'joinVoteById' aufrufen, falls der Spion langsam ist.
+        Object.assign(currentVoteData, updateData);
+        
+        // Verstecke den "Termin fixieren" Container, da wir jetzt speichern
+        hideFixDateSelection();
+        
         joinVoteById(currentVoteData.id);
 
     } catch (error) {
         console.error("Fehler beim Speichern der Änderungen:", error);
-        alertUser("Speichern fehlgeschlagen.", "error");
+        alertUser("Speichern fehlgeschlagen: " + error.message, "error_long");
     } finally {
         setButtonLoading(saveBtn, false);
-        // =================================================================
-        // START KORREKTUR (Problem 3)
-        // =================================================================
-        // Verstecke die Leiste und gib den Knopf wieder frei
-        if (stickySaveBtn) stickySaveBtn.disabled = false;
-        setEditChanges(false);
-        // =================================================================
-        // ENDE KORREKTUR (Problem 3)
-        // =================================================================
+        if (stickySaveBtn) setButtonLoading(stickySaveBtn, false);
+        setEditChanges(false); // Verstecke die rote Leiste
     }
 }
+
 
 
 
