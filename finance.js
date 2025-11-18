@@ -1,10 +1,11 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE
-import { db, currentUser, USERS, alertUser, setButtonLoading, navigate } from './haupteingang.js';
+import { db, currentUser, USERS, alertUser, setButtonLoading, navigate, appId } from './haupteingang.js';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, orderBy, serverTimestamp, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 // ENDE-ZIKA
 
-// Konstanten
+// Konstanten & Referenzen
 const COLLECTION_NAME = 'finances';
+let financeCollectionRef = null; // Wird in initializeFinanceView gesetzt
 let unsubscribeFinance = null;
 let financeData = []; // Lokaler Cache aller Daten
 let currentFilter = 'open'; // 'open', 'history', 'smart'
@@ -13,6 +14,10 @@ let currentDetailId = null; // ID des aktuell geöffneten Eintrags
 // Initiale Funktion
 export function initializeFinanceView() {
     console.log("Finance View Initialized");
+    
+    // Referenz sicher erstellen (mit der korrekten appId)
+    financeCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', COLLECTION_NAME);
+    
     setupFinanceListeners();
     listenForFinanceData();
 }
@@ -75,9 +80,16 @@ function setupFinanceListeners() {
 function listenForFinanceData() {
     if (unsubscribeFinance) unsubscribeFinance();
 
+    // Sicherstellen, dass wir angemeldet sind
+    if (!currentUser || !currentUser.mode) {
+        console.warn("Finance: Kein Benutzer angemeldet.");
+        return;
+    }
+
     // Lade alles, wo der User beteiligt ist
+    // Wir nutzen die korrekt initialisierte financeCollectionRef
     const q = query(
-        collection(db, 'artifacts', '20LVob88b3ovXRUyX3ra', 'public', 'data', COLLECTION_NAME),
+        financeCollectionRef,
         where('participants', 'array-contains', currentUser.mode)
     );
 
@@ -90,6 +102,7 @@ function listenForFinanceData() {
         renderFinanceList();
     }, (error) => {
         console.error("Fehler beim Laden der Finanzdaten:", error);
+        alertUser("Zugriffsfehler: Datenbank verweigert Zugriff.", "error");
     });
 }
 
@@ -275,9 +288,6 @@ function openDetailModal(item) {
         actionDiv.classList.add('hidden');
     } else {
         actionDiv.classList.remove('hidden');
-        // Wenn ich der Sender bin (Geld bekomme), kann ich nur "Alles begleichen" (Bestätigen)
-        // Wenn ich Empfänger bin, kann ich auch Teilzahlen.
-        // Vereinfachung: Beide dürfen alles.
     }
 
     // Verlauf rendern
@@ -319,7 +329,8 @@ async function handleSettleFull() {
     setButtonLoading(btn, true);
 
     try {
-        const docRef = doc(db, 'artifacts', '20LVob88b3ovXRUyX3ra', 'public', 'data', COLLECTION_NAME, currentDetailId);
+        // Benutze die sichere Referenz
+        const docRef = doc(financeCollectionRef, currentDetailId);
         
         // Wir holen das aktuelle Doc für die History
         const docSnap = await getDoc(docRef);
@@ -361,7 +372,8 @@ async function handleSettlePart() {
     setButtonLoading(btn, true);
 
     try {
-        const docRef = doc(db, 'artifacts', '20LVob88b3ovXRUyX3ra', 'public', 'data', COLLECTION_NAME, currentDetailId);
+        // Benutze die sichere Referenz
+        const docRef = doc(financeCollectionRef, currentDetailId);
         const docSnap = await getDoc(docRef);
         const currentData = docSnap.data();
         
@@ -403,7 +415,8 @@ async function handleDeleteEntry() {
     if (!confirm("ACHTUNG: Möchtest du diesen Eintrag wirklich LÖSCHEN? Das kann nicht rückgängig gemacht werden.")) return;
     
     try {
-        await deleteDoc(doc(db, 'artifacts', '20LVob88b3ovXRUyX3ra', 'public', 'data', COLLECTION_NAME, currentDetailId));
+        // Benutze die sichere Referenz
+        await deleteDoc(doc(financeCollectionRef, currentDetailId));
         alertUser("Eintrag gelöscht.", "success");
         document.getElementById('financeDetailModal').classList.add('hidden');
     } catch (error) {
@@ -507,7 +520,8 @@ async function saveFinanceEntry() {
             }]
         };
         
-        await addDoc(collection(db, 'artifacts', '20LVob88b3ovXRUyX3ra', 'public', 'data', COLLECTION_NAME), newEntry);
+        // Benutze die sichere Referenz
+        await addDoc(financeCollectionRef, newEntry);
         
         alertUser("Eintrag gespeichert!", "success");
         closeFinanceModal();
