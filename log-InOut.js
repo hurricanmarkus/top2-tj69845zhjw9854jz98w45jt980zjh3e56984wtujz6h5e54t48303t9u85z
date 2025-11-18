@@ -136,8 +136,8 @@ export async function checkCurrentUserValidity() {
         else if (user.permissionType === 'individual') {
             userPermissions = [...(user.customPermissions || [])];
         }
-if (effectiveRole === 'SYSTEMADMIN') {
-            userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG', 'TERMINPLANER_CREATE', 'ZAHLUNGSVERWALTUNG'];
+        if (effectiveRole === 'SYSTEMADMIN') {
+            userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
         }
 
         // --- TEIL 2: Lade ADMIN-Rechte ---

@@ -15,7 +15,6 @@ import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.
 import { renderUserKeyList } from './admin_benutzersteuerung.js'; 
 // NEU: Wir importieren die Start-Funktion aus deiner neuen Datei
 import { initializeTerminplanerView, listenForPublicVotes, joinVoteById, joinVoteByToken, joinVoteAsGuest } from './terminplaner.js';
-import { initializeZahlungsverwaltungView } from './zahlungsverwaltung.js';
 // // ENDE-ZIKA //
 
 
@@ -92,8 +91,7 @@ export const views = {
     checklistSettings: { id: 'checklistSettingsView' }, 
     essensberechnung: { id: 'essensberechnungView' }, 
     notrufSettings: { id: 'notrufSettingsView' },
-    terminplaner: { id: 'terminplanerView' },
-    zahlungsverwaltung: { id: 'zahlungsverwaltungView' } // <-- NEU
+    terminplaner: { id: 'terminplanerView' } // <-- NEU HINZUGEFÜGT
 };
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
 
@@ -121,7 +119,7 @@ export let currentMeal = (() => {
     };
 })(); // Die Funktion wird sofort ausgeführt und gibt das Objekt zurück
 
-export let  = {
+export let notrufSettings = {
     modes: [],
     contacts: [],
     flicAssignments: { einfach: null, doppel: null, halten: null },
@@ -555,7 +553,6 @@ export function navigate(targetViewName) {
             }
         }
         if (targetViewName === 'notrufSettings' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Notruf-Einstellungen).", 'error');
-    if (targetViewName === 'zahlungsverwaltung' && !userPermissions.includes('ZAHLUNGSVERWALTUNG') && !isAdmin) return alertUser("Zugriff verweigert (Zahlungen).", 'error');
     }
 
 
@@ -606,9 +603,6 @@ export function navigate(targetViewName) {
         Object.keys(adminSectionsState).forEach(key => adminSectionsState[key] = false);
         toggleAdminSection(null);
     }
-if (targetViewName === 'zahlungsverwaltung') {
-        initializeZahlungsverwaltungView();
-    }
 }
 
 
@@ -647,9 +641,6 @@ export function setupEventListeners() {
     });
 
     // --- Navigation Cards on Home View ---
-        const zahlungsverwaltungCard = document.getElementById('zahlungsverwaltungCard');
-    if (zahlungsverwaltungCard) zahlungsverwaltungCard.addEventListener('click', () => navigate('zahlungsverwaltung'));
-    
     const entranceCard = document.getElementById('entranceCard');
     if (entranceCard) entranceCard.addEventListener('click', () => navigate('entrance'));
 
