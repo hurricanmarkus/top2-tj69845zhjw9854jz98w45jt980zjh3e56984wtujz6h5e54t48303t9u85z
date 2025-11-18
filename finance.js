@@ -22,9 +22,20 @@ export function initializeFinanceView() {
     listenForFinanceData();
 }
 
+// Hilfsfunktion für defensive Listener-Anbindung
+const safeAddListener = (id, event, handler) => {
+    const el = document.getElementById(id);
+    if (el) {
+        el.addEventListener(event, handler);
+    }
+};
+
 function setupFinanceListeners() {
     const view = document.getElementById('financeView');
-    if (view.dataset.listenersAttached === 'true') return;
+    // Falls die View noch nicht im DOM ist oder schon Listener hat, abbrechen
+    if (!view || view.dataset.listenersAttached === 'true') return; 
+    
+    const getEl = (id) => document.getElementById(id);
 
     // Tabs umschalten
     view.querySelectorAll('.finance-tab-btn').forEach(btn => {
@@ -42,37 +53,37 @@ function setupFinanceListeners() {
     });
 
     // FAB (Add Button) & Modal Close
-    document.getElementById('finance-fab-add').addEventListener('click', () => openFinanceModal());
-    document.getElementById('finance-modal-close').addEventListener('click', () => closeFinanceModal());
-    document.getElementById('detail-close-btn').addEventListener('click', () => document.getElementById('financeDetailModal').classList.add('hidden'));
+    safeAddListener('finance-fab-add', 'click', () => openFinanceModal());
+    safeAddListener('finance-modal-close', 'click', () => closeFinanceModal());
+    safeAddListener('detail-close-btn', 'click', () => getEl('financeDetailModal')?.classList.add('hidden'));
 
     // Toggle Advanced im Erstellen-Modal
-    document.getElementById('finance-advanced-toggle').addEventListener('click', () => {
-        const area = document.getElementById('finance-advanced-area');
-        area.classList.toggle('hidden');
-        const icon = document.getElementById('finance-advanced-toggle').querySelector('svg');
-        icon.classList.toggle('rotate-180');
+    safeAddListener('finance-advanced-toggle', 'click', () => {
+        const area = getEl('finance-advanced-area');
+        area?.classList.toggle('hidden');
+        const icon = getEl('finance-advanced-toggle')?.querySelector('svg');
+        icon?.classList.toggle('rotate-180');
     });
 
     // Split Slider Logik
-    document.getElementById('finance-split-active').addEventListener('change', (e) => {
-        document.getElementById('finance-split-details').classList.toggle('hidden', !e.target.checked);
+    safeAddListener('finance-split-active', 'change', (e) => {
+        getEl('finance-split-details')?.classList.toggle('hidden', !e.target.checked);
     });
-    document.getElementById('finance-split-slider').addEventListener('input', (e) => {
-        document.getElementById('finance-split-value').textContent = e.target.value + '%';
+    safeAddListener('finance-split-slider', 'input', (e) => {
+        getEl('finance-split-value').textContent = e.target.value + '%';
     });
 
     // Speichern Button (Erstellen)
-    document.getElementById('finance-save-btn').addEventListener('click', saveFinanceEntry);
+    safeAddListener('finance-save-btn', 'click', saveFinanceEntry);
 
     // Personenauswahl
-    document.getElementById('finance-receiver-box').addEventListener('click', () => openPersonSelector('receiver'));
-    document.getElementById('finance-sender-box').addEventListener('click', () => openPersonSelector('sender'));
+    safeAddListener('finance-receiver-box', 'click', () => openPersonSelector('receiver'));
+    safeAddListener('finance-sender-box', 'click', () => openPersonSelector('sender'));
     
     // Detail-Ansicht Buttons
-    document.getElementById('btn-settle-full').addEventListener('click', () => handleSettleFull());
-    document.getElementById('btn-settle-part').addEventListener('click', () => handleSettlePart());
-    document.getElementById('btn-delete-entry').addEventListener('click', () => handleDeleteEntry());
+    safeAddListener('btn-settle-full', 'click', () => handleSettleFull());
+    safeAddListener('btn-settle-part', 'click', () => handleSettlePart());
+    safeAddListener('btn-delete-entry', 'click', () => handleDeleteEntry());
 
     view.dataset.listenersAttached = 'true';
 }
@@ -83,11 +94,12 @@ function listenForFinanceData() {
     // Sicherstellen, dass wir angemeldet sind
     if (!currentUser || !currentUser.mode) {
         console.warn("Finance: Kein Benutzer angemeldet.");
-        renderFinanceList(true); // NEU: Render als Leerzustand
+        renderFinanceList(true); // Render mit Empty State
         return;
     }
 
     // Lade alles, wo der User beteiligt ist
+    // Wir nutzen die korrekt initialisierte financeCollectionRef
     const q = query(
         financeCollectionRef,
         where('participants', 'array-contains', currentUser.mode)
@@ -130,10 +142,9 @@ function updateDashboard() {
 }
 
 // --- Haupt-Rendering Funktion ---
-// AKZEPTIERT JETZT EINEN OPTIONALEN FLAG FÜR LEEREN ZUSTAND
 function renderFinanceList(forceEmpty = false) {
     const container = document.getElementById('finance-list-container');
-    if (!container) return; // Wichtig: Falls der Container fehlt, hier abbrechen
+    if (!container) return; 
     
     container.innerHTML = '';
 
@@ -154,7 +165,6 @@ function renderFinanceList(forceEmpty = false) {
 
     // WENN LEER ODER KEIN USER (forceEmpty)
     if (filteredData.length === 0 || forceEmpty) {
-        // NEUE, DEUTLICHE LEER-ANSICHT
         container.innerHTML = `
             <div class="bg-gray-100 border border-gray-300 rounded-xl p-10 text-center">
                 <h3 class="text-gray-600 font-bold mb-2">Noch keine Einträge vorhanden.</h3>
