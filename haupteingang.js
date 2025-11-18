@@ -12,9 +12,10 @@ import { IFTTT_URL, initializeNotrufSettingsView } from './notfall.js';
 import { PUSHOVER_TOKEN, RECIPIENT_KEYS } from './pushbenachrichtigung.js';
 import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, openTemplateModal, renderChecklistView, renderChecklistSettingsView, listenForTemplates, listenForStacks } from './checklist.js';
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
-import { renderUserKeyList } from './admin_benutzersteuerung.js'; 
+import { renderUserKeyList } from './admin_benutzersteuerung.js';
 // NEU: Wir importieren die Start-Funktion aus deiner neuen Datei
 import { initializeTerminplanerView, listenForPublicVotes, joinVoteById, joinVoteByToken, joinVoteAsGuest } from './terminplaner.js';
+import { initializeFinanceView } from './finance.js';
 // // ENDE-ZIKA //
 
 
@@ -81,17 +82,18 @@ export const usingEnvConfig = typeof __firebase_config !== 'undefined' && __fire
 export const firebaseConfig = usingEnvConfig ? JSON.parse(__firebase_config) : firebaseConfigFromUser;
 
 // NEU: Wir fügen 'terminplaner' zu unserer Liste der bekannten Seiten (Views) hinzu
-export const views = { 
-    home: { id: 'homeView' }, 
-    entrance: { id: 'entranceView' }, 
-    pushover: { id: 'pushoverView' }, 
-    admin: { id: 'adminView' }, 
-    userSettings: { id: 'userSettingsView' }, 
-    checklist: { id: 'checklistView' }, 
-    checklistSettings: { id: 'checklistSettingsView' }, 
-    essensberechnung: { id: 'essensberechnungView' }, 
+export const views = {
+    home: { id: 'homeView' },
+    entrance: { id: 'entranceView' },
+    pushover: { id: 'pushoverView' },
+    admin: { id: 'adminView' },
+    userSettings: { id: 'userSettingsView' },
+    checklist: { id: 'checklistView' },
+    checklistSettings: { id: 'checklistSettingsView' },
+    essensberechnung: { id: 'essensberechnungView' },
     notrufSettings: { id: 'notrufSettingsView' },
-    terminplaner: { id: 'terminplanerView' } // <-- NEU HINZUGEFÜGT
+    terminplaner: { id: 'terminplanerView' }, // <-- NEU HINZUGEFÜGT
+    finance: { id: 'financeView' }
 };
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
 
@@ -107,7 +109,7 @@ export let currentMeal = (() => {
         console.error("Fehler beim Laden der Mahlzeit aus sessionStorage:", e);
         sessionStorage.removeItem('currentMealData');
     }
-    
+
     // Wenn nichts gefunden wurde, starte mit einer leeren Mahlzeit
     return {
         name: '',
@@ -233,7 +235,7 @@ async function initializeFirebase() {
         console.log("initializeFirebase: Starte Firebase Initialisierung...");
         const app = initializeApp(firebaseConfig);
         db = getFirestore(app);
-        auth = getAuth(app); 
+        auth = getAuth(app);
 
         // --- Functions Initialisierung muss in onAuthStateChanged erfolgen ---
 
@@ -275,18 +277,18 @@ async function initializeFirebase() {
             if (user && !window.firebaseFunctionsInitialised) {
                 const { getFunctions, httpsCallable } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js");
                 const functions = getFunctions(app);
-                window.setRoleClaim = httpsCallable(functions, 'setRoleClaim'); 
+                window.setRoleClaim = httpsCallable(functions, 'setRoleClaim');
                 window.checkVoteToken = httpsCallable(functions, 'checkVoteToken');
-                
+
                 window.firebaseFunctionsInitialised = true;
                 console.log("Firebase Functions initialisiert und global verfügbar gemacht.");
             }
-            
+
             // Listener starten (unabhängig vom Login-Status)
             try {
                 console.log("initializeFirebase: Starte Daten-Listener...");
-                
-                onSnapshot(settingsDocRef, (docSnap) => { 
+
+                onSnapshot(settingsDocRef, (docSnap) => {
                     if (docSnap.exists()) {
                         adminSettings = docSnap.data();
                     } else {
@@ -294,23 +296,23 @@ async function initializeFirebase() {
                         adminSettings = {};
                     }
                 }, (error) => {
-                    console.error("Error listening to settings:", error); 
+                    console.error("Error listening to settings:", error);
                 });
 
                 onSnapshot(notrufSettingsDocRef, (docSnap) => {
-                     if (docSnap.exists()) {
-                         notrufSettings = docSnap.data();
-                         if (!notrufSettings.modes) notrufSettings.modes = [];
-                         if (!notrufSettings.contacts) notrufSettings.contacts = [];
-                         if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
-                         if (!notrufSettings.sounds) notrufSettings.sounds = [];
-                         if (!notrufSettings.flicAssignments) notrufSettings.flicAssignments = { einfach: null, doppel: null, halten: null };
-                     } else {
-                         console.warn("Firebase Notruf Settings Document 'notruf' not found, creating default.");
-                         notrufSettings = { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } };
-                     }
+                    if (docSnap.exists()) {
+                        notrufSettings = docSnap.data();
+                        if (!notrufSettings.modes) notrufSettings.modes = [];
+                        if (!notrufSettings.contacts) notrufSettings.contacts = [];
+                        if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
+                        if (!notrufSettings.sounds) notrufSettings.sounds = [];
+                        if (!notrufSettings.flicAssignments) notrufSettings.flicAssignments = { einfach: null, doppel: null, halten: null };
+                    } else {
+                        console.warn("Firebase Notruf Settings Document 'notruf' not found, creating default.");
+                        notrufSettings = { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } };
+                    }
                 }, (error) => {
-                    console.error("Error listening to notruf settings:", error); 
+                    console.error("Error listening to notruf settings:", error);
                 });
 
                 listenForRoleUpdates();
@@ -323,7 +325,7 @@ async function initializeFirebase() {
                 listenForChecklistCategories();
                 listenForTemplates();
                 listenForStacks();
-                
+
                 if (typeof listenForPublicVotes === 'function') {
                     listenForPublicVotes();
                 } else {
@@ -339,18 +341,18 @@ async function initializeFirebase() {
             // UI basierend auf User-Status aktualisieren
             if (user) {
                 console.log("initializeFirebase: User (anonym) vorhanden. Rufe checkCurrentUserValidity auf.");
-                await checkCurrentUserValidity(); 
-                initialAuthCheckDone = true; 
-                initializeTerminplanerView(); 
-                
+                await checkCurrentUserValidity();
+                initialAuthCheckDone = true;
+                initializeTerminplanerView();
+
             } else {
                 console.log("Firebase meldet KEINEN User, wechsle explizit zum Gastmodus.");
                 switchToGuestMode(false);
-                 initialAuthCheckDone = true;
-                 updateUIForMode(); 
-                 initializeTerminplanerView(); 
+                initialAuthCheckDone = true;
+                updateUIForMode();
+                initializeTerminplanerView();
             }
-            
+
             // =================================================================
             // URL-PRÜFUNG (KORRIGIERT: Lädt letzte Ansicht)
             // =================================================================
@@ -359,29 +361,29 @@ async function initializeFirebase() {
                 const urlParams = new URLSearchParams(window.location.search);
                 const voteId = urlParams.get('vote_id');
                 const voteToken = urlParams.get('vote_token');
-                const view = urlParams.get('view'); 
+                const view = urlParams.get('view');
                 const guestId = urlParams.get('guest_id');
 
                 const isUrlClean = !voteId && !voteToken && !view && !guestId;
 
                 if (!isUrlClean) {
                     navigatedByUrl = true; // Ein Link wurde verwendet
-                    
+
                     if (voteId && guestId) {
                         // Fall 1: Wichtigster Fall - Ein Gast-per-Link
                         console.log("[P3] URL-Parameter 'vote_id' UND 'guest_id' gefunden, starte joinVoteAsGuest...");
-                        await joinVoteAsGuest(voteId, guestId); 
-                    
+                        await joinVoteAsGuest(voteId, guestId);
+
                     } else if (voteId) {
                         // Fall 2: Normaler Beitritt per ID
                         console.log("URL-Parameter 'vote_id' gefunden, starte joinVoteById...");
-                        await joinVoteById(voteId); 
-                    
+                        await joinVoteById(voteId);
+
                     } else if (voteToken) {
                         // Fall 3: Normaler Beitritt per Token
                         console.log("URL-Parameter 'vote_token' gefunden, starte joinVoteByToken...");
-                        await joinVoteByToken(voteToken); 
-                    
+                        await joinVoteByToken(voteToken);
+
                     } else if (view === 'terminplaner') {
                         // Fall 4: Navigation zur Ansicht
                         console.log("URL-Parameter 'view=terminplaner' gefunden, navigiere...");
@@ -392,7 +394,7 @@ async function initializeFirebase() {
             } catch (e) {
                 console.error("Fehler bei der URL-Parameter-Prüfung:", e);
             }
-            
+
             // =================================================================
             // START KORREKTUR (Letzte Ansicht wiederherstellen)
             // =================================================================
@@ -465,8 +467,8 @@ async function seedInitialData() {
 }
 
 export function alertUser(message, type) {
-    let duration = 3000; 
-    let colorClass = 'bg-green-600'; 
+    let duration = 3000;
+    let colorClass = 'bg-green-600';
 
     if (type === 'error') {
         colorClass = 'bg-red-600';
@@ -481,16 +483,16 @@ export function alertUser(message, type) {
 
     const tempAlert = document.createElement('div');
     tempAlert.textContent = message;
-    
+
     tempAlert.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 rounded-xl text-white font-bold shadow-lg transition-opacity duration-300 z-50 text-center ${colorClass}`;
-    
+
     document.body.appendChild(tempAlert);
     setTimeout(() => tempAlert.style.opacity = '1', 10);
 
     setTimeout(() => {
         tempAlert.style.opacity = '0';
         setTimeout(() => tempAlert.remove(), 300);
-    }, duration); 
+    }, duration);
 }
 
 // HINZUFÜGEN zu haupteingang.js (z.B. nach der alertUser Funktion)
@@ -534,19 +536,20 @@ export function navigate(targetViewName) {
     // Berechtigungsprüfung (bleibt gleich)
     const userPermissions = currentUser.permissions || [];
     const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'SYSTEMADMIN';
-    
+
     // (P3) Ausnahme für 'terminplaner'
     if (targetViewName !== 'terminplaner') {
         if (targetViewName === 'entrance' && !userPermissions.includes('ENTRANCE')) return alertUser("Zugriff verweigert (Eingang).", 'error');
         if (targetViewName === 'pushover' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Push).", 'error');
+        if (targetViewName === 'finance' && !userPermissions.includes('FINANCE') && !isAdmin) return alertUser("Zugriff verweigert.", 'error');
         if (targetViewName === 'checklist' && !userPermissions.includes('CHECKLIST')) return alertUser("Zugriff verweigert (Checkliste).", 'error');
         if (targetViewName === 'checklistSettings' && !userPermissions.includes('CHECKLIST_SETTINGS')) return alertUser("Zugriff verweigert (Checklisten-Einstellungen).", 'error');
         if (targetViewName === 'essensberechnung' && !userPermissions.includes('ESSENSBERECHNUNG')) return alertUser("Zugriff verweigert (Essensberechnung).", 'error');
 
         if (targetViewName === 'admin') {
-            const isAdminRole = currentUser.role === 'ADMIN' || currentUser.role === 'SYSTEMADMIN'; 
-            const isIndividualAdminDisplay = currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN'; 
-            const allowAdminAccess = isAdminRole || isIndividualAdminDisplay; 
+            const isAdminRole = currentUser.role === 'ADMIN' || currentUser.role === 'SYSTEMADMIN';
+            const isIndividualAdminDisplay = currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN';
+            const allowAdminAccess = isAdminRole || isIndividualAdminDisplay;
 
             if (!allowAdminAccess) {
                 return alertUser("Zugriff verweigert (Admin).", 'error');
@@ -590,7 +593,7 @@ export function navigate(targetViewName) {
         initializeEssensberechnungView();
     }
     if (targetViewName === 'notrufSettings') {
-        initializeNotrufSettingsView(); 
+        initializeNotrufSettingsView();
     }
     if (targetViewName === 'checklist') {
         const defaultListId = adminSettings.defaultChecklistId;
@@ -602,6 +605,9 @@ export function navigate(targetViewName) {
     if (targetViewName === 'admin') {
         Object.keys(adminSectionsState).forEach(key => adminSectionsState[key] = false);
         toggleAdminSection(null);
+    }
+    if (targetViewName === 'finance') {
+        initializeFinanceView();
     }
 }
 
@@ -648,7 +654,7 @@ export function setupEventListeners() {
     if (essensberechnungCard) essensberechnungCard.addEventListener('click', () => navigate('essensberechnung'));
 
     const currentChecklistCard = document.getElementById('currentChecklistCard');
-    if (currentChecklistCard) currentChecklistCard.addEventListener('click', () => navigate('checklist')); 
+    if (currentChecklistCard) currentChecklistCard.addEventListener('click', () => navigate('checklist'));
 
     const checklistSettingsCard = document.getElementById('checklistSettingsCard');
     if (checklistSettingsCard) checklistSettingsCard.addEventListener('click', () => navigate('checklistSettings'));
@@ -657,6 +663,12 @@ export function setupEventListeners() {
     const terminplanerCard = document.getElementById('terminplanerCard');
     if (terminplanerCard) terminplanerCard.addEventListener('click', () => navigate('terminplaner'));
 
+    const financeCard = document.getElementById('financeCard');
+    if (financeCard) financeCard.addEventListener('click', () => navigate('finance'));
+
+    // Settings Button im Finance Header
+    const financeSettingsBtn = document.getElementById('finance-settings-btn');
+    if (financeSettingsBtn) financeSettingsBtn.addEventListener('click', () => alertUser("Einstellungen kommen bald!", "info"));
 
     // --- Modals (Login, Archived Lists etc.) ---
     const cancelSelectionButton = document.getElementById('cancelSelectionButton');
@@ -702,103 +714,103 @@ export function setupEventListeners() {
         });
     }
 
-// ERSETZE deine komplette handleLogin Funktion hiermit:
-const handleLogin = async () => {
-    if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) {
-        return;
-    }
+    // ERSETZE deine komplette handleLogin Funktion hiermit:
+    const handleLogin = async () => {
+        if (!selectedUserForLogin || !adminPinInput || !pinModal || !pinError) {
+            return;
+        }
 
-    const appUserId = selectedUserForLogin;
-    const enteredPin = adminPinInput.value;
-    const userFromFirestore = USERS[appUserId];
+        const appUserId = selectedUserForLogin;
+        const enteredPin = adminPinInput.value;
+        const userFromFirestore = USERS[appUserId];
 
-    if (!userFromFirestore) {
-        alertUser("Benutzerdaten noch nicht geladen. Bitte kurz warten und erneut versuchen.", "error");
-        return;
-    }
+        if (!userFromFirestore) {
+            alertUser("Benutzerdaten noch nicht geladen. Bitte kurz warten und erneut versuchen.", "error");
+            return;
+        }
 
-    // 1. Lokale PIN-Prüfung
-    if (userFromFirestore.key !== enteredPin) {
-        pinError.style.display = 'block';
+        // 1. Lokale PIN-Prüfung
+        if (userFromFirestore.key !== enteredPin) {
+            pinError.style.display = 'block';
+            adminPinInput.value = '';
+            return;
+        }
+
+        // 2. PIN korrekt, Modal schließen
+        pinModal.style.display = 'none';
         adminPinInput.value = '';
-        return;
-    }
+        pinError.style.display = 'none';
 
-    // 2. PIN korrekt, Modal schließen
-    pinModal.style.display = 'none';
-    adminPinInput.value = '';
-    pinError.style.display = 'none';
+        try {
+            // --- 3. KORREKTUR: Cloud Function mit dem Firebase SDK aufrufen (NICHT fetch) ---
 
-    try {
-        // --- 3. KORREKTUR: Cloud Function mit dem Firebase SDK aufrufen (NICHT fetch) ---
-        
-        // Sicherstellen, dass Auth User vorhanden ist
-        if (!auth || !auth.currentUser) {
-            // Warten bis der User sicher da ist
-            await new Promise((resolve, reject) => {
-                 const unsubscribe = auth.onAuthStateChanged(user => {
-                     unsubscribe();
-                     if (user) { resolve(user); }
-                     else { reject(new Error("Benutzer ist nicht bei Firebase angemeldet.")); }
-                 });
-                 setTimeout(() => reject(new Error("Timeout beim Warten auf Auth User.")), 5000); 
-            });
+            // Sicherstellen, dass Auth User vorhanden ist
+            if (!auth || !auth.currentUser) {
+                // Warten bis der User sicher da ist
+                await new Promise((resolve, reject) => {
+                    const unsubscribe = auth.onAuthStateChanged(user => {
+                        unsubscribe();
+                        if (user) { resolve(user); }
+                        else { reject(new Error("Benutzer ist nicht bei Firebase angemeldet.")); }
+                    });
+                    setTimeout(() => reject(new Error("Timeout beim Warten auf Auth User.")), 5000);
+                });
+            }
+            if (!auth.currentUser) { throw new Error("Benutzer konnte nicht authentifiziert werden."); }
+
+            // ID Token holen (wird vom SDK automatisch im Header mitgesendet)
+            await auth.currentUser.getIdToken(true);
+
+            // Prüfen, ob die Funktion initialisiert wurde (aus initializeFirebase)
+            if (!window.setRoleClaim) {
+                throw new Error("Cloud Function (setRoleClaim) ist noch nicht initialisiert. Bitte warten.");
+            }
+
+            // Das Daten-Objekt, das wir an die 'onCall' Funktion senden.
+            // Das SDK fügt den idToken automatisch hinzu.
+            const dataToSend = {
+                appUserId: appUserId,
+                pin: enteredPin
+                // KEIN idToken hier im Body!
+            };
+
+            // Aufruf mit dem httpsCallable (dem "neuen Schlüssel")
+            const result = await window.setRoleClaim(dataToSend);
+
+            // 4. Ergebnis der Cloud Function auswerten
+            // Bei httpsCallable ist das Ergebnis direkt das "data" Objekt
+            const responseData = result.data;
+
+            // FEHLERPRÜFUNG: Wenn die Cloud Function einen Fehler wirft (throw new HttpsError),
+            // landet der Code automatisch in der 'catch (error)' Sektion.
+            // Wir prüfen hier nur, ob die Funktion 'status: "success"' zurückgegeben hat.
+            if (responseData.status !== "success") {
+                throw new Error("Cloud Function meldete: " + (responseData.message || "Unbekannter Fehler"));
+            }
+
+            // 5. Finales Token aktualisieren und UI updaten
+            const idTokenResult = await auth.currentUser.getIdTokenResult(true);
+            const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle zugewiesen';
+
+            // 6. Lokale Zustände aktualisieren
+            localStorage.setItem(ADMIN_STORAGE_KEY, appUserId);
+            await checkCurrentUserValidity();
+
+            // 7. Erfolgsmeldung
+            alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet! Rolle: ${newClaimRole}`, "success");
+
+        } catch (error) {
+            // 8. Fehlerbehandlung
+            console.error("Fehler beim Cloud Function Aufruf oder Token Refresh:", error);
+
+            // KORREKTUR: Zeige die Fehlermeldung der Cloud Function an
+            // (z.B. "Ungültiger PIN." oder "Benutzer nicht authentifiziert.")
+            alertUser(`Fehler: ${error.message || 'Interner Fehler'}`, "error");
+
+            switchToGuestMode(false);
+            updateUIForMode();
         }
-        if (!auth.currentUser) { throw new Error("Benutzer konnte nicht authentifiziert werden."); }
-        
-        // ID Token holen (wird vom SDK automatisch im Header mitgesendet)
-        await auth.currentUser.getIdToken(true); 
-        
-        // Prüfen, ob die Funktion initialisiert wurde (aus initializeFirebase)
-        if (!window.setRoleClaim) {
-            throw new Error("Cloud Function (setRoleClaim) ist noch nicht initialisiert. Bitte warten.");
-        }
-
-        // Das Daten-Objekt, das wir an die 'onCall' Funktion senden.
-        // Das SDK fügt den idToken automatisch hinzu.
-        const dataToSend = {
-            appUserId: appUserId,
-            pin: enteredPin
-            // KEIN idToken hier im Body!
-        };
-
-        // Aufruf mit dem httpsCallable (dem "neuen Schlüssel")
-        const result = await window.setRoleClaim(dataToSend);
-
-        // 4. Ergebnis der Cloud Function auswerten
-        // Bei httpsCallable ist das Ergebnis direkt das "data" Objekt
-        const responseData = result.data; 
-
-        // FEHLERPRÜFUNG: Wenn die Cloud Function einen Fehler wirft (throw new HttpsError),
-        // landet der Code automatisch in der 'catch (error)' Sektion.
-        // Wir prüfen hier nur, ob die Funktion 'status: "success"' zurückgegeben hat.
-        if (responseData.status !== "success") {
-             throw new Error("Cloud Function meldete: " + (responseData.message || "Unbekannter Fehler"));
-        }
-        
-        // 5. Finales Token aktualisieren und UI updaten
-        const idTokenResult = await auth.currentUser.getIdTokenResult(true); 
-        const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle zugewiesen';
-
-        // 6. Lokale Zustände aktualisieren
-        localStorage.setItem(ADMIN_STORAGE_KEY, appUserId);
-        await checkCurrentUserValidity(); 
-
-        // 7. Erfolgsmeldung
-        alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet! Rolle: ${newClaimRole}`, "success");
-
-    } catch (error) {
-        // 8. Fehlerbehandlung
-        console.error("Fehler beim Cloud Function Aufruf oder Token Refresh:", error);
-        
-        // KORREKTUR: Zeige die Fehlermeldung der Cloud Function an
-        // (z.B. "Ungültiger PIN." oder "Benutzer nicht authentifiziert.")
-        alertUser(`Fehler: ${error.message || 'Interner Fehler'}`, "error");
-        
-        switchToGuestMode(false);
-        updateUIForMode();
-    }
-};
+    };
 
     if (submitAdminKeyButton) submitAdminKeyButton.addEventListener('click', handleLogin);
     if (adminPinInput) adminPinInput.addEventListener('keydown', (e) => e.key === 'Enter' && handleLogin());
@@ -818,7 +830,7 @@ const handleLogin = async () => {
             const buttonEl = e.currentTarget;
             const delay = parseInt(buttonEl.dataset.delay, 10);
             const buttonTextEl = buttonEl.querySelector('.button-text');
-            if (!buttonTextEl || isNaN(delay)) return; 
+            if (!buttonTextEl || isNaN(delay)) return;
             const originalText = buttonTextEl.textContent;
 
             const sendRequest = async () => {
@@ -936,7 +948,7 @@ const handleLogin = async () => {
     }
 
     const archivedListsContainer = document.getElementById('archivedListsContainer');
-    if (archivedListsContainer && !archivedListsContainer.dataset.listenerAttached) { 
+    if (archivedListsContainer && !archivedListsContainer.dataset.listenerAttached) {
         archivedListsContainer.addEventListener('click', async (e) => {
             const restoreBtn = e.target.closest('.restore-archived-btn');
             const deleteBtn = e.target.closest('.delete-archived-btn');
@@ -972,7 +984,7 @@ const handleLogin = async () => {
                 }
             }
         });
-        archivedListsContainer.dataset.listenerAttached = 'true'; 
+        archivedListsContainer.dataset.listenerAttached = 'true';
     }
 
     // --- API Token Modal ---
