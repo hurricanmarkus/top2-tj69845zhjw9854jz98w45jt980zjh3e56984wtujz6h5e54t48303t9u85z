@@ -1,6 +1,6 @@
 // zahlungsverwaltung.js
 
-import { alertUser, db, currentUser, USERS, setButtonLoading, GUEST_MODE, navigate } from './haupteingang.js';
+import { alertUser, db, currentUser, USERS, setButtonLoading, GUEST_MODE, navigate, appId } from './haupteingang.js';
 import {
     collection,
     addDoc,
@@ -41,59 +41,80 @@ export function initializeZahlungsverwaltungView() {
 // Listener Setup
 function setupEventListeners() {
     // 1. Button "Neuer Eintrag"
-    document.getElementById('btn-create-new-payment')?.addEventListener('click', () => {
-        openCreateModal();
-    });
+    const createBtn = document.getElementById('btn-create-new-payment');
+    if (createBtn) createBtn.addEventListener('click', openCreateModal);
 
     // 2. Modal schließen
-    document.getElementById('close-create-payment-modal')?.addEventListener('click', closeCreateModal);
-    document.getElementById('btn-cancel-create-payment')?.addEventListener('click', closeCreateModal);
+    const closeCreateBtn = document.getElementById('close-create-payment-modal');
+    if (closeCreateBtn) closeCreateBtn.addEventListener('click', closeCreateModal);
+    
+    const cancelCreateBtn = document.getElementById('btn-cancel-create-payment');
+    if (cancelCreateBtn) cancelCreateBtn.addEventListener('click', closeCreateModal);
 
     // 3. Speichern
-    document.getElementById('btn-save-payment')?.addEventListener('click', savePayment);
+    const saveBtn = document.getElementById('btn-save-payment');
+    if (saveBtn) saveBtn.addEventListener('click', savePayment);
 
-    // 4. Richtung umschalten (Ich schulde vs. Mir wird geschuldet)
-    document.getElementById('btn-direction-i-owe')?.addEventListener('click', () => setDirection('i_owe'));
-    document.getElementById('btn-direction-owes-me')?.addEventListener('click', () => setDirection('owes_me'));
+    // 4. Richtung umschalten
+    const dirIBtn = document.getElementById('btn-direction-i-owe');
+    if (dirIBtn) dirIBtn.addEventListener('click', () => setDirection('i_owe'));
+    
+    const dirMeBtn = document.getElementById('btn-direction-owes-me');
+    if (dirMeBtn) dirMeBtn.addEventListener('click', () => setDirection('owes_me'));
 
     // 5. Manueller Partner Toggle
-    document.getElementById('btn-toggle-partner-manual')?.addEventListener('click', togglePartnerManual);
+    const togglePartnerBtn = document.getElementById('btn-toggle-partner-manual');
+    if (togglePartnerBtn) togglePartnerBtn.addEventListener('click', togglePartnerManual);
 
     // 6. Erweiterte Optionen
-    document.getElementById('btn-toggle-advanced-payment')?.addEventListener('click', () => {
-        document.getElementById('payment-advanced-options').classList.toggle('hidden');
-    });
+    const advOptionsBtn = document.getElementById('btn-toggle-advanced-payment');
+    if (advOptionsBtn) {
+        advOptionsBtn.addEventListener('click', () => {
+            const opts = document.getElementById('payment-advanced-options');
+            if (opts) opts.classList.toggle('hidden');
+        });
+    }
 
     // 7. Filter und Suche
-    document.getElementById('payment-search-input')?.addEventListener('input', applyFilters);
-    document.getElementById('payment-filter-status')?.addEventListener('change', applyFilters);
-    document.getElementById('payment-filter-direction')?.addEventListener('change', applyFilters);
+    const searchInput = document.getElementById('payment-search-input');
+    if (searchInput) searchInput.addEventListener('input', applyFilters);
+    
+    const statusFilter = document.getElementById('payment-filter-status');
+    if (statusFilter) statusFilter.addEventListener('change', applyFilters);
+    
+    const dirFilter = document.getElementById('payment-filter-direction');
+    if (dirFilter) dirFilter.addEventListener('change', applyFilters);
 
     // 8. Detail Modal schließen
-    document.getElementById('btn-close-detail-modal')?.addEventListener('click', closeDetailModal);
+    const closeDetailBtn = document.getElementById('btn-close-detail-modal');
+    if (closeDetailBtn) closeDetailBtn.addEventListener('click', closeDetailModal);
 
     // 9. Drucken
-    document.getElementById('btn-print-payment')?.addEventListener('click', () => window.print());
+    const printBtn = document.getElementById('btn-print-payment');
+    if (printBtn) printBtn.addEventListener('click', () => window.print());
 
     // 10. TBD Checkbox
-    document.getElementById('payment-amount-tbd')?.addEventListener('change', (e) => {
-        const input = document.getElementById('payment-amount');
-        input.disabled = e.target.checked;
-        if (e.target.checked) input.value = '';
-    });
+    const tbdCheckbox = document.getElementById('payment-amount-tbd');
+    if (tbdCheckbox) {
+        tbdCheckbox.addEventListener('change', (e) => {
+            const input = document.getElementById('payment-amount');
+            if (input) {
+                input.disabled = e.target.checked;
+                if (e.target.checked) input.value = '';
+            }
+        });
+    }
 }
 
 // --- DATENBANK LISTENER ---
 function listenForPayments() {
     if (unsubscribePayments) unsubscribePayments();
 
-    const paymentsRef = collection(db, 'artifacts', '20LVob88b3ovXRUyX3ra', 'public', 'data', 'payments'); // Nutze deine AppID Pfad Konvention
+    // HIER WAR DER FEHLER: Wir nutzen jetzt die dynamische appId statt der festen
+    const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
     
-    // Wir holen ALLES, wo der User involviert ist (als Ersteller, Schuldner oder Gläubiger)
-    // Da Firestore OR-Queries limitiert sind, holen wir client-seitig alles oder nutzen einen kombinierten Ansatz.
-    // Für V1: Wir filtern im Client nach dem "ownerId" Feld, das wir jedem Eintrag geben.
-    
-    // Besser: Wir speichern "involvedUserIds" array im Dokument.
+    // Filter: Ich muss involviert sein (entweder als Ersteller oder als Partner)
+    // Hinweis: Das setzt voraus, dass 'involvedUserIds' im Dokument existiert.
     const q = query(paymentsRef, where('involvedUserIds', 'array-contains', currentUser.mode));
 
     unsubscribePayments = onSnapshot(q, (snapshot) => {
@@ -105,6 +126,10 @@ function listenForPayments() {
         applyFilters(); // Render Liste + Dashboard
     }, (error) => {
         console.error("Fehler beim Laden der Zahlungen:", error);
+        // Wenn hier "Missing permissions" kommt, liegt es an den Firestore Rules (siehe unten)
+        if (error.code === 'permission-denied') {
+            alertUser("Fehler: Keine Berechtigung für Zahlungen. Bitte Datenbank-Regeln prüfen.", "error");
+        }
     });
 }
 
@@ -115,9 +140,12 @@ function openCreateModal() {
     if (!modal) return;
 
     // Reset Formular
-    document.getElementById('payment-amount').value = '';
-    document.getElementById('payment-amount').disabled = false;
-    document.getElementById('payment-amount-tbd').checked = false;
+    const amtInput = document.getElementById('payment-amount');
+    if (amtInput) { amtInput.value = ''; amtInput.disabled = false; }
+    
+    const tbdInput = document.getElementById('payment-amount-tbd');
+    if (tbdInput) tbdInput.checked = false;
+    
     document.getElementById('payment-deadline').value = '';
     document.getElementById('payment-title').value = '';
     document.getElementById('payment-invoice-nr').value = '';
@@ -127,12 +155,14 @@ function openCreateModal() {
     
     // Partner Select füllen
     const select = document.getElementById('payment-partner-select');
-    select.innerHTML = '<option value="">- Person auswählen -</option>';
-    Object.values(USERS).forEach(user => {
-        if (user.id !== currentUser.mode && user.isActive) {
-            select.innerHTML += `<option value="${user.id}">${user.realName || user.name}</option>`;
-        }
-    });
+    if (select) {
+        select.innerHTML = '<option value="">- Person auswählen -</option>';
+        Object.values(USERS).forEach(user => {
+            if (user.id !== currentUser.mode && user.isActive) {
+                select.innerHTML += `<option value="${user.id}">${user.realName || user.name}</option>`;
+            }
+        });
+    }
 
     // Standard Richtung
     setDirection('i_owe');
@@ -142,25 +172,38 @@ function openCreateModal() {
 }
 
 function closeCreateModal() {
-    document.getElementById('createPaymentModal').classList.add('hidden');
-    document.getElementById('createPaymentModal').style.display = 'none';
+    const modal = document.getElementById('createPaymentModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
 }
 
 function setDirection(dir) {
-    document.getElementById('payment-direction').value = dir;
+    const dirInput = document.getElementById('payment-direction');
+    if (dirInput) dirInput.value = dir;
+    
     const btnI = document.getElementById('btn-direction-i-owe');
     const btnMe = document.getElementById('btn-direction-owes-me');
 
     if (dir === 'i_owe') {
-        btnI.classList.add('bg-white', 'shadow', 'text-red-600');
-        btnI.classList.remove('text-gray-500', 'hover:bg-gray-200');
-        btnMe.classList.remove('bg-white', 'shadow', 'text-emerald-600');
-        btnMe.classList.add('text-gray-500', 'hover:bg-gray-200');
+        if (btnI) {
+            btnI.classList.add('bg-white', 'shadow', 'text-red-600');
+            btnI.classList.remove('text-gray-500', 'hover:bg-gray-200');
+        }
+        if (btnMe) {
+            btnMe.classList.remove('bg-white', 'shadow', 'text-emerald-600');
+            btnMe.classList.add('text-gray-500', 'hover:bg-gray-200');
+        }
     } else {
-        btnMe.classList.add('bg-white', 'shadow', 'text-emerald-600');
-        btnMe.classList.remove('text-gray-500', 'hover:bg-gray-200');
-        btnI.classList.remove('bg-white', 'shadow', 'text-red-600');
-        btnI.classList.add('text-gray-500', 'hover:bg-gray-200');
+        if (btnMe) {
+            btnMe.classList.add('bg-white', 'shadow', 'text-emerald-600');
+            btnMe.classList.remove('text-gray-500', 'hover:bg-gray-200');
+        }
+        if (btnI) {
+            btnI.classList.remove('bg-white', 'shadow', 'text-red-600');
+            btnI.classList.add('text-gray-500', 'hover:bg-gray-200');
+        }
     }
 }
 
@@ -168,6 +211,8 @@ function togglePartnerManual() {
     const select = document.getElementById('payment-partner-select');
     const input = document.getElementById('payment-partner-name-manual');
     const btn = document.getElementById('btn-toggle-partner-manual');
+
+    if (!select || !input || !btn) return;
 
     if (input.classList.contains('hidden')) {
         // Zu Manuell wechseln
@@ -192,7 +237,7 @@ async function savePayment() {
 
     try {
         // Daten sammeln
-        const direction = document.getElementById('payment-direction').value; // 'i_owe' oder 'owes_me'
+        const direction = document.getElementById('payment-direction').value;
         const partnerSelect = document.getElementById('payment-partner-select').value;
         const partnerManual = document.getElementById('payment-partner-name-manual').value.trim();
         
@@ -239,7 +284,7 @@ async function savePayment() {
         const paymentData = {
             title: title,
             amount: amount,
-            remainingAmount: amount, // Zu Beginn ist alles offen
+            remainingAmount: amount,
             isTBD: isTBD,
             deadline: deadline || null,
             invoiceNr: invoiceNr,
@@ -266,8 +311,8 @@ async function savePayment() {
             }]
         };
 
-        // In Firebase speichern
-        const paymentsRef = collection(db, 'artifacts', '20LVob88b3ovXRUyX3ra', 'public', 'data', 'payments');
+        // In Firebase speichern (mit korrekter appId)
+        const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
         await addDoc(paymentsRef, paymentData);
 
         alertUser("Eintrag erfolgreich erstellt!", "success");
@@ -275,7 +320,11 @@ async function savePayment() {
 
     } catch (error) {
         console.error("Fehler beim Speichern:", error);
-        alertUser(error.message, "error");
+        if (error.code === 'permission-denied') {
+            alertUser("Speichern fehlgeschlagen: Keine Berechtigung (Datenbank-Regel fehlt).", "error");
+        } else {
+            alertUser(error.message, "error");
+        }
     } finally {
         setButtonLoading(saveBtn, false);
     }
@@ -291,9 +340,9 @@ function applyFilters() {
     let filtered = allPayments.filter(p => {
         // 1. Suche
         const textMatch = 
-            p.title.toLowerCase().includes(searchTerm) || 
-            p.debtorName.toLowerCase().includes(searchTerm) ||
-            p.creditorName.toLowerCase().includes(searchTerm) ||
+            (p.title && p.title.toLowerCase().includes(searchTerm)) || 
+            (p.debtorName && p.debtorName.toLowerCase().includes(searchTerm)) ||
+            (p.creditorName && p.creditorName.toLowerCase().includes(searchTerm)) ||
             (p.invoiceNr && p.invoiceNr.toLowerCase().includes(searchTerm));
         if (!textMatch) return false;
 
@@ -314,18 +363,17 @@ function applyFilters() {
         return true;
     });
 
-    // Sortieren: Offene zuerst, dann nach Datum (Deadline oder Created)
+    // Sortieren: Offene zuerst
     filtered.sort((a, b) => {
         if (a.status === 'open' && b.status !== 'open') return -1;
         if (a.status !== 'open' && b.status === 'open') return 1;
-        // Fallback auf Erstellungsdatum (neueste zuerst)
         const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date();
         const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date();
         return dateB - dateA;
     });
 
     renderPaymentList(filtered);
-    updateDashboard(allPayments); // Dashboard nutzt immer ALLE Daten für die Summen
+    updateDashboard(allPayments);
 }
 
 function renderPaymentList(payments) {
@@ -354,7 +402,6 @@ function renderPaymentList(payments) {
 
         let amountDisplay = p.isTBD ? '<span class="text-gray-500 font-bold">TBD</span>' : `${parseFloat(p.remainingAmount).toFixed(2)} €`;
         
-        // Deadline Warnung
         let deadlineInfo = '';
         if (p.deadline && p.status === 'open') {
             const today = new Date();
@@ -397,31 +444,34 @@ function updateDashboard(payments) {
     let owedToMeCount = 0;
 
     payments.forEach(p => {
-        if (p.status !== 'open' && p.status !== 'pending_approval') return; // Nur aktive zählen
+        if (p.status !== 'open' && p.status !== 'pending_approval') return;
 
         const amount = p.isTBD ? 0 : parseFloat(p.remainingAmount);
 
         if (p.debtorId === currentUser.mode) {
-            // Ich schulde
             myDebt += amount;
             myDebtCount++;
         } else if (p.creditorId === currentUser.mode) {
-            // Mir wird geschuldet
             owedToMe += amount;
             owedToMeCount++;
         }
     });
 
-    document.getElementById('dashboard-my-debt-display').textContent = myDebt.toFixed(2) + " €";
-    document.getElementById('dashboard-my-debt-detail').textContent = `in ${myDebtCount} offenen Posten`;
+    const myDebtDisplay = document.getElementById('dashboard-my-debt-display');
+    if (myDebtDisplay) myDebtDisplay.textContent = myDebt.toFixed(2) + " €";
+    
+    const myDebtDetail = document.getElementById('dashboard-my-debt-detail');
+    if (myDebtDetail) myDebtDetail.textContent = `in ${myDebtCount} offenen Posten`;
 
-    document.getElementById('dashboard-owe-me-display').textContent = owedToMe.toFixed(2) + " €";
-    document.getElementById('dashboard-owe-me-detail').textContent = `aus ${owedToMeCount} offenen Posten`;
+    const oweMeDisplay = document.getElementById('dashboard-owe-me-display');
+    if (oweMeDisplay) oweMeDisplay.textContent = owedToMe.toFixed(2) + " €";
+    
+    const oweMeDetail = document.getElementById('dashboard-owe-me-detail');
+    if (oweMeDetail) oweMeDetail.textContent = `aus ${owedToMeCount} offenen Posten`;
 }
 
 // --- DETAIL ANSICHT & ACTIONS ---
 
-// Global verfügbar machen für onclick im HTML
 window.openPaymentDetail = function(id) {
     const p = allPayments.find(x => x.id === id);
     if (!p) return;
@@ -430,24 +480,27 @@ window.openPaymentDetail = function(id) {
     const modal = document.getElementById('paymentDetailModal');
     const content = document.getElementById('payment-detail-content');
     const actions = document.getElementById('payment-detail-actions');
+    const partialForm = document.getElementById('partial-payment-form');
     
     if(!modal || !content || !actions) return;
 
     const iAmDebtor = p.debtorId === currentUser.mode;
     const iAmCreditor = p.creditorId === currentUser.mode;
 
-    // HTML für Details
-    let historyHtml = (p.history || []).map(h => `
+    let historyHtml = (p.history || []).map(h => {
+        const d = h.date?.toDate ? h.date.toDate() : new Date(h.date);
+        return `
         <div class="text-xs text-gray-600 border-l-2 border-gray-300 pl-2 mb-2">
-            <span class="font-bold">${h.date?.toDate ? h.date.toDate().toLocaleDateString() : 'Datum'}</span> - ${h.user}: ${h.info}
+            <span class="font-bold">${d.toLocaleDateString()} ${d.toLocaleTimeString()}</span> - ${h.user}: ${h.info}
         </div>
-    `).join('');
+        `;
+    }).join('');
 
     content.innerHTML = `
         <h2 class="text-2xl font-bold text-gray-800 mb-1">${p.title}</h2>
         <div class="flex gap-2 mb-4">
             <span class="px-2 py-1 bg-gray-200 rounded text-xs">ID: ${p.id.substring(0,6)}...</span>
-            ${p.invoiceNr ? `<span class="px-2 py-1 bg-blue-100 rounded text-xs">Rechnug: ${p.invoiceNr}</span>` : ''}
+            ${p.invoiceNr ? `<span class="px-2 py-1 bg-blue-100 rounded text-xs">Rechnung: ${p.invoiceNr}</span>` : ''}
         </div>
 
         <div class="grid grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
@@ -477,20 +530,17 @@ window.openPaymentDetail = function(id) {
 
     // Actions bauen
     actions.innerHTML = '';
-    const partialForm = document.getElementById('partial-payment-form');
-    partialForm.classList.add('hidden');
+    if (partialForm) partialForm.classList.add('hidden');
 
     if (p.status === 'open' || p.status === 'pending_approval') {
-        // 1. Zahlungs-Button (Für Schuldner)
         if (iAmDebtor && p.status === 'open') {
             actions.innerHTML += `<button onclick="handlePaymentAction('${id}', 'mark_paid')" class="py-2 px-4 bg-blue-600 text-white font-bold rounded hover:bg-blue-700">Als bezahlt melden</button>`;
             actions.innerHTML += `<button onclick="showPartialForm()" class="py-2 px-4 bg-blue-100 text-blue-800 font-bold rounded hover:bg-blue-200">Teilzahlung</button>`;
         }
 
-        // 2. Bestätigen-Button (Für Gläubiger)
         if (iAmCreditor) {
             if (p.status === 'pending_approval') {
-                actions.innerHTML += `<button onclick="handlePaymentAction('${id}', 'confirm_payment')" class="py-2 px-4 bg-green-600 text-white font-bold rounded hover:bg-green-700">Zahlungseingang bestätigen</button>`;
+                actions.innerHTML += `<button onclick="handlePaymentAction('${id}', 'confirm_payment')" class="py-2 px-4 bg-green-600 text-white font-bold rounded hover:bg-green-700">Bestätigen</button>`;
                 actions.innerHTML += `<button onclick="handlePaymentAction('${id}', 'reject_payment')" class="py-2 px-4 bg-red-100 text-red-600 font-bold rounded hover:bg-red-200">Ablehnen</button>`;
             } else {
                 actions.innerHTML += `<button onclick="handlePaymentAction('${id}', 'force_close')" class="py-2 px-4 bg-green-600 text-white font-bold rounded hover:bg-green-700">Als erledigt markieren</button>`;
@@ -499,22 +549,31 @@ window.openPaymentDetail = function(id) {
         }
     }
 
-    // Teilzahlung Logik
     window.showPartialForm = function() {
-        partialForm.classList.remove('hidden');
+        if (partialForm) partialForm.classList.remove('hidden');
     }
-    document.getElementById('btn-submit-partial').onclick = () => {
-        const amt = parseFloat(document.getElementById('partial-amount-input').value);
-        if (amt > 0) handlePaymentAction(id, 'partial_pay', amt);
-    };
+    
+    const submitPartialBtn = document.getElementById('btn-submit-partial');
+    if (submitPartialBtn) {
+        // Alten Listener entfernen (durch Klonen)
+        const newBtn = submitPartialBtn.cloneNode(true);
+        submitPartialBtn.parentNode.replaceChild(newBtn, submitPartialBtn);
+        newBtn.onclick = () => {
+            const amt = parseFloat(document.getElementById('partial-amount-input').value);
+            if (amt > 0) handlePaymentAction(id, 'partial_pay', amt);
+        };
+    }
 
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
 }
 
 function closeDetailModal() {
-    document.getElementById('paymentDetailModal').classList.add('hidden');
-    document.getElementById('paymentDetailModal').style.display = 'none';
+    const modal = document.getElementById('paymentDetailModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
 }
 
 // --- ACTIONS (Zahlen, Bestätigen, etc.) ---
@@ -548,7 +607,6 @@ window.handlePaymentAction = async function(id, action, amount = 0) {
 
     updateData.status = newStatus;
     
-    // History bauen
     const newHistory = {
         date: new Date(),
         action: action,
@@ -559,12 +617,12 @@ window.handlePaymentAction = async function(id, action, amount = 0) {
     updateData.history = [...(p.history || []), newHistory];
 
     try {
-        const docRef = doc(db, 'artifacts', '20LVob88b3ovXRUyX3ra', 'public', 'data', 'payments', id);
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'payments', id);
         await updateDoc(docRef, updateData);
         alertUser("Status aktualisiert.", "success");
         closeDetailModal();
     } catch (e) {
         console.error(e);
-        alertUser("Fehler beim Aktualisieren.", "error");
+        alertUser("Fehler beim Aktualisieren: " + e.message, "error");
     }
 }
