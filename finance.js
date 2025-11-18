@@ -154,7 +154,12 @@ function renderFinanceList(forceEmpty = false) {
 
     // WENN LEER ODER KEIN USER (forceEmpty)
     if (filteredData.length === 0 || forceEmpty) {
-        container.innerHTML = `<div class="text-center p-8 text-gray-400">Keine Einträge in dieser Ansicht.</div>`;
+        // NEUE, DEUTLICHE LEER-ANSICHT
+        container.innerHTML = `
+            <div class="bg-gray-100 border border-gray-300 rounded-xl p-10 text-center">
+                <h3 class="text-gray-600 font-bold mb-2">Noch keine Einträge vorhanden.</h3>
+                <p class="text-sm text-gray-500">Beginne, indem du unten rechts auf den runden "+" Knopf klickst.</p>
+            </div>`;
         return;
     }
 
