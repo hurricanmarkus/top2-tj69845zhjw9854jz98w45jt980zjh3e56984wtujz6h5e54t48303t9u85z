@@ -20,7 +20,7 @@ let unsubscribePayments = null;
 let allPayments = []; 
 let currentDetailPaymentId = null;
 let currentSplitMode = 'single'; // 'single' oder 'split'
-let activeSettlementPartnerId = null; // Für Verrechnung
+let activeSettlementPartnerId = null; 
 
 // Initialisierung
 export function initializeZahlungsverwaltungView() {
@@ -53,6 +53,16 @@ function setupEventListeners() {
     document.getElementById('btn-direction-owes-me')?.addEventListener('click', () => setDirection('owes_me'));
     document.getElementById('btn-toggle-partner-manual')?.addEventListener('click', togglePartnerManual);
 
+    // SPLIT: Gast hinzufügen
+    document.getElementById('btn-add-split-manual')?.addEventListener('click', addSplitManualPartner);
+    // Enter-Taste im Gast-Feld soll nicht speichern, sondern Gast hinzufügen
+    document.getElementById('split-manual-name-input')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addSplitManualPartner();
+        }
+    });
+
     document.getElementById('btn-toggle-advanced-payment')?.addEventListener('click', () => {
         document.getElementById('payment-advanced-options').classList.toggle('hidden');
     });
@@ -60,7 +70,6 @@ function setupEventListeners() {
     // Split Calculation Logic
     document.getElementById('payment-amount')?.addEventListener('input', updateSplitPreview);
     document.getElementById('split-include-me')?.addEventListener('change', updateSplitPreview);
-    // Listener für dynamische Checkboxen hängen wir beim Erstellen an
 
     // Filters
     document.getElementById('payment-search-input')?.addEventListener('input', applyFilters);
@@ -80,7 +89,7 @@ function setupEventListeners() {
         });
     }
 
-    // SETTLEMENT / BILANZ
+    // SETTLEMENT
     document.getElementById('btn-open-settlement')?.addEventListener('click', openSettlementModal);
     document.getElementById('close-settlement-modal')?.addEventListener('click', closeSettlementModal);
     document.getElementById('btn-execute-settlement')?.addEventListener('click', executeSettlement);
@@ -101,7 +110,6 @@ function listenForPayments() {
         
         applyFilters(); 
         
-        // Live-Updates
         if (currentDetailPaymentId) {
             const updatedP = allPayments.find(x => x.id === currentDetailPaymentId);
             if (updatedP) {
@@ -113,14 +121,13 @@ function listenForPayments() {
                 closeDetailModal();
             }
         }
-        // Update Settlement View if open
+        
         const settlementModal = document.getElementById('settlementModal');
         if (settlementModal && !settlementModal.classList.contains('hidden')) {
-            // Refresh List or Detail
             if (activeSettlementPartnerId) {
-                selectSettlementPartner(activeSettlementPartnerId); // Refresh Detail
+                selectSettlementPartner(activeSettlementPartnerId); 
             } else {
-                openSettlementModal(); // Refresh List
+                openSettlementModal(); 
             }
         }
 
@@ -149,6 +156,7 @@ function openCreateModal(paymentToEdit = null) {
     document.getElementById('payment-amount').value = '';
     document.getElementById('payment-amount-tbd').checked = false;
     document.getElementById('payment-amount').disabled = false;
+    document.getElementById('split-manual-name-input').value = ''; // Reset Gast Input
 
     // Partner Select füllen
     const select = document.getElementById('payment-partner-select');
@@ -172,16 +180,14 @@ function openCreateModal(paymentToEdit = null) {
     select.innerHTML = partnerOptions;
     splitList.innerHTML = splitCheckboxes;
     
-    // Listener für Checkboxen hinzufügen (für Berechnung)
+    // Listener für Checkboxen (wichtig für Berechnung)
     document.querySelectorAll('.split-partner-cb').forEach(cb => {
         cb.addEventListener('change', updateSplitPreview);
     });
 
     if (paymentToEdit) {
-        // --- EDIT MODE ---
-        // Editieren ist nur im "Einzel"-Modus möglich. Split-Erstellung erstellt ja viele Einzel-Einträge.
+        // --- EDIT MODE (Nur Einzel) ---
         setCreateMode('single');
-        // Sperre die Modus-Knöpfe im Edit-Modus
         document.getElementById('mode-single').disabled = true;
         document.getElementById('mode-split').disabled = true;
         document.getElementById('mode-split').classList.add('opacity-50', 'cursor-not-allowed');
@@ -205,7 +211,6 @@ function openCreateModal(paymentToEdit = null) {
         const partnerId = iAmDebtor ? paymentToEdit.creditorId : paymentToEdit.debtorId;
         const partnerName = iAmDebtor ? paymentToEdit.creditorName : paymentToEdit.debtorName;
         
-        // Prüfen ob Partner in Liste
         const optionExists = select.querySelector(`option[value="${partnerId}"]`);
         if (optionExists) {
             select.value = partnerId;
@@ -220,7 +225,7 @@ function openCreateModal(paymentToEdit = null) {
             manualInput.value = partnerName;
             document.getElementById('btn-toggle-partner-manual').textContent = "Liste wählen";
         }
-
+        
         if (paymentToEdit.invoiceNr || paymentToEdit.orderNr || paymentToEdit.notes || paymentToEdit.type === 'transfer') {
             document.getElementById('payment-advanced-options').classList.remove('hidden');
         }
@@ -228,7 +233,6 @@ function openCreateModal(paymentToEdit = null) {
     } else {
         // --- NEW MODE ---
         setCreateMode('single');
-        // Knöpfe entsperren
         document.getElementById('mode-single').disabled = false;
         document.getElementById('mode-split').disabled = false;
         document.getElementById('mode-split').classList.remove('opacity-50', 'cursor-not-allowed');
@@ -252,6 +256,33 @@ function closeCreateModal() {
     document.getElementById('createPaymentModal').style.display = 'none';
 }
 
+// --- SPLIT LOGIK: Gast hinzufügen ---
+function addSplitManualPartner() {
+    const input = document.getElementById('split-manual-name-input');
+    const name = input.value.trim();
+    if (!name) return;
+
+    const list = document.getElementById('split-partner-list');
+    const id = 'MANUAL_' + Date.now(); // Temporäre ID für die UI-Logik
+
+    const div = document.createElement('div');
+    div.innerHTML = `
+        <label class="flex items-center gap-2 p-1 hover:bg-gray-100 rounded cursor-pointer bg-yellow-50 border border-yellow-100">
+            <input type="checkbox" class="split-partner-cb h-4 w-4" value="${id}" data-name="${name}" checked>
+            <span class="text-gray-800 font-medium">${name} <span class="text-xs text-gray-500">(Gast)</span></span>
+        </label>
+    `;
+    
+    // Am Anfang einfügen
+    list.insertBefore(div.firstElementChild, list.firstChild);
+    input.value = '';
+    
+    // Listener für die neue Checkbox
+    list.querySelector('.split-partner-cb').addEventListener('change', updateSplitPreview);
+    
+    updateSplitPreview(); // Update Berechnung
+}
+
 function setCreateMode(mode) {
     currentSplitMode = mode;
     const btnSingle = document.getElementById('mode-single');
@@ -260,7 +291,7 @@ function setCreateMode(mode) {
     const singleWrappers = [
         document.getElementById('direction-wrapper'),
         document.getElementById('single-partner-wrapper'),
-        document.getElementById('tbd-wrapper') // TBD macht bei Split wenig Sinn
+        document.getElementById('tbd-wrapper')
     ];
     const splitWrappers = [
         document.getElementById('split-partner-wrapper'),
@@ -344,7 +375,7 @@ function togglePartnerManual() {
     }
 }
 
-// --- SAVE FUNCTION (MIGHTY) ---
+// --- SAVE FUNCTION ---
 
 async function savePayment() {
     const saveBtn = document.getElementById('btn-save-payment');
@@ -365,7 +396,7 @@ async function savePayment() {
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
 
         if (currentSplitMode === 'single') {
-            // --- SINGLE MODE (Wie gehabt) ---
+            // --- SINGLE MODE ---
             const direction = document.getElementById('payment-direction').value;
             const partnerSelect = document.getElementById('payment-partner-select').value;
             const partnerManual = document.getElementById('payment-partner-name-manual').value.trim();
@@ -397,7 +428,6 @@ async function savePayment() {
             };
 
             if (editId) {
-                // Update
                 const existing = allPayments.find(p => p.id === editId);
                 let newRemaining = existing.remainingAmount;
                 if (!isTBD && !existing.isTBD) {
@@ -412,7 +442,6 @@ async function savePayment() {
                 
                 batch.update(doc(paymentsRef, editId), data);
             } else {
-                // Neu
                 data.amount = amount;
                 data.remainingAmount = amount;
                 data.status = 'open';
@@ -420,11 +449,11 @@ async function savePayment() {
                 data.createdBy = currentUser.mode;
                 data.history = [{ date: new Date(), action: 'created', user: currentUser.displayName, info: `Erstellt: ${isTBD?'TBD':amount+'€'}` }];
                 
-                batch.set(doc(paymentsRef), data); // addDoc via Batch ist doc(ref) + set
+                batch.set(doc(paymentsRef), data);
             }
 
         } else {
-            // --- SPLIT MODE (Nur Neu) ---
+            // --- SPLIT MODE ---
             if (editId) throw new Error("Split-Einträge können nicht als Gruppe bearbeitet werden.");
             
             const totalAmount = parseFloat(document.getElementById('payment-amount').value);
@@ -437,18 +466,23 @@ async function savePayment() {
             const count = selectedCheckboxes.length + (includeMe ? 1 : 0);
             const share = totalAmount / count;
 
-            // Wir erstellen für JEDE ausgewählte Person einen Eintrag: "Schuldet mir [Anteil]"
-            // (Wir nehmen an, ICH habe bezahlt und fordere das Geld zurück)
-            // Typischer Anwendungsfall: "Ich habe Rechnung bezahlt"
-            
+            // Split-Einträge erstellen
             selectedCheckboxes.forEach(cb => {
-                const pId = cb.value;
+                let pId = cb.value; // ID oder MANUAL_XYZ
                 const pName = cb.dataset.name;
+                let involved = [currentUser.mode];
                 
-                const docRef = doc(paymentsRef); // Neue ID generieren
+                // Wenn es ein manueller Gast ist, ist ID null
+                if (pId.startsWith('MANUAL_')) {
+                    pId = null;
+                } else {
+                    involved.push(pId);
+                }
+                
+                const docRef = doc(paymentsRef);
                 
                 const entryData = {
-                    title: `${title} (Split)`, // Markierung im Titel
+                    title: `${title} (Split)`,
                     amount: share,
                     remainingAmount: share,
                     isTBD: false,
@@ -458,12 +492,12 @@ async function savePayment() {
                     createdAt: serverTimestamp(),
                     createdBy: currentUser.mode,
                     
-                    // Ich bin Gläubiger, Partner ist Schuldner
+                    // Ich bin Gläubiger (ich hab bezahlt)
                     creditorId: currentUser.mode,
                     creditorName: currentUser.displayName,
-                    debtorId: pId,
+                    debtorId: pId, // Null für Gast
                     debtorName: pName,
-                    involvedUserIds: [currentUser.mode, pId],
+                    involvedUserIds: involved,
                     
                     history: [{
                         date: new Date(),
@@ -488,7 +522,7 @@ async function savePayment() {
     }
 }
 
-// --- SETTLEMENT / VERRECHNUNG ---
+// --- SETTLEMENT ---
 
 function openSettlementModal() {
     const modal = document.getElementById('settlementModal');
@@ -498,18 +532,16 @@ function openSettlementModal() {
     if (!modal) return;
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
-    detail.classList.add('hidden'); // Detail verstecken
+    detail.classList.add('hidden');
     activeSettlementPartnerId = null;
 
-    // 1. Daten aggregieren pro Partner
-    const partners = {}; // { id: { name, iOwe, owesMe } }
+    const partners = {};
 
     allPayments.forEach(p => {
-        if (p.status !== 'open' && p.status !== 'pending_approval') return; // Nur aktive
+        if (p.status !== 'open' && p.status !== 'pending_approval') return;
         
         const amount = p.isTBD ? 0 : parseFloat(p.remainingAmount);
         
-        // Bestimme den "Anderen"
         let partnerId, partnerName;
         let isMyDebt = false;
 
@@ -521,7 +553,6 @@ function openSettlementModal() {
             isMyDebt = false;
         }
 
-        // Manueller Partner ohne ID? Nutzen wir den Namen als ID
         if (!partnerId) partnerId = "MANUAL_" + partnerName;
 
         if (!partners[partnerId]) {
@@ -532,7 +563,6 @@ function openSettlementModal() {
         else partners[partnerId].owesMe += amount;
     });
 
-    // 2. Liste rendern
     list.innerHTML = '';
     const partnerArray = Object.values(partners);
     
@@ -564,12 +594,10 @@ function openSettlementModal() {
 }
 
 function selectSettlementPartner(partnerId) {
-    // Zeige Detail-Ansicht
     activeSettlementPartnerId = partnerId;
     const detail = document.getElementById('settlement-detail-view');
     detail.classList.remove('hidden');
 
-    // Berechne Live-Werte (falls sich was geändert hat)
     let iOwe = 0;
     let owesMe = 0;
     let partnerName = "Unbekannt";
@@ -577,7 +605,6 @@ function selectSettlementPartner(partnerId) {
     allPayments.forEach(p => {
         if (p.status !== 'open' && p.status !== 'pending_approval') return;
 
-        // Check ID match (inkl. manueller Namen)
         let pIdCheck = (p.debtorId === currentUser.mode) ? p.creditorId : p.debtorId;
         let pNameCheck = (p.debtorId === currentUser.mode) ? p.creditorName : p.debtorName;
         if (!pIdCheck) pIdCheck = "MANUAL_" + pNameCheck;
@@ -631,7 +658,6 @@ async function executeSettlement() {
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
         
-        // 1. Sammle alle relevanten Dokumente
         const involvedDocs = [];
         let partnerName = "";
         let net = 0;
@@ -647,12 +673,11 @@ async function executeSettlement() {
                 partnerName = pNameCheck;
                 involvedDocs.push(p);
                 const amount = p.isTBD ? 0 : parseFloat(p.remainingAmount);
-                if (p.debtorId === currentUser.mode) net -= amount; // Ich schulde (-)
-                else net += amount; // Mir wird geschuldet (+)
+                if (p.debtorId === currentUser.mode) net -= amount;
+                else net += amount;
             }
         });
 
-        // 2. Setze alle existierenden auf "paid"
         involvedDocs.forEach(p => {
             const ref = doc(paymentsRef, p.id);
             batch.update(ref, { 
@@ -662,9 +687,8 @@ async function executeSettlement() {
             });
         });
 
-        // 3. Erstelle ggf. EINEN neuen Rest-Eintrag
         if (Math.abs(net) > 0.01) {
-            const isCreditor = net > 0; // Positiv = Ich bekomme Geld
+            const isCreditor = net > 0;
             const absAmount = Math.abs(net);
             
             const realPartnerId = activeSettlementPartnerId.startsWith("MANUAL_") ? null : activeSettlementPartnerId;
@@ -715,10 +739,6 @@ window.deletePayment = async function(id) { if(!confirm("Löschen?")) return; tr
 window.openPaymentDetail = function(id, r=false) { 
     const p = allPayments.find(x=>x.id===id); if(!p) return; 
     currentDetailPaymentId=id; 
-    // ... (Wiederholung des Render-Codes für Details - kurzgefasst, da oben schon definiert, 
-    // aber beim Copy-Paste ist es sicherer, die Funktion von oben zu nehmen.
-    // Da ich hier Platz sparen muss: Bitte nutze exakt die openPaymentDetail Logik aus dem vorherigen Schritt 
-    // oder kopiere sie hier rein. Der Einfachheit halber füge ich sie unten vollständig an.)
     renderDetailContent(p, r);
 };
 
