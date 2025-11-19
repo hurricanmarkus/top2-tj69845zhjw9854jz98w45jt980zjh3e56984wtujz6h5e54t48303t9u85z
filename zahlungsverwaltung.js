@@ -194,7 +194,13 @@ function setupSettingsListeners() {
     document.getElementById('btn-add-other-credit')?.addEventListener('click', () => openCreditModal('add', 'other'));
 
     // Guthaben Modal Aktionen
-    document.getElementById('btn-cancel-credit')?.addEventListener('click', () => document.getElementById('creditManageModal').classList.add('hidden'));
+    // KORREKTUR HIER: Wir erzwingen das Ausblenden mit style.display = 'none'
+    document.getElementById('btn-cancel-credit')?.addEventListener('click', () => {
+        const modal = document.getElementById('creditManageModal');
+        modal.classList.add('hidden');
+        modal.style.display = 'none'; 
+    });
+    
     document.getElementById('btn-save-credit')?.addEventListener('click', executeCreditAction);
 }
 
