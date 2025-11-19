@@ -136,6 +136,11 @@ function setupEventListeners() {
         document.getElementById('splitEntryModal').style.display = 'none';
     });
     document.getElementById('btn-confirm-split')?.addEventListener('click', executeSplitEntry);
+
+    // NEU: ADJUST AMOUNT (Betrag anpassen)
+    document.getElementById('close-adjust-modal')?.addEventListener('click', closeAdjustAmountModal);
+    document.getElementById('btn-cancel-adjust')?.addEventListener('click', closeAdjustAmountModal);
+    document.getElementById('btn-save-adjust')?.addEventListener('click', executeAdjustAmount);
 }
 
 // --- DATENBANK LISTENER ---
@@ -395,6 +400,98 @@ async function executeSplitEntry() {
         setButtonLoading(btn, false);
     }
 }
+
+
+// --- ADJUST AMOUNT LOGIK (Betrag anpassen) ---
+let currentAdjustId = null;
+
+window.openAdjustAmountModal = function(id) {
+    const p = allPayments.find(x => x.id === id);
+    if (!p) return;
+
+    currentAdjustId = id;
+    const modal = document.getElementById('adjustAmountModal');
+    
+    document.getElementById('adjust-current-amount-display').textContent = parseFloat(p.remainingAmount).toFixed(2) + " €";
+    document.getElementById('adjust-new-amount').value = parseFloat(p.remainingAmount).toFixed(2); // Standardwert = aktueller Wert
+    document.getElementById('adjust-reason').value = 'correction';
+    document.getElementById('adjust-note').value = '';
+
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+    
+    // Detail-Modal kurz schließen/verstecken, damit Fokus klar ist (optional, hier lassen wir es offen im Hintergrund)
+}
+
+function closeAdjustAmountModal() {
+    document.getElementById('adjustAmountModal').classList.add('hidden');
+    document.getElementById('adjustAmountModal').style.display = 'none';
+    currentAdjustId = null;
+}
+
+async function executeAdjustAmount() {
+    if (!currentAdjustId) return;
+    const p = allPayments.find(x => x.id === currentAdjustId);
+    if (!p) return;
+
+    const newAmountVal = parseFloat(document.getElementById('adjust-new-amount').value);
+    const reason = document.getElementById('adjust-reason').value;
+    const note = document.getElementById('adjust-note').value.trim();
+
+    if (isNaN(newAmountVal) || newAmountVal < 0) {
+        alertUser("Bitte gültigen positiven Betrag eingeben.", "error");
+        return;
+    }
+
+    const oldAmount = parseFloat(p.remainingAmount);
+    const diff = newAmountVal - oldAmount;
+
+    if (Math.abs(diff) < 0.01) {
+        alertUser("Keine Änderung am Betrag festgestellt.", "info");
+        return;
+    }
+
+    const btn = document.getElementById('btn-save-adjust');
+    setButtonLoading(btn, true);
+
+    try {
+        const paymentRef = doc(db, 'artifacts', appId, 'public', 'data', 'payments', currentAdjustId);
+        
+        // Mapping für schöne Texte im Verlauf
+        const reasonTexts = {
+            'correction': 'Korrektur',
+            'interest': 'Zinsen/Gebühr',
+            'discount': 'Erlass/Rabatt',
+            'other': 'Anpassung'
+        };
+        const reasonText = reasonTexts[reason] || 'Anpassung';
+        const logInfo = `${reasonText}: Von ${oldAmount.toFixed(2)}€ auf ${newAmountVal.toFixed(2)}€ gesetzt. ${note ? `(${note})` : ''}`;
+
+        await updateDoc(paymentRef, {
+            remainingAmount: newAmountVal,
+            // Falls es eine Korrektur ist, passen wir vielleicht auch den Ursprungsbetrag 'amount' an? 
+            // Wir ändern hier nur remainingAmount, es sei denn, amount war kleiner als der neue Rest.
+            amount: (newAmountVal > p.amount) ? newAmountVal : p.amount, 
+            history: [...(p.history || []), { 
+                date: new Date(), 
+                action: 'adjusted', 
+                user: currentUser.displayName, 
+                info: logInfo 
+            }]
+        });
+
+        alertUser("Betrag erfolgreich angepasst.", "success");
+        closeAdjustAmountModal();
+        // Detailansicht aktualisiert sich automatisch durch den Snapshot Listener
+
+    } catch (e) {
+        console.error(e);
+        alertUser("Fehler: " + e.message, "error");
+    } finally {
+        setButtonLoading(btn, false);
+    }
+}
+
 
 // --- CREATE & EDIT MODAL ---
 
@@ -1101,13 +1198,26 @@ function renderDetailContent(p, isRefresh) {
     const iAmCreditor = p.creditorId === currentUser.mode;
     const iAmCreator = p.createdBy === currentUser.mode;
 
+    // Short ID generieren (die letzten 4 Zeichen)
+    const shortId = p.id.slice(-4).toUpperCase();
+
     let editControls = '';
+    // Ersteller darf bearbeiten/löschen
     if (iAmCreator) {
         editControls = `
-        <div class="flex justify-end gap-2 mb-4 no-print border-b pb-2">
-            <button onclick="openSplitModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 text-sm font-bold">Aufteilen</button>
-            <button onclick="editPayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-sm font-bold">Bearbeiten</button>
-            <button onclick="deletePayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-bold">Löschen</button>
+        <div class="flex justify-end gap-2 mb-4 no-print border-b pb-2 flex-wrap">
+             <button onclick="openAdjustAmountModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-bold">
+                € Anpassen
+            </button>
+            <button onclick="openSplitModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 text-sm font-bold">
+                Aufteilen
+            </button>
+            <button onclick="editPayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-sm font-bold">
+                Bearbeiten
+            </button>
+            <button onclick="deletePayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-bold">
+                Löschen
+            </button>
         </div>`;
     }
 
@@ -1145,41 +1255,56 @@ function renderDetailContent(p, isRefresh) {
 
     content.innerHTML = `
         ${editControls}
-        <h2 class="text-2xl font-bold text-gray-800 mb-1">${p.title}</h2>
-        <div class="flex gap-2 mb-4"><span class="px-2 py-1 bg-gray-200 rounded text-xs">ID: ${p.id.substring(0, 6)}...</span>${p.invoiceNr ? `<span class="px-2 py-1 bg-blue-100 rounded text-xs">Rechnung: ${p.invoiceNr}</span>` : ''}</div>
+        <h2 class="text-2xl font-bold text-gray-800 mb-1 leading-tight">${p.title}</h2>
         
-        <div class="grid grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
-            <div><p class="text-xs font-bold text-gray-500 uppercase">Schuldner</p><p class="text-lg font-semibold text-gray-900">${p.debtorName}</p></div>
-            <div class="text-right"><p class="text-xs font-bold text-gray-500 uppercase">Gläubiger</p><p class="text-lg font-semibold text-gray-900">${p.creditorName}</p></div>
+        <div class="flex flex-wrap gap-2 mb-4 mt-2">
+            <span class="px-2 py-1 bg-gray-800 text-white rounded text-xs font-mono tracking-wider">#${shortId}</span>
+            ${p.invoiceNr ? `<span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-semibold">Rechnung: ${p.invoiceNr}</span>` : ''}
+            ${p.startDate ? `<span class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs">Start: ${new Date(p.startDate).toLocaleDateString()}</span>` : ''}
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
+            <div><p class="text-xs font-bold text-gray-500 uppercase">Schuldner</p><p class="text-lg font-semibold text-gray-900 break-words">${p.debtorName}</p></div>
+            <div class="text-right"><p class="text-xs font-bold text-gray-500 uppercase">Gläubiger</p><p class="text-lg font-semibold text-gray-900 break-words">${p.creditorName}</p></div>
         </div>
 
         ${installmentInfo}
 
-        <div class="mb-6 text-center">
-            <p class="text-sm text-gray-500">Offener Betrag</p>
-            <p class="text-4xl font-extrabold text-gray-800">${p.isTBD ? 'TBD' : parseFloat(p.remainingAmount).toFixed(2) + ' €'}</p>
-            ${!p.isTBD && p.amount > p.remainingAmount ? `<p class="text-xs text-green-600">Von ursprünglich ${p.amount.toFixed(2)} €</p>` : ''}
+        <div class="mb-6 text-center p-4 border-2 border-dashed border-gray-200 rounded-xl">
+            <p class="text-sm text-gray-500 uppercase font-bold tracking-wide">Offener Betrag</p>
+            <p class="text-5xl font-extrabold text-gray-800 mt-1">${p.isTBD ? 'TBD' : parseFloat(p.remainingAmount).toFixed(2) + ' €'}</p>
+            ${!p.isTBD && p.amount > p.remainingAmount ? `<p class="text-xs text-green-600 font-semibold mt-1">Ursprünglich: ${p.amount.toFixed(2)} €</p>` : ''}
         </div>
+        
         ${p.notes ? `<div class="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-gray-700"><strong>Notiz:</strong><br>${p.notes}</div>` : ''}
-        <h4 class="font-bold text-gray-700 mb-2 border-b pb-1">Verlauf</h4>
-        <div class="mb-4">${historyHtml}</div>
+        
+        <h4 class="font-bold text-gray-700 mb-2 border-b pb-1 mt-8">Verlauf</h4>
+        <div class="mb-4 max-h-40 overflow-y-auto">${historyHtml}</div>
     `;
 
     actions.innerHTML = '';
     if (partialForm) partialForm.classList.add('hidden');
 
+    // ACTION BUTTONS LOGIK
     if (p.status === 'open' || p.status === 'pending_approval') {
+        
+        // Wenn ICH der Schuldner bin (und es offen ist) -> Ich kann bezahlen
         if (iAmDebtor && p.status === 'open') {
-            actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'mark_paid')" class="py-2 px-4 bg-blue-600 text-white font-bold rounded hover:bg-blue-700">Als bezahlt melden</button>`;
-            actions.innerHTML += `<button onclick="showPartialForm()" class="py-2 px-4 bg-blue-100 text-blue-800 font-bold rounded hover:bg-blue-200">Teilzahlung</button>`;
+            actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'mark_paid')" class="py-3 px-6 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 w-full sm:w-auto">✅ Als bezahlt melden</button>`;
+            actions.innerHTML += `<button onclick="showPartialForm()" class="py-3 px-6 bg-blue-100 text-blue-800 font-bold rounded-lg hover:bg-blue-200 w-full sm:w-auto">Teilzahlung</button>`;
         }
+        
+        // Wenn ICH der Gläubiger bin
         if (iAmCreditor) {
             if (p.status === 'pending_approval') {
-                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'confirm_payment')" class="py-2 px-4 bg-green-600 text-white font-bold rounded hover:bg-green-700">Bestätigen</button>`;
-                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'reject_payment')" class="py-2 px-4 bg-red-100 text-red-600 font-bold rounded hover:bg-red-200">Ablehnen</button>`;
+                // Bestätigen oder Ablehnen
+                actions.innerHTML += `<div class="w-full bg-yellow-50 border border-yellow-200 p-3 rounded-lg mb-2 text-center text-sm text-yellow-800 font-semibold">Der Schuldner hat gemeldet, dass bezahlt wurde. Bitte bestätigen.</div>`;
+                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'confirm_payment')" class="py-3 px-6 bg-green-600 text-white font-bold rounded-lg shadow hover:bg-green-700 flex-grow">Geld erhalten (Bestätigen)</button>`;
+                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'reject_payment')" class="py-3 px-6 bg-red-100 text-red-600 font-bold rounded-lg hover:bg-red-200 flex-grow">Nicht erhalten (Ablehnen)</button>`;
             } else {
-                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'force_close')" class="py-2 px-4 bg-green-600 text-white font-bold rounded hover:bg-green-700">Als erledigt markieren</button>`;
-                actions.innerHTML += `<button onclick="showPartialForm()" class="py-2 px-4 bg-blue-100 text-blue-800 font-bold rounded hover:bg-blue-200">Teilzahlung buchen</button>`;
+                // Normal offen -> Ich kann es manuell schließen oder Teilzahlung buchen
+                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'force_close')" class="py-3 px-6 bg-emerald-600 text-white font-bold rounded-lg shadow hover:bg-emerald-700 w-full sm:w-auto">Als erledigt markieren</button>`;
+                actions.innerHTML += `<button onclick="showPartialForm()" class="py-3 px-6 bg-blue-100 text-blue-800 font-bold rounded-lg hover:bg-blue-200 w-full sm:w-auto">Teilzahlung empfangen</button>`;
             }
         }
     }
@@ -1201,6 +1326,7 @@ function renderDetailContent(p, isRefresh) {
         modal.style.display = 'flex';
     }
 }
+
 
 function closeDetailModal() {
     const modal = document.getElementById('paymentDetailModal');
