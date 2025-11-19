@@ -541,7 +541,6 @@ async function executeAdjustAmount() {
 }
 
 
-
 // --- CREATE & EDIT MODAL ---
 
 function openCreateModal(paymentToEdit = null) {
@@ -1598,7 +1597,6 @@ async function executePayment(id, action, amount) {
 
     } catch (e) { console.error(e); alertUser("Fehler: " + e.message, "error"); }
 }
-
 
 async function resolveOverpayment(decision) {
     if (!pendingOverpaymentData) return;
