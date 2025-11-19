@@ -42,6 +42,7 @@ export function initializeZahlungsverwaltungView() {
     }
 }
 
+// --- EVENT LISTENER SETUP ---
 function setupEventListeners() {
     // Create / Modal Buttons
     document.getElementById('btn-create-new-payment')?.addEventListener('click', () => openCreateModal());
@@ -143,6 +144,7 @@ function setupEventListeners() {
         pendingOverpaymentData = null;
     });
 }
+
 
 // --- DATENBANK LISTENER ---
 function listenForPayments() {
@@ -403,6 +405,94 @@ async function executeSplitEntry() {
 }
 
 
+// --- ADJUST AMOUNT LOGIK (Betrag anpassen) ---
+// Globale Variable für aktuelle Bearbeitungs-ID
+let currentAdjustId = null; 
+
+window.openAdjustAmountModal = function(id) {
+    const p = allPayments.find(x => x.id === id);
+    if (!p) return;
+
+    currentAdjustId = id;
+    const modal = document.getElementById('adjustAmountModal');
+    
+    document.getElementById('adjust-current-amount-display').textContent = parseFloat(p.remainingAmount).toFixed(2) + " €";
+    document.getElementById('adjust-new-amount').value = parseFloat(p.remainingAmount).toFixed(2); // Standardwert = aktueller Wert
+    document.getElementById('adjust-reason').value = 'correction';
+    document.getElementById('adjust-note').value = '';
+
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+}
+
+function closeAdjustAmountModal() {
+    document.getElementById('adjustAmountModal').classList.add('hidden');
+    document.getElementById('adjustAmountModal').style.display = 'none';
+    currentAdjustId = null;
+}
+
+async function executeAdjustAmount() {
+    if (!currentAdjustId) return;
+    const p = allPayments.find(x => x.id === currentAdjustId);
+    if (!p) return;
+
+    const newAmountVal = parseFloat(document.getElementById('adjust-new-amount').value);
+    const reason = document.getElementById('adjust-reason').value;
+    const note = document.getElementById('adjust-note').value.trim();
+
+    if (isNaN(newAmountVal) || newAmountVal < 0) {
+        alertUser("Bitte gültigen positiven Betrag eingeben.", "error");
+        return;
+    }
+
+    const oldAmount = parseFloat(p.remainingAmount);
+    const diff = newAmountVal - oldAmount;
+
+    if (Math.abs(diff) < 0.01) {
+        alertUser("Keine Änderung am Betrag festgestellt.", "info");
+        return;
+    }
+
+    const btn = document.getElementById('btn-save-adjust');
+    setButtonLoading(btn, true);
+
+    try {
+        const paymentRef = doc(db, 'artifacts', appId, 'public', 'data', 'payments', currentAdjustId);
+        
+        // Mapping für schöne Texte im Verlauf
+        const reasonTexts = {
+            'correction': 'Korrektur',
+            'interest': 'Zinsen/Gebühr',
+            'discount': 'Erlass/Rabatt',
+            'other': 'Anpassung'
+        };
+        const reasonText = reasonTexts[reason] || 'Anpassung';
+        const logInfo = `${reasonText}: Von ${oldAmount.toFixed(2)}€ auf ${newAmountVal.toFixed(2)}€ gesetzt. ${note ? `(${note})` : ''}`;
+
+        await updateDoc(paymentRef, {
+            remainingAmount: newAmountVal,
+            // Falls es eine Korrektur ist, passen wir vielleicht auch den Ursprungsbetrag 'amount' an? 
+            // Wir ändern hier nur remainingAmount, es sei denn, amount war kleiner als der neue Rest.
+            amount: (newAmountVal > p.amount) ? newAmountVal : p.amount, 
+            history: [...(p.history || []), { 
+                date: new Date(), 
+                action: 'adjusted', 
+                user: currentUser.displayName, 
+                info: logInfo 
+            }]
+        });
+
+        alertUser("Betrag erfolgreich angepasst.", "success");
+        closeAdjustAmountModal();
+        // Detailansicht aktualisiert sich automatisch durch den Snapshot Listener
+
+    } catch (e) {
+        console.error(e);
+        alertUser("Fehler: " + e.message, "error");
+    } finally {
+        setButtonLoading(btn, false);
+    }
+}
 
 
 // --- CREATE & EDIT MODAL ---
@@ -415,8 +505,10 @@ function openCreateModal(paymentToEdit = null) {
     const hiddenId = document.getElementById('edit-payment-id');
 
     // Reset aller Felder
-    document.getElementById('payment-start-date').value = new Date().toISOString().split('T')[0]; // Standard: Heute
+    // NEU: Startdatum auf Heute setzen
+    document.getElementById('payment-start-date').value = new Date().toISOString().split('T')[0]; 
     document.getElementById('payment-deadline').value = '';
+    
     document.getElementById('payment-title').value = '';
     document.getElementById('payment-invoice-nr').value = '';
     document.getElementById('payment-order-nr').value = '';
@@ -463,9 +555,7 @@ function openCreateModal(paymentToEdit = null) {
     });
 
     if (paymentToEdit) {
-        // --- EDIT MODE (Nur Einzel-Modus erlaubt) ---
-        
-        // Ratenzahlung laden
+        // --- EDIT MODE ---
         if (paymentToEdit.installment) {
             document.getElementById('payment-is-installment').checked = true;
             document.getElementById('installment-options').classList.remove('hidden');
@@ -487,10 +577,10 @@ function openCreateModal(paymentToEdit = null) {
         document.getElementById('payment-amount-tbd').checked = paymentToEdit.isTBD;
         document.getElementById('payment-amount').disabled = paymentToEdit.isTBD;
         
-        // Datumswerte setzen
-        document.getElementById('payment-start-date').value = paymentToEdit.startDate || ''; 
+        // NEU: Daten laden
+        document.getElementById('payment-start-date').value = paymentToEdit.startDate || '';
         document.getElementById('payment-deadline').value = paymentToEdit.deadline || '';
-        
+
         document.getElementById('payment-invoice-nr').value = paymentToEdit.invoiceNr || '';
         document.getElementById('payment-order-nr').value = paymentToEdit.orderNr || '';
         document.getElementById('payment-notes').value = paymentToEdit.notes || '';
@@ -541,6 +631,7 @@ function openCreateModal(paymentToEdit = null) {
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
 }
+
 
 
 function closeCreateModal() {
@@ -706,8 +797,11 @@ async function savePayment() {
 
     try {
         const editId = document.getElementById('edit-payment-id').value;
-        const startDate = document.getElementById('payment-start-date').value; // NEU
+        
+        // NEU: Startdatum lesen
+        const startDate = document.getElementById('payment-start-date').value;
         const deadline = document.getElementById('payment-deadline').value;
+        
         const title = document.getElementById('payment-title').value.trim();
         const invoiceNr = document.getElementById('payment-invoice-nr').value.trim();
         const orderNr = document.getElementById('payment-order-nr').value.trim();
@@ -725,7 +819,8 @@ async function savePayment() {
         }
 
         if (!title) throw new Error("Bitte einen Grund/Betreff angeben.");
-        if (!startDate) throw new Error("Bitte ein Buchungsdatum (Start) angeben."); // NEU
+        // NEU: Validierung
+        if (!startDate) throw new Error("Bitte ein Buchungsdatum (Start) angeben.");
 
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
@@ -857,6 +952,7 @@ async function savePayment() {
         setButtonLoading(saveBtn, false);
     }
 }
+
 
 
 // --- SETTLEMENT (BILANZ) ---
@@ -1103,9 +1199,8 @@ function renderDetailContent(p, isRefresh) {
     const content = document.getElementById('payment-detail-content');
     const actions = document.getElementById('payment-detail-actions');
     const partialForm = document.getElementById('partial-payment-form');
-    const transactionSection = document.getElementById('transaction-history-section');
-    const transactionList = document.getElementById('transaction-list');
-    const creditContainer = document.getElementById('credit-usage-container');
+    const transactionSection = document.getElementById('transaction-history-section'); // NEU
+    const transactionList = document.getElementById('transaction-list'); // NEU
 
     if (!modal || !content || !actions) return;
 
@@ -1113,28 +1208,6 @@ function renderDetailContent(p, isRefresh) {
     const iAmCreditor = p.creditorId === currentUser.mode;
     const iAmCreator = p.createdBy === currentUser.mode;
     const shortId = p.id.slice(-4).toUpperCase();
-
-    // --- GUTHABEN CHECK (ANGEPASST FÜR MANUELLE NAMEN) ---
-    if (creditContainer) {
-        if (iAmDebtor && p.status === 'open') {
-            // WICHTIG: Wir suchen Guthaben anhand ID *oder* Name
-            const creditAmount = calculateAvailableCredit(p.creditorId, p.creditorName);
-            
-            if (creditAmount > 0) {
-                creditContainer.classList.remove('hidden');
-                document.getElementById('available-credit-amount').textContent = creditAmount.toFixed(2) + ' €';
-                
-                const btn = document.getElementById('btn-use-credit');
-                btn.dataset.targetPaymentId = p.id;
-                btn.dataset.creditorId = p.creditorId || ""; // Leeren String falls null
-                btn.dataset.creditorName = p.creditorName || ""; // Name speichern!
-            } else {
-                creditContainer.classList.add('hidden');
-            }
-        } else {
-            creditContainer.classList.add('hidden');
-        }
-    }
 
     let editControls = '';
     if (iAmCreator) {
@@ -1163,6 +1236,7 @@ function renderDetailContent(p, isRefresh) {
             </div>`;
     }
 
+    // NEU: Transaktions-Liste anzeigen
     if (p.transactions && p.transactions.length > 0) {
         transactionSection.classList.remove('hidden');
         transactionList.innerHTML = '';
@@ -1171,19 +1245,15 @@ function renderDetailContent(p, isRefresh) {
             const row = document.createElement('div');
             row.className = "flex justify-between items-center p-2 bg-white rounded border shadow-sm";
             const dateStr = tx.date?.toDate ? tx.date.toDate().toLocaleDateString() : new Date(tx.date).toLocaleDateString();
-            
-            const isCredit = tx.type === 'credit_usage';
-            const label = isCredit ? 'Guthaben' : 'Zahlung';
-            const amountClass = isCredit ? 'text-purple-700' : 'text-green-700';
-
             row.innerHTML = `
                 <div class="flex items-center gap-2">
-                    <span class="font-bold ${amountClass}">+ ${parseFloat(tx.amount).toFixed(2)} €</span>
+                    <span class="font-bold text-green-700">+ ${parseFloat(tx.amount).toFixed(2)} €</span>
                     <span class="text-xs text-gray-400">| ${dateStr}</span>
-                    <span class="text-xs text-gray-500 italic">(${label})</span>
+                    <span class="text-xs text-gray-500 italic">(${tx.type === 'credit_usage' ? 'Guthaben' : 'Zahlung'})</span>
                 </div>
                 ${canDelete ? `<button class="text-red-400 hover:text-red-600 text-xs font-bold delete-tx-btn px-2 py-1 bg-red-50 rounded border border-red-100">Löschen</button>` : ''}
             `;
+            // Event Listener für Löschen
             if (canDelete) row.querySelector('.delete-tx-btn').addEventListener('click', () => deleteTransaction(p.id, index));
             transactionList.appendChild(row);
         });
@@ -1212,6 +1282,7 @@ function renderDetailContent(p, isRefresh) {
             <p class="text-5xl font-extrabold text-gray-800 mt-1">${p.isTBD ? 'TBD' : parseFloat(p.remainingAmount).toFixed(2) + ' €'}</p>
             ${!p.isTBD && p.amount > p.remainingAmount ? `<p class="text-xs text-green-600 font-semibold mt-1">Bezahlt: ${(p.amount - p.remainingAmount).toFixed(2)} €</p>` : ''}
         </div>
+        
         ${p.notes ? `<div class="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-gray-700"><strong>Notiz:</strong><br>${p.notes}</div>` : ''}
         
         <h4 class="font-bold text-gray-700 mb-2 border-b pb-1 mt-8">System-Log</h4>
@@ -1242,7 +1313,6 @@ function renderDetailContent(p, isRefresh) {
         }
     }
     window.showPartialForm = function () { if (partialForm) partialForm.classList.remove('hidden'); }
-    
     const submitPartialBtn = document.getElementById('btn-submit-partial');
     if (submitPartialBtn) {
         const newBtn = submitPartialBtn.cloneNode(true);
@@ -1254,7 +1324,6 @@ function renderDetailContent(p, isRefresh) {
     }
     if (!isRefresh) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
 }
-
 
 
 
@@ -1386,6 +1455,8 @@ function updateDashboard(payments) {
     const oDD = document.getElementById('dashboard-owe-me-detail'); if (oDD) oDD.textContent = `aus ${owedToMeCount} offenen Posten`;
 }
 
+// --- LOGIK FÜR ZAHLUNGEN UND ÜBERZAHLUNG ---
+
 window.handlePaymentAction = async function (id, action, amount = 0) {
     const p = allPayments.find(x => x.id === id); if (!p) return;
     
@@ -1510,188 +1581,4 @@ window.deleteTransaction = async function(paymentId, txIndex) {
         });
         alertUser("Zahlung storniert.", "success");
     } catch (e) { console.error(e); alertUser("Fehler beim Löschen.", "error"); }
-}
-
-// --- ADJUST AMOUNT LOGIK (Betrag anpassen) ---
-// Globale Variable für aktuelle Bearbeitungs-ID
-let currentAdjustId = null; 
-
-window.openAdjustAmountModal = function(id) {
-    const p = allPayments.find(x => x.id === id);
-    if (!p) return;
-
-    currentAdjustId = id;
-    const modal = document.getElementById('adjustAmountModal');
-    
-    document.getElementById('adjust-current-amount-display').textContent = parseFloat(p.remainingAmount).toFixed(2) + " €";
-    document.getElementById('adjust-new-amount').value = parseFloat(p.remainingAmount).toFixed(2); // Standardwert = aktueller Wert
-    document.getElementById('adjust-reason').value = 'correction';
-    document.getElementById('adjust-note').value = '';
-
-    modal.classList.remove('hidden');
-    modal.style.display = 'flex';
-}
-
-function closeAdjustAmountModal() {
-    document.getElementById('adjustAmountModal').classList.add('hidden');
-    document.getElementById('adjustAmountModal').style.display = 'none';
-    currentAdjustId = null;
-}
-
-async function executeAdjustAmount() {
-    if (!currentAdjustId) return;
-    const p = allPayments.find(x => x.id === currentAdjustId);
-    if (!p) return;
-
-    const newAmountVal = parseFloat(document.getElementById('adjust-new-amount').value);
-    const reason = document.getElementById('adjust-reason').value;
-    const note = document.getElementById('adjust-note').value.trim();
-
-    if (isNaN(newAmountVal) || newAmountVal < 0) {
-        alertUser("Bitte gültigen positiven Betrag eingeben.", "error");
-        return;
-    }
-
-    const oldAmount = parseFloat(p.remainingAmount);
-    const diff = newAmountVal - oldAmount;
-
-    if (Math.abs(diff) < 0.01) {
-        alertUser("Keine Änderung am Betrag festgestellt.", "info");
-        return;
-    }
-
-    const btn = document.getElementById('btn-save-adjust');
-    setButtonLoading(btn, true);
-
-    try {
-        const paymentRef = doc(db, 'artifacts', appId, 'public', 'data', 'payments', currentAdjustId);
-        
-        // Mapping für schöne Texte im Verlauf
-        const reasonTexts = {
-            'correction': 'Korrektur',
-            'interest': 'Zinsen/Gebühr',
-            'discount': 'Erlass/Rabatt',
-            'other': 'Anpassung'
-        };
-        const reasonText = reasonTexts[reason] || 'Anpassung';
-        const logInfo = `${reasonText}: Von ${oldAmount.toFixed(2)}€ auf ${newAmountVal.toFixed(2)}€ gesetzt. ${note ? `(${note})` : ''}`;
-
-        await updateDoc(paymentRef, {
-            remainingAmount: newAmountVal,
-            // Falls es eine Korrektur ist, passen wir vielleicht auch den Ursprungsbetrag 'amount' an? 
-            // Wir ändern hier nur remainingAmount, es sei denn, amount war kleiner als der neue Rest.
-            amount: (newAmountVal > p.amount) ? newAmountVal : p.amount, 
-            history: [...(p.history || []), { 
-                date: new Date(), 
-                action: 'adjusted', 
-                user: currentUser.displayName, 
-                info: logInfo 
-            }]
-        });
-
-        alertUser("Betrag erfolgreich angepasst.", "success");
-        closeAdjustAmountModal();
-        // Detailansicht aktualisiert sich automatisch durch den Snapshot Listener
-
-    } catch (e) {
-        console.error(e);
-        alertUser("Fehler: " + e.message, "error");
-    } finally {
-        setButtonLoading(btn, false);
-    }
-}
-
-
-// 1. Berechnet Guthaben (ID oder Name)
-function calculateAvailableCredit(partnerId, partnerName) {
-    let credit = 0;
-    allPayments.forEach(p => {
-        // Grundbedingung: Eintrag ist offen, Typ Credit, ICH bin Gläubiger (mir gehört das Guthaben)
-        if (p.status === 'open' && p.type === 'credit' && p.creditorId === currentUser.mode) {
-            
-            // Fall A: Partner hat eine ID (registrierter User)
-            if (partnerId && p.debtorId === partnerId) {
-                credit += parseFloat(p.remainingAmount);
-            }
-            // Fall B: Partner hat KEINE ID (manuell), wir vergleichen den Namen
-            // (Nur wenn partnerId leer ist und p.debtorId auch leer ist)
-            else if (!partnerId && !p.debtorId && p.debtorName === partnerName) {
-                credit += parseFloat(p.remainingAmount);
-            }
-        }
-    });
-    return credit;
-}
-
-// 2. Führt die Verrechnung durch (Button Klick)
-// 2. Führt die Verrechnung durch
-async function useCreditForPayment() {
-    const btn = document.getElementById('btn-use-credit');
-    const paymentId = btn.dataset.targetPaymentId;
-    
-    // Wir holen ID und Name aus dem Button
-    const partnerId = btn.dataset.creditorId || null; 
-    const partnerName = btn.dataset.creditorName || "";
-
-    const targetPayment = allPayments.find(p => p.id === paymentId);
-    if (!targetPayment) return;
-
-    // Berechnung mit ID und Name
-    const availableCredit = calculateAvailableCredit(partnerId, partnerName);
-    const debtAmount = parseFloat(targetPayment.remainingAmount);
-
-    const amountToUse = Math.min(availableCredit, debtAmount);
-
-    if (!confirm(`${amountToUse.toFixed(2)} € Guthaben verrechnen?`)) return;
-
-    setButtonLoading(btn, true);
-
-    try {
-        const batch = writeBatch(db);
-        const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
-
-        // A) Die aktuelle Schuld reduzieren
-        const newDebtRemaining = debtAmount - amountToUse;
-        batch.update(doc(paymentsRef, paymentId), {
-            remainingAmount: newDebtRemaining,
-            status: newDebtRemaining <= 0.01 ? 'paid' : 'open',
-            history: [...(targetPayment.history || []), { date: new Date(), action: 'paid_with_credit', user: currentUser.displayName, info: `${amountToUse.toFixed(2)}€ mit Guthaben verrechnet.` }],
-            transactions: [...(targetPayment.transactions || []), { date: new Date(), amount: amountToUse, type: 'credit_usage', user: currentUser.displayName }]
-        });
-
-        // B) Das Guthaben reduzieren
-        let remainingToDeduct = amountToUse;
-        
-        // Suche passende Guthaben-Einträge (ID oder Name)
-        const creditEntries = allPayments.filter(p => {
-            if (p.status !== 'open' || p.type !== 'credit' || p.creditorId !== currentUser.mode) return false;
-            
-            if (partnerId) return p.debtorId === partnerId;
-            return !p.debtorId && p.debtorName === partnerName;
-        });
-        
-        for (const creditP of creditEntries) {
-            if (remainingToDeduct <= 0) break;
-
-            const availableInThisEntry = parseFloat(creditP.remainingAmount);
-            const deduct = Math.min(remainingToDeduct, availableInThisEntry);
-            const newCreditRemaining = availableInThisEntry - deduct;
-
-            batch.update(doc(paymentsRef, creditP.id), {
-                remainingAmount: newCreditRemaining,
-                status: newCreditRemaining <= 0.01 ? 'paid' : 'open',
-                history: [...(creditP.history || []), { date: new Date(), action: 'credit_used', user: currentUser.displayName, info: `${deduct.toFixed(2)}€ Guthaben eingelöst für "${targetPayment.title}".` }]
-            });
-            remainingToDeduct -= deduct;
-        }
-
-        await batch.commit();
-        alertUser("Guthaben erfolgreich verrechnet!", "success");
-
-    } catch (e) {
-        console.error(e);
-        alertUser("Fehler beim Verrechnen: " + e.message, "error");
-    } finally {
-        setButtonLoading(btn, false);
-    }
 }
