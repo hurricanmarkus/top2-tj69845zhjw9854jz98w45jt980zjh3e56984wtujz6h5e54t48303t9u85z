@@ -1828,15 +1828,27 @@
             </div>
             <div id="zahlungsverwaltungView" class="view">
                 <div class="back-link-container w-full mb-4 flex justify-between items-center">
-                    <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition"
-                        data-target="home">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
-                            class="w-5 h-5 mr-1">
-                            <path d="m15 18-6-6 6-6" />
-                        </svg>
-                        <span class="text-sm font-semibold">zurück</span>
-                    </button>
+                    <div class="flex gap-2">
+                        <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition"
+                            data-target="home">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                stroke-linejoin="round" class="w-5 h-5 mr-1">
+                                <path d="m15 18-6-6 6-6" />
+                            </svg>
+                            <span class="text-sm font-semibold">zurück</span>
+                        </button>
+                        <button id="btn-zv-settings"
+                            class="p-2 text-gray-500 hover:text-gray-800 transition rounded-full hover:bg-gray-200"
+                            title="Einstellungen">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                                class="w-5 h-5">
+                                <path fill-rule="evenodd"
+                                    d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 0 1 1.262.125l1.669 1.669a1 1 0 0 1 .125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 0 1 .804.98v2.361a1 1 0 0 1-.804.98l-1.473.295a6.95 6.95 0 0 1-.587 1.416l.834 1.25a1 1 0 0 1-.125 1.262l-1.669 1.669a1 1 0 0 1-.125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 0 1 .804.98l-1.473.295a6.953 6.953 0 0 1-1.416.587l-.294 1.473a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.295-1.473a6.957 6.957 0 0 1-1.416-.587l-1.25.834a1 1 0 0 1-1.262-.125l-1.669-1.669a1 1 0 0 1-.125-1.262l.834-1.25a6.957 6.957 0 0 1-.587-1.416l-1.473-.294A1 1 0 0 1 1 10.82V8.46a1 1 0 0 1 .804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 0 1 .125-1.262l1.669-1.669a1 1 0 0 1 1.262-.125l1.25.834c.445-.245.919-.443 1.416-.587l.294-1.473ZM9 14a5 5 0 1 1 10 0 5 5 0 0 1-10 0Z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
 
                     <button id="btn-create-new-payment"
                         class="py-2 px-4 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition shadow-sm flex items-center gap-2">
@@ -1943,23 +1955,6 @@
                 </div>
             </div>
 
-
-<div class="back-link-container w-full mb-4 flex justify-between items-center">
-    <div class="flex gap-2">
-        <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition" data-target="home">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-1"><path d="m15 18-6-6 6-6"/></svg>
-            <span class="text-sm font-semibold">zurück</span>
-        </button>
-        <button id="btn-zv-settings" class="p-2 text-gray-500 hover:text-gray-800 transition rounded-full hover:bg-gray-200" title="Einstellungen / Vorlagen">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
-              <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 0 1 1.262.125l1.669 1.669a1 1 0 0 1 .125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 0 1 .804.98v2.361a1 1 0 0 1-.804.98l-1.473.295a6.95 6.95 0 0 1-.587 1.416l.834 1.25a1 1 0 0 1-.125 1.262l-1.669 1.669a1 1 0 0 1-1.262.125l-1.25-.834a6.953 6.953 0 0 1-1.416.587l-.294 1.473a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.295-1.473a6.957 6.957 0 0 1-1.416-.587l-1.25.834a1 1 0 0 1-1.262-.125l-1.669-1.669a1 1 0 0 1-.125-1.262l.834-1.25a6.957 6.957 0 0 1-.587-1.416l-1.473-.294A1 1 0 0 1 1 10.82V8.46a1 1 0 0 1 .804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 0 1 .125-1.262l1.669-1.669a1 1 0 0 1 1.262-.125l1.25.834c.445-.245.919-.443 1.416-.587l.294-1.473ZM9 14a5 5 0 1 1 10 0 5 5 0 0 1-10 0Z" clip-rule="evenodd" />
-            </svg>
-        </button>
-    </div>
-
-    <button id="btn-create-new-payment" class="...">...</button>
-</div>
-
             <div id="createPaymentModal"
                 class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50 overflow-y-auto">
                 <div class="bg-white p-0 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
@@ -1969,14 +1964,16 @@
                             class="text-gray-400 hover:text-red-600 font-bold text-2xl">&times;</button>
                     </div>
 
-
-<div class="p-2 bg-indigo-50 border-b flex gap-2 items-center justify-between">
-    <span class="text-xs font-bold text-indigo-800 uppercase">Schnellstart:</span>
-    <select id="payment-template-select" class="text-sm border-gray-300 rounded shadow-sm p-1 flex-grow">
-        <option value="">-- Vorlage wählen --</option>
-    </select>
-    <button id="btn-save-as-template" class="text-xs bg-white border border-indigo-200 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100" title="Aktuelle Eingaben als Vorlage speichern">💾 Speichern</button>
-</div>
+                    <div class="p-2 bg-indigo-50 border-b flex gap-2 items-center justify-between">
+                        <span class="text-xs font-bold text-indigo-800 uppercase">Schnellstart:</span>
+                        <select id="payment-template-select"
+                            class="text-sm border-gray-300 rounded shadow-sm p-1 flex-grow">
+                            <option value="">-- Vorlage wählen --</option>
+                        </select>
+                        <button id="btn-save-as-template"
+                            class="text-xs bg-white border border-indigo-200 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100"
+                            title="Aktuelle Eingaben als Vorlage speichern">💾 Speichern</button>
+                    </div>
 
                     <div class="p-4 overflow-y-auto space-y-4 flex-grow">
                         <input type="hidden" id="edit-payment-id" value="">
@@ -2645,32 +2642,39 @@
             </div>
         </div>
 
-<div id="overpaymentModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[60]">
-                <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm text-center">
-                    <div class="mb-4 text-yellow-500 flex justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-12 h-12">
-                            <path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold text-gray-800 mb-2">Überzahlung erkannt!</h3>
-                    <p class="text-gray-600 text-sm mb-4">
-                        Du hast <span id="overpayment-amount" class="font-bold text-gray-900">0,00 €</span> mehr angegeben als offen ist.<br>
-                        Was soll mit dem Rest passieren?
-                    </p>
-                    
-                    <div class="space-y-3">
-                        <button id="btn-op-credit" class="w-full py-3 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 shadow-md flex items-center justify-center gap-2">
-                            <span>🏦 Als Guthaben speichern</span>
-                        </button>
-                        <button id="btn-op-tip" class="w-full py-3 bg-emerald-500 text-white font-bold rounded-lg hover:bg-emerald-600 shadow-md flex items-center justify-center gap-2">
-                            <span>☕ Als Trinkgeld (schenken)</span>
-                        </button>
-                        <button id="btn-op-cancel" class="w-full py-2 text-gray-500 font-semibold hover:text-gray-700">
-                            Abbrechen
-                        </button>
-                    </div>
+        <div id="overpaymentModal"
+            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[60]">
+            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm text-center">
+                <div class="mb-4 text-yellow-500 flex justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-12 h-12">
+                        <path fill-rule="evenodd"
+                            d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z"
+                            clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <h3 class="text-xl font-bold text-gray-800 mb-2">Überzahlung erkannt!</h3>
+                <p class="text-gray-600 text-sm mb-4">
+                    Du hast <span id="overpayment-amount" class="font-bold text-gray-900">0,00 €</span> mehr angegeben
+                    als offen ist.<br>
+                    Was soll mit dem Rest passieren?
+                </p>
+
+                <div class="space-y-3">
+                    <button id="btn-op-credit"
+                        class="w-full py-3 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 shadow-md flex items-center justify-center gap-2">
+                        <span>🏦 Als Guthaben speichern</span>
+                    </button>
+                    <button id="btn-op-tip"
+                        class="w-full py-3 bg-emerald-500 text-white font-bold rounded-lg hover:bg-emerald-600 shadow-md flex items-center justify-center gap-2">
+                        <span>☕ Als Trinkgeld (schenken)</span>
+                    </button>
+                    <button id="btn-op-cancel" class="w-full py-2 text-gray-500 font-semibold hover:text-gray-700">
+                        Abbrechen
+                    </button>
                 </div>
             </div>
+        </div>
+
 <div id="zahlungsverwaltungSettingsView" class="view">
     <div class="back-link-container w-full mb-4">
         <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition" data-target="zahlungsverwaltung">
@@ -2750,7 +2754,6 @@
         </div>
     </div>
 </div>
-
 </body>
 
 </html>
