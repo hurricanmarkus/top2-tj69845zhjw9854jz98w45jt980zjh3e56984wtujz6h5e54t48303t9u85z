@@ -25,7 +25,6 @@ let activeSettlementPartnerId = null;
 // Multi-Select Variablen (für Zusammenfassen)
 let isSelectionMode = false;
 let selectedPaymentIds = new Set();
-let pendingOverpaymentData = null;
 
 // --- INITIALISIERUNG ---
 export function initializeZahlungsverwaltungView() {
@@ -49,18 +48,6 @@ function setupEventListeners() {
     document.getElementById('close-create-payment-modal')?.addEventListener('click', closeCreateModal);
     document.getElementById('btn-cancel-create-payment')?.addEventListener('click', closeCreateModal);
     document.getElementById('btn-save-payment')?.addEventListener('click', savePayment);
-
-
-    // OVERPAYMENT
-    document.getElementById('btn-op-credit')?.addEventListener('click', () => resolveOverpayment('credit'));
-    document.getElementById('btn-op-tip')?.addEventListener('click', () => resolveOverpayment('tip'));
-    document.getElementById('btn-op-cancel')?.addEventListener('click', () => {
-        document.getElementById('overpaymentModal').classList.add('hidden');
-    });
-
-    // CREDIT USAGE
-    document.getElementById('btn-use-credit')?.addEventListener('click', useCreditForPayment);
-
 
     // Modes & Toggles (Erstellen)
     document.getElementById('mode-single')?.addEventListener('click', () => setCreateMode('single'));
@@ -328,7 +315,7 @@ async function executeMerge() {
 
 // --- SPLIT EXISTING ENTRY LOGIK (Aufsplitten) ---
 
-window.openSplitModal = function (id) {
+window.openSplitModal = function(id) {
     const p = allPayments.find(x => x.id === id);
     if (!p) return;
 
@@ -418,13 +405,13 @@ async function executeSplitEntry() {
 // --- ADJUST AMOUNT LOGIK (Betrag anpassen) ---
 let currentAdjustId = null;
 
-window.openAdjustAmountModal = function (id) {
+window.openAdjustAmountModal = function(id) {
     const p = allPayments.find(x => x.id === id);
     if (!p) return;
 
     currentAdjustId = id;
     const modal = document.getElementById('adjustAmountModal');
-
+    
     document.getElementById('adjust-current-amount-display').textContent = parseFloat(p.remainingAmount).toFixed(2) + " €";
     document.getElementById('adjust-new-amount').value = parseFloat(p.remainingAmount).toFixed(2); // Standardwert = aktueller Wert
     document.getElementById('adjust-reason').value = 'correction';
@@ -432,7 +419,7 @@ window.openAdjustAmountModal = function (id) {
 
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
-
+    
     // Detail-Modal kurz schließen/verstecken, damit Fokus klar ist (optional, hier lassen wir es offen im Hintergrund)
 }
 
@@ -469,7 +456,7 @@ async function executeAdjustAmount() {
 
     try {
         const paymentRef = doc(db, 'artifacts', appId, 'public', 'data', 'payments', currentAdjustId);
-
+        
         // Mapping für schöne Texte im Verlauf
         const reasonTexts = {
             'correction': 'Korrektur',
@@ -484,12 +471,12 @@ async function executeAdjustAmount() {
             remainingAmount: newAmountVal,
             // Falls es eine Korrektur ist, passen wir vielleicht auch den Ursprungsbetrag 'amount' an? 
             // Wir ändern hier nur remainingAmount, es sei denn, amount war kleiner als der neue Rest.
-            amount: (newAmountVal > p.amount) ? newAmountVal : p.amount,
-            history: [...(p.history || []), {
-                date: new Date(),
-                action: 'adjusted',
-                user: currentUser.displayName,
-                info: logInfo
+            amount: (newAmountVal > p.amount) ? newAmountVal : p.amount, 
+            history: [...(p.history || []), { 
+                date: new Date(), 
+                action: 'adjusted', 
+                user: currentUser.displayName, 
+                info: logInfo 
             }]
         });
 
@@ -565,7 +552,7 @@ function openCreateModal(paymentToEdit = null) {
 
     if (paymentToEdit) {
         // --- EDIT MODE (Nur Einzel-Modus erlaubt) ---
-
+        
         // Ratenzahlung laden
         if (paymentToEdit.installment) {
             document.getElementById('payment-is-installment').checked = true;
@@ -587,11 +574,11 @@ function openCreateModal(paymentToEdit = null) {
         document.getElementById('payment-amount').value = paymentToEdit.isTBD ? '' : paymentToEdit.amount;
         document.getElementById('payment-amount-tbd').checked = paymentToEdit.isTBD;
         document.getElementById('payment-amount').disabled = paymentToEdit.isTBD;
-
+        
         // Datumswerte setzen
-        document.getElementById('payment-start-date').value = paymentToEdit.startDate || '';
+        document.getElementById('payment-start-date').value = paymentToEdit.startDate || ''; 
         document.getElementById('payment-deadline').value = paymentToEdit.deadline || '';
-
+        
         document.getElementById('payment-invoice-nr').value = paymentToEdit.invoiceNr || '';
         document.getElementById('payment-order-nr').value = paymentToEdit.orderNr || '';
         document.getElementById('payment-notes').value = paymentToEdit.notes || '';
@@ -859,9 +846,9 @@ async function savePayment() {
             if (partnerId) involvedUserIds.push(partnerId);
 
             const data = {
-                title, isTBD,
+                title, isTBD, 
                 startDate: startDate || null, // NEU
-                deadline: deadline || null,
+                deadline: deadline || null, 
                 invoiceNr, orderNr, notes, type,
                 debtorId, debtorName, creditorId, creditorName, involvedUserIds,
                 installment: installmentData
@@ -1172,7 +1159,7 @@ function closeSettlementModal() {
 
 // --- DETAIL ANSICHT ---
 // WICHTIG: Globale Zuweisung für HTML onclick
-window.editPayment = function (id) {
+window.editPayment = function(id) {
     const p = allPayments.find(x => x.id === id);
     if (p) {
         closeDetailModal();
@@ -1180,7 +1167,7 @@ window.editPayment = function (id) {
     }
 };
 
-window.deletePayment = async function (id) {
+window.deletePayment = async function(id) {
     if (!confirm("Diesen Eintrag wirklich unwiderruflich löschen?")) return;
     try {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', id));
@@ -1192,7 +1179,7 @@ window.deletePayment = async function (id) {
     }
 };
 
-window.openPaymentDetail = function (id, isRefresh = false) {
+window.openPaymentDetail = function(id, isRefresh = false) {
     const p = allPayments.find(x => x.id === id);
     if (!p) return;
     currentDetailPaymentId = id;
@@ -1204,88 +1191,67 @@ function renderDetailContent(p, isRefresh) {
     const content = document.getElementById('payment-detail-content');
     const actions = document.getElementById('payment-detail-actions');
     const partialForm = document.getElementById('partial-payment-form');
-    const transactionSection = document.getElementById('transaction-history-section');
-    const transactionList = document.getElementById('transaction-list');
-    const creditContainer = document.getElementById('credit-usage-container');
 
     if (!modal || !content || !actions) return;
 
     const iAmDebtor = p.debtorId === currentUser.mode;
     const iAmCreditor = p.creditorId === currentUser.mode;
     const iAmCreator = p.createdBy === currentUser.mode;
+
+    // Short ID generieren (die letzten 4 Zeichen)
     const shortId = p.id.slice(-4).toUpperCase();
 
-    // --- 1. GUTHABEN CHECK ---
-    // Prüfen, ob der aktuelle "Schuldner" (debtor) Guthaben beim "Gläubiger" (creditor) hat.
-    // Guthaben bedeutet: Es gibt einen Eintrag wo Debtor = Creditor ist und Creditor = Debtor.
-    // Wir suchen nach Einträgen mit Typ 'credit' oder einfach umgedrehte Schulden.
-    
-    if (creditContainer && iAmDebtor) { // Nur anzeigen, wenn ICH zahlen muss
-        const creditAmount = calculateAvailableCredit(p.creditorId);
-        if (creditAmount > 0) {
-            creditContainer.classList.remove('hidden');
-            document.getElementById('available-credit-amount').textContent = creditAmount.toFixed(2) + ' €';
-            // ID speichern für den Click-Handler
-            document.getElementById('btn-use-credit').dataset.targetPaymentId = p.id;
-            document.getElementById('btn-use-credit').dataset.creditorId = p.creditorId;
-        } else {
-            creditContainer.classList.add('hidden');
-        }
-    } else if (creditContainer) {
-        creditContainer.classList.add('hidden');
-    }
-
-
-    // --- 2. HEADER & EDIT ---
     let editControls = '';
+    // Ersteller darf bearbeiten/löschen
     if (iAmCreator) {
         editControls = `
         <div class="flex justify-end gap-2 mb-4 no-print border-b pb-2 flex-wrap">
-            <button onclick="openAdjustAmountModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-bold">€ Anpassen</button>
-            <button onclick="openSplitModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 text-sm font-bold">Aufteilen</button>
-            <button onclick="editPayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-sm font-bold">Bearbeiten</button>
-            <button onclick="deletePayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-bold">Löschen</button>
+             <button onclick="openAdjustAmountModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-bold">
+                € Anpassen
+            </button>
+            <button onclick="openSplitModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 text-sm font-bold">
+                Aufteilen
+            </button>
+            <button onclick="editPayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-sm font-bold">
+                Bearbeiten
+            </button>
+            <button onclick="deletePayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-bold">
+                Löschen
+            </button>
         </div>`;
     }
 
-    // --- 3. INHALT RENDERN ---
-    // Raten-Info (Code wie vorher...)
+    // Raten-Info anzeigen
     let installmentInfo = '';
     if (p.installment && p.installment.total > 0) {
         const paidAmount = p.amount - p.remainingAmount;
         const rateApprox = p.amount / p.installment.total;
         const ratesPaid = Math.floor(paidAmount / rateApprox);
-        installmentInfo = `<div class="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">...Rateninfo...</div>`; // (Gekürzt für Übersicht)
+
+        installmentInfo = `
+            <div class="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                <p class="text-xs font-bold text-indigo-600 uppercase mb-1">Ratenplan (${p.installment.interval === 'monthly' ? 'Monatlich' : 'Wöchentlich'})</p>
+                <div class="flex justify-between items-end">
+                    <div>
+                        <span class="text-xl font-bold text-gray-800">${ratesPaid} / ${p.installment.total}</span>
+                        <span class="text-xs text-gray-500">Raten bezahlt</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-sm font-semibold text-gray-700">~${rateApprox.toFixed(2)} €</span>
+                        <span class="text-xs text-gray-500 block">pro Rate</span>
+                    </div>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                  <div class="bg-indigo-600 h-2.5 rounded-full" style="width: ${(ratesPaid / p.installment.total) * 100}%"></div>
+                </div>
+            </div>
+        `;
     }
 
-    // Transaktions-Tabelle (NEU)
-    if (p.transactions && p.transactions.length > 0) {
-        transactionSection.classList.remove('hidden');
-        transactionList.innerHTML = '';
-        p.transactions.forEach((tx, index) => {
-            // Kann gelöscht werden, wenn ich Creator oder Creditor bin
-            const canDelete = (iAmCreator || iAmCreditor);
-            const row = document.createElement('div');
-            row.className = "flex justify-between items-center p-2 bg-gray-50 rounded border-b";
-            const dateStr = tx.date?.toDate ? tx.date.toDate().toLocaleDateString() : new Date(tx.date).toLocaleDateString();
-            
-            row.innerHTML = `
-                <div>
-                    <span class="font-bold text-gray-800">${parseFloat(tx.amount).toFixed(2)} €</span>
-                    <span class="text-xs text-gray-500 mx-2">${dateStr}</span>
-                    <span class="text-xs text-gray-600 italic">(${tx.type === 'credit_usage' ? 'Guthaben' : 'Zahlung'})</span>
-                </div>
-                ${canDelete ? `<button class="text-red-500 hover:text-red-700 text-xs font-bold delete-tx-btn">X</button>` : ''}
-            `;
-            
-            if (canDelete) {
-                row.querySelector('.delete-tx-btn').addEventListener('click', () => deleteTransaction(p.id, index));
-            }
-            transactionList.appendChild(row);
-        });
-    } else {
-        transactionSection.classList.add('hidden');
-    }
+    let historyHtml = (p.history || []).map(h => {
+        const d = h.date?.toDate ? h.date.toDate() : new Date(h.date);
+        return `<div class="text-xs text-gray-600 border-l-2 border-gray-300 pl-2 mb-2"><span class="font-bold">${d.toLocaleDateString()} ${d.toLocaleTimeString()}</span> - ${h.user}: ${h.info}</div>`;
+    }).join('');
 
     content.innerHTML = `
         ${editControls}
@@ -1293,7 +1259,7 @@ function renderDetailContent(p, isRefresh) {
         
         <div class="flex flex-wrap gap-2 mb-4 mt-2">
             <span class="px-2 py-1 bg-gray-800 text-white rounded text-xs font-mono tracking-wider">#${shortId}</span>
-            ${p.type === 'credit' ? '<span class="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-bold">Guthaben</span>' : ''}
+            ${p.invoiceNr ? `<span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-semibold">Rechnung: ${p.invoiceNr}</span>` : ''}
             ${p.startDate ? `<span class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs">Start: ${new Date(p.startDate).toLocaleDateString()}</span>` : ''}
         </div>
         
@@ -1304,35 +1270,42 @@ function renderDetailContent(p, isRefresh) {
 
         ${installmentInfo}
 
-        <div class="mb-6 text-center p-4 border-2 border-dashed border-gray-200 rounded-xl ${p.remainingAmount <= 0.01 ? 'bg-green-50 border-green-300' : ''}">
+        <div class="mb-6 text-center p-4 border-2 border-dashed border-gray-200 rounded-xl">
             <p class="text-sm text-gray-500 uppercase font-bold tracking-wide">Offener Betrag</p>
             <p class="text-5xl font-extrabold text-gray-800 mt-1">${p.isTBD ? 'TBD' : parseFloat(p.remainingAmount).toFixed(2) + ' €'}</p>
-            ${!p.isTBD && p.amount > p.remainingAmount ? `<p class="text-xs text-green-600 font-semibold mt-1">Bezahlt: ${(p.amount - p.remainingAmount).toFixed(2)} €</p>` : ''}
+            ${!p.isTBD && p.amount > p.remainingAmount ? `<p class="text-xs text-green-600 font-semibold mt-1">Ursprünglich: ${p.amount.toFixed(2)} €</p>` : ''}
         </div>
         
         ${p.notes ? `<div class="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-gray-700"><strong>Notiz:</strong><br>${p.notes}</div>` : ''}
         
-        <h4 class="font-bold text-gray-700 mb-2 border-b pb-1 mt-8">System-Log</h4>
-        <div class="mb-4 max-h-40 overflow-y-auto text-xs text-gray-400">
-            ${(p.history || []).map(h => {
-                const d = h.date?.toDate ? h.date.toDate() : new Date(h.date);
-                return `<div class="mb-1">${d.toLocaleDateString()} - ${h.info}</div>`;
-            }).join('')}
-        </div>
+        <h4 class="font-bold text-gray-700 mb-2 border-b pb-1 mt-8">Verlauf</h4>
+        <div class="mb-4 max-h-40 overflow-y-auto">${historyHtml}</div>
     `;
 
-    // --- 4. ACTIONS ---
     actions.innerHTML = '';
     if (partialForm) partialForm.classList.add('hidden');
 
+    // ACTION BUTTONS LOGIK
     if (p.status === 'open' || p.status === 'pending_approval') {
+        
+        // Wenn ICH der Schuldner bin (und es offen ist) -> Ich kann bezahlen
         if (iAmDebtor && p.status === 'open') {
-            actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'mark_paid')" class="py-3 px-6 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 w-full sm:w-auto">✅ Alles bezahlt</button>`;
-            actions.innerHTML += `<button onclick="showPartialForm()" class="py-3 px-6 bg-blue-100 text-blue-800 font-bold rounded-lg hover:bg-blue-200 w-full sm:w-auto">Teilzahlung / Überweisung</button>`;
+            actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'mark_paid')" class="py-3 px-6 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 w-full sm:w-auto">✅ Als bezahlt melden</button>`;
+            actions.innerHTML += `<button onclick="showPartialForm()" class="py-3 px-6 bg-blue-100 text-blue-800 font-bold rounded-lg hover:bg-blue-200 w-full sm:w-auto">Teilzahlung</button>`;
         }
+        
+        // Wenn ICH der Gläubiger bin
         if (iAmCreditor) {
-            actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'force_close')" class="py-3 px-6 bg-emerald-600 text-white font-bold rounded-lg shadow hover:bg-emerald-700 w-full sm:w-auto">Als erledigt markieren</button>`;
-            actions.innerHTML += `<button onclick="showPartialForm()" class="py-3 px-6 bg-blue-100 text-blue-800 font-bold rounded-lg hover:bg-blue-200 w-full sm:w-auto">Teilzahlung empfangen</button>`;
+            if (p.status === 'pending_approval') {
+                // Bestätigen oder Ablehnen
+                actions.innerHTML += `<div class="w-full bg-yellow-50 border border-yellow-200 p-3 rounded-lg mb-2 text-center text-sm text-yellow-800 font-semibold">Der Schuldner hat gemeldet, dass bezahlt wurde. Bitte bestätigen.</div>`;
+                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'confirm_payment')" class="py-3 px-6 bg-green-600 text-white font-bold rounded-lg shadow hover:bg-green-700 flex-grow">Geld erhalten (Bestätigen)</button>`;
+                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'reject_payment')" class="py-3 px-6 bg-red-100 text-red-600 font-bold rounded-lg hover:bg-red-200 flex-grow">Nicht erhalten (Ablehnen)</button>`;
+            } else {
+                // Normal offen -> Ich kann es manuell schließen oder Teilzahlung buchen
+                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'force_close')" class="py-3 px-6 bg-emerald-600 text-white font-bold rounded-lg shadow hover:bg-emerald-700 w-full sm:w-auto">Als erledigt markieren</button>`;
+                actions.innerHTML += `<button onclick="showPartialForm()" class="py-3 px-6 bg-blue-100 text-blue-800 font-bold rounded-lg hover:bg-blue-200 w-full sm:w-auto">Teilzahlung empfangen</button>`;
+            }
         }
     }
 
@@ -1351,283 +1324,6 @@ function renderDetailContent(p, isRefresh) {
     if (!isRefresh) {
         modal.classList.remove('hidden');
         modal.style.display = 'flex';
-    }
-}
-
-// --- NEUE HILFSFUNKTIONEN ---
-
-// Berechnet, wie viel Guthaben ICH bei jemandem habe
-function calculateAvailableCredit(partnerId) {
-    let credit = 0;
-    allPayments.forEach(p => {
-        // Guthaben entsteht, wenn ein Eintrag den Typ 'credit' hat.
-        // Dabei bin ICH (currentUser) der Gläubiger (creditor), und der Partner ist der Schuldner (debtor).
-        // Denn: Er schuldet mir das Guthaben.
-        if (p.status === 'open' && p.type === 'credit' && p.creditorId === currentUser.mode && p.debtorId === partnerId) {
-            credit += parseFloat(p.remainingAmount);
-        }
-        // Alternativ: Normale "Schulden", wo ich der Gläubiger bin, könnte man auch verrechnen.
-        // Aber wir trennen hier strikt nach "Guthaben-Konto" (type='credit').
-    });
-    return credit;
-}
-
-// Guthaben nutzen
-async function useCreditForPayment() {
-    const btn = document.getElementById('btn-use-credit');
-    const paymentId = btn.dataset.targetPaymentId;
-    const partnerId = btn.dataset.creditorId; // Der, dem ich Geld schulde (und bei dem ich Guthaben habe)
-
-    const targetPayment = allPayments.find(p => p.id === paymentId);
-    if (!targetPayment) return;
-
-    const availableCredit = calculateAvailableCredit(partnerId);
-    const debtAmount = targetPayment.remainingAmount;
-
-    // Wieviel verrechnen? Maximum was möglich ist.
-    const amountToUse = Math.min(availableCredit, debtAmount);
-
-    if (!confirm(`${amountToUse.toFixed(2)} € Guthaben verrechnen?`)) return;
-
-    setButtonLoading(btn, true);
-
-    try {
-        const batch = writeBatch(db);
-        const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
-
-        // 1. Aktuelle Schuld reduzieren
-        batch.update(doc(paymentsRef, paymentId), {
-            remainingAmount: debtAmount - amountToUse,
-            status: (debtAmount - amountToUse) <= 0.01 ? 'paid' : 'open',
-            history: [...(targetPayment.history || []), { date: new Date(), action: 'paid_with_credit', user: currentUser.displayName, info: `${amountToUse.toFixed(2)}€ mit Guthaben bezahlt.` }],
-            transactions: [...(targetPayment.transactions || []), { date: new Date(), amount: amountToUse, type: 'credit_usage', user: currentUser.displayName }]
-        });
-
-        // 2. Guthaben-Einträge reduzieren (FIFO - First In First Out)
-        let remainingToDeduct = amountToUse;
-        
-        // Wir suchen Guthaben-Einträge
-        const creditEntries = allPayments.filter(p => p.status === 'open' && p.type === 'credit' && p.creditorId === currentUser.mode && p.debtorId === partnerId);
-        
-        for (const creditP of creditEntries) {
-            if (remainingToDeduct <= 0) break;
-
-            const availableInThisEntry = parseFloat(creditP.remainingAmount);
-            const deduct = Math.min(remainingToDeduct, availableInThisEntry);
-
-            batch.update(doc(paymentsRef, creditP.id), {
-                remainingAmount: availableInThisEntry - deduct,
-                status: (availableInThisEntry - deduct) <= 0.01 ? 'paid' : 'open',
-                history: [...(creditP.history || []), { date: new Date(), action: 'credit_used', user: currentUser.displayName, info: `${deduct.toFixed(2)}€ Guthaben eingelöst für "${targetPayment.title}".` }]
-            });
-
-            remainingToDeduct -= deduct;
-        }
-
-        await batch.commit();
-        alertUser("Guthaben erfolgreich verrechnet!", "success");
-        // Modal refresh passiert automatisch durch Listener
-
-    } catch (e) {
-        console.error(e);
-        alertUser("Fehler beim Verrechnen: " + e.message, "error");
-    } finally {
-        setButtonLoading(btn, false);
-    }
-}
-
-// Transaktion löschen (Rückgängig machen)
-window.deleteTransaction = async function(paymentId, txIndex) {
-    const p = allPayments.find(x => x.id === paymentId);
-    if (!p || !p.transactions) return;
-
-    if (!confirm("Diese Teilzahlung wirklich löschen? Der offene Betrag erhöht sich wieder.")) return;
-
-    const tx = p.transactions[txIndex];
-    const amountToAddBack = parseFloat(tx.amount);
-
-    try {
-        const newTransactions = p.transactions.filter((_, i) => i !== txIndex);
-        const newRemaining = parseFloat(p.remainingAmount) + amountToAddBack;
-
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', paymentId), {
-            remainingAmount: newRemaining,
-            status: 'open', // Wieder öffnen falls es paid war
-            transactions: newTransactions,
-            history: [...(p.history || []), { date: new Date(), action: 'tx_deleted', user: currentUser.displayName, info: `Zahlung von ${amountToAddBack.toFixed(2)}€ gelöscht.` }]
-        });
-        alertUser("Zahlung gelöscht.", "success");
-    } catch (e) {
-        console.error(e);
-        alertUser("Fehler beim Löschen.", "error");
-    }
-}
-
-// --- LOGIK FÜR HANDLE PAYMENT & OVERPAYMENT ---
-
-// Wir müssen handlePaymentAction anpassen, um Overpayment zu erkennen
-// Ersetze die alte handlePaymentAction hiermit:
-window.handlePaymentAction = async function (id, action, amount = 0) {
-    const p = allPayments.find(x => x.id === id); if (!p) return;
-    
-    // SPEZIALFALL: Teilzahlung mit Überzahlung
-    if (action === 'partial_pay' || action === 'mark_paid') {
-        const currentRest = parseFloat(p.remainingAmount);
-        let payAmount = amount;
-        
-        if (action === 'mark_paid') payAmount = currentRest; // Ganzer Rest
-
-        if (payAmount > currentRest + 0.01) { // Toleranz für Rundungsfehler
-            // ÜBERZAHLUNG ENTDECKT!
-            const overpayment = payAmount - currentRest;
-            
-            // Daten zwischenspeichern für das Modal
-            pendingOverpaymentData = {
-                paymentId: id,
-                payAmount: payAmount,
-                debtAmount: currentRest,
-                excessAmount: overpayment
-            };
-
-            // Modal anzeigen
-            document.getElementById('overpayment-amount').textContent = overpayment.toFixed(2) + " €";
-            document.getElementById('overpaymentModal').classList.remove('hidden');
-            document.getElementById('overpaymentModal').style.display = 'flex';
-            return; // WICHTIG: Hier abbrechen, User muss erst entscheiden
-        }
-    }
-
-    // Normaler Ablauf (keine Überzahlung)
-    await executePayment(id, action, amount);
-};
-
-// Führt die Zahlung aus (nach Prüfung)
-async function executePayment(id, action, amount) {
-    const p = allPayments.find(x => x.id === id);
-    let updateData = {}; 
-    let logEntry = ""; 
-    let newStatus = p.status;
-    let transaction = null;
-
-    if (action === 'mark_paid') { 
-        // Wir buchen den gesamten Rest als Transaktion
-        amount = parseFloat(p.remainingAmount);
-        newStatus = 'pending_approval'; 
-        logEntry = "Als bezahlt markiert."; 
-    }
-    else if (action === 'confirm_payment' || action === 'force_close') { 
-        amount = parseFloat(p.remainingAmount);
-        newStatus = 'paid'; 
-        updateData.remainingAmount = 0; 
-        logEntry = "Abgeschlossen.";
-        // Bei force_close buchen wir eine Transaktion, wenn noch Rest da war
-        if (amount > 0) {
-            transaction = { date: new Date(), amount: amount, type: 'payment', user: currentUser.displayName };
-        }
-    }
-    else if (action === 'reject_payment') { 
-        newStatus = 'open'; 
-        logEntry = "Zahlung abgelehnt."; 
-    }
-    else if (action === 'partial_pay') {
-        const newRemaining = parseFloat(p.remainingAmount) - amount; 
-        updateData.remainingAmount = newRemaining < 0 ? 0 : newRemaining;
-        if (newRemaining <= 0.001) newStatus = 'paid'; 
-        logEntry = `Teilzahlung ${amount.toFixed(2)}€.`;
-        transaction = { date: new Date(), amount: amount, type: 'payment', user: currentUser.displayName };
-    }
-
-    updateData.status = newStatus;
-    updateData.history = [...(p.history || []), { date: new Date(), action, user: currentUser.displayName, info: logEntry }];
-    
-    if (transaction) {
-        updateData.transactions = [...(p.transactions || []), transaction];
-    }
-
-    try { 
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', id), updateData); 
-        alertUser("Gespeichert.", "success"); 
-        if (action !== 'partial_pay' && action !== 'mark_paid') closeDetailModal(); 
-    }
-    catch (e) { console.error(e); alertUser("Fehler: " + e.message, "error"); }
-}
-
-// Entscheidung aus Modal verarbeiten
-async function resolveOverpayment(decision) {
-    if (!pendingOverpaymentData) return;
-    const { paymentId, payAmount, debtAmount, excessAmount } = pendingOverpaymentData;
-    const p = allPayments.find(x => x.id === paymentId);
-
-    setButtonLoading(document.getElementById(decision === 'credit' ? 'btn-op-credit' : 'btn-op-tip'), true);
-
-    try {
-        const batch = writeBatch(db);
-        const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
-
-        // 1. Ursprüngliche Schuld komplett begleichen
-        const transaction = { date: new Date(), amount: debtAmount, type: 'payment', user: currentUser.displayName };
-        
-        batch.update(doc(paymentsRef, paymentId), {
-            remainingAmount: 0,
-            status: 'paid', // Wird direkt geschlossen
-            history: [...(p.history || []), { date: new Date(), action: 'paid_excess', user: currentUser.displayName, info: `Bezahlt mit Überzahlung (${payAmount.toFixed(2)}€).` }],
-            transactions: [...(p.transactions || []), transaction]
-        });
-
-        // 2. Entscheidung behandeln
-        if (decision === 'credit') {
-            // NEUER EINTRAG: Guthaben
-            // Wichtig: Wenn A (Debtor) an B (Creditor) zu viel zahlt, 
-            // dann schuldet B jetzt A das Geld.
-            // Also: Neuer Eintrag: Debtor = B, Creditor = A, Type = 'credit'
-            
-            const creditDocRef = doc(paymentsRef);
-            batch.set(creditDocRef, {
-                title: `Guthaben (aus Überzahlung "${p.title}")`,
-                amount: excessAmount,
-                remainingAmount: excessAmount,
-                isTBD: false,
-                type: 'credit', // Markiert als Guthabenkonto
-                status: 'open',
-                createdAt: serverTimestamp(),
-                createdBy: currentUser.mode,
-                
-                // Rollentausch!
-                debtorId: p.creditorId, 
-                debtorName: p.creditorName,
-                creditorId: p.debtorId, // Der, der zu viel gezahlt hat, ist jetzt Gläubiger
-                creditorName: p.debtorName,
-                
-                involvedUserIds: p.involvedUserIds,
-                history: [{ date: new Date(), action: 'created_credit', user: currentUser.displayName, info: `Guthaben aus Überzahlung.` }]
-            });
-            alertUser("Guthabenkonto angelegt!", "success");
-
-        } else {
-            // TRINKGELD
-            // Wir loggen es nur im alten Eintrag (der jetzt zu ist)
-            // Es wird kein neuer Eintrag erstellt. Das Geld ist "weg" (geschenkt).
-            // Wir könnten noch einen History Eintrag anhängen?
-            // (Da wir oben update verwenden, müssten wir arrayUnion nutzen oder es ist im batch schwierig)
-            // Einfacher: Wir lassen es. Das Geld ist weg.
-             alertUser("Rest als Trinkgeld verbucht.", "success");
-        }
-
-        await batch.commit();
-        
-        // Cleanup
-        document.getElementById('overpaymentModal').classList.add('hidden');
-        document.getElementById('overpaymentModal').style.display = 'none';
-        closeDetailModal();
-        pendingOverpaymentData = null;
-
-    } catch (e) {
-        console.error(e);
-        alertUser("Fehler: " + e.message, "error");
-    } finally {
-         // Buttons resetten (nicht nötig da Modal zugeht, aber sauber)
-         setButtonLoading(document.getElementById('btn-op-credit'), false);
-         setButtonLoading(document.getElementById('btn-op-tip'), false);
     }
 }
 
@@ -1687,7 +1383,7 @@ function renderPaymentList(payments) {
         const prefix = iAmDebtor ? "Ich schulde an" : "Schuldet mir";
         const colorClass = iAmDebtor ? "text-red-600" : "text-emerald-600";
         const bgClass = iAmDebtor ? "bg-red-50 border-red-200" : "bg-emerald-50 border-emerald-200";
-
+        
         let statusBadge = '';
         let timeBadge = '';
 
@@ -1697,8 +1393,8 @@ function renderPaymentList(payments) {
 
             if (p.deadline) {
                 const deadlineDate = new Date(p.deadline);
-                deadlineDate.setHours(0, 0, 0, 0);
-
+                deadlineDate.setHours(0,0,0,0);
+                
                 const diffTime = deadlineDate - today;
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
@@ -1716,7 +1412,7 @@ function renderPaymentList(payments) {
                     timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500">Fällig in ${diffDays} Tagen</span>`;
                 }
             }
-        }
+        } 
         else if (p.status === 'pending_approval') statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-yellow-100 text-yellow-800">Wartet</span>`;
         else if (p.status === 'paid') statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-800">Bezahlt</span>`;
         else if (p.status === 'cancelled') statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-gray-100 text-gray-600">Storniert</span>`;
