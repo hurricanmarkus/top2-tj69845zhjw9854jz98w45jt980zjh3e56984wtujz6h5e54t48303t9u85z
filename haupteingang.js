@@ -93,7 +93,7 @@ export const views = {
     essensberechnung: { id: 'essensberechnungView' },
     notrufSettings: { id: 'notrufSettingsView' },
     terminplaner: { id: 'terminplanerView' }, // <-- NEU HINZUGEFÜGT
-    zahlungsverwaltung: { id: 'zahlungsverwaltungView' } // <-- NEU
+    zahlungsverwaltung: { id: 'zahlungsverwaltungView' }, // <-- NEU
     zahlungsverwaltungSettings: { id: 'zahlungsverwaltungSettingsView' }
 };
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
