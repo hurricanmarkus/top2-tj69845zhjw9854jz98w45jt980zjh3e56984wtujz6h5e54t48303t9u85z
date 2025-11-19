@@ -406,6 +406,7 @@ function openCreateModal(paymentToEdit = null) {
     const hiddenId = document.getElementById('edit-payment-id');
 
     // Reset aller Felder
+    document.getElementById('payment-start-date').value = new Date().toISOString().split('T')[0]; // Standard: Heute
     document.getElementById('payment-deadline').value = '';
     document.getElementById('payment-title').value = '';
     document.getElementById('payment-invoice-nr').value = '';
@@ -476,7 +477,11 @@ function openCreateModal(paymentToEdit = null) {
         document.getElementById('payment-amount').value = paymentToEdit.isTBD ? '' : paymentToEdit.amount;
         document.getElementById('payment-amount-tbd').checked = paymentToEdit.isTBD;
         document.getElementById('payment-amount').disabled = paymentToEdit.isTBD;
+        
+        // Datumswerte setzen
+        document.getElementById('payment-start-date').value = paymentToEdit.startDate || ''; 
         document.getElementById('payment-deadline').value = paymentToEdit.deadline || '';
+        
         document.getElementById('payment-invoice-nr').value = paymentToEdit.invoiceNr || '';
         document.getElementById('payment-order-nr').value = paymentToEdit.orderNr || '';
         document.getElementById('payment-notes').value = paymentToEdit.notes || '';
@@ -527,6 +532,7 @@ function openCreateModal(paymentToEdit = null) {
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
 }
+
 
 function closeCreateModal() {
     document.getElementById('createPaymentModal').classList.add('hidden');
@@ -685,13 +691,13 @@ function togglePartnerManual() {
     }
 }
 
-// --- SAVE FUNCTION ---
 async function savePayment() {
     const saveBtn = document.getElementById('btn-save-payment');
     setButtonLoading(saveBtn, true);
 
     try {
         const editId = document.getElementById('edit-payment-id').value;
+        const startDate = document.getElementById('payment-start-date').value; // NEU
         const deadline = document.getElementById('payment-deadline').value;
         const title = document.getElementById('payment-title').value.trim();
         const invoiceNr = document.getElementById('payment-invoice-nr').value.trim();
@@ -710,6 +716,7 @@ async function savePayment() {
         }
 
         if (!title) throw new Error("Bitte einen Grund/Betreff angeben.");
+        if (!startDate) throw new Error("Bitte ein Buchungsdatum (Start) angeben."); // NEU
 
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
@@ -742,7 +749,10 @@ async function savePayment() {
             if (partnerId) involvedUserIds.push(partnerId);
 
             const data = {
-                title, isTBD, deadline: deadline || null, invoiceNr, orderNr, notes, type,
+                title, isTBD, 
+                startDate: startDate || null, // NEU
+                deadline: deadline || null, 
+                invoiceNr, orderNr, notes, type,
                 debtorId, debtorName, creditorId, creditorName, involvedUserIds,
                 installment: installmentData
             };
@@ -804,6 +814,7 @@ async function savePayment() {
                     amount: share,
                     remainingAmount: share,
                     isTBD: false,
+                    startDate: startDate || null, // NEU
                     deadline: deadline || null,
                     invoiceNr, orderNr, notes, type,
                     status: 'open',
@@ -837,6 +848,7 @@ async function savePayment() {
         setButtonLoading(saveBtn, false);
     }
 }
+
 
 // --- SETTLEMENT (BILANZ) ---
 function openSettlementModal() {
@@ -1236,14 +1248,45 @@ function renderPaymentList(payments) {
     container.innerHTML = '';
     if (payments.length === 0) { container.innerHTML = `<div class="text-center p-8 bg-gray-50 rounded-xl text-gray-500">Keine Einträge.</div>`; return; }
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Zeit ignorieren für Vergleich
+
     payments.forEach(p => {
         const iAmDebtor = p.debtorId === currentUser.mode;
         const partnerName = iAmDebtor ? p.creditorName : p.debtorName;
         const prefix = iAmDebtor ? "Ich schulde an" : "Schuldet mir";
         const colorClass = iAmDebtor ? "text-red-600" : "text-emerald-600";
         const bgClass = iAmDebtor ? "bg-red-50 border-red-200" : "bg-emerald-50 border-emerald-200";
+        
         let statusBadge = '';
-        if (p.status === 'open') statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-blue-100 text-blue-800">Offen</span>`;
+        let timeBadge = '';
+
+        // --- LOGIK FÜR DEADLINE WARNUNGEN ---
+        if (p.status === 'open') {
+            statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-blue-100 text-blue-800">Offen</span>`;
+
+            if (p.deadline) {
+                const deadlineDate = new Date(p.deadline);
+                deadlineDate.setHours(0,0,0,0);
+                
+                const diffTime = deadlineDate - today;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                if (diffDays < 0) {
+                    // Überfällig
+                    timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white">Überfällig (${Math.abs(diffDays)} Tage)</span>`;
+                } else if (diffDays === 0) {
+                    // Heute
+                    timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-orange-500 text-white">Fällig: HEUTE</span>`;
+                } else if (diffDays <= 3) {
+                    // Bald
+                    timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-800">Fällig in ${diffDays} Tagen</span>`;
+                } else {
+                    // Zukunft
+                    timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500">Fällig in ${diffDays} Tagen</span>`;
+                }
+            }
+        } 
         else if (p.status === 'pending_approval') statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-yellow-100 text-yellow-800">Wartet</span>`;
         else if (p.status === 'paid') statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-800">Bezahlt</span>`;
         else if (p.status === 'cancelled') statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-gray-100 text-gray-600">Storniert</span>`;
@@ -1255,9 +1298,18 @@ function renderPaymentList(payments) {
         <div class="payment-card-item card p-4 rounded-xl border ${bgClass} shadow-sm hover:shadow-md transition cursor-pointer flex items-center" data-id="${p.id}">
             ${checkboxHtml}
             <div class="flex-grow">
-                <div class="flex justify-between items-start"><h4 class="font-bold text-gray-800">${p.title}</h4>${statusBadge}</div>
-                <p class="text-xs text-gray-500 mt-1">${prefix} <strong>${partnerName}</strong></p>
-                <div class="mt-2 flex items-center gap-2"><span class="text-xl font-extrabold ${colorClass}">${p.isTBD ? 'TBD' : parseFloat(p.remainingAmount).toFixed(2) + ' €'}</span></div>
+                <div class="flex justify-between items-start">
+                    <div class="flex flex-col">
+                        <h4 class="font-bold text-gray-800 leading-tight">${p.title}</h4>
+                        ${p.startDate ? `<span class="text-[10px] text-gray-400 mt-0.5">Vom: ${new Date(p.startDate).toLocaleDateString()}</span>` : ''}
+                    </div>
+                    <div class="flex flex-col items-end gap-1">
+                        ${statusBadge}
+                        ${timeBadge}
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">${prefix} <strong>${partnerName}</strong></p>
+                <div class="mt-1 flex items-center gap-2"><span class="text-xl font-extrabold ${colorClass}">${p.isTBD ? 'TBD' : parseFloat(p.remainingAmount).toFixed(2) + ' €'}</span></div>
             </div>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6 text-gray-400 ml-2"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
         </div>`;
