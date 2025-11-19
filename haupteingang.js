@@ -601,16 +601,19 @@ export function navigate(targetViewName) {
         Object.keys(adminSectionsState).forEach(key => adminSectionsState[key] = false);
         toggleAdminSection(null);
     }
+
+    // In haupteingang.js - Innerhalb der navigate Funktion, ganz unten
+
     if (targetViewName === 'zahlungsverwaltung') {
         initializeZahlungsverwaltungView();
     }
     
-    // --- WICHTIG: HIER IST DIE FEHLENDE INITIALISIERUNG ---
+    // --- DIESER TEIL FEHLT WAHRSCHEINLICH: ---
     if (targetViewName === 'zahlungsverwaltungSettings') {
-        // Wir rufen die Start-Funktion auf, die die Buttons aktiviert
+        console.log("Starte Einstellungen-Skript..."); // Hilfe zur Fehlersuche
         initializeZahlungsverwaltungSettingsView();
     }
-}
+} // Ende der navigate Funktion
 
 
 
