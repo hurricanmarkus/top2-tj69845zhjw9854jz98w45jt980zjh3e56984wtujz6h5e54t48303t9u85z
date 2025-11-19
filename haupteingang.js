@@ -15,7 +15,7 @@ import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.
 import { renderUserKeyList } from './admin_benutzersteuerung.js';
 // NEU: Wir importieren die Start-Funktion aus deiner neuen Datei
 import { initializeTerminplanerView, listenForPublicVotes, joinVoteById, joinVoteByToken, joinVoteAsGuest } from './terminplaner.js';
-import { initializeZahlungsverwaltungView, initializeZahlungsverwaltungGuestView } from './zahlungsverwaltung.js';
+import { initializeZahlungsverwaltungView } from './zahlungsverwaltung.js';
 // // ENDE-ZIKA //
 
 
@@ -94,7 +94,6 @@ export const views = {
     notrufSettings: { id: 'notrufSettingsView' },
     terminplaner: { id: 'terminplanerView' }, // <-- NEU HINZUGEFÜGT
     zahlungsverwaltung: { id: 'zahlungsverwaltungView' } // <-- NEU
-    paymentGuest: { id: 'paymentGuestView' } // <-- NEU
 };
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
 
@@ -238,6 +237,8 @@ async function initializeFirebase() {
         db = getFirestore(app);
         auth = getAuth(app);
 
+        // --- Functions Initialisierung muss in onAuthStateChanged erfolgen ---
+
         console.log("initializeFirebase: Firebase App, DB, Auth initialisiert.");
 
         // --- DB Refs ---
@@ -255,6 +256,7 @@ async function initializeFirebase() {
         approvalRequestsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'approval-requests');
         checklistStacksCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-stacks');
         checklistTemplatesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'checklist-templates');
+        // Diese Zeile MUSS hier sein
         votesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
 
 
@@ -353,61 +355,64 @@ async function initializeFirebase() {
                 initializeZahlungsverwaltungView();
             }
 
-            // URL-PRÜFUNG
-            let navigatedByUrl = false;
+            // =================================================================
+            // URL-PRÜFUNG (KORRIGIERT: Lädt letzte Ansicht)
+            // =================================================================
+            let navigatedByUrl = false; // Merker, ob ein Link uns navigiert hat
             try {
                 const urlParams = new URLSearchParams(window.location.search);
                 const voteId = urlParams.get('vote_id');
                 const voteToken = urlParams.get('vote_token');
                 const view = urlParams.get('view');
                 const guestId = urlParams.get('guest_id');
-                
-                // NEU für Zahlungsverwaltung
-                const paymentGuestId = urlParams.get('payment_guest_id');
-                const paymentHostId = urlParams.get('payment_host_id');
 
-                const isUrlClean = !voteId && !voteToken && !view && !guestId && !paymentGuestId;
+                const isUrlClean = !voteId && !voteToken && !view && !guestId;
 
                 if (!isUrlClean) {
-                    navigatedByUrl = true;
+                    navigatedByUrl = true; // Ein Link wurde verwendet
 
                     if (voteId && guestId) {
+                        // Fall 1: Wichtigster Fall - Ein Gast-per-Link
                         console.log("[P3] URL-Parameter 'vote_id' UND 'guest_id' gefunden, starte joinVoteAsGuest...");
                         await joinVoteAsGuest(voteId, guestId);
 
                     } else if (voteId) {
+                        // Fall 2: Normaler Beitritt per ID
                         console.log("URL-Parameter 'vote_id' gefunden, starte joinVoteById...");
                         await joinVoteById(voteId);
 
                     } else if (voteToken) {
+                        // Fall 3: Normaler Beitritt per Token
                         console.log("URL-Parameter 'vote_token' gefunden, starte joinVoteByToken...");
                         await joinVoteByToken(voteToken);
 
                     } else if (view === 'terminplaner') {
+                        // Fall 4: Navigation zur Ansicht
                         console.log("URL-Parameter 'view=terminplaner' gefunden, navigiere...");
                         navigate('terminplaner');
                         cleanUrlParams();
-                        
-                    } else if (view === 'payment_guest' && paymentGuestId && paymentHostId) {
-                        // NEU: Gast-Ansicht Zahlungsverwaltung laden
-                        console.log("Gast-Link für Zahlungen erkannt.");
-                        initializeZahlungsverwaltungGuestView(paymentHostId, paymentGuestId);
-                        navigate('paymentGuest');
-                        // URL NICHT bereinigen, damit Reload funktioniert
                     }
                 }
             } catch (e) {
                 console.error("Fehler bei der URL-Parameter-Prüfung:", e);
             }
 
-            // Letzte Ansicht wiederherstellen (nur wenn kein Link genutzt wurde)
+            // =================================================================
+            // START KORREKTUR (Letzte Ansicht wiederherstellen)
+            // =================================================================
+            // Wenn wir NICHT über einen Link gekommen sind, versuchen wir, die letzte Ansicht zu laden
             if (!navigatedByUrl && sessionStorage) {
                 const lastView = sessionStorage.getItem('lastActiveView');
+                // Stelle die Ansicht nur wieder her, wenn es nicht die Startseite ist
+                // und die Ansicht in unserer Liste bekannt ist.
                 if (lastView && lastView !== 'home' && views[lastView]) {
                     console.log(`Letzte Ansicht [${lastView}] aus sessionStorage wiederhergestellt.`);
                     navigate(lastView);
                 }
             }
+            // =================================================================
+            // ENDE KORREKTUR
+            // =================================================================
 
         }); // Ende onAuthStateChanged
     } catch (error) {
@@ -415,7 +420,6 @@ async function initializeFirebase() {
         alertUser("Firebase konnte nicht initialisiert werden.", "error");
     }
 }
-
 
 
 

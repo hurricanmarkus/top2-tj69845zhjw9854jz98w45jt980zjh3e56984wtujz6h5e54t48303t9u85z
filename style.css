@@ -167,24 +167,3 @@
         display: none !important;
     }
 }
-
-/* --- GAST ANSICHT STYLES --- */
-.guest-view-header {
-    background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
-    color: white;
-    padding: 2rem;
-    border-radius: 0 0 1.5rem 1.5rem;
-    margin-bottom: 2rem;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-}
-.guest-balance-card {
-    background: white;
-    border-radius: 1rem;
-    padding: 1.5rem;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-    margin-top: -3rem; /* Überlappungseffekt */
-    margin-left: 1rem;
-    margin-right: 1rem;
-    border: 1px solid #e5e7eb;
-    text-align: center;
-}
