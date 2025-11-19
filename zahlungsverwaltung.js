@@ -55,7 +55,7 @@ function setupEventListeners() {
 
     // SPLIT: Gast hinzufügen
     document.getElementById('btn-add-split-manual')?.addEventListener('click', addSplitManualPartner);
-    // Enter-Taste im Gast-Feld soll nicht speichern, sondern Gast hinzufügen
+    // Enter-Taste im Gast-Feld
     document.getElementById('split-manual-name-input')?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -158,7 +158,7 @@ function openCreateModal(paymentToEdit = null) {
     document.getElementById('payment-amount').disabled = false;
     document.getElementById('split-manual-name-input').value = ''; // Reset Gast Input
 
-    // Partner Select füllen
+    // Partner Select füllen (Nur registrierte User, Gäste kommen manuell dazu)
     const select = document.getElementById('payment-partner-select');
     const splitList = document.getElementById('split-partner-list');
     
@@ -170,17 +170,18 @@ function openCreateModal(paymentToEdit = null) {
             const name = user.realName || user.name;
             partnerOptions += `<option value="${user.id}">${name}</option>`;
             splitCheckboxes += `
-                <label class="flex items-center gap-2 p-1 hover:bg-gray-100 rounded cursor-pointer">
-                    <input type="checkbox" class="split-partner-cb h-4 w-4" value="${user.id}" data-name="${name}">
-                    <span class="text-gray-700 font-medium">${name}</span>
-                </label>
+                <div class="p-1 hover:bg-gray-100 rounded">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" class="split-partner-cb h-4 w-4" value="${user.id}" data-name="${name}">
+                        <span class="text-gray-700 font-medium">${name}</span>
+                    </label>
+                </div>
             `;
         }
     });
     select.innerHTML = partnerOptions;
     splitList.innerHTML = splitCheckboxes;
     
-    // Listener für Checkboxen (wichtig für Berechnung)
     document.querySelectorAll('.split-partner-cb').forEach(cb => {
         cb.addEventListener('change', updateSplitPreview);
     });
@@ -256,31 +257,63 @@ function closeCreateModal() {
     document.getElementById('createPaymentModal').style.display = 'none';
 }
 
-// --- SPLIT LOGIK: Gast hinzufügen ---
+// --- SPLIT LOGIK: Gast hinzufügen / bearbeiten / löschen ---
 function addSplitManualPartner() {
     const input = document.getElementById('split-manual-name-input');
     const name = input.value.trim();
     if (!name) return;
 
     const list = document.getElementById('split-partner-list');
-    const id = 'MANUAL_' + Date.now(); // Temporäre ID für die UI-Logik
+    const id = 'MANUAL_' + Date.now(); 
 
+    // Neuer Container mit Flexbox für Buttons
     const div = document.createElement('div');
+    div.className = "flex items-center justify-between p-1 mb-1 hover:bg-gray-100 rounded bg-yellow-50 border border-yellow-100";
     div.innerHTML = `
-        <label class="flex items-center gap-2 p-1 hover:bg-gray-100 rounded cursor-pointer bg-yellow-50 border border-yellow-100">
+        <label class="flex items-center gap-2 cursor-pointer flex-grow">
             <input type="checkbox" class="split-partner-cb h-4 w-4" value="${id}" data-name="${name}" checked>
-            <span class="text-gray-800 font-medium">${name} <span class="text-xs text-gray-500">(Gast)</span></span>
+            <span class="text-gray-800 font-medium partner-name-display">${name} <span class="text-xs text-gray-500">(Gast)</span></span>
         </label>
+        <div class="flex gap-1">
+            <button type="button" class="edit-guest-btn p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-100 rounded" title="Umbenennen">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+                  <path d="M5.433 13.917l1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" />
+                </svg>
+            </button>
+            <button type="button" class="delete-guest-btn p-1 text-gray-500 hover:text-red-600 hover:bg-red-100 rounded" title="Entfernen">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+                  <path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.58.22-2.365.468a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193v-.443A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd" />
+                </svg>
+            </button>
+        </div>
     `;
     
     // Am Anfang einfügen
-    list.insertBefore(div.firstElementChild, list.firstChild);
+    list.insertBefore(div, list.firstChild);
     input.value = '';
     
-    // Listener für die neue Checkbox
-    list.querySelector('.split-partner-cb').addEventListener('change', updateSplitPreview);
+    // Listener für Checkbox
+    const checkbox = div.querySelector('.split-partner-cb');
+    checkbox.addEventListener('change', updateSplitPreview);
+
+    // Listener für Löschen
+    div.querySelector('.delete-guest-btn').addEventListener('click', () => {
+        div.remove();
+        updateSplitPreview();
+    });
+
+    // Listener für Umbenennen
+    div.querySelector('.edit-guest-btn').addEventListener('click', () => {
+        const currentName = checkbox.dataset.name;
+        const newName = prompt("Namen ändern:", currentName);
+        if (newName && newName.trim() !== "") {
+            const cleanName = newName.trim();
+            checkbox.dataset.name = cleanName;
+            div.querySelector('.partner-name-display').innerHTML = `${cleanName} <span class="text-xs text-gray-500">(Gast)</span>`;
+        }
+    });
     
-    updateSplitPreview(); // Update Berechnung
+    updateSplitPreview(); 
 }
 
 function setCreateMode(mode) {
@@ -466,13 +499,11 @@ async function savePayment() {
             const count = selectedCheckboxes.length + (includeMe ? 1 : 0);
             const share = totalAmount / count;
 
-            // Split-Einträge erstellen
             selectedCheckboxes.forEach(cb => {
                 let pId = cb.value; // ID oder MANUAL_XYZ
-                const pName = cb.dataset.name;
+                const pName = cb.dataset.name; // Holt immer den aktuellen Namen (auch nach Umbenennen)
                 let involved = [currentUser.mode];
                 
-                // Wenn es ein manueller Gast ist, ist ID null
                 if (pId.startsWith('MANUAL_')) {
                     pId = null;
                 } else {
@@ -491,14 +522,11 @@ async function savePayment() {
                     status: 'open',
                     createdAt: serverTimestamp(),
                     createdBy: currentUser.mode,
-                    
-                    // Ich bin Gläubiger (ich hab bezahlt)
                     creditorId: currentUser.mode,
                     creditorName: currentUser.displayName,
-                    debtorId: pId, // Null für Gast
+                    debtorId: pId, 
                     debtorName: pName,
                     involvedUserIds: involved,
-                    
                     history: [{
                         date: new Date(),
                         action: 'created_split',
