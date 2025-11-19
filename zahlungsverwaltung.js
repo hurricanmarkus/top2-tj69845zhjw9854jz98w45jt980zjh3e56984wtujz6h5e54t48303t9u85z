@@ -42,7 +42,7 @@ export function initializeZahlungsverwaltungView() {
 function setupEventListeners() {
     // 1. Button "Neuer Eintrag"
     const createBtn = document.getElementById('btn-create-new-payment');
-    if (createBtn) createBtn.addEventListener('click', openCreateModal);
+    if (createBtn) createBtn.addEventListener('click', () => openCreateModal()); // Kein Argument = Neu
 
     // 2. Modal schließen
     const closeCreateBtn = document.getElementById('close-create-payment-modal');
@@ -110,11 +110,9 @@ function setupEventListeners() {
 function listenForPayments() {
     if (unsubscribePayments) unsubscribePayments();
 
-    // HIER WAR DER FEHLER: Wir nutzen jetzt die dynamische appId statt der festen
     const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
     
     // Filter: Ich muss involviert sein (entweder als Ersteller oder als Partner)
-    // Hinweis: Das setzt voraus, dass 'involvedUserIds' im Dokument existiert.
     const q = query(paymentsRef, where('involvedUserIds', 'array-contains', currentUser.mode));
 
     unsubscribePayments = onSnapshot(q, (snapshot) => {
@@ -124,9 +122,23 @@ function listenForPayments() {
         });
         
         applyFilters(); // Render Liste + Dashboard
+        
+        // Falls das Detail-Modal offen ist und sich der Eintrag geändert hat, aktualisieren wir die Anzeige live
+        if (currentDetailPaymentId) {
+            const updatedP = allPayments.find(x => x.id === currentDetailPaymentId);
+            if (updatedP) {
+                // Nur re-rendern, wenn wir NICHT gerade im Bearbeiten-Modus sind (Modal Create ist zu)
+                const createModal = document.getElementById('createPaymentModal');
+                if (createModal.classList.contains('hidden')) {
+                     window.openPaymentDetail(currentDetailPaymentId, true); // true = refresh only
+                }
+            } else {
+                // Eintrag wurde gelöscht
+                closeDetailModal();
+            }
+        }
     }, (error) => {
         console.error("Fehler beim Laden der Zahlungen:", error);
-        // Wenn hier "Missing permissions" kommt, liegt es an den Firestore Rules (siehe unten)
         if (error.code === 'permission-denied') {
             alertUser("Fehler: Keine Berechtigung für Zahlungen. Bitte Datenbank-Regeln prüfen.", "error");
         }
@@ -135,37 +147,120 @@ function listenForPayments() {
 
 // --- UI FUNKTIONEN (MODAL) ---
 
-function openCreateModal() {
+// Kann im "Neu"-Modus (keine Args) oder "Bearbeiten"-Modus (paymentObject) aufgerufen werden
+function openCreateModal(paymentToEdit = null) {
     const modal = document.getElementById('createPaymentModal');
     if (!modal) return;
+    
+    const titleEl = modal.querySelector('h3');
+    const saveBtn = document.getElementById('btn-save-payment');
+    const hiddenId = document.getElementById('edit-payment-id');
 
-    // Reset Formular
-    const amtInput = document.getElementById('payment-amount');
-    if (amtInput) { amtInput.value = ''; amtInput.disabled = false; }
-    
-    const tbdInput = document.getElementById('payment-amount-tbd');
-    if (tbdInput) tbdInput.checked = false;
-    
-    document.getElementById('payment-deadline').value = '';
-    document.getElementById('payment-title').value = '';
-    document.getElementById('payment-invoice-nr').value = '';
-    document.getElementById('payment-order-nr').value = '';
-    document.getElementById('payment-notes').value = '';
-    document.getElementById('payment-type').value = 'debt';
-    
-    // Partner Select füllen
-    const select = document.getElementById('payment-partner-select');
-    if (select) {
+    if (paymentToEdit) {
+        // --- BEARBEITEN MODUS ---
+        titleEl.textContent = "Eintrag bearbeiten";
+        saveBtn.textContent = "Änderungen speichern";
+        hiddenId.value = paymentToEdit.id;
+
+        // Felder füllen
+        document.getElementById('payment-title').value = paymentToEdit.title;
+        
+        // Betrag: Da wir im Backend 'amount' und 'remainingAmount' haben, müssen wir aufpassen.
+        // Wenn wir den ursprünglichen Betrag ändern, müssen wir den Restbetrag neu berechnen.
+        // Das passiert in savePayment(). Hier zeigen wir den Ursprungsbetrag.
+        document.getElementById('payment-amount').value = paymentToEdit.isTBD ? '' : paymentToEdit.amount;
+        document.getElementById('payment-amount-tbd').checked = paymentToEdit.isTBD;
+        document.getElementById('payment-amount').disabled = paymentToEdit.isTBD;
+        
+        document.getElementById('payment-deadline').value = paymentToEdit.deadline || '';
+        document.getElementById('payment-invoice-nr').value = paymentToEdit.invoiceNr || '';
+        document.getElementById('payment-order-nr').value = paymentToEdit.orderNr || '';
+        document.getElementById('payment-notes').value = paymentToEdit.notes || '';
+        document.getElementById('payment-type').value = paymentToEdit.type || 'debt';
+
+        // Richtung & Partner setzen
+        // Wir müssen rekonstruieren, ob "Ich schulde" oder "Mir geschuldet"
+        const iAmDebtor = paymentToEdit.debtorId === currentUser.mode;
+        setDirection(iAmDebtor ? 'i_owe' : 'owes_me');
+
+        // Partner Feld setzen
+        const partnerId = iAmDebtor ? paymentToEdit.creditorId : paymentToEdit.debtorId;
+        const partnerName = iAmDebtor ? paymentToEdit.creditorName : paymentToEdit.debtorName;
+
+        const select = document.getElementById('payment-partner-select');
+        const manualInput = document.getElementById('payment-partner-name-manual');
+        
+        // Select neu bauen (um sicherzustellen, dass alle da sind)
         select.innerHTML = '<option value="">- Person auswählen -</option>';
+        let foundInList = false;
         Object.values(USERS).forEach(user => {
             if (user.id !== currentUser.mode && user.isActive) {
-                select.innerHTML += `<option value="${user.id}">${user.realName || user.name}</option>`;
+                const isSelected = user.id === partnerId ? 'selected' : '';
+                if (isSelected) foundInList = true;
+                select.innerHTML += `<option value="${user.id}" ${isSelected}>${user.realName || user.name}</option>`;
             }
         });
-    }
 
-    // Standard Richtung
-    setDirection('i_owe');
+        if (partnerId && foundInList) {
+            // Partner ist in der Liste
+            select.classList.remove('hidden');
+            manualInput.classList.add('hidden');
+            document.getElementById('btn-toggle-partner-manual').textContent = "Manueller Name";
+        } else {
+            // Partner ist manuell oder nicht mehr in der Liste
+            select.classList.add('hidden');
+            manualInput.classList.remove('hidden');
+            manualInput.value = partnerName;
+            select.value = "";
+            document.getElementById('btn-toggle-partner-manual').textContent = "Liste wählen";
+        }
+        
+        // Erweiterte Optionen aufklappen, wenn Daten drin sind
+        if (paymentToEdit.invoiceNr || paymentToEdit.orderNr || paymentToEdit.notes || paymentToEdit.type === 'transfer') {
+            document.getElementById('payment-advanced-options').classList.remove('hidden');
+        }
+
+    } else {
+        // --- NEU ERSTELLEN MODUS ---
+        titleEl.textContent = "Neuer Finanz-Eintrag";
+        saveBtn.textContent = "Speichern";
+        hiddenId.value = ""; // Leer = Neu
+
+        // Reset Formular
+        const amtInput = document.getElementById('payment-amount');
+        if (amtInput) { amtInput.value = ''; amtInput.disabled = false; }
+        
+        const tbdInput = document.getElementById('payment-amount-tbd');
+        if (tbdInput) tbdInput.checked = false;
+        
+        document.getElementById('payment-deadline').value = '';
+        document.getElementById('payment-title').value = '';
+        document.getElementById('payment-invoice-nr').value = '';
+        document.getElementById('payment-order-nr').value = '';
+        document.getElementById('payment-notes').value = '';
+        document.getElementById('payment-type').value = 'debt';
+        document.getElementById('payment-advanced-options').classList.add('hidden');
+        
+        // Partner Select füllen
+        const select = document.getElementById('payment-partner-select');
+        if (select) {
+            select.innerHTML = '<option value="">- Person auswählen -</option>';
+            Object.values(USERS).forEach(user => {
+                if (user.id !== currentUser.mode && user.isActive) {
+                    select.innerHTML += `<option value="${user.id}">${user.realName || user.name}</option>`;
+                }
+            });
+        }
+
+        // Standard Richtung & UI Reset
+        setDirection('i_owe');
+        const manualInput = document.getElementById('payment-partner-name-manual');
+        const toggleBtn = document.getElementById('btn-toggle-partner-manual');
+        select.classList.remove('hidden');
+        manualInput.classList.add('hidden');
+        manualInput.value = "";
+        toggleBtn.textContent = "Manueller Name";
+    }
     
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
@@ -218,24 +313,26 @@ function togglePartnerManual() {
         // Zu Manuell wechseln
         select.classList.add('hidden');
         input.classList.remove('hidden');
-        select.value = ""; // Reset Selection
+        select.value = ""; 
         btn.textContent = "Liste wählen";
     } else {
         // Zu Liste wechseln
         input.classList.add('hidden');
         select.classList.remove('hidden');
-        input.value = ""; // Reset Input
+        input.value = ""; 
         btn.textContent = "Manueller Name";
     }
 }
 
-// --- SPEICHERN (CORE LOGIC) ---
+// --- SPEICHERN (NEU & EDIT) ---
 
 async function savePayment() {
     const saveBtn = document.getElementById('btn-save-payment');
     setButtonLoading(saveBtn, true);
 
     try {
+        const editId = document.getElementById('edit-payment-id').value; // Leer = Neu, ID = Edit
+        
         // Daten sammeln
         const direction = document.getElementById('payment-direction').value;
         const partnerSelect = document.getElementById('payment-partner-select').value;
@@ -263,70 +360,112 @@ async function savePayment() {
         let partnerName = partnerSelect ? (USERS[partnerSelect]?.realName || USERS[partnerSelect]?.name) : partnerManual;
 
         if (direction === 'i_owe') {
-            // Ich bin der Schuldner
             debtorId = currentUser.mode;
             debtorName = currentUser.displayName;
-            creditorId = partnerId; // Kann null sein (wenn manuell)
+            creditorId = partnerId;
             creditorName = partnerName;
         } else {
-            // Mir wird geschuldet -> Ich bin der Gläubiger
             creditorId = currentUser.mode;
             creditorName = currentUser.displayName;
-            debtorId = partnerId; // Kann null sein (wenn manuell)
+            debtorId = partnerId;
             debtorName = partnerName;
         }
 
-        // Involved User IDs für Security Rules und Filterung
         const involvedUserIds = [currentUser.mode];
         if (partnerId) involvedUserIds.push(partnerId);
 
-
+        // Basis-Daten
         const paymentData = {
             title: title,
-            amount: amount,
-            remainingAmount: amount,
             isTBD: isTBD,
             deadline: deadline || null,
             invoiceNr: invoiceNr,
             orderNr: orderNr,
             notes: notes,
             type: type,
-            
-            status: 'open', // open, pending_approval, paid, cancelled
-            createdAt: serverTimestamp(),
-            createdBy: currentUser.mode,
-            
             debtorId: debtorId,
             debtorName: debtorName,
             creditorId: creditorId,
             creditorName: creditorName,
-            
-            involvedUserIds: involvedUserIds,
-            
-            history: [{
+            involvedUserIds: involvedUserIds
+        };
+
+        const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
+
+        if (editId) {
+            // --- UPDATE ---
+            const existing = allPayments.find(p => p.id === editId);
+            if (!existing) throw new Error("Eintrag nicht mehr gefunden.");
+
+            // Betrags-Logik beim Update:
+            // Wenn sich der Gesamtbetrag ändert, müssen wir den "Restbetrag" anpassen.
+            // Formel: NeuerRest = AlterRest + (NeuerGesamt - AlterGesamt)
+            let newRemaining = existing.remainingAmount;
+            if (!isTBD && !existing.isTBD) {
+                const diff = amount - existing.amount;
+                newRemaining = parseFloat(existing.remainingAmount) + diff;
+                if (newRemaining < 0) newRemaining = 0; // Sicherheitsnetz
+            } else if (!isTBD && existing.isTBD) {
+                // War TBD, ist jetzt fix -> Rest ist gleich dem neuen Betrag (da vorher nichts bezahlt wurde, TBD ist immer 0)
+                newRemaining = amount;
+            } else if (isTBD) {
+                newRemaining = 0;
+            }
+
+            paymentData.amount = amount;
+            paymentData.remainingAmount = newRemaining;
+
+            // Logbuch Eintrag
+            const newHistory = {
+                date: new Date(),
+                action: 'edited',
+                user: currentUser.displayName,
+                info: `Eintrag bearbeitet.`
+            };
+            paymentData.history = [...(existing.history || []), newHistory];
+
+            await updateDoc(doc(paymentsRef, editId), paymentData);
+            alertUser("Änderungen gespeichert!", "success");
+
+        } else {
+            // --- NEU ERSTELLEN ---
+            paymentData.amount = amount;
+            paymentData.remainingAmount = amount;
+            paymentData.status = 'open';
+            paymentData.createdAt = serverTimestamp();
+            paymentData.createdBy = currentUser.mode;
+            paymentData.history = [{
                 date: new Date(),
                 action: 'created',
                 user: currentUser.displayName,
                 info: `Eintrag erstellt. Betrag: ${isTBD ? 'TBD' : amount + '€'}`
-            }]
-        };
+            }];
 
-        // In Firebase speichern (mit korrekter appId)
-        const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
-        await addDoc(paymentsRef, paymentData);
+            await addDoc(paymentsRef, paymentData);
+            alertUser("Eintrag erfolgreich erstellt!", "success");
+        }
 
-        alertUser("Eintrag erfolgreich erstellt!", "success");
         closeCreateModal();
 
     } catch (error) {
         console.error("Fehler beim Speichern:", error);
-        if (error.code === 'permission-denied') {
-            alertUser("Speichern fehlgeschlagen: Keine Berechtigung (Datenbank-Regel fehlt).", "error");
-        } else {
-            alertUser(error.message, "error");
-        }
+        alertUser(error.message, "error");
     } finally {
         setButtonLoading(saveBtn, false);
+    }
+}
+
+// --- LÖSCHEN ---
+window.deletePayment = async function(id) {
+    if(!confirm("Diesen Eintrag wirklich unwiderruflich löschen?")) return;
+
+    try {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', id));
+        alertUser("Eintrag gelöscht.", "success");
+        closeDetailModal();
+    } catch (e) {
+        console.error(e);
+        alertUser("Fehler beim Löschen.", "error");
     }
 }
 
@@ -338,7 +477,6 @@ function applyFilters() {
     const dirFilter = document.getElementById('payment-filter-direction')?.value || 'all';
 
     let filtered = allPayments.filter(p => {
-        // 1. Suche
         const textMatch = 
             (p.title && p.title.toLowerCase().includes(searchTerm)) || 
             (p.debtorName && p.debtorName.toLowerCase().includes(searchTerm)) ||
@@ -346,14 +484,12 @@ function applyFilters() {
             (p.invoiceNr && p.invoiceNr.toLowerCase().includes(searchTerm));
         if (!textMatch) return false;
 
-        // 2. Status
         if (statusFilter !== 'all') {
             if (statusFilter === 'open' && p.status !== 'open') return false;
             if (statusFilter === 'pending' && p.status !== 'pending_approval') return false;
             if (statusFilter === 'closed' && (p.status !== 'paid' && p.status !== 'cancelled')) return false;
         }
 
-        // 3. Richtung
         if (dirFilter !== 'all') {
             const iAmDebtor = p.debtorId === currentUser.mode;
             if (dirFilter === 'i_owe' && !iAmDebtor) return false;
@@ -363,7 +499,6 @@ function applyFilters() {
         return true;
     });
 
-    // Sortieren: Offene zuerst
     filtered.sort((a, b) => {
         if (a.status === 'open' && b.status !== 'open') return -1;
         if (a.status !== 'open' && b.status === 'open') return 1;
@@ -472,7 +607,16 @@ function updateDashboard(payments) {
 
 // --- DETAIL ANSICHT & ACTIONS ---
 
-window.openPaymentDetail = function(id) {
+// Global für onclick
+window.editPayment = function(id) {
+    const p = allPayments.find(x => x.id === id);
+    if (p) {
+        closeDetailModal();
+        openCreateModal(p); // Rufe Modal im Edit-Modus auf
+    }
+}
+
+window.openPaymentDetail = function(id, isRefresh = false) {
     const p = allPayments.find(x => x.id === id);
     if (!p) return;
     currentDetailPaymentId = id;
@@ -486,6 +630,26 @@ window.openPaymentDetail = function(id) {
 
     const iAmDebtor = p.debtorId === currentUser.mode;
     const iAmCreditor = p.creditorId === currentUser.mode;
+    
+    // Nur der Ersteller darf bearbeiten/löschen
+    const iAmCreator = p.createdBy === currentUser.mode;
+
+    // Edit Button im Header des Contents
+    let editControls = '';
+    if (iAmCreator) {
+        editControls = `
+        <div class="flex justify-end gap-2 mb-4 no-print border-b pb-2">
+            <button onclick="editPayment('${id}')" class="flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-sm font-bold">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M5.433 13.917l1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" /></svg>
+                Bearbeiten
+            </button>
+            <button onclick="deletePayment('${id}')" class="flex items-center gap-1 px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-bold">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.58.22-2.365.468a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193v-.443A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd" /></svg>
+                Löschen
+            </button>
+        </div>
+        `;
+    }
 
     let historyHtml = (p.history || []).map(h => {
         const d = h.date?.toDate ? h.date.toDate() : new Date(h.date);
@@ -497,6 +661,7 @@ window.openPaymentDetail = function(id) {
     }).join('');
 
     content.innerHTML = `
+        ${editControls}
         <h2 class="text-2xl font-bold text-gray-800 mb-1">${p.title}</h2>
         <div class="flex gap-2 mb-4">
             <span class="px-2 py-1 bg-gray-200 rounded text-xs">ID: ${p.id.substring(0,6)}...</span>
@@ -555,7 +720,6 @@ window.openPaymentDetail = function(id) {
     
     const submitPartialBtn = document.getElementById('btn-submit-partial');
     if (submitPartialBtn) {
-        // Alten Listener entfernen (durch Klonen)
         const newBtn = submitPartialBtn.cloneNode(true);
         submitPartialBtn.parentNode.replaceChild(newBtn, submitPartialBtn);
         newBtn.onclick = () => {
@@ -564,8 +728,10 @@ window.openPaymentDetail = function(id) {
         };
     }
 
-    modal.classList.remove('hidden');
-    modal.style.display = 'flex';
+    if (!isRefresh) {
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
+    }
 }
 
 function closeDetailModal() {
@@ -574,6 +740,7 @@ function closeDetailModal() {
         modal.classList.add('hidden');
         modal.style.display = 'none';
     }
+    currentDetailPaymentId = null;
 }
 
 // --- ACTIONS (Zahlen, Bestätigen, etc.) ---
@@ -620,7 +787,11 @@ window.handlePaymentAction = async function(id, action, amount = 0) {
         const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'payments', id);
         await updateDoc(docRef, updateData);
         alertUser("Status aktualisiert.", "success");
-        closeDetailModal();
+        if (action !== 'partial_pay' && action !== 'mark_paid') {
+             closeDetailModal();
+        } else {
+             // Bei Teilzahlung offen lassen, um Ergebnis zu sehen
+        }
     } catch (e) {
         console.error(e);
         alertUser("Fehler beim Aktualisieren: " + e.message, "error");
