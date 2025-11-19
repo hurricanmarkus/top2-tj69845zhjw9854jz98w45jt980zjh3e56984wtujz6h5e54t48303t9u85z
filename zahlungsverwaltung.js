@@ -1105,7 +1105,6 @@ function renderDetailContent(p, isRefresh) {
     const partialForm = document.getElementById('partial-payment-form');
     const transactionSection = document.getElementById('transaction-history-section');
     const transactionList = document.getElementById('transaction-list');
-    // HIER holen wir uns den Container für den Guthaben-Button
     const creditContainer = document.getElementById('credit-usage-container');
 
     if (!modal || !content || !actions) return;
@@ -1115,27 +1114,24 @@ function renderDetailContent(p, isRefresh) {
     const iAmCreator = p.createdBy === currentUser.mode;
     const shortId = p.id.slice(-4).toUpperCase();
 
-    // --- GUTHABEN CHECK (NEU) ---
-    // Wir prüfen: Bin ich der Schuldner? Und habe ich Guthaben bei diesem Gläubiger?
+    // --- GUTHABEN CHECK (ANGEPASST FÜR MANUELLE NAMEN) ---
     if (creditContainer) {
         if (iAmDebtor && p.status === 'open') {
-            // Berechne Guthaben bei dem Gläubiger (p.creditorId)
-            const creditAmount = calculateAvailableCredit(p.creditorId);
+            // WICHTIG: Wir suchen Guthaben anhand ID *oder* Name
+            const creditAmount = calculateAvailableCredit(p.creditorId, p.creditorName);
             
             if (creditAmount > 0) {
-                // Button anzeigen und Text setzen
                 creditContainer.classList.remove('hidden');
                 document.getElementById('available-credit-amount').textContent = creditAmount.toFixed(2) + ' €';
                 
-                // WICHTIG: Wir speichern die IDs im Button, damit die Funktion 'useCreditForPayment' weiß, worum es geht
                 const btn = document.getElementById('btn-use-credit');
                 btn.dataset.targetPaymentId = p.id;
-                btn.dataset.creditorId = p.creditorId;
+                btn.dataset.creditorId = p.creditorId || ""; // Leeren String falls null
+                btn.dataset.creditorName = p.creditorName || ""; // Name speichern!
             } else {
                 creditContainer.classList.add('hidden');
             }
         } else {
-            // Wenn ich nicht Schuldner bin oder schon bezahlt ist -> weg damit
             creditContainer.classList.add('hidden');
         }
     }
@@ -1176,7 +1172,6 @@ function renderDetailContent(p, isRefresh) {
             row.className = "flex justify-between items-center p-2 bg-white rounded border shadow-sm";
             const dateStr = tx.date?.toDate ? tx.date.toDate().toLocaleDateString() : new Date(tx.date).toLocaleDateString();
             
-            // Anzeige anpassen, wenn es eine Guthaben-Verrechnung war
             const isCredit = tx.type === 'credit_usage';
             const label = isCredit ? 'Guthaben' : 'Zahlung';
             const amountClass = isCredit ? 'text-purple-700' : 'text-green-700';
@@ -1217,7 +1212,6 @@ function renderDetailContent(p, isRefresh) {
             <p class="text-5xl font-extrabold text-gray-800 mt-1">${p.isTBD ? 'TBD' : parseFloat(p.remainingAmount).toFixed(2) + ' €'}</p>
             ${!p.isTBD && p.amount > p.remainingAmount ? `<p class="text-xs text-green-600 font-semibold mt-1">Bezahlt: ${(p.amount - p.remainingAmount).toFixed(2)} €</p>` : ''}
         </div>
-        
         ${p.notes ? `<div class="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-gray-700"><strong>Notiz:</strong><br>${p.notes}</div>` : ''}
         
         <h4 class="font-bold text-gray-700 mb-2 border-b pb-1 mt-8">System-Log</h4>
@@ -1260,6 +1254,7 @@ function renderDetailContent(p, isRefresh) {
     }
     if (!isRefresh) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
 }
+
 
 
 
@@ -1607,36 +1602,44 @@ async function executeAdjustAmount() {
 }
 
 
-// --- GUTHABEN LOGIK ---
-
-// 1. Berechnet, wie viel Guthaben ICH bei der Person (partnerId) habe
-function calculateAvailableCredit(partnerId) {
+// 1. Berechnet Guthaben (ID oder Name)
+function calculateAvailableCredit(partnerId, partnerName) {
     let credit = 0;
     allPayments.forEach(p => {
-        // Guthaben ist ein Eintrag vom Typ 'credit'.
-        // WICHTIG: Bei Guthaben bin ICH (currentUser) der Gläubiger (creditor),
-        // weil die andere Person (debtor) mir das Geld schuldet (bzw. gutgeschrieben hat).
-        if (p.status === 'open' && p.type === 'credit' && p.creditorId === currentUser.mode && p.debtorId === partnerId) {
-            credit += parseFloat(p.remainingAmount);
+        // Grundbedingung: Eintrag ist offen, Typ Credit, ICH bin Gläubiger (mir gehört das Guthaben)
+        if (p.status === 'open' && p.type === 'credit' && p.creditorId === currentUser.mode) {
+            
+            // Fall A: Partner hat eine ID (registrierter User)
+            if (partnerId && p.debtorId === partnerId) {
+                credit += parseFloat(p.remainingAmount);
+            }
+            // Fall B: Partner hat KEINE ID (manuell), wir vergleichen den Namen
+            // (Nur wenn partnerId leer ist und p.debtorId auch leer ist)
+            else if (!partnerId && !p.debtorId && p.debtorName === partnerName) {
+                credit += parseFloat(p.remainingAmount);
+            }
         }
     });
     return credit;
 }
 
 // 2. Führt die Verrechnung durch (Button Klick)
+// 2. Führt die Verrechnung durch
 async function useCreditForPayment() {
     const btn = document.getElementById('btn-use-credit');
-    // Wir lesen die IDs aus, die wir im renderDetailContent im Button gespeichert haben
     const paymentId = btn.dataset.targetPaymentId;
-    const partnerId = btn.dataset.creditorId; 
+    
+    // Wir holen ID und Name aus dem Button
+    const partnerId = btn.dataset.creditorId || null; 
+    const partnerName = btn.dataset.creditorName || "";
 
     const targetPayment = allPayments.find(p => p.id === paymentId);
     if (!targetPayment) return;
 
-    const availableCredit = calculateAvailableCredit(partnerId);
+    // Berechnung mit ID und Name
+    const availableCredit = calculateAvailableCredit(partnerId, partnerName);
     const debtAmount = parseFloat(targetPayment.remainingAmount);
 
-    // Wir nutzen maximal so viel, wie Schulden da sind oder Guthaben vorhanden ist
     const amountToUse = Math.min(availableCredit, debtAmount);
 
     if (!confirm(`${amountToUse.toFixed(2)} € Guthaben verrechnen?`)) return;
@@ -1651,57 +1654,39 @@ async function useCreditForPayment() {
         const newDebtRemaining = debtAmount - amountToUse;
         batch.update(doc(paymentsRef, paymentId), {
             remainingAmount: newDebtRemaining,
-            status: newDebtRemaining <= 0.01 ? 'paid' : 'open', // Wenn alles bezahlt, auf 'paid' setzen
-            history: [...(targetPayment.history || []), { 
-                date: new Date(), 
-                action: 'paid_with_credit', 
-                user: currentUser.displayName, 
-                info: `${amountToUse.toFixed(2)}€ mit Guthaben verrechnet.` 
-            }],
-            transactions: [...(targetPayment.transactions || []), { 
-                date: new Date(), 
-                amount: amountToUse, 
-                type: 'credit_usage', // Spezieller Typ für die Anzeige
-                user: currentUser.displayName 
-            }]
+            status: newDebtRemaining <= 0.01 ? 'paid' : 'open',
+            history: [...(targetPayment.history || []), { date: new Date(), action: 'paid_with_credit', user: currentUser.displayName, info: `${amountToUse.toFixed(2)}€ mit Guthaben verrechnet.` }],
+            transactions: [...(targetPayment.transactions || []), { date: new Date(), amount: amountToUse, type: 'credit_usage', user: currentUser.displayName }]
         });
 
-        // B) Das Guthaben reduzieren (FIFO - Ältestes Guthaben zuerst nutzen)
+        // B) Das Guthaben reduzieren
         let remainingToDeduct = amountToUse;
         
-        // Suche alle offenen Guthaben-Einträge bei dieser Person
-        const creditEntries = allPayments.filter(p => 
-            p.status === 'open' && 
-            p.type === 'credit' && 
-            p.creditorId === currentUser.mode && 
-            p.debtorId === partnerId
-        );
+        // Suche passende Guthaben-Einträge (ID oder Name)
+        const creditEntries = allPayments.filter(p => {
+            if (p.status !== 'open' || p.type !== 'credit' || p.creditorId !== currentUser.mode) return false;
+            
+            if (partnerId) return p.debtorId === partnerId;
+            return !p.debtorId && p.debtorName === partnerName;
+        });
         
         for (const creditP of creditEntries) {
             if (remainingToDeduct <= 0) break;
 
             const availableInThisEntry = parseFloat(creditP.remainingAmount);
             const deduct = Math.min(remainingToDeduct, availableInThisEntry);
-
             const newCreditRemaining = availableInThisEntry - deduct;
 
             batch.update(doc(paymentsRef, creditP.id), {
                 remainingAmount: newCreditRemaining,
-                status: newCreditRemaining <= 0.01 ? 'paid' : 'open', // Wenn Guthaben aufgebraucht, schließen
-                history: [...(creditP.history || []), { 
-                    date: new Date(), 
-                    action: 'credit_used', 
-                    user: currentUser.displayName, 
-                    info: `${deduct.toFixed(2)}€ Guthaben eingelöst für "${targetPayment.title}".` 
-                }]
+                status: newCreditRemaining <= 0.01 ? 'paid' : 'open',
+                history: [...(creditP.history || []), { date: new Date(), action: 'credit_used', user: currentUser.displayName, info: `${deduct.toFixed(2)}€ Guthaben eingelöst für "${targetPayment.title}".` }]
             });
-
             remainingToDeduct -= deduct;
         }
 
         await batch.commit();
         alertUser("Guthaben erfolgreich verrechnet!", "success");
-        // Das Fenster aktualisiert sich automatisch
 
     } catch (e) {
         console.error(e);
