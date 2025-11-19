@@ -415,11 +415,51 @@ window.openAdjustAmountModal = function(id) {
 
     currentAdjustId = id;
     const modal = document.getElementById('adjustAmountModal');
+    const inputField = document.getElementById('adjust-new-amount');
     
-    document.getElementById('adjust-current-amount-display').textContent = parseFloat(p.remainingAmount).toFixed(2) + " €";
-    document.getElementById('adjust-new-amount').value = parseFloat(p.remainingAmount).toFixed(2); // Standardwert = aktueller Wert
+    // Aktuellen Wert setzen
+    const currentAmount = parseFloat(p.remainingAmount);
+    document.getElementById('adjust-current-amount-display').textContent = currentAmount.toFixed(2) + " €";
+    inputField.value = currentAmount.toFixed(2); 
+    
     document.getElementById('adjust-reason').value = 'correction';
     document.getElementById('adjust-note').value = '';
+
+    // --- NEU: Differenz-Anzeige vorbereiten ---
+    // Wir schauen, ob wir das Anzeige-Element schon haben, sonst bauen wir es ein
+    let diffDisplay = document.getElementById('adjust-diff-display');
+    if (!diffDisplay) {
+        diffDisplay = document.createElement('div');
+        diffDisplay.id = 'adjust-diff-display';
+        diffDisplay.className = "text-right text-sm font-bold mt-1 h-5"; // Platzhalterhöhe
+        // Wir fügen es direkt nach dem Eingabefeld ein
+        inputField.parentNode.appendChild(diffDisplay);
+    }
+    diffDisplay.textContent = ""; // Reset beim Öffnen
+
+    // Event Listener: Wenn man tippt, sofort rechnen
+    inputField.oninput = function() {
+        const newVal = parseFloat(inputField.value);
+        if (isNaN(newVal)) {
+            diffDisplay.textContent = "";
+            return;
+        }
+
+        const diff = newVal - currentAmount;
+        
+        if (Math.abs(diff) < 0.01) {
+            diffDisplay.textContent = "Keine Änderung";
+            diffDisplay.className = "text-right text-sm font-bold mt-1 text-gray-400";
+        } else if (diff > 0) {
+            // Neuer Betrag ist höher -> Schlecht (mehr Schulden) oder Korrektur nach oben
+            diffDisplay.textContent = `+ ${diff.toFixed(2)} €`;
+            diffDisplay.className = "text-right text-sm font-bold mt-1 text-red-600";
+        } else {
+            // Neuer Betrag ist niedriger -> Gut (weniger Schulden)
+            diffDisplay.textContent = `${diff.toFixed(2)} €`; // Minus ist schon im Wert
+            diffDisplay.className = "text-right text-sm font-bold mt-1 text-emerald-600";
+        }
+    };
 
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
@@ -466,12 +506,19 @@ async function executeAdjustAmount() {
             'discount': 'Erlass/Rabatt',
             'other': 'Anpassung'
         };
+        
+        // NEU: Differenz berechnen für den Text
+        let diffText = "";
+        if (diff > 0) diffText = `(+${diff.toFixed(2)})`;
+        else diffText = `(${diff.toFixed(2)})`; // Minus ist schon dabei
+
         const reasonText = reasonTexts[reason] || 'Anpassung';
-        const logInfo = `${reasonText}: Von ${oldAmount.toFixed(2)}€ auf ${newAmountVal.toFixed(2)}€ gesetzt. ${note ? `(${note})` : ''}`;
+        
+        // NEU: Log Text enthält jetzt die Differenz
+        const logInfo = `${reasonText}: ${diffText} | Neu: ${newAmountVal.toFixed(2)}€ ${note ? `(${note})` : ''}`;
 
         await updateDoc(paymentRef, {
             remainingAmount: newAmountVal,
-            // Falls es eine Korrektur ist, passen wir vielleicht auch den Ursprungsbetrag 'amount' an? 
             // Wir ändern hier nur remainingAmount, es sei denn, amount war kleiner als der neue Rest.
             amount: (newAmountVal > p.amount) ? newAmountVal : p.amount, 
             history: [...(p.history || []), { 
@@ -484,7 +531,6 @@ async function executeAdjustAmount() {
 
         alertUser("Betrag erfolgreich angepasst.", "success");
         closeAdjustAmountModal();
-        // Detailansicht aktualisiert sich automatisch durch den Snapshot Listener
 
     } catch (e) {
         console.error(e);
@@ -493,6 +539,7 @@ async function executeAdjustAmount() {
         setButtonLoading(btn, false);
     }
 }
+
 
 
 // --- CREATE & EDIT MODAL ---
@@ -1481,15 +1528,51 @@ window.handlePaymentAction = async function (id, action, amount = 0) {
 
 async function executePayment(id, action, amount) {
     const p = allPayments.find(x => x.id === id);
-    let updateData = {}; let logEntry = ""; let newStatus = p.status; let transaction = null;
+    let updateData = {}; 
+    let logEntry = ""; 
+    let newStatus = p.status; 
+    let transaction = null;
 
     if (action === 'mark_paid') { 
-        amount = parseFloat(p.remainingAmount); newStatus = 'pending_approval'; logEntry = "Als bezahlt markiert."; 
+        // Logik: Wer muss das genehmigen?
+        // Normalerweise derjenige, der das Geld bekommt (Creditor).
+        // Ist der Creditor ein System-User?
+        const creditorIsSystemUser = USERS[p.creditorId] && USERS[p.creditorId].isActive;
+        const iAmCreditor = p.creditorId === currentUser.mode;
+
+        // Wir genehmigen SOFORT, wenn:
+        // 1. Der Gläubiger KEIN System-User ist (Gast kann nicht einloggen zum Genehmigen)
+        // 2. ODER: Ich selbst der Gläubiger bin (ich bestätige ja gerade, dass ich Geld habe)
+        // 3. (Hier könnte man später noch 'userSettings.autoApprove' einbauen)
+        
+        const autoApprove = !creditorIsSystemUser || iAmCreditor;
+
+        if (autoApprove) {
+            // SOFORT BEZAHLT
+            amount = parseFloat(p.remainingAmount);
+            newStatus = 'paid';
+            updateData.remainingAmount = 0;
+            logEntry = creditorIsSystemUser 
+                ? "Als erledigt markiert." 
+                : "Als bezahlt markiert (Auto-Genehmigt, da Gast).";
+            
+            // WICHTIG: Wenn wir auto-genehmigen, müssen wir auch die Transaktion schreiben!
+            if (amount > 0) transaction = { date: new Date(), amount: amount, type: 'payment', user: currentUser.displayName };
+
+        } else {
+            // WARTEN AUF GENEHMIGUNG
+            amount = parseFloat(p.remainingAmount); 
+            newStatus = 'pending_approval'; 
+            logEntry = "Als bezahlt markiert (Wartet auf Bestätigung)."; 
+        }
+
     } else if (action === 'confirm_payment' || action === 'force_close') { 
         amount = parseFloat(p.remainingAmount); newStatus = 'paid'; updateData.remainingAmount = 0; logEntry = "Abgeschlossen.";
         if (amount > 0) transaction = { date: new Date(), amount: amount, type: 'payment', user: currentUser.displayName };
+    
     } else if (action === 'reject_payment') { 
         newStatus = 'open'; logEntry = "Zahlung abgelehnt."; 
+    
     } else if (action === 'partial_pay') {
         const newRemaining = parseFloat(p.remainingAmount) - amount; 
         updateData.remainingAmount = newRemaining < 0 ? 0 : newRemaining;
@@ -1501,7 +1584,7 @@ async function executePayment(id, action, amount) {
     updateData.status = newStatus;
     updateData.history = [...(p.history || []), { date: new Date(), action, user: currentUser.displayName, info: logEntry }];
     
-    // NEU: Transaktion speichern
+    // NEU: Transaktion speichern (falls vorhanden)
     if (transaction) {
         updateData.transactions = [...(p.transactions || []), transaction];
     }
@@ -1510,8 +1593,12 @@ async function executePayment(id, action, amount) {
         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', id), updateData); 
         alertUser("Gespeichert.", "success"); 
         if (action !== 'partial_pay' && action !== 'mark_paid') closeDetailModal(); 
+        // Wenn es auto-approved wurde (mark_paid -> paid), schließen wir das Fenster auch besser
+        if (action === 'mark_paid' && newStatus === 'paid') closeDetailModal();
+
     } catch (e) { console.error(e); alertUser("Fehler: " + e.message, "error"); }
 }
+
 
 async function resolveOverpayment(decision) {
     if (!pendingOverpaymentData) return;
