@@ -526,21 +526,14 @@ export function navigate(targetViewName) {
         return;
     }
 
-    // =================================================================
-    // START KORREKTUR (Letzte Ansicht speichern)
-    // =================================================================
-    // Speichere die Ziel-Ansicht im Kurzzeitgedächtnis
+    // Ansicht im Speicher merken
     if (sessionStorage) {
         sessionStorage.setItem('lastActiveView', targetViewName);
     }
-    // =================================================================
-    // ENDE KORREKTUR
-    // =================================================================
 
-    // Berechtigungsprüfung (bleibt gleich)
+    // Berechtigungsprüfung
     const userPermissions = currentUser.permissions || [];
-    const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'SYSTEMADMIN';
-
+    
     // (P3) Ausnahme für 'terminplaner'
     if (targetViewName !== 'terminplaner') {
         if (targetViewName === 'entrance' && !userPermissions.includes('ENTRANCE')) return alertUser("Zugriff verweigert (Eingang).", 'error');
@@ -561,7 +554,6 @@ export function navigate(targetViewName) {
         if (targetViewName === 'notrufSettings' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Notruf-Einstellungen).", 'error');
     }
 
-
     // Scroll zum Anfang
     const mainContent = document.querySelector('.main-content');
     if (mainContent) mainContent.scrollTop = 0;
@@ -574,7 +566,7 @@ export function navigate(targetViewName) {
     } else {
         console.error(`Navigation fehlgeschlagen: Element mit ID "${targetView.id}" nicht gefunden.`);
         const homeElement = document.getElementById(views.home.id);
-        if (homeElement) homeElement.classList.add('active'); // Fallback
+        if (homeElement) homeElement.classList.add('active'); 
         return;
     }
 
@@ -612,10 +604,14 @@ export function navigate(targetViewName) {
     if (targetViewName === 'zahlungsverwaltung') {
         initializeZahlungsverwaltungView();
     }
+    
+    // --- WICHTIG: HIER IST DIE FEHLENDE INITIALISIERUNG ---
     if (targetViewName === 'zahlungsverwaltungSettings') {
+        // Wir rufen die Start-Funktion auf, die die Buttons aktiviert
         initializeZahlungsverwaltungSettingsView();
     }
 }
+
 
 
 export function setupEventListeners() {

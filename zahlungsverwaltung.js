@@ -29,7 +29,7 @@ let pendingOverpaymentData = null; // Speichert Daten für Überzahlung
 let unsubscribeTemplates = null;
 let allTemplates = [];
 
-// --- INITIALISIERUNG HAUPTANSICHT (ERSETZEN) ---
+// --- INITIALISIERUNG HAUPTANSICHT ---
 export function initializeZahlungsverwaltungView() {
     const view = document.getElementById('zahlungsverwaltungView');
     if (view && !view.dataset.listenerAttached) {
@@ -39,18 +39,23 @@ export function initializeZahlungsverwaltungView() {
 
     if (currentUser.mode !== GUEST_MODE) {
         listenForPayments();
-        listenForTemplates(); // NEU: Vorlagen laden
+        listenForTemplates(); 
     } else {
         renderPaymentList([]);
     }
 }
 
-// --- INITIALISIERUNG EINSTELLUNGSANSICHT (NEU HINZUFÜGEN) ---
+// --- INITIALISIERUNG EINSTELLUNGSANSICHT ---
 export function initializeZahlungsverwaltungSettingsView() {
     const view = document.getElementById('zahlungsverwaltungSettingsView');
-    if (!view) return;
+    if (!view) {
+        console.error("initializeZahlungsverwaltungSettingsView: View Element nicht gefunden!");
+        return;
+    }
     
+    // Listener nur einmal anhängen
     if (!view.dataset.listenerAttached) {
+        console.log("initializeZahlungsverwaltungSettingsView: Hänge Listener an...");
         setupSettingsListeners();
         view.dataset.listenerAttached = 'true';
     }
