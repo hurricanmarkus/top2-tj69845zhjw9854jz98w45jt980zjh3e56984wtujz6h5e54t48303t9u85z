@@ -15,7 +15,7 @@ import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.
 import { renderUserKeyList } from './admin_benutzersteuerung.js';
 // NEU: Wir importieren die Start-Funktion aus deiner neuen Datei
 import { initializeTerminplanerView, listenForPublicVotes, joinVoteById, joinVoteByToken, joinVoteAsGuest } from './terminplaner.js';
-import { initializeZahlungsverwaltungView, initializeZahlungsverwaltungSettingsView } from './zahlungsverwaltung.js';
+import { initializeZahlungsverwaltungView } from './zahlungsverwaltung.js';
 // // ENDE-ZIKA //
 
 
@@ -93,8 +93,7 @@ export const views = {
     essensberechnung: { id: 'essensberechnungView' },
     notrufSettings: { id: 'notrufSettingsView' },
     terminplaner: { id: 'terminplanerView' }, // <-- NEU HINZUGEFÜGT
-    zahlungsverwaltung: { id: 'zahlungsverwaltungView' }, // <-- NEU
-    zahlungsverwaltungSettings: { id: 'zahlungsverwaltungSettingsView' }
+    zahlungsverwaltung: { id: 'zahlungsverwaltungView' } // <-- NEU
 };
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
 
@@ -611,9 +610,6 @@ export function navigate(targetViewName) {
     }
     if (targetViewName === 'zahlungsverwaltung') {
         initializeZahlungsverwaltungView();
-    }
-    if (targetViewName === 'zahlungsverwaltungSettings') {
-        initializeZahlungsverwaltungSettingsView();
     }
 }
 

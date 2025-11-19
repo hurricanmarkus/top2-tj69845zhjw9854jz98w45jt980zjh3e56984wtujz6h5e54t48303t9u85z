@@ -18,8 +18,6 @@ import {
 // --- GLOBALE VARIABLEN ---
 let unsubscribePayments = null;
 let allPayments = [];
-let unsubscribeTemplates = null;
-let allTemplates = [];
 let currentDetailPaymentId = null;
 let currentSplitMode = 'single'; // 'single' oder 'split'
 let activeSettlementPartnerId = null;
@@ -29,7 +27,7 @@ let isSelectionMode = false;
 let selectedPaymentIds = new Set();
 let pendingOverpaymentData = null; // Speichert Daten für Überzahlung
 
-// --- INITIALISIERUNG HAUPTANSICHT (ERSETZEN) ---
+// --- INITIALISIERUNG ---
 export function initializeZahlungsverwaltungView() {
     const view = document.getElementById('zahlungsverwaltungView');
     if (view && !view.dataset.listenerAttached) {
@@ -39,28 +37,10 @@ export function initializeZahlungsverwaltungView() {
 
     if (currentUser.mode !== GUEST_MODE) {
         listenForPayments();
-        listenForTemplates(); // NEU: Vorlagen laden
     } else {
         renderPaymentList([]);
     }
 }
-
-// --- INITIALISIERUNG EINSTELLUNGSANSICHT (NEU HINZUFÜGEN) ---
-export function initializeZahlungsverwaltungSettingsView() {
-    const view = document.getElementById('zahlungsverwaltungSettingsView');
-    if (!view) return;
-    
-    if (!view.dataset.listenerAttached) {
-        setupSettingsListeners();
-        view.dataset.listenerAttached = 'true';
-    }
-    
-    // Standard-Tab öffnen und Daten laden
-    openSettingsTab('templates');
-    renderTemplateList();
-    renderCreditOverview();
-}
-
 
 // --- EVENT LISTENER SETUP ---
 function setupEventListeners() {
@@ -163,35 +143,6 @@ function setupEventListeners() {
         document.getElementById('overpaymentModal').style.display = 'none';
         pendingOverpaymentData = null;
     });
-    // NEU: Settings Button Navigation
-    document.getElementById('btn-zv-settings')?.addEventListener('click', () => navigate('zahlungsverwaltungSettings'));
-    
-    // NEU: Template Logik im Erstellen-Modal
-    document.getElementById('payment-template-select')?.addEventListener('change', applySelectedTemplate);
-    document.getElementById('btn-save-as-template')?.addEventListener('click', saveCurrentAsTemplate);
-}
-
-
-function setupSettingsListeners() {
-    // Tabs umschalten
-    document.getElementById('tab-zv-templates')?.addEventListener('click', () => openSettingsTab('templates'));
-    document.getElementById('tab-zv-credits')?.addEventListener('click', () => openSettingsTab('credits'));
-
-    // Vorlagen löschen (Delegation)
-    document.getElementById('zv-templates-list')?.addEventListener('click', (e) => {
-        if (e.target.closest('.delete-tpl-btn')) {
-            const id = e.target.closest('.delete-tpl-btn').dataset.id;
-            deleteTemplate(id);
-        }
-    });
-
-    // Guthaben Buttons
-    document.getElementById('btn-add-my-credit')?.addEventListener('click', () => openCreditModal('add', 'my'));
-    document.getElementById('btn-add-other-credit')?.addEventListener('click', () => openCreditModal('add', 'other'));
-
-    // Guthaben Modal Aktionen
-    document.getElementById('btn-cancel-credit')?.addEventListener('click', () => document.getElementById('creditManageModal').classList.add('hidden'));
-    document.getElementById('btn-save-credit')?.addEventListener('click', executeCreditAction);
 }
 
 
@@ -239,23 +190,6 @@ function listenForPayments() {
     });
 }
 
-
-function listenForTemplates() {
-    if (unsubscribeTemplates) unsubscribeTemplates();
-    const tplRef = collection(db, 'artifacts', appId, 'public', 'data', 'payment-templates');
-    
-    unsubscribeTemplates = onSnapshot(tplRef, (snapshot) => {
-        allTemplates = [];
-        snapshot.forEach(doc => allTemplates.push({ id: doc.id, ...doc.data() }));
-        
-        updateTemplateDropdown(); // Dropdown im Modal aktualisieren
-        
-        // Liste in den Einstellungen aktualisieren, falls offen
-        if (document.getElementById('zahlungsverwaltungSettingsView').classList.contains('active')) {
-            renderTemplateList();
-        }
-    });
-}
 // --- SELECTION & MERGE LOGIK (Zusammenfassen) ---
 
 function toggleSelectionMode() {
@@ -607,16 +541,12 @@ async function executeAdjustAmount() {
 }
 
 
+
 // --- CREATE & EDIT MODAL ---
 
 function openCreateModal(paymentToEdit = null) {
     const modal = document.getElementById('createPaymentModal');
     if (!modal) return;
-
-    // NEU: Dropdown aktualisieren und resetten
-    updateTemplateDropdown();
-    const tplSelect = document.getElementById('payment-template-select');
-    if(tplSelect) tplSelect.value = "";
 
     const saveBtn = document.getElementById('btn-save-payment');
     const hiddenId = document.getElementById('edit-payment-id');
@@ -1669,6 +1599,7 @@ async function executePayment(id, action, amount) {
     } catch (e) { console.error(e); alertUser("Fehler: " + e.message, "error"); }
 }
 
+
 async function resolveOverpayment(decision) {
     if (!pendingOverpaymentData) return;
     const { paymentId, payAmount, debtAmount, excessAmount } = pendingOverpaymentData;
@@ -1737,254 +1668,4 @@ window.deleteTransaction = async function(paymentId, txIndex) {
         });
         alertUser("Zahlung storniert.", "success");
     } catch (e) { console.error(e); alertUser("Fehler beim Löschen.", "error"); }
-}
-
-// --- TABS LOGIK (NEU) ---
-function openSettingsTab(tabName) {
-    const tabTemplates = document.getElementById('tab-zv-templates');
-    const tabCredits = document.getElementById('tab-zv-credits');
-    const contentTemplates = document.getElementById('content-zv-templates');
-    const contentCredits = document.getElementById('content-zv-credits');
-
-    if (tabName === 'templates') {
-        tabTemplates.className = "px-4 py-2 font-bold text-indigo-600 border-b-2 border-indigo-600";
-        tabCredits.className = "px-4 py-2 font-bold text-gray-500 hover:text-gray-700";
-        contentTemplates.classList.remove('hidden');
-        contentCredits.classList.add('hidden');
-    } else {
-        tabTemplates.className = "px-4 py-2 font-bold text-gray-500 hover:text-gray-700";
-        tabCredits.className = "px-4 py-2 font-bold text-orange-600 border-b-2 border-orange-600";
-        contentTemplates.classList.add('hidden');
-        contentCredits.classList.remove('hidden');
-    }
-}
-
-// --- VORLAGEN (TEMPLATES) LOGIK (NEU) ---
-
-async function saveCurrentAsTemplate() {
-    const title = document.getElementById('payment-title').value.trim();
-    if (!title) { alertUser("Bitte erst einen Titel eingeben.", "error"); return; }
-
-    const amount = parseFloat(document.getElementById('payment-amount').value) || 0;
-    const partnerId = document.getElementById('payment-partner-select').value;
-    const partnerManual = document.getElementById('payment-partner-name-manual').value;
-    
-    const tplData = {
-        title: title,
-        amount: amount,
-        partnerId: partnerId,
-        partnerManual: partnerManual,
-        direction: document.getElementById('payment-direction').value,
-        createdBy: currentUser.mode
-    };
-
-    try {
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'payment-templates'), tplData);
-        alertUser("Vorlage gespeichert!", "success");
-    } catch(e) { console.error(e); alertUser("Fehler beim Speichern.", "error"); }
-}
-
-function renderTemplateList() {
-    const container = document.getElementById('zv-templates-list');
-    if (!container) return;
-    container.innerHTML = '';
-    
-    if (allTemplates.length === 0) {
-        container.innerHTML = '<p class="text-center text-gray-400 italic">Keine Vorlagen.</p>';
-        return;
-    }
-
-    allTemplates.forEach(tpl => {
-        const div = document.createElement('div');
-        div.className = "flex justify-between items-center p-3 bg-white rounded shadow-sm border hover:shadow-md";
-        div.innerHTML = `
-            <div>
-                <p class="font-bold text-gray-800">${tpl.title}</p>
-                <p class="text-xs text-gray-500">${tpl.amount ? tpl.amount.toFixed(2) + '€' : 'Variabel'}</p>
-            </div>
-            <button class="delete-tpl-btn text-red-400 hover:text-red-600 p-2" data-id="${tpl.id}">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.58.22-2.365.468a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193v-.443A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd" /></svg>
-            </button>
-        `;
-        container.appendChild(div);
-    });
-}
-
-async function deleteTemplate(id) {
-    if (!confirm("Vorlage wirklich löschen?")) return;
-    try {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payment-templates', id));
-    } catch(e) { console.error(e); }
-}
-
-function updateTemplateDropdown() {
-    const select = document.getElementById('payment-template-select');
-    if (!select) return;
-    select.innerHTML = '<option value="">-- Vorlage wählen --</option>';
-    allTemplates.forEach(tpl => {
-        const opt = document.createElement('option');
-        opt.value = tpl.id;
-        opt.textContent = `${tpl.title}`;
-        select.appendChild(opt);
-    });
-}
-
-function applySelectedTemplate() {
-    const id = document.getElementById('payment-template-select').value;
-    const tpl = allTemplates.find(t => t.id === id);
-    if (!tpl) return;
-
-    document.getElementById('payment-title').value = tpl.title;
-    if (tpl.amount) document.getElementById('payment-amount').value = tpl.amount;
-    if (tpl.direction) setDirection(tpl.direction);
-    
-    if (tpl.partnerId) {
-        document.getElementById('payment-partner-select').value = tpl.partnerId;
-        document.getElementById('payment-partner-select').classList.remove('hidden');
-        document.getElementById('payment-partner-name-manual').classList.add('hidden');
-        document.getElementById('btn-toggle-partner-manual').textContent = "Manueller Name";
-    } else if (tpl.partnerManual) {
-        document.getElementById('payment-partner-name-manual').value = tpl.partnerManual;
-        document.getElementById('payment-partner-select').classList.add('hidden');
-        document.getElementById('payment-partner-name-manual').classList.remove('hidden');
-        document.getElementById('btn-toggle-partner-manual').textContent = "Liste wählen";
-    }
-}
-
-// --- GUTHABEN (CREDIT) LOGIK (NEU) ---
-
-function renderCreditOverview() {
-    const myCreditsList = document.getElementById('my-credits-list');
-    const othersCreditsList = document.getElementById('others-credits-list');
-    
-    myCreditsList.innerHTML = '';
-    othersCreditsList.innerHTML = '';
-
-    const credits = allPayments.filter(p => p.type === 'credit' && p.status === 'open');
-
-    // 1. Mein Guthaben
-    const myCredits = credits.filter(p => p.creditorId === currentUser.mode);
-    if (myCredits.length === 0) myCreditsList.innerHTML = '<p class="text-sm text-gray-400 italic">Leer.</p>';
-    
-    myCredits.forEach(p => {
-        const div = document.createElement('div');
-        div.className = "flex justify-between items-center p-2 bg-purple-50 rounded border border-purple-100";
-        div.innerHTML = `
-            <div><p class="font-bold text-purple-900">${p.debtorName}</p><p class="text-xs text-gray-500">${p.title}</p></div>
-            <div class="flex items-center gap-2"><span class="font-mono font-bold text-purple-700">${parseFloat(p.remainingAmount).toFixed(2)}€</span><button class="text-xs bg-white border border-gray-300 px-2 py-1 rounded hover:bg-gray-50" onclick="openCreditModal('sub', 'my', '${p.id}')">Abbuchen</button></div>
-        `;
-        myCreditsList.appendChild(div);
-    });
-
-    // 2. Fremdes Guthaben
-    const othersCredits = credits.filter(p => p.debtorId === currentUser.mode);
-    if (othersCredits.length === 0) othersCreditsList.innerHTML = '<p class="text-sm text-gray-400 italic">Leer.</p>';
-    
-    othersCredits.forEach(p => {
-        const div = document.createElement('div');
-        div.className = "flex justify-between items-center p-2 bg-orange-50 rounded border border-orange-100";
-        div.innerHTML = `
-            <div><p class="font-bold text-orange-900">${p.creditorName}</p><p class="text-xs text-gray-500">${p.title}</p></div>
-            <div class="flex items-center gap-2"><span class="font-mono font-bold text-orange-700">${parseFloat(p.remainingAmount).toFixed(2)}€</span><button class="text-xs bg-white border border-gray-300 px-2 py-1 rounded hover:bg-gray-50" onclick="openCreditModal('sub', 'other', '${p.id}')">Auszahlen</button></div>
-        `;
-        othersCreditsList.appendChild(div);
-    });
-}
-
-window.openCreditModal = function(mode, context, paymentId = null) {
-    const modal = document.getElementById('creditManageModal');
-    document.getElementById('credit-mode').value = mode;
-    document.getElementById('credit-context').value = context;
-    modal.dataset.paymentId = paymentId || "";
-
-    const select = document.getElementById('credit-partner-select');
-    const amountInput = document.getElementById('credit-amount');
-    const reasonInput = document.getElementById('credit-reason');
-    
-    amountInput.value = ''; reasonInput.value = ''; select.innerHTML = ''; select.disabled = false;
-
-    // User füllen
-    Object.values(USERS).forEach(u => {
-        if (u.id !== currentUser.mode && u.isActive) {
-            const opt = document.createElement('option');
-            opt.value = u.id; opt.textContent = u.realName || u.name;
-            select.appendChild(opt);
-        }
-    });
-
-    if (mode === 'add') {
-        document.getElementById('credit-sub-warning').classList.add('hidden');
-        document.getElementById('btn-save-credit').textContent = "Zubuchen";
-        document.getElementById('btn-save-credit').className = "px-4 py-2 bg-green-600 text-white font-bold rounded hover:bg-green-700";
-        document.getElementById('credit-modal-title').textContent = context === 'my' ? "Guthaben aufladen" : "Guthaben gutschreiben";
-        document.getElementById('credit-modal-desc').textContent = context === 'my' ? "Du gibst jemandem Geld." : "Du erhältst Geld als Guthaben.";
-    } else {
-        document.getElementById('credit-sub-warning').classList.remove('hidden');
-        document.getElementById('btn-save-credit').textContent = "Abbuchen";
-        document.getElementById('btn-save-credit').className = "px-4 py-2 bg-red-600 text-white font-bold rounded hover:bg-red-700";
-        document.getElementById('credit-modal-title').textContent = "Guthaben nutzen / auszahlen";
-        document.getElementById('credit-modal-desc').textContent = "Guthaben wird reduziert.";
-        
-        if (paymentId) {
-            const p = allPayments.find(x => x.id === paymentId);
-            if (p) {
-                amountInput.value = p.remainingAmount;
-                reasonInput.value = "Auszahlung / Verrechnung";
-                select.value = (context === 'my') ? p.debtorId : p.creditorId;
-                select.disabled = true;
-            }
-        }
-    }
-    modal.classList.remove('hidden');
-    modal.style.display = 'flex';
-}
-
-async function executeCreditAction() {
-    const mode = document.getElementById('credit-mode').value;
-    const context = document.getElementById('credit-context').value;
-    const partnerId = document.getElementById('credit-partner-select').value;
-    const amount = parseFloat(document.getElementById('credit-amount').value);
-    const reason = document.getElementById('credit-reason').value.trim();
-    const paymentId = document.getElementById('creditManageModal').dataset.paymentId;
-
-    if (!partnerId || isNaN(amount) || amount <= 0) { alertUser("Bitte prüfen.", "error"); return; }
-    if (!reason) { alertUser("Grund fehlt.", "error"); return; }
-
-    const btn = document.getElementById('btn-save-credit');
-    setButtonLoading(btn, true);
-
-    try {
-        const batch = writeBatch(db);
-        const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
-        const partnerName = USERS[partnerId]?.realName || USERS[partnerId]?.name || "Unbekannt";
-
-        if (mode === 'add') {
-            const docData = {
-                title: reason, amount: amount, remainingAmount: amount, type: 'credit', status: 'open', isTBD: false,
-                startDate: new Date().toISOString().split('T')[0], createdAt: serverTimestamp(), createdBy: currentUser.mode,
-                involvedUserIds: [currentUser.mode, partnerId],
-                history: [{ date: new Date(), action: 'created_manual_credit', user: currentUser.displayName, info: `Guthaben manuell angelegt.` }]
-            };
-
-            if (context === 'my') { docData.creditorId = currentUser.mode; docData.creditorName = currentUser.displayName; docData.debtorId = partnerId; docData.debtorName = partnerName; } 
-            else { docData.creditorId = partnerId; docData.creditorName = partnerName; docData.debtorId = currentUser.mode; docData.debtorName = currentUser.displayName; }
-
-            batch.set(doc(paymentsRef), docData);
-            alertUser("Erfolgreich.", "success");
-        } else {
-            if (paymentId) {
-                const p = allPayments.find(x => x.id === paymentId);
-                if (p) {
-                    const newRest = parseFloat(p.remainingAmount) - amount;
-                    if (newRest < -0.01) throw new Error("Nicht genug Guthaben.");
-                    const updateData = { remainingAmount: Math.max(0, newRest), history: [...(p.history || []), { date: new Date(), action: 'credit_used', user: currentUser.displayName, info: `Abgebucht: ${amount.toFixed(2)}€` }] };
-                    if (newRest <= 0.001) updateData.status = 'paid';
-                    batch.update(doc(paymentsRef, paymentId), updateData);
-                    alertUser("Erfolgreich.", "success");
-                }
-            }
-        }
-        await batch.commit();
-        document.getElementById('creditManageModal').classList.add('hidden');
-    } catch (e) { console.error(e); alertUser(e.message, "error"); } finally { setButtonLoading(btn, false); }
 }
