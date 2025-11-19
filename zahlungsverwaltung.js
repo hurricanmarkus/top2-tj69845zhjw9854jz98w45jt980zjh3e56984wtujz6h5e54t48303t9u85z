@@ -1473,3 +1473,92 @@ window.handlePaymentAction = async function (id, action, amount = 0) {
     try { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', id), updateData); alertUser("Status aktualisiert.", "success"); if (action !== 'partial_pay' && action !== 'mark_paid') closeDetailModal(); }
     catch (e) { console.error(e); alertUser("Fehler: " + e.message, "error"); }
 };
+
+// --- ADJUST AMOUNT LOGIK (Betrag anpassen) ---
+// Globale Variable für aktuelle Bearbeitungs-ID
+let currentAdjustId = null; 
+
+window.openAdjustAmountModal = function(id) {
+    const p = allPayments.find(x => x.id === id);
+    if (!p) return;
+
+    currentAdjustId = id;
+    const modal = document.getElementById('adjustAmountModal');
+    
+    document.getElementById('adjust-current-amount-display').textContent = parseFloat(p.remainingAmount).toFixed(2) + " €";
+    document.getElementById('adjust-new-amount').value = parseFloat(p.remainingAmount).toFixed(2); // Standardwert = aktueller Wert
+    document.getElementById('adjust-reason').value = 'correction';
+    document.getElementById('adjust-note').value = '';
+
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+}
+
+function closeAdjustAmountModal() {
+    document.getElementById('adjustAmountModal').classList.add('hidden');
+    document.getElementById('adjustAmountModal').style.display = 'none';
+    currentAdjustId = null;
+}
+
+async function executeAdjustAmount() {
+    if (!currentAdjustId) return;
+    const p = allPayments.find(x => x.id === currentAdjustId);
+    if (!p) return;
+
+    const newAmountVal = parseFloat(document.getElementById('adjust-new-amount').value);
+    const reason = document.getElementById('adjust-reason').value;
+    const note = document.getElementById('adjust-note').value.trim();
+
+    if (isNaN(newAmountVal) || newAmountVal < 0) {
+        alertUser("Bitte gültigen positiven Betrag eingeben.", "error");
+        return;
+    }
+
+    const oldAmount = parseFloat(p.remainingAmount);
+    const diff = newAmountVal - oldAmount;
+
+    if (Math.abs(diff) < 0.01) {
+        alertUser("Keine Änderung am Betrag festgestellt.", "info");
+        return;
+    }
+
+    const btn = document.getElementById('btn-save-adjust');
+    setButtonLoading(btn, true);
+
+    try {
+        const paymentRef = doc(db, 'artifacts', appId, 'public', 'data', 'payments', currentAdjustId);
+        
+        // Mapping für schöne Texte im Verlauf
+        const reasonTexts = {
+            'correction': 'Korrektur',
+            'interest': 'Zinsen/Gebühr',
+            'discount': 'Erlass/Rabatt',
+            'other': 'Anpassung'
+        };
+        const reasonText = reasonTexts[reason] || 'Anpassung';
+        const logInfo = `${reasonText}: Von ${oldAmount.toFixed(2)}€ auf ${newAmountVal.toFixed(2)}€ gesetzt. ${note ? `(${note})` : ''}`;
+
+        await updateDoc(paymentRef, {
+            remainingAmount: newAmountVal,
+            // Falls es eine Korrektur ist, passen wir vielleicht auch den Ursprungsbetrag 'amount' an? 
+            // Wir ändern hier nur remainingAmount, es sei denn, amount war kleiner als der neue Rest.
+            amount: (newAmountVal > p.amount) ? newAmountVal : p.amount, 
+            history: [...(p.history || []), { 
+                date: new Date(), 
+                action: 'adjusted', 
+                user: currentUser.displayName, 
+                info: logInfo 
+            }]
+        });
+
+        alertUser("Betrag erfolgreich angepasst.", "success");
+        closeAdjustAmountModal();
+        // Detailansicht aktualisiert sich automatisch durch den Snapshot Listener
+
+    } catch (e) {
+        console.error(e);
+        alertUser("Fehler: " + e.message, "error");
+    } finally {
+        setButtonLoading(btn, false);
+    }
+}
