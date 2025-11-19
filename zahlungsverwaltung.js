@@ -1103,8 +1103,10 @@ function renderDetailContent(p, isRefresh) {
     const content = document.getElementById('payment-detail-content');
     const actions = document.getElementById('payment-detail-actions');
     const partialForm = document.getElementById('partial-payment-form');
-    const transactionSection = document.getElementById('transaction-history-section'); // NEU
-    const transactionList = document.getElementById('transaction-list'); // NEU
+    const transactionSection = document.getElementById('transaction-history-section');
+    const transactionList = document.getElementById('transaction-list');
+    // HIER holen wir uns den Container für den Guthaben-Button
+    const creditContainer = document.getElementById('credit-usage-container');
 
     if (!modal || !content || !actions) return;
 
@@ -1112,6 +1114,31 @@ function renderDetailContent(p, isRefresh) {
     const iAmCreditor = p.creditorId === currentUser.mode;
     const iAmCreator = p.createdBy === currentUser.mode;
     const shortId = p.id.slice(-4).toUpperCase();
+
+    // --- GUTHABEN CHECK (NEU) ---
+    // Wir prüfen: Bin ich der Schuldner? Und habe ich Guthaben bei diesem Gläubiger?
+    if (creditContainer) {
+        if (iAmDebtor && p.status === 'open') {
+            // Berechne Guthaben bei dem Gläubiger (p.creditorId)
+            const creditAmount = calculateAvailableCredit(p.creditorId);
+            
+            if (creditAmount > 0) {
+                // Button anzeigen und Text setzen
+                creditContainer.classList.remove('hidden');
+                document.getElementById('available-credit-amount').textContent = creditAmount.toFixed(2) + ' €';
+                
+                // WICHTIG: Wir speichern die IDs im Button, damit die Funktion 'useCreditForPayment' weiß, worum es geht
+                const btn = document.getElementById('btn-use-credit');
+                btn.dataset.targetPaymentId = p.id;
+                btn.dataset.creditorId = p.creditorId;
+            } else {
+                creditContainer.classList.add('hidden');
+            }
+        } else {
+            // Wenn ich nicht Schuldner bin oder schon bezahlt ist -> weg damit
+            creditContainer.classList.add('hidden');
+        }
+    }
 
     let editControls = '';
     if (iAmCreator) {
@@ -1140,7 +1167,6 @@ function renderDetailContent(p, isRefresh) {
             </div>`;
     }
 
-    // NEU: Transaktions-Liste anzeigen
     if (p.transactions && p.transactions.length > 0) {
         transactionSection.classList.remove('hidden');
         transactionList.innerHTML = '';
@@ -1149,15 +1175,20 @@ function renderDetailContent(p, isRefresh) {
             const row = document.createElement('div');
             row.className = "flex justify-between items-center p-2 bg-white rounded border shadow-sm";
             const dateStr = tx.date?.toDate ? tx.date.toDate().toLocaleDateString() : new Date(tx.date).toLocaleDateString();
+            
+            // Anzeige anpassen, wenn es eine Guthaben-Verrechnung war
+            const isCredit = tx.type === 'credit_usage';
+            const label = isCredit ? 'Guthaben' : 'Zahlung';
+            const amountClass = isCredit ? 'text-purple-700' : 'text-green-700';
+
             row.innerHTML = `
                 <div class="flex items-center gap-2">
-                    <span class="font-bold text-green-700">+ ${parseFloat(tx.amount).toFixed(2)} €</span>
+                    <span class="font-bold ${amountClass}">+ ${parseFloat(tx.amount).toFixed(2)} €</span>
                     <span class="text-xs text-gray-400">| ${dateStr}</span>
-                    <span class="text-xs text-gray-500 italic">(${tx.type === 'credit_usage' ? 'Guthaben' : 'Zahlung'})</span>
+                    <span class="text-xs text-gray-500 italic">(${label})</span>
                 </div>
                 ${canDelete ? `<button class="text-red-400 hover:text-red-600 text-xs font-bold delete-tx-btn px-2 py-1 bg-red-50 rounded border border-red-100">Löschen</button>` : ''}
             `;
-            // Event Listener für Löschen
             if (canDelete) row.querySelector('.delete-tx-btn').addEventListener('click', () => deleteTransaction(p.id, index));
             transactionList.appendChild(row);
         });
@@ -1217,6 +1248,7 @@ function renderDetailContent(p, isRefresh) {
         }
     }
     window.showPartialForm = function () { if (partialForm) partialForm.classList.remove('hidden'); }
+    
     const submitPartialBtn = document.getElementById('btn-submit-partial');
     if (submitPartialBtn) {
         const newBtn = submitPartialBtn.cloneNode(true);
@@ -1569,6 +1601,111 @@ async function executeAdjustAmount() {
     } catch (e) {
         console.error(e);
         alertUser("Fehler: " + e.message, "error");
+    } finally {
+        setButtonLoading(btn, false);
+    }
+}
+
+
+// --- GUTHABEN LOGIK ---
+
+// 1. Berechnet, wie viel Guthaben ICH bei der Person (partnerId) habe
+function calculateAvailableCredit(partnerId) {
+    let credit = 0;
+    allPayments.forEach(p => {
+        // Guthaben ist ein Eintrag vom Typ 'credit'.
+        // WICHTIG: Bei Guthaben bin ICH (currentUser) der Gläubiger (creditor),
+        // weil die andere Person (debtor) mir das Geld schuldet (bzw. gutgeschrieben hat).
+        if (p.status === 'open' && p.type === 'credit' && p.creditorId === currentUser.mode && p.debtorId === partnerId) {
+            credit += parseFloat(p.remainingAmount);
+        }
+    });
+    return credit;
+}
+
+// 2. Führt die Verrechnung durch (Button Klick)
+async function useCreditForPayment() {
+    const btn = document.getElementById('btn-use-credit');
+    // Wir lesen die IDs aus, die wir im renderDetailContent im Button gespeichert haben
+    const paymentId = btn.dataset.targetPaymentId;
+    const partnerId = btn.dataset.creditorId; 
+
+    const targetPayment = allPayments.find(p => p.id === paymentId);
+    if (!targetPayment) return;
+
+    const availableCredit = calculateAvailableCredit(partnerId);
+    const debtAmount = parseFloat(targetPayment.remainingAmount);
+
+    // Wir nutzen maximal so viel, wie Schulden da sind oder Guthaben vorhanden ist
+    const amountToUse = Math.min(availableCredit, debtAmount);
+
+    if (!confirm(`${amountToUse.toFixed(2)} € Guthaben verrechnen?`)) return;
+
+    setButtonLoading(btn, true);
+
+    try {
+        const batch = writeBatch(db);
+        const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
+
+        // A) Die aktuelle Schuld reduzieren
+        const newDebtRemaining = debtAmount - amountToUse;
+        batch.update(doc(paymentsRef, paymentId), {
+            remainingAmount: newDebtRemaining,
+            status: newDebtRemaining <= 0.01 ? 'paid' : 'open', // Wenn alles bezahlt, auf 'paid' setzen
+            history: [...(targetPayment.history || []), { 
+                date: new Date(), 
+                action: 'paid_with_credit', 
+                user: currentUser.displayName, 
+                info: `${amountToUse.toFixed(2)}€ mit Guthaben verrechnet.` 
+            }],
+            transactions: [...(targetPayment.transactions || []), { 
+                date: new Date(), 
+                amount: amountToUse, 
+                type: 'credit_usage', // Spezieller Typ für die Anzeige
+                user: currentUser.displayName 
+            }]
+        });
+
+        // B) Das Guthaben reduzieren (FIFO - Ältestes Guthaben zuerst nutzen)
+        let remainingToDeduct = amountToUse;
+        
+        // Suche alle offenen Guthaben-Einträge bei dieser Person
+        const creditEntries = allPayments.filter(p => 
+            p.status === 'open' && 
+            p.type === 'credit' && 
+            p.creditorId === currentUser.mode && 
+            p.debtorId === partnerId
+        );
+        
+        for (const creditP of creditEntries) {
+            if (remainingToDeduct <= 0) break;
+
+            const availableInThisEntry = parseFloat(creditP.remainingAmount);
+            const deduct = Math.min(remainingToDeduct, availableInThisEntry);
+
+            const newCreditRemaining = availableInThisEntry - deduct;
+
+            batch.update(doc(paymentsRef, creditP.id), {
+                remainingAmount: newCreditRemaining,
+                status: newCreditRemaining <= 0.01 ? 'paid' : 'open', // Wenn Guthaben aufgebraucht, schließen
+                history: [...(creditP.history || []), { 
+                    date: new Date(), 
+                    action: 'credit_used', 
+                    user: currentUser.displayName, 
+                    info: `${deduct.toFixed(2)}€ Guthaben eingelöst für "${targetPayment.title}".` 
+                }]
+            });
+
+            remainingToDeduct -= deduct;
+        }
+
+        await batch.commit();
+        alertUser("Guthaben erfolgreich verrechnet!", "success");
+        // Das Fenster aktualisiert sich automatisch
+
+    } catch (e) {
+        console.error(e);
+        alertUser("Fehler beim Verrechnen: " + e.message, "error");
     } finally {
         setButtonLoading(btn, false);
     }
