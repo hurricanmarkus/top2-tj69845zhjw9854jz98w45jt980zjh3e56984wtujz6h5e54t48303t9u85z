@@ -1543,47 +1543,65 @@ async function resolveOverpayment(decision) {
     const { paymentId, payAmount, debtAmount, excessAmount } = pendingOverpaymentData;
     const p = allPayments.find(x => x.id === paymentId);
 
+    // --- NEU: SICHERHEITSCHECK ---
+    // Wir prüfen, ob der Partner (der das Guthaben bekommen soll) ein echter User oder Kontakt ist.
+    // Bei Überzahlung ist der Partner immer der, der Geld GEGEBEN hat (also p.creditorId, wenn er bezahlt wurde).
+    // Moment... wer hat bezahlt?
+    // Szenario: Ich schulde Max 10€. Ich markiere "Max hat bezahlt" (bzw ich habe bezahlt).
+    // Wenn ich auf "Alles bezahlt" klicke bei "Ich schulde", dann zahle ICH an MAX.
+    // Wenn ich 15€ eingebe, hat MAX 5€ Guthaben bei mir.
+    // Partner ID ist also der Gläubiger des ursprünglichen Eintrags.
+    
+    let targetPartnerId = (p.debtorId === currentUser.mode) ? p.creditorId : p.debtorId;
+    
+    // Wenn targetPartnerId null ist (manueller Gast) ODER die ID nicht in Users/Contacts gefunden wird:
+    const isRealUser = USERS[targetPartnerId];
+    const isContact = allContacts.some(c => c.id === targetPartnerId);
+
+    if (decision === 'credit' && !isRealUser && !isContact) {
+        alertUser("FEHLER: Guthaben kann nur für gespeicherte Kontakte angelegt werden!", "error_long");
+        alert("Achtung:\nDieser Partner ist nur als Text (Gast) hinterlegt.\n\nBitte zuerst:\n1. Den Partner unter 'Einstellungen > Eigene Kontakte' anlegen.\n2. Den offenen Eintrag bearbeiten und die Person auf den neuen Kontakt ändern.\n3. Dann die Zahlung erneut erfassen.");
+        
+        // Modal schließen, aber nichts buchen
+        document.getElementById('overpaymentModal').style.display = 'none';
+        pendingOverpaymentData = null;
+        return;
+    }
+    // --- ENDE CHECK ---
+
     setButtonLoading(document.getElementById(decision === 'credit' ? 'btn-op-credit' : 'btn-op-tip'), true);
 
     try {
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
-
-        // 1. Alte Schuld begleichen
         const transaction = { date: new Date(), amount: debtAmount, type: 'payment', user: currentUser.displayName };
+        
         batch.update(doc(paymentsRef, paymentId), {
             remainingAmount: 0, status: 'paid',
-            history: [...(p.history || []), { date: new Date(), action: 'paid_excess', user: currentUser.displayName, info: `Bezahlt mit Überzahlung (${payAmount.toFixed(2)}€).` }],
-            transactions: [...(p.transactions || []), transaction]
+            history: [...(p.history||[]), { date: new Date(), action: 'paid_excess', user: currentUser.displayName, info: `Bezahlt mit Überzahlung (${payAmount.toFixed(2)}€).` }],
+            transactions: [...(p.transactions||[]), transaction]
         });
 
-        // 2. Entscheidung
         if (decision === 'credit') {
             const creditDocRef = doc(paymentsRef);
-            // NEU: Guthaben erstellen (Rollentausch!)
             batch.set(creditDocRef, {
-                title: `Guthaben (aus "${p.title}")`,
-                amount: excessAmount, remainingAmount: excessAmount, isTBD: false, type: 'credit', status: 'open',
-                createdAt: serverTimestamp(), createdBy: currentUser.mode,
-                debtorId: p.creditorId, debtorName: p.creditorName, creditorId: p.debtorId, creditorName: p.debtorName,
-                involvedUserIds: p.involvedUserIds, history: [{ date: new Date(), action: 'created_credit', user: currentUser.displayName, info: `Guthaben aus Überzahlung.` }]
+                title: `Guthaben (aus "${p.title}")`, amount: excessAmount, remainingAmount: excessAmount, isTBD: false, type: 'credit', status: 'open', createdAt: serverTimestamp(), createdBy: currentUser.mode, debtorId: p.creditorId, debtorName: p.creditorName, creditorId: p.debtorId, creditorName: p.debtorName, involvedUserIds: p.involvedUserIds, history: [{ date: new Date(), action: 'created_credit', user: currentUser.displayName, info: `Guthaben aus Überzahlung.` }]
             });
-            alertUser("Guthabenkonto angelegt!", "success");
-        } else { 
-            alertUser("Rest als Trinkgeld verbucht.", "success"); 
-        }
-
-        await batch.commit();
-        document.getElementById('overpaymentModal').classList.add('hidden');
-        document.getElementById('overpaymentModal').style.display = 'none';
-        closeDetailModal();
+            alertUser("Guthaben angelegt!", "success");
+        } else { alertUser("Als Trinkgeld verbucht.", "success"); }
+        
+        await batch.commit(); 
+        document.getElementById('overpaymentModal').style.display = 'none'; 
+        closeDetailModal(); 
         pendingOverpaymentData = null;
-    } catch (e) { console.error(e); alertUser("Fehler: " + e.message, "error"); } 
+
+    } catch (e) { console.error(e); alertUser(e.message, "error"); } 
     finally { 
         setButtonLoading(document.getElementById('btn-op-credit'), false); 
         setButtonLoading(document.getElementById('btn-op-tip'), false); 
     }
 }
+
 
 // Transaktion löschen (Neu)
 window.deleteTransaction = async function(paymentId, txIndex) {
@@ -1987,8 +2005,8 @@ window.openCreditModal = function(mode, context, paymentId = null) {
     
     amountInput.value = ''; reasonInput.value = ''; select.innerHTML = ''; select.disabled = false;
 
-    // NEU: Dropdown mit Kontakten füllen
-    fillPartnerSelect(select, false); // false = kein "- Wählen -" Platzhalter (optional)
+    // Standard Dropdown füllen
+    fillPartnerSelect(select, false);
 
     if (mode === 'add') {
         document.getElementById('credit-sub-warning').classList.add('hidden');
@@ -2002,39 +2020,77 @@ window.openCreditModal = function(mode, context, paymentId = null) {
         document.getElementById('btn-save-credit').className = "px-4 py-2 bg-red-600 text-white font-bold rounded hover:bg-red-700";
         document.getElementById('credit-modal-title').textContent = "Guthaben nutzen / auszahlen";
         document.getElementById('credit-modal-desc').textContent = "Guthaben wird reduziert.";
+        
         if (paymentId) {
             const p = allPayments.find(x => x.id === paymentId);
             if (p) {
                 amountInput.value = p.remainingAmount;
                 reasonInput.value = "Auszahlung / Verrechnung";
-                select.value = (context === 'my') ? p.debtorId : p.creditorId;
+                
+                // ID des Partners ermitteln
+                const partnerId = (context === 'my') ? p.debtorId : p.creditorId;
+                const partnerName = (context === 'my') ? p.debtorName : p.creditorName;
+
+                // FIX: Prüfen, ob der Partner im Dropdown ist. Wenn nicht (weil "Geist"), fügen wir ihn hinzu.
+                let optionExists = select.querySelector(`option[value="${partnerId}"]`);
+                if (!optionExists && partnerId) {
+                    const opt = document.createElement('option');
+                    opt.value = partnerId;
+                    opt.textContent = partnerName + " (Archiviert/Gast)";
+                    // Am Anfang einfügen
+                    select.insertBefore(opt, select.firstChild);
+                } else if (!partnerId) {
+                     // Ganz schlimmer Fall: Keine ID. Wir nehmen den Namen als Value (Notlösung)
+                     const opt = document.createElement('option');
+                     opt.value = partnerName; // Vorsicht, hier muss executeCreditAction drauf reagieren
+                     opt.textContent = partnerName + " (Nur Name)";
+                     select.insertBefore(opt, select.firstChild);
+                }
+
+                select.value = partnerId || partnerName;
                 select.disabled = true;
             }
         }
     }
     modal.classList.remove('hidden'); modal.style.display = 'flex';
 }
-
 async function executeCreditAction() {
     const mode = document.getElementById('credit-mode').value;
     const context = document.getElementById('credit-context').value;
     const partnerId = document.getElementById('credit-partner-select').value;
     
-    // NEU: Hier wird gerundet!
+    // NEU: Runden
     let amount = parseFloat(document.getElementById('credit-amount').value);
-    if (!isNaN(amount)) {
-        amount = parseFloat(amount.toFixed(2)); // Hart auf 2 Stellen runden
-    }
+    if (!isNaN(amount)) { amount = parseFloat(amount.toFixed(2)); }
     
     const reason = document.getElementById('credit-reason').value.trim();
     const paymentId = document.getElementById('creditManageModal').dataset.paymentId;
 
-    if (!partnerId || isNaN(amount) || amount <= 0) { alertUser("Bitte Partner und Betrag wählen.", "error"); return; }
-    if (!reason) { alertUser("Grund fehlt.", "error"); return; }
+    if (!partnerId) { alertUser("Bitte eine Person aus der Liste wählen.", "error"); return; }
+    if (isNaN(amount) || amount <= 0) { alertUser("Bitte einen gültigen Betrag eingeben.", "error"); return; }
+    if (!reason) { alertUser("Bitte einen Grund angeben.", "error"); return; }
+
+    // --- NEU: SICHERHEITSCHECK FÜR MANUELLES AUFLADEN ---
+    // Wenn wir ADDEN (Zubuchen), muss der Partner valid sein.
+    // Beim Abbuchen (SUB) erlauben wir es ausnahmsweise, damit man "Leichen" entfernen kann.
+    if (mode === 'add') {
+        const isRealUser = USERS[partnerId];
+        const isContact = allContacts.some(c => c.id === partnerId);
+        
+        if (!isRealUser && !isContact) {
+             // Das passiert eigentlich nur, wenn jemand den Value im HTML manipuliert,
+             // aber sicher ist sicher.
+             alertUser("Guthaben kann nur für registrierte Kontakte angelegt werden.", "error");
+             return;
+        }
+    }
+    // --- ENDE CHECK ---
 
     const btn = document.getElementById('btn-save-credit');
     setButtonLoading(btn, true);
-
+    
+    // ... (Rest der Funktion bleibt gleich wie vorher) ...
+    // Hier unten folgt der try { ... } Block.
     try {
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
@@ -2044,6 +2100,11 @@ async function executeCreditAction() {
         else {
             const c = allContacts.find(c => c.id === partnerId);
             if (c) partnerName = c.name;
+            // Fallback für Abbuchen von "Leichen"
+            else if (paymentId) {
+                 const p = allPayments.find(x => x.id === paymentId);
+                 if(p) partnerName = (context === 'my') ? p.debtorName : p.creditorName;
+            }
         }
 
         if (mode === 'add') {
@@ -2061,9 +2122,7 @@ async function executeCreditAction() {
             if (paymentId) {
                 const p = allPayments.find(x => x.id === paymentId);
                 if (p) {
-                    // Auch hier runden wir das Rechenergebnis sicherheitshalber
                     const newRest = parseFloat((parseFloat(p.remainingAmount) - amount).toFixed(2));
-                    
                     if (newRest < 0) throw new Error("Nicht genug Guthaben.");
                     const updateData = { 
                         remainingAmount: newRest, 
