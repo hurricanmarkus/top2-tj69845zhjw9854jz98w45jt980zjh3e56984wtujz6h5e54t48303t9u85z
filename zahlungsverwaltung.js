@@ -162,32 +162,23 @@ function setupEventListeners() {
 }
 
 function setupSettingsListeners() {
-    // Tabs
     document.getElementById('tab-zv-templates')?.addEventListener('click', () => openSettingsTab('templates'));
     document.getElementById('tab-zv-contacts')?.addEventListener('click', () => openSettingsTab('contacts'));
     document.getElementById('tab-zv-credits')?.addEventListener('click', () => openSettingsTab('credits'));
     document.getElementById('tab-zv-accounts')?.addEventListener('click', () => openSettingsTab('accounts'));
-    document.getElementById('tab-zv-categories')?.addEventListener('click', () => openSettingsTab('categories')); // NEU
+    document.getElementById('tab-zv-categories')?.addEventListener('click', () => openSettingsTab('categories'));
 
-    // Listen
+    // Listener für Vorlagen-Liste (Löschen UND Umbenennen)
     document.getElementById('zv-templates-list')?.addEventListener('click', (e) => {
         if (e.target.closest('.delete-tpl-btn')) deleteTemplate(e.target.closest('.delete-tpl-btn').dataset.id);
+        if (e.target.closest('.edit-tpl-btn')) renameTemplate(e.target.closest('.edit-tpl-btn').dataset.id); // NEU
     });
 
-    // Add Buttons
     document.getElementById('btn-add-contact-setting')?.addEventListener('click', addContactFromSettings);
     document.getElementById('btn-add-account-setting')?.addEventListener('click', addAccountFromSettings);
-    document.getElementById('btn-add-category-setting')?.addEventListener('click', addCategoryFromSettings); // NEU
+    document.getElementById('btn-add-category-setting')?.addEventListener('click', addCategoryFromSettings);
 
-    // NEU: Kategorien Liste Actions (Löschen)
-    const categoryList = document.getElementById('zv-categories-list');
-    if (categoryList) {
-        categoryList.onclick = (e) => {
-            if (e.target.closest('.delete-cat-btn')) deleteCategory(e.target.closest('.delete-cat-btn').dataset.id);
-        }
-    }
-
-    // Listen Aktionen
+    // Listen Aktionen (Kontakte, Accounts, Kategorien) - wie gehabt
     const contactList = document.getElementById('zv-contacts-list');
     if(contactList) {
         contactList.onclick = (e) => {
@@ -209,8 +200,14 @@ function setupSettingsListeners() {
         }
     }
 
-    document.getElementById('btn-execute-migration')?.addEventListener('click', executeMigration);
+    const categoryList = document.getElementById('zv-categories-list');
+    if (categoryList) {
+        categoryList.onclick = (e) => {
+            if (e.target.closest('.delete-cat-btn')) deleteCategory(e.target.closest('.delete-cat-btn').dataset.id);
+        }
+    }
 
+    document.getElementById('btn-execute-migration')?.addEventListener('click', executeMigration);
     document.getElementById('btn-add-my-credit')?.addEventListener('click', () => openCreditModal('add', 'my'));
     document.getElementById('btn-add-other-credit')?.addEventListener('click', () => openCreditModal('add', 'other'));
 
@@ -221,6 +218,7 @@ function setupSettingsListeners() {
     });
     document.getElementById('btn-save-credit')?.addEventListener('click', executeCreditAction);
 }
+
 
 
 // --- DATENBANK LISTENER ---
@@ -2170,7 +2168,20 @@ async function quickSaveContact() {
 
 async function saveCurrentAsTemplate() {
     const title = document.getElementById('payment-title').value.trim();
-    if (!title) { alertUser("Bitte erst einen Titel eingeben.", "error"); return; }
+    // Wir brauchen zumindest einen Titel im Formular als Basis
+    if (!title) { alertUser("Bitte gib erst einen Titel/Betreff für die Zahlung ein.", "error"); return; }
+
+    // 1. Name für die Vorlage abfragen
+    const tplName = prompt("Bitte einen Namen für diese Vorlage eingeben:", title);
+    if (!tplName || !tplName.trim()) return; // Abbrechen gedrückt
+
+    // 2. Prüfen ob Name schon existiert (Duplikat-Check)
+    // Wir prüfen 'name' (neu) und 'title' (alt)
+    const exists = allTemplates.some(t => (t.name || t.title).toLowerCase() === tplName.trim().toLowerCase());
+    if (exists) {
+        alertUser("Eine Vorlage mit diesem Namen existiert bereits.", "error");
+        return;
+    }
 
     // Werte auslesen
     const amount = parseFloat(document.getElementById('payment-amount').value) || 0;
@@ -2187,10 +2198,10 @@ async function saveCurrentAsTemplate() {
     const creditorMan = !credManualHidden ? document.getElementById('payment-creditor-manual').value : null;
 
     const tplData = {
-        title: title,
+        name: tplName.trim(), // NEU: Der Anzeigename der Vorlage
+        title: title,         // Der Betreff der Zahlung
         amount: amount,
         categoryId: categoryId,
-        // Wir speichern genau den Zustand der Felder
         debtorVal: debtorVal,
         debtorMan: debtorMan,
         creditorVal: creditorVal,
@@ -2205,6 +2216,7 @@ async function saveCurrentAsTemplate() {
 }
 
 
+
 function renderTemplateList() {
     const container = document.getElementById('zv-templates-list');
     if (!container) return;
@@ -2216,26 +2228,62 @@ function renderTemplateList() {
     }
 
     allTemplates.forEach(tpl => {
+        const displayName = tpl.name || tpl.title; // Fallback für alte Vorlagen
+
         const div = document.createElement('div');
         div.className = "flex justify-between items-center p-3 bg-white rounded shadow-sm border hover:shadow-md";
         div.innerHTML = `
             <div>
-                <p class="font-bold text-gray-800">${tpl.title}</p>
+                <p class="font-bold text-gray-800">${displayName}</p>
                 <p class="text-xs text-gray-500">${tpl.amount ? tpl.amount.toFixed(2) + '€' : 'Variabel'}</p>
             </div>
-            <button class="delete-tpl-btn text-red-400 hover:text-red-600 p-2" data-id="${tpl.id}">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.58.22-2.365.468a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193v-.443A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd" /></svg>
-            </button>
+            <div class="flex gap-1">
+                <button class="edit-tpl-btn text-indigo-400 hover:text-indigo-600 p-2" data-id="${tpl.id}" title="Umbenennen">
+                    ✏️
+                </button>
+                <button class="delete-tpl-btn text-red-400 hover:text-red-600 p-2" data-id="${tpl.id}" title="Löschen">
+                    🗑️
+                </button>
+            </div>
         `;
         container.appendChild(div);
     });
 }
+
 
 async function deleteTemplate(id) {
     if (!confirm("Vorlage wirklich löschen?")) return;
     try {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payment-templates', id));
     } catch(e) { console.error(e); }
+}
+
+
+async function renameTemplate(id) {
+    const tpl = allTemplates.find(t => t.id === id);
+    if (!tpl) return;
+
+    const oldName = tpl.name || tpl.title;
+    const newName = prompt("Neuer Name für die Vorlage:", oldName);
+
+    if (!newName || newName.trim() === "" || newName === oldName) return;
+
+    // Duplikat-Check (ausgenommen die eigene ID)
+    const exists = allTemplates.some(t => t.id !== id && (t.name || t.title).toLowerCase() === newName.trim().toLowerCase());
+    if (exists) {
+        alertUser("Dieser Name ist bereits vergeben.", "error");
+        return;
+    }
+
+    try {
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payment-templates', id), {
+            name: newName.trim()
+        });
+        alertUser("Vorlage umbenannt.", "success");
+    } catch(e) {
+        console.error(e);
+        alertUser("Fehler beim Umbenennen.", "error");
+    }
 }
 
 function updateTemplateDropdown() {
@@ -2245,7 +2293,8 @@ function updateTemplateDropdown() {
     allTemplates.forEach(tpl => {
         const opt = document.createElement('option');
         opt.value = tpl.id;
-        opt.textContent = `${tpl.title}`;
+        // Zeige 'name' wenn vorhanden, sonst 'title'
+        opt.textContent = tpl.name || tpl.title;
         select.appendChild(opt);
     });
 }
@@ -2255,35 +2304,41 @@ function applySelectedTemplate() {
     const tpl = allTemplates.find(t => t.id === id);
     if (!tpl) return;
 
+    // NEU: Sofort zur Eingabemaske wechseln (Szenario-Auswahl überspringen)
+    document.getElementById('scenario-selector-container').classList.add('hidden');
+    document.getElementById('transaction-details-container').classList.remove('hidden');
+
     // 1. Basisdaten setzen
-    document.getElementById('payment-title').value = tpl.title;
-    if (tpl.amount) document.getElementById('payment-amount').value = tpl.amount;
+    document.getElementById('payment-title').value = tpl.title || "";
+    if (tpl.amount) {
+        const amountInput = document.getElementById('payment-amount');
+        amountInput.value = tpl.amount;
+        // Falls wir im Edit-Mode sind, bleibt es disabled, bei Neu ist es enabled
+        // (Das wird durch openCreateModal gesteuert, hier greifen wir nur auf Werte zu)
+    }
     if (tpl.categoryId) document.getElementById('payment-category-select').value = tpl.categoryId;
     
     // 2. Schuldner setzen
     if (tpl.debtorVal) {
-        // Dropdown Modus
-        toggleInputMode('debtor', false); // Force Select
+        toggleInputMode('debtor', false);
         document.getElementById('payment-debtor-select').value = tpl.debtorVal;
     } else if (tpl.debtorMan) {
-        // Manuell Modus
-        toggleInputMode('debtor', true); // Force Manual
+        toggleInputMode('debtor', true);
         document.getElementById('payment-debtor-manual').value = tpl.debtorMan;
     }
 
     // 3. Gläubiger setzen
     if (tpl.creditorVal) {
-        // Dropdown Modus
-        toggleInputMode('creditor', false); // Force Select
+        toggleInputMode('creditor', false);
         document.getElementById('payment-creditor-select').value = tpl.creditorVal;
     } else if (tpl.creditorMan) {
-        // Manuell Modus
-        toggleInputMode('creditor', true); // Force Manual
+        toggleInputMode('creditor', true);
         document.getElementById('payment-creditor-manual').value = tpl.creditorMan;
     }
     
     updateCreditorHint();
 }
+
 
 // --- GUTHABEN (CREDIT) LOGIK (NEU) ---
 
