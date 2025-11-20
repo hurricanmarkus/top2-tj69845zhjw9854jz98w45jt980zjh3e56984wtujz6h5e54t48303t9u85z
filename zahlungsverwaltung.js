@@ -74,6 +74,10 @@ function setupEventListeners() {
     document.getElementById('scenario-i-owe')?.addEventListener('click', () => setTransactionScenario('i_owe'));
     document.getElementById('scenario-owes-me')?.addEventListener('click', () => setTransactionScenario('owes_me'));
     document.getElementById('scenario-other')?.addEventListener('click', () => setTransactionScenario('other'));
+    document.getElementById('btn-back-to-scenario')?.addEventListener('click', () => {
+        document.getElementById('scenario-selector-container').classList.remove('hidden');
+        document.getElementById('transaction-details-container').classList.add('hidden');
+    });
 
     // Standard Buttons
     document.getElementById('btn-create-new-payment')?.addEventListener('click', () => openCreateModal());
@@ -639,7 +643,7 @@ function openCreateModal(paymentToEdit = null) {
     document.getElementById('installment-options').classList.add('hidden');
     
     // Inputs und Modi zurücksetzen
-    toggleInputMode('debtor', false); // false = Dropdown Modus
+    toggleInputMode('debtor', false);
     toggleInputMode('creditor', false);
     toggleSplitMode(false);
     document.getElementById('toggle-split-mode').checked = false;
@@ -649,17 +653,20 @@ function openCreateModal(paymentToEdit = null) {
     fillDropdown(document.getElementById('payment-creditor-select'), 'creditor');
 
     if (paymentToEdit) {
+        // EDIT MODUS: Direkt zu den Details
+        document.getElementById('scenario-selector-container').classList.add('hidden');
+        document.getElementById('transaction-details-container').classList.remove('hidden');
+
         document.getElementById('edit-payment-id').value = paymentToEdit.id;
         document.getElementById('payment-title').value = paymentToEdit.title;
         document.getElementById('payment-amount').value = paymentToEdit.amount;
         document.getElementById('payment-start-date').value = paymentToEdit.startDate || '';
         document.getElementById('payment-deadline').value = paymentToEdit.deadline || '';
         
-        // 1. Debtor (Schuldner) setzen
+        // Debtor setzen
         const debSelect = document.getElementById('payment-debtor-select');
         let foundDeb = false;
         const prefixes = ['USR', 'CON', 'ACC'];
-        // Wir suchen die ID mit verschiedenen Prefix-Möglichkeiten
         for(let p of prefixes) {
             if (debSelect.querySelector(`option[value="${p}:${paymentToEdit.debtorId}"]`)) {
                 debSelect.value = `${p}:${paymentToEdit.debtorId}`;
@@ -667,12 +674,11 @@ function openCreateModal(paymentToEdit = null) {
             }
         }
         if (!foundDeb && paymentToEdit.debtorId) {
-             // Fallback: Manuell oder gelöschter User
              toggleInputMode('debtor', true);
              document.getElementById('payment-debtor-manual').value = paymentToEdit.debtorName;
         }
 
-        // 2. Creditor (Gläubiger) setzen
+        // Creditor setzen
         const credSelect = document.getElementById('payment-creditor-select');
         let foundCred = false;
         for(let p of prefixes) {
@@ -690,16 +696,11 @@ function openCreateModal(paymentToEdit = null) {
         if (paymentToEdit.invoiceNr || paymentToEdit.orderNr || paymentToEdit.notes || paymentToEdit.type === 'transfer') {
             document.getElementById('payment-advanced-options').classList.remove('hidden');
         }
-        
-        // Buttons neutral setzen beim Bearbeiten
-        setTransactionScenario(null);
-
     } else {
-        // Neuer Eintrag
+        // NEU ERSTELLEN: Zeige Auswahl-Buttons
         document.getElementById('edit-payment-id').value = "";
-        
-        // STANDARD: Ich schulde (Setzt den Button aktiv und füllt "Von" mit mir selbst)
-        setTransactionScenario('i_owe');
+        document.getElementById('scenario-selector-container').classList.remove('hidden');
+        document.getElementById('transaction-details-container').classList.add('hidden');
     }
 
     modal.classList.remove('hidden');
@@ -715,36 +716,21 @@ function setTransactionScenario(scenario) {
     const debtSelect = document.getElementById('payment-debtor-select');
     const credSelect = document.getElementById('payment-creditor-select');
 
-    // Visuelles Feedback für Buttons
-    const btns = {
-        'i_owe': document.getElementById('scenario-i-owe'),
-        'owes_me': document.getElementById('scenario-owes-me'),
-        'other': document.getElementById('scenario-other')
-    };
+    // 1. UI Umschalten: Buttons weg, Details da
+    document.getElementById('scenario-selector-container').classList.add('hidden');
+    document.getElementById('transaction-details-container').classList.remove('hidden');
 
-    Object.keys(btns).forEach(key => {
-        const btn = btns[key];
-        if (key === scenario) {
-            btn.classList.remove('text-gray-600', 'hover:bg-gray-100', 'bg-white');
-            btn.classList.add('bg-white', 'text-indigo-700', 'shadow-sm'); 
-        } else {
-            btn.classList.remove('bg-white', 'text-indigo-700', 'shadow-sm');
-            btn.classList.add('text-gray-600', 'hover:bg-gray-100');
-        }
-    });
-
-    // Logik anwenden
+    // 2. Logik anwenden (Vorbelegung)
     if (scenario === 'i_owe') {
         // Ich schulde -> Von Mir -> An ?
-        // Wir setzen den Schuldner auf MICH (wenn vorhanden)
-        // Wir leeren den Gläubiger
         toggleInputMode('debtor', false);
         toggleInputMode('creditor', false);
         
+        // Versuche "MICH" auszuwählen
         if (debtSelect.querySelector(`option[value="${myId}"]`)) {
             debtSelect.value = myId;
         }
-        credSelect.value = "";
+        credSelect.value = ""; // Empfänger offen lassen
     
     } else if (scenario === 'owes_me') {
         // Mir schuldet -> Von ? -> An Mich
@@ -754,16 +740,17 @@ function setTransactionScenario(scenario) {
         if (credSelect.querySelector(`option[value="${myId}"]`)) {
             credSelect.value = myId;
         }
-        debtSelect.value = "";
+        debtSelect.value = ""; // Schuldner offen lassen
         
     } else {
-        // Sonstiges -> Alles leer
+        // Sonstiges -> Alles leer lassen
         debtSelect.value = "";
         credSelect.value = "";
     }
     
     updateCreditorHint();
 }
+
 
 
 // --- HELFER FÜR DAS MODAL ---
@@ -804,21 +791,37 @@ function toggleSplitMode(isActive) {
         const splitList = document.getElementById('split-partner-list');
         splitList.innerHTML = '';
         let html = '';
-        // User laden
+        
+        // User laden (ALLE AKTIVEN, auch ICH)
         Object.values(USERS).forEach(u => { 
-            if(u.id !== currentUser.mode) 
-                html += `<label class="flex gap-2 p-1"><input type="checkbox" class="split-cb" value="${u.id}" data-name="${u.name}">${u.name}</label>`; 
+            if(u.isActive) {
+                let displayName = u.name;
+                if (u.id === currentUser.mode) displayName += " (Ich)";
+                
+                html += `<label class="flex gap-2 p-1 hover:bg-gray-50 rounded cursor-pointer border-b border-gray-100 last:border-0">
+                            <input type="checkbox" class="split-cb h-4 w-4 text-indigo-600 rounded" value="${u.id}" data-name="${u.name}">
+                            <span class="text-sm text-gray-700">${displayName}</span>
+                         </label>`; 
+            }
         });
+        
         // Kontakte laden
-        allContacts.forEach(c => { 
-            html += `<label class="flex gap-2 p-1"><input type="checkbox" class="split-cb" value="${c.id}" data-name="${c.name}">${c.name}</label>`; 
-        });
+        if (allContacts.length > 0) {
+             html += `<div class="text-[10px] font-bold text-gray-400 mt-2 mb-1 uppercase">Eigene Kontakte</div>`;
+             allContacts.forEach(c => { 
+                html += `<label class="flex gap-2 p-1 hover:bg-gray-50 rounded cursor-pointer border-b border-gray-100 last:border-0">
+                            <input type="checkbox" class="split-cb h-4 w-4 text-indigo-600 rounded" value="${c.id}" data-name="${c.name}">
+                            <span class="text-sm text-gray-700">${c.name}</span>
+                         </label>`; 
+            });
+        }
         splitList.innerHTML = html;
     } else {
         singleWrap.classList.remove('hidden');
         splitWrap.classList.add('hidden');
     }
 }
+
 
 // Diese Funktion wurde umbenannt/ersetzt (früher togglePartnerManual),
 // wird aber vom HTML EventListener benötigt. Wir leiten sie um oder entfernen sie,
