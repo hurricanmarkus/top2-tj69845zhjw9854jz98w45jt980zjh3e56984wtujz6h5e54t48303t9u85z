@@ -67,33 +67,39 @@ export function initializeZahlungsverwaltungSettingsView() {
 
 // --- SETUP EVENT LISTENERS ---
 function setupEventListeners() {
+    // Standard Buttons
     document.getElementById('btn-create-new-payment')?.addEventListener('click', () => openCreateModal());
     document.getElementById('close-create-payment-modal')?.addEventListener('click', closeCreateModal);
     document.getElementById('btn-cancel-create-payment')?.addEventListener('click', closeCreateModal);
     document.getElementById('btn-save-payment')?.addEventListener('click', savePayment);
     
+    // Erstellen Modus Umschalter
     document.getElementById('mode-single')?.addEventListener('click', () => setCreateMode('single'));
     document.getElementById('mode-split')?.addEventListener('click', () => setCreateMode('split'));
     document.getElementById('btn-direction-i-owe')?.addEventListener('click', () => setDirection('i_owe'));
     document.getElementById('btn-direction-owes-me')?.addEventListener('click', () => setDirection('owes_me'));
     document.getElementById('btn-toggle-partner-manual')?.addEventListener('click', togglePartnerManual);
     
+    // Split Logik
     document.getElementById('btn-add-split-manual')?.addEventListener('click', addSplitManualPartner);
     document.getElementById('split-manual-name-input')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addSplitManualPartner(); } });
-    
-    document.getElementById('btn-toggle-advanced-payment')?.addEventListener('click', () => document.getElementById('payment-advanced-options').classList.toggle('hidden'));
-    document.getElementById('payment-is-installment')?.addEventListener('change', (e) => document.getElementById('installment-options').classList.toggle('hidden', !e.target.checked));
-    
     document.getElementById('payment-amount')?.addEventListener('input', updateSplitPreview);
     document.getElementById('split-include-me')?.addEventListener('change', updateSplitPreview);
     
+    // Erweiterte Optionen
+    document.getElementById('btn-toggle-advanced-payment')?.addEventListener('click', () => document.getElementById('payment-advanced-options').classList.toggle('hidden'));
+    document.getElementById('payment-is-installment')?.addEventListener('change', (e) => document.getElementById('installment-options').classList.toggle('hidden', !e.target.checked));
+    
+    // Filter
     document.getElementById('payment-search-input')?.addEventListener('input', applyFilters);
     document.getElementById('payment-filter-status')?.addEventListener('change', applyFilters);
     document.getElementById('payment-filter-direction')?.addEventListener('change', applyFilters);
     
+    // Detail Modal
     document.getElementById('btn-close-detail-modal')?.addEventListener('click', closeDetailModal);
     document.getElementById('btn-print-payment')?.addEventListener('click', () => window.print());
     
+    // Listen Klicks
     const listContainer = document.getElementById('payments-list-container');
     if (listContainer) {
         listContainer.addEventListener('click', (e) => {
@@ -106,6 +112,7 @@ function setupEventListeners() {
         });
     }
     
+    // Spezialfunktionen (Bilanz, Merge, Split, Adjust)
     document.getElementById('btn-open-settlement')?.addEventListener('click', openSettlementModal);
     document.getElementById('close-settlement-modal')?.addEventListener('click', closeSettlementModal);
     document.getElementById('btn-execute-settlement')?.addEventListener('click', executeSettlement);
@@ -123,19 +130,24 @@ function setupEventListeners() {
     document.getElementById('btn-op-tip')?.addEventListener('click', () => resolveOverpayment('tip'));
     document.getElementById('btn-op-cancel')?.addEventListener('click', () => { document.getElementById('overpaymentModal').style.display = 'none'; pendingOverpaymentData = null; });
 
+    // Settings & Kontakte
     document.getElementById('btn-zv-settings')?.addEventListener('click', () => navigate('zahlungsverwaltungSettings'));
     document.getElementById('payment-template-select')?.addEventListener('change', applySelectedTemplate);
     document.getElementById('btn-save-as-template')?.addEventListener('click', saveCurrentAsTemplate);
-
     document.getElementById('payment-partner-name-manual')?.addEventListener('input', checkManualInputForContact);
     document.getElementById('btn-quick-save-contact')?.addEventListener('click', quickSaveContact);
 
-    // NEU: Guthaben-Box Klick -> Gehe zu Settings -> Tab Credits
+    // Dashboard Guthaben Box Klick
     document.getElementById('btn-dashboard-credits')?.addEventListener('click', () => {
         navigate('zahlungsverwaltungSettings');
         setTimeout(() => openSettingsTab('credits'), 50);
     });
+
+    // WICHTIG: HIER SIND DIE REPARIERTEN SCHLIESSEN-BUTTONS FÜR DAS NEUE FENSTER
+    document.getElementById('close-credit-details-btn')?.addEventListener('click', () => document.getElementById('creditDetailsModal').style.display = 'none');
+    document.getElementById('btn-close-credit-details')?.addEventListener('click', () => document.getElementById('creditDetailsModal').style.display = 'none');
 }
+
 
 
 function setupSettingsListeners() {

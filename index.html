@@ -1861,35 +1861,30 @@
                     </button>
                 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div class="p-4 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm">
-                        <p class="text-sm font-bold text-red-700 uppercase tracking-wide">Ich schulde (Offen)</p>
-                        <p class="text-3xl font-extrabold text-gray-800 mt-1" id="dashboard-my-debt-display">0,00 €</p>
-                        <p class="text-xs text-gray-500 mt-2" id="dashboard-my-debt-detail">an 0 Personen</p>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+                    
+                    <div class="p-3 bg-red-50 border border-red-200 rounded-lg shadow-sm flex flex-col justify-center">
+                        <p class="text-[10px] font-bold text-red-700 uppercase tracking-wide">Ich schulde</p>
+                        <p class="text-xl font-extrabold text-gray-800 leading-tight" id="dashboard-my-debt-display">0,00 €</p>
+                        <p class="text-[10px] text-gray-500" id="dashboard-my-debt-detail">an 0 Personen</p>
                     </div>
 
-                    <div class="p-4 bg-emerald-50 border-l-4 border-emerald-500 rounded-lg shadow-sm">
-                        <p class="text-sm font-bold text-emerald-700 uppercase tracking-wide">Mir wird geschuldet (Offen)</p>
-                        <p class="text-3xl font-extrabold text-gray-800 mt-1" id="dashboard-owe-me-display">0,00 €</p>
-                        <p class="text-xs text-gray-500 mt-2" id="dashboard-owe-me-detail">von 0 Personen</p>
+                    <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-lg shadow-sm flex flex-col justify-center">
+                        <p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">Mir wird geschuldet</p>
+                        <p class="text-xl font-extrabold text-gray-800 leading-tight" id="dashboard-owe-me-display">0,00 €</p>
+                        <p class="text-[10px] text-gray-500" id="dashboard-owe-me-detail">von 0 Personen</p>
                     </div>
-                </div>
 
-                <div id="btn-dashboard-credits" class="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg shadow-sm flex justify-between items-center cursor-pointer hover:bg-blue-100 transition">
-                    <div class="flex items-center gap-3">
-                        <div class="p-2 bg-blue-200 rounded-full text-blue-700">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
-                                <path d="M1 4a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4Zm12 4a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM4 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm13-1a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM1.75 14.5a.75.75 0 0 0 0 1.5c4.417 0 8.693.603 12.749 1.73 1.111.309 2.251-.512 2.251-1.696v-.784a.75.75 0 0 0-1.5 0v.784a.272.272 0 0 1-.35.25A49.043 49.043 0 0 0 1.75 14.5Z" />
+                    <div id="btn-dashboard-credits" class="p-3 bg-blue-50 border border-blue-200 rounded-lg shadow-sm cursor-pointer hover:bg-blue-100 transition flex flex-col justify-center relative group">
+                        <div class="absolute top-2 right-2 text-blue-300 group-hover:text-blue-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+                                <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" />
                             </svg>
                         </div>
-                        <div>
-                            <p class="text-xs font-bold text-blue-800 uppercase">Aktives Guthaben</p>
-                            <p class="text-lg font-extrabold text-gray-800" id="dashboard-credit-display">0,00 €</p>
-                        </div>
+                        <p class="text-[10px] font-bold text-blue-700 uppercase tracking-wide">Aktives Guthaben</p>
+                        <p class="text-xl font-extrabold text-gray-800 leading-tight" id="dashboard-credit-display">0,00 €</p>
+                        <p class="text-[10px] text-blue-600">Zum Verwalten klicken</p>
                     </div>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-blue-400">
-                        <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" />
-                    </svg>
                 </div>
 
                 <div class="flex flex-col md:flex-row gap-2 mb-4">
