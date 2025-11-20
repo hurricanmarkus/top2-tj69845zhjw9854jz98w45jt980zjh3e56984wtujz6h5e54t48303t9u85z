@@ -17,17 +17,19 @@ import {
 
 // --- GLOBALE VARIABLEN ---
 let unsubscribePayments = null;
-let allPayments = [];
-let currentDetailPaymentId = null;
-let currentSplitMode = 'single'; // 'single' oder 'split'
-let activeSettlementPartnerId = null;
+let unsubscribeTemplates = null;
+let unsubscribeContacts = null; // NEU
 
-// Multi-Select Variablen (für Zusammenfassen)
+let allPayments = [];
+let allTemplates = [];
+let allContacts = []; // NEU
+
+let currentDetailPaymentId = null;
+let currentSplitMode = 'single';
+let activeSettlementPartnerId = null;
 let isSelectionMode = false;
 let selectedPaymentIds = new Set();
-let pendingOverpaymentData = null; // Speichert Daten für Überzahlung
-let unsubscribeTemplates = null;
-let allTemplates = [];
+let pendingOverpaymentData = null;
 
 // --- INITIALISIERUNG HAUPTANSICHT ---
 export function initializeZahlungsverwaltungView() {
@@ -39,7 +41,8 @@ export function initializeZahlungsverwaltungView() {
 
     if (currentUser.mode !== GUEST_MODE) {
         listenForPayments();
-        listenForTemplates(); 
+        listenForTemplates();
+        listenForContacts(); // NEU
     } else {
         renderPaymentList([]);
     }
@@ -48,153 +51,106 @@ export function initializeZahlungsverwaltungView() {
 // --- INITIALISIERUNG EINSTELLUNGSANSICHT ---
 export function initializeZahlungsverwaltungSettingsView() {
     const view = document.getElementById('zahlungsverwaltungSettingsView');
-    if (!view) {
-        console.error("initializeZahlungsverwaltungSettingsView: View Element nicht gefunden!");
-        return;
-    }
+    if (!view) return;
     
-    // Listener nur einmal anhängen
     if (!view.dataset.listenerAttached) {
-        console.log("initializeZahlungsverwaltungSettingsView: Hänge Listener an...");
         setupSettingsListeners();
         view.dataset.listenerAttached = 'true';
     }
     
-    // Standard-Tab öffnen und Daten laden
+    // Standard-Tab öffnen
     openSettingsTab('templates');
     renderTemplateList();
+    renderContactList(); // NEU
     renderCreditOverview();
 }
 
-// --- EVENT LISTENER SETUP ---
+// --- SETUP EVENT LISTENERS ---
 function setupEventListeners() {
-    // Create / Modal Buttons
     document.getElementById('btn-create-new-payment')?.addEventListener('click', () => openCreateModal());
     document.getElementById('close-create-payment-modal')?.addEventListener('click', closeCreateModal);
     document.getElementById('btn-cancel-create-payment')?.addEventListener('click', closeCreateModal);
     document.getElementById('btn-save-payment')?.addEventListener('click', savePayment);
-
-    // Modes & Toggles (Erstellen)
+    
     document.getElementById('mode-single')?.addEventListener('click', () => setCreateMode('single'));
     document.getElementById('mode-split')?.addEventListener('click', () => setCreateMode('split'));
-
     document.getElementById('btn-direction-i-owe')?.addEventListener('click', () => setDirection('i_owe'));
     document.getElementById('btn-direction-owes-me')?.addEventListener('click', () => setDirection('owes_me'));
     document.getElementById('btn-toggle-partner-manual')?.addEventListener('click', togglePartnerManual);
-
-    // SPLIT: Gast hinzufügen (im Erstellen-Modal)
+    
     document.getElementById('btn-add-split-manual')?.addEventListener('click', addSplitManualPartner);
-    document.getElementById('split-manual-name-input')?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            addSplitManualPartner();
-        }
-    });
-
-    // Advanced Options & Ratenzahlung Toggle
-    document.getElementById('btn-toggle-advanced-payment')?.addEventListener('click', () => {
-        document.getElementById('payment-advanced-options').classList.toggle('hidden');
-    });
-    document.getElementById('payment-is-installment')?.addEventListener('change', (e) => {
-        const opts = document.getElementById('installment-options');
-        if (e.target.checked) {
-            opts.classList.remove('hidden');
-        } else {
-            opts.classList.add('hidden');
-        }
-    });
-
-    // Split Calculation Logic
+    document.getElementById('split-manual-name-input')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addSplitManualPartner(); } });
+    
+    document.getElementById('btn-toggle-advanced-payment')?.addEventListener('click', () => document.getElementById('payment-advanced-options').classList.toggle('hidden'));
+    document.getElementById('payment-is-installment')?.addEventListener('change', (e) => document.getElementById('installment-options').classList.toggle('hidden', !e.target.checked));
+    
     document.getElementById('payment-amount')?.addEventListener('input', updateSplitPreview);
     document.getElementById('split-include-me')?.addEventListener('change', updateSplitPreview);
-
-    // Filter & Suche
+    
     document.getElementById('payment-search-input')?.addEventListener('input', applyFilters);
     document.getElementById('payment-filter-status')?.addEventListener('change', applyFilters);
     document.getElementById('payment-filter-direction')?.addEventListener('change', applyFilters);
-
-    // Details Modal
+    
     document.getElementById('btn-close-detail-modal')?.addEventListener('click', closeDetailModal);
     document.getElementById('btn-print-payment')?.addEventListener('click', () => window.print());
-
-    // Klick auf Liste
+    
     const listContainer = document.getElementById('payments-list-container');
     if (listContainer) {
         listContainer.addEventListener('click', (e) => {
-            if (e.target.classList.contains('payment-select-cb')) {
-                e.stopPropagation();
-                togglePaymentSelection(e.target.value, e.target.checked);
-                return;
-            }
+            if (e.target.classList.contains('payment-select-cb')) { e.stopPropagation(); togglePaymentSelection(e.target.value, e.target.checked); return; }
             const card = e.target.closest('.payment-card-item');
             if (card && card.dataset.id) {
-                if (isSelectionMode) {
-                    const cb = card.querySelector('.payment-select-cb');
-                    if (cb) { cb.checked = !cb.checked; togglePaymentSelection(card.dataset.id, cb.checked); }
-                } else {
-                    openPaymentDetail(card.dataset.id);
-                }
+                if (isSelectionMode) { const cb = card.querySelector('.payment-select-cb'); if (cb) { cb.checked = !cb.checked; togglePaymentSelection(card.dataset.id, cb.checked); } } 
+                else { openPaymentDetail(card.dataset.id); }
             }
         });
     }
-
-    // SETTLEMENT
+    
     document.getElementById('btn-open-settlement')?.addEventListener('click', openSettlementModal);
     document.getElementById('close-settlement-modal')?.addEventListener('click', closeSettlementModal);
     document.getElementById('btn-execute-settlement')?.addEventListener('click', executeSettlement);
-
-    // MERGE
     document.getElementById('btn-toggle-selection-mode')?.addEventListener('click', toggleSelectionMode);
     document.getElementById('btn-execute-merge')?.addEventListener('click', executeMerge);
-
-    // SPLIT EXISTING
-    document.getElementById('btn-cancel-split')?.addEventListener('click', () => {
-        document.getElementById('splitEntryModal').classList.add('hidden');
-        document.getElementById('splitEntryModal').style.display = 'none';
-    });
+    
+    document.getElementById('btn-cancel-split')?.addEventListener('click', () => document.getElementById('splitEntryModal').style.display = 'none');
     document.getElementById('btn-confirm-split')?.addEventListener('click', executeSplitEntry);
-
-    // ADJUST AMOUNT
+    
     document.getElementById('close-adjust-modal')?.addEventListener('click', closeAdjustAmountModal);
     document.getElementById('btn-cancel-adjust')?.addEventListener('click', closeAdjustAmountModal);
     document.getElementById('btn-save-adjust')?.addEventListener('click', executeAdjustAmount);
-
-    // NEU: OVERPAYMENT (Überzahlung)
+    
     document.getElementById('btn-op-credit')?.addEventListener('click', () => resolveOverpayment('credit'));
     document.getElementById('btn-op-tip')?.addEventListener('click', () => resolveOverpayment('tip'));
-    document.getElementById('btn-op-cancel')?.addEventListener('click', () => {
-        document.getElementById('overpaymentModal').classList.add('hidden');
-        document.getElementById('overpaymentModal').style.display = 'none';
-        pendingOverpaymentData = null;
-    });
-   // NEU: Settings Button Navigation
+    document.getElementById('btn-op-cancel')?.addEventListener('click', () => { document.getElementById('overpaymentModal').style.display = 'none'; pendingOverpaymentData = null; });
+
     document.getElementById('btn-zv-settings')?.addEventListener('click', () => navigate('zahlungsverwaltungSettings'));
-    
-    // NEU: Template Logik im Erstellen-Modal
     document.getElementById('payment-template-select')?.addEventListener('change', applySelectedTemplate);
-    document.getElementById('btn-save-as-template')?.addEventListener('click', saveCurrentAsTemplate); 
+    document.getElementById('btn-save-as-template')?.addEventListener('click', saveCurrentAsTemplate);
+
+    // NEU: Listener für manuellen Namen & Schnell-Speichern
+    document.getElementById('payment-partner-name-manual')?.addEventListener('input', checkManualInputForContact);
+    document.getElementById('btn-quick-save-contact')?.addEventListener('click', quickSaveContact);
 }
 
-
 function setupSettingsListeners() {
-    // Tabs umschalten
     document.getElementById('tab-zv-templates')?.addEventListener('click', () => openSettingsTab('templates'));
+    document.getElementById('tab-zv-contacts')?.addEventListener('click', () => openSettingsTab('contacts')); // NEU
     document.getElementById('tab-zv-credits')?.addEventListener('click', () => openSettingsTab('credits'));
 
-    // Vorlagen löschen (Delegation)
     document.getElementById('zv-templates-list')?.addEventListener('click', (e) => {
-        if (e.target.closest('.delete-tpl-btn')) {
-            const id = e.target.closest('.delete-tpl-btn').dataset.id;
-            deleteTemplate(id);
-        }
+        if (e.target.closest('.delete-tpl-btn')) deleteTemplate(e.target.closest('.delete-tpl-btn').dataset.id);
     });
 
-    // Guthaben Buttons
+    // NEU: Kontakte in Settings
+    document.getElementById('btn-add-contact-setting')?.addEventListener('click', addContactFromSettings);
+    document.getElementById('zv-contacts-list')?.addEventListener('click', (e) => {
+        if (e.target.closest('.delete-contact-btn')) deleteContact(e.target.closest('.delete-contact-btn').dataset.id);
+        if (e.target.closest('.edit-contact-btn')) renameContact(e.target.closest('.edit-contact-btn').dataset.id);
+    });
+
     document.getElementById('btn-add-my-credit')?.addEventListener('click', () => openCreditModal('add', 'my'));
     document.getElementById('btn-add-other-credit')?.addEventListener('click', () => openCreditModal('add', 'other'));
 
-    // Guthaben Modal Aktionen
-    // KORREKTUR HIER: Wir erzwingen das Ausblenden mit style.display = 'none'
     document.getElementById('btn-cancel-credit')?.addEventListener('click', () => {
         const modal = document.getElementById('creditManageModal');
         modal.classList.add('hidden');
@@ -206,63 +162,51 @@ function setupSettingsListeners() {
 
 
 // --- DATENBANK LISTENER ---
+
 function listenForPayments() {
     if (unsubscribePayments) unsubscribePayments();
-
     const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
     const q = query(paymentsRef, where('involvedUserIds', 'array-contains', currentUser.mode));
 
     unsubscribePayments = onSnapshot(q, (snapshot) => {
         allPayments = [];
-        snapshot.forEach(doc => {
-            allPayments.push({ id: doc.id, ...doc.data() });
-        });
-
+        snapshot.forEach(doc => allPayments.push({ id: doc.id, ...doc.data() }));
+        
         applyFilters();
-
-        // Live-Update für offenes Detail-Fenster
         if (currentDetailPaymentId) {
             const updatedP = allPayments.find(x => x.id === currentDetailPaymentId);
-            if (updatedP) {
-                const createModal = document.getElementById('createPaymentModal');
-                // Nur aktualisieren, wenn wir nicht gerade im Bearbeiten-Modus sind
-                if (!createModal || createModal.classList.contains('hidden')) {
-                    openPaymentDetail(currentDetailPaymentId, true);
-                }
-            } else {
-                closeDetailModal();
-            }
+            if (updatedP) openPaymentDetail(currentDetailPaymentId, true); else closeDetailModal();
         }
-
-        // Live-Update für Bilanz-Fenster
-        const settlementModal = document.getElementById('settlementModal');
-        if (settlementModal && !settlementModal.classList.contains('hidden')) {
-            if (activeSettlementPartnerId) {
-                selectSettlementPartner(activeSettlementPartnerId);
-            } else {
-                openSettlementModal();
-            }
+        if (document.getElementById('zahlungsverwaltungSettingsView').classList.contains('active')) {
+            renderCreditOverview();
         }
-
-    }, (error) => {
-        console.error("Fehler:", error);
-    });
+    }, error => console.error("Fehler Payments:", error));
 }
 
 function listenForTemplates() {
     if (unsubscribeTemplates) unsubscribeTemplates();
     const tplRef = collection(db, 'artifacts', appId, 'public', 'data', 'payment-templates');
-    
     unsubscribeTemplates = onSnapshot(tplRef, (snapshot) => {
         allTemplates = [];
         snapshot.forEach(doc => allTemplates.push({ id: doc.id, ...doc.data() }));
+        updateTemplateDropdown(); 
+        if (document.getElementById('zahlungsverwaltungSettingsView').classList.contains('active')) renderTemplateList();
+    });
+}
+
+// NEU: Kontakte laden
+function listenForContacts() {
+    if (unsubscribeContacts) unsubscribeContacts();
+    const contactRef = collection(db, 'artifacts', appId, 'public', 'data', 'private-contacts');
+    // Lade nur Kontakte, die von MIR erstellt wurden
+    const q = query(contactRef, where('createdBy', '==', currentUser.mode));
+
+    unsubscribeContacts = onSnapshot(q, (snapshot) => {
+        allContacts = [];
+        snapshot.forEach(doc => allContacts.push({ id: doc.id, ...doc.data() }));
         
-        updateTemplateDropdown(); // Dropdown im Modal aktualisieren
-        
-        // Liste in den Einstellungen aktualisieren, falls offen
-        if (document.getElementById('zahlungsverwaltungSettingsView').classList.contains('active')) {
-            renderTemplateList();
-        }
+        // Überall aktualisieren, wo Dropdowns sind
+        if (document.getElementById('zahlungsverwaltungSettingsView').classList.contains('active')) renderContactList();
     });
 }
 
@@ -625,7 +569,6 @@ function openCreateModal(paymentToEdit = null) {
     const modal = document.getElementById('createPaymentModal');
     if (!modal) return;
 
-    // NEU: Dropdown aktualisieren und resetten
     updateTemplateDropdown();
     const tplSelect = document.getElementById('payment-template-select');
     if(tplSelect) tplSelect.value = "";
@@ -633,11 +576,8 @@ function openCreateModal(paymentToEdit = null) {
     const saveBtn = document.getElementById('btn-save-payment');
     const hiddenId = document.getElementById('edit-payment-id');
 
-    // Reset aller Felder
-    // NEU: Startdatum auf Heute setzen
     document.getElementById('payment-start-date').value = new Date().toISOString().split('T')[0]; 
     document.getElementById('payment-deadline').value = '';
-    
     document.getElementById('payment-title').value = '';
     document.getElementById('payment-invoice-nr').value = '';
     document.getElementById('payment-order-nr').value = '';
@@ -649,42 +589,37 @@ function openCreateModal(paymentToEdit = null) {
     document.getElementById('payment-amount').disabled = false;
     document.getElementById('split-manual-name-input').value = '';
 
-    // Ratenzahlung Reset
     document.getElementById('payment-is-installment').checked = false;
     document.getElementById('installment-options').classList.add('hidden');
     document.getElementById('payment-installments-total').value = '';
 
-    // Partner Select neu befüllen (User Liste + Split Checkboxen)
+    // NEU: Partner Select mit Gruppen befüllen
     const select = document.getElementById('payment-partner-select');
+    fillPartnerSelect(select);
+
+    // Split Liste neu bauen
     const splitList = document.getElementById('split-partner-list');
-
-    let partnerOptions = `<option value="">- Person auswählen -</option>`;
     let splitCheckboxes = ``;
-
+    
+    // User
     Object.values(USERS).forEach(user => {
         if (user.id !== currentUser.mode && user.isActive) {
             const name = user.realName || user.name;
-            partnerOptions += `<option value="${user.id}">${name}</option>`;
-            splitCheckboxes += `
-                <div class="p-1 hover:bg-gray-100 rounded">
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" class="split-partner-cb h-4 w-4" value="${user.id}" data-name="${name}">
-                        <span class="text-gray-700 font-medium">${name}</span>
-                    </label>
-                </div>
-            `;
+            splitCheckboxes += `<div class="p-1 hover:bg-gray-100 rounded"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="split-partner-cb h-4 w-4" value="${user.id}" data-name="${name}"><span class="text-gray-700 font-medium">${name}</span></label></div>`;
         }
     });
-    select.innerHTML = partnerOptions;
+    // Kontakte
+    if (allContacts.length > 0) {
+        splitCheckboxes += `<div class="text-xs font-bold text-gray-500 mt-2 mb-1 uppercase">Eigene Kontakte</div>`;
+        allContacts.forEach(c => {
+             splitCheckboxes += `<div class="p-1 hover:bg-gray-100 rounded"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="split-partner-cb h-4 w-4" value="${c.id}" data-name="${c.name}"><span class="text-gray-700 font-medium">${c.name}</span></label></div>`;
+        });
+    }
     splitList.innerHTML = splitCheckboxes;
 
-    // Checkbox-Listener anhängen
-    document.querySelectorAll('.split-partner-cb').forEach(cb => {
-        cb.addEventListener('change', updateSplitPreview);
-    });
+    document.querySelectorAll('.split-partner-cb').forEach(cb => { cb.addEventListener('change', updateSplitPreview); });
 
     if (paymentToEdit) {
-        // --- EDIT MODE ---
         if (paymentToEdit.installment) {
             document.getElementById('payment-is-installment').checked = true;
             document.getElementById('installment-options').classList.remove('hidden');
@@ -692,7 +627,6 @@ function openCreateModal(paymentToEdit = null) {
             document.getElementById('payment-installment-interval').value = paymentToEdit.installment.interval || 'monthly';
             document.getElementById('payment-advanced-options').classList.remove('hidden');
         }
-
         setCreateMode('single');
         document.getElementById('mode-single').disabled = true;
         document.getElementById('mode-split').disabled = true;
@@ -705,11 +639,8 @@ function openCreateModal(paymentToEdit = null) {
         document.getElementById('payment-amount').value = paymentToEdit.isTBD ? '' : paymentToEdit.amount;
         document.getElementById('payment-amount-tbd').checked = paymentToEdit.isTBD;
         document.getElementById('payment-amount').disabled = paymentToEdit.isTBD;
-        
-        // NEU: Daten laden
         document.getElementById('payment-start-date').value = paymentToEdit.startDate || '';
         document.getElementById('payment-deadline').value = paymentToEdit.deadline || '';
-
         document.getElementById('payment-invoice-nr').value = paymentToEdit.invoiceNr || '';
         document.getElementById('payment-order-nr').value = paymentToEdit.orderNr || '';
         document.getElementById('payment-notes').value = paymentToEdit.notes || '';
@@ -717,16 +648,17 @@ function openCreateModal(paymentToEdit = null) {
 
         const iAmDebtor = paymentToEdit.debtorId === currentUser.mode;
         setDirection(iAmDebtor ? 'i_owe' : 'owes_me');
-
         const partnerId = iAmDebtor ? paymentToEdit.creditorId : paymentToEdit.debtorId;
         const partnerName = iAmDebtor ? paymentToEdit.creditorName : paymentToEdit.debtorName;
 
+        // Prüfen ob ID im Select ist
         const optionExists = select.querySelector(`option[value="${partnerId}"]`);
         if (optionExists) {
             select.value = partnerId;
             select.classList.remove('hidden');
             document.getElementById('payment-partner-name-manual').classList.add('hidden');
             document.getElementById('btn-toggle-partner-manual').textContent = "Manueller Name";
+            document.getElementById('btn-quick-save-contact').classList.add('hidden');
         } else {
             select.value = "";
             select.classList.add('hidden');
@@ -734,32 +666,29 @@ function openCreateModal(paymentToEdit = null) {
             manualInput.classList.remove('hidden');
             manualInput.value = partnerName;
             document.getElementById('btn-toggle-partner-manual').textContent = "Liste wählen";
+            checkManualInputForContact.call(manualInput);
         }
-
         if (paymentToEdit.invoiceNr || paymentToEdit.orderNr || paymentToEdit.notes || paymentToEdit.type === 'transfer') {
             document.getElementById('payment-advanced-options').classList.remove('hidden');
         }
-
     } else {
-        // --- NEW MODE ---
         setCreateMode('single');
         document.getElementById('mode-single').disabled = false;
         document.getElementById('mode-split').disabled = false;
         document.getElementById('mode-split').classList.remove('opacity-50', 'cursor-not-allowed');
-
         saveBtn.textContent = "Speichern";
         hiddenId.value = "";
-
         setDirection('i_owe');
         select.classList.remove('hidden');
         document.getElementById('payment-partner-name-manual').classList.add('hidden');
         document.getElementById('payment-partner-name-manual').value = "";
         document.getElementById('btn-toggle-partner-manual').textContent = "Manueller Name";
+        document.getElementById('btn-quick-save-contact').classList.add('hidden');
     }
-
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
 }
+
 
 
 
@@ -773,52 +702,14 @@ function addSplitManualPartner() {
     const input = document.getElementById('split-manual-name-input');
     const name = input.value.trim();
     if (!name) return;
-
     const list = document.getElementById('split-partner-list');
     const id = 'MANUAL_' + Date.now();
-
     const div = document.createElement('div');
     div.className = "flex items-center justify-between p-1 mb-1 hover:bg-gray-100 rounded bg-yellow-50 border border-yellow-100";
-    div.innerHTML = `
-        <label class="flex items-center gap-2 cursor-pointer flex-grow">
-            <input type="checkbox" class="split-partner-cb h-4 w-4" value="${id}" data-name="${name}" checked>
-            <span class="text-gray-800 font-medium partner-name-display">${name} <span class="text-xs text-gray-500">(Gast)</span></span>
-        </label>
-        <div class="flex gap-1">
-            <button type="button" class="edit-guest-btn p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-100 rounded" title="Umbenennen">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M5.433 13.917l1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" /></svg>
-            </button>
-            <button type="button" class="delete-guest-btn p-1 text-gray-500 hover:text-red-600 hover:bg-red-100 rounded" title="Entfernen">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.58.22-2.365.468a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193v-.443A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd" /></svg>
-            </button>
-        </div>
-    `;
-
-    // Am Anfang einfügen
+    div.innerHTML = `<label class="flex items-center gap-2 cursor-pointer flex-grow"><input type="checkbox" class="split-partner-cb h-4 w-4" value="${id}" data-name="${name}" checked><span class="text-gray-800 font-medium partner-name-display">${name} <span class="text-xs text-gray-500">(Gast)</span></span></label>`;
     list.insertBefore(div, list.firstChild);
     input.value = '';
-
-    // Listener für die neue Checkbox
-    const checkbox = div.querySelector('.split-partner-cb');
-    checkbox.addEventListener('change', updateSplitPreview);
-
-    // Listener für Löschen
-    div.querySelector('.delete-guest-btn').addEventListener('click', () => {
-        div.remove();
-        updateSplitPreview();
-    });
-
-    // Listener für Umbenennen
-    div.querySelector('.edit-guest-btn').addEventListener('click', () => {
-        const currentName = checkbox.dataset.name;
-        const newName = prompt("Namen ändern:", currentName);
-        if (newName && newName.trim() !== "") {
-            const cleanName = newName.trim();
-            checkbox.dataset.name = cleanName;
-            div.querySelector('.partner-name-display').innerHTML = `${cleanName} <span class="text-xs text-gray-500">(Gast)</span>`;
-        }
-    });
-
+    div.querySelector('.split-partner-cb').addEventListener('change', updateSplitPreview);
     updateSplitPreview();
 }
 
@@ -907,179 +798,99 @@ function togglePartnerManual() {
     const select = document.getElementById('payment-partner-select');
     const input = document.getElementById('payment-partner-name-manual');
     const btn = document.getElementById('btn-toggle-partner-manual');
+    const saveBtn = document.getElementById('btn-quick-save-contact');
+
     if (input.classList.contains('hidden')) {
-        select.classList.add('hidden');
-        input.classList.remove('hidden');
-        select.value = "";
-        btn.textContent = "Liste wählen";
+        select.classList.add('hidden'); input.classList.remove('hidden'); select.value = ""; btn.textContent = "Liste wählen";
+        checkManualInputForContact.call(input); // Status prüfen
     } else {
-        input.classList.add('hidden');
-        select.classList.remove('hidden');
-        input.value = "";
-        btn.textContent = "Manueller Name";
+        input.classList.add('hidden'); select.classList.remove('hidden'); input.value = ""; btn.textContent = "Manueller Name";
+        saveBtn.classList.add('hidden');
     }
 }
 
 async function savePayment() {
     const saveBtn = document.getElementById('btn-save-payment');
     setButtonLoading(saveBtn, true);
-
     try {
         const editId = document.getElementById('edit-payment-id').value;
-        
-        // NEU: Startdatum lesen
         const startDate = document.getElementById('payment-start-date').value;
         const deadline = document.getElementById('payment-deadline').value;
-        
         const title = document.getElementById('payment-title').value.trim();
         const invoiceNr = document.getElementById('payment-invoice-nr').value.trim();
         const orderNr = document.getElementById('payment-order-nr').value.trim();
         const notes = document.getElementById('payment-notes').value.trim();
         const type = document.getElementById('payment-type').value;
-
-        // Installment Data
         const isInstallment = document.getElementById('payment-is-installment').checked;
         let installmentData = null;
-        if (isInstallment) {
-            installmentData = {
-                total: parseInt(document.getElementById('payment-installments-total').value) || 0,
-                interval: document.getElementById('payment-installment-interval').value
-            };
-        }
-
+        if (isInstallment) { installmentData = { total: parseInt(document.getElementById('payment-installments-total').value) || 0, interval: document.getElementById('payment-installment-interval').value }; }
         if (!title) throw new Error("Bitte einen Grund/Betreff angeben.");
-        // NEU: Validierung
         if (!startDate) throw new Error("Bitte ein Buchungsdatum (Start) angeben.");
 
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
 
         if (currentSplitMode === 'single') {
-            // --- SINGLE ---
             const direction = document.getElementById('payment-direction').value;
             const partnerSelect = document.getElementById('payment-partner-select').value;
             const partnerManual = document.getElementById('payment-partner-name-manual').value.trim();
             const amountInput = document.getElementById('payment-amount').value;
             const isTBD = document.getElementById('payment-amount-tbd').checked;
             const amount = isTBD ? 0 : parseFloat(amountInput);
-
             if (!isTBD && (isNaN(amount) || amount <= 0)) throw new Error("Bitte gültigen Betrag.");
             if (!partnerSelect && !partnerManual) throw new Error("Bitte Person angeben.");
 
             let creditorId, creditorName, debtorId, debtorName;
             let partnerId = partnerSelect || null;
-            let partnerName = partnerSelect ? (USERS[partnerSelect]?.realName || USERS[partnerSelect]?.name) : partnerManual;
-
-            if (direction === 'i_owe') {
-                debtorId = currentUser.mode; debtorName = currentUser.displayName;
-                creditorId = partnerId; creditorName = partnerName;
+            
+            // Name ermitteln: Entweder aus Users, oder aus Kontakten, oder Manuell
+            let partnerName = "";
+            if (partnerSelect) {
+                if (USERS[partnerSelect]) partnerName = USERS[partnerSelect].realName || USERS[partnerSelect].name;
+                else {
+                    const c = allContacts.find(c => c.id === partnerSelect);
+                    if (c) partnerName = c.name;
+                }
             } else {
-                creditorId = currentUser.mode; creditorName = currentUser.displayName;
-                debtorId = partnerId; debtorName = partnerName;
+                partnerName = partnerManual;
             }
 
-            const involvedUserIds = [currentUser.mode];
-            if (partnerId) involvedUserIds.push(partnerId);
+            if (direction === 'i_owe') { debtorId = currentUser.mode; debtorName = currentUser.displayName; creditorId = partnerId; creditorName = partnerName; } 
+            else { creditorId = currentUser.mode; creditorName = currentUser.displayName; debtorId = partnerId; debtorName = partnerName; }
 
-            const data = {
-                title, isTBD, 
-                startDate: startDate || null, // NEU
-                deadline: deadline || null, 
-                invoiceNr, orderNr, notes, type,
-                debtorId, debtorName, creditorId, creditorName, involvedUserIds,
-                installment: installmentData
-            };
+            const involvedUserIds = [currentUser.mode]; if (partnerId) involvedUserIds.push(partnerId);
+            const data = { title, isTBD, startDate: startDate || null, deadline: deadline || null, invoiceNr, orderNr, notes, type, debtorId, debtorName, creditorId, creditorName, involvedUserIds, installment: installmentData };
 
             if (editId) {
                 const existing = allPayments.find(p => p.id === editId);
                 let newRemaining = existing.remainingAmount;
-                if (!isTBD && !existing.isTBD) {
-                    newRemaining = parseFloat(existing.remainingAmount) + (amount - existing.amount);
-                    if (newRemaining < 0) newRemaining = 0;
-                } else if (!isTBD && existing.isTBD) newRemaining = amount;
-                else if (isTBD) newRemaining = 0;
-
-                data.amount = amount;
-                data.remainingAmount = newRemaining;
-                data.history = [...(existing.history || []), { date: new Date(), action: 'edited', user: currentUser.displayName, info: 'Bearbeitet.' }];
-
+                if (!isTBD && !existing.isTBD) { newRemaining = parseFloat(existing.remainingAmount) + (amount - existing.amount); if (newRemaining < 0) newRemaining = 0; } 
+                else if (!isTBD && existing.isTBD) newRemaining = amount; else if (isTBD) newRemaining = 0;
+                data.amount = amount; data.remainingAmount = newRemaining; data.history = [...(existing.history || []), { date: new Date(), action: 'edited', user: currentUser.displayName, info: 'Bearbeitet.' }];
                 batch.update(doc(paymentsRef, editId), data);
             } else {
-                data.amount = amount;
-                data.remainingAmount = amount;
-                data.status = 'open';
-                data.createdAt = serverTimestamp();
-                data.createdBy = currentUser.mode;
+                data.amount = amount; data.remainingAmount = amount; data.status = 'open'; data.createdAt = serverTimestamp(); data.createdBy = currentUser.mode;
                 data.history = [{ date: new Date(), action: 'created', user: currentUser.displayName, info: `Erstellt: ${isTBD ? 'TBD' : amount + '€'}` }];
-
                 batch.set(doc(paymentsRef), data);
             }
-
         } else {
-            // --- SPLIT ---
-            if (editId) throw new Error("Split-Einträge können nicht als Gruppe bearbeitet werden.");
-
             const totalAmount = parseFloat(document.getElementById('payment-amount').value);
-            if (isNaN(totalAmount) || totalAmount <= 0) throw new Error("Bitte Gesamtbetrag angeben.");
-
             const selectedCheckboxes = document.querySelectorAll('.split-partner-cb:checked');
-            if (selectedCheckboxes.length === 0) throw new Error("Bitte mindestens eine Person auswählen.");
-
             const includeMe = document.getElementById('split-include-me').checked;
             const count = selectedCheckboxes.length + (includeMe ? 1 : 0);
             const share = totalAmount / count;
-
             selectedCheckboxes.forEach(cb => {
-                let pId = cb.value;
-                const pName = cb.dataset.name;
-                let involved = [currentUser.mode];
-
-                if (pId.startsWith('MANUAL_')) {
-                    pId = null;
-                } else {
-                    involved.push(pId);
-                }
-
-                const docRef = doc(paymentsRef);
-
+                let pId = cb.value; const pName = cb.dataset.name; let involved = [currentUser.mode];
+                if (pId.startsWith('MANUAL_')) pId = null; else involved.push(pId);
                 const entryData = {
-                    title: `${title} (Split)`,
-                    amount: share,
-                    remainingAmount: share,
-                    isTBD: false,
-                    startDate: startDate || null, // NEU
-                    deadline: deadline || null,
-                    invoiceNr, orderNr, notes, type,
-                    status: 'open',
-                    createdAt: serverTimestamp(),
-                    createdBy: currentUser.mode,
-                    creditorId: currentUser.mode,
-                    creditorName: currentUser.displayName,
-                    debtorId: pId,
-                    debtorName: pName,
-                    involvedUserIds: involved,
-                    installment: installmentData,
-                    history: [{
-                        date: new Date(),
-                        action: 'created_split',
-                        user: currentUser.displayName,
-                        info: `Split-Anteil von ${share.toFixed(2)}€ (Gesamt: ${totalAmount.toFixed(2)}€)`
-                    }]
+                    title: `${title} (Split)`, amount: share, remainingAmount: share, isTBD: false, startDate: startDate || null, deadline: deadline || null, invoiceNr, orderNr, notes, type, status: 'open', createdAt: serverTimestamp(), createdBy: currentUser.mode, creditorId: currentUser.mode, creditorName: currentUser.displayName, debtorId: pId, debtorName: pName, involvedUserIds: involved, installment: installmentData,
+                    history: [{ date: new Date(), action: 'created_split', user: currentUser.displayName, info: `Split-Anteil von ${share.toFixed(2)}€` }]
                 };
-                batch.set(docRef, entryData);
+                batch.set(doc(paymentsRef), entryData);
             });
         }
-
-        await batch.commit();
-        alertUser("Gespeichert!", "success");
-        closeCreateModal();
-
-    } catch (error) {
-        console.error("Fehler:", error);
-        alertUser(error.message, "error");
-    } finally {
-        setButtonLoading(saveBtn, false);
-    }
+        await batch.commit(); alertUser("Gespeichert!", "success"); closeCreateModal();
+    } catch (e) { console.error(e); alertUser(e.message, "error"); } finally { setButtonLoading(saveBtn, false); }
 }
 
 
@@ -1752,23 +1563,156 @@ window.deleteTransaction = async function(paymentId, txIndex) {
     } catch (e) { console.error(e); alertUser("Fehler beim Löschen.", "error"); }
 }
 
-// --- TABS LOGIK (NEU) ---
-function openSettingsTab(tabName) {
-    const tabTemplates = document.getElementById('tab-zv-templates');
-    const tabCredits = document.getElementById('tab-zv-credits');
-    const contentTemplates = document.getElementById('content-zv-templates');
-    const contentCredits = document.getElementById('content-zv-credits');
+// --- HELPER: DROPDOWN BEFÜLLEN (MIT GRUPPEN) ---
+function fillPartnerSelect(selectElement, includeEmpty = true) {
+    selectElement.innerHTML = '';
+    if (includeEmpty) {
+        selectElement.innerHTML = '<option value="">- Person auswählen -</option>';
+    }
 
-    if (tabName === 'templates') {
-        tabTemplates.className = "px-4 py-2 font-bold text-indigo-600 border-b-2 border-indigo-600";
-        tabCredits.className = "px-4 py-2 font-bold text-gray-500 hover:text-gray-700";
-        contentTemplates.classList.remove('hidden');
-        contentCredits.classList.add('hidden');
+    // Gruppe 1: Registrierte Personen
+    const grpUsers = document.createElement('optgroup');
+    grpUsers.label = "[REGISTRIERTE PERSONEN]";
+    let hasUsers = false;
+    Object.values(USERS).forEach(user => {
+        if (user.id !== currentUser.mode && user.isActive) {
+            const opt = document.createElement('option');
+            opt.value = user.id;
+            opt.textContent = user.realName || user.name;
+            grpUsers.appendChild(opt);
+            hasUsers = true;
+        }
+    });
+    if (hasUsers) selectElement.appendChild(grpUsers);
+
+    // Gruppe 2: Eigene Kontakte
+    const grpContacts = document.createElement('optgroup');
+    grpContacts.label = "[EIGENE KONTAKTE]";
+    let hasContacts = false;
+    allContacts.forEach(contact => {
+        const opt = document.createElement('option');
+        opt.value = contact.id; // ID des Kontakt-Dokuments
+        opt.textContent = contact.name;
+        grpContacts.appendChild(opt);
+        hasContacts = true;
+    });
+    if (hasContacts) selectElement.appendChild(grpContacts);
+}
+
+// --- TABS LOGIK ---
+function openSettingsTab(tabName) {
+    const tabs = ['templates', 'contacts', 'credits'];
+    
+    tabs.forEach(t => {
+        const btn = document.getElementById(`tab-zv-${t}`);
+        const content = document.getElementById(`content-zv-${t}`);
+        if (t === tabName) {
+            btn.className = "px-4 py-2 font-bold text-indigo-600 border-b-2 border-indigo-600 whitespace-nowrap";
+            content.classList.remove('hidden');
+        } else {
+            btn.className = "px-4 py-2 font-bold text-gray-500 hover:text-gray-700 whitespace-nowrap";
+            content.classList.add('hidden');
+        }
+    });
+}
+
+// --- KONTAKTE VERWALTUNG (KOMPLETT NEU) ---
+
+async function addContact(name) {
+    const cleanName = name.trim();
+    if (!cleanName) return;
+
+    try {
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'private-contacts'), {
+            name: cleanName,
+            createdBy: currentUser.mode,
+            createdAt: serverTimestamp()
+        });
+        return true;
+    } catch (e) {
+        console.error(e);
+        alertUser("Fehler beim Erstellen des Kontakts.", "error");
+        return false;
+    }
+}
+
+async function addContactFromSettings() {
+    const input = document.getElementById('new-contact-name-input');
+    const name = input.value;
+    if (await addContact(name)) {
+        alertUser("Kontakt erstellt!", "success");
+        input.value = '';
+    }
+}
+
+async function deleteContact(id) {
+    if(!confirm("Kontakt löschen?")) return;
+    try {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'private-contacts', id));
+    } catch(e) { console.error(e); }
+}
+
+async function renameContact(id) {
+    const contact = allContacts.find(c => c.id === id);
+    const newName = prompt("Neuer Name:", contact?.name);
+    if (newName && newName.trim()) {
+        try {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'private-contacts', id), { name: newName.trim() });
+        } catch(e) { console.error(e); }
+    }
+}
+
+function renderContactList() {
+    const container = document.getElementById('zv-contacts-list');
+    if (!container) return;
+    container.innerHTML = '';
+    
+    if (allContacts.length === 0) {
+        container.innerHTML = '<p class="text-center text-gray-400 italic">Keine Kontakte.</p>';
+        return;
+    }
+
+    allContacts.forEach(c => {
+        const div = document.createElement('div');
+        div.className = "flex justify-between items-center p-2 bg-white rounded shadow-sm border";
+        div.innerHTML = `
+            <span class="font-bold text-gray-700 pl-2">${c.name}</span>
+            <div class="flex gap-1">
+                <button class="edit-contact-btn p-1 text-blue-400 hover:bg-blue-50 rounded" data-id="${c.id}">✏️</button>
+                <button class="delete-contact-btn p-1 text-red-400 hover:bg-red-50 rounded" data-id="${c.id}">🗑️</button>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// --- SCHNELL-SPEICHERN LOGIK (NEU) ---
+function checkManualInputForContact() {
+    const val = this.value.trim();
+    const btn = document.getElementById('btn-quick-save-contact');
+    
+    // Zeige Button nur, wenn Text da ist UND es diesen Namen noch nicht gibt
+    if (val.length > 0) {
+        const exists = allContacts.some(c => c.name.toLowerCase() === val.toLowerCase());
+        if (!exists) {
+            btn.classList.remove('hidden');
+            btn.textContent = `💾 "${val}" als Kontakt speichern`;
+        } else {
+            btn.classList.add('hidden');
+        }
     } else {
-        tabTemplates.className = "px-4 py-2 font-bold text-gray-500 hover:text-gray-700";
-        tabCredits.className = "px-4 py-2 font-bold text-orange-600 border-b-2 border-orange-600";
-        contentTemplates.classList.add('hidden');
-        contentCredits.classList.remove('hidden');
+        btn.classList.add('hidden');
+    }
+}
+
+async function quickSaveContact() {
+    const input = document.getElementById('payment-partner-name-manual');
+    const name = input.value;
+    if (await addContact(name)) {
+        alertUser(`"${name}" wurde als Kontakt gespeichert!`, "success");
+        document.getElementById('btn-quick-save-contact').classList.add('hidden');
+        // Umschalten auf Dropdown
+        togglePartnerManual(); 
     }
 }
 
@@ -1904,6 +1848,8 @@ function renderCreditOverview() {
     });
 }
 
+// --- CREDITS MODAL & ACTIONS ---
+
 window.openCreditModal = function(mode, context, paymentId = null) {
     const modal = document.getElementById('creditManageModal');
     document.getElementById('credit-mode').value = mode;
@@ -1916,14 +1862,8 @@ window.openCreditModal = function(mode, context, paymentId = null) {
     
     amountInput.value = ''; reasonInput.value = ''; select.innerHTML = ''; select.disabled = false;
 
-    // User füllen
-    Object.values(USERS).forEach(u => {
-        if (u.id !== currentUser.mode && u.isActive) {
-            const opt = document.createElement('option');
-            opt.value = u.id; opt.textContent = u.realName || u.name;
-            select.appendChild(opt);
-        }
-    });
+    // NEU: Dropdown mit Kontakten füllen
+    fillPartnerSelect(select, false); // false = kein "- Wählen -" Platzhalter (optional)
 
     if (mode === 'add') {
         document.getElementById('credit-sub-warning').classList.add('hidden');
@@ -1937,7 +1877,6 @@ window.openCreditModal = function(mode, context, paymentId = null) {
         document.getElementById('btn-save-credit').className = "px-4 py-2 bg-red-600 text-white font-bold rounded hover:bg-red-700";
         document.getElementById('credit-modal-title').textContent = "Guthaben nutzen / auszahlen";
         document.getElementById('credit-modal-desc').textContent = "Guthaben wird reduziert.";
-        
         if (paymentId) {
             const p = allPayments.find(x => x.id === paymentId);
             if (p) {
@@ -1948,8 +1887,7 @@ window.openCreditModal = function(mode, context, paymentId = null) {
             }
         }
     }
-    modal.classList.remove('hidden');
-    modal.style.display = 'flex';
+    modal.classList.remove('hidden'); modal.style.display = 'flex';
 }
 
 async function executeCreditAction() {
@@ -1960,7 +1898,7 @@ async function executeCreditAction() {
     const reason = document.getElementById('credit-reason').value.trim();
     const paymentId = document.getElementById('creditManageModal').dataset.paymentId;
 
-    if (!partnerId || isNaN(amount) || amount <= 0) { alertUser("Bitte prüfen.", "error"); return; }
+    if (!partnerId || isNaN(amount) || amount <= 0) { alertUser("Bitte Partner und Betrag wählen.", "error"); return; }
     if (!reason) { alertUser("Grund fehlt.", "error"); return; }
 
     const btn = document.getElementById('btn-save-credit');
@@ -1969,7 +1907,14 @@ async function executeCreditAction() {
     try {
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
-        const partnerName = USERS[partnerId]?.realName || USERS[partnerId]?.name || "Unbekannt";
+        
+        // Name auflösen (User oder Kontakt)
+        let partnerName = "Unbekannt";
+        if (USERS[partnerId]) partnerName = USERS[partnerId].realName || USERS[partnerId].name;
+        else {
+            const c = allContacts.find(c => c.id === partnerId);
+            if (c) partnerName = c.name;
+        }
 
         if (mode === 'add') {
             const docData = {
@@ -1978,10 +1923,8 @@ async function executeCreditAction() {
                 involvedUserIds: [currentUser.mode, partnerId],
                 history: [{ date: new Date(), action: 'created_manual_credit', user: currentUser.displayName, info: `Guthaben manuell angelegt.` }]
             };
-
             if (context === 'my') { docData.creditorId = currentUser.mode; docData.creditorName = currentUser.displayName; docData.debtorId = partnerId; docData.debtorName = partnerName; } 
             else { docData.creditorId = partnerId; docData.creditorName = partnerName; docData.debtorId = currentUser.mode; docData.debtorName = currentUser.displayName; }
-
             batch.set(doc(paymentsRef), docData);
             alertUser("Erfolgreich.", "success");
         } else {
@@ -1998,6 +1941,6 @@ async function executeCreditAction() {
             }
         }
         await batch.commit();
-        document.getElementById('creditManageModal').classList.add('hidden');
+        document.getElementById('creditManageModal').style.display = 'none';
     } catch (e) { console.error(e); alertUser(e.message, "error"); } finally { setButtonLoading(btn, false); }
 }
