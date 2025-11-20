@@ -1841,7 +1841,7 @@
                         </button>
                         <button id="btn-zv-settings"
                             class="p-2 text-gray-500 hover:text-gray-800 transition rounded-full hover:bg-gray-200"
-                            title="Einstellungen, Kategorien & Vorlagen">
+                            title="Einstellungen & Vorlagen">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
                                 class="w-5 h-5">
                                 <path fill-rule="evenodd"
@@ -1862,6 +1862,7 @@
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+
                     <div class="p-3 bg-red-50 border border-red-200 rounded-lg shadow-sm flex flex-col justify-center">
                         <p class="text-[10px] font-bold text-red-700 uppercase tracking-wide">Ich schulde</p>
                         <p class="text-xl font-extrabold text-gray-800 leading-tight" id="dashboard-my-debt-display">
@@ -1895,53 +1896,29 @@
                     </div>
                 </div>
 
-                <div id="dashboard-category-scroller" class="flex gap-2 overflow-x-auto pb-2 mb-2 snap-x">
-                    <div
-                        class="p-2 bg-gray-50 rounded border min-w-[120px] flex flex-col justify-center items-center text-gray-400">
-                        <span class="text-xs">Lade Kategorien...</span>
-                    </div>
-                </div>
-
-                <div class="flex flex-col gap-2 mb-4 bg-gray-50 p-3 rounded-xl border border-gray-200 shadow-sm">
-                    <div class="flex gap-2">
-                        <button id="btn-toggle-selection-mode"
-                            class="p-2 bg-white text-gray-600 border border-gray-300 rounded-lg shadow-sm hover:bg-gray-100 flex-shrink-0"
-                            title="Einträge zusammenfassen">
-                            ☑️
-                        </button>
-                        <button id="btn-open-settlement"
-                            class="p-2 bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg shadow-sm font-bold hover:bg-indigo-200 whitespace-nowrap flex-shrink-0">
-                            ⚖️ Bilanz
-                        </button>
-                        <input type="text" id="payment-search-input" placeholder="Suchen..."
-                            class="flex-grow p-2 border rounded-lg shadow-sm text-sm min-w-0">
-                    </div>
-
-                    <div class="grid grid-cols-3 gap-2">
-                        <select id="payment-filter-status"
-                            class="p-1.5 border rounded-lg bg-white shadow-sm text-xs font-medium text-gray-700 truncate">
-                            <optgroup label="[BEZAHLSTATUS]" class="font-bold bg-indigo-50 text-indigo-900">
-                                <option value="open" selected>Offen/Teilbezahlt</option>
-                                <option value="pending">Wartet auf Bestätigung</option>
-                                <option value="closed">Abgeschlossen/Bezahlt</option>
-                                <option value="all">Alle anzeigen</option>
-                            </optgroup>
-                        </select>
-
-                        <select id="payment-filter-category"
-                            class="p-1.5 border rounded-lg bg-white shadow-sm text-xs font-medium text-gray-700 truncate">
-                            <optgroup label="[KATEGORIEN]" class="font-bold bg-indigo-50 text-indigo-900">
-                                <option value="all" selected>Alle Kategorien</option>
-                            </optgroup>
-                        </select>
-
-                        <select id="payment-filter-direction"
-                            class="p-1.5 border rounded-lg bg-white shadow-sm text-xs font-medium text-gray-700 truncate">
-                            <option value="all">Alle Richtungen</option>
-                            <option value="i_owe">Ich schulde</option>
-                            <option value="owes_me">Schuldet mir</option>
-                        </select>
-                    </div>
+                <div class="flex flex-col md:flex-row gap-2 mb-4">
+                    <button id="btn-toggle-selection-mode"
+                        class="p-2 bg-gray-100 text-gray-600 border border-gray-300 rounded-lg shadow-sm hover:bg-gray-200"
+                        title="Einträge auswählen & zusammenfassen">
+                        ☑️
+                    </button>
+                    <button id="btn-open-settlement"
+                        class="p-2 bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg shadow-sm font-bold hover:bg-indigo-200 whitespace-nowrap">
+                        ⚖️ Bilanz
+                    </button>
+                    <input type="text" id="payment-search-input" placeholder="Suchen (Name, Betreff, ID)..."
+                        class="flex-grow p-2 border rounded-lg shadow-sm">
+                    <select id="payment-filter-status" class="p-2 border rounded-lg bg-white shadow-sm">
+                        <option value="all">Alle Status</option>
+                        <option value="open" selected>Offen & Teilbezahlt</option>
+                        <option value="pending">Wartet auf Bestätigung</option>
+                        <option value="closed">Abgeschlossen / Bezahlt</option>
+                    </select>
+                    <select id="payment-filter-direction" class="p-2 border rounded-lg bg-white shadow-sm">
+                        <option value="all">Alle Richtungen</option>
+                        <option value="i_owe">Ich schulde</option>
+                        <option value="owes_me">Schuldet mir</option>
+                    </select>
                 </div>
 
                 <div id="payments-list-container" class="space-y-3 pb-20">
@@ -2040,6 +2017,7 @@
                             <div id="transaction-details-container" class="hidden space-y-4">
 
                                 <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
+
                                     <div class="flex justify-between items-center mb-2">
                                         <button id="btn-back-to-scenario"
                                             class="text-xs font-bold text-indigo-500 hover:underline flex items-center gap-1">
@@ -2054,9 +2032,11 @@
                                     </div>
 
                                     <div class="flex flex-row items-start gap-2">
+
                                         <div class="flex-1 min-w-0">
                                             <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Von
                                                 (Schuldner)</label>
+
                                             <div id="debtor-single-wrapper" class="flex flex-col gap-1">
                                                 <select id="payment-debtor-select"
                                                     class="w-full p-2 border border-gray-300 rounded-lg bg-white text-gray-800 text-sm font-bold shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
@@ -2068,6 +2048,7 @@
                                                     class="text-[10px] text-indigo-500 hover:text-indigo-700 font-bold text-right w-full">Manuell
                                                     eingeben</button>
                                             </div>
+
                                             <div id="debtor-split-wrapper"
                                                 class="hidden p-2 bg-white border border-indigo-100 rounded-lg shadow-inner">
                                                 <div class="flex gap-1 mb-2 border-b border-indigo-50 pb-1">
@@ -2144,20 +2125,10 @@
                                     <div class="space-y-3">
                                         <div>
                                             <label
-                                                class="block text-xs font-bold text-gray-500 uppercase mb-1">Kategorie</label>
-                                            <select id="payment-category-select"
-                                                class="w-full p-2 border border-gray-300 rounded-lg bg-white text-sm font-medium">
-                                                <option value="">-- Keine Kategorie --</option>
-                                            </select>
-                                        </div>
-
-                                        <div>
-                                            <label
                                                 class="block text-xs font-bold text-gray-500 uppercase mb-1">Buchungsdatum</label>
                                             <input type="date" id="payment-start-date"
                                                 class="w-full p-2 border border-gray-300 rounded-lg bg-gray-50 text-sm font-medium">
                                         </div>
-
                                         <div>
                                             <label
                                                 class="block text-xs font-bold text-gray-500 uppercase mb-1">Fälligkeit
@@ -2243,6 +2214,10 @@
                                 </div>
                             </div>
                         </div>
+
+
+
+
                         <div class="p-4 border-t bg-gray-50 rounded-b-xl flex justify-end gap-3">
                             <button id="btn-cancel-create-payment"
                                 class="py-2 px-4 bg-gray-200 text-gray-800 font-semibold rounded-lg hover:bg-gray-300">Abbrechen</button>
@@ -2251,116 +2226,46 @@
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div id="zahlungsverwaltungSettingsView" class="view">
-                <div class="back-link-container w-full mb-4">
-                    <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition"
-                        data-target="zahlungsverwaltung">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
-                            class="w-5 h-5 mr-1">
-                            <path d="m15 18-6-6 6-6" />
-                        </svg>
-                        <span class="text-sm font-semibold">zurück</span>
-                    </button>
-                </div>
-
-                <h2 class="text-2xl font-bold text-gray-800 mb-4">Finanz-Einstellungen</h2>
-
-                <div class="flex gap-2 mb-4 border-b overflow-x-auto">
-                    <button id="tab-zv-templates"
-                        class="px-4 py-2 font-bold text-indigo-600 border-b-2 border-indigo-600 whitespace-nowrap">Vorlagen</button>
-                    <button id="tab-zv-categories"
-                        class="px-4 py-2 font-bold text-gray-500 hover:text-gray-700 whitespace-nowrap">Kategorien</button>
-                    <button id="tab-zv-accounts"
-                        class="px-4 py-2 font-bold text-gray-500 hover:text-gray-700 whitespace-nowrap">Meine
-                        Konten</button>
-                    <button id="tab-zv-contacts"
-                        class="px-4 py-2 font-bold text-gray-500 hover:text-gray-700 whitespace-nowrap">Adressbuch</button>
-                    <button id="tab-zv-credits"
-                        class="px-4 py-2 font-bold text-gray-500 hover:text-gray-700 whitespace-nowrap">Guthaben</button>
-                </div>
-
-                <div id="content-zv-templates" class="space-y-4">
-                    <div class="bg-blue-50 p-3 rounded-lg text-sm text-blue-800 mb-2">
-                        Erstelle Bausteine für wiederkehrende Zahlungen (z.B. "Miete", "Spotify").
-                    </div>
-                    <div id="zv-templates-list" class="space-y-2">
-                        <p class="text-gray-400 text-center py-4">Lade Vorlagen...</p>
-                    </div>
-                </div>
-
-                <div id="content-zv-categories" class="hidden space-y-4">
-                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-yellow-500">
-                        <h3 class="text-lg font-bold text-gray-800 mb-2">Kategorien verwalten</h3>
-                        <p class="text-xs text-gray-500 mb-4">Erstelle Kategorien wie "Rückerstattung Shop" oder
-                            "Urlaub", um deine Finanzen besser zu filtern.</p>
-
-                        <div class="p-3 bg-gray-50 rounded-lg border mb-4 flex gap-2">
-                            <input type="text" id="new-category-name" class="flex-grow p-2 border rounded-lg"
-                                placeholder="Kategorie (z.B. Shopping Retouren)">
-                            <button id="btn-add-category"
-                                class="px-4 py-2 bg-yellow-500 text-white font-bold rounded-lg hover:bg-yellow-600">+
-                                Anlegen</button>
+                <div id="paymentDetailModal"
+                    class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50 overflow-y-auto">
+                    <div class="bg-white p-0 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[95vh]">
+                        <div class="p-4 border-b flex justify-between items-center no-print">
+                            <h3 class="text-lg font-bold text-gray-800">Details & Verlauf</h3>
+                            <div class="flex gap-2">
+                                <button id="btn-print-payment"
+                                    class="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="Drucken">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                                        class="w-5 h-5">
+                                        <path fill-rule="evenodd"
+                                            d="M5 2.75C5 1.784 5.784 1 6.75 1h6.5c.966 0 1.75.784 1.75 1.75V5.5a.75.75 0 0 1-1.5 0V2.75a.25.25 0 0 0-.25-.25h-6.5a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h2.75a.75.75 0 0 1 0 1.5H6.75A1.75 1.75 0 0 1 5 13.25V2.75Zm6 9.75a.75.75 0 0 1 .75.75v1.5h1.5a.75.75 0 0 1 0 1.5h-1.5v1.5a.75.75 0 0 1-1.5 0v-1.5h-1.5a.75.75 0 0 1 .75-.75Z"
+                                            clip-rule="evenodd" />
+                                        <path d="M14.5 6.5a2 2 0 1 1 4 0 2 2 0 0 1-4 0Z" />
+                                    </svg>
+                                </button>
+                                <button id="btn-close-detail-modal"
+                                    class="text-gray-400 hover:text-red-600 font-bold text-2xl">&times;</button>
+                            </div>
                         </div>
-
-                        <div id="zv-categories-list" class="space-y-2 max-h-80 overflow-y-auto">
+                        <div id="payment-detail-content" class="p-6 overflow-y-auto flex-grow"></div>
+                        <div id="transaction-history-section" class="px-6 pb-4 hidden border-t bg-gray-50">
+                            <h4 class="font-bold text-gray-700 mb-2 pt-4">Zahlungseingänge / Teilzahlungen</h4>
+                            <div id="transaction-list" class="space-y-2 text-sm"></div>
                         </div>
-                    </div>
-                </div>
-
-                <div id="content-zv-accounts" class="hidden space-y-4">
-                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-blue-600">
-                        <h3 class="text-lg font-bold text-gray-800 mb-2">Meine Geld-Konten</h3>
-                        <p class="text-xs text-gray-500 mb-4">Definiere hier deine Geldbörsen oder Bankkonten, um genau
-                            zu sehen, wo Geld fehlt oder eingehen soll.</p>
-
-                        <div class="p-3 bg-gray-50 rounded-lg border mb-4 space-y-2">
-                            <input type="text" id="new-account-name" class="w-full p-2 border rounded-lg"
-                                placeholder="Name (z.B. Haushaltskonto)">
-                            <input type="text" id="new-account-details" class="w-full p-2 border rounded-lg text-sm"
-                                placeholder="Details (z.B. IBAN AT12...)">
-                            <button id="btn-add-account-setting"
-                                class="w-full py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700">+
-                                Konto anlegen</button>
+                        <div class="p-4 border-t bg-gray-50 rounded-b-xl flex flex-col gap-2 no-print">
+                            <div id="payment-detail-actions" class="flex flex-wrap gap-2 justify-end"></div>
+                            <div id="partial-payment-form"
+                                class="hidden p-3 bg-white border rounded-lg mt-2 shadow-inner">
+                                <label class="block text-sm font-bold mb-1 text-gray-700">Zahlung erfassen</label>
+                                <div class="flex gap-2">
+                                    <input type="number" id="partial-amount-input"
+                                        class="flex-grow p-2 border rounded font-mono" placeholder="Betrag..."
+                                        step="0.01">
+                                    <button id="btn-submit-partial"
+                                        class="bg-green-600 text-white px-4 rounded font-bold hover:bg-green-700 shadow">Buchen</button>
+                                </div>
+                            </div>
                         </div>
-
-                        <div id="zv-accounts-list" class="space-y-2 max-h-80 overflow-y-auto">
-                            <p class="text-center text-gray-400 italic">Keine eigenen Konten angelegt.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="content-zv-contacts" class="hidden space-y-4">
-                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-teal-500">
-                        <h3 class="text-lg font-bold text-gray-800 mb-2">Mein Adressbuch</h3>
-                        <div class="flex gap-2 mb-4">
-                            <input type="text" id="new-contact-name-input" class="flex-grow p-2 border rounded-lg"
-                                placeholder="Name (z.B. Max)">
-                            <button id="btn-add-contact-setting"
-                                class="px-4 py-2 bg-teal-600 text-white font-bold rounded-lg hover:bg-teal-700">+</button>
-                        </div>
-                        <div id="zv-contacts-list" class="space-y-2 max-h-80 overflow-y-auto"></div>
-                    </div>
-                </div>
-
-                <div id="content-zv-credits" class="hidden space-y-6">
-                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-purple-500">
-                        <h3 class="text-lg font-bold text-gray-800 mb-2">Mein Guthaben (bei anderen)</h3>
-                        <div id="my-credits-list" class="space-y-2 mb-4"></div>
-                        <button id="btn-add-my-credit"
-                            class="w-full py-2 bg-purple-100 text-purple-700 font-bold rounded hover:bg-purple-200 transition">
-                            + Guthaben einzahlen / aufladen
-                        </button>
-                    </div>
-                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-orange-500">
-                        <h3 class="text-lg font-bold text-gray-800 mb-2">Fremdes Guthaben (bei mir)</h3>
-                        <div id="others-credits-list" class="space-y-2 mb-4"></div>
-                        <button id="btn-add-other-credit"
-                            class="w-full py-2 bg-orange-100 text-orange-700 font-bold rounded hover:bg-orange-200 transition">
-                            + Guthaben für jemanden verbuchen
-                        </button>
                     </div>
                 </div>
             </div>
