@@ -1615,35 +1615,40 @@ function renderPaymentList(payments) {
                 const deadlineDate = new Date(p.deadline); deadlineDate.setHours(0,0,0,0);
                 const diffTime = deadlineDate - today;
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                if (diffDays < 0) statusDot = `<div class="w-3 h-3 rounded-full bg-red-600 border-2 border-white shadow-sm" title="Überfällig"></div>`;
-                else if (diffDays === 0) statusDot = `<div class="w-3 h-3 rounded-full bg-orange-500 border-2 border-white shadow-sm" title="Heute fällig"></div>`;
-                else statusDot = `<div class="w-3 h-3 rounded-full bg-blue-500 border-2 border-white shadow-sm" title="Offen"></div>`;
+                if (diffDays < 0) statusDot = `<div class="w-2.5 h-2.5 rounded-full bg-red-600 border border-white shadow-sm" title="Überfällig"></div>`;
+                else if (diffDays === 0) statusDot = `<div class="w-2.5 h-2.5 rounded-full bg-orange-500 border border-white shadow-sm" title="Heute fällig"></div>`;
+                else statusDot = `<div class="w-2.5 h-2.5 rounded-full bg-blue-500 border border-white shadow-sm" title="Offen"></div>`;
             } else {
-                statusDot = `<div class="w-3 h-3 rounded-full bg-blue-500 border-2 border-white shadow-sm" title="Offen"></div>`;
+                statusDot = `<div class="w-2.5 h-2.5 rounded-full bg-blue-500 border border-white shadow-sm" title="Offen"></div>`;
             }
         } 
-        else if (p.status === 'pending_approval') statusDot = `<div class="w-3 h-3 rounded-full bg-yellow-500 animate-pulse border-2 border-white shadow-sm" title="Wartet"></div>`;
-        else if (p.status === 'paid') statusDot = `<div class="w-3 h-3 rounded-full bg-green-500 border-2 border-white shadow-sm" title="Bezahlt"></div>`;
-        else statusDot = `<div class="w-3 h-3 rounded-full bg-gray-400 border-2 border-white shadow-sm" title="Storniert"></div>`;
+        else if (p.status === 'pending_approval') statusDot = `<div class="w-2.5 h-2.5 rounded-full bg-yellow-500 animate-pulse border border-white shadow-sm" title="Wartet"></div>`;
+        else if (p.status === 'paid') statusDot = `<div class="w-2.5 h-2.5 rounded-full bg-green-500 border border-white shadow-sm" title="Bezahlt"></div>`;
+        else statusDot = `<div class="w-2.5 h-2.5 rounded-full bg-gray-400 border border-white shadow-sm" title="Storniert"></div>`;
 
         const checkboxHtml = isSelectionMode ?
-            `<div class="absolute top-3 right-3 z-10"><input type="checkbox" class="payment-select-cb h-5 w-5 text-indigo-600 accent-indigo-600" value="${p.id}" ${selectedPaymentIds.has(p.id) ? 'checked' : ''}></div>` : '';
+            `<div class="absolute top-1/2 -translate-y-1/2 right-2 z-20"><input type="checkbox" class="payment-select-cb h-5 w-5 text-indigo-600 accent-indigo-600" value="${p.id}" ${selectedPaymentIds.has(p.id) ? 'checked' : ''}></div>` : '';
 
+        // SUPER KOMPAKTES LAYOUT
+        // Flex-Wrap im Header für Titel + Kategorie
+        // Flex-Row im Footer für Name + Preis
         const html = `
-        <div class="payment-card-item relative p-3 rounded-xl border ${bgClass} shadow-sm hover:shadow-md transition cursor-pointer flex flex-col h-full" data-id="${p.id}">
+        <div class="payment-card-item relative p-2 rounded-lg border ${bgClass} shadow-sm hover:shadow-md transition cursor-pointer flex flex-col justify-between h-full min-h-[70px]" data-id="${p.id}">
             ${checkboxHtml}
             
-            <div class="flex justify-between items-start mb-2">
-                <span class="text-xs text-gray-600 font-bold bg-white/80 px-2 py-0.5 rounded border border-gray-200 truncate max-w-[70%] shadow-sm">${catName}</span>
-                ${statusDot}
+            <div class="absolute top-1.5 right-1.5 z-10">${statusDot}</div>
+            
+            <div class="pr-4 mb-1">
+                <span class="text-xs font-bold text-gray-900 leading-tight break-words">${p.title}</span>
+                <span class="inline-block text-[9px] text-gray-500 bg-white/60 px-1 rounded border border-gray-200 ml-1 align-middle whitespace-nowrap">${catName}</span>
             </div>
             
-            <h4 class="text-sm font-extrabold text-gray-900 leading-snug mb-3 line-clamp-2">${p.title}</h4>
-            
-            <div class="mt-auto">
-                <p class="text-xs text-gray-600 truncate mb-1">${prefix} <strong class="text-gray-900 text-sm">${partnerName}</strong></p>
-                <div class="font-black text-xl ${colorClass} tracking-tight">
-                    ${p.isTBD ? 'TBD' : parseFloat(p.remainingAmount).toFixed(2) + ' €'}
+            <div class="flex justify-between items-end gap-1 mt-auto pt-1">
+                <p class="text-[10px] text-gray-500 truncate leading-none max-w-[60%]">
+                    ${prefix} <strong class="text-gray-700">${partnerName}</strong>
+                </p>
+                <div class="font-black text-base ${colorClass} leading-none text-right flex-shrink-0">
+                    ${p.isTBD ? 'TBD' : parseFloat(p.remainingAmount).toFixed(2) + '€'}
                 </div>
             </div>
         </div>`;
@@ -1651,7 +1656,8 @@ function renderPaymentList(payments) {
     });
 }
 
-// --- KATEGORIE DASHBOARD (Größere Schrift) ---
+
+// --- KATEGORIE DASHBOARD (Lesbare Titel & Kompakt) ---
 function updateCategoryDashboard() {
     const container = document.getElementById('category-dashboard-container');
     const modalList = document.getElementById('category-overview-list');
@@ -1701,23 +1707,28 @@ function updateCategoryDashboard() {
             div.className = "bg-gray-50 border border-gray-200 rounded-lg p-3 flex justify-between items-center shadow-sm";
             div.innerHTML = `
                  <div class="text-left">
-                    <p class="text-sm font-bold text-gray-800">${item.name}</p>
+                    <p class="text-sm font-bold text-gray-700">${item.name}</p>
                     <p class="text-xs text-gray-500">${item.count} Posten</p>
                  </div>
-                 <p class="text-lg font-bold text-gray-900">${item.amount.toFixed(2)} €</p>
+                 <p class="text-base font-extrabold text-gray-800">${item.amount.toFixed(2)} €</p>
              `;
         } else {
-            // Dashboard Design (Größer & Lesbarer)
-            div.className = "flex-shrink-0 bg-white border border-gray-200 rounded-xl px-3 py-2 min-w-[120px] shadow-sm text-center flex flex-col justify-center hover:shadow-md transition cursor-pointer h-16";
+            // Dashboard Design (Optimiert für Lesbarkeit & Platz)
+            div.className = "flex-shrink-0 bg-white border border-gray-200 rounded-xl px-2 py-1.5 min-w-[100px] max-w-[120px] shadow-sm text-center flex flex-col justify-between hover:shadow-md transition cursor-pointer h-auto min-h-[60px]";
             
+            // line-clamp-2 erlaubt zweizeiligen Text für lange Wörter wie "Rückerstattung"
+            // leading-tight zieht die Zeilen etwas enger zusammen
             div.innerHTML = `
-                 <p class="text-xs font-bold text-gray-600 uppercase truncate w-full mb-0.5">${item.name}</p>
-                 <p class="text-xl font-black text-indigo-600 leading-none">${item.amount.toFixed(2)} €</p>
-                 <p class="text-[10px] text-gray-400 mt-0.5 font-medium">${item.count} offen</p>
+                 <div class="flex items-center justify-center flex-grow min-h-[24px]">
+                    <p class="text-[11px] font-bold text-gray-600 uppercase leading-3 line-clamp-2 break-words w-full">${item.name}</p>
+                 </div>
+                 <div class="mt-0.5">
+                    <p class="text-base font-black text-indigo-600 leading-none">${item.amount.toFixed(2)} €</p>
+                    <p class="text-[9px] text-gray-400 font-medium leading-none mt-0.5">${item.count} off.</p>
+                 </div>
              `;
              div.onclick = () => {
-                 const filterDropdown = document.getElementById('payment-filter-category');
-                 // Optional: Filtern bei Klick (kannst du später aktivieren)
+                 // Optional: Filterlogik hier
              };
         }
         return div;
@@ -1725,24 +1736,21 @@ function updateCategoryDashboard() {
 
     const MAX_VISIBLE = 7;
     
-    // Dashboard füllen
     sums.slice(0, MAX_VISIBLE).forEach(item => {
         container.appendChild(createBox(item, false));
     });
 
-    // "Mehr"-Button
     if (sums.length > MAX_VISIBLE) {
         const moreCount = sums.length - MAX_VISIBLE;
         const btn = document.createElement('button');
-        btn.className = "flex-shrink-0 bg-indigo-50 border border-indigo-200 rounded-xl px-2 py-2 min-w-[80px] text-indigo-700 font-bold hover:bg-indigo-100 transition flex flex-col justify-center items-center shadow-sm h-16";
-        btn.innerHTML = `<span class="text-xl leading-none">+${moreCount}</span><span class="text-[10px]">weitere...</span>`;
+        btn.className = "flex-shrink-0 bg-indigo-50 border border-indigo-200 rounded-xl px-2 py-2 min-w-[60px] text-indigo-700 font-bold hover:bg-indigo-100 transition flex flex-col justify-center items-center shadow-sm min-h-[60px]";
+        btn.innerHTML = `<span class="text-lg leading-none">+${moreCount}</span><span class="text-[9px]">mehr</span>`;
         btn.onclick = () => {
             document.getElementById('categoryOverviewModal').style.display = 'flex';
         };
         container.appendChild(btn);
     }
 
-    // Modal füllen
     if (modalList) {
         sums.forEach(item => {
             modalList.appendChild(createBox(item, true));
