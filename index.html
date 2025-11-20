@@ -1827,7 +1827,7 @@
                 </div>
             </div>
 
-<div id="zahlungsverwaltungView" class="view">
+            <div id="zahlungsverwaltungView" class="view">
                 <div class="back-link-container w-full mb-4 flex justify-between items-center">
                     <div class="flex gap-2">
                         <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition"
@@ -1896,7 +1896,8 @@
                 </div>
 
                 <div id="dashboard-category-scroller" class="flex gap-2 overflow-x-auto pb-2 mb-2 snap-x">
-                    <div class="p-2 bg-gray-50 rounded border min-w-[120px] flex flex-col justify-center items-center text-gray-400">
+                    <div
+                        class="p-2 bg-gray-50 rounded border min-w-[120px] flex flex-col justify-center items-center text-gray-400">
                         <span class="text-xs">Lade Kategorien...</span>
                     </div>
                 </div>
@@ -1917,7 +1918,8 @@
                     </div>
 
                     <div class="grid grid-cols-3 gap-2">
-                        <select id="payment-filter-status" class="p-1.5 border rounded-lg bg-white shadow-sm text-xs font-medium text-gray-700 truncate">
+                        <select id="payment-filter-status"
+                            class="p-1.5 border rounded-lg bg-white shadow-sm text-xs font-medium text-gray-700 truncate">
                             <optgroup label="[BEZAHLSTATUS]" class="font-bold bg-indigo-50 text-indigo-900">
                                 <option value="open" selected>Offen/Teilbezahlt</option>
                                 <option value="pending">Wartet auf Bestätigung</option>
@@ -1925,14 +1927,16 @@
                                 <option value="all">Alle anzeigen</option>
                             </optgroup>
                         </select>
-                        
-                        <select id="payment-filter-category" class="p-1.5 border rounded-lg bg-white shadow-sm text-xs font-medium text-gray-700 truncate">
-                             <optgroup label="[KATEGORIEN]" class="font-bold bg-indigo-50 text-indigo-900">
+
+                        <select id="payment-filter-category"
+                            class="p-1.5 border rounded-lg bg-white shadow-sm text-xs font-medium text-gray-700 truncate">
+                            <optgroup label="[KATEGORIEN]" class="font-bold bg-indigo-50 text-indigo-900">
                                 <option value="all" selected>Alle Kategorien</option>
-                                </optgroup>
+                            </optgroup>
                         </select>
-                        
-                        <select id="payment-filter-direction" class="p-1.5 border rounded-lg bg-white shadow-sm text-xs font-medium text-gray-700 truncate">
+
+                        <select id="payment-filter-direction"
+                            class="p-1.5 border rounded-lg bg-white shadow-sm text-xs font-medium text-gray-700 truncate">
                             <option value="all">Alle Richtungen</option>
                             <option value="i_owe">Ich schulde</option>
                             <option value="owes_me">Schuldet mir</option>
@@ -2141,14 +2145,25 @@
                                         <div>
                                             <label
                                                 class="block text-xs font-bold text-gray-500 uppercase mb-1">Kategorie</label>
-                                            <select id="payment-category-select" class="w-full p-2 border border-gray-300 rounded-lg bg-white text-sm font-medium">
-                                                </select>
+                                            <select id="payment-category-select"
+                                                class="w-full p-2 border border-gray-300 rounded-lg bg-white text-sm font-medium">
+                                                <option value="">-- Keine Kategorie --</option>
+                                            </select>
                                         </div>
+
                                         <div>
                                             <label
                                                 class="block text-xs font-bold text-gray-500 uppercase mb-1">Buchungsdatum</label>
                                             <input type="date" id="payment-start-date"
                                                 class="w-full p-2 border border-gray-300 rounded-lg bg-gray-50 text-sm font-medium">
+                                        </div>
+
+                                        <div>
+                                            <label
+                                                class="block text-xs font-bold text-gray-500 uppercase mb-1">Fälligkeit
+                                                (Deadline)</label>
+                                            <input type="date" id="payment-deadline"
+                                                class="w-full p-2 border border-red-200 rounded-lg text-sm font-medium focus:border-red-500 text-gray-700">
                                         </div>
                                     </div>
                                 </div>
@@ -2236,7 +2251,7 @@
                         </div>
                     </div>
                 </div>
-                </div>
+            </div>
 
             <div id="zahlungsverwaltungSettingsView" class="view">
                 <div class="back-link-container w-full mb-4">
@@ -2279,7 +2294,8 @@
                 <div id="content-zv-categories" class="hidden space-y-4">
                     <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-yellow-500">
                         <h3 class="text-lg font-bold text-gray-800 mb-2">Kategorien verwalten</h3>
-                        <p class="text-xs text-gray-500 mb-4">Erstelle Kategorien wie "Rückerstattung Shop" oder "Urlaub", um deine Finanzen besser zu filtern.</p>
+                        <p class="text-xs text-gray-500 mb-4">Erstelle Kategorien wie "Rückerstattung Shop" oder
+                            "Urlaub", um deine Finanzen besser zu filtern.</p>
 
                         <div class="p-3 bg-gray-50 rounded-lg border mb-4 flex gap-2">
                             <input type="text" id="new-category-name" class="flex-grow p-2 border rounded-lg"
@@ -2290,7 +2306,7 @@
                         </div>
 
                         <div id="zv-categories-list" class="space-y-2 max-h-80 overflow-y-auto">
-                            </div>
+                        </div>
                     </div>
                 </div>
 
