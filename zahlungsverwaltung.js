@@ -672,7 +672,7 @@ function openCreateModal(paymentToEdit = null) {
     if (!modal) return;
 
     updateTemplateDropdown();
-    fillCategoryDropdown(document.getElementById('payment-category-select')); // NEU: Kategorien laden
+    fillCategoryDropdown(document.getElementById('payment-category-select')); 
 
     const tplSelect = document.getElementById('payment-template-select');
     if(tplSelect) tplSelect.value = "";
@@ -686,13 +686,23 @@ function openCreateModal(paymentToEdit = null) {
     document.getElementById('payment-notes').value = '';
     document.getElementById('payment-type').value = 'debt';
     document.getElementById('payment-advanced-options').classList.add('hidden');
-    document.getElementById('payment-amount').value = '';
-    document.getElementById('payment-amount-tbd').checked = false;
+    
+    // Betrag zurücksetzen
+    const amountInput = document.getElementById('payment-amount');
+    const tbdCheckbox = document.getElementById('payment-amount-tbd');
+    
+    amountInput.value = '';
+    tbdCheckbox.checked = false;
+    
+    // WICHTIG: Standardmäßig aktivieren (für NEUE Einträge)
+    amountInput.disabled = false;
+    tbdCheckbox.disabled = false;
+    
     document.getElementById('split-manual-name-input').value = '';
     document.getElementById('payment-is-installment').checked = false;
     document.getElementById('installment-options').classList.add('hidden');
     
-    // NEU: Standard-Kategorie setzen (Diverse)
+    // Standard-Kategorie setzen (Diverse)
     document.getElementById('payment-category-select').value = 'cat_misc';
 
     // Inputs und Modi zurücksetzen
@@ -712,11 +722,20 @@ function openCreateModal(paymentToEdit = null) {
 
         document.getElementById('edit-payment-id').value = paymentToEdit.id;
         document.getElementById('payment-title').value = paymentToEdit.title;
-        document.getElementById('payment-amount').value = paymentToEdit.amount;
+        
+        // WICHTIG: Im Edit-Modus Betrag setzen UND SPERREN
+        amountInput.value = paymentToEdit.amount;
+        amountInput.disabled = true; // Feld ausgegraut
+        amountInput.title = "Änderung nur über '€ Anpassen' möglich"; // Tooltip
+        
+        // TBD Checkbox auch sperren
+        tbdCheckbox.checked = paymentToEdit.isTBD;
+        tbdCheckbox.disabled = true;
+
         document.getElementById('payment-start-date').value = paymentToEdit.startDate || '';
         document.getElementById('payment-deadline').value = paymentToEdit.deadline || '';
         
-        // NEU: Kategorie setzen (falls vorhanden, sonst Standard)
+        // Kategorie setzen
         if (paymentToEdit.categoryId) {
             document.getElementById('payment-category-select').value = paymentToEdit.categoryId;
         } else {
@@ -766,6 +785,7 @@ function openCreateModal(paymentToEdit = null) {
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
 }
+
 
 
 
