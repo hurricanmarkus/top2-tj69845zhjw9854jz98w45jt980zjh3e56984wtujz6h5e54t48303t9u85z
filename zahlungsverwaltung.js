@@ -127,14 +127,16 @@ function setupEventListeners() {
     document.getElementById('payment-template-select')?.addEventListener('change', applySelectedTemplate);
     document.getElementById('btn-save-as-template')?.addEventListener('click', saveCurrentAsTemplate);
 
-    // NEU: Listener für manuellen Namen & Schnell-Speichern
     document.getElementById('payment-partner-name-manual')?.addEventListener('input', checkManualInputForContact);
     document.getElementById('btn-quick-save-contact')?.addEventListener('click', quickSaveContact);
 
-    // NEU: Guthaben Details Modal
-    document.getElementById('close-credit-details-btn')?.addEventListener('click', () => document.getElementById('creditDetailsModal').style.display = 'none');
-    document.getElementById('btn-close-credit-details')?.addEventListener('click', () => document.getElementById('creditDetailsModal').style.display = 'none');
+    // NEU: Guthaben-Box Klick -> Gehe zu Settings -> Tab Credits
+    document.getElementById('btn-dashboard-credits')?.addEventListener('click', () => {
+        navigate('zahlungsverwaltungSettings');
+        setTimeout(() => openSettingsTab('credits'), 50);
+    });
 }
+
 
 function setupSettingsListeners() {
     document.getElementById('tab-zv-templates')?.addEventListener('click', () => openSettingsTab('templates'));
@@ -1315,12 +1317,16 @@ function renderPaymentList(payments) {
     const container = document.getElementById('payments-list-container');
     if (!container) return;
     container.innerHTML = '';
-    if (payments.length === 0) { container.innerHTML = `<div class="text-center p-8 bg-gray-50 rounded-xl text-gray-500">Keine Einträge.</div>`; return; }
+    
+    // Filtere Guthaben (Credits) hier raus!
+    const visiblePayments = payments.filter(p => p.type !== 'credit');
+    
+    if (visiblePayments.length === 0) { container.innerHTML = `<div class="text-center p-8 bg-gray-50 rounded-xl text-gray-500">Keine Einträge.</div>`; return; }
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Zeit ignorieren für Vergleich
+    today.setHours(0, 0, 0, 0); 
 
-    payments.forEach(p => {
+    visiblePayments.forEach(p => {
         const iAmDebtor = p.debtorId === currentUser.mode;
         const partnerName = iAmDebtor ? p.creditorName : p.debtorName;
         const prefix = iAmDebtor ? "Ich schulde an" : "Schuldet mir";
@@ -1330,7 +1336,6 @@ function renderPaymentList(payments) {
         let statusBadge = '';
         let timeBadge = '';
 
-        // --- LOGIK FÜR DEADLINE WARNUNGEN ---
         if (p.status === 'open') {
             statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-blue-100 text-blue-800">Offen</span>`;
 
@@ -1342,16 +1347,12 @@ function renderPaymentList(payments) {
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
                 if (diffDays < 0) {
-                    // Überfällig
                     timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white">Überfällig (${Math.abs(diffDays)} Tage)</span>`;
                 } else if (diffDays === 0) {
-                    // Heute
                     timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-orange-500 text-white">Fällig: HEUTE</span>`;
                 } else if (diffDays <= 3) {
-                    // Bald
                     timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-800">Fällig in ${diffDays} Tagen</span>`;
                 } else {
-                    // Zukunft
                     timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500">Fällig in ${diffDays} Tagen</span>`;
                 }
             }
@@ -1386,18 +1387,46 @@ function renderPaymentList(payments) {
     });
 }
 
+
 function updateDashboard(payments) {
-    let myDebt = 0; let myDebtCount = 0; let owedToMe = 0; let owedToMeCount = 0;
+    let myDebt = 0; let myDebtCount = 0; 
+    let owedToMe = 0; let owedToMeCount = 0;
+    
+    // NEU: Variablen für Guthaben
+    let totalCredits = 0;
+
     payments.forEach(p => {
         if (p.status !== 'open' && p.status !== 'pending_approval') return;
+        
         const amount = p.isTBD ? 0 : parseFloat(p.remainingAmount);
-        if (p.debtorId === currentUser.mode) { myDebt += amount; myDebtCount++; } else if (p.creditorId === currentUser.mode) { owedToMe += amount; owedToMeCount++; }
+        
+        if (p.type === 'credit') {
+            // GUTHABEN BERECHNUNG
+            // Wenn ICH der creditor bin (ich habe Guthaben beim anderen) -> Positiv für mich
+            if (p.creditorId === currentUser.mode) {
+                totalCredits += amount;
+            }
+            // Wenn ICH der debtor bin (der andere hat Guthaben bei mir) -> Eigentlich negativ für mich, 
+            // aber in der Anzeige "Aktives Guthaben" zeigen wir meistens das, was ich HABEN, nicht was ich schulde.
+            // Oder wir machen eine Netto-Rechnung.
+            // Einfachheitshalber: "Aktives Guthaben" = Was ich bei anderen gut habe.
+        } else {
+            // NORMALE SCHULDEN
+            if (p.debtorId === currentUser.mode) { myDebt += amount; myDebtCount++; } 
+            else if (p.creditorId === currentUser.mode) { owedToMe += amount; owedToMeCount++; }
+        }
     });
+
     const mD = document.getElementById('dashboard-my-debt-display'); if (mD) mD.textContent = myDebt.toFixed(2) + " €";
     const mDD = document.getElementById('dashboard-my-debt-detail'); if (mDD) mDD.textContent = `in ${myDebtCount} offenen Posten`;
     const oD = document.getElementById('dashboard-owe-me-display'); if (oD) oD.textContent = owedToMe.toFixed(2) + " €";
     const oDD = document.getElementById('dashboard-owe-me-detail'); if (oDD) oDD.textContent = `aus ${owedToMeCount} offenen Posten`;
+    
+    // NEU: Guthaben Anzeige aktualisieren
+    const cD = document.getElementById('dashboard-credit-display'); 
+    if (cD) cD.textContent = totalCredits.toFixed(2) + " €";
 }
+
 
 // --- LOGIK FÜR ZAHLUNGEN UND ÜBERZAHLUNG ---
 
@@ -1978,7 +2007,13 @@ async function executeCreditAction() {
     const mode = document.getElementById('credit-mode').value;
     const context = document.getElementById('credit-context').value;
     const partnerId = document.getElementById('credit-partner-select').value;
-    const amount = parseFloat(document.getElementById('credit-amount').value);
+    
+    // NEU: Hier wird gerundet!
+    let amount = parseFloat(document.getElementById('credit-amount').value);
+    if (!isNaN(amount)) {
+        amount = parseFloat(amount.toFixed(2)); // Hart auf 2 Stellen runden
+    }
+    
     const reason = document.getElementById('credit-reason').value.trim();
     const paymentId = document.getElementById('creditManageModal').dataset.paymentId;
 
@@ -1992,7 +2027,6 @@ async function executeCreditAction() {
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
         
-        // Name auflösen (User oder Kontakt)
         let partnerName = "Unbekannt";
         if (USERS[partnerId]) partnerName = USERS[partnerId].realName || USERS[partnerId].name;
         else {
@@ -2005,7 +2039,7 @@ async function executeCreditAction() {
                 title: reason, amount: amount, remainingAmount: amount, type: 'credit', status: 'open', isTBD: false,
                 startDate: new Date().toISOString().split('T')[0], createdAt: serverTimestamp(), createdBy: currentUser.mode,
                 involvedUserIds: [currentUser.mode, partnerId],
-                history: [{ date: new Date(), action: 'created_manual_credit', user: currentUser.displayName, info: `Guthaben manuell angelegt.` }]
+                history: [{ date: new Date(), action: 'created_manual_credit', user: currentUser.displayName, info: `Guthaben manuell angelegt: ${amount.toFixed(2)}€` }]
             };
             if (context === 'my') { docData.creditorId = currentUser.mode; docData.creditorName = currentUser.displayName; docData.debtorId = partnerId; docData.debtorName = partnerName; } 
             else { docData.creditorId = partnerId; docData.creditorName = partnerName; docData.debtorId = currentUser.mode; docData.debtorName = currentUser.displayName; }
@@ -2015,10 +2049,15 @@ async function executeCreditAction() {
             if (paymentId) {
                 const p = allPayments.find(x => x.id === paymentId);
                 if (p) {
-                    const newRest = parseFloat(p.remainingAmount) - amount;
-                    if (newRest < -0.01) throw new Error("Nicht genug Guthaben.");
-                    const updateData = { remainingAmount: Math.max(0, newRest), history: [...(p.history || []), { date: new Date(), action: 'credit_used', user: currentUser.displayName, info: `Abgebucht: ${amount.toFixed(2)}€` }] };
-                    if (newRest <= 0.001) updateData.status = 'paid';
+                    // Auch hier runden wir das Rechenergebnis sicherheitshalber
+                    const newRest = parseFloat((parseFloat(p.remainingAmount) - amount).toFixed(2));
+                    
+                    if (newRest < 0) throw new Error("Nicht genug Guthaben.");
+                    const updateData = { 
+                        remainingAmount: newRest, 
+                        history: [...(p.history || []), { date: new Date(), action: 'credit_used', user: currentUser.displayName, info: `Abgebucht: ${amount.toFixed(2)}€` }] 
+                    };
+                    if (newRest === 0) updateData.status = 'paid';
                     batch.update(doc(paymentsRef, paymentId), updateData);
                     alertUser("Erfolgreich.", "success");
                 }
