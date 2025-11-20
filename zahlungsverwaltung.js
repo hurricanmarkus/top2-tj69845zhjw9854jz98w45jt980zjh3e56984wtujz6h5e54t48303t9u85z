@@ -109,9 +109,12 @@ function setupEventListeners() {
     document.getElementById('btn-toggle-advanced-payment')?.addEventListener('click', () => document.getElementById('payment-advanced-options').classList.toggle('hidden'));
     document.getElementById('payment-is-installment')?.addEventListener('change', (e) => document.getElementById('installment-options').classList.toggle('hidden', !e.target.checked));
     
-    // Filter & Listen
+// Filter & Listen
     document.getElementById('payment-search-input')?.addEventListener('input', applyFilters);
     document.getElementById('payment-filter-status')?.addEventListener('change', applyFilters);
+    
+    document.getElementById('payment-filter-category')?.addEventListener('change', applyFilters);
+    
     document.getElementById('payment-filter-direction')?.addEventListener('change', applyFilters);
     
     document.getElementById('btn-close-detail-modal')?.addEventListener('click', closeDetailModal);
@@ -1662,7 +1665,7 @@ function updateCategoryDashboard() {
 
     // 1. Daten sammeln
     const sums = [];
-    const allCats = [...SYSTEM_CATEGORIES, ...allCategories]; // Array aller Kats
+    const allCats = [...SYSTEM_CATEGORIES, ...allCategories]; 
 
     // Werte berechnen
     allCats.forEach(cat => {
@@ -1671,13 +1674,12 @@ function updateCategoryDashboard() {
         
         allPayments.forEach(p => {
             if ((p.status === 'open' || p.status === 'pending_approval') && p.type !== 'credit') {
-                // Falls p.categoryId leer oder ungültig ist, zählen wir es zu 'cat_misc'
                 const pCat = p.categoryId || 'cat_misc';
                 if (pCat === cat.id) {
                     count++;
                     amount += parseFloat(p.remainingAmount || 0);
                 }
-                // Sonderfall: Wenn Eintrag eine gelöschte ID hat, zählen wir es zu Diverse
+                // Sonderfall: Gelöschte Kategorie fällt auf Diverse zurück
                 if (cat.id === 'cat_misc' && p.categoryId && !allCats.find(c => c.id === p.categoryId)) {
                      count++;
                      amount += parseFloat(p.remainingAmount || 0);
@@ -1685,47 +1687,54 @@ function updateCategoryDashboard() {
             }
         });
 
+        // Nur aktive anzeigen (Count > 0)
         if (count > 0) {
             sums.push({ name: cat.name, count: count, amount: amount });
         }
     });
 
-    // Keine offenen Posten?
     if (sums.length === 0) {
-        container.innerHTML = '<p class="text-[10px] text-gray-400 w-full text-center">Alles erledigt! 🎉</p>';
+        container.innerHTML = '<p class="text-xs text-gray-400 p-2 w-full text-center">Alles erledigt! 🎉</p>';
         return;
     }
 
     // 2. Helper zum Erstellen der HTML-Boxen
     const createBox = (item, isModal = false) => {
         const div = document.createElement('div');
-        // Style für Dashboard (klein, fix) oder Modal (größer)
-        const baseClass = isModal 
-            ? "bg-gray-50 border border-gray-200 rounded-lg p-3 flex justify-between items-center shadow-sm"
-            : "flex-shrink-0 bg-white border border-gray-200 rounded-lg px-2 py-1 min-w-[90px] max-w-[110px] shadow-sm text-center flex flex-col justify-center h-full";
-            
+        
         if (isModal) {
-            div.className = baseClass;
+            // Modal Design (Listenansicht)
+            div.className = "bg-gray-50 border border-gray-200 rounded-lg p-3 flex justify-between items-center shadow-sm";
             div.innerHTML = `
                  <div class="text-left">
-                    <p class="text-xs font-bold text-gray-600 uppercase">${item.name}</p>
-                    <p class="text-[10px] text-gray-400">${item.count} Posten</p>
+                    <p class="text-sm font-bold text-gray-700">${item.name}</p>
+                    <p class="text-xs text-gray-500">${item.count} Posten offen</p>
                  </div>
-                 <p class="text-sm font-extrabold text-gray-800">${item.amount.toFixed(2)} €</p>
+                 <p class="text-base font-extrabold text-gray-800">${item.amount.toFixed(2)} €</p>
              `;
         } else {
-            div.className = baseClass;
+            // Dashboard Design (Große Buttons, min-width für gute Touch-Bedienung)
+            div.className = "flex-shrink-0 bg-white border border-gray-200 rounded-xl px-3 py-2 min-w-[110px] shadow-sm text-center flex flex-col justify-center hover:shadow-md transition cursor-pointer";
+            
+            // Bei Klick auf eine Kategorie könnte man filtern (optional), hier nur Anzeige
             div.innerHTML = `
-                 <p class="text-[9px] font-bold text-gray-500 uppercase truncate w-full">${item.name}</p>
-                 <p class="text-xs font-extrabold text-gray-800 leading-tight my-0.5">${item.amount.toFixed(2)} €</p>
-                 <p class="text-[9px] text-gray-400 leading-none">${item.count} off.</p>
+                 <p class="text-[10px] font-bold text-gray-500 uppercase truncate w-full mb-1">${item.name}</p>
+                 <p class="text-lg font-extrabold text-indigo-600 leading-tight">${item.amount.toFixed(2)} €</p>
+                 <p class="text-[10px] text-gray-400 mt-1">${item.count} offen</p>
              `;
+             // Optional: Klick filtert die Liste darunter
+             div.onclick = () => {
+                 const filterDropdown = document.getElementById('payment-filter-category');
+                 // Versuchen die ID zu finden (wir haben hier nur Namen im item, daher kleiner Workaround oder wir speichern ID)
+                 // Da item aus sums kommt, erweitern wir sums oben kurz um die ID:
+                 // (Das machen wir im nächsten Schritt sauberer, für jetzt ist es nur Anzeige)
+             };
         }
         return div;
     };
 
-    // 3. Anzeigen (Max 3 im Dashboard, Rest im Modal)
-    const MAX_VISIBLE = 3;
+    // 3. Anzeigen (Max 7 im Dashboard, Rest im Modal)
+    const MAX_VISIBLE = 7;
     
     // Dashboard füllen
     sums.slice(0, MAX_VISIBLE).forEach(item => {
@@ -1736,21 +1745,23 @@ function updateCategoryDashboard() {
     if (sums.length > MAX_VISIBLE) {
         const moreCount = sums.length - MAX_VISIBLE;
         const btn = document.createElement('button');
-        btn.className = "flex-shrink-0 bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-1 text-indigo-700 font-bold text-[10px] h-full hover:bg-indigo-100 transition flex flex-col justify-center items-center min-w-[60px]";
-        btn.innerHTML = `<span>+${moreCount}</span><span>weitere</span>`;
+        // Style passend zu den anderen Boxen
+        btn.className = "flex-shrink-0 bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2 min-w-[80px] text-indigo-700 font-bold text-xs hover:bg-indigo-100 transition flex flex-col justify-center items-center shadow-sm";
+        btn.innerHTML = `<span class="text-lg">+${moreCount}</span><span>weitere...</span>`;
         btn.onclick = () => {
             document.getElementById('categoryOverviewModal').style.display = 'flex';
         };
         container.appendChild(btn);
     }
 
-    // Modal IMMER komplett füllen (für den Fall, dass man es öffnet)
+    // Modal IMMER komplett füllen
     if (modalList) {
         sums.forEach(item => {
             modalList.appendChild(createBox(item, true));
         });
     }
 }
+
 
 
 
