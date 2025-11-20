@@ -69,6 +69,12 @@ export function initializeZahlungsverwaltungSettingsView() {
 
 // --- SETUP EVENT LISTENERS ---
 function setupEventListeners() {
+
+    // Szenario Umschalter (Create Modal)
+    document.getElementById('scenario-i-owe')?.addEventListener('click', () => setTransactionScenario('i_owe'));
+    document.getElementById('scenario-owes-me')?.addEventListener('click', () => setTransactionScenario('owes_me'));
+    document.getElementById('scenario-other')?.addEventListener('click', () => setTransactionScenario('other'));
+
     // Standard Buttons
     document.getElementById('btn-create-new-payment')?.addEventListener('click', () => openCreateModal());
     document.getElementById('close-create-payment-modal')?.addEventListener('click', closeCreateModal);
@@ -684,22 +690,81 @@ function openCreateModal(paymentToEdit = null) {
         if (paymentToEdit.invoiceNr || paymentToEdit.orderNr || paymentToEdit.notes || paymentToEdit.type === 'transfer') {
             document.getElementById('payment-advanced-options').classList.remove('hidden');
         }
+        
+        // Buttons neutral setzen beim Bearbeiten
+        setTransactionScenario(null);
+
     } else {
         // Neuer Eintrag
         document.getElementById('edit-payment-id').value = "";
         
-        // Standard: Debtor = Ich (User)
-        const debSelect = document.getElementById('payment-debtor-select');
-        if(debSelect.querySelector(`option[value="USR:${currentUser.mode}"]`)) {
-             debSelect.value = `USR:${currentUser.mode}`;
-        }
+        // STANDARD: Ich schulde (Setzt den Button aktiv und füllt "Von" mit mir selbst)
+        setTransactionScenario('i_owe');
     }
 
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
 }
 
+
 function closeCreateModal() { document.getElementById('createPaymentModal').style.display = 'none'; }
+
+
+function setTransactionScenario(scenario) {
+    const myId = `USR:${currentUser.mode}`;
+    const debtSelect = document.getElementById('payment-debtor-select');
+    const credSelect = document.getElementById('payment-creditor-select');
+
+    // Visuelles Feedback für Buttons
+    const btns = {
+        'i_owe': document.getElementById('scenario-i-owe'),
+        'owes_me': document.getElementById('scenario-owes-me'),
+        'other': document.getElementById('scenario-other')
+    };
+
+    Object.keys(btns).forEach(key => {
+        const btn = btns[key];
+        if (key === scenario) {
+            btn.classList.remove('text-gray-600', 'hover:bg-gray-100', 'bg-white');
+            btn.classList.add('bg-white', 'text-indigo-700', 'shadow-sm'); 
+        } else {
+            btn.classList.remove('bg-white', 'text-indigo-700', 'shadow-sm');
+            btn.classList.add('text-gray-600', 'hover:bg-gray-100');
+        }
+    });
+
+    // Logik anwenden
+    if (scenario === 'i_owe') {
+        // Ich schulde -> Von Mir -> An ?
+        // Wir setzen den Schuldner auf MICH (wenn vorhanden)
+        // Wir leeren den Gläubiger
+        toggleInputMode('debtor', false);
+        toggleInputMode('creditor', false);
+        
+        if (debtSelect.querySelector(`option[value="${myId}"]`)) {
+            debtSelect.value = myId;
+        }
+        credSelect.value = "";
+    
+    } else if (scenario === 'owes_me') {
+        // Mir schuldet -> Von ? -> An Mich
+        toggleInputMode('debtor', false);
+        toggleInputMode('creditor', false);
+
+        if (credSelect.querySelector(`option[value="${myId}"]`)) {
+            credSelect.value = myId;
+        }
+        debtSelect.value = "";
+        
+    } else {
+        // Sonstiges -> Alles leer
+        debtSelect.value = "";
+        credSelect.value = "";
+    }
+    
+    updateCreditorHint();
+}
+
 
 // --- HELFER FÜR DAS MODAL ---
 
@@ -1661,18 +1726,18 @@ window.deleteTransaction = async function(paymentId, txIndex) {
     } catch (e) { console.error(e); alertUser("Fehler beim Löschen.", "error"); }
 }
 
-// --- HELPER: DROPDOWN BEFÜLLEN (NEU: MIT KONTEN) ---
+// --- HELPER: DROPDOWN BEFÜLLEN (INKL. EIGENER USER) ---
 function fillDropdown(selectElement, type) {
     selectElement.innerHTML = '';
     selectElement.innerHTML = '<option value="">- Bitte wählen -</option>';
 
-    // 1. MEINE KONTEN (Für Gläubiger wichtig, für Schuldner auch möglich)
+    // 1. MEINE KONTEN
     if (allAccounts.length > 0) {
         const grpAcc = document.createElement('optgroup');
         grpAcc.label = "[MEINE KONTEN]";
         allAccounts.forEach(acc => {
             const opt = document.createElement('option');
-            opt.value = `ACC:${acc.id}`; // Prefix um es zu unterscheiden
+            opt.value = `ACC:${acc.id}`; 
             opt.dataset.type = "account";
             opt.dataset.details = acc.details || "";
             opt.textContent = acc.name;
@@ -1681,15 +1746,22 @@ function fillDropdown(selectElement, type) {
         selectElement.appendChild(grpAcc);
     }
     
-    // 2. REGISTRIERTE PERSONEN
+    // 2. REGISTRIERTE PERSONEN (JETZT MIT MIR SELBST!)
     const grpUsers = document.createElement('optgroup');
     grpUsers.label = "[REGISTRIERTE PERSONEN]";
     Object.values(USERS).forEach(user => {
-        if (user.id !== currentUser.mode && user.isActive) {
+        if (user.isActive) { // KORREKTUR: Wir filtern currentUser NICHT mehr aus!
             const opt = document.createElement('option');
             opt.value = `USR:${user.id}`;
             opt.dataset.type = "user";
             opt.textContent = user.realName || user.name;
+            
+            // Markiere mich selbst zur Orientierung
+            if (user.id === currentUser.mode) {
+                opt.textContent += " (Ich)";
+                opt.style.fontWeight = "bold";
+            }
+            
             grpUsers.appendChild(opt);
         }
     });
