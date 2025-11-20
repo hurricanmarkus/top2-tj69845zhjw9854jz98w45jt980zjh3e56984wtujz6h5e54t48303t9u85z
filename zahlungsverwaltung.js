@@ -2172,16 +2172,29 @@ async function saveCurrentAsTemplate() {
     const title = document.getElementById('payment-title').value.trim();
     if (!title) { alertUser("Bitte erst einen Titel eingeben.", "error"); return; }
 
+    // Werte auslesen
     const amount = parseFloat(document.getElementById('payment-amount').value) || 0;
-    const partnerId = document.getElementById('payment-partner-select').value;
-    const partnerManual = document.getElementById('payment-partner-name-manual').value;
+    const categoryId = document.getElementById('payment-category-select').value;
     
+    // Schuldner Status ermitteln
+    const debManualHidden = document.getElementById('payment-debtor-manual').classList.contains('hidden');
+    const debtorVal = debManualHidden ? document.getElementById('payment-debtor-select').value : null;
+    const debtorMan = !debManualHidden ? document.getElementById('payment-debtor-manual').value : null;
+
+    // Gläubiger Status ermitteln
+    const credManualHidden = document.getElementById('payment-creditor-manual').classList.contains('hidden');
+    const creditorVal = credManualHidden ? document.getElementById('payment-creditor-select').value : null;
+    const creditorMan = !credManualHidden ? document.getElementById('payment-creditor-manual').value : null;
+
     const tplData = {
         title: title,
         amount: amount,
-        partnerId: partnerId,
-        partnerManual: partnerManual,
-        direction: document.getElementById('payment-direction').value,
+        categoryId: categoryId,
+        // Wir speichern genau den Zustand der Felder
+        debtorVal: debtorVal,
+        debtorMan: debtorMan,
+        creditorVal: creditorVal,
+        creditorMan: creditorMan,
         createdBy: currentUser.mode
     };
 
@@ -2190,6 +2203,7 @@ async function saveCurrentAsTemplate() {
         alertUser("Vorlage gespeichert!", "success");
     } catch(e) { console.error(e); alertUser("Fehler beim Speichern.", "error"); }
 }
+
 
 function renderTemplateList() {
     const container = document.getElementById('zv-templates-list');
@@ -2241,21 +2255,34 @@ function applySelectedTemplate() {
     const tpl = allTemplates.find(t => t.id === id);
     if (!tpl) return;
 
+    // 1. Basisdaten setzen
     document.getElementById('payment-title').value = tpl.title;
     if (tpl.amount) document.getElementById('payment-amount').value = tpl.amount;
-    if (tpl.direction) setDirection(tpl.direction);
+    if (tpl.categoryId) document.getElementById('payment-category-select').value = tpl.categoryId;
     
-    if (tpl.partnerId) {
-        document.getElementById('payment-partner-select').value = tpl.partnerId;
-        document.getElementById('payment-partner-select').classList.remove('hidden');
-        document.getElementById('payment-partner-name-manual').classList.add('hidden');
-        document.getElementById('btn-toggle-partner-manual').textContent = "Manueller Name";
-    } else if (tpl.partnerManual) {
-        document.getElementById('payment-partner-name-manual').value = tpl.partnerManual;
-        document.getElementById('payment-partner-select').classList.add('hidden');
-        document.getElementById('payment-partner-name-manual').classList.remove('hidden');
-        document.getElementById('btn-toggle-partner-manual').textContent = "Liste wählen";
+    // 2. Schuldner setzen
+    if (tpl.debtorVal) {
+        // Dropdown Modus
+        toggleInputMode('debtor', false); // Force Select
+        document.getElementById('payment-debtor-select').value = tpl.debtorVal;
+    } else if (tpl.debtorMan) {
+        // Manuell Modus
+        toggleInputMode('debtor', true); // Force Manual
+        document.getElementById('payment-debtor-manual').value = tpl.debtorMan;
     }
+
+    // 3. Gläubiger setzen
+    if (tpl.creditorVal) {
+        // Dropdown Modus
+        toggleInputMode('creditor', false); // Force Select
+        document.getElementById('payment-creditor-select').value = tpl.creditorVal;
+    } else if (tpl.creditorMan) {
+        // Manuell Modus
+        toggleInputMode('creditor', true); // Force Manual
+        document.getElementById('payment-creditor-manual').value = tpl.creditorMan;
+    }
+    
+    updateCreditorHint();
 }
 
 // --- GUTHABEN (CREDIT) LOGIK (NEU) ---
