@@ -740,7 +740,16 @@ function openCreateModal(paymentToEdit = null) {
     modal.classList.remove('hidden'); modal.style.display = 'flex';
 }
 
-
+function setSelectValueWithPrefix(select, id) {
+    const prefixes = ['USR', 'CON', 'ACC'];
+    for(let p of prefixes) {
+        if (select.querySelector(`option[value="${p}:${id}"]`)) {
+            select.value = `${p}:${id}`; 
+            return true;
+        }
+    }
+    return false;
+}
 
 function updateCategorySelectInModal() {
     const select = document.getElementById('payment-category-select');
