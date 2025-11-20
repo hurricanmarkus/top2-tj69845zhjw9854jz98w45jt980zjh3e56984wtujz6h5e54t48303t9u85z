@@ -130,6 +130,10 @@ function setupEventListeners() {
     // NEU: Listener für manuellen Namen & Schnell-Speichern
     document.getElementById('payment-partner-name-manual')?.addEventListener('input', checkManualInputForContact);
     document.getElementById('btn-quick-save-contact')?.addEventListener('click', quickSaveContact);
+
+    // NEU: Guthaben Details Modal
+    document.getElementById('close-credit-details-btn')?.addEventListener('click', () => document.getElementById('creditDetailsModal').style.display = 'none');
+    document.getElementById('btn-close-credit-details')?.addEventListener('click', () => document.getElementById('creditDetailsModal').style.display = 'none');
 }
 
 function setupSettingsListeners() {
@@ -1810,42 +1814,122 @@ function applySelectedTemplate() {
 
 // --- GUTHABEN (CREDIT) LOGIK (NEU) ---
 
+// --- GUTHABEN (CREDIT) LIST RENDER (GRUPPIERT) ---
 function renderCreditOverview() {
     const myCreditsList = document.getElementById('my-credits-list');
     const othersCreditsList = document.getElementById('others-credits-list');
+    myCreditsList.innerHTML = ''; othersCreditsList.innerHTML = '';
     
-    myCreditsList.innerHTML = '';
-    othersCreditsList.innerHTML = '';
-
     const credits = allPayments.filter(p => p.type === 'credit' && p.status === 'open');
 
-    // 1. Mein Guthaben
-    const myCredits = credits.filter(p => p.creditorId === currentUser.mode);
-    if (myCredits.length === 0) myCreditsList.innerHTML = '<p class="text-sm text-gray-400 italic">Leer.</p>';
-    
-    myCredits.forEach(p => {
-        const div = document.createElement('div');
-        div.className = "flex justify-between items-center p-2 bg-purple-50 rounded border border-purple-100";
-        div.innerHTML = `
-            <div><p class="font-bold text-purple-900">${p.debtorName}</p><p class="text-xs text-gray-500">${p.title}</p></div>
-            <div class="flex items-center gap-2"><span class="font-mono font-bold text-purple-700">${parseFloat(p.remainingAmount).toFixed(2)}€</span><button class="text-xs bg-white border border-gray-300 px-2 py-1 rounded hover:bg-gray-50" onclick="openCreditModal('sub', 'my', '${p.id}')">Abbuchen</button></div>
-        `;
-        myCreditsList.appendChild(div);
+    // 1. Mein Guthaben (Ich bin creditor)
+    const myCreditsRaw = credits.filter(p => p.creditorId === currentUser.mode);
+    renderGroupedCredits(myCreditsRaw, myCreditsList, 'my');
+
+    // 2. Fremdes Guthaben (Ich bin debtor)
+    const othersCreditsRaw = credits.filter(p => p.debtorId === currentUser.mode);
+    renderGroupedCredits(othersCreditsRaw, othersCreditsList, 'other');
+}
+
+function renderGroupedCredits(rawList, container, context) {
+    if (rawList.length === 0) { 
+        container.innerHTML = '<p class="text-sm text-gray-400 italic">Leer.</p>'; 
+        return; 
+    }
+
+    // Gruppieren nach Partner ID
+    const groups = {};
+    rawList.forEach(p => {
+        // Wer ist der Partner?
+        const partnerId = (context === 'my') ? p.debtorId : p.creditorId;
+        const partnerName = (context === 'my') ? p.debtorName : p.creditorName;
+        
+        // ID generieren (falls manueller Name ohne ID, nutzen wir den Namen als Key)
+        const key = partnerId || partnerName;
+
+        if (!groups[key]) {
+            groups[key] = { 
+                name: partnerName, 
+                total: 0, 
+                count: 0, 
+                ids: [], // Wir speichern alle IDs dieser Person
+                context: context
+            };
+        }
+        groups[key].total += parseFloat(p.remainingAmount);
+        groups[key].count++;
+        groups[key].ids.push(p.id);
     });
 
-    // 2. Fremdes Guthaben
-    const othersCredits = credits.filter(p => p.debtorId === currentUser.mode);
-    if (othersCredits.length === 0) othersCreditsList.innerHTML = '<p class="text-sm text-gray-400 italic">Leer.</p>';
-    
-    othersCredits.forEach(p => {
+    // Rendern
+    Object.values(groups).forEach(g => {
         const div = document.createElement('div');
-        div.className = "flex justify-between items-center p-2 bg-orange-50 rounded border border-orange-100";
+        const colorClass = context === 'my' ? 'bg-purple-50 border-purple-100 text-purple-900' : 'bg-orange-50 border-orange-100 text-orange-900';
+        const amountClass = context === 'my' ? 'text-purple-700' : 'text-orange-700';
+
+        div.className = `flex justify-between items-center p-3 rounded border ${colorClass} cursor-pointer hover:shadow-md transition`;
+        div.onclick = () => openCreditDetails(g); // Klick öffnet Details
+
         div.innerHTML = `
-            <div><p class="font-bold text-orange-900">${p.creditorName}</p><p class="text-xs text-gray-500">${p.title}</p></div>
-            <div class="flex items-center gap-2"><span class="font-mono font-bold text-orange-700">${parseFloat(p.remainingAmount).toFixed(2)}€</span><button class="text-xs bg-white border border-gray-300 px-2 py-1 rounded hover:bg-gray-50" onclick="openCreditModal('sub', 'other', '${p.id}')">Auszahlen</button></div>
+            <div class="flex items-center gap-2">
+                <div>
+                    <p class="font-bold">${g.name}</p>
+                    <p class="text-xs text-gray-500">${g.count} Eintrag/Einträge</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                 <span class="font-mono font-bold text-lg ${amountClass}">${g.total.toFixed(2)}€</span>
+                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-gray-400"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
+            </div>
         `;
-        othersCreditsList.appendChild(div);
+        container.appendChild(div);
     });
+}
+
+
+// --- NEU: CREDIT DETAILS ANZEIGEN ---
+function openCreditDetails(group) {
+    const modal = document.getElementById('creditDetailsModal');
+    const list = document.getElementById('credit-details-list');
+    
+    document.getElementById('credit-details-title').textContent = group.name;
+    document.getElementById('credit-details-total').textContent = group.total.toFixed(2) + " €";
+    list.innerHTML = '';
+
+    // Hole die echten Objekte anhand der gespeicherten IDs
+    const entries = allPayments.filter(p => group.ids.includes(p.id));
+
+    entries.forEach(p => {
+        const row = document.createElement('div');
+        row.className = "flex justify-between items-center p-2 bg-white border rounded shadow-sm";
+        
+        // Button Text je nach Kontext
+        const btnText = group.context === 'my' ? "Abbuchen" : "Auszahlen";
+        const btnClass = "text-xs border border-gray-300 px-2 py-1 rounded hover:bg-gray-100 text-gray-600";
+
+        row.innerHTML = `
+            <div class="flex-grow">
+                <p class="text-sm font-bold text-gray-800">${p.title}</p>
+                <p class="text-xs text-gray-500">${new Date(p.createdAt?.toDate()).toLocaleDateString()}</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="font-mono font-semibold text-gray-700">${parseFloat(p.remainingAmount).toFixed(2)}€</span>
+                <button class="${btnClass} action-btn" data-id="${p.id}">${btnText}</button>
+            </div>
+        `;
+        
+        // Event Listener für den Button im Detail-Fenster
+        row.querySelector('.action-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Modal schließen und Action-Modal öffnen
+            document.getElementById('creditDetailsModal').style.display = 'none';
+            openCreditModal('sub', group.context, p.id);
+        });
+
+        list.appendChild(row);
+    });
+
+    modal.style.display = 'flex';
 }
 
 // --- CREDITS MODAL & ACTIONS ---
