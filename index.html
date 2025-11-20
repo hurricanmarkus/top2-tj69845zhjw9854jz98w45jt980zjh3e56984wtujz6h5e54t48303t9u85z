@@ -1861,28 +1861,37 @@
                     </button>
                 </div>
 
-<div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
-                    
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+
                     <div class="p-3 bg-red-50 border border-red-200 rounded-lg shadow-sm flex flex-col justify-center">
                         <p class="text-[10px] font-bold text-red-700 uppercase tracking-wide">Ich schulde</p>
-                        <p class="text-xl font-extrabold text-gray-800 leading-tight" id="dashboard-my-debt-display">0,00 €</p>
+                        <p class="text-xl font-extrabold text-gray-800 leading-tight" id="dashboard-my-debt-display">
+                            0,00 €</p>
                         <p class="text-[10px] text-gray-500" id="dashboard-my-debt-detail">an 0 Personen</p>
                     </div>
 
-                    <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-lg shadow-sm flex flex-col justify-center">
-                        <p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">Mir wird geschuldet</p>
-                        <p class="text-xl font-extrabold text-gray-800 leading-tight" id="dashboard-owe-me-display">0,00 €</p>
+                    <div
+                        class="p-3 bg-emerald-50 border border-emerald-200 rounded-lg shadow-sm flex flex-col justify-center">
+                        <p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">Mir wird geschuldet
+                        </p>
+                        <p class="text-xl font-extrabold text-gray-800 leading-tight" id="dashboard-owe-me-display">0,00
+                            €</p>
                         <p class="text-[10px] text-gray-500" id="dashboard-owe-me-detail">von 0 Personen</p>
                     </div>
 
-                    <div id="btn-dashboard-credits" class="p-3 bg-blue-50 border border-blue-200 rounded-lg shadow-sm cursor-pointer hover:bg-blue-100 transition flex flex-col justify-center relative group">
+                    <div id="btn-dashboard-credits"
+                        class="p-3 bg-blue-50 border border-blue-200 rounded-lg shadow-sm cursor-pointer hover:bg-blue-100 transition flex flex-col justify-center relative group">
                         <div class="absolute top-2 right-2 text-blue-300 group-hover:text-blue-500">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
-                                <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" />
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                                class="w-4 h-4">
+                                <path fill-rule="evenodd"
+                                    d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z"
+                                    clip-rule="evenodd" />
                             </svg>
                         </div>
                         <p class="text-[10px] font-bold text-blue-700 uppercase tracking-wide">Aktives Guthaben</p>
-                        <p class="text-xl font-extrabold text-gray-800 leading-tight" id="dashboard-credit-display">0,00 €</p>
+                        <p class="text-xl font-extrabold text-gray-800 leading-tight" id="dashboard-credit-display">0,00
+                            €</p>
                         <p class="text-[10px] text-blue-600">Zum Verwalten klicken</p>
                     </div>
                 </div>
@@ -1983,75 +1992,69 @@
                                 title="Aktuelle Eingaben als Vorlage speichern">💾 Speichern</button>
                         </div>
 
-                        <div class="p-4 overflow-y-auto space-y-4 flex-grow">
+<div class="p-4 overflow-y-auto space-y-4 flex-grow">
                             <input type="hidden" id="edit-payment-id" value="">
-                            <div class="flex justify-center mb-2">
-                                <div class="bg-gray-100 p-1 rounded-lg flex gap-1">
-                                    <button type="button" id="mode-single"
-                                        class="px-4 py-1 rounded-md text-sm font-bold bg-white shadow text-gray-800 transition">Einzeln</button>
-                                    <button type="button" id="mode-split"
-                                        class="px-4 py-1 rounded-md text-sm font-bold text-gray-500 hover:bg-gray-200 transition">Gruppen-Split</button>
-                                </div>
-                            </div>
-                            <div id="direction-wrapper" class="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-lg">
-                                <button type="button" id="btn-direction-i-owe"
-                                    class="py-2 text-sm font-bold rounded-md transition bg-white shadow text-red-600">Ich
-                                    schulde Geld</button>
-                                <button type="button" id="btn-direction-owes-me"
-                                    class="py-2 text-sm font-bold rounded-md transition text-gray-500 hover:bg-gray-200">Jemand
-                                    schuldet mir</button>
-                            </div>
-                            <input type="hidden" id="payment-direction" value="i_owe">
+                            
+                            <div class="bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-4">
+                                
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Wer muss zahlen? (Schuldner)</label>
+                                    
+                                    <div class="flex justify-end mb-1">
+                                        <label class="flex items-center gap-2 cursor-pointer">
+                                            <span class="text-xs text-gray-500">Gruppe / Split?</span>
+                                            <input type="checkbox" id="toggle-split-mode" class="h-4 w-4 text-indigo-600">
+                                        </label>
+                                    </div>
 
-                            <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-1" id="label-partner">Person
-                                    (Gegenseite)</label>
-                                <div id="single-partner-wrapper" class="flex flex-col gap-2">
+                                    <div id="debtor-single-wrapper">
+                                        <div class="flex gap-2">
+                                            <select id="payment-debtor-select" class="flex-grow p-2 border rounded-lg bg-white text-gray-800 font-medium">
+                                                </select>
+                                            <input type="text" id="payment-debtor-manual" class="flex-grow p-2 border rounded-lg hidden" placeholder="Shop Name / Person...">
+                                            <button id="btn-toggle-debtor-manual" class="py-1 px-2 bg-gray-200 text-gray-500 rounded-lg text-xs font-bold">Tippen</button>
+                                        </div>
+                                    </div>
+
+                                    <div id="debtor-split-wrapper" class="hidden p-2 bg-white border rounded-lg">
+                                        <div class="flex gap-2 mb-2 border-b pb-2">
+                                            <input type="text" id="split-manual-name-input" class="flex-grow p-1.5 border rounded text-sm" placeholder="+ Gast Name...">
+                                            <button id="btn-add-split-manual" class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded font-bold text-sm">+</button>
+                                        </div>
+                                        <div id="split-partner-list" class="max-h-32 overflow-y-auto"></div>
+                                    </div>
+                                </div>
+
+                                <div class="flex justify-center -my-2 relative z-10">
+                                    <div class="bg-white p-1 rounded-full border shadow-sm text-gray-400">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                                            <path fill-rule="evenodd" d="M10 3a1 1 0 0 1 1 1v5h5a1 1 0 1 1 0 2h-5v5a1 1 0 1 1-2 0v-5H4a1 1 0 1 1 0-2h5V4a1 1 0 0 1 1-1Z" clip-rule="evenodd" />
+                                        </svg> <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                          <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 13.5 12 21m0 0-7.5-7.5M12 21V3" />
+                                        </svg>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Wer bekommt das Geld? (Gläubiger)</label>
                                     <div class="flex gap-2">
-                                        <select id="payment-partner-select"
-                                            class="flex-grow p-2 border rounded-lg bg-white">
-                                            <option value="">- Person auswählen -</option>
-                                        </select>
-                                        <input type="text" id="payment-partner-name-manual"
-                                            class="flex-grow p-2 border rounded-lg hidden"
-                                            placeholder="Name eingeben...">
-                                        <button id="btn-toggle-partner-manual"
-                                            class="py-1 px-3 bg-gray-200 text-gray-600 rounded-lg text-xs font-bold whitespace-nowrap">Manueller
-                                            Name</button>
+                                        <select id="payment-creditor-select" class="flex-grow p-2 border rounded-lg bg-white text-gray-800 font-medium border-l-4 border-l-emerald-500">
+                                            </select>
+                                        <input type="text" id="payment-creditor-manual" class="flex-grow p-2 border rounded-lg hidden" placeholder="Empfänger...">
+                                        <button id="btn-toggle-creditor-manual" class="py-1 px-2 bg-gray-200 text-gray-500 rounded-lg text-xs font-bold">Tippen</button>
                                     </div>
-                                    <button id="btn-quick-save-contact"
-                                        class="hidden w-full py-1 bg-teal-50 text-teal-700 border border-teal-200 rounded text-xs font-bold hover:bg-teal-100">
-                                        💾 Als "Eigener Kontakt" speichern
-                                    </button>
+                                    <p class="text-[10px] text-gray-400 mt-1 italic" id="creditor-details-hint"></p>
                                 </div>
-                                <div id="split-partner-wrapper"
-                                    class="hidden p-3 border rounded-lg bg-gray-50 space-y-2">
-                                    <div class="flex gap-2 mb-2 border-b pb-2">
-                                        <input type="text" id="split-manual-name-input"
-                                            class="flex-grow p-1.5 border rounded text-sm"
-                                            placeholder="+ Gast Name (z.B. Max)...">
-                                        <button id="btn-add-split-manual"
-                                            class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded font-bold text-sm hover:bg-indigo-200">+</button>
-                                    </div>
-                                    <p class="text-xs text-gray-500 italic mb-1">Beteiligte auswählen:</p>
-                                    <div id="split-partner-list" class="max-h-32 overflow-y-auto"></div>
-                                </div>
+
                             </div>
+
 
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-sm font-bold text-gray-700 mb-1" id="label-amount">Betrag
-                                        (€)</label>
-                                    <input type="number" id="payment-amount"
-                                        class="w-full p-2 border rounded-lg font-mono text-lg" placeholder="0.00"
-                                        step="0.01">
+                                    <label class="block text-sm font-bold text-gray-700 mb-1" id="label-amount">Betrag (€)</label>
+                                    <input type="number" id="payment-amount" class="w-full p-2 border rounded-lg font-mono text-lg" placeholder="0.00" step="0.01">
                                     <div id="split-options-wrapper" class="hidden mt-2 space-y-2">
-                                        <label class="flex items-center gap-2">
-                                            <input type="checkbox" id="split-include-me" class="h-4 w-4" checked>
-                                            <span class="text-sm text-gray-700">Mich mitzählen (ich war dabei)</span>
-                                        </label>
-                                        <p class="text-xs text-blue-600 font-semibold" id="split-calculation-preview">
-                                        </p>
+                                        <p class="text-xs text-blue-600 font-semibold" id="split-calculation-preview"></p>
                                     </div>
                                     <label class="flex items-center gap-2 mt-1" id="tbd-wrapper">
                                         <input type="checkbox" id="payment-amount-tbd" class="h-4 w-4">
@@ -2060,62 +2063,49 @@
                                 </div>
                                 <div class="space-y-2">
                                     <div>
-                                        <label class="block text-xs font-bold text-gray-500 uppercase">Buchungsdatum
-                                            (Start)</label>
-                                        <input type="date" id="payment-start-date"
-                                            class="w-full p-2 border rounded-lg bg-gray-50 text-sm">
+                                        <label class="block text-xs font-bold text-gray-500 uppercase">Buchungsdatum</label>
+                                        <input type="date" id="payment-start-date" class="w-full p-2 border rounded-lg bg-gray-50 text-sm">
                                     </div>
                                     <div>
-                                        <label class="block text-xs font-bold text-gray-500 uppercase">Fälligkeit
-                                            (Deadline)</label>
-                                        <input type="date" id="payment-deadline"
-                                            class="w-full p-2 border rounded-lg text-sm font-semibold focus:border-red-500">
+                                        <label class="block text-xs font-bold text-gray-500 uppercase">Fälligkeit (Deadline)</label>
+                                        <input type="date" id="payment-deadline" class="w-full p-2 border rounded-lg text-sm font-semibold focus:border-red-500">
                                     </div>
                                 </div>
                             </div>
 
                             <div>
                                 <label class="block text-sm font-bold text-gray-700 mb-1">Grund / Betreff</label>
-                                <input type="text" id="payment-title" class="w-full p-2 border rounded-lg"
-                                    placeholder="z.B. Pizza, Kino...">
+                                <input type="text" id="payment-title" class="w-full p-2 border rounded-lg" placeholder="z.B. Rückerstattung Amazon, Miete...">
                             </div>
 
-                            <button id="btn-toggle-advanced-payment"
-                                class="text-sm text-indigo-600 font-semibold hover:underline">+ Erweiterte Optionen
-                                anzeigen</button>
+                            <button id="btn-toggle-advanced-payment" class="text-sm text-indigo-600 font-semibold hover:underline">+ Erweiterte Optionen anzeigen</button>
 
                             <div id="payment-advanced-options" class="hidden space-y-4 pt-2 border-t border-gray-100">
                                 <div class="grid grid-cols-2 gap-4">
-                                    <input type="text" id="payment-invoice-nr" class="p-2 border rounded-lg text-sm"
-                                        placeholder="Rechnungs-Nr. (opt)">
-                                    <input type="text" id="payment-order-nr" class="p-2 border rounded-lg text-sm"
-                                        placeholder="Bestell-Nr. (opt)">
+                                    <input type="text" id="payment-invoice-nr" class="p-2 border rounded-lg text-sm" placeholder="Rechnungs-Nr. (opt)">
+                                    <input type="text" id="payment-order-nr" class="p-2 border rounded-lg text-sm" placeholder="Bestell-Nr. (opt)">
                                 </div>
-                                <textarea id="payment-notes" class="w-full p-2 border rounded-lg text-sm" rows="2"
-                                    placeholder="Interne Notizen..."></textarea>
+                                <textarea id="payment-notes" class="w-full p-2 border rounded-lg text-sm" rows="2" placeholder="Interne Notizen..."></textarea>
                                 <div>
                                     <label class="block text-sm font-bold text-gray-700 mb-1">Typ</label>
                                     <select id="payment-type" class="w-full p-2 border rounded-lg bg-white">
-                                        <option value="debt">Schulde / Forderung (Standard)</option>
+                                        <option value="debt">Schulde / Forderung / Erstattung (Standard)</option>
                                         <option value="transfer">Umbuchung (Konto zu Konto)</option>
                                     </select>
                                 </div>
                                 <div class="pt-2 border-t border-gray-200">
                                     <label class="flex items-center gap-2 cursor-pointer">
-                                        <input type="checkbox" id="payment-is-installment"
-                                            class="h-4 w-4 text-indigo-600">
+                                        <input type="checkbox" id="payment-is-installment" class="h-4 w-4 text-indigo-600">
                                         <span class="text-sm font-bold text-gray-700">Ist Ratenzahlung</span>
                                     </label>
                                     <div id="installment-options" class="hidden mt-2 grid grid-cols-2 gap-2 pl-6">
                                         <div>
                                             <label class="block text-xs text-gray-500">Gesamt-Raten</label>
-                                            <input type="number" id="payment-installments-total"
-                                                class="w-full p-1 border rounded text-sm" placeholder="z.B. 12">
+                                            <input type="number" id="payment-installments-total" class="w-full p-1 border rounded text-sm" placeholder="z.B. 12">
                                         </div>
                                         <div>
                                             <label class="block text-xs text-gray-500">Intervall</label>
-                                            <select id="payment-installment-interval"
-                                                class="w-full p-1 border rounded text-sm bg-white">
+                                            <select id="payment-installment-interval" class="w-full p-1 border rounded text-sm bg-white">
                                                 <option value="monthly">Monatlich</option>
                                                 <option value="weekly">Wöchentlich</option>
                                             </select>
@@ -2124,6 +2114,7 @@
                                 </div>
                             </div>
                         </div>
+                        
 
                         <div class="p-4 border-t bg-gray-50 rounded-b-xl flex justify-end gap-3">
                             <button id="btn-cancel-create-payment"
@@ -2195,57 +2186,70 @@
                 <div class="flex gap-2 mb-4 border-b overflow-x-auto">
                     <button id="tab-zv-templates"
                         class="px-4 py-2 font-bold text-indigo-600 border-b-2 border-indigo-600 whitespace-nowrap">Vorlagen</button>
+                    <button id="tab-zv-accounts"
+                        class="px-4 py-2 font-bold text-gray-500 hover:text-gray-700 whitespace-nowrap">Meine
+                        Konten</button>
                     <button id="tab-zv-contacts"
-                        class="px-4 py-2 font-bold text-gray-500 hover:text-gray-700 whitespace-nowrap">Eigene
-                        Kontakte</button>
+                        class="px-4 py-2 font-bold text-gray-500 hover:text-gray-700 whitespace-nowrap">Adressbuch</button>
                     <button id="tab-zv-credits"
                         class="px-4 py-2 font-bold text-gray-500 hover:text-gray-700 whitespace-nowrap">Guthaben</button>
                 </div>
 
                 <div id="content-zv-templates" class="space-y-4">
                     <div class="bg-blue-50 p-3 rounded-lg text-sm text-blue-800 mb-2">
-                        Erstelle Bausteine für wiederkehrende Zahlungen (z.B. "Miete", "Spotify"). Diese kannst du beim
-                        Erstellen eines Eintrags oben auswählen.
+                        Erstelle Bausteine für wiederkehrende Zahlungen (z.B. "Miete", "Spotify").
                     </div>
                     <div id="zv-templates-list" class="space-y-2">
                         <p class="text-gray-400 text-center py-4">Lade Vorlagen...</p>
                     </div>
                 </div>
 
+                <div id="content-zv-accounts" class="hidden space-y-4">
+                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-blue-600">
+                        <h3 class="text-lg font-bold text-gray-800 mb-2">Meine Geld-Konten</h3>
+                        <p class="text-xs text-gray-500 mb-4">Definiere hier deine Geldbörsen oder Bankkonten, um genau
+                            zu sehen, wo Geld fehlt oder eingehen soll.</p>
+
+                        <div class="p-3 bg-gray-50 rounded-lg border mb-4 space-y-2">
+                            <input type="text" id="new-account-name" class="w-full p-2 border rounded-lg"
+                                placeholder="Name (z.B. Haushaltskonto)">
+                            <input type="text" id="new-account-details" class="w-full p-2 border rounded-lg text-sm"
+                                placeholder="Details (z.B. IBAN AT12...)">
+                            <button id="btn-add-account-setting"
+                                class="w-full py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700">+
+                                Konto anlegen</button>
+                        </div>
+
+                        <div id="zv-accounts-list" class="space-y-2 max-h-80 overflow-y-auto">
+                            <p class="text-center text-gray-400 italic">Keine eigenen Konten angelegt.</p>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="content-zv-contacts" class="hidden space-y-4">
                     <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-teal-500">
                         <h3 class="text-lg font-bold text-gray-800 mb-2">Mein Adressbuch</h3>
-                        <p class="text-xs text-gray-500 mb-4">Erstelle eigene Kontakte für Personen, die nicht in der
-                            App registriert sind (z.B. Freunde, Oma).</p>
-
                         <div class="flex gap-2 mb-4">
                             <input type="text" id="new-contact-name-input" class="flex-grow p-2 border rounded-lg"
                                 placeholder="Name (z.B. Max)">
                             <button id="btn-add-contact-setting"
                                 class="px-4 py-2 bg-teal-600 text-white font-bold rounded-lg hover:bg-teal-700">+</button>
                         </div>
-
-                        <div id="zv-contacts-list" class="space-y-2 max-h-80 overflow-y-auto">
-                            <p class="text-center text-gray-400 italic">Keine Kontakte.</p>
-                        </div>
+                        <div id="zv-contacts-list" class="space-y-2 max-h-80 overflow-y-auto"></div>
                     </div>
                 </div>
 
                 <div id="content-zv-credits" class="hidden space-y-6">
                     <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-purple-500">
                         <h3 class="text-lg font-bold text-gray-800 mb-2">Mein Guthaben (bei anderen)</h3>
-                        <p class="text-xs text-gray-500 mb-4">Geld, das bei anderen "geparkt" ist (z.B. durch
-                            Überzahlungen oder Einzahlungen).</p>
                         <div id="my-credits-list" class="space-y-2 mb-4"></div>
                         <button id="btn-add-my-credit"
                             class="w-full py-2 bg-purple-100 text-purple-700 font-bold rounded hover:bg-purple-200 transition">
                             + Guthaben einzahlen / aufladen
                         </button>
                     </div>
-
                     <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-orange-500">
                         <h3 class="text-lg font-bold text-gray-800 mb-2">Fremdes Guthaben (bei mir)</h3>
-                        <p class="text-xs text-gray-500 mb-4">Geld von anderen, das ich verwalte.</p>
                         <div id="others-credits-list" class="space-y-2 mb-4"></div>
                         <button id="btn-add-other-credit"
                             class="w-full py-2 bg-orange-100 text-orange-700 font-bold rounded hover:bg-orange-200 transition">
@@ -2254,6 +2258,7 @@
                     </div>
                 </div>
             </div>
+
 
             <div id="creditManageModal"
                 class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[70]">
@@ -2810,13 +2815,13 @@
         </div>
 
 
-<div id="guestView" class="view bg-gray-50 min-h-screen p-4">
+        <div id="guestView" class="view bg-gray-50 min-h-screen p-4">
             <div class="max-w-md mx-auto bg-white shadow-xl rounded-xl overflow-hidden">
                 <div class="bg-indigo-600 p-6 text-white text-center">
                     <h1 class="text-2xl font-bold">Hallo <span id="guest-name-display">Gast</span>!</h1>
                     <p class="text-indigo-100 text-sm mt-1">Hier ist deine aktuelle Übersicht.</p>
                 </div>
-                
+
                 <div class="p-6 space-y-6">
                     <div class="text-center p-4 bg-gray-50 rounded-lg border border-gray-200">
                         <p class="text-xs text-gray-500 uppercase font-bold mb-1">Offener Gesamtbetrag</p>
@@ -2839,16 +2844,19 @@
             </div>
         </div>
 
-        <div id="migrationModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[80]">
+        <div id="migrationModal"
+            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[80]">
             <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
                 <div class="flex justify-between items-center mb-4 border-b pb-2">
                     <h3 class="text-xl font-bold text-gray-800">Kontakt umwandeln</h3>
-                    <button onclick="document.getElementById('migrationModal').style.display='none'" class="text-gray-400 hover:text-red-600 font-bold text-2xl">&times;</button>
+                    <button onclick="document.getElementById('migrationModal').style.display='none'"
+                        class="text-gray-400 hover:text-red-600 font-bold text-2xl">&times;</button>
                 </div>
-                
+
                 <div class="bg-yellow-50 p-3 rounded-lg border border-yellow-200 text-sm text-yellow-800 mb-4">
                     <p class="font-bold">Achtung:</p>
-                    <p>Alle Zahlungen und Guthaben von <strong id="mig-contact-name">...</strong> werden auf den ausgewählten Benutzer übertragen.</p>
+                    <p>Alle Zahlungen und Guthaben von <strong id="mig-contact-name">...</strong> werden auf den
+                        ausgewählten Benutzer übertragen.</p>
                     <p class="mt-1">Der Kontakt wird danach gelöscht.</p>
                 </div>
 
@@ -2856,13 +2864,16 @@
                     <div>
                         <label class="block text-sm font-bold text-gray-700 mb-1">Ziel-Benutzer wählen</label>
                         <select id="migration-target-select" class="w-full p-2 border rounded-lg bg-white">
-                            </select>
+                        </select>
                     </div>
                 </div>
 
                 <div class="flex justify-end gap-2 mt-6 pt-2 border-t">
-                    <button onclick="document.getElementById('migrationModal').style.display='none'" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">Abbrechen</button>
-                    <button id="btn-execute-migration" class="px-4 py-2 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700">Jetzt übertragen</button>
+                    <button onclick="document.getElementById('migrationModal').style.display='none'"
+                        class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">Abbrechen</button>
+                    <button id="btn-execute-migration"
+                        class="px-4 py-2 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700">Jetzt
+                        übertragen</button>
                 </div>
             </div>
         </div>

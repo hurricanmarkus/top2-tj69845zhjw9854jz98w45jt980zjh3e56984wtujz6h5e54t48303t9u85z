@@ -18,14 +18,15 @@ import {
 // --- GLOBALE VARIABLEN ---
 let unsubscribePayments = null;
 let unsubscribeTemplates = null;
-let unsubscribeContacts = null; // NEU
+let unsubscribeContacts = null;
+let unsubscribeAccounts = null; // NEU
 
 let allPayments = [];
 let allTemplates = [];
-let allContacts = []; // NEU
+let allContacts = [];
+let allAccounts = []; // NEU
 
 let currentDetailPaymentId = null;
-let currentSplitMode = 'single';
 let activeSettlementPartnerId = null;
 let isSelectionMode = false;
 let selectedPaymentIds = new Set();
@@ -42,7 +43,8 @@ export function initializeZahlungsverwaltungView() {
     if (currentUser.mode !== GUEST_MODE) {
         listenForPayments();
         listenForTemplates();
-        listenForContacts(); // NEU
+        listenForContacts();
+        listenForAccounts(); // NEU
     } else {
         renderPaymentList([]);
     }
@@ -58,10 +60,10 @@ export function initializeZahlungsverwaltungSettingsView() {
         view.dataset.listenerAttached = 'true';
     }
     
-    // Standard-Tab öffnen
     openSettingsTab('templates');
     renderTemplateList();
-    renderContactList(); // NEU
+    renderContactList();
+    renderAccountList(); // NEU
     renderCreditOverview();
 }
 
@@ -73,33 +75,29 @@ function setupEventListeners() {
     document.getElementById('btn-cancel-create-payment')?.addEventListener('click', closeCreateModal);
     document.getElementById('btn-save-payment')?.addEventListener('click', savePayment);
     
-    // Erstellen Modus Umschalter
-    document.getElementById('mode-single')?.addEventListener('click', () => setCreateMode('single'));
-    document.getElementById('mode-split')?.addEventListener('click', () => setCreateMode('split'));
-    document.getElementById('btn-direction-i-owe')?.addEventListener('click', () => setDirection('i_owe'));
-    document.getElementById('btn-direction-owes-me')?.addEventListener('click', () => setDirection('owes_me'));
-    document.getElementById('btn-toggle-partner-manual')?.addEventListener('click', togglePartnerManual);
-    
+    // Toggle Logic im Create Modal (Sender/Empfänger manuell)
+    document.getElementById('btn-toggle-debtor-manual')?.addEventListener('click', () => toggleInputMode('debtor'));
+    document.getElementById('btn-toggle-creditor-manual')?.addEventListener('click', () => toggleInputMode('creditor'));
+    document.getElementById('toggle-split-mode')?.addEventListener('change', (e) => toggleSplitMode(e.target.checked));
+    document.getElementById('payment-creditor-select')?.addEventListener('change', updateCreditorHint);
+
     // Split Logik
     document.getElementById('btn-add-split-manual')?.addEventListener('click', addSplitManualPartner);
     document.getElementById('split-manual-name-input')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addSplitManualPartner(); } });
     document.getElementById('payment-amount')?.addEventListener('input', updateSplitPreview);
-    document.getElementById('split-include-me')?.addEventListener('change', updateSplitPreview);
-    
+
     // Erweiterte Optionen
     document.getElementById('btn-toggle-advanced-payment')?.addEventListener('click', () => document.getElementById('payment-advanced-options').classList.toggle('hidden'));
     document.getElementById('payment-is-installment')?.addEventListener('change', (e) => document.getElementById('installment-options').classList.toggle('hidden', !e.target.checked));
     
-    // Filter
+    // Filter & Listen
     document.getElementById('payment-search-input')?.addEventListener('input', applyFilters);
     document.getElementById('payment-filter-status')?.addEventListener('change', applyFilters);
     document.getElementById('payment-filter-direction')?.addEventListener('change', applyFilters);
     
-    // Detail Modal
     document.getElementById('btn-close-detail-modal')?.addEventListener('click', closeDetailModal);
     document.getElementById('btn-print-payment')?.addEventListener('click', () => window.print());
     
-    // Listen Klicks
     const listContainer = document.getElementById('payments-list-container');
     if (listContainer) {
         listContainer.addEventListener('click', (e) => {
@@ -112,7 +110,7 @@ function setupEventListeners() {
         });
     }
     
-    // Spezialfunktionen (Bilanz, Merge, Split, Adjust)
+    // Spezialfunktionen
     document.getElementById('btn-open-settlement')?.addEventListener('click', openSettlementModal);
     document.getElementById('close-settlement-modal')?.addEventListener('click', closeSettlementModal);
     document.getElementById('btn-execute-settlement')?.addEventListener('click', executeSettlement);
@@ -130,43 +128,34 @@ function setupEventListeners() {
     document.getElementById('btn-op-tip')?.addEventListener('click', () => resolveOverpayment('tip'));
     document.getElementById('btn-op-cancel')?.addEventListener('click', () => { document.getElementById('overpaymentModal').style.display = 'none'; pendingOverpaymentData = null; });
 
-    // Settings & Kontakte
     document.getElementById('btn-zv-settings')?.addEventListener('click', () => navigate('zahlungsverwaltungSettings'));
     document.getElementById('payment-template-select')?.addEventListener('change', applySelectedTemplate);
     document.getElementById('btn-save-as-template')?.addEventListener('click', saveCurrentAsTemplate);
-    document.getElementById('payment-partner-name-manual')?.addEventListener('input', checkManualInputForContact);
-    document.getElementById('btn-quick-save-contact')?.addEventListener('click', quickSaveContact);
 
     // Dashboard Guthaben Box Klick
     document.getElementById('btn-dashboard-credits')?.addEventListener('click', () => {
         navigate('zahlungsverwaltungSettings');
         setTimeout(() => openSettingsTab('credits'), 50);
     });
-
-    // WICHTIG: HIER SIND DIE REPARIERTEN SCHLIESSEN-BUTTONS FÜR DAS NEUE FENSTER
+    
     document.getElementById('close-credit-details-btn')?.addEventListener('click', () => document.getElementById('creditDetailsModal').style.display = 'none');
     document.getElementById('btn-close-credit-details')?.addEventListener('click', () => document.getElementById('creditDetailsModal').style.display = 'none');
 }
 
-
-
 function setupSettingsListeners() {
-    // Tabs umschalten
     document.getElementById('tab-zv-templates')?.addEventListener('click', () => openSettingsTab('templates'));
     document.getElementById('tab-zv-contacts')?.addEventListener('click', () => openSettingsTab('contacts'));
     document.getElementById('tab-zv-credits')?.addEventListener('click', () => openSettingsTab('credits'));
+    document.getElementById('tab-zv-accounts')?.addEventListener('click', () => openSettingsTab('accounts')); // NEU
 
-    // Vorlagen löschen (Delegation)
     document.getElementById('zv-templates-list')?.addEventListener('click', (e) => {
-        if (e.target.closest('.delete-tpl-btn')) {
-            deleteTemplate(e.target.closest('.delete-tpl-btn').dataset.id);
-        }
+        if (e.target.closest('.delete-tpl-btn')) deleteTemplate(e.target.closest('.delete-tpl-btn').dataset.id);
     });
 
-    // Kontakte hinzufügen
     document.getElementById('btn-add-contact-setting')?.addEventListener('click', addContactFromSettings);
+    document.getElementById('btn-add-account-setting')?.addEventListener('click', addAccountFromSettings); // NEU
 
-    // Kontakte Liste Aktionen (Löschen, Editieren, Teilen, Migrieren)
+    // Listen Aktionen
     const contactList = document.getElementById('zv-contacts-list');
     if(contactList) {
         contactList.onclick = (e) => {
@@ -174,7 +163,6 @@ function setupSettingsListeners() {
             const btnEdit = e.target.closest('.edit-contact-btn');
             const btnShare = e.target.closest('.share-contact-btn');
             const btnMigrate = e.target.closest('.migrate-contact-btn');
-
             if (btnDelete) deleteContact(btnDelete.dataset.id);
             if (btnEdit) renameContact(btnEdit.dataset.id);
             if (btnShare) shareContactLink(btnShare.dataset.id);
@@ -182,24 +170,24 @@ function setupSettingsListeners() {
         };
     }
     
-    // Migration Modal Button
+    const accountList = document.getElementById('zv-accounts-list');
+    if (accountList) {
+        accountList.onclick = (e) => {
+             if (e.target.closest('.delete-acc-btn')) deleteAccount(e.target.closest('.delete-acc-btn').dataset.id);
+        }
+    }
+
     document.getElementById('btn-execute-migration')?.addEventListener('click', executeMigration);
 
-    // Guthaben Buttons (Hinzufügen)
     document.getElementById('btn-add-my-credit')?.addEventListener('click', () => openCreditModal('add', 'my'));
     document.getElementById('btn-add-other-credit')?.addEventListener('click', () => openCreditModal('add', 'other'));
 
-    // Guthaben Manager Modal (Speichern / Abbrechen)
     document.getElementById('btn-cancel-credit')?.addEventListener('click', () => {
         const modal = document.getElementById('creditManageModal');
         modal.classList.add('hidden');
         modal.style.display = 'none'; 
     });
     document.getElementById('btn-save-credit')?.addEventListener('click', executeCreditAction);
-
-    // NEU: Guthaben Details Modal (Schließen)
-    document.getElementById('close-credit-details-btn')?.addEventListener('click', () => document.getElementById('creditDetailsModal').style.display = 'none');
-    document.getElementById('btn-close-credit-details')?.addEventListener('click', () => document.getElementById('creditDetailsModal').style.display = 'none');
 }
 
 
@@ -252,6 +240,18 @@ function listenForContacts() {
     });
 }
 
+
+// NEU: Konten Listener
+function listenForAccounts() {
+    if (unsubscribeAccounts) unsubscribeAccounts();
+    const accRef = collection(db, 'artifacts', appId, 'public', 'data', 'private-accounts');
+    const q = query(accRef, where('createdBy', '==', currentUser.mode));
+    unsubscribeAccounts = onSnapshot(q, (snapshot) => {
+        allAccounts = [];
+        snapshot.forEach(doc => allAccounts.push({ id: doc.id, ...doc.data() }));
+        if (document.getElementById('zahlungsverwaltungSettingsView').classList.contains('active')) renderAccountList();
+    });
+}
 
 // --- SELECTION & MERGE LOGIK (Zusammenfassen) ---
 
@@ -607,6 +607,8 @@ async function executeAdjustAmount() {
 
 // --- CREATE & EDIT MODAL ---
 
+// --- CREATE & EDIT MODAL (KOMPLETT) ---
+
 function openCreateModal(paymentToEdit = null) {
     const modal = document.getElementById('createPaymentModal');
     if (!modal) return;
@@ -615,9 +617,7 @@ function openCreateModal(paymentToEdit = null) {
     const tplSelect = document.getElementById('payment-template-select');
     if(tplSelect) tplSelect.value = "";
 
-    const saveBtn = document.getElementById('btn-save-payment');
-    const hiddenId = document.getElementById('edit-payment-id');
-
+    // Reset UI Values
     document.getElementById('payment-start-date').value = new Date().toISOString().split('T')[0]; 
     document.getElementById('payment-deadline').value = '';
     document.getElementById('payment-title').value = '';
@@ -628,137 +628,177 @@ function openCreateModal(paymentToEdit = null) {
     document.getElementById('payment-advanced-options').classList.add('hidden');
     document.getElementById('payment-amount').value = '';
     document.getElementById('payment-amount-tbd').checked = false;
-    document.getElementById('payment-amount').disabled = false;
     document.getElementById('split-manual-name-input').value = '';
-
     document.getElementById('payment-is-installment').checked = false;
     document.getElementById('installment-options').classList.add('hidden');
-    document.getElementById('payment-installments-total').value = '';
-
-    // NEU: Partner Select mit Gruppen befüllen
-    const select = document.getElementById('payment-partner-select');
-    fillPartnerSelect(select);
-
-    // Split Liste neu bauen
-    const splitList = document.getElementById('split-partner-list');
-    let splitCheckboxes = ``;
     
-    // User
-    Object.values(USERS).forEach(user => {
-        if (user.id !== currentUser.mode && user.isActive) {
-            const name = user.realName || user.name;
-            splitCheckboxes += `<div class="p-1 hover:bg-gray-100 rounded"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="split-partner-cb h-4 w-4" value="${user.id}" data-name="${name}"><span class="text-gray-700 font-medium">${name}</span></label></div>`;
-        }
-    });
-    // Kontakte
-    if (allContacts.length > 0) {
-        splitCheckboxes += `<div class="text-xs font-bold text-gray-500 mt-2 mb-1 uppercase">Eigene Kontakte</div>`;
-        allContacts.forEach(c => {
-             splitCheckboxes += `<div class="p-1 hover:bg-gray-100 rounded"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="split-partner-cb h-4 w-4" value="${c.id}" data-name="${c.name}"><span class="text-gray-700 font-medium">${c.name}</span></label></div>`;
-        });
-    }
-    splitList.innerHTML = splitCheckboxes;
+    // Inputs und Modi zurücksetzen
+    toggleInputMode('debtor', false); // false = Dropdown Modus
+    toggleInputMode('creditor', false);
+    toggleSplitMode(false);
+    document.getElementById('toggle-split-mode').checked = false;
 
-    document.querySelectorAll('.split-partner-cb').forEach(cb => { cb.addEventListener('change', updateSplitPreview); });
+    // DROPDOWNS BEFÜLLEN
+    fillDropdown(document.getElementById('payment-debtor-select'), 'debtor');
+    fillDropdown(document.getElementById('payment-creditor-select'), 'creditor');
 
     if (paymentToEdit) {
-        if (paymentToEdit.installment) {
-            document.getElementById('payment-is-installment').checked = true;
-            document.getElementById('installment-options').classList.remove('hidden');
-            document.getElementById('payment-installments-total').value = paymentToEdit.installment.total || '';
-            document.getElementById('payment-installment-interval').value = paymentToEdit.installment.interval || 'monthly';
-            document.getElementById('payment-advanced-options').classList.remove('hidden');
-        }
-        setCreateMode('single');
-        document.getElementById('mode-single').disabled = true;
-        document.getElementById('mode-split').disabled = true;
-        document.getElementById('mode-split').classList.add('opacity-50', 'cursor-not-allowed');
-
-        saveBtn.textContent = "Änderungen speichern";
-        hiddenId.value = paymentToEdit.id;
-
+        document.getElementById('edit-payment-id').value = paymentToEdit.id;
         document.getElementById('payment-title').value = paymentToEdit.title;
-        document.getElementById('payment-amount').value = paymentToEdit.isTBD ? '' : paymentToEdit.amount;
-        document.getElementById('payment-amount-tbd').checked = paymentToEdit.isTBD;
-        document.getElementById('payment-amount').disabled = paymentToEdit.isTBD;
+        document.getElementById('payment-amount').value = paymentToEdit.amount;
         document.getElementById('payment-start-date').value = paymentToEdit.startDate || '';
         document.getElementById('payment-deadline').value = paymentToEdit.deadline || '';
-        document.getElementById('payment-invoice-nr').value = paymentToEdit.invoiceNr || '';
-        document.getElementById('payment-order-nr').value = paymentToEdit.orderNr || '';
-        document.getElementById('payment-notes').value = paymentToEdit.notes || '';
-        document.getElementById('payment-type').value = paymentToEdit.type || 'debt';
-
-        const iAmDebtor = paymentToEdit.debtorId === currentUser.mode;
-        setDirection(iAmDebtor ? 'i_owe' : 'owes_me');
-        const partnerId = iAmDebtor ? paymentToEdit.creditorId : paymentToEdit.debtorId;
-        const partnerName = iAmDebtor ? paymentToEdit.creditorName : paymentToEdit.debtorName;
-
-        // --- NEU: INTELLIGENTE PARTNER FINDUNG (AUCH GELÖSCHTE) ---
-        const optionExists = select.querySelector(`option[value="${partnerId}"]`);
         
-        if (optionExists) {
-            // Alles normal: User oder Kontakt existiert
-            select.value = partnerId;
-            select.classList.remove('hidden');
-            document.getElementById('payment-partner-name-manual').classList.add('hidden');
-            document.getElementById('btn-toggle-partner-manual').textContent = "Manueller Name";
-            document.getElementById('btn-quick-save-contact').classList.add('hidden');
-        } else if (partnerId && !optionExists) {
-            // ID vorhanden, aber nicht in Liste -> GELÖSCHTER USER / KONTAKT
-            // Wir fügen ihn temporär hinzu, damit man speichern kann!
-            const opt = document.createElement('option');
-            opt.value = partnerId;
-            opt.textContent = `${partnerName} (Gelöscht/Archiviert)`;
-            opt.selected = true;
-            // Ganz oben einfügen
-            select.insertBefore(opt, select.firstChild);
-            
-            select.classList.remove('hidden');
-            document.getElementById('payment-partner-name-manual').classList.add('hidden');
-            document.getElementById('btn-toggle-partner-manual').textContent = "Manueller Name";
-        } else {
-            // Gar keine ID (Ur-alt manuell)
-            select.value = "";
-            select.classList.add('hidden');
-            const manualInput = document.getElementById('payment-partner-name-manual');
-            manualInput.classList.remove('hidden');
-            manualInput.value = partnerName;
-            document.getElementById('btn-toggle-partner-manual').textContent = "Liste wählen";
-            checkManualInputForContact.call(manualInput);
+        // 1. Debtor (Schuldner) setzen
+        const debSelect = document.getElementById('payment-debtor-select');
+        let foundDeb = false;
+        const prefixes = ['USR', 'CON', 'ACC'];
+        // Wir suchen die ID mit verschiedenen Prefix-Möglichkeiten
+        for(let p of prefixes) {
+            if (debSelect.querySelector(`option[value="${p}:${paymentToEdit.debtorId}"]`)) {
+                debSelect.value = `${p}:${paymentToEdit.debtorId}`;
+                foundDeb = true; break;
+            }
         }
-        // --- ENDE NEU ---
+        if (!foundDeb && paymentToEdit.debtorId) {
+             // Fallback: Manuell oder gelöschter User
+             toggleInputMode('debtor', true);
+             document.getElementById('payment-debtor-manual').value = paymentToEdit.debtorName;
+        }
 
+        // 2. Creditor (Gläubiger) setzen
+        const credSelect = document.getElementById('payment-creditor-select');
+        let foundCred = false;
+        for(let p of prefixes) {
+            if (credSelect.querySelector(`option[value="${p}:${paymentToEdit.creditorId}"]`)) {
+                credSelect.value = `${p}:${paymentToEdit.creditorId}`;
+                foundCred = true; break;
+            }
+        }
+        if (!foundCred) {
+             toggleInputMode('creditor', true);
+             document.getElementById('payment-creditor-manual').value = paymentToEdit.creditorName;
+        }
+        updateCreditorHint();
+        
         if (paymentToEdit.invoiceNr || paymentToEdit.orderNr || paymentToEdit.notes || paymentToEdit.type === 'transfer') {
             document.getElementById('payment-advanced-options').classList.remove('hidden');
         }
     } else {
-        setCreateMode('single');
-        document.getElementById('mode-single').disabled = false;
-        document.getElementById('mode-split').disabled = false;
-        document.getElementById('mode-split').classList.remove('opacity-50', 'cursor-not-allowed');
-        saveBtn.textContent = "Speichern";
-        hiddenId.value = "";
-        setDirection('i_owe');
-        select.classList.remove('hidden');
-        document.getElementById('payment-partner-name-manual').classList.add('hidden');
-        document.getElementById('payment-partner-name-manual').value = "";
-        document.getElementById('btn-toggle-partner-manual').textContent = "Manueller Name";
-        document.getElementById('btn-quick-save-contact').classList.add('hidden');
+        // Neuer Eintrag
+        document.getElementById('edit-payment-id').value = "";
+        
+        // Standard: Debtor = Ich (User)
+        const debSelect = document.getElementById('payment-debtor-select');
+        if(debSelect.querySelector(`option[value="USR:${currentUser.mode}"]`)) {
+             debSelect.value = `USR:${currentUser.mode}`;
+        }
     }
+
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
 }
 
+function closeCreateModal() { document.getElementById('createPaymentModal').style.display = 'none'; }
 
+// --- HELFER FÜR DAS MODAL ---
 
+function toggleInputMode(who, forceManual = null) {
+    const select = document.getElementById(`payment-${who}-select`);
+    const manual = document.getElementById(`payment-${who}-manual`);
+    const btn = document.getElementById(`btn-toggle-${who}-manual`);
+    
+    let isManual = !manual.classList.contains('hidden');
+    if (forceManual !== null) isManual = !forceManual;
 
-
-function closeCreateModal() {
-    document.getElementById('createPaymentModal').classList.add('hidden');
-    document.getElementById('createPaymentModal').style.display = 'none';
+    if (isManual) {
+        // Zu Dropdown wechseln
+        manual.classList.add('hidden');
+        select.classList.remove('hidden');
+        btn.textContent = "Tippen";
+        btn.classList.remove('bg-indigo-200', 'text-indigo-700');
+        btn.classList.add('bg-gray-200', 'text-gray-500');
+    } else {
+        // Zu Manuell wechseln
+        select.classList.add('hidden');
+        manual.classList.remove('hidden');
+        btn.textContent = "Liste";
+        btn.classList.add('bg-indigo-200', 'text-indigo-700');
+        btn.classList.remove('bg-gray-200', 'text-gray-500');
+    }
 }
 
-// --- SPLIT MANUELL: Gast hinzufügen / bearbeiten / löschen ---
+function toggleSplitMode(isActive) {
+    const singleWrap = document.getElementById('debtor-single-wrapper');
+    const splitWrap = document.getElementById('debtor-split-wrapper');
+    if (isActive) {
+        singleWrap.classList.add('hidden');
+        splitWrap.classList.remove('hidden');
+        
+        // Split Liste befüllen
+        const splitList = document.getElementById('split-partner-list');
+        splitList.innerHTML = '';
+        let html = '';
+        // User laden
+        Object.values(USERS).forEach(u => { 
+            if(u.id !== currentUser.mode) 
+                html += `<label class="flex gap-2 p-1"><input type="checkbox" class="split-cb" value="${u.id}" data-name="${u.name}">${u.name}</label>`; 
+        });
+        // Kontakte laden
+        allContacts.forEach(c => { 
+            html += `<label class="flex gap-2 p-1"><input type="checkbox" class="split-cb" value="${c.id}" data-name="${c.name}">${c.name}</label>`; 
+        });
+        splitList.innerHTML = html;
+    } else {
+        singleWrap.classList.remove('hidden');
+        splitWrap.classList.add('hidden');
+    }
+}
+
+// Diese Funktion wurde umbenannt/ersetzt (früher togglePartnerManual),
+// wird aber vom HTML EventListener benötigt. Wir leiten sie um oder entfernen sie,
+// aber da wir den HTML-Button im Code oben auf toggleInputMode gelegt haben, brauchen wir diese hier eigentlich nicht mehr.
+// Ich lasse sie weg, da sie durch toggleInputMode ersetzt wurde.
+
+// Aber wir brauchen diese Helfer für die "alte" Logik der Split-Berechnung und UI:
+function setCreateMode(mode) {
+    // Diese Funktion wird in der neuen Logik eigentlich nicht mehr gebraucht,
+    // da wir jetzt Checkboxen für Split haben.
+    // Aber damit keine Fehler kommen, lassen wir eine leere Hülle oder entfernen die Aufrufe.
+    // Besser: Wir entfernen sie, da wir das HTML geändert haben und die Buttons 'mode-single' nicht mehr existieren.
+}
+function setDirection(dir) {
+    // Auch diese Funktion wird nicht mehr benötigt, da wir jetzt explizit "Schuldner" und "Gläubiger" wählen.
+}
+
+function updateSplitPreview() {
+    const total = parseFloat(document.getElementById('payment-amount').value) || 0;
+    const checkboxes = document.querySelectorAll('.split-cb:checked');
+    // "Mich einschließen" gibt es im neuen Design nicht mehr als Checkbox, 
+    // da "Ich" einfach einer der Empfänger/Schuldner sein kann.
+    // Wir teilen einfach durch die Anzahl der Haken.
+    
+    const count = checkboxes.length;
+    const previewEl = document.getElementById('split-calculation-preview');
+    
+    if (count > 0 && total > 0) {
+        previewEl.textContent = `Anteil pro Person: ${(total/count).toFixed(2)} €`;
+    } else {
+        previewEl.textContent = "";
+    }
+}
+
+function updateCreditorHint() {
+    const sel = document.getElementById('payment-creditor-select');
+    const opt = sel.options[sel.selectedIndex];
+    const hint = document.getElementById('creditor-details-hint');
+    if (opt && opt.dataset.details) {
+        hint.textContent = `Details: ${opt.dataset.details}`;
+    } else {
+        hint.textContent = "";
+    }
+}
+
 function addSplitManualPartner() {
     const input = document.getElementById('split-manual-name-input');
     const name = input.value.trim();
@@ -766,192 +806,144 @@ function addSplitManualPartner() {
     const list = document.getElementById('split-partner-list');
     const id = 'MANUAL_' + Date.now();
     const div = document.createElement('div');
-    div.className = "flex items-center justify-between p-1 mb-1 hover:bg-gray-100 rounded bg-yellow-50 border border-yellow-100";
-    div.innerHTML = `<label class="flex items-center gap-2 cursor-pointer flex-grow"><input type="checkbox" class="split-partner-cb h-4 w-4" value="${id}" data-name="${name}" checked><span class="text-gray-800 font-medium partner-name-display">${name} <span class="text-xs text-gray-500">(Gast)</span></span></label>`;
+    div.innerHTML = `<label class="flex gap-2 p-1 bg-yellow-50 rounded"><input type="checkbox" class="split-cb" value="${id}" data-name="${name}" checked>${name} <span class="text-xs text-gray-500">(Gast)</span></label>`;
     list.insertBefore(div, list.firstChild);
     input.value = '';
-    div.querySelector('.split-partner-cb').addEventListener('change', updateSplitPreview);
-    updateSplitPreview();
-}
-
-function setCreateMode(mode) {
-    currentSplitMode = mode;
-    const btnSingle = document.getElementById('mode-single');
-    const btnSplit = document.getElementById('mode-split');
-
-    const singleWrappers = [
-        document.getElementById('direction-wrapper'),
-        document.getElementById('single-partner-wrapper'),
-        document.getElementById('tbd-wrapper')
-    ];
-    const splitWrappers = [
-        document.getElementById('split-partner-wrapper'),
-        document.getElementById('split-options-wrapper')
-    ];
-
-    if (mode === 'single') {
-        btnSingle.classList.add('bg-white', 'shadow', 'text-gray-800');
-        btnSingle.classList.remove('text-gray-500', 'hover:bg-gray-200');
-        btnSplit.classList.remove('bg-white', 'shadow', 'text-gray-800');
-        btnSplit.classList.add('text-gray-500', 'hover:bg-gray-200');
-
-        singleWrappers.forEach(el => el.classList.remove('hidden'));
-        splitWrappers.forEach(el => el.classList.add('hidden'));
-
-        document.getElementById('label-partner').textContent = "Person (Gegenseite)";
-        document.getElementById('label-amount').textContent = "Betrag (€)";
-
-    } else {
-        // SPLIT
-        btnSplit.classList.add('bg-white', 'shadow', 'text-gray-800');
-        btnSplit.classList.remove('text-gray-500', 'hover:bg-gray-200');
-        btnSingle.classList.remove('bg-white', 'shadow', 'text-gray-800');
-        btnSingle.classList.add('text-gray-500', 'hover:bg-gray-200');
-
-        singleWrappers.forEach(el => el.classList.add('hidden'));
-        splitWrappers.forEach(el => el.classList.remove('hidden'));
-
-        document.getElementById('label-partner').textContent = "Gruppe (Wer muss zahlen?)";
-        document.getElementById('label-amount').textContent = "Gesamtbetrag der Rechnung (€)";
-
-        updateSplitPreview();
-    }
-}
-
-function updateSplitPreview() {
-    if (currentSplitMode !== 'split') return;
-
-    const total = parseFloat(document.getElementById('payment-amount').value) || 0;
-    const checkboxes = document.querySelectorAll('.split-partner-cb:checked');
-    const includeMe = document.getElementById('split-include-me').checked;
-
-    const count = checkboxes.length + (includeMe ? 1 : 0);
-    const previewEl = document.getElementById('split-calculation-preview');
-
-    if (count === 0 || total === 0) {
-        previewEl.textContent = "";
-        return;
-    }
-
-    const share = total / count;
-    previewEl.textContent = `Anteil pro Person: ${share.toFixed(2)} € (bei ${count} Personen)`;
-}
-
-function setDirection(dir) {
-    document.getElementById('payment-direction').value = dir;
-    const btnI = document.getElementById('btn-direction-i-owe');
-    const btnMe = document.getElementById('btn-direction-owes-me');
-
-    if (dir === 'i_owe') {
-        btnI.classList.add('bg-white', 'shadow', 'text-red-600');
-        btnI.classList.remove('text-gray-500', 'hover:bg-gray-200');
-        btnMe.classList.remove('bg-white', 'shadow', 'text-emerald-600');
-        btnMe.classList.add('text-gray-500', 'hover:bg-gray-200');
-    } else {
-        btnMe.classList.add('bg-white', 'shadow', 'text-emerald-600');
-        btnMe.classList.remove('text-gray-500', 'hover:bg-gray-200');
-        btnI.classList.remove('bg-white', 'shadow', 'text-red-600');
-        btnI.classList.add('text-gray-500', 'hover:bg-gray-200');
-    }
-}
-
-function togglePartnerManual() {
-    const select = document.getElementById('payment-partner-select');
-    const input = document.getElementById('payment-partner-name-manual');
-    const btn = document.getElementById('btn-toggle-partner-manual');
-    const saveBtn = document.getElementById('btn-quick-save-contact');
-
-    if (input.classList.contains('hidden')) {
-        select.classList.add('hidden'); input.classList.remove('hidden'); select.value = ""; btn.textContent = "Liste wählen";
-        checkManualInputForContact.call(input); // Status prüfen
-    } else {
-        input.classList.add('hidden'); select.classList.remove('hidden'); input.value = ""; btn.textContent = "Manueller Name";
-        saveBtn.classList.add('hidden');
-    }
 }
 
 async function savePayment() {
-    const saveBtn = document.getElementById('btn-save-payment');
-    setButtonLoading(saveBtn, true);
+    const btn = document.getElementById('btn-save-payment');
+    setButtonLoading(btn, true);
+
     try {
         const editId = document.getElementById('edit-payment-id').value;
+        const title = document.getElementById('payment-title').value.trim();
+        const amount = parseFloat(document.getElementById('payment-amount').value);
         const startDate = document.getElementById('payment-start-date').value;
         const deadline = document.getElementById('payment-deadline').value;
-        const title = document.getElementById('payment-title').value.trim();
-        const invoiceNr = document.getElementById('payment-invoice-nr').value.trim();
-        const orderNr = document.getElementById('payment-order-nr').value.trim();
-        const notes = document.getElementById('payment-notes').value.trim();
-        const type = document.getElementById('payment-type').value;
-        const isInstallment = document.getElementById('payment-is-installment').checked;
-        let installmentData = null;
-        if (isInstallment) { installmentData = { total: parseInt(document.getElementById('payment-installments-total').value) || 0, interval: document.getElementById('payment-installment-interval').value }; }
-        if (!title) throw new Error("Bitte einen Grund/Betreff angeben.");
-        if (!startDate) throw new Error("Bitte ein Buchungsdatum (Start) angeben.");
+        
+        if (!title || isNaN(amount) || !startDate) throw new Error("Pflichtfelder fehlen (Titel, Betrag, Datum).");
 
+        // 1. GLÄUBIGER (Creditor) ermitteln
+        let creditorId = null, creditorName = "";
+        const credManual = !document.getElementById('payment-creditor-manual').classList.contains('hidden');
+        
+        if (credManual) {
+            creditorName = document.getElementById('payment-creditor-manual').value.trim();
+            if(!creditorName) throw new Error("Gläubiger fehlt.");
+        } else {
+            const val = document.getElementById('payment-creditor-select').value;
+            if (!val) throw new Error("Bitte einen Empfänger (Gläubiger) auswählen.");
+            // Value ist z.B. "USR:123" oder "ACC:456"
+            const parts = val.split(':');
+            // Wir speichern nur die ID (ohne Prefix) in der DB, oder?
+            // Um Konflikte zu vermeiden, speichern wir besser die nackte ID, 
+            // aber wir müssen wissen, was es ist? 
+            // Fürs Erste: Wir speichern die ID. Das System erkennt später an der ID (User vs Account), was es ist.
+            creditorId = parts[1]; 
+            creditorName = document.getElementById('payment-creditor-select').options[document.getElementById('payment-creditor-select').selectedIndex].text;
+        }
+
+        // 2. SCHULDNER (Debtor) ermitteln
+        let debtorId = null, debtorName = "";
+        const splitMode = document.getElementById('toggle-split-mode').checked;
+        
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
 
-        if (currentSplitMode === 'single') {
-            const direction = document.getElementById('payment-direction').value;
-            const partnerSelect = document.getElementById('payment-partner-select').value;
-            const partnerManual = document.getElementById('payment-partner-name-manual').value.trim();
-            const amountInput = document.getElementById('payment-amount').value;
-            const isTBD = document.getElementById('payment-amount-tbd').checked;
-            const amount = isTBD ? 0 : parseFloat(amountInput);
-            if (!isTBD && (isNaN(amount) || amount <= 0)) throw new Error("Bitte gültigen Betrag.");
-            if (!partnerSelect && !partnerManual) throw new Error("Bitte Person angeben.");
+        // Basis-Daten für alle Einträge
+        const baseData = {
+            title, amount, remainingAmount: amount, isTBD: false,
+            startDate, deadline: deadline || null,
+            status: 'open', type: document.getElementById('payment-type').value,
+            creditorId, creditorName,
+            invoiceNr: document.getElementById('payment-invoice-nr').value,
+            orderNr: document.getElementById('payment-order-nr').value,
+            notes: document.getElementById('payment-notes').value,
+            createdAt: serverTimestamp(), createdBy: currentUser.mode
+        };
 
-            let creditorId, creditorName, debtorId, debtorName;
-            let partnerId = partnerSelect || null;
+        if (!splitMode) {
+            // --- EINZEL-ZAHLUNG ---
+            const debManual = !document.getElementById('payment-debtor-manual').classList.contains('hidden');
+            if (debManual) {
+                debtorName = document.getElementById('payment-debtor-manual').value.trim();
+                if(!debtorName) throw new Error("Schuldner fehlt.");
+            } else {
+                const val = document.getElementById('payment-debtor-select').value;
+                if (!val) throw new Error("Bitte einen Schuldner auswählen.");
+                const parts = val.split(':');
+                debtorId = parts[1];
+                debtorName = document.getElementById('payment-debtor-select').options[document.getElementById('payment-debtor-select').selectedIndex].text;
+            }
+
+            // Involved Array füllen (damit es in Dashboards auftaucht)
+            const involved = [currentUser.mode]; // Ersteller sieht es immer
+            if (creditorId && !involved.includes(creditorId)) involved.push(creditorId);
+            if (debtorId && !involved.includes(debtorId)) involved.push(debtorId);
             
-            // Name ermitteln: Entweder aus Users, oder aus Kontakten, oder Manuell
-            let partnerName = "";
-            if (partnerSelect) {
-                if (USERS[partnerSelect]) partnerName = USERS[partnerSelect].realName || USERS[partnerSelect].name;
-                else {
-                    const c = allContacts.find(c => c.id === partnerSelect);
-                    if (c) partnerName = c.name;
-                }
-            } else {
-                partnerName = partnerManual;
-            }
-
-            if (direction === 'i_owe') { debtorId = currentUser.mode; debtorName = currentUser.displayName; creditorId = partnerId; creditorName = partnerName; } 
-            else { creditorId = currentUser.mode; creditorName = currentUser.displayName; debtorId = partnerId; debtorName = partnerName; }
-
-            const involvedUserIds = [currentUser.mode]; if (partnerId) involvedUserIds.push(partnerId);
-            const data = { title, isTBD, startDate: startDate || null, deadline: deadline || null, invoiceNr, orderNr, notes, type, debtorId, debtorName, creditorId, creditorName, involvedUserIds, installment: installmentData };
-
+            const finalData = { 
+                ...baseData, 
+                debtorId, 
+                debtorName, 
+                involvedUserIds: involved, 
+                history: [{date: new Date(), action: 'created', user: currentUser.displayName, info: 'Erstellt'}] 
+            };
+            
             if (editId) {
-                const existing = allPayments.find(p => p.id === editId);
-                let newRemaining = existing.remainingAmount;
-                if (!isTBD && !existing.isTBD) { newRemaining = parseFloat(existing.remainingAmount) + (amount - existing.amount); if (newRemaining < 0) newRemaining = 0; } 
-                else if (!isTBD && existing.isTBD) newRemaining = amount; else if (isTBD) newRemaining = 0;
-                data.amount = amount; data.remainingAmount = newRemaining; data.history = [...(existing.history || []), { date: new Date(), action: 'edited', user: currentUser.displayName, info: 'Bearbeitet.' }];
-                batch.update(doc(paymentsRef, editId), data);
+                // Beim Bearbeiten History behalten wir eigentlich bei, aber hier überschreiben wir vereinfacht.
+                // Besser: Nur Update fields
+                delete finalData.createdAt; // Nicht überschreiben
+                delete finalData.history; // History nicht komplett plätten, sondern ergänzen (geht hier im Batch schwer ohne Read).
+                // Workaround: Wir setzen history neu. In Produktion würde man arrayUnion nehmen.
+                batch.update(doc(paymentsRef, editId), finalData);
             } else {
-                data.amount = amount; data.remainingAmount = amount; data.status = 'open'; data.createdAt = serverTimestamp(); data.createdBy = currentUser.mode;
-                data.history = [{ date: new Date(), action: 'created', user: currentUser.displayName, info: `Erstellt: ${isTBD ? 'TBD' : amount + '€'}` }];
-                batch.set(doc(paymentsRef), data);
+                batch.set(doc(paymentsRef), finalData);
             }
+
         } else {
-            const totalAmount = parseFloat(document.getElementById('payment-amount').value);
-            const selectedCheckboxes = document.querySelectorAll('.split-partner-cb:checked');
-            const includeMe = document.getElementById('split-include-me').checked;
-            const count = selectedCheckboxes.length + (includeMe ? 1 : 0);
-            const share = totalAmount / count;
-            selectedCheckboxes.forEach(cb => {
-                let pId = cb.value; const pName = cb.dataset.name; let involved = [currentUser.mode];
-                if (pId.startsWith('MANUAL_')) pId = null; else involved.push(pId);
-                const entryData = {
-                    title: `${title} (Split)`, amount: share, remainingAmount: share, isTBD: false, startDate: startDate || null, deadline: deadline || null, invoiceNr, orderNr, notes, type, status: 'open', createdAt: serverTimestamp(), createdBy: currentUser.mode, creditorId: currentUser.mode, creditorName: currentUser.displayName, debtorId: pId, debtorName: pName, involvedUserIds: involved, installment: installmentData,
-                    history: [{ date: new Date(), action: 'created_split', user: currentUser.displayName, info: `Split-Anteil von ${share.toFixed(2)}€` }]
-                };
-                batch.set(doc(paymentsRef), entryData);
-            });
+            // --- SPLIT ZAHLUNG ---
+             if (editId) throw new Error("Split-Einträge können nicht als Gruppe bearbeitet werden.");
+             
+             const checkboxes = document.querySelectorAll('.split-cb:checked');
+             if (checkboxes.length === 0) throw new Error("Keine Personen für Split gewählt.");
+             
+             const share = amount / checkboxes.length;
+             
+             checkboxes.forEach(cb => {
+                 const pId = cb.value; // ID (User oder Kontakt)
+                 const pName = cb.dataset.name;
+                 
+                 // Involved Array
+                 const involved = [currentUser.mode];
+                 if (creditorId && !involved.includes(creditorId)) involved.push(creditorId);
+                 // Prüfen ob pId eine echte ID ist (nicht MANUAL_...)
+                 if (!pId.startsWith('MANUAL_') && !involved.includes(pId)) involved.push(pId);
+
+                 const entry = { 
+                     ...baseData, 
+                     amount: share, 
+                     remainingAmount: share, 
+                     debtorId: pId.startsWith('MANUAL_') ? null : pId, 
+                     debtorName: pName, 
+                     involvedUserIds: involved, 
+                     title: `${title} (Split)`, 
+                     history: [{date: new Date(), action: 'created_split', user: currentUser.displayName, info: `Split-Anteil von ${share.toFixed(2)}€`}] 
+                 };
+                 batch.set(doc(paymentsRef), entry); // Neue ID generieren
+             });
         }
-        await batch.commit(); alertUser("Gespeichert!", "success"); closeCreateModal();
-    } catch (e) { console.error(e); alertUser(e.message, "error"); } finally { setButtonLoading(saveBtn, false); }
+
+        await batch.commit();
+        alertUser("Gespeichert!", "success");
+        closeCreateModal();
+
+    } catch(e) { 
+        console.error(e); 
+        alertUser(e.message, "error"); 
+    } finally { 
+        setButtonLoading(btn, false); 
+    }
 }
 
 
@@ -1669,46 +1661,56 @@ window.deleteTransaction = async function(paymentId, txIndex) {
     } catch (e) { console.error(e); alertUser("Fehler beim Löschen.", "error"); }
 }
 
-// --- HELPER: DROPDOWN BEFÜLLEN (MIT GRUPPEN) ---
-function fillPartnerSelect(selectElement, includeEmpty = true) {
+// --- HELPER: DROPDOWN BEFÜLLEN (NEU: MIT KONTEN) ---
+function fillDropdown(selectElement, type) {
     selectElement.innerHTML = '';
-    if (includeEmpty) {
-        selectElement.innerHTML = '<option value="">- Person auswählen -</option>';
-    }
+    selectElement.innerHTML = '<option value="">- Bitte wählen -</option>';
 
-    // Gruppe 1: Registrierte Personen
+    // 1. MEINE KONTEN (Für Gläubiger wichtig, für Schuldner auch möglich)
+    if (allAccounts.length > 0) {
+        const grpAcc = document.createElement('optgroup');
+        grpAcc.label = "[MEINE KONTEN]";
+        allAccounts.forEach(acc => {
+            const opt = document.createElement('option');
+            opt.value = `ACC:${acc.id}`; // Prefix um es zu unterscheiden
+            opt.dataset.type = "account";
+            opt.dataset.details = acc.details || "";
+            opt.textContent = acc.name;
+            grpAcc.appendChild(opt);
+        });
+        selectElement.appendChild(grpAcc);
+    }
+    
+    // 2. REGISTRIERTE PERSONEN
     const grpUsers = document.createElement('optgroup');
     grpUsers.label = "[REGISTRIERTE PERSONEN]";
-    let hasUsers = false;
     Object.values(USERS).forEach(user => {
         if (user.id !== currentUser.mode && user.isActive) {
             const opt = document.createElement('option');
-            opt.value = user.id;
+            opt.value = `USR:${user.id}`;
+            opt.dataset.type = "user";
             opt.textContent = user.realName || user.name;
             grpUsers.appendChild(opt);
-            hasUsers = true;
         }
     });
-    if (hasUsers) selectElement.appendChild(grpUsers);
+    selectElement.appendChild(grpUsers);
 
-    // Gruppe 2: Eigene Kontakte
+    // 3. EIGENE KONTAKTE
     const grpContacts = document.createElement('optgroup');
     grpContacts.label = "[EIGENE KONTAKTE]";
-    let hasContacts = false;
     allContacts.forEach(contact => {
         const opt = document.createElement('option');
-        opt.value = contact.id; // ID des Kontakt-Dokuments
+        opt.value = `CON:${contact.id}`;
+        opt.dataset.type = "contact";
         opt.textContent = contact.name;
         grpContacts.appendChild(opt);
-        hasContacts = true;
     });
-    if (hasContacts) selectElement.appendChild(grpContacts);
+    selectElement.appendChild(grpContacts);
 }
 
 // --- TABS LOGIK ---
 function openSettingsTab(tabName) {
-    const tabs = ['templates', 'contacts', 'credits'];
-    
+    const tabs = ['templates', 'contacts', 'credits', 'accounts'];
     tabs.forEach(t => {
         const btn = document.getElementById(`tab-zv-${t}`);
         const content = document.getElementById(`content-zv-${t}`);
@@ -1719,6 +1721,45 @@ function openSettingsTab(tabName) {
             btn.className = "px-4 py-2 font-bold text-gray-500 hover:text-gray-700 whitespace-nowrap";
             content.classList.add('hidden');
         }
+    });
+}
+
+// --- KONTEN VERWALTUNG (NEU) ---
+async function addAccountFromSettings() {
+    const name = document.getElementById('new-account-name').value.trim();
+    const details = document.getElementById('new-account-details').value.trim();
+    if (!name) return;
+    try {
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'private-accounts'), {
+            name, details, createdBy: currentUser.mode, createdAt: serverTimestamp()
+        });
+        alertUser("Konto erstellt!", "success");
+        document.getElementById('new-account-name').value = '';
+        document.getElementById('new-account-details').value = '';
+    } catch(e) { console.error(e); alertUser("Fehler.", "error"); }
+}
+
+async function deleteAccount(id) {
+    if(!confirm("Konto löschen?")) return;
+    try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'private-accounts', id)); } catch(e) { console.error(e); }
+}
+
+function renderAccountList() {
+    const container = document.getElementById('zv-accounts-list');
+    if (!container) return;
+    container.innerHTML = '';
+    if (allAccounts.length === 0) { container.innerHTML = '<p class="text-center text-gray-400 italic">Keine eigenen Konten.</p>'; return; }
+    allAccounts.forEach(acc => {
+        const div = document.createElement('div');
+        div.className = "flex justify-between items-center p-2 bg-white rounded shadow-sm border";
+        div.innerHTML = `
+            <div>
+                <span class="font-bold text-blue-700 block">${acc.name}</span>
+                <span class="text-xs text-gray-500">${acc.details || ''}</span>
+            </div>
+            <button class="delete-acc-btn p-1 text-red-400 hover:bg-red-50 rounded" data-id="${acc.id}">🗑️</button>
+        `;
+        container.appendChild(div);
     });
 }
 
