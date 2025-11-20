@@ -944,7 +944,7 @@ async function savePayment() {
         const amount = parseFloat(document.getElementById('payment-amount').value);
         const startDate = document.getElementById('payment-start-date').value;
         const deadline = document.getElementById('payment-deadline').value;
-        const categoryId = document.getElementById('payment-category-select').value; // NEU
+        const categoryId = document.getElementById('payment-category-select').value;
         
         if (!title || isNaN(amount) || !startDate) throw new Error("Pflichtfelder fehlen.");
 
@@ -969,14 +969,14 @@ async function savePayment() {
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
 
         const baseData = {
-            title, amount, remainingAmount: amount, isTBD: false,
+            title, amount, isTBD: false,
             startDate, deadline: deadline || null,
             status: 'open', type: document.getElementById('payment-type').value,
-            creditorId, creditorName, categoryId, // NEU: Kategorie ID speichern
+            creditorId, creditorName, categoryId,
             invoiceNr: document.getElementById('payment-invoice-nr').value,
             orderNr: document.getElementById('payment-order-nr').value,
             notes: document.getElementById('payment-notes').value,
-            createdAt: serverTimestamp(), createdBy: currentUser.mode
+            createdBy: currentUser.mode
         };
 
         if (!splitMode) {
@@ -995,15 +995,65 @@ async function savePayment() {
             if (creditorId && !involved.includes(creditorId)) involved.push(creditorId);
             if (debtorId && !involved.includes(debtorId)) involved.push(debtorId);
             
-            const finalData = { ...baseData, debtorId, debtorName, involvedUserIds: involved, history: [{date: new Date(), action: 'created', user: currentUser.displayName, info: 'Erstellt'}] };
-            
             if (editId) {
-                delete finalData.createdAt;
-                batch.update(doc(paymentsRef, editId), finalData);
+                // --- EDIT MODUS MIT PROTOKOLL ---
+                const docRef = doc(paymentsRef, editId);
+                
+                // Wir müssen das alte Dokument lesen für den Diff (Protokoll)
+                // Da wir hier in einer async funktion sind, können wir await nutzen.
+                const oldSnap = await getDoc(docRef);
+                const oldData = oldSnap.data();
+                
+                let changes = [];
+                if (oldData.title !== title) changes.push(`Titel: "${oldData.title}" -> "${title}"`);
+                if (parseFloat(oldData.amount) !== amount) changes.push(`Gesamtbetrag: ${oldData.amount}€ -> ${amount}€`);
+                if (oldData.deadline !== deadline) changes.push(`Frist: ${oldData.deadline||'Keine'} -> ${deadline||'Keine'}`);
+                if (oldData.categoryId !== categoryId) changes.push(`Kategorie geändert`);
+                
+                // Restbetrag anpassen, wenn sich der Gesamtbetrag geändert hat
+                let newRemaining = oldData.remainingAmount;
+                if (amount !== oldData.amount) {
+                    const paidSoFar = oldData.amount - oldData.remainingAmount;
+                    newRemaining = amount - paidSoFar;
+                    if (newRemaining < 0) newRemaining = 0; // Safety
+                }
+
+                const updateData = { 
+                    ...baseData, 
+                    debtorId, debtorName, involvedUserIds: involved,
+                    remainingAmount: newRemaining, // Update remaining based on new total
+                    // createdAt NICHT überschreiben
+                };
+                delete updateData.createdAt;
+
+                if (changes.length > 0) {
+                    // Protokoll Eintrag
+                    const historyEntry = {
+                        date: new Date(), 
+                        action: 'edited', 
+                        user: currentUser.displayName, 
+                        info: `Bearbeitet: ${changes.join(', ')}`
+                    };
+                    // Array Union workaround via spread in batch
+                    updateData.history = [...(oldData.history || []), historyEntry];
+                }
+
+                batch.update(docRef, updateData);
+
             } else {
+                // --- CREATE MODUS ---
+                const finalData = { 
+                    ...baseData, 
+                    remainingAmount: amount, // Am Anfang ist Rest = Gesamt
+                    debtorId, debtorName, involvedUserIds: involved, 
+                    createdAt: serverTimestamp(),
+                    history: [{date: new Date(), action: 'created', user: currentUser.displayName, info: 'Erstellt'}] 
+                };
                 batch.set(doc(paymentsRef), finalData);
             }
+
         } else {
+             // SPLIT LOGIK BLEIBT GLEICH (Kein Edit Support für Split Gruppen aktuell)
              if (editId) throw new Error("Split-Einträge können nicht als Gruppe bearbeitet werden.");
              const checkboxes = document.querySelectorAll('.split-cb:checked');
              if (checkboxes.length === 0) throw new Error("Keine Personen für Split gewählt.");
@@ -1019,6 +1069,7 @@ async function savePayment() {
                      ...baseData, amount: share, remainingAmount: share, 
                      debtorId: pId.startsWith('MANUAL_') ? null : pId, debtorName: pName, 
                      involvedUserIds: involved, title: `${title} (Split)`, 
+                     createdAt: serverTimestamp(),
                      history: [{date: new Date(), action: 'created_split', user: currentUser.displayName, info: `Split-Anteil von ${share.toFixed(2)}€`}] 
                  };
                  batch.set(doc(paymentsRef), entry); 
@@ -1030,6 +1081,7 @@ async function savePayment() {
         closeCreateModal();
     } catch(e) { console.error(e); alertUser(e.message, "error"); } finally { setButtonLoading(btn, false); }
 }
+
 
 
 
@@ -1330,27 +1382,30 @@ function renderDetailContent(p, isRefresh) {
     const content = document.getElementById('payment-detail-content');
     const actions = document.getElementById('payment-detail-actions');
     const partialForm = document.getElementById('partial-payment-form');
-    const transactionSection = document.getElementById('transaction-history-section'); // NEU
-    const transactionList = document.getElementById('transaction-list'); // NEU
+    const transactionSection = document.getElementById('transaction-history-section'); 
+    const transactionList = document.getElementById('transaction-list'); 
 
     if (!modal || !content || !actions) return;
 
     const iAmDebtor = p.debtorId === currentUser.mode;
     const iAmCreditor = p.creditorId === currentUser.mode;
     const iAmCreator = p.createdBy === currentUser.mode;
-    const shortId = p.id.slice(-4).toUpperCase();
+
+    // Kategorie Name holen
+    const catName = allCategories.find(c => c.id === p.categoryId)?.name || "Keine Kategorie";
 
     let editControls = '';
     if (iAmCreator) {
         editControls = `
         <div class="flex justify-end gap-2 mb-4 no-print border-b pb-2 flex-wrap">
             <button onclick="openAdjustAmountModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-bold">€ Anpassen</button>
-            <button onclick="openSplitModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 text-sm font-bold">Aufteilen</button>
+            <button onclick="openSplitModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 text-sm font-bold">Split</button>
             <button onclick="editPayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-sm font-bold">Bearbeiten</button>
             <button onclick="deletePayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-bold">Löschen</button>
         </div>`;
     }
 
+    // Ratenplan Info
     let installmentInfo = '';
     if (p.installment && p.installment.total > 0) {
         const paidAmount = p.amount - p.remainingAmount;
@@ -1371,21 +1426,29 @@ function renderDetailContent(p, isRefresh) {
     if (p.transactions && p.transactions.length > 0) {
         transactionSection.classList.remove('hidden');
         transactionList.innerHTML = '';
+        // Wir drehen die Liste um (slice().reverse()), damit neueste oben sind, aber behalten den echten Index für Löschung bei
         p.transactions.forEach((tx, index) => {
+            // Berechtigung zum Löschen: Ersteller oder Gläubiger (Empfänger)
             const canDelete = (iAmCreator || iAmCreditor);
+            
             const row = document.createElement('div');
-            row.className = "flex justify-between items-center p-2 bg-white rounded border shadow-sm";
-            const dateStr = tx.date?.toDate ? tx.date.toDate().toLocaleDateString() : new Date(tx.date).toLocaleDateString();
+            row.className = "flex justify-between items-center p-2 bg-white rounded border shadow-sm mb-1";
+            const dateStr = tx.date?.toDate ? tx.date.toDate().toLocaleDateString() + ' ' + tx.date.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : new Date(tx.date).toLocaleDateString();
+            
             row.innerHTML = `
-                <div class="flex items-center gap-2">
-                    <span class="font-bold text-green-700">+ ${parseFloat(tx.amount).toFixed(2)} €</span>
-                    <span class="text-xs text-gray-400">| ${dateStr}</span>
-                    <span class="text-xs text-gray-500 italic">(${tx.type === 'credit_usage' ? 'Guthaben' : 'Zahlung'})</span>
+                <div class="flex flex-col">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-green-700">+ ${parseFloat(tx.amount).toFixed(2)} €</span>
+                        <span class="text-xs text-gray-500 italic">(${tx.user || 'System'})</span>
+                    </div>
+                    <span class="text-[10px] text-gray-400">${dateStr}</span>
                 </div>
-                ${canDelete ? `<button class="text-red-400 hover:text-red-600 text-xs font-bold delete-tx-btn px-2 py-1 bg-red-50 rounded border border-red-100">Löschen</button>` : ''}
+                ${canDelete ? `<button class="text-red-400 hover:text-red-600 text-xs font-bold delete-tx-btn px-2 py-1 bg-red-50 rounded border border-red-100" title="Zahlung stornieren">Löschen</button>` : ''}
             `;
-            // Event Listener für Löschen
-            if (canDelete) row.querySelector('.delete-tx-btn').addEventListener('click', () => deleteTransaction(p.id, index));
+            
+            if (canDelete) {
+                row.querySelector('.delete-tx-btn').addEventListener('click', () => deleteTransaction(p.id, index));
+            }
             transactionList.appendChild(row);
         });
     } else {
@@ -1396,9 +1459,10 @@ function renderDetailContent(p, isRefresh) {
         ${editControls}
         <h2 class="text-2xl font-bold text-gray-800 mb-1 leading-tight">${p.title}</h2>
         <div class="flex flex-wrap gap-2 mb-4 mt-2">
-            <span class="px-2 py-1 bg-gray-800 text-white rounded text-xs font-mono tracking-wider">#${shortId}</span>
+            <span class="px-2 py-1 bg-gray-800 text-white rounded text-xs font-mono tracking-wider">#${p.id.slice(-4).toUpperCase()}</span>
+            <span class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs font-bold">${catName}</span>
             ${p.type === 'credit' ? '<span class="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-bold">Guthaben</span>' : ''}
-            ${p.startDate ? `<span class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs">Start: ${new Date(p.startDate).toLocaleDateString()}</span>` : ''}
+            ${p.startDate ? `<span class="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">Start: ${new Date(p.startDate).toLocaleDateString()}</span>` : ''}
         </div>
         
         <div class="grid grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
@@ -1411,16 +1475,20 @@ function renderDetailContent(p, isRefresh) {
         <div class="mb-6 text-center p-4 border-2 border-dashed border-gray-200 rounded-xl ${p.remainingAmount <= 0.01 ? 'bg-green-50 border-green-300' : ''}">
             <p class="text-sm text-gray-500 uppercase font-bold tracking-wide">Offener Betrag</p>
             <p class="text-5xl font-extrabold text-gray-800 mt-1">${p.isTBD ? 'TBD' : parseFloat(p.remainingAmount).toFixed(2) + ' €'}</p>
-            ${!p.isTBD && p.amount > p.remainingAmount ? `<p class="text-xs text-green-600 font-semibold mt-1">Bezahlt: ${(p.amount - p.remainingAmount).toFixed(2)} €</p>` : ''}
+            ${!p.isTBD && p.amount > p.remainingAmount ? `<p class="text-xs text-green-600 font-semibold mt-1">Bereits bezahlt: ${(p.amount - p.remainingAmount).toFixed(2)} €</p>` : ''}
         </div>
         
         ${p.notes ? `<div class="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-gray-700"><strong>Notiz:</strong><br>${p.notes}</div>` : ''}
         
-        <h4 class="font-bold text-gray-700 mb-2 border-b pb-1 mt-8">System-Log</h4>
-        <div class="mb-4 max-h-40 overflow-y-auto text-xs text-gray-400">
-            ${(p.history || []).map(h => {
+        <h4 class="font-bold text-gray-700 mb-2 border-b pb-1 mt-8">Protokoll (Änderungen)</h4>
+        <div class="mb-4 max-h-40 overflow-y-auto text-xs text-gray-500 space-y-1 font-mono">
+            ${(p.history || []).slice().reverse().map(h => {
                 const d = h.date?.toDate ? h.date.toDate() : new Date(h.date);
-                return `<div class="mb-1">${d.toLocaleDateString()} - ${h.info}</div>`;
+                const dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                return `<div class="border-b border-gray-100 pb-1 last:border-0">
+                            <span class="font-bold text-gray-700">${dateStr}</span> <span class="text-indigo-600">[${h.user}]</span><br>
+                            ${h.info}
+                        </div>`;
             }).join('')}
         </div>
     `;
@@ -1429,21 +1497,27 @@ function renderDetailContent(p, isRefresh) {
     if (partialForm) partialForm.classList.add('hidden');
 
     if (p.status === 'open' || p.status === 'pending_approval') {
+        // Ich schulde -> Kann zahlen
         if (iAmDebtor && p.status === 'open') {
             actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'mark_paid')" class="py-3 px-6 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 w-full sm:w-auto">✅ Alles bezahlt</button>`;
             actions.innerHTML += `<button onclick="showPartialForm()" class="py-3 px-6 bg-blue-100 text-blue-800 font-bold rounded-lg hover:bg-blue-200 w-full sm:w-auto">Teilzahlung</button>`;
         }
+        // Mir wird geschuldet -> Kann bestätigen oder "Alles bezahlt" markieren
         if (iAmCreditor) {
             if (p.status === 'pending_approval') {
                 actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'confirm_payment')" class="py-3 px-6 bg-green-600 text-white font-bold rounded-lg shadow hover:bg-green-700 flex-grow">Bestätigen</button>`;
                 actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'reject_payment')" class="py-3 px-6 bg-red-100 text-red-600 font-bold rounded-lg hover:bg-red-200 flex-grow">Ablehnen</button>`;
             } else {
-                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'force_close')" class="py-3 px-6 bg-emerald-600 text-white font-bold rounded-lg shadow hover:bg-emerald-700 w-full sm:w-auto">Als erledigt markieren</button>`;
+                // KORREKTUR: Button heißt jetzt auch "Alles bezahlt" und Teilzahlung ist da
+                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'force_close')" class="py-3 px-6 bg-emerald-600 text-white font-bold rounded-lg shadow hover:bg-emerald-700 w-full sm:w-auto">✅ Alles bezahlt</button>`;
                 actions.innerHTML += `<button onclick="showPartialForm()" class="py-3 px-6 bg-blue-100 text-blue-800 font-bold rounded-lg hover:bg-blue-200 w-full sm:w-auto">Teilzahlung empfangen</button>`;
             }
         }
     }
+    
+    // Partial Form sichtbar machen
     window.showPartialForm = function () { if (partialForm) partialForm.classList.remove('hidden'); }
+    
     const submitPartialBtn = document.getElementById('btn-submit-partial');
     if (submitPartialBtn) {
         const newBtn = submitPartialBtn.cloneNode(true);
@@ -1453,8 +1527,10 @@ function renderDetailContent(p, isRefresh) {
             if (amt > 0) handlePaymentAction(p.id, 'partial_pay', amt);
         };
     }
+    
     if (!isRefresh) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
 }
+
 
 
 
@@ -1651,40 +1727,28 @@ async function executePayment(id, action, amount) {
     let transaction = null;
 
     if (action === 'mark_paid') { 
-        // Logik: Wer muss das genehmigen?
-        // Normalerweise derjenige, der das Geld bekommt (Creditor).
-        // Ist der Creditor ein System-User?
-        const creditorIsSystemUser = USERS[p.creditorId] && USERS[p.creditorId].isActive;
-        const iAmCreditor = p.creditorId === currentUser.mode;
-
-        // Wir genehmigen SOFORT, wenn:
-        // 1. Der Gläubiger KEIN System-User ist (Gast kann nicht einloggen zum Genehmigen)
-        // 2. ODER: Ich selbst der Gläubiger bin (ich bestätige ja gerade, dass ich Geld habe)
-        // 3. (Hier könnte man später noch 'userSettings.autoApprove' einbauen)
-        
-        const autoApprove = !creditorIsSystemUser || iAmCreditor;
+        // "Alles Bezahlt" Logik
+        const autoApprove = !USERS[p.creditorId] || (p.creditorId === currentUser.mode);
+        amount = parseFloat(p.remainingAmount);
 
         if (autoApprove) {
-            // SOFORT BEZAHLT
-            amount = parseFloat(p.remainingAmount);
             newStatus = 'paid';
             updateData.remainingAmount = 0;
-            logEntry = creditorIsSystemUser 
-                ? "Als erledigt markiert." 
-                : "Als bezahlt markiert (Auto-Genehmigt, da Gast).";
-            
-            // WICHTIG: Wenn wir auto-genehmigen, müssen wir auch die Transaktion schreiben!
+            logEntry = "Als bezahlt markiert (Auto-Confirm).";
+            // Transaction anlegen
             if (amount > 0) transaction = { date: new Date(), amount: amount, type: 'payment', user: currentUser.displayName };
-
         } else {
-            // WARTEN AUF GENEHMIGUNG
-            amount = parseFloat(p.remainingAmount); 
+            // Pending
             newStatus = 'pending_approval'; 
             logEntry = "Als bezahlt markiert (Wartet auf Bestätigung)."; 
+            // HIER NOCH KEINE Transaktion, erst bei Confirm!
         }
 
     } else if (action === 'confirm_payment' || action === 'force_close') { 
-        amount = parseFloat(p.remainingAmount); newStatus = 'paid'; updateData.remainingAmount = 0; logEntry = "Abgeschlossen.";
+        amount = parseFloat(p.remainingAmount); 
+        newStatus = 'paid'; 
+        updateData.remainingAmount = 0; 
+        logEntry = "Alles bezahlt (Abgeschlossen).";
         if (amount > 0) transaction = { date: new Date(), amount: amount, type: 'payment', user: currentUser.displayName };
     
     } else if (action === 'reject_payment') { 
@@ -1694,14 +1758,14 @@ async function executePayment(id, action, amount) {
         const newRemaining = parseFloat(p.remainingAmount) - amount; 
         updateData.remainingAmount = newRemaining < 0 ? 0 : newRemaining;
         if (newRemaining <= 0.001) newStatus = 'paid'; 
-        logEntry = `Teilzahlung ${amount.toFixed(2)}€.`;
+        logEntry = `Teilzahlung empfangen: ${amount.toFixed(2)}€.`;
         transaction = { date: new Date(), amount: amount, type: 'payment', user: currentUser.displayName };
     }
 
     updateData.status = newStatus;
     updateData.history = [...(p.history || []), { date: new Date(), action, user: currentUser.displayName, info: logEntry }];
     
-    // NEU: Transaktion speichern (falls vorhanden)
+    // NEU: Transaktion speichern
     if (transaction) {
         updateData.transactions = [...(p.transactions || []), transaction];
     }
@@ -1710,11 +1774,11 @@ async function executePayment(id, action, amount) {
         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', id), updateData); 
         alertUser("Gespeichert.", "success"); 
         if (action !== 'partial_pay' && action !== 'mark_paid') closeDetailModal(); 
-        // Wenn es auto-approved wurde (mark_paid -> paid), schließen wir das Fenster auch besser
         if (action === 'mark_paid' && newStatus === 'paid') closeDetailModal();
 
     } catch (e) { console.error(e); alertUser("Fehler: " + e.message, "error"); }
 }
+
 
 
 async function resolveOverpayment(decision) {
@@ -2716,5 +2780,45 @@ function updateCategoryFilterDropdown() {
             <option value="closed">Abgeschlossen / Bezahlt</option>
         `;
         statusSelect.appendChild(sGrp);
+    }
+}
+
+// Transaktion löschen (Stornieren)
+window.deleteTransaction = async function(paymentId, txIndex) {
+    const p = allPayments.find(x => x.id === paymentId);
+    if (!p || !p.transactions) return;
+    
+    const tx = p.transactions[txIndex];
+    if (!confirm(`Transaktion vom ${new Date(tx.date.toDate()).toLocaleDateString()} über ${tx.amount}€ wirklich löschen? Der Betrag wird wieder offen.`)) return;
+
+    const amountToAddBack = parseFloat(tx.amount);
+
+    try {
+        // 1. Transaktion aus Array entfernen
+        const newTransactions = p.transactions.filter((_, i) => i !== txIndex);
+        
+        // 2. Betrag wieder draufrechnen
+        const newRemaining = parseFloat(p.remainingAmount) + amountToAddBack;
+
+        // 3. Status prüfen (wenn es paid war, ist es jetzt wieder open)
+        const newStatus = 'open'; // Immer öffnen bei Storno, sicherheitshalber
+
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', paymentId), {
+            remainingAmount: newRemaining,
+            status: newStatus,
+            transactions: newTransactions,
+            history: [...(p.history || []), { 
+                date: new Date(), 
+                action: 'tx_deleted', 
+                user: currentUser.displayName, 
+                info: `Storno: Zahlung von ${amountToAddBack.toFixed(2)}€ gelöscht.` 
+            }]
+        });
+        
+        alertUser("Zahlung storniert.", "success");
+        // Detailansicht aktualisiert sich automatisch durch den Listener
+    } catch (e) { 
+        console.error(e); 
+        alertUser("Fehler beim Löschen.", "error"); 
     }
 }
