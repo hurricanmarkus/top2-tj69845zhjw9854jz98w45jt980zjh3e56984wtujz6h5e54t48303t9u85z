@@ -1995,107 +1995,128 @@
 <div class="p-4 overflow-y-auto space-y-4 flex-grow">
                             <input type="hidden" id="edit-payment-id" value="">
                             
-                            <div class="bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-4">
+                            <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
                                 
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Wer muss zahlen? (Schuldner)</label>
-                                    
-                                    <div class="flex justify-end mb-1">
-                                        <label class="flex items-center gap-2 cursor-pointer">
-                                            <span class="text-xs text-gray-500">Gruppe / Split?</span>
-                                            <input type="checkbox" id="toggle-split-mode" class="h-4 w-4 text-indigo-600">
-                                        </label>
-                                    </div>
-
-                                    <div id="debtor-single-wrapper">
-                                        <div class="flex gap-2">
-                                            <select id="payment-debtor-select" class="flex-grow p-2 border rounded-lg bg-white text-gray-800 font-medium">
-                                                </select>
-                                            <input type="text" id="payment-debtor-manual" class="flex-grow p-2 border rounded-lg hidden" placeholder="Shop Name / Person...">
-                                            <button id="btn-toggle-debtor-manual" class="py-1 px-2 bg-gray-200 text-gray-500 rounded-lg text-xs font-bold">Tippen</button>
-                                        </div>
-                                    </div>
-
-                                    <div id="debtor-split-wrapper" class="hidden p-2 bg-white border rounded-lg">
-                                        <div class="flex gap-2 mb-2 border-b pb-2">
-                                            <input type="text" id="split-manual-name-input" class="flex-grow p-1.5 border rounded text-sm" placeholder="+ Gast Name...">
-                                            <button id="btn-add-split-manual" class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded font-bold text-sm">+</button>
-                                        </div>
-                                        <div id="split-partner-list" class="max-h-32 overflow-y-auto"></div>
-                                    </div>
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">Transaktion</span>
+                                    <label class="flex items-center gap-2 cursor-pointer bg-white px-2 py-1 rounded border border-gray-200 shadow-sm hover:bg-gray-50">
+                                        <span class="text-xs font-bold text-indigo-600">Gruppe / Split?</span>
+                                        <input type="checkbox" id="toggle-split-mode" class="h-4 w-4 text-indigo-600 rounded focus:ring-indigo-500">
+                                    </label>
                                 </div>
 
-                                <div class="flex justify-center -my-2 relative z-10">
-                                    <div class="bg-white p-1 rounded-full border shadow-sm text-gray-400">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
-                                            <path fill-rule="evenodd" d="M10 3a1 1 0 0 1 1 1v5h5a1 1 0 1 1 0 2h-5v5a1 1 0 1 1-2 0v-5H4a1 1 0 1 1 0-2h5V4a1 1 0 0 1 1-1Z" clip-rule="evenodd" />
-                                        </svg> <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                                          <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 13.5 12 21m0 0-7.5-7.5M12 21V3" />
+                                <div class="flex flex-row items-start gap-2">
+                                    
+                                    <div class="flex-1 min-w-0">
+                                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Von (Schuldner)</label>
+                                        
+                                        <div id="debtor-single-wrapper" class="flex flex-col gap-1">
+                                            <select id="payment-debtor-select" class="w-full p-2 border border-gray-300 rounded-lg bg-white text-gray-800 text-sm font-bold shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                                                </select>
+                                            <input type="text" id="payment-debtor-manual" class="w-full p-2 border border-gray-300 rounded-lg text-sm hidden" placeholder="Name...">
+                                            <button id="btn-toggle-debtor-manual" class="text-[10px] text-indigo-500 hover:text-indigo-700 font-bold text-right w-full">Manuell eingeben</button>
+                                        </div>
+
+                                        <div id="debtor-split-wrapper" class="hidden p-2 bg-white border border-indigo-100 rounded-lg shadow-inner">
+                                            <div class="flex gap-1 mb-2 border-b border-indigo-50 pb-1">
+                                                <input type="text" id="split-manual-name-input" class="flex-grow p-1 text-xs border rounded" placeholder="+ Gast...">
+                                                <button id="btn-add-split-manual" class="px-2 bg-indigo-100 text-indigo-700 rounded font-bold text-xs">+</button>
+                                            </div>
+                                            <div id="split-partner-list" class="max-h-32 overflow-y-auto space-y-1"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex flex-col justify-center items-center pt-6">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8 text-indigo-500 filter drop-shadow-sm transform scale-125">
+                                            <path fill-rule="evenodd" d="M16.72 7.72a.75.75 0 0 1 1.06 0l3.75 3.75a.75.75 0 0 1 0 1.06l-3.75 3.75a.75.75 0 1 1-1.06-1.06l2.47-2.47H3a.75.75 0 0 1 0-1.5h16.19l-2.47-2.47a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
                                         </svg>
                                     </div>
-                                </div>
 
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Wer bekommt das Geld? (Gläubiger)</label>
-                                    <div class="flex gap-2">
-                                        <select id="payment-creditor-select" class="flex-grow p-2 border rounded-lg bg-white text-gray-800 font-medium border-l-4 border-l-emerald-500">
-                                            </select>
-                                        <input type="text" id="payment-creditor-manual" class="flex-grow p-2 border rounded-lg hidden" placeholder="Empfänger...">
-                                        <button id="btn-toggle-creditor-manual" class="py-1 px-2 bg-gray-200 text-gray-500 rounded-lg text-xs font-bold">Tippen</button>
+                                    <div class="flex-1 min-w-0">
+                                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">An (Gläubiger)</label>
+                                        <div class="flex flex-col gap-1">
+                                            <select id="payment-creditor-select" class="w-full p-2 border border-gray-300 rounded-lg bg-white text-gray-800 text-sm font-bold shadow-sm border-l-4 border-l-emerald-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                                                </select>
+                                            <input type="text" id="payment-creditor-manual" class="w-full p-2 border border-gray-300 rounded-lg text-sm hidden" placeholder="Empfänger...">
+                                            <button id="btn-toggle-creditor-manual" class="text-[10px] text-indigo-500 hover:text-indigo-700 font-bold text-right w-full">Manuell eingeben</button>
+                                        </div>
+                                        <p class="text-[10px] text-gray-400 mt-1 italic leading-tight" id="creditor-details-hint"></p>
                                     </div>
-                                    <p class="text-[10px] text-gray-400 mt-1 italic" id="creditor-details-hint"></p>
+
                                 </div>
-
                             </div>
-
 
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-bold text-gray-700 mb-1" id="label-amount">Betrag (€)</label>
-                                    <input type="number" id="payment-amount" class="w-full p-2 border rounded-lg font-mono text-lg" placeholder="0.00" step="0.01">
-                                    <div id="split-options-wrapper" class="hidden mt-2 space-y-2">
-                                        <p class="text-xs text-blue-600 font-semibold" id="split-calculation-preview"></p>
+                                    <div class="relative">
+                                        <input type="number" id="payment-amount" class="w-full p-3 border border-gray-300 rounded-xl font-mono text-xl font-bold text-gray-800 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="0.00" step="0.01">
+                                        <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                            <span class="text-gray-400 font-bold">€</span>
+                                        </div>
                                     </div>
-                                    <label class="flex items-center gap-2 mt-1" id="tbd-wrapper">
-                                        <input type="checkbox" id="payment-amount-tbd" class="h-4 w-4">
-                                        <span class="text-xs text-gray-500">Betrag noch unbekannt (TBD)</span>
+                                    
+                                    <div id="split-options-wrapper" class="hidden mt-2 p-2 bg-blue-50 rounded border border-blue-100">
+                                        <p class="text-xs text-blue-700 font-bold text-center" id="split-calculation-preview"></p>
+                                    </div>
+
+                                    <label class="flex items-center gap-2 mt-2 cursor-pointer">
+                                        <input type="checkbox" id="payment-amount-tbd" class="h-4 w-4 text-orange-500 rounded focus:ring-orange-500">
+                                        <span class="text-xs text-gray-500 font-medium">Betrag noch unbekannt (TBD)</span>
                                     </label>
                                 </div>
-                                <div class="space-y-2">
+
+                                <div class="space-y-3">
                                     <div>
-                                        <label class="block text-xs font-bold text-gray-500 uppercase">Buchungsdatum</label>
-                                        <input type="date" id="payment-start-date" class="w-full p-2 border rounded-lg bg-gray-50 text-sm">
+                                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Buchungsdatum</label>
+                                        <input type="date" id="payment-start-date" class="w-full p-2 border border-gray-300 rounded-lg bg-gray-50 text-sm font-medium">
                                     </div>
                                     <div>
-                                        <label class="block text-xs font-bold text-gray-500 uppercase">Fälligkeit (Deadline)</label>
-                                        <input type="date" id="payment-deadline" class="w-full p-2 border rounded-lg text-sm font-semibold focus:border-red-500">
+                                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Fälligkeit (Deadline)</label>
+                                        <input type="date" id="payment-deadline" class="w-full p-2 border border-red-200 rounded-lg text-sm font-medium focus:border-red-500 text-gray-700">
                                     </div>
                                 </div>
                             </div>
 
                             <div>
                                 <label class="block text-sm font-bold text-gray-700 mb-1">Grund / Betreff</label>
-                                <input type="text" id="payment-title" class="w-full p-2 border rounded-lg" placeholder="z.B. Rückerstattung Amazon, Miete...">
+                                <input type="text" id="payment-title" class="w-full p-3 border border-gray-300 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="z.B. Rückerstattung Amazon, Miete...">
                             </div>
 
-                            <button id="btn-toggle-advanced-payment" class="text-sm text-indigo-600 font-semibold hover:underline">+ Erweiterte Optionen anzeigen</button>
+                            <div class="border-t border-gray-100 pt-2">
+                                <button id="btn-toggle-advanced-payment" class="flex items-center gap-1 text-xs text-indigo-600 font-bold hover:text-indigo-800 transition">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+                                        <path fill-rule="evenodd" d="M10 3a1 1 0 0 1 .707.293l3 3a1 1 0 0 1-1.414 1.414L10 5.414 7.707 7.707a1 1 0 0 1-1.414-1.414l3-3A1 1 0 0 1 10 3Zm-3.707 9.293a1 1 0 0 1 1.414 0L10 14.586l2.293-2.293a1 1 0 0 1 1.414 1.414l-3 3a1 1 0 0 1-1.414 0l-3-3a1 1 0 0 1 0-1.414Z" clip-rule="evenodd" />
+                                    </svg>
+                                    Erweiterte Optionen (Rechnung, Notizen, Raten)
+                                </button>
+                            </div>
 
-                            <div id="payment-advanced-options" class="hidden space-y-4 pt-2 border-t border-gray-100">
+                            <div id="payment-advanced-options" class="hidden space-y-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
                                 <div class="grid grid-cols-2 gap-4">
-                                    <input type="text" id="payment-invoice-nr" class="p-2 border rounded-lg text-sm" placeholder="Rechnungs-Nr. (opt)">
-                                    <input type="text" id="payment-order-nr" class="p-2 border rounded-lg text-sm" placeholder="Bestell-Nr. (opt)">
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Rechnungs-Nr.</label>
+                                        <input type="text" id="payment-invoice-nr" class="w-full p-2 border border-gray-300 rounded-lg text-sm" placeholder="#">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bestell-Nr.</label>
+                                        <input type="text" id="payment-order-nr" class="w-full p-2 border border-gray-300 rounded-lg text-sm" placeholder="#">
+                                    </div>
                                 </div>
-                                <textarea id="payment-notes" class="w-full p-2 border rounded-lg text-sm" rows="2" placeholder="Interne Notizen..."></textarea>
                                 <div>
-                                    <label class="block text-sm font-bold text-gray-700 mb-1">Typ</label>
-                                    <select id="payment-type" class="w-full p-2 border rounded-lg bg-white">
+                                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Interne Notizen</label>
+                                    <textarea id="payment-notes" class="w-full p-2 border border-gray-300 rounded-lg text-sm" rows="2" placeholder="Details..."></textarea>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Buchungstyp</label>
+                                    <select id="payment-type" class="w-full p-2 border border-gray-300 rounded-lg bg-white text-sm">
                                         <option value="debt">Schulde / Forderung / Erstattung (Standard)</option>
                                         <option value="transfer">Umbuchung (Konto zu Konto)</option>
                                     </select>
                                 </div>
                                 <div class="pt-2 border-t border-gray-200">
                                     <label class="flex items-center gap-2 cursor-pointer">
-                                        <input type="checkbox" id="payment-is-installment" class="h-4 w-4 text-indigo-600">
+                                        <input type="checkbox" id="payment-is-installment" class="h-4 w-4 text-indigo-600 rounded focus:ring-indigo-500">
                                         <span class="text-sm font-bold text-gray-700">Ist Ratenzahlung</span>
                                     </label>
                                     <div id="installment-options" class="hidden mt-2 grid grid-cols-2 gap-2 pl-6">
@@ -2115,6 +2136,7 @@
                             </div>
                         </div>
                         
+
 
                         <div class="p-4 border-t bg-gray-50 rounded-b-xl flex justify-end gap-3">
                             <button id="btn-cancel-create-payment"
