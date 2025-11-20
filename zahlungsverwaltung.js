@@ -1597,7 +1597,6 @@ function renderPaymentList(payments) {
     visiblePayments.forEach(p => {
         const iAmDebtor = p.debtorId === currentUser.mode;
         const partnerName = iAmDebtor ? p.creditorName : p.debtorName;
-        // Kurzform für Mobile
         const prefix = iAmDebtor ? "an" : "von"; 
         const colorClass = iAmDebtor ? "text-red-600" : "text-emerald-600";
         const bgClass = iAmDebtor ? "bg-red-50 border-red-200" : "bg-emerald-50 border-emerald-200";
@@ -1610,42 +1609,40 @@ function renderPaymentList(payments) {
             catName = customCat ? customCat.name : "Diverse";
         }
 
-        // Status Anzeige vereinfachen für Grid
         let statusDot = '';
         if (p.status === 'open') {
             if (p.deadline) {
                 const deadlineDate = new Date(p.deadline); deadlineDate.setHours(0,0,0,0);
                 const diffTime = deadlineDate - today;
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                if (diffDays < 0) statusDot = `<div class="w-2 h-2 rounded-full bg-red-600" title="Überfällig"></div>`;
-                else if (diffDays === 0) statusDot = `<div class="w-2 h-2 rounded-full bg-orange-500" title="Heute fällig"></div>`;
-                else statusDot = `<div class="w-2 h-2 rounded-full bg-blue-500" title="Offen"></div>`;
+                if (diffDays < 0) statusDot = `<div class="w-3 h-3 rounded-full bg-red-600 border-2 border-white shadow-sm" title="Überfällig"></div>`;
+                else if (diffDays === 0) statusDot = `<div class="w-3 h-3 rounded-full bg-orange-500 border-2 border-white shadow-sm" title="Heute fällig"></div>`;
+                else statusDot = `<div class="w-3 h-3 rounded-full bg-blue-500 border-2 border-white shadow-sm" title="Offen"></div>`;
             } else {
-                statusDot = `<div class="w-2 h-2 rounded-full bg-blue-500" title="Offen"></div>`;
+                statusDot = `<div class="w-3 h-3 rounded-full bg-blue-500 border-2 border-white shadow-sm" title="Offen"></div>`;
             }
         } 
-        else if (p.status === 'pending_approval') statusDot = `<div class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" title="Wartet"></div>`;
-        else if (p.status === 'paid') statusDot = `<div class="w-2 h-2 rounded-full bg-green-500" title="Bezahlt"></div>`;
-        else statusDot = `<div class="w-2 h-2 rounded-full bg-gray-400" title="Storniert"></div>`;
+        else if (p.status === 'pending_approval') statusDot = `<div class="w-3 h-3 rounded-full bg-yellow-500 animate-pulse border-2 border-white shadow-sm" title="Wartet"></div>`;
+        else if (p.status === 'paid') statusDot = `<div class="w-3 h-3 rounded-full bg-green-500 border-2 border-white shadow-sm" title="Bezahlt"></div>`;
+        else statusDot = `<div class="w-3 h-3 rounded-full bg-gray-400 border-2 border-white shadow-sm" title="Storniert"></div>`;
 
         const checkboxHtml = isSelectionMode ?
-            `<div class="absolute top-2 right-2"><input type="checkbox" class="payment-select-cb h-4 w-4 text-indigo-600" value="${p.id}" ${selectedPaymentIds.has(p.id) ? 'checked' : ''}></div>` : '';
+            `<div class="absolute top-3 right-3 z-10"><input type="checkbox" class="payment-select-cb h-5 w-5 text-indigo-600 accent-indigo-600" value="${p.id}" ${selectedPaymentIds.has(p.id) ? 'checked' : ''}></div>` : '';
 
-        // KOMPAKTERES KARTEN-DESIGN
         const html = `
-        <div class="payment-card-item relative p-2 rounded-lg border ${bgClass} shadow-sm hover:shadow-md transition cursor-pointer flex flex-col h-full" data-id="${p.id}">
+        <div class="payment-card-item relative p-3 rounded-xl border ${bgClass} shadow-sm hover:shadow-md transition cursor-pointer flex flex-col h-full" data-id="${p.id}">
             ${checkboxHtml}
             
-            <div class="flex justify-between items-start mb-1">
-                <span class="text-[10px] text-gray-500 font-semibold bg-white/60 px-1 rounded border border-gray-100 truncate max-w-[70%]">${catName}</span>
+            <div class="flex justify-between items-start mb-2">
+                <span class="text-xs text-gray-600 font-bold bg-white/80 px-2 py-0.5 rounded border border-gray-200 truncate max-w-[70%] shadow-sm">${catName}</span>
                 ${statusDot}
             </div>
             
-            <h4 class="text-xs font-bold text-gray-800 leading-tight mb-1 line-clamp-2 h-8">${p.title}</h4>
+            <h4 class="text-sm font-extrabold text-gray-900 leading-snug mb-3 line-clamp-2">${p.title}</h4>
             
             <div class="mt-auto">
-                <p class="text-[10px] text-gray-500 truncate">${prefix} <strong class="text-gray-700">${partnerName}</strong></p>
-                <div class="font-extrabold text-sm ${colorClass} mt-0.5">
+                <p class="text-xs text-gray-600 truncate mb-1">${prefix} <strong class="text-gray-900 text-sm">${partnerName}</strong></p>
+                <div class="font-black text-xl ${colorClass} tracking-tight">
                     ${p.isTBD ? 'TBD' : parseFloat(p.remainingAmount).toFixed(2) + ' €'}
                 </div>
             </div>
@@ -1654,7 +1651,7 @@ function renderPaymentList(payments) {
     });
 }
 
-// --- KATEGORIE DASHBOARD (Limitierte Ansicht + Popup) ---
+// --- KATEGORIE DASHBOARD (Größere Schrift) ---
 function updateCategoryDashboard() {
     const container = document.getElementById('category-dashboard-container');
     const modalList = document.getElementById('category-overview-list');
@@ -1667,7 +1664,6 @@ function updateCategoryDashboard() {
     const sums = [];
     const allCats = [...SYSTEM_CATEGORIES, ...allCategories]; 
 
-    // Werte berechnen
     allCats.forEach(cat => {
         let count = 0;
         let amount = 0;
@@ -1679,7 +1675,6 @@ function updateCategoryDashboard() {
                     count++;
                     amount += parseFloat(p.remainingAmount || 0);
                 }
-                // Sonderfall: Gelöschte Kategorie fällt auf Diverse zurück
                 if (cat.id === 'cat_misc' && p.categoryId && !allCats.find(c => c.id === p.categoryId)) {
                      count++;
                      amount += parseFloat(p.remainingAmount || 0);
@@ -1687,7 +1682,6 @@ function updateCategoryDashboard() {
             }
         });
 
-        // Nur aktive anzeigen (Count > 0)
         if (count > 0) {
             sums.push({ name: cat.name, count: count, amount: amount });
         }
@@ -1698,42 +1692,37 @@ function updateCategoryDashboard() {
         return;
     }
 
-    // 2. Helper zum Erstellen der HTML-Boxen
+    // 2. Helper zum Erstellen der Boxen
     const createBox = (item, isModal = false) => {
         const div = document.createElement('div');
         
         if (isModal) {
-            // Modal Design (Listenansicht)
+            // Modal Design
             div.className = "bg-gray-50 border border-gray-200 rounded-lg p-3 flex justify-between items-center shadow-sm";
             div.innerHTML = `
                  <div class="text-left">
-                    <p class="text-sm font-bold text-gray-700">${item.name}</p>
-                    <p class="text-xs text-gray-500">${item.count} Posten offen</p>
+                    <p class="text-sm font-bold text-gray-800">${item.name}</p>
+                    <p class="text-xs text-gray-500">${item.count} Posten</p>
                  </div>
-                 <p class="text-base font-extrabold text-gray-800">${item.amount.toFixed(2)} €</p>
+                 <p class="text-lg font-bold text-gray-900">${item.amount.toFixed(2)} €</p>
              `;
         } else {
-            // Dashboard Design (Große Buttons, min-width für gute Touch-Bedienung)
-            div.className = "flex-shrink-0 bg-white border border-gray-200 rounded-xl px-3 py-2 min-w-[110px] shadow-sm text-center flex flex-col justify-center hover:shadow-md transition cursor-pointer";
+            // Dashboard Design (Größer & Lesbarer)
+            div.className = "flex-shrink-0 bg-white border border-gray-200 rounded-xl px-3 py-2 min-w-[120px] shadow-sm text-center flex flex-col justify-center hover:shadow-md transition cursor-pointer h-16";
             
-            // Bei Klick auf eine Kategorie könnte man filtern (optional), hier nur Anzeige
             div.innerHTML = `
-                 <p class="text-[10px] font-bold text-gray-500 uppercase truncate w-full mb-1">${item.name}</p>
-                 <p class="text-lg font-extrabold text-indigo-600 leading-tight">${item.amount.toFixed(2)} €</p>
-                 <p class="text-[10px] text-gray-400 mt-1">${item.count} offen</p>
+                 <p class="text-xs font-bold text-gray-600 uppercase truncate w-full mb-0.5">${item.name}</p>
+                 <p class="text-xl font-black text-indigo-600 leading-none">${item.amount.toFixed(2)} €</p>
+                 <p class="text-[10px] text-gray-400 mt-0.5 font-medium">${item.count} offen</p>
              `;
-             // Optional: Klick filtert die Liste darunter
              div.onclick = () => {
                  const filterDropdown = document.getElementById('payment-filter-category');
-                 // Versuchen die ID zu finden (wir haben hier nur Namen im item, daher kleiner Workaround oder wir speichern ID)
-                 // Da item aus sums kommt, erweitern wir sums oben kurz um die ID:
-                 // (Das machen wir im nächsten Schritt sauberer, für jetzt ist es nur Anzeige)
+                 // Optional: Filtern bei Klick (kannst du später aktivieren)
              };
         }
         return div;
     };
 
-    // 3. Anzeigen (Max 7 im Dashboard, Rest im Modal)
     const MAX_VISIBLE = 7;
     
     // Dashboard füllen
@@ -1741,26 +1730,26 @@ function updateCategoryDashboard() {
         container.appendChild(createBox(item, false));
     });
 
-    // "Mehr"-Button Logik
+    // "Mehr"-Button
     if (sums.length > MAX_VISIBLE) {
         const moreCount = sums.length - MAX_VISIBLE;
         const btn = document.createElement('button');
-        // Style passend zu den anderen Boxen
-        btn.className = "flex-shrink-0 bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2 min-w-[80px] text-indigo-700 font-bold text-xs hover:bg-indigo-100 transition flex flex-col justify-center items-center shadow-sm";
-        btn.innerHTML = `<span class="text-lg">+${moreCount}</span><span>weitere...</span>`;
+        btn.className = "flex-shrink-0 bg-indigo-50 border border-indigo-200 rounded-xl px-2 py-2 min-w-[80px] text-indigo-700 font-bold hover:bg-indigo-100 transition flex flex-col justify-center items-center shadow-sm h-16";
+        btn.innerHTML = `<span class="text-xl leading-none">+${moreCount}</span><span class="text-[10px]">weitere...</span>`;
         btn.onclick = () => {
             document.getElementById('categoryOverviewModal').style.display = 'flex';
         };
         container.appendChild(btn);
     }
 
-    // Modal IMMER komplett füllen
+    // Modal füllen
     if (modalList) {
         sums.forEach(item => {
             modalList.appendChild(createBox(item, true));
         });
     }
 }
+
 
 
 
