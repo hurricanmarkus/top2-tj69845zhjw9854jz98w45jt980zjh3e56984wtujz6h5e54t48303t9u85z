@@ -693,15 +693,31 @@ function openCreateModal(paymentToEdit = null) {
         const partnerId = iAmDebtor ? paymentToEdit.creditorId : paymentToEdit.debtorId;
         const partnerName = iAmDebtor ? paymentToEdit.creditorName : paymentToEdit.debtorName;
 
-        // Prüfen ob ID im Select ist
+        // --- NEU: INTELLIGENTE PARTNER FINDUNG (AUCH GELÖSCHTE) ---
         const optionExists = select.querySelector(`option[value="${partnerId}"]`);
+        
         if (optionExists) {
+            // Alles normal: User oder Kontakt existiert
             select.value = partnerId;
             select.classList.remove('hidden');
             document.getElementById('payment-partner-name-manual').classList.add('hidden');
             document.getElementById('btn-toggle-partner-manual').textContent = "Manueller Name";
             document.getElementById('btn-quick-save-contact').classList.add('hidden');
+        } else if (partnerId && !optionExists) {
+            // ID vorhanden, aber nicht in Liste -> GELÖSCHTER USER / KONTAKT
+            // Wir fügen ihn temporär hinzu, damit man speichern kann!
+            const opt = document.createElement('option');
+            opt.value = partnerId;
+            opt.textContent = `${partnerName} (Gelöscht/Archiviert)`;
+            opt.selected = true;
+            // Ganz oben einfügen
+            select.insertBefore(opt, select.firstChild);
+            
+            select.classList.remove('hidden');
+            document.getElementById('payment-partner-name-manual').classList.add('hidden');
+            document.getElementById('btn-toggle-partner-manual').textContent = "Manueller Name";
         } else {
+            // Gar keine ID (Ur-alt manuell)
             select.value = "";
             select.classList.add('hidden');
             const manualInput = document.getElementById('payment-partner-name-manual');
@@ -710,6 +726,8 @@ function openCreateModal(paymentToEdit = null) {
             document.getElementById('btn-toggle-partner-manual').textContent = "Liste wählen";
             checkManualInputForContact.call(manualInput);
         }
+        // --- ENDE NEU ---
+
         if (paymentToEdit.invoiceNr || paymentToEdit.orderNr || paymentToEdit.notes || paymentToEdit.type === 'transfer') {
             document.getElementById('payment-advanced-options').classList.remove('hidden');
         }
@@ -730,6 +748,7 @@ function openCreateModal(paymentToEdit = null) {
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
 }
+
 
 
 
