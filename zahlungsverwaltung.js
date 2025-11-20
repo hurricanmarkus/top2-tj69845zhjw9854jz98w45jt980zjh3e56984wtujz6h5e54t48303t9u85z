@@ -1391,9 +1391,12 @@ function renderDetailContent(p, isRefresh) {
     const iAmCreditor = p.creditorId === currentUser.mode;
     const iAmCreator = p.createdBy === currentUser.mode;
 
-    // Kategorie Name holen
-    const catName = allCategories.find(c => c.id === p.categoryId)?.name || "Keine Kategorie";
+    // Kategorie Name holen (falls vorhanden, sonst leer)
+    const catName = (typeof allCategories !== 'undefined' && allCategories) 
+        ? (allCategories.find(c => c.id === p.categoryId)?.name || "Keine Kategorie") 
+        : "";
 
+    // --- EDIT BUTTONS (Nur für Ersteller) ---
     let editControls = '';
     if (iAmCreator) {
         editControls = `
@@ -1405,7 +1408,7 @@ function renderDetailContent(p, isRefresh) {
         </div>`;
     }
 
-    // Ratenplan Info
+    // --- RATENPLAN INFO ---
     let installmentInfo = '';
     if (p.installment && p.installment.total > 0) {
         const paidAmount = p.amount - p.remainingAmount;
@@ -1422,45 +1425,65 @@ function renderDetailContent(p, isRefresh) {
             </div>`;
     }
 
-    // NEU: Transaktions-Liste anzeigen
-    if (p.transactions && p.transactions.length > 0) {
-        transactionSection.classList.remove('hidden');
-        transactionList.innerHTML = '';
-        // Wir drehen die Liste um (slice().reverse()), damit neueste oben sind, aber behalten den echten Index für Löschung bei
-        p.transactions.forEach((tx, index) => {
-            // Berechtigung zum Löschen: Ersteller oder Gläubiger (Empfänger)
-            const canDelete = (iAmCreator || iAmCreditor);
+    // --- TRANSAKTIONSVERLAUF (NEU) ---
+    if (transactionSection && transactionList) {
+        if (p.transactions && p.transactions.length > 0) {
+            transactionSection.classList.remove('hidden');
+            transactionList.innerHTML = '';
             
-            const row = document.createElement('div');
-            row.className = "flex justify-between items-center p-2 bg-white rounded border shadow-sm mb-1";
-            const dateStr = tx.date?.toDate ? tx.date.toDate().toLocaleDateString() + ' ' + tx.date.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : new Date(tx.date).toLocaleDateString();
-            
-            row.innerHTML = `
-                <div class="flex flex-col">
-                    <div class="flex items-center gap-2">
-                        <span class="font-bold text-green-700">+ ${parseFloat(tx.amount).toFixed(2)} €</span>
-                        <span class="text-xs text-gray-500 italic">(${tx.user || 'System'})</span>
+            // Liste umdrehen damit neueste oben, aber Index für Löschung behalten wir über das data-attribut oder Logik
+            // Wir iterieren normal und bauen das HTML
+            p.transactions.forEach((tx, index) => {
+                const canDelete = (iAmCreator || iAmCreditor); // Wer darf löschen?
+                
+                const row = document.createElement('div');
+                row.className = "flex justify-between items-center p-2 bg-white rounded border shadow-sm mb-1";
+                
+                // Datum sicher parsen
+                let dateStr = "Datum unbekannt";
+                if (tx.date) {
+                    const d = tx.date.toDate ? tx.date.toDate() : new Date(tx.date);
+                    dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                }
+
+                const txUser = tx.user || 'Unbekannt';
+                const txType = tx.type === 'credit_usage' ? 'Guthaben' : 'Zahlung';
+
+                row.innerHTML = `
+                    <div class="flex flex-col">
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-green-700">+ ${parseFloat(tx.amount).toFixed(2)} €</span>
+                            <span class="text-xs text-gray-500 italic">(${txUser})</span>
+                        </div>
+                        <span class="text-[10px] text-gray-400">${dateStr} | ${txType}</span>
                     </div>
-                    <span class="text-[10px] text-gray-400">${dateStr}</span>
-                </div>
-                ${canDelete ? `<button class="text-red-400 hover:text-red-600 text-xs font-bold delete-tx-btn px-2 py-1 bg-red-50 rounded border border-red-100" title="Zahlung stornieren">Löschen</button>` : ''}
-            `;
-            
-            if (canDelete) {
-                row.querySelector('.delete-tx-btn').addEventListener('click', () => deleteTransaction(p.id, index));
-            }
-            transactionList.appendChild(row);
-        });
-    } else {
-        transactionSection.classList.add('hidden');
+                    ${canDelete ? `<button class="text-red-400 hover:text-red-600 text-xs font-bold delete-tx-btn px-2 py-1 bg-red-50 rounded border border-red-100 hover:bg-red-100 transition" title="Zahlung stornieren">Storno 🗑️</button>` : ''}
+                `;
+                
+                // Event Listener für Löschen Button
+                if (canDelete) {
+                    const btn = row.querySelector('.delete-tx-btn');
+                    btn.onclick = (e) => {
+                        e.stopPropagation(); // Verhindert andere Klicks
+                        deleteTransaction(p.id, index); // Ruft die globale deleteTransaction auf
+                    };
+                }
+                
+                // Neue Einträge oben einfügen
+                transactionList.insertBefore(row, transactionList.firstChild);
+            });
+        } else {
+            transactionSection.classList.add('hidden');
+        }
     }
 
+    // --- CONTENT HTML ---
     content.innerHTML = `
         ${editControls}
         <h2 class="text-2xl font-bold text-gray-800 mb-1 leading-tight">${p.title}</h2>
         <div class="flex flex-wrap gap-2 mb-4 mt-2">
             <span class="px-2 py-1 bg-gray-800 text-white rounded text-xs font-mono tracking-wider">#${p.id.slice(-4).toUpperCase()}</span>
-            <span class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs font-bold">${catName}</span>
+            ${catName ? `<span class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs font-bold">${catName}</span>` : ''}
             ${p.type === 'credit' ? '<span class="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-bold">Guthaben</span>' : ''}
             ${p.startDate ? `<span class="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">Start: ${new Date(p.startDate).toLocaleDateString()}</span>` : ''}
         </div>
@@ -1480,12 +1503,12 @@ function renderDetailContent(p, isRefresh) {
         
         ${p.notes ? `<div class="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-gray-700"><strong>Notiz:</strong><br>${p.notes}</div>` : ''}
         
-        <h4 class="font-bold text-gray-700 mb-2 border-b pb-1 mt-8">Protokoll (Änderungen)</h4>
-        <div class="mb-4 max-h-40 overflow-y-auto text-xs text-gray-500 space-y-1 font-mono">
+        <h4 class="font-bold text-gray-700 mb-2 border-b pb-1 mt-8">System-Protokoll</h4>
+        <div class="mb-4 max-h-40 overflow-y-auto text-xs text-gray-500 space-y-1 font-mono bg-gray-50 p-2 rounded border">
             ${(p.history || []).slice().reverse().map(h => {
                 const d = h.date?.toDate ? h.date.toDate() : new Date(h.date);
                 const dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                return `<div class="border-b border-gray-100 pb-1 last:border-0">
+                return `<div class="border-b border-gray-200 pb-1 last:border-0 mb-1">
                             <span class="font-bold text-gray-700">${dateStr}</span> <span class="text-indigo-600">[${h.user}]</span><br>
                             ${h.info}
                         </div>`;
@@ -1493,38 +1516,43 @@ function renderDetailContent(p, isRefresh) {
         </div>
     `;
 
+    // --- ACTIONS ---
     actions.innerHTML = '';
     if (partialForm) partialForm.classList.add('hidden');
 
     if (p.status === 'open' || p.status === 'pending_approval') {
-        // Ich schulde -> Kann zahlen
+        
+        // Aktionen für SCHULDNER (Ich muss zahlen)
         if (iAmDebtor && p.status === 'open') {
             actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'mark_paid')" class="py-3 px-6 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 w-full sm:w-auto">✅ Alles bezahlt</button>`;
             actions.innerHTML += `<button onclick="showPartialForm()" class="py-3 px-6 bg-blue-100 text-blue-800 font-bold rounded-lg hover:bg-blue-200 w-full sm:w-auto">Teilzahlung</button>`;
         }
-        // Mir wird geschuldet -> Kann bestätigen oder "Alles bezahlt" markieren
+        
+        // Aktionen für GLÄUBIGER (Ich bekomme Geld)
         if (iAmCreditor) {
             if (p.status === 'pending_approval') {
                 actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'confirm_payment')" class="py-3 px-6 bg-green-600 text-white font-bold rounded-lg shadow hover:bg-green-700 flex-grow">Bestätigen</button>`;
                 actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'reject_payment')" class="py-3 px-6 bg-red-100 text-red-600 font-bold rounded-lg hover:bg-red-200 flex-grow">Ablehnen</button>`;
             } else {
-                // KORREKTUR: Button heißt jetzt auch "Alles bezahlt" und Teilzahlung ist da
+                // HIER IST DIE ÄNDERUNG: Auch Gläubiger kann "Alles bezahlt" und "Teilzahlung" machen
                 actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'force_close')" class="py-3 px-6 bg-emerald-600 text-white font-bold rounded-lg shadow hover:bg-emerald-700 w-full sm:w-auto">✅ Alles bezahlt</button>`;
                 actions.innerHTML += `<button onclick="showPartialForm()" class="py-3 px-6 bg-blue-100 text-blue-800 font-bold rounded-lg hover:bg-blue-200 w-full sm:w-auto">Teilzahlung empfangen</button>`;
             }
         }
     }
     
-    // Partial Form sichtbar machen
+    // Partial Form Handler Hook (Global verfügbar machen für HTML onClick)
     window.showPartialForm = function () { if (partialForm) partialForm.classList.remove('hidden'); }
     
+    // Button für Teilzahlung-Submit konfigurieren
     const submitPartialBtn = document.getElementById('btn-submit-partial');
     if (submitPartialBtn) {
-        const newBtn = submitPartialBtn.cloneNode(true);
+        const newBtn = submitPartialBtn.cloneNode(true); // Event Listener resetten
         submitPartialBtn.parentNode.replaceChild(newBtn, submitPartialBtn);
         newBtn.onclick = () => {
             const amt = parseFloat(document.getElementById('partial-amount-input').value);
             if (amt > 0) handlePaymentAction(p.id, 'partial_pay', amt);
+            else alertUser("Bitte Betrag eingeben", "error");
         };
     }
     
