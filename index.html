@@ -1827,7 +1827,7 @@
                 </div>
             </div>
 
-<div id="zahlungsverwaltungView" class="view">
+            <div id="zahlungsverwaltungView" class="view">
                 <div class="back-link-container w-full mb-4 flex justify-between items-center">
                     <div class="flex gap-2">
                         <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition"
@@ -1861,7 +1861,8 @@
                     </button>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+
                     <div class="p-3 bg-red-50 border border-red-200 rounded-lg shadow-sm flex flex-col justify-center">
                         <p class="text-[10px] font-bold text-red-700 uppercase tracking-wide">Ich schulde</p>
                         <p class="text-xl font-extrabold text-gray-800 leading-tight" id="dashboard-my-debt-display">
@@ -1895,39 +1896,29 @@
                     </div>
                 </div>
 
-                <div id="dashboard-categories-container" class="flex gap-2 overflow-x-auto pb-2 mb-2 snap-x">
-                    <p class="text-xs text-gray-400 p-2">Lade Kategorien...</p>
-                </div>
-
-                <div class="flex flex-wrap gap-2 mb-4 bg-white p-2 rounded-lg shadow-sm border">
-                    
-                    <div class="flex gap-2 w-full sm:w-auto flex-grow">
-                        <button id="btn-toggle-selection-mode"
-                            class="p-2 bg-gray-100 text-gray-600 border border-gray-300 rounded-lg shadow-sm hover:bg-gray-200"
-                            title="Zusammenfassen">
-                            ☑️
-                        </button>
-                        <button id="btn-open-settlement"
-                            class="p-2 bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg shadow-sm font-bold hover:bg-indigo-200 whitespace-nowrap text-xs">
-                            ⚖️ Bilanz
-                        </button>
-                        <input type="text" id="payment-search-input" placeholder="Suche..."
-                            class="flex-grow p-2 border rounded-lg shadow-sm text-sm min-w-[100px]">
-                    </div>
-
-                    <div class="flex gap-2 w-full sm:w-auto flex-grow overflow-x-auto">
-                        <select id="payment-filter-status" class="p-2 border rounded-lg bg-white shadow-sm text-xs font-medium flex-grow min-w-[130px]">
-                            </select>
-
-                        <select id="payment-filter-category" class="p-2 border rounded-lg bg-white shadow-sm text-xs font-medium flex-grow min-w-[130px]">
-                             </select>
-
-                         <select id="payment-filter-direction" class="p-2 border rounded-lg bg-white shadow-sm text-xs font-medium flex-shrink-0">
-                            <option value="all">Alle Richtungen</option>
-                            <option value="i_owe">Ich schulde</option>
-                            <option value="owes_me">Schuldet mir</option>
-                        </select>
-                    </div>
+                <div class="flex flex-col md:flex-row gap-2 mb-4">
+                    <button id="btn-toggle-selection-mode"
+                        class="p-2 bg-gray-100 text-gray-600 border border-gray-300 rounded-lg shadow-sm hover:bg-gray-200"
+                        title="Einträge auswählen & zusammenfassen">
+                        ☑️
+                    </button>
+                    <button id="btn-open-settlement"
+                        class="p-2 bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg shadow-sm font-bold hover:bg-indigo-200 whitespace-nowrap">
+                        ⚖️ Bilanz
+                    </button>
+                    <input type="text" id="payment-search-input" placeholder="Suchen (Name, Betreff, ID)..."
+                        class="flex-grow p-2 border rounded-lg shadow-sm">
+                    <select id="payment-filter-status" class="p-2 border rounded-lg bg-white shadow-sm">
+                        <option value="all">Alle Status</option>
+                        <option value="open" selected>Offen & Teilbezahlt</option>
+                        <option value="pending">Wartet auf Bestätigung</option>
+                        <option value="closed">Abgeschlossen / Bezahlt</option>
+                    </select>
+                    <select id="payment-filter-direction" class="p-2 border rounded-lg bg-white shadow-sm">
+                        <option value="all">Alle Richtungen</option>
+                        <option value="i_owe">Ich schulde</option>
+                        <option value="owes_me">Schuldet mir</option>
+                    </select>
                 </div>
 
                 <div id="payments-list-container" class="space-y-3 pb-20">
@@ -2154,12 +2145,6 @@
                                         class="w-full p-3 border border-gray-300 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                                         placeholder="z.B. Rückerstattung Amazon, Miete...">
                                 </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-bold text-gray-700 mb-1">Kategorie</label>
-                                    <select id="payment-category-select" class="w-full p-2 border border-gray-300 rounded-lg bg-white text-sm">
-                                        </select>
-                                </div>
 
                                 <div class="border-t border-gray-100 pt-2">
                                     <button id="btn-toggle-advanced-payment"
@@ -2230,6 +2215,9 @@
                             </div>
                         </div>
 
+
+
+
                         <div class="p-4 border-t bg-gray-50 rounded-b-xl flex justify-end gap-3">
                             <button id="btn-cancel-create-payment"
                                 class="py-2 px-4 bg-gray-200 text-gray-800 font-semibold rounded-lg hover:bg-gray-300">Abbrechen</button>
@@ -2282,8 +2270,7 @@
                 </div>
             </div>
 
-
-<div id="zahlungsverwaltungSettingsView" class="view">
+            <div id="zahlungsverwaltungSettingsView" class="view">
                 <div class="back-link-container w-full mb-4">
                     <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition"
                         data-target="zahlungsverwaltung">
@@ -2301,8 +2288,6 @@
                 <div class="flex gap-2 mb-4 border-b overflow-x-auto">
                     <button id="tab-zv-templates"
                         class="px-4 py-2 font-bold text-indigo-600 border-b-2 border-indigo-600 whitespace-nowrap">Vorlagen</button>
-                    <button id="tab-zv-categories"
-                        class="px-4 py-2 font-bold text-gray-500 hover:text-gray-700 whitespace-nowrap">Kategorien</button>
                     <button id="tab-zv-accounts"
                         class="px-4 py-2 font-bold text-gray-500 hover:text-gray-700 whitespace-nowrap">Meine
                         Konten</button>
@@ -2318,21 +2303,6 @@
                     </div>
                     <div id="zv-templates-list" class="space-y-2">
                         <p class="text-gray-400 text-center py-4">Lade Vorlagen...</p>
-                    </div>
-                </div>
-
-                <div id="content-zv-categories" class="hidden space-y-4">
-                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-pink-500">
-                        <h3 class="text-lg font-bold text-gray-800 mb-2">Kategorien verwalten</h3>
-                        <div class="flex gap-2 mb-4">
-                            <input type="text" id="new-category-input" class="flex-grow p-2 border rounded-lg"
-                                placeholder="Neue Kategorie (z.B. Urlaub, Haushalt)">
-                            <button id="btn-add-category"
-                                class="px-4 py-2 bg-pink-600 text-white font-bold rounded-lg hover:bg-pink-700">+</button>
-                        </div>
-                        <div id="zv-categories-list" class="space-y-2 max-h-80 overflow-y-auto">
-                            <p class="text-center text-gray-400 italic">Lade Kategorien...</p>
-                        </div>
                     </div>
                 </div>
 
@@ -2390,7 +2360,6 @@
                     </div>
                 </div>
             </div>
-            
 
 
             <div id="creditManageModal"

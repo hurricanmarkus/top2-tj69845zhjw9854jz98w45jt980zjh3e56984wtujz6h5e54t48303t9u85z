@@ -19,14 +19,12 @@ import {
 let unsubscribePayments = null;
 let unsubscribeTemplates = null;
 let unsubscribeContacts = null;
-let unsubscribeAccounts = null;
-let unsubscribeCategories = null; // NEU
+let unsubscribeAccounts = null; // NEU
 
 let allPayments = [];
 let allTemplates = [];
 let allContacts = [];
-let allAccounts = [];
-let allCategories = []; // NEU
+let allAccounts = []; // NEU
 
 let currentDetailPaymentId = null;
 let activeSettlementPartnerId = null;
@@ -46,13 +44,11 @@ export function initializeZahlungsverwaltungView() {
         listenForPayments();
         listenForTemplates();
         listenForContacts();
-        listenForAccounts();
-        listenForCategories(); // NEU: Kategorien laden
+        listenForAccounts(); // NEU
     } else {
         renderPaymentList([]);
     }
 }
-
 
 // --- INITIALISIERUNG EINSTELLUNGSANSICHT ---
 export function initializeZahlungsverwaltungSettingsView() {
@@ -67,11 +63,9 @@ export function initializeZahlungsverwaltungSettingsView() {
     openSettingsTab('templates');
     renderTemplateList();
     renderContactList();
-    renderAccountList();
-    renderCategoryList(); // NEU: Liste laden
+    renderAccountList(); // NEU
     renderCreditOverview();
 }
-
 
 // --- SETUP EVENT LISTENERS ---
 function setupEventListeners() {
@@ -91,7 +85,7 @@ function setupEventListeners() {
     document.getElementById('btn-cancel-create-payment')?.addEventListener('click', closeCreateModal);
     document.getElementById('btn-save-payment')?.addEventListener('click', savePayment);
     
-    // Toggle Logic im Create Modal
+    // Toggle Logic im Create Modal (Sender/Empfänger manuell)
     document.getElementById('btn-toggle-debtor-manual')?.addEventListener('click', () => toggleInputMode('debtor'));
     document.getElementById('btn-toggle-creditor-manual')?.addEventListener('click', () => toggleInputMode('creditor'));
     document.getElementById('toggle-split-mode')?.addEventListener('change', (e) => toggleSplitMode(e.target.checked));
@@ -106,10 +100,9 @@ function setupEventListeners() {
     document.getElementById('btn-toggle-advanced-payment')?.addEventListener('click', () => document.getElementById('payment-advanced-options').classList.toggle('hidden'));
     document.getElementById('payment-is-installment')?.addEventListener('change', (e) => document.getElementById('installment-options').classList.toggle('hidden', !e.target.checked));
     
-    // Filter & Listen (NEU: Category Listener)
+    // Filter & Listen
     document.getElementById('payment-search-input')?.addEventListener('input', applyFilters);
     document.getElementById('payment-filter-status')?.addEventListener('change', applyFilters);
-    document.getElementById('payment-filter-category')?.addEventListener('change', applyFilters); // NEU
     document.getElementById('payment-filter-direction')?.addEventListener('change', applyFilters);
     
     document.getElementById('btn-close-detail-modal')?.addEventListener('click', closeDetailModal);
@@ -149,6 +142,7 @@ function setupEventListeners() {
     document.getElementById('payment-template-select')?.addEventListener('change', applySelectedTemplate);
     document.getElementById('btn-save-as-template')?.addEventListener('click', saveCurrentAsTemplate);
 
+    // Dashboard Guthaben Box Klick
     document.getElementById('btn-dashboard-credits')?.addEventListener('click', () => {
         navigate('zahlungsverwaltungSettings');
         setTimeout(() => openSettingsTab('credits'), 50);
@@ -162,16 +156,14 @@ function setupSettingsListeners() {
     document.getElementById('tab-zv-templates')?.addEventListener('click', () => openSettingsTab('templates'));
     document.getElementById('tab-zv-contacts')?.addEventListener('click', () => openSettingsTab('contacts'));
     document.getElementById('tab-zv-credits')?.addEventListener('click', () => openSettingsTab('credits'));
-    document.getElementById('tab-zv-accounts')?.addEventListener('click', () => openSettingsTab('accounts'));
-    document.getElementById('tab-zv-categories')?.addEventListener('click', () => openSettingsTab('categories')); // NEU
+    document.getElementById('tab-zv-accounts')?.addEventListener('click', () => openSettingsTab('accounts')); // NEU
 
     document.getElementById('zv-templates-list')?.addEventListener('click', (e) => {
         if (e.target.closest('.delete-tpl-btn')) deleteTemplate(e.target.closest('.delete-tpl-btn').dataset.id);
     });
 
     document.getElementById('btn-add-contact-setting')?.addEventListener('click', addContactFromSettings);
-    document.getElementById('btn-add-account-setting')?.addEventListener('click', addAccountFromSettings);
-    document.getElementById('btn-add-category')?.addEventListener('click', addCategory); // NEU
+    document.getElementById('btn-add-account-setting')?.addEventListener('click', addAccountFromSettings); // NEU
 
     // Listen Aktionen
     const contactList = document.getElementById('zv-contacts-list');
@@ -195,25 +187,18 @@ function setupSettingsListeners() {
         }
     }
 
-    const categoryList = document.getElementById('zv-categories-list'); // NEU
-    if (categoryList) {
-        categoryList.onclick = (e) => {
-             if (e.target.closest('.delete-cat-btn')) deleteCategory(e.target.closest('.delete-cat-btn').dataset.id);
-             if (e.target.closest('.edit-cat-btn')) renameCategory(e.target.closest('.edit-cat-btn').dataset.id);
-        }
-    }
-
     document.getElementById('btn-execute-migration')?.addEventListener('click', executeMigration);
+
     document.getElementById('btn-add-my-credit')?.addEventListener('click', () => openCreditModal('add', 'my'));
     document.getElementById('btn-add-other-credit')?.addEventListener('click', () => openCreditModal('add', 'other'));
 
     document.getElementById('btn-cancel-credit')?.addEventListener('click', () => {
         const modal = document.getElementById('creditManageModal');
-        modal.classList.add('hidden'); modal.style.display = 'none'; 
+        modal.classList.add('hidden');
+        modal.style.display = 'none'; 
     });
     document.getElementById('btn-save-credit')?.addEventListener('click', executeCreditAction);
 }
-
 
 
 // --- DATENBANK LISTENER ---
@@ -277,44 +262,6 @@ function listenForAccounts() {
         if (document.getElementById('zahlungsverwaltungSettingsView').classList.contains('active')) renderAccountList();
     });
 }
-
-
-
-// NEU: Kategorien Listener + Seeding
-function listenForCategories() {
-    if (unsubscribeCategories) unsubscribeCategories();
-    const catRef = collection(db, 'artifacts', appId, 'public', 'data', 'payment-categories');
-    // Lade alle Kategorien
-    unsubscribeCategories = onSnapshot(catRef, (snapshot) => {
-        allCategories = [];
-        snapshot.forEach(doc => allCategories.push({ id: doc.id, ...doc.data() }));
-        
-        // Wenn keine Kategorien existieren, erstelle die Standards
-        if (allCategories.length === 0) {
-             seedDefaultCategories();
-        }
-        
-        updateCategoryFilterDropdown(); // Dropdown im Dashboard
-        renderCategoryList(); // Liste in den Settings
-        updateDashboard(allPayments); // Dashboard Zahlen aktualisieren
-    });
-}
-
-async function seedDefaultCategories() {
-    const catRef = collection(db, 'artifacts', appId, 'public', 'data', 'payment-categories');
-    const defaults = ["Rückerstattung", "Diverse"];
-    
-    const batch = writeBatch(db);
-    defaults.forEach(name => {
-        const newRef = doc(catRef);
-        batch.set(newRef, { name: name, isSystem: true, createdAt: serverTimestamp() });
-    });
-    try { await batch.commit(); } catch(e) { console.error("Seeding failed", e); }
-}
-
-
-
-
 
 // --- SELECTION & MERGE LOGIK (Zusammenfassen) ---
 
@@ -677,11 +624,10 @@ function openCreateModal(paymentToEdit = null) {
     if (!modal) return;
 
     updateTemplateDropdown();
-    updateCategorySelectInModal(); // NEU
-
     const tplSelect = document.getElementById('payment-template-select');
     if(tplSelect) tplSelect.value = "";
 
+    // Reset UI Values
     document.getElementById('payment-start-date').value = new Date().toISOString().split('T')[0]; 
     document.getElementById('payment-deadline').value = '';
     document.getElementById('payment-title').value = '';
@@ -696,72 +642,69 @@ function openCreateModal(paymentToEdit = null) {
     document.getElementById('payment-is-installment').checked = false;
     document.getElementById('installment-options').classList.add('hidden');
     
+    // Inputs und Modi zurücksetzen
     toggleInputMode('debtor', false);
     toggleInputMode('creditor', false);
     toggleSplitMode(false);
     document.getElementById('toggle-split-mode').checked = false;
 
+    // DROPDOWNS BEFÜLLEN
     fillDropdown(document.getElementById('payment-debtor-select'), 'debtor');
     fillDropdown(document.getElementById('payment-creditor-select'), 'creditor');
 
     if (paymentToEdit) {
+        // EDIT MODUS: Direkt zu den Details
         document.getElementById('scenario-selector-container').classList.add('hidden');
         document.getElementById('transaction-details-container').classList.remove('hidden');
+
         document.getElementById('edit-payment-id').value = paymentToEdit.id;
         document.getElementById('payment-title').value = paymentToEdit.title;
         document.getElementById('payment-amount').value = paymentToEdit.amount;
         document.getElementById('payment-start-date').value = paymentToEdit.startDate || '';
         document.getElementById('payment-deadline').value = paymentToEdit.deadline || '';
         
-        // Kategorie setzen
-        if (paymentToEdit.categoryId) document.getElementById('payment-category-select').value = paymentToEdit.categoryId;
-
+        // Debtor setzen
         const debSelect = document.getElementById('payment-debtor-select');
-        let foundDeb = setSelectValueWithPrefix(debSelect, paymentToEdit.debtorId);
-        if (!foundDeb && paymentToEdit.debtorId) { toggleInputMode('debtor', true); document.getElementById('payment-debtor-manual').value = paymentToEdit.debtorName; }
+        let foundDeb = false;
+        const prefixes = ['USR', 'CON', 'ACC'];
+        for(let p of prefixes) {
+            if (debSelect.querySelector(`option[value="${p}:${paymentToEdit.debtorId}"]`)) {
+                debSelect.value = `${p}:${paymentToEdit.debtorId}`;
+                foundDeb = true; break;
+            }
+        }
+        if (!foundDeb && paymentToEdit.debtorId) {
+             toggleInputMode('debtor', true);
+             document.getElementById('payment-debtor-manual').value = paymentToEdit.debtorName;
+        }
 
+        // Creditor setzen
         const credSelect = document.getElementById('payment-creditor-select');
-        let foundCred = setSelectValueWithPrefix(credSelect, paymentToEdit.creditorId);
-        if (!foundCred) { toggleInputMode('creditor', true); document.getElementById('payment-creditor-manual').value = paymentToEdit.creditorName; }
+        let foundCred = false;
+        for(let p of prefixes) {
+            if (credSelect.querySelector(`option[value="${p}:${paymentToEdit.creditorId}"]`)) {
+                credSelect.value = `${p}:${paymentToEdit.creditorId}`;
+                foundCred = true; break;
+            }
+        }
+        if (!foundCred) {
+             toggleInputMode('creditor', true);
+             document.getElementById('payment-creditor-manual').value = paymentToEdit.creditorName;
+        }
         updateCreditorHint();
         
         if (paymentToEdit.invoiceNr || paymentToEdit.orderNr || paymentToEdit.notes || paymentToEdit.type === 'transfer') {
             document.getElementById('payment-advanced-options').classList.remove('hidden');
-            document.getElementById('payment-invoice-nr').value = paymentToEdit.invoiceNr || '';
-            document.getElementById('payment-order-nr').value = paymentToEdit.orderNr || '';
-            document.getElementById('payment-notes').value = paymentToEdit.notes || '';
-            document.getElementById('payment-type').value = paymentToEdit.type || 'debt';
         }
     } else {
+        // NEU ERSTELLEN: Zeige Auswahl-Buttons
         document.getElementById('edit-payment-id').value = "";
         document.getElementById('scenario-selector-container').classList.remove('hidden');
         document.getElementById('transaction-details-container').classList.add('hidden');
     }
-    modal.classList.remove('hidden'); modal.style.display = 'flex';
-}
 
-function setSelectValueWithPrefix(select, id) {
-    const prefixes = ['USR', 'CON', 'ACC'];
-    for(let p of prefixes) {
-        if (select.querySelector(`option[value="${p}:${id}"]`)) {
-            select.value = `${p}:${id}`; 
-            return true;
-        }
-    }
-    return false;
-}
-
-function updateCategorySelectInModal() {
-    const select = document.getElementById('payment-category-select');
-    if (!select) return;
-    select.innerHTML = '<option value="">- Keine Kategorie -</option>';
-    
-    allCategories.forEach(cat => {
-        const opt = document.createElement('option');
-        opt.value = cat.id;
-        opt.textContent = cat.name;
-        select.appendChild(opt);
-    });
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
 }
 
 
@@ -937,152 +880,139 @@ function addSplitManualPartner() {
 }
 
 async function savePayment() {
-    const btn = document.getElementById('btn-save-payment'); setButtonLoading(btn, true);
+    const btn = document.getElementById('btn-save-payment');
+    setButtonLoading(btn, true);
+
     try {
         const editId = document.getElementById('edit-payment-id').value;
         const title = document.getElementById('payment-title').value.trim();
         const amount = parseFloat(document.getElementById('payment-amount').value);
         const startDate = document.getElementById('payment-start-date').value;
         const deadline = document.getElementById('payment-deadline').value;
-        const categoryId = document.getElementById('payment-category-select').value;
         
-        if (!title || isNaN(amount) || !startDate) throw new Error("Pflichtfelder fehlen.");
+        if (!title || isNaN(amount) || !startDate) throw new Error("Pflichtfelder fehlen (Titel, Betrag, Datum).");
 
-        // 1. GLÄUBIGER
+        // 1. GLÄUBIGER (Creditor) ermitteln
         let creditorId = null, creditorName = "";
         const credManual = !document.getElementById('payment-creditor-manual').classList.contains('hidden');
+        
         if (credManual) {
             creditorName = document.getElementById('payment-creditor-manual').value.trim();
             if(!creditorName) throw new Error("Gläubiger fehlt.");
         } else {
             const val = document.getElementById('payment-creditor-select').value;
-            if (!val) throw new Error("Empfänger fehlt.");
-            creditorId = val.split(':')[1]; 
-            creditorName = document.getElementById('payment-creditor-select').options[document.getElementById('payment-creditor-select').selectedIndex].text.replace(" (Ich)", "");
+            if (!val) throw new Error("Bitte einen Empfänger (Gläubiger) auswählen.");
+            // Value ist z.B. "USR:123" oder "ACC:456"
+            const parts = val.split(':');
+            // Wir speichern nur die ID (ohne Prefix) in der DB, oder?
+            // Um Konflikte zu vermeiden, speichern wir besser die nackte ID, 
+            // aber wir müssen wissen, was es ist? 
+            // Fürs Erste: Wir speichern die ID. Das System erkennt später an der ID (User vs Account), was es ist.
+            creditorId = parts[1]; 
+            creditorName = document.getElementById('payment-creditor-select').options[document.getElementById('payment-creditor-select').selectedIndex].text;
         }
 
-        // 2. SCHULDNER
+        // 2. SCHULDNER (Debtor) ermitteln
         let debtorId = null, debtorName = "";
         const splitMode = document.getElementById('toggle-split-mode').checked;
         
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
 
+        // Basis-Daten für alle Einträge
         const baseData = {
-            title, amount, isTBD: false,
+            title, amount, remainingAmount: amount, isTBD: false,
             startDate, deadline: deadline || null,
             status: 'open', type: document.getElementById('payment-type').value,
-            creditorId, creditorName, categoryId,
+            creditorId, creditorName,
             invoiceNr: document.getElementById('payment-invoice-nr').value,
             orderNr: document.getElementById('payment-order-nr').value,
             notes: document.getElementById('payment-notes').value,
-            createdBy: currentUser.mode
+            createdAt: serverTimestamp(), createdBy: currentUser.mode
         };
 
         if (!splitMode) {
+            // --- EINZEL-ZAHLUNG ---
             const debManual = !document.getElementById('payment-debtor-manual').classList.contains('hidden');
             if (debManual) {
                 debtorName = document.getElementById('payment-debtor-manual').value.trim();
                 if(!debtorName) throw new Error("Schuldner fehlt.");
             } else {
                 const val = document.getElementById('payment-debtor-select').value;
-                if (!val) throw new Error("Schuldner fehlt.");
-                debtorId = val.split(':')[1];
-                debtorName = document.getElementById('payment-debtor-select').options[document.getElementById('payment-debtor-select').selectedIndex].text.replace(" (Ich)", "");
+                if (!val) throw new Error("Bitte einen Schuldner auswählen.");
+                const parts = val.split(':');
+                debtorId = parts[1];
+                debtorName = document.getElementById('payment-debtor-select').options[document.getElementById('payment-debtor-select').selectedIndex].text;
             }
 
-            const involved = [currentUser.mode];
+            // Involved Array füllen (damit es in Dashboards auftaucht)
+            const involved = [currentUser.mode]; // Ersteller sieht es immer
             if (creditorId && !involved.includes(creditorId)) involved.push(creditorId);
             if (debtorId && !involved.includes(debtorId)) involved.push(debtorId);
             
+            const finalData = { 
+                ...baseData, 
+                debtorId, 
+                debtorName, 
+                involvedUserIds: involved, 
+                history: [{date: new Date(), action: 'created', user: currentUser.displayName, info: 'Erstellt'}] 
+            };
+            
             if (editId) {
-                // --- EDIT MODUS MIT PROTOKOLL ---
-                const docRef = doc(paymentsRef, editId);
-                
-                // Wir müssen das alte Dokument lesen für den Diff (Protokoll)
-                // Da wir hier in einer async funktion sind, können wir await nutzen.
-                const oldSnap = await getDoc(docRef);
-                const oldData = oldSnap.data();
-                
-                let changes = [];
-                if (oldData.title !== title) changes.push(`Titel: "${oldData.title}" -> "${title}"`);
-                if (parseFloat(oldData.amount) !== amount) changes.push(`Gesamtbetrag: ${oldData.amount}€ -> ${amount}€`);
-                if (oldData.deadline !== deadline) changes.push(`Frist: ${oldData.deadline||'Keine'} -> ${deadline||'Keine'}`);
-                if (oldData.categoryId !== categoryId) changes.push(`Kategorie geändert`);
-                
-                // Restbetrag anpassen, wenn sich der Gesamtbetrag geändert hat
-                let newRemaining = oldData.remainingAmount;
-                if (amount !== oldData.amount) {
-                    const paidSoFar = oldData.amount - oldData.remainingAmount;
-                    newRemaining = amount - paidSoFar;
-                    if (newRemaining < 0) newRemaining = 0; // Safety
-                }
-
-                const updateData = { 
-                    ...baseData, 
-                    debtorId, debtorName, involvedUserIds: involved,
-                    remainingAmount: newRemaining, // Update remaining based on new total
-                    // createdAt NICHT überschreiben
-                };
-                delete updateData.createdAt;
-
-                if (changes.length > 0) {
-                    // Protokoll Eintrag
-                    const historyEntry = {
-                        date: new Date(), 
-                        action: 'edited', 
-                        user: currentUser.displayName, 
-                        info: `Bearbeitet: ${changes.join(', ')}`
-                    };
-                    // Array Union workaround via spread in batch
-                    updateData.history = [...(oldData.history || []), historyEntry];
-                }
-
-                batch.update(docRef, updateData);
-
+                // Beim Bearbeiten History behalten wir eigentlich bei, aber hier überschreiben wir vereinfacht.
+                // Besser: Nur Update fields
+                delete finalData.createdAt; // Nicht überschreiben
+                delete finalData.history; // History nicht komplett plätten, sondern ergänzen (geht hier im Batch schwer ohne Read).
+                // Workaround: Wir setzen history neu. In Produktion würde man arrayUnion nehmen.
+                batch.update(doc(paymentsRef, editId), finalData);
             } else {
-                // --- CREATE MODUS ---
-                const finalData = { 
-                    ...baseData, 
-                    remainingAmount: amount, // Am Anfang ist Rest = Gesamt
-                    debtorId, debtorName, involvedUserIds: involved, 
-                    createdAt: serverTimestamp(),
-                    history: [{date: new Date(), action: 'created', user: currentUser.displayName, info: 'Erstellt'}] 
-                };
                 batch.set(doc(paymentsRef), finalData);
             }
 
         } else {
-             // SPLIT LOGIK BLEIBT GLEICH (Kein Edit Support für Split Gruppen aktuell)
+            // --- SPLIT ZAHLUNG ---
              if (editId) throw new Error("Split-Einträge können nicht als Gruppe bearbeitet werden.");
+             
              const checkboxes = document.querySelectorAll('.split-cb:checked');
              if (checkboxes.length === 0) throw new Error("Keine Personen für Split gewählt.");
+             
              const share = amount / checkboxes.length;
              
              checkboxes.forEach(cb => {
-                 const pId = cb.value; const pName = cb.dataset.name;
+                 const pId = cb.value; // ID (User oder Kontakt)
+                 const pName = cb.dataset.name;
+                 
+                 // Involved Array
                  const involved = [currentUser.mode];
                  if (creditorId && !involved.includes(creditorId)) involved.push(creditorId);
+                 // Prüfen ob pId eine echte ID ist (nicht MANUAL_...)
                  if (!pId.startsWith('MANUAL_') && !involved.includes(pId)) involved.push(pId);
 
                  const entry = { 
-                     ...baseData, amount: share, remainingAmount: share, 
-                     debtorId: pId.startsWith('MANUAL_') ? null : pId, debtorName: pName, 
-                     involvedUserIds: involved, title: `${title} (Split)`, 
-                     createdAt: serverTimestamp(),
+                     ...baseData, 
+                     amount: share, 
+                     remainingAmount: share, 
+                     debtorId: pId.startsWith('MANUAL_') ? null : pId, 
+                     debtorName: pName, 
+                     involvedUserIds: involved, 
+                     title: `${title} (Split)`, 
                      history: [{date: new Date(), action: 'created_split', user: currentUser.displayName, info: `Split-Anteil von ${share.toFixed(2)}€`}] 
                  };
-                 batch.set(doc(paymentsRef), entry); 
+                 batch.set(doc(paymentsRef), entry); // Neue ID generieren
              });
         }
 
         await batch.commit();
         alertUser("Gespeichert!", "success");
         closeCreateModal();
-    } catch(e) { console.error(e); alertUser(e.message, "error"); } finally { setButtonLoading(btn, false); }
+
+    } catch(e) { 
+        console.error(e); 
+        alertUser(e.message, "error"); 
+    } finally { 
+        setButtonLoading(btn, false); 
+    }
 }
-
-
 
 
 
@@ -1319,96 +1249,38 @@ window.deletePayment = async function(id) {
 };
 
 window.openPaymentDetail = function(id, isRefresh = false) {
-    const p = allPayments.find(x => x.id === id); if (!p) return;
+    const p = allPayments.find(x => x.id === id);
+    if (!p) return;
     currentDetailPaymentId = id;
-    const modal = document.getElementById('paymentDetailModal');
-    const content = document.getElementById('payment-detail-content');
-    const actions = document.getElementById('payment-detail-actions');
-    const iAmCreator = p.createdBy === currentUser.mode;
-    const iAmDebtor = p.debtorId === currentUser.mode;
-    const iAmCreditor = p.creditorId === currentUser.mode;
-
-    // Kategorie Name holen
-    const catName = allCategories.find(c => c.id === p.categoryId)?.name || "Keine Kategorie";
-
-    let editControls = iAmCreator ? `<div class="flex justify-end gap-2 mb-4 no-print flex-wrap border-b pb-2"><button onclick="openAdjustAmountModal('${p.id}')" class="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-bold">€ Anpassen</button><button onclick="openSplitModal('${p.id}')" class="px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs font-bold">Split</button><button onclick="editPayment('${p.id}')" class="px-2 py-1 bg-indigo-100 text-indigo-700 rounded text-xs font-bold">Bearbeiten</button><button onclick="deletePayment('${p.id}')" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-bold">Löschen</button></div>` : '';
-
-    content.innerHTML = `
-        ${editControls}
-        <h2 class="text-2xl font-bold text-gray-800 leading-tight">${p.title}</h2>
-        <div class="flex flex-wrap gap-2 mb-4 mt-2">
-            <span class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs font-bold">${catName}</span>
-            ${p.type === 'credit' ? '<span class="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-bold">Guthaben</span>' : ''}
-            ${p.startDate ? `<span class="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">${new Date(p.startDate).toLocaleDateString()}</span>` : ''}
-        </div>
-        <div class="grid grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
-            <div><p class="text-xs font-bold text-gray-500 uppercase">Schuldner</p><p class="text-lg font-semibold text-gray-900">${p.debtorName}</p></div>
-            <div class="text-right"><p class="text-xs font-bold text-gray-500 uppercase">Gläubiger</p><p class="text-lg font-semibold text-gray-900">${p.creditorName}</p></div>
-        </div>
-        <div class="mb-6 text-center p-4 border-2 border-dashed border-gray-200 rounded-xl ${p.remainingAmount <= 0.01 ? 'bg-green-50 border-green-300' : ''}">
-            <p class="text-sm text-gray-500 uppercase font-bold tracking-wide">Offen</p>
-            <p class="text-5xl font-extrabold text-gray-800 mt-1">${p.isTBD ? 'TBD' : parseFloat(p.remainingAmount).toFixed(2) + ' €'}</p>
-        </div>
-        ${p.notes ? `<div class="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-gray-700"><strong>Notiz:</strong><br>${p.notes}</div>` : ''}
-    `;
-    
-    actions.innerHTML = '';
-    if (p.status === 'open' || p.status === 'pending_approval') {
-        if (iAmDebtor && p.status === 'open') {
-            actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'mark_paid')" class="py-3 px-6 bg-blue-600 text-white font-bold rounded-lg shadow w-full sm:w-auto">✅ Alles bezahlt</button>`;
-            actions.innerHTML += `<button onclick="showPartialForm()" class="py-3 px-6 bg-blue-100 text-blue-800 font-bold rounded-lg w-full sm:w-auto">Teilzahlung</button>`;
-        }
-        if (iAmCreditor) {
-            if (p.status === 'pending_approval') {
-                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'confirm_payment')" class="py-3 px-6 bg-green-600 text-white font-bold rounded-lg shadow flex-grow">Bestätigen</button><button onclick="handlePaymentAction('${p.id}', 'reject_payment')" class="py-3 px-6 bg-red-100 text-red-600 font-bold rounded-lg flex-grow">Ablehnen</button>`;
-            } else {
-                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'force_close')" class="py-3 px-6 bg-emerald-600 text-white font-bold rounded-lg shadow w-full sm:w-auto">Erledigt</button>`;
-            }
-        }
-    }
-    // Partial Form Handler Hook
-    window.showPartialForm = function () { document.getElementById('partial-payment-form').classList.remove('hidden'); }
-    const submitPartialBtn = document.getElementById('btn-submit-partial');
-    if(submitPartialBtn) {
-        const newBtn = submitPartialBtn.cloneNode(true); submitPartialBtn.parentNode.replaceChild(newBtn, submitPartialBtn);
-        newBtn.onclick = () => { const amt = parseFloat(document.getElementById('partial-amount-input').value); if (amt > 0) handlePaymentAction(p.id, 'partial_pay', amt); };
-    }
-
-    if (!isRefresh) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
-}
+    renderDetailContent(p, isRefresh);
+};
 
 function renderDetailContent(p, isRefresh) {
     const modal = document.getElementById('paymentDetailModal');
     const content = document.getElementById('payment-detail-content');
     const actions = document.getElementById('payment-detail-actions');
     const partialForm = document.getElementById('partial-payment-form');
-    const transactionSection = document.getElementById('transaction-history-section'); 
-    const transactionList = document.getElementById('transaction-list'); 
+    const transactionSection = document.getElementById('transaction-history-section'); // NEU
+    const transactionList = document.getElementById('transaction-list'); // NEU
 
     if (!modal || !content || !actions) return;
 
     const iAmDebtor = p.debtorId === currentUser.mode;
     const iAmCreditor = p.creditorId === currentUser.mode;
     const iAmCreator = p.createdBy === currentUser.mode;
+    const shortId = p.id.slice(-4).toUpperCase();
 
-    // Kategorie Name holen (falls vorhanden, sonst leer)
-    const catName = (typeof allCategories !== 'undefined' && allCategories) 
-        ? (allCategories.find(c => c.id === p.categoryId)?.name || "Keine Kategorie") 
-        : "";
-
-    // --- EDIT BUTTONS (Nur für Ersteller) ---
     let editControls = '';
     if (iAmCreator) {
         editControls = `
         <div class="flex justify-end gap-2 mb-4 no-print border-b pb-2 flex-wrap">
             <button onclick="openAdjustAmountModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-bold">€ Anpassen</button>
-            <button onclick="openSplitModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 text-sm font-bold">Split</button>
+            <button onclick="openSplitModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 text-sm font-bold">Aufteilen</button>
             <button onclick="editPayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-sm font-bold">Bearbeiten</button>
             <button onclick="deletePayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-bold">Löschen</button>
         </div>`;
     }
 
-    // --- RATENPLAN INFO ---
     let installmentInfo = '';
     if (p.installment && p.installment.total > 0) {
         const paidAmount = p.amount - p.remainingAmount;
@@ -1425,67 +1297,38 @@ function renderDetailContent(p, isRefresh) {
             </div>`;
     }
 
-    // --- TRANSAKTIONSVERLAUF (NEU) ---
-    if (transactionSection && transactionList) {
-        if (p.transactions && p.transactions.length > 0) {
-            transactionSection.classList.remove('hidden');
-            transactionList.innerHTML = '';
-            
-            // Liste umdrehen damit neueste oben, aber Index für Löschung behalten wir über das data-attribut oder Logik
-            // Wir iterieren normal und bauen das HTML
-            p.transactions.forEach((tx, index) => {
-                const canDelete = (iAmCreator || iAmCreditor); // Wer darf löschen?
-                
-                const row = document.createElement('div');
-                row.className = "flex justify-between items-center p-2 bg-white rounded border shadow-sm mb-1";
-                
-                // Datum sicher parsen
-                let dateStr = "Datum unbekannt";
-                if (tx.date) {
-                    const d = tx.date.toDate ? tx.date.toDate() : new Date(tx.date);
-                    dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                }
-
-                const txUser = tx.user || 'Unbekannt';
-                const txType = tx.type === 'credit_usage' ? 'Guthaben' : 'Zahlung';
-
-                row.innerHTML = `
-                    <div class="flex flex-col">
-                        <div class="flex items-center gap-2">
-                            <span class="font-bold text-green-700">+ ${parseFloat(tx.amount).toFixed(2)} €</span>
-                            <span class="text-xs text-gray-500 italic">(${txUser})</span>
-                        </div>
-                        <span class="text-[10px] text-gray-400">${dateStr} | ${txType}</span>
-                    </div>
-                    ${canDelete ? `<button class="text-red-400 hover:text-red-600 text-xs font-bold delete-tx-btn px-2 py-1 bg-red-50 rounded border border-red-100 hover:bg-red-100 transition" title="Zahlung stornieren">Storno 🗑️</button>` : ''}
-                `;
-                
-                // Event Listener für Löschen Button
-                if (canDelete) {
-                    const btn = row.querySelector('.delete-tx-btn');
-                    btn.onclick = (e) => {
-                        e.stopPropagation(); // Verhindert andere Klicks
-                        deleteTransaction(p.id, index); // Ruft die globale deleteTransaction auf
-                    };
-                }
-                
-                // Neue Einträge oben einfügen
-                transactionList.insertBefore(row, transactionList.firstChild);
-            });
-        } else {
-            transactionSection.classList.add('hidden');
-        }
+    // NEU: Transaktions-Liste anzeigen
+    if (p.transactions && p.transactions.length > 0) {
+        transactionSection.classList.remove('hidden');
+        transactionList.innerHTML = '';
+        p.transactions.forEach((tx, index) => {
+            const canDelete = (iAmCreator || iAmCreditor);
+            const row = document.createElement('div');
+            row.className = "flex justify-between items-center p-2 bg-white rounded border shadow-sm";
+            const dateStr = tx.date?.toDate ? tx.date.toDate().toLocaleDateString() : new Date(tx.date).toLocaleDateString();
+            row.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-green-700">+ ${parseFloat(tx.amount).toFixed(2)} €</span>
+                    <span class="text-xs text-gray-400">| ${dateStr}</span>
+                    <span class="text-xs text-gray-500 italic">(${tx.type === 'credit_usage' ? 'Guthaben' : 'Zahlung'})</span>
+                </div>
+                ${canDelete ? `<button class="text-red-400 hover:text-red-600 text-xs font-bold delete-tx-btn px-2 py-1 bg-red-50 rounded border border-red-100">Löschen</button>` : ''}
+            `;
+            // Event Listener für Löschen
+            if (canDelete) row.querySelector('.delete-tx-btn').addEventListener('click', () => deleteTransaction(p.id, index));
+            transactionList.appendChild(row);
+        });
+    } else {
+        transactionSection.classList.add('hidden');
     }
 
-    // --- CONTENT HTML ---
     content.innerHTML = `
         ${editControls}
         <h2 class="text-2xl font-bold text-gray-800 mb-1 leading-tight">${p.title}</h2>
         <div class="flex flex-wrap gap-2 mb-4 mt-2">
-            <span class="px-2 py-1 bg-gray-800 text-white rounded text-xs font-mono tracking-wider">#${p.id.slice(-4).toUpperCase()}</span>
-            ${catName ? `<span class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs font-bold">${catName}</span>` : ''}
+            <span class="px-2 py-1 bg-gray-800 text-white rounded text-xs font-mono tracking-wider">#${shortId}</span>
             ${p.type === 'credit' ? '<span class="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-bold">Guthaben</span>' : ''}
-            ${p.startDate ? `<span class="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">Start: ${new Date(p.startDate).toLocaleDateString()}</span>` : ''}
+            ${p.startDate ? `<span class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs">Start: ${new Date(p.startDate).toLocaleDateString()}</span>` : ''}
         </div>
         
         <div class="grid grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
@@ -1498,67 +1341,50 @@ function renderDetailContent(p, isRefresh) {
         <div class="mb-6 text-center p-4 border-2 border-dashed border-gray-200 rounded-xl ${p.remainingAmount <= 0.01 ? 'bg-green-50 border-green-300' : ''}">
             <p class="text-sm text-gray-500 uppercase font-bold tracking-wide">Offener Betrag</p>
             <p class="text-5xl font-extrabold text-gray-800 mt-1">${p.isTBD ? 'TBD' : parseFloat(p.remainingAmount).toFixed(2) + ' €'}</p>
-            ${!p.isTBD && p.amount > p.remainingAmount ? `<p class="text-xs text-green-600 font-semibold mt-1">Bereits bezahlt: ${(p.amount - p.remainingAmount).toFixed(2)} €</p>` : ''}
+            ${!p.isTBD && p.amount > p.remainingAmount ? `<p class="text-xs text-green-600 font-semibold mt-1">Bezahlt: ${(p.amount - p.remainingAmount).toFixed(2)} €</p>` : ''}
         </div>
         
         ${p.notes ? `<div class="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-gray-700"><strong>Notiz:</strong><br>${p.notes}</div>` : ''}
         
-        <h4 class="font-bold text-gray-700 mb-2 border-b pb-1 mt-8">System-Protokoll</h4>
-        <div class="mb-4 max-h-40 overflow-y-auto text-xs text-gray-500 space-y-1 font-mono bg-gray-50 p-2 rounded border">
-            ${(p.history || []).slice().reverse().map(h => {
+        <h4 class="font-bold text-gray-700 mb-2 border-b pb-1 mt-8">System-Log</h4>
+        <div class="mb-4 max-h-40 overflow-y-auto text-xs text-gray-400">
+            ${(p.history || []).map(h => {
                 const d = h.date?.toDate ? h.date.toDate() : new Date(h.date);
-                const dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                return `<div class="border-b border-gray-200 pb-1 last:border-0 mb-1">
-                            <span class="font-bold text-gray-700">${dateStr}</span> <span class="text-indigo-600">[${h.user}]</span><br>
-                            ${h.info}
-                        </div>`;
+                return `<div class="mb-1">${d.toLocaleDateString()} - ${h.info}</div>`;
             }).join('')}
         </div>
     `;
 
-    // --- ACTIONS ---
     actions.innerHTML = '';
     if (partialForm) partialForm.classList.add('hidden');
 
     if (p.status === 'open' || p.status === 'pending_approval') {
-        
-        // Aktionen für SCHULDNER (Ich muss zahlen)
         if (iAmDebtor && p.status === 'open') {
             actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'mark_paid')" class="py-3 px-6 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 w-full sm:w-auto">✅ Alles bezahlt</button>`;
             actions.innerHTML += `<button onclick="showPartialForm()" class="py-3 px-6 bg-blue-100 text-blue-800 font-bold rounded-lg hover:bg-blue-200 w-full sm:w-auto">Teilzahlung</button>`;
         }
-        
-        // Aktionen für GLÄUBIGER (Ich bekomme Geld)
         if (iAmCreditor) {
             if (p.status === 'pending_approval') {
                 actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'confirm_payment')" class="py-3 px-6 bg-green-600 text-white font-bold rounded-lg shadow hover:bg-green-700 flex-grow">Bestätigen</button>`;
                 actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'reject_payment')" class="py-3 px-6 bg-red-100 text-red-600 font-bold rounded-lg hover:bg-red-200 flex-grow">Ablehnen</button>`;
             } else {
-                // HIER IST DIE ÄNDERUNG: Auch Gläubiger kann "Alles bezahlt" und "Teilzahlung" machen
-                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'force_close')" class="py-3 px-6 bg-emerald-600 text-white font-bold rounded-lg shadow hover:bg-emerald-700 w-full sm:w-auto">✅ Alles bezahlt</button>`;
+                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'force_close')" class="py-3 px-6 bg-emerald-600 text-white font-bold rounded-lg shadow hover:bg-emerald-700 w-full sm:w-auto">Als erledigt markieren</button>`;
                 actions.innerHTML += `<button onclick="showPartialForm()" class="py-3 px-6 bg-blue-100 text-blue-800 font-bold rounded-lg hover:bg-blue-200 w-full sm:w-auto">Teilzahlung empfangen</button>`;
             }
         }
     }
-    
-    // Partial Form Handler Hook (Global verfügbar machen für HTML onClick)
     window.showPartialForm = function () { if (partialForm) partialForm.classList.remove('hidden'); }
-    
-    // Button für Teilzahlung-Submit konfigurieren
     const submitPartialBtn = document.getElementById('btn-submit-partial');
     if (submitPartialBtn) {
-        const newBtn = submitPartialBtn.cloneNode(true); // Event Listener resetten
+        const newBtn = submitPartialBtn.cloneNode(true);
         submitPartialBtn.parentNode.replaceChild(newBtn, submitPartialBtn);
         newBtn.onclick = () => {
             const amt = parseFloat(document.getElementById('partial-amount-input').value);
             if (amt > 0) handlePaymentAction(p.id, 'partial_pay', amt);
-            else alertUser("Bitte Betrag eingeben", "error");
         };
     }
-    
     if (!isRefresh) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
 }
-
 
 
 
@@ -1575,30 +1401,16 @@ function closeDetailModal() {
 function applyFilters() {
     const searchTerm = document.getElementById('payment-search-input')?.value.toLowerCase() || '';
     const statusFilter = document.getElementById('payment-filter-status')?.value || 'all';
-    const categoryFilter = document.getElementById('payment-filter-category')?.value || 'all'; // NEU
     const dirFilter = document.getElementById('payment-filter-direction')?.value || 'all';
 
     let filtered = allPayments.filter(p => {
-        // Grundfilter
-        if (p.type === 'credit') return false; // Credits raus
-        
-        // Text Suche
         const textMatch = (p.title && p.title.toLowerCase().includes(searchTerm)) || (p.debtorName && p.debtorName.toLowerCase().includes(searchTerm)) || (p.creditorName && p.creditorName.toLowerCase().includes(searchTerm));
         if (!textMatch) return false;
-
-        // Status Filter
         if (statusFilter !== 'all') {
             if (statusFilter === 'open' && p.status !== 'open') return false;
             if (statusFilter === 'pending' && p.status !== 'pending_approval') return false;
             if (statusFilter === 'closed' && (p.status !== 'paid' && p.status !== 'cancelled')) return false;
         }
-
-        // NEU: Kategorie Filter
-        if (categoryFilter !== 'all') {
-            if (p.categoryId !== categoryFilter) return false;
-        }
-
-        // Richtung Filter
         if (dirFilter !== 'all') {
             const iAmDebtor = p.debtorId === currentUser.mode;
             if (dirFilter === 'i_owe' && !iAmDebtor) return false;
@@ -1607,35 +1419,65 @@ function applyFilters() {
         return true;
     });
 
-    filtered.sort((a, b) => (b.createdAt?.toDate ? b.createdAt.toDate() : new Date()) - (a.createdAt?.toDate ? a.createdAt.toDate() : new Date()));
+    filtered.sort((a, b) => {
+        if (a.status === 'open' && b.status !== 'open') return -1;
+        if (a.status !== 'open' && b.status === 'open') return 1;
+        return (b.createdAt?.toDate ? b.createdAt.toDate() : new Date()) - (a.createdAt?.toDate ? a.createdAt.toDate() : new Date());
+    });
     renderPaymentList(filtered);
     updateDashboard(allPayments);
 }
-
 
 function renderPaymentList(payments) {
     const container = document.getElementById('payments-list-container');
     if (!container) return;
     container.innerHTML = '';
-    if (payments.length === 0) { container.innerHTML = `<div class="text-center p-8 bg-gray-50 rounded-xl text-gray-500">Keine Einträge.</div>`; return; }
+    
+    // Filtere Guthaben (Credits) hier raus!
+    const visiblePayments = payments.filter(p => p.type !== 'credit');
+    
+    if (visiblePayments.length === 0) { container.innerHTML = `<div class="text-center p-8 bg-gray-50 rounded-xl text-gray-500">Keine Einträge.</div>`; return; }
 
-    payments.forEach(p => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); 
+
+    visiblePayments.forEach(p => {
         const iAmDebtor = p.debtorId === currentUser.mode;
         const partnerName = iAmDebtor ? p.creditorName : p.debtorName;
         const prefix = iAmDebtor ? "Ich schulde an" : "Schuldet mir";
         const colorClass = iAmDebtor ? "text-red-600" : "text-emerald-600";
         const bgClass = iAmDebtor ? "bg-red-50 border-red-200" : "bg-emerald-50 border-emerald-200";
         
-        // Kategorie Name finden und Badge erstellen
-        const catName = allCategories.find(c => c.id === p.categoryId)?.name || "";
-        const catBadge = catName ? `<span class="text-[10px] bg-white px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 mr-2 font-semibold">${catName}</span>` : '';
-
         let statusBadge = '';
-        if (p.status === 'open') statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-blue-100 text-blue-800">Offen</span>`;
+        let timeBadge = '';
+
+        if (p.status === 'open') {
+            statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-blue-100 text-blue-800">Offen</span>`;
+
+            if (p.deadline) {
+                const deadlineDate = new Date(p.deadline);
+                deadlineDate.setHours(0,0,0,0);
+                
+                const diffTime = deadlineDate - today;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                if (diffDays < 0) {
+                    timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white">Überfällig (${Math.abs(diffDays)} Tage)</span>`;
+                } else if (diffDays === 0) {
+                    timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-orange-500 text-white">Fällig: HEUTE</span>`;
+                } else if (diffDays <= 3) {
+                    timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-800">Fällig in ${diffDays} Tagen</span>`;
+                } else {
+                    timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500">Fällig in ${diffDays} Tagen</span>`;
+                }
+            }
+        } 
         else if (p.status === 'pending_approval') statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-yellow-100 text-yellow-800">Wartet</span>`;
         else if (p.status === 'paid') statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-800">Bezahlt</span>`;
-        
-        const checkboxHtml = isSelectionMode ? `<div class="mr-3 flex items-center"><input type="checkbox" class="payment-select-cb h-5 w-5 text-indigo-600" value="${p.id}" ${selectedPaymentIds.has(p.id) ? 'checked' : ''}></div>` : '';
+        else if (p.status === 'cancelled') statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-gray-100 text-gray-600">Storniert</span>`;
+
+        const checkboxHtml = isSelectionMode ?
+            `<div class="mr-3 flex items-center"><input type="checkbox" class="payment-select-cb h-5 w-5 text-indigo-600" value="${p.id}" ${selectedPaymentIds.has(p.id) ? 'checked' : ''}></div>` : '';
 
         const html = `
         <div class="payment-card-item card p-4 rounded-xl border ${bgClass} shadow-sm hover:shadow-md transition cursor-pointer flex items-center" data-id="${p.id}">
@@ -1643,84 +1485,62 @@ function renderPaymentList(payments) {
             <div class="flex-grow">
                 <div class="flex justify-between items-start">
                     <div class="flex flex-col">
-                        <div class="flex items-center mb-1">
-                            ${catBadge}
-                            <h4 class="font-bold text-gray-800 leading-tight text-sm sm:text-base">${p.title}</h4>
-                        </div>
-                        ${p.startDate ? `<span class="text-[10px] text-gray-400">Vom: ${new Date(p.startDate).toLocaleDateString()}</span>` : ''}
+                        <h4 class="font-bold text-gray-800 leading-tight">${p.title}</h4>
+                        ${p.startDate ? `<span class="text-[10px] text-gray-400 mt-0.5">Vom: ${new Date(p.startDate).toLocaleDateString()}</span>` : ''}
                     </div>
-                    ${statusBadge}
+                    <div class="flex flex-col items-end gap-1">
+                        ${statusBadge}
+                        ${timeBadge}
+                    </div>
                 </div>
                 <p class="text-xs text-gray-500 mt-2">${prefix} <strong>${partnerName}</strong></p>
                 <div class="mt-1 flex items-center gap-2"><span class="text-xl font-extrabold ${colorClass}">${p.isTBD ? 'TBD' : parseFloat(p.remainingAmount).toFixed(2) + ' €'}</span></div>
             </div>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6 text-gray-400 ml-2"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
         </div>`;
         container.innerHTML += html;
     });
 }
 
 
-
 function updateDashboard(payments) {
-    let myDebt = 0; let owedToMe = 0; let totalCredits = 0;
-    let myDebtCount = 0; let owedToMeCount = 0;
-
-    // NEU: Kategorien Summen
-    const catSums = {}; // { catId: { name, count, amount } }
+    let myDebt = 0; let myDebtCount = 0; 
+    let owedToMe = 0; let owedToMeCount = 0;
+    
+    // NEU: Variablen für Guthaben
+    let totalCredits = 0;
 
     payments.forEach(p => {
         if (p.status !== 'open' && p.status !== 'pending_approval') return;
+        
         const amount = p.isTBD ? 0 : parseFloat(p.remainingAmount);
-
+        
         if (p.type === 'credit') {
-            if (p.creditorId === currentUser.mode) totalCredits += amount;
+            // GUTHABEN BERECHNUNG
+            // Wenn ICH der creditor bin (ich habe Guthaben beim anderen) -> Positiv für mich
+            if (p.creditorId === currentUser.mode) {
+                totalCredits += amount;
+            }
+            // Wenn ICH der debtor bin (der andere hat Guthaben bei mir) -> Eigentlich negativ für mich, 
+            // aber in der Anzeige "Aktives Guthaben" zeigen wir meistens das, was ich HABEN, nicht was ich schulde.
+            // Oder wir machen eine Netto-Rechnung.
+            // Einfachheitshalber: "Aktives Guthaben" = Was ich bei anderen gut habe.
         } else {
+            // NORMALE SCHULDEN
             if (p.debtorId === currentUser.mode) { myDebt += amount; myDebtCount++; } 
             else if (p.creditorId === currentUser.mode) { owedToMe += amount; owedToMeCount++; }
-            
-            // Kategorie Logik (Summiert alle offenen Beträge dieser Kategorie)
-            if (p.categoryId) {
-                if (!catSums[p.categoryId]) {
-                    const c = allCategories.find(x => x.id === p.categoryId);
-                    catSums[p.categoryId] = { name: c ? c.name : 'Unbekannt', count: 0, amount: 0 };
-                }
-                catSums[p.categoryId].count++;
-                catSums[p.categoryId].amount += amount;
-            }
         }
     });
 
-    // Dashboard Standard Zahlen
-    document.getElementById('dashboard-my-debt-display').textContent = myDebt.toFixed(2) + " €";
-    document.getElementById('dashboard-my-debt-detail').textContent = `in ${myDebtCount} offenen Posten`;
-    document.getElementById('dashboard-owe-me-display').textContent = owedToMe.toFixed(2) + " €";
-    document.getElementById('dashboard-owe-me-detail').textContent = `aus ${owedToMeCount} offenen Posten`;
-    document.getElementById('dashboard-credit-display').textContent = totalCredits.toFixed(2) + " €";
-
-    // Dashboard Kategorien Rendern (Horizontal Scroll)
-    const catContainer = document.getElementById('dashboard-categories-container');
-    if (catContainer) {
-        catContainer.innerHTML = '';
-        const sortedKeys = Object.keys(catSums).sort((a,b) => catSums[b].amount - catSums[a].amount);
-        
-        if (sortedKeys.length === 0) {
-            catContainer.innerHTML = '<span class="text-xs text-gray-400 p-1">Keine offenen Kategorien.</span>';
-        } else {
-            sortedKeys.forEach(catId => {
-                const data = catSums[catId];
-                const box = document.createElement('div');
-                box.className = "flex-shrink-0 bg-white border rounded-lg p-2 min-w-[100px] shadow-sm flex flex-col justify-center snap-start";
-                box.innerHTML = `
-                    <span class="text-[10px] text-gray-500 font-bold uppercase truncate">${data.name}</span>
-                    <span class="text-sm font-extrabold text-gray-800">${data.amount.toFixed(2)} €</span>
-                    <span class="text-[10px] text-gray-400">${data.count} offen</span>
-                `;
-                catContainer.appendChild(box);
-            });
-        }
-    }
+    const mD = document.getElementById('dashboard-my-debt-display'); if (mD) mD.textContent = myDebt.toFixed(2) + " €";
+    const mDD = document.getElementById('dashboard-my-debt-detail'); if (mDD) mDD.textContent = `in ${myDebtCount} offenen Posten`;
+    const oD = document.getElementById('dashboard-owe-me-display'); if (oD) oD.textContent = owedToMe.toFixed(2) + " €";
+    const oDD = document.getElementById('dashboard-owe-me-detail'); if (oDD) oDD.textContent = `aus ${owedToMeCount} offenen Posten`;
+    
+    // NEU: Guthaben Anzeige aktualisieren
+    const cD = document.getElementById('dashboard-credit-display'); 
+    if (cD) cD.textContent = totalCredits.toFixed(2) + " €";
 }
-
 
 
 // --- LOGIK FÜR ZAHLUNGEN UND ÜBERZAHLUNG ---
@@ -1755,28 +1575,40 @@ async function executePayment(id, action, amount) {
     let transaction = null;
 
     if (action === 'mark_paid') { 
-        // "Alles Bezahlt" Logik
-        const autoApprove = !USERS[p.creditorId] || (p.creditorId === currentUser.mode);
-        amount = parseFloat(p.remainingAmount);
+        // Logik: Wer muss das genehmigen?
+        // Normalerweise derjenige, der das Geld bekommt (Creditor).
+        // Ist der Creditor ein System-User?
+        const creditorIsSystemUser = USERS[p.creditorId] && USERS[p.creditorId].isActive;
+        const iAmCreditor = p.creditorId === currentUser.mode;
+
+        // Wir genehmigen SOFORT, wenn:
+        // 1. Der Gläubiger KEIN System-User ist (Gast kann nicht einloggen zum Genehmigen)
+        // 2. ODER: Ich selbst der Gläubiger bin (ich bestätige ja gerade, dass ich Geld habe)
+        // 3. (Hier könnte man später noch 'userSettings.autoApprove' einbauen)
+        
+        const autoApprove = !creditorIsSystemUser || iAmCreditor;
 
         if (autoApprove) {
+            // SOFORT BEZAHLT
+            amount = parseFloat(p.remainingAmount);
             newStatus = 'paid';
             updateData.remainingAmount = 0;
-            logEntry = "Als bezahlt markiert (Auto-Confirm).";
-            // Transaction anlegen
+            logEntry = creditorIsSystemUser 
+                ? "Als erledigt markiert." 
+                : "Als bezahlt markiert (Auto-Genehmigt, da Gast).";
+            
+            // WICHTIG: Wenn wir auto-genehmigen, müssen wir auch die Transaktion schreiben!
             if (amount > 0) transaction = { date: new Date(), amount: amount, type: 'payment', user: currentUser.displayName };
+
         } else {
-            // Pending
+            // WARTEN AUF GENEHMIGUNG
+            amount = parseFloat(p.remainingAmount); 
             newStatus = 'pending_approval'; 
             logEntry = "Als bezahlt markiert (Wartet auf Bestätigung)."; 
-            // HIER NOCH KEINE Transaktion, erst bei Confirm!
         }
 
     } else if (action === 'confirm_payment' || action === 'force_close') { 
-        amount = parseFloat(p.remainingAmount); 
-        newStatus = 'paid'; 
-        updateData.remainingAmount = 0; 
-        logEntry = "Alles bezahlt (Abgeschlossen).";
+        amount = parseFloat(p.remainingAmount); newStatus = 'paid'; updateData.remainingAmount = 0; logEntry = "Abgeschlossen.";
         if (amount > 0) transaction = { date: new Date(), amount: amount, type: 'payment', user: currentUser.displayName };
     
     } else if (action === 'reject_payment') { 
@@ -1786,14 +1618,14 @@ async function executePayment(id, action, amount) {
         const newRemaining = parseFloat(p.remainingAmount) - amount; 
         updateData.remainingAmount = newRemaining < 0 ? 0 : newRemaining;
         if (newRemaining <= 0.001) newStatus = 'paid'; 
-        logEntry = `Teilzahlung empfangen: ${amount.toFixed(2)}€.`;
+        logEntry = `Teilzahlung ${amount.toFixed(2)}€.`;
         transaction = { date: new Date(), amount: amount, type: 'payment', user: currentUser.displayName };
     }
 
     updateData.status = newStatus;
     updateData.history = [...(p.history || []), { date: new Date(), action, user: currentUser.displayName, info: logEntry }];
     
-    // NEU: Transaktion speichern
+    // NEU: Transaktion speichern (falls vorhanden)
     if (transaction) {
         updateData.transactions = [...(p.transactions || []), transaction];
     }
@@ -1802,11 +1634,11 @@ async function executePayment(id, action, amount) {
         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', id), updateData); 
         alertUser("Gespeichert.", "success"); 
         if (action !== 'partial_pay' && action !== 'mark_paid') closeDetailModal(); 
+        // Wenn es auto-approved wurde (mark_paid -> paid), schließen wir das Fenster auch besser
         if (action === 'mark_paid' && newStatus === 'paid') closeDetailModal();
 
     } catch (e) { console.error(e); alertUser("Fehler: " + e.message, "error"); }
 }
-
 
 
 async function resolveOverpayment(decision) {
@@ -1951,85 +1783,12 @@ function fillDropdown(selectElement, type) {
     selectElement.appendChild(grpContacts);
 }
 
-
-async function addCategory() {
-    const input = document.getElementById('new-category-input');
-    const name = input.value.trim();
-    if (!name) return;
-
-    // Prüfen ob existiert
-    if (allCategories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
-        alertUser("Kategorie existiert bereits.", "error");
-        return;
-    }
-
-    try {
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'payment-categories'), {
-            name: name,
-            isSystem: false,
-            createdAt: serverTimestamp()
-        });
-        alertUser("Kategorie erstellt!", "success");
-        input.value = '';
-    } catch(e) { console.error(e); alertUser("Fehler.", "error"); }
-}
-
-async function deleteCategory(id) {
-    const cat = allCategories.find(c => c.id === id);
-    if (!cat) return;
-    if (cat.isSystem) { alertUser("System-Kategorien können nicht gelöscht werden.", "error"); return; }
-    if (!confirm(`Kategorie "${cat.name}" löschen?`)) return;
-
-    try {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payment-categories', id));
-        alertUser("Gelöscht.", "success");
-    } catch(e) { console.error(e); }
-}
-
-async function renameCategory(id) {
-    const cat = allCategories.find(c => c.id === id);
-    if (!cat) return;
-    if (cat.isSystem) { alertUser("System-Kategorien können nicht umbenannt werden.", "error"); return; }
-    
-    const newName = prompt("Neuer Name:", cat.name);
-    if (newName && newName.trim()) {
-         try {
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payment-categories', id), { name: newName.trim() });
-        } catch(e) { console.error(e); }
-    }
-}
-
-function renderCategoryList() {
-    const container = document.getElementById('zv-categories-list');
-    if (!container) return;
-    container.innerHTML = '';
-    if (allCategories.length === 0) return;
-
-    allCategories.forEach(c => {
-        const isSys = c.isSystem;
-        const div = document.createElement('div');
-        div.className = "flex justify-between items-center p-3 bg-white rounded shadow-sm border";
-        div.innerHTML = `
-            <span class="font-bold ${isSys ? 'text-gray-500' : 'text-gray-800'}">${c.name} ${isSys ? '(System)' : ''}</span>
-            ${!isSys ? `
-            <div class="flex gap-1">
-                <button class="edit-cat-btn p-1.5 text-indigo-500 hover:bg-indigo-50 rounded" data-id="${c.id}">✏️</button>
-                <button class="delete-cat-btn p-1.5 text-red-500 hover:bg-red-50 rounded" data-id="${c.id}">🗑️</button>
-            </div>` : ''}
-        `;
-        container.appendChild(div);
-    });
-}
-
-
-
 // --- TABS LOGIK ---
 function openSettingsTab(tabName) {
-    const tabs = ['templates', 'contacts', 'credits', 'accounts', 'categories']; // "categories" hinzugefügt
+    const tabs = ['templates', 'contacts', 'credits', 'accounts'];
     tabs.forEach(t => {
         const btn = document.getElementById(`tab-zv-${t}`);
         const content = document.getElementById(`content-zv-${t}`);
-        if (!btn || !content) return;
         if (t === tabName) {
             btn.className = "px-4 py-2 font-bold text-indigo-600 border-b-2 border-indigo-600 whitespace-nowrap";
             content.classList.remove('hidden');
@@ -2039,7 +1798,6 @@ function openSettingsTab(tabName) {
         }
     });
 }
-
 
 // --- KONTEN VERWALTUNG (NEU) ---
 async function addAccountFromSettings() {
@@ -2768,85 +2526,5 @@ async function executeMigration() {
         alertUser("Fehler bei der Migration: " + e.message, "error");
     } finally {
         setButtonLoading(btn, false);
-    }
-}
-
-
-function updateCategoryFilterDropdown() {
-    const select = document.getElementById('payment-filter-category');
-    if (!select) return;
-    
-    const currentVal = select.value;
-
-    select.innerHTML = '';
-    const allOpt = document.createElement('option');
-    allOpt.value = 'all'; allOpt.textContent = 'Alle Kategorien';
-    select.appendChild(allOpt);
-
-    const grp = document.createElement('optgroup');
-    grp.label = "[KATEGORIEN]";
-    
-    allCategories.forEach(cat => {
-        const opt = document.createElement('option');
-        opt.value = cat.id;
-        opt.textContent = cat.name;
-        grp.appendChild(opt);
-    });
-    select.appendChild(grp);
-    
-    select.value = currentVal || 'all';
-    
-    // Auch Status-Dropdown neu bauen für fettgedruckte Überschrift
-    const statusSelect = document.getElementById('payment-filter-status');
-    if (statusSelect && statusSelect.children.length <= 1) {
-        statusSelect.innerHTML = '';
-        const sAll = document.createElement('option'); sAll.value = 'all'; sAll.textContent = 'Alle Status'; statusSelect.appendChild(sAll);
-        const sGrp = document.createElement('optgroup'); sGrp.label = "[BEZAHLSTATUS]";
-        sGrp.innerHTML = `
-            <option value="open">Offen / Teilbezahlt</option>
-            <option value="pending">Wartet auf Bestätigung</option>
-            <option value="closed">Abgeschlossen / Bezahlt</option>
-        `;
-        statusSelect.appendChild(sGrp);
-    }
-}
-
-// Transaktion löschen (Stornieren)
-window.deleteTransaction = async function(paymentId, txIndex) {
-    const p = allPayments.find(x => x.id === paymentId);
-    if (!p || !p.transactions) return;
-    
-    const tx = p.transactions[txIndex];
-    if (!confirm(`Transaktion vom ${new Date(tx.date.toDate()).toLocaleDateString()} über ${tx.amount}€ wirklich löschen? Der Betrag wird wieder offen.`)) return;
-
-    const amountToAddBack = parseFloat(tx.amount);
-
-    try {
-        // 1. Transaktion aus Array entfernen
-        const newTransactions = p.transactions.filter((_, i) => i !== txIndex);
-        
-        // 2. Betrag wieder draufrechnen
-        const newRemaining = parseFloat(p.remainingAmount) + amountToAddBack;
-
-        // 3. Status prüfen (wenn es paid war, ist es jetzt wieder open)
-        const newStatus = 'open'; // Immer öffnen bei Storno, sicherheitshalber
-
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', paymentId), {
-            remainingAmount: newRemaining,
-            status: newStatus,
-            transactions: newTransactions,
-            history: [...(p.history || []), { 
-                date: new Date(), 
-                action: 'tx_deleted', 
-                user: currentUser.displayName, 
-                info: `Storno: Zahlung von ${amountToAddBack.toFixed(2)}€ gelöscht.` 
-            }]
-        });
-        
-        alertUser("Zahlung storniert.", "success");
-        // Detailansicht aktualisiert sich automatisch durch den Listener
-    } catch (e) { 
-        console.error(e); 
-        alertUser("Fehler beim Löschen.", "error"); 
     }
 }
