@@ -1581,10 +1581,12 @@ function renderPaymentList(payments) {
     if (!container) return;
     container.innerHTML = '';
     
-    // Filtere Guthaben (Credits) hier raus!
     const visiblePayments = payments.filter(p => p.type !== 'credit');
     
-    if (visiblePayments.length === 0) { container.innerHTML = `<div class="text-center p-8 bg-gray-50 rounded-xl text-gray-500">Keine Einträge.</div>`; return; }
+    if (visiblePayments.length === 0) { 
+        container.innerHTML = `<div class="col-span-2 text-center p-8 bg-gray-50 rounded-xl text-gray-500">Keine Einträge.</div>`; 
+        return; 
+    }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0); 
@@ -1592,127 +1594,164 @@ function renderPaymentList(payments) {
     visiblePayments.forEach(p => {
         const iAmDebtor = p.debtorId === currentUser.mode;
         const partnerName = iAmDebtor ? p.creditorName : p.debtorName;
-        const prefix = iAmDebtor ? "Ich schulde an" : "Schuldet mir";
+        // Kurzform für Mobile
+        const prefix = iAmDebtor ? "an" : "von"; 
         const colorClass = iAmDebtor ? "text-red-600" : "text-emerald-600";
         const bgClass = iAmDebtor ? "bg-red-50 border-red-200" : "bg-emerald-50 border-emerald-200";
         
-// NEU: Kategorie Name holen
         let catName = "";
         const sysCat = SYSTEM_CATEGORIES.find(c => c.id === p.categoryId);
         if (sysCat) catName = sysCat.name;
         else {
             const customCat = allCategories.find(c => c.id === p.categoryId);
-            if (customCat) catName = customCat.name;
-            else catName = "Diverse"; // Fallback
+            catName = customCat ? customCat.name : "Diverse";
         }
 
-        let statusBadge = '';
-        let timeBadge = '';
-
+        // Status Anzeige vereinfachen für Grid
+        let statusDot = '';
         if (p.status === 'open') {
-            statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-blue-100 text-blue-800">Offen</span>`;
-
             if (p.deadline) {
-                const deadlineDate = new Date(p.deadline);
-                deadlineDate.setHours(0,0,0,0);
-                
+                const deadlineDate = new Date(p.deadline); deadlineDate.setHours(0,0,0,0);
                 const diffTime = deadlineDate - today;
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-                if (diffDays < 0) {
-                    timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white">Überfällig (${Math.abs(diffDays)} Tage)</span>`;
-                } else if (diffDays === 0) {
-                    timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-orange-500 text-white">Fällig: HEUTE</span>`;
-                } else if (diffDays <= 3) {
-                    timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-800">Fällig in ${diffDays} Tagen</span>`;
-                } else {
-                    timeBadge = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500">Fällig in ${diffDays} Tagen</span>`;
-                }
+                if (diffDays < 0) statusDot = `<div class="w-2 h-2 rounded-full bg-red-600" title="Überfällig"></div>`;
+                else if (diffDays === 0) statusDot = `<div class="w-2 h-2 rounded-full bg-orange-500" title="Heute fällig"></div>`;
+                else statusDot = `<div class="w-2 h-2 rounded-full bg-blue-500" title="Offen"></div>`;
+            } else {
+                statusDot = `<div class="w-2 h-2 rounded-full bg-blue-500" title="Offen"></div>`;
             }
         } 
-        else if (p.status === 'pending_approval') statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-yellow-100 text-yellow-800">Wartet</span>`;
-        else if (p.status === 'paid') statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-800">Bezahlt</span>`;
-        else if (p.status === 'cancelled') statusBadge = `<span class="px-2 py-1 rounded text-xs font-bold bg-gray-100 text-gray-600">Storniert</span>`;
+        else if (p.status === 'pending_approval') statusDot = `<div class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" title="Wartet"></div>`;
+        else if (p.status === 'paid') statusDot = `<div class="w-2 h-2 rounded-full bg-green-500" title="Bezahlt"></div>`;
+        else statusDot = `<div class="w-2 h-2 rounded-full bg-gray-400" title="Storniert"></div>`;
 
         const checkboxHtml = isSelectionMode ?
-            `<div class="mr-3 flex items-center"><input type="checkbox" class="payment-select-cb h-5 w-5 text-indigo-600" value="${p.id}" ${selectedPaymentIds.has(p.id) ? 'checked' : ''}></div>` : '';
+            `<div class="absolute top-2 right-2"><input type="checkbox" class="payment-select-cb h-4 w-4 text-indigo-600" value="${p.id}" ${selectedPaymentIds.has(p.id) ? 'checked' : ''}></div>` : '';
 
+        // KOMPAKTERES KARTEN-DESIGN
         const html = `
-        <div class="payment-card-item card p-4 rounded-xl border ${bgClass} shadow-sm hover:shadow-md transition cursor-pointer flex items-center" data-id="${p.id}">
+        <div class="payment-card-item relative p-2 rounded-lg border ${bgClass} shadow-sm hover:shadow-md transition cursor-pointer flex flex-col h-full" data-id="${p.id}">
             ${checkboxHtml}
-            <div class="flex-grow">
-                <div class="flex justify-between items-start">
-<div class="flex flex-col">
-                        <h4 class="font-bold text-gray-800 leading-tight">${p.title}</h4>
-                        <div class="flex gap-2 mt-1">
-                             ${p.startDate ? `<span class="text-[10px] text-gray-400">Vom: ${new Date(p.startDate).toLocaleDateString()}</span>` : ''}
-                             <span class="text-[10px] text-gray-500 font-semibold px-1.5 bg-white rounded border border-gray-200">${catName}</span>
-                        </div>
-                    </div>
-                    <div class="flex flex-col items-end gap-1">
-                        ${statusBadge}
-                        ${timeBadge}
-                    </div>
-                </div>
-                <p class="text-xs text-gray-500 mt-2">${prefix} <strong>${partnerName}</strong></p>
-                <div class="mt-1 flex items-center gap-2"><span class="text-xl font-extrabold ${colorClass}">${p.isTBD ? 'TBD' : parseFloat(p.remainingAmount).toFixed(2) + ' €'}</span></div>
+            
+            <div class="flex justify-between items-start mb-1">
+                <span class="text-[10px] text-gray-500 font-semibold bg-white/60 px-1 rounded border border-gray-100 truncate max-w-[70%]">${catName}</span>
+                ${statusDot}
             </div>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6 text-gray-400 ml-2"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" /></svg>
+            
+            <h4 class="text-xs font-bold text-gray-800 leading-tight mb-1 line-clamp-2 h-8">${p.title}</h4>
+            
+            <div class="mt-auto">
+                <p class="text-[10px] text-gray-500 truncate">${prefix} <strong class="text-gray-700">${partnerName}</strong></p>
+                <div class="font-extrabold text-sm ${colorClass} mt-0.5">
+                    ${p.isTBD ? 'TBD' : parseFloat(p.remainingAmount).toFixed(2) + ' €'}
+                </div>
+            </div>
         </div>`;
         container.innerHTML += html;
     });
 }
 
-// --- KATEGORIE DASHBOARD (KLARNA STYLE) ---
+// --- KATEGORIE DASHBOARD (Limitierte Ansicht + Popup) ---
 function updateCategoryDashboard() {
     const container = document.getElementById('category-dashboard-container');
+    const modalList = document.getElementById('category-overview-list');
     if (!container) return;
+    
     container.innerHTML = '';
+    if (modalList) modalList.innerHTML = '';
 
-    // Zusammenzählen
-    const sums = {};
-    
-    // Initialisierung
-    SYSTEM_CATEGORIES.forEach(c => sums[c.id] = { name: c.name, count: 0, amount: 0 });
-    allCategories.forEach(c => sums[c.id] = { name: c.name, count: 0, amount: 0 });
+    // 1. Daten sammeln
+    const sums = [];
+    const allCats = [...SYSTEM_CATEGORIES, ...allCategories]; // Array aller Kats
 
-    // Durch alle Zahlungen loopen (nur offene)
-    allPayments.forEach(p => {
-        if (p.status === 'open' || p.status === 'pending_approval') {
-             if (p.type === 'credit') return; // Guthaben ignorieren
-             
-             const catId = p.categoryId || 'cat_misc'; // Fallback Diverse
-             
-             // Wenn Kategorie gelöscht wurde oder nicht existiert -> Diverse
-             if (!sums[catId]) {
-                 if (!sums['cat_misc']) sums['cat_misc'] = { name: 'Diverse', count: 0, amount: 0 };
-                 sums['cat_misc'].count++;
-                 sums['cat_misc'].amount += parseFloat(p.remainingAmount || 0);
-             } else {
-                 sums[catId].count++;
-                 sums[catId].amount += parseFloat(p.remainingAmount || 0);
-             }
+    // Werte berechnen
+    allCats.forEach(cat => {
+        let count = 0;
+        let amount = 0;
+        
+        allPayments.forEach(p => {
+            if ((p.status === 'open' || p.status === 'pending_approval') && p.type !== 'credit') {
+                // Falls p.categoryId leer oder ungültig ist, zählen wir es zu 'cat_misc'
+                const pCat = p.categoryId || 'cat_misc';
+                if (pCat === cat.id) {
+                    count++;
+                    amount += parseFloat(p.remainingAmount || 0);
+                }
+                // Sonderfall: Wenn Eintrag eine gelöschte ID hat, zählen wir es zu Diverse
+                if (cat.id === 'cat_misc' && p.categoryId && !allCats.find(c => c.id === p.categoryId)) {
+                     count++;
+                     amount += parseFloat(p.remainingAmount || 0);
+                }
+            }
+        });
+
+        if (count > 0) {
+            sums.push({ name: cat.name, count: count, amount: amount });
         }
     });
 
-    // Rendern
-    Object.values(sums).forEach(item => {
-        if (item.count > 0) { // Nur Kategorien mit offenen Posten anzeigen
-             const div = document.createElement('div');
-             div.className = "flex-shrink-0 bg-white border border-gray-200 rounded-lg p-2 min-w-[120px] shadow-sm text-center";
-             div.innerHTML = `
-                 <p class="text-[10px] font-bold text-gray-500 uppercase truncate">${item.name}</p>
+    // Keine offenen Posten?
+    if (sums.length === 0) {
+        container.innerHTML = '<p class="text-[10px] text-gray-400 w-full text-center">Alles erledigt! 🎉</p>';
+        return;
+    }
+
+    // 2. Helper zum Erstellen der HTML-Boxen
+    const createBox = (item, isModal = false) => {
+        const div = document.createElement('div');
+        // Style für Dashboard (klein, fix) oder Modal (größer)
+        const baseClass = isModal 
+            ? "bg-gray-50 border border-gray-200 rounded-lg p-3 flex justify-between items-center shadow-sm"
+            : "flex-shrink-0 bg-white border border-gray-200 rounded-lg px-2 py-1 min-w-[90px] max-w-[110px] shadow-sm text-center flex flex-col justify-center h-full";
+            
+        if (isModal) {
+            div.className = baseClass;
+            div.innerHTML = `
+                 <div class="text-left">
+                    <p class="text-xs font-bold text-gray-600 uppercase">${item.name}</p>
+                    <p class="text-[10px] text-gray-400">${item.count} Posten</p>
+                 </div>
                  <p class="text-sm font-extrabold text-gray-800">${item.amount.toFixed(2)} €</p>
-                 <p class="text-[10px] text-gray-400">${item.count} offen</p>
              `;
-             container.appendChild(div);
+        } else {
+            div.className = baseClass;
+            div.innerHTML = `
+                 <p class="text-[9px] font-bold text-gray-500 uppercase truncate w-full">${item.name}</p>
+                 <p class="text-xs font-extrabold text-gray-800 leading-tight my-0.5">${item.amount.toFixed(2)} €</p>
+                 <p class="text-[9px] text-gray-400 leading-none">${item.count} off.</p>
+             `;
         }
-    });
+        return div;
+    };
+
+    // 3. Anzeigen (Max 3 im Dashboard, Rest im Modal)
+    const MAX_VISIBLE = 3;
     
-    if (container.innerHTML === '') {
-        container.innerHTML = '<p class="text-xs text-gray-400 p-2 w-full text-center">Alles erledigt! 🎉</p>';
+    // Dashboard füllen
+    sums.slice(0, MAX_VISIBLE).forEach(item => {
+        container.appendChild(createBox(item, false));
+    });
+
+    // "Mehr"-Button Logik
+    if (sums.length > MAX_VISIBLE) {
+        const moreCount = sums.length - MAX_VISIBLE;
+        const btn = document.createElement('button');
+        btn.className = "flex-shrink-0 bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-1 text-indigo-700 font-bold text-[10px] h-full hover:bg-indigo-100 transition flex flex-col justify-center items-center min-w-[60px]";
+        btn.innerHTML = `<span>+${moreCount}</span><span>weitere</span>`;
+        btn.onclick = () => {
+            document.getElementById('categoryOverviewModal').style.display = 'flex';
+        };
+        container.appendChild(btn);
+    }
+
+    // Modal IMMER komplett füllen (für den Fall, dass man es öffnet)
+    if (modalList) {
+        sums.forEach(item => {
+            modalList.appendChild(createBox(item, true));
+        });
     }
 }
+
 
 
 function updateDashboard(payments) {
