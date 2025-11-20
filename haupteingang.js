@@ -415,6 +415,25 @@ async function initializeFirebase() {
             // ENDE KORREKTUR
             // =================================================================
 
+
+// --- URL PRÜFUNG (GAST LINK) ---
+            const urlParams = new URLSearchParams(window.location.search);
+            const guestId = urlParams.get('guest_id');
+            
+            if (guestId) {
+                console.log("Gast-Link erkannt! Starte Gast-Ansicht...");
+                // Wir importieren die Funktion dynamisch, um Zyklen zu vermeiden oder rufen sie direkt auf wenn verfügbar
+                import('./zahlungsverwaltung.js').then(module => {
+                    // Verstecke alles andere
+                    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+                    document.getElementById('appHeader').style.display = 'none';
+                    document.getElementById('appFooter').style.display = 'none';
+                    
+                    // Starte Gast Modus
+                    module.initializeGuestView(guestId);
+                });
+            }
+
         }); // Ende onAuthStateChanged
     } catch (error) {
         console.error("initializeFirebase: FEHLER bei der grundlegenden Firebase Initialisierung:", error);

@@ -151,31 +151,55 @@ function setupEventListeners() {
 
 
 function setupSettingsListeners() {
+    // Tabs umschalten
     document.getElementById('tab-zv-templates')?.addEventListener('click', () => openSettingsTab('templates'));
-    document.getElementById('tab-zv-contacts')?.addEventListener('click', () => openSettingsTab('contacts')); // NEU
+    document.getElementById('tab-zv-contacts')?.addEventListener('click', () => openSettingsTab('contacts'));
     document.getElementById('tab-zv-credits')?.addEventListener('click', () => openSettingsTab('credits'));
 
+    // Vorlagen löschen (Delegation)
     document.getElementById('zv-templates-list')?.addEventListener('click', (e) => {
-        if (e.target.closest('.delete-tpl-btn')) deleteTemplate(e.target.closest('.delete-tpl-btn').dataset.id);
+        if (e.target.closest('.delete-tpl-btn')) {
+            deleteTemplate(e.target.closest('.delete-tpl-btn').dataset.id);
+        }
     });
 
-    // NEU: Kontakte in Settings
+    // Kontakte hinzufügen
     document.getElementById('btn-add-contact-setting')?.addEventListener('click', addContactFromSettings);
-    document.getElementById('zv-contacts-list')?.addEventListener('click', (e) => {
-        if (e.target.closest('.delete-contact-btn')) deleteContact(e.target.closest('.delete-contact-btn').dataset.id);
-        if (e.target.closest('.edit-contact-btn')) renameContact(e.target.closest('.edit-contact-btn').dataset.id);
-    });
 
+    // Kontakte Liste Aktionen (Löschen, Editieren, Teilen, Migrieren)
+    const contactList = document.getElementById('zv-contacts-list');
+    if(contactList) {
+        contactList.onclick = (e) => {
+            const btnDelete = e.target.closest('.delete-contact-btn');
+            const btnEdit = e.target.closest('.edit-contact-btn');
+            const btnShare = e.target.closest('.share-contact-btn');
+            const btnMigrate = e.target.closest('.migrate-contact-btn');
+
+            if (btnDelete) deleteContact(btnDelete.dataset.id);
+            if (btnEdit) renameContact(btnEdit.dataset.id);
+            if (btnShare) shareContactLink(btnShare.dataset.id);
+            if (btnMigrate) openMigrationModal(btnMigrate.dataset.id);
+        };
+    }
+    
+    // Migration Modal Button
+    document.getElementById('btn-execute-migration')?.addEventListener('click', executeMigration);
+
+    // Guthaben Buttons (Hinzufügen)
     document.getElementById('btn-add-my-credit')?.addEventListener('click', () => openCreditModal('add', 'my'));
     document.getElementById('btn-add-other-credit')?.addEventListener('click', () => openCreditModal('add', 'other'));
 
+    // Guthaben Manager Modal (Speichern / Abbrechen)
     document.getElementById('btn-cancel-credit')?.addEventListener('click', () => {
         const modal = document.getElementById('creditManageModal');
         modal.classList.add('hidden');
         modal.style.display = 'none'; 
     });
-    
     document.getElementById('btn-save-credit')?.addEventListener('click', executeCreditAction);
+
+    // NEU: Guthaben Details Modal (Schließen)
+    document.getElementById('close-credit-details-btn')?.addEventListener('click', () => document.getElementById('creditDetailsModal').style.display = 'none');
+    document.getElementById('btn-close-credit-details')?.addEventListener('click', () => document.getElementById('creditDetailsModal').style.display = 'none');
 }
 
 
@@ -1737,18 +1761,32 @@ function renderContactList() {
 
     allContacts.forEach(c => {
         const div = document.createElement('div');
-        div.className = "flex justify-between items-center p-2 bg-white rounded shadow-sm border";
+        div.className = "flex justify-between items-center p-3 bg-white rounded-lg shadow-sm border hover:shadow-md transition";
         div.innerHTML = `
-            <span class="font-bold text-gray-700 pl-2">${c.name}</span>
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center font-bold text-xs">
+                    ${c.name.substring(0,2).toUpperCase()}
+                </div>
+                <span class="font-bold text-gray-700">${c.name}</span>
+            </div>
             <div class="flex gap-1">
-                <button class="edit-contact-btn p-1 text-blue-400 hover:bg-blue-50 rounded" data-id="${c.id}">✏️</button>
-                <button class="delete-contact-btn p-1 text-red-400 hover:bg-red-50 rounded" data-id="${c.id}">🗑️</button>
+                <button class="share-contact-btn p-1.5 text-gray-500 hover:bg-blue-50 hover:text-blue-600 rounded transition" data-id="${c.id}" title="Gast-Link kopieren">
+                    🔗
+                </button>
+                <button class="migrate-contact-btn p-1.5 text-gray-500 hover:bg-orange-50 hover:text-orange-600 rounded transition" data-id="${c.id}" title="In echten User umwandeln">
+                    🔄
+                </button>
+                <button class="edit-contact-btn p-1.5 text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 rounded transition" data-id="${c.id}" title="Umbenennen">
+                    ✏️
+                </button>
+                <button class="delete-contact-btn p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600 rounded transition" data-id="${c.id}" title="Löschen">
+                    🗑️
+                </button>
             </div>
         `;
         container.appendChild(div);
     });
 }
-
 // --- SCHNELL-SPEICHERN LOGIK (NEU) ---
 function checkManualInputForContact() {
     const val = this.value.trim();
@@ -2137,4 +2175,221 @@ async function executeCreditAction() {
         await batch.commit();
         document.getElementById('creditManageModal').style.display = 'none';
     } catch (e) { console.error(e); alertUser(e.message, "error"); } finally { setButtonLoading(btn, false); }
+}
+
+// --- GAST LINK LOGIK ---
+
+async function shareContactLink(contactId) {
+    // Wir erstellen einen Link mit der ID. 
+    // Sicherheit: Da es nur Read-Only ist und man die ID erraten müsste (was bei Firestore IDs schwer ist),
+    // ist das für diesen Zweck ("geheimer Link") ausreichend.
+    
+    const baseUrl = window.location.origin + window.location.pathname;
+    const link = `${baseUrl}?guest_id=${contactId}`;
+    
+    try {
+        await navigator.clipboard.writeText(link);
+        alertUser("Geheimer Link kopiert! 📋\nSende ihn an deinen Freund.", "success");
+    } catch (err) {
+        prompt("Link kopieren:", link);
+    }
+}
+
+// --- GAST VIEW INITIALISIERUNG (Wird von haupteingang.js gerufen) ---
+
+export async function initializeGuestView(guestId) {
+    const view = document.getElementById('guestView');
+    if (!view) return;
+    view.classList.add('active');
+
+    // 1. Kontaktdaten laden (Name)
+    try {
+        const contactDoc = await getDocs(query(collection(db, 'artifacts', appId, 'public', 'data', 'private-contacts'), where('__name__', '==', guestId))); // Hack für ID Query in V9 Lite
+        // Firestore Client SDK V9: getDoc(doc(...)) ist besser
+        const docSnap = await getDocs(query(collection(db, 'artifacts', appId, 'public', 'data', 'private-contacts'))); 
+        // Wir müssen durchsuchen, da wir keine Auth haben und die Regeln vielleicht ID-basiert sind? 
+        // Nein, wir nutzen einfach den Client.
+        
+        // Einfacherer Weg mit Referenz, falls Regeln public read erlauben:
+        // Da wir nicht eingeloggt sind, greifen wir auf "public" Daten zu.
+        // ACHTUNG: Firebase Regeln müssen read für "private-contacts" und "payments" erlauben (if true).
+        
+        // Da wir den Gastnamen nicht kennen, laden wir ihn.
+        // Wir suchen in den Payments nach dem Namen, das ist robuster ohne Auth auf Contacts.
+        
+        const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
+        // Wir suchen Zahlungen, wo dieser Gast involviert ist.
+        // Da involvedUserIds auch die Kontakt-ID enthält:
+        const q = query(paymentsRef, where('involvedUserIds', 'array-contains', guestId));
+        
+        const snapshot = await getDocs(q);
+        const listContainer = document.getElementById('guest-payment-list');
+        listContainer.innerHTML = '';
+        
+        let totalDebt = 0;
+        let nameFound = "Gast";
+
+        if (snapshot.empty) {
+            listContainer.innerHTML = '<p class="text-center text-gray-500">Keine Einträge gefunden.</p>';
+        } else {
+            snapshot.forEach(doc => {
+                const p = doc.data();
+                if (p.status !== 'open' && p.status !== 'pending_approval') return;
+
+                // Name finden
+                if (p.debtorId === guestId) nameFound = p.debtorName;
+                if (p.creditorId === guestId) nameFound = p.creditorName;
+
+                // Rechnen (Aus Sicht des Gastes!)
+                // Wenn Gast Debtor ist -> Er schuldet -> Negativ (rot)
+                // Wenn Gast Creditor ist -> Er kriegt -> Positiv (grün)
+                // Aber meistens zeigen wir "Was muss ich zahlen?".
+                
+                let amount = parseFloat(p.remainingAmount);
+                let isDebt = (p.debtorId === guestId);
+                
+                if (isDebt) totalDebt -= amount; // Ich schulde
+                else totalDebt += amount; // Ich kriege
+
+                const div = document.createElement('div');
+                div.className = "p-3 bg-white border rounded shadow-sm flex justify-between items-center";
+                div.innerHTML = `
+                    <div>
+                        <p class="font-bold text-gray-800">${p.title}</p>
+                        <p class="text-xs text-gray-500">
+                            ${isDebt ? 'Du schuldest an' : 'Dir schuldet'} 
+                            <strong>${isDebt ? p.creditorName : p.debtorName}</strong>
+                        </p>
+                    </div>
+                    <span class="font-mono font-bold ${isDebt ? 'text-red-600' : 'text-green-600'}">
+                        ${isDebt ? '- ' : '+ '}${amount.toFixed(2)} €
+                    </span>
+                `;
+                listContainer.appendChild(div);
+            });
+        }
+        
+        document.getElementById('guest-name-display').textContent = nameFound;
+        
+        const totalEl = document.getElementById('guest-total-display');
+        const statusEl = document.getElementById('guest-status-text');
+        
+        if (totalDebt < 0) {
+            totalEl.textContent = Math.abs(totalDebt).toFixed(2) + " €";
+            totalEl.className = "text-4xl font-extrabold text-red-600";
+            statusEl.textContent = "Das musst du noch zurückzahlen.";
+        } else if (totalDebt > 0) {
+            totalEl.textContent = totalDebt.toFixed(2) + " €";
+            totalEl.className = "text-4xl font-extrabold text-emerald-600";
+            statusEl.textContent = "Das bekommst du noch.";
+        } else {
+            totalEl.textContent = "0,00 €";
+            totalEl.className = "text-4xl font-extrabold text-gray-400";
+            statusEl.textContent = "Alles ausgeglichen.";
+        }
+
+    } catch (e) {
+        console.error(e);
+        alert("Fehler beim Laden. Eventuell ist der Link abgelaufen oder die Berechtigungen fehlen.");
+    }
+}
+
+
+// --- MIGRATION (KONTAKT -> USER) ---
+
+let currentMigrationContactId = null;
+
+function openMigrationModal(contactId) {
+    currentMigrationContactId = contactId;
+    const contact = allContacts.find(c => c.id === contactId);
+    if (!contact) return;
+
+    document.getElementById('mig-contact-name').textContent = contact.name;
+    const select = document.getElementById('migration-target-select');
+    select.innerHTML = '';
+
+    // Fülle Select mit echten Usern
+    Object.values(USERS).forEach(user => {
+        if (user.id !== currentUser.mode && user.isActive) {
+            const opt = document.createElement('option');
+            opt.value = user.id;
+            opt.textContent = user.realName || user.name;
+            select.appendChild(opt);
+        }
+    });
+
+    document.getElementById('migrationModal').style.display = 'flex';
+}
+
+async function executeMigration() {
+    const targetUserId = document.getElementById('migration-target-select').value;
+    if (!targetUserId || !currentMigrationContactId) return;
+
+    const targetUser = USERS[targetUserId];
+    const targetName = targetUser.realName || targetUser.name;
+
+    if (!confirm(`Wirklich alle Daten auf "${targetName}" übertragen? Dies kann nicht rückgängig gemacht werden.`)) return;
+
+    const btn = document.getElementById('btn-execute-migration');
+    setButtonLoading(btn, true);
+
+    try {
+        const batch = writeBatch(db);
+        const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
+        
+        // Wir müssen ALLE Zahlungen finden, wo der Kontakt involviert ist.
+        const q = query(paymentsRef, where('involvedUserIds', 'array-contains', currentMigrationContactId));
+        const snapshot = await getDocs(q);
+
+        let count = 0;
+        snapshot.forEach(docSnap => {
+            const p = docSnap.data();
+            const ref = doc(paymentsRef, docSnap.id);
+            const updates = {};
+            let changed = false;
+
+            // Array aktualisieren: Alten ID raus, Neue ID rein
+            let newInvolved = p.involvedUserIds.filter(id => id !== currentMigrationContactId);
+            if (!newInvolved.includes(targetUserId)) newInvolved.push(targetUserId);
+            updates.involvedUserIds = newInvolved;
+
+            // Rollen umschreiben
+            if (p.debtorId === currentMigrationContactId) {
+                updates.debtorId = targetUserId;
+                updates.debtorName = targetName;
+                changed = true;
+            }
+            if (p.creditorId === currentMigrationContactId) {
+                updates.creditorId = targetUserId;
+                updates.creditorName = targetName;
+                changed = true;
+            }
+
+            if (changed) {
+                updates.history = [...(p.history || []), { 
+                    date: new Date(), 
+                    action: 'migrated', 
+                    user: currentUser.displayName, 
+                    info: `Migriert von Kontakt zu User ${targetName}.` 
+                }];
+                batch.update(ref, updates);
+                count++;
+            }
+        });
+
+        // Kontakt löschen
+        const contactRef = doc(db, 'artifacts', appId, 'public', 'data', 'private-contacts', currentMigrationContactId);
+        batch.delete(contactRef);
+
+        await batch.commit();
+        
+        alertUser(`Erfolgreich ${count} Einträge auf ${targetName} übertragen.`, "success");
+        document.getElementById('migrationModal').style.display = 'none';
+        
+    } catch (e) {
+        console.error(e);
+        alertUser("Fehler bei der Migration: " + e.message, "error");
+    } finally {
+        setButtonLoading(btn, false);
+    }
 }
