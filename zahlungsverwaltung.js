@@ -19,18 +19,26 @@ import {
 let unsubscribePayments = null;
 let unsubscribeTemplates = null;
 let unsubscribeContacts = null;
-let unsubscribeAccounts = null; // NEU
+let unsubscribeAccounts = null;
+let unsubscribeCategories = null; // NEU
 
 let allPayments = [];
 let allTemplates = [];
 let allContacts = [];
-let allAccounts = []; // NEU
+let allAccounts = [];
+let allCategories = []; // NEU: Benutzerdefinierte Kategorien
 
 let currentDetailPaymentId = null;
 let activeSettlementPartnerId = null;
 let isSelectionMode = false;
 let selectedPaymentIds = new Set();
 let pendingOverpaymentData = null;
+
+// STANDARD KATEGORIEN (Unveränderlich)
+const SYSTEM_CATEGORIES = [
+    { id: 'cat_refund', name: 'Rückerstattung' },
+    { id: 'cat_misc', name: 'Diverse' }
+];
 
 // --- INITIALISIERUNG HAUPTANSICHT ---
 export function initializeZahlungsverwaltungView() {
@@ -40,11 +48,12 @@ export function initializeZahlungsverwaltungView() {
         view.dataset.listenerAttached = 'true';
     }
 
-    if (currentUser.mode !== GUEST_MODE) {
+if (currentUser.mode !== GUEST_MODE) {
         listenForPayments();
         listenForTemplates();
         listenForContacts();
-        listenForAccounts(); // NEU
+        listenForAccounts();
+        listenForCategories(); // NEU HINZUGEFÜGT
     } else {
         renderPaymentList([]);
     }
@@ -153,17 +162,30 @@ function setupEventListeners() {
 }
 
 function setupSettingsListeners() {
+    // Tabs
     document.getElementById('tab-zv-templates')?.addEventListener('click', () => openSettingsTab('templates'));
     document.getElementById('tab-zv-contacts')?.addEventListener('click', () => openSettingsTab('contacts'));
     document.getElementById('tab-zv-credits')?.addEventListener('click', () => openSettingsTab('credits'));
-    document.getElementById('tab-zv-accounts')?.addEventListener('click', () => openSettingsTab('accounts')); // NEU
+    document.getElementById('tab-zv-accounts')?.addEventListener('click', () => openSettingsTab('accounts'));
+    document.getElementById('tab-zv-categories')?.addEventListener('click', () => openSettingsTab('categories')); // NEU
 
+    // Listen
     document.getElementById('zv-templates-list')?.addEventListener('click', (e) => {
         if (e.target.closest('.delete-tpl-btn')) deleteTemplate(e.target.closest('.delete-tpl-btn').dataset.id);
     });
 
+    // Add Buttons
     document.getElementById('btn-add-contact-setting')?.addEventListener('click', addContactFromSettings);
-    document.getElementById('btn-add-account-setting')?.addEventListener('click', addAccountFromSettings); // NEU
+    document.getElementById('btn-add-account-setting')?.addEventListener('click', addAccountFromSettings);
+    document.getElementById('btn-add-category-setting')?.addEventListener('click', addCategoryFromSettings); // NEU
+
+    // NEU: Kategorien Liste Actions (Löschen)
+    const categoryList = document.getElementById('zv-categories-list');
+    if (categoryList) {
+        categoryList.onclick = (e) => {
+            if (e.target.closest('.delete-cat-btn')) deleteCategory(e.target.closest('.delete-cat-btn').dataset.id);
+        }
+    }
 
     // Listen Aktionen
     const contactList = document.getElementById('zv-contacts-list');
@@ -262,6 +284,32 @@ function listenForAccounts() {
         if (document.getElementById('zahlungsverwaltungSettingsView').classList.contains('active')) renderAccountList();
     });
 }
+
+
+// NEU: Kategorien Listener
+function listenForCategories() {
+    if (unsubscribeCategories) unsubscribeCategories();
+    const catRef = collection(db, 'artifacts', appId, 'public', 'data', 'payment-categories');
+    // Wir laden Kategorien, die von MIR erstellt wurden
+    const q = query(catRef, where('createdBy', '==', currentUser.mode));
+    
+    unsubscribeCategories = onSnapshot(q, (snapshot) => {
+        allCategories = [];
+        snapshot.forEach(doc => allCategories.push({ id: doc.id, ...doc.data() }));
+        
+        // UI Updates überall anstoßen
+        const catSelect = document.getElementById('payment-category-select');
+        if (catSelect) fillCategoryDropdown(catSelect);
+        
+        fillFilterDropdowns(); // Filter aktualisieren
+        updateCategoryDashboard(); // Dashboard aktualisieren
+        
+        if (document.getElementById('zahlungsverwaltungSettingsView').classList.contains('active')) {
+            renderCategoryList();
+        }
+    });
+}
+
 
 // --- SELECTION & MERGE LOGIK (Zusammenfassen) ---
 
@@ -624,6 +672,8 @@ function openCreateModal(paymentToEdit = null) {
     if (!modal) return;
 
     updateTemplateDropdown();
+    fillCategoryDropdown(document.getElementById('payment-category-select')); // NEU: Kategorien laden
+
     const tplSelect = document.getElementById('payment-template-select');
     if(tplSelect) tplSelect.value = "";
 
@@ -642,6 +692,9 @@ function openCreateModal(paymentToEdit = null) {
     document.getElementById('payment-is-installment').checked = false;
     document.getElementById('installment-options').classList.add('hidden');
     
+    // NEU: Standard-Kategorie setzen (Diverse)
+    document.getElementById('payment-category-select').value = 'cat_misc';
+
     // Inputs und Modi zurücksetzen
     toggleInputMode('debtor', false);
     toggleInputMode('creditor', false);
@@ -662,6 +715,13 @@ function openCreateModal(paymentToEdit = null) {
         document.getElementById('payment-amount').value = paymentToEdit.amount;
         document.getElementById('payment-start-date').value = paymentToEdit.startDate || '';
         document.getElementById('payment-deadline').value = paymentToEdit.deadline || '';
+        
+        // NEU: Kategorie setzen (falls vorhanden, sonst Standard)
+        if (paymentToEdit.categoryId) {
+            document.getElementById('payment-category-select').value = paymentToEdit.categoryId;
+        } else {
+            document.getElementById('payment-category-select').value = 'cat_misc';
+        }
         
         // Debtor setzen
         const debSelect = document.getElementById('payment-debtor-select');
@@ -706,6 +766,7 @@ function openCreateModal(paymentToEdit = null) {
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
 }
+
 
 
 function closeCreateModal() { document.getElementById('createPaymentModal').style.display = 'none'; }
@@ -890,6 +951,9 @@ async function savePayment() {
         const startDate = document.getElementById('payment-start-date').value;
         const deadline = document.getElementById('payment-deadline').value;
         
+        // NEU: Kategorie auslesen
+        const categoryId = document.getElementById('payment-category-select').value || 'cat_misc';
+        
         if (!title || isNaN(amount) || !startDate) throw new Error("Pflichtfelder fehlen (Titel, Betrag, Datum).");
 
         // 1. GLÄUBIGER (Creditor) ermitteln
@@ -902,12 +966,7 @@ async function savePayment() {
         } else {
             const val = document.getElementById('payment-creditor-select').value;
             if (!val) throw new Error("Bitte einen Empfänger (Gläubiger) auswählen.");
-            // Value ist z.B. "USR:123" oder "ACC:456"
             const parts = val.split(':');
-            // Wir speichern nur die ID (ohne Prefix) in der DB, oder?
-            // Um Konflikte zu vermeiden, speichern wir besser die nackte ID, 
-            // aber wir müssen wissen, was es ist? 
-            // Fürs Erste: Wir speichern die ID. Das System erkennt später an der ID (User vs Account), was es ist.
             creditorId = parts[1]; 
             creditorName = document.getElementById('payment-creditor-select').options[document.getElementById('payment-creditor-select').selectedIndex].text;
         }
@@ -919,11 +978,12 @@ async function savePayment() {
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
 
-        // Basis-Daten für alle Einträge
+        // Basis-Daten für alle Einträge (INKLUSIVE KATEGORIE)
         const baseData = {
             title, amount, remainingAmount: amount, isTBD: false,
             startDate, deadline: deadline || null,
             status: 'open', type: document.getElementById('payment-type').value,
+            categoryId: categoryId, // NEU: Hier wird die Kategorie gespeichert
             creditorId, creditorName,
             invoiceNr: document.getElementById('payment-invoice-nr').value,
             orderNr: document.getElementById('payment-order-nr').value,
@@ -945,8 +1005,8 @@ async function savePayment() {
                 debtorName = document.getElementById('payment-debtor-select').options[document.getElementById('payment-debtor-select').selectedIndex].text;
             }
 
-            // Involved Array füllen (damit es in Dashboards auftaucht)
-            const involved = [currentUser.mode]; // Ersteller sieht es immer
+            // Involved Array füllen
+            const involved = [currentUser.mode];
             if (creditorId && !involved.includes(creditorId)) involved.push(creditorId);
             if (debtorId && !involved.includes(debtorId)) involved.push(debtorId);
             
@@ -959,11 +1019,9 @@ async function savePayment() {
             };
             
             if (editId) {
-                // Beim Bearbeiten History behalten wir eigentlich bei, aber hier überschreiben wir vereinfacht.
-                // Besser: Nur Update fields
-                delete finalData.createdAt; // Nicht überschreiben
-                delete finalData.history; // History nicht komplett plätten, sondern ergänzen (geht hier im Batch schwer ohne Read).
-                // Workaround: Wir setzen history neu. In Produktion würde man arrayUnion nehmen.
+                delete finalData.createdAt; 
+                delete finalData.history; 
+                // Wir nutzen update beim Editieren
                 batch.update(doc(paymentsRef, editId), finalData);
             } else {
                 batch.set(doc(paymentsRef), finalData);
@@ -979,17 +1037,16 @@ async function savePayment() {
              const share = amount / checkboxes.length;
              
              checkboxes.forEach(cb => {
-                 const pId = cb.value; // ID (User oder Kontakt)
+                 const pId = cb.value; 
                  const pName = cb.dataset.name;
                  
                  // Involved Array
                  const involved = [currentUser.mode];
                  if (creditorId && !involved.includes(creditorId)) involved.push(creditorId);
-                 // Prüfen ob pId eine echte ID ist (nicht MANUAL_...)
                  if (!pId.startsWith('MANUAL_') && !involved.includes(pId)) involved.push(pId);
 
                  const entry = { 
-                     ...baseData, 
+                     ...baseData, // Hier ist die Kategorie schon drin
                      amount: share, 
                      remainingAmount: share, 
                      debtorId: pId.startsWith('MANUAL_') ? null : pId, 
@@ -998,7 +1055,7 @@ async function savePayment() {
                      title: `${title} (Split)`, 
                      history: [{date: new Date(), action: 'created_split', user: currentUser.displayName, info: `Split-Anteil von ${share.toFixed(2)}€`}] 
                  };
-                 batch.set(doc(paymentsRef), entry); // Neue ID generieren
+                 batch.set(doc(paymentsRef), entry); 
              });
         }
 
@@ -1013,6 +1070,7 @@ async function savePayment() {
         setButtonLoading(btn, false); 
     }
 }
+
 
 
 
@@ -1397,20 +1455,91 @@ function closeDetailModal() {
     currentDetailPaymentId = null;
 }
 
-// --- LIST RENDER & FILTER ---
+// Füllt die Filter-Dropdowns mit den speziellen Gruppen (Fett & Farbig)
+function fillFilterDropdowns() {
+    const statusSelect = document.getElementById('payment-filter-status');
+    const categorySelect = document.getElementById('payment-filter-category');
+    
+    if(!statusSelect || !categorySelect) return;
+    
+    // 1. Status Dropdown (Merken was gewählt war)
+    const currentStatus = statusSelect.value;
+    statusSelect.innerHTML = '';
+    
+    const grpStatus = document.createElement('optgroup');
+    grpStatus.label = "[BEZAHLSTATUS]";
+    
+    const statuses = [
+        {val: 'all', txt: 'Alle Status'},
+        {val: 'open', txt: 'Offen / Teilbezahlt'},
+        {val: 'pending', txt: 'Wartet auf Bestätigung'},
+        {val: 'closed', txt: 'Abgeschlossen / Bezahlt'}
+    ];
+    
+    statuses.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.val;
+        opt.textContent = s.txt;
+        grpStatus.appendChild(opt);
+    });
+    statusSelect.appendChild(grpStatus);
+    if(currentStatus) statusSelect.value = currentStatus; else statusSelect.value = 'open';
+
+    // 2. Kategorie Dropdown
+    const currentCat = categorySelect.value;
+    categorySelect.innerHTML = '';
+    
+    const grpCat = document.createElement('optgroup');
+    grpCat.label = "[KATEGORIEN]";
+    
+    const optAll = document.createElement('option');
+    optAll.value = 'all';
+    optAll.textContent = 'Alle Kategorien';
+    grpCat.appendChild(optAll);
+    
+    // System Kategorien
+    SYSTEM_CATEGORIES.forEach(sc => {
+        const opt = document.createElement('option');
+        opt.value = sc.id;
+        opt.textContent = sc.name;
+        grpCat.appendChild(opt);
+    });
+    
+    // Eigene Kategorien
+    allCategories.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        grpCat.appendChild(opt);
+    });
+    
+    categorySelect.appendChild(grpCat);
+    if(currentCat) categorySelect.value = currentCat;
+}
+
 function applyFilters() {
     const searchTerm = document.getElementById('payment-search-input')?.value.toLowerCase() || '';
     const statusFilter = document.getElementById('payment-filter-status')?.value || 'all';
+    const categoryFilter = document.getElementById('payment-filter-category')?.value || 'all'; // NEU
     const dirFilter = document.getElementById('payment-filter-direction')?.value || 'all';
 
     let filtered = allPayments.filter(p => {
         const textMatch = (p.title && p.title.toLowerCase().includes(searchTerm)) || (p.debtorName && p.debtorName.toLowerCase().includes(searchTerm)) || (p.creditorName && p.creditorName.toLowerCase().includes(searchTerm));
         if (!textMatch) return false;
+        
         if (statusFilter !== 'all') {
             if (statusFilter === 'open' && p.status !== 'open') return false;
             if (statusFilter === 'pending' && p.status !== 'pending_approval') return false;
             if (statusFilter === 'closed' && (p.status !== 'paid' && p.status !== 'cancelled')) return false;
         }
+        
+        // NEU: Kategorie Filter
+        if (categoryFilter !== 'all') {
+            // Wenn keine Kategorie im Posten gespeichert ist, ist es 'cat_misc' (Diverse)
+            const pCat = p.categoryId || 'cat_misc';
+            if (pCat !== categoryFilter) return false;
+        }
+        
         if (dirFilter !== 'all') {
             const iAmDebtor = p.debtorId === currentUser.mode;
             if (dirFilter === 'i_owe' && !iAmDebtor) return false;
@@ -1426,6 +1555,7 @@ function applyFilters() {
     });
     renderPaymentList(filtered);
     updateDashboard(allPayments);
+    updateCategoryDashboard(); // NEU: Auch das obere Dashboard aktualisieren
 }
 
 function renderPaymentList(payments) {
@@ -1448,6 +1578,16 @@ function renderPaymentList(payments) {
         const colorClass = iAmDebtor ? "text-red-600" : "text-emerald-600";
         const bgClass = iAmDebtor ? "bg-red-50 border-red-200" : "bg-emerald-50 border-emerald-200";
         
+// NEU: Kategorie Name holen
+        let catName = "";
+        const sysCat = SYSTEM_CATEGORIES.find(c => c.id === p.categoryId);
+        if (sysCat) catName = sysCat.name;
+        else {
+            const customCat = allCategories.find(c => c.id === p.categoryId);
+            if (customCat) catName = customCat.name;
+            else catName = "Diverse"; // Fallback
+        }
+
         let statusBadge = '';
         let timeBadge = '';
 
@@ -1484,9 +1624,12 @@ function renderPaymentList(payments) {
             ${checkboxHtml}
             <div class="flex-grow">
                 <div class="flex justify-between items-start">
-                    <div class="flex flex-col">
+<div class="flex flex-col">
                         <h4 class="font-bold text-gray-800 leading-tight">${p.title}</h4>
-                        ${p.startDate ? `<span class="text-[10px] text-gray-400 mt-0.5">Vom: ${new Date(p.startDate).toLocaleDateString()}</span>` : ''}
+                        <div class="flex gap-2 mt-1">
+                             ${p.startDate ? `<span class="text-[10px] text-gray-400">Vom: ${new Date(p.startDate).toLocaleDateString()}</span>` : ''}
+                             <span class="text-[10px] text-gray-500 font-semibold px-1.5 bg-white rounded border border-gray-200">${catName}</span>
+                        </div>
                     </div>
                     <div class="flex flex-col items-end gap-1">
                         ${statusBadge}
@@ -1500,6 +1643,57 @@ function renderPaymentList(payments) {
         </div>`;
         container.innerHTML += html;
     });
+}
+
+// --- KATEGORIE DASHBOARD (KLARNA STYLE) ---
+function updateCategoryDashboard() {
+    const container = document.getElementById('category-dashboard-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    // Zusammenzählen
+    const sums = {};
+    
+    // Initialisierung
+    SYSTEM_CATEGORIES.forEach(c => sums[c.id] = { name: c.name, count: 0, amount: 0 });
+    allCategories.forEach(c => sums[c.id] = { name: c.name, count: 0, amount: 0 });
+
+    // Durch alle Zahlungen loopen (nur offene)
+    allPayments.forEach(p => {
+        if (p.status === 'open' || p.status === 'pending_approval') {
+             if (p.type === 'credit') return; // Guthaben ignorieren
+             
+             const catId = p.categoryId || 'cat_misc'; // Fallback Diverse
+             
+             // Wenn Kategorie gelöscht wurde oder nicht existiert -> Diverse
+             if (!sums[catId]) {
+                 if (!sums['cat_misc']) sums['cat_misc'] = { name: 'Diverse', count: 0, amount: 0 };
+                 sums['cat_misc'].count++;
+                 sums['cat_misc'].amount += parseFloat(p.remainingAmount || 0);
+             } else {
+                 sums[catId].count++;
+                 sums[catId].amount += parseFloat(p.remainingAmount || 0);
+             }
+        }
+    });
+
+    // Rendern
+    Object.values(sums).forEach(item => {
+        if (item.count > 0) { // Nur Kategorien mit offenen Posten anzeigen
+             const div = document.createElement('div');
+             div.className = "flex-shrink-0 bg-white border border-gray-200 rounded-lg p-2 min-w-[120px] shadow-sm text-center";
+             div.innerHTML = `
+                 <p class="text-[10px] font-bold text-gray-500 uppercase truncate">${item.name}</p>
+                 <p class="text-sm font-extrabold text-gray-800">${item.amount.toFixed(2)} €</p>
+                 <p class="text-[10px] text-gray-400">${item.count} offen</p>
+             `;
+             container.appendChild(div);
+        }
+    });
+    
+    if (container.innerHTML === '') {
+        container.innerHTML = '<p class="text-xs text-gray-400 p-2 w-full text-center">Alles erledigt! 🎉</p>';
+    }
 }
 
 
@@ -1785,7 +1979,7 @@ function fillDropdown(selectElement, type) {
 
 // --- TABS LOGIK ---
 function openSettingsTab(tabName) {
-    const tabs = ['templates', 'contacts', 'credits', 'accounts'];
+    const tabs = ['templates', 'contacts', 'credits', 'accounts', 'categories']; // 'categories' hinzugefügt
     tabs.forEach(t => {
         const btn = document.getElementById(`tab-zv-${t}`);
         const content = document.getElementById(`content-zv-${t}`);
@@ -2527,4 +2721,87 @@ async function executeMigration() {
     } finally {
         setButtonLoading(btn, false);
     }
+}
+
+// --- KATEGORIEN VERWALTUNG (SETTINGS) ---
+
+async function addCategoryFromSettings() {
+    const input = document.getElementById('new-category-name-input');
+    const name = input.value.trim();
+    if (!name) return;
+    
+    // Prüfen ob Name schon existiert (System oder Custom)
+    const exists = SYSTEM_CATEGORIES.some(c => c.name.toLowerCase() === name.toLowerCase()) || 
+                   allCategories.some(c => c.name.toLowerCase() === name.toLowerCase());
+                   
+    if (exists) { alertUser("Kategorie existiert bereits.", "error"); return; }
+
+    try {
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'payment-categories'), {
+            name: name,
+            createdBy: currentUser.mode,
+            createdAt: serverTimestamp()
+        });
+        alertUser("Kategorie erstellt!", "success");
+        input.value = '';
+    } catch(e) { console.error(e); alertUser("Fehler.", "error"); }
+}
+
+async function deleteCategory(id) {
+    if(!confirm("Kategorie löschen? Einträge in dieser Kategorie fallen zurück auf 'Diverse'.")) return;
+    try {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payment-categories', id));
+    } catch(e) { console.error(e); }
+}
+
+function renderCategoryList() {
+    const container = document.getElementById('zv-categories-list');
+    if (!container) return;
+    container.innerHTML = '';
+    
+    // 1. System Kategorien (Nicht löschbar)
+    SYSTEM_CATEGORIES.forEach(sc => {
+        const div = document.createElement('div');
+        div.className = "flex justify-between items-center p-2 bg-gray-100 rounded border border-gray-200";
+        div.innerHTML = `
+            <span class="font-bold text-gray-600">${sc.name} <span class="text-[10px] font-normal">(System)</span></span>
+            <span class="text-xs text-gray-400">Standard</span>
+        `;
+        container.appendChild(div);
+    });
+
+    // 2. Eigene Kategorien
+    allCategories.forEach(c => {
+        const div = document.createElement('div');
+        div.className = "flex justify-between items-center p-2 bg-white rounded shadow-sm border";
+        div.innerHTML = `
+            <span class="font-bold text-gray-800">${c.name}</span>
+            <button class="delete-cat-btn p-1 text-red-400 hover:bg-red-50 rounded" data-id="${c.id}">🗑️</button>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function fillCategoryDropdown(selectElement) {
+    if (!selectElement) return;
+    selectElement.innerHTML = '';
+    
+    // System
+    SYSTEM_CATEGORIES.forEach(sc => {
+        const opt = document.createElement('option');
+        opt.value = sc.id;
+        opt.textContent = sc.name;
+        selectElement.appendChild(opt);
+    });
+    
+    // Custom
+    allCategories.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        selectElement.appendChild(opt);
+    });
+    
+    // Default auswählen falls vorhanden
+    if (selectElement.value === '') selectElement.value = 'cat_misc';
 }
