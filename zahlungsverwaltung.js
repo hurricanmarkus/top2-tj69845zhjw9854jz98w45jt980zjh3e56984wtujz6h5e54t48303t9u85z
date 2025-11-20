@@ -19,18 +19,21 @@ import {
 let unsubscribePayments = null;
 let unsubscribeTemplates = null;
 let unsubscribeContacts = null;
-let unsubscribeAccounts = null; // NEU
+let unsubscribeAccounts = null;
+let unsubscribeCategories = null; // NEU
 
 let allPayments = [];
 let allTemplates = [];
 let allContacts = [];
-let allAccounts = []; // NEU
+let allAccounts = [];
+let allCategories = []; // NEU
 
 let currentDetailPaymentId = null;
 let activeSettlementPartnerId = null;
 let isSelectionMode = false;
 let selectedPaymentIds = new Set();
 let pendingOverpaymentData = null;
+
 
 // --- INITIALISIERUNG HAUPTANSICHT ---
 export function initializeZahlungsverwaltungView() {
@@ -41,10 +44,11 @@ export function initializeZahlungsverwaltungView() {
     }
 
     if (currentUser.mode !== GUEST_MODE) {
+        listenForCategories(); // NEU: Kategorien laden
         listenForPayments();
         listenForTemplates();
         listenForContacts();
-        listenForAccounts(); // NEU
+        listenForAccounts();
     } else {
         renderPaymentList([]);
     }
@@ -63,9 +67,11 @@ export function initializeZahlungsverwaltungSettingsView() {
     openSettingsTab('templates');
     renderTemplateList();
     renderContactList();
-    renderAccountList(); // NEU
+    renderAccountList();
+    renderCategoryList(); // NEU: Kategorien rendern
     renderCreditOverview();
 }
+
 
 // --- SETUP EVENT LISTENERS ---
 function setupEventListeners() {
@@ -100,10 +106,11 @@ function setupEventListeners() {
     document.getElementById('btn-toggle-advanced-payment')?.addEventListener('click', () => document.getElementById('payment-advanced-options').classList.toggle('hidden'));
     document.getElementById('payment-is-installment')?.addEventListener('change', (e) => document.getElementById('installment-options').classList.toggle('hidden', !e.target.checked));
     
-    // Filter & Listen
+// Filter & Listen
     document.getElementById('payment-search-input')?.addEventListener('input', applyFilters);
     document.getElementById('payment-filter-status')?.addEventListener('change', applyFilters);
     document.getElementById('payment-filter-direction')?.addEventListener('change', applyFilters);
+    document.getElementById('payment-filter-category')?.addEventListener('change', applyFilters); // NEU: Kategorie Filter
     
     document.getElementById('btn-close-detail-modal')?.addEventListener('click', closeDetailModal);
     document.getElementById('btn-print-payment')?.addEventListener('click', () => window.print());
@@ -198,6 +205,19 @@ function setupSettingsListeners() {
         modal.style.display = 'none'; 
     });
     document.getElementById('btn-save-credit')?.addEventListener('click', executeCreditAction);
+
+    // NEU: Kategorien Tab und Buttons
+    document.getElementById('tab-zv-categories')?.addEventListener('click', () => openSettingsTab('categories'));
+    document.getElementById('btn-add-category')?.addEventListener('click', addCategory);
+
+    // NEU: Kategorien Liste Aktionen (Löschen/Bearbeiten)
+    const categoryList = document.getElementById('zv-categories-list');
+    if (categoryList) {
+        categoryList.onclick = (e) => {
+             if (e.target.closest('.delete-cat-btn')) deleteCategory(e.target.closest('.delete-cat-btn').dataset.id);
+             if (e.target.closest('.edit-cat-btn')) renameCategory(e.target.closest('.edit-cat-btn').dataset.id);
+        }
+    }
 }
 
 
@@ -262,6 +282,55 @@ function listenForAccounts() {
         if (document.getElementById('zahlungsverwaltungSettingsView').classList.contains('active')) renderAccountList();
     });
 }
+
+
+
+// NEU: Kategorien Listener
+function listenForCategories() {
+    if (unsubscribeCategories) unsubscribeCategories();
+    const catRef = collection(db, 'artifacts', appId, 'public', 'data', 'payment-categories');
+    
+    unsubscribeCategories = onSnapshot(catRef, (snapshot) => {
+        allCategories = [];
+        snapshot.forEach(doc => allCategories.push({ id: doc.id, ...doc.data() }));
+        
+        // Initial Seed, falls Standard-Kategorien fehlen
+        seedDefaultCategories();
+        
+        // Updates in der UI
+        fillCategoryDropdowns();
+        if (document.getElementById('zahlungsverwaltungSettingsView').classList.contains('active')) renderCategoryList();
+        
+        // Dashboard neu rendern (für Kategorie-Scroller)
+        updateDashboard(allPayments);
+        
+    }, error => console.error("Fehler Categories:", error));
+}
+
+// NEU: Standard Kategorien anlegen falls nicht vorhanden
+async function seedDefaultCategories() {
+    const standards = ["Rückerstattung", "Diverse"];
+    const missing = [];
+    
+    standards.forEach(std => {
+        if (!allCategories.some(c => c.name === std)) missing.push(std);
+    });
+    
+    if (missing.length > 0) {
+        const batch = writeBatch(db);
+        missing.forEach(name => {
+             const ref = doc(collection(db, 'artifacts', appId, 'public', 'data', 'payment-categories'));
+             batch.set(ref, {
+                 name: name,
+                 isSystem: true, // System-Kategorie (nicht löschbar)
+                 createdBy: 'SYSTEM',
+                 createdAt: serverTimestamp()
+             });
+        });
+        await batch.commit();
+    }
+}
+
 
 // --- SELECTION & MERGE LOGIK (Zusammenfassen) ---
 
@@ -624,6 +693,8 @@ function openCreateModal(paymentToEdit = null) {
     if (!modal) return;
 
     updateTemplateDropdown();
+    fillCategoryDropdowns(); // NEU: Kategorien laden beim Öffnen
+
     const tplSelect = document.getElementById('payment-template-select');
     if(tplSelect) tplSelect.value = "";
 
@@ -642,6 +713,11 @@ function openCreateModal(paymentToEdit = null) {
     document.getElementById('payment-is-installment').checked = false;
     document.getElementById('installment-options').classList.add('hidden');
     
+    // NEU: Default Kategorie setzen (Diverse), falls vorhanden
+    const diverseCat = allCategories.find(c => c.name === 'Diverse');
+    if (diverseCat) document.getElementById('payment-category-select').value = diverseCat.id;
+    else document.getElementById('payment-category-select').value = "";
+
     // Inputs und Modi zurücksetzen
     toggleInputMode('debtor', false);
     toggleInputMode('creditor', false);
@@ -663,33 +739,25 @@ function openCreateModal(paymentToEdit = null) {
         document.getElementById('payment-start-date').value = paymentToEdit.startDate || '';
         document.getElementById('payment-deadline').value = paymentToEdit.deadline || '';
         
-        // Debtor setzen
+        // NEU: Kategorie beim Bearbeiten setzen
+        if (paymentToEdit.categoryId) document.getElementById('payment-category-select').value = paymentToEdit.categoryId;
+        
+        // Debtor setzen (Prüfen ob ID im Dropdown vorhanden ist)
         const debSelect = document.getElementById('payment-debtor-select');
-        let foundDeb = false;
-        const prefixes = ['USR', 'CON', 'ACC'];
-        for(let p of prefixes) {
-            if (debSelect.querySelector(`option[value="${p}:${paymentToEdit.debtorId}"]`)) {
-                debSelect.value = `${p}:${paymentToEdit.debtorId}`;
-                foundDeb = true; break;
-            }
+        if ([...debSelect.options].some(o => o.value.includes(paymentToEdit.debtorId))) {
+             debSelect.value = [...debSelect.options].find(o => o.value.includes(paymentToEdit.debtorId)).value;
+        } else { 
+             toggleInputMode('debtor', true); 
+             document.getElementById('payment-debtor-manual').value = paymentToEdit.debtorName; 
         }
-        if (!foundDeb && paymentToEdit.debtorId) {
-             toggleInputMode('debtor', true);
-             document.getElementById('payment-debtor-manual').value = paymentToEdit.debtorName;
-        }
-
-        // Creditor setzen
+        
+        // Creditor setzen (Prüfen ob ID im Dropdown vorhanden ist)
         const credSelect = document.getElementById('payment-creditor-select');
-        let foundCred = false;
-        for(let p of prefixes) {
-            if (credSelect.querySelector(`option[value="${p}:${paymentToEdit.creditorId}"]`)) {
-                credSelect.value = `${p}:${paymentToEdit.creditorId}`;
-                foundCred = true; break;
-            }
-        }
-        if (!foundCred) {
-             toggleInputMode('creditor', true);
-             document.getElementById('payment-creditor-manual').value = paymentToEdit.creditorName;
+        if ([...credSelect.options].some(o => o.value.includes(paymentToEdit.creditorId))) {
+             credSelect.value = [...credSelect.options].find(o => o.value.includes(paymentToEdit.creditorId)).value;
+        } else { 
+             toggleInputMode('creditor', true); 
+             document.getElementById('payment-creditor-manual').value = paymentToEdit.creditorName; 
         }
         updateCreditorHint();
         
@@ -706,6 +774,7 @@ function openCreateModal(paymentToEdit = null) {
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
 }
+
 
 
 function closeCreateModal() { document.getElementById('createPaymentModal').style.display = 'none'; }
@@ -880,138 +949,69 @@ function addSplitManualPartner() {
 }
 
 async function savePayment() {
-    const btn = document.getElementById('btn-save-payment');
-    setButtonLoading(btn, true);
-
+    const btn = document.getElementById('btn-save-payment'); setButtonLoading(btn, true);
     try {
         const editId = document.getElementById('edit-payment-id').value;
         const title = document.getElementById('payment-title').value.trim();
         const amount = parseFloat(document.getElementById('payment-amount').value);
         const startDate = document.getElementById('payment-start-date').value;
-        const deadline = document.getElementById('payment-deadline').value;
         
-        if (!title || isNaN(amount) || !startDate) throw new Error("Pflichtfelder fehlen (Titel, Betrag, Datum).");
+        // NEU: Kategorie holen
+        const catId = document.getElementById('payment-category-select').value;
+        const catObj = allCategories.find(c => c.id === catId);
+        const categoryName = catObj ? catObj.name : null;
 
-        // 1. GLÄUBIGER (Creditor) ermitteln
+        if (!title || isNaN(amount) || !startDate) throw new Error("Pflichtfelder fehlen.");
+
         let creditorId = null, creditorName = "";
-        const credManual = !document.getElementById('payment-creditor-manual').classList.contains('hidden');
-        
-        if (credManual) {
+        if (!document.getElementById('payment-creditor-manual').classList.contains('hidden')) {
             creditorName = document.getElementById('payment-creditor-manual').value.trim();
             if(!creditorName) throw new Error("Gläubiger fehlt.");
         } else {
             const val = document.getElementById('payment-creditor-select').value;
-            if (!val) throw new Error("Bitte einen Empfänger (Gläubiger) auswählen.");
-            // Value ist z.B. "USR:123" oder "ACC:456"
-            const parts = val.split(':');
-            // Wir speichern nur die ID (ohne Prefix) in der DB, oder?
-            // Um Konflikte zu vermeiden, speichern wir besser die nackte ID, 
-            // aber wir müssen wissen, was es ist? 
-            // Fürs Erste: Wir speichern die ID. Das System erkennt später an der ID (User vs Account), was es ist.
-            creditorId = parts[1]; 
-            creditorName = document.getElementById('payment-creditor-select').options[document.getElementById('payment-creditor-select').selectedIndex].text;
+            if (!val) throw new Error("Gläubiger wählen.");
+            creditorId = val.split(':')[1]; creditorName = document.getElementById('payment-creditor-select').options[document.getElementById('payment-creditor-select').selectedIndex].text;
         }
 
-        // 2. SCHULDNER (Debtor) ermitteln
-        let debtorId = null, debtorName = "";
-        const splitMode = document.getElementById('toggle-split-mode').checked;
-        
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
-
-        // Basis-Daten für alle Einträge
         const baseData = {
-            title, amount, remainingAmount: amount, isTBD: false,
-            startDate, deadline: deadline || null,
-            status: 'open', type: document.getElementById('payment-type').value,
-            creditorId, creditorName,
-            invoiceNr: document.getElementById('payment-invoice-nr').value,
-            orderNr: document.getElementById('payment-order-nr').value,
-            notes: document.getElementById('payment-notes').value,
-            createdAt: serverTimestamp(), createdBy: currentUser.mode
+            title, amount, remainingAmount: amount, isTBD: false, startDate, deadline: document.getElementById('payment-deadline').value || null,
+            status: 'open', type: document.getElementById('payment-type').value, creditorId, creditorName,
+            invoiceNr: document.getElementById('payment-invoice-nr').value, orderNr: document.getElementById('payment-order-nr').value, notes: document.getElementById('payment-notes').value,
+            createdAt: serverTimestamp(), createdBy: currentUser.mode,
+            categoryId: catId || null, categoryName: categoryName || null // NEU: Kategorie speichern
         };
 
-        if (!splitMode) {
-            // --- EINZEL-ZAHLUNG ---
-            const debManual = !document.getElementById('payment-debtor-manual').classList.contains('hidden');
-            if (debManual) {
+        if (!document.getElementById('toggle-split-mode').checked) {
+            let debtorId = null, debtorName = "";
+            if (!document.getElementById('payment-debtor-manual').classList.contains('hidden')) {
                 debtorName = document.getElementById('payment-debtor-manual').value.trim();
-                if(!debtorName) throw new Error("Schuldner fehlt.");
             } else {
                 const val = document.getElementById('payment-debtor-select').value;
-                if (!val) throw new Error("Bitte einen Schuldner auswählen.");
-                const parts = val.split(':');
-                debtorId = parts[1];
-                debtorName = document.getElementById('payment-debtor-select').options[document.getElementById('payment-debtor-select').selectedIndex].text;
+                if (!val) throw new Error("Schuldner wählen.");
+                debtorId = val.split(':')[1]; debtorName = document.getElementById('payment-debtor-select').options[document.getElementById('payment-debtor-select').selectedIndex].text;
             }
-
-            // Involved Array füllen (damit es in Dashboards auftaucht)
-            const involved = [currentUser.mode]; // Ersteller sieht es immer
+            const involved = [currentUser.mode];
             if (creditorId && !involved.includes(creditorId)) involved.push(creditorId);
             if (debtorId && !involved.includes(debtorId)) involved.push(debtorId);
-            
-            const finalData = { 
-                ...baseData, 
-                debtorId, 
-                debtorName, 
-                involvedUserIds: involved, 
-                history: [{date: new Date(), action: 'created', user: currentUser.displayName, info: 'Erstellt'}] 
-            };
-            
-            if (editId) {
-                // Beim Bearbeiten History behalten wir eigentlich bei, aber hier überschreiben wir vereinfacht.
-                // Besser: Nur Update fields
-                delete finalData.createdAt; // Nicht überschreiben
-                delete finalData.history; // History nicht komplett plätten, sondern ergänzen (geht hier im Batch schwer ohne Read).
-                // Workaround: Wir setzen history neu. In Produktion würde man arrayUnion nehmen.
-                batch.update(doc(paymentsRef, editId), finalData);
-            } else {
-                batch.set(doc(paymentsRef), finalData);
-            }
 
+            const finalData = { ...baseData, debtorId, debtorName, involvedUserIds: involved, history: [{date: new Date(), action: 'created', user: currentUser.displayName, info: 'Erstellt'}] };
+            if (editId) { delete finalData.createdAt; delete finalData.history; batch.update(doc(paymentsRef, editId), finalData); } 
+            else { batch.set(doc(paymentsRef), finalData); }
         } else {
-            // --- SPLIT ZAHLUNG ---
-             if (editId) throw new Error("Split-Einträge können nicht als Gruppe bearbeitet werden.");
-             
-             const checkboxes = document.querySelectorAll('.split-cb:checked');
-             if (checkboxes.length === 0) throw new Error("Keine Personen für Split gewählt.");
-             
-             const share = amount / checkboxes.length;
-             
-             checkboxes.forEach(cb => {
-                 const pId = cb.value; // ID (User oder Kontakt)
-                 const pName = cb.dataset.name;
-                 
-                 // Involved Array
-                 const involved = [currentUser.mode];
-                 if (creditorId && !involved.includes(creditorId)) involved.push(creditorId);
-                 // Prüfen ob pId eine echte ID ist (nicht MANUAL_...)
-                 if (!pId.startsWith('MANUAL_') && !involved.includes(pId)) involved.push(pId);
-
-                 const entry = { 
-                     ...baseData, 
-                     amount: share, 
-                     remainingAmount: share, 
-                     debtorId: pId.startsWith('MANUAL_') ? null : pId, 
-                     debtorName: pName, 
-                     involvedUserIds: involved, 
-                     title: `${title} (Split)`, 
-                     history: [{date: new Date(), action: 'created_split', user: currentUser.displayName, info: `Split-Anteil von ${share.toFixed(2)}€`}] 
-                 };
-                 batch.set(doc(paymentsRef), entry); // Neue ID generieren
-             });
+            if (editId) throw new Error("Split editieren nicht möglich.");
+            const cbs = document.querySelectorAll('.split-cb:checked'); if (cbs.length === 0) throw new Error("Split-Personen fehlen.");
+            const share = amount / cbs.length;
+            cbs.forEach(cb => {
+                const pId = cb.value.startsWith('MANUAL_') ? null : cb.value;
+                const pName = cb.dataset.name;
+                const involved = [currentUser.mode]; if (creditorId) involved.push(creditorId); if (pId) involved.push(pId);
+                batch.set(doc(paymentsRef), { ...baseData, amount: share, remainingAmount: share, debtorId: pId, debtorName: pName, involvedUserIds: involved, title: `${title} (Split)`, history: [{date: new Date(), action: 'created_split', user: currentUser.displayName, info: 'Split'}] });
+            });
         }
-
-        await batch.commit();
-        alertUser("Gespeichert!", "success");
-        closeCreateModal();
-
-    } catch(e) { 
-        console.error(e); 
-        alertUser(e.message, "error"); 
-    } finally { 
-        setButtonLoading(btn, false); 
-    }
+        await batch.commit(); alertUser("Gespeichert!", "success"); closeCreateModal();
+    } catch(e) { console.error(e); alertUser(e.message, "error"); } finally { setButtonLoading(btn, false); }
 }
 
 
@@ -1399,34 +1399,46 @@ function closeDetailModal() {
 
 // --- LIST RENDER & FILTER ---
 function applyFilters() {
-    const searchTerm = document.getElementById('payment-search-input')?.value.toLowerCase() || '';
-    const statusFilter = document.getElementById('payment-filter-status')?.value || 'all';
-    const dirFilter = document.getElementById('payment-filter-direction')?.value || 'all';
+    const term = document.getElementById('payment-search-input')?.value.toLowerCase() || '';
+    const status = document.getElementById('payment-filter-status')?.value || 'all';
+    const dir = document.getElementById('payment-filter-direction')?.value || 'all';
+    const cat = document.getElementById('payment-filter-category')?.value || 'all'; // NEU
 
     let filtered = allPayments.filter(p => {
-        const textMatch = (p.title && p.title.toLowerCase().includes(searchTerm)) || (p.debtorName && p.debtorName.toLowerCase().includes(searchTerm)) || (p.creditorName && p.creditorName.toLowerCase().includes(searchTerm));
+        if (p.type === 'credit') return false; // Credits filtern (gehören nicht in die Liste)
+        
+        const textMatch = (p.title+p.debtorName+p.creditorName).toLowerCase().includes(term);
         if (!textMatch) return false;
-        if (statusFilter !== 'all') {
-            if (statusFilter === 'open' && p.status !== 'open') return false;
-            if (statusFilter === 'pending' && p.status !== 'pending_approval') return false;
-            if (statusFilter === 'closed' && (p.status !== 'paid' && p.status !== 'cancelled')) return false;
+        
+        if (status !== 'all') {
+            if (status === 'open' && p.status !== 'open') return false;
+            if (status === 'pending' && p.status !== 'pending_approval') return false;
+            if (status === 'closed' && (p.status !== 'paid' && p.status !== 'cancelled')) return false;
         }
-        if (dirFilter !== 'all') {
+        
+        if (dir !== 'all') {
             const iAmDebtor = p.debtorId === currentUser.mode;
-            if (dirFilter === 'i_owe' && !iAmDebtor) return false;
-            if (dirFilter === 'owes_me' && iAmDebtor) return false;
+            if (dir === 'i_owe' && !iAmDebtor) return false;
+            if (dir === 'owes_me' && iAmDebtor) return false;
         }
+
+        // NEU: Kategorie Filter
+        if (cat !== 'all') {
+            if (cat === 'uncategorized') {
+                if (p.categoryId && allCategories.some(c => c.id === p.categoryId)) return false;
+            } else {
+                if (p.categoryId !== cat) return false;
+            }
+        }
+
         return true;
     });
 
-    filtered.sort((a, b) => {
-        if (a.status === 'open' && b.status !== 'open') return -1;
-        if (a.status !== 'open' && b.status === 'open') return 1;
-        return (b.createdAt?.toDate ? b.createdAt.toDate() : new Date()) - (a.createdAt?.toDate ? a.createdAt.toDate() : new Date());
-    });
+    filtered.sort((a, b) => (b.createdAt?.toDate() || new Date()) - (a.createdAt?.toDate() || new Date()));
     renderPaymentList(filtered);
-    updateDashboard(allPayments);
+    updateDashboard(allPayments); // Dashboard immer mit ALLEN Daten rechnen
 }
+
 
 function renderPaymentList(payments) {
     const container = document.getElementById('payments-list-container');
@@ -1504,43 +1516,69 @@ function renderPaymentList(payments) {
 
 
 function updateDashboard(payments) {
-    let myDebt = 0; let myDebtCount = 0; 
-    let owedToMe = 0; let owedToMeCount = 0;
-    
-    // NEU: Variablen für Guthaben
-    let totalCredits = 0;
-
+    // 1. Standard Dashboard (Schulden Gesamt)
+    let myDebt = 0, owedToMe = 0, credits = 0;
     payments.forEach(p => {
         if (p.status !== 'open' && p.status !== 'pending_approval') return;
-        
-        const amount = p.isTBD ? 0 : parseFloat(p.remainingAmount);
-        
-        if (p.type === 'credit') {
-            // GUTHABEN BERECHNUNG
-            // Wenn ICH der creditor bin (ich habe Guthaben beim anderen) -> Positiv für mich
-            if (p.creditorId === currentUser.mode) {
-                totalCredits += amount;
-            }
-            // Wenn ICH der debtor bin (der andere hat Guthaben bei mir) -> Eigentlich negativ für mich, 
-            // aber in der Anzeige "Aktives Guthaben" zeigen wir meistens das, was ich HABEN, nicht was ich schulde.
-            // Oder wir machen eine Netto-Rechnung.
-            // Einfachheitshalber: "Aktives Guthaben" = Was ich bei anderen gut habe.
-        } else {
-            // NORMALE SCHULDEN
-            if (p.debtorId === currentUser.mode) { myDebt += amount; myDebtCount++; } 
-            else if (p.creditorId === currentUser.mode) { owedToMe += amount; owedToMeCount++; }
+        const amount = parseFloat(p.remainingAmount);
+        if (p.type === 'credit') { if(p.creditorId === currentUser.mode) credits += amount; }
+        else {
+            if (p.debtorId === currentUser.mode) myDebt += amount;
+            else if (p.creditorId === currentUser.mode) owedToMe += amount;
         }
     });
+    document.getElementById('dashboard-my-debt-display').textContent = myDebt.toFixed(2) + " €";
+    document.getElementById('dashboard-owe-me-display').textContent = owedToMe.toFixed(2) + " €";
+    document.getElementById('dashboard-credit-display').textContent = credits.toFixed(2) + " €";
 
-    const mD = document.getElementById('dashboard-my-debt-display'); if (mD) mD.textContent = myDebt.toFixed(2) + " €";
-    const mDD = document.getElementById('dashboard-my-debt-detail'); if (mDD) mDD.textContent = `in ${myDebtCount} offenen Posten`;
-    const oD = document.getElementById('dashboard-owe-me-display'); if (oD) oD.textContent = owedToMe.toFixed(2) + " €";
-    const oDD = document.getElementById('dashboard-owe-me-detail'); if (oDD) oDD.textContent = `aus ${owedToMeCount} offenen Posten`;
-    
-    // NEU: Guthaben Anzeige aktualisieren
-    const cD = document.getElementById('dashboard-credit-display'); 
-    if (cD) cD.textContent = totalCredits.toFixed(2) + " €";
+    // 2. NEU: Kategorie Scroller (Klarna Style)
+    const catScroller = document.getElementById('dashboard-category-scroller');
+    if (catScroller) {
+        catScroller.innerHTML = '';
+        
+        // Gruppieren
+        const catGroups = {};
+        allCategories.forEach(c => { catGroups[c.id] = { name: c.name, sum: 0, count: 0 }; });
+        // Füge "Keine Kategorie" als Fallback hinzu
+        catGroups['uncategorized'] = { name: 'Ohne Kategorie', sum: 0, count: 0 };
+
+        payments.forEach(p => {
+            if (p.status !== 'open' && p.status !== 'pending_approval' || p.type === 'credit') return;
+            // Wenn Kategorie existiert, nimm sie, sonst 'uncategorized'
+            const cId = (p.categoryId && catGroups[p.categoryId]) ? p.categoryId : 'uncategorized';
+            
+            // ACHTUNG: Für das Dashboard zählen wir nur Schulden, die ICH zahlen muss oder bekomme?
+            // Klarna zeigt meistens an, was ICH zahlen muss. 
+            // Wir summieren hier ALLE offenen Beträge (egal ob ich bekomme oder schulde), um zu sehen "was ist da los".
+            catGroups[cId].sum += parseFloat(p.remainingAmount);
+            catGroups[cId].count++;
+        });
+
+        // HTML Rendern
+        Object.entries(catGroups).forEach(([id, data]) => {
+            // Nur anzeigen wenn > 0 oder wenn es "uncategorized" ist und Einträge hat
+            if (data.count > 0) {
+                 const isActive = data.sum > 0;
+                 // Styling: Wenn Beträge offen sind, farbig hervorheben
+                 const borderColor = isActive ? 'border-indigo-200 bg-indigo-50' : 'border-gray-200 bg-gray-50 opacity-70';
+                 const textColor = isActive ? 'text-indigo-900' : 'text-gray-500';
+                 const sumColor = isActive ? 'text-indigo-700' : 'text-gray-400';
+
+                 catScroller.innerHTML += `
+                 <div class="p-3 rounded-xl border min-w-[140px] flex flex-col justify-center items-start snap-start ${borderColor}">
+                    <span class="text-[10px] font-bold uppercase tracking-wide ${textColor} truncate w-full" title="${data.name}">${data.name}</span>
+                    <span class="text-lg font-extrabold ${sumColor} mt-1">${data.sum.toFixed(2)} €</span>
+                    <span class="text-[10px] text-gray-400">${data.count} offen</span>
+                 </div>`;
+            }
+        });
+        
+        if (catScroller.innerHTML === '') {
+            catScroller.innerHTML = `<div class="p-3 rounded-xl border border-gray-200 bg-gray-50 min-w-[140px] flex items-center justify-center text-xs text-gray-400">Keine offenen Posten</div>`;
+        }
+    }
 }
+
 
 
 // --- LOGIK FÜR ZAHLUNGEN UND ÜBERZAHLUNG ---
@@ -1785,7 +1823,7 @@ function fillDropdown(selectElement, type) {
 
 // --- TABS LOGIK ---
 function openSettingsTab(tabName) {
-    const tabs = ['templates', 'contacts', 'credits', 'accounts'];
+    const tabs = ['templates', 'contacts', 'credits', 'accounts', 'categories']; // NEU: categories
     tabs.forEach(t => {
         const btn = document.getElementById(`tab-zv-${t}`);
         const content = document.getElementById(`content-zv-${t}`);
@@ -2526,5 +2564,92 @@ async function executeMigration() {
         alertUser("Fehler bei der Migration: " + e.message, "error");
     } finally {
         setButtonLoading(btn, false);
+    }
+}
+
+
+// --- KATEGORIEN LOGIK (NEU) ---
+
+async function addCategory() {
+    const input = document.getElementById('new-category-name');
+    const name = input.value.trim();
+    if (!name) return;
+    
+    try {
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'payment-categories'), {
+            name: name,
+            isSystem: false,
+            createdBy: currentUser.mode,
+            createdAt: serverTimestamp()
+        });
+        alertUser(`Kategorie "${name}" erstellt.`, "success");
+        input.value = '';
+    } catch(e) { alertUser("Fehler beim Erstellen.", "error"); }
+}
+
+async function deleteCategory(id) {
+    const cat = allCategories.find(c => c.id === id);
+    if (cat && cat.isSystem) { alertUser("Standard-Kategorien können nicht gelöscht werden.", "error"); return; }
+    if (!confirm(`Kategorie "${cat?.name}" wirklich löschen?`)) return;
+    
+    try {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payment-categories', id));
+        alertUser("Gelöscht.", "success");
+    } catch(e) { alertUser("Fehler.", "error"); }
+}
+
+async function renameCategory(id) {
+    const cat = allCategories.find(c => c.id === id);
+    if (cat && cat.isSystem) { alertUser("Standard-Kategorien können nicht umbenannt werden.", "error"); return; }
+    const newName = prompt("Neuer Name:", cat.name);
+    if (newName && newName.trim()) {
+        try {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payment-categories', id), { name: newName.trim() });
+            alertUser("Umbenannt.", "success");
+        } catch(e) { alertUser("Fehler.", "error"); }
+    }
+}
+
+function renderCategoryList() {
+    const list = document.getElementById('zv-categories-list');
+    if (!list) return; list.innerHTML = '';
+    
+    allCategories.forEach(c => {
+        const isSystem = c.isSystem === true;
+        const badge = isSystem ? '<span class="bg-gray-200 text-gray-600 text-[10px] px-1 rounded ml-2">STANDARD</span>' : '';
+        const buttons = isSystem ? '' : `
+            <button class="edit-cat-btn p-1 text-blue-400 hover:bg-blue-50 rounded" data-id="${c.id}">✏️</button>
+            <button class="delete-cat-btn p-1 text-red-400 hover:bg-red-50 rounded" data-id="${c.id}">🗑️</button>
+        `;
+        
+        list.innerHTML += `
+        <div class="flex justify-between items-center p-3 bg-white border rounded shadow-sm">
+            <div class="font-bold text-gray-700 flex items-center">${c.name} ${badge}</div>
+            <div class="flex gap-1">${buttons}</div>
+        </div>`;
+    });
+}
+
+function fillCategoryDropdowns() {
+    // 1. Filter Dropdown
+    const filterSel = document.getElementById('payment-filter-category');
+    if (filterSel) {
+        const optgroup = filterSel.querySelector('optgroup');
+        if (optgroup) {
+            optgroup.innerHTML = '<option value="all" selected>Alle Kategorien</option>';
+            optgroup.innerHTML += '<option value="uncategorized">Ohne Kategorie</option>'; // Option für Einträge ohne Kat
+            allCategories.forEach(c => {
+                optgroup.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+            });
+        }
+    }
+
+    // 2. Create Modal Dropdown
+    const createSel = document.getElementById('payment-category-select');
+    if (createSel) {
+        createSel.innerHTML = '<option value="">-- Keine Kategorie --</option>';
+        allCategories.forEach(c => {
+            createSel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+        });
     }
 }
