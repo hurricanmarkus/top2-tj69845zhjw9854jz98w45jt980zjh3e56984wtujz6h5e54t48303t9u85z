@@ -109,16 +109,24 @@ function setupEventListeners() {
     document.getElementById('btn-toggle-advanced-payment')?.addEventListener('click', () => document.getElementById('payment-advanced-options').classList.toggle('hidden'));
     document.getElementById('payment-is-installment')?.addEventListener('change', (e) => document.getElementById('installment-options').classList.toggle('hidden', !e.target.checked));
     
-// Filter & Listen
+// Toggle für Dashboard-Controls (Improvement 1)
+    document.getElementById('btn-toggle-dashboard-controls')?.addEventListener('click', () => {
+        const wrapper = document.getElementById('dashboard-controls-wrapper');
+        const icon = document.getElementById('icon-dashboard-toggle');
+        if (wrapper.classList.contains('hidden')) {
+            wrapper.classList.remove('hidden');
+            icon.classList.add('rotate-180'); // Pfeil drehen
+        } else {
+            wrapper.classList.add('hidden');
+            icon.classList.remove('rotate-180');
+        }
+    });
+
+    // Filter & Listen
     document.getElementById('payment-search-input')?.addEventListener('input', applyFilters);
     document.getElementById('payment-filter-status')?.addEventListener('change', applyFilters);
-    
     document.getElementById('payment-filter-category')?.addEventListener('change', applyFilters);
-    
     document.getElementById('payment-filter-direction')?.addEventListener('change', applyFilters);
-    
-    document.getElementById('btn-close-detail-modal')?.addEventListener('click', closeDetailModal);
-    document.getElementById('btn-print-payment')?.addEventListener('click', () => window.print());
     
     const listContainer = document.getElementById('payments-list-container');
     if (listContainer) {
@@ -1477,13 +1485,14 @@ function closeDetailModal() {
 }
 
 // Füllt die Filter-Dropdowns mit den speziellen Gruppen (Fett & Farbig)
+// Füllt die Filter-Dropdowns
 function fillFilterDropdowns() {
     const statusSelect = document.getElementById('payment-filter-status');
     const categorySelect = document.getElementById('payment-filter-category');
     
     if(!statusSelect || !categorySelect) return;
     
-    // 1. Status Dropdown (Merken was gewählt war)
+    // 1. Status Dropdown
     const currentStatus = statusSelect.value;
     statusSelect.innerHTML = '';
     
@@ -1504,7 +1513,13 @@ function fillFilterDropdowns() {
         grpStatus.appendChild(opt);
     });
     statusSelect.appendChild(grpStatus);
-    if(currentStatus) statusSelect.value = currentStatus; else statusSelect.value = 'open';
+    
+    // FIX BUG 3: Wenn kein Wert da ist oder beim Neuladen, setze auf OPEN
+    if(currentStatus && currentStatus !== "") {
+        statusSelect.value = currentStatus;
+    } else {
+        statusSelect.value = 'open';
+    }
 
     // 2. Kategorie Dropdown
     const currentCat = categorySelect.value;
@@ -1518,7 +1533,6 @@ function fillFilterDropdowns() {
     optAll.textContent = 'Alle Kategorien';
     grpCat.appendChild(optAll);
     
-    // System Kategorien
     SYSTEM_CATEGORIES.forEach(sc => {
         const opt = document.createElement('option');
         opt.value = sc.id;
@@ -1526,7 +1540,6 @@ function fillFilterDropdowns() {
         grpCat.appendChild(opt);
     });
     
-    // Eigene Kategorien
     allCategories.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c.id;
@@ -1537,6 +1550,7 @@ function fillFilterDropdowns() {
     categorySelect.appendChild(grpCat);
     if(currentCat) categorySelect.value = currentCat;
 }
+
 
 function applyFilters() {
     const searchTerm = document.getElementById('payment-search-input')?.value.toLowerCase() || '';
@@ -2038,19 +2052,28 @@ function fillDropdown(selectElement, type) {
 
 // --- TABS LOGIK ---
 function openSettingsTab(tabName) {
-    const tabs = ['templates', 'contacts', 'credits', 'accounts', 'categories']; // 'categories' hinzugefügt
+    const tabs = ['templates', 'contacts', 'credits', 'accounts', 'categories'];
     tabs.forEach(t => {
         const btn = document.getElementById(`tab-zv-${t}`);
         const content = document.getElementById(`content-zv-${t}`);
         if (t === tabName) {
             btn.className = "px-4 py-2 font-bold text-indigo-600 border-b-2 border-indigo-600 whitespace-nowrap";
             content.classList.remove('hidden');
+            
+            // FIX BUG 1: Liste rendern, wenn Tab geöffnet wird
+            if (tabName === 'categories') renderCategoryList();
+            if (tabName === 'contacts') renderContactList();
+            if (tabName === 'accounts') renderAccountList();
+            if (tabName === 'templates') renderTemplateList();
+            if (tabName === 'credits') renderCreditOverview();
+            
         } else {
             btn.className = "px-4 py-2 font-bold text-gray-500 hover:text-gray-700 whitespace-nowrap";
             content.classList.add('hidden');
         }
     });
 }
+
 
 // --- KONTEN VERWALTUNG (NEU) ---
 async function addAccountFromSettings() {
@@ -2515,8 +2538,9 @@ window.openCreditModal = function(mode, context, paymentId = null) {
     
     amountInput.value = ''; reasonInput.value = ''; select.innerHTML = ''; select.disabled = false;
 
-    // Standard Dropdown füllen
-    fillPartnerSelect(select, false);
+    // FIX BUG 2: Falscher Funktionsname korrigiert (fillPartnerSelect -> fillDropdown)
+    // Wir nutzen einfach fillDropdown, filtern aber im Kopf, was wir brauchen
+    fillDropdown(select, 'user'); 
 
     if (mode === 'add') {
         document.getElementById('credit-sub-warning').classList.add('hidden');
@@ -2537,33 +2561,31 @@ window.openCreditModal = function(mode, context, paymentId = null) {
                 amountInput.value = p.remainingAmount;
                 reasonInput.value = "Auszahlung / Verrechnung";
                 
-                // ID des Partners ermitteln
                 const partnerId = (context === 'my') ? p.debtorId : p.creditorId;
                 const partnerName = (context === 'my') ? p.debtorName : p.creditorName;
 
-                // FIX: Prüfen, ob der Partner im Dropdown ist. Wenn nicht (weil "Geist"), fügen wir ihn hinzu.
-                let optionExists = select.querySelector(`option[value="${partnerId}"]`);
+                let optionExists = select.querySelector(`option[value="USR:${partnerId}"]`) || select.querySelector(`option[value="CON:${partnerId}"]`);
+                
+                // Wenn Partner nicht in der Liste (z.B. gelöscht oder Gast), manuell hinzufügen
                 if (!optionExists && partnerId) {
                     const opt = document.createElement('option');
-                    opt.value = partnerId;
+                    // Wir wissen nicht genau ob User oder Contact, probieren wir es generisch zu setzen oder nehmen USR als fallback
+                    opt.value = partnerId; // Hier nehmen wir die rohe ID
                     opt.textContent = partnerName + " (Archiviert/Gast)";
-                    // Am Anfang einfügen
                     select.insertBefore(opt, select.firstChild);
-                } else if (!partnerId) {
-                     // Ganz schlimmer Fall: Keine ID. Wir nehmen den Namen als Value (Notlösung)
-                     const opt = document.createElement('option');
-                     opt.value = partnerName; // Vorsicht, hier muss executeCreditAction drauf reagieren
-                     opt.textContent = partnerName + " (Nur Name)";
-                     select.insertBefore(opt, select.firstChild);
+                    select.value = partnerId;
+                } else if (optionExists) {
+                    select.value = optionExists.value;
                 }
 
-                select.value = partnerId || partnerName;
                 select.disabled = true;
             }
         }
     }
     modal.classList.remove('hidden'); modal.style.display = 'flex';
 }
+
+
 async function executeCreditAction() {
     const mode = document.getElementById('credit-mode').value;
     const context = document.getElementById('credit-context').value;
