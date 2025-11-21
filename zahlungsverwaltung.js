@@ -490,7 +490,6 @@ async function executeSplitEntry() {
     const splitTitle = document.getElementById('split-title-input').value.trim();
     const currentRest = parseFloat(p.remainingAmount);
 
-    // Validierung
     if (isNaN(splitAmount) || splitAmount <= 0 || splitAmount >= currentRest) {
         alertUser("Bitte einen gültigen Betrag eingeben (kleiner als der aktuelle Rest).", "error");
         return;
@@ -506,34 +505,46 @@ async function executeSplitEntry() {
     try {
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
-
         const newRest = currentRest - splitAmount;
 
-        // 1. Ursprungseintrag aktualisieren (Restbetrag verringern)
+        // 1. Neue Referenz vorab erstellen, um die ID zu bekommen
+        const newDocRef = doc(paymentsRef);
+        const newDocIdShort = newDocRef.id.slice(-4).toUpperCase();
+        const originIdShort = originId.slice(-4).toUpperCase();
+
+        // 2. Ursprungseintrag aktualisieren (mit Verweis auf neue ID)
         const originRef = doc(paymentsRef, originId);
         batch.update(originRef, {
             remainingAmount: newRest,
-            history: [...(p.history || []), { date: new Date(), action: 'split_source', user: currentUser.displayName, info: `Betrag von ${splitAmount.toFixed(2)}€ abgespalten.` }]
+            history: [...(p.history || []), { 
+                date: new Date(), 
+                action: 'split_source', 
+                user: currentUser.displayName, 
+                info: `Betrag von ${splitAmount.toFixed(2)}€ abgespalten auf Eintrag #${newDocIdShort} ("${splitTitle}").` 
+            }]
         });
 
-        // 2. Neuen Eintrag für den abgespaltenen Betrag erstellen
+        // 3. Neuen Eintrag erstellen (mit Verweis auf alte ID)
         const newData = {
-            ...p, // Kopiere alle Felder vom Original
-            id: undefined, // Wichtig: ID löschen, wird neu generiert
+            ...p,
+            id: undefined, // ID entfernen, da neu
             title: splitTitle,
-            amount: splitAmount, // Bei Split ist der neue Betrag = Splitbetrag
+            amount: splitAmount,
             remainingAmount: splitAmount,
             createdAt: serverTimestamp(),
-            history: [{ date: new Date(), action: 'split_target', user: currentUser.displayName, info: `Abgespalten von "${p.title}".` }]
+            history: [{ 
+                date: new Date(), 
+                action: 'split_target', 
+                user: currentUser.displayName, 
+                info: `Abgespalten von Eintrag #${originIdShort} ("${p.title}").` 
+            }]
         };
-        delete newData.id; // Sicherstellen, dass keine ID im Objekt ist
+        delete newData.id;
 
-        const newDocRef = doc(paymentsRef);
         batch.set(newDocRef, newData);
 
         await batch.commit();
         alertUser("Eintrag erfolgreich aufgesplittet!", "success");
-
         modal.classList.add('hidden');
         modal.style.display = 'none';
         closeDetailModal();
@@ -1241,83 +1252,72 @@ function selectSettlementPartner(partnerId) {
 
 async function executeSettlement() {
     if (!activeSettlementPartnerId) return;
-    if (!confirm("Möchtest du wirklich alle offenen Posten verrechnen und glattstellen?")) return;
-
+    if (!confirm("Wirklich verrechnen?")) return;
     const btn = document.getElementById('btn-execute-settlement');
     setButtonLoading(btn, true);
 
     try {
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
-
-        const involvedDocs = [];
-        let partnerName = "";
-        let net = 0;
-
+        let partnerName = "", net = 0;
+        const involvedIds = []; // IDs sammeln für den Log
+        
         allPayments.forEach(p => {
             if (p.status !== 'open' && p.status !== 'pending_approval') return;
-
+            if (p.type === 'credit') return;
             let pIdCheck = (p.debtorId === currentUser.mode) ? p.creditorId : p.debtorId;
             let pNameCheck = (p.debtorId === currentUser.mode) ? p.creditorName : p.debtorName;
             if (!pIdCheck) pIdCheck = "MANUAL_" + pNameCheck;
 
             if (pIdCheck === activeSettlementPartnerId) {
                 partnerName = pNameCheck;
-                involvedDocs.push(p);
+                involvedIds.push(p.id.slice(-4).toUpperCase());
                 const amount = p.isTBD ? 0 : parseFloat(p.remainingAmount);
-                if (p.debtorId === currentUser.mode) net -= amount;
-                else net += amount;
+                if (p.debtorId === currentUser.mode) net -= amount; else net += amount;
+                
+                batch.update(doc(paymentsRef, p.id), {
+                    status: 'paid', remainingAmount: 0,
+                    history: [...(p.history || []), { 
+                        date: new Date(), 
+                        action: 'settled', 
+                        user: currentUser.displayName, 
+                        info: 'Durch Verrechnung ausgeglichen.' 
+                    }]
+                });
             }
-        });
-
-        involvedDocs.forEach(p => {
-            const ref = doc(paymentsRef, p.id);
-            batch.update(ref, {
-                status: 'paid',
-                remainingAmount: 0,
-                history: [...(p.history || []), { date: new Date(), action: 'settled', user: currentUser.displayName, info: 'Durch Verrechnung ausgeglichen.' }]
-            });
         });
 
         if (Math.abs(net) > 0.01) {
             const isCreditor = net > 0;
             const absAmount = Math.abs(net);
-
             const realPartnerId = activeSettlementPartnerId.startsWith("MANUAL_") ? null : activeSettlementPartnerId;
+            
+            const logText = `Restbetrag aus Verrechnung von ${involvedIds.length} Posten.`;
 
             const newData = {
-                title: "Restbetrag nach Verrechnung",
-                amount: absAmount,
-                remainingAmount: absAmount,
-                isTBD: false,
-                deadline: null,
-                invoiceNr: "", orderNr: "", notes: "Automatisch erstellt.", type: 'debt',
-                status: 'open',
-                createdAt: serverTimestamp(),
-                createdBy: currentUser.mode,
-                debtorId: isCreditor ? realPartnerId : currentUser.mode,
-                debtorName: isCreditor ? partnerName : currentUser.displayName,
-                creditorId: isCreditor ? currentUser.mode : realPartnerId,
-                creditorName: isCreditor ? currentUser.displayName : partnerName,
-                involvedUserIds: [currentUser.mode],
-                history: [{ date: new Date(), action: 'created_settlement', user: currentUser.displayName, info: `Restbetrag aus Verrechnung.` }]
+                title: "Restbetrag nach Verrechnung", amount: absAmount, remainingAmount: absAmount, isTBD: false,
+                deadline: null, invoiceNr: "", orderNr: "", notes: `Automatisch erstellt aus Bilanzierung mit ${partnerName}.`, 
+                type: 'debt', status: 'open',
+                categoryId: 'cat_misc',
+                createdAt: serverTimestamp(), createdBy: currentUser.mode,
+                debtorId: isCreditor ? realPartnerId : currentUser.mode, debtorName: isCreditor ? partnerName : currentUser.displayName,
+                creditorId: isCreditor ? currentUser.mode : realPartnerId, creditorName: isCreditor ? currentUser.displayName : partnerName,
+                involvedUserIds: [currentUser.mode, ...(realPartnerId ? [realPartnerId] : [])],
+                history: [{ 
+                    date: new Date(), 
+                    action: 'created_settlement', 
+                    user: currentUser.displayName, 
+                    info: logText 
+                }]
             };
-            if (realPartnerId) newData.involvedUserIds.push(realPartnerId);
-
             batch.set(doc(paymentsRef), newData);
         }
-
         await batch.commit();
         alertUser("Erfolgreich verrechnet!", "success");
         closeSettlementModal();
-
-    } catch (e) {
-        console.error(e);
-        alertUser("Fehler: " + e.message, "error");
-    } finally {
-        setButtonLoading(btn, false);
-    }
+    } catch (e) { console.error(e); alertUser("Fehler: " + e.message, "error"); } finally { setButtonLoading(btn, false); }
 }
+
 
 function closeSettlementModal() {
     document.getElementById('settlementModal').classList.add('hidden');
@@ -1364,7 +1364,6 @@ function renderDetailContent(p, isRefresh) {
 
     if (!modal || !content || !actions) return;
 
-    // FIX: Schließen-Button Funktion erzwingen (damit das X immer funktioniert)
     const closeBtn = document.getElementById('btn-close-detail-modal');
     if(closeBtn) closeBtn.onclick = closeDetailModal;
 
@@ -1400,7 +1399,7 @@ function renderDetailContent(p, isRefresh) {
             </div>`;
     }
 
-    // Transaktions-Liste anzeigen
+    // Transaktions-Liste anzeigen (Mit Zeit & User)
     if (p.transactions && p.transactions.length > 0) {
         transactionSection.classList.remove('hidden');
         transactionList.innerHTML = '';
@@ -1408,12 +1407,19 @@ function renderDetailContent(p, isRefresh) {
             const canDelete = (iAmCreator || iAmCreditor);
             const row = document.createElement('div');
             row.className = "flex justify-between items-center p-2 bg-white rounded border shadow-sm";
-            const dateStr = tx.date?.toDate ? tx.date.toDate().toLocaleDateString() : new Date(tx.date).toLocaleDateString();
+            
+            // Datum & Zeit formatieren
+            const txDateObj = tx.date?.toDate ? tx.date.toDate() : new Date(tx.date);
+            const dateStr = txDateObj.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+            const userName = tx.user || 'Unbekannt';
+
             row.innerHTML = `
-                <div class="flex items-center gap-2">
-                    <span class="font-bold text-green-700">+ ${parseFloat(tx.amount).toFixed(2)} €</span>
-                    <span class="text-xs text-gray-400">| ${dateStr}</span>
-                    <span class="text-xs text-gray-500 italic">(${tx.type === 'credit_usage' ? 'Guthaben' : 'Zahlung'})</span>
+                <div class="flex flex-col">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-green-700">+ ${parseFloat(tx.amount).toFixed(2)} €</span>
+                        <span class="text-xs text-gray-500 italic">(${tx.type === 'credit_usage' ? 'Guthaben' : 'Zahlung'})</span>
+                    </div>
+                    <span class="text-[10px] text-gray-400">von <strong>${userName}</strong> am ${dateStr}</span>
                 </div>
                 ${canDelete ? `<button class="text-red-400 hover:text-red-600 text-xs font-bold delete-tx-btn px-2 py-1 bg-red-50 rounded border border-red-100">Löschen</button>` : ''}
             `;
@@ -1449,10 +1455,16 @@ function renderDetailContent(p, isRefresh) {
         ${p.notes ? `<div class="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-gray-700"><strong>Notiz:</strong><br>${p.notes}</div>` : ''}
         
         <h4 class="font-bold text-gray-700 mb-2 border-b pb-1 mt-8">System-Log</h4>
-        <div class="mb-4 max-h-40 overflow-y-auto text-xs text-gray-400">
-            ${(p.history || []).map(h => {
+        <div class="mb-4 max-h-60 overflow-y-auto text-xs text-gray-500 bg-gray-50 p-2 rounded border">
+            ${(p.history || []).slice().reverse().map(h => {
                 const d = h.date?.toDate ? h.date.toDate() : new Date(h.date);
-                return `<div class="mb-1">${d.toLocaleDateString()} - ${h.info}</div>`;
+                const dateStr = d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+                return `
+                <div class="mb-2 border-b border-gray-200 pb-1 last:border-0">
+                    <span class="font-bold text-gray-700">${h.user || 'System'}</span> 
+                    <span class="text-[10px] text-gray-400 ml-1">(${dateStr})</span>
+                    <div class="mt-0.5">${h.info}</div>
+                </div>`;
             }).join('')}
         </div>
     `;
@@ -1487,6 +1499,7 @@ function renderDetailContent(p, isRefresh) {
     }
     if (!isRefresh) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
 }
+
 
 
 
