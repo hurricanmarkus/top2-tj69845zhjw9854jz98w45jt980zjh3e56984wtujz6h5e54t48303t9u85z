@@ -1584,7 +1584,7 @@ function renderDetailContent(p, isRefresh) {
         </div>
     `;
 
-    // --- AKTIONEN UNTEN (Mächtig & Kompakt) ---
+    // --- AKTIONEN UNTEN (50/50 Layout & Leeres Feld) ---
     actions.innerHTML = '';
     if (partialForm) partialForm.remove(); 
 
@@ -1593,11 +1593,9 @@ function renderDetailContent(p, isRefresh) {
     if (canAct) {
         const currentRest = parseFloat(p.remainingAmount);
         
-        // Container
         const paymentInterface = document.createElement('div');
         paymentInterface.className = "w-full bg-gray-50 p-2 rounded-lg border border-gray-200 shadow-inner mt-2";
         
-        // Guthaben Button (nur wenn Guthaben da)
         let creditHtml = '';
         if (availableCredit > 0) {
             const maxUsage = Math.min(availableCredit, currentRest);
@@ -1611,56 +1609,62 @@ function renderDetailContent(p, isRefresh) {
             </div>`;
         }
 
-        // --- DAS NEUE MÄCHTIGE LAYOUT ---
+        // LAYOUT: flex-1 für beide Elemente sorgt für exakte 50/50 Aufteilung
+        // VALUE: Leer ("")
         paymentInterface.innerHTML = `
             ${creditHtml}
             <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Zahlung buchen</label>
             
             <div class="flex gap-2 items-stretch">
-                <div class="relative w-1/3 min-w-[130px]">
+                <div class="relative flex-1">
                     <span class="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xl">€</span>
                     <input type="number" id="smart-payment-amount" 
                         class="w-full pl-6 pr-1 h-16 border-2 border-gray-300 rounded-xl font-black text-2xl text-gray-800 focus:border-indigo-500 focus:ring-0 text-center" 
-                        step="0.01" placeholder="0.00" value="${currentRest.toFixed(2)}">
+                        step="0.01" placeholder="0.00" value="">
                 </div>
 
                 <button id="btn-smart-pay" 
-                    class="flex-grow h-16 bg-green-600 text-white rounded-xl shadow-md hover:bg-green-700 transition flex flex-col justify-center items-center leading-tight px-1">
-                    <span id="btn-smart-pay-text" class="font-black text-lg uppercase tracking-wide">Alles zahlen</span>
-                    <span id="btn-smart-pay-subtext" class="text-[10px] font-medium opacity-90">und schließen</span>
+                    class="flex-1 h-16 bg-gray-400 text-white rounded-xl shadow-md transition flex flex-col justify-center items-center leading-tight px-1 cursor-not-allowed">
+                    <span id="btn-smart-pay-text" class="font-black text-base uppercase tracking-wide">Betrag eingeben</span>
+                    <span id="btn-smart-pay-subtext" class="text-[10px] font-medium opacity-90">...</span>
                 </button>
             </div>
         `;
         
         actions.appendChild(paymentInterface);
 
-        // --- LOGIK ---
         const input = document.getElementById('smart-payment-amount');
         const payBtn = document.getElementById('btn-smart-pay');
         const payText = document.getElementById('btn-smart-pay-text');
         const paySubText = document.getElementById('btn-smart-pay-subtext');
         const creditBtn = document.getElementById('btn-use-credit-smart');
 
-        // Live Update beim Tippen
+        // Live Update
         input.oninput = () => {
-            const val = parseFloat(input.value) || 0;
+            const valStr = input.value;
+            const val = parseFloat(valStr);
+            
+            // Reset
+            payBtn.className = "flex-1 h-16 text-white rounded-xl shadow-md transition flex flex-col justify-center items-center leading-tight px-1";
+
+            if (!valStr || isNaN(val)) {
+                payText.textContent = "Betrag eingeben";
+                paySubText.textContent = "...";
+                payBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
+                return;
+            }
+
             const diff = currentRest - val;
             
-            // Reset Classes
-            payBtn.className = "flex-grow h-16 text-white rounded-xl shadow-md transition flex flex-col justify-center items-center leading-tight px-1";
-
             if (Math.abs(diff) < 0.01) {
-                // Exakt
                 payText.textContent = "Alles zahlen";
                 paySubText.textContent = "und schließen";
                 payBtn.classList.add('bg-green-600', 'hover:bg-green-700');
             } else if (diff > 0) {
-                // Teilbetrag
                 payText.textContent = "Teilbetrag";
                 paySubText.textContent = `Rest: ${diff.toFixed(2)} €`;
                 payBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
             } else {
-                // Überzahlung
                 const over = Math.abs(diff).toFixed(2);
                 payText.textContent = `Überzahlung!`;
                 paySubText.textContent = `+ ${over} € Guthaben/Tip`;
@@ -1668,15 +1672,15 @@ function renderDetailContent(p, isRefresh) {
             }
         };
 
-        // Klick Handler
         payBtn.onclick = () => {
             const val = parseFloat(input.value);
             if (isNaN(val) || val <= 0) {
-                alertUser("Bitte Betrag eingeben.", "error");
+                // Nichts tun oder kurzes Wackeln (hier nur Alert)
+                // alertUser("Bitte Betrag eingeben.", "info");
+                input.focus();
                 return;
             }
             const action = (val >= currentRest - 0.01) ? 'mark_paid' : 'partial_pay';
-            // Überzahlung wird intern in handlePaymentAction erkannt und öffnet das Modal
             handlePaymentAction(p.id, action, val);
         };
 
@@ -1692,7 +1696,6 @@ function renderDetailContent(p, isRefresh) {
 
     if (!isRefresh) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
 }
-
 
 
 
