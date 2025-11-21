@@ -507,16 +507,14 @@ async function executeSplitEntry() {
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
         const newRest = currentRest - splitAmount;
 
-        // 1. Neue Referenz vorab
         const newDocRef = doc(paymentsRef);
         const newShort = newDocRef.id.slice(-4).toUpperCase();
         const originShort = originId.slice(-4).toUpperCase();
         
-        // Link-Codes generieren
         const linkToNew = `[LINK:${newDocRef.id}:#${newShort}]`;
         const linkToOrigin = `[LINK:${originId}:#${originShort}]`;
 
-        // 2. Ursprung aktualisieren
+        // Ursprung aktualisieren
         const originRef = doc(paymentsRef, originId);
         batch.update(originRef, {
             remainingAmount: newRest,
@@ -528,7 +526,7 @@ async function executeSplitEntry() {
             }]
         });
 
-        // 3. Neu erstellen
+        // Neuen Eintrag erstellen
         const newData = {
             ...p,
             id: undefined,
@@ -540,7 +538,8 @@ async function executeSplitEntry() {
                 date: new Date(), 
                 action: 'split_target', 
                 user: currentUser.displayName, 
-                info: `Abgespalten von Eintrag ${linkToOrigin} ("${p.title}").` 
+                // NEU: Betrag hier auch eingefügt für Klarheit
+                info: `Abgespalten (${splitAmount.toFixed(2)} €) von Eintrag ${linkToOrigin} ("${p.title}").` 
             }]
         };
         delete newData.id;
@@ -560,6 +559,7 @@ async function executeSplitEntry() {
         setButtonLoading(btn, false);
     }
 }
+
 
 
 
@@ -1267,8 +1267,8 @@ async function executeSettlement() {
         
         let partnerName = "";
         let net = 0;
-        const involvedLinks = []; // Liste für den neuen Eintrag
-        const involvedDocs = []; // Liste der zu aktualisierenden Docs
+        const involvedLinks = []; 
+        const involvedDocs = []; 
 
         // 1. Daten sammeln
         allPayments.forEach(p => {
@@ -1283,9 +1283,7 @@ async function executeSettlement() {
                 partnerName = pNameCheck;
                 involvedDocs.push(p);
                 
-                // ID Kurzform für den Link
                 const short = p.id.slice(-4).toUpperCase();
-                // Speichern des Link-Codes: [LINK:DokumentID:AnzeigeText]
                 involvedLinks.push(`[LINK:${p.id}:#${short}]`);
 
                 const amount = p.isTBD ? 0 : parseFloat(p.remainingAmount);
@@ -1293,7 +1291,7 @@ async function executeSettlement() {
             }
         });
 
-        // 2. ID für den neuen "Restbetrag"-Eintrag vorab generieren (falls nötig)
+        // 2. ID für den neuen "Restbetrag"-Eintrag vorab generieren
         let newDocRef = null;
         let newLinkCode = "";
         
@@ -1309,7 +1307,9 @@ async function executeSettlement() {
             let logInfo = 'Durch Verrechnung ausgeglichen.';
             
             if (newDocRef) {
-                // Wenn es einen Restbetrag gibt, verweisen wir darauf
+                // Hier schreiben wir jetzt auch den Betrag dazu, falls gewünscht?
+                // Aber wichtiger ist der neue Eintrag unten.
+                // Wir lassen es hier kurz, da der Fokus auf dem neuen Eintrag liegt.
                 logInfo = `Verrechnet. Restbetrag auf Eintrag ${newLinkCode} übertragen.`;
             } else {
                 logInfo = `Verrechnet und vollständig glattgestellt (0,00 €).`;
@@ -1327,13 +1327,14 @@ async function executeSettlement() {
             });
         });
 
-        // 4. Neuen Eintrag erstellen (wenn Restbetrag)
+        // 4. Neuen Eintrag erstellen (Restbetrag)
         if (newDocRef) {
             const isCreditor = net > 0;
             const absAmount = Math.abs(net);
             const realPartnerId = activeSettlementPartnerId.startsWith("MANUAL_") ? null : activeSettlementPartnerId;
             
-            const logText = `Restbetrag aus Verrechnung von: ${involvedLinks.join(', ')}`;
+            // NEU: Betrag im Log-Text
+            const logText = `Restbetrag (${absAmount.toFixed(2)} €) aus Verrechnung von: ${involvedLinks.join(', ')}`;
 
             const newData = {
                 title: "Restbetrag nach Verrechnung", 
@@ -1375,6 +1376,7 @@ async function executeSettlement() {
         setButtonLoading(btn, false); 
     }
 }
+
 
 
 function closeSettlementModal() {
