@@ -3134,11 +3134,12 @@ window.openHistoryModal = function(startId) {
 };
 
 function generateMermaidGraph(rootId) {
-    // 1. Alle Verbindungen finden (Kanten)
-    const edges = [];
-    const nodes = new Set();
-    const addedEdges = new Set(); 
-
+    const container = document.getElementById('history-graph-container');
+    
+    // 1. Alle Verbindungen (Kanten) im gesamten System erfassen
+    // Wir bauen erst eine Liste ALLER Beziehungen auf, die es gibt.
+    const allEdges = [];
+    
     const extractLinks = (text) => {
         const links = [];
         const regex = /\[LINK:([^:]+):([^\]]+)\]/g;
@@ -3160,78 +3161,83 @@ function generateMermaidGraph(rootId) {
                 let to = null;
                 let label = "";
 
-                // Logik: Wer ist Elternteil, wer ist Kind?
-                // Diese Aktionen bedeuten: linkedId (Neu) entstand aus pId (Alt/Parent)
-                // Bzw. linkedId wurde in pId hineingezogen
+                // LOGIK: Wer ist Elternteil (Oben), wer ist Kind (Unten)?
                 
-                // Fall A: Ein neuer Eintrag wurde erstellt (Split-Target, Restbetrag) -> Ursprung ist der aktuelle pId
-                if (h.action === 'created_merge' || h.action === 'created_settlement' || h.action === 'split_target' || h.action === 'created_credit') {
-                    from = linkedId; // WARTEN! Hier ist linkedId meist der Ursprung? Nein.
-                    // Bsp Split Target: "Abgespalten von Eintrag LINK:ORIGIN".
-                    // Also linkedId ist ORIGIN (Parent), pId ist TARGET (Child).
-                    from = linkedId; 
-                    to = pId;
-                    
-                    if (h.action === 'created_merge') label = "Merge";
-                    else if (h.action === 'created_settlement') label = "Bilanz";
-                    else if (h.action === 'split_target') label = "Split";
-                    else if (h.action === 'created_credit') label = "Guthaben";
-                } 
-                // Fall B: Der aktuelle Eintrag wurde irgendwohin verarbeitet
-                else if (h.action === 'merged' || h.action === 'settled' || h.action === 'split_source' || h.action === 'paid_excess') {
-                    // pId ist Parent, linkedId ist Child (Ziel)
-                    from = pId; 
-                    to = linkedId;
-                    
-                    if (h.action === 'merged') label = "Merge";
-                    else if (h.action === 'settled') label = "Bilanz";
-                    else if (h.action === 'split_source') label = "Split";
-                    else if (h.action === 'paid_excess') label = "Guthaben";
-                }
+                // Gruppe A: Der aktuelle Eintrag (p) ENTSTAND aus dem verlinkten (linked)
+                // Pfeil: Linked -> p
+                if (h.action === 'created_merge') { from = linkedId; to = pId; label = "Merge"; }
+                else if (h.action === 'created_settlement') { from = linkedId; to = pId; label = "Bilanz"; }
+                else if (h.action === 'split_target') { from = linkedId; to = pId; label = "Split"; }
+                else if (h.action === 'created_credit') { from = linkedId; to = pId; label = "Guthaben"; }
+                
+                // Gruppe B: Der aktuelle Eintrag (p) WURDE zu dem verlinkten (linked)
+                // Pfeil: p -> Linked
+                else if (h.action === 'merged') { from = pId; to = linkedId; label = "zu Merge"; }
+                else if (h.action === 'settled') { from = pId; to = linkedId; label = "zu Bilanz"; }
+                else if (h.action === 'split_source') { from = pId; to = linkedId; label = "zu Split"; }
+                else if (h.action === 'paid_excess') { from = pId; to = linkedId; label = "zu Guthaben"; }
 
                 if (from && to) {
-                    const edgeKey = `${from}-${to}`;
-                    if (!addedEdges.has(edgeKey)) {
-                        edges.push({ from, to, label });
-                        nodes.add(from);
-                        nodes.add(to);
-                        addedEdges.add(edgeKey);
-                    }
+                    allEdges.push({ from, to, label });
                 }
             });
         });
     });
 
-    // Filtern: Wir wollen nur den Teilbaum sehen, der mit rootId verbunden ist
-    // Wir laufen den Graphen in beide Richtungen ab, um alle Verwandten zu finden
+    // 2. Den relevanten Teilbaum finden (Infinite Search)
+    // Wir starten beim rootId und suchen so lange, bis wir ALLES gefunden haben, was irgendwie dranhängt.
     const relevantNodes = new Set([rootId]);
-    let changed = true;
-    while(changed) {
-        changed = false;
-        edges.forEach(edge => {
+    let newNodesFound = true;
+
+    while(newNodesFound) {
+        newNodesFound = false;
+        const currentSize = relevantNodes.size;
+
+        allEdges.forEach(edge => {
+            // Wenn EINER der beiden Knoten schon in unserer Gruppe ist, holen wir den anderen auch dazu.
+            // Das wandert den Baum sowohl nach oben (Eltern) als auch nach unten (Kinder).
             if (relevantNodes.has(edge.from) && !relevantNodes.has(edge.to)) {
                 relevantNodes.add(edge.to);
-                changed = true;
             }
             if (relevantNodes.has(edge.to) && !relevantNodes.has(edge.from)) {
                 relevantNodes.add(edge.from);
-                changed = true;
             }
         });
+
+        if (relevantNodes.size > currentSize) {
+            newNodesFound = true; // Wir haben was gefunden, also noch eine Runde drehen
+        }
     }
 
-    // Analyse für Styles: Wer ist Ursprung (keine eingehenden Kanten im Ausschnitt)?
-    const incomingCounts = {};
-    relevantNodes.forEach(id => incomingCounts[id] = 0);
-    edges.forEach(edge => {
+    // 3. Mermaid Definition bauen
+    let graphDefinition = 'graph TD\n';
+    
+    // Pfeile definieren (Nur die relevanten)
+    // Wir nutzen ein Set für Strings, um doppelte Pfeile zu vermeiden
+    const writtenEdges = new Set();
+
+    allEdges.forEach(edge => {
         if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) {
-            incomingCounts[edge.to] = (incomingCounts[edge.to] || 0) + 1;
+            const edgeId = `${edge.from}-${edge.to}`;
+            if (!writtenEdges.has(edgeId)) {
+                const safeFrom = "NODE_" + edge.from;
+                const safeTo = "NODE_" + edge.to;
+                // Dicke Pfeile durch Styling am Ende
+                graphDefinition += `    ${safeFrom} -- ${edge.label} --> ${safeTo}\n`;
+                writtenEdges.add(edgeId);
+            }
         }
     });
 
-    // 2. Mermaid Definition bauen
-    let graphDefinition = 'graph TD\n';
-    
+    // Analyse für Styles: Wer ist absoluter Ursprung in diesem Bild? (Hat keine Eltern im Graph)
+    const hasParent = new Set();
+    allEdges.forEach(edge => {
+        if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) {
+            hasParent.add(edge.to);
+        }
+    });
+
+    // Knoten definieren
     relevantNodes.forEach(nodeId => {
         const p = allPayments.find(x => x.id === nodeId);
         const short = nodeId.slice(-4).toUpperCase();
@@ -3241,36 +3247,30 @@ function generateMermaidGraph(rootId) {
         let nodeAmount = "???";
         
         if (p) {
-            // Titel kürzen und Sonderzeichen entfernen
             const safeTitle = p.title.replace(/["\(\)]/g, '').substring(0, 20) + (p.title.length>20?"...":"");
             nodeTitle = safeTitle;
             nodeAmount = parseFloat(p.amount).toFixed(2) + " €";
         }
 
-        // Styles und Labels definieren
         const safeId = "NODE_" + nodeId;
-        let styleDef = `style ${safeId} fill:#f3f4f6,stroke:#d1d5db,stroke-width:1px\n`; // Default Grau
+        let styleDef = `style ${safeId} fill:#f9fafb,stroke:#9ca3af,stroke-width:1px\n`; // Default Grau/Weiß
 
-        // Basis Label
         let labelPrefix = "";
-        let labelSuffix = "";
-
+        
         if (nodeId === rootId) {
-            // AKTUELL: Fett, Orange
+            // AKTUELL: Groß, Fett, Orange
             labelPrefix = "📍 ";
-            labelSuffix = " (HIER)";
-            styleDef = `style ${safeId} fill:#fffbeb,stroke:#f59e0b,stroke-width:4px\n`;
-        } else if (incomingCounts[nodeId] === 0) {
+            styleDef = `style ${safeId} fill:#fff7ed,stroke:#ea580c,stroke-width:4px\n`;
+        } else if (!hasParent.has(nodeId)) {
             // URSPRUNG: Grün
             labelPrefix = "🚀 ";
-            styleDef = `style ${safeId} fill:#ecfdf5,stroke:#10b981,stroke-width:2px\n`;
+            styleDef = `style ${safeId} fill:#ecfdf5,stroke:#059669,stroke-width:2px\n`;
         } else if (p && p.status === 'paid') {
-            // BEZAHLT: Gestrichelt
+            // ERLEDIGT ZWISCHENSCHRITT: Gestrichelt
             styleDef = `style ${safeId} fill:#f0fdf4,stroke:#bbf7d0,stroke-dasharray: 5 5\n`;
         }
 
-        // HTML-Label für Mermaid
-        nodeLabel = `"${labelPrefix}<b>${nodeTitle}</b>${labelSuffix}<br>${nodeAmount}<br><small>#${short}</small>"`;
+        nodeLabel = `"${labelPrefix}<b>${nodeTitle}</b><br>${nodeAmount}<br><small>#${short}</small>"`;
         
         graphDefinition += `    ${safeId}(${nodeLabel})\n`;
         graphDefinition += `    ${styleDef}`;
@@ -3279,23 +3279,18 @@ function generateMermaidGraph(rootId) {
         graphDefinition += `    click ${safeId} call openPaymentDetail("${nodeId}")\n`;
     });
 
-    edges.forEach(edge => {
-        if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) {
-            const safeFrom = "NODE_" + edge.from;
-            const safeTo = "NODE_" + edge.to;
-            graphDefinition += `    ${safeFrom} -- ${edge.label} --> ${safeTo}\n`;
-        }
-    });
-
-    // Fallback, wenn keine Verknüpfungen da sind
+    // Fallback
     if (relevantNodes.size === 1) {
-        document.getElementById('history-graph-container').innerHTML = 
+        container.innerHTML = 
             '<div class="text-center p-10 text-gray-500">Keine Verknüpfungen für diesen Eintrag.<br><span class="text-xs">Dies ist ein Einzelposten ohne Vorgeschichte.</span></div>';
         return;
     }
 
-    const container = document.getElementById('history-graph-container');
-    // Unique ID für das Diagramm, damit Mermaid beim Neurendern nicht durcheinander kommt
+    // --- STYLE FÜR PFEILE ---
+    // Hier machen wir die Pfeile dicker und deutlicher (Dunkelgrau, 2px dick)
+    graphDefinition += `    linkStyle default stroke-width:2px,fill:none,stroke:#374151;\n`;
+
+    // Rendern
     const uniqueId = "mermaid-" + Math.floor(Math.random() * 100000);
     container.innerHTML = `<div class="mermaid" id="${uniqueId}">${graphDefinition}</div>`;
     
