@@ -3468,11 +3468,12 @@ window.openHistoryModal = function(startId) {
 
 function generateMermaidGraph(rootId) {
     const container = document.getElementById('history-graph-container');
+    // Lade-Animation
     container.innerHTML = '<div class="flex justify-center items-center h-full"><div class="loading-spinner border-gray-500"></div></div>';
     
-    // 1. Helper für saubere Daten (Anti-Crash)
-    const cleanId = (id) => "N" + id.replace(/[^a-zA-Z0-9]/g, ''); // Nur Buchstaben/Zahlen für IDs
-    const cleanText = (text) => text ? text.replace(/["#;:<>{}]/g, ' ').trim() : ""; // Verbotene Zeichen raus
+    // 1. Helper
+    const cleanId = (id) => "N" + id.replace(/[^a-zA-Z0-9]/g, '');
+    const cleanText = (text) => text ? text.replace(/["#;:<>{}]/g, ' ').trim() : "";
 
     const extractLinks = (text) => {
         const links = [];
@@ -3486,45 +3487,99 @@ function generateMermaidGraph(rootId) {
         return match ? match[0] : null;
     };
 
-    // 2. Netz aufbauen
     const edgeMap = new Map(); 
+    const virtualNodes = new Map(); // Für Zahlungen, Stornos ohne eigene ID
+
     allPayments.forEach(p => {
         if (!p.history) return;
-        p.history.forEach(h => {
+
+        p.history.forEach((h, index) => {
             const linkedIds = extractLinks(h.info);
             let textAmount = extractAmountFromText(h.info);
             
-            linkedIds.forEach(linkedId => {
-                let from, to, actionName;
-                let amount = textAmount;
+            // --- A) Echte Verbindungen (Links zu anderen Einträgen) ---
+            if (linkedIds.length > 0) {
+                linkedIds.forEach(linkedId => {
+                    let from, to, actionName;
+                    let amount = textAmount;
 
-                // Logik (Richtung bestimmen)
-                if (h.action === 'created_merge') { from = linkedId; to = p.id; actionName = "Merge"; if(!amount){const s=allPayments.find(x=>x.id===linkedId);if(s)amount=parseFloat(s.amount).toFixed(2)+" €";} }
-                else if (h.action === 'created_settlement') { from = linkedId; to = p.id; actionName = "Bilanz"; if(!amount){const s=allPayments.find(x=>x.id===linkedId);if(s)amount=parseFloat(s.amount).toFixed(2)+" €";} }
-                else if (h.action === 'split_target') { from = linkedId; to = p.id; actionName = "Split"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
-                else if (h.action === 'created_credit') { from = linkedId; to = p.id; actionName = "Guthaben"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                    // Entstehung
+                    if (h.action === 'created_merge') { from = linkedId; to = p.id; actionName = "Merge"; if(!amount){const s=allPayments.find(x=>x.id===linkedId);if(s)amount=parseFloat(s.amount).toFixed(2)+" €";} }
+                    else if (h.action === 'created_settlement') { from = linkedId; to = p.id; actionName = "Bilanz"; if(!amount){const s=allPayments.find(x=>x.id===linkedId);if(s)amount=parseFloat(s.amount).toFixed(2)+" €";} }
+                    else if (h.action === 'split_target') { from = linkedId; to = p.id; actionName = "Split"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                    else if (h.action === 'created_credit') { from = linkedId; to = p.id; actionName = "Guthaben"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                    
+                    // Auflösung / Verarbeitung
+                    else if (h.action === 'merged') { from = p.id; to = linkedId; actionName = "zu Merge"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                    else if (h.action === 'settled') { from = p.id; to = linkedId; actionName = "zu Bilanz"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                    else if (h.action === 'split_source') { from = p.id; to = linkedId; actionName = "zu Split"; if(!amount){const t=allPayments.find(x=>x.id===linkedId);if(t)amount=parseFloat(t.amount).toFixed(2)+" €";} }
+                    else if (h.action === 'paid_excess') { from = p.id; to = linkedId; actionName = "zu Guthaben"; if(!amount){const t=allPayments.find(x=>x.id===linkedId);if(t)amount=parseFloat(t.amount).toFixed(2)+" €";} }
+                    
+                    // Guthaben Nutzung (WICHTIG: Hier fehlte die Logik)
+                    else if (h.action === 'credit_used') { 
+                        // p ist der Guthaben-Eintrag, linkedId ist die Schuld
+                        from = p.id; 
+                        to = linkedId; 
+                        actionName = "Guthaben Einlösung"; 
+                    }
+                    // Storno Rückbuchung
+                    else if (h.action === 'credit_refunded') { from = linkedId; to = p.id; actionName = "Rückbuchung"; }
+
+                    if (from && to) {
+                        const key = `${from}-${to}`;
+                        const existing = edgeMap.get(key);
+                        if (!existing || (!existing.amount && amount)) {
+                            edgeMap.set(key, { from, to, label: actionName, amount });
+                        }
+                    }
+                });
+            } 
+            // --- B) Virtuelle Ereignisse (Zahlungen, Stornos) ---
+            else {
+                let vType = null;
+                let vLabel = "";
                 
-                else if (h.action === 'merged') { from = p.id; to = linkedId; actionName = "zu Merge"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
-                else if (h.action === 'settled') { from = p.id; to = linkedId; actionName = "zu Bilanz"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
-                else if (h.action === 'split_source') { from = p.id; to = linkedId; actionName = "zu Split"; if(!amount){const t=allPayments.find(x=>x.id===linkedId);if(t)amount=parseFloat(t.amount).toFixed(2)+" €";} }
-                else if (h.action === 'paid_excess') { from = p.id; to = linkedId; actionName = "zu Guthaben"; if(!amount){const t=allPayments.find(x=>x.id===linkedId);if(t)amount=parseFloat(t.amount).toFixed(2)+" €";} }
-                else if (h.action === 'credit_refunded') { from = linkedId; to = p.id; actionName = "Storno"; } 
+                // Zahlung (Geld fließt rein)
+                if (h.action === 'partial_pay' || h.action === 'mark_paid' || h.action === 'confirm_payment') {
+                    vType = 'PAY';
+                    vLabel = "Zahlung";
+                } 
+                // ACHTUNG: 'paid_with_credit' ignorieren wir hier, weil das oben über 'credit_used' als echter Link dargestellt wird!
+                // Das verhindert doppelte Pfeile.
+                
+                else if (h.action === 'adjusted') {
+                    vType = 'ADJUST';
+                    vLabel = "€ Änderung";
+                } 
+                else if (h.action === 'tx_deleted') {
+                    vType = 'STORNO';
+                    vLabel = "Storno";
+                }
 
-                if (from && to) {
-                    const key = `${from}-${to}`;
-                    // Nur hinzufügen, wenn wir die Kante nicht schon "besser" (mit Betrag) haben
-                    const existing = edgeMap.get(key);
-                    if (!existing || (!existing.amount && amount)) {
-                        edgeMap.set(key, { from, to, label: actionName, amount });
+                if (vType) {
+                    const vId = `V_${p.id}_${index}`; // Einzigartige ID für das Event
+                    virtualNodes.set(vId, { type: vType, label: vLabel, amount: textAmount, parentId: p.id, info: cleanText(h.info) });
+                    
+                    // Richtung der Pfeile für virtuelle Knoten:
+                    if (vType === 'PAY') {
+                        // Zahlung -> Eintrag (Geld kommt an)
+                        edgeMap.set(`${vId}-${p.id}`, { from: vId, to: p.id, label: "gebucht", amount: textAmount });
+                    } else if (vType === 'STORNO') {
+                        // Storno -> Eintrag (Info)
+                        edgeMap.set(`${vId}-${p.id}`, { from: vId, to: p.id, label: "storniert", amount: textAmount });
+                    } else {
+                        // Anpassung -> Eintrag
+                        edgeMap.set(`${vId}-${p.id}`, { from: vId, to: p.id, label: "ändert", amount: textAmount });
                     }
                 }
-            });
+            }
         });
     });
 
-    // 3. Relevanten Bereich suchen
+    // 3. Relevanten Teilbaum finden (Alles was zusammenhängt)
     const relevantNodes = new Set([rootId]);
     let changed = true;
+    
     while(changed) {
         changed = false;
         const currentSize = relevantNodes.size;
@@ -3535,59 +3590,86 @@ function generateMermaidGraph(rootId) {
         if (relevantNodes.size > currentSize) changed = true;
     }
 
-    // 4. Mermaid String bauen
+    // 4. Graph Definition
     let graphDef = 'graph TD\n';
-    
-    // Ursprungs-Check
     const hasParent = new Set();
+    
+    // Wer hat Eltern?
     for (const [key, edge] of edgeMap) {
         if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) hasParent.add(edge.to);
     }
 
-    // Knoten
+    // KNOTEN ZEICHNEN
     relevantNodes.forEach(nodeId => {
-        const p = allPayments.find(x => x.id === nodeId);
-        const short = nodeId.slice(-4).toUpperCase();
-        const sId = cleanId(nodeId);
-        
-        let label = "";
-        let styleClass = "";
+        // Virtuelle Knoten (Zahlungen etc.)
+        if (nodeId.startsWith('V_')) {
+            const vNode = virtualNodes.get(nodeId);
+            if (vNode) {
+                const sId = "N" + nodeId.replace(/[^a-zA-Z0-9]/g, '');
+                const amt = vNode.amount ? vNode.amount : "";
+                
+                let shapeS = "(", shapeE = ")";
+                let style = "";
 
-        if (p) {
-            const title = cleanText(p.title);
-            const amt = parseFloat(p.amount).toFixed(2) + " €";
-            
-            // Label bauen (Vorsicht mit HTML in Mermaid strings!)
-            let prefix = "";
-            if (nodeId === rootId) prefix = "📍 ";
-            else if (!hasParent.has(nodeId)) prefix = "🚀 ";
-            
-            // Wir nutzen einfache Strings mit <br> für Umbrüche, das ist sicherer
-            label = `"${prefix}${title}<br>${amt}<br>#${short}"`;
+                if (vNode.type === 'PAY') {
+                    style = `style ${sId} fill:#dcfce7,stroke:#166534,stroke-width:1px,stroke-dasharray: 2 2`;
+                    shapeS = "(["; shapeE = "])"; // Rund
+                } else if (vNode.type === 'STORNO') {
+                    style = `style ${sId} fill:#fee2e2,stroke:#991b1b,stroke-width:2px`;
+                    shapeS = "{{"; shapeE = "}}"; // Hexagon
+                } else {
+                    style = `style ${sId} fill:#fef3c7,stroke:#d97706,stroke-width:1px`;
+                    shapeS = "[/"; shapeE = "\\]"; // Trapez
+                }
 
-            // Styles definieren
-            if (nodeId === rootId) styleClass = `style ${sId} fill:#fff7ed,stroke:#ea580c,stroke-width:4px`;
-            else if (!hasParent.has(nodeId)) styleClass = `style ${sId} fill:#ecfdf5,stroke:#059669,stroke-width:2px`;
-            else if (p.status === 'paid') styleClass = `style ${sId} fill:#f0fdf4,stroke:#bbf7d0,stroke-dasharray: 5 5`;
-            else styleClass = `style ${sId} fill:#ffffff,stroke:#9ca3af`;
+                graphDef += `    ${sId}${shapeS}"<b>${vNode.label}</b><br>${amt}"${shapeE}\n`;
+                graphDef += `    ${style}\n`;
+                // Klick zeigt Info
+                graphDef += `    click ${sId} call alert("${vNode.info}")\n`;
+            }
+        } 
+        // Echte Einträge
+        else {
+            const p = allPayments.find(x => x.id === nodeId);
+            const short = nodeId.slice(-4).toUpperCase();
+            const sId = cleanId(nodeId);
+            let label = "", style = "";
 
-            // Klick Event
-            graphDef += `    click ${sId} call openPaymentDetail("${nodeId}")\n`;
+            if (p) {
+                const title = cleanText(p.title);
+                const amt = parseFloat(p.amount).toFixed(2) + " €";
+                let prefix = "";
 
-        } else {
-            label = `"🗑️ Gelöscht<br>#${short}"`;
-            styleClass = `style ${sId} fill:#f3f4f6,stroke:#d1d5db`;
+                if (nodeId === rootId) {
+                    prefix = "📍 ";
+                    style = `style ${sId} fill:#fff7ed,stroke:#ea580c,stroke-width:4px`;
+                } else if (!hasParent.has(nodeId)) {
+                    prefix = "🚀 ";
+                    style = `style ${sId} fill:#ecfdf5,stroke:#059669,stroke-width:2px`;
+                } else if (p.status === 'paid') {
+                    style = `style ${sId} fill:#f0fdf4,stroke:#bbf7d0,stroke-dasharray: 5 5`;
+                } else {
+                    style = `style ${sId} fill:#ffffff,stroke:#9ca3af`;
+                }
+
+                label = `"${prefix}<b>${title}</b><br>${amt}<br>#${short}"`;
+                graphDef += `    ${sId}(${label})\n`;
+                graphDef += `    ${style}\n`;
+                graphDef += `    click ${sId} call openPaymentDetail("${nodeId}")\n`;
+
+            } else {
+                graphDef += `    ${sId}("🗑️ Gelöscht<br>#${short}")\n`;
+                graphDef += `    style ${sId} fill:#f3f4f6,stroke:#d1d5db\n`;
+            }
         }
-
-        graphDef += `    ${sId}(${label})\n`;
-        graphDef += `    ${styleClass}\n`;
     });
 
-    // Kanten
+    // KANTEN ZEICHNEN
     for (const [key, edge] of edgeMap) {
         if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) {
-            const sFrom = cleanId(edge.from);
-            const sTo = cleanId(edge.to);
+            // IDs bereinigen für Mermaid
+            let sFrom = edge.from.startsWith('V_') ? "N" + edge.from.replace(/[^a-zA-Z0-9]/g, '') : cleanId(edge.from);
+            let sTo = edge.to.startsWith('V_') ? "N" + edge.to.replace(/[^a-zA-Z0-9]/g, '') : cleanId(edge.to);
             
             let txt = edge.label;
             if (edge.amount) txt += `<br>${edge.amount}`;
@@ -3597,52 +3679,41 @@ function generateMermaidGraph(rootId) {
     }
 
     if (relevantNodes.size === 1) {
-        container.innerHTML = '<div class="text-center p-10 text-gray-500 flex flex-col items-center justify-center h-full">Keine Verknüpfungen gefunden.<br><span class="text-xs">Einzelposten.</span></div>';
+        container.innerHTML = '<div class="text-center p-10 text-gray-500 h-full flex flex-col justify-center">Keine Verknüpfungen gefunden.<br><span class="text-xs">Einzelposten.</span></div>';
         return;
     }
 
     graphDef += `    linkStyle default stroke:#374151,stroke-width:2px,fill:none;\n`;
 
-    // 5. Rendern & Zoom (Fix für 1/4 Größe)
+    // 5. Rendern
     const uniqueId = "mermaid-" + Date.now();
-    // Container leeren
-    container.innerHTML = `<div class="mermaid" id="${uniqueId}" style="width: 100%; height: 100%; overflow: hidden;">${graphDef}</div>`;
+    container.innerHTML = `<div class="mermaid" id="${uniqueId}" style="opacity: 0; transition: opacity 0.3s ease; width: 100%; height: 100%;">${graphDef}</div>`;
 
     setTimeout(() => {
         try {
             mermaid.init(undefined, document.getElementById(uniqueId));
-            
-            // Kurz warten, bis SVG im DOM ist
             setTimeout(() => {
                 const svgElement = document.querySelector(`#${uniqueId} svg`);
-                if (svgElement) {
-                    // GRÖSSEN FIX: Attribute entfernen, die die Größe begrenzen
-                    svgElement.removeAttribute('width');
-                    svgElement.removeAttribute('height');
-                    svgElement.removeAttribute('style');
-                    
-                    // CSS setzen, damit es den Container füllt
-                    svgElement.style.width = "100%";
+                const divElement = document.getElementById(uniqueId);
+                if (svgElement && divElement) {
+                    svgElement.style.maxWidth = "none";
                     svgElement.style.height = "100%";
-                    svgElement.style.display = "block"; // Wichtig gegen Abstände unten
-
-                    // Zoom aktivieren
+                    svgElement.style.width = "100%";
+                    
+                    // Zoom starten
                     svgPanZoom(svgElement, {
-                        zoomEnabled: true,
-                        controlIconsEnabled: true,
-                        fit: true,
-                        center: true,
-                        minZoom: 0.5,
-                        maxZoom: 20
+                        zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true, minZoom: 0.1, maxZoom: 10
                     });
+                    divElement.style.opacity = "1";
                 }
-            }, 100);
-        } catch (e) {
+            }, 150);
+        } catch(e) {
             console.error("Mermaid Error:", e);
             container.innerHTML = `<div class="text-red-500 p-4 text-center">Grafikfehler: ${e.message}</div>`;
         }
     }, 50);
 }
+
 
 
 
