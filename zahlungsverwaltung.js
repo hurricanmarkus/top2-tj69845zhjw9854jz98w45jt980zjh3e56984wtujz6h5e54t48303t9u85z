@@ -383,7 +383,6 @@ async function executeMerge() {
         const p = allPayments.find(item => item.id === id);
         if (!p) continue;
 
-        // Validierung: Gleicher Partner, gleiche Richtung, Status Offen
         if (p.debtorId !== first.debtorId || p.creditorId !== first.creditorId) {
             alertUser("Fehler: Man kann nur Einträge derselben Person und Richtung zusammenfassen.", "error");
             return;
@@ -400,7 +399,6 @@ async function executeMerge() {
         totalAmount += parseFloat(p.remainingAmount);
         titleList.push(p.title);
         
-        // Link für den neuen Eintrag generieren
         const short = p.id.slice(-4).toUpperCase();
         mergedLinks.push(`[LINK:${p.id}:#${short}]`);
     }
@@ -414,15 +412,19 @@ async function executeMerge() {
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
 
-        // 1. Neue Referenz VORAB erstellen (damit wir die ID für die Verlinkung haben)
+        // 1. Neue Referenz VORAB erstellen
         const newDocRef = doc(paymentsRef);
         const newShort = newDocRef.id.slice(-4).toUpperCase();
         const linkToNew = `[LINK:${newDocRef.id}:#${newShort}]`;
 
-        // 2. Alte Einträge schließen & Link zur Sammelrechnung eintragen
+        // 2. Alte Einträge schließen
         ids.forEach(id => {
             const ref = doc(paymentsRef, id);
             const p = allPayments.find(item => item.id === id);
+            
+            // NEU: Wir holen den aktuellen Restbetrag für den Log
+            const currentRest = parseFloat(p.remainingAmount).toFixed(2);
+            
             const history = p.history || [];
             batch.update(ref, {
                 status: 'closed',
@@ -430,8 +432,8 @@ async function executeMerge() {
                     date: new Date(), 
                     action: 'merged', 
                     user: currentUser.displayName, 
-                    // NEU: Hier steht jetzt der Link zur neuen Sammelrechnung
-                    info: `In Sammelrechnung ${linkToNew} zusammengefasst.` 
+                    // NEU: Betrag im Text speichern für den Graphen
+                    info: `In Sammelrechnung ${linkToNew} (${currentRest} €) zusammengefasst.` 
                 }]
             });
         });
@@ -439,7 +441,6 @@ async function executeMerge() {
         // 3. Neuen Sammel-Eintrag erstellen
         const newTitle = `Sammelrechnung (${ids.length} Posten)`;
         const newNotes = "Zusammenfassung von:\n- " + titleList.join("\n- ");
-        
         const logInfo = `Zusammenfassung aus ${ids.length} Einträgen erstellt: ${mergedLinks.join(', ')}`;
 
         const newData = {
@@ -453,7 +454,7 @@ async function executeMerge() {
             notes: newNotes,
             type: 'debt',
             status: 'open',
-            categoryId: 'cat_misc', // Standard auf Diverse
+            categoryId: 'cat_misc',
             createdAt: serverTimestamp(),
             createdBy: currentUser.mode,
             debtorId: first.debtorId, debtorName: first.debtorName,
@@ -467,12 +468,11 @@ async function executeMerge() {
             }]
         };
 
-        // Speichern unter der bereits erstellten Referenz
         batch.set(newDocRef, newData);
 
         await batch.commit();
         alertUser("Einträge erfolgreich zusammengefasst!", "success");
-        toggleSelectionMode(); // Auswahlmodus beenden
+        toggleSelectionMode();
 
     } catch (e) {
         console.error(e);
@@ -481,6 +481,7 @@ async function executeMerge() {
         setButtonLoading(btn, false);
     }
 }
+
 
 
 // --- SPLIT EXISTING ENTRY LOGIK (Aufsplitten) ---
@@ -1316,7 +1317,7 @@ async function executeSettlement() {
             }
         });
 
-        // 2. ID für den neuen "Restbetrag"-Eintrag vorab generieren
+        // 2. Neue ID vorbereiten
         let newDocRef = null;
         let newLinkCode = "";
         
@@ -1329,15 +1330,14 @@ async function executeSettlement() {
         // 3. Alte Einträge aktualisieren
         involvedDocs.forEach(p => {
             const ref = doc(paymentsRef, p.id);
-            let logInfo = 'Durch Verrechnung ausgeglichen.';
+            // NEU: Aktuellen Betrag für Log holen
+            const currentRest = parseFloat(p.remainingAmount).toFixed(2);
             
+            let logInfo = "";
             if (newDocRef) {
-                // Hier schreiben wir jetzt auch den Betrag dazu, falls gewünscht?
-                // Aber wichtiger ist der neue Eintrag unten.
-                // Wir lassen es hier kurz, da der Fokus auf dem neuen Eintrag liegt.
-                logInfo = `Verrechnet. Restbetrag auf Eintrag ${newLinkCode} übertragen.`;
+                logInfo = `Verrechnet (${currentRest} €). Restbetrag auf Eintrag ${newLinkCode} übertragen.`;
             } else {
-                logInfo = `Verrechnet und vollständig glattgestellt (0,00 €).`;
+                logInfo = `Verrechnet und vollständig glattgestellt (${currentRest} €).`;
             }
 
             batch.update(ref, {
@@ -1352,13 +1352,12 @@ async function executeSettlement() {
             });
         });
 
-        // 4. Neuen Eintrag erstellen (Restbetrag)
+        // 4. Neuen Eintrag erstellen
         if (newDocRef) {
             const isCreditor = net > 0;
             const absAmount = Math.abs(net);
             const realPartnerId = activeSettlementPartnerId.startsWith("MANUAL_") ? null : activeSettlementPartnerId;
             
-            // NEU: Betrag im Log-Text
             const logText = `Restbetrag (${absAmount.toFixed(2)} €) aus Verrechnung von: ${involvedLinks.join(', ')}`;
 
             const newData = {
@@ -1401,6 +1400,7 @@ async function executeSettlement() {
         setButtonLoading(btn, false); 
     }
 }
+
 
 
 
