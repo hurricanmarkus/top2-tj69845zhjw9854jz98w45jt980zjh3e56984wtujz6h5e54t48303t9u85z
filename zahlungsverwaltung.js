@@ -1452,9 +1452,9 @@ function renderDetailContent(p, isRefresh) {
     const closeBtn = document.getElementById('btn-close-detail-modal');
     if(closeBtn) closeBtn.onclick = closeDetailModal;
 
+    const iAmCreator = p.createdBy === currentUser.mode;
     const iAmDebtor = p.debtorId === currentUser.mode;
     const iAmCreditor = p.creditorId === currentUser.mode;
-    const iAmCreator = p.createdBy === currentUser.mode;
     const shortId = p.id.slice(-4).toUpperCase();
 
     const parseLinks = (text) => {
@@ -1464,23 +1464,30 @@ function renderDetailContent(p, isRefresh) {
         });
     };
 
-    // 1. Allgemeine Buttons (für alle Beteiligten sichtbar)
-    // NEU: Hier ist jetzt der Verlauf-Button
-    let commonControls = `
-        <div class="flex justify-end gap-2 mb-2 no-print">
-             <button onclick="openHistoryModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-bold shadow-sm transition transform hover:scale-105">🌳 Verlauf</button>
-        </div>
-    `;
-
-    // 2. Editier-Buttons (Nur für Ersteller)
-    let editControls = '';
+    // --- BUTTON LOGIK ---
+    // Wir bauen eine Button-Leiste, die für ALLE sichtbar ist, aber je nach Rolle mehr Buttons hat.
+    
+    let topButtonsHTML = '';
+    
+    // Der Verlauf-Button ist immer da (links)
+    const btnHistory = `<button onclick="openHistoryModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-bold shadow-sm transition transform hover:scale-105 mr-auto">🌳 Verlauf</button>`;
+    
     if (iAmCreator) {
-        editControls = `
-        <div class="flex justify-end gap-2 mb-4 no-print border-b pb-2 flex-wrap">
-            <button onclick="openAdjustAmountModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-bold">€ Anpassen</button>
+        // Wenn Ersteller: Alle Buttons in einer Reihe
+        // Reihenfolge: Verlauf (links bündig durch mr-auto oben, oder wir packen ihn in den Flow) -> Anpassen -> Split -> Edit -> Delete
+        // Um sie schön nebeneinander zu haben ohne Überlappung:
+        topButtonsHTML = `
+        <div class="flex flex-wrap justify-end gap-2 mb-4 no-print border-b pb-2 items-center">
+            ${btnHistory} <button onclick="openAdjustAmountModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-bold">€ Anpassen</button>
             <button onclick="openSplitModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 text-sm font-bold">Aufteilen</button>
             <button onclick="editPayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-sm font-bold">Bearbeiten</button>
             <button onclick="deletePayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-bold">Löschen</button>
+        </div>`;
+    } else {
+        // Wenn KEIN Ersteller: Nur Verlauf anzeigen
+        topButtonsHTML = `
+        <div class="flex justify-start gap-2 mb-4 no-print border-b pb-2">
+            ${btnHistory}
         </div>`;
     }
 
@@ -1519,7 +1526,7 @@ function renderDetailContent(p, isRefresh) {
                         <span class="text-xs text-gray-500 italic">(${tx.type === 'credit_usage' ? 'Guthaben' : 'Zahlung'})</span>
                     </div>
                     <span class="text-[10px] text-gray-400">von <strong>${userName}</strong> am ${dateStr}</span>
-                    ${txInfo ? `<span class="text-[10px] text-gray-500">${txInfo}</span>` : ''}
+                    ${txInfo ? `<span class="text-[10px] text-gray-500 mt-0.5 block">${txInfo}</span>` : ''}
                 </div>
                 ${canDelete ? `<button class="text-red-400 hover:text-red-600 text-xs font-bold delete-tx-btn px-2 py-1 bg-red-50 rounded border border-red-100">Löschen</button>` : ''}
             `;
@@ -1530,10 +1537,8 @@ function renderDetailContent(p, isRefresh) {
         transactionSection.classList.add('hidden');
     }
 
-    // HTML Zusammenbau: Erst Common, dann Edit
     content.innerHTML = `
-        ${commonControls}
-        ${editControls}
+        ${topButtonsHTML}
         <h2 class="text-2xl font-bold text-gray-800 mb-1 leading-tight">${p.title}</h2>
         <div class="flex flex-wrap gap-2 mb-4 mt-2">
             <span class="px-2 py-1 bg-gray-800 text-white rounded text-xs font-mono tracking-wider">#${shortId}</span>
@@ -1602,6 +1607,7 @@ function renderDetailContent(p, isRefresh) {
     }
     if (!isRefresh) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
 }
+
 
 
 
@@ -3142,82 +3148,41 @@ window.openHistoryModal = function(startId) {
 
 function generateMermaidGraph(rootId) {
     const container = document.getElementById('history-graph-container');
-    // Vorheriges SVG und PanZoom Instanzen aufräumen (wichtig!)
     container.innerHTML = ''; 
     
+    // 1. Helper
     const extractLinks = (text) => {
         const links = [];
         const regex = /\[LINK:([^:]+):([^\]]+)\]/g;
         let match;
-        while ((match = regex.exec(text)) !== null) {
-            links.push(match[1]);
-        }
+        while ((match = regex.exec(text)) !== null) links.push(match[1]);
         return links;
     };
-
     const extractAmountFromText = (text) => {
         const match = text.match(/(\d+(?:[.,]\d{2})?)\s?€/);
         return match ? match[0] : null;
     };
 
+    // 2. Kanten sammeln
     const edgeMap = new Map(); 
-
     allPayments.forEach(p => {
         if (!p.history) return;
-
         p.history.forEach(h => {
             const linkedIds = extractLinks(h.info);
             let textAmount = extractAmountFromText(h.info);
-
             linkedIds.forEach(linkedId => {
                 let from, to, actionName;
                 let amount = textAmount;
 
-                if (h.action === 'created_merge') { 
-                    from = linkedId; to = p.id; actionName = "Merge"; 
-                    if (!amount) {
-                        const src = allPayments.find(x => x.id === linkedId);
-                        if (src) amount = parseFloat(src.amount).toFixed(2) + " €";
-                    }
-                }
-                else if (h.action === 'created_settlement') { 
-                    from = linkedId; to = p.id; actionName = "Bilanz"; 
-                    if (!amount) {
-                        const src = allPayments.find(x => x.id === linkedId);
-                        if (src) amount = parseFloat(src.amount).toFixed(2) + " €";
-                    }
-                }
-                else if (h.action === 'split_target') { 
-                    from = linkedId; to = p.id; actionName = "Split"; 
-                    if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
-                }
-                else if (h.action === 'created_credit') { 
-                    from = linkedId; to = p.id; actionName = "Guthaben"; 
-                    if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
-                }
+                if (h.action === 'created_merge') { from = linkedId; to = p.id; actionName = "Merge"; if(!amount){const src=allPayments.find(x=>x.id===linkedId);if(src)amount=parseFloat(src.amount).toFixed(2)+" €";} }
+                else if (h.action === 'created_settlement') { from = linkedId; to = p.id; actionName = "Bilanz"; if(!amount){const src=allPayments.find(x=>x.id===linkedId);if(src)amount=parseFloat(src.amount).toFixed(2)+" €";} }
+                else if (h.action === 'split_target') { from = linkedId; to = p.id; actionName = "Split"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                else if (h.action === 'created_credit') { from = linkedId; to = p.id; actionName = "Guthaben"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
                 
-                else if (h.action === 'merged') { 
-                    from = p.id; to = linkedId; actionName = "zu Merge";
-                    if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
-                }
-                else if (h.action === 'settled') { 
-                    from = p.id; to = linkedId; actionName = "zu Bilanz";
-                    if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
-                }
-                else if (h.action === 'split_source') { 
-                    from = p.id; to = linkedId; actionName = "zu Split"; 
-                    if (!amount) {
-                        const target = allPayments.find(x => x.id === linkedId);
-                        if (target) amount = parseFloat(target.amount).toFixed(2) + " €";
-                    }
-                }
-                else if (h.action === 'paid_excess') { 
-                    from = p.id; to = linkedId; actionName = "zu Guthaben"; 
-                    if (!amount) {
-                         const target = allPayments.find(x => x.id === linkedId);
-                         if (target) amount = parseFloat(target.amount).toFixed(2) + " €";
-                    }
-                }
+                else if (h.action === 'merged') { from = p.id; to = linkedId; actionName = "zu Merge"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                else if (h.action === 'settled') { from = p.id; to = linkedId; actionName = "zu Bilanz"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                else if (h.action === 'split_source') { from = p.id; to = linkedId; actionName = "zu Split"; if(!amount){const target=allPayments.find(x=>x.id===linkedId);if(target)amount=parseFloat(target.amount).toFixed(2)+" €";} }
+                else if (h.action === 'paid_excess') { from = p.id; to = linkedId; actionName = "zu Guthaben"; if(!amount){const target=allPayments.find(x=>x.id===linkedId);if(target)amount=parseFloat(target.amount).toFixed(2)+" €";} }
 
                 if (from && to) {
                     const key = `${from}-${to}`;
@@ -3230,39 +3195,29 @@ function generateMermaidGraph(rootId) {
         });
     });
 
+    // 3. Teilbaum finden
     const relevantNodes = new Set([rootId]);
     let changed = true;
-    
     while(changed) {
         changed = false;
         const currentSize = relevantNodes.size;
-        
         for (const [key, edge] of edgeMap) {
-            if (relevantNodes.has(edge.from) && !relevantNodes.has(edge.to)) {
-                relevantNodes.add(edge.to);
-            }
-            if (relevantNodes.has(edge.to) && !relevantNodes.has(edge.from)) {
-                relevantNodes.add(edge.from);
-            }
+            if (relevantNodes.has(edge.from) && !relevantNodes.has(edge.to)) relevantNodes.add(edge.to);
+            if (relevantNodes.has(edge.to) && !relevantNodes.has(edge.from)) relevantNodes.add(edge.from);
         }
-        
         if (relevantNodes.size > currentSize) changed = true;
     }
 
+    // 4. Graph Definition
     let graphDefinition = 'graph TD\n';
-    const writtenEdges = new Set();
-
     const hasParent = new Set();
     for (const [key, edge] of edgeMap) {
-        if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) {
-            hasParent.add(edge.to);
-        }
+        if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) hasParent.add(edge.to);
     }
 
     relevantNodes.forEach(nodeId => {
         const p = allPayments.find(x => x.id === nodeId);
         const short = nodeId.slice(-4).toUpperCase();
-        
         let nodeTitle = "Gelöscht/Archiviert";
         let nodeAmount = "???";
         
@@ -3272,9 +3227,8 @@ function generateMermaidGraph(rootId) {
             nodeAmount = parseFloat(p.amount).toFixed(2) + " €";
         }
 
-        const safeId = "NODE_" + nodeId;
+        const safeId = "N" + nodeId;
         let styleDef = `style ${safeId} fill:#f9fafb,stroke:#9ca3af,stroke-width:1px\n`; 
-
         let labelPrefix = "";
         
         if (nodeId === rootId) {
@@ -3288,7 +3242,6 @@ function generateMermaidGraph(rootId) {
         }
 
         const nodeLabel = `"${labelPrefix}<b>${nodeTitle}</b><br>${nodeAmount}<br><small>#${short}</small>"`;
-        
         graphDefinition += `    ${safeId}(${nodeLabel})\n`;
         graphDefinition += `    ${styleDef}`;
         graphDefinition += `    click ${safeId} call openPaymentDetail("${nodeId}")\n`;
@@ -3296,8 +3249,8 @@ function generateMermaidGraph(rootId) {
 
     for (const [key, edge] of edgeMap) {
         if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) {
-            const safeFrom = "NODE_" + edge.from;
-            const safeTo = "NODE_" + edge.to;
+            const safeFrom = "N" + edge.from;
+            const safeTo = "N" + edge.to;
             let edgeLabel = `"${edge.label}`;
             if (edge.amount) edgeLabel += `<br>${edge.amount}`;
             edgeLabel += `"`;
@@ -3313,33 +3266,43 @@ function generateMermaidGraph(rootId) {
     graphDefinition += `    linkStyle default stroke:#374151,stroke-width:2px,fill:none;\n`;
 
     const uniqueId = "mermaid-" + Math.floor(Math.random() * 1000000);
-    container.innerHTML = `<div class="mermaid" id="${uniqueId}" style="width: 100%; height: 100%;">${graphDefinition}</div>`;
     
-    // WICHTIG: Zoom aktivieren NACHDEM Mermaid fertig ist
+    // FIX: Opacity auf 0 setzen, um "Aufblitzen" zu verhindern
+    container.innerHTML = `<div class="mermaid" id="${uniqueId}" style="opacity: 0; transition: opacity 0.3s ease; width: 100%; height: 100%;">${graphDefinition}</div>`;
+    
+    // WICHTIG: Zoom & Resize Fix
     setTimeout(() => {
         try {
             mermaid.init(undefined, document.getElementById(uniqueId));
             
-            // Kurze Verzögerung, damit DOM gerendert ist
             setTimeout(() => {
                 const svgElement = document.querySelector(`#${uniqueId} svg`);
-                if (svgElement) {
-                    // Zoom Bibliothek aktivieren
+                const divElement = document.getElementById(uniqueId);
+                
+                if (svgElement && divElement) {
+                    // 1. Zwinge SVG auf 100% Breite/Höhe (Mermaid setzt oft harte max-width)
+                    svgElement.style.maxWidth = "none";
+                    svgElement.style.height = "100%";
+                    svgElement.style.width = "100%";
+                    
+                    // 2. Zoom aktivieren
                     svgPanZoom(svgElement, {
                         zoomEnabled: true,
-                        controlIconsEnabled: true, // Zeigt +/- Buttons an
+                        controlIconsEnabled: true, 
                         fit: true,
                         center: true,
                         minZoom: 0.5,
                         maxZoom: 10
                     });
+                    
+                    // 3. Jetzt sichtbar machen
+                    divElement.style.opacity = "1";
                 }
-            }, 100);
+            }, 150); // Etwas mehr Zeit geben für das Rendering
             
         } catch(e) {
-            console.error("Graph Fehler:", e);
+            console.error("Graph Render Fehler:", e);
             container.innerHTML = "Fehler bei der Darstellung.";
         }
     }, 50);
 }
-
