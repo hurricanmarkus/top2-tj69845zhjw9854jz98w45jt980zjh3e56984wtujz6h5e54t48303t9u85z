@@ -377,6 +377,8 @@ async function executeMerge() {
 
     let totalAmount = 0;
     let titleList = [];
+    // NEU: Liste für die Links zu den Originalen
+    const mergedLinks = [];
 
     for (const id of ids) {
         const p = allPayments.find(item => item.id === id);
@@ -398,6 +400,10 @@ async function executeMerge() {
 
         totalAmount += parseFloat(p.remainingAmount);
         titleList.push(p.title);
+        
+        // NEU: Link generieren und speichern
+        const short = p.id.slice(-4).toUpperCase();
+        mergedLinks.push(`[LINK:${p.id}:#${short}]`);
     }
 
     if (!confirm(`Möchtest du diese ${ids.length} Einträge zu einem neuen Eintrag über ${totalAmount.toFixed(2)}€ zusammenfassen?`)) return;
@@ -416,31 +422,45 @@ async function executeMerge() {
             const history = p.history || [];
             batch.update(ref, {
                 status: 'closed',
-                history: [...history, { date: new Date(), action: 'merged', user: currentUser.displayName, info: 'In Sammelrechnung zusammengefasst.' }]
+                history: [...history, { 
+                    date: new Date(), 
+                    action: 'merged', 
+                    user: currentUser.displayName, 
+                    info: 'In Sammelrechnung zusammengefasst.' 
+                }]
             });
         });
 
         // 2. Neuen Sammel-Eintrag erstellen
         const newTitle = `Sammelrechnung (${ids.length} Posten)`;
         const newNotes = "Zusammenfassung von:\n- " + titleList.join("\n- ");
+        
+        // NEU: Info-Text mit den anklickbaren Links
+        const logInfo = `Zusammenfassung aus ${ids.length} Einträgen erstellt: ${mergedLinks.join(', ')}`;
 
         const newData = {
             title: newTitle,
             amount: totalAmount,
             remainingAmount: totalAmount,
             isTBD: false,
-            deadline: first.deadline, // Nimm Deadline vom ersten Eintrag
+            deadline: first.deadline, 
             invoiceNr: "",
             orderNr: "",
             notes: newNotes,
             type: 'debt',
             status: 'open',
+            categoryId: 'cat_misc', // Standard auf Diverse
             createdAt: serverTimestamp(),
             createdBy: currentUser.mode,
             debtorId: first.debtorId, debtorName: first.debtorName,
             creditorId: first.creditorId, creditorName: first.creditorName,
             involvedUserIds: first.involvedUserIds,
-            history: [{ date: new Date(), action: 'created_merge', user: currentUser.displayName, info: `Zusammenfassung aus ${ids.length} Einträgen erstellt.` }]
+            history: [{ 
+                date: new Date(), 
+                action: 'created_merge', 
+                user: currentUser.displayName, 
+                info: logInfo 
+            }]
         };
 
         const newDocRef = doc(paymentsRef);
@@ -457,6 +477,7 @@ async function executeMerge() {
         setButtonLoading(btn, false);
     }
 }
+
 
 // --- SPLIT EXISTING ENTRY LOGIK (Aufsplitten) ---
 
