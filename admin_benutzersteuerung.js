@@ -403,8 +403,8 @@ export function renderUserManagement() {
     const newUserRoleSelect = userManagementArea.querySelector('#newUserRole');
     if (newUserRoleSelect) { newUserRoleSelect.innerHTML = roleOptionsHTML; newUserRoleSelect.value = 'ANGEMELDET'; }
 
-    // =================================================================
-    // BEGINN DER ÄNDERUNG
+// =================================================================
+    // BEGINN DER ÄNDERUNG (Neue Berechtigungen)
     // =================================================================
     // Verfügbare Berechtigungen
     const allPermissions = { 
@@ -414,8 +414,11 @@ export function renderUserManagement() {
         'CHECKLIST_SWITCH': '-> Listen umschalten', 
         'CHECKLIST_SETTINGS': '-> Checkliste-Einstellungen', 
         'ESSENSBERECHNUNG': 'Essensberechnung',
-        'TERMINPLANER': 'Termin finden', // <-- NEU
-        'TERMINPLANER_CREATE': '-> Neuen Termin anlegen' // <-- NEU
+        'TERMINPLANER': 'Termin finden', 
+        'TERMINPLANER_CREATE': '-> Neuen Termin anlegen',
+        // NEU: Zahlungsverwaltung
+        'ZAHLUNGSVERWALTUNG': 'Zahlungsverwaltung',
+        'ZAHLUNGSVERWALTUNG_CREATE': '-> Neue Zahlung anlegen'
     };
     // =================================================================
     // ENDE DER ÄNDERUNG
@@ -501,7 +504,7 @@ export function renderUserManagement() {
             // basierend auf der von uns geänderten 'allPermissions'-Liste.
             const allPermissionsHTML = Object.keys(allPermissions).map(permKey => {
                 // Hier prüfen wir, ob die Berechtigung eingerückt werden soll
-                const isSubPermission = permKey.startsWith('CHECKLIST_') || permKey.startsWith('TERMINPLANER_');
+                const isSubPermission = permKey.startsWith('CHECKLIST_') || permKey.startsWith('TERMINPLANER_') || permKey.startsWith('ZAHLUNGSVERWALTUNG_');
                 const marginLeft = isSubPermission ? 'pl-6' : '';
                 
                 return `<label class="flex items-center ${marginLeft}">

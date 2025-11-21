@@ -150,7 +150,7 @@ export function renderRoleManagement() {
         </div>`;
     roleManagementArea.appendChild(userRolesContainer);
 
-    const allRolePermissions = {
+const allRolePermissions = {
         'ENTRANCE': { label: 'Haupteingang öffnen', indent: false },
         'PUSHOVER': { label: 'Push-Nachricht senden', indent: false },
         'CHECKLIST': { label: 'Aktuelle Checkliste', indent: false },
@@ -158,7 +158,10 @@ export function renderRoleManagement() {
         'CHECKLIST_SETTINGS': { label: '-> Checkliste-Einstellungen', indent: true },
         'ESSENSBERECHNUNG': { label: 'Essensberechnung', indent: false },
         'TERMINPLANER': { label: 'Termin finden', indent: false }, 
-        'TERMINPLANER_CREATE': { label: '-> Neuen Termin anlegen', indent: true } 
+        'TERMINPLANER_CREATE': { label: '-> Neuen Termin anlegen', indent: true },
+        // NEU: Zahlungsverwaltung
+        'ZAHLUNGSVERWALTUNG': { label: 'Zahlungsverwaltung', indent: false },
+        'ZAHLUNGSVERWALTUNG_CREATE': { label: '-> Neue Zahlung anlegen', indent: true }
     };
     
     // (Container für neue Rollen-Rechte)
@@ -169,7 +172,7 @@ export function renderRoleManagement() {
         const marginLeft = perm.indent ? 'pl-6' : '';
         
         // (Diese Logik für 'disabled' müssen wir gleich in der setupCheckboxDependencies-Funktion verallgemeinern)
-        const isSubPermission = permKey.startsWith('CHECKLIST_') || permKey.startsWith('TERMINPLANER_');
+        const isSubPermission = permKey.startsWith('CHECKLIST_') || permKey.startsWith('TERMINPLANER_') || permKey.startsWith('ZAHLUNGSVERWALTUNG_');
         const isDisabled = isSubPermission ? 'disabled' : ''; // Alle Unterpunkte sind anfangs deaktiviert
         
         newRolePermsContainer.innerHTML += `
@@ -195,21 +198,25 @@ export function renderRoleManagement() {
             // Ansonsten (für alle anderen Rollen, inkl. ADMIN und NO_RIGHTS), 
             // baue die Checkboxen wie bisher
             
-            // (Wir müssen 'isChecklistEnabled' hier definieren, da es nur im 'else'-Block gebraucht wird)
+// (Wir müssen 'isChecklistEnabled' hier definieren, da es nur im 'else'-Block gebraucht wird)
             const isChecklistEnabled = role.permissions?.includes('CHECKLIST'); 
-            const isTerminplanerEnabled = role.permissions?.includes('TERMINPLANER'); // NEU
+            const isTerminplanerEnabled = role.permissions?.includes('TERMINPLANER'); 
+            const isZahlungsverwaltungEnabled = role.permissions?.includes('ZAHLUNGSVERWALTUNG'); // NEU
             
             permissionsCheckboxesHTML = Object.keys(allRolePermissions).map(permKey => {
                 const perm = allRolePermissions[permKey];
                 const isChecked = role.permissions?.includes(permKey) ? 'checked' : '';
                 
-                // Wir müssen 'disabled' hier korrekt setzen, damit die setupCheckboxDependencies-Funktion
-                // (die weiter unten kommt) weiß, ob sie die Unterpunkte sperren soll.
+                // Wir müssen 'disabled' hier korrekt setzen
                 let isDisabled = !canEditThisRole;
                 if (permKey.startsWith('CHECKLIST_') && !isChecklistEnabled) {
                     isDisabled = true;
                 }
-                if (permKey.startsWith('TERMINPLANER_') && !isTerminplanerEnabled) { // NEU
+                if (permKey.startsWith('TERMINPLANER_') && !isTerminplanerEnabled) {
+                    isDisabled = true;
+                }
+                // NEU: Sperren wenn Hauptberechtigung fehlt
+                if (permKey.startsWith('ZAHLUNGSVERWALTUNG_') && !isZahlungsverwaltungEnabled) {
                     isDisabled = true;
                 }
                 
@@ -275,6 +282,7 @@ export function renderRoleManagement() {
         // Hier definieren wir alle unsere Abhängigkeiten:
         setupPair('CHECKLIST', ['CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS']);
         setupPair('TERMINPLANER', ['TERMINPLANER_CREATE']);
+        setupPair('ZAHLUNGSVERWALTUNG', ['ZAHLUNGSVERWALTUNG_CREATE']);
     };
 
     userRolesList.querySelectorAll('.p-3.border').forEach(card => setupCheckboxDependencies(card));

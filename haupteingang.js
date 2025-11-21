@@ -553,14 +553,19 @@ export function navigate(targetViewName) {
     // Berechtigungsprüfung
     const userPermissions = currentUser.permissions || [];
     
-    // (P3) Ausnahme für 'terminplaner'
+// (P3) Ausnahme für 'terminplaner'
     if (targetViewName !== 'terminplaner') {
         if (targetViewName === 'entrance' && !userPermissions.includes('ENTRANCE')) return alertUser("Zugriff verweigert (Eingang).", 'error');
         if (targetViewName === 'pushover' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Push).", 'error');
         if (targetViewName === 'checklist' && !userPermissions.includes('CHECKLIST')) return alertUser("Zugriff verweigert (Checkliste).", 'error');
         if (targetViewName === 'checklistSettings' && !userPermissions.includes('CHECKLIST_SETTINGS')) return alertUser("Zugriff verweigert (Checklisten-Einstellungen).", 'error');
         if (targetViewName === 'essensberechnung' && !userPermissions.includes('ESSENSBERECHNUNG')) return alertUser("Zugriff verweigert (Essensberechnung).", 'error');
-
+        
+        // NEU: Zugriffsschutz für Zahlungsverwaltung
+        if ((targetViewName === 'zahlungsverwaltung' || targetViewName === 'zahlungsverwaltungSettings') && !userPermissions.includes('ZAHLUNGSVERWALTUNG')) {
+             return alertUser("Zugriff verweigert (Zahlungsverwaltung).", 'error');
+        }
+        
         if (targetViewName === 'admin') {
             const isAdminRole = currentUser.role === 'ADMIN' || currentUser.role === 'SYSTEMADMIN';
             const isIndividualAdminDisplay = currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN';
