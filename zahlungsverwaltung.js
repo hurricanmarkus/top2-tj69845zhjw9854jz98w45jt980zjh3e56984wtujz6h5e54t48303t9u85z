@@ -1494,7 +1494,7 @@ function renderDetailContent(p, isRefresh) {
         </div>`;
     }
 
-    // --- Ratenplan ---
+    // --- Ratenplan & Transaktionen ---
     let installmentInfo = '';
     if (p.installment && p.installment.total > 0) {
         const paidAmount = p.amount - p.remainingAmount;
@@ -1511,7 +1511,6 @@ function renderDetailContent(p, isRefresh) {
             </div>`;
     }
 
-    // --- Transaktionen ---
     if (p.transactions && p.transactions.length > 0) {
         transactionSection.classList.remove('hidden');
         transactionList.innerHTML = '';
@@ -1543,7 +1542,7 @@ function renderDetailContent(p, isRefresh) {
         transactionSection.classList.add('hidden');
     }
 
-    // --- Content zusammensetzen ---
+    // --- Content ---
     content.innerHTML = `
         ${topButtonsHTML}
         <h2 class="text-2xl font-bold text-gray-800 mb-1 leading-tight">${p.title}</h2>
@@ -1584,7 +1583,7 @@ function renderDetailContent(p, isRefresh) {
         </div>
     `;
 
-    // --- AKTIONEN UNTEN (Initiale Ansicht: Nur Button) ---
+    // --- AKTIONEN UNTEN (Neu: Mit Tabs und Guthaben-Logik) ---
     actions.innerHTML = '';
     if (partialForm) partialForm.remove(); 
 
@@ -1593,41 +1592,25 @@ function renderDetailContent(p, isRefresh) {
     if (canAct) {
         const currentRest = parseFloat(p.remainingAmount);
         
-        // 1. Der große Initial-Button
-        const initialBtn = document.createElement('button');
-        initialBtn.className = "w-full py-4 bg-indigo-600 text-white text-lg font-bold rounded-xl shadow-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2 mb-2";
-        initialBtn.innerHTML = `<span>Transaktion tätigen</span>`;
-        
-        // 2. Container für das Interface (versteckt am Anfang)
         const paymentInterface = document.createElement('div');
-        paymentInterface.className = "w-full bg-gray-50 p-2 rounded-lg border border-gray-200 shadow-inner mt-2 hidden";
+        paymentInterface.className = "w-full bg-gray-50 p-2 rounded-lg border border-gray-200 shadow-inner mt-2";
         
-        // Klick Event: Button weg, Interface da
-        initialBtn.onclick = () => {
-            initialBtn.remove();
-            paymentInterface.classList.remove('hidden');
-        };
+        // HTML Aufbau
+        let tabsHtml = '';
+        let defaultMode = 'money';
         
-        actions.appendChild(initialBtn);
-        actions.appendChild(paymentInterface);
-
-        // --- Interface Inhalt ---
-        let creditHtml = '';
+        // Wenn Guthaben verfügbar ist, zeigen wir Tabs
         if (availableCredit > 0) {
-            const maxUsage = Math.min(availableCredit, currentRest);
-            creditHtml = `
-            <div class="mb-3 pb-3 border-b border-gray-300">
-                <button id="btn-use-credit-smart" class="w-full py-2 px-3 bg-purple-600 text-white font-bold rounded hover:bg-purple-700 flex items-center justify-center gap-2 shadow-sm">
-                    <span class="text-lg">💎</span> 
-                    <span>Guthaben einlösen (Max. ${maxUsage.toFixed(2)} €)</span>
-                </button>
-                <p class="text-[10px] text-gray-500 text-center mt-1">Verfügbar: ${availableCredit.toFixed(2)} €</p>
+            tabsHtml = `
+            <div class="flex gap-2 mb-3 p-1 bg-gray-200 rounded-lg">
+                <button id="tab-mode-money" class="flex-1 py-1.5 rounded-md text-xs font-bold transition bg-white text-indigo-700 shadow-sm">💶 Geldzahlung</button>
+                <button id="tab-mode-credit" class="flex-1 py-1.5 rounded-md text-xs font-bold transition text-gray-500 hover:text-gray-700">💎 Guthaben (${availableCredit.toFixed(2)}€)</button>
             </div>`;
         }
 
         paymentInterface.innerHTML = `
-            ${creditHtml}
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Zahlung buchen</label>
+            ${tabsHtml}
+            <label class="block text-xs font-bold text-gray-500 uppercase mb-1" id="pay-label">Zahlung erfassen</label>
             
             <div class="flex gap-2 items-stretch">
                 <div class="relative flex-1">
@@ -1645,17 +1628,45 @@ function renderDetailContent(p, isRefresh) {
             </div>
         `;
         
-        // --- LOGIK FÜR DIE BUTTONS (Identisch zu vorher, nur im neuen Container) ---
+        actions.appendChild(paymentInterface);
+
+        // --- UI LOGIK ---
         const input = document.getElementById('smart-payment-amount');
         const payBtn = document.getElementById('btn-smart-pay');
         const payText = document.getElementById('btn-smart-pay-text');
         const paySubText = document.getElementById('btn-smart-pay-subtext');
-        const creditBtn = document.getElementById('btn-use-credit-smart');
+        const tabMoney = document.getElementById('tab-mode-money');
+        const tabCredit = document.getElementById('tab-mode-credit');
+        
+        let currentMode = 'money'; // 'money' oder 'credit'
 
+        // Tab Wechsel Logik
+        if (tabMoney && tabCredit) {
+            const switchMode = (mode) => {
+                currentMode = mode;
+                input.value = ''; // Reset bei Wechsel
+                input.dispatchEvent(new Event('input')); // Trigger update
+
+                if (mode === 'money') {
+                    tabMoney.className = "flex-1 py-1.5 rounded-md text-xs font-bold transition bg-white text-indigo-700 shadow-sm";
+                    tabCredit.className = "flex-1 py-1.5 rounded-md text-xs font-bold transition text-gray-500 hover:text-gray-700";
+                    document.getElementById('pay-label').textContent = "Zahlung erfassen";
+                } else {
+                    tabMoney.className = "flex-1 py-1.5 rounded-md text-xs font-bold transition text-gray-500 hover:text-gray-700";
+                    tabCredit.className = "flex-1 py-1.5 rounded-md text-xs font-bold transition bg-purple-100 text-purple-800 shadow-sm border border-purple-200";
+                    document.getElementById('pay-label').textContent = "Guthaben einlösen";
+                }
+            };
+            tabMoney.onclick = () => switchMode('money');
+            tabCredit.onclick = () => switchMode('credit');
+        }
+
+        // Live Update beim Tippen
         input.oninput = () => {
             const valStr = input.value;
             const val = parseFloat(valStr);
             
+            // Reset Button Style
             payBtn.className = "flex-1 h-16 text-white rounded-xl shadow-md transition flex flex-col justify-center items-center leading-tight px-1";
 
             if (!valStr || isNaN(val)) {
@@ -1665,42 +1676,55 @@ function renderDetailContent(p, isRefresh) {
                 return;
             }
 
-            const diff = currentRest - val;
-            
-            if (Math.abs(diff) < 0.01) {
-                payText.textContent = "Alles zahlen";
-                paySubText.textContent = "und schließen";
-                payBtn.classList.add('bg-green-600', 'hover:bg-green-700');
-            } else if (diff > 0) {
-                payText.textContent = "Teilbetrag";
-                paySubText.textContent = `Rest: ${diff.toFixed(2)} €`;
-                payBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
-            } else {
-                const over = Math.abs(diff).toFixed(2);
-                payText.textContent = `Überzahlung!`;
-                paySubText.textContent = `+ ${over} € Guthaben/Tip`;
-                payBtn.classList.add('bg-orange-500', 'hover:bg-orange-600');
-            }
-        };
-
-        payBtn.onclick = () => {
-            const val = parseFloat(input.value);
-            if (isNaN(val) || val <= 0) {
-                input.focus();
-                return;
-            }
-            const action = (val >= currentRest - 0.01) ? 'mark_paid' : 'partial_pay';
-            handlePaymentAction(p.id, action, val);
-        };
-
-        if (creditBtn) {
-            creditBtn.onclick = () => {
-                const maxUsage = Math.min(availableCredit, currentRest);
-                if (confirm(`Möchtest du ${maxUsage.toFixed(2)} € Guthaben einlösen?`)) {
-                    executePayWithCredit(p.id, maxUsage);
+            if (currentMode === 'money') {
+                // GELD MODUS
+                const diff = currentRest - val;
+                if (Math.abs(diff) < 0.01) {
+                    payText.textContent = "Alles zahlen";
+                    paySubText.textContent = "und schließen";
+                    payBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+                } else if (diff > 0) {
+                    payText.textContent = "Teilbetrag";
+                    paySubText.textContent = `Rest: ${diff.toFixed(2)} €`;
+                    payBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                } else {
+                    const over = Math.abs(diff).toFixed(2);
+                    payText.textContent = `Überzahlung!`;
+                    paySubText.textContent = `+ ${over} € Guthaben/Tip`;
+                    payBtn.classList.add('bg-orange-500', 'hover:bg-orange-600');
                 }
-            };
-        }
+            } else {
+                // GUTHABEN MODUS
+                if (val > availableCredit) {
+                    payText.textContent = "Zu wenig Guthaben";
+                    paySubText.textContent = `Max: ${availableCredit.toFixed(2)} €`;
+                    payBtn.classList.add('bg-gray-500', 'cursor-not-allowed');
+                } else if (val > currentRest + 0.01) { // Guthaben darf nicht überzahlen
+                    payText.textContent = "Betrag zu hoch";
+                    paySubText.textContent = `Schuld nur ${currentRest.toFixed(2)} €`;
+                    payBtn.classList.add('bg-gray-500', 'cursor-not-allowed');
+                } else {
+                    payText.textContent = "Guthaben einlösen";
+                    paySubText.textContent = `-${val.toFixed(2)} € vom Konto`;
+                    payBtn.classList.add('bg-purple-600', 'hover:bg-purple-700');
+                }
+            }
+        };
+
+        // Klick Handler
+        payBtn.onclick = () => {
+            if (payBtn.classList.contains('cursor-not-allowed')) return;
+            const val = parseFloat(input.value);
+
+            if (currentMode === 'money') {
+                const action = (val >= currentRest - 0.01) ? 'mark_paid' : 'partial_pay';
+                handlePaymentAction(p.id, action, val);
+            } else {
+                if (confirm(`Möchtest du ${val.toFixed(2)} € Guthaben einlösen?`)) {
+                    executePayWithCredit(p.id, val);
+                }
+            }
+        };
     }
 
     if (!isRefresh) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
@@ -2240,18 +2264,68 @@ window.deleteTransaction = async function(paymentId, txIndex) {
     const amountToAddBack = parseFloat(tx.amount);
 
     try {
+        const batch = writeBatch(db);
+        const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
+
+        // 1. Haupt-Eintrag zurücksetzen
         const newTransactions = p.transactions.filter((_, i) => i !== txIndex);
         const newRemaining = parseFloat(p.remainingAmount) + amountToAddBack;
+        const debtRef = doc(paymentsRef, paymentId);
 
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', paymentId), {
+        batch.update(debtRef, {
             remainingAmount: newRemaining,
-            status: 'open', // Wieder öffnen
+            status: 'open', 
             transactions: newTransactions,
-            history: [...(p.history || []), { date: new Date(), action: 'tx_deleted', user: currentUser.displayName, info: `Zahlung von ${amountToAddBack.toFixed(2)}€ storniert.` }]
+            history: [...(p.history || []), { 
+                date: new Date(), 
+                action: 'tx_deleted', 
+                user: currentUser.displayName, 
+                info: `Zahlung von ${amountToAddBack.toFixed(2)}€ storniert.` 
+            }]
         });
-        alertUser("Zahlung storniert.", "success");
-    } catch (e) { console.error(e); alertUser("Fehler beim Löschen.", "error"); }
+
+        // 2. Falls es eine Guthaben-Zahlung war -> Guthaben erstatten
+        if (tx.type === 'credit_usage' && tx.creditSources) {
+            for (const source of tx.creditSources) {
+                // Wir müssen den aktuellen Zustand des Guthaben-Eintrags holen
+                // Da wir allPayments live haben, suchen wir ihn dort.
+                const creditEntry = allPayments.find(x => x.id === source.id);
+                
+                if (creditEntry) {
+                    const currentCreditRest = parseFloat(creditEntry.remainingAmount);
+                    const newCreditRest = currentCreditRest + parseFloat(source.amount);
+                    const creditRef = doc(paymentsRef, source.id);
+                    
+                    const shortDebtId = paymentId.slice(-4).toUpperCase();
+                    const linkToDebt = `[LINK:${paymentId}:#${shortDebtId}]`;
+
+                    batch.update(creditRef, {
+                        remainingAmount: newCreditRest,
+                        status: 'open', // Wieder öffnen, falls es zu war
+                        history: [...(creditEntry.history || []), { 
+                            date: new Date(), 
+                            action: 'credit_refunded', 
+                            user: currentUser.displayName, 
+                            info: `Rückerstattung (${parseFloat(source.amount).toFixed(2)} €) durch Storno von ${linkToDebt}.` 
+                        }]
+                    });
+                } else {
+                    console.warn("Ursprünglicher Guthaben-Eintrag nicht mehr gefunden:", source.id);
+                    // Optional: Alert, aber wir lassen den Prozess nicht crashen
+                }
+            }
+        }
+
+        await batch.commit();
+        alertUser("Zahlung storniert und ggf. Guthaben erstattet.", "success");
+        // UI Refresh via Listener (automatisch) oder manuell
+        // closeDetailModal(); // Offen lassen zum sehen
+    } catch (e) { 
+        console.error(e); 
+        alertUser("Fehler beim Löschen.", "error"); 
+    }
 }
+
 
 // --- HELPER: DROPDOWN BEFÜLLEN (INKL. EIGENER USER) ---
 function fillDropdown(selectElement, type) {
@@ -2770,34 +2844,54 @@ function openCreditDetails(group) {
     document.getElementById('credit-details-total').textContent = group.total.toFixed(2) + " €";
     list.innerHTML = '';
 
-    // Hole die echten Objekte anhand der gespeicherten IDs
     const entries = allPayments.filter(p => group.ids.includes(p.id));
 
     entries.forEach(p => {
         const row = document.createElement('div');
-        row.className = "flex justify-between items-center p-2 bg-white border rounded shadow-sm";
+        row.className = "bg-white border rounded shadow-sm p-2 mb-2";
         
-        // Button Text je nach Kontext
         const btnText = group.context === 'my' ? "Abbuchen" : "Auszahlen";
-        const btnClass = "text-xs border border-gray-300 px-2 py-1 rounded hover:bg-gray-100 text-gray-600";
+        const dateStr = new Date(p.createdAt?.toDate()).toLocaleDateString();
 
+        // Kopfzeile des Eintrags
         row.innerHTML = `
-            <div class="flex-grow">
-                <p class="text-sm font-bold text-gray-800">${p.title}</p>
-                <p class="text-xs text-gray-500">${new Date(p.createdAt?.toDate()).toLocaleDateString()}</p>
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="text-sm font-bold text-gray-800">${p.title}</p>
+                    <p class="text-xs text-gray-500">${dateStr} • ID: #${p.id.slice(-4).toUpperCase()}</p>
+                </div>
+                <div class="text-right">
+                    <p class="font-mono font-bold text-gray-800">${parseFloat(p.remainingAmount).toFixed(2)}€</p>
+                    <div class="flex gap-1 mt-1 justify-end">
+                        <button class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded border hover:bg-gray-200 toggle-history-btn">Verlauf</button>
+                        <button class="text-xs bg-red-50 text-red-600 px-2 py-1 rounded border border-red-100 hover:bg-red-100 action-btn" data-id="${p.id}">${btnText}</button>
+                    </div>
+                </div>
             </div>
-            <div class="flex items-center gap-2">
-                <span class="font-mono font-semibold text-gray-700">${parseFloat(p.remainingAmount).toFixed(2)}€</span>
-                <button class="${btnClass} action-btn" data-id="${p.id}">${btnText}</button>
+            <div class="history-container hidden mt-2 pt-2 border-t border-gray-100 text-xs text-gray-500 space-y-1">
+                ${(p.history || []).slice().reverse().map(h => {
+                    const d = h.date?.toDate ? h.date.toDate() : new Date(h.date);
+                    const dStr = d.toLocaleDateString();
+                    // Links parsen für die Ansicht (falls wir die Funktion global hätten, sonst einfach Text)
+                    // Wir nehmen hier einfachen Text, da Links im Modal schwieriger sind ohne Context-Switch
+                    return `<div><span class="font-semibold">${dStr}:</span> ${h.info}</div>`;
+                }).join('')}
             </div>
         `;
         
-        // Event Listener für den Button im Detail-Fenster
+        // Listener für Abbuchen
         row.querySelector('.action-btn').addEventListener('click', (e) => {
             e.stopPropagation();
-            // Modal schließen und Action-Modal öffnen
             document.getElementById('creditDetailsModal').style.display = 'none';
             openCreditModal('sub', group.context, p.id);
+        });
+
+        // Listener für Verlauf Toggle
+        row.querySelector('.toggle-history-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const hist = row.querySelector('.history-container');
+            hist.classList.toggle('hidden');
+            e.target.textContent = hist.classList.contains('hidden') ? 'Verlauf' : 'Verbergen';
         });
 
         list.appendChild(row);
@@ -2805,6 +2899,7 @@ function openCreditDetails(group) {
 
     modal.style.display = 'flex';
 }
+
 
 // --- CREDITS MODAL & ACTIONS ---
 
@@ -3489,19 +3584,20 @@ function generateMermaidGraph(rootId) {
 
 
 // --- GUTHABEN EINLÖSEN LOGIK ---
+// --- GUTHABEN EINLÖSEN LOGIK ---
 async function executePayWithCredit(debtPaymentId, amountToUse) {
     const p = allPayments.find(x => x.id === debtPaymentId);
     if (!p) return;
 
-    setButtonLoading(document.getElementById('btn-use-credit-smart'), true);
+    // Button Loading Animation (falls vorhanden, sonst globalen Spinner nutzen oder ignorieren)
+    const btn = document.getElementById('btn-smart-pay');
+    if (btn) setButtonLoading(btn, true);
 
     try {
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
 
         // 1. Passende Guthaben-Einträge suchen
-        // (User A schuldet B. B hat Guthaben bei A. Also suchen wir Credit wo Debtor=A und Creditor=B)
-        // p.debtorId ist A, p.creditorId ist B.
         const creditEntries = allPayments.filter(cp => 
             cp.type === 'credit' && 
             cp.status === 'open' &&
@@ -3509,9 +3605,9 @@ async function executePayWithCredit(debtPaymentId, amountToUse) {
             cp.debtorId === p.creditorId
         );
 
-        // Sortieren: Älteste zuerst verwenden? Oder egal. Nehmen wir einfach die Liste.
         let remainingToDeduct = amountToUse;
-        const usedCreditInfo = []; // Für Log
+        const usedCreditInfo = []; // Für Log-Text
+        const creditSourceData = []; // Für maschinelles Rückbuchen
 
         for (const credit of creditEntries) {
             if (remainingToDeduct <= 0.001) break;
@@ -3529,7 +3625,7 @@ async function executePayWithCredit(debtPaymentId, amountToUse) {
             
             batch.update(creditRef, {
                 remainingAmount: newCreditRest,
-                status: (newCreditRest <= 0.001) ? 'paid' : 'open', // Schließen wenn leer
+                status: (newCreditRest <= 0.001) ? 'paid' : 'open',
                 history: [...(credit.history || []), { 
                     date: new Date(), 
                     action: 'credit_used', 
@@ -3540,9 +3636,12 @@ async function executePayWithCredit(debtPaymentId, amountToUse) {
             
             const cShort = credit.id.slice(-4).toUpperCase();
             usedCreditInfo.push(`[LINK:${credit.id}:#${cShort}] (${take.toFixed(2)} €)`);
+            
+            // WICHTIG: Speichern für spätere Rückbuchung
+            creditSourceData.push({ id: credit.id, amount: take });
         }
 
-        // 2. Schulden-Eintrag aktualisieren (Geld empfangen)
+        // 2. Schulden-Eintrag aktualisieren
         const currentRest = parseFloat(p.remainingAmount);
         const newRest = currentRest - amountToUse;
         const debtRef = doc(paymentsRef, p.id);
@@ -3550,9 +3649,10 @@ async function executePayWithCredit(debtPaymentId, amountToUse) {
         const transaction = { 
             date: new Date(), 
             amount: amountToUse, 
-            type: 'credit_usage', // Spezieller Typ für die Anzeige
+            type: 'credit_usage', 
             user: currentUser.displayName,
-            info: `Bezahlt mit Guthaben aus: ${usedCreditInfo.join(', ')}`
+            info: `Bezahlt mit Guthaben aus: ${usedCreditInfo.join(', ')}`,
+            creditSources: creditSourceData // <-- Hier speichern wir die Quellen!
         };
 
         batch.update(debtRef, {
@@ -3569,14 +3669,13 @@ async function executePayWithCredit(debtPaymentId, amountToUse) {
 
         await batch.commit();
         alertUser("Guthaben erfolgreich verrechnet!", "success");
-        // closeDetailModal(); // Optional: schließen oder offen lassen zum sehen
-        // Wir lassen es offen und refreshen, damit man das Ergebnis sieht
-        // openPaymentDetail holt sich die neuen Daten automatisch, da wir Listener haben.
-        // Einziges Problem: Listener ist async. Wir warten kurz.
+        // UI refresh
         setTimeout(() => openPaymentDetail(p.id), 200);
 
     } catch (e) {
         console.error(e);
         alertUser("Fehler beim Verrechnen: " + e.message, "error");
+    } finally {
+        if (btn) setButtonLoading(btn, false);
     }
 }
