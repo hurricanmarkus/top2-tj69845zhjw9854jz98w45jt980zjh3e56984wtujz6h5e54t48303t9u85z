@@ -1486,6 +1486,7 @@ function closeDetailModal() {
 
 // Füllt die Filter-Dropdowns mit den speziellen Gruppen (Fett & Farbig)
 // Füllt die Filter-Dropdowns
+// Füllt die Filter-Dropdowns
 function fillFilterDropdowns() {
     const statusSelect = document.getElementById('payment-filter-status');
     const categorySelect = document.getElementById('payment-filter-category');
@@ -1495,6 +1496,9 @@ function fillFilterDropdowns() {
     // 1. Status Dropdown
     const currentStatus = statusSelect.value;
     statusSelect.innerHTML = '';
+    
+    // Welcher Wert soll aktiv sein? (Beim ersten Laden 'open', sonst der Benutzer-Wert)
+    const targetStatus = (currentStatus && currentStatus !== "") ? currentStatus : 'open';
     
     const grpStatus = document.createElement('optgroup');
     grpStatus.label = "[BEZAHLSTATUS]";
@@ -1510,33 +1514,36 @@ function fillFilterDropdowns() {
         const opt = document.createElement('option');
         opt.value = s.val;
         opt.textContent = s.txt;
+        // WICHTIG: Direkt beim Erstellen selektieren
+        if (s.val === targetStatus) {
+            opt.selected = true;
+        }
         grpStatus.appendChild(opt);
     });
     statusSelect.appendChild(grpStatus);
-    
-    // FIX BUG 3: Wenn kein Wert da ist oder beim Neuladen, setze auf OPEN
-    if(currentStatus && currentStatus !== "") {
-        statusSelect.value = currentStatus;
-    } else {
-        statusSelect.value = 'open';
-    }
+    // Zur Sicherheit auch den Value setzen
+    statusSelect.value = targetStatus;
 
     // 2. Kategorie Dropdown
     const currentCat = categorySelect.value;
+    const targetCat = (currentCat && currentCat !== "") ? currentCat : 'all';
     categorySelect.innerHTML = '';
     
     const grpCat = document.createElement('optgroup');
     grpCat.label = "[KATEGORIEN]";
     
+    // Option "Alle"
     const optAll = document.createElement('option');
     optAll.value = 'all';
     optAll.textContent = 'Alle Kategorien';
+    if (targetCat === 'all') optAll.selected = true;
     grpCat.appendChild(optAll);
     
     SYSTEM_CATEGORIES.forEach(sc => {
         const opt = document.createElement('option');
         opt.value = sc.id;
         opt.textContent = sc.name;
+        if (sc.id === targetCat) opt.selected = true;
         grpCat.appendChild(opt);
     });
     
@@ -1544,19 +1551,27 @@ function fillFilterDropdowns() {
         const opt = document.createElement('option');
         opt.value = c.id;
         opt.textContent = c.name;
+        if (c.id === targetCat) opt.selected = true;
         grpCat.appendChild(opt);
     });
     
     categorySelect.appendChild(grpCat);
-    if(currentCat) categorySelect.value = currentCat;
+    categorySelect.value = targetCat;
 }
 
 
+
 function applyFilters() {
-    const searchTerm = document.getElementById('payment-search-input')?.value.toLowerCase() || '';
-    const statusFilter = document.getElementById('payment-filter-status')?.value || 'all';
-    const categoryFilter = document.getElementById('payment-filter-category')?.value || 'all'; // NEU
-    const dirFilter = document.getElementById('payment-filter-direction')?.value || 'all';
+    const searchInput = document.getElementById('payment-search-input');
+    const statusSelect = document.getElementById('payment-filter-status');
+    const categorySelect = document.getElementById('payment-filter-category');
+    const dirSelect = document.getElementById('payment-filter-direction');
+
+    // WICHTIG: Fallback auf 'open', nicht 'all', falls der Wert leer ist (beim Init)
+    const searchTerm = searchInput?.value.toLowerCase() || '';
+    const statusFilter = statusSelect?.value || 'open'; 
+    const categoryFilter = categorySelect?.value || 'all';
+    const dirFilter = dirSelect?.value || 'all';
 
     let filtered = allPayments.filter(p => {
         const textMatch = (p.title && p.title.toLowerCase().includes(searchTerm)) || (p.debtorName && p.debtorName.toLowerCase().includes(searchTerm)) || (p.creditorName && p.creditorName.toLowerCase().includes(searchTerm));
@@ -1568,9 +1583,7 @@ function applyFilters() {
             if (statusFilter === 'closed' && (p.status !== 'paid' && p.status !== 'cancelled')) return false;
         }
         
-        // NEU: Kategorie Filter
         if (categoryFilter !== 'all') {
-            // Wenn keine Kategorie im Posten gespeichert ist, ist es 'cat_misc' (Diverse)
             const pCat = p.categoryId || 'cat_misc';
             if (pCat !== categoryFilter) return false;
         }
@@ -1584,14 +1597,18 @@ function applyFilters() {
     });
 
     filtered.sort((a, b) => {
+        // Sortierung: Offene immer zuerst
         if (a.status === 'open' && b.status !== 'open') return -1;
         if (a.status !== 'open' && b.status === 'open') return 1;
+        // Dann nach Datum (Neuere zuerst)
         return (b.createdAt?.toDate ? b.createdAt.toDate() : new Date()) - (a.createdAt?.toDate ? a.createdAt.toDate() : new Date());
     });
+    
     renderPaymentList(filtered);
     updateDashboard(allPayments);
-    updateCategoryDashboard(); // NEU: Auch das obere Dashboard aktualisieren
+    updateCategoryDashboard();
 }
+
 
 function renderPaymentList(payments) {
     const container = document.getElementById('payments-list-container');
