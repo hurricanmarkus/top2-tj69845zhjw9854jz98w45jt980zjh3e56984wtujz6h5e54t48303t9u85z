@@ -1443,7 +1443,7 @@ function renderDetailContent(p, isRefresh) {
     const modal = document.getElementById('paymentDetailModal');
     const content = document.getElementById('payment-detail-content');
     const actions = document.getElementById('payment-detail-actions');
-    const partialForm = document.getElementById('partial-payment-form');
+    const partialForm = document.getElementById('partial-payment-form'); // Wird nicht mehr gebraucht, aber wir lassen Code sauber
     const transactionSection = document.getElementById('transaction-history-section');
     const transactionList = document.getElementById('transaction-list');
 
@@ -1457,6 +1457,18 @@ function renderDetailContent(p, isRefresh) {
     const iAmCreditor = p.creditorId === currentUser.mode;
     const shortId = p.id.slice(-4).toUpperCase();
 
+    // 1. Guthaben berechnen (Hat der Schuldner Guthaben beim Gläubiger?)
+    let availableCredit = 0;
+    // Wir suchen Einträge vom Typ 'credit', wo der aktuelle Schuldner (p.debtorId) der Gläubiger (Besitzer) des Guthabens ist
+    // und der aktuelle Gläubiger (p.creditorId) das Guthaben "hält" (also dort der Debtor ist).
+    const creditEntries = allPayments.filter(cp => 
+        cp.type === 'credit' && 
+        cp.status === 'open' &&
+        cp.creditorId === p.debtorId && 
+        cp.debtorId === p.creditorId
+    );
+    creditEntries.forEach(c => availableCredit += parseFloat(c.remainingAmount));
+
     const parseLinks = (text) => {
         if (!text) return "";
         return text.replace(/\[LINK:([^:]+):([^\]]+)\]/g, (match, id, label) => {
@@ -1464,33 +1476,27 @@ function renderDetailContent(p, isRefresh) {
         });
     };
 
-    // --- BUTTON LOGIK ---
-    // Wir bauen eine Button-Leiste, die für ALLE sichtbar ist, aber je nach Rolle mehr Buttons hat.
-    
+    // --- Button Leiste Oben ---
     let topButtonsHTML = '';
-    
-    // Der Verlauf-Button ist immer da (links)
     const btnHistory = `<button onclick="openHistoryModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-bold shadow-sm transition transform hover:scale-105 mr-auto">🌳 Verlauf</button>`;
     
     if (iAmCreator) {
-        // Wenn Ersteller: Alle Buttons in einer Reihe
-        // Reihenfolge: Verlauf (links bündig durch mr-auto oben, oder wir packen ihn in den Flow) -> Anpassen -> Split -> Edit -> Delete
-        // Um sie schön nebeneinander zu haben ohne Überlappung:
         topButtonsHTML = `
         <div class="flex flex-wrap justify-end gap-2 mb-4 no-print border-b pb-2 items-center">
-            ${btnHistory} <button onclick="openAdjustAmountModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-bold">€ Anpassen</button>
+            ${btnHistory}
+            <button onclick="openAdjustAmountModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-bold">€ Anpassen</button>
             <button onclick="openSplitModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 text-sm font-bold">Aufteilen</button>
             <button onclick="editPayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-sm font-bold">Bearbeiten</button>
             <button onclick="deletePayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-bold">Löschen</button>
         </div>`;
     } else {
-        // Wenn KEIN Ersteller: Nur Verlauf anzeigen
         topButtonsHTML = `
         <div class="flex justify-start gap-2 mb-4 no-print border-b pb-2">
             ${btnHistory}
         </div>`;
     }
 
+    // --- Ratenplan ---
     let installmentInfo = '';
     if (p.installment && p.installment.total > 0) {
         const paidAmount = p.amount - p.remainingAmount;
@@ -1507,6 +1513,7 @@ function renderDetailContent(p, isRefresh) {
             </div>`;
     }
 
+    // --- Transaktionen ---
     if (p.transactions && p.transactions.length > 0) {
         transactionSection.classList.remove('hidden');
         transactionList.innerHTML = '';
@@ -1514,6 +1521,7 @@ function renderDetailContent(p, isRefresh) {
             const canDelete = (iAmCreator || iAmCreditor);
             const row = document.createElement('div');
             row.className = "flex justify-between items-center p-2 bg-white rounded border shadow-sm";
+            
             const txDateObj = tx.date?.toDate ? tx.date.toDate() : new Date(tx.date);
             const dateStr = txDateObj.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
             const userName = tx.user || 'Unbekannt';
@@ -1537,6 +1545,7 @@ function renderDetailContent(p, isRefresh) {
         transactionSection.classList.add('hidden');
     }
 
+    // --- Content zusammensetzen ---
     content.innerHTML = `
         ${topButtonsHTML}
         <h2 class="text-2xl font-bold text-gray-800 mb-1 leading-tight">${p.title}</h2>
@@ -1577,34 +1586,101 @@ function renderDetailContent(p, isRefresh) {
         </div>
     `;
 
+    // --- AKTIONEN UNTEN (Komplett neu) ---
     actions.innerHTML = '';
-    if (partialForm) partialForm.classList.add('hidden');
+    if (partialForm) partialForm.remove(); // Altes Formular sicher entfernen
 
-    if (p.status === 'open' || p.status === 'pending_approval') {
-        if (iAmDebtor && p.status === 'open') {
-            actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'mark_paid')" class="py-3 px-6 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 w-full sm:w-auto">✅ Alles bezahlt</button>`;
-            actions.innerHTML += `<button onclick="showPartialForm()" class="py-3 px-6 bg-blue-100 text-blue-800 font-bold rounded-lg hover:bg-blue-200 w-full sm:w-auto">Teilzahlung</button>`;
+    // Zeige Aktionen nur wenn offen und User berechtigt (Schuldner, Gläubiger oder Ersteller)
+    const canAct = (iAmDebtor || iAmCreditor || iAmCreator) && (p.status === 'open' || p.status === 'pending_approval');
+
+    if (canAct) {
+        const currentRest = parseFloat(p.remainingAmount);
+        
+        // HTML für das neue smarte Interface
+        const paymentInterface = document.createElement('div');
+        paymentInterface.className = "w-full bg-gray-50 p-3 rounded-lg border border-gray-200 shadow-inner mt-2";
+        
+        // 1. Guthaben Button (nur wenn Guthaben da)
+        let creditHtml = '';
+        if (availableCredit > 0) {
+            // Wir können maximal das nehmen, was da ist, oder was geschuldet wird
+            const maxUsage = Math.min(availableCredit, currentRest);
+            creditHtml = `
+            <div class="mb-3 pb-3 border-b border-gray-300">
+                <button id="btn-use-credit-smart" class="w-full py-2 px-3 bg-purple-600 text-white font-bold rounded hover:bg-purple-700 flex items-center justify-center gap-2 shadow-sm">
+                    <span class="text-lg">💎</span> 
+                    <span>Guthaben einlösen (Max. ${maxUsage.toFixed(2)} €)</span>
+                </button>
+                <p class="text-[10px] text-gray-500 text-center mt-1">Verfügbares Gesamtguthaben: ${availableCredit.toFixed(2)} €</p>
+            </div>`;
         }
-        if (iAmCreditor) {
-            if (p.status === 'pending_approval') {
-                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'confirm_payment')" class="py-3 px-6 bg-green-600 text-white font-bold rounded-lg shadow hover:bg-green-700 flex-grow">Bestätigen</button>`;
-                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'reject_payment')" class="py-3 px-6 bg-red-100 text-red-600 font-bold rounded-lg hover:bg-red-200 flex-grow">Ablehnen</button>`;
+
+        paymentInterface.innerHTML = `
+            ${creditHtml}
+            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Zahlung erfassen</label>
+            <div class="flex gap-2 mb-2">
+                <div class="relative flex-grow">
+                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">€</span>
+                    <input type="number" id="smart-payment-amount" class="w-full pl-7 p-2 border border-gray-300 rounded font-bold text-gray-800" step="0.01" placeholder="0.00" value="${currentRest.toFixed(2)}">
+                </div>
+            </div>
+            <button id="btn-smart-pay" class="w-full py-3 px-4 bg-green-600 text-white font-bold rounded shadow hover:bg-green-700 transition flex items-center justify-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd" /></svg>
+                <span id="btn-smart-pay-text">Vollständig beglichen. Verrechnung schließen</span>
+            </button>
+        `;
+        
+        actions.appendChild(paymentInterface);
+
+        // --- LOGIK FÜR DIE BUTTONS ---
+        const input = document.getElementById('smart-payment-amount');
+        const payBtn = document.getElementById('btn-smart-pay');
+        const payText = document.getElementById('btn-smart-pay-text');
+        const creditBtn = document.getElementById('btn-use-credit-smart');
+
+        // Dynamischer Text beim Tippen
+        input.oninput = () => {
+            const val = parseFloat(input.value) || 0;
+            // Toleranz für Fließkommazahlen
+            const diff = currentRest - val;
+            
+            if (Math.abs(diff) < 0.01) {
+                payText.textContent = "Vollständig beglichen. Verrechnung schließen";
+                payBtn.className = "w-full py-3 px-4 bg-green-600 text-white font-bold rounded shadow hover:bg-green-700 transition flex items-center justify-center gap-2";
+            } else if (diff > 0) {
+                payText.textContent = `Teilbetrag buchen, offen bleiben ${diff.toFixed(2)} €`;
+                payBtn.className = "w-full py-3 px-4 bg-blue-600 text-white font-bold rounded shadow hover:bg-blue-700 transition flex items-center justify-center gap-2";
             } else {
-                actions.innerHTML += `<button onclick="handlePaymentAction('${p.id}', 'force_close')" class="py-3 px-6 bg-emerald-600 text-white font-bold rounded-lg shadow hover:bg-emerald-700 w-full sm:w-auto">Als erledigt markieren</button>`;
-                actions.innerHTML += `<button onclick="showPartialForm()" class="py-3 px-6 bg-blue-100 text-blue-800 font-bold rounded-lg hover:bg-blue-200 w-full sm:w-auto">Teilzahlung empfangen</button>`;
+                const over = Math.abs(diff).toFixed(2);
+                payText.textContent = `Überzahlung (${over} €) buchen`;
+                payBtn.className = "w-full py-3 px-4 bg-orange-500 text-white font-bold rounded shadow hover:bg-orange-600 transition flex items-center justify-center gap-2";
             }
+        };
+
+        // Klick auf "Zahlung buchen"
+        payBtn.onclick = () => {
+            const val = parseFloat(input.value);
+            if (isNaN(val) || val <= 0) {
+                alertUser("Bitte einen gültigen Betrag eingeben.", "error");
+                return;
+            }
+            // Nutzt die bestehende Logik, entscheidet automatisch ob 'mark_paid' (voll) oder 'partial_pay'
+            const action = (val >= currentRest - 0.01) ? 'mark_paid' : 'partial_pay';
+            // Wenn überzahlt, wird handlePaymentAction automatisch das Überzahlungs-Modal öffnen (das haben wir schon programmiert)
+            handlePaymentAction(p.id, action, val);
+        };
+
+        // Klick auf "Guthaben einlösen"
+        if (creditBtn) {
+            creditBtn.onclick = () => {
+                const maxUsage = Math.min(availableCredit, currentRest);
+                if (confirm(`Möchtest du ${maxUsage.toFixed(2)} € vom Guthaben verwenden, um diese Schuld zu begleichen?`)) {
+                    executePayWithCredit(p.id, maxUsage);
+                }
+            };
         }
     }
-    window.showPartialForm = function () { if (partialForm) partialForm.classList.remove('hidden'); }
-    const submitPartialBtn = document.getElementById('btn-submit-partial');
-    if (submitPartialBtn) {
-        const newBtn = submitPartialBtn.cloneNode(true);
-        submitPartialBtn.parentNode.replaceChild(newBtn, submitPartialBtn);
-        newBtn.onclick = () => {
-            const amt = parseFloat(document.getElementById('partial-amount-input').value);
-            if (amt > 0) handlePaymentAction(p.id, 'partial_pay', amt);
-        };
-    }
+
     if (!isRefresh) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
 }
 
@@ -3360,4 +3436,98 @@ function generateMermaidGraph(rootId) {
             container.innerHTML = "Fehler bei der Darstellung.";
         }
     }, 50);
+}
+
+
+// --- GUTHABEN EINLÖSEN LOGIK ---
+async function executePayWithCredit(debtPaymentId, amountToUse) {
+    const p = allPayments.find(x => x.id === debtPaymentId);
+    if (!p) return;
+
+    setButtonLoading(document.getElementById('btn-use-credit-smart'), true);
+
+    try {
+        const batch = writeBatch(db);
+        const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
+
+        // 1. Passende Guthaben-Einträge suchen
+        // (User A schuldet B. B hat Guthaben bei A. Also suchen wir Credit wo Debtor=A und Creditor=B)
+        // p.debtorId ist A, p.creditorId ist B.
+        const creditEntries = allPayments.filter(cp => 
+            cp.type === 'credit' && 
+            cp.status === 'open' &&
+            cp.creditorId === p.debtorId && 
+            cp.debtorId === p.creditorId
+        );
+
+        // Sortieren: Älteste zuerst verwenden? Oder egal. Nehmen wir einfach die Liste.
+        let remainingToDeduct = amountToUse;
+        const usedCreditInfo = []; // Für Log
+
+        for (const credit of creditEntries) {
+            if (remainingToDeduct <= 0.001) break;
+
+            const available = parseFloat(credit.remainingAmount);
+            const take = Math.min(available, remainingToDeduct);
+            
+            const newCreditRest = available - take;
+            remainingToDeduct -= take;
+
+            // Guthaben-Eintrag aktualisieren
+            const creditRef = doc(paymentsRef, credit.id);
+            const shortId = p.id.slice(-4).toUpperCase();
+            const linkToDebt = `[LINK:${p.id}:#${shortId}]`;
+            
+            batch.update(creditRef, {
+                remainingAmount: newCreditRest,
+                status: (newCreditRest <= 0.001) ? 'paid' : 'open', // Schließen wenn leer
+                history: [...(credit.history || []), { 
+                    date: new Date(), 
+                    action: 'credit_used', 
+                    user: currentUser.displayName, 
+                    info: `Guthaben (${take.toFixed(2)} €) eingelöst für Eintrag ${linkToDebt}.` 
+                }]
+            });
+            
+            const cShort = credit.id.slice(-4).toUpperCase();
+            usedCreditInfo.push(`[LINK:${credit.id}:#${cShort}] (${take.toFixed(2)} €)`);
+        }
+
+        // 2. Schulden-Eintrag aktualisieren (Geld empfangen)
+        const currentRest = parseFloat(p.remainingAmount);
+        const newRest = currentRest - amountToUse;
+        const debtRef = doc(paymentsRef, p.id);
+        
+        const transaction = { 
+            date: new Date(), 
+            amount: amountToUse, 
+            type: 'credit_usage', // Spezieller Typ für die Anzeige
+            user: currentUser.displayName,
+            info: `Bezahlt mit Guthaben aus: ${usedCreditInfo.join(', ')}`
+        };
+
+        batch.update(debtRef, {
+            remainingAmount: newRest,
+            status: (newRest <= 0.001) ? 'paid' : 'open',
+            transactions: [...(p.transactions || []), transaction],
+            history: [...(p.history || []), { 
+                date: new Date(), 
+                action: 'paid_with_credit', 
+                user: currentUser.displayName, 
+                info: `Zahlung erhalten durch Guthaben (${amountToUse.toFixed(2)} €).` 
+            }]
+        });
+
+        await batch.commit();
+        alertUser("Guthaben erfolgreich verrechnet!", "success");
+        // closeDetailModal(); // Optional: schließen oder offen lassen zum sehen
+        // Wir lassen es offen und refreshen, damit man das Ergebnis sieht
+        // openPaymentDetail holt sich die neuen Daten automatisch, da wir Listener haben.
+        // Einziges Problem: Listener ist async. Wir warten kurz.
+        setTimeout(() => openPaymentDetail(p.id), 200);
+
+    } catch (e) {
+        console.error(e);
+        alertUser("Fehler beim Verrechnen: " + e.message, "error");
+    }
 }
