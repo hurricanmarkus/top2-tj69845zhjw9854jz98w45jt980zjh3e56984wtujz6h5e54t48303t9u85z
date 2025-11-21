@@ -538,51 +538,50 @@ export function setButtonLoading(button, isLoading) {
 }
 
 export function navigate(targetViewName) {
-    console.log(`Navigiere zu: ${targetViewName}`); // Log Navigation
+    console.log(`Navigiere zu: ${targetViewName}`); 
     const targetView = views[targetViewName];
     if (!targetView) {
         console.error(`Navigation fehlgeschlagen: View "${targetViewName}" nicht gefunden.`);
         return;
     }
 
-    // Ansicht im Speicher merken
     if (sessionStorage) {
         sessionStorage.setItem('lastActiveView', targetViewName);
     }
 
     // Berechtigungsprüfung
     const userPermissions = currentUser.permissions || [];
+    // FIX: Systemadmin hat immer Zugriff (Master-Key)
+    const isSystemAdmin = currentUser.role === 'SYSTEMADMIN';
     
-// (P3) Ausnahme für 'terminplaner'
-    if (targetViewName !== 'terminplaner') {
+    // Wenn NICHT Systemadmin, dann prüfe die Rechte
+    if (targetViewName !== 'terminplaner' && !isSystemAdmin) {
         if (targetViewName === 'entrance' && !userPermissions.includes('ENTRANCE')) return alertUser("Zugriff verweigert (Eingang).", 'error');
         if (targetViewName === 'pushover' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Push).", 'error');
         if (targetViewName === 'checklist' && !userPermissions.includes('CHECKLIST')) return alertUser("Zugriff verweigert (Checkliste).", 'error');
         if (targetViewName === 'checklistSettings' && !userPermissions.includes('CHECKLIST_SETTINGS')) return alertUser("Zugriff verweigert (Checklisten-Einstellungen).", 'error');
         if (targetViewName === 'essensberechnung' && !userPermissions.includes('ESSENSBERECHNUNG')) return alertUser("Zugriff verweigert (Essensberechnung).", 'error');
-        
-        // NEU: Zugriffsschutz für Zahlungsverwaltung
-        if ((targetViewName === 'zahlungsverwaltung' || targetViewName === 'zahlungsverwaltungSettings') && !userPermissions.includes('ZAHLUNGSVERWALTUNG')) {
-             return alertUser("Zugriff verweigert (Zahlungsverwaltung).", 'error');
-        }
-        
-        if (targetViewName === 'admin') {
-            const isAdminRole = currentUser.role === 'ADMIN' || currentUser.role === 'SYSTEMADMIN';
-            const isIndividualAdminDisplay = currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN';
-            const allowAdminAccess = isAdminRole || isIndividualAdminDisplay;
 
-            if (!allowAdminAccess) {
+        if (targetViewName === 'admin') {
+            const isAdminRole = currentUser.role === 'ADMIN'; 
+            const isIndividualAdminDisplay = currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN';
+            
+            if (!isAdminRole && !isIndividualAdminDisplay) {
                 return alertUser("Zugriff verweigert (Admin).", 'error');
             }
         }
         if (targetViewName === 'notrufSettings' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Notruf-Einstellungen).", 'error');
+        
+        // Zugriffsschutz für Zahlungsverwaltung
+        if ((targetViewName === 'zahlungsverwaltung' || targetViewName === 'zahlungsverwaltungSettings') && !userPermissions.includes('ZAHLUNGSVERWALTUNG')) {
+             return alertUser("Zugriff verweigert (Zahlungsverwaltung).", 'error');
+        }
     }
 
     // Scroll zum Anfang
     const mainContent = document.querySelector('.main-content');
     if (mainContent) mainContent.scrollTop = 0;
 
-    // Alle Views ausblenden, Ziel-View einblenden
     Object.values(viewElements).forEach(el => el && el.classList.remove('active'));
     const targetElement = document.getElementById(targetView.id);
     if (targetElement) {
@@ -594,10 +593,8 @@ export function navigate(targetViewName) {
         return;
     }
 
-    // UI basierend auf Modus aktualisieren
     updateUIForMode();
 
-    // View-spezifische Initialisierungen
     if (targetViewName === 'userSettings') {
         const userNameEl = document.getElementById('userSettingsName');
         const userKeyDisplayEl = document.getElementById('currentUserKeyDisplay');
@@ -626,18 +623,14 @@ export function navigate(targetViewName) {
         toggleAdminSection(null);
     }
 
-    // In haupteingang.js - Innerhalb der navigate Funktion, ganz unten
-
     if (targetViewName === 'zahlungsverwaltung') {
         initializeZahlungsverwaltungView();
     }
     
-    // --- DIESER TEIL FEHLT WAHRSCHEINLICH: ---
     if (targetViewName === 'zahlungsverwaltungSettings') {
-        console.log("Starte Einstellungen-Skript..."); // Hilfe zur Fehlersuche
         initializeZahlungsverwaltungSettingsView();
     }
-} // Ende der navigate Funktion
+}
 
 
 

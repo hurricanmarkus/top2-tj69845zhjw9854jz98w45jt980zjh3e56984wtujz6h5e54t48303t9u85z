@@ -48,24 +48,24 @@ export function initializeZahlungsverwaltungView() {
         view.dataset.listenerAttached = 'true';
     }
     
-    // NEU: Button "+ Neu" basierend auf Berechtigung anzeigen/verstecken
+    // Button "+ Neu" basierend auf Berechtigung anzeigen/verstecken
     const createBtn = document.getElementById('btn-create-new-payment');
     const settingsBtn = document.getElementById('btn-zv-settings');
     
-    // Prüfen ob Gast oder User ohne Schreibrechte
-    const canCreate = currentUser.mode !== GUEST_MODE && (currentUser.permissions || []).includes('ZAHLUNGSVERWALTUNG_CREATE');
+    // FIX: Systemadmin darf immer schreiben (Master-Key)
+    const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
+    const canCreate = currentUser.mode !== GUEST_MODE && (isSysAdmin || (currentUser.permissions || []).includes('ZAHLUNGSVERWALTUNG_CREATE'));
     
     if (createBtn) createBtn.style.display = canCreate ? 'flex' : 'none';
-    // Einstellungen Button auch nur für Schreibberechtigte? (Optional, hier lasse ich ihn mal da, aber man kann nichts speichern ohne Rechte)
-    // Besser: Wir verstecken ihn auch, da Einstellungen meistens Schreibzugriff bedeuten
+    // Einstellungen Button auch nur für Schreibberechtigte
     if (settingsBtn) settingsBtn.style.display = canCreate ? 'block' : 'none';
 
-if (currentUser.mode !== GUEST_MODE) {
+    if (currentUser.mode !== GUEST_MODE) {
         listenForPayments();
         listenForTemplates();
         listenForContacts();
         listenForAccounts();
-        listenForCategories(); // NEU HINZUGEFÜGT
+        listenForCategories();
     } else {
         renderPaymentList([]);
     }
