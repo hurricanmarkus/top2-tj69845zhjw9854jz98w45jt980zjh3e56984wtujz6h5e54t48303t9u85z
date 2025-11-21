@@ -507,12 +507,16 @@ async function executeSplitEntry() {
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
         const newRest = currentRest - splitAmount;
 
-        // 1. Neue Referenz vorab erstellen, um die ID zu bekommen
+        // 1. Neue Referenz vorab
         const newDocRef = doc(paymentsRef);
-        const newDocIdShort = newDocRef.id.slice(-4).toUpperCase();
-        const originIdShort = originId.slice(-4).toUpperCase();
+        const newShort = newDocRef.id.slice(-4).toUpperCase();
+        const originShort = originId.slice(-4).toUpperCase();
+        
+        // Link-Codes generieren
+        const linkToNew = `[LINK:${newDocRef.id}:#${newShort}]`;
+        const linkToOrigin = `[LINK:${originId}:#${originShort}]`;
 
-        // 2. Ursprungseintrag aktualisieren (mit Verweis auf neue ID)
+        // 2. Ursprung aktualisieren
         const originRef = doc(paymentsRef, originId);
         batch.update(originRef, {
             remainingAmount: newRest,
@@ -520,14 +524,14 @@ async function executeSplitEntry() {
                 date: new Date(), 
                 action: 'split_source', 
                 user: currentUser.displayName, 
-                info: `Betrag von ${splitAmount.toFixed(2)}€ abgespalten auf Eintrag #${newDocIdShort} ("${splitTitle}").` 
+                info: `Betrag von ${splitAmount.toFixed(2)}€ abgespalten auf Eintrag ${linkToNew} ("${splitTitle}").` 
             }]
         });
 
-        // 3. Neuen Eintrag erstellen (mit Verweis auf alte ID)
+        // 3. Neu erstellen
         const newData = {
             ...p,
-            id: undefined, // ID entfernen, da neu
+            id: undefined,
             title: splitTitle,
             amount: splitAmount,
             remainingAmount: splitAmount,
@@ -536,7 +540,7 @@ async function executeSplitEntry() {
                 date: new Date(), 
                 action: 'split_target', 
                 user: currentUser.displayName, 
-                info: `Abgespalten von Eintrag #${originIdShort} ("${p.title}").` 
+                info: `Abgespalten von Eintrag ${linkToOrigin} ("${p.title}").` 
             }]
         };
         delete newData.id;
@@ -556,6 +560,7 @@ async function executeSplitEntry() {
         setButtonLoading(btn, false);
     }
 }
+
 
 
 // --- ADJUST AMOUNT LOGIK (Betrag anpassen) ---
@@ -1259,49 +1264,95 @@ async function executeSettlement() {
     try {
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
-        let partnerName = "", net = 0;
-        const involvedIds = []; // IDs sammeln für den Log
         
+        let partnerName = "";
+        let net = 0;
+        const involvedLinks = []; // Liste für den neuen Eintrag
+        const involvedDocs = []; // Liste der zu aktualisierenden Docs
+
+        // 1. Daten sammeln
         allPayments.forEach(p => {
             if (p.status !== 'open' && p.status !== 'pending_approval') return;
             if (p.type === 'credit') return;
+            
             let pIdCheck = (p.debtorId === currentUser.mode) ? p.creditorId : p.debtorId;
             let pNameCheck = (p.debtorId === currentUser.mode) ? p.creditorName : p.debtorName;
             if (!pIdCheck) pIdCheck = "MANUAL_" + pNameCheck;
 
             if (pIdCheck === activeSettlementPartnerId) {
                 partnerName = pNameCheck;
-                involvedIds.push(p.id.slice(-4).toUpperCase());
+                involvedDocs.push(p);
+                
+                // ID Kurzform für den Link
+                const short = p.id.slice(-4).toUpperCase();
+                // Speichern des Link-Codes: [LINK:DokumentID:AnzeigeText]
+                involvedLinks.push(`[LINK:${p.id}:#${short}]`);
+
                 const amount = p.isTBD ? 0 : parseFloat(p.remainingAmount);
                 if (p.debtorId === currentUser.mode) net -= amount; else net += amount;
-                
-                batch.update(doc(paymentsRef, p.id), {
-                    status: 'paid', remainingAmount: 0,
-                    history: [...(p.history || []), { 
-                        date: new Date(), 
-                        action: 'settled', 
-                        user: currentUser.displayName, 
-                        info: 'Durch Verrechnung ausgeglichen.' 
-                    }]
-                });
             }
         });
 
+        // 2. ID für den neuen "Restbetrag"-Eintrag vorab generieren (falls nötig)
+        let newDocRef = null;
+        let newLinkCode = "";
+        
         if (Math.abs(net) > 0.01) {
+            newDocRef = doc(paymentsRef);
+            const newShort = newDocRef.id.slice(-4).toUpperCase();
+            newLinkCode = `[LINK:${newDocRef.id}:#${newShort}]`;
+        }
+
+        // 3. Alte Einträge aktualisieren
+        involvedDocs.forEach(p => {
+            const ref = doc(paymentsRef, p.id);
+            let logInfo = 'Durch Verrechnung ausgeglichen.';
+            
+            if (newDocRef) {
+                // Wenn es einen Restbetrag gibt, verweisen wir darauf
+                logInfo = `Verrechnet. Restbetrag auf Eintrag ${newLinkCode} übertragen.`;
+            } else {
+                logInfo = `Verrechnet und vollständig glattgestellt (0,00 €).`;
+            }
+
+            batch.update(ref, {
+                status: 'paid', 
+                remainingAmount: 0,
+                history: [...(p.history || []), { 
+                    date: new Date(), 
+                    action: 'settled', 
+                    user: currentUser.displayName, 
+                    info: logInfo 
+                }]
+            });
+        });
+
+        // 4. Neuen Eintrag erstellen (wenn Restbetrag)
+        if (newDocRef) {
             const isCreditor = net > 0;
             const absAmount = Math.abs(net);
             const realPartnerId = activeSettlementPartnerId.startsWith("MANUAL_") ? null : activeSettlementPartnerId;
             
-            const logText = `Restbetrag aus Verrechnung von ${involvedIds.length} Posten.`;
+            const logText = `Restbetrag aus Verrechnung von: ${involvedLinks.join(', ')}`;
 
             const newData = {
-                title: "Restbetrag nach Verrechnung", amount: absAmount, remainingAmount: absAmount, isTBD: false,
-                deadline: null, invoiceNr: "", orderNr: "", notes: `Automatisch erstellt aus Bilanzierung mit ${partnerName}.`, 
-                type: 'debt', status: 'open',
+                title: "Restbetrag nach Verrechnung", 
+                amount: absAmount, 
+                remainingAmount: absAmount, 
+                isTBD: false,
+                deadline: null, 
+                invoiceNr: "", 
+                orderNr: "", 
+                notes: `Automatisch erstellt aus Bilanzierung mit ${partnerName}.`, 
+                type: 'debt', 
+                status: 'open',
                 categoryId: 'cat_misc',
-                createdAt: serverTimestamp(), createdBy: currentUser.mode,
-                debtorId: isCreditor ? realPartnerId : currentUser.mode, debtorName: isCreditor ? partnerName : currentUser.displayName,
-                creditorId: isCreditor ? currentUser.mode : realPartnerId, creditorName: isCreditor ? currentUser.displayName : partnerName,
+                createdAt: serverTimestamp(), 
+                createdBy: currentUser.mode,
+                debtorId: isCreditor ? realPartnerId : currentUser.mode, 
+                debtorName: isCreditor ? partnerName : currentUser.displayName,
+                creditorId: isCreditor ? currentUser.mode : realPartnerId, 
+                creditorName: isCreditor ? currentUser.displayName : partnerName,
                 involvedUserIds: [currentUser.mode, ...(realPartnerId ? [realPartnerId] : [])],
                 history: [{ 
                     date: new Date(), 
@@ -1310,12 +1361,19 @@ async function executeSettlement() {
                     info: logText 
                 }]
             };
-            batch.set(doc(paymentsRef), newData);
+            batch.set(newDocRef, newData);
         }
+
         await batch.commit();
         alertUser("Erfolgreich verrechnet!", "success");
         closeSettlementModal();
-    } catch (e) { console.error(e); alertUser("Fehler: " + e.message, "error"); } finally { setButtonLoading(btn, false); }
+
+    } catch (e) { 
+        console.error(e); 
+        alertUser("Fehler: " + e.message, "error"); 
+    } finally { 
+        setButtonLoading(btn, false); 
+    }
 }
 
 
@@ -1372,6 +1430,16 @@ function renderDetailContent(p, isRefresh) {
     const iAmCreator = p.createdBy === currentUser.mode;
     const shortId = p.id.slice(-4).toUpperCase();
 
+    // Helfer: Text mit Links parsen
+    const parseLinks = (text) => {
+        if (!text) return "";
+        // Ersetzt [LINK:ID:LABEL] durch einen klickbaren Span
+        return text.replace(/\[LINK:([^:]+):([^\]]+)\]/g, (match, id, label) => {
+            // Wir nutzen onclick mit stopPropagation, damit keine anderen Events feuern
+            return `<span class="text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer font-bold" onclick="openPaymentDetail('${id}'); event.stopPropagation();">${label}</span>`;
+        });
+    };
+
     let editControls = '';
     if (iAmCreator) {
         editControls = `
@@ -1399,7 +1467,7 @@ function renderDetailContent(p, isRefresh) {
             </div>`;
     }
 
-    // Transaktions-Liste anzeigen (Mit Zeit & User)
+    // Transaktions-Liste anzeigen
     if (p.transactions && p.transactions.length > 0) {
         transactionSection.classList.remove('hidden');
         transactionList.innerHTML = '';
@@ -1408,10 +1476,12 @@ function renderDetailContent(p, isRefresh) {
             const row = document.createElement('div');
             row.className = "flex justify-between items-center p-2 bg-white rounded border shadow-sm";
             
-            // Datum & Zeit formatieren
             const txDateObj = tx.date?.toDate ? tx.date.toDate() : new Date(tx.date);
             const dateStr = txDateObj.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
             const userName = tx.user || 'Unbekannt';
+
+            // Auch hier parseLinks anwenden, falls Links in Transaktions-Infos stehen
+            const txInfo = parseLinks(tx.info || ''); 
 
             row.innerHTML = `
                 <div class="flex flex-col">
@@ -1420,6 +1490,7 @@ function renderDetailContent(p, isRefresh) {
                         <span class="text-xs text-gray-500 italic">(${tx.type === 'credit_usage' ? 'Guthaben' : 'Zahlung'})</span>
                     </div>
                     <span class="text-[10px] text-gray-400">von <strong>${userName}</strong> am ${dateStr}</span>
+                    ${txInfo ? `<span class="text-[10px] text-gray-500">${txInfo}</span>` : ''}
                 </div>
                 ${canDelete ? `<button class="text-red-400 hover:text-red-600 text-xs font-bold delete-tx-btn px-2 py-1 bg-red-50 rounded border border-red-100">Löschen</button>` : ''}
             `;
@@ -1459,11 +1530,13 @@ function renderDetailContent(p, isRefresh) {
             ${(p.history || []).slice().reverse().map(h => {
                 const d = h.date?.toDate ? h.date.toDate() : new Date(h.date);
                 const dateStr = d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+                // HIER WIRD DER LINK GENERIERT
+                const infoText = parseLinks(h.info);
                 return `
                 <div class="mb-2 border-b border-gray-200 pb-1 last:border-0">
                     <span class="font-bold text-gray-700">${h.user || 'System'}</span> 
                     <span class="text-[10px] text-gray-400 ml-1">(${dateStr})</span>
-                    <div class="mt-0.5">${h.info}</div>
+                    <div class="mt-0.5 leading-relaxed">${infoText}</div>
                 </div>`;
             }).join('')}
         </div>
@@ -1499,6 +1572,7 @@ function renderDetailContent(p, isRefresh) {
     }
     if (!isRefresh) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
 }
+
 
 
 
