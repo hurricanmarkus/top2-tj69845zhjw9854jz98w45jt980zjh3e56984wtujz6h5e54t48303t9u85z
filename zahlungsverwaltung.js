@@ -1359,10 +1359,14 @@ function renderDetailContent(p, isRefresh) {
     const content = document.getElementById('payment-detail-content');
     const actions = document.getElementById('payment-detail-actions');
     const partialForm = document.getElementById('partial-payment-form');
-    const transactionSection = document.getElementById('transaction-history-section'); // NEU
-    const transactionList = document.getElementById('transaction-list'); // NEU
+    const transactionSection = document.getElementById('transaction-history-section');
+    const transactionList = document.getElementById('transaction-list');
 
     if (!modal || !content || !actions) return;
+
+    // FIX: Schließen-Button Funktion erzwingen (damit das X immer funktioniert)
+    const closeBtn = document.getElementById('btn-close-detail-modal');
+    if(closeBtn) closeBtn.onclick = closeDetailModal;
 
     const iAmDebtor = p.debtorId === currentUser.mode;
     const iAmCreditor = p.creditorId === currentUser.mode;
@@ -1396,7 +1400,7 @@ function renderDetailContent(p, isRefresh) {
             </div>`;
     }
 
-    // NEU: Transaktions-Liste anzeigen
+    // Transaktions-Liste anzeigen
     if (p.transactions && p.transactions.length > 0) {
         transactionSection.classList.remove('hidden');
         transactionList.innerHTML = '';
@@ -1413,7 +1417,6 @@ function renderDetailContent(p, isRefresh) {
                 </div>
                 ${canDelete ? `<button class="text-red-400 hover:text-red-600 text-xs font-bold delete-tx-btn px-2 py-1 bg-red-50 rounded border border-red-100">Löschen</button>` : ''}
             `;
-            // Event Listener für Löschen
             if (canDelete) row.querySelector('.delete-tx-btn').addEventListener('click', () => deleteTransaction(p.id, index));
             transactionList.appendChild(row);
         });
@@ -1484,6 +1487,7 @@ function renderDetailContent(p, isRefresh) {
     }
     if (!isRefresh) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
 }
+
 
 
 
