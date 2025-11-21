@@ -3468,9 +3468,12 @@ window.openHistoryModal = function(startId) {
 
 function generateMermaidGraph(rootId) {
     const container = document.getElementById('history-graph-container');
-    container.innerHTML = ''; 
+    container.innerHTML = '<div class="flex justify-center items-center h-full"><div class="loading-spinner border-gray-500"></div></div>';
     
-    // Helper
+    // 1. Helper für saubere Daten (Anti-Crash)
+    const cleanId = (id) => "N" + id.replace(/[^a-zA-Z0-9]/g, ''); // Nur Buchstaben/Zahlen für IDs
+    const cleanText = (text) => text ? text.replace(/["#;:<>{}]/g, ' ').trim() : ""; // Verbotene Zeichen raus
+
     const extractLinks = (text) => {
         const links = [];
         const regex = /\[LINK:([^:]+):([^\]]+)\]/g;
@@ -3483,216 +3486,164 @@ function generateMermaidGraph(rootId) {
         return match ? match[0] : null;
     };
 
+    // 2. Netz aufbauen
     const edgeMap = new Map(); 
-    const virtualNodes = new Map(); // Speichert virtuelle Events (Zahlungen, Stornos...)
-
     allPayments.forEach(p => {
         if (!p.history) return;
-
-        p.history.forEach((h, index) => {
+        p.history.forEach(h => {
             const linkedIds = extractLinks(h.info);
             let textAmount = extractAmountFromText(h.info);
             
-            // --- TEIL 1: Echte Verknüpfungen (Links) ---
-            if (linkedIds.length > 0) {
-                linkedIds.forEach(linkedId => {
-                    let from, to, actionName;
-                    let amount = textAmount;
+            linkedIds.forEach(linkedId => {
+                let from, to, actionName;
+                let amount = textAmount;
 
-                    if (h.action === 'created_merge') { from = linkedId; to = p.id; actionName = "Merge"; if(!amount){const s=allPayments.find(x=>x.id===linkedId);if(s)amount=parseFloat(s.amount).toFixed(2)+" €";} }
-                    else if (h.action === 'created_settlement') { from = linkedId; to = p.id; actionName = "Bilanz"; if(!amount){const s=allPayments.find(x=>x.id===linkedId);if(s)amount=parseFloat(s.amount).toFixed(2)+" €";} }
-                    else if (h.action === 'split_target') { from = linkedId; to = p.id; actionName = "Split"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
-                    else if (h.action === 'created_credit') { from = linkedId; to = p.id; actionName = "Guthaben"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
-                    
-                    else if (h.action === 'merged') { from = p.id; to = linkedId; actionName = "zu Merge"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
-                    else if (h.action === 'settled') { from = p.id; to = linkedId; actionName = "zu Bilanz"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
-                    else if (h.action === 'split_source') { from = p.id; to = linkedId; actionName = "zu Split"; if(!amount){const t=allPayments.find(x=>x.id===linkedId);if(t)amount=parseFloat(t.amount).toFixed(2)+" €";} }
-                    else if (h.action === 'paid_excess') { from = p.id; to = linkedId; actionName = "zu Guthaben"; if(!amount){const t=allPayments.find(x=>x.id===linkedId);if(t)amount=parseFloat(t.amount).toFixed(2)+" €";} }
-                    // Storno Guthaben Rückbuchung
-                    else if (h.action === 'credit_refunded') { from = linkedId; to = p.id; actionName = "Storno Rück."; } 
+                // Logik (Richtung bestimmen)
+                if (h.action === 'created_merge') { from = linkedId; to = p.id; actionName = "Merge"; if(!amount){const s=allPayments.find(x=>x.id===linkedId);if(s)amount=parseFloat(s.amount).toFixed(2)+" €";} }
+                else if (h.action === 'created_settlement') { from = linkedId; to = p.id; actionName = "Bilanz"; if(!amount){const s=allPayments.find(x=>x.id===linkedId);if(s)amount=parseFloat(s.amount).toFixed(2)+" €";} }
+                else if (h.action === 'split_target') { from = linkedId; to = p.id; actionName = "Split"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                else if (h.action === 'created_credit') { from = linkedId; to = p.id; actionName = "Guthaben"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                
+                else if (h.action === 'merged') { from = p.id; to = linkedId; actionName = "zu Merge"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                else if (h.action === 'settled') { from = p.id; to = linkedId; actionName = "zu Bilanz"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                else if (h.action === 'split_source') { from = p.id; to = linkedId; actionName = "zu Split"; if(!amount){const t=allPayments.find(x=>x.id===linkedId);if(t)amount=parseFloat(t.amount).toFixed(2)+" €";} }
+                else if (h.action === 'paid_excess') { from = p.id; to = linkedId; actionName = "zu Guthaben"; if(!amount){const t=allPayments.find(x=>x.id===linkedId);if(t)amount=parseFloat(t.amount).toFixed(2)+" €";} }
+                else if (h.action === 'credit_refunded') { from = linkedId; to = p.id; actionName = "Storno"; } 
 
-                    if (from && to) {
-                        const key = `${from}-${to}`;
-                        const existing = edgeMap.get(key);
-                        if (!existing || (!existing.amount && amount)) {
-                            edgeMap.set(key, { from, to, label: actionName, amount });
-                        }
-                    }
-                });
-            } 
-            // --- TEIL 2: Virtuelle Ereignisse (Keine Links, nur Aktionen) ---
-            else {
-                let vType = null;
-                let vLabel = "";
-                let vAmount = textAmount;
-
-                if (h.action === 'partial_pay' || h.action === 'mark_paid' || h.action === 'confirm_payment' || h.action === 'paid_with_credit') {
-                    vType = 'PAY';
-                    vLabel = "Zahlung";
-                } else if (h.action === 'adjusted') {
-                    vType = 'ADJUST';
-                    vLabel = "Anpassung";
-                } else if (h.action === 'tx_deleted') {
-                    vType = 'STORNO';
-                    vLabel = "Storno";
-                }
-
-                if (vType) {
-                    // Virtuelle ID generieren: PaymentID + Index
-                    const vId = `V_${p.id}_${index}`;
-                    virtualNodes.set(vId, { type: vType, label: vLabel, amount: vAmount, parentId: p.id, info: h.info });
-                    
-                    // Kante erstellen
-                    // Zahlung: Payment -> Virtuell (Geld fließt raus/weg)
-                    // Storno: Virtuell -> Payment (Geld kommt zurück/wird rückgängig gemacht)
-                    // Anpassung: Bidirektional oder einfach dranhängen.
-                    
-                    if (vType === 'PAY') {
-                        edgeMap.set(`${p.id}-${vId}`, { from: p.id, to: vId, label: "bezahlt", amount: vAmount });
-                    } else if (vType === 'STORNO') {
-                        edgeMap.set(`${vId}-${p.id}`, { from: vId, to: p.id, label: "rückgängig", amount: vAmount });
-                    } else if (vType === 'ADJUST') {
-                        // Anpassung zeigen wir als Einwirkung auf den Knoten
-                        edgeMap.set(`${vId}-${p.id}`, { from: vId, to: p.id, label: "ändert", amount: vAmount });
+                if (from && to) {
+                    const key = `${from}-${to}`;
+                    // Nur hinzufügen, wenn wir die Kante nicht schon "besser" (mit Betrag) haben
+                    const existing = edgeMap.get(key);
+                    if (!existing || (!existing.amount && amount)) {
+                        edgeMap.set(key, { from, to, label: actionName, amount });
                     }
                 }
-            }
+            });
         });
     });
 
-    // 3. Teilbaum finden (Inklusive virtueller Nodes)
+    // 3. Relevanten Bereich suchen
     const relevantNodes = new Set([rootId]);
     let changed = true;
-    
     while(changed) {
         changed = false;
         const currentSize = relevantNodes.size;
-        
         for (const [key, edge] of edgeMap) {
             if (relevantNodes.has(edge.from) && !relevantNodes.has(edge.to)) relevantNodes.add(edge.to);
             if (relevantNodes.has(edge.to) && !relevantNodes.has(edge.from)) relevantNodes.add(edge.from);
         }
-        
         if (relevantNodes.size > currentSize) changed = true;
     }
 
-    // 4. Graph Definition
-    let graphDefinition = 'graph TD\n';
+    // 4. Mermaid String bauen
+    let graphDef = 'graph TD\n';
+    
+    // Ursprungs-Check
     const hasParent = new Set();
     for (const [key, edge] of edgeMap) {
         if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) hasParent.add(edge.to);
     }
 
+    // Knoten
     relevantNodes.forEach(nodeId => {
-        // Ist es ein echter Knoten oder virtuell?
-        if (nodeId.startsWith('V_')) {
-            // VIRTUELLER KNOTEN
-            const vNode = virtualNodes.get(nodeId);
-            if (vNode) {
-                const safeId = "N" + nodeId.replace(/[^a-zA-Z0-9]/g, '');
-                const displayAmount = vNode.amount ? vNode.amount : "";
-                
-                let styleDef = "";
-                let shapeStart = "(", shapeEnd = ")"; // Abgerundet
+        const p = allPayments.find(x => x.id === nodeId);
+        const short = nodeId.slice(-4).toUpperCase();
+        const sId = cleanId(nodeId);
+        
+        let label = "";
+        let styleClass = "";
 
-                if (vNode.type === 'PAY') {
-                    styleDef = `style ${safeId} fill:#dcfce7,stroke:#166534,stroke-width:1px,stroke-dasharray: 2 2\n`;
-                    shapeStart = "(["; shapeEnd = "])"; // Stadion-Form
-                } else if (vNode.type === 'STORNO') {
-                    styleDef = `style ${safeId} fill:#fee2e2,stroke:#991b1b,stroke-width:2px\n`;
-                    shapeStart = "{{"; shapeEnd = "}}"; // Hexagon
-                } else if (vNode.type === 'ADJUST') {
-                    styleDef = `style ${safeId} fill:#fef3c7,stroke:#d97706,stroke-width:1px\n`;
-                    shapeStart = "[/"; shapeEnd = "\\ ]"; // Trapez
-                }
+        if (p) {
+            const title = cleanText(p.title);
+            const amt = parseFloat(p.amount).toFixed(2) + " €";
+            
+            // Label bauen (Vorsicht mit HTML in Mermaid strings!)
+            let prefix = "";
+            if (nodeId === rootId) prefix = "📍 ";
+            else if (!hasParent.has(nodeId)) prefix = "🚀 ";
+            
+            // Wir nutzen einfache Strings mit <br> für Umbrüche, das ist sicherer
+            label = `"${prefix}${title}<br>${amt}<br>#${short}"`;
 
-                const label = `"${shapeStart}<b>${vNode.label}</b><br>${displayAmount}${shapeEnd}"`;
-                graphDefinition += `    ${safeId}${label}\n`;
-                graphDefinition += `    ${styleDef}`;
-                
-                // Klick auf virtuellen Knoten zeigt Info (Alert)
-                graphDefinition += `    click ${safeId} call alert("${vNode.info.replace(/"/g, "'")}")\n`;
-            }
+            // Styles definieren
+            if (nodeId === rootId) styleClass = `style ${sId} fill:#fff7ed,stroke:#ea580c,stroke-width:4px`;
+            else if (!hasParent.has(nodeId)) styleClass = `style ${sId} fill:#ecfdf5,stroke:#059669,stroke-width:2px`;
+            else if (p.status === 'paid') styleClass = `style ${sId} fill:#f0fdf4,stroke:#bbf7d0,stroke-dasharray: 5 5`;
+            else styleClass = `style ${sId} fill:#ffffff,stroke:#9ca3af`;
+
+            // Klick Event
+            graphDef += `    click ${sId} call openPaymentDetail("${nodeId}")\n`;
 
         } else {
-            // ECHTER KNOTEN
-            const p = allPayments.find(x => x.id === nodeId);
-            const short = nodeId.slice(-4).toUpperCase();
-            let nodeTitle = "Gelöscht/Archiviert";
-            let nodeAmount = "???";
-            
-            if (p) {
-                const safeTitle = p.title.replace(/["\(\)]/g, ' ');
-                nodeTitle = safeTitle;
-                nodeAmount = parseFloat(p.amount).toFixed(2) + " €";
-            }
-
-            const safeId = "N" + nodeId;
-            let styleDef = `style ${safeId} fill:#f9fafb,stroke:#9ca3af,stroke-width:1px\n`; 
-            let labelPrefix = "";
-            
-            if (nodeId === rootId) {
-                labelPrefix = "📍 ";
-                styleDef = `style ${safeId} fill:#fff7ed,stroke:#ea580c,stroke-width:4px\n`;
-            } else if (!hasParent.has(nodeId)) {
-                labelPrefix = "🚀 ";
-                styleDef = `style ${safeId} fill:#ecfdf5,stroke:#059669,stroke-width:2px\n`;
-            } else if (p && p.status === 'paid') {
-                styleDef = `style ${safeId} fill:#f0fdf4,stroke:#bbf7d0,stroke-dasharray: 5 5\n`;
-            }
-
-            const nodeLabel = `"${labelPrefix}<b>${nodeTitle}</b><br>${nodeAmount}<br><small>#${short}</small>"`;
-            graphDefinition += `    ${safeId}(${nodeLabel})\n`;
-            graphDefinition += `    ${styleDef}`;
-            graphDefinition += `    click ${safeId} call openPaymentDetail("${nodeId}")\n`;
+            label = `"🗑️ Gelöscht<br>#${short}"`;
+            styleClass = `style ${sId} fill:#f3f4f6,stroke:#d1d5db`;
         }
+
+        graphDef += `    ${sId}(${label})\n`;
+        graphDef += `    ${styleClass}\n`;
     });
 
+    // Kanten
     for (const [key, edge] of edgeMap) {
         if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) {
-            const safeFrom = "N" + edge.from.replace(/[^a-zA-Z0-9]/g, '');
-            const safeTo = "N" + edge.to.replace(/[^a-zA-Z0-9]/g, '');
+            const sFrom = cleanId(edge.from);
+            const sTo = cleanId(edge.to);
             
-            let edgeLabel = `"${edge.label}`;
-            if (edge.amount) edgeLabel += `<br>${edge.amount}`;
-            edgeLabel += `"`;
+            let txt = edge.label;
+            if (edge.amount) txt += `<br>${edge.amount}`;
             
-            graphDefinition += `    ${safeFrom} -- ${edgeLabel} --> ${safeTo}\n`;
+            graphDef += `    ${sFrom} -- "${txt}" --> ${sTo}\n`;
         }
     }
 
     if (relevantNodes.size === 1) {
-        container.innerHTML = '<div class="text-center p-10 text-gray-500">Keine Verknüpfungen gefunden.<br><span class="text-xs">Dies ist ein Einzelposten.</span></div>';
+        container.innerHTML = '<div class="text-center p-10 text-gray-500 flex flex-col items-center justify-center h-full">Keine Verknüpfungen gefunden.<br><span class="text-xs">Einzelposten.</span></div>';
         return;
     }
 
-    graphDefinition += `    linkStyle default stroke:#374151,stroke-width:2px,fill:none;\n`;
+    graphDef += `    linkStyle default stroke:#374151,stroke-width:2px,fill:none;\n`;
 
-    const uniqueId = "mermaid-" + Math.floor(Math.random() * 1000000);
-    container.innerHTML = `<div class="mermaid" id="${uniqueId}" style="opacity: 0; transition: opacity 0.3s ease; width: 100%; height: 100%;">${graphDefinition}</div>`;
-    
+    // 5. Rendern & Zoom (Fix für 1/4 Größe)
+    const uniqueId = "mermaid-" + Date.now();
+    // Container leeren
+    container.innerHTML = `<div class="mermaid" id="${uniqueId}" style="width: 100%; height: 100%; overflow: hidden;">${graphDef}</div>`;
+
     setTimeout(() => {
         try {
             mermaid.init(undefined, document.getElementById(uniqueId));
+            
+            // Kurz warten, bis SVG im DOM ist
             setTimeout(() => {
                 const svgElement = document.querySelector(`#${uniqueId} svg`);
-                const divElement = document.getElementById(uniqueId);
-                if (svgElement && divElement) {
-                    svgElement.style.maxWidth = "none";
-                    svgElement.style.height = "100%";
+                if (svgElement) {
+                    // GRÖSSEN FIX: Attribute entfernen, die die Größe begrenzen
+                    svgElement.removeAttribute('width');
+                    svgElement.removeAttribute('height');
+                    svgElement.removeAttribute('style');
+                    
+                    // CSS setzen, damit es den Container füllt
                     svgElement.style.width = "100%";
+                    svgElement.style.height = "100%";
+                    svgElement.style.display = "block"; // Wichtig gegen Abstände unten
+
+                    // Zoom aktivieren
                     svgPanZoom(svgElement, {
-                        zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true, minZoom: 0.1, maxZoom: 10
+                        zoomEnabled: true,
+                        controlIconsEnabled: true,
+                        fit: true,
+                        center: true,
+                        minZoom: 0.5,
+                        maxZoom: 20
                     });
-                    divElement.style.opacity = "1";
                 }
-            }, 150);
-        } catch(e) {
-            console.error("Graph Render Fehler:", e);
-            container.innerHTML = "Fehler bei der Darstellung.";
+            }, 100);
+        } catch (e) {
+            console.error("Mermaid Error:", e);
+            container.innerHTML = `<div class="text-red-500 p-4 text-center">Grafikfehler: ${e.message}</div>`;
         }
     }, 50);
 }
+
 
 
 
