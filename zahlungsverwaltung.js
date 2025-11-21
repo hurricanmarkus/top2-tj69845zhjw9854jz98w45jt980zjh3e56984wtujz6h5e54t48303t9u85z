@@ -1494,7 +1494,7 @@ function renderDetailContent(p, isRefresh) {
         </div>`;
     }
 
-    // --- Ratenplan & Transaktionen ---
+    // --- Ratenplan ---
     let installmentInfo = '';
     if (p.installment && p.installment.total > 0) {
         const paidAmount = p.amount - p.remainingAmount;
@@ -1511,6 +1511,7 @@ function renderDetailContent(p, isRefresh) {
             </div>`;
     }
 
+    // --- Transaktionen ---
     if (p.transactions && p.transactions.length > 0) {
         transactionSection.classList.remove('hidden');
         transactionList.innerHTML = '';
@@ -1583,7 +1584,7 @@ function renderDetailContent(p, isRefresh) {
         </div>
     `;
 
-    // --- AKTIONEN UNTEN (Neu: Mit Tabs und Guthaben-Logik) ---
+    // --- AKTIONEN UNTEN ---
     actions.innerHTML = '';
     if (partialForm) partialForm.remove(); 
 
@@ -1592,14 +1593,27 @@ function renderDetailContent(p, isRefresh) {
     if (canAct) {
         const currentRest = parseFloat(p.remainingAmount);
         
-        const paymentInterface = document.createElement('div');
-        paymentInterface.className = "w-full bg-gray-50 p-2 rounded-lg border border-gray-200 shadow-inner mt-2";
+        // 1. Der "Öffnen"-Button
+        const initialBtn = document.createElement('button');
+        initialBtn.className = "w-full py-4 bg-indigo-600 text-white text-lg font-bold rounded-xl shadow-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2 mb-2";
+        initialBtn.innerHTML = `<span>Transaktion tätigen</span>`;
         
-        // HTML Aufbau
+        // 2. Der Interface-Container (Versteckt)
+        const paymentInterface = document.createElement('div');
+        paymentInterface.className = "w-full bg-gray-50 p-2 rounded-lg border border-gray-200 shadow-inner mt-2 hidden";
+        
+        // Klick öffnet Interface
+        initialBtn.onclick = () => {
+            initialBtn.remove();
+            paymentInterface.classList.remove('hidden');
+        };
+        
+        actions.appendChild(initialBtn);
+        actions.appendChild(paymentInterface);
+
+        // --- Interface Aufbau ---
         let tabsHtml = '';
         let defaultMode = 'money';
-        
-        // Wenn Guthaben verfügbar ist, zeigen wir Tabs
         if (availableCredit > 0) {
             tabsHtml = `
             <div class="flex gap-2 mb-3 p-1 bg-gray-200 rounded-lg">
@@ -1628,8 +1642,6 @@ function renderDetailContent(p, isRefresh) {
             </div>
         `;
         
-        actions.appendChild(paymentInterface);
-
         // --- UI LOGIK ---
         const input = document.getElementById('smart-payment-amount');
         const payBtn = document.getElementById('btn-smart-pay');
@@ -1638,13 +1650,12 @@ function renderDetailContent(p, isRefresh) {
         const tabMoney = document.getElementById('tab-mode-money');
         const tabCredit = document.getElementById('tab-mode-credit');
         
-        let currentMode = 'money'; // 'money' oder 'credit'
+        let currentMode = 'money';
 
-        // Tab Wechsel Logik
         if (tabMoney && tabCredit) {
             const switchMode = (mode) => {
                 currentMode = mode;
-                input.value = ''; // Reset bei Wechsel
+                input.value = '';
                 input.dispatchEvent(new Event('input')); // Trigger update
 
                 if (mode === 'money') {
@@ -1661,12 +1672,11 @@ function renderDetailContent(p, isRefresh) {
             tabCredit.onclick = () => switchMode('credit');
         }
 
-        // Live Update beim Tippen
+        // Live Update
         input.oninput = () => {
             const valStr = input.value;
             const val = parseFloat(valStr);
             
-            // Reset Button Style
             payBtn.className = "flex-1 h-16 text-white rounded-xl shadow-md transition flex flex-col justify-center items-center leading-tight px-1";
 
             if (!valStr || isNaN(val)) {
@@ -1699,7 +1709,7 @@ function renderDetailContent(p, isRefresh) {
                     payText.textContent = "Zu wenig Guthaben";
                     paySubText.textContent = `Max: ${availableCredit.toFixed(2)} €`;
                     payBtn.classList.add('bg-gray-500', 'cursor-not-allowed');
-                } else if (val > currentRest + 0.01) { // Guthaben darf nicht überzahlen
+                } else if (val > currentRest + 0.01) {
                     payText.textContent = "Betrag zu hoch";
                     paySubText.textContent = `Schuld nur ${currentRest.toFixed(2)} €`;
                     payBtn.classList.add('bg-gray-500', 'cursor-not-allowed');
@@ -1711,7 +1721,6 @@ function renderDetailContent(p, isRefresh) {
             }
         };
 
-        // Klick Handler
         payBtn.onclick = () => {
             if (payBtn.classList.contains('cursor-not-allowed')) return;
             const val = parseFloat(input.value);
@@ -2844,6 +2853,15 @@ function openCreditDetails(group) {
     document.getElementById('credit-details-total').textContent = group.total.toFixed(2) + " €";
     list.innerHTML = '';
 
+    // Link Parser auch hier lokal
+    const parseLinks = (text) => {
+        if (!text) return "";
+        // WICHTIG: openPaymentDetail muss global verfügbar sein
+        return text.replace(/\[LINK:([^:]+):([^\]]+)\]/g, (match, id, label) => {
+            return `<span class="text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer font-bold" onclick="openPaymentDetail('${id}'); event.stopPropagation();">${label}</span>`;
+        });
+    };
+
     const entries = allPayments.filter(p => group.ids.includes(p.id));
 
     entries.forEach(p => {
@@ -2853,7 +2871,6 @@ function openCreditDetails(group) {
         const btnText = group.context === 'my' ? "Abbuchen" : "Auszahlen";
         const dateStr = new Date(p.createdAt?.toDate()).toLocaleDateString();
 
-        // Kopfzeile des Eintrags
         row.innerHTML = `
             <div class="flex justify-between items-start">
                 <div>
@@ -2872,21 +2889,19 @@ function openCreditDetails(group) {
                 ${(p.history || []).slice().reverse().map(h => {
                     const d = h.date?.toDate ? h.date.toDate() : new Date(h.date);
                     const dStr = d.toLocaleDateString();
-                    // Links parsen für die Ansicht (falls wir die Funktion global hätten, sonst einfach Text)
-                    // Wir nehmen hier einfachen Text, da Links im Modal schwieriger sind ohne Context-Switch
-                    return `<div><span class="font-semibold">${dStr}:</span> ${h.info}</div>`;
+                    // NEU: Links parsen
+                    const infoText = parseLinks(h.info);
+                    return `<div><span class="font-semibold">${dStr}:</span> ${infoText}</div>`;
                 }).join('')}
             </div>
         `;
         
-        // Listener für Abbuchen
         row.querySelector('.action-btn').addEventListener('click', (e) => {
             e.stopPropagation();
             document.getElementById('creditDetailsModal').style.display = 'none';
             openCreditModal('sub', group.context, p.id);
         });
 
-        // Listener für Verlauf Toggle
         row.querySelector('.toggle-history-btn').addEventListener('click', (e) => {
             e.stopPropagation();
             const hist = row.querySelector('.history-container');
