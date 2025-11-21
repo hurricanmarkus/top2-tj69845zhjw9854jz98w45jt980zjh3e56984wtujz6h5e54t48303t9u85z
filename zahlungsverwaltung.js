@@ -2441,15 +2441,6 @@ async function renameContact(id) {
     }
 }
 
-async function renameContact(id) {
-    const contact = allContacts.find(c => c.id === id);
-    const newName = prompt("Neuer Name:", contact?.name);
-    if (newName && newName.trim()) {
-        try {
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'private-contacts', id), { name: newName.trim() });
-        } catch(e) { console.error(e); }
-    }
-}
 
 function renderContactList() {
     const container = document.getElementById('zv-contacts-list');
