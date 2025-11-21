@@ -1449,7 +1449,6 @@ function renderDetailContent(p, isRefresh) {
 
     if (!modal || !content || !actions) return;
 
-    // Sicherstellen, dass der Schließen-Button immer funktioniert
     const closeBtn = document.getElementById('btn-close-detail-modal');
     if(closeBtn) closeBtn.onclick = closeDetailModal;
 
@@ -1458,7 +1457,6 @@ function renderDetailContent(p, isRefresh) {
     const iAmCreator = p.createdBy === currentUser.mode;
     const shortId = p.id.slice(-4).toUpperCase();
 
-    // Helfer: Links klickbar machen
     const parseLinks = (text) => {
         if (!text) return "";
         return text.replace(/\[LINK:([^:]+):([^\]]+)\]/g, (match, id, label) => {
@@ -1466,12 +1464,19 @@ function renderDetailContent(p, isRefresh) {
         });
     };
 
+    // 1. Allgemeine Buttons (für alle Beteiligten sichtbar)
+    // NEU: Hier ist jetzt der Verlauf-Button
+    let commonControls = `
+        <div class="flex justify-end gap-2 mb-2 no-print">
+             <button onclick="openHistoryModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-bold shadow-sm transition transform hover:scale-105">🌳 Verlauf</button>
+        </div>
+    `;
+
+    // 2. Editier-Buttons (Nur für Ersteller)
     let editControls = '';
     if (iAmCreator) {
-        // NEU: Verlauf-Button an erster Stelle eingefügt
         editControls = `
         <div class="flex justify-end gap-2 mb-4 no-print border-b pb-2 flex-wrap">
-            <button onclick="openHistoryModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-bold shadow-sm transition transform hover:scale-105">🌳 Verlauf</button>
             <button onclick="openAdjustAmountModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-bold">€ Anpassen</button>
             <button onclick="openSplitModal('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 text-sm font-bold">Aufteilen</button>
             <button onclick="editPayment('${p.id}')" class="flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-sm font-bold">Bearbeiten</button>
@@ -1502,7 +1507,6 @@ function renderDetailContent(p, isRefresh) {
             const canDelete = (iAmCreator || iAmCreditor);
             const row = document.createElement('div');
             row.className = "flex justify-between items-center p-2 bg-white rounded border shadow-sm";
-            
             const txDateObj = tx.date?.toDate ? tx.date.toDate() : new Date(tx.date);
             const dateStr = txDateObj.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
             const userName = tx.user || 'Unbekannt';
@@ -1515,7 +1519,7 @@ function renderDetailContent(p, isRefresh) {
                         <span class="text-xs text-gray-500 italic">(${tx.type === 'credit_usage' ? 'Guthaben' : 'Zahlung'})</span>
                     </div>
                     <span class="text-[10px] text-gray-400">von <strong>${userName}</strong> am ${dateStr}</span>
-                    ${txInfo ? `<span class="text-[10px] text-gray-500 mt-0.5 block">${txInfo}</span>` : ''}
+                    ${txInfo ? `<span class="text-[10px] text-gray-500">${txInfo}</span>` : ''}
                 </div>
                 ${canDelete ? `<button class="text-red-400 hover:text-red-600 text-xs font-bold delete-tx-btn px-2 py-1 bg-red-50 rounded border border-red-100">Löschen</button>` : ''}
             `;
@@ -1526,7 +1530,9 @@ function renderDetailContent(p, isRefresh) {
         transactionSection.classList.add('hidden');
     }
 
+    // HTML Zusammenbau: Erst Common, dann Edit
     content.innerHTML = `
+        ${commonControls}
         ${editControls}
         <h2 class="text-2xl font-bold text-gray-800 mb-1 leading-tight">${p.title}</h2>
         <div class="flex flex-wrap gap-2 mb-4 mt-2">
@@ -1596,6 +1602,7 @@ function renderDetailContent(p, isRefresh) {
     }
     if (!isRefresh) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
 }
+
 
 
 
@@ -3135,8 +3142,9 @@ window.openHistoryModal = function(startId) {
 
 function generateMermaidGraph(rootId) {
     const container = document.getElementById('history-graph-container');
+    // Vorheriges SVG und PanZoom Instanzen aufräumen (wichtig!)
+    container.innerHTML = ''; 
     
-    // 1. Hilfsfunktionen
     const extractLinks = (text) => {
         const links = [];
         const regex = /\[LINK:([^:]+):([^\]]+)\]/g;
@@ -3152,9 +3160,7 @@ function generateMermaidGraph(rootId) {
         return match ? match[0] : null;
     };
 
-    // 2. Alle Kanten (Verbindungen) im gesamten System sammeln
-    // Wir nutzen eine Map, um Duplikate zu vermeiden und die beste Info zu behalten
-    const edgeMap = new Map(); // Key: "FROM-TO", Value: {from, to, label, amount}
+    const edgeMap = new Map(); 
 
     allPayments.forEach(p => {
         if (!p.history) return;
@@ -3167,13 +3173,8 @@ function generateMermaidGraph(rootId) {
                 let from, to, actionName;
                 let amount = textAmount;
 
-                // LOGIK: Wer ist Quelle (from), wer ist Ziel (to)?
-                // Und: Wie viel Geld fließt?
-                
-                // Gruppe A: p entstand AUS linkedId (linkedId -> p)
                 if (h.action === 'created_merge') { 
                     from = linkedId; to = p.id; actionName = "Merge"; 
-                    // Bei Merge ist der Betrag oft der gesamte Restbetrag der Quelle
                     if (!amount) {
                         const src = allPayments.find(x => x.id === linkedId);
                         if (src) amount = parseFloat(src.amount).toFixed(2) + " €";
@@ -3188,7 +3189,6 @@ function generateMermaidGraph(rootId) {
                 }
                 else if (h.action === 'split_target') { 
                     from = linkedId; to = p.id; actionName = "Split"; 
-                    // Der neue Split-Eintrag (p) hat genau den Betrag, der gesplittet wurde
                     if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
                 }
                 else if (h.action === 'created_credit') { 
@@ -3196,7 +3196,6 @@ function generateMermaidGraph(rootId) {
                     if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
                 }
                 
-                // Gruppe B: p wurde ZU linkedId (p -> linkedId)
                 else if (h.action === 'merged') { 
                     from = p.id; to = linkedId; actionName = "zu Merge";
                     if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
@@ -3207,7 +3206,6 @@ function generateMermaidGraph(rootId) {
                 }
                 else if (h.action === 'split_source') { 
                     from = p.id; to = linkedId; actionName = "zu Split"; 
-                    // Wir suchen den Betrag des Ziels (linkedId), das ist der abgespaltene Teil
                     if (!amount) {
                         const target = allPayments.find(x => x.id === linkedId);
                         if (target) amount = parseFloat(target.amount).toFixed(2) + " €";
@@ -3224,9 +3222,6 @@ function generateMermaidGraph(rootId) {
                 if (from && to) {
                     const key = `${from}-${to}`;
                     const existing = edgeMap.get(key);
-                    
-                    // Wir speichern die Kante. Wenn wir schon eine haben, aber die neue 
-                    // einen Betrag hat (und die alte nicht), nehmen wir die neue.
                     if (!existing || (!existing.amount && amount)) {
                         edgeMap.set(key, { from, to, label: actionName, amount });
                     }
@@ -3235,8 +3230,6 @@ function generateMermaidGraph(rootId) {
         });
     });
 
-    // 3. Relevanten Teilbaum finden (Vollständige Suche)
-    // Wir starten beim rootId und laufen so lange, bis wir alle verbundenen Knoten haben.
     const relevantNodes = new Set([rootId]);
     let changed = true;
     
@@ -3245,7 +3238,6 @@ function generateMermaidGraph(rootId) {
         const currentSize = relevantNodes.size;
         
         for (const [key, edge] of edgeMap) {
-            // Wenn einer der beiden Knoten im Set ist, holen wir den anderen dazu
             if (relevantNodes.has(edge.from) && !relevantNodes.has(edge.to)) {
                 relevantNodes.add(edge.to);
             }
@@ -3257,63 +3249,58 @@ function generateMermaidGraph(rootId) {
         if (relevantNodes.size > currentSize) changed = true;
     }
 
-    // 4. Mermaid Graph bauen
     let graphDefinition = 'graph TD\n';
-    
-    // Knoten definieren
+    const writtenEdges = new Set();
+
+    const hasParent = new Set();
+    for (const [key, edge] of edgeMap) {
+        if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) {
+            hasParent.add(edge.to);
+        }
+    }
+
     relevantNodes.forEach(nodeId => {
         const p = allPayments.find(x => x.id === nodeId);
         const short = nodeId.slice(-4).toUpperCase();
-        let label = "";
+        
+        let nodeTitle = "Gelöscht/Archiviert";
+        let nodeAmount = "???";
         
         if (p) {
             const safeTitle = p.title.replace(/["\(\)]/g, '').substring(0, 20) + (p.title.length>20?"...":"");
-            const amount = parseFloat(p.amount).toFixed(2) + " €";
-            
-            let prefix = "";
-            if (nodeId === rootId) prefix = "📍 "; // Aktuell
-            
-            label = `"${prefix}<b>${safeTitle}</b><br>${amount}<br><small>#${short}</small>"`;
-            
-            // Mermaid ID darf keine Sonderzeichen haben, daher "N" + ID
-            const safeId = "N" + nodeId; 
-            
-            graphDefinition += `    ${safeId}(${label})\n`;
-            
-            // Styling
-            if (nodeId === rootId) {
-                // Aktuell: Fett Orange
-                graphDefinition += `    style ${safeId} fill:#fff7ed,stroke:#ea580c,stroke-width:4px\n`;
-            } else if (p.status === 'paid' || p.status === 'closed') {
-                // Erledigt: Grünlich gestrichelt
-                graphDefinition += `    style ${safeId} fill:#f0fdf4,stroke:#bbf7d0,stroke-dasharray: 5 5\n`;
-            } else {
-                // Offen/Normal: Weiß/Grau
-                graphDefinition += `    style ${safeId} fill:#ffffff,stroke:#9ca3af\n`;
-            }
-            
-            // Klickbar machen
-            graphDefinition += `    click ${safeId} call openPaymentDetail("${nodeId}")\n`;
-            
-        } else {
-            // Gelöschter Knoten (nicht mehr in allPayments gefunden)
-            const safeId = "N" + nodeId;
-            graphDefinition += `    ${safeId}("🗑️ Gelöscht<br><small>#${short}</small>")\n`;
-            graphDefinition += `    style ${safeId} fill:#f3f4f6,stroke:#d1d5db\n`;
+            nodeTitle = safeTitle;
+            nodeAmount = parseFloat(p.amount).toFixed(2) + " €";
         }
+
+        const safeId = "NODE_" + nodeId;
+        let styleDef = `style ${safeId} fill:#f9fafb,stroke:#9ca3af,stroke-width:1px\n`; 
+
+        let labelPrefix = "";
+        
+        if (nodeId === rootId) {
+            labelPrefix = "📍 ";
+            styleDef = `style ${safeId} fill:#fff7ed,stroke:#ea580c,stroke-width:4px\n`;
+        } else if (!hasParent.has(nodeId)) {
+            labelPrefix = "🚀 ";
+            styleDef = `style ${safeId} fill:#ecfdf5,stroke:#059669,stroke-width:2px\n`;
+        } else if (p && p.status === 'paid') {
+            styleDef = `style ${safeId} fill:#f0fdf4,stroke:#bbf7d0,stroke-dasharray: 5 5\n`;
+        }
+
+        const nodeLabel = `"${labelPrefix}<b>${nodeTitle}</b><br>${nodeAmount}<br><small>#${short}</small>"`;
+        
+        graphDefinition += `    ${safeId}(${nodeLabel})\n`;
+        graphDefinition += `    ${styleDef}`;
+        graphDefinition += `    click ${safeId} call openPaymentDetail("${nodeId}")\n`;
     });
 
-    // Kanten definieren
     for (const [key, edge] of edgeMap) {
         if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) {
-            const safeFrom = "N" + edge.from;
-            const safeTo = "N" + edge.to;
-            
-            // Beschriftung auf dem Pfeil: Action + Betrag
+            const safeFrom = "NODE_" + edge.from;
+            const safeTo = "NODE_" + edge.to;
             let edgeLabel = `"${edge.label}`;
             if (edge.amount) edgeLabel += `<br>${edge.amount}`;
             edgeLabel += `"`;
-            
             graphDefinition += `    ${safeFrom} -- ${edgeLabel} --> ${safeTo}\n`;
         }
     }
@@ -3323,17 +3310,36 @@ function generateMermaidGraph(rootId) {
         return;
     }
 
-    // Globale Styles für Pfeile (Dicker, Dunkelgrau)
     graphDefinition += `    linkStyle default stroke:#374151,stroke-width:2px,fill:none;\n`;
 
-    // Rendern
     const uniqueId = "mermaid-" + Math.floor(Math.random() * 1000000);
-    container.innerHTML = `<div class="mermaid" id="${uniqueId}">${graphDefinition}</div>`;
+    container.innerHTML = `<div class="mermaid" id="${uniqueId}" style="width: 100%; height: 100%;">${graphDefinition}</div>`;
     
-    try {
-        mermaid.init(undefined, document.getElementById(uniqueId));
-    } catch(e) {
-        console.error("Mermaid Render Fehler:", e);
-        container.innerHTML = "Fehler bei der Darstellung des Graphen.";
-    }
+    // WICHTIG: Zoom aktivieren NACHDEM Mermaid fertig ist
+    setTimeout(() => {
+        try {
+            mermaid.init(undefined, document.getElementById(uniqueId));
+            
+            // Kurze Verzögerung, damit DOM gerendert ist
+            setTimeout(() => {
+                const svgElement = document.querySelector(`#${uniqueId} svg`);
+                if (svgElement) {
+                    // Zoom Bibliothek aktivieren
+                    svgPanZoom(svgElement, {
+                        zoomEnabled: true,
+                        controlIconsEnabled: true, // Zeigt +/- Buttons an
+                        fit: true,
+                        center: true,
+                        minZoom: 0.5,
+                        maxZoom: 10
+                    });
+                }
+            }, 100);
+            
+        } catch(e) {
+            console.error("Graph Fehler:", e);
+            container.innerHTML = "Fehler bei der Darstellung.";
+        }
+    }, 50);
 }
+
