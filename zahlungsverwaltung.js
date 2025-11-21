@@ -3136,9 +3136,7 @@ window.openHistoryModal = function(startId) {
 function generateMermaidGraph(rootId) {
     const container = document.getElementById('history-graph-container');
     
-    // 1. Alle Verbindungen (Kanten) erfassen
-    const allEdges = [];
-    
+    // 1. Hilfsfunktionen
     const extractLinks = (text) => {
         const links = [];
         const regex = /\[LINK:([^:]+):([^\]]+)\]/g;
@@ -3149,184 +3147,193 @@ function generateMermaidGraph(rootId) {
         return links;
     };
 
-    // Helfer: Betrag aus Text extrahieren (z.B. "Abgespalten (12.50 €)...")
     const extractAmountFromText = (text) => {
         const match = text.match(/(\d+(?:[.,]\d{2})?)\s?€/);
         return match ? match[0] : null;
     };
 
+    // 2. Alle Kanten (Verbindungen) im gesamten System sammeln
+    // Wir nutzen eine Map, um Duplikate zu vermeiden und die beste Info zu behalten
+    const edgeMap = new Map(); // Key: "FROM-TO", Value: {from, to, label, amount}
+
     allPayments.forEach(p => {
-        const pId = p.id;
         if (!p.history) return;
 
         p.history.forEach(h => {
             const linkedIds = extractLinks(h.info);
-            
-            // Versuchen, einen Betrag im Log-Text zu finden (z.B. bei Split)
             let textAmount = extractAmountFromText(h.info);
 
             linkedIds.forEach(linkedId => {
-                let from = null;
-                let to = null;
-                let actionLabel = "";
-                let amountLabel = textAmount; // Standard: Was wir im Text gefunden haben
+                let from, to, actionName;
+                let amount = textAmount;
 
-                // LOGIK: Richtung und Beschriftung
+                // LOGIK: Wer ist Quelle (from), wer ist Ziel (to)?
+                // Und: Wie viel Geld fließt?
                 
-                // Gruppe A: Neuer Eintrag ENTSTAND aus altem
+                // Gruppe A: p entstand AUS linkedId (linkedId -> p)
                 if (h.action === 'created_merge') { 
-                    from = linkedId; to = pId; actionLabel = "Merge"; 
-                    // Bei Merge steht der Betrag oft nicht im Text des Ziels,
-                    // aber wir können ihn evtl. später aus dem Quell-Knoten holen (siehe unten)
+                    from = linkedId; to = p.id; actionName = "Merge"; 
+                    // Bei Merge ist der Betrag oft der gesamte Restbetrag der Quelle
+                    if (!amount) {
+                        const src = allPayments.find(x => x.id === linkedId);
+                        if (src) amount = parseFloat(src.amount).toFixed(2) + " €";
+                    }
                 }
                 else if (h.action === 'created_settlement') { 
-                    from = linkedId; to = pId; actionLabel = "Bilanz"; 
+                    from = linkedId; to = p.id; actionName = "Bilanz"; 
+                    if (!amount) {
+                        const src = allPayments.find(x => x.id === linkedId);
+                        if (src) amount = parseFloat(src.amount).toFixed(2) + " €";
+                    }
                 }
                 else if (h.action === 'split_target') { 
-                    from = linkedId; to = pId; actionLabel = "Split"; 
+                    from = linkedId; to = p.id; actionName = "Split"; 
+                    // Der neue Split-Eintrag (p) hat genau den Betrag, der gesplittet wurde
+                    if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
                 }
                 else if (h.action === 'created_credit') { 
-                    from = linkedId; to = pId; actionLabel = "Guthaben"; 
+                    from = linkedId; to = p.id; actionName = "Guthaben"; 
+                    if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
                 }
                 
-                // Gruppe B: Aktueller Eintrag WURDE zu neuem
+                // Gruppe B: p wurde ZU linkedId (p -> linkedId)
                 else if (h.action === 'merged') { 
-                    from = pId; to = linkedId; actionLabel = "zu Merge";
-                    // Wenn p komplett gemerged wurde, ist der Betrag = p.amount
-                    if (!amountLabel) amountLabel = parseFloat(p.amount).toFixed(2) + " €";
+                    from = p.id; to = linkedId; actionName = "zu Merge";
+                    if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
                 }
                 else if (h.action === 'settled') { 
-                    from = pId; to = linkedId; actionLabel = "zu Bilanz";
-                    if (!amountLabel) amountLabel = parseFloat(p.amount).toFixed(2) + " €";
+                    from = p.id; to = linkedId; actionName = "zu Bilanz";
+                    if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
                 }
                 else if (h.action === 'split_source') { 
-                    from = pId; to = linkedId; actionLabel = "zu Split"; 
-                    // Bei Split Source steht der Betrag meist im Text ("Betrag von X abgespalten")
+                    from = p.id; to = linkedId; actionName = "zu Split"; 
+                    // Wir suchen den Betrag des Ziels (linkedId), das ist der abgespaltene Teil
+                    if (!amount) {
+                        const target = allPayments.find(x => x.id === linkedId);
+                        if (target) amount = parseFloat(target.amount).toFixed(2) + " €";
+                    }
                 }
                 else if (h.action === 'paid_excess') { 
-                    from = pId; to = linkedId; actionLabel = "zu Guthaben"; 
+                    from = p.id; to = linkedId; actionName = "zu Guthaben"; 
+                    if (!amount) {
+                         const target = allPayments.find(x => x.id === linkedId);
+                         if (target) amount = parseFloat(target.amount).toFixed(2) + " €";
+                    }
                 }
 
                 if (from && to) {
-                    // Kombinierter Label für den Pfeil
-                    // Format: "<b>Action</b><br>50,00 €"
-                    let finalLabel = `<b>${actionLabel}</b>`;
-                    if (amountLabel) {
-                        finalLabel += `<br>${amountLabel}`;
-                    }
+                    const key = `${from}-${to}`;
+                    const existing = edgeMap.get(key);
                     
-                    // Wichtig: Anführungszeichen für Mermaid escapen/nutzen
-                    finalLabel = `"${finalLabel}"`;
-
-                    allEdges.push({ from, to, label: finalLabel });
+                    // Wir speichern die Kante. Wenn wir schon eine haben, aber die neue 
+                    // einen Betrag hat (und die alte nicht), nehmen wir die neue.
+                    if (!existing || (!existing.amount && amount)) {
+                        edgeMap.set(key, { from, to, label: actionName, amount });
+                    }
                 }
             });
         });
     });
 
-    // 2. Relevanten Teilbaum finden (Infinite Search)
+    // 3. Relevanten Teilbaum finden (Vollständige Suche)
+    // Wir starten beim rootId und laufen so lange, bis wir alle verbundenen Knoten haben.
     const relevantNodes = new Set([rootId]);
-    let newNodesFound = true;
-
-    while(newNodesFound) {
-        newNodesFound = false;
+    let changed = true;
+    
+    while(changed) {
+        changed = false;
         const currentSize = relevantNodes.size;
-
-        allEdges.forEach(edge => {
+        
+        for (const [key, edge] of edgeMap) {
+            // Wenn einer der beiden Knoten im Set ist, holen wir den anderen dazu
             if (relevantNodes.has(edge.from) && !relevantNodes.has(edge.to)) {
                 relevantNodes.add(edge.to);
             }
             if (relevantNodes.has(edge.to) && !relevantNodes.has(edge.from)) {
                 relevantNodes.add(edge.from);
             }
-        });
-
-        if (relevantNodes.size > currentSize) newNodesFound = true;
+        }
+        
+        if (relevantNodes.size > currentSize) changed = true;
     }
 
-    // 3. Mermaid Definition bauen
+    // 4. Mermaid Graph bauen
     let graphDefinition = 'graph TD\n';
-    const writtenEdges = new Set();
-
-    // Pfeile zeichnen
-    allEdges.forEach(edge => {
-        if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) {
-            const edgeId = `${edge.from}-${edge.to}`;
-            if (!writtenEdges.has(edgeId)) {
-                const safeFrom = "NODE_" + edge.from;
-                const safeTo = "NODE_" + edge.to;
-                // Pfeil mit Label
-                graphDefinition += `    ${safeFrom} -- ${edge.label} --> ${safeTo}\n`;
-                writtenEdges.add(edgeId);
-            }
-        }
-    });
-
-    // Ursprungs-Analyse für Styles
-    const hasParent = new Set();
-    allEdges.forEach(edge => {
-        if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) {
-            hasParent.add(edge.to);
-        }
-    });
-
-    // Knoten zeichnen
+    
+    // Knoten definieren
     relevantNodes.forEach(nodeId => {
         const p = allPayments.find(x => x.id === nodeId);
         const short = nodeId.slice(-4).toUpperCase();
-        
-        let nodeTitle = "Gelöscht/Archiviert";
-        let nodeAmount = "???";
+        let label = "";
         
         if (p) {
             const safeTitle = p.title.replace(/["\(\)]/g, '').substring(0, 20) + (p.title.length>20?"...":"");
-            nodeTitle = safeTitle;
-            nodeAmount = parseFloat(p.amount).toFixed(2) + " €";
+            const amount = parseFloat(p.amount).toFixed(2) + " €";
+            
+            let prefix = "";
+            if (nodeId === rootId) prefix = "📍 "; // Aktuell
+            
+            label = `"${prefix}<b>${safeTitle}</b><br>${amount}<br><small>#${short}</small>"`;
+            
+            // Mermaid ID darf keine Sonderzeichen haben, daher "N" + ID
+            const safeId = "N" + nodeId; 
+            
+            graphDefinition += `    ${safeId}(${label})\n`;
+            
+            // Styling
+            if (nodeId === rootId) {
+                // Aktuell: Fett Orange
+                graphDefinition += `    style ${safeId} fill:#fff7ed,stroke:#ea580c,stroke-width:4px\n`;
+            } else if (p.status === 'paid' || p.status === 'closed') {
+                // Erledigt: Grünlich gestrichelt
+                graphDefinition += `    style ${safeId} fill:#f0fdf4,stroke:#bbf7d0,stroke-dasharray: 5 5\n`;
+            } else {
+                // Offen/Normal: Weiß/Grau
+                graphDefinition += `    style ${safeId} fill:#ffffff,stroke:#9ca3af\n`;
+            }
+            
+            // Klickbar machen
+            graphDefinition += `    click ${safeId} call openPaymentDetail("${nodeId}")\n`;
+            
+        } else {
+            // Gelöschter Knoten (nicht mehr in allPayments gefunden)
+            const safeId = "N" + nodeId;
+            graphDefinition += `    ${safeId}("🗑️ Gelöscht<br><small>#${short}</small>")\n`;
+            graphDefinition += `    style ${safeId} fill:#f3f4f6,stroke:#d1d5db\n`;
         }
-
-        const safeId = "NODE_" + nodeId;
-        let styleDef = `style ${safeId} fill:#f9fafb,stroke:#9ca3af,stroke-width:1px\n`; 
-
-        let labelPrefix = "";
-        
-        if (nodeId === rootId) {
-            // AKTUELL: Orange
-            labelPrefix = "📍 ";
-            styleDef = `style ${safeId} fill:#fff7ed,stroke:#ea580c,stroke-width:4px\n`;
-        } else if (!hasParent.has(nodeId)) {
-            // URSPRUNG: Grün
-            labelPrefix = "🚀 ";
-            styleDef = `style ${safeId} fill:#ecfdf5,stroke:#059669,stroke-width:2px\n`;
-        } else if (p && p.status === 'paid') {
-            // BEZAHLT: Gestrichelt
-            styleDef = `style ${safeId} fill:#f0fdf4,stroke:#bbf7d0,stroke-dasharray: 5 5\n`;
-        }
-
-        const nodeLabel = `"${labelPrefix}<b>${nodeTitle}</b><br>${nodeAmount}<br><small>#${short}</small>"`;
-        
-        graphDefinition += `    ${safeId}(${nodeLabel})\n`;
-        graphDefinition += `    ${styleDef}`;
-        graphDefinition += `    click ${safeId} call openPaymentDetail("${nodeId}")\n`;
     });
 
+    // Kanten definieren
+    for (const [key, edge] of edgeMap) {
+        if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) {
+            const safeFrom = "N" + edge.from;
+            const safeTo = "N" + edge.to;
+            
+            // Beschriftung auf dem Pfeil: Action + Betrag
+            let edgeLabel = `"${edge.label}`;
+            if (edge.amount) edgeLabel += `<br>${edge.amount}`;
+            edgeLabel += `"`;
+            
+            graphDefinition += `    ${safeFrom} -- ${edgeLabel} --> ${safeTo}\n`;
+        }
+    }
+
     if (relevantNodes.size === 1) {
-        container.innerHTML = '<div class="text-center p-10 text-gray-500">Keine Verknüpfungen für diesen Eintrag.<br><span class="text-xs">Dies ist ein Einzelposten.</span></div>';
+        container.innerHTML = '<div class="text-center p-10 text-gray-500">Keine Verknüpfungen gefunden.<br><span class="text-xs">Dies ist ein Einzelposten.</span></div>';
         return;
     }
 
-    // Styles für Pfeile (Dunkelgrau, Textbox weiß hinterlegt)
-    // linkStyle default wendet Styles auf alle Pfeile an
-    // stroke-width:2px = dickerer Pfeil
-    // fill:none = keine Füllung
+    // Globale Styles für Pfeile (Dicker, Dunkelgrau)
     graphDefinition += `    linkStyle default stroke:#374151,stroke-width:2px,fill:none;\n`;
 
-    const uniqueId = "mermaid-" + Math.floor(Math.random() * 100000);
+    // Rendern
+    const uniqueId = "mermaid-" + Math.floor(Math.random() * 1000000);
     container.innerHTML = `<div class="mermaid" id="${uniqueId}">${graphDefinition}</div>`;
     
     try {
         mermaid.init(undefined, document.getElementById(uniqueId));
     } catch(e) {
-        console.error("Mermaid Fehler:", e);
-        container.innerHTML = "Fehler bei der Darstellung.";
+        console.error("Mermaid Render Fehler:", e);
+        container.innerHTML = "Fehler bei der Darstellung des Graphen.";
     }
 }
