@@ -106,7 +106,7 @@ function setupEventListeners() {
     document.getElementById('btn-cancel-create-payment')?.addEventListener('click', closeCreateModal);
     document.getElementById('btn-save-payment')?.addEventListener('click', savePayment);
     
-    // Toggle Logic im Create Modal (Sender/Empfänger manuell)
+    // Toggle Logic im Create Modal
     document.getElementById('btn-toggle-debtor-manual')?.addEventListener('click', () => toggleInputMode('debtor'));
     document.getElementById('btn-toggle-creditor-manual')?.addEventListener('click', () => toggleInputMode('creditor'));
     document.getElementById('toggle-split-mode')?.addEventListener('change', (e) => toggleSplitMode(e.target.checked));
@@ -121,13 +121,13 @@ function setupEventListeners() {
     document.getElementById('btn-toggle-advanced-payment')?.addEventListener('click', () => document.getElementById('payment-advanced-options').classList.toggle('hidden'));
     document.getElementById('payment-is-installment')?.addEventListener('change', (e) => document.getElementById('installment-options').classList.toggle('hidden', !e.target.checked));
     
-// Toggle für Dashboard-Controls (Improvement 1)
+    // Toggle für Dashboard-Controls
     document.getElementById('btn-toggle-dashboard-controls')?.addEventListener('click', () => {
         const wrapper = document.getElementById('dashboard-controls-wrapper');
         const icon = document.getElementById('icon-dashboard-toggle');
         if (wrapper.classList.contains('hidden')) {
             wrapper.classList.remove('hidden');
-            icon.classList.add('rotate-180'); // Pfeil drehen
+            icon.classList.add('rotate-180'); 
         } else {
             wrapper.classList.add('hidden');
             icon.classList.remove('rotate-180');
@@ -139,6 +139,13 @@ function setupEventListeners() {
     document.getElementById('payment-filter-status')?.addEventListener('change', applyFilters);
     document.getElementById('payment-filter-category')?.addEventListener('change', applyFilters);
     document.getElementById('payment-filter-direction')?.addEventListener('change', applyFilters);
+    
+    document.getElementById('btn-close-detail-modal')?.addEventListener('click', closeDetailModal);
+    
+    // FIX: Drucken Button korrekt verknüpfen
+    document.getElementById('btn-print-payment')?.addEventListener('click', () => {
+        if (currentDetailPaymentId) printPaymentDetail(currentDetailPaymentId);
+    });
     
     const listContainer = document.getElementById('payments-list-container');
     if (listContainer) {
@@ -166,6 +173,7 @@ function setupEventListeners() {
     document.getElementById('btn-cancel-adjust')?.addEventListener('click', closeAdjustAmountModal);
     document.getElementById('btn-save-adjust')?.addEventListener('click', executeAdjustAmount);
     
+    // Überzahlung Buttons
     document.getElementById('btn-op-credit')?.addEventListener('click', () => resolveOverpayment('credit'));
     document.getElementById('btn-op-tip')?.addEventListener('click', () => resolveOverpayment('tip'));
     document.getElementById('btn-op-cancel')?.addEventListener('click', () => { document.getElementById('overpaymentModal').style.display = 'none'; pendingOverpaymentData = null; });
@@ -2103,26 +2111,44 @@ function updateDashboard(payments) {
 // --- LOGIK FÜR ZAHLUNGEN UND ÜBERZAHLUNG ---
 
 window.handlePaymentAction = async function (id, action, amount = 0) {
-    const p = allPayments.find(x => x.id === id); if (!p) return;
+    const p = allPayments.find(x => x.id === id); 
+    if (!p) return;
     
-    if (action === 'partial_pay' || action === 'mark_paid') {
-        const currentRest = parseFloat(p.remainingAmount);
-        let payAmount = amount;
-        
-        if (action === 'mark_paid') payAmount = currentRest;
-        
-        // Toleranz für Rundungsfehler (0.01)
-        if (payAmount > currentRest + 0.01) {
-            const overpayment = payAmount - currentRest;
-            pendingOverpaymentData = { paymentId: id, payAmount: payAmount, debtAmount: currentRest, excessAmount: overpayment };
-            document.getElementById('overpayment-amount').textContent = overpayment.toFixed(2) + " €";
-            document.getElementById('overpaymentModal').classList.remove('hidden');
-            document.getElementById('overpaymentModal').style.display = 'flex';
-            return; // STOPPT HIER, WARTET AUF MODAL
-        }
+    // 1. Überprüfung auf Überzahlung
+    // Wir schauen uns den Restbetrag an.
+    const currentRest = parseFloat(p.remainingAmount);
+    let payAmount = amount;
+    
+    // Wenn "Alles zahlen" geklickt wurde, ist der Betrag = Rest (keine Überzahlung möglich)
+    // Wenn "Teilbetrag" (oder manuell), ist amount gesetzt.
+    if (action === 'mark_paid' && amount === 0) {
+        payAmount = currentRest;
     }
-    await executePayment(id, action, amount);
+    
+    // Wenn der eingegebene Betrag größer ist als der Rest (mit 1 Cent Toleranz)
+    if (payAmount > currentRest + 0.01) {
+        const overpayment = payAmount - currentRest;
+        
+        // Daten zwischenspeichern
+        pendingOverpaymentData = { 
+            paymentId: id, 
+            payAmount: payAmount, 
+            debtAmount: currentRest, 
+            excessAmount: overpayment 
+        };
+        
+        // Modal anzeigen
+        document.getElementById('overpayment-amount').textContent = overpayment.toFixed(2) + " €";
+        document.getElementById('overpaymentModal').classList.remove('hidden');
+        document.getElementById('overpaymentModal').style.display = 'flex';
+        
+        return; // WICHTIG: Hier abbrechen und auf User-Entscheidung warten!
+    }
+    
+    // Wenn keine Überzahlung, normal weiter
+    await executePayment(id, action, payAmount);
 };
+
 
 async function executePayment(id, action, amount) {
     const p = allPayments.find(x => x.id === id);
@@ -2132,57 +2158,44 @@ async function executePayment(id, action, amount) {
     let transaction = null;
 
     if (action === 'mark_paid') { 
-        // Logik: Wer muss das genehmigen?
-        // Normalerweise derjenige, der das Geld bekommt (Creditor).
-        // Ist der Creditor ein System-User?
-        const creditorIsSystemUser = USERS[p.creditorId] && USERS[p.creditorId].isActive;
-        const iAmCreditor = p.creditorId === currentUser.mode;
-
-        // Wir genehmigen SOFORT, wenn:
-        // 1. Der Gläubiger KEIN System-User ist (Gast kann nicht einloggen zum Genehmigen)
-        // 2. ODER: Ich selbst der Gläubiger bin (ich bestätige ja gerade, dass ich Geld habe)
-        // 3. (Hier könnte man später noch 'userSettings.autoApprove' einbauen)
-        
-        const autoApprove = !creditorIsSystemUser || iAmCreditor;
+        // Auto-Approve Logik
+        const autoApprove = (!USERS[p.creditorId] || p.creditorId === currentUser.mode);
 
         if (autoApprove) {
-            // SOFORT BEZAHLT
             amount = parseFloat(p.remainingAmount);
             newStatus = 'paid';
             updateData.remainingAmount = 0;
-            logEntry = creditorIsSystemUser 
-                ? "Als erledigt markiert." 
-                : "Als bezahlt markiert (Auto-Genehmigt, da Gast).";
-            
-            // WICHTIG: Wenn wir auto-genehmigen, müssen wir auch die Transaktion schreiben!
+            logEntry = `Als bezahlt markiert (${amount.toFixed(2)} €).`;
             if (amount > 0) transaction = { date: new Date(), amount: amount, type: 'payment', user: currentUser.displayName };
 
         } else {
-            // WARTEN AUF GENEHMIGUNG
             amount = parseFloat(p.remainingAmount); 
             newStatus = 'pending_approval'; 
-            logEntry = "Als bezahlt markiert (Wartet auf Bestätigung)."; 
+            logEntry = `Als bezahlt markiert (${amount.toFixed(2)} €). Wartet auf Bestätigung.`; 
         }
 
     } else if (action === 'confirm_payment' || action === 'force_close') { 
-        amount = parseFloat(p.remainingAmount); newStatus = 'paid'; updateData.remainingAmount = 0; logEntry = "Abgeschlossen.";
+        amount = parseFloat(p.remainingAmount); 
+        newStatus = 'paid'; 
+        updateData.remainingAmount = 0; 
+        logEntry = `Zahlungseingang bestätigt und abgeschlossen (${amount.toFixed(2)} €).`;
         if (amount > 0) transaction = { date: new Date(), amount: amount, type: 'payment', user: currentUser.displayName };
     
     } else if (action === 'reject_payment') { 
-        newStatus = 'open'; logEntry = "Zahlung abgelehnt."; 
+        newStatus = 'open'; 
+        logEntry = "Zahlung abgelehnt."; 
     
     } else if (action === 'partial_pay') {
         const newRemaining = parseFloat(p.remainingAmount) - amount; 
         updateData.remainingAmount = newRemaining < 0 ? 0 : newRemaining;
         if (newRemaining <= 0.001) newStatus = 'paid'; 
-        logEntry = `Teilzahlung ${amount.toFixed(2)}€.`;
+        logEntry = `Teilzahlung von ${amount.toFixed(2)} € verbucht.`;
         transaction = { date: new Date(), amount: amount, type: 'payment', user: currentUser.displayName };
     }
 
     updateData.status = newStatus;
     updateData.history = [...(p.history || []), { date: new Date(), action, user: currentUser.displayName, info: logEntry }];
     
-    // NEU: Transaktion speichern (falls vorhanden)
     if (transaction) {
         updateData.transactions = [...(p.transactions || []), transaction];
     }
@@ -2191,76 +2204,148 @@ async function executePayment(id, action, amount) {
         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', id), updateData); 
         alertUser("Gespeichert.", "success"); 
         if (action !== 'partial_pay' && action !== 'mark_paid') closeDetailModal(); 
-        // Wenn es auto-approved wurde (mark_paid -> paid), schließen wir das Fenster auch besser
         if (action === 'mark_paid' && newStatus === 'paid') closeDetailModal();
 
     } catch (e) { console.error(e); alertUser("Fehler: " + e.message, "error"); }
 }
 
 
+
 async function resolveOverpayment(decision) {
     if (!pendingOverpaymentData) return;
+    
     const { paymentId, payAmount, debtAmount, excessAmount } = pendingOverpaymentData;
     const p = allPayments.find(x => x.id === paymentId);
 
-    // --- NEU: SICHERHEITSCHECK ---
-    // Wir prüfen, ob der Partner (der das Guthaben bekommen soll) ein echter User oder Kontakt ist.
-    // Bei Überzahlung ist der Partner immer der, der Geld GEGEBEN hat (also p.creditorId, wenn er bezahlt wurde).
-    // Moment... wer hat bezahlt?
-    // Szenario: Ich schulde Max 10€. Ich markiere "Max hat bezahlt" (bzw ich habe bezahlt).
-    // Wenn ich auf "Alles bezahlt" klicke bei "Ich schulde", dann zahle ICH an MAX.
-    // Wenn ich 15€ eingebe, hat MAX 5€ Guthaben bei mir.
-    // Partner ID ist also der Gläubiger des ursprünglichen Eintrags.
+    // Partner bestimmen (Wer bekommt das Guthaben?)
+    // Wenn ich Schuldner bin und überzahle -> Ich kriege Guthaben beim Gläubiger.
+    // Aber hier ist es meistens so: Ich markiere einen Eintrag als bezahlt.
+    // Wenn "Ich schulde Max" und ich gebe "20€" ein (bei 10€ Schuld) -> Max hat 10€ bekommen und ich habe 10€ zu viel gezahlt.
+    // -> Ich habe 10€ Guthaben bei Max.
     
-    let targetPartnerId = (p.debtorId === currentUser.mode) ? p.creditorId : p.debtorId;
+    // Wir nutzen die Logik: Der ursprüngliche Creditor (Geldempfänger) wird zum Debtor des Guthabens.
     
-    // Wenn targetPartnerId null ist (manueller Gast) ODER die ID nicht in Users/Contacts gefunden wird:
-    const isRealUser = USERS[targetPartnerId];
-    const isContact = allContacts.some(c => c.id === targetPartnerId);
+    let creditOwnerId, creditHolderId, creditOwnerName, creditHolderName;
+    
+    if (p.debtorId === currentUser.mode) {
+        // Ich habe gezahlt -> Ich kriege Guthaben
+        creditOwnerId = p.debtorId; creditOwnerName = p.debtorName;
+        creditHolderId = p.creditorId; creditHolderName = p.creditorName;
+    } else {
+        // Jemand hat mir gezahlt -> Er kriegt Guthaben
+        creditOwnerId = p.debtorId; creditOwnerName = p.debtorName;
+        creditHolderId = p.creditorId; creditHolderName = p.creditorName;
+    }
 
-    if (decision === 'credit' && !isRealUser && !isContact) {
+    // Sicherheitscheck
+    const isRealUser = USERS[creditOwnerId];
+    const isContact = allContacts.some(c => c.id === creditOwnerId);
+
+    if (decision === 'credit' && !isRealUser && !isContact && creditOwnerId !== currentUser.mode) {
         alertUser("FEHLER: Guthaben kann nur für gespeicherte Kontakte angelegt werden!", "error_long");
-        alert("Achtung:\nDieser Partner ist nur als Text (Gast) hinterlegt.\n\nBitte zuerst:\n1. Den Partner unter 'Einstellungen > Eigene Kontakte' anlegen.\n2. Den offenen Eintrag bearbeiten und die Person auf den neuen Kontakt ändern.\n3. Dann die Zahlung erneut erfassen.");
-        
-        // Modal schließen, aber nichts buchen
         document.getElementById('overpaymentModal').style.display = 'none';
         pendingOverpaymentData = null;
         return;
     }
-    // --- ENDE CHECK ---
 
-    setButtonLoading(document.getElementById(decision === 'credit' ? 'btn-op-credit' : 'btn-op-tip'), true);
+    const btnId = decision === 'credit' ? 'btn-op-credit' : 'btn-op-tip';
+    setButtonLoading(document.getElementById(btnId), true);
 
     try {
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
-        const transaction = { date: new Date(), amount: debtAmount, type: 'payment', user: currentUser.displayName };
         
+        // 1. Ursprüngliche Schuld begleichen
+        // Wir erstellen eine ID für das neue Guthaben (falls Credit), um es zu verlinken
+        let creditLink = "";
+        let creditDocRef = null;
+        
+        if (decision === 'credit') {
+            creditDocRef = doc(paymentsRef);
+            const short = creditDocRef.id.slice(-4).toUpperCase();
+            creditLink = `[LINK:${creditDocRef.id}:#${short}]`;
+        }
+
+        const transaction = { 
+            date: new Date(), 
+            amount: debtAmount, 
+            type: 'payment', 
+            user: currentUser.displayName,
+            info: `Zahlung inkl. Überzahlung (${excessAmount.toFixed(2)} €).`
+        };
+        
+        let logInfo = "";
+        if (decision === 'credit') {
+            logInfo = `Vollständig bezahlt mit Überzahlung. Rest (${excessAmount.toFixed(2)} €) als Guthaben auf ${creditLink} gebucht.`;
+        } else {
+            logInfo = `Vollständig bezahlt mit Überzahlung. Rest (${excessAmount.toFixed(2)} €) als Trinkgeld verbucht.`;
+        }
+
         batch.update(doc(paymentsRef, paymentId), {
-            remainingAmount: 0, status: 'paid',
-            history: [...(p.history||[]), { date: new Date(), action: 'paid_excess', user: currentUser.displayName, info: `Bezahlt mit Überzahlung (${payAmount.toFixed(2)}€).` }],
+            remainingAmount: 0, 
+            status: 'paid',
+            history: [...(p.history||[]), { 
+                date: new Date(), 
+                action: 'paid_excess', 
+                user: currentUser.displayName, 
+                info: logInfo
+            }],
             transactions: [...(p.transactions||[]), transaction]
         });
 
-        if (decision === 'credit') {
-            const creditDocRef = doc(paymentsRef);
+        // 2. Guthaben anlegen (nur bei Entscheidung 'credit')
+        if (decision === 'credit' && creditDocRef) {
+            const originShort = paymentId.slice(-4).toUpperCase();
+            const originLink = `[LINK:${paymentId}:#${originShort}]`;
+            
             batch.set(creditDocRef, {
-                title: `Guthaben (aus "${p.title}")`, amount: excessAmount, remainingAmount: excessAmount, isTBD: false, type: 'credit', status: 'open', createdAt: serverTimestamp(), createdBy: currentUser.mode, debtorId: p.creditorId, debtorName: p.creditorName, creditorId: p.debtorId, creditorName: p.debtorName, involvedUserIds: p.involvedUserIds, history: [{ date: new Date(), action: 'created_credit', user: currentUser.displayName, info: `Guthaben aus Überzahlung.` }]
+                title: `Guthaben aus Überzahlung`, 
+                amount: excessAmount, 
+                remainingAmount: excessAmount, 
+                isTBD: false, 
+                type: 'credit', 
+                status: 'open', 
+                createdAt: serverTimestamp(), 
+                createdBy: currentUser.mode, 
+                
+                // ACHTUNG: Bei Guthaben drehen sich die Rollen um, wenn man es als "Schulden" betrachtet.
+                // Aber unsere Logik ist: type='credit', debtorId = "Wer das Guthaben HAT (wem ich vertraue)", creditorId = "Wem das Guthaben GEHÖRT".
+                // In unserer App Logik:
+                // Wenn p.debtorId (Ich) zahle zu viel an p.creditorId (Max).
+                // Dann schuldet Max mir jetzt Geld.
+                // Also: Neuer Eintrag -> Debtor: Max, Creditor: Ich.
+                
+                debtorId: p.creditorId, 
+                debtorName: p.creditorName, 
+                creditorId: p.debtorId, 
+                creditorName: p.debtorName, 
+                
+                involvedUserIds: p.involvedUserIds, 
+                history: [{ 
+                    date: new Date(), 
+                    action: 'created_credit', 
+                    user: currentUser.displayName, 
+                    info: `Guthaben (${excessAmount.toFixed(2)} €) entstanden aus Überzahlung von ${originLink}.` 
+                }]
             });
             alertUser("Guthaben angelegt!", "success");
-        } else { alertUser("Als Trinkgeld verbucht.", "success"); }
+        } else { 
+            alertUser("Als Trinkgeld verbucht.", "success"); 
+        }
         
         await batch.commit(); 
         document.getElementById('overpaymentModal').style.display = 'none'; 
         closeDetailModal(); 
         pendingOverpaymentData = null;
 
-    } catch (e) { console.error(e); alertUser(e.message, "error"); } 
-    finally { 
-        setButtonLoading(document.getElementById('btn-op-credit'), false); 
-        setButtonLoading(document.getElementById('btn-op-tip'), false); 
+    } catch (e) { 
+        console.error(e); 
+        alertUser(e.message, "error"); 
+    } finally { 
+        setButtonLoading(document.getElementById(btnId), false); 
     }
 }
+
 
 
 // Transaktion löschen (Neu)
@@ -3385,95 +3470,97 @@ function generateMermaidGraph(rootId) {
     const container = document.getElementById('history-graph-container');
     container.innerHTML = ''; 
     
-    // 1. Helper
+    // Helper
     const extractLinks = (text) => {
         const links = [];
         const regex = /\[LINK:([^:]+):([^\]]+)\]/g;
         let match;
-        while ((match = regex.exec(text)) !== null) {
-            links.push(match[1]);
-        }
+        while ((match = regex.exec(text)) !== null) links.push(match[1]);
         return links;
     };
-
     const extractAmountFromText = (text) => {
         const match = text.match(/(\d+(?:[.,]\d{2})?)\s?€/);
         return match ? match[0] : null;
     };
 
-    // 2. Kanten sammeln
     const edgeMap = new Map(); 
+    const virtualNodes = new Map(); // Speichert virtuelle Events (Zahlungen, Stornos...)
 
     allPayments.forEach(p => {
         if (!p.history) return;
 
-        p.history.forEach(h => {
+        p.history.forEach((h, index) => {
             const linkedIds = extractLinks(h.info);
             let textAmount = extractAmountFromText(h.info);
+            
+            // --- TEIL 1: Echte Verknüpfungen (Links) ---
+            if (linkedIds.length > 0) {
+                linkedIds.forEach(linkedId => {
+                    let from, to, actionName;
+                    let amount = textAmount;
 
-            linkedIds.forEach(linkedId => {
-                let from, to, actionName;
-                let amount = textAmount;
+                    if (h.action === 'created_merge') { from = linkedId; to = p.id; actionName = "Merge"; if(!amount){const s=allPayments.find(x=>x.id===linkedId);if(s)amount=parseFloat(s.amount).toFixed(2)+" €";} }
+                    else if (h.action === 'created_settlement') { from = linkedId; to = p.id; actionName = "Bilanz"; if(!amount){const s=allPayments.find(x=>x.id===linkedId);if(s)amount=parseFloat(s.amount).toFixed(2)+" €";} }
+                    else if (h.action === 'split_target') { from = linkedId; to = p.id; actionName = "Split"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                    else if (h.action === 'created_credit') { from = linkedId; to = p.id; actionName = "Guthaben"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                    
+                    else if (h.action === 'merged') { from = p.id; to = linkedId; actionName = "zu Merge"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                    else if (h.action === 'settled') { from = p.id; to = linkedId; actionName = "zu Bilanz"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                    else if (h.action === 'split_source') { from = p.id; to = linkedId; actionName = "zu Split"; if(!amount){const t=allPayments.find(x=>x.id===linkedId);if(t)amount=parseFloat(t.amount).toFixed(2)+" €";} }
+                    else if (h.action === 'paid_excess') { from = p.id; to = linkedId; actionName = "zu Guthaben"; if(!amount){const t=allPayments.find(x=>x.id===linkedId);if(t)amount=parseFloat(t.amount).toFixed(2)+" €";} }
+                    // Storno Guthaben Rückbuchung
+                    else if (h.action === 'credit_refunded') { from = linkedId; to = p.id; actionName = "Storno Rück."; } 
 
-                // Logik wie gehabt...
-                if (h.action === 'created_merge') { 
-                    from = linkedId; to = p.id; actionName = "Merge"; 
-                    if (!amount) {
-                        const src = allPayments.find(x => x.id === linkedId);
-                        if (src) amount = parseFloat(src.amount).toFixed(2) + " €";
+                    if (from && to) {
+                        const key = `${from}-${to}`;
+                        const existing = edgeMap.get(key);
+                        if (!existing || (!existing.amount && amount)) {
+                            edgeMap.set(key, { from, to, label: actionName, amount });
+                        }
                     }
-                }
-                else if (h.action === 'created_settlement') { 
-                    from = linkedId; to = p.id; actionName = "Bilanz"; 
-                    if (!amount) {
-                        const src = allPayments.find(x => x.id === linkedId);
-                        if (src) amount = parseFloat(src.amount).toFixed(2) + " €";
-                    }
-                }
-                else if (h.action === 'split_target') { 
-                    from = linkedId; to = p.id; actionName = "Split"; 
-                    if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
-                }
-                else if (h.action === 'created_credit') { 
-                    from = linkedId; to = p.id; actionName = "Guthaben"; 
-                    if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
-                }
-                
-                else if (h.action === 'merged') { 
-                    from = p.id; to = linkedId; actionName = "zu Merge"; 
-                    if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
-                }
-                else if (h.action === 'settled') { 
-                    from = p.id; to = linkedId; actionName = "zu Bilanz"; 
-                    if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
-                }
-                else if (h.action === 'split_source') { 
-                    from = p.id; to = linkedId; actionName = "zu Split"; 
-                    if (!amount) {
-                        const target = allPayments.find(x => x.id === linkedId);
-                        if (target) amount = parseFloat(target.amount).toFixed(2) + " €";
-                    }
-                }
-                else if (h.action === 'paid_excess') { 
-                    from = p.id; to = linkedId; actionName = "zu Guthaben"; 
-                    if (!amount) {
-                         const target = allPayments.find(x => x.id === linkedId);
-                         if (target) amount = parseFloat(target.amount).toFixed(2) + " €";
-                    }
+                });
+            } 
+            // --- TEIL 2: Virtuelle Ereignisse (Keine Links, nur Aktionen) ---
+            else {
+                let vType = null;
+                let vLabel = "";
+                let vAmount = textAmount;
+
+                if (h.action === 'partial_pay' || h.action === 'mark_paid' || h.action === 'confirm_payment' || h.action === 'paid_with_credit') {
+                    vType = 'PAY';
+                    vLabel = "Zahlung";
+                } else if (h.action === 'adjusted') {
+                    vType = 'ADJUST';
+                    vLabel = "Anpassung";
+                } else if (h.action === 'tx_deleted') {
+                    vType = 'STORNO';
+                    vLabel = "Storno";
                 }
 
-                if (from && to) {
-                    const key = `${from}-${to}`;
-                    const existing = edgeMap.get(key);
-                    if (!existing || (!existing.amount && amount)) {
-                        edgeMap.set(key, { from, to, label: actionName, amount });
+                if (vType) {
+                    // Virtuelle ID generieren: PaymentID + Index
+                    const vId = `V_${p.id}_${index}`;
+                    virtualNodes.set(vId, { type: vType, label: vLabel, amount: vAmount, parentId: p.id, info: h.info });
+                    
+                    // Kante erstellen
+                    // Zahlung: Payment -> Virtuell (Geld fließt raus/weg)
+                    // Storno: Virtuell -> Payment (Geld kommt zurück/wird rückgängig gemacht)
+                    // Anpassung: Bidirektional oder einfach dranhängen.
+                    
+                    if (vType === 'PAY') {
+                        edgeMap.set(`${p.id}-${vId}`, { from: p.id, to: vId, label: "bezahlt", amount: vAmount });
+                    } else if (vType === 'STORNO') {
+                        edgeMap.set(`${vId}-${p.id}`, { from: vId, to: p.id, label: "rückgängig", amount: vAmount });
+                    } else if (vType === 'ADJUST') {
+                        // Anpassung zeigen wir als Einwirkung auf den Knoten
+                        edgeMap.set(`${vId}-${p.id}`, { from: vId, to: p.id, label: "ändert", amount: vAmount });
                     }
                 }
-            });
+            }
         });
     });
 
-    // 3. Teilbaum finden
+    // 3. Teilbaum finden (Inklusive virtueller Nodes)
     const relevantNodes = new Set([rootId]);
     let changed = true;
     
@@ -3482,12 +3569,8 @@ function generateMermaidGraph(rootId) {
         const currentSize = relevantNodes.size;
         
         for (const [key, edge] of edgeMap) {
-            if (relevantNodes.has(edge.from) && !relevantNodes.has(edge.to)) {
-                relevantNodes.add(edge.to);
-            }
-            if (relevantNodes.has(edge.to) && !relevantNodes.has(edge.from)) {
-                relevantNodes.add(edge.from);
-            }
+            if (relevantNodes.has(edge.from) && !relevantNodes.has(edge.to)) relevantNodes.add(edge.to);
+            if (relevantNodes.has(edge.to) && !relevantNodes.has(edge.from)) relevantNodes.add(edge.from);
         }
         
         if (relevantNodes.size > currentSize) changed = true;
@@ -3497,56 +3580,83 @@ function generateMermaidGraph(rootId) {
     let graphDefinition = 'graph TD\n';
     const hasParent = new Set();
     for (const [key, edge] of edgeMap) {
-        if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) {
-            hasParent.add(edge.to);
-        }
+        if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) hasParent.add(edge.to);
     }
 
     relevantNodes.forEach(nodeId => {
-        const p = allPayments.find(x => x.id === nodeId);
-        const short = nodeId.slice(-4).toUpperCase();
-        
-        let nodeTitle = "Gelöscht/Archiviert";
-        let nodeAmount = "???";
-        
-        if (p) {
-            // FIX: Hier wurde der Text abgeschnitten. Jetzt nehmen wir den vollen Titel.
-            // Wir ersetzen nur " und ( ) durch Leerzeichen, damit Mermaid nicht crasht.
-            const safeTitle = p.title.replace(/["\(\)]/g, ' ');
+        // Ist es ein echter Knoten oder virtuell?
+        if (nodeId.startsWith('V_')) {
+            // VIRTUELLER KNOTEN
+            const vNode = virtualNodes.get(nodeId);
+            if (vNode) {
+                const safeId = "N" + nodeId.replace(/[^a-zA-Z0-9]/g, '');
+                const displayAmount = vNode.amount ? vNode.amount : "";
+                
+                let styleDef = "";
+                let shapeStart = "(", shapeEnd = ")"; // Abgerundet
+
+                if (vNode.type === 'PAY') {
+                    styleDef = `style ${safeId} fill:#dcfce7,stroke:#166534,stroke-width:1px,stroke-dasharray: 2 2\n`;
+                    shapeStart = "(["; shapeEnd = "])"; // Stadion-Form
+                } else if (vNode.type === 'STORNO') {
+                    styleDef = `style ${safeId} fill:#fee2e2,stroke:#991b1b,stroke-width:2px\n`;
+                    shapeStart = "{{"; shapeEnd = "}}"; // Hexagon
+                } else if (vNode.type === 'ADJUST') {
+                    styleDef = `style ${safeId} fill:#fef3c7,stroke:#d97706,stroke-width:1px\n`;
+                    shapeStart = "[/"; shapeEnd = "\\ ]"; // Trapez
+                }
+
+                const label = `"${shapeStart}<b>${vNode.label}</b><br>${displayAmount}${shapeEnd}"`;
+                graphDefinition += `    ${safeId}${label}\n`;
+                graphDefinition += `    ${styleDef}`;
+                
+                // Klick auf virtuellen Knoten zeigt Info (Alert)
+                graphDefinition += `    click ${safeId} call alert("${vNode.info.replace(/"/g, "'")}")\n`;
+            }
+
+        } else {
+            // ECHTER KNOTEN
+            const p = allPayments.find(x => x.id === nodeId);
+            const short = nodeId.slice(-4).toUpperCase();
+            let nodeTitle = "Gelöscht/Archiviert";
+            let nodeAmount = "???";
             
-            nodeTitle = safeTitle;
-            nodeAmount = parseFloat(p.amount).toFixed(2) + " €";
+            if (p) {
+                const safeTitle = p.title.replace(/["\(\)]/g, ' ');
+                nodeTitle = safeTitle;
+                nodeAmount = parseFloat(p.amount).toFixed(2) + " €";
+            }
+
+            const safeId = "N" + nodeId;
+            let styleDef = `style ${safeId} fill:#f9fafb,stroke:#9ca3af,stroke-width:1px\n`; 
+            let labelPrefix = "";
+            
+            if (nodeId === rootId) {
+                labelPrefix = "📍 ";
+                styleDef = `style ${safeId} fill:#fff7ed,stroke:#ea580c,stroke-width:4px\n`;
+            } else if (!hasParent.has(nodeId)) {
+                labelPrefix = "🚀 ";
+                styleDef = `style ${safeId} fill:#ecfdf5,stroke:#059669,stroke-width:2px\n`;
+            } else if (p && p.status === 'paid') {
+                styleDef = `style ${safeId} fill:#f0fdf4,stroke:#bbf7d0,stroke-dasharray: 5 5\n`;
+            }
+
+            const nodeLabel = `"${labelPrefix}<b>${nodeTitle}</b><br>${nodeAmount}<br><small>#${short}</small>"`;
+            graphDefinition += `    ${safeId}(${nodeLabel})\n`;
+            graphDefinition += `    ${styleDef}`;
+            graphDefinition += `    click ${safeId} call openPaymentDetail("${nodeId}")\n`;
         }
-
-        const safeId = "N" + nodeId;
-        let styleDef = `style ${safeId} fill:#f9fafb,stroke:#9ca3af,stroke-width:1px\n`; 
-
-        let labelPrefix = "";
-        
-        if (nodeId === rootId) {
-            labelPrefix = "📍 ";
-            styleDef = `style ${safeId} fill:#fff7ed,stroke:#ea580c,stroke-width:4px\n`;
-        } else if (!hasParent.has(nodeId)) {
-            labelPrefix = "🚀 ";
-            styleDef = `style ${safeId} fill:#ecfdf5,stroke:#059669,stroke-width:2px\n`;
-        } else if (p && p.status === 'paid') {
-            styleDef = `style ${safeId} fill:#f0fdf4,stroke:#bbf7d0,stroke-dasharray: 5 5\n`;
-        }
-
-        const nodeLabel = `"${labelPrefix}<b>${nodeTitle}</b><br>${nodeAmount}<br><small>#${short}</small>"`;
-        
-        graphDefinition += `    ${safeId}(${nodeLabel})\n`;
-        graphDefinition += `    ${styleDef}`;
-        graphDefinition += `    click ${safeId} call openPaymentDetail("${nodeId}")\n`;
     });
 
     for (const [key, edge] of edgeMap) {
         if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) {
-            const safeFrom = "N" + edge.from;
-            const safeTo = "N" + edge.to;
+            const safeFrom = "N" + edge.from.replace(/[^a-zA-Z0-9]/g, '');
+            const safeTo = "N" + edge.to.replace(/[^a-zA-Z0-9]/g, '');
+            
             let edgeLabel = `"${edge.label}`;
             if (edge.amount) edgeLabel += `<br>${edge.amount}`;
             edgeLabel += `"`;
+            
             graphDefinition += `    ${safeFrom} -- ${edgeLabel} --> ${safeTo}\n`;
         }
     }
@@ -3559,37 +3669,24 @@ function generateMermaidGraph(rootId) {
     graphDefinition += `    linkStyle default stroke:#374151,stroke-width:2px,fill:none;\n`;
 
     const uniqueId = "mermaid-" + Math.floor(Math.random() * 1000000);
-    // Opacity auf 0 für sanftes Einblenden
     container.innerHTML = `<div class="mermaid" id="${uniqueId}" style="opacity: 0; transition: opacity 0.3s ease; width: 100%; height: 100%;">${graphDefinition}</div>`;
     
     setTimeout(() => {
         try {
             mermaid.init(undefined, document.getElementById(uniqueId));
-            
             setTimeout(() => {
                 const svgElement = document.querySelector(`#${uniqueId} svg`);
                 const divElement = document.getElementById(uniqueId);
-                
                 if (svgElement && divElement) {
-                    // SVG auf 100% zwingen
                     svgElement.style.maxWidth = "none";
                     svgElement.style.height = "100%";
                     svgElement.style.width = "100%";
-                    
                     svgPanZoom(svgElement, {
-                        zoomEnabled: true,
-                        controlIconsEnabled: true, 
-                        fit: true,
-                        center: true,
-                        minZoom: 0.1, // Erlaubt sehr weites Herauszoomen für riesige Bäume
-                        maxZoom: 10
+                        zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true, minZoom: 0.1, maxZoom: 10
                     });
-                    
-                    // Einblenden
                     divElement.style.opacity = "1";
                 }
             }, 150);
-            
         } catch(e) {
             console.error("Graph Render Fehler:", e);
             container.innerHTML = "Fehler bei der Darstellung.";
@@ -3598,7 +3695,7 @@ function generateMermaidGraph(rootId) {
 }
 
 
-// --- GUTHABEN EINLÖSEN LOGIK ---
+
 // --- GUTHABEN EINLÖSEN LOGIK ---
 async function executePayWithCredit(debtPaymentId, amountToUse) {
     const p = allPayments.find(x => x.id === debtPaymentId);
@@ -3693,4 +3790,80 @@ async function executePayWithCredit(debtPaymentId, amountToUse) {
     } finally {
         if (btn) setButtonLoading(btn, false);
     }
+}
+
+// --- DRUCK FUNKTION (Robust) ---
+function printPaymentDetail(paymentId) {
+    const p = allPayments.find(x => x.id === paymentId);
+    if (!p) return;
+
+    // Content holen
+    const contentEl = document.getElementById('payment-detail-content');
+    if (!contentEl) return;
+
+    // Druck-Container erstellen (falls nicht vorhanden)
+    let printContainer = document.getElementById('print-container');
+    if (!printContainer) {
+        printContainer = document.createElement('div');
+        printContainer.id = 'print-container';
+        printContainer.style.display = 'none';
+        document.body.appendChild(printContainer);
+    }
+
+    // Inhalt kopieren
+    let html = `
+        <div style="font-family: sans-serif; padding: 20px; max-width: 800px; margin: 0 auto;">
+            <h1 style="font-size: 24px; margin-bottom: 10px;">${p.title}</h1>
+            <div style="border: 1px solid #ccc; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <table style="width: 100%; margin-bottom: 10px;">
+                    <tr>
+                        <td><strong>Von:</strong> ${p.debtorName}</td>
+                        <td style="text-align: right;"><strong>An:</strong> ${p.creditorName}</td>
+                    </tr>
+                </table>
+                <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
+                <div style="text-align: center;">
+                    <div style="font-size: 12px; color: #666;">OFFENER BETRAG</div>
+                    <div style="font-size: 32px; font-weight: bold;">${parseFloat(p.remainingAmount).toFixed(2)} €</div>
+                </div>
+            </div>
+            
+            <h3>Details</h3>
+            <p><strong>ID:</strong> #${p.id.slice(-4).toUpperCase()}</p>
+            <p><strong>Datum:</strong> ${new Date(p.createdAt?.toDate()).toLocaleDateString()}</p>
+            ${p.notes ? `<p><strong>Notiz:</strong> ${p.notes}</p>` : ''}
+            
+            <h3 style="margin-top: 20px;">Verlauf & Protokoll</h3>
+            <ul style="font-size: 12px; color: #444; list-style: none; padding: 0;">
+                ${(p.history || []).map(h => {
+                    const d = h.date?.toDate ? h.date.toDate() : new Date(h.date);
+                    return `<li style="margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px dotted #ddd;">
+                        <strong>${d.toLocaleString()}</strong> - ${h.user}: ${h.info}
+                    </li>`;
+                }).join('')}
+            </ul>
+        </div>
+    `;
+
+    printContainer.innerHTML = html;
+
+    // Styles für Druck vorbereiten
+    const style = document.createElement('style');
+    style.innerHTML = `
+        @media print {
+            body > * { display: none !important; }
+            #print-container { display: block !important; }
+            #print-container * { visibility: visible !important; }
+        }
+    `;
+    document.head.appendChild(style);
+
+    // Drucken
+    window.print();
+
+    // Aufräumen
+    setTimeout(() => {
+        document.head.removeChild(style);
+        printContainer.innerHTML = '';
+    }, 1000);
 }
