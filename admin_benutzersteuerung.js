@@ -1,5 +1,5 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 // TEST 2
-import { onSnapshot, doc, updateDoc, setDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { onSnapshot, doc, updateDoc, setDoc, deleteDoc, getDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { db, usersCollectionRef, setButtonLoading, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES, ADMIN_STORAGE_KEY, PENDING_REQUESTS } from './haupteingang.js';
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js'; // NEU: renderProtocolHistory importiert
 import { setupPermissionDependencies, renderAdminRightsManagement } from './admin_rechteverwaltung.js'; // Oder der richtige Dateiname
@@ -763,9 +763,25 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
         console.log(`[CLICK] Klick innerhalb der Karte für User: ${originalUser.name}`);
 
-        // Löschen Button
+// Löschen Button
         const deleteButton = e.target.closest('.delete-user-button');
         if (deleteButton) {
+            
+            // --- NEU: Check auf Guthaben ---
+            const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
+            // Suche Guthaben, wo der User beteiligt ist
+            const qCredit = query(paymentsRef, 
+                where('type', '==', 'credit'), 
+                where('status', '==', 'open'), 
+                where('involvedUserIds', 'array-contains', userId)
+            );
+            const snapCredit = await getDocs(qCredit);
+            
+            if (!snapCredit.empty) {
+                alertUser("Löschen nicht möglich: Benutzer hat aktives Guthaben!", "error");
+                return;
+            }
+            // --- ENDE CHECK ---
             if (!confirm(`Soll der Benutzer '${originalUser.name}' wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden.`)) return;
             
             rememberAdminScroll();
@@ -808,9 +824,23 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
             return;
         }
 
-        // Speichern nach Umbenennen Button (Häkchen)
+// Speichern nach Umbenennen Button (Häkchen)
         const saveNameButton = e.target.closest('.save-name-btn');
         if (saveNameButton) {
+            // --- NEU: Check auf Guthaben ---
+            const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
+            const qCredit = query(paymentsRef, 
+                where('type', '==', 'credit'), 
+                where('status', '==', 'open'), 
+                where('involvedUserIds', 'array-contains', userId)
+            );
+            const snapCredit = await getDocs(qCredit);
+            
+            if (!snapCredit.empty) {
+                alertUser("Umbenennen nicht möglich: Benutzer hat aktives Guthaben!", "error");
+                return;
+            }
+            // --- ENDE CHECK ---
             const nameEditContainer = saveNameButton.closest('.name-edit-container');
             const nameDisplay = userCard.querySelector('.name-display');
             if (!nameEditContainer || !nameDisplay) return;

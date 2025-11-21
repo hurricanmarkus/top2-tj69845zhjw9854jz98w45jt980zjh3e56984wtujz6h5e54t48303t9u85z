@@ -1584,7 +1584,7 @@ function renderDetailContent(p, isRefresh) {
         </div>
     `;
 
-    // --- AKTIONEN UNTEN (50/50 Layout & Leeres Feld) ---
+    // --- AKTIONEN UNTEN (Initiale Ansicht: Nur Button) ---
     actions.innerHTML = '';
     if (partialForm) partialForm.remove(); 
 
@@ -1593,9 +1593,25 @@ function renderDetailContent(p, isRefresh) {
     if (canAct) {
         const currentRest = parseFloat(p.remainingAmount);
         
-        const paymentInterface = document.createElement('div');
-        paymentInterface.className = "w-full bg-gray-50 p-2 rounded-lg border border-gray-200 shadow-inner mt-2";
+        // 1. Der große Initial-Button
+        const initialBtn = document.createElement('button');
+        initialBtn.className = "w-full py-4 bg-indigo-600 text-white text-lg font-bold rounded-xl shadow-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2 mb-2";
+        initialBtn.innerHTML = `<span>Transaktion tätigen</span>`;
         
+        // 2. Container für das Interface (versteckt am Anfang)
+        const paymentInterface = document.createElement('div');
+        paymentInterface.className = "w-full bg-gray-50 p-2 rounded-lg border border-gray-200 shadow-inner mt-2 hidden";
+        
+        // Klick Event: Button weg, Interface da
+        initialBtn.onclick = () => {
+            initialBtn.remove();
+            paymentInterface.classList.remove('hidden');
+        };
+        
+        actions.appendChild(initialBtn);
+        actions.appendChild(paymentInterface);
+
+        // --- Interface Inhalt ---
         let creditHtml = '';
         if (availableCredit > 0) {
             const maxUsage = Math.min(availableCredit, currentRest);
@@ -1609,8 +1625,6 @@ function renderDetailContent(p, isRefresh) {
             </div>`;
         }
 
-        // LAYOUT: flex-1 für beide Elemente sorgt für exakte 50/50 Aufteilung
-        // VALUE: Leer ("")
         paymentInterface.innerHTML = `
             ${creditHtml}
             <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Zahlung buchen</label>
@@ -1631,20 +1645,17 @@ function renderDetailContent(p, isRefresh) {
             </div>
         `;
         
-        actions.appendChild(paymentInterface);
-
+        // --- LOGIK FÜR DIE BUTTONS (Identisch zu vorher, nur im neuen Container) ---
         const input = document.getElementById('smart-payment-amount');
         const payBtn = document.getElementById('btn-smart-pay');
         const payText = document.getElementById('btn-smart-pay-text');
         const paySubText = document.getElementById('btn-smart-pay-subtext');
         const creditBtn = document.getElementById('btn-use-credit-smart');
 
-        // Live Update
         input.oninput = () => {
             const valStr = input.value;
             const val = parseFloat(valStr);
             
-            // Reset
             payBtn.className = "flex-1 h-16 text-white rounded-xl shadow-md transition flex flex-col justify-center items-center leading-tight px-1";
 
             if (!valStr || isNaN(val)) {
@@ -1675,8 +1686,6 @@ function renderDetailContent(p, isRefresh) {
         payBtn.onclick = () => {
             const val = parseFloat(input.value);
             if (isNaN(val) || val <= 0) {
-                // Nichts tun oder kurzes Wackeln (hier nur Alert)
-                // alertUser("Bitte Betrag eingeben.", "info");
                 input.focus();
                 return;
             }
@@ -1696,6 +1705,7 @@ function renderDetailContent(p, isRefresh) {
 
     if (!isRefresh) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
 }
+
 
 
 
@@ -2391,10 +2401,44 @@ async function addContactFromSettings() {
 }
 
 async function deleteContact(id) {
+    // Check auf aktives Guthaben
+    const hasActiveCredit = allPayments.some(p => 
+        p.type === 'credit' && 
+        p.status === 'open' && 
+        (p.creditorId === id || p.debtorId === id)
+    );
+
+    if (hasActiveCredit) {
+        alertUser("Dieser Kontakt hat noch aktives Guthaben. Bitte erst auf 0 setzen!", "error_long");
+        return;
+    }
+
     if(!confirm("Kontakt löschen?")) return;
     try {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'private-contacts', id));
     } catch(e) { console.error(e); }
+}
+
+async function renameContact(id) {
+    // Check auf aktives Guthaben
+    const hasActiveCredit = allPayments.some(p => 
+        p.type === 'credit' && 
+        p.status === 'open' && 
+        (p.creditorId === id || p.debtorId === id)
+    );
+
+    if (hasActiveCredit) {
+        alertUser("Namensänderung blockiert: Kontakt hat noch aktives Guthaben.", "error_long");
+        return;
+    }
+
+    const contact = allContacts.find(c => c.id === id);
+    const newName = prompt("Neuer Name:", contact?.name);
+    if (newName && newName.trim()) {
+        try {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'private-contacts', id), { name: newName.trim() });
+        } catch(e) { console.error(e); }
+    }
 }
 
 async function renameContact(id) {
@@ -2836,9 +2880,16 @@ window.openCreditModal = function(mode, context, paymentId = null) {
 async function executeCreditAction() {
     const mode = document.getElementById('credit-mode').value;
     const context = document.getElementById('credit-context').value;
-    const partnerId = document.getElementById('credit-partner-select').value;
     
-    // NEU: Runden
+    // 1. Rohwert aus dem Select holen (kann USR:..., CON:... oder ID sein)
+    let rawPartnerValue = document.getElementById('credit-partner-select').value;
+    
+    // 2. ID bereinigen (Prefix entfernen)
+    let partnerId = rawPartnerValue;
+    if (partnerId && partnerId.includes(':')) {
+        partnerId = partnerId.split(':')[1];
+    }
+    
     let amount = parseFloat(document.getElementById('credit-amount').value);
     if (!isNaN(amount)) { amount = parseFloat(amount.toFixed(2)); }
     
@@ -2849,37 +2900,31 @@ async function executeCreditAction() {
     if (isNaN(amount) || amount <= 0) { alertUser("Bitte einen gültigen Betrag eingeben.", "error"); return; }
     if (!reason) { alertUser("Bitte einen Grund angeben.", "error"); return; }
 
-    // --- NEU: SICHERHEITSCHECK FÜR MANUELLES AUFLADEN ---
-    // Wenn wir ADDEN (Zubuchen), muss der Partner valid sein.
-    // Beim Abbuchen (SUB) erlauben wir es ausnahmsweise, damit man "Leichen" entfernen kann.
+    // --- FIX: Korrekte Prüfung auf Existenz ---
     if (mode === 'add') {
         const isRealUser = USERS[partnerId];
+        // Prüfen, ob ID in allContacts (Array) existiert
         const isContact = allContacts.some(c => c.id === partnerId);
         
         if (!isRealUser && !isContact) {
-             // Das passiert eigentlich nur, wenn jemand den Value im HTML manipuliert,
-             // aber sicher ist sicher.
-             alertUser("Guthaben kann nur für registrierte Kontakte angelegt werden.", "error");
+             alertUser("Guthaben kann nur für registrierte Kontakte/User angelegt werden.", "error");
              return;
         }
     }
-    // --- ENDE CHECK ---
 
     const btn = document.getElementById('btn-save-credit');
     setButtonLoading(btn, true);
     
-    // ... (Rest der Funktion bleibt gleich wie vorher) ...
-    // Hier unten folgt der try { ... } Block.
     try {
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
         
         let partnerName = "Unbekannt";
-        if (USERS[partnerId]) partnerName = USERS[partnerId].realName || USERS[partnerId].name;
-        else {
+        if (USERS[partnerId]) {
+            partnerName = USERS[partnerId].realName || USERS[partnerId].name;
+        } else {
             const c = allContacts.find(c => c.id === partnerId);
             if (c) partnerName = c.name;
-            // Fallback für Abbuchen von "Leichen"
             else if (paymentId) {
                  const p = allPayments.find(x => x.id === paymentId);
                  if(p) partnerName = (context === 'my') ? p.debtorName : p.creditorName;
@@ -2890,7 +2935,7 @@ async function executeCreditAction() {
             const docData = {
                 title: reason, amount: amount, remainingAmount: amount, type: 'credit', status: 'open', isTBD: false,
                 startDate: new Date().toISOString().split('T')[0], createdAt: serverTimestamp(), createdBy: currentUser.mode,
-                involvedUserIds: [currentUser.mode, partnerId],
+                involvedUserIds: [currentUser.mode, partnerId], // Wichtig: ID ohne Prefix speichern!
                 history: [{ date: new Date(), action: 'created_manual_credit', user: currentUser.displayName, info: `Guthaben manuell angelegt: ${amount.toFixed(2)}€` }]
             };
             if (context === 'my') { docData.creditorId = currentUser.mode; docData.creditorName = currentUser.displayName; docData.debtorId = partnerId; docData.debtorName = partnerName; } 
@@ -2917,6 +2962,7 @@ async function executeCreditAction() {
         document.getElementById('creditManageModal').style.display = 'none';
     } catch (e) { console.error(e); alertUser(e.message, "error"); } finally { setButtonLoading(btn, false); }
 }
+
 
 // --- GAST LINK LOGIK ---
 
