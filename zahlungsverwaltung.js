@@ -377,7 +377,6 @@ async function executeMerge() {
 
     let totalAmount = 0;
     let titleList = [];
-    // NEU: Liste für die Links zu den Originalen
     const mergedLinks = [];
 
     for (const id of ids) {
@@ -401,7 +400,7 @@ async function executeMerge() {
         totalAmount += parseFloat(p.remainingAmount);
         titleList.push(p.title);
         
-        // NEU: Link generieren und speichern
+        // Link für den neuen Eintrag generieren
         const short = p.id.slice(-4).toUpperCase();
         mergedLinks.push(`[LINK:${p.id}:#${short}]`);
     }
@@ -415,7 +414,12 @@ async function executeMerge() {
         const batch = writeBatch(db);
         const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
 
-        // 1. Alte Einträge schließen (Status: closed)
+        // 1. Neue Referenz VORAB erstellen (damit wir die ID für die Verlinkung haben)
+        const newDocRef = doc(paymentsRef);
+        const newShort = newDocRef.id.slice(-4).toUpperCase();
+        const linkToNew = `[LINK:${newDocRef.id}:#${newShort}]`;
+
+        // 2. Alte Einträge schließen & Link zur Sammelrechnung eintragen
         ids.forEach(id => {
             const ref = doc(paymentsRef, id);
             const p = allPayments.find(item => item.id === id);
@@ -426,16 +430,16 @@ async function executeMerge() {
                     date: new Date(), 
                     action: 'merged', 
                     user: currentUser.displayName, 
-                    info: 'In Sammelrechnung zusammengefasst.' 
+                    // NEU: Hier steht jetzt der Link zur neuen Sammelrechnung
+                    info: `In Sammelrechnung ${linkToNew} zusammengefasst.` 
                 }]
             });
         });
 
-        // 2. Neuen Sammel-Eintrag erstellen
+        // 3. Neuen Sammel-Eintrag erstellen
         const newTitle = `Sammelrechnung (${ids.length} Posten)`;
         const newNotes = "Zusammenfassung von:\n- " + titleList.join("\n- ");
         
-        // NEU: Info-Text mit den anklickbaren Links
         const logInfo = `Zusammenfassung aus ${ids.length} Einträgen erstellt: ${mergedLinks.join(', ')}`;
 
         const newData = {
@@ -463,7 +467,7 @@ async function executeMerge() {
             }]
         };
 
-        const newDocRef = doc(paymentsRef);
+        // Speichern unter der bereits erstellten Referenz
         batch.set(newDocRef, newData);
 
         await batch.commit();
