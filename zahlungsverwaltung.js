@@ -3155,9 +3155,12 @@ function generateMermaidGraph(rootId) {
         const links = [];
         const regex = /\[LINK:([^:]+):([^\]]+)\]/g;
         let match;
-        while ((match = regex.exec(text)) !== null) links.push(match[1]);
+        while ((match = regex.exec(text)) !== null) {
+            links.push(match[1]);
+        }
         return links;
     };
+
     const extractAmountFromText = (text) => {
         const match = text.match(/(\d+(?:[.,]\d{2})?)\s?€/);
         return match ? match[0] : null;
@@ -3165,24 +3168,64 @@ function generateMermaidGraph(rootId) {
 
     // 2. Kanten sammeln
     const edgeMap = new Map(); 
+
     allPayments.forEach(p => {
         if (!p.history) return;
+
         p.history.forEach(h => {
             const linkedIds = extractLinks(h.info);
             let textAmount = extractAmountFromText(h.info);
+
             linkedIds.forEach(linkedId => {
                 let from, to, actionName;
                 let amount = textAmount;
 
-                if (h.action === 'created_merge') { from = linkedId; to = p.id; actionName = "Merge"; if(!amount){const src=allPayments.find(x=>x.id===linkedId);if(src)amount=parseFloat(src.amount).toFixed(2)+" €";} }
-                else if (h.action === 'created_settlement') { from = linkedId; to = p.id; actionName = "Bilanz"; if(!amount){const src=allPayments.find(x=>x.id===linkedId);if(src)amount=parseFloat(src.amount).toFixed(2)+" €";} }
-                else if (h.action === 'split_target') { from = linkedId; to = p.id; actionName = "Split"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
-                else if (h.action === 'created_credit') { from = linkedId; to = p.id; actionName = "Guthaben"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
+                // Logik wie gehabt...
+                if (h.action === 'created_merge') { 
+                    from = linkedId; to = p.id; actionName = "Merge"; 
+                    if (!amount) {
+                        const src = allPayments.find(x => x.id === linkedId);
+                        if (src) amount = parseFloat(src.amount).toFixed(2) + " €";
+                    }
+                }
+                else if (h.action === 'created_settlement') { 
+                    from = linkedId; to = p.id; actionName = "Bilanz"; 
+                    if (!amount) {
+                        const src = allPayments.find(x => x.id === linkedId);
+                        if (src) amount = parseFloat(src.amount).toFixed(2) + " €";
+                    }
+                }
+                else if (h.action === 'split_target') { 
+                    from = linkedId; to = p.id; actionName = "Split"; 
+                    if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
+                }
+                else if (h.action === 'created_credit') { 
+                    from = linkedId; to = p.id; actionName = "Guthaben"; 
+                    if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
+                }
                 
-                else if (h.action === 'merged') { from = p.id; to = linkedId; actionName = "zu Merge"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
-                else if (h.action === 'settled') { from = p.id; to = linkedId; actionName = "zu Bilanz"; if(!amount)amount=parseFloat(p.amount).toFixed(2)+" €"; }
-                else if (h.action === 'split_source') { from = p.id; to = linkedId; actionName = "zu Split"; if(!amount){const target=allPayments.find(x=>x.id===linkedId);if(target)amount=parseFloat(target.amount).toFixed(2)+" €";} }
-                else if (h.action === 'paid_excess') { from = p.id; to = linkedId; actionName = "zu Guthaben"; if(!amount){const target=allPayments.find(x=>x.id===linkedId);if(target)amount=parseFloat(target.amount).toFixed(2)+" €";} }
+                else if (h.action === 'merged') { 
+                    from = p.id; to = linkedId; actionName = "zu Merge"; 
+                    if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
+                }
+                else if (h.action === 'settled') { 
+                    from = p.id; to = linkedId; actionName = "zu Bilanz"; 
+                    if (!amount) amount = parseFloat(p.amount).toFixed(2) + " €";
+                }
+                else if (h.action === 'split_source') { 
+                    from = p.id; to = linkedId; actionName = "zu Split"; 
+                    if (!amount) {
+                        const target = allPayments.find(x => x.id === linkedId);
+                        if (target) amount = parseFloat(target.amount).toFixed(2) + " €";
+                    }
+                }
+                else if (h.action === 'paid_excess') { 
+                    from = p.id; to = linkedId; actionName = "zu Guthaben"; 
+                    if (!amount) {
+                         const target = allPayments.find(x => x.id === linkedId);
+                         if (target) amount = parseFloat(target.amount).toFixed(2) + " €";
+                    }
+                }
 
                 if (from && to) {
                     const key = `${from}-${to}`;
@@ -3198,13 +3241,20 @@ function generateMermaidGraph(rootId) {
     // 3. Teilbaum finden
     const relevantNodes = new Set([rootId]);
     let changed = true;
+    
     while(changed) {
         changed = false;
         const currentSize = relevantNodes.size;
+        
         for (const [key, edge] of edgeMap) {
-            if (relevantNodes.has(edge.from) && !relevantNodes.has(edge.to)) relevantNodes.add(edge.to);
-            if (relevantNodes.has(edge.to) && !relevantNodes.has(edge.from)) relevantNodes.add(edge.from);
+            if (relevantNodes.has(edge.from) && !relevantNodes.has(edge.to)) {
+                relevantNodes.add(edge.to);
+            }
+            if (relevantNodes.has(edge.to) && !relevantNodes.has(edge.from)) {
+                relevantNodes.add(edge.from);
+            }
         }
+        
         if (relevantNodes.size > currentSize) changed = true;
     }
 
@@ -3212,23 +3262,30 @@ function generateMermaidGraph(rootId) {
     let graphDefinition = 'graph TD\n';
     const hasParent = new Set();
     for (const [key, edge] of edgeMap) {
-        if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) hasParent.add(edge.to);
+        if (relevantNodes.has(edge.from) && relevantNodes.has(edge.to)) {
+            hasParent.add(edge.to);
+        }
     }
 
     relevantNodes.forEach(nodeId => {
         const p = allPayments.find(x => x.id === nodeId);
         const short = nodeId.slice(-4).toUpperCase();
+        
         let nodeTitle = "Gelöscht/Archiviert";
         let nodeAmount = "???";
         
         if (p) {
-            const safeTitle = p.title.replace(/["\(\)]/g, '').substring(0, 20) + (p.title.length>20?"...":"");
+            // FIX: Hier wurde der Text abgeschnitten. Jetzt nehmen wir den vollen Titel.
+            // Wir ersetzen nur " und ( ) durch Leerzeichen, damit Mermaid nicht crasht.
+            const safeTitle = p.title.replace(/["\(\)]/g, ' ');
+            
             nodeTitle = safeTitle;
             nodeAmount = parseFloat(p.amount).toFixed(2) + " €";
         }
 
         const safeId = "N" + nodeId;
         let styleDef = `style ${safeId} fill:#f9fafb,stroke:#9ca3af,stroke-width:1px\n`; 
+
         let labelPrefix = "";
         
         if (nodeId === rootId) {
@@ -3242,6 +3299,7 @@ function generateMermaidGraph(rootId) {
         }
 
         const nodeLabel = `"${labelPrefix}<b>${nodeTitle}</b><br>${nodeAmount}<br><small>#${short}</small>"`;
+        
         graphDefinition += `    ${safeId}(${nodeLabel})\n`;
         graphDefinition += `    ${styleDef}`;
         graphDefinition += `    click ${safeId} call openPaymentDetail("${nodeId}")\n`;
@@ -3266,11 +3324,9 @@ function generateMermaidGraph(rootId) {
     graphDefinition += `    linkStyle default stroke:#374151,stroke-width:2px,fill:none;\n`;
 
     const uniqueId = "mermaid-" + Math.floor(Math.random() * 1000000);
-    
-    // FIX: Opacity auf 0 setzen, um "Aufblitzen" zu verhindern
+    // Opacity auf 0 für sanftes Einblenden
     container.innerHTML = `<div class="mermaid" id="${uniqueId}" style="opacity: 0; transition: opacity 0.3s ease; width: 100%; height: 100%;">${graphDefinition}</div>`;
     
-    // WICHTIG: Zoom & Resize Fix
     setTimeout(() => {
         try {
             mermaid.init(undefined, document.getElementById(uniqueId));
@@ -3280,25 +3336,24 @@ function generateMermaidGraph(rootId) {
                 const divElement = document.getElementById(uniqueId);
                 
                 if (svgElement && divElement) {
-                    // 1. Zwinge SVG auf 100% Breite/Höhe (Mermaid setzt oft harte max-width)
+                    // SVG auf 100% zwingen
                     svgElement.style.maxWidth = "none";
                     svgElement.style.height = "100%";
                     svgElement.style.width = "100%";
                     
-                    // 2. Zoom aktivieren
                     svgPanZoom(svgElement, {
                         zoomEnabled: true,
                         controlIconsEnabled: true, 
                         fit: true,
                         center: true,
-                        minZoom: 0.5,
+                        minZoom: 0.1, // Erlaubt sehr weites Herauszoomen für riesige Bäume
                         maxZoom: 10
                     });
                     
-                    // 3. Jetzt sichtbar machen
+                    // Einblenden
                     divElement.style.opacity = "1";
                 }
-            }, 150); // Etwas mehr Zeit geben für das Rendering
+            }, 150);
             
         } catch(e) {
             console.error("Graph Render Fehler:", e);
