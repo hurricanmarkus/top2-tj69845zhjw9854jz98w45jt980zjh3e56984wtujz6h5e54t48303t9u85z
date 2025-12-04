@@ -910,10 +910,5 @@ window.toggleSonderzahlungMonat = toggleSonderzahlungMonat;
 window.renderSonderzahlungenRefresh = renderSonderzahlungen;
 
 // ========================================
-// AUTO-INITIALISIERUNG
+// HINWEIS: Initialisierung erfolgt durch haupteingang.js
 // ========================================
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeVertragsverwaltung);
-} else {
-    initializeVertragsverwaltung();
-}

@@ -980,12 +980,5 @@ window.updateSchritt = updateSchritt;
 window.removeDokument = removeDokument;
 
 // ========================================
-// AUTO-INITIALISIERUNG
+// HINWEIS: Initialisierung erfolgt durch haupteingang.js
 // ========================================
-// Sofort initialisieren, da das Script am Ende des Body geladen wird
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initRezeptverwaltung);
-} else {
-    // DOM ist bereits geladen
-    initRezeptverwaltung();
-}

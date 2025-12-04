@@ -20,6 +20,7 @@ import { initializeZahlungsverwaltungView, initializeZahlungsverwaltungSettingsV
 import { initializeTicketSupport, listenForTickets } from './ticket-support.js';
 import { initializeWertguthaben, listenForWertguthaben } from './wertguthaben.js';
 import { initializeVertragsverwaltung, listenForVertraege } from './vertragsverwaltung.js';
+import { initRezeptverwaltung } from './rezeptverwaltung.js';
 // // ENDE-ZIKA //
 
 
@@ -373,6 +374,8 @@ async function initializeFirebase() {
                 initializeZahlungsverwaltungView();
                 initializeTicketSupport();
                 initializeWertguthaben();
+                initializeVertragsverwaltung();
+                initRezeptverwaltung();
 
             } else {
                 console.log("Firebase meldet KEINEN User, wechsle explizit zum Gastmodus.");
@@ -383,6 +386,8 @@ async function initializeFirebase() {
                 initializeZahlungsverwaltungView();
                 initializeTicketSupport();
                 initializeWertguthaben();
+                initializeVertragsverwaltung();
+                initRezeptverwaltung();
             }
 
             // =================================================================
@@ -702,6 +707,10 @@ export function navigate(targetViewName) {
 
     if (targetViewName === 'vertragsverwaltung') {
         initializeVertragsverwaltung();
+    }
+
+    if (targetViewName === 'rezepte') {
+        initRezeptverwaltung();
     }
 }
 
