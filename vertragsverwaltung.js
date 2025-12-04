@@ -52,6 +52,12 @@ const ABSICHT_CONFIG = {
     dringend: { label: 'Dringend!', icon: '🚨', color: 'bg-red-100 text-red-800', priority: 3 }
 };
 
+// Monatsnamen
+const MONATSNAMEN = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+
+// Temporäre Sonderzahlungen für das Modal
+let tempSonderzahlungen = [];
+
 // ========================================
 // INITIALISIERUNG
 // ========================================
@@ -174,6 +180,13 @@ function setupEventListeners() {
         vertragsverwaltungCard.addEventListener('click', () => navigate('vertragsverwaltung'));
         vertragsverwaltungCard.dataset.listenerAttached = 'true';
     }
+
+    // Sonderzahlung hinzufügen Button
+    const addSonderzahlungBtn = document.getElementById('btn-add-sonderzahlung');
+    if (addSonderzahlungBtn && !addSonderzahlungBtn.dataset.listenerAttached) {
+        addSonderzahlungBtn.addEventListener('click', addSonderzahlung);
+        addSonderzahlungBtn.dataset.listenerAttached = 'true';
+    }
 }
 
 // ========================================
@@ -221,8 +234,6 @@ function openCreateModal() {
     document.getElementById('vertragAnbieter').value = '';
     document.getElementById('vertragBetrag').value = '';
     document.getElementById('vertragRhythmus').value = 'monatlich';
-    document.getElementById('vertragZusatzbetrag').value = '';
-    document.getElementById('vertragZusatzbetragMonat').value = '';
     document.getElementById('vertragBeginn').value = '';
     document.getElementById('vertragLaufzeit').value = '';
     document.getElementById('vertragKuendigungsfrist').value = '';
@@ -230,6 +241,10 @@ function openCreateModal() {
     document.getElementById('vertragKuendigungsdatum').value = '';
     document.getElementById('vertragErinnerungTage').value = '30';
     document.getElementById('vertragNotizen').value = '';
+    
+    // Sonderzahlungen zurücksetzen
+    tempSonderzahlungen = [];
+    renderSonderzahlungen();
     
     // Kündigungsabsicht zurücksetzen
     document.querySelectorAll('.kuendigungs-option').forEach(opt => {
@@ -262,8 +277,6 @@ function openEditModal(vertragId) {
     document.getElementById('vertragAnbieter').value = vertrag.anbieter || '';
     document.getElementById('vertragBetrag').value = vertrag.betrag || '';
     document.getElementById('vertragRhythmus').value = vertrag.rhythmus || 'monatlich';
-    document.getElementById('vertragZusatzbetrag').value = vertrag.zusatzbetrag || '';
-    document.getElementById('vertragZusatzbetragMonat').value = vertrag.zusatzbetragMonat || '';
     document.getElementById('vertragBeginn').value = vertrag.beginn || '';
     document.getElementById('vertragLaufzeit').value = vertrag.laufzeit || '';
     document.getElementById('vertragKuendigungsfrist').value = vertrag.kuendigungsfrist || '';
@@ -271,6 +284,10 @@ function openEditModal(vertragId) {
     document.getElementById('vertragKuendigungsdatum').value = vertrag.kuendigungsdatum || '';
     document.getElementById('vertragErinnerungTage').value = vertrag.erinnerungTage || '30';
     document.getElementById('vertragNotizen').value = vertrag.notizen || '';
+    
+    // Sonderzahlungen laden
+    tempSonderzahlungen = vertrag.sonderzahlungen ? [...vertrag.sonderzahlungen] : [];
+    renderSonderzahlungen();
     
     // Kündigungsabsicht setzen
     document.querySelectorAll('.kuendigungs-option').forEach(opt => {
@@ -323,8 +340,7 @@ async function saveVertrag() {
         anbieter: document.getElementById('vertragAnbieter').value.trim(),
         betrag: betrag,
         rhythmus: document.getElementById('vertragRhythmus').value,
-        zusatzbetrag: parseFloat(document.getElementById('vertragZusatzbetrag').value) || 0,
-        zusatzbetragMonat: document.getElementById('vertragZusatzbetragMonat').value,
+        sonderzahlungen: tempSonderzahlungen,
         beginn: document.getElementById('vertragBeginn').value,
         laufzeit: parseInt(document.getElementById('vertragLaufzeit').value) || 0,
         kuendigungsfrist: parseInt(document.getElementById('vertragKuendigungsfrist').value) || 0,
@@ -498,7 +514,36 @@ function showVertragDetails(vertragId) {
     
     // Monatliche Kosten berechnen
     const monatlicheKosten = vertrag.betrag * rhythmusConfig.multiplierToMonthly;
-    const jaehrlicheKosten = monatlicheKosten * 12 + (vertrag.zusatzbetrag || 0);
+    
+    // Jährliche Kosten inkl. Sonderzahlungen
+    let jaehrlicheKosten = monatlicheKosten * 12;
+    let sonderzahlungenHtml = '';
+    
+    if (vertrag.sonderzahlungen && Array.isArray(vertrag.sonderzahlungen) && vertrag.sonderzahlungen.length > 0) {
+        vertrag.sonderzahlungen.forEach(sz => {
+            const betrag = sz.betrag || 0;
+            const anzahlMonate = sz.monate ? sz.monate.length : 0;
+            const monateText = sz.monate ? sz.monate.map(m => MONATSNAMEN[m].substring(0, 3)).join(', ') : '-';
+            
+            if (sz.typ === 'zusatzbetrag') {
+                jaehrlicheKosten += betrag * anzahlMonate;
+                sonderzahlungenHtml += `
+                    <div class="flex justify-between items-center py-1 text-sm">
+                        <span class="text-yellow-700">💸 ${sz.bezeichnung || 'Zusatzbetrag'} (${monateText})</span>
+                        <span class="font-bold text-yellow-700">+${formatCurrency(betrag * anzahlMonate)}</span>
+                    </div>
+                `;
+            } else if (sz.typ === 'gutschrift') {
+                jaehrlicheKosten -= betrag * anzahlMonate;
+                sonderzahlungenHtml += `
+                    <div class="flex justify-between items-center py-1 text-sm">
+                        <span class="text-green-700">💰 ${sz.bezeichnung || 'Gutschrift'} (${monateText})</span>
+                        <span class="font-bold text-green-700">-${formatCurrency(betrag * anzahlMonate)}</span>
+                    </div>
+                `;
+            }
+        });
+    }
     
     document.getElementById('vertragDetailsTitle').textContent = vertrag.name;
     document.getElementById('vertragDetailsContent').innerHTML = `
@@ -526,10 +571,10 @@ function showVertragDetails(vertragId) {
                         <p class="text-xl font-bold text-indigo-700">${formatCurrency(monatlicheKosten)}</p>
                     </div>
                 </div>
-                ${vertrag.zusatzbetrag ? `
+                ${sonderzahlungenHtml ? `
                     <div class="mt-3 pt-3 border-t border-indigo-200">
-                        <p class="text-xs text-yellow-700">Zusatzbetrag (${getMonthName(vertrag.zusatzbetragMonat)})</p>
-                        <p class="text-lg font-bold text-yellow-700">+${formatCurrency(vertrag.zusatzbetrag)}</p>
+                        <p class="text-xs text-gray-600 mb-2 font-semibold">Sonderzahlungen pro Jahr:</p>
+                        ${sonderzahlungenHtml}
                     </div>
                 ` : ''}
                 <div class="mt-3 pt-3 border-t border-indigo-200">
@@ -599,10 +644,21 @@ function updateStatistics() {
     });
     document.getElementById('stat-monatliche-kosten').textContent = formatCurrency(monatlicheKosten);
     
-    // Jährliche Kosten
+    // Jährliche Kosten (inkl. Sonderzahlungen)
     let jaehrlicheKosten = monatlicheKosten * 12;
     vertraege.forEach(v => {
-        jaehrlicheKosten += v.zusatzbetrag || 0;
+        // Sonderzahlungen berücksichtigen
+        if (v.sonderzahlungen && Array.isArray(v.sonderzahlungen)) {
+            v.sonderzahlungen.forEach(sz => {
+                const betrag = sz.betrag || 0;
+                const anzahlMonate = sz.monate ? sz.monate.length : 0;
+                if (sz.typ === 'zusatzbetrag') {
+                    jaehrlicheKosten += betrag * anzahlMonate;
+                } else if (sz.typ === 'gutschrift') {
+                    jaehrlicheKosten -= betrag * anzahlMonate;
+                }
+            });
+        }
     });
     document.getElementById('stat-jaehrliche-kosten').textContent = formatCurrency(jaehrlicheKosten);
     
@@ -705,9 +761,141 @@ function formatDate(dateString) {
 }
 
 function getMonthName(month) {
-    const months = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 
-                   'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-    return months[parseInt(month)] || '-';
+    return MONATSNAMEN[parseInt(month)] || '-';
+}
+
+// ========================================
+// SONDERZAHLUNGEN FUNKTIONEN
+// ========================================
+function addSonderzahlung() {
+    const newId = Date.now();
+    tempSonderzahlungen.push({
+        id: newId,
+        typ: 'zusatzbetrag', // 'zusatzbetrag' oder 'gutschrift'
+        bezeichnung: '',
+        betrag: 0,
+        monate: [] // Array von Monatsnummern (1-12)
+    });
+    renderSonderzahlungen();
+}
+
+function removeSonderzahlung(id) {
+    tempSonderzahlungen = tempSonderzahlungen.filter(sz => sz.id !== id);
+    renderSonderzahlungen();
+}
+
+function updateSonderzahlung(id, field, value) {
+    const sz = tempSonderzahlungen.find(s => s.id === id);
+    if (sz) {
+        if (field === 'betrag') {
+            sz[field] = parseFloat(value) || 0;
+        } else {
+            sz[field] = value;
+        }
+    }
+}
+
+function toggleSonderzahlungMonat(id, monat) {
+    const sz = tempSonderzahlungen.find(s => s.id === id);
+    if (sz) {
+        const monatNum = parseInt(monat);
+        const index = sz.monate.indexOf(monatNum);
+        if (index > -1) {
+            sz.monate.splice(index, 1);
+        } else {
+            sz.monate.push(monatNum);
+            sz.monate.sort((a, b) => a - b);
+        }
+        renderSonderzahlungen();
+    }
+}
+
+function renderSonderzahlungen() {
+    const container = document.getElementById('sonderzahlungen-container');
+    const emptyState = document.getElementById('sonderzahlungen-empty');
+    
+    if (!container) return;
+    
+    if (tempSonderzahlungen.length === 0) {
+        container.innerHTML = '';
+        if (emptyState) emptyState.style.display = 'block';
+        return;
+    }
+    
+    if (emptyState) emptyState.style.display = 'none';
+    
+    container.innerHTML = tempSonderzahlungen.map((sz, index) => {
+        const isZusatzbetrag = sz.typ === 'zusatzbetrag';
+        const bgColor = isZusatzbetrag ? 'bg-yellow-100 border-yellow-300' : 'bg-green-100 border-green-300';
+        const iconColor = isZusatzbetrag ? 'text-yellow-700' : 'text-green-700';
+        const icon = isZusatzbetrag ? '💸' : '💰';
+        
+        // Monats-Checkboxen generieren
+        const monateHtml = MONATSNAMEN.slice(1).map((name, i) => {
+            const monatNum = i + 1;
+            const isChecked = sz.monate.includes(monatNum);
+            const shortName = name.substring(0, 3);
+            return `
+                <label class="flex items-center gap-1 cursor-pointer p-1 rounded ${isChecked ? 'bg-indigo-100' : 'hover:bg-gray-100'}">
+                    <input type="checkbox" 
+                        ${isChecked ? 'checked' : ''} 
+                        onchange="window.toggleSonderzahlungMonat(${sz.id}, ${monatNum})"
+                        class="w-3 h-3">
+                    <span class="text-xs">${shortName}</span>
+                </label>
+            `;
+        }).join('');
+        
+        return `
+            <div class="p-3 rounded-lg border-2 ${bgColor}" data-sz-id="${sz.id}">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg">${icon}</span>
+                        <select 
+                            onchange="window.updateSonderzahlung(${sz.id}, 'typ', this.value); window.renderSonderzahlungenRefresh();"
+                            class="text-sm font-bold border rounded px-2 py-1 ${iconColor} bg-white">
+                            <option value="zusatzbetrag" ${isZusatzbetrag ? 'selected' : ''}>Zusatzbetrag</option>
+                            <option value="gutschrift" ${!isZusatzbetrag ? 'selected' : ''}>Gutschrift</option>
+                        </select>
+                    </div>
+                    <button type="button" 
+                        onclick="window.removeSonderzahlung(${sz.id})"
+                        class="text-red-500 hover:text-red-700 p-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Bezeichnung</label>
+                        <input type="text" 
+                            value="${sz.bezeichnung || ''}"
+                            onchange="window.updateSonderzahlung(${sz.id}, 'bezeichnung', this.value)"
+                            placeholder="z.B. Servicepauschale"
+                            class="w-full p-2 text-sm border rounded focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Betrag (€)</label>
+                        <input type="number" 
+                            value="${sz.betrag || ''}"
+                            onchange="window.updateSonderzahlung(${sz.id}, 'betrag', this.value)"
+                            step="0.01" min="0" placeholder="0.00"
+                            class="w-full p-2 text-sm border rounded focus:border-indigo-500">
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Fällig in Monat(en):</label>
+                    <div class="flex flex-wrap gap-1">
+                        ${monateHtml}
+                    </div>
+                    ${sz.monate.length === 0 ? '<p class="text-xs text-red-500 mt-1">⚠️ Bitte mindestens einen Monat auswählen</p>' : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 // ========================================
@@ -716,3 +904,7 @@ function getMonthName(month) {
 window.editVertrag = openEditModal;
 window.deleteVertrag = deleteVertrag;
 window.showVertragDetails = showVertragDetails;
+window.removeSonderzahlung = removeSonderzahlung;
+window.updateSonderzahlung = updateSonderzahlung;
+window.toggleSonderzahlungMonat = toggleSonderzahlungMonat;
+window.renderSonderzahlungenRefresh = renderSonderzahlungen;
