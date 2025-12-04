@@ -1,0 +1,718 @@
+// @ts-check
+// ========================================
+// VERTRAGSVERWALTUNG SYSTEM
+// ========================================
+
+import {
+    alertUser,
+    db,
+    currentUser,
+    USERS,
+    navigate,
+    appId
+} from './haupteingang.js';
+
+import {
+    collection,
+    addDoc,
+    serverTimestamp,
+    query,
+    orderBy,
+    onSnapshot,
+    doc,
+    updateDoc,
+    deleteDoc,
+    getDoc
+} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+// ========================================
+// GLOBALE VARIABLEN
+// ========================================
+let vertraegeCollection = null;
+let VERTRAEGE = {};
+let currentFilter = { rhythmus: '', absicht: '' };
+let searchTerm = '';
+let unsubscribeVertraege = null;
+
+// Rhythmus-Konfiguration
+const RHYTHMUS_CONFIG = {
+    taeglich: { label: 'Täglich', multiplierToMonthly: 30, icon: '📅' },
+    woechentlich: { label: 'Wöchentlich', multiplierToMonthly: 4.33, icon: '📆' },
+    monatlich: { label: 'Monatlich', multiplierToMonthly: 1, icon: '🗓️' },
+    quartalsweise: { label: 'Quartalsweise', multiplierToMonthly: 0.33, icon: '📊' },
+    halbjaehrlich: { label: 'Halbjährlich', multiplierToMonthly: 0.167, icon: '📈' },
+    jaehrlich: { label: 'Jährlich', multiplierToMonthly: 0.083, icon: '🎯' }
+};
+
+// Kündigungsabsicht-Konfiguration
+const ABSICHT_CONFIG = {
+    behalten: { label: 'Behalten', icon: '✅', color: 'bg-green-100 text-green-800', priority: 0 },
+    ueberlege: { label: 'Überlege', icon: '🤔', color: 'bg-yellow-100 text-yellow-800', priority: 1 },
+    kuendigen: { label: 'Will kündigen', icon: '📝', color: 'bg-orange-100 text-orange-800', priority: 2 },
+    dringend: { label: 'Dringend!', icon: '🚨', color: 'bg-red-100 text-red-800', priority: 3 }
+};
+
+// ========================================
+// INITIALISIERUNG
+// ========================================
+export function initializeVertragsverwaltung() {
+    console.log("📋 Vertragsverwaltung wird initialisiert...");
+
+    if (db) {
+        vertraegeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'vertraege');
+    }
+
+    setupEventListeners();
+    listenForVertraege();
+}
+
+function setupEventListeners() {
+    // Create Button
+    const createBtn = document.getElementById('btn-create-vertrag');
+    if (createBtn && !createBtn.dataset.listenerAttached) {
+        createBtn.addEventListener('click', openCreateModal);
+        createBtn.dataset.listenerAttached = 'true';
+    }
+
+    // Modal Close Buttons
+    const closeModal = document.getElementById('closeVertragModal');
+    if (closeModal && !closeModal.dataset.listenerAttached) {
+        closeModal.addEventListener('click', closeVertragModal);
+        closeModal.dataset.listenerAttached = 'true';
+    }
+
+    const cancelBtn = document.getElementById('cancelVertragBtn');
+    if (cancelBtn && !cancelBtn.dataset.listenerAttached) {
+        cancelBtn.addEventListener('click', closeVertragModal);
+        cancelBtn.dataset.listenerAttached = 'true';
+    }
+
+    const saveBtn = document.getElementById('saveVertragBtn');
+    if (saveBtn && !saveBtn.dataset.listenerAttached) {
+        saveBtn.addEventListener('click', saveVertrag);
+        saveBtn.dataset.listenerAttached = 'true';
+    }
+
+    // Details Modal
+    const closeDetails = document.getElementById('closeVertragDetailsModal');
+    if (closeDetails && !closeDetails.dataset.listenerAttached) {
+        closeDetails.addEventListener('click', () => {
+            document.getElementById('vertragDetailsModal').style.display = 'none';
+        });
+        closeDetails.dataset.listenerAttached = 'true';
+    }
+
+    // Kündigungsabsicht Radio Buttons
+    document.querySelectorAll('.kuendigungs-option').forEach(option => {
+        if (!option.dataset.listenerAttached) {
+            option.addEventListener('click', (e) => {
+                const label = e.currentTarget;
+                const value = label.dataset.value;
+                
+                // Alle deselektieren
+                document.querySelectorAll('.kuendigungs-option').forEach(opt => {
+                    opt.classList.remove('border-indigo-500', 'bg-indigo-50');
+                    opt.classList.add('border-gray-200');
+                    opt.querySelector('.radio-circle').innerHTML = '';
+                });
+                
+                // Ausgewählte Option markieren
+                label.classList.remove('border-gray-200');
+                label.classList.add('border-indigo-500', 'bg-indigo-50');
+                label.querySelector('.radio-circle').innerHTML = '<span class="w-2 h-2 bg-indigo-600 rounded-full"></span>';
+                label.querySelector('input').checked = true;
+            });
+            option.dataset.listenerAttached = 'true';
+        }
+    });
+
+    // Suche
+    const searchInput = document.getElementById('search-vertraege');
+    if (searchInput && !searchInput.dataset.listenerAttached) {
+        searchInput.addEventListener('input', (e) => {
+            searchTerm = e.target.value.toLowerCase();
+            renderVertraegeTable();
+        });
+        searchInput.dataset.listenerAttached = 'true';
+    }
+
+    // Filter
+    const filterRhythmus = document.getElementById('filter-zahlungsrhythmus');
+    if (filterRhythmus && !filterRhythmus.dataset.listenerAttached) {
+        filterRhythmus.addEventListener('change', (e) => {
+            currentFilter.rhythmus = e.target.value;
+            renderVertraegeTable();
+        });
+        filterRhythmus.dataset.listenerAttached = 'true';
+    }
+
+    const filterAbsicht = document.getElementById('filter-kuendigungsabsicht');
+    if (filterAbsicht && !filterAbsicht.dataset.listenerAttached) {
+        filterAbsicht.addEventListener('change', (e) => {
+            currentFilter.absicht = e.target.value;
+            renderVertraegeTable();
+        });
+        filterAbsicht.dataset.listenerAttached = 'true';
+    }
+
+    const resetFilters = document.getElementById('reset-filters-vertraege');
+    if (resetFilters && !resetFilters.dataset.listenerAttached) {
+        resetFilters.addEventListener('click', () => {
+            currentFilter = { rhythmus: '', absicht: '' };
+            searchTerm = '';
+            document.getElementById('search-vertraege').value = '';
+            document.getElementById('filter-zahlungsrhythmus').value = '';
+            document.getElementById('filter-kuendigungsabsicht').value = '';
+            renderVertraegeTable();
+        });
+        resetFilters.dataset.listenerAttached = 'true';
+    }
+
+    // Navigation Card
+    const vertragsverwaltungCard = document.getElementById('vertragsverwaltungCard');
+    if (vertragsverwaltungCard && !vertragsverwaltungCard.dataset.listenerAttached) {
+        vertragsverwaltungCard.addEventListener('click', () => navigate('vertragsverwaltung'));
+        vertragsverwaltungCard.dataset.listenerAttached = 'true';
+    }
+}
+
+// ========================================
+// FIREBASE LISTENER
+// ========================================
+export function listenForVertraege() {
+    if (!vertraegeCollection) {
+        if (db) {
+            vertraegeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'vertraege');
+        } else {
+            console.warn("DB nicht verfügbar für Verträge");
+            return;
+        }
+    }
+
+    if (unsubscribeVertraege) {
+        unsubscribeVertraege();
+    }
+
+    const q = query(vertraegeCollection, orderBy('createdAt', 'desc'));
+    
+    unsubscribeVertraege = onSnapshot(q, (snapshot) => {
+        VERTRAEGE = {};
+        snapshot.forEach(doc => {
+            VERTRAEGE[doc.id] = { id: doc.id, ...doc.data() };
+        });
+        console.log(`📋 ${Object.keys(VERTRAEGE).length} Verträge geladen`);
+        renderVertraegeTable();
+        updateStatistics();
+        renderKuendigungsWarnungen();
+    }, (error) => {
+        console.error("Fehler beim Laden der Verträge:", error);
+    });
+}
+
+// ========================================
+// MODAL FUNKTIONEN
+// ========================================
+function openCreateModal() {
+    document.getElementById('vertragModalTitle').textContent = 'Neuer Vertrag';
+    document.getElementById('vertragId').value = '';
+    
+    // Formular zurücksetzen
+    document.getElementById('vertragName').value = '';
+    document.getElementById('vertragAnbieter').value = '';
+    document.getElementById('vertragBetrag').value = '';
+    document.getElementById('vertragRhythmus').value = 'monatlich';
+    document.getElementById('vertragZusatzbetrag').value = '';
+    document.getElementById('vertragZusatzbetragMonat').value = '';
+    document.getElementById('vertragBeginn').value = '';
+    document.getElementById('vertragLaufzeit').value = '';
+    document.getElementById('vertragKuendigungsfrist').value = '';
+    document.getElementById('vertragKuendigungsfristEinheit').value = 'monate';
+    document.getElementById('vertragKuendigungsdatum').value = '';
+    document.getElementById('vertragErinnerungTage').value = '30';
+    document.getElementById('vertragNotizen').value = '';
+    
+    // Kündigungsabsicht zurücksetzen
+    document.querySelectorAll('.kuendigungs-option').forEach(opt => {
+        opt.classList.remove('border-indigo-500', 'bg-indigo-50');
+        opt.classList.add('border-gray-200');
+        opt.querySelector('.radio-circle').innerHTML = '';
+        opt.querySelector('input').checked = false;
+    });
+    
+    // Standard: Behalten
+    const behaltenOption = document.querySelector('.kuendigungs-option[data-value="behalten"]');
+    if (behaltenOption) {
+        behaltenOption.classList.remove('border-gray-200');
+        behaltenOption.classList.add('border-indigo-500', 'bg-indigo-50');
+        behaltenOption.querySelector('.radio-circle').innerHTML = '<span class="w-2 h-2 bg-indigo-600 rounded-full"></span>';
+        behaltenOption.querySelector('input').checked = true;
+    }
+    
+    document.getElementById('vertragModal').style.display = 'flex';
+}
+
+function openEditModal(vertragId) {
+    const vertrag = VERTRAEGE[vertragId];
+    if (!vertrag) return;
+    
+    document.getElementById('vertragModalTitle').textContent = 'Vertrag bearbeiten';
+    document.getElementById('vertragId').value = vertragId;
+    
+    document.getElementById('vertragName').value = vertrag.name || '';
+    document.getElementById('vertragAnbieter').value = vertrag.anbieter || '';
+    document.getElementById('vertragBetrag').value = vertrag.betrag || '';
+    document.getElementById('vertragRhythmus').value = vertrag.rhythmus || 'monatlich';
+    document.getElementById('vertragZusatzbetrag').value = vertrag.zusatzbetrag || '';
+    document.getElementById('vertragZusatzbetragMonat').value = vertrag.zusatzbetragMonat || '';
+    document.getElementById('vertragBeginn').value = vertrag.beginn || '';
+    document.getElementById('vertragLaufzeit').value = vertrag.laufzeit || '';
+    document.getElementById('vertragKuendigungsfrist').value = vertrag.kuendigungsfrist || '';
+    document.getElementById('vertragKuendigungsfristEinheit').value = vertrag.kuendigungsfristEinheit || 'monate';
+    document.getElementById('vertragKuendigungsdatum').value = vertrag.kuendigungsdatum || '';
+    document.getElementById('vertragErinnerungTage').value = vertrag.erinnerungTage || '30';
+    document.getElementById('vertragNotizen').value = vertrag.notizen || '';
+    
+    // Kündigungsabsicht setzen
+    document.querySelectorAll('.kuendigungs-option').forEach(opt => {
+        opt.classList.remove('border-indigo-500', 'bg-indigo-50');
+        opt.classList.add('border-gray-200');
+        opt.querySelector('.radio-circle').innerHTML = '';
+        opt.querySelector('input').checked = false;
+    });
+    
+    const absicht = vertrag.kuendigungsabsicht || 'behalten';
+    const selectedOption = document.querySelector(`.kuendigungs-option[data-value="${absicht}"]`);
+    if (selectedOption) {
+        selectedOption.classList.remove('border-gray-200');
+        selectedOption.classList.add('border-indigo-500', 'bg-indigo-50');
+        selectedOption.querySelector('.radio-circle').innerHTML = '<span class="w-2 h-2 bg-indigo-600 rounded-full"></span>';
+        selectedOption.querySelector('input').checked = true;
+    }
+    
+    document.getElementById('vertragModal').style.display = 'flex';
+}
+
+function closeVertragModal() {
+    document.getElementById('vertragModal').style.display = 'none';
+}
+
+// ========================================
+// SPEICHERN / LÖSCHEN
+// ========================================
+async function saveVertrag() {
+    const vertragId = document.getElementById('vertragId').value;
+    const name = document.getElementById('vertragName').value.trim();
+    const betrag = parseFloat(document.getElementById('vertragBetrag').value);
+    
+    if (!name) {
+        alertUser('Bitte gib einen Vertragsnamen ein.', 'error');
+        return;
+    }
+    
+    if (isNaN(betrag) || betrag < 0) {
+        alertUser('Bitte gib einen gültigen Betrag ein.', 'error');
+        return;
+    }
+    
+    // Kündigungsabsicht ermitteln
+    const selectedAbsicht = document.querySelector('input[name="kuendigungsabsicht"]:checked');
+    const kuendigungsabsicht = selectedAbsicht ? selectedAbsicht.value : 'behalten';
+    
+    const vertragData = {
+        name: name,
+        anbieter: document.getElementById('vertragAnbieter').value.trim(),
+        betrag: betrag,
+        rhythmus: document.getElementById('vertragRhythmus').value,
+        zusatzbetrag: parseFloat(document.getElementById('vertragZusatzbetrag').value) || 0,
+        zusatzbetragMonat: document.getElementById('vertragZusatzbetragMonat').value,
+        beginn: document.getElementById('vertragBeginn').value,
+        laufzeit: parseInt(document.getElementById('vertragLaufzeit').value) || 0,
+        kuendigungsfrist: parseInt(document.getElementById('vertragKuendigungsfrist').value) || 0,
+        kuendigungsfristEinheit: document.getElementById('vertragKuendigungsfristEinheit').value,
+        kuendigungsdatum: document.getElementById('vertragKuendigungsdatum').value,
+        kuendigungsabsicht: kuendigungsabsicht,
+        erinnerungTage: parseInt(document.getElementById('vertragErinnerungTage').value) || 30,
+        notizen: document.getElementById('vertragNotizen').value.trim(),
+        updatedAt: serverTimestamp(),
+        updatedBy: currentUser?.displayName || 'Unbekannt'
+    };
+    
+    try {
+        if (vertragId) {
+            // Update
+            await updateDoc(doc(vertraegeCollection, vertragId), vertragData);
+            alertUser('Vertrag erfolgreich aktualisiert!', 'success');
+        } else {
+            // Create
+            vertragData.createdAt = serverTimestamp();
+            vertragData.createdBy = currentUser?.displayName || 'Unbekannt';
+            await addDoc(vertraegeCollection, vertragData);
+            alertUser('Vertrag erfolgreich erstellt!', 'success');
+        }
+        closeVertragModal();
+    } catch (error) {
+        console.error("Fehler beim Speichern:", error);
+        alertUser('Fehler beim Speichern des Vertrags.', 'error');
+    }
+}
+
+async function deleteVertrag(vertragId) {
+    const vertrag = VERTRAEGE[vertragId];
+    if (!vertrag) return;
+    
+    if (!confirm(`Möchtest du den Vertrag "${vertrag.name}" wirklich löschen?`)) {
+        return;
+    }
+    
+    try {
+        await deleteDoc(doc(vertraegeCollection, vertragId));
+        alertUser('Vertrag erfolgreich gelöscht!', 'success');
+    } catch (error) {
+        console.error("Fehler beim Löschen:", error);
+        alertUser('Fehler beim Löschen des Vertrags.', 'error');
+    }
+}
+
+// ========================================
+// RENDER FUNKTIONEN
+// ========================================
+function renderVertraegeTable() {
+    const tbody = document.getElementById('vertraege-table-body');
+    if (!tbody) return;
+    
+    let vertraege = Object.values(VERTRAEGE);
+    
+    // Filter anwenden
+    if (currentFilter.rhythmus) {
+        vertraege = vertraege.filter(v => v.rhythmus === currentFilter.rhythmus);
+    }
+    if (currentFilter.absicht) {
+        vertraege = vertraege.filter(v => v.kuendigungsabsicht === currentFilter.absicht);
+    }
+    
+    // Suche anwenden
+    if (searchTerm) {
+        vertraege = vertraege.filter(v => 
+            (v.name || '').toLowerCase().includes(searchTerm) ||
+            (v.anbieter || '').toLowerCase().includes(searchTerm)
+        );
+    }
+    
+    // Nach Priorität und dann nach Name sortieren
+    vertraege.sort((a, b) => {
+        const prioA = ABSICHT_CONFIG[a.kuendigungsabsicht]?.priority || 0;
+        const prioB = ABSICHT_CONFIG[b.kuendigungsabsicht]?.priority || 0;
+        if (prioB !== prioA) return prioB - prioA;
+        return (a.name || '').localeCompare(b.name || '');
+    });
+    
+    if (vertraege.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="px-4 py-8 text-center text-gray-400 italic">
+                    ${searchTerm || currentFilter.rhythmus || currentFilter.absicht 
+                        ? 'Keine Verträge gefunden.' 
+                        : 'Keine Verträge vorhanden. Erstelle deinen ersten Vertrag!'}
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = vertraege.map(vertrag => {
+        const rhythmusConfig = RHYTHMUS_CONFIG[vertrag.rhythmus] || RHYTHMUS_CONFIG.monatlich;
+        const absichtConfig = ABSICHT_CONFIG[vertrag.kuendigungsabsicht] || ABSICHT_CONFIG.behalten;
+        
+        // Kündigungsfrist berechnen
+        let kuendigungsfristText = '-';
+        if (vertrag.kuendigungsfrist) {
+            const einheit = vertrag.kuendigungsfristEinheit === 'tage' ? 'Tage' : 
+                           vertrag.kuendigungsfristEinheit === 'wochen' ? 'Wochen' : 'Monate';
+            kuendigungsfristText = `${vertrag.kuendigungsfrist} ${einheit}`;
+        }
+        
+        // Warnung wenn Kündigung bald fällig
+        let kuendigungsWarnung = '';
+        if (vertrag.kuendigungsdatum && vertrag.kuendigungsabsicht !== 'behalten') {
+            const kuendigungsDatum = new Date(vertrag.kuendigungsdatum);
+            const heute = new Date();
+            const diffTage = Math.ceil((kuendigungsDatum - heute) / (1000 * 60 * 60 * 24));
+            const erinnerungTage = vertrag.erinnerungTage || 30;
+            
+            if (diffTage <= 0) {
+                kuendigungsWarnung = '<span class="ml-2 text-red-600 font-bold animate-pulse">⚠️ ÜBERFÄLLIG!</span>';
+            } else if (diffTage <= erinnerungTage) {
+                kuendigungsWarnung = `<span class="ml-2 text-orange-600 font-semibold">⏰ ${diffTage} Tage</span>`;
+            }
+        }
+        
+        return `
+            <tr class="hover:bg-gray-50 transition cursor-pointer" onclick="window.showVertragDetails('${vertrag.id}')">
+                <td class="px-4 py-3">
+                    <div class="font-semibold text-gray-900">${vertrag.name || '-'}</div>
+                </td>
+                <td class="px-4 py-3 text-gray-600">${vertrag.anbieter || '-'}</td>
+                <td class="px-4 py-3">
+                    <span class="font-bold text-gray-900">${formatCurrency(vertrag.betrag)}</span>
+                    ${vertrag.zusatzbetrag ? `<span class="text-xs text-yellow-600 block">+${formatCurrency(vertrag.zusatzbetrag)}/Jahr</span>` : ''}
+                </td>
+                <td class="px-4 py-3">
+                    <span class="text-sm">${rhythmusConfig.icon} ${rhythmusConfig.label}</span>
+                </td>
+                <td class="px-4 py-3">
+                    <span class="text-sm">${kuendigungsfristText}</span>
+                    ${kuendigungsWarnung}
+                </td>
+                <td class="px-4 py-3">
+                    <span class="px-2 py-1 rounded-full text-xs font-bold ${absichtConfig.color}">
+                        ${absichtConfig.icon} ${absichtConfig.label}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-center" onclick="event.stopPropagation()">
+                    <div class="flex justify-center gap-2">
+                        <button onclick="window.editVertrag('${vertrag.id}')" 
+                            class="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="Bearbeiten">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                        </button>
+                        <button onclick="window.deleteVertrag('${vertrag.id}')" 
+                            class="p-2 text-red-600 hover:bg-red-100 rounded-lg transition" title="Löschen">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function showVertragDetails(vertragId) {
+    const vertrag = VERTRAEGE[vertragId];
+    if (!vertrag) return;
+    
+    const rhythmusConfig = RHYTHMUS_CONFIG[vertrag.rhythmus] || RHYTHMUS_CONFIG.monatlich;
+    const absichtConfig = ABSICHT_CONFIG[vertrag.kuendigungsabsicht] || ABSICHT_CONFIG.behalten;
+    
+    // Monatliche Kosten berechnen
+    const monatlicheKosten = vertrag.betrag * rhythmusConfig.multiplierToMonthly;
+    const jaehrlicheKosten = monatlicheKosten * 12 + (vertrag.zusatzbetrag || 0);
+    
+    document.getElementById('vertragDetailsTitle').textContent = vertrag.name;
+    document.getElementById('vertragDetailsContent').innerHTML = `
+        <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-gray-50 p-3 rounded-lg">
+                    <p class="text-xs text-gray-500 font-semibold">Anbieter</p>
+                    <p class="text-lg font-bold">${vertrag.anbieter || '-'}</p>
+                </div>
+                <div class="bg-gray-50 p-3 rounded-lg">
+                    <p class="text-xs text-gray-500 font-semibold">Zahlungsrhythmus</p>
+                    <p class="text-lg font-bold">${rhythmusConfig.icon} ${rhythmusConfig.label}</p>
+                </div>
+            </div>
+            
+            <div class="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
+                <p class="text-sm font-bold text-indigo-800 mb-2">💰 Kosten</p>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-xs text-gray-600">Regelmäßig (${rhythmusConfig.label})</p>
+                        <p class="text-xl font-bold text-indigo-700">${formatCurrency(vertrag.betrag)}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-600">Monatlich umgerechnet</p>
+                        <p class="text-xl font-bold text-indigo-700">${formatCurrency(monatlicheKosten)}</p>
+                    </div>
+                </div>
+                ${vertrag.zusatzbetrag ? `
+                    <div class="mt-3 pt-3 border-t border-indigo-200">
+                        <p class="text-xs text-yellow-700">Zusatzbetrag (${getMonthName(vertrag.zusatzbetragMonat)})</p>
+                        <p class="text-lg font-bold text-yellow-700">+${formatCurrency(vertrag.zusatzbetrag)}</p>
+                    </div>
+                ` : ''}
+                <div class="mt-3 pt-3 border-t border-indigo-200">
+                    <p class="text-xs text-gray-600">Jährliche Gesamtkosten</p>
+                    <p class="text-2xl font-bold text-indigo-900">${formatCurrency(jaehrlicheKosten)}</p>
+                </div>
+            </div>
+            
+            <div class="bg-gray-50 p-4 rounded-lg">
+                <p class="text-sm font-bold text-gray-800 mb-2">📅 Vertragsdaten</p>
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                    <div><span class="text-gray-500">Beginn:</span> ${vertrag.beginn ? formatDate(vertrag.beginn) : '-'}</div>
+                    <div><span class="text-gray-500">Laufzeit:</span> ${vertrag.laufzeit ? `${vertrag.laufzeit} Monate` : '-'}</div>
+                </div>
+            </div>
+            
+            <div class="bg-red-50 p-4 rounded-lg border border-red-200">
+                <p class="text-sm font-bold text-red-800 mb-2">⚠️ Kündigung</p>
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                    <div><span class="text-gray-600">Frist:</span> ${vertrag.kuendigungsfrist ? `${vertrag.kuendigungsfrist} ${vertrag.kuendigungsfristEinheit === 'tage' ? 'Tage' : vertrag.kuendigungsfristEinheit === 'wochen' ? 'Wochen' : 'Monate'}` : '-'}</div>
+                    <div><span class="text-gray-600">Nächster Termin:</span> ${vertrag.kuendigungsdatum ? formatDate(vertrag.kuendigungsdatum) : '-'}</div>
+                </div>
+                <div class="mt-3">
+                    <span class="px-3 py-1 rounded-full text-sm font-bold ${absichtConfig.color}">
+                        ${absichtConfig.icon} ${absichtConfig.label}
+                    </span>
+                </div>
+            </div>
+            
+            ${vertrag.notizen ? `
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <p class="text-sm font-bold text-gray-800 mb-2">📝 Notizen</p>
+                    <p class="text-sm text-gray-700 whitespace-pre-wrap">${vertrag.notizen}</p>
+                </div>
+            ` : ''}
+            
+            <div class="flex gap-3 pt-4">
+                <button onclick="window.editVertrag('${vertragId}'); document.getElementById('vertragDetailsModal').style.display='none';" 
+                    class="flex-1 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition">
+                    Bearbeiten
+                </button>
+                <button onclick="window.deleteVertrag('${vertragId}'); document.getElementById('vertragDetailsModal').style.display='none';" 
+                    class="flex-1 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition">
+                    Löschen
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('vertragDetailsModal').style.display = 'flex';
+}
+
+// ========================================
+// STATISTIKEN
+// ========================================
+function updateStatistics() {
+    const vertraege = Object.values(VERTRAEGE);
+    
+    // Aktive Verträge
+    document.getElementById('stat-vertraege-aktiv').textContent = vertraege.length;
+    
+    // Monatliche Kosten berechnen
+    let monatlicheKosten = 0;
+    vertraege.forEach(v => {
+        const config = RHYTHMUS_CONFIG[v.rhythmus] || RHYTHMUS_CONFIG.monatlich;
+        monatlicheKosten += (v.betrag || 0) * config.multiplierToMonthly;
+    });
+    document.getElementById('stat-monatliche-kosten').textContent = formatCurrency(monatlicheKosten);
+    
+    // Jährliche Kosten
+    let jaehrlicheKosten = monatlicheKosten * 12;
+    vertraege.forEach(v => {
+        jaehrlicheKosten += v.zusatzbetrag || 0;
+    });
+    document.getElementById('stat-jaehrliche-kosten').textContent = formatCurrency(jaehrlicheKosten);
+    
+    // Kündigungen bald fällig
+    const heute = new Date();
+    let kuendigungenBald = 0;
+    vertraege.forEach(v => {
+        if (v.kuendigungsdatum && v.kuendigungsabsicht !== 'behalten') {
+            const datum = new Date(v.kuendigungsdatum);
+            const diffTage = Math.ceil((datum - heute) / (1000 * 60 * 60 * 24));
+            const erinnerungTage = v.erinnerungTage || 30;
+            if (diffTage <= erinnerungTage) {
+                kuendigungenBald++;
+            }
+        }
+    });
+    document.getElementById('stat-kuendigungen-bald').textContent = kuendigungenBald;
+}
+
+function renderKuendigungsWarnungen() {
+    const container = document.getElementById('kuendigungs-warnungen');
+    if (!container) return;
+    
+    const heute = new Date();
+    const warnungen = [];
+    
+    Object.values(VERTRAEGE).forEach(v => {
+        if (v.kuendigungsdatum && v.kuendigungsabsicht !== 'behalten') {
+            const datum = new Date(v.kuendigungsdatum);
+            const diffTage = Math.ceil((datum - heute) / (1000 * 60 * 60 * 24));
+            const erinnerungTage = v.erinnerungTage || 30;
+            
+            if (diffTage <= erinnerungTage) {
+                warnungen.push({
+                    ...v,
+                    diffTage: diffTage
+                });
+            }
+        }
+    });
+    
+    if (warnungen.length === 0) {
+        container.classList.add('hidden');
+        return;
+    }
+    
+    // Nach Dringlichkeit sortieren
+    warnungen.sort((a, b) => a.diffTage - b.diffTage);
+    
+    container.classList.remove('hidden');
+    container.innerHTML = `
+        <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+            <h3 class="font-bold text-red-800 mb-3">🔔 Kündigungserinnerungen</h3>
+            <div class="space-y-2">
+                ${warnungen.map(w => {
+                    const absichtConfig = ABSICHT_CONFIG[w.kuendigungsabsicht] || ABSICHT_CONFIG.kuendigen;
+                    let statusClass = 'text-orange-600';
+                    let statusText = `⏰ Noch ${w.diffTage} Tage`;
+                    
+                    if (w.diffTage <= 0) {
+                        statusClass = 'text-red-600 font-bold animate-pulse';
+                        statusText = '⚠️ ÜBERFÄLLIG!';
+                    } else if (w.diffTage <= 7) {
+                        statusClass = 'text-red-600 font-bold';
+                        statusText = `🚨 Nur noch ${w.diffTage} Tage!`;
+                    }
+                    
+                    return `
+                        <div class="flex items-center justify-between bg-white p-3 rounded-lg shadow-sm cursor-pointer hover:bg-gray-50"
+                            onclick="window.showVertragDetails('${w.id}')">
+                            <div>
+                                <span class="font-semibold">${w.name}</span>
+                                <span class="text-sm text-gray-500 ml-2">${w.anbieter || ''}</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="px-2 py-1 rounded-full text-xs font-bold ${absichtConfig.color}">
+                                    ${absichtConfig.icon}
+                                </span>
+                                <span class="${statusClass}">${statusText}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+}
+
+// ========================================
+// HILFSFUNKTIONEN
+// ========================================
+function formatCurrency(value) {
+    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value || 0);
+}
+
+function formatDate(dateString) {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function getMonthName(month) {
+    const months = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 
+                   'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+    return months[parseInt(month)] || '-';
+}
+
+// ========================================
+// GLOBALE FUNKTIONEN FÜR HTML ONCLICK
+// ========================================
+window.editVertrag = openEditModal;
+window.deleteVertrag = deleteVertrag;
+window.showVertragDetails = showVertragDetails;
