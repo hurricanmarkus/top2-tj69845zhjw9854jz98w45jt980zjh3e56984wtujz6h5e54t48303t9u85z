@@ -14,14 +14,19 @@
 (async function importHaushaltszahlungen() {
     console.log("🚀 Starte Import der Haushaltszahlungen...");
     
-    // Firebase Referenzen aus dem globalen Scope holen
-    const { collection, addDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+    // Firebase Referenzen importieren
+    const { getFirestore, collection, addDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+    const { getApps } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
     
-    // db sollte global verfügbar sein
-    if (typeof db === 'undefined') {
-        console.error("❌ FEHLER: Firebase db nicht gefunden! Bist du in der App eingeloggt?");
+    // Firebase App finden
+    const apps = getApps();
+    if (apps.length === 0) {
+        console.error("❌ FEHLER: Keine Firebase App gefunden! Bist du in der App eingeloggt?");
         return;
     }
+    
+    const db = getFirestore(apps[0]);
+    console.log("✅ Firebase Verbindung hergestellt");
     
     const haushaltszahlungenCollection = collection(db, 'artifacts/20LVob88b3ovXRUyX3ra/public/data/haushaltszahlungen');
     
