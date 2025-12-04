@@ -242,9 +242,18 @@ function updateSimulationWarning() {
 // FIREBASE LISTENER
 // ========================================
 export function listenForHaushaltszahlungen() {
-    if (!haushaltszahlungenCollection) return;
+    // Collection initialisieren falls noch nicht geschehen
+    if (!haushaltszahlungenCollection && db) {
+        haushaltszahlungenCollection = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen');
+    }
+    
+    if (!haushaltszahlungenCollection) {
+        console.warn("Haushaltszahlungen: Collection nicht verfügbar");
+        return;
+    }
 
-    const q = query(haushaltszahlungenCollection, orderBy('createdAt', 'desc'));
+    // Ohne orderBy, da das Feld möglicherweise nicht existiert
+    const q = query(haushaltszahlungenCollection);
     
     return onSnapshot(q, (snapshot) => {
         HAUSHALTSZAHLUNGEN = {};
