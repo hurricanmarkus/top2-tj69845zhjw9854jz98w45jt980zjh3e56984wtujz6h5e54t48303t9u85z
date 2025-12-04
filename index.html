@@ -238,6 +238,19 @@
                         <span class="text-sm text-gray-500">Verträge, Abos & Kündigungen verwalten.</span>
                     </div>
                 </div>
+
+                <div id="rezepteCard" data-permission="REZEPTE"
+                    class="card bg-white p-4 rounded-xl shadow-lg flex items-center space-x-4 hover:shadow-xl transition duration-200 cursor-pointer w-full border-t-4 border-orange-500 hidden">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                        class="w-10 h-10 text-orange-500 flex-shrink-0">
+                        <path d="M12.75 12.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM7.5 15.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM8.25 17.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM9.75 15.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM10.5 17.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12 15.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM12.75 17.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM14.25 15.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM15 17.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM16.5 15.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM15 12.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM16.5 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" />
+                        <path fill-rule="evenodd" d="M6.75 2.25A.75.75 0 0 1 7.5 3v1.5h9V3A.75.75 0 0 1 18 3v1.5h.75a3 3 0 0 1 3 3v11.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V7.5a3 3 0 0 1 3-3H6V3a.75.75 0 0 1 .75-.75Zm13.5 9a1.5 1.5 0 0 0-1.5-1.5H5.25a1.5 1.5 0 0 0-1.5 1.5v7.5a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5v-7.5Z" clip-rule="evenodd" />
+                    </svg>
+                    <div>
+                        <span class="text-xl font-bold text-orange-500 block">Rezepte</span>
+                        <span class="text-sm text-gray-500">Rezeptsammlung verwalten & durchsuchen.</span>
+                    </div>
+                </div>
             </div>
 
 
@@ -1531,6 +1544,349 @@
                         </button>
                     </div>
                     <div id="vertragDetailsContent" class="p-6">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== REZEPTE VIEW ========== -->
+            <div id="rezepteView" class="view">
+                <div class="back-link-container w-full mb-3">
+                    <div class="flex justify-between items-center">
+                        <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition" data-target="home">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-1">
+                                <path d="m15 18-6-6 6-6" />
+                            </svg>
+                            <span class="text-sm font-semibold">zurück</span>
+                        </button>
+                        <button id="btn-neues-rezept" class="py-2 px-4 bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                            Neues Rezept
+                        </button>
+                    </div>
+                    <div class="border-t border-gray-300 mt-2"></div>
+                </div>
+
+                <!-- Header mit Statistiken -->
+                <div class="bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl p-4 mb-4 shadow-lg">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold flex items-center gap-2">🍳 Rezepte</h2>
+                            <p class="text-orange-100 text-sm">Deine Rezeptsammlung</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-3xl font-bold" id="stat-rezepte-gesamt">0</p>
+                            <p class="text-xs text-orange-100">Rezepte gesamt</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Suchleiste & Filter -->
+                <div class="bg-white rounded-xl shadow-lg p-4 mb-4">
+                    <!-- Hauptsuche -->
+                    <div class="relative mb-3">
+                        <input type="text" id="rezept-suche" placeholder="Rezept suchen (Titel, Zutat, ID, Nummer...)" 
+                            class="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                    
+                    <!-- Filter-Toggle -->
+                    <button id="toggle-rezept-filter" class="w-full flex items-center justify-between py-2 px-3 bg-gray-100 rounded-lg hover:bg-gray-200 transition mb-3">
+                        <span class="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                            </svg>
+                            Erweiterte Filter
+                        </span>
+                        <svg id="filter-toggle-icon" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-gray-500 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+                    
+                    <!-- Erweiterte Filter (versteckt) -->
+                    <div id="rezept-filter-panel" class="hidden space-y-3">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1">Kategorie</label>
+                                <select id="filter-kategorie" class="w-full p-2 border rounded-lg text-sm">
+                                    <option value="">Alle Kategorien</option>
+                                    <option value="vorspeise">🥗 Vorspeise</option>
+                                    <option value="hauptgericht">🍽️ Hauptgericht</option>
+                                    <option value="dessert">🍰 Dessert</option>
+                                    <option value="getraenk">🥤 Getränk</option>
+                                    <option value="snack">🍿 Snack</option>
+                                    <option value="backen">🥧 Backen</option>
+                                    <option value="suppe">🍲 Suppe</option>
+                                    <option value="salat">🥬 Salat</option>
+                                    <option value="sonstiges">📦 Sonstiges</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1">Arbeitszeit</label>
+                                <select id="filter-arbeitszeit" class="w-full p-2 border rounded-lg text-sm">
+                                    <option value="">Beliebig</option>
+                                    <option value="15">⚡ Bis 15 Min</option>
+                                    <option value="30">🕐 Bis 30 Min</option>
+                                    <option value="60">🕑 Bis 1 Std</option>
+                                    <option value="120">🕒 Bis 2 Std</option>
+                                    <option value="999">🕓 Über 2 Std</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1">Bewertung</label>
+                                <select id="filter-bewertung" class="w-full p-2 border rounded-lg text-sm">
+                                    <option value="">Alle</option>
+                                    <option value="5">⭐⭐⭐⭐⭐ (5)</option>
+                                    <option value="4">⭐⭐⭐⭐ (4+)</option>
+                                    <option value="3">⭐⭐⭐ (3+)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1">Rezept-Typ</label>
+                                <select id="filter-typ" class="w-full p-2 border rounded-lg text-sm">
+                                    <option value="">Alle Typen</option>
+                                    <option value="manuell">📝 Manuell eingegeben</option>
+                                    <option value="dokument">📄 Dokument/Foto</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1">Rezept-ID</label>
+                                <input type="text" id="filter-id" placeholder="z.B. RZ001" class="w-full p-2 border rounded-lg text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1">Mappen-Nr.</label>
+                                <input type="text" id="filter-mappennr" placeholder="z.B. 42" class="w-full p-2 border rounded-lg text-sm">
+                            </div>
+                        </div>
+                        <button id="reset-rezept-filter" class="w-full py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition text-sm">
+                            Filter zurücksetzen
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Rezepte-Liste -->
+                <div id="rezepte-liste" class="space-y-3">
+                    <!-- Wird dynamisch gefüllt -->
+                </div>
+
+                <!-- Leerer Zustand -->
+                <div id="rezepte-leer" class="hidden text-center py-12">
+                    <div class="text-6xl mb-4">📖</div>
+                    <h3 class="text-xl font-bold text-gray-700 mb-2">Noch keine Rezepte</h3>
+                    <p class="text-gray-500 mb-4">Erstelle dein erstes Rezept!</p>
+                    <button id="btn-erstes-rezept" class="py-2 px-6 bg-orange-500 text-white font-bold rounded-lg hover:bg-orange-600 transition">
+                        + Rezept erstellen
+                    </button>
+                </div>
+            </div>
+
+            <!-- ========== REZEPT MODAL (Erstellen/Bearbeiten) ========== -->
+            <div id="rezeptModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[95vh] overflow-y-auto">
+                    <div class="sticky top-0 bg-gradient-to-r from-orange-500 to-red-500 text-white p-4 rounded-t-2xl flex justify-between items-center z-10">
+                        <h3 id="rezeptModalTitle" class="text-xl font-bold">Neues Rezept</h3>
+                        <button id="closeRezeptModal" class="text-white/80 hover:text-white transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div class="p-6 space-y-4">
+                        <input type="hidden" id="rezeptId">
+                        
+                        <!-- Rezept-Typ Auswahl -->
+                        <div class="bg-gray-100 p-4 rounded-xl">
+                            <label class="block text-sm font-bold text-gray-700 mb-3">Rezept-Typ</label>
+                            <div class="grid grid-cols-2 gap-3">
+                                <label class="rezept-typ-option flex items-center gap-3 p-3 border-2 border-gray-300 rounded-lg cursor-pointer hover:border-orange-400 transition" data-value="manuell">
+                                    <input type="radio" name="rezeptTyp" value="manuell" checked class="hidden">
+                                    <span class="text-2xl">📝</span>
+                                    <div>
+                                        <span class="font-bold text-gray-800 block">Manuell eingeben</span>
+                                        <span class="text-xs text-gray-500">Zutaten & Schritte einzeln</span>
+                                    </div>
+                                </label>
+                                <label class="rezept-typ-option flex items-center gap-3 p-3 border-2 border-gray-300 rounded-lg cursor-pointer hover:border-orange-400 transition" data-value="dokument">
+                                    <input type="radio" name="rezeptTyp" value="dokument" class="hidden">
+                                    <span class="text-2xl">📄</span>
+                                    <div>
+                                        <span class="font-bold text-gray-800 block">Dokument/Foto</span>
+                                        <span class="text-xs text-gray-500">PDF oder Bild anhängen</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <!-- Basis-Infos -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="col-span-2">
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Titel *</label>
+                                <input type="text" id="rezeptTitel" placeholder="z.B. Spaghetti Carbonara" 
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-orange-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Kategorie</label>
+                                <select id="rezeptKategorie" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-orange-500">
+                                    <option value="hauptgericht">🍽️ Hauptgericht</option>
+                                    <option value="vorspeise">🥗 Vorspeise</option>
+                                    <option value="dessert">🍰 Dessert</option>
+                                    <option value="getraenk">🥤 Getränk</option>
+                                    <option value="snack">🍿 Snack</option>
+                                    <option value="backen">🥧 Backen</option>
+                                    <option value="suppe">🍲 Suppe</option>
+                                    <option value="salat">🥬 Salat</option>
+                                    <option value="sonstiges">📦 Sonstiges</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Mappen-Nr.</label>
+                                <input type="number" id="rezeptMappenNr" placeholder="z.B. 42" min="1"
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-orange-500">
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Portionen</label>
+                                <input type="number" id="rezeptPortionen" value="4" min="1"
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-orange-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Arbeitszeit (Min)</label>
+                                <input type="number" id="rezeptArbeitszeit" placeholder="30" min="1"
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-orange-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Gesamtzeit (Min)</label>
+                                <input type="number" id="rezeptGesamtzeit" placeholder="60" min="1"
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-orange-500">
+                            </div>
+                        </div>
+                        
+                        <!-- Dokument-Upload (nur bei Typ "dokument") -->
+                        <div id="rezept-dokument-section" class="hidden bg-blue-50 p-4 rounded-xl border-2 border-dashed border-blue-300">
+                            <label class="block text-sm font-bold text-blue-800 mb-3">📎 Dokument/Foto hochladen</label>
+                            <div class="space-y-3">
+                                <input type="file" id="rezeptDokument" accept="image/*,.pdf" multiple
+                                    class="w-full p-2 border rounded-lg bg-white">
+                                <div class="flex gap-2">
+                                    <button type="button" id="btn-kamera" class="flex-1 py-2 px-4 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        </svg>
+                                        Kamera
+                                    </button>
+                                </div>
+                                <div id="rezept-dokument-preview" class="grid grid-cols-3 gap-2">
+                                    <!-- Vorschau der hochgeladenen Dateien -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Zutaten (nur bei Typ "manuell") -->
+                        <div id="rezept-zutaten-section" class="bg-green-50 p-4 rounded-xl border border-green-200">
+                            <div class="flex justify-between items-center mb-3">
+                                <label class="block text-sm font-bold text-green-800">🥕 Zutaten</label>
+                                <button type="button" id="btn-add-zutat" class="px-3 py-1 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 transition flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    Zutat
+                                </button>
+                            </div>
+                            <div id="zutaten-container" class="space-y-2">
+                                <!-- Dynamisch hinzugefügte Zutaten -->
+                            </div>
+                            <div id="zutaten-leer" class="text-center py-3 text-gray-400 text-sm italic">
+                                Noch keine Zutaten hinzugefügt
+                            </div>
+                        </div>
+                        
+                        <!-- Arbeitsschritte (nur bei Typ "manuell") -->
+                        <div id="rezept-schritte-section" class="bg-yellow-50 p-4 rounded-xl border border-yellow-200">
+                            <div class="flex justify-between items-center mb-3">
+                                <label class="block text-sm font-bold text-yellow-800">📋 Arbeitsschritte</label>
+                                <button type="button" id="btn-add-schritt" class="px-3 py-1 bg-yellow-600 text-white text-sm font-bold rounded-lg hover:bg-yellow-700 transition flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    Schritt
+                                </button>
+                            </div>
+                            <div id="schritte-container" class="space-y-3">
+                                <!-- Dynamisch hinzugefügte Schritte -->
+                            </div>
+                            <div id="schritte-leer" class="text-center py-3 text-gray-400 text-sm italic">
+                                Noch keine Arbeitsschritte hinzugefügt
+                            </div>
+                        </div>
+                        
+                        <!-- Notizen -->
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">📝 Notizen zum Rezept</label>
+                            <textarea id="rezeptNotizen" rows="3" placeholder="Tipps, Variationen, Anmerkungen..." 
+                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-orange-500 resize-none"></textarea>
+                        </div>
+                        
+                        <!-- Bewertung -->
+                        <div class="bg-purple-50 p-4 rounded-xl border border-purple-200">
+                            <label class="block text-sm font-bold text-purple-800 mb-2">⭐ Bewertung</label>
+                            <div id="rezept-bewertung" class="flex gap-2">
+                                <button type="button" class="stern-btn text-3xl text-gray-300 hover:text-yellow-400 transition" data-wert="1">★</button>
+                                <button type="button" class="stern-btn text-3xl text-gray-300 hover:text-yellow-400 transition" data-wert="2">★</button>
+                                <button type="button" class="stern-btn text-3xl text-gray-300 hover:text-yellow-400 transition" data-wert="3">★</button>
+                                <button type="button" class="stern-btn text-3xl text-gray-300 hover:text-yellow-400 transition" data-wert="4">★</button>
+                                <button type="button" class="stern-btn text-3xl text-gray-300 hover:text-yellow-400 transition" data-wert="5">★</button>
+                            </div>
+                            <input type="hidden" id="rezeptBewertung" value="0">
+                        </div>
+                    </div>
+                    
+                    <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-3">
+                        <button id="cancelRezeptBtn" class="px-6 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
+                            Abbrechen
+                        </button>
+                        <button id="saveRezeptBtn" class="px-6 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold rounded-lg hover:shadow-lg transition">
+                            Speichern
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== REZEPT DETAILS MODAL ========== -->
+            <div id="rezeptDetailsModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[95vh] overflow-y-auto">
+                    <div class="sticky top-0 bg-gradient-to-r from-orange-500 to-red-500 text-white p-4 rounded-t-2xl flex justify-between items-center z-10">
+                        <h3 id="rezeptDetailsTitle" class="text-xl font-bold">Rezeptdetails</h3>
+                        <button id="closeRezeptDetailsModal" class="text-white/80 hover:text-white transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <!-- Portionen-Umrechner -->
+                    <div id="portionen-rechner" class="bg-orange-50 p-4 border-b border-orange-200">
+                        <div class="flex items-center justify-center gap-4">
+                            <span class="text-sm font-bold text-orange-800">Portionen:</span>
+                            <button type="button" id="portionen-minus" class="w-8 h-8 bg-orange-500 text-white rounded-full font-bold hover:bg-orange-600 transition">-</button>
+                            <span id="portionen-anzeige" class="text-2xl font-bold text-orange-700 w-12 text-center">4</span>
+                            <button type="button" id="portionen-plus" class="w-8 h-8 bg-orange-500 text-white rounded-full font-bold hover:bg-orange-600 transition">+</button>
+                            <span class="text-xs text-orange-600">(Original: <span id="original-portionen">4</span>)</span>
+                        </div>
+                    </div>
+                    
+                    <div id="rezeptDetailsContent" class="p-6">
                         <!-- Wird dynamisch gefüllt -->
                     </div>
                 </div>
@@ -4533,6 +4889,8 @@
 <script type="module" src="ticket-support.js"></script>
 <script type="module" src="wertguthaben.js"></script>
 <script type="module" src="zahlungsverwaltung.js"></script>
+<script type="module" src="vertragsverwaltung.js"></script>
+<script type="module" src="rezeptverwaltung.js"></script>
 </body>
 
 </html>

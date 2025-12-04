@@ -107,7 +107,8 @@ export const views = {
     ticketSupport: { id: 'ticketSupportView' },
     wertguthaben: { id: 'wertguthabenView' },
     wertguthabenSettings: { id: 'wertguthabenSettingsView' },
-    vertragsverwaltung: { id: 'vertragsverwaltungView' }
+    vertragsverwaltung: { id: 'vertragsverwaltungView' },
+    rezepte: { id: 'rezepteView' }
 };
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
 
@@ -485,9 +486,9 @@ async function seedInitialData() {
         if (rolesSnapshot.empty) {
             const batch = writeBatch(db);
             const defaultRoles = {
-                SYSTEMADMIN: { name: 'Systemadmin', permissions: ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG', 'ZAHLUNGSVERWALTUNG', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG'], deletable: false },
-                ADMIN: { name: 'Admin', permissions: ['ENTRANCE', 'PUSHOVER', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG'], deletable: false },
-                ANGEMELDET: { name: 'Angemeldet', permissions: ['ENTRANCE', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG'], deletable: true },
+                SYSTEMADMIN: { name: 'Systemadmin', permissions: ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG', 'ZAHLUNGSVERWALTUNG', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE'], deletable: false },
+                ADMIN: { name: 'Admin', permissions: ['ENTRANCE', 'PUSHOVER', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE'], deletable: false },
+                ANGEMELDET: { name: 'Angemeldet', permissions: ['ENTRANCE', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE'], deletable: true },
                 NO_RIGHTS: { name: '- Keine Rechte -', permissions: [], deletable: false }
             };
             Object.keys(defaultRoles).forEach(roleId => batch.set(doc(rolesCollectionRef, roleId), defaultRoles[roleId]));
@@ -631,6 +632,11 @@ export function navigate(targetViewName) {
         if (targetViewName === 'vertragsverwaltung' && !userPermissions.includes('VERTRAGSVERWALTUNG')) {
             return alertUser("Zugriff verweigert (Vertragsverwaltung).", 'error');
         }
+
+        // Zugriffsschutz für Rezepte
+        if (targetViewName === 'rezepte' && !userPermissions.includes('REZEPTE')) {
+            return alertUser("Zugriff verweigert (Rezepte).", 'error');
+        }
     }
 
     // Scroll zum Anfang
@@ -764,6 +770,9 @@ export function setupEventListeners() {
 
     const vertragsverwaltungCard = document.getElementById('vertragsverwaltungCard');
     if (vertragsverwaltungCard) vertragsverwaltungCard.addEventListener('click', () => navigate('vertragsverwaltung'));
+
+    const rezepteCard = document.getElementById('rezepteCard');
+    if (rezepteCard) rezepteCard.addEventListener('click', () => navigate('rezepte'));
 
     const terminplanerCard = document.getElementById('terminplanerCard');
     if (terminplanerCard) terminplanerCard.addEventListener('click', () => navigate('terminplaner'));

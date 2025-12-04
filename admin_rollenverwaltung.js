@@ -164,7 +164,8 @@ export function renderRoleManagement() {
         'ZAHLUNGSVERWALTUNG_CREATE': { label: '-> Neue Zahlung anlegen', indent: true },
         'TICKET_SUPPORT': { label: 'Ticket Support', indent: false },
         'WERTGUTHABEN': { label: 'Wertguthaben', indent: false },
-        'VERTRAGSVERWALTUNG': { label: 'Vertragsverwaltung', indent: false }
+        'VERTRAGSVERWALTUNG': { label: 'Vertragsverwaltung', indent: false },
+        'REZEPTE': { label: 'Rezepte', indent: false }
     };
     
     const newRolePermsContainer = document.getElementById('newRolePermissions');
