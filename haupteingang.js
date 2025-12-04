@@ -21,6 +21,7 @@ import { initializeTicketSupport, listenForTickets } from './ticket-support.js';
 import { initializeWertguthaben, listenForWertguthaben } from './wertguthaben.js';
 import { initializeVertragsverwaltung, listenForVertraege } from './vertragsverwaltung.js';
 import { initRezeptverwaltung } from './rezeptverwaltung.js';
+import { initializeHaushaltszahlungen, listenForHaushaltszahlungen } from './haushaltszahlungen.js';
 // // ENDE-ZIKA //
 
 
@@ -109,7 +110,8 @@ export const views = {
     wertguthaben: { id: 'wertguthabenView' },
     wertguthabenSettings: { id: 'wertguthabenSettingsView' },
     vertragsverwaltung: { id: 'vertragsverwaltungView' },
-    rezepte: { id: 'rezepteView' }
+    rezepte: { id: 'rezepteView' },
+    haushaltszahlungen: { id: 'haushaltszahlungenView' }
 };
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
 
@@ -359,6 +361,11 @@ async function initializeFirebase() {
                     console.error("Fehler: listenForWertguthaben ist nicht importiert!");
                 }
 
+                if (typeof listenForHaushaltszahlungen === 'function') {
+                    listenForHaushaltszahlungen();
+                } else {
+                    console.error("Fehler: listenForHaushaltszahlungen ist nicht importiert!");
+                }
 
             } catch (error) {
                 console.error("initializeFirebase: FEHLER beim Starten der Listener:", error);
@@ -642,6 +649,11 @@ export function navigate(targetViewName) {
         if (targetViewName === 'rezepte' && !userPermissions.includes('REZEPTE')) {
             return alertUser("Zugriff verweigert (Rezepte).", 'error');
         }
+
+        // Zugriffsschutz für Haushaltszahlungen
+        if (targetViewName === 'haushaltszahlungen' && !userPermissions.includes('HAUSHALTSZAHLUNGEN')) {
+            return alertUser("Zugriff verweigert (Haushaltszahlungen).", 'error');
+        }
     }
 
     // Scroll zum Anfang
@@ -711,6 +723,10 @@ export function navigate(targetViewName) {
 
     if (targetViewName === 'rezepte') {
         initRezeptverwaltung();
+    }
+
+    if (targetViewName === 'haushaltszahlungen') {
+        initializeHaushaltszahlungen();
     }
 }
 
@@ -786,8 +802,8 @@ export function setupEventListeners() {
     const terminplanerCard = document.getElementById('terminplanerCard');
     if (terminplanerCard) terminplanerCard.addEventListener('click', () => navigate('terminplaner'));
 
-
-    
+    const haushaltszahlungenCard = document.getElementById('haushaltszahlungenCard');
+    if (haushaltszahlungenCard) haushaltszahlungenCard.addEventListener('click', () => navigate('haushaltszahlungen'));
 
     // --- Modals (Login, Archived Lists etc.) ---
     const cancelSelectionButton = document.getElementById('cancelSelectionButton');
