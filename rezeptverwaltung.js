@@ -2,7 +2,14 @@
 // REZEPTVERWALTUNG - Rezeptsammlung
 // ========================================
 
-import { db, auth } from './firebase-config.js';
+import {
+    alertUser,
+    db,
+    currentUser,
+    navigate,
+    appId
+} from './haupteingang.js';
+
 import {
     collection,
     doc,
@@ -19,7 +26,6 @@ import {
 let rezepteCollection = null;
 let unsubscribeRezepte = null;
 let REZEPTE = {};
-let currentUser = null;
 let rezeptIdCounter = 0;
 
 // Temporäre Daten für Modal
@@ -68,27 +74,30 @@ const EINHEITEN = [
 export function initRezeptverwaltung() {
     console.log("=== Rezeptverwaltung wird initialisiert ===");
     
-    // Event Listeners sofort einrichten
+    // Collection initialisieren
+    if (db) {
+        rezepteCollection = collection(db, 'artifacts', appId, 'public', 'data', 'rezepte');
+    }
+    
+    // Event Listeners einrichten
     setupEventListeners();
     
-    // Firestore Listener bei Auth-Änderung
-    auth.onAuthStateChanged(user => {
-        currentUser = user;
-        console.log("Auth State Changed:", user ? user.email : "nicht angemeldet");
-        if (user) {
-            setupFirestoreListener();
-        }
-    });
+    // Firestore Listener starten
+    listenForRezepte();
     
     console.log("=== Rezeptverwaltung Initialisierung abgeschlossen ===");
 }
 
-function setupFirestoreListener() {
+function listenForRezepte() {
+    if (!rezepteCollection) {
+        console.warn("Rezepte Collection nicht initialisiert");
+        return;
+    }
+    
     if (unsubscribeRezepte) {
         unsubscribeRezepte();
     }
     
-    rezepteCollection = collection(db, 'rezepte');
     const q = query(rezepteCollection, orderBy('titel', 'asc'));
     
     unsubscribeRezepte = onSnapshot(q, (snapshot) => {
@@ -954,24 +963,6 @@ function updateStatistics() {
     const count = Object.keys(REZEPTE).length;
     const statEl = document.getElementById('stat-rezepte-gesamt');
     if (statEl) statEl.textContent = count;
-}
-
-// ========================================
-// HILFSFUNKTIONEN
-// ========================================
-function alertUser(message, type) {
-    // Nutze globale alertUser Funktion falls vorhanden
-    if (typeof window.alertUser === 'function') {
-        window.alertUser(message, type);
-    } else {
-        alert(message);
-    }
-}
-
-function navigate(view) {
-    if (typeof window.navigate === 'function') {
-        window.navigate(view);
-    }
 }
 
 // ========================================
