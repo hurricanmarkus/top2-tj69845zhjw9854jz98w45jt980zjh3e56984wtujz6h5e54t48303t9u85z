@@ -406,7 +406,8 @@ export function renderUserManagement() {
         'ZAHLUNGSVERWALTUNG': 'Zahlungsverwaltung',
         'ZAHLUNGSVERWALTUNG_CREATE': '-> Neue Zahlung anlegen',
         'TICKET_SUPPORT': 'Ticket Support',
-        'WERTGUTHABEN': 'Wertguthaben'
+        'WERTGUTHABEN': 'Wertguthaben',
+        'VERTRAGSVERWALTUNG': 'Vertragsverwaltung'
     };
     // =================================================================
     // ENDE DER ÄNDERUNG

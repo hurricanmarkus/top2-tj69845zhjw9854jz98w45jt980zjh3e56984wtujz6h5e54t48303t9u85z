@@ -485,9 +485,9 @@ async function seedInitialData() {
         if (rolesSnapshot.empty) {
             const batch = writeBatch(db);
             const defaultRoles = {
-                SYSTEMADMIN: { name: 'Systemadmin', permissions: ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG', 'ZAHLUNGSVERWALTUNG', 'TICKET_SUPPORT', 'WERTGUTHABEN'], deletable: false },
-                ADMIN: { name: 'Admin', permissions: ['ENTRANCE', 'PUSHOVER', 'TICKET_SUPPORT', 'WERTGUTHABEN'], deletable: false },
-                ANGEMELDET: { name: 'Angemeldet', permissions: ['ENTRANCE', 'TICKET_SUPPORT', 'WERTGUTHABEN'], deletable: true },
+                SYSTEMADMIN: { name: 'Systemadmin', permissions: ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG', 'ZAHLUNGSVERWALTUNG', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG'], deletable: false },
+                ADMIN: { name: 'Admin', permissions: ['ENTRANCE', 'PUSHOVER', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG'], deletable: false },
+                ANGEMELDET: { name: 'Angemeldet', permissions: ['ENTRANCE', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG'], deletable: true },
                 NO_RIGHTS: { name: '- Keine Rechte -', permissions: [], deletable: false }
             };
             Object.keys(defaultRoles).forEach(roleId => batch.set(doc(rolesCollectionRef, roleId), defaultRoles[roleId]));
@@ -627,8 +627,8 @@ export function navigate(targetViewName) {
             return alertUser("Zugriff verweigert (Wertguthaben).", 'error');
         }
 
-        // Zugriffsschutz für Vertragsverwaltung (unter Wertguthaben)
-        if (targetViewName === 'vertragsverwaltung' && !userPermissions.includes('WERTGUTHABEN')) {
+        // Zugriffsschutz für Vertragsverwaltung
+        if (targetViewName === 'vertragsverwaltung' && !userPermissions.includes('VERTRAGSVERWALTUNG')) {
             return alertUser("Zugriff verweigert (Vertragsverwaltung).", 'error');
         }
     }
