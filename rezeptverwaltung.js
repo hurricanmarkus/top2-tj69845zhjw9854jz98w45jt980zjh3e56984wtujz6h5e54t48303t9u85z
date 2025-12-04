@@ -66,16 +66,21 @@ const EINHEITEN = [
 // INITIALISIERUNG
 // ========================================
 export function initRezeptverwaltung() {
-    console.log("Rezeptverwaltung wird initialisiert...");
+    console.log("=== Rezeptverwaltung wird initialisiert ===");
     
+    // Event Listeners sofort einrichten
+    setupEventListeners();
+    
+    // Firestore Listener bei Auth-Änderung
     auth.onAuthStateChanged(user => {
         currentUser = user;
+        console.log("Auth State Changed:", user ? user.email : "nicht angemeldet");
         if (user) {
             setupFirestoreListener();
         }
     });
     
-    setupEventListeners();
+    console.log("=== Rezeptverwaltung Initialisierung abgeschlossen ===");
 }
 
 function setupFirestoreListener() {
@@ -103,17 +108,33 @@ function setupFirestoreListener() {
 }
 
 function setupEventListeners() {
-    // Rezepte-Card Click
-    const rezepteCard = document.getElementById('rezepteCard');
-    if (rezepteCard) {
-        rezepteCard.addEventListener('click', () => navigate('rezepte'));
-    }
+    console.log("Rezeptverwaltung: Event Listeners werden eingerichtet...");
+    
+    // Rezepte-Card Click (wird bereits in haupteingang.js gemacht)
     
     // Neues Rezept Buttons
     const btnNeuesRezept = document.getElementById('btn-neues-rezept');
     const btnErstesRezept = document.getElementById('btn-erstes-rezept');
-    if (btnNeuesRezept) btnNeuesRezept.addEventListener('click', openCreateModal);
-    if (btnErstesRezept) btnErstesRezept.addEventListener('click', openCreateModal);
+    
+    if (btnNeuesRezept) {
+        btnNeuesRezept.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log("Neues Rezept Button geklickt");
+            openCreateModal();
+        });
+        console.log("Event Listener für btn-neues-rezept hinzugefügt");
+    } else {
+        console.warn("btn-neues-rezept nicht gefunden!");
+    }
+    
+    if (btnErstesRezept) {
+        btnErstesRezept.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openCreateModal();
+        });
+    }
     
     // Modal schließen
     const closeRezeptModal = document.getElementById('closeRezeptModal');
@@ -162,12 +183,23 @@ function setupEventListeners() {
     // Filter Toggle
     const toggleFilter = document.getElementById('toggle-rezept-filter');
     if (toggleFilter) {
-        toggleFilter.addEventListener('click', () => {
+        toggleFilter.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log("Filter Toggle geklickt");
             const panel = document.getElementById('rezept-filter-panel');
             const icon = document.getElementById('filter-toggle-icon');
-            panel.classList.toggle('hidden');
-            icon.classList.toggle('rotate-180');
+            if (panel) {
+                panel.classList.toggle('hidden');
+                console.log("Panel hidden:", panel.classList.contains('hidden'));
+            }
+            if (icon) {
+                icon.classList.toggle('rotate-180');
+            }
         });
+        console.log("Event Listener für toggle-rezept-filter hinzugefügt");
+    } else {
+        console.warn("toggle-rezept-filter nicht gefunden!");
     }
     
     // Suche & Filter
@@ -211,18 +243,36 @@ function setupEventListeners() {
 // MODAL FUNKTIONEN
 // ========================================
 function openCreateModal() {
-    document.getElementById('rezeptModalTitle').textContent = 'Neues Rezept';
-    document.getElementById('rezeptId').value = '';
+    console.log("openCreateModal wird aufgerufen...");
+    
+    const modal = document.getElementById('rezeptModal');
+    if (!modal) {
+        console.error("rezeptModal nicht gefunden!");
+        return;
+    }
+    
+    const titleEl = document.getElementById('rezeptModalTitle');
+    const idEl = document.getElementById('rezeptId');
+    
+    if (titleEl) titleEl.textContent = 'Neues Rezept';
+    if (idEl) idEl.value = '';
     
     // Felder zurücksetzen
-    document.getElementById('rezeptTitel').value = '';
-    document.getElementById('rezeptKategorie').value = 'hauptgericht';
-    document.getElementById('rezeptMappenNr').value = '';
-    document.getElementById('rezeptPortionen').value = '4';
-    document.getElementById('rezeptArbeitszeit').value = '';
-    document.getElementById('rezeptGesamtzeit').value = '';
-    document.getElementById('rezeptNotizen').value = '';
-    document.getElementById('rezeptBewertung').value = '0';
+    const fields = {
+        'rezeptTitel': '',
+        'rezeptKategorie': 'hauptgericht',
+        'rezeptMappenNr': '',
+        'rezeptPortionen': '4',
+        'rezeptArbeitszeit': '',
+        'rezeptGesamtzeit': '',
+        'rezeptNotizen': '',
+        'rezeptBewertung': '0'
+    };
+    
+    Object.entries(fields).forEach(([id, value]) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value;
+    });
     
     // Rezept-Typ auf manuell setzen
     document.querySelectorAll('.rezept-typ-option').forEach(opt => {
@@ -233,7 +283,8 @@ function openCreateModal() {
     if (manuellOption) {
         manuellOption.classList.remove('border-gray-300');
         manuellOption.classList.add('border-orange-500', 'bg-orange-50');
-        manuellOption.querySelector('input').checked = true;
+        const input = manuellOption.querySelector('input');
+        if (input) input.checked = true;
     }
     toggleRezeptTypSections('manuell');
     
@@ -246,7 +297,8 @@ function openCreateModal() {
     renderDokumentPreview();
     updateSterneAnzeige(0);
     
-    document.getElementById('rezeptModal').style.display = 'flex';
+    modal.style.display = 'flex';
+    console.log("Modal geöffnet");
 }
 
 function openEditModal(rezeptId) {
@@ -935,3 +987,14 @@ window.addSchritt = addSchritt;
 window.removeSchritt = removeSchritt;
 window.updateSchritt = updateSchritt;
 window.removeDokument = removeDokument;
+
+// ========================================
+// AUTO-INITIALISIERUNG
+// ========================================
+// Sofort initialisieren, da das Script am Ende des Body geladen wird
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initRezeptverwaltung);
+} else {
+    // DOM ist bereits geladen
+    initRezeptverwaltung();
+}

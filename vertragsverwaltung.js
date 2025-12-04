@@ -908,3 +908,12 @@ window.removeSonderzahlung = removeSonderzahlung;
 window.updateSonderzahlung = updateSonderzahlung;
 window.toggleSonderzahlungMonat = toggleSonderzahlungMonat;
 window.renderSonderzahlungenRefresh = renderSonderzahlungen;
+
+// ========================================
+// AUTO-INITIALISIERUNG
+// ========================================
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeVertragsverwaltung);
+} else {
+    initializeVertragsverwaltung();
+}
