@@ -1226,6 +1226,7 @@ export function renderAdminUserDetails(userId) {
                         </div>
 
                         ${generateCheckbox('canUseMainZahlungsverwaltung', '-> Zahlungsverwaltung', true)}
+                        ${generateCheckbox('canUseMainHaushaltszahlungen', '-> Haushaltszahlungen', true)}
                         </div>
                     </div>
                 

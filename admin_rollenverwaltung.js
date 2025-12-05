@@ -165,7 +165,9 @@ export function renderRoleManagement() {
         'TICKET_SUPPORT': { label: 'Ticket Support', indent: false },
         'WERTGUTHABEN': { label: 'Wertguthaben', indent: false },
         'VERTRAGSVERWALTUNG': { label: 'Vertragsverwaltung', indent: false },
-        'REZEPTE': { label: 'Rezepte', indent: false }
+        'REZEPTE': { label: 'Rezepte', indent: false },
+        'HAUSHALTSZAHLUNGEN': { label: 'Haushaltszahlungen', indent: false },
+        'HAUSHALTSZAHLUNGEN_CREATE': { label: '-> Neue Zahlung anlegen', indent: true }
     };
     
     const newRolePermsContainer = document.getElementById('newRolePermissions');
@@ -173,7 +175,7 @@ export function renderRoleManagement() {
         const perm = allRolePermissions[permKey];
         const marginLeft = perm.indent ? 'pl-6' : '';
         
-        const isSubPermission = permKey.startsWith('CHECKLIST_') || permKey.startsWith('TERMINPLANER_') || permKey.startsWith('ZAHLUNGSVERWALTUNG_') || permKey.startsWith('TICKET_SUPPORT_') || permKey.startsWith('WERTGUTHABEN_');
+        const isSubPermission = permKey.startsWith('CHECKLIST_') || permKey.startsWith('TERMINPLANER_') || permKey.startsWith('ZAHLUNGSVERWALTUNG_') || permKey.startsWith('TICKET_SUPPORT_') || permKey.startsWith('WERTGUTHABEN_') || permKey.startsWith('HAUSHALTSZAHLUNGEN_');
         const isDisabled = isSubPermission ? 'disabled' : ''; 
         
         newRolePermsContainer.innerHTML += `
@@ -196,6 +198,7 @@ export function renderRoleManagement() {
             const isChecklistEnabled = role.permissions?.includes('CHECKLIST'); 
             const isTerminplanerEnabled = role.permissions?.includes('TERMINPLANER'); 
             const isZahlungsverwaltungEnabled = role.permissions?.includes('ZAHLUNGSVERWALTUNG');
+            const isHaushaltszahlungenEnabled = role.permissions?.includes('HAUSHALTSZAHLUNGEN');
             
             permissionsCheckboxesHTML = Object.keys(allRolePermissions).map(permKey => {
                 const perm = allRolePermissions[permKey];
@@ -209,6 +212,9 @@ export function renderRoleManagement() {
                     isDisabled = true;
                 }
                 if (permKey.startsWith('ZAHLUNGSVERWALTUNG_') && !isZahlungsverwaltungEnabled) {
+                    isDisabled = true;
+                }
+                if (permKey.startsWith('HAUSHALTSZAHLUNGEN_') && !isHaushaltszahlungenEnabled) {
                     isDisabled = true;
                 }
                 
@@ -264,6 +270,7 @@ export function renderRoleManagement() {
         setupPair('CHECKLIST', ['CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS']);
         setupPair('TERMINPLANER', ['TERMINPLANER_CREATE']);
         setupPair('ZAHLUNGSVERWALTUNG', ['ZAHLUNGSVERWALTUNG_CREATE']);
+        setupPair('HAUSHALTSZAHLUNGEN', ['HAUSHALTSZAHLUNGEN_CREATE']);
     };
 
     userRolesList.querySelectorAll('.p-3.border').forEach(card => setupCheckboxDependencies(card));
@@ -415,6 +422,7 @@ export function renderRoleManagement() {
                                             </div>
 
                                             <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainZahlungsverwaltung"> <span>-> Zahlungsverwaltung</span></label>
+                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainHaushaltszahlungen"> <span>-> Haushaltszahlungen</span></label>
 
                                             </div>
                                         </div>

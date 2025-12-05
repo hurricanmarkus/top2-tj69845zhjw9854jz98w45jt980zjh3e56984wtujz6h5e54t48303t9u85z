@@ -36,8 +36,10 @@ let haushaltszahlungenCollection = null;
 let haushaltszahlungenSettingsRef = null;
 let haushaltszahlungenThemenRef = null;
 let haushaltszahlungenProtokollRef = null;
+let haushaltszahlungenEinladungenRef = null;
 let HAUSHALTSZAHLUNGEN = {};
 let THEMEN = {};
+let EINLADUNGEN = {}; // Einladungen für den aktuellen Benutzer
 let currentThemaId = null; // Aktuell ausgewähltes Thema
 let currentFilter = { status: '', typ: '', person: '' };
 let searchTerm = '';
@@ -51,9 +53,10 @@ let haushaltszahlungenSettings = {
 
 // Zugriffsrechte
 const ZUGRIFFSRECHTE = {
-    lesen: { label: 'Nur Lesen', icon: '👁️', canEdit: false, canEditOwn: false },
-    eigene: { label: 'Eigene Zahlung ändern', icon: '✏️', canEdit: false, canEditOwn: true },
-    vollzugriff: { label: 'Vollzugriff', icon: '🔓', canEdit: true, canEditOwn: true }
+    nicht_teilen: { label: 'Nicht teilen (nur kalkulieren)', icon: '🔒', canEdit: false, canEditOwn: false, isShared: false },
+    lesen: { label: 'Nur Lesen', icon: '👁️', canEdit: false, canEditOwn: false, isShared: true },
+    eigene: { label: 'Eigene Zahlung ändern', icon: '✏️', canEdit: false, canEditOwn: true, isShared: true },
+    vollzugriff: { label: 'Vollzugriff', icon: '🔓', canEdit: true, canEditOwn: true, isShared: true }
 };
 
 // Intervall-Konfiguration (Spalten G-S in Excel)
@@ -97,8 +100,10 @@ export function initializeHaushaltszahlungen() {
         haushaltszahlungenSettingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'haushaltszahlungen');
         haushaltszahlungenThemenRef = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen_themen');
         haushaltszahlungenProtokollRef = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen_protokoll');
+        haushaltszahlungenEinladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen_einladungen');
         loadSettings();
         loadThemen();
+        loadEinladungen();
     }
 
     setupEventListeners();
@@ -163,6 +168,40 @@ function updateCollectionForThema() {
     if (currentThemaId && db) {
         haushaltszahlungenCollection = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen_themen', currentThemaId, 'eintraege');
         listenForHaushaltszahlungen();
+    }
+}
+
+// Einladungen laden
+async function loadEinladungen() {
+    if (!haushaltszahlungenEinladungenRef || !currentUser?.mode) return;
+    
+    try {
+        const snapshot = await getDocs(haushaltszahlungenEinladungenRef);
+        EINLADUNGEN = {};
+        snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            // Nur Einladungen für den aktuellen Benutzer laden
+            if (data.targetUserId === currentUser.mode || data.targetUserName === currentUser.displayName) {
+                EINLADUNGEN[docSnap.id] = { id: docSnap.id, ...data };
+            }
+        });
+        renderEinladungenBadge();
+    } catch (e) {
+        console.error("Fehler beim Laden der Einladungen:", e);
+    }
+}
+
+// Badge für offene Einladungen anzeigen
+function renderEinladungenBadge() {
+    const pendingCount = Object.values(EINLADUNGEN).filter(e => e.status === 'pending').length;
+    const badge = document.getElementById('hz-einladungen-badge');
+    if (badge) {
+        if (pendingCount > 0) {
+            badge.textContent = pendingCount;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
     }
 }
 
@@ -311,6 +350,9 @@ function setupEventListeners() {
         anteilSlider.dataset.listenerAttached = 'true';
     }
 
+    // Intervall-Checkboxen: Monatlich vs. Einzelmonate gegenseitig ausschließen
+    setupIntervallCheckboxLogic();
+
     // Settings Modal
     const closeSettingsModal = document.getElementById('closeHaushaltszahlungenSettingsModal');
     if (closeSettingsModal && !closeSettingsModal.dataset.listenerAttached) {
@@ -337,6 +379,54 @@ function updateSimulationWarning() {
             warningEl.classList.add('hidden');
         }
     }
+}
+
+// Intervall-Checkbox-Logik: Monatlich vs. Einzelmonate gegenseitig ausschließen
+function setupIntervallCheckboxLogic() {
+    const monatlichCheckbox = document.querySelector('.hz-intervall-checkbox[value="monatlich"]');
+    const einzelmonateCheckboxes = document.querySelectorAll('.hz-intervall-checkbox:not([value="monatlich"])');
+    
+    if (!monatlichCheckbox) return;
+    
+    // Wenn "Monatlich" bereits einen Listener hat, nicht erneut hinzufügen
+    if (monatlichCheckbox.dataset.logicAttached) return;
+    
+    // Listener für "Monatlich"
+    monatlichCheckbox.addEventListener('change', function() {
+        if (this.checked) {
+            // Deaktiviere alle Einzelmonate
+            einzelmonateCheckboxes.forEach(cb => {
+                cb.checked = false;
+                cb.disabled = true;
+            });
+        } else {
+            // Aktiviere alle Einzelmonate wieder
+            einzelmonateCheckboxes.forEach(cb => {
+                cb.disabled = false;
+            });
+        }
+    });
+    monatlichCheckbox.dataset.logicAttached = 'true';
+    
+    // Listener für Einzelmonate
+    einzelmonateCheckboxes.forEach(cb => {
+        if (cb.dataset.logicAttached) return;
+        
+        cb.addEventListener('change', function() {
+            // Prüfe ob irgendein Einzelmonat ausgewählt ist
+            const anyMonthSelected = Array.from(einzelmonateCheckboxes).some(c => c.checked);
+            
+            if (anyMonthSelected) {
+                // Deaktiviere "Monatlich"
+                monatlichCheckbox.checked = false;
+                monatlichCheckbox.disabled = true;
+            } else {
+                // Aktiviere "Monatlich" wieder
+                monatlichCheckbox.disabled = false;
+            }
+        });
+        cb.dataset.logicAttached = 'true';
+    });
 }
 
 // ========================================
@@ -946,9 +1036,13 @@ function openCreateModal() {
         document.getElementById('hz-vertragsnummer').value = '';
         document.getElementById('hz-vormerk').value = '';
         document.getElementById('hz-erinnerung').value = '';
+        if (document.getElementById('hz-notizen')) document.getElementById('hz-notizen').value = '';
         
-        // Intervall-Checkboxen zurücksetzen
-        document.querySelectorAll('.hz-intervall-checkbox').forEach(cb => cb.checked = false);
+        // Intervall-Checkboxen zurücksetzen und aktivieren
+        document.querySelectorAll('.hz-intervall-checkbox').forEach(cb => {
+            cb.checked = false;
+            cb.disabled = false;
+        });
         
         updateAnteilDisplay();
         modal.style.display = 'flex';
@@ -972,10 +1066,21 @@ function openEditModal(eintrag) {
         document.getElementById('hz-vertragsnummer').value = eintrag.vertragsnummer || '';
         document.getElementById('hz-vormerk').value = eintrag.vormerk || '';
         document.getElementById('hz-erinnerung').value = eintrag.erinnerung || '';
+        if (document.getElementById('hz-notizen')) document.getElementById('hz-notizen').value = eintrag.notizen || '';
         
-        // Intervall-Checkboxen setzen
+        // Intervall-Checkboxen setzen und Logik anwenden
+        const hasMonatlich = (eintrag.intervall || []).includes('monatlich');
+        const einzelmonate = ['januar', 'februar', 'maerz', 'april', 'mai', 'juni', 'juli', 'august', 'september', 'oktober', 'november', 'dezember'];
+        const hasEinzelmonat = einzelmonate.some(m => (eintrag.intervall || []).includes(m));
+        
         document.querySelectorAll('.hz-intervall-checkbox').forEach(cb => {
             cb.checked = (eintrag.intervall || []).includes(cb.value);
+            // Logik: Wenn monatlich ausgewählt, Einzelmonate deaktivieren und umgekehrt
+            if (cb.value === 'monatlich') {
+                cb.disabled = hasEinzelmonat;
+            } else {
+                cb.disabled = hasMonatlich;
+            }
         });
         
         updateAnteilDisplay();
@@ -1018,6 +1123,7 @@ async function saveHaushaltszahlung() {
     const vertragsnummer = document.getElementById('hz-vertragsnummer').value.trim();
     const vormerk = document.getElementById('hz-vormerk').value.trim();
     const erinnerung = document.getElementById('hz-erinnerung').value;
+    const notizen = document.getElementById('hz-notizen')?.value?.trim() || '';
 
     // Intervalle sammeln
     const intervall = [];
@@ -1037,6 +1143,7 @@ async function saveHaushaltszahlung() {
         vertragsnummer,
         vormerk,
         erinnerung,
+        notizen,
         updatedAt: serverTimestamp(),
         updatedBy: currentUser.displayName
     };
@@ -1140,29 +1247,66 @@ function renderThemenListe() {
     const container = document.getElementById('hz-themen-liste');
     if (!container) return;
     
-    if (Object.keys(THEMEN).length === 0) {
+    // Filtere nur aktive (nicht archivierte) Themen
+    const activeThemen = Object.values(THEMEN).filter(t => !t.archiviert);
+    const archivedThemen = Object.values(THEMEN).filter(t => t.archiviert);
+    
+    if (activeThemen.length === 0 && archivedThemen.length === 0) {
         container.innerHTML = '<p class="text-gray-500 text-sm italic">Keine Themen vorhanden</p>';
         return;
     }
     
-    container.innerHTML = Object.values(THEMEN).map(thema => `
-        <div class="flex items-center justify-between p-2 bg-white rounded-lg border ${thema.id === currentThemaId ? 'border-cyan-500 bg-cyan-50' : 'border-gray-200'}">
-            <div class="flex items-center gap-2">
-                <span class="font-bold text-gray-800">${thema.name}</span>
-                ${thema.id === currentThemaId ? '<span class="text-xs bg-cyan-500 text-white px-2 py-0.5 rounded">Aktiv</span>' : ''}
-                <span class="text-xs text-gray-500">(${thema.mitglieder?.length || 0} Mitglieder)</span>
+    let html = '';
+    
+    // Aktive Themen
+    if (activeThemen.length > 0) {
+        html += activeThemen.map(thema => `
+            <div class="flex items-center justify-between p-2 bg-white rounded-lg border ${thema.id === currentThemaId ? 'border-cyan-500 bg-cyan-50' : 'border-gray-200'}">
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-gray-800">${thema.name}</span>
+                    ${thema.id === currentThemaId ? '<span class="text-xs bg-cyan-500 text-white px-2 py-0.5 rounded">Aktiv</span>' : ''}
+                    <span class="text-xs text-gray-500">(${thema.mitglieder?.length || 0} Mitglieder)</span>
+                </div>
+                <div class="flex gap-1">
+                    ${thema.ersteller === currentUser.displayName ? `
+                        <button onclick="window.archiveThema('${thema.id}')" class="p-1 text-orange-600 hover:bg-orange-100 rounded" title="Archivieren">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                            </svg>
+                        </button>
+                    ` : ''}
+                </div>
             </div>
-            <div class="flex gap-1">
-                ${thema.ersteller === currentUser.displayName ? `
-                    <button onclick="window.deleteThema('${thema.id}')" class="p-1 text-red-600 hover:bg-red-100 rounded" title="Löschen">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                    </button>
-                ` : ''}
+        `).join('');
+    }
+    
+    // Archivierte Themen (falls vorhanden)
+    if (archivedThemen.length > 0) {
+        html += `
+            <div class="mt-4 pt-3 border-t border-gray-200">
+                <p class="text-xs font-bold text-gray-500 mb-2">📦 ARCHIVIERT</p>
+                ${archivedThemen.map(thema => `
+                    <div class="flex items-center justify-between p-2 bg-gray-50 rounded-lg border border-gray-200 opacity-70 mb-1">
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-gray-600">${thema.name}</span>
+                            <span class="text-xs text-gray-400">(${thema.mitglieder?.length || 0} Mitglieder)</span>
+                        </div>
+                        <div class="flex gap-1">
+                            ${thema.ersteller === currentUser.displayName ? `
+                                <button onclick="window.restoreThema('${thema.id}')" class="p-1 text-green-600 hover:bg-green-100 rounded" title="Wiederherstellen">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                `).join('')}
             </div>
-        </div>
-    `).join('');
+        `;
+    }
+    
+    container.innerHTML = html;
 }
 
 function renderMitgliederListe() {
@@ -1275,12 +1419,28 @@ async function saveNewThema() {
 
 function openAddMitgliedModal() {
     const userSelect = document.getElementById('hz-mitglied-user-select');
+    const thema = THEMEN[currentThemaId];
+    
     if (userSelect) {
-        // Fülle Benutzer-Dropdown
+        // Filtere Benutzer: Nur registrierte, aktive Benutzer, die nicht bereits Mitglied sind und nicht der aktuelle Benutzer
+        const existingMemberIds = thema?.mitglieder?.map(m => m.userId || m.name) || [];
+        
+        const availableUsers = Object.values(USERS).filter(user => {
+            // Nur aktive, registrierte Benutzer
+            if (!user.isActive || user.permissionType === 'not_registered') return false;
+            // Nicht den aktuellen Benutzer anzeigen
+            if (user.id === currentUser.mode || user.name === currentUser.displayName) return false;
+            // Nicht bereits Mitglieder
+            if (existingMemberIds.includes(user.id) || existingMemberIds.includes(user.name)) return false;
+            return true;
+        });
+        
         userSelect.innerHTML = '<option value="">Benutzer wählen...</option>' +
-            Object.values(USERS).map(user => 
-                `<option value="${user.displayName}">${user.displayName}</option>`
-            ).join('');
+            availableUsers.map(user => {
+                const displayName = user.realName || user.name || user.displayName || user.id;
+                const id = user.id || user.name;
+                return `<option value="${id}">${displayName}</option>`;
+            }).join('');
     }
     document.getElementById('hz-add-mitglied-modal').style.display = 'flex';
 }
@@ -1290,11 +1450,11 @@ async function saveNewMitglied() {
     const rechtSelect = document.getElementById('hz-mitglied-recht-select');
     const anteilInput = document.getElementById('hz-mitglied-anteil');
     
-    const userName = userSelect?.value;
+    const userId = userSelect?.value;
     const recht = rechtSelect?.value || 'lesen';
     const anteil = parseInt(anteilInput?.value) || 50;
     
-    if (!userName) {
+    if (!userId) {
         alertUser('Bitte wähle einen Benutzer', 'error');
         return;
     }
@@ -1302,37 +1462,87 @@ async function saveNewMitglied() {
     const thema = THEMEN[currentThemaId];
     if (!thema) return;
     
+    // Finde den Benutzer für den Namen
+    const targetUser = Object.values(USERS).find(u => u.id === userId || u.name === userId);
+    const userName = targetUser?.realName || targetUser?.name || userId;
+    
     // Prüfe ob Benutzer bereits Mitglied ist
-    if (thema.mitglieder?.some(m => m.name === userName)) {
+    if (thema.mitglieder?.some(m => m.userId === userId || m.name === userName)) {
         alertUser('Benutzer ist bereits Mitglied', 'error');
         return;
     }
     
+    // Prüfe ob eine abgelehnte Einladung existiert
+    const rejectedInvite = Object.values(EINLADUNGEN).find(e => 
+        e.themaId === currentThemaId && 
+        e.targetUserId === userId && 
+        e.status === 'rejected'
+    );
+    if (rejectedInvite) {
+        alertUser('Dieser Benutzer hat die Einladung abgelehnt. Er muss die Ablehnung erst widerrufen.', 'error');
+        return;
+    }
+    
+    // Prüfe ob bereits eine ausstehende Einladung existiert
+    const pendingInvite = Object.values(EINLADUNGEN).find(e => 
+        e.themaId === currentThemaId && 
+        e.targetUserId === userId && 
+        e.status === 'pending'
+    );
+    if (pendingInvite) {
+        alertUser('Es existiert bereits eine ausstehende Einladung für diesen Benutzer.', 'error');
+        return;
+    }
+    
     try {
-        const newMitglied = {
-            userId: userName,
-            name: userName,
-            zugriffsrecht: recht,
-            anteil: anteil,
-            dauerauftraege: {
-                monatlich: 0,
-                januar: 0, februar: 0, maerz: 0, april: 0, mai: 0, juni: 0,
-                juli: 0, august: 0, september: 0, oktober: 0, november: 0, dezember: 0
-            }
-        };
+        const zugriffsrecht = ZUGRIFFSRECHTE[recht];
         
-        thema.mitglieder = thema.mitglieder || [];
-        thema.mitglieder.push(newMitglied);
-        
-        await updateDoc(doc(haushaltszahlungenThemenRef, currentThemaId), {
-            mitglieder: thema.mitglieder
-        });
-        
-        document.getElementById('hz-add-mitglied-modal').style.display = 'none';
-        renderMitgliederListe();
-        renderKostenaufteilung();
-        renderDashboard();
-        alertUser('Mitglied hinzugefügt!', 'success');
+        // Wenn "Nicht teilen" gewählt, direkt hinzufügen ohne Einladung
+        if (!zugriffsrecht?.isShared) {
+            const newMitglied = {
+                userId: userId,
+                name: userName,
+                zugriffsrecht: recht,
+                anteil: anteil,
+                dauerauftraege: {
+                    monatlich: 0,
+                    januar: 0, februar: 0, maerz: 0, april: 0, mai: 0, juni: 0,
+                    juli: 0, august: 0, september: 0, oktober: 0, november: 0, dezember: 0
+                }
+            };
+            
+            thema.mitglieder = thema.mitglieder || [];
+            thema.mitglieder.push(newMitglied);
+            
+            await updateDoc(doc(haushaltszahlungenThemenRef, currentThemaId), {
+                mitglieder: thema.mitglieder
+            });
+            
+            document.getElementById('hz-add-mitglied-modal').style.display = 'none';
+            renderMitgliederListe();
+            renderKostenaufteilung();
+            renderDashboard();
+            alertUser('Mitglied hinzugefügt (ohne Einladung)!', 'success');
+        } else {
+            // Einladung senden
+            const einladung = {
+                themaId: currentThemaId,
+                themaName: thema.name,
+                targetUserId: userId,
+                targetUserName: userName,
+                invitedBy: currentUser.displayName,
+                invitedById: currentUser.mode,
+                zugriffsrecht: recht,
+                anteil: anteil,
+                status: 'pending',
+                createdAt: serverTimestamp()
+            };
+            
+            await addDoc(haushaltszahlungenEinladungenRef, einladung);
+            
+            document.getElementById('hz-add-mitglied-modal').style.display = 'none';
+            alertUser(`Einladung an ${userName} gesendet!`, 'success');
+        }
     } catch (error) {
         console.error("Fehler beim Hinzufügen des Mitglieds:", error);
         alertUser('Fehler: ' + error.message, 'error');
@@ -1494,24 +1704,52 @@ async function saveSettings() {
 }
 
 // Globale Funktionen für Einstellungen
-window.deleteThema = async function(themaId) {
-    if (!confirm('Möchtest du dieses Thema wirklich löschen? Alle Einträge werden gelöscht!')) return;
+window.archiveThema = async function(themaId) {
+    if (!confirm('Möchtest du dieses Thema archivieren? Es kann später wiederhergestellt werden.')) return;
     
     try {
-        await deleteDoc(doc(haushaltszahlungenThemenRef, themaId));
-        delete THEMEN[themaId];
+        await updateDoc(doc(haushaltszahlungenThemenRef, themaId), {
+            archiviert: true,
+            archiviertAm: serverTimestamp(),
+            archiviertVon: currentUser.displayName
+        });
         
+        THEMEN[themaId].archiviert = true;
+        
+        // Wenn das aktive Thema archiviert wird, wechsle zu einem anderen
         if (currentThemaId === themaId) {
-            currentThemaId = Object.keys(THEMEN)[0] || null;
-            localStorage.setItem('hz_current_thema', currentThemaId);
+            const activeThemen = Object.values(THEMEN).filter(t => !t.archiviert);
+            currentThemaId = activeThemen.length > 0 ? activeThemen[0].id : null;
+            localStorage.setItem('hz_current_thema', currentThemaId || '');
             updateCollectionForThema();
         }
         
         renderThemenListe();
         renderThemenDropdown();
-        alertUser('Thema gelöscht!', 'success');
+        alertUser('Thema archiviert!', 'success');
     } catch (error) {
-        console.error("Fehler beim Löschen:", error);
+        console.error("Fehler beim Archivieren:", error);
+        alertUser('Fehler: ' + error.message, 'error');
+    }
+};
+
+window.restoreThema = async function(themaId) {
+    if (!confirm('Möchtest du dieses Thema wiederherstellen?')) return;
+    
+    try {
+        await updateDoc(doc(haushaltszahlungenThemenRef, themaId), {
+            archiviert: false,
+            wiederhergestelltAm: serverTimestamp(),
+            wiederhergestelltVon: currentUser.displayName
+        });
+        
+        THEMEN[themaId].archiviert = false;
+        
+        renderThemenListe();
+        renderThemenDropdown();
+        alertUser('Thema wiederhergestellt!', 'success');
+    } catch (error) {
+        console.error("Fehler beim Wiederherstellen:", error);
         alertUser('Fehler: ' + error.message, 'error');
     }
 };
@@ -1581,3 +1819,149 @@ window.editHaushaltszahlung = function(id) {
 };
 
 window.deleteHaushaltszahlung = deleteHaushaltszahlung;
+
+// ========================================
+// EINLADUNGS-SYSTEM
+// ========================================
+window.openEinladungenModal = function() {
+    const modal = document.getElementById('hz-einladungen-modal');
+    if (!modal) return;
+    
+    renderEinladungenListe();
+    modal.style.display = 'flex';
+};
+
+function renderEinladungenListe() {
+    const container = document.getElementById('hz-einladungen-liste');
+    if (!container) return;
+    
+    const pendingEinladungen = Object.values(EINLADUNGEN).filter(e => e.status === 'pending');
+    const rejectedEinladungen = Object.values(EINLADUNGEN).filter(e => e.status === 'rejected');
+    
+    if (pendingEinladungen.length === 0 && rejectedEinladungen.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-sm italic">Keine Einladungen vorhanden</p>';
+        return;
+    }
+    
+    let html = '';
+    
+    // Ausstehende Einladungen
+    if (pendingEinladungen.length > 0) {
+        html += '<p class="font-bold text-gray-700 mb-2">📬 Ausstehende Einladungen</p>';
+        html += pendingEinladungen.map(e => `
+            <div class="p-3 bg-yellow-50 border border-yellow-200 rounded-lg mb-2">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="font-bold text-gray-800">${e.themaName}</p>
+                        <p class="text-sm text-gray-600">Eingeladen von: ${e.invitedBy}</p>
+                        <p class="text-sm text-gray-600">Berechtigung: ${ZUGRIFFSRECHTE[e.zugriffsrecht]?.label || e.zugriffsrecht}</p>
+                        <p class="text-sm text-gray-600">Kostenanteil: ${e.anteil}%</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="window.respondToEinladung('${e.id}', 'accepted')" 
+                            class="px-3 py-1 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm">
+                            ✓ Annehmen
+                        </button>
+                        <button onclick="window.respondToEinladung('${e.id}', 'rejected')" 
+                            class="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm">
+                            ✗ Ablehnen
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    // Abgelehnte Einladungen
+    if (rejectedEinladungen.length > 0) {
+        html += '<p class="font-bold text-gray-700 mb-2 mt-4">🚫 Abgelehnte Einladungen</p>';
+        html += '<p class="text-xs text-gray-500 mb-2">Solange eine Ablehnung besteht, kann der Einladende keine neue Anfrage stellen.</p>';
+        html += rejectedEinladungen.map(e => `
+            <div class="p-3 bg-red-50 border border-red-200 rounded-lg mb-2 opacity-70">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="font-bold text-gray-600">${e.themaName}</p>
+                        <p class="text-sm text-gray-500">Eingeladen von: ${e.invitedBy}</p>
+                    </div>
+                    <button onclick="window.revokeRejection('${e.id}')" 
+                        class="px-3 py-1 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-sm">
+                        ↩ Ablehnung zurückrufen
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    container.innerHTML = html;
+}
+
+window.respondToEinladung = async function(einladungId, response) {
+    const einladung = EINLADUNGEN[einladungId];
+    if (!einladung) return;
+    
+    try {
+        if (response === 'accepted') {
+            // Einladung annehmen: Mitglied zum Thema hinzufügen
+            const thema = THEMEN[einladung.themaId];
+            if (thema) {
+                const newMitglied = {
+                    userId: currentUser.mode,
+                    name: currentUser.displayName,
+                    zugriffsrecht: einladung.zugriffsrecht,
+                    anteil: einladung.anteil,
+                    dauerauftraege: {
+                        monatlich: 0,
+                        januar: 0, februar: 0, maerz: 0, april: 0, mai: 0, juni: 0,
+                        juli: 0, august: 0, september: 0, oktober: 0, november: 0, dezember: 0
+                    }
+                };
+                
+                thema.mitglieder = thema.mitglieder || [];
+                thema.mitglieder.push(newMitglied);
+                
+                await updateDoc(doc(haushaltszahlungenThemenRef, einladung.themaId), {
+                    mitglieder: thema.mitglieder
+                });
+            }
+            
+            // Einladung löschen
+            await deleteDoc(doc(haushaltszahlungenEinladungenRef, einladungId));
+            delete EINLADUNGEN[einladungId];
+            
+            alertUser('Einladung angenommen! Du bist jetzt Mitglied.', 'success');
+            loadThemen(); // Themen neu laden
+        } else {
+            // Einladung ablehnen
+            await updateDoc(doc(haushaltszahlungenEinladungenRef, einladungId), {
+                status: 'rejected',
+                rejectedAt: serverTimestamp()
+            });
+            EINLADUNGEN[einladungId].status = 'rejected';
+            
+            alertUser('Einladung abgelehnt.', 'success');
+        }
+        
+        renderEinladungenListe();
+        renderEinladungenBadge();
+    } catch (error) {
+        console.error("Fehler bei Einladungs-Antwort:", error);
+        alertUser('Fehler: ' + error.message, 'error');
+    }
+};
+
+window.revokeRejection = async function(einladungId) {
+    if (!confirm('Möchtest du die Ablehnung widerrufen? Der Einladende kann dann erneut eine Anfrage stellen.')) return;
+    
+    try {
+        // Einladung komplett löschen
+        await deleteDoc(doc(haushaltszahlungenEinladungenRef, einladungId));
+        delete EINLADUNGEN[einladungId];
+        
+        renderEinladungenListe();
+        renderEinladungenBadge();
+        alertUser('Ablehnung widerrufen.', 'success');
+    } catch (error) {
+        console.error("Fehler beim Widerrufen:", error);
+        alertUser('Fehler: ' + error.message, 'error');
+    }
+};
