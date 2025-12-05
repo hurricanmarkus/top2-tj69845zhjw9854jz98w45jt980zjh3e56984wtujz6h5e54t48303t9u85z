@@ -723,13 +723,48 @@ function berechneDashboardStats() {
         juli: 0, august: 0, september: 0, oktober: 0, november: 0, dezember: 0
     };
     
+    // SOLL-Beiträge pro Mitglied und Intervall (basierend auf individuellem anteilMarkus pro Eintrag)
+    const sollProMitgliedUndIntervall = {};
+    const thema = THEMEN[currentThemaId];
+    if (thema?.mitglieder) {
+        thema.mitglieder.forEach(m => {
+            sollProMitgliedUndIntervall[m.userId || m.name] = {
+                monatlich: 0,
+                januar: 0, februar: 0, maerz: 0, april: 0, mai: 0, juni: 0,
+                juli: 0, august: 0, september: 0, oktober: 0, november: 0, dezember: 0
+            };
+        });
+    }
+    
     eintraege.forEach(eintrag => {
         const { status } = berechneStatus(eintrag);
         if (status !== 'aktiv') return;
         
+        const betrag = Math.abs(eintrag.betrag || 0);
+        const anteilMarkus = eintrag.anteilMarkus ?? 50; // Default 50% wenn nicht gesetzt
+        const anteilJasmin = 100 - anteilMarkus;
+        
         (eintrag.intervall || []).forEach(intervall => {
             if (kostenProIntervall[intervall] !== undefined) {
-                kostenProIntervall[intervall] += Math.abs(eintrag.betrag || 0);
+                kostenProIntervall[intervall] += betrag;
+            }
+            
+            // SOLL pro Mitglied berechnen (basierend auf individuellem Anteil des Eintrags)
+            if (thema?.mitglieder) {
+                thema.mitglieder.forEach((m, idx) => {
+                    const mitgliedKey = m.userId || m.name;
+                    if (sollProMitgliedUndIntervall[mitgliedKey]) {
+                        // Für 2 Mitglieder: erstes = anteilMarkus, zweites = anteilJasmin
+                        // Für mehr Mitglieder: verwende den globalen Anteil als Fallback
+                        let mitgliedAnteil;
+                        if (thema.mitglieder.length === 2) {
+                            mitgliedAnteil = idx === 0 ? anteilMarkus : anteilJasmin;
+                        } else {
+                            mitgliedAnteil = m.anteil || (100 / thema.mitglieder.length);
+                        }
+                        sollProMitgliedUndIntervall[mitgliedKey][intervall] += betrag * (mitgliedAnteil / 100);
+                    }
+                });
             }
         });
     });
@@ -765,12 +800,13 @@ function berechneDashboardStats() {
         alarme,
         eintraegeOhneBetrag,
         kostenProIntervall,
+        sollProMitgliedUndIntervall, // NEU: SOLL-Werte basierend auf individuellem anteilMarkus pro Eintrag
         gesamtBelastungMonatlich: summenProMonat.belastung.monatlich,
         gesamtGutschriftMonatlich: summenProMonat.gutschrift.monatlich
     };
 }
 
-// Alarme berechnen (Einzahlungen vs. Kosten)
+// Alarme berechnen (Einzahlungen vs. Kosten) - basierend auf individuellem anteilMarkus pro Eintrag
 function berechneAlarme() {
     const alarme = [];
     const thema = THEMEN[currentThemaId];
@@ -779,21 +815,38 @@ function berechneAlarme() {
     
     const eintraege = Object.values(HAUSHALTSZAHLUNGEN);
     
-    // Gesamtkosten pro Intervall berechnen
-    const kostenProIntervall = {
-        monatlich: 0,
-        januar: 0, februar: 0, maerz: 0, april: 0, mai: 0, juni: 0,
-        juli: 0, august: 0, september: 0, oktober: 0, november: 0, dezember: 0
-    };
+    // SOLL pro Mitglied und Intervall berechnen (basierend auf individuellem anteilMarkus pro Eintrag)
+    const sollProMitglied = {};
+    thema.mitglieder.forEach(m => {
+        sollProMitglied[m.userId || m.name] = {
+            monatlich: 0,
+            januar: 0, februar: 0, maerz: 0, april: 0, mai: 0, juni: 0,
+            juli: 0, august: 0, september: 0, oktober: 0, november: 0, dezember: 0
+        };
+    });
     
     eintraege.forEach(eintrag => {
         const { status } = berechneStatus(eintrag);
         if (status !== 'aktiv') return;
         
+        const betrag = Math.abs(eintrag.betrag || 0);
+        const anteilMarkus = eintrag.anteilMarkus ?? 50;
+        const anteilJasmin = 100 - anteilMarkus;
+        
         (eintrag.intervall || []).forEach(intervall => {
-            if (kostenProIntervall[intervall] !== undefined) {
-                kostenProIntervall[intervall] += Math.abs(eintrag.betrag);
-            }
+            thema.mitglieder.forEach((m, idx) => {
+                const mitgliedKey = m.userId || m.name;
+                if (sollProMitglied[mitgliedKey] && sollProMitglied[mitgliedKey][intervall] !== undefined) {
+                    // Für 2 Mitglieder: erstes = anteilMarkus, zweites = anteilJasmin
+                    let mitgliedAnteil;
+                    if (thema.mitglieder.length === 2) {
+                        mitgliedAnteil = idx === 0 ? anteilMarkus : anteilJasmin;
+                    } else {
+                        mitgliedAnteil = m.anteil || (100 / thema.mitglieder.length);
+                    }
+                    sollProMitglied[mitgliedKey][intervall] += betrag * (mitgliedAnteil / 100);
+                }
+            });
         });
     });
     
@@ -801,13 +854,14 @@ function berechneAlarme() {
     thema.mitglieder.forEach(mitglied => {
         if (!mitglied.dauerauftraege) return;
         
+        const mitgliedKey = mitglied.userId || mitglied.name;
+        const mitgliedSoll = sollProMitglied[mitgliedKey] || {};
+        
         // Prüfe jeden Dauerauftrag
         Object.entries(mitglied.dauerauftraege).forEach(([intervall, betrag]) => {
-            const sollBetrag = kostenProIntervall[intervall] || 0;
-            const anteil = mitglied.anteil || (100 / thema.mitglieder.length);
-            const sollAnteil = sollBetrag * (anteil / 100);
+            const sollAnteil = mitgliedSoll[intervall] || 0;
             
-            if (betrag < sollAnteil && sollAnteil > 0) {
+            if (betrag < sollAnteil - 0.01 && sollAnteil > 0) {
                 alarme.push({
                     typ: 'unterdeckung',
                     person: mitglied.name,
@@ -815,7 +869,7 @@ function berechneAlarme() {
                     differenz: sollAnteil - betrag,
                     message: `${mitglied.name} zahlt ${formatCurrency(betrag)} statt ${formatCurrency(sollAnteil)} (${INTERVALL_CONFIG[intervall]?.label || intervall})`
                 });
-            } else if (betrag > sollAnteil && sollAnteil > 0) {
+            } else if (betrag > sollAnteil + 0.01 && sollAnteil > 0) {
                 alarme.push({
                     typ: 'ueberdeckung',
                     person: mitglied.name,
@@ -920,17 +974,20 @@ function renderMitgliederBeitraege(stats) {
     
     container.innerHTML = errorBanner + thema.mitglieder.map((mitglied, index) => {
         const color = colors[index % colors.length];
-        const anteil = mitglied.anteil || (100 / thema.mitglieder.length);
-        const mitgliedId = (mitglied.userId || mitglied.name).replace(/[^a-zA-Z0-9]/g, '_');
+        const mitgliedKey = mitglied.userId || mitglied.name;
+        const mitgliedId = mitgliedKey.replace(/[^a-zA-Z0-9]/g, '_');
         
         // Vollen Namen ermitteln
         const userObj = Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name);
         const displayName = userObj?.realName || mitglied.name || mitglied.userId;
         
-        // Berechne SOLL-Beiträge für dieses Mitglied
-        const sollMonatlich = stats.beitraegeSoll?.monatlich?.[mitglied.name] || (stats.kosten.monatlich * (anteil / 100));
-        const sollJaehrlich = stats.beitraegeSoll?.jaehrlich?.[mitglied.name] || ((stats.kosten.monatlich * 12 + stats.kosten.jaehrlichEinmalig) * (anteil / 100));
-        const sollEffektiv = sollJaehrlich / 12;
+        // SOLL-Werte aus der neuen Berechnung (basierend auf individuellem anteilMarkus pro Eintrag)
+        const mitgliedSoll = stats.sollProMitgliedUndIntervall?.[mitgliedKey] || {};
+        const sollMonatlich = mitgliedSoll.monatlich || 0;
+        const sollJaehrlichEinzel = Object.entries(mitgliedSoll)
+            .filter(([key]) => key !== 'monatlich')
+            .reduce((sum, [, val]) => sum + (val || 0), 0);
+        const sollJaehrlich = (sollMonatlich * 12) + sollJaehrlichEinzel;
         
         // Berechne IST-Einzahlungen (aus Daueraufträgen)
         const dauerauftraege = mitglied.dauerauftraege || {};
@@ -939,7 +996,6 @@ function renderMitgliederBeitraege(stats) {
             .filter(([key]) => key !== 'monatlich')
             .reduce((sum, [, val]) => sum + (val || 0), 0);
         const istJaehrlich = (istMonatlich * 12) + istJaehrlichEinzel;
-        const istEffektiv = istJaehrlich / 12;
         
         // Status berechnen
         const differenzMonatlich = istMonatlich - sollMonatlich;
@@ -950,9 +1006,9 @@ function renderMitgliederBeitraege(stats) {
         const statusText = hasAlarm ? 'ALARM' : (hasOhneBetrag ? 'PRÜFEN' : 'Alles okay');
         const statusColor = hasAlarm ? 'bg-red-500' : (hasOhneBetrag ? 'bg-yellow-500' : 'bg-green-500');
         
-        // IST/SOLL Details pro Intervall
+        // IST/SOLL Details pro Intervall (jetzt mit korrekten SOLL-Werten pro Mitglied)
         const intervallDetails = Object.entries(INTERVALL_CONFIG).map(([key, config]) => {
-            const sollIntervall = (stats.kostenProIntervall?.[key] || 0) * (anteil / 100);
+            const sollIntervall = mitgliedSoll[key] || 0;
             const istIntervall = dauerauftraege[key] || 0;
             const diff = istIntervall - sollIntervall;
             const hasDiff = Math.abs(diff) > 0.01 && sollIntervall > 0;
@@ -996,7 +1052,7 @@ function renderMitgliederBeitraege(stats) {
                         <p class="text-white/60">Jährlich</p>
                     </div>
                     <div class="bg-white/10 rounded p-1">
-                        <p class="font-bold">${formatCurrency(sollEffektiv)}</p>
+                        <p class="font-bold">${formatCurrency(sollJaehrlich / 12)}</p>
                         <p class="text-white/60">Effektiv/M</p>
                     </div>
                 </div>
