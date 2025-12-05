@@ -41,7 +41,7 @@ let HAUSHALTSZAHLUNGEN = {};
 let THEMEN = {};
 let EINLADUNGEN = {}; // Einladungen für den aktuellen Benutzer
 let currentThemaId = null; // Aktuell ausgewähltes Thema
-let currentFilter = { status: '', typ: '', person: '' };
+let currentFilter = { status: '', typ: '', person: '', intervall: '' };
 let searchTerm = '';
 let simulationsDatum = null; // Für Datums-Simulation (wie W7 in Excel)
 
@@ -341,14 +341,24 @@ function setupEventListeners() {
         filterTyp.dataset.listenerAttached = 'true';
     }
 
+    const filterIntervall = document.getElementById('filter-hz-intervall');
+    if (filterIntervall && !filterIntervall.dataset.listenerAttached) {
+        filterIntervall.addEventListener('change', (e) => {
+            currentFilter.intervall = e.target.value;
+            renderHaushaltszahlungenTable();
+        });
+        filterIntervall.dataset.listenerAttached = 'true';
+    }
+
     const resetFilters = document.getElementById('reset-filters-haushaltszahlungen');
     if (resetFilters && !resetFilters.dataset.listenerAttached) {
         resetFilters.addEventListener('click', () => {
-            currentFilter = { status: '', typ: '', person: '' };
+            currentFilter = { status: '', typ: '', person: '', intervall: '' };
             searchTerm = '';
             document.getElementById('search-haushaltszahlungen').value = '';
             document.getElementById('filter-hz-status').value = '';
             document.getElementById('filter-hz-typ').value = '';
+            document.getElementById('filter-hz-intervall').value = '';
             renderHaushaltszahlungenTable();
         });
         resetFilters.dataset.listenerAttached = 'true';
@@ -677,6 +687,30 @@ function berechneDashboardStats() {
 
     // Alarme berechnen
     const alarme = berechneAlarme();
+    
+    // Einträge ohne Betrag finden (für Alarm)
+    const eintraegeOhneBetrag = eintraege.filter(eintrag => {
+        const { status } = berechneStatus(eintrag);
+        return status === 'aktiv' && (eintrag.betrag === undefined || eintrag.betrag === null || eintrag.betrag === '' || eintrag.betrag === 0);
+    });
+    
+    // Kosten pro Intervall für IST/SOLL Vergleich
+    const kostenProIntervall = {
+        monatlich: 0,
+        januar: 0, februar: 0, maerz: 0, april: 0, mai: 0, juni: 0,
+        juli: 0, august: 0, september: 0, oktober: 0, november: 0, dezember: 0
+    };
+    
+    eintraege.forEach(eintrag => {
+        const { status } = berechneStatus(eintrag);
+        if (status !== 'aktiv') return;
+        
+        (eintrag.intervall || []).forEach(intervall => {
+            if (kostenProIntervall[intervall] !== undefined) {
+                kostenProIntervall[intervall] += Math.abs(eintrag.betrag || 0);
+            }
+        });
+    });
 
     return {
         counts: {
@@ -707,6 +741,8 @@ function berechneDashboardStats() {
             }
         },
         alarme,
+        eintraegeOhneBetrag,
+        kostenProIntervall,
         gesamtBelastungMonatlich: summenProMonat.belastung.monatlich,
         gesamtGutschriftMonatlich: summenProMonat.gutschrift.monatlich
     };
@@ -820,7 +856,7 @@ function renderDashboard() {
     renderMonatsUebersicht(stats);
 }
 
-// Mitglieder-Beiträge dynamisch rendern
+// Mitglieder-Beiträge dynamisch rendern - Neues Design mit ausklappbarer IST/SOLL-Liste
 function renderMitgliederBeitraege(stats) {
     const container = document.getElementById('hz-mitglieder-beitraege');
     if (!container) return;
@@ -836,29 +872,118 @@ function renderMitgliederBeitraege(stats) {
     container.innerHTML = thema.mitglieder.map((mitglied, index) => {
         const color = colors[index % colors.length];
         const anteil = mitglied.anteil || (100 / thema.mitglieder.length);
+        const mitgliedId = (mitglied.userId || mitglied.name).replace(/[^a-zA-Z0-9]/g, '_');
         
-        // Berechne Beiträge für dieses Mitglied
-        const monatlich = stats.kosten.monatlich * (anteil / 100);
-        const jaehrlich = (stats.kosten.monatlich * 12 + stats.kosten.jaehrlichEinmalig) * (anteil / 100);
-        const effektiv = jaehrlich / 12;
+        // Berechne SOLL-Beiträge für dieses Mitglied
+        const sollMonatlich = stats.beitraegeSoll?.monatlich?.[mitglied.name] || (stats.kosten.monatlich * (anteil / 100));
+        const sollJaehrlich = stats.beitraegeSoll?.jaehrlich?.[mitglied.name] || ((stats.kosten.monatlich * 12 + stats.kosten.jaehrlichEinmalig) * (anteil / 100));
+        const sollEffektiv = sollJaehrlich / 12;
+        
+        // Berechne IST-Einzahlungen (aus Daueraufträgen)
+        const dauerauftraege = mitglied.dauerauftraege || {};
+        const istMonatlich = dauerauftraege.monatlich || 0;
+        const istJaehrlichEinzel = Object.entries(dauerauftraege)
+            .filter(([key]) => key !== 'monatlich')
+            .reduce((sum, [, val]) => sum + (val || 0), 0);
+        const istJaehrlich = (istMonatlich * 12) + istJaehrlichEinzel;
+        const istEffektiv = istJaehrlich / 12;
+        
+        // Status berechnen
+        const differenzMonatlich = istMonatlich - sollMonatlich;
+        const differenzJaehrlich = istJaehrlich - sollJaehrlich;
+        const hasAlarm = differenzMonatlich < -0.01 || differenzJaehrlich < -0.01;
+        const hasOhneBetrag = stats.eintraegeOhneBetrag?.length > 0;
+        
+        const statusText = hasAlarm ? 'ALARM' : (hasOhneBetrag ? 'PRÜFEN' : 'Alles okay');
+        const statusColor = hasAlarm ? 'bg-red-500' : (hasOhneBetrag ? 'bg-yellow-500' : 'bg-green-500');
+        
+        // IST/SOLL Details pro Intervall
+        const intervallDetails = Object.entries(INTERVALL_CONFIG).map(([key, config]) => {
+            const sollIntervall = (stats.kostenProIntervall?.[key] || 0) * (anteil / 100);
+            const istIntervall = dauerauftraege[key] || 0;
+            const diff = istIntervall - sollIntervall;
+            const hasDiff = Math.abs(diff) > 0.01 && sollIntervall > 0;
+            
+            if (sollIntervall === 0 && istIntervall === 0) return '';
+            
+            return `
+                <div class="flex justify-between items-center py-1 border-b border-white/10 ${hasDiff ? (diff < 0 ? 'bg-red-500/20' : 'bg-green-500/20') : ''}">
+                    <span class="text-xs">${config.label}</span>
+                    <div class="flex gap-2 text-xs">
+                        <span class="text-white/70">IST: ${formatCurrency(istIntervall)}</span>
+                        <span class="text-white/70">SOLL: ${formatCurrency(sollIntervall)}</span>
+                        ${hasDiff ? `<span class="${diff < 0 ? 'text-red-300 font-bold' : 'text-green-300'}">${diff > 0 ? '+' : ''}${formatCurrency(diff)}</span>` : ''}
+                    </div>
+                </div>
+            `;
+        }).filter(Boolean).join('');
         
         return `
             <div class="bg-${color}-500/30 p-3 rounded-lg">
-                <div class="flex justify-between items-center mb-1">
-                    <p class="text-xs font-bold">${mitglied.name}</p>
-                    <span class="text-xs bg-white/20 px-2 py-0.5 rounded">${anteil.toFixed(0)}%</span>
+                <!-- Header mit Name und Status -->
+                <div class="flex justify-between items-center mb-2">
+                    <p class="text-lg font-bold">${mitglied.name}</p>
+                    <button onclick="toggleMitgliedDetails('${mitgliedId}')" 
+                        class="px-3 py-1 ${statusColor} text-white text-xs font-bold rounded-lg hover:opacity-80 transition cursor-pointer flex items-center gap-1">
+                        ${statusText}
+                        <svg id="hz-chevron-${mitgliedId}" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
                 </div>
-                <p class="text-sm">Monatlich: <span class="font-bold">${formatCurrency(monatlich)}</span></p>
-                <p class="text-sm">Jährlich: <span class="font-bold">${formatCurrency(jaehrlich)}</span></p>
-                <p class="text-xs text-white/70">Effektiv/Monat: ${formatCurrency(effektiv)}</p>
+                
+                <!-- Kompakte Übersicht -->
+                <div class="grid grid-cols-3 gap-1 text-center text-xs mb-2">
+                    <div>
+                        <p class="font-bold">${formatCurrency(sollMonatlich)}</p>
+                        <p class="text-white/60">Monatlich</p>
+                    </div>
+                    <div>
+                        <p class="font-bold">${formatCurrency(sollJaehrlich)}</p>
+                        <p class="text-white/60">Jährlich</p>
+                    </div>
+                    <div class="bg-white/10 rounded p-1">
+                        <p class="font-bold">${formatCurrency(sollEffektiv)}</p>
+                        <p class="text-white/60">Effektiv/M</p>
+                    </div>
+                </div>
+                
+                <!-- Ausklappbare Details -->
+                <div id="hz-details-${mitgliedId}" class="hidden mt-2 bg-white/10 rounded-lg p-2">
+                    <h5 class="text-xs font-bold mb-2 border-b border-white/20 pb-1">📊 IST vs. SOLL Einzahlungen</h5>
+                    ${intervallDetails || '<p class="text-xs text-white/50">Keine Daueraufträge konfiguriert</p>'}
+                    
+                    <div class="mt-2 pt-2 border-t border-white/20">
+                        <div class="flex justify-between text-xs font-bold">
+                            <span>Gesamt Jährlich:</span>
+                            <span class="${differenzJaehrlich < -0.01 ? 'text-red-300' : 'text-green-300'}">
+                                IST: ${formatCurrency(istJaehrlich)} / SOLL: ${formatCurrency(sollJaehrlich)}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
                 <button onclick="window.openDauerauftraegeModal('${mitglied.userId || mitglied.name}')" 
                     class="mt-2 text-xs bg-white/20 hover:bg-white/30 px-2 py-1 rounded transition w-full">
-                    ⚙️ Daueraufträge
+                    ⚙️ Daueraufträge bearbeiten
                 </button>
             </div>
         `;
     }).join('');
 }
+
+// Toggle für Mitglied-Details
+function toggleMitgliedDetails(mitgliedId) {
+    const details = document.getElementById(`hz-details-${mitgliedId}`);
+    const chevron = document.getElementById(`hz-chevron-${mitgliedId}`);
+    if (details) {
+        details.classList.toggle('hidden');
+        if (chevron) {
+            chevron.classList.toggle('rotate-180');
+        }
+    }
+}
+window.toggleMitgliedDetails = toggleMitgliedDetails;
 
 // Alarme Modal anzeigen
 function showAlarmeModal(alarme) {
@@ -984,6 +1109,10 @@ function renderHaushaltszahlungenTable() {
         eintraege = eintraege.filter(e => berechneTyp(e) === currentFilter.typ);
     }
 
+    if (currentFilter.intervall) {
+        eintraege = eintraege.filter(e => e.intervall && e.intervall.includes(currentFilter.intervall));
+    }
+
     if (eintraege.length === 0) {
         tbody.innerHTML = `
             <tr>
@@ -1003,14 +1132,19 @@ function renderHaushaltszahlungenTable() {
         const betragMarkus = berechneBetragMarkus(eintrag);
         const betragJasmin = berechneBetragJasmin(eintrag);
         const intervallLabels = (eintrag.intervall || []).map(i => INTERVALL_CONFIG[i]?.short || i).join(', ');
+        
+        // Prüfe ob Betrag fehlt (Alarm)
+        const betragFehlt = eintrag.betrag === undefined || eintrag.betrag === null || eintrag.betrag === '' || eintrag.betrag === 0;
+        const betragAlarm = status === 'aktiv' && betragFehlt;
 
         return `
-            <tr class="hover:bg-gray-50 transition ${status === 'fehler' ? 'bg-red-50' : ''}">
+            <tr class="hover:bg-gray-50 transition ${status === 'fehler' ? 'bg-red-50' : ''} ${betragAlarm ? 'bg-yellow-50 border-l-4 border-yellow-500' : ''}">
                 <td class="px-3 py-3">
                     <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${statusConfig.color}">
                         ${statusConfig.icon} ${statusConfig.label}
                     </span>
                     ${fehlerText ? `<div class="text-xs text-red-600 mt-1">${fehlerText}</div>` : ''}
+                    ${betragAlarm ? `<div class="text-xs text-yellow-600 mt-1 font-bold">⚠️ Betrag fehlt!</div>` : ''}
                 </td>
                 <td class="px-3 py-3">
                     <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${typConfig.color}">
@@ -1020,8 +1154,8 @@ function renderHaushaltszahlungenTable() {
                 <td class="px-3 py-3 font-medium text-gray-800">${eintrag.zweck || '-'}</td>
                 <td class="px-3 py-3 text-gray-600">${eintrag.organisation || '-'}</td>
                 <td class="px-3 py-3 text-xs text-gray-500">${intervallLabels || '-'}</td>
-                <td class="px-3 py-3 font-bold ${typ === 'gutschrift' ? 'text-green-600' : 'text-red-600'}">
-                    ${formatCurrency(eintrag.betrag)}
+                <td class="px-3 py-3 font-bold ${betragAlarm ? 'text-yellow-600 bg-yellow-100' : (typ === 'gutschrift' ? 'text-green-600' : 'text-red-600')}">
+                    ${betragAlarm ? '⚠️ FEHLT' : formatCurrency(eintrag.betrag)}
                 </td>
                 <td class="px-3 py-3 text-sm">
                     <div class="text-blue-600">${eintrag.anteilMarkus}% M</div>
@@ -1032,6 +1166,14 @@ function renderHaushaltszahlungenTable() {
                 </td>
                 <td class="px-3 py-3 text-center">
                     <div class="flex justify-center gap-1">
+                        ${status === 'aktiv' ? `
+                        <button onclick="window.openAbtauschModal('${eintrag.id}')" 
+                            class="p-1.5 text-purple-600 hover:bg-purple-100 rounded-lg transition" title="Abtausch">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                        </button>
+                        ` : ''}
                         <button onclick="window.editHaushaltszahlung('${eintrag.id}')" 
                             class="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="Bearbeiten">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1054,6 +1196,30 @@ function renderHaushaltszahlungenTable() {
 // ========================================
 // MODAL FUNKTIONEN
 // ========================================
+
+// Autocomplete-Listen für Zweck und Organisation aktualisieren
+function updateAutocompleteLists() {
+    const eintraege = Object.values(HAUSHALTSZAHLUNGEN);
+    
+    // Eindeutige Zwecke sammeln
+    const zwecke = [...new Set(eintraege.map(e => e.zweck).filter(Boolean))].sort();
+    const organisationen = [...new Set(eintraege.map(e => e.organisation).filter(Boolean))].sort();
+    
+    // Zweck-Datalist befüllen
+    const zweckList = document.getElementById('hz-zweck-list');
+    if (zweckList) {
+        zweckList.innerHTML = zwecke.map(z => `<option value="${z}">`).join('') + 
+            '<option value="** Neuer Eintrag **">';
+    }
+    
+    // Organisation-Datalist befüllen
+    const orgList = document.getElementById('hz-organisation-list');
+    if (orgList) {
+        orgList.innerHTML = organisationen.map(o => `<option value="${o}">`).join('') + 
+            '<option value="** Neuer Eintrag **">';
+    }
+}
+
 function openCreateModal() {
     const modal = document.getElementById('haushaltszahlungModal');
     const title = document.getElementById('haushaltszahlungModalTitle');
@@ -1078,6 +1244,9 @@ function openCreateModal() {
             cb.checked = false;
             cb.disabled = false;
         });
+        
+        // Autocomplete-Listen aktualisieren
+        updateAutocompleteLists();
         
         updateAnteilDisplay();
         modal.style.display = 'flex';
@@ -1117,6 +1286,9 @@ function openEditModal(eintrag) {
                 cb.disabled = hasMonatlich;
             }
         });
+        
+        // Autocomplete-Listen aktualisieren
+        updateAutocompleteLists();
         
         updateAnteilDisplay();
         modal.style.display = 'flex';
@@ -1998,5 +2170,143 @@ window.revokeRejection = async function(einladungId) {
     } catch (error) {
         console.error("Fehler beim Widerrufen:", error);
         alertUser('Fehler: ' + error.message, 'error');
+    }
+};
+
+// ========================================
+// ABTAUSCH-FUNKTION
+// ========================================
+let currentAbtauschEintragId = null;
+
+window.openAbtauschModal = function(eintragId) {
+    const eintrag = HAUSHALTSZAHLUNGEN[eintragId];
+    if (!eintrag) {
+        alertUser('Eintrag nicht gefunden', 'error');
+        return;
+    }
+    
+    currentAbtauschEintragId = eintragId;
+    
+    const modal = document.getElementById('hz-abtausch-modal');
+    if (!modal) return;
+    
+    // Aktuelles Datum als Standardwert für neuen Beginn
+    const heute = new Date();
+    const morgen = new Date(heute);
+    morgen.setDate(morgen.getDate() + 1);
+    
+    // Felder befüllen
+    document.getElementById('hz-abtausch-neuer-beginn').value = morgen.toISOString().split('T')[0];
+    
+    // Vorheriges Ende berechnen (Tag vor neuem Beginn)
+    updateAbtauschEnde();
+    
+    // Vorherige Werte übernehmen
+    document.getElementById('hz-abtausch-zweck').value = eintrag.zweck || '';
+    document.getElementById('hz-abtausch-organisation').value = eintrag.organisation || '';
+    document.getElementById('hz-abtausch-betrag').value = eintrag.betrag || '';
+    document.getElementById('hz-abtausch-anteil').value = eintrag.anteilMarkus || 50;
+    document.getElementById('hz-abtausch-kundennummer').value = eintrag.kundennummer || '';
+    document.getElementById('hz-abtausch-vertragsnummer').value = eintrag.vertragsnummer || '';
+    
+    // Intervall-Checkboxen setzen
+    document.querySelectorAll('.hz-abtausch-intervall').forEach(cb => {
+        cb.checked = (eintrag.intervall || []).includes(cb.value);
+    });
+    
+    // Anzeige der alten Werte
+    document.getElementById('hz-abtausch-alter-zweck').textContent = eintrag.zweck || '-';
+    document.getElementById('hz-abtausch-alter-betrag').textContent = formatCurrency(eintrag.betrag);
+    document.getElementById('hz-abtausch-alter-gueltig').textContent = `${formatDate(eintrag.gueltigAb)} - ${formatDate(eintrag.gueltigBis)}`;
+    
+    modal.style.display = 'flex';
+};
+
+function updateAbtauschEnde() {
+    const neuerBeginn = document.getElementById('hz-abtausch-neuer-beginn').value;
+    if (neuerBeginn) {
+        const neuerBeginnDate = new Date(neuerBeginn);
+        neuerBeginnDate.setDate(neuerBeginnDate.getDate() - 1);
+        document.getElementById('hz-abtausch-altes-ende').value = neuerBeginnDate.toISOString().split('T')[0];
+    }
+}
+
+// Event-Listener für Abtausch-Datum
+document.addEventListener('DOMContentLoaded', () => {
+    const neuerBeginnInput = document.getElementById('hz-abtausch-neuer-beginn');
+    if (neuerBeginnInput) {
+        neuerBeginnInput.addEventListener('change', updateAbtauschEnde);
+    }
+});
+
+window.closeAbtauschModal = function() {
+    const modal = document.getElementById('hz-abtausch-modal');
+    if (modal) modal.style.display = 'none';
+    currentAbtauschEintragId = null;
+};
+
+window.saveAbtausch = async function() {
+    if (!currentAbtauschEintragId) return;
+    
+    const alterEintrag = HAUSHALTSZAHLUNGEN[currentAbtauschEintragId];
+    if (!alterEintrag) return;
+    
+    const neuerBeginn = document.getElementById('hz-abtausch-neuer-beginn').value;
+    const altesEnde = document.getElementById('hz-abtausch-altes-ende').value;
+    const neuerBetrag = parseFloat(document.getElementById('hz-abtausch-betrag').value) || 0;
+    const neuerZweck = document.getElementById('hz-abtausch-zweck').value;
+    const neueOrganisation = document.getElementById('hz-abtausch-organisation').value;
+    const neuerAnteil = parseInt(document.getElementById('hz-abtausch-anteil').value) || 50;
+    const neueKundennummer = document.getElementById('hz-abtausch-kundennummer').value;
+    const neueVertragsnummer = document.getElementById('hz-abtausch-vertragsnummer').value;
+    
+    // Intervalle sammeln
+    const neueIntervalle = [];
+    document.querySelectorAll('.hz-abtausch-intervall:checked').forEach(cb => {
+        neueIntervalle.push(cb.value);
+    });
+    
+    if (!neuerBeginn || !altesEnde) {
+        alertUser('Bitte alle Datumsfelder ausfüllen', 'error');
+        return;
+    }
+    
+    try {
+        // 1. Alten Eintrag beenden (gueltigBis auf altesEnde setzen)
+        await updateDoc(doc(haushaltszahlungenCollection, currentAbtauschEintragId), {
+            gueltigBis: altesEnde,
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUser?.displayName || 'System'
+        });
+        
+        // 2. Neuen Eintrag erstellen
+        const neuerEintrag = {
+            zweck: neuerZweck,
+            organisation: neueOrganisation,
+            betrag: neuerBetrag,
+            gueltigAb: neuerBeginn,
+            gueltigBis: alterEintrag.gueltigBis, // Übernimmt das ursprüngliche Ende
+            anteilMarkus: neuerAnteil,
+            intervall: neueIntervalle,
+            kundennummer: neueKundennummer,
+            vertragsnummer: neueVertragsnummer,
+            vormerk: alterEintrag.vormerk || '',
+            erinnerung: alterEintrag.erinnerung || '',
+            notizen: `Abtausch von Eintrag vom ${formatDate(alterEintrag.gueltigAb)}. Alter Betrag: ${formatCurrency(alterEintrag.betrag)}`,
+            createdAt: serverTimestamp(),
+            createdBy: currentUser?.displayName || 'System',
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUser?.displayName || 'System',
+            abtauschVon: currentAbtauschEintragId // Referenz zum alten Eintrag
+        };
+        
+        await addDoc(haushaltszahlungenCollection, neuerEintrag);
+        
+        alertUser('Abtausch erfolgreich! Alter Eintrag beendet, neuer Eintrag erstellt.', 'success');
+        window.closeAbtauschModal();
+        
+    } catch (error) {
+        console.error("Fehler beim Abtausch:", error);
+        alertUser('Fehler beim Abtausch: ' + error.message, 'error');
     }
 };

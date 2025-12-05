@@ -1978,19 +1978,22 @@
 
                     <!-- Kosten-Übersicht -->
                     <div class="bg-white/10 p-3 rounded-lg mb-3">
-                        <h4 class="text-xs font-bold mb-2">📊 Kosten-Übersicht</h4>
+                        <h4 class="text-xs font-bold mb-2">📊 Kosten-Übersicht (Gesamt)</h4>
                         <div class="grid grid-cols-3 gap-2 text-center">
                             <div>
                                 <p class="text-lg font-bold" id="hz-kosten-monatlich">0,00 €</p>
                                 <p class="text-[10px]">Monatlich</p>
+                                <p class="text-[8px] text-white/50">(nur "Monatlich"-Zahlungen)</p>
                             </div>
                             <div>
                                 <p class="text-lg font-bold" id="hz-kosten-jaehrlich">0,00 €</p>
-                                <p class="text-[10px]">Jährlich (Jan-Dez)</p>
+                                <p class="text-[10px]">Jährlich</p>
+                                <p class="text-[8px] text-white/50">(alle Zahlungen/Jahr)</p>
                             </div>
                             <div class="bg-white/20 rounded-lg p-1">
                                 <p class="text-lg font-bold" id="hz-kosten-effektiv">0,00 €</p>
                                 <p class="text-[10px]">Effektiv/Monat</p>
+                                <p class="text-[8px] text-white/50">(Jährlich ÷ 12)</p>
                             </div>
                         </div>
                     </div>
@@ -2037,6 +2040,23 @@
                             <option value="">Alle Typen</option>
                             <option value="belastung">📤 Belastung</option>
                             <option value="gutschrift">📥 Gutschrift</option>
+                        </select>
+                        
+                        <select id="filter-hz-intervall" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                            <option value="">Alle Intervalle</option>
+                            <option value="monatlich">📅 Monatlich</option>
+                            <option value="januar">Jänner</option>
+                            <option value="februar">Februar</option>
+                            <option value="maerz">März</option>
+                            <option value="april">April</option>
+                            <option value="mai">Mai</option>
+                            <option value="juni">Juni</option>
+                            <option value="juli">Juli</option>
+                            <option value="august">August</option>
+                            <option value="september">September</option>
+                            <option value="oktober">Oktober</option>
+                            <option value="november">November</option>
+                            <option value="dezember">Dezember</option>
                         </select>
                         
                         <button id="reset-filters-haushaltszahlungen" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
@@ -2089,17 +2109,23 @@
                     <div class="p-6 space-y-4">
                         <input type="hidden" id="hz-id">
                         
-                        <!-- Zweck & Organisation -->
+                        <!-- Zweck & Organisation mit Autocomplete -->
                         <div class="grid grid-cols-2 gap-4">
-                            <div>
+                            <div class="relative">
                                 <label class="block text-sm font-bold text-gray-700 mb-1">Zahlungszweck *</label>
-                                <input type="text" id="hz-zweck" placeholder="z.B. Miete, Strom, Internet..." 
-                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-cyan-500">
+                                <input type="text" id="hz-zweck" list="hz-zweck-list" placeholder="z.B. Miete, Strom, Internet..." 
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-cyan-500" autocomplete="off">
+                                <datalist id="hz-zweck-list">
+                                    <!-- Wird dynamisch befüllt -->
+                                </datalist>
                             </div>
-                            <div>
+                            <div class="relative">
                                 <label class="block text-sm font-bold text-gray-700 mb-1">Organisation *</label>
-                                <input type="text" id="hz-organisation" placeholder="z.B. Stadtwerke, Telekom..." 
-                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-cyan-500">
+                                <input type="text" id="hz-organisation" list="hz-organisation-list" placeholder="z.B. Stadtwerke, Telekom..." 
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-cyan-500" autocomplete="off">
+                                <datalist id="hz-organisation-list">
+                                    <!-- Wird dynamisch befüllt -->
+                                </datalist>
                             </div>
                         </div>
                         
@@ -2455,6 +2481,155 @@
                     <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-end">
                         <button onclick="document.getElementById('hz-einladungen-modal').style.display='none'" class="px-6 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
                             Schließen
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== ABTAUSCH MODAL ========== -->
+            <div id="hz-abtausch-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <div class="sticky top-0 bg-gradient-to-r from-purple-600 to-indigo-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                        <h3 class="text-xl font-bold">🔄 Zahlung abtauschen</h3>
+                        <button onclick="window.closeAbtauschModal()" class="text-white/80 hover:text-white transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="p-6">
+                        <!-- Alter Eintrag Info -->
+                        <div class="bg-gray-100 rounded-lg p-4 mb-4">
+                            <h4 class="font-bold text-gray-700 mb-2">📋 Aktueller Eintrag (wird beendet)</h4>
+                            <div class="grid grid-cols-3 gap-2 text-sm">
+                                <div>
+                                    <span class="text-gray-500">Zweck:</span>
+                                    <span id="hz-abtausch-alter-zweck" class="font-medium">-</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Betrag:</span>
+                                    <span id="hz-abtausch-alter-betrag" class="font-medium">-</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Gültigkeit:</span>
+                                    <span id="hz-abtausch-alter-gueltig" class="font-medium">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Datumsfelder -->
+                        <div class="grid grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">📅 Neuer Beginn *</label>
+                                <input type="date" id="hz-abtausch-neuer-beginn" class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-purple-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">📅 Alter Eintrag endet am</label>
+                                <input type="date" id="hz-abtausch-altes-ende" class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-purple-500">
+                                <p class="text-xs text-gray-500 mt-1">Wird automatisch berechnet (Tag vor neuem Beginn)</p>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+                        <h4 class="font-bold text-gray-700 mb-3">✨ Neuer Eintrag (Werte anpassen)</h4>
+
+                        <!-- Neue Werte -->
+                        <div class="grid grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Zahlungszweck</label>
+                                <input type="text" id="hz-abtausch-zweck" class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-purple-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Organisation</label>
+                                <input type="text" id="hz-abtausch-organisation" class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-purple-500">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">💰 Neuer Betrag *</label>
+                                <input type="number" step="0.01" id="hz-abtausch-betrag" class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-purple-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Anteil Markus %</label>
+                                <input type="number" min="0" max="100" id="hz-abtausch-anteil" class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-purple-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Kundennummer</label>
+                                <input type="text" id="hz-abtausch-kundennummer" class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-purple-500">
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Vertragsnummer</label>
+                            <input type="text" id="hz-abtausch-vertragsnummer" class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-purple-500">
+                        </div>
+
+                        <!-- Intervall -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-bold text-gray-700 mb-2">📆 Intervall</label>
+                            <div class="grid grid-cols-4 gap-2">
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="monatlich" class="hz-abtausch-intervall rounded">
+                                    <span class="text-sm">Monatlich</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="januar" class="hz-abtausch-intervall rounded">
+                                    <span class="text-sm">Jänner</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="februar" class="hz-abtausch-intervall rounded">
+                                    <span class="text-sm">Februar</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="maerz" class="hz-abtausch-intervall rounded">
+                                    <span class="text-sm">März</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="april" class="hz-abtausch-intervall rounded">
+                                    <span class="text-sm">April</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="mai" class="hz-abtausch-intervall rounded">
+                                    <span class="text-sm">Mai</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="juni" class="hz-abtausch-intervall rounded">
+                                    <span class="text-sm">Juni</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="juli" class="hz-abtausch-intervall rounded">
+                                    <span class="text-sm">Juli</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="august" class="hz-abtausch-intervall rounded">
+                                    <span class="text-sm">August</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="september" class="hz-abtausch-intervall rounded">
+                                    <span class="text-sm">September</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="oktober" class="hz-abtausch-intervall rounded">
+                                    <span class="text-sm">Oktober</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="november" class="hz-abtausch-intervall rounded">
+                                    <span class="text-sm">November</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="dezember" class="hz-abtausch-intervall rounded">
+                                    <span class="text-sm">Dezember</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-3">
+                        <button onclick="window.closeAbtauschModal()" class="px-6 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
+                            Abbrechen
+                        </button>
+                        <button onclick="window.saveAbtausch()" class="px-6 py-2 bg-gradient-to-r from-purple-600 to-indigo-500 text-white font-bold rounded-lg hover:opacity-90 transition">
+                            🔄 Abtausch speichern
                         </button>
                     </div>
                 </div>

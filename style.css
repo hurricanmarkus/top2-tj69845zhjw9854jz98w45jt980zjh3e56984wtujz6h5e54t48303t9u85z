@@ -191,3 +191,88 @@ option {
     -ms-overflow-style: none;
     scrollbar-width: none;
 }
+
+/* ========================================
+   HAUSHALTSZAHLUNGEN: Scrollbar immer sichtbar
+   ======================================== */
+
+/* Für die Haushaltszahlungen-Ansicht: Scrollbar immer anzeigen */
+#haushaltszahlungenView {
+    overflow-y: auto !important;
+    scrollbar-gutter: stable;
+}
+
+/* Scrollbar-Styling für Webkit-Browser (Chrome, Safari, Edge) */
+#haushaltszahlungenView::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+#haushaltszahlungenView::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 5px;
+}
+
+#haushaltszahlungenView::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 5px;
+}
+
+#haushaltszahlungenView::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Für Firefox */
+#haushaltszahlungenView {
+    scrollbar-width: auto;
+    scrollbar-color: #888 #f1f1f1;
+}
+
+/* Tabellen-Container mit sichtbarer Scrollbar */
+#haushaltszahlungenView .overflow-x-auto {
+    overflow-x: auto !important;
+    scrollbar-gutter: stable;
+}
+
+#haushaltszahlungenView .overflow-x-auto::-webkit-scrollbar {
+    height: 8px;
+}
+
+#haushaltszahlungenView .overflow-x-auto::-webkit-scrollbar-track {
+    background: #e5e7eb;
+    border-radius: 4px;
+}
+
+#haushaltszahlungenView .overflow-x-auto::-webkit-scrollbar-thumb {
+    background: #9ca3af;
+    border-radius: 4px;
+}
+
+#haushaltszahlungenView .overflow-x-auto::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
+}
+
+/* Main-Content Scrollbar für PC immer sichtbar */
+@media (min-width: 768px) {
+    .main-content {
+        scrollbar-width: auto;
+        scrollbar-color: #888 #f1f1f1;
+    }
+    
+    .main-content::-webkit-scrollbar {
+        width: 10px;
+    }
+    
+    .main-content::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+    
+    .main-content::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 5px;
+    }
+    
+    .main-content::-webkit-scrollbar-thumb:hover {
+        background: #555;
+    }
+}
