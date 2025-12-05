@@ -1006,23 +1006,23 @@ function renderMitgliederBeitraege(stats) {
         const statusText = hasAlarm ? 'ALARM' : (hasOhneBetrag ? 'PRÜFEN' : 'Alles okay');
         const statusColor = hasAlarm ? 'bg-red-500' : (hasOhneBetrag ? 'bg-yellow-500' : 'bg-green-500');
         
-        // IST/SOLL Details pro Intervall (jetzt mit korrekten SOLL-Werten pro Mitglied)
+        // IST/SOLL Details pro Intervall (vereinfacht: 3 Spalten - Monat, IST, SOLL)
         const intervallDetails = Object.entries(INTERVALL_CONFIG).map(([key, config]) => {
             const sollIntervall = mitgliedSoll[key] || 0;
             const istIntervall = dauerauftraege[key] || 0;
-            const diff = istIntervall - sollIntervall;
-            const hasDiff = Math.abs(diff) > 0.01 && sollIntervall > 0;
+            const hasDiff = Math.abs(istIntervall - sollIntervall) > 0.01;
             
+            // Nur anzeigen wenn SOLL oder IST > 0
             if (sollIntervall === 0 && istIntervall === 0) return '';
             
+            // Rot markieren bei Abweichung
+            const rowClass = hasDiff ? 'bg-red-500/40 text-white font-bold' : '';
+            
             return `
-                <div class="flex justify-between items-center py-1 border-b border-white/10 ${hasDiff ? (diff < 0 ? 'bg-red-500/20' : 'bg-green-500/20') : ''}">
-                    <span class="text-xs">${config.label}</span>
-                    <div class="flex gap-2 text-xs">
-                        <span class="text-white/70">IST: ${formatCurrency(istIntervall)}</span>
-                        <span class="text-white/70">SOLL: ${formatCurrency(sollIntervall)}</span>
-                        ${hasDiff ? `<span class="${diff < 0 ? 'text-red-300 font-bold' : 'text-green-300'}">${diff > 0 ? '+' : ''}${formatCurrency(diff)}</span>` : ''}
-                    </div>
+                <div class="grid grid-cols-3 gap-2 py-1 border-b border-white/10 text-xs ${rowClass}">
+                    <span>${config.label}</span>
+                    <span class="text-right">${formatCurrency(istIntervall)}</span>
+                    <span class="text-right">${formatCurrency(sollIntervall)}</span>
                 </div>
             `;
         }).filter(Boolean).join('');
@@ -1060,6 +1060,12 @@ function renderMitgliederBeitraege(stats) {
                 <!-- Ausklappbare Details -->
                 <div id="hz-details-${mitgliedId}" class="hidden mt-2 bg-white/10 rounded-lg p-2">
                     <h5 class="text-xs font-bold mb-2 border-b border-white/20 pb-1">📊 IST vs. SOLL Einzahlungen</h5>
+                    <!-- Tabellen-Header -->
+                    <div class="grid grid-cols-3 gap-2 py-1 border-b border-white/30 text-xs font-bold text-white/80 mb-1">
+                        <span>Intervall</span>
+                        <span class="text-right">IST</span>
+                        <span class="text-right">SOLL</span>
+                    </div>
                     ${intervallDetails || '<p class="text-xs text-white/50">Keine Daueraufträge konfiguriert</p>'}
                     
                     <div class="mt-2 pt-2 border-t border-white/20">
@@ -2078,15 +2084,17 @@ async function loadProtokoll(userId) {
         const snapshot = await getDocs(q);
         
         const protokolle = [];
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            if (data.themaId === currentThemaId && data.mitgliedName === userId) {
+        snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            // Prüfe sowohl mitgliedName als auch mitgliedUserId für Kompatibilität
+            if (data.themaId === currentThemaId && 
+                (data.mitgliedName === userId || data.mitgliedUserId === userId || data.mitgliedName === currentDauerauftraegeMitglied?.name)) {
                 protokolle.push(data);
             }
         });
         
         if (protokolle.length === 0) {
-            container.innerHTML = '<p class="text-gray-500 italic">Keine Änderungen protokolliert</p>';
+            container.innerHTML = '<p class="text-gray-500 italic text-sm">Keine Änderungen protokolliert</p>';
             return;
         }
         
@@ -2127,6 +2135,39 @@ async function saveSettings() {
         }
     }
 }
+
+// Globale Funktionen für Daueraufträge und Protokoll
+window.saveDauerauftraege = saveDauerauftraege;
+window.toggleProtokoll = toggleProtokoll;
+window.saveSettings = saveSettings;
+window.closeDauerauftraegeModal = function() {
+    const modal = document.getElementById('hz-dauerauftraege-modal');
+    if (modal) modal.style.display = 'none';
+    currentDauerauftraegeMitglied = null;
+};
+window.openThemaSettings = function() {
+    openSettingsModal();
+};
+window.closeSettingsModal = function() {
+    const modal = document.getElementById('haushaltszahlungenSettingsModal');
+    if (modal) modal.style.display = 'none';
+};
+window.closeAddThemaModal = function() {
+    const modal = document.getElementById('hz-add-thema-modal');
+    if (modal) modal.style.display = 'none';
+};
+window.closeAddMitgliedModal = function() {
+    const modal = document.getElementById('hz-add-mitglied-modal');
+    if (modal) modal.style.display = 'none';
+};
+window.closeAlarmeModal = function() {
+    const modal = document.getElementById('hz-alarme-modal');
+    if (modal) modal.style.display = 'none';
+};
+window.closeEinladungenModal = function() {
+    const modal = document.getElementById('hz-einladungen-modal');
+    if (modal) modal.style.display = 'none';
+};
 
 // Globale Funktionen für Einstellungen
 window.archiveThema = async function(themaId) {
