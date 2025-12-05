@@ -119,9 +119,43 @@ async function loadThemen() {
             THEMEN[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
         });
         
-        // Wenn kein Thema existiert, Standard-Thema erstellen
+        // Wenn kein Thema existiert, prüfe ob Legacy-Daten existieren
         if (Object.keys(THEMEN).length === 0) {
-            await createDefaultThema();
+            // Prüfe ob Legacy-Collection existiert (alte Struktur: /haushaltszahlungen/{id})
+            const legacyRef = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen');
+            const legacySnapshot = await getDocs(legacyRef);
+            
+            if (!legacySnapshot.empty) {
+                // Legacy-Daten gefunden - erstelle Thema mit dieser ID
+                // Die erste Sub-Collection ist das "Thema"
+                const legacyIds = [];
+                legacySnapshot.forEach(doc => {
+                    // Prüfe ob es sich um eine Sub-Collection handelt (hat Dokumente)
+                    legacyIds.push(doc.ref.parent.id);
+                });
+                
+                // Verwende die bekannte Legacy-ID
+                const legacyThemaId = '9wxDEbDH8nv4PHYMRBxD';
+                THEMEN[legacyThemaId] = {
+                    id: legacyThemaId,
+                    name: 'Haushalt (Legacy)',
+                    ersteller: currentUser?.displayName || 'System',
+                    mitglieder: [{
+                        userId: currentUser?.mode || 'system',
+                        name: currentUser?.displayName || 'System',
+                        zugriffsrecht: 'vollzugriff',
+                        anteil: 50,
+                        dauerauftraege: {
+                            monatlich: 0,
+                            januar: 0, februar: 0, maerz: 0, april: 0, mai: 0, juni: 0,
+                            juli: 0, august: 0, september: 0, oktober: 0, november: 0, dezember: 0
+                        }
+                    }]
+                };
+                console.log("📦 Legacy-Haushaltszahlungen gefunden, verwende ID:", legacyThemaId);
+            } else {
+                await createDefaultThema();
+            }
         }
         
         // Erstes Thema auswählen oder gespeichertes
@@ -166,7 +200,8 @@ async function createDefaultThema() {
 
 function updateCollectionForThema() {
     if (currentThemaId && db) {
-        haushaltszahlungenCollection = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen_themen', currentThemaId, 'eintraege');
+        // Einträge liegen in: /artifacts/{appId}/public/data/haushaltszahlungen/{themaId}
+        haushaltszahlungenCollection = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen', currentThemaId);
         listenForHaushaltszahlungen();
     }
 }
