@@ -101,6 +101,12 @@ export async function initializeHaushaltszahlungen() {
         haushaltszahlungenThemenRef = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen_themen');
         haushaltszahlungenProtokollRef = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen_protokoll');
         haushaltszahlungenEinladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen_einladungen');
+        
+        console.log("📂 Firebase Referenzen erstellt:");
+        console.log("  - Themen:", haushaltszahlungenThemenRef.path);
+        console.log("  - Protokoll:", haushaltszahlungenProtokollRef.path);
+        console.log("  - Einladungen:", haushaltszahlungenEinladungenRef.path);
+        
         loadSettings();
         await loadThemen(); // Warte auf Themen bevor Dashboard gerendert wird
         loadEinladungen();
@@ -168,10 +174,13 @@ async function createDefaultThema() {
 
 function updateCollectionForThema() {
     if (currentThemaId && db) {
-        // Einträge liegen in: /artifacts/{appId}/public/data/haushaltszahlungen/{themaId}/eintraege
-        // Collection-Referenzen müssen ungerade Anzahl Segmente haben (7 statt 6)
-        haushaltszahlungenCollection = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen', currentThemaId, 'eintraege');
+        // Einträge liegen als Sub-Collection unter dem Thema-Dokument:
+        // /artifacts/{appId}/public/data/haushaltszahlungen_themen/{themaId}/eintraege
+        haushaltszahlungenCollection = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen_themen', currentThemaId, 'eintraege');
+        console.log("📂 Einträge-Collection aktualisiert:", haushaltszahlungenCollection.path);
         listenForHaushaltszahlungen();
+    } else {
+        console.warn("⚠️ updateCollectionForThema: currentThemaId oder db fehlt", { currentThemaId, db: !!db });
     }
 }
 
@@ -1983,12 +1992,26 @@ function openDauerauftraegeModal(userId) {
 }
 
 async function saveDauerauftraege() {
-    if (!currentDauerauftraegeMitglied) return;
+    console.log("💾 saveDauerauftraege aufgerufen");
+    console.log("  - currentDauerauftraegeMitglied:", currentDauerauftraegeMitglied);
+    console.log("  - currentThemaId:", currentThemaId);
+    
+    if (!currentDauerauftraegeMitglied) {
+        console.error("❌ Kein Mitglied ausgewählt");
+        alertUser('Fehler: Kein Mitglied ausgewählt', 'error');
+        return;
+    }
     
     const thema = THEMEN[currentThemaId];
-    if (!thema) return;
+    if (!thema) {
+        console.error("❌ Kein Thema gefunden für ID:", currentThemaId);
+        alertUser('Fehler: Kein Thema gefunden', 'error');
+        return;
+    }
     
     const inputs = document.querySelectorAll('.hz-dauerauftrag-input');
+    console.log("  - Gefundene Inputs:", inputs.length);
+    
     const newDauerauftraege = {};
     const changes = [];
     
@@ -2010,34 +2033,59 @@ async function saveDauerauftraege() {
         }
     });
     
+    console.log("  - Neue Daueraufträge:", newDauerauftraege);
+    console.log("  - Änderungen:", changes);
+    
     try {
         // Update Mitglied
-        const mitgliedIndex = thema.mitglieder.findIndex(m => m.name === currentDauerauftraegeMitglied.name);
+        const mitgliedIndex = thema.mitglieder.findIndex(m => 
+            m.name === currentDauerauftraegeMitglied.name || 
+            m.userId === currentDauerauftraegeMitglied.userId
+        );
+        
+        console.log("  - Mitglied Index:", mitgliedIndex);
+        
         if (mitgliedIndex >= 0) {
             thema.mitglieder[mitgliedIndex].dauerauftraege = newDauerauftraege;
             
+            console.log("  - Speichere in Firebase...");
             await updateDoc(doc(haushaltszahlungenThemenRef, currentThemaId), {
                 mitglieder: thema.mitglieder
             });
+            console.log("  ✅ Thema aktualisiert");
             
-            // Protokoll speichern
+            // Protokoll speichern (optional, Fehler ignorieren)
             if (changes.length > 0) {
-                await addDoc(haushaltszahlungenProtokollRef, {
-                    themaId: currentThemaId,
-                    mitgliedName: currentDauerauftraegeMitglied.name,
-                    changes,
-                    timestamp: serverTimestamp(),
-                    changedBy: currentUser.displayName
-                });
+                try {
+                    await addDoc(haushaltszahlungenProtokollRef, {
+                        themaId: currentThemaId,
+                        mitgliedName: currentDauerauftraegeMitglied.name,
+                        mitgliedUserId: currentDauerauftraegeMitglied.userId,
+                        changes,
+                        timestamp: serverTimestamp(),
+                        changedBy: currentUser.displayName
+                    });
+                    console.log("  ✅ Protokoll gespeichert");
+                } catch (protokollError) {
+                    console.warn("⚠️ Protokoll konnte nicht gespeichert werden:", protokollError);
+                }
             }
+            
+            // Update lokales Objekt
+            THEMEN[currentThemaId] = thema;
+        } else {
+            console.error("❌ Mitglied nicht gefunden in Thema");
+            alertUser('Fehler: Mitglied nicht gefunden', 'error');
+            return;
         }
         
         document.getElementById('hz-dauerauftraege-modal').style.display = 'none';
+        currentDauerauftraegeMitglied = null;
         renderDashboard();
         alertUser('Daueraufträge gespeichert!', 'success');
     } catch (error) {
-        console.error("Fehler beim Speichern:", error);
-        alertUser('Fehler: ' + error.message, 'error');
+        console.error("❌ Fehler beim Speichern:", error);
+        alertUser('Fehler beim Speichern: ' + (error.message || error), 'error');
     }
 }
 
