@@ -1866,8 +1866,8 @@ async function saveNewMitglied() {
     try {
         const zugriffsrecht = ZUGRIFFSRECHTE[recht];
         
-        // Wenn "Nicht teilen" gewählt, direkt hinzufügen ohne Einladung
-        if (!zugriffsrecht?.isShared) {
+        // Eigener Benutzer oder "Nicht teilen" -> direkt hinzufügen ohne Einladung
+        if (isCurrentUser || !zugriffsrecht?.isShared) {
             const newMitglied = {
                 userId: userId,
                 name: userName,
@@ -1891,7 +1891,7 @@ async function saveNewMitglied() {
             renderMitgliederListe();
             renderKostenaufteilung();
             renderDashboard();
-            alertUser('Mitglied hinzugefügt (ohne Einladung)!', 'success');
+            alertUser(isCurrentUser ? 'Du wurdest wieder hinzugefügt!' : 'Mitglied hinzugefügt (ohne Einladung)!', 'success');
         } else {
             // Einladung senden
             const einladung = {
