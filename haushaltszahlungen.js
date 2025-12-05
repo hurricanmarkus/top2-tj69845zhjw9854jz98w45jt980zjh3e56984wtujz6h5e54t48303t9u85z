@@ -93,7 +93,7 @@ const TYP_CONFIG = {
 // ========================================
 // INITIALISIERUNG
 // ========================================
-export function initializeHaushaltszahlungen() {
+export async function initializeHaushaltszahlungen() {
     console.log("🏠 Haushaltszahlungen-System wird initialisiert...");
 
     if (db) {
@@ -102,7 +102,7 @@ export function initializeHaushaltszahlungen() {
         haushaltszahlungenProtokollRef = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen_protokoll');
         haushaltszahlungenEinladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen_einladungen');
         loadSettings();
-        loadThemen();
+        await loadThemen(); // Warte auf Themen bevor Dashboard gerendert wird
         loadEinladungen();
     }
 
@@ -887,14 +887,38 @@ function renderMitgliederBeitraege(stats) {
     if (!container) return;
     
     const thema = THEMEN[currentThemaId];
-    if (!thema || !thema.mitglieder) {
+    if (!thema || !thema.mitglieder || thema.mitglieder.length === 0) {
         container.innerHTML = '<p class="text-white/70 text-sm">Keine Mitglieder konfiguriert</p>';
         return;
     }
     
+    // Prüfe Prozentverteilung
+    const gesamtAnteil = thema.mitglieder.reduce((sum, m) => sum + (m.anteil || 0), 0);
+    const hasPercentError = gesamtAnteil !== 100;
+    
+    // Fehler-Banner wenn Prozente nicht 100% ergeben
+    let errorBanner = '';
+    if (hasPercentError) {
+        const differenz = 100 - gesamtAnteil;
+        errorBanner = `
+            <div class="mb-4 p-4 bg-red-500/30 border-2 border-red-400 rounded-lg">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-2xl">⚠️</span>
+                    <span class="text-lg font-bold text-white">Fehler in Prozentverteilung!</span>
+                </div>
+                <p class="text-white/90 mb-2">
+                    Aktuell verteilt: <strong>${gesamtAnteil}%</strong> (${differenz > 0 ? `${differenz}% fehlen` : `${Math.abs(differenz)}% zuviel`})
+                </p>
+                <button onclick="window.openThemaSettings()" class="px-3 py-1 bg-white text-red-600 font-bold rounded hover:bg-red-100 transition">
+                    Jetzt korrigieren →
+                </button>
+            </div>
+        `;
+    }
+    
     const colors = ['blue', 'pink', 'green', 'purple', 'orange', 'cyan'];
     
-    container.innerHTML = thema.mitglieder.map((mitglied, index) => {
+    container.innerHTML = errorBanner + thema.mitglieder.map((mitglied, index) => {
         const color = colors[index % colors.length];
         const anteil = mitglied.anteil || (100 / thema.mitglieder.length);
         const mitgliedId = (mitglied.userId || mitglied.name).replace(/[^a-zA-Z0-9]/g, '_');
@@ -1642,8 +1666,34 @@ function renderKostenaufteilung() {
     
     // Berechne Gesamtanteil
     const gesamtAnteil = thema.mitglieder.reduce((sum, m) => sum + (m.anteil || 0), 0);
+    const differenz = 100 - gesamtAnteil;
+    const hasError = gesamtAnteil !== 100;
     
-    container.innerHTML = thema.mitglieder.map((mitglied, index) => {
+    // Fehler-Banner wenn Prozente nicht 100% ergeben
+    let errorBanner = '';
+    if (hasError) {
+        const errorType = differenz > 0 ? 'fehlen' : 'zuviel';
+        const errorAmount = Math.abs(differenz);
+        errorBanner = `
+            <div class="mb-4 p-4 bg-red-100 border-2 border-red-500 rounded-lg">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-2xl">⚠️</span>
+                    <span class="text-lg font-bold text-red-700">Fehler in Prozentverteilung!</span>
+                </div>
+                <p class="text-red-700 mb-2">
+                    <strong>${errorAmount}%</strong> ${errorType} zur korrekten Verteilung.
+                    ${differenz > 0 
+                        ? 'Diese Prozente sind keiner Person zugewiesen und werden nicht berechnet.' 
+                        : 'Die Summe übersteigt 100% - bitte korrigiere die Anteile.'}
+                </p>
+                <p class="text-red-600 text-sm">
+                    Bitte verteile alle Prozente auf die vorhandenen Mitglieder, sodass die Summe genau 100% ergibt.
+                </p>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = errorBanner + thema.mitglieder.map((mitglied, index) => {
         // Vollen Namen ermitteln
         const userObj = Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name);
         const displayName = userObj?.realName || mitglied.name || mitglied.userId;
@@ -1651,18 +1701,22 @@ function renderKostenaufteilung() {
         return `
         <div class="flex items-center gap-3">
             <span class="w-24 font-bold text-gray-700">${displayName}</span>
-            <input type="number" min="0" max="100" value="${mitglied.anteil || Math.round(100 / thema.mitglieder.length)}" 
+            <input type="number" min="0" max="100" value="${mitglied.anteil || 0}" 
                 onchange="window.updateMitgliedAnteil(${index}, this.value)"
-                class="w-20 p-2 border-2 border-gray-300 rounded-lg text-center font-bold">
+                class="w-20 p-2 border-2 ${hasError ? 'border-red-400' : 'border-gray-300'} rounded-lg text-center font-bold">
             <span class="text-gray-500">%</span>
             <div class="flex-1 bg-gray-200 rounded-full h-3">
-                <div class="bg-cyan-500 h-3 rounded-full" style="width: ${mitglied.anteil || Math.round(100 / thema.mitglieder.length)}%"></div>
+                <div class="${hasError ? 'bg-red-500' : 'bg-cyan-500'} h-3 rounded-full" style="width: ${Math.min(mitglied.anteil || 0, 100)}%"></div>
             </div>
         </div>
     `}).join('') + `
-        <div class="mt-2 p-2 rounded-lg ${gesamtAnteil === 100 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
-            <span class="font-bold">Gesamt: ${gesamtAnteil}%</span>
-            ${gesamtAnteil !== 100 ? ' ⚠️ Sollte 100% sein!' : ' ✓'}
+        <div class="mt-3 p-3 rounded-lg ${gesamtAnteil === 100 ? 'bg-green-100 text-green-700 border border-green-300' : 'bg-red-100 text-red-700 border-2 border-red-400'}">
+            <div class="flex justify-between items-center">
+                <span class="font-bold text-lg">Gesamt: ${gesamtAnteil}%</span>
+                ${gesamtAnteil === 100 
+                    ? '<span class="text-green-600 font-bold">✓ Korrekt verteilt</span>' 
+                    : `<span class="text-red-600 font-bold">${differenz > 0 ? '+' : ''}${differenz}% ${differenz > 0 ? 'fehlen' : 'zuviel'}</span>`}
+            </div>
         </div>
     `;
 }
@@ -1717,25 +1771,36 @@ function openAddMitgliedModal() {
     const thema = THEMEN[currentThemaId];
     
     if (userSelect) {
-        // Filtere Benutzer: Nur registrierte, aktive Benutzer, die nicht bereits Mitglied sind und nicht der aktuelle Benutzer
         const existingMemberIds = thema?.mitglieder?.map(m => m.userId || m.name) || [];
+        
+        // Prüfe ob der eigene Benutzer bereits Mitglied ist
+        const currentUserIsMember = existingMemberIds.includes(currentUser.displayName) || 
+                                     existingMemberIds.includes(currentUser.mode);
         
         const availableUsers = Object.values(USERS).filter(user => {
             // Nur aktive, registrierte Benutzer
             if (!user.isActive || user.permissionType === 'not_registered') return false;
-            // Nicht den aktuellen Benutzer anzeigen
-            if (user.id === currentUser.mode || user.name === currentUser.displayName) return false;
             // Nicht bereits Mitglieder
             if (existingMemberIds.includes(user.id) || existingMemberIds.includes(user.name)) return false;
             return true;
         });
         
-        userSelect.innerHTML = '<option value="">Benutzer wählen...</option>' +
-            availableUsers.map(user => {
-                const displayName = user.realName || user.name || user.displayName || user.id;
-                const id = user.id || user.name;
-                return `<option value="${id}">${displayName}</option>`;
-            }).join('');
+        // Wenn der eigene Benutzer fehlt, füge ihn zur Liste hinzu (an erster Stelle)
+        let options = '<option value="">Benutzer wählen...</option>';
+        
+        if (!currentUserIsMember) {
+            const currentUserObj = Object.values(USERS).find(u => u.id === currentUser.mode || u.name === currentUser.displayName);
+            const currentDisplayName = currentUserObj?.realName || currentUser.displayName;
+            options += `<option value="${currentUser.displayName}" class="font-bold">${currentDisplayName} (Du selbst)</option>`;
+        }
+        
+        options += availableUsers.map(user => {
+            const displayName = user.realName || user.name || user.displayName || user.id;
+            const id = user.id || user.name;
+            return `<option value="${id}">${displayName}</option>`;
+        }).join('');
+        
+        userSelect.innerHTML = options;
     }
     document.getElementById('hz-add-mitglied-modal').style.display = 'flex';
 }
@@ -1746,7 +1811,7 @@ async function saveNewMitglied() {
     const anteilInput = document.getElementById('hz-mitglied-anteil');
     
     const userId = userSelect?.value;
-    const recht = rechtSelect?.value || 'lesen';
+    let recht = rechtSelect?.value || 'lesen';
     const anteil = parseInt(anteilInput?.value) || 50;
     
     if (!userId) {
@@ -1761,32 +1826,41 @@ async function saveNewMitglied() {
     const targetUser = Object.values(USERS).find(u => u.id === userId || u.name === userId);
     const userName = targetUser?.realName || targetUser?.name || userId;
     
+    // Prüfe ob es der eigene Benutzer ist - dann immer Vollzugriff
+    const isCurrentUser = userId === currentUser.displayName || userId === currentUser.mode;
+    if (isCurrentUser) {
+        recht = 'vollzugriff'; // Eigener Benutzer hat immer Vollzugriff
+    }
+    
     // Prüfe ob Benutzer bereits Mitglied ist
     if (thema.mitglieder?.some(m => m.userId === userId || m.name === userName)) {
         alertUser('Benutzer ist bereits Mitglied', 'error');
         return;
     }
     
-    // Prüfe ob eine abgelehnte Einladung existiert
-    const rejectedInvite = Object.values(EINLADUNGEN).find(e => 
-        e.themaId === currentThemaId && 
-        e.targetUserId === userId && 
-        e.status === 'rejected'
-    );
-    if (rejectedInvite) {
-        alertUser('Dieser Benutzer hat die Einladung abgelehnt. Er muss die Ablehnung erst widerrufen.', 'error');
-        return;
-    }
-    
-    // Prüfe ob bereits eine ausstehende Einladung existiert
-    const pendingInvite = Object.values(EINLADUNGEN).find(e => 
-        e.themaId === currentThemaId && 
-        e.targetUserId === userId && 
-        e.status === 'pending'
-    );
-    if (pendingInvite) {
-        alertUser('Es existiert bereits eine ausstehende Einladung für diesen Benutzer.', 'error');
-        return;
+    // Für andere Benutzer: Prüfe Einladungsstatus
+    if (!isCurrentUser) {
+        // Prüfe ob eine abgelehnte Einladung existiert
+        const rejectedInvite = Object.values(EINLADUNGEN).find(e => 
+            e.themaId === currentThemaId && 
+            e.targetUserId === userId && 
+            e.status === 'rejected'
+        );
+        if (rejectedInvite) {
+            alertUser('Dieser Benutzer hat die Einladung abgelehnt. Er muss die Ablehnung erst widerrufen.', 'error');
+            return;
+        }
+        
+        // Prüfe ob bereits eine ausstehende Einladung existiert
+        const pendingInvite = Object.values(EINLADUNGEN).find(e => 
+            e.themaId === currentThemaId && 
+            e.targetUserId === userId && 
+            e.status === 'pending'
+        );
+        if (pendingInvite) {
+            alertUser('Es existiert bereits eine ausstehende Einladung für diesen Benutzer.', 'error');
+            return;
+        }
     }
     
     try {
