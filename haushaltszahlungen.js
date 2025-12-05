@@ -2,6 +2,7 @@
 // ========================================
 // HAUSHALTSZAHLUNGEN SYSTEM
 // Digitalisierung der Excel-Haushaltsberechnung
+// Mit Themen-System und Multi-Personen-Unterstützung
 // ========================================
 
 import {
@@ -24,7 +25,8 @@ import {
     updateDoc,
     deleteDoc,
     getDoc,
-    setDoc
+    setDoc,
+    getDocs
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ========================================
@@ -32,18 +34,26 @@ import {
 // ========================================
 let haushaltszahlungenCollection = null;
 let haushaltszahlungenSettingsRef = null;
+let haushaltszahlungenThemenRef = null;
+let haushaltszahlungenProtokollRef = null;
 let HAUSHALTSZAHLUNGEN = {};
+let THEMEN = {};
+let currentThemaId = null; // Aktuell ausgewähltes Thema
 let currentFilter = { status: '', typ: '', person: '' };
 let searchTerm = '';
 let simulationsDatum = null; // Für Datums-Simulation (wie W7 in Excel)
 
 // Standard-Einstellungen
 let haushaltszahlungenSettings = {
-    personen: [
-        { id: 'markus', name: 'Markus', defaultAnteil: 50 },
-        { id: 'jasmin', name: 'Jasmin', defaultAnteil: 50 }
-    ],
+    personen: [],
     defaultAnteilMarkus: 50
+};
+
+// Zugriffsrechte
+const ZUGRIFFSRECHTE = {
+    lesen: { label: 'Nur Lesen', icon: '👁️', canEdit: false, canEditOwn: false },
+    eigene: { label: 'Eigene Zahlung ändern', icon: '✏️', canEdit: false, canEditOwn: true },
+    vollzugriff: { label: 'Vollzugriff', icon: '🔓', canEdit: true, canEditOwn: true }
 };
 
 // Intervall-Konfiguration (Spalten G-S in Excel)
@@ -84,13 +94,85 @@ export function initializeHaushaltszahlungen() {
     console.log("🏠 Haushaltszahlungen-System wird initialisiert...");
 
     if (db) {
-        haushaltszahlungenCollection = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen');
         haushaltszahlungenSettingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'haushaltszahlungen');
+        haushaltszahlungenThemenRef = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen_themen');
+        haushaltszahlungenProtokollRef = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen_protokoll');
         loadSettings();
+        loadThemen();
     }
 
     setupEventListeners();
     renderDashboard();
+}
+
+// Themen laden
+async function loadThemen() {
+    try {
+        const snapshot = await getDocs(haushaltszahlungenThemenRef);
+        THEMEN = {};
+        snapshot.forEach((docSnap) => {
+            THEMEN[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
+        });
+        
+        // Wenn kein Thema existiert, Standard-Thema erstellen
+        if (Object.keys(THEMEN).length === 0) {
+            await createDefaultThema();
+        }
+        
+        // Erstes Thema auswählen oder gespeichertes
+        const savedThemaId = localStorage.getItem('hz_current_thema');
+        if (savedThemaId && THEMEN[savedThemaId]) {
+            currentThemaId = savedThemaId;
+        } else {
+            currentThemaId = Object.keys(THEMEN)[0];
+        }
+        
+        renderThemenDropdown();
+        updateCollectionForThema();
+    } catch (e) {
+        console.error("Fehler beim Laden der Themen:", e);
+    }
+}
+
+async function createDefaultThema() {
+    try {
+        const defaultThema = {
+            name: 'Haushalt',
+            ersteller: currentUser.displayName,
+            erstelltAm: serverTimestamp(),
+            mitglieder: [{
+                oderId: currentUser.displayName,
+                name: currentUser.displayName,
+                zugriffsrecht: 'vollzugriff',
+                dauerauftraege: {
+                    monatlich: 0,
+                    januar: 0, februar: 0, maerz: 0, april: 0, mai: 0, juni: 0,
+                    juli: 0, august: 0, september: 0, oktober: 0, november: 0, dezember: 0
+                }
+            }]
+        };
+        const docRef = await addDoc(haushaltszahlungenThemenRef, defaultThema);
+        THEMEN[docRef.id] = { id: docRef.id, ...defaultThema };
+        currentThemaId = docRef.id;
+    } catch (e) {
+        console.error("Fehler beim Erstellen des Standard-Themas:", e);
+    }
+}
+
+function updateCollectionForThema() {
+    if (currentThemaId && db) {
+        haushaltszahlungenCollection = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen_themen', currentThemaId, 'eintraege');
+        listenForHaushaltszahlungen();
+    }
+}
+
+function renderThemenDropdown() {
+    const dropdown = document.getElementById('hz-thema-dropdown');
+    if (!dropdown) return;
+    
+    dropdown.innerHTML = Object.values(THEMEN).map(thema => 
+        `<option value="${thema.id}" ${thema.id === currentThemaId ? 'selected' : ''}>${thema.name}</option>`
+    ).join('');
 }
 
 async function loadSettings() {
@@ -105,6 +187,18 @@ async function loadSettings() {
 }
 
 function setupEventListeners() {
+    // Thema-Dropdown
+    const themaDropdown = document.getElementById('hz-thema-dropdown');
+    if (themaDropdown && !themaDropdown.dataset.listenerAttached) {
+        themaDropdown.addEventListener('change', (e) => {
+            currentThemaId = e.target.value;
+            localStorage.setItem('hz_current_thema', currentThemaId);
+            updateCollectionForThema();
+            renderDashboard();
+        });
+        themaDropdown.dataset.listenerAttached = 'true';
+    }
+
     // Neuer Eintrag Button
     const createBtn = document.getElementById('btn-create-haushaltszahlung');
     if (createBtn && !createBtn.dataset.listenerAttached) {
@@ -117,6 +211,13 @@ function setupEventListeners() {
     if (settingsBtn && !settingsBtn.dataset.listenerAttached) {
         settingsBtn.addEventListener('click', openSettingsModal);
         settingsBtn.dataset.listenerAttached = 'true';
+    }
+    
+    // Alle Monate auswählen/abwählen Button
+    const alleMonateBtn = document.getElementById('hz-alle-monate-btn');
+    if (alleMonateBtn && !alleMonateBtn.dataset.listenerAttached) {
+        alleMonateBtn.addEventListener('click', toggleAlleMonate);
+        alleMonateBtn.dataset.listenerAttached = 'true';
     }
 
     // Modal schließen
@@ -427,6 +528,31 @@ function berechneDashboardStats() {
     const jaehrlichMarkus = (beitraegeMarkus.monatlich * 12) + beitraegeMarkus.einmalig;
     const jaehrlichJasmin = (beitraegeJasmin.monatlich * 12) + beitraegeJasmin.einmalig;
 
+    // Jährliche Summen berechnen (Summe aller Einzelmonate)
+    const summenJaehrlich = {
+        gutschrift: Object.entries(summenProMonat.gutschrift)
+            .filter(([key]) => key !== 'monatlich')
+            .reduce((sum, [, val]) => sum + val, 0) + (summenProMonat.gutschrift.monatlich * 12),
+        belastung: Object.entries(summenProMonat.belastung)
+            .filter(([key]) => key !== 'monatlich')
+            .reduce((sum, [, val]) => sum + val, 0) + (summenProMonat.belastung.monatlich * 12)
+    };
+
+    // Kosten berechnen
+    const kostenMonatlich = summenProMonat.belastung.monatlich - summenProMonat.gutschrift.monatlich;
+    const kostenJaehrlichEinmalig = Object.entries(summenProMonat.belastung)
+        .filter(([key]) => key !== 'monatlich')
+        .reduce((sum, [, val]) => sum + val, 0) - 
+        Object.entries(summenProMonat.gutschrift)
+        .filter(([key]) => key !== 'monatlich')
+        .reduce((sum, [, val]) => sum + val, 0);
+    
+    // Effektiv monatlich = (monatliche Kosten * 12 + Jahreskosten) / 12
+    const effektivMonatlich = ((kostenMonatlich * 12) + kostenJaehrlichEinmalig) / 12;
+
+    // Alarme berechnen
+    const alarme = berechneAlarme();
+
     return {
         counts: {
             aktiv: countAktiv,
@@ -439,6 +565,12 @@ function berechneDashboardStats() {
             zukuenftig: countZukuenftig
         },
         summenProMonat,
+        summenJaehrlich,
+        kosten: {
+            monatlich: kostenMonatlich,
+            jaehrlichEinmalig: kostenJaehrlichEinmalig,
+            effektivMonatlich: effektivMonatlich
+        },
         beitraege: {
             markus: {
                 monatlich: beitraegeMarkus.monatlich,
@@ -449,9 +581,70 @@ function berechneDashboardStats() {
                 jaehrlich: jaehrlichJasmin
             }
         },
+        alarme,
         gesamtBelastungMonatlich: summenProMonat.belastung.monatlich,
         gesamtGutschriftMonatlich: summenProMonat.gutschrift.monatlich
     };
+}
+
+// Alarme berechnen (Einzahlungen vs. Kosten)
+function berechneAlarme() {
+    const alarme = [];
+    const thema = THEMEN[currentThemaId];
+    
+    if (!thema || !thema.mitglieder) return alarme;
+    
+    const eintraege = Object.values(HAUSHALTSZAHLUNGEN);
+    
+    // Gesamtkosten pro Intervall berechnen
+    const kostenProIntervall = {
+        monatlich: 0,
+        januar: 0, februar: 0, maerz: 0, april: 0, mai: 0, juni: 0,
+        juli: 0, august: 0, september: 0, oktober: 0, november: 0, dezember: 0
+    };
+    
+    eintraege.forEach(eintrag => {
+        const { status } = berechneStatus(eintrag);
+        if (status !== 'aktiv') return;
+        
+        (eintrag.intervall || []).forEach(intervall => {
+            if (kostenProIntervall[intervall] !== undefined) {
+                kostenProIntervall[intervall] += Math.abs(eintrag.betrag);
+            }
+        });
+    });
+    
+    // Für jedes Mitglied prüfen
+    thema.mitglieder.forEach(mitglied => {
+        if (!mitglied.dauerauftraege) return;
+        
+        // Prüfe jeden Dauerauftrag
+        Object.entries(mitglied.dauerauftraege).forEach(([intervall, betrag]) => {
+            const sollBetrag = kostenProIntervall[intervall] || 0;
+            const anteil = mitglied.anteil || (100 / thema.mitglieder.length);
+            const sollAnteil = sollBetrag * (anteil / 100);
+            
+            if (betrag < sollAnteil && sollAnteil > 0) {
+                alarme.push({
+                    typ: 'unterdeckung',
+                    person: mitglied.name,
+                    intervall: INTERVALL_CONFIG[intervall]?.label || intervall,
+                    differenz: sollAnteil - betrag,
+                    message: `${mitglied.name} zahlt ${formatCurrency(betrag)} statt ${formatCurrency(sollAnteil)} (${INTERVALL_CONFIG[intervall]?.label || intervall})`
+                });
+            } else if (betrag > sollAnteil && sollAnteil > 0) {
+                alarme.push({
+                    typ: 'ueberdeckung',
+                    person: mitglied.name,
+                    intervall: INTERVALL_CONFIG[intervall]?.label || intervall,
+                    differenz: betrag - sollAnteil,
+                    message: `${mitglied.name} zahlt ${formatCurrency(betrag - sollAnteil)} zu viel (${INTERVALL_CONFIG[intervall]?.label || intervall})`
+                });
+            }
+        });
+    });
+    
+    return alarme;
 }
 
 function berechneGesamtStatus(stats) {
@@ -470,67 +663,178 @@ function renderDashboard() {
     const stats = berechneDashboardStats();
     const gesamtStatus = berechneGesamtStatus(stats);
 
-    // Zähler aktualisieren
+    // Zähler aktualisieren (nur aktive Einträge für Belastung/Gutschrift)
     updateElement('hz-stat-aktiv', stats.counts.aktiv);
-    updateElement('hz-stat-n-aktiv', stats.counts.nAktiv);
-    updateElement('hz-stat-gutschrift', stats.counts.gutschrift);
-    updateElement('hz-stat-belastung', stats.counts.belastung);
-    updateElement('hz-stat-gesamt', stats.counts.gesamt);
-    updateElement('hz-stat-fehler', stats.counts.fehler);
-    updateElement('hz-stat-abgelaufen', stats.counts.abgelaufen);
-    updateElement('hz-stat-zukuenftig', stats.counts.zukuenftig);
+    updateElement('hz-stat-belastung', formatCurrency(stats.kosten.monatlich));
+    updateElement('hz-stat-gutschrift', formatCurrency(Math.abs(stats.gesamtGutschriftMonatlich)));
+    updateElement('hz-stat-alarm', stats.alarme.length);
 
-    // Beitragsaufteilung
-    updateElement('hz-markus-monatlich', formatCurrency(stats.beitraege.markus.monatlich));
-    updateElement('hz-markus-jaehrlich', formatCurrency(stats.beitraege.markus.jaehrlich));
-    updateElement('hz-jasmin-monatlich', formatCurrency(stats.beitraege.jasmin.monatlich));
-    updateElement('hz-jasmin-jaehrlich', formatCurrency(stats.beitraege.jasmin.jaehrlich));
+    // Kosten-Übersicht
+    updateElement('hz-kosten-monatlich', formatCurrency(stats.kosten.monatlich));
+    updateElement('hz-kosten-jaehrlich', formatCurrency(stats.kosten.jaehrlichEinmalig));
+    updateElement('hz-kosten-effektiv', formatCurrency(stats.kosten.effektivMonatlich));
 
-    // Effektiv monatlich (Durchschnitt)
-    const effektivMarkus = stats.beitraege.markus.jaehrlich / 12;
-    const effektivJasmin = stats.beitraege.jasmin.jaehrlich / 12;
-    updateElement('hz-markus-effektiv', formatCurrency(effektivMarkus));
-    updateElement('hz-jasmin-effektiv', formatCurrency(effektivJasmin));
+    // Mitglieder-Beiträge dynamisch rendern
+    renderMitgliederBeitraege(stats);
 
-    // Gesamt-Status
+    // Gesamt-Status mit Alarmen
     const statusEl = document.getElementById('hz-total-status');
     if (statusEl) {
-        statusEl.textContent = gesamtStatus.status;
-        statusEl.className = `px-4 py-2 rounded-lg font-bold text-white ${gesamtStatus.color}`;
+        if (stats.alarme.length > 0) {
+            statusEl.textContent = `⚠️ ${stats.alarme.length} ALARM${stats.alarme.length > 1 ? 'E' : ''}`;
+            statusEl.className = 'px-4 py-2 rounded-lg font-bold text-white bg-red-500 cursor-pointer';
+            statusEl.onclick = () => showAlarmeModal(stats.alarme);
+        } else {
+            statusEl.textContent = gesamtStatus.status;
+            statusEl.className = `px-4 py-2 rounded-lg font-bold text-white ${gesamtStatus.color}`;
+            statusEl.onclick = null;
+        }
     }
 
     // Monatsübersicht rendern
     renderMonatsUebersicht(stats);
 }
 
+// Mitglieder-Beiträge dynamisch rendern
+function renderMitgliederBeitraege(stats) {
+    const container = document.getElementById('hz-mitglieder-beitraege');
+    if (!container) return;
+    
+    const thema = THEMEN[currentThemaId];
+    if (!thema || !thema.mitglieder) {
+        container.innerHTML = '<p class="text-white/70 text-sm">Keine Mitglieder konfiguriert</p>';
+        return;
+    }
+    
+    const colors = ['blue', 'pink', 'green', 'purple', 'orange', 'cyan'];
+    
+    container.innerHTML = thema.mitglieder.map((mitglied, index) => {
+        const color = colors[index % colors.length];
+        const anteil = mitglied.anteil || (100 / thema.mitglieder.length);
+        
+        // Berechne Beiträge für dieses Mitglied
+        const monatlich = stats.kosten.monatlich * (anteil / 100);
+        const jaehrlich = (stats.kosten.monatlich * 12 + stats.kosten.jaehrlichEinmalig) * (anteil / 100);
+        const effektiv = jaehrlich / 12;
+        
+        return `
+            <div class="bg-${color}-500/30 p-3 rounded-lg">
+                <div class="flex justify-between items-center mb-1">
+                    <p class="text-xs font-bold">${mitglied.name}</p>
+                    <span class="text-xs bg-white/20 px-2 py-0.5 rounded">${anteil.toFixed(0)}%</span>
+                </div>
+                <p class="text-sm">Monatlich: <span class="font-bold">${formatCurrency(monatlich)}</span></p>
+                <p class="text-sm">Jährlich: <span class="font-bold">${formatCurrency(jaehrlich)}</span></p>
+                <p class="text-xs text-white/70">Effektiv/Monat: ${formatCurrency(effektiv)}</p>
+                <button onclick="window.openDauerauftraegeModal('${mitglied.userId || mitglied.name}')" 
+                    class="mt-2 text-xs bg-white/20 hover:bg-white/30 px-2 py-1 rounded transition w-full">
+                    ⚙️ Daueraufträge
+                </button>
+            </div>
+        `;
+    }).join('');
+}
+
+// Alarme Modal anzeigen
+function showAlarmeModal(alarme) {
+    const modal = document.getElementById('hz-alarme-modal');
+    const content = document.getElementById('hz-alarme-content');
+    
+    if (!modal || !content) return;
+    
+    content.innerHTML = alarme.map(alarm => `
+        <div class="p-3 rounded-lg ${alarm.typ === 'unterdeckung' ? 'bg-red-100 border-l-4 border-red-500' : 'bg-yellow-100 border-l-4 border-yellow-500'}">
+            <p class="font-bold ${alarm.typ === 'unterdeckung' ? 'text-red-700' : 'text-yellow-700'}">
+                ${alarm.typ === 'unterdeckung' ? '⚠️ Unterdeckung' : '💰 Überdeckung'}
+            </p>
+            <p class="text-sm text-gray-700">${alarm.message}</p>
+            <p class="text-xs text-gray-500 mt-1">Differenz: ${formatCurrency(alarm.differenz)}</p>
+        </div>
+    `).join('');
+    
+    modal.style.display = 'flex';
+}
+
 function renderMonatsUebersicht(stats) {
     const container = document.getElementById('hz-monats-uebersicht');
     if (!container) return;
 
-    const monate = ['monatlich', 'januar', 'februar', 'maerz', 'april', 'mai', 'juni', 'juli', 'august', 'september', 'oktober', 'november', 'dezember'];
+    // Nur die 12 Monate (ohne "monatlich")
+    const monate = ['januar', 'februar', 'maerz', 'april', 'mai', 'juni', 'juli', 'august', 'september', 'oktober', 'november', 'dezember'];
     
-    let html = '<div class="grid grid-cols-13 gap-1 text-xs">';
+    // Horizontale Tabelle mit Monat als Spalten
+    let html = `
+        <table class="w-full border-collapse text-xs">
+            <thead>
+                <tr class="bg-gray-100">
+                    <th class="p-2 text-left font-bold text-gray-700 border">Typ</th>
+                    ${monate.map(m => `<th class="p-1 text-center font-bold text-gray-600 border">${INTERVALL_CONFIG[m]?.short || m}</th>`).join('')}
+                    <th class="p-2 text-center font-bold text-gray-700 border bg-cyan-50">Σ Jahr</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="p-2 font-bold text-green-700 border bg-green-50">📥 Gutschrift</td>
+                    ${monate.map(m => {
+                        const wert = stats.summenProMonat.gutschrift[m] || 0;
+                        return `<td class="p-1 text-center border ${wert > 0 ? 'bg-green-100 text-green-700 font-medium' : 'text-gray-400'}">${wert > 0 ? formatCurrency(wert) : '-'}</td>`;
+                    }).join('')}
+                    <td class="p-2 text-center font-bold text-green-700 border bg-green-100">${formatCurrency(stats.summenJaehrlich?.gutschrift || 0)}</td>
+                </tr>
+                <tr>
+                    <td class="p-2 font-bold text-red-700 border bg-red-50">📤 Belastung</td>
+                    ${monate.map(m => {
+                        const wert = stats.summenProMonat.belastung[m] || 0;
+                        return `<td class="p-1 text-center border ${wert > 0 ? 'bg-red-100 text-red-700 font-medium' : 'text-gray-400'}">${wert > 0 ? formatCurrency(wert) : '-'}</td>`;
+                    }).join('')}
+                    <td class="p-2 text-center font-bold text-red-700 border bg-red-100">${formatCurrency(stats.summenJaehrlich?.belastung || 0)}</td>
+                </tr>
+                <tr class="bg-gray-50">
+                    <td class="p-2 font-bold text-gray-700 border">📊 Saldo</td>
+                    ${monate.map(m => {
+                        const gutschrift = stats.summenProMonat.gutschrift[m] || 0;
+                        const belastung = stats.summenProMonat.belastung[m] || 0;
+                        const saldo = gutschrift - belastung;
+                        const color = saldo > 0 ? 'text-green-600' : saldo < 0 ? 'text-red-600' : 'text-gray-400';
+                        return `<td class="p-1 text-center border ${color} font-medium">${saldo !== 0 ? formatCurrency(saldo) : '-'}</td>`;
+                    }).join('')}
+                    <td class="p-2 text-center font-bold border ${(stats.summenJaehrlich?.gutschrift || 0) - (stats.summenJaehrlich?.belastung || 0) >= 0 ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}">${formatCurrency((stats.summenJaehrlich?.gutschrift || 0) - (stats.summenJaehrlich?.belastung || 0))}</td>
+                </tr>
+            </tbody>
+        </table>
+    `;
     
-    // Header
-    monate.forEach(monat => {
-        const label = INTERVALL_CONFIG[monat]?.short || monat;
-        html += `<div class="text-center font-bold text-gray-600 py-1">${label}</div>`;
-    });
-
-    // Gutschrift-Zeile
-    monate.forEach(monat => {
-        const wert = stats.summenProMonat.gutschrift[monat] || 0;
-        html += `<div class="text-center py-1 ${wert > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-50 text-gray-400'} rounded">${wert > 0 ? formatCurrency(wert) : '-'}</div>`;
-    });
-
-    // Belastung-Zeile
-    monate.forEach(monat => {
-        const wert = stats.summenProMonat.belastung[monat] || 0;
-        html += `<div class="text-center py-1 ${wert > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-50 text-gray-400'} rounded">${wert > 0 ? formatCurrency(wert) : '-'}</div>`;
-    });
-
-    html += '</div>';
     container.innerHTML = html;
+}
+
+// Toggle alle Monate im Modal
+function toggleAlleMonate() {
+    const checkboxes = document.querySelectorAll('.hz-intervall-checkbox:not([value="monatlich"])');
+    const btn = document.getElementById('hz-alle-monate-btn');
+    
+    // Prüfen ob alle ausgewählt sind
+    const alleAusgewaehlt = Array.from(checkboxes).every(cb => cb.checked);
+    
+    // Toggle
+    checkboxes.forEach(cb => {
+        cb.checked = !alleAusgewaehlt;
+    });
+    
+    // Button-Text aktualisieren
+    if (btn) {
+        btn.textContent = alleAusgewaehlt ? '☐ Alle Monate auswählen' : '☑ Alle Monate abwählen';
+    }
+}
+
+// Aktualisiere Button-Text basierend auf Checkbox-Status
+function updateAlleMonateButton() {
+    const checkboxes = document.querySelectorAll('.hz-intervall-checkbox:not([value="monatlich"])');
+    const btn = document.getElementById('hz-alle-monate-btn');
+    
+    if (!btn) return;
+    
+    const alleAusgewaehlt = Array.from(checkboxes).every(cb => cb.checked);
+    btn.textContent = alleAusgewaehlt ? '☑ Alle Monate abwählen' : '☐ Alle Monate auswählen';
 }
 
 function renderHaushaltszahlungenTable() {
@@ -782,25 +1086,467 @@ async function deleteHaushaltszahlung(id) {
 function openSettingsModal() {
     const modal = document.getElementById('haushaltszahlungenSettingsModal');
     if (modal) {
-        document.getElementById('hz-settings-default-anteil').value = haushaltszahlungenSettings.defaultAnteilMarkus || 50;
+        renderThemenListe();
+        renderMitgliederListe();
+        renderKostenaufteilung();
         modal.style.display = 'flex';
+    }
+    
+    // Event-Listener für Buttons
+    setupSettingsEventListeners();
+}
+
+function setupSettingsEventListeners() {
+    const addThemaBtn = document.getElementById('hz-add-thema-btn');
+    if (addThemaBtn && !addThemaBtn.dataset.listenerAttached) {
+        addThemaBtn.addEventListener('click', () => {
+            document.getElementById('hz-add-thema-modal').style.display = 'flex';
+        });
+        addThemaBtn.dataset.listenerAttached = 'true';
+    }
+    
+    const saveThemaBtn = document.getElementById('hz-save-thema-btn');
+    if (saveThemaBtn && !saveThemaBtn.dataset.listenerAttached) {
+        saveThemaBtn.addEventListener('click', saveNewThema);
+        saveThemaBtn.dataset.listenerAttached = 'true';
+    }
+    
+    const addMitgliedBtn = document.getElementById('hz-add-mitglied-btn');
+    if (addMitgliedBtn && !addMitgliedBtn.dataset.listenerAttached) {
+        addMitgliedBtn.addEventListener('click', openAddMitgliedModal);
+        addMitgliedBtn.dataset.listenerAttached = 'true';
+    }
+    
+    const saveMitgliedBtn = document.getElementById('hz-save-mitglied-btn');
+    if (saveMitgliedBtn && !saveMitgliedBtn.dataset.listenerAttached) {
+        saveMitgliedBtn.addEventListener('click', saveNewMitglied);
+        saveMitgliedBtn.dataset.listenerAttached = 'true';
+    }
+    
+    const saveDauerauftraegeBtn = document.getElementById('hz-save-dauerauftraege-btn');
+    if (saveDauerauftraegeBtn && !saveDauerauftraegeBtn.dataset.listenerAttached) {
+        saveDauerauftraegeBtn.addEventListener('click', saveDauerauftraege);
+        saveDauerauftraegeBtn.dataset.listenerAttached = 'true';
+    }
+    
+    const showProtokollBtn = document.getElementById('hz-show-protokoll-btn');
+    if (showProtokollBtn && !showProtokollBtn.dataset.listenerAttached) {
+        showProtokollBtn.addEventListener('click', toggleProtokoll);
+        showProtokollBtn.dataset.listenerAttached = 'true';
+    }
+}
+
+function renderThemenListe() {
+    const container = document.getElementById('hz-themen-liste');
+    if (!container) return;
+    
+    if (Object.keys(THEMEN).length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-sm italic">Keine Themen vorhanden</p>';
+        return;
+    }
+    
+    container.innerHTML = Object.values(THEMEN).map(thema => `
+        <div class="flex items-center justify-between p-2 bg-white rounded-lg border ${thema.id === currentThemaId ? 'border-cyan-500 bg-cyan-50' : 'border-gray-200'}">
+            <div class="flex items-center gap-2">
+                <span class="font-bold text-gray-800">${thema.name}</span>
+                ${thema.id === currentThemaId ? '<span class="text-xs bg-cyan-500 text-white px-2 py-0.5 rounded">Aktiv</span>' : ''}
+                <span class="text-xs text-gray-500">(${thema.mitglieder?.length || 0} Mitglieder)</span>
+            </div>
+            <div class="flex gap-1">
+                ${thema.ersteller === currentUser.displayName ? `
+                    <button onclick="window.deleteThema('${thema.id}')" class="p-1 text-red-600 hover:bg-red-100 rounded" title="Löschen">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </button>
+                ` : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderMitgliederListe() {
+    const container = document.getElementById('hz-mitglieder-liste');
+    if (!container) return;
+    
+    const thema = THEMEN[currentThemaId];
+    if (!thema || !thema.mitglieder || thema.mitglieder.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-sm italic">Keine Mitglieder vorhanden</p>';
+        return;
+    }
+    
+    container.innerHTML = thema.mitglieder.map((mitglied, index) => `
+        <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-gray-200">
+            <div class="flex items-center gap-2">
+                <span class="font-bold text-gray-800">${mitglied.name}</span>
+                <span class="text-xs ${ZUGRIFFSRECHTE[mitglied.zugriffsrecht]?.icon ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'} px-2 py-0.5 rounded">
+                    ${ZUGRIFFSRECHTE[mitglied.zugriffsrecht]?.label || mitglied.zugriffsrecht}
+                </span>
+                <span class="text-xs text-gray-500">${mitglied.anteil || Math.round(100 / thema.mitglieder.length)}%</span>
+            </div>
+            <div class="flex gap-1">
+                <button onclick="window.openDauerauftraegeModal('${mitglied.userId || mitglied.name}')" class="p-1 text-blue-600 hover:bg-blue-100 rounded" title="Daueraufträge">
+                    💳
+                </button>
+                ${thema.ersteller === currentUser.displayName && mitglied.name !== thema.ersteller ? `
+                    <button onclick="window.removeMitglied(${index})" class="p-1 text-red-600 hover:bg-red-100 rounded" title="Entfernen">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                ` : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderKostenaufteilung() {
+    const container = document.getElementById('hz-kostenaufteilung');
+    if (!container) return;
+    
+    const thema = THEMEN[currentThemaId];
+    if (!thema || !thema.mitglieder || thema.mitglieder.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-sm italic">Füge zuerst Mitglieder hinzu</p>';
+        return;
+    }
+    
+    // Berechne Gesamtanteil
+    const gesamtAnteil = thema.mitglieder.reduce((sum, m) => sum + (m.anteil || 0), 0);
+    
+    container.innerHTML = thema.mitglieder.map((mitglied, index) => `
+        <div class="flex items-center gap-3">
+            <span class="w-24 font-bold text-gray-700">${mitglied.name}</span>
+            <input type="number" min="0" max="100" value="${mitglied.anteil || Math.round(100 / thema.mitglieder.length)}" 
+                onchange="window.updateMitgliedAnteil(${index}, this.value)"
+                class="w-20 p-2 border-2 border-gray-300 rounded-lg text-center font-bold">
+            <span class="text-gray-500">%</span>
+            <div class="flex-1 bg-gray-200 rounded-full h-3">
+                <div class="bg-cyan-500 h-3 rounded-full" style="width: ${mitglied.anteil || Math.round(100 / thema.mitglieder.length)}%"></div>
+            </div>
+        </div>
+    `).join('') + `
+        <div class="mt-2 p-2 rounded-lg ${gesamtAnteil === 100 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
+            <span class="font-bold">Gesamt: ${gesamtAnteil}%</span>
+            ${gesamtAnteil !== 100 ? ' ⚠️ Sollte 100% sein!' : ' ✓'}
+        </div>
+    `;
+}
+
+async function saveNewThema() {
+    const nameInput = document.getElementById('hz-thema-name');
+    const name = nameInput?.value?.trim();
+    
+    if (!name) {
+        alertUser('Bitte gib einen Namen ein', 'error');
+        return;
+    }
+    
+    try {
+        const newThema = {
+            name,
+            ersteller: currentUser.displayName,
+            erstelltAm: serverTimestamp(),
+            mitglieder: [{
+                userId: currentUser.displayName,
+                name: currentUser.displayName,
+                zugriffsrecht: 'vollzugriff',
+                anteil: 100,
+                dauerauftraege: {
+                    monatlich: 0,
+                    januar: 0, februar: 0, maerz: 0, april: 0, mai: 0, juni: 0,
+                    juli: 0, august: 0, september: 0, oktober: 0, november: 0, dezember: 0
+                }
+            }]
+        };
+        
+        const docRef = await addDoc(haushaltszahlungenThemenRef, newThema);
+        THEMEN[docRef.id] = { id: docRef.id, ...newThema };
+        
+        nameInput.value = '';
+        document.getElementById('hz-add-thema-modal').style.display = 'none';
+        renderThemenListe();
+        renderThemenDropdown();
+        alertUser('Thema erstellt!', 'success');
+    } catch (error) {
+        console.error("Fehler beim Erstellen des Themas:", error);
+        alertUser('Fehler: ' + error.message, 'error');
+    }
+}
+
+function openAddMitgliedModal() {
+    const userSelect = document.getElementById('hz-mitglied-user-select');
+    if (userSelect) {
+        // Fülle Benutzer-Dropdown
+        userSelect.innerHTML = '<option value="">Benutzer wählen...</option>' +
+            Object.values(USERS).map(user => 
+                `<option value="${user.displayName}">${user.displayName}</option>`
+            ).join('');
+    }
+    document.getElementById('hz-add-mitglied-modal').style.display = 'flex';
+}
+
+async function saveNewMitglied() {
+    const userSelect = document.getElementById('hz-mitglied-user-select');
+    const rechtSelect = document.getElementById('hz-mitglied-recht-select');
+    const anteilInput = document.getElementById('hz-mitglied-anteil');
+    
+    const userName = userSelect?.value;
+    const recht = rechtSelect?.value || 'lesen';
+    const anteil = parseInt(anteilInput?.value) || 50;
+    
+    if (!userName) {
+        alertUser('Bitte wähle einen Benutzer', 'error');
+        return;
+    }
+    
+    const thema = THEMEN[currentThemaId];
+    if (!thema) return;
+    
+    // Prüfe ob Benutzer bereits Mitglied ist
+    if (thema.mitglieder?.some(m => m.name === userName)) {
+        alertUser('Benutzer ist bereits Mitglied', 'error');
+        return;
+    }
+    
+    try {
+        const newMitglied = {
+            userId: userName,
+            name: userName,
+            zugriffsrecht: recht,
+            anteil: anteil,
+            dauerauftraege: {
+                monatlich: 0,
+                januar: 0, februar: 0, maerz: 0, april: 0, mai: 0, juni: 0,
+                juli: 0, august: 0, september: 0, oktober: 0, november: 0, dezember: 0
+            }
+        };
+        
+        thema.mitglieder = thema.mitglieder || [];
+        thema.mitglieder.push(newMitglied);
+        
+        await updateDoc(doc(haushaltszahlungenThemenRef, currentThemaId), {
+            mitglieder: thema.mitglieder
+        });
+        
+        document.getElementById('hz-add-mitglied-modal').style.display = 'none';
+        renderMitgliederListe();
+        renderKostenaufteilung();
+        renderDashboard();
+        alertUser('Mitglied hinzugefügt!', 'success');
+    } catch (error) {
+        console.error("Fehler beim Hinzufügen des Mitglieds:", error);
+        alertUser('Fehler: ' + error.message, 'error');
+    }
+}
+
+let currentDauerauftraegeMitglied = null;
+
+function openDauerauftraegeModal(userId) {
+    const thema = THEMEN[currentThemaId];
+    if (!thema) return;
+    
+    const mitglied = thema.mitglieder?.find(m => m.userId === userId || m.name === userId);
+    if (!mitglied) return;
+    
+    currentDauerauftraegeMitglied = mitglied;
+    
+    const content = document.getElementById('hz-dauerauftraege-content');
+    if (!content) return;
+    
+    const intervalle = ['monatlich', 'januar', 'februar', 'maerz', 'april', 'mai', 'juni', 'juli', 'august', 'september', 'oktober', 'november', 'dezember'];
+    
+    content.innerHTML = `
+        <p class="font-bold text-gray-700 mb-3">Daueraufträge für: ${mitglied.name}</p>
+        ${intervalle.map(intervall => `
+            <div class="flex items-center gap-3">
+                <span class="w-24 text-sm font-medium text-gray-600">${INTERVALL_CONFIG[intervall]?.label || intervall}</span>
+                <input type="number" step="0.01" min="0" value="${mitglied.dauerauftraege?.[intervall] || 0}" 
+                    data-intervall="${intervall}"
+                    class="hz-dauerauftrag-input flex-1 p-2 border-2 border-gray-300 rounded-lg text-right font-bold">
+                <span class="text-gray-500">€</span>
+            </div>
+        `).join('')}
+    `;
+    
+    document.getElementById('hz-dauerauftraege-modal').style.display = 'flex';
+    loadProtokoll(userId);
+}
+
+async function saveDauerauftraege() {
+    if (!currentDauerauftraegeMitglied) return;
+    
+    const thema = THEMEN[currentThemaId];
+    if (!thema) return;
+    
+    const inputs = document.querySelectorAll('.hz-dauerauftrag-input');
+    const newDauerauftraege = {};
+    const changes = [];
+    
+    inputs.forEach(input => {
+        const intervall = input.dataset.intervall;
+        const newValue = parseFloat(input.value) || 0;
+        const oldValue = currentDauerauftraegeMitglied.dauerauftraege?.[intervall] || 0;
+        
+        newDauerauftraege[intervall] = newValue;
+        
+        if (newValue !== oldValue) {
+            changes.push({
+                intervall,
+                oldValue,
+                newValue,
+                timestamp: new Date().toISOString(),
+                user: currentUser.displayName
+            });
+        }
+    });
+    
+    try {
+        // Update Mitglied
+        const mitgliedIndex = thema.mitglieder.findIndex(m => m.name === currentDauerauftraegeMitglied.name);
+        if (mitgliedIndex >= 0) {
+            thema.mitglieder[mitgliedIndex].dauerauftraege = newDauerauftraege;
+            
+            await updateDoc(doc(haushaltszahlungenThemenRef, currentThemaId), {
+                mitglieder: thema.mitglieder
+            });
+            
+            // Protokoll speichern
+            if (changes.length > 0) {
+                await addDoc(haushaltszahlungenProtokollRef, {
+                    themaId: currentThemaId,
+                    mitgliedName: currentDauerauftraegeMitglied.name,
+                    changes,
+                    timestamp: serverTimestamp(),
+                    changedBy: currentUser.displayName
+                });
+            }
+        }
+        
+        document.getElementById('hz-dauerauftraege-modal').style.display = 'none';
+        renderDashboard();
+        alertUser('Daueraufträge gespeichert!', 'success');
+    } catch (error) {
+        console.error("Fehler beim Speichern:", error);
+        alertUser('Fehler: ' + error.message, 'error');
+    }
+}
+
+async function loadProtokoll(userId) {
+    const container = document.getElementById('hz-protokoll-liste');
+    if (!container) return;
+    
+    try {
+        const q = query(
+            haushaltszahlungenProtokollRef,
+            orderBy('timestamp', 'desc')
+        );
+        const snapshot = await getDocs(q);
+        
+        const protokolle = [];
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.themaId === currentThemaId && data.mitgliedName === userId) {
+                protokolle.push(data);
+            }
+        });
+        
+        if (protokolle.length === 0) {
+            container.innerHTML = '<p class="text-gray-500 italic">Keine Änderungen protokolliert</p>';
+            return;
+        }
+        
+        container.innerHTML = protokolle.slice(0, 20).map(p => `
+            <div class="p-2 bg-gray-50 rounded">
+                <p class="font-bold text-gray-700">${formatDate(p.timestamp?.toDate?.() || p.timestamp)} - ${p.changedBy}</p>
+                ${p.changes.map(c => `
+                    <p class="text-gray-600">${INTERVALL_CONFIG[c.intervall]?.label}: ${formatCurrency(c.oldValue)} → ${formatCurrency(c.newValue)}</p>
+                `).join('')}
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error("Fehler beim Laden des Protokolls:", error);
+    }
+}
+
+function toggleProtokoll() {
+    const container = document.getElementById('hz-dauerauftraege-protokoll');
+    if (container) {
+        container.classList.toggle('hidden');
     }
 }
 
 async function saveSettings() {
-    const defaultAnteil = parseInt(document.getElementById('hz-settings-default-anteil').value) || 50;
-    
-    haushaltszahlungenSettings.defaultAnteilMarkus = defaultAnteil;
-
-    try {
-        await setDoc(haushaltszahlungenSettingsRef, haushaltszahlungenSettings);
-        alertUser('Einstellungen gespeichert!', 'success');
-        document.getElementById('haushaltszahlungenSettingsModal').style.display = 'none';
-    } catch (error) {
-        console.error("Fehler beim Speichern der Einstellungen:", error);
-        alertUser('Fehler beim Speichern: ' + error.message, 'error');
+    // Speichere Thema-Änderungen
+    const thema = THEMEN[currentThemaId];
+    if (thema) {
+        try {
+            await updateDoc(doc(haushaltszahlungenThemenRef, currentThemaId), {
+                mitglieder: thema.mitglieder
+            });
+            alertUser('Einstellungen gespeichert!', 'success');
+            document.getElementById('haushaltszahlungenSettingsModal').style.display = 'none';
+            renderDashboard();
+        } catch (error) {
+            console.error("Fehler beim Speichern:", error);
+            alertUser('Fehler: ' + error.message, 'error');
+        }
     }
 }
+
+// Globale Funktionen für Einstellungen
+window.deleteThema = async function(themaId) {
+    if (!confirm('Möchtest du dieses Thema wirklich löschen? Alle Einträge werden gelöscht!')) return;
+    
+    try {
+        await deleteDoc(doc(haushaltszahlungenThemenRef, themaId));
+        delete THEMEN[themaId];
+        
+        if (currentThemaId === themaId) {
+            currentThemaId = Object.keys(THEMEN)[0] || null;
+            localStorage.setItem('hz_current_thema', currentThemaId);
+            updateCollectionForThema();
+        }
+        
+        renderThemenListe();
+        renderThemenDropdown();
+        alertUser('Thema gelöscht!', 'success');
+    } catch (error) {
+        console.error("Fehler beim Löschen:", error);
+        alertUser('Fehler: ' + error.message, 'error');
+    }
+};
+
+window.removeMitglied = async function(index) {
+    if (!confirm('Möchtest du dieses Mitglied wirklich entfernen?')) return;
+    
+    const thema = THEMEN[currentThemaId];
+    if (!thema) return;
+    
+    try {
+        thema.mitglieder.splice(index, 1);
+        await updateDoc(doc(haushaltszahlungenThemenRef, currentThemaId), {
+            mitglieder: thema.mitglieder
+        });
+        
+        renderMitgliederListe();
+        renderKostenaufteilung();
+        renderDashboard();
+        alertUser('Mitglied entfernt!', 'success');
+    } catch (error) {
+        console.error("Fehler:", error);
+        alertUser('Fehler: ' + error.message, 'error');
+    }
+};
+
+window.updateMitgliedAnteil = async function(index, value) {
+    const thema = THEMEN[currentThemaId];
+    if (!thema || !thema.mitglieder[index]) return;
+    
+    thema.mitglieder[index].anteil = parseInt(value) || 0;
+    renderKostenaufteilung();
+};
+
+window.openDauerauftraegeModal = openDauerauftraegeModal;
 
 // ========================================
 // HILFSFUNKTIONEN

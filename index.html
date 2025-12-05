@@ -1908,13 +1908,19 @@
             <!-- ========== HAUSHALTSZAHLUNGEN VIEW ========== -->
             <div id="haushaltszahlungenView" class="view">
                 <div class="back-link-container w-full mb-3">
-                    <div class="flex justify-between items-center">
+                    <div class="flex justify-between items-center flex-wrap gap-2">
                         <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition" data-target="home">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mr-1">
                                 <path d="m15 18-6-6 6-6" />
                             </svg>
                             <span class="text-base font-semibold">zurück</span>
                         </button>
+                        
+                        <!-- Thema-Dropdown -->
+                        <select id="hz-thema-dropdown" class="flex-1 min-w-[150px] max-w-[300px] p-2 border-2 border-cyan-500 rounded-lg bg-white text-sm font-bold text-cyan-700 focus:ring-2 focus:ring-cyan-300">
+                            <option value="">Thema wählen...</option>
+                        </select>
+                        
                         <div class="flex gap-2">
                             <button id="btn-haushaltszahlungen-settings" class="p-2 text-gray-500 hover:text-gray-800 transition rounded-full hover:bg-gray-200" title="Einstellungen">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6">
@@ -1942,40 +1948,49 @@
                         <span id="hz-total-status" class="px-4 py-2 rounded-lg font-bold text-white bg-green-500">ALLES OK</span>
                     </div>
                     
-                    <!-- Zähler -->
+                    <!-- Zähler: Aktiv, Belastung, Gutschrift, Alarm -->
                     <div class="grid grid-cols-4 gap-2 text-center mb-3">
                         <div class="bg-white/20 px-2 py-2 rounded-lg">
                             <p class="text-xl font-bold" id="hz-stat-aktiv">0</p>
                             <p class="text-[10px] font-semibold leading-tight">✓ Aktiv</p>
                         </div>
-                        <div class="bg-white/20 px-2 py-2 rounded-lg">
-                            <p class="text-xl font-bold" id="hz-stat-n-aktiv">0</p>
-                            <p class="text-[10px] font-semibold leading-tight">📅 N-Aktiv</p>
+                        <div class="bg-red-500/30 px-2 py-2 rounded-lg">
+                            <p class="text-lg font-bold" id="hz-stat-belastung">0,00 €</p>
+                            <p class="text-[10px] font-semibold leading-tight">📤 Belastung/M</p>
                         </div>
-                        <div class="bg-white/20 px-2 py-2 rounded-lg">
-                            <p class="text-xl font-bold" id="hz-stat-belastung">0</p>
-                            <p class="text-[10px] font-semibold leading-tight">📤 Belastung</p>
+                        <div class="bg-green-500/30 px-2 py-2 rounded-lg">
+                            <p class="text-lg font-bold" id="hz-stat-gutschrift">0,00 €</p>
+                            <p class="text-[10px] font-semibold leading-tight">📥 Gutschrift/M</p>
                         </div>
-                        <div class="bg-white/20 px-2 py-2 rounded-lg">
-                            <p class="text-xl font-bold" id="hz-stat-gutschrift">0</p>
-                            <p class="text-[10px] font-semibold leading-tight">📥 Gutschrift</p>
+                        <div class="bg-yellow-500/30 px-2 py-2 rounded-lg">
+                            <p class="text-xl font-bold" id="hz-stat-alarm">0</p>
+                            <p class="text-[10px] font-semibold leading-tight">⚠️ Alarme</p>
                         </div>
                     </div>
 
-                    <!-- Beitragsaufteilung -->
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="bg-blue-500/30 p-3 rounded-lg">
-                            <p class="text-xs font-bold mb-1">💙 Markus</p>
-                            <p class="text-sm">Monatlich: <span id="hz-markus-monatlich" class="font-bold">0,00 €</span></p>
-                            <p class="text-sm">Jährlich: <span id="hz-markus-jaehrlich" class="font-bold">0,00 €</span></p>
-                            <p class="text-xs text-white/70">Effektiv/Monat: <span id="hz-markus-effektiv">0,00 €</span></p>
+                    <!-- Kosten-Übersicht -->
+                    <div class="bg-white/10 p-3 rounded-lg mb-3">
+                        <h4 class="text-xs font-bold mb-2">📊 Kosten-Übersicht</h4>
+                        <div class="grid grid-cols-3 gap-2 text-center">
+                            <div>
+                                <p class="text-lg font-bold" id="hz-kosten-monatlich">0,00 €</p>
+                                <p class="text-[10px]">Monatlich</p>
+                            </div>
+                            <div>
+                                <p class="text-lg font-bold" id="hz-kosten-jaehrlich">0,00 €</p>
+                                <p class="text-[10px]">Jährlich (Jan-Dez)</p>
+                            </div>
+                            <div class="bg-white/20 rounded-lg p-1">
+                                <p class="text-lg font-bold" id="hz-kosten-effektiv">0,00 €</p>
+                                <p class="text-[10px]">Effektiv/Monat</p>
+                            </div>
                         </div>
-                        <div class="bg-pink-500/30 p-3 rounded-lg">
-                            <p class="text-xs font-bold mb-1">💗 Jasmin</p>
-                            <p class="text-sm">Monatlich: <span id="hz-jasmin-monatlich" class="font-bold">0,00 €</span></p>
-                            <p class="text-sm">Jährlich: <span id="hz-jasmin-jaehrlich" class="font-bold">0,00 €</span></p>
-                            <p class="text-xs text-white/70">Effektiv/Monat: <span id="hz-jasmin-effektiv">0,00 €</span></p>
-                        </div>
+                    </div>
+
+                    <!-- Mitglieder-Beiträge (dynamisch) -->
+                    <div id="hz-mitglieder-beitraege" class="grid grid-cols-2 gap-3">
+                        <!-- Wird dynamisch gefüllt -->
+                        <p class="text-white/70 text-sm col-span-2 text-center">Lade Mitglieder...</p>
                     </div>
                 </div>
 
@@ -2089,12 +2104,23 @@
                         
                         <!-- Intervall -->
                         <div class="bg-gray-50 p-4 rounded-lg">
-                            <label class="block text-sm font-bold text-gray-700 mb-3">Zahlungsintervall * <span class="text-xs text-gray-500">(mindestens eines auswählen)</span></label>
-                            <div class="grid grid-cols-7 gap-2 text-center text-xs">
-                                <label class="flex flex-col items-center p-2 bg-white rounded-lg border cursor-pointer hover:bg-cyan-50">
-                                    <input type="checkbox" value="monatlich" class="hz-intervall-checkbox mb-1">
-                                    <span>M</span>
+                            <div class="flex justify-between items-center mb-3">
+                                <label class="text-sm font-bold text-gray-700">Zahlungsintervall * <span class="text-xs text-gray-500">(mindestens eines auswählen)</span></label>
+                                <button type="button" id="hz-alle-monate-btn" class="text-xs bg-cyan-100 text-cyan-700 px-3 py-1 rounded-lg hover:bg-cyan-200 transition font-bold">
+                                    ☐ Alle Monate auswählen
+                                </button>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3 mb-3">
+                                <label class="flex items-center gap-2 p-3 bg-cyan-100 rounded-lg border-2 border-cyan-300 cursor-pointer hover:bg-cyan-200">
+                                    <input type="checkbox" value="monatlich" class="hz-intervall-checkbox w-5 h-5">
+                                    <span class="font-bold text-cyan-800">📅 Monatlich (jeden Monat)</span>
                                 </label>
+                                <div class="p-3 bg-gray-100 rounded-lg text-xs text-gray-600">
+                                    <p class="font-bold">💡 Tipp:</p>
+                                    <p>Wähle "Monatlich" für wiederkehrende Zahlungen oder einzelne Monate für einmalige Jahreskosten.</p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-6 gap-2 text-center text-xs">
                                 <label class="flex flex-col items-center p-2 bg-white rounded-lg border cursor-pointer hover:bg-cyan-50">
                                     <input type="checkbox" value="januar" class="hz-intervall-checkbox mb-1">
                                     <span>Jan</span>
@@ -2208,8 +2234,8 @@
 
             <!-- ========== HAUSHALTSZAHLUNGEN SETTINGS MODAL ========== -->
             <div id="haushaltszahlungenSettingsModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
-                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-                    <div class="bg-gradient-to-r from-cyan-600 to-teal-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <div class="sticky top-0 bg-gradient-to-r from-cyan-600 to-teal-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
                         <h3 class="text-xl font-bold">⚙️ Einstellungen</h3>
                         <button id="closeHaushaltszahlungenSettingsModal" class="text-white/80 hover:text-white transition">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2218,18 +2244,176 @@
                         </button>
                     </div>
                     
-                    <div class="p-6 space-y-4">
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-1">Standard-Anteil Markus (%)</label>
-                            <input type="number" id="hz-settings-default-anteil" min="0" max="100" value="50" 
-                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-cyan-500">
-                            <p class="text-xs text-gray-500 mt-1">Wird bei neuen Einträgen als Standardwert verwendet.</p>
+                    <div class="p-6 space-y-6">
+                        <!-- Themen-Verwaltung -->
+                        <div class="bg-cyan-50 p-4 rounded-lg border-2 border-cyan-200">
+                            <div class="flex justify-between items-center mb-3">
+                                <h4 class="font-bold text-cyan-800">🏠 Themen (Arbeitsbereiche)</h4>
+                                <button id="hz-add-thema-btn" class="text-xs bg-cyan-600 text-white px-3 py-1 rounded-lg hover:bg-cyan-700 transition font-bold">
+                                    + Neues Thema
+                                </button>
+                            </div>
+                            <p class="text-xs text-gray-600 mb-3">Verwalte verschiedene Haushalte oder Arbeitsbereiche separat.</p>
+                            <div id="hz-themen-liste" class="space-y-2">
+                                <!-- Wird dynamisch gefüllt -->
+                            </div>
+                        </div>
+
+                        <!-- Mitglieder des aktuellen Themas -->
+                        <div class="bg-purple-50 p-4 rounded-lg border-2 border-purple-200">
+                            <div class="flex justify-between items-center mb-3">
+                                <h4 class="font-bold text-purple-800">👥 Mitglieder (aktuelles Thema)</h4>
+                                <button id="hz-add-mitglied-btn" class="text-xs bg-purple-600 text-white px-3 py-1 rounded-lg hover:bg-purple-700 transition font-bold">
+                                    + Person hinzufügen
+                                </button>
+                            </div>
+                            <p class="text-xs text-gray-600 mb-3">Füge registrierte Benutzer hinzu, die an diesem Haushalt mitwirken.</p>
+                            <div id="hz-mitglieder-liste" class="space-y-2">
+                                <!-- Wird dynamisch gefüllt -->
+                            </div>
+                        </div>
+
+                        <!-- Kostenaufteilung -->
+                        <div class="bg-gray-50 p-4 rounded-lg border-2 border-gray-200">
+                            <h4 class="font-bold text-gray-800 mb-3">📊 Kostenaufteilung</h4>
+                            <p class="text-xs text-gray-600 mb-3">Lege fest, wie die Kosten zwischen den Mitgliedern aufgeteilt werden.</p>
+                            <div id="hz-kostenaufteilung" class="space-y-3">
+                                <!-- Wird dynamisch gefüllt -->
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-3">
+                    <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-3">
                         <button id="saveHaushaltszahlungenSettingsBtn" class="px-6 py-2 bg-gradient-to-r from-cyan-600 to-teal-500 text-white font-bold rounded-lg hover:shadow-lg transition">
                             Speichern
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== ALARME MODAL ========== -->
+            <div id="hz-alarme-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto">
+                    <div class="sticky top-0 bg-gradient-to-r from-red-500 to-orange-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                        <h3 class="text-xl font-bold">⚠️ Alarme</h3>
+                        <button onclick="document.getElementById('hz-alarme-modal').style.display='none'" class="text-white/80 hover:text-white transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="hz-alarme-content" class="p-4 space-y-3">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== DAUERAUFTRÄGE MODAL ========== -->
+            <div id="hz-dauerauftraege-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                    <div class="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                        <h3 class="text-xl font-bold">💳 Daueraufträge</h3>
+                        <button onclick="document.getElementById('hz-dauerauftraege-modal').style.display='none'" class="text-white/80 hover:text-white transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="p-4">
+                        <p class="text-sm text-gray-600 mb-4">Gib die Beträge deiner 13 Daueraufträge an das Haushaltskonto ein:</p>
+                        <div id="hz-dauerauftraege-content" class="space-y-3">
+                            <!-- Wird dynamisch gefüllt -->
+                        </div>
+                        <div id="hz-dauerauftraege-protokoll" class="mt-4 border-t pt-4 hidden">
+                            <h4 class="font-bold text-gray-700 mb-2">📋 Änderungsprotokoll</h4>
+                            <div id="hz-protokoll-liste" class="text-xs space-y-1 max-h-40 overflow-y-auto">
+                                <!-- Wird dynamisch gefüllt -->
+                            </div>
+                        </div>
+                    </div>
+                    <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-between">
+                        <button id="hz-show-protokoll-btn" class="text-xs text-gray-600 hover:text-gray-800">
+                            📋 Protokoll anzeigen
+                        </button>
+                        <button id="hz-save-dauerauftraege-btn" class="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-500 text-white font-bold rounded-lg hover:shadow-lg transition">
+                            Speichern
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== MITGLIED HINZUFÜGEN MODAL ========== -->
+            <div id="hz-add-mitglied-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+                    <div class="bg-gradient-to-r from-purple-600 to-pink-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                        <h3 class="text-xl font-bold">👤 Mitglied hinzufügen</h3>
+                        <button onclick="document.getElementById('hz-add-mitglied-modal').style.display='none'" class="text-white/80 hover:text-white transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Benutzer auswählen</label>
+                            <select id="hz-mitglied-user-select" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-purple-500">
+                                <option value="">Benutzer wählen...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Zugriffsrecht</label>
+                            <select id="hz-mitglied-recht-select" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-purple-500">
+                                <option value="lesen">👁️ Nur Lesen</option>
+                                <option value="eigene">✏️ Eigene Zahlung ändern</option>
+                                <option value="vollzugriff">🔓 Vollzugriff</option>
+                            </select>
+                            <p class="text-xs text-gray-500 mt-1">
+                                <strong>Nur Lesen:</strong> Kann nur ansehen<br>
+                                <strong>Eigene Zahlung:</strong> Kann eigene Daueraufträge ändern<br>
+                                <strong>Vollzugriff:</strong> Kann alles bearbeiten
+                            </p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Kostenanteil (%)</label>
+                            <input type="number" id="hz-mitglied-anteil" min="0" max="100" value="50" 
+                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-purple-500">
+                        </div>
+                    </div>
+                    <div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-3">
+                        <button onclick="document.getElementById('hz-add-mitglied-modal').style.display='none'" class="px-4 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
+                            Abbrechen
+                        </button>
+                        <button id="hz-save-mitglied-btn" class="px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold rounded-lg hover:shadow-lg transition">
+                            Hinzufügen
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== THEMA HINZUFÜGEN MODAL ========== -->
+            <div id="hz-add-thema-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+                    <div class="bg-gradient-to-r from-cyan-600 to-teal-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                        <h3 class="text-xl font-bold">🏠 Neues Thema</h3>
+                        <button onclick="document.getElementById('hz-add-thema-modal').style.display='none'" class="text-white/80 hover:text-white transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Thema-Name</label>
+                            <input type="text" id="hz-thema-name" placeholder="z.B. Haushalt 2, Ferienhaus..." 
+                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-cyan-500">
+                        </div>
+                    </div>
+                    <div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-3">
+                        <button onclick="document.getElementById('hz-add-thema-modal').style.display='none'" class="px-4 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
+                            Abbrechen
+                        </button>
+                        <button id="hz-save-thema-btn" class="px-6 py-2 bg-gradient-to-r from-cyan-600 to-teal-500 text-white font-bold rounded-lg hover:shadow-lg transition">
+                            Erstellen
                         </button>
                     </div>
                 </div>
