@@ -119,43 +119,9 @@ async function loadThemen() {
             THEMEN[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
         });
         
-        // Wenn kein Thema existiert, prüfe ob Legacy-Daten existieren
+        // Wenn kein Thema existiert, erstelle ein Standard-Thema
         if (Object.keys(THEMEN).length === 0) {
-            // Prüfe ob Legacy-Collection existiert (alte Struktur: /haushaltszahlungen/{id})
-            const legacyRef = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen');
-            const legacySnapshot = await getDocs(legacyRef);
-            
-            if (!legacySnapshot.empty) {
-                // Legacy-Daten gefunden - erstelle Thema mit dieser ID
-                // Die erste Sub-Collection ist das "Thema"
-                const legacyIds = [];
-                legacySnapshot.forEach(doc => {
-                    // Prüfe ob es sich um eine Sub-Collection handelt (hat Dokumente)
-                    legacyIds.push(doc.ref.parent.id);
-                });
-                
-                // Verwende die bekannte Legacy-ID
-                const legacyThemaId = '9wxDEbDH8nv4PHYMRBxD';
-                THEMEN[legacyThemaId] = {
-                    id: legacyThemaId,
-                    name: 'Haushalt (Legacy)',
-                    ersteller: currentUser?.displayName || 'System',
-                    mitglieder: [{
-                        userId: currentUser?.mode || 'system',
-                        name: currentUser?.displayName || 'System',
-                        zugriffsrecht: 'vollzugriff',
-                        anteil: 50,
-                        dauerauftraege: {
-                            monatlich: 0,
-                            januar: 0, februar: 0, maerz: 0, april: 0, mai: 0, juni: 0,
-                            juli: 0, august: 0, september: 0, oktober: 0, november: 0, dezember: 0
-                        }
-                    }]
-                };
-                console.log("📦 Legacy-Haushaltszahlungen gefunden, verwende ID:", legacyThemaId);
-            } else {
-                await createDefaultThema();
-            }
+            await createDefaultThema();
         }
         
         // Erstes Thema auswählen oder gespeichertes
@@ -180,9 +146,10 @@ async function createDefaultThema() {
             ersteller: currentUser.displayName,
             erstelltAm: serverTimestamp(),
             mitglieder: [{
-                oderId: currentUser.displayName,
+                userId: currentUser.mode || currentUser.displayName,
                 name: currentUser.displayName,
                 zugriffsrecht: 'vollzugriff',
+                anteil: 50,
                 dauerauftraege: {
                     monatlich: 0,
                     januar: 0, februar: 0, maerz: 0, april: 0, mai: 0, juni: 0,
@@ -193,6 +160,7 @@ async function createDefaultThema() {
         const docRef = await addDoc(haushaltszahlungenThemenRef, defaultThema);
         THEMEN[docRef.id] = { id: docRef.id, ...defaultThema };
         currentThemaId = docRef.id;
+        console.log("✅ Standard-Thema erstellt:", docRef.id);
     } catch (e) {
         console.error("Fehler beim Erstellen des Standard-Themas:", e);
     }
@@ -200,8 +168,9 @@ async function createDefaultThema() {
 
 function updateCollectionForThema() {
     if (currentThemaId && db) {
-        // Einträge liegen in: /artifacts/{appId}/public/data/haushaltszahlungen/{themaId}
-        haushaltszahlungenCollection = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen', currentThemaId);
+        // Einträge liegen in: /artifacts/{appId}/public/data/haushaltszahlungen/{themaId}/eintraege
+        // Collection-Referenzen müssen ungerade Anzahl Segmente haben (7 statt 6)
+        haushaltszahlungenCollection = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen', currentThemaId, 'eintraege');
         listenForHaushaltszahlungen();
     }
 }
@@ -2171,6 +2140,17 @@ window.closeEinladungenModal = function() {
 
 // Globale Funktionen für Einstellungen
 window.archiveThema = async function(themaId) {
+    // Prüfe ob es das aktuell aktive Thema ist
+    if (currentThemaId === themaId) {
+        const activeThemen = Object.values(THEMEN).filter(t => !t.archiviert && t.id !== themaId);
+        if (activeThemen.length === 0) {
+            alertUser('Das aktive Thema kann nicht archiviert werden, wenn es das einzige ist. Bitte erstelle zuerst ein neues Thema.', 'error');
+            return;
+        }
+        alertUser('Bitte wähle zuerst ein anderes Thema aus, bevor du dieses archivierst.', 'error');
+        return;
+    }
+    
     if (!confirm('Möchtest du dieses Thema archivieren? Es kann später wiederhergestellt werden.')) return;
     
     try {
@@ -2182,20 +2162,12 @@ window.archiveThema = async function(themaId) {
         
         THEMEN[themaId].archiviert = true;
         
-        // Wenn das aktive Thema archiviert wird, wechsle zu einem anderen
-        if (currentThemaId === themaId) {
-            const activeThemen = Object.values(THEMEN).filter(t => !t.archiviert);
-            currentThemaId = activeThemen.length > 0 ? activeThemen[0].id : null;
-            localStorage.setItem('hz_current_thema', currentThemaId || '');
-            updateCollectionForThema();
-        }
-        
         renderThemenListe();
         renderThemenDropdown();
-        alertUser('Thema archiviert!', 'success');
+        alertUser('Thema erfolgreich archiviert!', 'success');
     } catch (error) {
         console.error("Fehler beim Archivieren:", error);
-        alertUser('Fehler: ' + error.message, 'error');
+        alertUser('Fehler beim Archivieren: ' + error.message, 'error');
     }
 };
 
