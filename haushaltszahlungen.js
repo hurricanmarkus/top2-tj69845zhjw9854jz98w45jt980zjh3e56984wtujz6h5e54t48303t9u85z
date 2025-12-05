@@ -838,13 +838,16 @@ function renderDashboard() {
     // Mitglieder-Beiträge dynamisch rendern
     renderMitgliederBeitraege(stats);
 
-    // Gesamt-Status mit Alarmen
+    // Gesamt-Status mit Alarmen (inkl. Einträge ohne Betrag)
     const statusEl = document.getElementById('hz-total-status');
     if (statusEl) {
-        if (stats.alarme.length > 0) {
-            statusEl.textContent = `⚠️ ${stats.alarme.length} ALARM${stats.alarme.length > 1 ? 'E' : ''}`;
+        const hatEintraegeOhneBetrag = stats.eintraegeOhneBetrag && stats.eintraegeOhneBetrag.length > 0;
+        const gesamtAlarme = stats.alarme.length + (hatEintraegeOhneBetrag ? stats.eintraegeOhneBetrag.length : 0);
+        
+        if (gesamtAlarme > 0) {
+            statusEl.textContent = `⚠️ ${gesamtAlarme} ALARM${gesamtAlarme > 1 ? 'E' : ''}`;
             statusEl.className = 'px-4 py-2 rounded-lg font-bold text-white bg-red-500 cursor-pointer';
-            statusEl.onclick = () => showAlarmeModal(stats.alarme);
+            statusEl.onclick = () => showAlarmeModal(stats.alarme, stats.eintraegeOhneBetrag);
         } else {
             statusEl.textContent = gesamtStatus.status;
             statusEl.className = `px-4 py-2 rounded-lg font-bold text-white ${gesamtStatus.color}`;
@@ -985,23 +988,52 @@ function toggleMitgliedDetails(mitgliedId) {
 }
 window.toggleMitgliedDetails = toggleMitgliedDetails;
 
-// Alarme Modal anzeigen
-function showAlarmeModal(alarme) {
+// Alarme Modal anzeigen (inkl. Einträge ohne Betrag)
+function showAlarmeModal(alarme, eintraegeOhneBetrag = []) {
     const modal = document.getElementById('hz-alarme-modal');
     const content = document.getElementById('hz-alarme-content');
     
     if (!modal || !content) return;
     
-    content.innerHTML = alarme.map(alarm => `
-        <div class="p-3 rounded-lg ${alarm.typ === 'unterdeckung' ? 'bg-red-100 border-l-4 border-red-500' : 'bg-yellow-100 border-l-4 border-yellow-500'}">
-            <p class="font-bold ${alarm.typ === 'unterdeckung' ? 'text-red-700' : 'text-yellow-700'}">
-                ${alarm.typ === 'unterdeckung' ? '⚠️ Unterdeckung' : '💰 Überdeckung'}
-            </p>
-            <p class="text-sm text-gray-700">${alarm.message}</p>
-            <p class="text-xs text-gray-500 mt-1">Differenz: ${formatCurrency(alarm.differenz)}</p>
-        </div>
-    `).join('');
+    let html = '';
     
+    // Einträge ohne Betrag zuerst anzeigen
+    if (eintraegeOhneBetrag && eintraegeOhneBetrag.length > 0) {
+        html += `<div class="mb-4"><h4 class="font-bold text-yellow-700 mb-2">⚠️ Einträge ohne Betrag (${eintraegeOhneBetrag.length})</h4>`;
+        html += eintraegeOhneBetrag.map(eintrag => `
+            <div class="p-3 rounded-lg bg-yellow-100 border-l-4 border-yellow-500 mb-2">
+                <p class="font-bold text-yellow-700">📋 ${eintrag.zweck || 'Ohne Zweck'}</p>
+                <p class="text-sm text-gray-700">${eintrag.organisation || '-'}</p>
+                <p class="text-xs text-gray-500 mt-1">Bitte Betrag nachtragen!</p>
+                <button onclick="window.editHaushaltszahlung('${eintrag.id}'); document.getElementById('hz-alarme-modal').style.display='none';" 
+                    class="mt-2 px-3 py-1 bg-yellow-500 text-white text-xs font-bold rounded hover:bg-yellow-600 transition">
+                    ✏️ Bearbeiten
+                </button>
+            </div>
+        `).join('');
+        html += '</div>';
+    }
+    
+    // Normale Alarme
+    if (alarme && alarme.length > 0) {
+        html += `<div><h4 class="font-bold text-red-700 mb-2">💰 Deckungsalarme (${alarme.length})</h4>`;
+        html += alarme.map(alarm => `
+            <div class="p-3 rounded-lg ${alarm.typ === 'unterdeckung' ? 'bg-red-100 border-l-4 border-red-500' : 'bg-yellow-100 border-l-4 border-yellow-500'} mb-2">
+                <p class="font-bold ${alarm.typ === 'unterdeckung' ? 'text-red-700' : 'text-yellow-700'}">
+                    ${alarm.typ === 'unterdeckung' ? '⚠️ Unterdeckung' : '💰 Überdeckung'}
+                </p>
+                <p class="text-sm text-gray-700">${alarm.message}</p>
+                <p class="text-xs text-gray-500 mt-1">Differenz: ${formatCurrency(alarm.differenz)}</p>
+            </div>
+        `).join('');
+        html += '</div>';
+    }
+    
+    if (!html) {
+        html = '<p class="text-gray-500 text-center">Keine Alarme vorhanden</p>';
+    }
+    
+    content.innerHTML = html;
     modal.style.display = 'flex';
 }
 
@@ -1166,14 +1198,6 @@ function renderHaushaltszahlungenTable() {
                 </td>
                 <td class="px-3 py-3 text-center">
                     <div class="flex justify-center gap-1">
-                        ${status === 'aktiv' ? `
-                        <button onclick="window.openAbtauschModal('${eintrag.id}')" 
-                            class="p-1.5 text-purple-600 hover:bg-purple-100 rounded-lg transition" title="Abtausch">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                            </svg>
-                        </button>
-                        ` : ''}
                         <button onclick="window.editHaushaltszahlung('${eintrag.id}')" 
                             class="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="Bearbeiten">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1208,15 +1232,13 @@ function updateAutocompleteLists() {
     // Zweck-Datalist befüllen
     const zweckList = document.getElementById('hz-zweck-list');
     if (zweckList) {
-        zweckList.innerHTML = zwecke.map(z => `<option value="${z}">`).join('') + 
-            '<option value="** Neuer Eintrag **">';
+        zweckList.innerHTML = zwecke.map(z => `<option value="${z}">`).join('');
     }
     
     // Organisation-Datalist befüllen
     const orgList = document.getElementById('hz-organisation-list');
     if (orgList) {
-        orgList.innerHTML = organisationen.map(o => `<option value="${o}">`).join('') + 
-            '<option value="** Neuer Eintrag **">';
+        orgList.innerHTML = organisationen.map(o => `<option value="${o}">`).join('');
     }
 }
 
@@ -1244,6 +1266,10 @@ function openCreateModal() {
             cb.checked = false;
             cb.disabled = false;
         });
+        
+        // Abtausch-Button verstecken (neuer Eintrag)
+        const abtauschBtn = document.getElementById('hz-abtausch-btn');
+        if (abtauschBtn) abtauschBtn.classList.add('hidden');
         
         // Autocomplete-Listen aktualisieren
         updateAutocompleteLists();
@@ -1286,6 +1312,21 @@ function openEditModal(eintrag) {
                 cb.disabled = hasMonatlich;
             }
         });
+        
+        // Abtausch-Button nur bei aktiven Einträgen anzeigen
+        const abtauschBtn = document.getElementById('hz-abtausch-btn');
+        const { status } = berechneStatus(eintrag);
+        if (abtauschBtn) {
+            if (status === 'aktiv') {
+                abtauschBtn.classList.remove('hidden');
+                abtauschBtn.onclick = () => {
+                    closeHaushaltszahlungModal();
+                    window.openAbtauschModal(eintrag.id);
+                };
+            } else {
+                abtauschBtn.classList.add('hidden');
+            }
+        }
         
         // Autocomplete-Listen aktualisieren
         updateAutocompleteLists();
