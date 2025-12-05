@@ -41,7 +41,7 @@ let HAUSHALTSZAHLUNGEN = {};
 let THEMEN = {};
 let EINLADUNGEN = {}; // Einladungen für den aktuellen Benutzer
 let currentThemaId = null; // Aktuell ausgewähltes Thema
-let currentFilter = { status: '', typ: '', person: '', intervall: '' };
+let currentFilter = { status: 'aktiv', typ: '', person: '', intervalle: [] }; // Standard: Aktiv
 let searchTerm = '';
 let simulationsDatum = null; // Für Datums-Simulation (wie W7 in Excel)
 
@@ -341,24 +341,46 @@ function setupEventListeners() {
         filterTyp.dataset.listenerAttached = 'true';
     }
 
-    const filterIntervall = document.getElementById('filter-hz-intervall');
-    if (filterIntervall && !filterIntervall.dataset.listenerAttached) {
-        filterIntervall.addEventListener('change', (e) => {
-            currentFilter.intervall = e.target.value;
-            renderHaushaltszahlungenTable();
+    // Intervall-Filter Dropdown (Mehrfachauswahl)
+    const intervallFilterBtn = document.getElementById('hz-intervall-filter-btn');
+    const intervallDropdown = document.getElementById('hz-intervall-dropdown');
+    if (intervallFilterBtn && !intervallFilterBtn.dataset.listenerAttached) {
+        intervallFilterBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            intervallDropdown.classList.toggle('hidden');
         });
-        filterIntervall.dataset.listenerAttached = 'true';
+        intervallFilterBtn.dataset.listenerAttached = 'true';
     }
+    
+    // Intervall-Filter Checkboxen
+    document.querySelectorAll('.hz-intervall-filter-cb').forEach(cb => {
+        if (!cb.dataset.listenerAttached) {
+            cb.addEventListener('change', () => {
+                updateIntervallFilter();
+                renderHaushaltszahlungenTable();
+            });
+            cb.dataset.listenerAttached = 'true';
+        }
+    });
+    
+    // Dropdown schließen bei Klick außerhalb
+    document.addEventListener('click', (e) => {
+        if (intervallDropdown && !intervallDropdown.contains(e.target) && e.target !== intervallFilterBtn) {
+            intervallDropdown.classList.add('hidden');
+        }
+    });
 
     const resetFilters = document.getElementById('reset-filters-haushaltszahlungen');
     if (resetFilters && !resetFilters.dataset.listenerAttached) {
         resetFilters.addEventListener('click', () => {
-            currentFilter = { status: '', typ: '', person: '', intervall: '' };
+            currentFilter = { status: 'aktiv', typ: '', person: '', intervalle: [] };
             searchTerm = '';
             document.getElementById('search-haushaltszahlungen').value = '';
-            document.getElementById('filter-hz-status').value = '';
+            document.getElementById('filter-hz-status').value = 'aktiv';
             document.getElementById('filter-hz-typ').value = '';
-            document.getElementById('filter-hz-intervall').value = '';
+            // Intervall-Checkboxen zurücksetzen
+            document.querySelectorAll('.hz-intervall-filter-cb').forEach(cb => cb.checked = false);
+            updateIntervallFilterLabel();
             renderHaushaltszahlungenTable();
         });
         resetFilters.dataset.listenerAttached = 'true';
@@ -877,6 +899,10 @@ function renderMitgliederBeitraege(stats) {
         const anteil = mitglied.anteil || (100 / thema.mitglieder.length);
         const mitgliedId = (mitglied.userId || mitglied.name).replace(/[^a-zA-Z0-9]/g, '_');
         
+        // Vollen Namen ermitteln
+        const userObj = Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name);
+        const displayName = userObj?.realName || mitglied.name || mitglied.userId;
+        
         // Berechne SOLL-Beiträge für dieses Mitglied
         const sollMonatlich = stats.beitraegeSoll?.monatlich?.[mitglied.name] || (stats.kosten.monatlich * (anteil / 100));
         const sollJaehrlich = stats.beitraegeSoll?.jaehrlich?.[mitglied.name] || ((stats.kosten.monatlich * 12 + stats.kosten.jaehrlichEinmalig) * (anteil / 100));
@@ -925,7 +951,7 @@ function renderMitgliederBeitraege(stats) {
             <div class="bg-${color}-500/30 p-3 rounded-lg">
                 <!-- Header mit Name und Status -->
                 <div class="flex justify-between items-center mb-2">
-                    <p class="text-lg font-bold">${mitglied.name}</p>
+                    <p class="text-lg font-bold">${displayName}</p>
                     <button onclick="toggleMitgliedDetails('${mitgliedId}')" 
                         class="px-3 py-1 ${statusColor} text-white text-xs font-bold rounded-lg hover:opacity-80 transition cursor-pointer flex items-center gap-1">
                         ${statusText}
@@ -1141,8 +1167,13 @@ function renderHaushaltszahlungenTable() {
         eintraege = eintraege.filter(e => berechneTyp(e) === currentFilter.typ);
     }
 
-    if (currentFilter.intervall) {
-        eintraege = eintraege.filter(e => e.intervall && e.intervall.includes(currentFilter.intervall));
+    // Mehrfachauswahl für Intervalle
+    if (currentFilter.intervalle && currentFilter.intervalle.length > 0) {
+        eintraege = eintraege.filter(e => {
+            if (!e.intervall || e.intervall.length === 0) return false;
+            // Eintrag muss mindestens eines der ausgewählten Intervalle haben
+            return currentFilter.intervalle.some(filterIntervall => e.intervall.includes(filterIntervall));
+        });
     }
 
     if (eintraege.length === 0) {
@@ -1567,10 +1598,17 @@ function renderMitgliederListe() {
         return;
     }
     
-    container.innerHTML = thema.mitglieder.map((mitglied, index) => `
-        <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-gray-200">
+    container.innerHTML = thema.mitglieder.map((mitglied, index) => {
+        // Vollen Namen ermitteln (aus USERS oder direkt aus mitglied.name)
+        const userObj = Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name);
+        const displayName = userObj?.realName || mitglied.name || mitglied.userId;
+        const isCurrentUser = mitglied.userId === currentUser.displayName || mitglied.userId === currentUser.mode;
+        
+        return `
+        <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-gray-200 ${isCurrentUser ? 'border-cyan-400 bg-cyan-50' : ''}">
             <div class="flex items-center gap-2">
-                <span class="font-bold text-gray-800">${mitglied.name}</span>
+                <span class="font-bold text-gray-800">${displayName}</span>
+                ${isCurrentUser ? '<span class="text-xs bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded">Du</span>' : ''}
                 <span class="text-xs ${ZUGRIFFSRECHTE[mitglied.zugriffsrecht]?.icon ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'} px-2 py-0.5 rounded">
                     ${ZUGRIFFSRECHTE[mitglied.zugriffsrecht]?.label || mitglied.zugriffsrecht}
                 </span>
@@ -1580,7 +1618,7 @@ function renderMitgliederListe() {
                 <button onclick="window.openDauerauftraegeModal('${mitglied.userId || mitglied.name}')" class="p-1 text-blue-600 hover:bg-blue-100 rounded" title="Daueraufträge">
                     💳
                 </button>
-                ${thema.ersteller === currentUser.displayName && mitglied.name !== thema.ersteller ? `
+                ${thema.ersteller === currentUser.displayName && mitglied.userId !== currentUser.displayName && mitglied.userId !== thema.ersteller ? `
                     <button onclick="window.removeMitglied(${index})" class="p-1 text-red-600 hover:bg-red-100 rounded" title="Entfernen">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -1589,7 +1627,7 @@ function renderMitgliederListe() {
                 ` : ''}
             </div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 function renderKostenaufteilung() {
@@ -1605,9 +1643,14 @@ function renderKostenaufteilung() {
     // Berechne Gesamtanteil
     const gesamtAnteil = thema.mitglieder.reduce((sum, m) => sum + (m.anteil || 0), 0);
     
-    container.innerHTML = thema.mitglieder.map((mitglied, index) => `
+    container.innerHTML = thema.mitglieder.map((mitglied, index) => {
+        // Vollen Namen ermitteln
+        const userObj = Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name);
+        const displayName = userObj?.realName || mitglied.name || mitglied.userId;
+        
+        return `
         <div class="flex items-center gap-3">
-            <span class="w-24 font-bold text-gray-700">${mitglied.name}</span>
+            <span class="w-24 font-bold text-gray-700">${displayName}</span>
             <input type="number" min="0" max="100" value="${mitglied.anteil || Math.round(100 / thema.mitglieder.length)}" 
                 onchange="window.updateMitgliedAnteil(${index}, this.value)"
                 class="w-20 p-2 border-2 border-gray-300 rounded-lg text-center font-bold">
@@ -1616,7 +1659,7 @@ function renderKostenaufteilung() {
                 <div class="bg-cyan-500 h-3 rounded-full" style="width: ${mitglied.anteil || Math.round(100 / thema.mitglieder.length)}%"></div>
             </div>
         </div>
-    `).join('') + `
+    `}).join('') + `
         <div class="mt-2 p-2 rounded-lg ${gesamtAnteil === 100 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
             <span class="font-bold">Gesamt: ${gesamtAnteil}%</span>
             ${gesamtAnteil !== 100 ? ' ⚠️ Sollte 100% sein!' : ' ✓'}
@@ -1633,6 +1676,10 @@ async function saveNewThema() {
         return;
     }
     
+    // Vollen Namen des aktuellen Benutzers ermitteln
+    const currentUserObj = Object.values(USERS).find(u => u.id === currentUser.mode || u.name === currentUser.displayName);
+    const fullName = currentUserObj?.realName || currentUser.displayName;
+    
     try {
         const newThema = {
             name,
@@ -1640,7 +1687,7 @@ async function saveNewThema() {
             erstelltAm: serverTimestamp(),
             mitglieder: [{
                 userId: currentUser.displayName,
-                name: currentUser.displayName,
+                name: fullName, // Voller Name statt displayName
                 zugriffsrecht: 'vollzugriff',
                 anteil: 100,
                 dauerauftraege: {
@@ -2351,3 +2398,82 @@ window.saveAbtausch = async function() {
         alertUser('Fehler beim Abtausch: ' + error.message, 'error');
     }
 };
+
+// ========================================
+// INTERVALL-FILTER FUNKTIONEN
+// ========================================
+
+// Intervall-Filter aktualisieren (Mehrfachauswahl)
+function updateIntervallFilter() {
+    const checked = [];
+    document.querySelectorAll('.hz-intervall-filter-cb:checked').forEach(cb => {
+        checked.push(cb.value);
+    });
+    currentFilter.intervalle = checked;
+    updateIntervallFilterLabel();
+}
+
+// Label für Intervall-Filter aktualisieren
+function updateIntervallFilterLabel() {
+    const label = document.getElementById('hz-intervall-filter-label');
+    if (!label) return;
+    
+    const checked = [];
+    document.querySelectorAll('.hz-intervall-filter-cb:checked').forEach(cb => {
+        checked.push(cb.value);
+    });
+    
+    if (checked.length === 0) {
+        label.textContent = 'Alle Intervalle';
+    } else if (checked.length === 1) {
+        const config = INTERVALL_CONFIG[checked[0]];
+        label.textContent = config ? config.short : checked[0];
+    } else {
+        label.textContent = `${checked.length} ausgewählt`;
+    }
+}
+
+// Abtausch-Intervall Checkbox-Logik (Monatlich vs. Einzelmonate)
+function setupAbtauschIntervallLogic() {
+    document.querySelectorAll('.hz-abtausch-intervall').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const isMonatlich = this.value === 'monatlich';
+            const isChecked = this.checked;
+            
+            if (isMonatlich && isChecked) {
+                // Monatlich ausgewählt -> Einzelmonate deaktivieren
+                document.querySelectorAll('.hz-abtausch-intervall[data-type="einzelmonat"]').forEach(einzelCb => {
+                    einzelCb.checked = false;
+                    einzelCb.disabled = true;
+                });
+            } else if (isMonatlich && !isChecked) {
+                // Monatlich abgewählt -> Einzelmonate aktivieren
+                document.querySelectorAll('.hz-abtausch-intervall[data-type="einzelmonat"]').forEach(einzelCb => {
+                    einzelCb.disabled = false;
+                });
+            } else if (!isMonatlich && isChecked) {
+                // Einzelmonat ausgewählt -> Monatlich deaktivieren
+                const monatlichCb = document.querySelector('.hz-abtausch-intervall[data-type="monatlich"]');
+                if (monatlichCb) {
+                    monatlichCb.checked = false;
+                    monatlichCb.disabled = true;
+                }
+            } else if (!isMonatlich) {
+                // Prüfen ob noch Einzelmonate ausgewählt sind
+                const anyEinzelChecked = Array.from(document.querySelectorAll('.hz-abtausch-intervall[data-type="einzelmonat"]:checked')).length > 0;
+                const monatlichCb = document.querySelector('.hz-abtausch-intervall[data-type="monatlich"]');
+                if (monatlichCb) {
+                    monatlichCb.disabled = anyEinzelChecked;
+                }
+            }
+        });
+    });
+}
+
+// Beim Laden der Seite Abtausch-Logik initialisieren
+document.addEventListener('DOMContentLoaded', () => {
+    setupAbtauschIntervallLogic();
+    
+    // Standard-Filter auf "Aktiv" setzen
+    currentFilter.status = 'aktiv';
+});

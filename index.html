@@ -1957,7 +1957,7 @@
                     </div>
                     
                     <!-- Zähler: Aktiv, Belastung, Gutschrift, Alarm -->
-                    <div class="grid grid-cols-4 gap-2 text-center mb-3">
+                    <div class="grid grid-cols-3 gap-2 text-center mb-3">
                         <div class="bg-white/20 px-2 py-2 rounded-lg">
                             <p class="text-xl font-bold" id="hz-stat-aktiv">0</p>
                             <p class="text-[10px] font-semibold leading-tight">✓ Aktiv</p>
@@ -1969,10 +1969,6 @@
                         <div class="bg-green-500/30 px-2 py-2 rounded-lg">
                             <p class="text-lg font-bold" id="hz-stat-gutschrift">0,00 €</p>
                             <p class="text-[10px] font-semibold leading-tight">📥 Gutschrift/M</p>
-                        </div>
-                        <div class="bg-yellow-500/30 px-2 py-2 rounded-lg">
-                            <p class="text-xl font-bold" id="hz-stat-alarm">0</p>
-                            <p class="text-[10px] font-semibold leading-tight">⚠️ Alarme</p>
                         </div>
                     </div>
 
@@ -2030,7 +2026,7 @@
                         
                         <select id="filter-hz-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Status</option>
-                            <option value="aktiv">✓ Aktiv</option>
+                            <option value="aktiv" selected>✓ Aktiv</option>
                             <option value="n-aktiv-geplant">📅 N-Aktiv:Geplant</option>
                             <option value="n-aktiv-vergangen">⏰ N-Aktiv:Vergangen</option>
                             <option value="fehler">⚠️ Fehler</option>
@@ -2042,22 +2038,70 @@
                             <option value="gutschrift">📥 Gutschrift</option>
                         </select>
                         
-                        <select id="filter-hz-intervall" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle Intervalle</option>
-                            <option value="monatlich">📅 Monatlich</option>
-                            <option value="januar">Jänner</option>
-                            <option value="februar">Februar</option>
-                            <option value="maerz">März</option>
-                            <option value="april">April</option>
-                            <option value="mai">Mai</option>
-                            <option value="juni">Juni</option>
-                            <option value="juli">Juli</option>
-                            <option value="august">August</option>
-                            <option value="september">September</option>
-                            <option value="oktober">Oktober</option>
-                            <option value="november">November</option>
-                            <option value="dezember">Dezember</option>
-                        </select>
+                        <!-- Intervall-Filter mit Mehrfachauswahl -->
+                        <div class="relative" id="hz-intervall-filter-container">
+                            <button type="button" id="hz-intervall-filter-btn" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm min-w-[140px] text-left flex justify-between items-center">
+                                <span id="hz-intervall-filter-label">Alle Intervalle</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div id="hz-intervall-dropdown" class="absolute top-full left-0 mt-1 bg-white border-2 border-gray-300 rounded-lg shadow-lg z-50 hidden min-w-[200px] max-h-[300px] overflow-y-auto">
+                                <label class="flex items-center gap-2 p-2 hover:bg-gray-100 cursor-pointer border-b border-gray-200">
+                                    <input type="checkbox" value="monatlich" class="hz-intervall-filter-cb rounded">
+                                    <span class="text-sm font-bold">📅 Monatlich</span>
+                                </label>
+                                <div class="border-b border-gray-200 py-1 px-2 text-xs text-gray-500 bg-gray-50">Einzelmonate:</div>
+                                <label class="flex items-center gap-2 p-2 hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="januar" class="hz-intervall-filter-cb rounded">
+                                    <span class="text-sm">Jänner</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="februar" class="hz-intervall-filter-cb rounded">
+                                    <span class="text-sm">Februar</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="maerz" class="hz-intervall-filter-cb rounded">
+                                    <span class="text-sm">März</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="april" class="hz-intervall-filter-cb rounded">
+                                    <span class="text-sm">April</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="mai" class="hz-intervall-filter-cb rounded">
+                                    <span class="text-sm">Mai</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="juni" class="hz-intervall-filter-cb rounded">
+                                    <span class="text-sm">Juni</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="juli" class="hz-intervall-filter-cb rounded">
+                                    <span class="text-sm">Juli</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="august" class="hz-intervall-filter-cb rounded">
+                                    <span class="text-sm">August</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="september" class="hz-intervall-filter-cb rounded">
+                                    <span class="text-sm">September</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="oktober" class="hz-intervall-filter-cb rounded">
+                                    <span class="text-sm">Oktober</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="november" class="hz-intervall-filter-cb rounded">
+                                    <span class="text-sm">November</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 hover:bg-gray-100 cursor-pointer">
+                                    <input type="checkbox" value="dezember" class="hz-intervall-filter-cb rounded">
+                                    <span class="text-sm">Dezember</span>
+                                </label>
+                            </div>
+                        </div>
                         
                         <button id="reset-filters-haushaltszahlungen" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
                             ✕ Reset
@@ -2574,60 +2618,68 @@
                         <!-- Intervall -->
                         <div class="mb-4">
                             <label class="block text-sm font-bold text-gray-700 mb-2">📆 Intervall</label>
+                            <p class="text-xs text-gray-500 mb-2">Entweder "Monatlich" ODER einzelne Monate auswählen</p>
                             <div class="grid grid-cols-4 gap-2">
-                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                                    <input type="checkbox" value="monatlich" class="hz-abtausch-intervall rounded">
-                                    <span class="text-sm">Monatlich</span>
+                                <label class="flex items-center gap-2 p-2 bg-cyan-50 rounded-lg hover:bg-cyan-100 cursor-pointer border-2 border-cyan-200">
+                                    <input type="checkbox" value="monatlich" class="hz-abtausch-intervall rounded" data-type="monatlich">
+                                    <span class="text-sm font-bold">Monatlich</span>
                                 </label>
-                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                                    <input type="checkbox" value="januar" class="hz-abtausch-intervall rounded">
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer hz-abtausch-einzelmonat">
+                                    <input type="checkbox" value="januar" class="hz-abtausch-intervall rounded" data-type="einzelmonat">
                                     <span class="text-sm">Jänner</span>
                                 </label>
-                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                                    <input type="checkbox" value="februar" class="hz-abtausch-intervall rounded">
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer hz-abtausch-einzelmonat">
+                                    <input type="checkbox" value="februar" class="hz-abtausch-intervall rounded" data-type="einzelmonat">
                                     <span class="text-sm">Februar</span>
                                 </label>
-                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                                    <input type="checkbox" value="maerz" class="hz-abtausch-intervall rounded">
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer hz-abtausch-einzelmonat">
+                                    <input type="checkbox" value="maerz" class="hz-abtausch-intervall rounded" data-type="einzelmonat">
                                     <span class="text-sm">März</span>
                                 </label>
-                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                                    <input type="checkbox" value="april" class="hz-abtausch-intervall rounded">
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer hz-abtausch-einzelmonat">
+                                    <input type="checkbox" value="april" class="hz-abtausch-intervall rounded" data-type="einzelmonat">
                                     <span class="text-sm">April</span>
                                 </label>
-                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                                    <input type="checkbox" value="mai" class="hz-abtausch-intervall rounded">
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer hz-abtausch-einzelmonat">
+                                    <input type="checkbox" value="mai" class="hz-abtausch-intervall rounded" data-type="einzelmonat">
                                     <span class="text-sm">Mai</span>
                                 </label>
-                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                                    <input type="checkbox" value="juni" class="hz-abtausch-intervall rounded">
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer hz-abtausch-einzelmonat">
+                                    <input type="checkbox" value="juni" class="hz-abtausch-intervall rounded" data-type="einzelmonat">
                                     <span class="text-sm">Juni</span>
                                 </label>
-                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                                    <input type="checkbox" value="juli" class="hz-abtausch-intervall rounded">
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer hz-abtausch-einzelmonat">
+                                    <input type="checkbox" value="juli" class="hz-abtausch-intervall rounded" data-type="einzelmonat">
                                     <span class="text-sm">Juli</span>
                                 </label>
-                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                                    <input type="checkbox" value="august" class="hz-abtausch-intervall rounded">
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer hz-abtausch-einzelmonat">
+                                    <input type="checkbox" value="august" class="hz-abtausch-intervall rounded" data-type="einzelmonat">
                                     <span class="text-sm">August</span>
                                 </label>
-                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                                    <input type="checkbox" value="september" class="hz-abtausch-intervall rounded">
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer hz-abtausch-einzelmonat">
+                                    <input type="checkbox" value="september" class="hz-abtausch-intervall rounded" data-type="einzelmonat">
                                     <span class="text-sm">September</span>
                                 </label>
-                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                                    <input type="checkbox" value="oktober" class="hz-abtausch-intervall rounded">
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer hz-abtausch-einzelmonat">
+                                    <input type="checkbox" value="oktober" class="hz-abtausch-intervall rounded" data-type="einzelmonat">
                                     <span class="text-sm">Oktober</span>
                                 </label>
-                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                                    <input type="checkbox" value="november" class="hz-abtausch-intervall rounded">
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer hz-abtausch-einzelmonat">
+                                    <input type="checkbox" value="november" class="hz-abtausch-intervall rounded" data-type="einzelmonat">
                                     <span class="text-sm">November</span>
                                 </label>
-                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                                    <input type="checkbox" value="dezember" class="hz-abtausch-intervall rounded">
+                                <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer hz-abtausch-einzelmonat">
+                                    <input type="checkbox" value="dezember" class="hz-abtausch-intervall rounded" data-type="einzelmonat">
                                     <span class="text-sm">Dezember</span>
                                 </label>
                             </div>
+                        </div>
+                        
+                        <!-- Notizen -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-bold text-gray-700 mb-1">📝 Notizen</label>
+                            <textarea id="hz-abtausch-notizen" rows="3" placeholder="Zusätzliche Notizen zum neuen Eintrag..." 
+                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 resize-none"></textarea>
                         </div>
                     </div>
                     <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-3">
