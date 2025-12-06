@@ -184,23 +184,29 @@ function updateCollectionForThema() {
     }
 }
 
-// Einladungen laden
-async function loadEinladungen() {
-    if (!haushaltszahlungenEinladungenRef || !currentUser?.mode) return;
+// Einladungen laden (mit Echtzeit-Listener für automatische Aktualisierung)
+function loadEinladungen() {
+    if (!haushaltszahlungenEinladungenRef || !currentUser?.displayName) return;
     
     try {
-        const snapshot = await getDocs(haushaltszahlungenEinladungenRef);
-        EINLADUNGEN = {};
-        snapshot.forEach(docSnap => {
-            const data = docSnap.data();
-            // Nur Einladungen für den aktuellen Benutzer laden
-            if (data.targetUserId === currentUser.mode || data.targetUserName === currentUser.displayName) {
-                EINLADUNGEN[docSnap.id] = { id: docSnap.id, ...data };
-            }
+        // Echtzeit-Listener statt getDocs für automatische Updates
+        const userId = currentUser.mode || currentUser.displayName;
+        
+        onSnapshot(haushaltszahlungenEinladungenRef, (snapshot) => {
+            EINLADUNGEN = {};
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                // Nur Einladungen für den aktuellen Benutzer laden
+                if (data.targetUserId === userId || data.targetUserName === currentUser.displayName) {
+                    EINLADUNGEN[docSnap.id] = { id: docSnap.id, ...data };
+                }
+            });
+            renderEinladungenBadge();
+        }, (error) => {
+            console.error("Fehler beim Laden der Einladungen:", error);
         });
-        renderEinladungenBadge();
     } catch (e) {
-        console.error("Fehler beim Laden der Einladungen:", e);
+        console.error("Fehler beim Initialisieren des Einladungs-Listeners:", e);
     }
 }
 
@@ -222,9 +228,12 @@ function renderThemenDropdown() {
     const dropdown = document.getElementById('hz-thema-dropdown');
     if (!dropdown) return;
     
-    dropdown.innerHTML = Object.values(THEMEN).map(thema => 
-        `<option value="${thema.id}" ${thema.id === currentThemaId ? 'selected' : ''}>${thema.name}</option>`
-    ).join('');
+    // Nur aktive (nicht archivierte) Themen anzeigen
+    dropdown.innerHTML = Object.values(THEMEN)
+        .filter(thema => !thema.archiviert)
+        .map(thema => 
+            `<option value="${thema.id}" ${thema.id === currentThemaId ? 'selected' : ''}>${thema.name}</option>`
+        ).join('');
 }
 
 async function loadSettings() {
@@ -341,12 +350,17 @@ function setupEventListeners() {
         }
     });
     
-    // Dropdown schließen bei Klick außerhalb
-    document.addEventListener('click', (e) => {
-        if (intervallDropdown && !intervallDropdown.contains(e.target) && e.target !== intervallFilterBtn) {
-            intervallDropdown.classList.add('hidden');
-        }
-    });
+    // Dropdown schließen bei Klick außerhalb (mit Flag um doppelte Listener zu verhindern)
+    if (!document.body.dataset.hzDropdownListenerAttached) {
+        document.addEventListener('click', (e) => {
+            const intervallDropdown = document.getElementById('hz-intervall-dropdown');
+            const intervallFilterBtn = document.getElementById('hz-intervall-filter-btn');
+            if (intervallDropdown && !intervallDropdown.contains(e.target) && e.target !== intervallFilterBtn) {
+                intervallDropdown.classList.add('hidden');
+            }
+        });
+        document.body.dataset.hzDropdownListenerAttached = 'true';
+    }
 
     const resetFilters = document.getElementById('reset-filters-haushaltszahlungen');
     if (resetFilters && !resetFilters.dataset.listenerAttached) {
@@ -450,6 +464,7 @@ function setupIntervallCheckboxLogic() {
                 cb.disabled = false;
             });
         }
+        updateAlleMonateButton(); // Button-Text aktualisieren
     });
     monatlichCheckbox.dataset.logicAttached = 'true';
     
@@ -469,6 +484,7 @@ function setupIntervallCheckboxLogic() {
                 // Aktiviere "Monatlich" wieder
                 monatlichCheckbox.disabled = false;
             }
+            updateAlleMonateButton(); // Button-Text aktualisieren
         });
         cb.dataset.logicAttached = 'true';
     });
@@ -956,9 +972,11 @@ function renderMitgliederBeitraege(stats) {
         const mitgliedKey = mitglied.userId || mitglied.name;
         const mitgliedId = mitgliedKey.replace(/[^a-zA-Z0-9]/g, '_');
         
-        // Vollen Namen ermitteln
-        const userObj = Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name);
-        const displayName = userObj?.realName || mitglied.name || mitglied.userId;
+    // Vollen Namen ermitteln mit Null-Check
+    const userObj = USERS && typeof USERS === 'object'
+        ? Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name)
+        : null;
+    const displayName = userObj?.realName || mitglied.name || mitglied.userId;
         
         // SOLL-Werte aus der neuen Berechnung (basierend auf individuellem anteilMarkus pro Eintrag)
         const mitgliedSoll = stats.sollProMitgliedUndIntervall?.[mitgliedKey] || {};
@@ -1507,17 +1525,29 @@ function updateAnteilDisplay() {
 // SPEICHERN & LÖSCHEN
 // ========================================
 async function saveHaushaltszahlung() {
-    const id = document.getElementById('hz-id').value;
-    const zweck = document.getElementById('hz-zweck').value.trim();
-    const organisation = document.getElementById('hz-organisation').value.trim();
-    const betrag = parseFloat(document.getElementById('hz-betrag').value) || 0;
-    const gueltigAb = document.getElementById('hz-gueltig-ab').value;
-    const gueltigBis = document.getElementById('hz-gueltig-bis').value;
-    const anteilMarkus = parseInt(document.getElementById('hz-anteil-markus').value) || 50;
-    const kundennummer = document.getElementById('hz-kundennummer').value.trim();
-    const vertragsnummer = document.getElementById('hz-vertragsnummer').value.trim();
-    const vormerk = document.getElementById('hz-vormerk').value.trim();
-    const erinnerung = document.getElementById('hz-erinnerung').value;
+    // Validiere dass Collection verfügbar ist
+    if (!haushaltszahlungenCollection) {
+        alertUser('Fehler: Keine Verbindung zur Datenbank. Bitte lade die Seite neu.', 'error');
+        return;
+    }
+    
+    // Validiere currentUser
+    if (!currentUser || !currentUser.displayName) {
+        alertUser('Fehler: Benutzer nicht angemeldet.', 'error');
+        return;
+    }
+    
+    const id = document.getElementById('hz-id')?.value || '';
+    const zweck = document.getElementById('hz-zweck')?.value?.trim() || '';
+    const organisation = document.getElementById('hz-organisation')?.value?.trim() || '';
+    const betrag = parseFloat(document.getElementById('hz-betrag')?.value || '0') || 0;
+    const gueltigAb = document.getElementById('hz-gueltig-ab')?.value || '';
+    const gueltigBis = document.getElementById('hz-gueltig-bis')?.value || '';
+    const anteilMarkus = parseInt(document.getElementById('hz-anteil-markus')?.value || '50') || 50;
+    const kundennummer = document.getElementById('hz-kundennummer')?.value?.trim() || '';
+    const vertragsnummer = document.getElementById('hz-vertragsnummer')?.value?.trim() || '';
+    const vormerk = document.getElementById('hz-vormerk')?.value?.trim() || '';
+    const erinnerung = document.getElementById('hz-erinnerung')?.value || '';
     const notizen = document.getElementById('hz-notizen')?.value?.trim() || '';
 
     // Intervalle sammeln
@@ -1566,19 +1596,25 @@ async function saveHaushaltszahlung() {
         closeHaushaltszahlungModal();
     } catch (error) {
         console.error("Fehler beim Speichern:", error);
-        alertUser('Fehler beim Speichern: ' + error.message, 'error');
+        alertUser('Fehler beim Speichern: ' + (error.message || 'Unbekannter Fehler'), 'error');
     }
 }
 
 async function deleteHaushaltszahlung(id) {
     if (!confirm('Möchtest du diesen Eintrag wirklich löschen?')) return;
+    
+    // Validiere dass Collection verfügbar ist
+    if (!haushaltszahlungenCollection) {
+        alertUser('Fehler: Keine Verbindung zur Datenbank. Bitte lade die Seite neu.', 'error');
+        return;
+    }
 
     try {
         await deleteDoc(doc(haushaltszahlungenCollection, id));
         alertUser('Eintrag erfolgreich gelöscht!', 'success');
     } catch (error) {
         console.error("Fehler beim Löschen:", error);
-        alertUser('Fehler beim Löschen: ' + error.message, 'error');
+        alertUser('Fehler beim Löschen: ' + (error.message || 'Unbekannter Fehler'), 'error');
     }
 }
 
@@ -1715,9 +1751,11 @@ function renderMitgliederListe() {
     }
     
     container.innerHTML = thema.mitglieder.map((mitglied, index) => {
-        // Vollen Namen ermitteln (aus USERS oder direkt aus mitglied.name)
-        const userObj = Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name);
-        const displayName = userObj?.realName || mitglied.name || mitglied.userId;
+    // Vollen Namen ermitteln (aus USERS oder direkt aus mitglied.name) mit Null-Check
+    const userObj = USERS && typeof USERS === 'object'
+        ? Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name)
+        : null;
+    const displayName = userObj?.realName || mitglied.name || mitglied.userId;
         const isCurrentUser = mitglied.userId === currentUser.displayName || mitglied.userId === currentUser.mode;
         
         return `
@@ -1786,11 +1824,13 @@ function renderKostenaufteilung() {
     }
     
     container.innerHTML = errorBanner + thema.mitglieder.map((mitglied, index) => {
-        // Vollen Namen ermitteln
-        const userObj = Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name);
-        const displayName = userObj?.realName || mitglied.name || mitglied.userId;
-        
-        return `
+    // Vollen Namen ermitteln mit Null-Check
+    const userObj = USERS && typeof USERS === 'object'
+        ? Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name)
+        : null;
+    const displayName = userObj?.realName || mitglied.name || mitglied.userId;
+    
+    return `
         <div class="flex items-center gap-3">
             <span class="w-24 font-bold text-gray-700">${displayName}</span>
             <input type="number" min="0" max="100" value="${mitglied.anteil || 0}" 
@@ -1822,8 +1862,10 @@ async function saveNewThema() {
         return;
     }
     
-    // Vollen Namen des aktuellen Benutzers ermitteln
-    const currentUserObj = Object.values(USERS).find(u => u.id === currentUser.mode || u.name === currentUser.displayName);
+    // Vollen Namen des aktuellen Benutzers ermitteln mit Null-Check
+    const currentUserObj = USERS && typeof USERS === 'object'
+        ? Object.values(USERS).find(u => u.id === currentUser.mode || u.name === currentUser.displayName)
+        : null;
     const fullName = currentUserObj?.realName || currentUser.displayName;
     
     try {
@@ -1869,19 +1911,23 @@ function openAddMitgliedModal() {
         const currentUserIsMember = existingMemberIds.includes(currentUser.displayName) || 
                                      existingMemberIds.includes(currentUser.mode);
         
-        const availableUsers = Object.values(USERS).filter(user => {
-            // Nur aktive, registrierte Benutzer
-            if (!user.isActive || user.permissionType === 'not_registered') return false;
-            // Nicht bereits Mitglieder
-            if (existingMemberIds.includes(user.id) || existingMemberIds.includes(user.name)) return false;
-            return true;
-        });
+        const availableUsers = (USERS && typeof USERS === 'object')
+            ? Object.values(USERS).filter(user => {
+                // Nur aktive, registrierte Benutzer
+                if (!user.isActive || user.permissionType === 'not_registered') return false;
+                // Nicht bereits Mitglieder
+                if (existingMemberIds.includes(user.id) || existingMemberIds.includes(user.name)) return false;
+                return true;
+            })
+            : [];
         
         // Wenn der eigene Benutzer fehlt, füge ihn zur Liste hinzu (an erster Stelle)
         let options = '<option value="">Benutzer wählen...</option>';
         
         if (!currentUserIsMember) {
-            const currentUserObj = Object.values(USERS).find(u => u.id === currentUser.mode || u.name === currentUser.displayName);
+            const currentUserObj = USERS && typeof USERS === 'object'
+                ? Object.values(USERS).find(u => u.id === currentUser.mode || u.name === currentUser.displayName)
+                : null;
             const currentDisplayName = currentUserObj?.realName || currentUser.displayName;
             options += `<option value="${currentUser.displayName}" class="font-bold">${currentDisplayName} (Du selbst)</option>`;
         }
@@ -1914,8 +1960,10 @@ async function saveNewMitglied() {
     const thema = THEMEN[currentThemaId];
     if (!thema) return;
     
-    // Finde den Benutzer für den Namen
-    const targetUser = Object.values(USERS).find(u => u.id === userId || u.name === userId);
+    // Finde den Benutzer für den Namen mit Null-Check
+    const targetUser = USERS && typeof USERS === 'object'
+        ? Object.values(USERS).find(u => u.id === userId || u.name === userId)
+        : null;
     const userName = targetUser?.realName || targetUser?.name || userId;
     
     // Prüfe ob es der eigene Benutzer ist - dann immer Vollzugriff
@@ -2488,9 +2536,15 @@ window.respondToEinladung = async function(einladungId, response) {
             // Einladung annehmen: Mitglied zum Thema hinzufügen
             const thema = THEMEN[einladung.themaId];
             if (thema) {
+                // Konsistente Verwendung von userId und Name
+                const userId = currentUser.mode || currentUser.displayName;
+                const userName = USERS && typeof USERS === 'object'
+                    ? (Object.values(USERS).find(u => u.id === userId || u.name === currentUser.displayName)?.realName || currentUser.displayName)
+                    : currentUser.displayName;
+                
                 const newMitglied = {
-                    userId: currentUser.mode,
-                    name: currentUser.displayName,
+                    userId: userId,
+                    name: userName,
                     zugriffsrecht: einladung.zugriffsrecht,
                     anteil: einladung.anteil,
                     dauerauftraege: {
@@ -2608,13 +2662,8 @@ function updateAbtauschEnde() {
     }
 }
 
-// Event-Listener für Abtausch-Datum
-document.addEventListener('DOMContentLoaded', () => {
-    const neuerBeginnInput = document.getElementById('hz-abtausch-neuer-beginn');
-    if (neuerBeginnInput) {
-        neuerBeginnInput.addEventListener('change', updateAbtauschEnde);
-    }
-});
+// Event-Listener für Abtausch-Datum wurde in den Haupt-DOMContentLoaded-Block verschoben
+// (siehe Ende der Datei)
 
 window.closeAbtauschModal = function() {
     const modal = document.getElementById('hz-abtausch-modal');
@@ -2724,7 +2773,13 @@ function updateIntervallFilterLabel() {
 
 // Abtausch-Intervall Checkbox-Logik (Monatlich vs. Einzelmonate)
 function setupAbtauschIntervallLogic() {
-    document.querySelectorAll('.hz-abtausch-intervall').forEach(cb => {
+    // Verhindere mehrfaches Anhängen von Event-Listenern
+    const checkboxes = document.querySelectorAll('.hz-abtausch-intervall');
+    
+    checkboxes.forEach(cb => {
+        // Prüfe ob Listener bereits angehängt wurde
+        if (cb.dataset.abtauschLogicAttached) return;
+        
         cb.addEventListener('change', function() {
             const isMonatlich = this.value === 'monatlich';
             const isChecked = this.checked;
@@ -2756,13 +2811,25 @@ function setupAbtauschIntervallLogic() {
                 }
             }
         });
+        
+        cb.dataset.abtauschLogicAttached = 'true';
     });
 }
 
-// Beim Laden der Seite Abtausch-Logik initialisieren
-document.addEventListener('DOMContentLoaded', () => {
-    setupAbtauschIntervallLogic();
-    
-    // Standard-Filter auf "Aktiv" setzen
-    currentFilter.status = 'aktiv';
-});
+// Initialisierung beim DOMContentLoaded (nur einmal)
+if (!window.hzDOMContentLoadedAttached) {
+    document.addEventListener('DOMContentLoaded', () => {
+        setupAbtauschIntervallLogic();
+        
+        // Standard-Filter auf "Aktiv" setzen
+        currentFilter.status = 'aktiv';
+        
+        // Event-Listener für Abtausch-Datum
+        const neuerBeginnInput = document.getElementById('hz-abtausch-neuer-beginn');
+        if (neuerBeginnInput && !neuerBeginnInput.dataset.listenerAttached) {
+            neuerBeginnInput.addEventListener('change', updateAbtauschEnde);
+            neuerBeginnInput.dataset.listenerAttached = 'true';
+        }
+    });
+    window.hzDOMContentLoadedAttached = true;
+}
