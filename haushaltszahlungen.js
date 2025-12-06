@@ -41,7 +41,7 @@ let HAUSHALTSZAHLUNGEN = {};
 let THEMEN = {};
 let EINLADUNGEN = {}; // Einladungen für den aktuellen Benutzer
 let currentThemaId = null; // Aktuell ausgewähltes Thema
-let currentFilter = { status: '', typ: '', person: '', intervalle: [] }; // Standard: Alle anzeigen (leer = kein Filter)
+let currentFilter = { status: 'aktiv', typ: '', person: '', intervalle: [] }; // Standard: Nur aktive Einträge anzeigen
 let searchTerm = '';
 let simulationsDatum = null; // Für Datums-Simulation (wie W7 in Excel)
 
@@ -375,10 +375,10 @@ function setupEventListeners() {
     const resetFilters = document.getElementById('reset-filters-haushaltszahlungen');
     if (resetFilters && !resetFilters.dataset.listenerAttached) {
         resetFilters.addEventListener('click', () => {
-            currentFilter = { status: '', typ: '', person: '', intervalle: [] }; // Alle anzeigen
+            currentFilter = { status: 'aktiv', typ: '', person: '', intervalle: [] }; // Zurück auf Standard: Aktiv
             searchTerm = '';
             document.getElementById('search-haushaltszahlungen').value = '';
-            document.getElementById('filter-hz-status').value = ''; // Leer = Alle
+            document.getElementById('filter-hz-status').value = 'aktiv'; // Standard: Aktiv
             document.getElementById('filter-hz-typ').value = '';
             // Intervall-Checkboxen zurücksetzen
             document.querySelectorAll('.hz-intervall-filter-cb').forEach(cb => cb.checked = false);
@@ -566,11 +566,12 @@ function validateEintrag(eintrag) {
     if (new Date(eintrag.gueltigAb) > new Date(eintrag.gueltigBis)) {
         return 'Gültigkeitswert BIS prüfen';
     }
-    // GEÄNDERT: 0 ist ein gültiger Betrag (z.B. für Gratis-Monate)
-    // Nur undefined, null oder leerer String sind Fehler
-    if (eintrag.betrag === undefined || eintrag.betrag === null || eintrag.betrag === '') {
-        return 'Betrag prüfen';
-    }
+    // GEÄNDERT: Betrag ist jetzt OPTIONAL
+    // null/undefined/'' = Betrag später nachtragen (wird als Warnung angezeigt)
+    // 0 = Gratis-Monat (gültig)
+    // X = Normaler Betrag (gültig)
+    // --> Keine Validierungsfehler mehr für fehlenden Betrag!
+    
     if (eintrag.anteilMarkus === undefined || eintrag.anteilMarkus === null) {
         return '% Kostenanteile prüfen';
     }
@@ -2889,8 +2890,8 @@ if (!window.hzDOMContentLoadedAttached) {
     document.addEventListener('DOMContentLoaded', () => {
         setupAbtauschIntervallLogic();
         
-        // Standard-Filter: LEER = Alle Einträge anzeigen
-        currentFilter.status = ''; // Zeige standardmäßig ALLE Einträge
+        // Standard-Filter: AKTIV (wie im HTML-Select voreingestellt)
+        currentFilter.status = 'aktiv';
         
         // Event-Listener für Abtausch-Datum
         const neuerBeginnInput = document.getElementById('hz-abtausch-neuer-beginn');
