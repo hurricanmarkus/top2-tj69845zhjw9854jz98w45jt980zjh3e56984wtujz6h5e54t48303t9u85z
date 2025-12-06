@@ -616,18 +616,52 @@ function berechneTyp(eintrag) {
 }
 
 // ========================================
-// BETRAGS-BERECHNUNG (AC22, AE22 Formeln)
+// BETRAGS-BERECHNUNG (Flexibel für beliebig viele Mitglieder)
 // ========================================
+function berechneBetragFuerMitglied(eintrag, userId) {
+    if (!eintrag.betrag) return 0;
+    
+    // Neue Struktur: kostenaufteilung Objekt
+    if (eintrag.kostenaufteilung && eintrag.kostenaufteilung[userId] !== undefined) {
+        return eintrag.betrag * (eintrag.kostenaufteilung[userId] / 100);
+    }
+    
+    // Legacy-Support: Alte Einträge mit anteilMarkus
+    const thema = THEMEN[currentThemaId];
+    if (thema && thema.mitglieder && thema.mitglieder.length >= 1) {
+        const ersteMitgliedId = thema.mitglieder[0].userId || thema.mitglieder[0].name;
+        if (userId === ersteMitgliedId) {
+            return eintrag.betrag * ((eintrag.anteilMarkus || 50) / 100);
+        } else if (thema.mitglieder.length >= 2) {
+            const zweiteMitgliedId = thema.mitglieder[1].userId || thema.mitglieder[1].name;
+            if (userId === zweiteMitgliedId) {
+                return eintrag.betrag * ((100 - (eintrag.anteilMarkus || 50)) / 100);
+            }
+        }
+    }
+    
+    // Fallback: Gleichverteilung
+    const anzahlMitglieder = thema?.mitglieder?.length || 1;
+    return eintrag.betrag * (1 / anzahlMitglieder);
+}
+
+// Legacy-Funktionen für Rückwärtskompatibilität
 function berechneBetragMarkus(eintrag) {
-    // AC22: =WENN(B22="";"";W22*AB22%)
-    return eintrag.betrag * (eintrag.anteilMarkus / 100);
+    const thema = THEMEN[currentThemaId];
+    if (thema && thema.mitglieder && thema.mitglieder.length >= 1) {
+        const ersteMitgliedId = thema.mitglieder[0].userId || thema.mitglieder[0].name;
+        return berechneBetragFuerMitglied(eintrag, ersteMitgliedId);
+    }
+    return eintrag.betrag * ((eintrag.anteilMarkus || 50) / 100);
 }
 
 function berechneBetragJasmin(eintrag) {
-    // AE22: =WENN(B22="";"";W22*AD22%)
-    // AD22: =WENN(B22="";"";100-AB22)
-    const anteilJasmin = 100 - eintrag.anteilMarkus;
-    return eintrag.betrag * (anteilJasmin / 100);
+    const thema = THEMEN[currentThemaId];
+    if (thema && thema.mitglieder && thema.mitglieder.length >= 2) {
+        const zweiteMitgliedId = thema.mitglieder[1].userId || thema.mitglieder[1].name;
+        return berechneBetragFuerMitglied(eintrag, zweiteMitgliedId);
+    }
+    return eintrag.betrag * ((100 - (eintrag.anteilMarkus || 50)) / 100);
 }
 
 // ========================================
@@ -1363,27 +1397,40 @@ function renderHaushaltszahlungenTable() {
                     ${(() => {
                         const thema = THEMEN[currentThemaId];
                         if (!thema || !thema.mitglieder || thema.mitglieder.length === 0) {
-                            return `<div class="text-gray-600">${eintrag.anteilMarkus}% / ${100 - eintrag.anteilMarkus}%</div>`;
+                            return `<div class="text-gray-600">Keine Mitglieder</div>`;
                         }
                         
-                        // Dynamische Namen der ersten beiden Mitglieder verwenden
-                        const mitglied1 = thema.mitglieder[0];
-                        const mitglied2 = thema.mitglieder[1];
+                        const colors = ['blue', 'pink', 'green', 'purple', 'orange'];
                         
                         // Voller VORNAME (vor dem ersten Leerzeichen)
                         const getName = (m) => {
                             const fullName = m.name || m.userId || '';
-                            // Hole nur den Vornamen (vor dem ersten Leerzeichen)
                             return fullName.split(' ')[0];
                         };
                         
-                        const name1 = getName(mitglied1);
-                        const name2 = mitglied2 ? getName(mitglied2) : '';
-                        
-                        return `
-                            <div class="text-blue-600 font-medium" title="${mitglied1.name || mitglied1.userId}">${eintrag.anteilMarkus}% ${name1}</div>
-                            ${mitglied2 ? `<div class="text-pink-600 font-medium" title="${mitglied2.name || mitglied2.userId}">${100 - eintrag.anteilMarkus}% ${name2}</div>` : ''}
-                        `;
+                        // NEUE STRUKTUR: Zeige alle Mitglieder mit ihren Anteilen
+                        return thema.mitglieder.map((mitglied, index) => {
+                            const userId = mitglied.userId || mitglied.name;
+                            const name = getName(mitglied);
+                            const color = colors[index % colors.length];
+                            
+                            // Hole Anteil aus kostenaufteilung oder fallback auf anteilMarkus
+                            let anteil;
+                            if (eintrag.kostenaufteilung && eintrag.kostenaufteilung[userId] !== undefined) {
+                                anteil = eintrag.kostenaufteilung[userId];
+                            } else {
+                                // Legacy: Alte Einträge mit anteilMarkus
+                                if (index === 0) {
+                                    anteil = eintrag.anteilMarkus || 50;
+                                } else if (index === 1) {
+                                    anteil = 100 - (eintrag.anteilMarkus || 50);
+                                } else {
+                                    anteil = 0; // Neue Mitglieder in alten Einträgen
+                                }
+                            }
+                            
+                            return `<div class="text-${color}-600 font-medium" title="${mitglied.name || mitglied.userId}">${anteil}% ${name}</div>`;
+                        }).join('');
                     })()}
                 </td>
                 <td class="px-3 py-3 text-xs text-gray-500">
@@ -1447,7 +1494,6 @@ function openCreateModal() {
         document.getElementById('hz-betrag').value = '';
         document.getElementById('hz-gueltig-ab').value = new Date().toISOString().split('T')[0];
         document.getElementById('hz-gueltig-bis').value = '';
-        document.getElementById('hz-anteil-markus').value = haushaltszahlungenSettings.defaultAnteilMarkus || 50;
         document.getElementById('hz-kundennummer').value = '';
         document.getElementById('hz-vertragsnummer').value = '';
         document.getElementById('hz-vormerk').value = '';
@@ -1471,7 +1517,9 @@ function openCreateModal() {
         // Autocomplete-Listen aktualisieren
         updateAutocompleteLists();
         
-        updateAnteilDisplay();
+        // WICHTIG: Dynamische Kostenaufteilung basierend auf Themen-Mitgliedern
+        renderKostenaufteilungInputs(null); // null = neuer Eintrag, Standard-Aufteilung
+        
         modal.style.display = 'flex';
     }
 }
@@ -1496,7 +1544,6 @@ function openEditModal(eintrag) {
         
         document.getElementById('hz-gueltig-ab').value = eintrag.gueltigAb || '';
         document.getElementById('hz-gueltig-bis').value = eintrag.gueltigBis || '';
-        document.getElementById('hz-anteil-markus').value = eintrag.anteilMarkus ?? 50;
         document.getElementById('hz-kundennummer').value = eintrag.kundennummer || '';
         document.getElementById('hz-vertragsnummer').value = eintrag.vertragsnummer || '';
         document.getElementById('hz-vormerk').value = eintrag.vormerk || '';
@@ -1536,7 +1583,9 @@ function openEditModal(eintrag) {
         // Autocomplete-Listen aktualisieren
         updateAutocompleteLists();
         
-        updateAnteilDisplay();
+        // WICHTIG: Dynamische Kostenaufteilung basierend auf Themen-Mitgliedern
+        renderKostenaufteilungInputs(eintrag); // Übergebe Eintrag für gespeicherte Aufteilung
+        
         modal.style.display = 'flex';
     }
 }
@@ -1548,17 +1597,108 @@ function closeHaushaltszahlungModal() {
     }
 }
 
-function updateAnteilDisplay() {
-    const slider = document.getElementById('hz-anteil-markus');
-    const displayMarkus = document.getElementById('hz-anteil-markus-display');
-    const displayJasmin = document.getElementById('hz-anteil-jasmin-display');
+// NEUE FUNKTION: Dynamische Kostenaufteilung basierend auf Themen-Mitgliedern
+function renderKostenaufteilungInputs(existingEintrag) {
+    const container = document.getElementById('hz-kostenaufteilung-inputs');
+    const summeContainer = document.getElementById('hz-kostenaufteilung-summe');
     
-    if (slider && displayMarkus && displayJasmin) {
-        const anteilMarkus = parseInt(slider.value);
-        const anteilJasmin = 100 - anteilMarkus;
-        displayMarkus.textContent = `${anteilMarkus}%`;
-        displayJasmin.textContent = `${anteilJasmin}%`;
+    if (!container || !summeContainer) return;
+    
+    const thema = THEMEN[currentThemaId];
+    if (!thema || !thema.mitglieder || thema.mitglieder.length === 0) {
+        container.innerHTML = '<p class="text-red-600 text-sm">⚠️ Keine Mitglieder im Thema! Bitte zuerst Mitglieder hinzufügen.</p>';
+        return;
     }
+    
+    const mitglieder = thema.mitglieder;
+    
+    // Bestimme Standard-Aufteilung
+    let anteile = {};
+    if (existingEintrag && existingEintrag.kostenaufteilung) {
+        // Bestehender Eintrag: Lade gespeicherte Aufteilung
+        anteile = { ...existingEintrag.kostenaufteilung };
+    } else {
+        // Neuer Eintrag: Gleichmäßige Verteilung
+        const gleichverteilung = Math.floor(100 / mitglieder.length);
+        const rest = 100 - (gleichverteilung * mitglieder.length);
+        
+        mitglieder.forEach((m, index) => {
+            const userId = m.userId || m.name;
+            anteile[userId] = index === 0 ? gleichverteilung + rest : gleichverteilung;
+        });
+    }
+    
+    const colors = ['blue', 'pink', 'green', 'purple', 'orange', 'cyan'];
+    
+    // Erstelle Input-Felder für jedes Mitglied
+    container.innerHTML = mitglieder.map((mitglied, index) => {
+        const userId = mitglied.userId || mitglied.name;
+        const userObj = USERS && typeof USERS === 'object'
+            ? Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name)
+            : null;
+        const displayName = userObj?.realName || mitglied.name || mitglied.userId;
+        const color = colors[index % colors.length];
+        const anteil = anteile[userId] || 0;
+        
+        return `
+            <div class="flex items-center gap-3">
+                <span class="w-32 font-bold text-${color}-600">${displayName}:</span>
+                <input type="number" 
+                    min="0" 
+                    max="100" 
+                    value="${anteil}" 
+                    data-user-id="${userId}"
+                    class="hz-anteil-input w-20 p-2 border-2 border-gray-300 rounded-lg text-center font-bold focus:border-${color}-500"
+                    oninput="window.updateKostenaufteilungSumme()">
+                <span class="text-gray-500">%</span>
+                <div class="flex-1 bg-gray-200 rounded-full h-3">
+                    <div class="bg-${color}-500 h-3 rounded-full transition-all" style="width: ${Math.min(anteil, 100)}%"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // Initiale Summen-Berechnung
+    updateKostenaufteilungSumme();
+}
+
+// NEUE FUNKTION: Berechne und validiere Summe der Kostenaufteilung
+window.updateKostenaufteilungSumme = function() {
+    const inputs = document.querySelectorAll('.hz-anteil-input');
+    const summeContainer = document.getElementById('hz-kostenaufteilung-summe');
+    
+    if (!summeContainer || inputs.length === 0) return;
+    
+    let summe = 0;
+    inputs.forEach(input => {
+        const value = parseInt(input.value) || 0;
+        summe += value;
+        
+        // Update visuelle Balken
+        const parent = input.closest('.flex');
+        const bar = parent?.querySelector('.bg-gray-200 > div');
+        if (bar) {
+            bar.style.width = `${Math.min(value, 100)}%`;
+        }
+    });
+    
+    // Validierung und Anzeige
+    if (summe === 100) {
+        summeContainer.className = 'mt-3 p-2 rounded text-sm font-bold text-center bg-green-100 text-green-700';
+        summeContainer.innerHTML = `✅ Summe: ${summe}% (Korrekt)`;
+    } else if (summe < 100) {
+        summeContainer.className = 'mt-3 p-2 rounded text-sm font-bold text-center bg-yellow-100 text-yellow-700';
+        summeContainer.innerHTML = `⚠️ Summe: ${summe}% (${100 - summe}% fehlen noch)`;
+    } else {
+        summeContainer.className = 'mt-3 p-2 rounded text-sm font-bold text-center bg-red-100 text-red-700';
+        summeContainer.innerHTML = `❌ Summe: ${summe}% (${summe - 100}% zu viel!)`;
+    }
+};
+
+// Alte Funktion für Legacy-Zwecke beibehalten (falls irgendwo noch verwendet)
+function updateAnteilDisplay() {
+    // Diese Funktion ist jetzt deprecated - nutze renderKostenaufteilungInputs()
+    updateKostenaufteilungSumme();
 }
 
 // ========================================
@@ -1597,7 +1737,31 @@ async function saveHaushaltszahlung() {
     
     const gueltigAb = document.getElementById('hz-gueltig-ab')?.value || '';
     const gueltigBis = document.getElementById('hz-gueltig-bis')?.value || '';
-    const anteilMarkus = parseInt(document.getElementById('hz-anteil-markus')?.value || '50') || 50;
+    
+    // NEUE KOSTENAUFTEILUNG: Sammle Anteile aller Mitglieder
+    const kostenaufteilung = {};
+    let summeAnteile = 0;
+    document.querySelectorAll('.hz-anteil-input').forEach(input => {
+        const userId = input.dataset.userId;
+        const anteil = parseInt(input.value) || 0;
+        kostenaufteilung[userId] = anteil;
+        summeAnteile += anteil;
+    });
+    
+    // Validierung: Summe muss 100% sein
+    if (summeAnteile !== 100) {
+        alertUser(`Kostenaufteilung muss 100% ergeben! Aktuell: ${summeAnteile}%`, 'error');
+        return;
+    }
+    
+    // Legacy-Support: Wenn nur 2 Personen, speichere auch anteilMarkus für Rückwärtskompatibilität
+    const thema = THEMEN[currentThemaId];
+    let anteilMarkus = 50; // Fallback
+    if (thema && thema.mitglieder && thema.mitglieder.length >= 1) {
+        const ersteMitgliedId = thema.mitglieder[0].userId || thema.mitglieder[0].name;
+        anteilMarkus = kostenaufteilung[ersteMitgliedId] || 50;
+    }
+    
     const kundennummer = document.getElementById('hz-kundennummer')?.value?.trim() || '';
     const vertragsnummer = document.getElementById('hz-vertragsnummer')?.value?.trim() || '';
     const vormerk = document.getElementById('hz-vormerk')?.value?.trim() || '';
@@ -1616,7 +1780,8 @@ async function saveHaushaltszahlung() {
         betrag,
         gueltigAb,
         gueltigBis,
-        anteilMarkus,
+        anteilMarkus, // Legacy-Support für alte Einträge
+        kostenaufteilung, // NEUE STRUKTUR: Flexibel für beliebig viele Mitglieder
         intervall,
         kundennummer,
         vertragsnummer,
@@ -1680,7 +1845,7 @@ function openSettingsModal() {
     if (modal) {
         renderThemenListe();
         renderMitgliederListe();
-        renderKostenaufteilung();
+        // renderKostenaufteilung() wurde entfernt - Aufteilung erfolgt individuell pro Eintrag
         modal.style.display = 'flex';
     }
     
