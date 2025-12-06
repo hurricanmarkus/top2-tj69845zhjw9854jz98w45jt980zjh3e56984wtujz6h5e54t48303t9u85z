@@ -484,11 +484,13 @@ export function listenForHaushaltszahlungen() {
     }
     
     if (!haushaltszahlungenCollection) {
-        console.warn("Haushaltszahlungen: Collection nicht verfügbar");
+        console.warn("Haushaltszahlungen: Collection nicht verfuegbar");
         return;
     }
 
-    // Ohne orderBy, da das Feld möglicherweise nicht existiert
+    console.log("Listening auf Collection:", haushaltszahlungenCollection.path);
+    
+    // Ohne orderBy, da das Feld moeglicherweise nicht existiert
     const q = query(haushaltszahlungenCollection);
     
     return onSnapshot(q, (snapshot) => {
@@ -496,6 +498,7 @@ export function listenForHaushaltszahlungen() {
         snapshot.forEach((doc) => {
             HAUSHALTSZAHLUNGEN[doc.id] = { id: doc.id, ...doc.data() };
         });
+        console.log(`Eintraege geladen: ${Object.keys(HAUSHALTSZAHLUNGEN).length} Stueck`);
         renderDashboard();
         renderHaushaltszahlungenTable();
     }, (error) => {
@@ -1214,6 +1217,7 @@ function renderHaushaltszahlungenTable() {
     if (!tbody) return;
 
     let eintraege = Object.values(HAUSHALTSZAHLUNGEN);
+    console.log(`Alle Eintraege vor Filter: ${eintraege.length}`);
 
     // Filter anwenden
     if (searchTerm) {
@@ -1221,33 +1225,60 @@ function renderHaushaltszahlungenTable() {
             (e.zweck && e.zweck.toLowerCase().includes(searchTerm)) ||
             (e.organisation && e.organisation.toLowerCase().includes(searchTerm))
         );
+        console.log(`Nach Suchfilter: ${eintraege.length}`);
     }
 
     if (currentFilter.status) {
+        const beforeFilter = eintraege.length;
         eintraege = eintraege.filter(e => berechneStatus(e).status === currentFilter.status);
+        console.log(`Nach Status-Filter (${currentFilter.status}): ${eintraege.length} (vorher: ${beforeFilter})`);
     }
 
     if (currentFilter.typ) {
         eintraege = eintraege.filter(e => berechneTyp(e) === currentFilter.typ);
+        console.log(`Nach Typ-Filter: ${eintraege.length}`);
     }
 
-    // Mehrfachauswahl für Intervalle
+    // Mehrfachauswahl fuer Intervalle
     if (currentFilter.intervalle && currentFilter.intervalle.length > 0) {
         eintraege = eintraege.filter(e => {
             if (!e.intervall || e.intervall.length === 0) return false;
-            // Eintrag muss mindestens eines der ausgewählten Intervalle haben
+            // Eintrag muss mindestens eines der ausgewaehlten Intervalle haben
             return currentFilter.intervalle.some(filterIntervall => e.intervall.includes(filterIntervall));
         });
+        console.log(`Nach Intervall-Filter: ${eintraege.length}`);
     }
 
     if (eintraege.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="9" class="px-4 py-8 text-center text-gray-400 italic">
-                    Keine Einträge gefunden. Erstelle deinen ersten Eintrag!
+        const alleEintraege = Object.values(HAUSHALTSZAHLUNGEN).length;
+        let message = '';
+        
+        if (alleEintraege > 0) {
+            // Es gibt Eintraege, aber sie werden durch Filter ausgeblendet
+            message = `
+                <td colspan="9" class="px-4 py-8 text-center">
+                    <div class="inline-block p-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg">
+                        <p class="text-yellow-800 font-bold mb-2">Keine Eintraege mit den aktuellen Filtern gefunden!</p>
+                        <p class="text-sm text-gray-600 mb-3">
+                            Es gibt ${alleEintraege} Eintraege insgesamt, aber keiner entspricht den Filter-Kriterien.<br>
+                            Aktueller Status-Filter: <strong>${currentFilter.status || 'Alle'}</strong>
+                        </p>
+                        <button onclick="document.getElementById('reset-filters-haushaltszahlungen').click()" 
+                            class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-bold">
+                            Filter zuruecksetzen
+                        </button>
+                    </div>
                 </td>
-            </tr>
-        `;
+            `;
+        } else {
+            message = `
+                <td colspan="9" class="px-4 py-8 text-center text-gray-400 italic">
+                    Keine Eintraege vorhanden. Erstelle deinen ersten Eintrag!
+                </td>
+            `;
+        }
+        
+        tbody.innerHTML = `<tr>${message}</tr>`;
         return;
     }
 
@@ -1285,8 +1316,25 @@ function renderHaushaltszahlungenTable() {
                     ${betragAlarm ? '⚠️ FEHLT' : formatCurrency(eintrag.betrag)}
                 </td>
                 <td class="px-3 py-3 text-sm">
-                    <div class="text-blue-600">${eintrag.anteilMarkus}% M</div>
-                    <div class="text-pink-600">${100 - eintrag.anteilMarkus}% J</div>
+                    ${(() => {
+                        const thema = THEMEN[currentThemaId];
+                        if (!thema || !thema.mitglieder || thema.mitglieder.length === 0) {
+                            return `<div class="text-gray-600">${eintrag.anteilMarkus}% / ${100 - eintrag.anteilMarkus}%</div>`;
+                        }
+                        
+                        // Dynamische Namen der ersten beiden Mitglieder verwenden
+                        const mitglied1 = thema.mitglieder[0];
+                        const mitglied2 = thema.mitglieder[1];
+                        
+                        // Kurznamen erstellen (erster Buchstabe des Vornamens)
+                        const name1Short = (mitglied1.name || mitglied1.userId || 'M').charAt(0).toUpperCase();
+                        const name2Short = mitglied2 ? (mitglied2.name || mitglied2.userId || 'J').charAt(0).toUpperCase() : 'J';
+                        
+                        return `
+                            <div class="text-blue-600" title="${mitglied1.name || mitglied1.userId}">${eintrag.anteilMarkus}% ${name1Short}</div>
+                            ${mitglied2 ? `<div class="text-pink-600" title="${mitglied2.name || mitglied2.userId}">${100 - eintrag.anteilMarkus}% ${name2Short}</div>` : ''}
+                        `;
+                    })()}
                 </td>
                 <td class="px-3 py-3 text-xs text-gray-500">
                     ${formatDate(eintrag.gueltigAb)} - ${formatDate(eintrag.gueltigBis)}
@@ -1961,16 +2009,28 @@ async function saveNewMitglied() {
 let currentDauerauftraegeMitglied = null;
 
 function openDauerauftraegeModal(userId) {
+    console.log("🔷 openDauerauftraegeModal aufgerufen für userId:", userId);
+    
     const thema = THEMEN[currentThemaId];
-    if (!thema) return;
+    if (!thema) {
+        console.error("❌ Kein Thema gefunden");
+        return;
+    }
     
     const mitglied = thema.mitglieder?.find(m => m.userId === userId || m.name === userId);
-    if (!mitglied) return;
+    if (!mitglied) {
+        console.error("❌ Kein Mitglied gefunden für userId:", userId);
+        return;
+    }
     
     currentDauerauftraegeMitglied = mitglied;
+    console.log("✅ Mitglied gesetzt:", mitglied);
     
     const content = document.getElementById('hz-dauerauftraege-content');
-    if (!content) return;
+    if (!content) {
+        console.error("❌ Content-Element nicht gefunden");
+        return;
+    }
     
     const intervalle = ['monatlich', 'januar', 'februar', 'maerz', 'april', 'mai', 'juni', 'juli', 'august', 'september', 'oktober', 'november', 'dezember'];
     
@@ -1986,6 +2046,39 @@ function openDauerauftraegeModal(userId) {
             </div>
         `).join('')}
     `;
+    
+    // EVENT LISTENER DIREKT HIER REGISTRIEREN!
+    // Problem: setupSettingsEventListeners() wird nur in openSettingsModal() aufgerufen,
+    // aber openDauerauftraegeModal() kann auch direkt aufgerufen werden
+    const saveDauerauftraegeBtn = document.getElementById('hz-save-dauerauftraege-btn');
+    if (saveDauerauftraegeBtn) {
+        // Entferne alte Listener falls vorhanden
+        const newBtn = saveDauerauftraegeBtn.cloneNode(true);
+        saveDauerauftraegeBtn.parentNode.replaceChild(newBtn, saveDauerauftraegeBtn);
+        
+        newBtn.addEventListener('click', () => {
+            console.log("💾 Speichern-Button geklickt!");
+            saveDauerauftraege();
+        });
+        console.log("✅ Event Listener für Speichern-Button registriert");
+    } else {
+        console.error("❌ Speichern-Button nicht gefunden!");
+    }
+    
+    const showProtokollBtn = document.getElementById('hz-show-protokoll-btn');
+    if (showProtokollBtn) {
+        // Entferne alte Listener falls vorhanden
+        const newBtn = showProtokollBtn.cloneNode(true);
+        showProtokollBtn.parentNode.replaceChild(newBtn, showProtokollBtn);
+        
+        newBtn.addEventListener('click', () => {
+            console.log("📋 Protokoll-Button geklickt!");
+            toggleProtokoll();
+        });
+        console.log("✅ Event Listener für Protokoll-Button registriert");
+    } else {
+        console.error("❌ Protokoll-Button nicht gefunden!");
+    }
     
     document.getElementById('hz-dauerauftraege-modal').style.display = 'flex';
     loadProtokoll(userId);
