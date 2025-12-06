@@ -2271,6 +2271,7 @@ window.updateMitgliedAnteil = async function(index, value) {
 };
 
 window.openDauerauftraegeModal = openDauerauftraegeModal;
+window.toggleMitgliedDetails = toggleMitgliedDetails;
 
 // ========================================
 // HILFSFUNKTIONEN
