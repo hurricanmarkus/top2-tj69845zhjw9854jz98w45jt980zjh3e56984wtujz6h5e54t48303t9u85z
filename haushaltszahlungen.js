@@ -201,6 +201,89 @@ function updateCollectionForThema() {
 // ========================================
 // DATEN-MIGRATION VON ALTER ZU NEUER STRUKTUR
 // ========================================
+
+// Funktion zum Löschen der alten Backup-Daten (nach erfolgreicher Migration)
+async function deleteOldBackupData() {
+    if (!db) {
+        alertUser('Fehler: Keine Datenbankverbindung', 'error');
+        return;
+    }
+    
+    try {
+        // Prüfe ob alte Collection Daten enthält
+        const oldCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen');
+        const oldSnapshot = await getDocs(oldCollectionRef);
+        
+        if (oldSnapshot.empty) {
+            alertUser('Keine alten Backup-Daten gefunden. Bereits gelöscht?', 'info');
+            return;
+        }
+        
+        console.log(`🗑️ ${oldSnapshot.size} alte Backup-Einträge gefunden`);
+        
+        // Sicherheitsabfrage
+        const confirmDelete = confirm(
+            `⚠️ ALTE BACKUP-DATEN LÖSCHEN?\n\n` +
+            `Es wurden ${oldSnapshot.size} alte Backup-Einträge gefunden.\n\n` +
+            `Diese sind nach der Migration nicht mehr nötig.\n\n` +
+            `ACHTUNG: Diese Aktion kann NICHT rückgängig gemacht werden!\n\n` +
+            `Stelle sicher, dass alle Daten korrekt migriert wurden,\n` +
+            `bevor du die Backups löschst.\n\n` +
+            `Wirklich löschen?`
+        );
+        
+        if (!confirmDelete) {
+            console.log("✅ Löschen abgebrochen - Backup-Daten bleiben erhalten");
+            return;
+        }
+        
+        // Zweite Bestätigung für zusätzliche Sicherheit
+        const doubleConfirm = confirm(
+            `🚨 LETZTE WARNUNG!\n\n` +
+            `Dies löscht ${oldSnapshot.size} Einträge unwiderruflich!\n\n` +
+            `Bist du dir ABSOLUT SICHER?`
+        );
+        
+        if (!doubleConfirm) {
+            console.log("✅ Löschen abgebrochen - Backup-Daten bleiben erhalten");
+            return;
+        }
+        
+        // Lösche alle alten Einträge
+        console.log("🗑️ Starte Löschvorgang...");
+        let deletedCount = 0;
+        let errorCount = 0;
+        
+        for (const docSnap of oldSnapshot.docs) {
+            try {
+                await deleteDoc(doc(oldCollectionRef, docSnap.id));
+                deletedCount++;
+                console.log(`  🗑️ Gelöscht: ${docSnap.id}`);
+            } catch (error) {
+                errorCount++;
+                console.error(`  ❌ Fehler beim Löschen von ${docSnap.id}:`, error);
+            }
+        }
+        
+        console.log(`✅ Löschvorgang abgeschlossen!`);
+        console.log(`   Gelöscht: ${deletedCount}`);
+        console.log(`   Fehler: ${errorCount}`);
+        
+        if (errorCount === 0) {
+            alertUser(`✅ Erfolgreich! ${deletedCount} alte Backup-Einträge wurden gelöscht.`, 'success');
+        } else {
+            alertUser(`⚠️ ${deletedCount} Einträge gelöscht, aber ${errorCount} Fehler aufgetreten.`, 'warning');
+        }
+        
+    } catch (error) {
+        console.error("❌ Fehler beim Löschen der Backup-Daten:", error);
+        alertUser('Fehler beim Löschen: ' + error.message, 'error');
+    }
+}
+
+// Globale Funktion verfügbar machen
+window.deleteOldHaushaltszahlungenBackup = deleteOldBackupData;
+
 async function checkAndMigrateOldData() {
     if (!db || !currentThemaId) {
         console.log("⚠️ Migration übersprungen: DB oder Thema fehlt");
