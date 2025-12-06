@@ -1356,7 +1356,7 @@ function renderHaushaltszahlungenTable() {
                 <td class="px-3 py-3 text-gray-600">${eintrag.organisation || '-'}</td>
                 <td class="px-3 py-3 text-xs text-gray-500">${intervallLabels || '-'}</td>
                 <td class="px-3 py-3 font-bold ${betragAlarm ? 'text-yellow-600 bg-yellow-100' : (typ === 'gutschrift' ? 'text-green-600' : 'text-red-600')}">
-                    ${betragAlarm ? '⚠️ FEHLT' : formatCurrency(eintrag.betrag)}
+                    ${betragAlarm ? '⚠️ FEHLT' : (eintrag.betrag === 0 ? '<span class="text-blue-600">0,00 € (Gratis)</span>' : formatCurrency(eintrag.betrag))}
                 </td>
                 <td class="px-3 py-3 text-sm">
                     ${(() => {
@@ -1463,6 +1463,10 @@ function openCreateModal() {
         const abtauschBtn = document.getElementById('hz-abtausch-btn');
         if (abtauschBtn) abtauschBtn.classList.add('hidden');
         
+        // Betrag-Hinweis anzeigen (da Feld leer ist)
+        const hinweis = document.getElementById('hz-betrag-hinweis');
+        if (hinweis) hinweis.classList.remove('hidden');
+        
         // Autocomplete-Listen aktualisieren
         updateAutocompleteLists();
         
@@ -1480,7 +1484,15 @@ function openEditModal(eintrag) {
         document.getElementById('hz-id').value = eintrag.id;
         document.getElementById('hz-zweck').value = eintrag.zweck || '';
         document.getElementById('hz-organisation').value = eintrag.organisation || '';
-        document.getElementById('hz-betrag').value = eintrag.betrag || '';
+        
+        // WICHTIG: Unterscheide zwischen null (fehlt) und 0 (Gratis)
+        const betragInput = document.getElementById('hz-betrag');
+        if (eintrag.betrag === null || eintrag.betrag === undefined) {
+            betragInput.value = ''; // Leer lassen wenn Betrag fehlt
+        } else {
+            betragInput.value = eintrag.betrag; // Auch 0 anzeigen
+        }
+        
         document.getElementById('hz-gueltig-ab').value = eintrag.gueltigAb || '';
         document.getElementById('hz-gueltig-bis').value = eintrag.gueltigBis || '';
         document.getElementById('hz-anteil-markus').value = eintrag.anteilMarkus ?? 50;
@@ -1567,7 +1579,21 @@ async function saveHaushaltszahlung() {
     const id = document.getElementById('hz-id')?.value || '';
     const zweck = document.getElementById('hz-zweck')?.value?.trim() || '';
     const organisation = document.getElementById('hz-organisation')?.value?.trim() || '';
-    const betrag = parseFloat(document.getElementById('hz-betrag')?.value || '0') || 0;
+    
+    // WICHTIG: Unterscheide zwischen leer (null) und bewusst 0 eingegeben
+    const betragInput = document.getElementById('hz-betrag')?.value?.trim();
+    let betrag;
+    if (betragInput === '' || betragInput === undefined || betragInput === null) {
+        // Feld ist leer → Betrag fehlt → null speichern
+        betrag = null;
+    } else {
+        // Wert wurde eingegeben (auch 0) → als Zahl speichern
+        betrag = parseFloat(betragInput);
+        if (isNaN(betrag)) {
+            betrag = null; // Ungültige Eingabe → null
+        }
+    }
+    
     const gueltigAb = document.getElementById('hz-gueltig-ab')?.value || '';
     const gueltigBis = document.getElementById('hz-gueltig-bis')?.value || '';
     const anteilMarkus = parseInt(document.getElementById('hz-anteil-markus')?.value || '50') || 50;
@@ -2324,6 +2350,21 @@ async function saveSettings() {
         }
     }
 }
+
+// Funktion zum Aktualisieren des Betrag-Hinweises
+window.updateBetragHinweis = function(input) {
+    const hinweis = document.getElementById('hz-betrag-hinweis');
+    if (!hinweis) return;
+    
+    const value = input.value.trim();
+    
+    // Zeige Hinweis nur wenn Feld komplett leer ist
+    if (value === '') {
+        hinweis.classList.remove('hidden');
+    } else {
+        hinweis.classList.add('hidden');
+    }
+};
 
 // Globale Funktionen für Daueraufträge und Protokoll
 window.saveDauerauftraege = saveDauerauftraege;
