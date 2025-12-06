@@ -1631,6 +1631,9 @@ function renderKostenaufteilungInputs(existingEintrag) {
     const colors = ['blue', 'pink', 'green', 'purple', 'orange', 'cyan'];
     
     // Erstelle Input-Felder für jedes Mitglied
+    // WICHTIG: Letzte Person wird automatisch berechnet (bequemer!)
+    const isLastPerson = (index) => index === mitglieder.length - 1;
+    
     container.innerHTML = mitglieder.map((mitglied, index) => {
         const userId = mitglied.userId || mitglied.name;
         const userObj = USERS && typeof USERS === 'object'
@@ -1639,18 +1642,30 @@ function renderKostenaufteilungInputs(existingEintrag) {
         const displayName = userObj?.realName || mitglied.name || mitglied.userId;
         const color = colors[index % colors.length];
         const anteil = anteile[userId] || 0;
+        const isLast = isLastPerson(index);
         
         return `
             <div class="flex items-center gap-3">
                 <span class="w-32 font-bold text-${color}-600">${displayName}:</span>
-                <input type="number" 
-                    min="0" 
-                    max="100" 
-                    value="${anteil}" 
-                    data-user-id="${userId}"
-                    class="hz-anteil-input w-20 p-2 border-2 border-gray-300 rounded-lg text-center font-bold focus:border-${color}-500"
-                    oninput="window.updateKostenaufteilungSumme()">
-                <span class="text-gray-500">%</span>
+                ${isLast ? `
+                    <input type="number" 
+                        value="${anteil}" 
+                        data-user-id="${userId}"
+                        class="hz-anteil-input hz-anteil-auto w-20 p-2 border-2 border-blue-400 bg-blue-50 rounded-lg text-center font-bold"
+                        readonly
+                        title="Wird automatisch berechnet (100% - Summe der anderen)">
+                    <span class="text-blue-600 text-xs">✨ Auto</span>
+                ` : `
+                    <input type="number" 
+                        min="0" 
+                        max="100" 
+                        value="${anteil}" 
+                        data-user-id="${userId}"
+                        data-index="${index}"
+                        class="hz-anteil-input w-20 p-2 border-2 border-gray-300 rounded-lg text-center font-bold focus:border-${color}-500"
+                        oninput="window.updateKostenaufteilungSumme()">
+                    <span class="text-gray-500">%</span>
+                `}
                 <div class="flex-1 bg-gray-200 rounded-full h-3">
                     <div class="bg-${color}-500 h-3 rounded-full transition-all" style="width: ${Math.min(anteil, 100)}%"></div>
                 </div>
@@ -1664,11 +1679,13 @@ function renderKostenaufteilungInputs(existingEintrag) {
 
 // NEUE FUNKTION: Berechne und validiere Summe der Kostenaufteilung
 window.updateKostenaufteilungSumme = function() {
-    const inputs = document.querySelectorAll('.hz-anteil-input');
+    const inputs = document.querySelectorAll('.hz-anteil-input:not(.hz-anteil-auto)'); // Nur editierbare Inputs
+    const autoInput = document.querySelector('.hz-anteil-auto'); // Auto-berechnete letzte Person
     const summeContainer = document.getElementById('hz-kostenaufteilung-summe');
     
-    if (!summeContainer || inputs.length === 0) return;
+    if (!summeContainer) return;
     
+    // Berechne Summe der manuellen Eingaben
     let summe = 0;
     inputs.forEach(input => {
         const value = parseInt(input.value) || 0;
@@ -1681,6 +1698,20 @@ window.updateKostenaufteilungSumme = function() {
             bar.style.width = `${Math.min(value, 100)}%`;
         }
     });
+    
+    // Automatische Berechnung für letzte Person
+    if (autoInput) {
+        const autoWert = Math.max(0, 100 - summe); // Kann nicht negativ sein
+        autoInput.value = autoWert;
+        summe += autoWert;
+        
+        // Update visueller Balken für Auto-Person
+        const parent = autoInput.closest('.flex');
+        const bar = parent?.querySelector('.bg-gray-200 > div');
+        if (bar) {
+            bar.style.width = `${Math.min(autoWert, 100)}%`;
+        }
+    }
     
     // Validierung und Anzeige
     if (summe === 100) {
@@ -1970,11 +2001,11 @@ function renderMitgliederListe() {
     }
     
     container.innerHTML = thema.mitglieder.map((mitglied, index) => {
-    // Vollen Namen ermitteln (aus USERS oder direkt aus mitglied.name) mit Null-Check
-    const userObj = USERS && typeof USERS === 'object'
-        ? Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name)
-        : null;
-    const displayName = userObj?.realName || mitglied.name || mitglied.userId;
+        // Vollen Namen ermitteln (aus USERS oder direkt aus mitglied.name) mit Null-Check
+        const userObj = USERS && typeof USERS === 'object'
+            ? Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name)
+            : null;
+        const displayName = userObj?.realName || mitglied.name || mitglied.userId;
         const isCurrentUser = mitglied.userId === currentUser.displayName || mitglied.userId === currentUser.mode;
         
         return `
@@ -1985,7 +2016,6 @@ function renderMitgliederListe() {
                 <span class="text-xs ${ZUGRIFFSRECHTE[mitglied.zugriffsrecht]?.icon ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'} px-2 py-0.5 rounded">
                     ${ZUGRIFFSRECHTE[mitglied.zugriffsrecht]?.label || mitglied.zugriffsrecht}
                 </span>
-                <span class="text-xs text-gray-500">${mitglied.anteil || Math.round(100 / thema.mitglieder.length)}%</span>
             </div>
             <div class="flex gap-1">
                 <button onclick="window.openDauerauftraegeModal('${mitglied.userId || mitglied.name}')" class="p-1 text-blue-600 hover:bg-blue-100 rounded" title="Daueraufträge">
@@ -2165,11 +2195,9 @@ function openAddMitgliedModal() {
 async function saveNewMitglied() {
     const userSelect = document.getElementById('hz-mitglied-user-select');
     const rechtSelect = document.getElementById('hz-mitglied-recht-select');
-    const anteilInput = document.getElementById('hz-mitglied-anteil');
     
     const userId = userSelect?.value;
     let recht = rechtSelect?.value || 'lesen';
-    const anteil = parseInt(anteilInput?.value) || 50;
     
     if (!userId) {
         alertUser('Bitte wähle einen Benutzer', 'error');
@@ -2231,7 +2259,7 @@ async function saveNewMitglied() {
                 userId: userId,
                 name: userName,
                 zugriffsrecht: recht,
-                anteil: anteil,
+                // Kein anteil mehr - wird individuell pro Eintrag festgelegt
                 dauerauftraege: {
                     monatlich: 0,
                     januar: 0, februar: 0, maerz: 0, april: 0, mai: 0, juni: 0,
@@ -2248,7 +2276,7 @@ async function saveNewMitglied() {
             
             document.getElementById('hz-add-mitglied-modal').style.display = 'none';
             renderMitgliederListe();
-            renderKostenaufteilung();
+            // renderKostenaufteilung() entfernt - nicht mehr nötig
             renderDashboard();
             alertUser(isCurrentUser ? 'Du wurdest wieder hinzugefügt!' : 'Mitglied hinzugefügt (ohne Einladung)!', 'success');
         } else {
@@ -2632,7 +2660,7 @@ window.removeMitglied = async function(index) {
         });
         
         renderMitgliederListe();
-        renderKostenaufteilung();
+        // renderKostenaufteilung() entfernt - nicht mehr nötig
         renderDashboard();
         alertUser('Mitglied entfernt!', 'success');
     } catch (error) {
@@ -2641,13 +2669,7 @@ window.removeMitglied = async function(index) {
     }
 };
 
-window.updateMitgliedAnteil = async function(index, value) {
-    const thema = THEMEN[currentThemaId];
-    if (!thema || !thema.mitglieder[index]) return;
-    
-    thema.mitglieder[index].anteil = parseInt(value) || 0;
-    renderKostenaufteilung();
-};
+// window.updateMitgliedAnteil wurde entfernt - Kostenaufteilung erfolgt jetzt individuell pro Eintrag
 
 window.openDauerauftraegeModal = openDauerauftraegeModal;
 window.toggleMitgliedDetails = toggleMitgliedDetails;
