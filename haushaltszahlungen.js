@@ -566,6 +566,8 @@ function validateEintrag(eintrag) {
     if (new Date(eintrag.gueltigAb) > new Date(eintrag.gueltigBis)) {
         return 'Gültigkeitswert BIS prüfen';
     }
+    // GEÄNDERT: 0 ist ein gültiger Betrag (z.B. für Gratis-Monate)
+    // Nur undefined, null oder leerer String sind Fehler
     if (eintrag.betrag === undefined || eintrag.betrag === null || eintrag.betrag === '') {
         return 'Betrag prüfen';
     }
@@ -729,9 +731,10 @@ function berechneDashboardStats() {
     const alarme = berechneAlarme();
     
     // Einträge ohne Betrag finden (für Alarm)
+    // GEÄNDERT: 0 ist ein gültiger Betrag (z.B. Gratis-Monate), nur undefined/null/'' sind Fehler
     const eintraegeOhneBetrag = eintraege.filter(eintrag => {
         const { status } = berechneStatus(eintrag);
-        return status === 'aktiv' && (eintrag.betrag === undefined || eintrag.betrag === null || eintrag.betrag === '' || eintrag.betrag === 0);
+        return status === 'aktiv' && (eintrag.betrag === undefined || eintrag.betrag === null || eintrag.betrag === '');
     });
     
     // Kosten pro Intervall für IST/SOLL Vergleich
@@ -1331,7 +1334,8 @@ function renderHaushaltszahlungenTable() {
         const intervallLabels = (eintrag.intervall || []).map(i => INTERVALL_CONFIG[i]?.short || i).join(', ');
         
         // Prüfe ob Betrag fehlt (Alarm)
-        const betragFehlt = eintrag.betrag === undefined || eintrag.betrag === null || eintrag.betrag === '' || eintrag.betrag === 0;
+        // GEÄNDERT: 0 ist ein gültiger Betrag (z.B. Gratis-Monate), nur undefined/null/'' sind Fehler
+        const betragFehlt = eintrag.betrag === undefined || eintrag.betrag === null || eintrag.betrag === '';
         const betragAlarm = status === 'aktiv' && betragFehlt;
 
         return `
