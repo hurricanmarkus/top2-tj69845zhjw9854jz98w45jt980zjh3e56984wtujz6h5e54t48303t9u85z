@@ -109,6 +109,10 @@ export async function initializeHaushaltszahlungen() {
         
         loadSettings();
         await loadThemen(); // Warte auf Themen bevor Dashboard gerendert wird
+        
+        // MIGRATION: Prüfe ob alte Daten vorhanden sind und migriere sie
+        await checkAndMigrateOldData();
+        
         loadEinladungen();
     }
 
@@ -191,6 +195,88 @@ function updateCollectionForThema() {
         listenForHaushaltszahlungen();
     } else {
         console.warn("⚠️ updateCollectionForThema: currentThemaId oder db fehlt", { currentThemaId, db: !!db });
+    }
+}
+
+// ========================================
+// DATEN-MIGRATION VON ALTER ZU NEUER STRUKTUR
+// ========================================
+async function checkAndMigrateOldData() {
+    if (!db || !currentThemaId) {
+        console.log("⚠️ Migration übersprungen: DB oder Thema fehlt");
+        return;
+    }
+    
+    try {
+        // Prüfe ob alte Collection Daten enthält
+        const oldCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen');
+        const oldSnapshot = await getDocs(oldCollectionRef);
+        
+        if (oldSnapshot.empty) {
+            console.log("✅ Keine alten Daten gefunden - Migration nicht nötig");
+            return;
+        }
+        
+        console.log(`🔄 MIGRATION: ${oldSnapshot.size} alte Einträge gefunden!`);
+        console.log("   Möchtest du diese in die neue Struktur migrieren?");
+        
+        // Zeige Migrations-Dialog
+        const shouldMigrate = confirm(
+            `📦 DATEN-MIGRATION ERFORDERLICH\n\n` +
+            `Es wurden ${oldSnapshot.size} Einträge in der alten Datenstruktur gefunden.\n\n` +
+            `Diese müssen in die neue Struktur migriert werden, damit sie angezeigt werden können.\n\n` +
+            `Soll ich die Migration jetzt durchführen?\n\n` +
+            `(Die alten Daten bleiben als Backup erhalten)`
+        );
+        
+        if (!shouldMigrate) {
+            console.log("⚠️ Migration vom Benutzer abgebrochen");
+            alertUser('Migration abgebrochen. Einträge werden nicht angezeigt.', 'warning');
+            return;
+        }
+        
+        // Führe Migration durch
+        console.log("🚀 Starte Migration...");
+        let successCount = 0;
+        let errorCount = 0;
+        
+        const targetCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen_themen', currentThemaId, 'eintraege');
+        
+        for (const docSnap of oldSnapshot.docs) {
+            try {
+                const data = docSnap.data();
+                
+                // Kopiere Daten in neue Struktur (mit Original-ID)
+                await setDoc(doc(targetCollectionRef, docSnap.id), {
+                    ...data,
+                    migratedAt: serverTimestamp(),
+                    migratedFrom: 'haushaltszahlungen',
+                    originalId: docSnap.id
+                });
+                
+                successCount++;
+                console.log(`  ✅ Migriert: ${data.zweck || docSnap.id}`);
+            } catch (error) {
+                errorCount++;
+                console.error(`  ❌ Fehler bei Migration von ${docSnap.id}:`, error);
+            }
+        }
+        
+        console.log(`✅ Migration abgeschlossen!`);
+        console.log(`   Erfolgreich: ${successCount}`);
+        console.log(`   Fehler: ${errorCount}`);
+        
+        alertUser(`Migration erfolgreich! ${successCount} Einträge wurden migriert.`, 'success');
+        
+        // Lade Daten neu
+        if (successCount > 0) {
+            console.log("🔄 Lade migrierte Daten...");
+            // Der Listener wird automatisch die neuen Daten laden
+        }
+        
+    } catch (error) {
+        console.error("❌ Fehler bei Migration:", error);
+        alertUser('Fehler bei der Migration: ' + error.message, 'error');
     }
 }
 
