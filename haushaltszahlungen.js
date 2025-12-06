@@ -119,29 +119,39 @@ export async function initializeHaushaltszahlungen() {
 // Themen laden
 async function loadThemen() {
     try {
+        console.log("🔄 Lade Themen...");
         const snapshot = await getDocs(haushaltszahlungenThemenRef);
         THEMEN = {};
         snapshot.forEach((docSnap) => {
-            THEMEN[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
+            const thema = { id: docSnap.id, ...docSnap.data() };
+            THEMEN[docSnap.id] = thema;
+            console.log(`  📁 Thema gefunden: "${thema.name}" (ID: ${docSnap.id})`);
         });
+        
+        console.log(`✅ ${Object.keys(THEMEN).length} Themen geladen`);
         
         // Wenn kein Thema existiert, erstelle ein Standard-Thema
         if (Object.keys(THEMEN).length === 0) {
+            console.log("⚠️ Keine Themen gefunden - erstelle Standard-Thema");
             await createDefaultThema();
         }
         
         // Erstes Thema auswählen oder gespeichertes
         const savedThemaId = localStorage.getItem('hz_current_thema');
+        console.log("💾 Gespeichertes Thema aus localStorage:", savedThemaId);
+        
         if (savedThemaId && THEMEN[savedThemaId]) {
             currentThemaId = savedThemaId;
+            console.log(`✅ Verwende gespeichertes Thema: ${THEMEN[savedThemaId].name}`);
         } else {
             currentThemaId = Object.keys(THEMEN)[0];
+            console.log(`✅ Verwende erstes Thema: ${THEMEN[currentThemaId]?.name}`);
         }
         
         renderThemenDropdown();
         updateCollectionForThema();
     } catch (e) {
-        console.error("Fehler beim Laden der Themen:", e);
+        console.error("❌ Fehler beim Laden der Themen:", e);
     }
 }
 
@@ -498,25 +508,38 @@ export function listenForHaushaltszahlungen() {
     // Kein Fallback zur alten Collection mehr - das war der Bug!
     
     if (!haushaltszahlungenCollection) {
-        console.warn("Haushaltszahlungen: Collection nicht verfuegbar - warte auf Thema-Auswahl");
+        console.warn("⚠️ Haushaltszahlungen: Collection nicht verfuegbar - warte auf Thema-Auswahl");
+        console.warn("   currentThemaId:", currentThemaId);
+        console.warn("   db:", !!db);
         return;
     }
 
     console.log("✅ Listening auf Collection:", haushaltszahlungenCollection.path);
+    console.log("   Vollständiger Pfad:", haushaltszahlungenCollection.path);
+    console.log("   Aktuelles Thema ID:", currentThemaId);
     
     // Ohne orderBy, da das Feld moeglicherweise nicht existiert
     const q = query(haushaltszahlungenCollection);
     
     return onSnapshot(q, (snapshot) => {
         HAUSHALTSZAHLUNGEN = {};
+        console.log(`📦 Snapshot erhalten: ${snapshot.size} Dokumente gefunden`);
+        
         snapshot.forEach((doc) => {
-            HAUSHALTSZAHLUNGEN[doc.id] = { id: doc.id, ...doc.data() };
+            const data = doc.data();
+            console.log(`  - Dokument ${doc.id}:`, data);
+            HAUSHALTSZAHLUNGEN[doc.id] = { id: doc.id, ...data };
         });
-        console.log(`Eintraege geladen: ${Object.keys(HAUSHALTSZAHLUNGEN).length} Stueck`);
+        
+        console.log(`✅ Eintraege geladen: ${Object.keys(HAUSHALTSZAHLUNGEN).length} Stueck`);
+        console.log(`   HAUSHALTSZAHLUNGEN Objekt:`, HAUSHALTSZAHLUNGEN);
+        
         renderDashboard();
         renderHaushaltszahlungenTable();
     }, (error) => {
-        console.error("Fehler beim Laden der Haushaltszahlungen:", error);
+        console.error("❌ FEHLER beim Laden der Haushaltszahlungen:", error);
+        console.error("   Error Code:", error.code);
+        console.error("   Error Message:", error.message);
     });
 }
 
