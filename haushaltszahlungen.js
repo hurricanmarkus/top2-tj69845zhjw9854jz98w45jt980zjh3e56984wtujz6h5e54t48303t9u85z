@@ -478,17 +478,15 @@ function setupIntervallCheckboxLogic() {
 // FIREBASE LISTENER
 // ========================================
 export function listenForHaushaltszahlungen() {
-    // Collection initialisieren falls noch nicht geschehen
-    if (!haushaltszahlungenCollection && db) {
-        haushaltszahlungenCollection = collection(db, 'artifacts', appId, 'public', 'data', 'haushaltszahlungen');
-    }
+    // WICHTIG: Collection wird NUR durch updateCollectionForThema() gesetzt!
+    // Kein Fallback zur alten Collection mehr - das war der Bug!
     
     if (!haushaltszahlungenCollection) {
-        console.warn("Haushaltszahlungen: Collection nicht verfuegbar");
+        console.warn("Haushaltszahlungen: Collection nicht verfuegbar - warte auf Thema-Auswahl");
         return;
     }
 
-    console.log("Listening auf Collection:", haushaltszahlungenCollection.path);
+    console.log("✅ Listening auf Collection:", haushaltszahlungenCollection.path);
     
     // Ohne orderBy, da das Feld moeglicherweise nicht existiert
     const q = query(haushaltszahlungenCollection);
@@ -1012,7 +1010,7 @@ function renderMitgliederBeitraege(stats) {
             <div class="bg-${color}-500/30 p-3 rounded-lg">
                 <!-- Header mit Name und Status -->
                 <div class="flex justify-between items-center mb-2">
-                    <p class="text-lg font-bold">${displayName}</p>
+                    <p class="text-lg font-bold truncate" style="max-width: 150px;" title="${displayName}">${displayName}</p>
                     <button onclick="toggleMitgliedDetails('${mitgliedId}')" 
                         class="px-3 py-1 ${statusColor} text-white text-xs font-bold rounded-lg hover:opacity-80 transition cursor-pointer flex items-center gap-1">
                         ${statusText}
@@ -1024,15 +1022,15 @@ function renderMitgliederBeitraege(stats) {
                 
                 <!-- Kompakte Übersicht -->
                 <div class="grid grid-cols-3 gap-1 text-center text-xs mb-2">
-                    <div>
+                    <div class="flex flex-col justify-between" style="min-height: 48px;">
                         <p class="font-bold">${formatCurrency(sollMonatlich)}</p>
                         <p class="text-white/60">Monatlich</p>
                     </div>
-                    <div>
+                    <div class="flex flex-col justify-between" style="min-height: 48px;">
                         <p class="font-bold">${formatCurrency(sollJaehrlich)}</p>
                         <p class="text-white/60">Jährlich</p>
                     </div>
-                    <div class="bg-white/10 rounded p-1">
+                    <div class="bg-white/10 rounded p-1 flex flex-col justify-between" style="min-height: 48px;">
                         <p class="font-bold">${formatCurrency(sollJaehrlich / 12)}</p>
                         <p class="text-white/60">Effektiv/M</p>
                     </div>
@@ -1326,13 +1324,19 @@ function renderHaushaltszahlungenTable() {
                         const mitglied1 = thema.mitglieder[0];
                         const mitglied2 = thema.mitglieder[1];
                         
-                        // Kurznamen erstellen (erster Buchstabe des Vornamens)
-                        const name1Short = (mitglied1.name || mitglied1.userId || 'M').charAt(0).toUpperCase();
-                        const name2Short = mitglied2 ? (mitglied2.name || mitglied2.userId || 'J').charAt(0).toUpperCase() : 'J';
+                        // Voller VORNAME (vor dem ersten Leerzeichen)
+                        const getName = (m) => {
+                            const fullName = m.name || m.userId || '';
+                            // Hole nur den Vornamen (vor dem ersten Leerzeichen)
+                            return fullName.split(' ')[0];
+                        };
+                        
+                        const name1 = getName(mitglied1);
+                        const name2 = mitglied2 ? getName(mitglied2) : '';
                         
                         return `
-                            <div class="text-blue-600" title="${mitglied1.name || mitglied1.userId}">${eintrag.anteilMarkus}% ${name1Short}</div>
-                            ${mitglied2 ? `<div class="text-pink-600" title="${mitglied2.name || mitglied2.userId}">${100 - eintrag.anteilMarkus}% ${name2Short}</div>` : ''}
+                            <div class="text-blue-600 font-medium" title="${mitglied1.name || mitglied1.userId}">${eintrag.anteilMarkus}% ${name1}</div>
+                            ${mitglied2 ? `<div class="text-pink-600 font-medium" title="${mitglied2.name || mitglied2.userId}">${100 - eintrag.anteilMarkus}% ${name2}</div>` : ''}
                         `;
                     })()}
                 </td>
