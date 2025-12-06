@@ -41,7 +41,7 @@ let HAUSHALTSZAHLUNGEN = {};
 let THEMEN = {};
 let EINLADUNGEN = {}; // Einladungen für den aktuellen Benutzer
 let currentThemaId = null; // Aktuell ausgewähltes Thema
-let currentFilter = { status: 'aktiv', typ: '', person: '', intervalle: [] }; // Standard: Aktiv
+let currentFilter = { status: '', typ: '', person: '', intervalle: [] }; // Standard: Alle anzeigen (leer = kein Filter)
 let searchTerm = '';
 let simulationsDatum = null; // Für Datums-Simulation (wie W7 in Excel)
 
@@ -365,10 +365,10 @@ function setupEventListeners() {
     const resetFilters = document.getElementById('reset-filters-haushaltszahlungen');
     if (resetFilters && !resetFilters.dataset.listenerAttached) {
         resetFilters.addEventListener('click', () => {
-            currentFilter = { status: 'aktiv', typ: '', person: '', intervalle: [] };
+            currentFilter = { status: '', typ: '', person: '', intervalle: [] }; // Alle anzeigen
             searchTerm = '';
             document.getElementById('search-haushaltszahlungen').value = '';
-            document.getElementById('filter-hz-status').value = 'aktiv';
+            document.getElementById('filter-hz-status').value = ''; // Leer = Alle
             document.getElementById('filter-hz-typ').value = '';
             // Intervall-Checkboxen zurücksetzen
             document.querySelectorAll('.hz-intervall-filter-cb').forEach(cb => cb.checked = false);
@@ -2821,8 +2821,8 @@ if (!window.hzDOMContentLoadedAttached) {
     document.addEventListener('DOMContentLoaded', () => {
         setupAbtauschIntervallLogic();
         
-        // Standard-Filter auf "Aktiv" setzen
-        currentFilter.status = 'aktiv';
+        // Standard-Filter: LEER = Alle Einträge anzeigen
+        currentFilter.status = ''; // Zeige standardmäßig ALLE Einträge
         
         // Event-Listener für Abtausch-Datum
         const neuerBeginnInput = document.getElementById('hz-abtausch-neuer-beginn');
