@@ -1101,18 +1101,18 @@ function renderMitgliederBeitraege(stats) {
                 </div>
                 
                 <!-- Kompakte Übersicht -->
-                <div class="grid grid-cols-3 gap-1 text-center text-xs mb-2">
-                    <div class="flex flex-col justify-between" style="min-height: 48px;">
-                        <p class="font-bold">${formatCurrency(sollMonatlich)}</p>
-                        <p class="text-white/60">Monatlich</p>
+                <div class="grid grid-cols-3 gap-1 text-center text-xs mb-2 items-start">
+                    <div>
+                        <p class="font-bold h-5 flex items-center justify-center">${formatCurrency(sollMonatlich)}</p>
+                        <p class="text-white/60 h-4 flex items-center justify-center">Monatlich</p>
                     </div>
-                    <div class="flex flex-col justify-between" style="min-height: 48px;">
-                        <p class="font-bold">${formatCurrency(sollJaehrlich)}</p>
-                        <p class="text-white/60">Jährlich</p>
+                    <div>
+                        <p class="font-bold h-5 flex items-center justify-center">${formatCurrency(sollJaehrlich)}</p>
+                        <p class="text-white/60 h-4 flex items-center justify-center">Jährlich</p>
                     </div>
-                    <div class="bg-white/10 rounded p-1 flex flex-col justify-between" style="min-height: 48px;">
-                        <p class="font-bold">${formatCurrency(sollJaehrlich / 12)}</p>
-                        <p class="text-white/60">Effektiv/M</p>
+                    <div class="bg-white/10 rounded p-1">
+                        <p class="font-bold h-5 flex items-center justify-center">${formatCurrency(sollJaehrlich / 12)}</p>
+                        <p class="text-white/60 h-4 flex items-center justify-center">Effektiv/M</p>
                     </div>
                 </div>
                 
@@ -2237,7 +2237,7 @@ async function saveNewMitglied() {
                 invitedBy: currentUser.displayName,
                 invitedById: currentUser.mode,
                 zugriffsrecht: recht,
-                anteil: anteil,
+                // anteil wurde entfernt - wird individuell pro Eintrag festgelegt
                 status: 'pending',
                 createdAt: serverTimestamp()
             };
