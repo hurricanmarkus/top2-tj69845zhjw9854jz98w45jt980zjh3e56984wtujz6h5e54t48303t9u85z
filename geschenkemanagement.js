@@ -956,6 +956,116 @@ function renderStandortList() {
 }
 
 // ========================================
+// OPTIONEN VERWALTUNG (für Einstellungen)
+// ========================================
+window.addCustomOption = async function(type) {
+    let inputId, settingsKey;
+    
+    switch(type) {
+        case 'status':
+            inputId = 'gm-new-status';
+            settingsKey = 'customStatusOptionen';
+            break;
+        case 'zahlungsarten':
+            inputId = 'gm-new-zahlungsarten';
+            settingsKey = 'customZahlungsarten';
+            break;
+        default:
+            return;
+    }
+    
+    const input = document.getElementById(inputId);
+    if (!input || !input.value.trim()) {
+        alertUser('Bitte gib einen Wert ein.', 'warning');
+        return;
+    }
+    
+    const newValue = input.value.trim();
+    
+    // Prüfen ob bereits vorhanden
+    if (geschenkeSettings[settingsKey].includes(newValue)) {
+        alertUser('Dieser Wert existiert bereits.', 'warning');
+        return;
+    }
+    
+    try {
+        geschenkeSettings[settingsKey].push(newValue);
+        await setDoc(geschenkeSettingsRef, geschenkeSettings);
+        input.value = '';
+        renderOptionenVerwaltung();
+        alertUser('Option hinzugefügt!', 'success');
+    } catch (e) {
+        alertUser('Fehler: ' + e.message, 'error');
+    }
+};
+
+window.removeCustomOption = async function(type, value) {
+    let settingsKey;
+    
+    switch(type) {
+        case 'status':
+            settingsKey = 'customStatusOptionen';
+            break;
+        case 'zahlungsarten':
+            settingsKey = 'customZahlungsarten';
+            break;
+        default:
+            return;
+    }
+    
+    if (!confirm(`"${value}" wirklich entfernen?`)) return;
+    
+    try {
+        geschenkeSettings[settingsKey] = geschenkeSettings[settingsKey].filter(o => o !== value);
+        await setDoc(geschenkeSettingsRef, geschenkeSettings);
+        renderOptionenVerwaltung();
+        alertUser('Option entfernt!', 'success');
+    } catch (e) {
+        alertUser('Fehler: ' + e.message, 'error');
+    }
+};
+
+window.addCustomStandort = async function() {
+    const input = document.getElementById('gm-new-standort');
+    if (!input || !input.value.trim()) {
+        alertUser('Bitte gib einen Standort ein.', 'warning');
+        return;
+    }
+    
+    const newStandort = input.value.trim();
+    
+    // Prüfen ob bereits vorhanden
+    const allStandorte = [...geschenkeSettings.geschenkeStandorte, ...geschenkeSettings.customGeschenkeStandorte];
+    if (allStandorte.includes(newStandort)) {
+        alertUser('Dieser Standort existiert bereits.', 'warning');
+        return;
+    }
+    
+    try {
+        geschenkeSettings.customGeschenkeStandorte.push(newStandort);
+        await setDoc(geschenkeSettingsRef, geschenkeSettings);
+        input.value = '';
+        renderOptionenVerwaltung();
+        alertUser('Standort hinzugefügt!', 'success');
+    } catch (e) {
+        alertUser('Fehler: ' + e.message, 'error');
+    }
+};
+
+window.removeCustomStandort = async function(standort) {
+    if (!confirm(`"${standort}" wirklich entfernen?`)) return;
+    
+    try {
+        geschenkeSettings.customGeschenkeStandorte = geschenkeSettings.customGeschenkeStandorte.filter(s => s !== standort);
+        await setDoc(geschenkeSettingsRef, geschenkeSettings);
+        renderOptionenVerwaltung();
+        alertUser('Standort entfernt!', 'success');
+    } catch (e) {
+        alertUser('Fehler: ' + e.message, 'error');
+    }
+};
+
+// ========================================
 // HILFSFUNKTIONEN
 // ========================================
 function formatCurrency(value) {
@@ -978,37 +1088,75 @@ window.filterByPerson = function(personId) {
     renderGeschenkeTabelle();
 };
 
-window.openAddPersonToThemaModal = async function() {
-    // Einfache Prompt-Lösung für schnelle Implementierung
-    const kontakteList = Object.values(KONTAKTE)
-        .filter(k => !THEMEN[currentThemaId]?.personen?.includes(k.id))
-        .map(k => k.name)
-        .join(', ');
+window.openAddPersonToThemaModal = function() {
+    const verfuegbareKontakte = Object.values(KONTAKTE)
+        .filter(k => !THEMEN[currentThemaId]?.personen?.includes(k.id));
     
-    if (!kontakteList) {
-        alertUser('Alle Kontakte sind bereits hinzugefügt oder es gibt keine Kontakte.', 'info');
+    if (verfuegbareKontakte.length === 0) {
+        alertUser('Alle Kontakte sind bereits hinzugefügt oder es gibt keine Kontakte. Erstelle neue Kontakte in den Einstellungen.', 'info');
         return;
     }
     
-    const personName = prompt(`Verfügbare Kontakte: ${kontakteList}\n\nGib den Namen der Person ein:`);
-    if (!personName) return;
-    
-    const kontakt = Object.values(KONTAKTE).find(k => k.name.toLowerCase() === personName.toLowerCase());
-    if (!kontakt) {
-        alertUser('Kontakt nicht gefunden. Bitte erst im Kontaktbuch anlegen.', 'warning');
-        return;
+    // Modal erstellen
+    let modal = document.getElementById('addPersonModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'addPersonModal';
+        modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+        document.body.appendChild(modal);
     }
+    
+    modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="bg-gradient-to-r from-pink-500 to-purple-600 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                <h3 class="text-xl font-bold">👤 Person hinzufügen</h3>
+                <button onclick="document.getElementById('addPersonModal').style.display='none'" class="text-white/80 hover:text-white transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="p-4">
+                <p class="text-sm text-gray-600 mb-3">Wähle eine Person aus dem Kontaktbuch:</p>
+                <div class="space-y-2 max-h-64 overflow-y-auto">
+                    ${verfuegbareKontakte.map(k => `
+                        <button onclick="window.addPersonToThema('${k.id}')" 
+                            class="w-full p-3 text-left bg-gray-50 hover:bg-pink-50 border border-gray-200 hover:border-pink-300 rounded-lg transition flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-pink-500 flex items-center justify-center text-white font-bold">
+                                ${(k.name || '?').charAt(0).toUpperCase()}
+                            </div>
+                            <span class="font-semibold text-gray-800">${k.name}</span>
+                        </button>
+                    `).join('')}
+                </div>
+            </div>
+            <div class="p-4 bg-gray-100 rounded-b-2xl">
+                <button onclick="document.getElementById('addPersonModal').style.display='none'" 
+                    class="w-full px-4 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
+                    Abbrechen
+                </button>
+            </div>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+};
+
+window.addPersonToThema = async function(kontaktId) {
+    const kontakt = KONTAKTE[kontaktId];
+    if (!kontakt) return;
     
     try {
         const thema = THEMEN[currentThemaId];
         const personen = thema.personen || [];
-        if (!personen.includes(kontakt.id)) {
-            personen.push(kontakt.id);
+        if (!personen.includes(kontaktId)) {
+            personen.push(kontaktId);
             await updateDoc(doc(geschenkeThemenRef, currentThemaId), { personen });
             THEMEN[currentThemaId].personen = personen;
             renderPersonenUebersicht();
             alertUser(`${kontakt.name} wurde hinzugefügt!`, 'success');
         }
+        document.getElementById('addPersonModal').style.display = 'none';
     } catch (e) {
         alertUser('Fehler: ' + e.message, 'error');
     }
@@ -1117,23 +1265,29 @@ window.createNewKontakt = async function() {
     }
 };
 
-// Geschenk kopieren
-window.copyGeschenk = async function(id) {
+// Geschenk kopieren - öffnet Modal zum Bearbeiten der Kopie
+window.copyGeschenk = function(id) {
     const original = GESCHENKE[id];
     if (!original) return;
     
-    try {
-        const kopie = { ...original };
-        delete kopie.id;
-        kopie.geschenk = kopie.geschenk + ' (Kopie)';
-        kopie.erstelltAm = serverTimestamp();
-        kopie.erstelltVon = currentUser.displayName;
-        
-        await addDoc(geschenkeCollection, kopie);
-        alertUser('Geschenk kopiert!', 'success');
-    } catch (e) {
-        alertUser('Fehler: ' + e.message, 'error');
-    }
+    const modal = document.getElementById('geschenkModal');
+    if (!modal) return;
+    
+    // Kopie-Daten vorbereiten
+    const kopie = { ...original };
+    kopie.geschenk = (kopie.geschenk || '') + ' (Kopie)';
+    
+    // Modal als "Kopie bearbeiten" öffnen
+    document.getElementById('geschenkModalTitle').innerHTML = `
+        <span>Kopie erstellen</span>
+        <span class="block text-sm font-normal bg-yellow-400 text-yellow-900 px-2 py-1 rounded mt-1">⚠️ Hier wird die KOPIE bearbeitet</span>
+    `;
+    document.getElementById('gm-id').value = ''; // Leere ID = neuer Eintrag
+    
+    fillModalForm(kopie);
+    renderModalSelects(kopie);
+    updateModalActionButtons(false); // Keine Aktions-Buttons bei Kopie
+    modal.style.display = 'flex';
 };
 
 // Geschenk löschen
@@ -1156,14 +1310,19 @@ window.saveAsVorlage = async function(id) {
     if (!name) return;
     
     try {
+        const geschenkCopy = { ...geschenk };
+        delete geschenkCopy.id;
+        delete geschenkCopy.erstelltAm;
+        
         const vorlageData = {
             name: name.trim(),
-            geschenkData: { ...geschenk },
+            geschenk: geschenkCopy.geschenk || name.trim(), // Geschenkname für Anzeige
+            shop: geschenkCopy.shop || '',
+            gesamtkosten: geschenkCopy.gesamtkosten || 0,
+            geschenkData: geschenkCopy,
             erstelltAm: serverTimestamp(),
             erstelltVon: currentUser.displayName
         };
-        delete vorlageData.geschenkData.id;
-        delete vorlageData.geschenkData.erstelltAm;
         
         const docRef = await addDoc(geschenkeVorlagenRef, vorlageData);
         VORLAGEN[docRef.id] = { id: docRef.id, ...vorlageData };
@@ -1173,24 +1332,43 @@ window.saveAsVorlage = async function(id) {
     }
 };
 
-// Vorlage anwenden
-window.applyVorlage = async function(vorlageId) {
+// Vorlage anwenden - füllt das Modal mit Vorlagendaten
+window.applyVorlage = function(vorlageId) {
     const vorlage = VORLAGEN[vorlageId];
     if (!vorlage) return;
     
-    try {
-        const newGeschenk = {
-            ...vorlage,
-            erstelltAm: serverTimestamp(),
-            erstelltVon: currentUser.displayName
-        };
-        delete newGeschenk.id;
-        await addDoc(geschenkeCollection, newGeschenk);
-        alertUser('Vorlage wurde als neues Geschenk eingefügt!', 'success');
-        closeVorlagenModal();
-    } catch (e) {
-        alertUser('Fehler: ' + e.message, 'error');
+    // Prüfe ob ein Thema ausgewählt ist
+    if (!currentThemaId) {
+        alertUser('Bitte erstelle zuerst ein Thema, bevor du eine Vorlage einfügst.', 'warning');
+        return;
     }
+    
+    const thema = THEMEN[currentThemaId];
+    if (!thema?.personen || thema.personen.length === 0) {
+        alertUser('Bitte füge zuerst Personen zum Thema hinzu.', 'warning');
+        return;
+    }
+    
+    closeVorlagenModal();
+    
+    const modal = document.getElementById('geschenkModal');
+    if (!modal) return;
+    
+    // Geschenkdaten aus der Vorlage extrahieren
+    const geschenkData = vorlage.geschenkData || vorlage;
+    
+    document.getElementById('geschenkModalTitle').innerHTML = `
+        <span>Neues Geschenk aus Vorlage</span>
+        <span class="block text-sm font-normal bg-purple-200 text-purple-800 px-2 py-1 rounded mt-1">📑 Vorlage: ${vorlage.name || 'Unbenannt'}</span>
+    `;
+    document.getElementById('gm-id').value = ''; // Leere ID = neuer Eintrag
+    
+    fillModalForm(geschenkData);
+    renderModalSelects(geschenkData);
+    updateModalActionButtons(false); // Keine Aktions-Buttons bei neuem Eintrag
+    modal.style.display = 'flex';
+    
+    alertUser('Vorlage geladen! Passe die Daten an und speichere.', 'info');
 };
 
 // Vorlagen-Modal öffnen
@@ -1229,7 +1407,7 @@ window.openVorlagenModal = function() {
                             <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:border-purple-300 transition">
                                 <div class="flex items-center justify-between">
                                     <div class="flex-1">
-                                        <p class="font-bold text-gray-800">${v.geschenk || 'Unbenannte Vorlage'}</p>
+                                        <p class="font-bold text-gray-800">${v.name || v.geschenk || 'Unbenannte Vorlage'}</p>
                                         <p class="text-sm text-gray-500">
                                             ${v.shop ? `🛍️ ${v.shop}` : ''}
                                             ${v.gesamtkosten ? ` • ${formatCurrency(v.gesamtkosten)}` : ''}
