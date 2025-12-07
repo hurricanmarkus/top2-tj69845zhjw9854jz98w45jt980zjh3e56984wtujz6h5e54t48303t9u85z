@@ -2508,17 +2508,67 @@ async function saveSettings() {
     }
 }
 
+// Funktion: Erlaubt nur gültige Zeichen für Betragseingabe (inkl. Minus!)
+window.allowNumberInput = function(event) {
+    const char = event.key;
+    const currentValue = event.target.value;
+    
+    // Erlaubte Zeichen: 0-9, Punkt, Komma, Minus
+    const isNumber = /[0-9]/.test(char);
+    const isDot = char === '.';
+    const isComma = char === ',';
+    const isMinus = char === '-';
+    
+    // Minus nur am Anfang erlauben (wenn Feld leer ist oder Cursor ganz vorne)
+    if (isMinus) {
+        const cursorPosition = event.target.selectionStart;
+        // Minus nur am Anfang erlauben, wenn noch kein Minus vorhanden ist
+        if (cursorPosition === 0 && !currentValue.includes('-')) {
+            return true; // Minus am Anfang erlauben
+        }
+        return false; // Minus an anderer Stelle blockieren
+    }
+    
+    // Punkt/Komma nur einmal erlauben
+    if (isDot || isComma) {
+        if (currentValue.includes('.') || currentValue.includes(',')) {
+            return false;
+        }
+        return true;
+    }
+    
+    // Zahlen immer erlauben
+    if (isNumber) {
+        return true;
+    }
+    
+    // Spezielle Tasten erlauben (Backspace, Delete, Pfeiltasten, etc.)
+    if (event.ctrlKey || event.metaKey || 
+        char === 'Backspace' || char === 'Delete' || 
+        char === 'ArrowLeft' || char === 'ArrowRight' ||
+        char === 'Tab' || char === 'Enter') {
+        return true;
+    }
+    
+    // Alle anderen Zeichen blockieren
+    return false;
+};
+
 // Funktion zum Aktualisieren des Betrag-Hinweises
 window.updateBetragHinweis = function(input) {
     const hinweis = document.getElementById('hz-betrag-hinweis');
     if (!hinweis) return;
     
-    const value = input.value.trim();
+    // Komma durch Punkt ersetzen für parseFloat
+    let value = input.value.trim().replace(',', '.');
+    input.value = value; // Aktualisiere Feld mit Punkt statt Komma
+    
     const numValue = parseFloat(value);
     
     // Zeige Hinweis nur wenn Feld komplett leer ist
-    if (value === '') {
+    if (value === '' || value === '-') {
         hinweis.classList.remove('hidden');
+        hinweis.className = 'mt-2 p-2 bg-yellow-50 border border-yellow-300 rounded text-xs text-yellow-800';
         hinweis.innerHTML = '⚠️ Betrag noch unbekannt? Für Gratis-Monate gib bitte 0 ein. Lass das Feld nur leer, wenn der Betrag wirklich noch unbekannt ist.';
     } else if (numValue < 0) {
         // Zeige Info bei Gutschrift
