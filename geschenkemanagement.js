@@ -927,62 +927,104 @@ function renderThemenVerwaltung() {
         `).join('');
 }
 
+// ========================================
+// NEUES FREIGABEMANAGEMENT-SYSTEM
+// ========================================
+
 function renderFreigabenVerwaltung() {
     const container = document.getElementById('gm-freigaben-list');
     if (!container) return;
     
-    // Registrierte Benutzer aus USERS
-    const registrierteBenutzer = Object.values(USERS).filter(u => u.permissionType !== 'not_registered' && u.id !== currentUser.odooUserId);
+    // Registrierte Benutzer (außer ich selbst)
+    const registrierteBenutzer = Object.values(USERS).filter(u => 
+        u.permissionType !== 'not_registered' && 
+        u.id !== currentUser.odooUserId
+    );
     
-    container.innerHTML = registrierteBenutzer.length === 0
-        ? '<p class="text-gray-500 text-center py-4">Keine registrierten Benutzer gefunden</p>'
-        : registrierteBenutzer.map(user => {
-            // Finde alle Freigaben für diesen Benutzer
-            const userFreigaben = Object.values(FREIGABEN).filter(f => f.userId === user.id && f.aktiv);
-            const themenCount = userFreigaben.length;
-            
-            return `
-                <div class="p-4 bg-gray-50 rounded-lg border">
-                    <div class="flex items-center justify-between mb-3">
-                        <div>
-                            <span class="font-bold">${user.displayName || user.name}</span>
-                            ${themenCount > 0 ? `
-                                <span class="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">
-                                    ${themenCount} Thema${themenCount !== 1 ? 'n' : ''} freigegeben
-                                </span>
-                            ` : ''}
-                        </div>
-                        <button onclick="window.openFreigabeEditor('${user.id}', '${user.displayName || user.name}')" 
-                            class="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 font-bold">
-                            ⚙️ Freigaben verwalten
-                        </button>
+    if (registrierteBenutzer.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-center py-4">Keine registrierten Benutzer gefunden</p>';
+        return;
+    }
+    
+    container.innerHTML = registrierteBenutzer.map(user => {
+        // Finde Einladungen für diesen Benutzer
+        const einladungen = Object.values(EINLADUNGEN).filter(e => 
+            e.empfaengerId === user.id && 
+            e.absenderId === currentUser.odooUserId
+        );
+        const aktiveFreigaben = Object.values(FREIGABEN).filter(f => 
+            f.userId === user.id && 
+            f.aktiv
+        );
+        
+        return `
+            <div class="p-4 bg-gray-50 rounded-lg border-2">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <span class="font-bold text-lg">${user.displayName || user.name}</span>
+                        ${aktiveFreigaben.length > 0 ? `
+                            <span class="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-bold">
+                                ✅ ${aktiveFreigaben.length} Freigabe${aktiveFreigaben.length !== 1 ? 'n' : ''} aktiv
+                            </span>
+                        ` : ''}
+                        ${einladungen.filter(e => e.status === 'pending').length > 0 ? `
+                            <span class="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full font-bold">
+                                ⏳ ${einladungen.filter(e => e.status === 'pending').length} Einladung${einladungen.filter(e => e.status === 'pending').length !== 1 ? 'en' : ''} ausstehend
+                            </span>
+                        ` : ''}
                     </div>
-                    ${userFreigaben.length > 0 ? `
-                        <div class="text-xs text-gray-600 space-y-1">
-                            ${userFreigaben.map(f => {
-                                const thema = THEMEN[f.themaId];
-                                const filterCount = Object.keys(f.filter || {}).length;
-                                return `
-                                    <div class="flex items-center justify-between p-2 bg-white rounded">
-                                        <span>📁 ${thema?.name || 'Unbekanntes Thema'}</span>
-                                        <span class="text-xs text-blue-600">${filterCount} Filter aktiv</span>
-                                    </div>
-                                `;
-                            }).join('')}
-                        </div>
-                    ` : '<p class="text-xs text-gray-400 italic">Keine Freigaben konfiguriert</p>'}
+                    <button onclick="window.openFreigabeEditor('${user.id}')" 
+                        class="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold rounded-lg hover:shadow-lg transition">
+                        🔐 Freigaben verwalten
+                    </button>
                 </div>
-            `;
-        }).join('');
+                
+                ${aktiveFreigaben.length > 0 ? `
+                    <div class="mt-2 space-y-1">
+                        ${aktiveFreigaben.map(f => {
+                            const thema = THEMEN[f.themaId];
+                            return `
+                                <div class="flex items-center justify-between p-2 bg-white rounded-lg border">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-2xl">📁</span>
+                                        <div>
+                                            <p class="font-semibold text-sm">${thema?.name || 'Unbekanntes Thema'}</p>
+                                            <p class="text-xs text-gray-500">
+                                                ${f.freigabeTyp === 'komplett' ? 
+                                                    `Komplett • ${f.rechte === 'lesen' ? '👁️ Lesen' : '✏️ Bearbeiten'}` :
+                                                    `Gefiltert • ${Object.keys(f.filter || {}).length} Filter`
+                                                }
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button onclick="window.deleteFreigabe('${f.id}')" 
+                                        class="text-red-500 hover:text-red-700 p-1" title="Freigabe entfernen">
+                                        🗑️
+                                    </button>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                ` : '<p class="text-xs text-gray-400 italic mt-2">Keine aktiven Freigaben</p>'}
+            </div>
+        `;
+    }).join('');
 }
 
-// Freigabe-Editor öffnen
-window.openFreigabeEditor = function(userId, userName) {
+// ========================================
+// NEUER FREIGABE-EDITOR
+// ========================================
+
+window.openFreigabeEditor = function(userId) {
     const user = USERS[userId];
     if (!user) return;
     
-    // Finde bestehende Freigaben für diesen Benutzer
+    // Finde bestehende Freigaben/Einladungen für diesen Benutzer
     const userFreigaben = Object.values(FREIGABEN).filter(f => f.userId === userId && f.aktiv);
+    const userEinladungen = Object.values(EINLADUNGEN).filter(e => 
+        e.empfaengerId === userId && 
+        e.absenderId === currentUser.odooUserId
+    );
     
     let modal = document.getElementById('freigabeEditorModal');
     if (!modal) {
@@ -995,9 +1037,12 @@ window.openFreigabeEditor = function(userId, userName) {
     const themenArray = Object.values(THEMEN).filter(t => !t.archiviert);
     
     modal.innerHTML = `
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
             <div class="sticky top-0 bg-gradient-to-r from-blue-600 to-purple-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
-                <h3 class="text-xl font-bold">🔐 Freigaben für ${userName || user.displayName}</h3>
+                <div>
+                    <h3 class="text-xl font-bold">🔐 Freigaben für ${user.displayName || user.name}</h3>
+                    <p class="text-xs text-white/80 mt-1">Neue Freigaben werden per Einladung gesendet</p>
+                </div>
                 <button onclick="window.closeFreigabeEditor()" class="text-white/80 hover:text-white transition">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -1005,252 +1050,410 @@ window.openFreigabeEditor = function(userId, userName) {
                 </button>
             </div>
             
-            <div class="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-                <p class="text-sm text-gray-600 mb-4">
-                    Wähle die Themen aus, die <strong>${userName || user.displayName}</strong> sehen darf, 
-                    und konfiguriere für jedes Thema die granularen Sichtbarkeitsrechte.
-                </p>
-                
-                <div class="space-y-4" id="freigabe-themen-container">
-                    ${themenArray.length === 0 ? `
-                        <p class="text-gray-500 text-center py-8">Keine Themen vorhanden. Erstelle zuerst Themen.</p>
-                    ` : themenArray.map(thema => {
-                        const existingFreigabe = userFreigaben.find(f => f.themaId === thema.id);
-                        const isEnabled = !!existingFreigabe;
-                        const filter = existingFreigabe?.filter || {};
-                        
-                        return `
-                            <div class="border-2 rounded-lg p-4 ${isEnabled ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}">
-                                <div class="flex items-center gap-3 mb-3">
-                                    <input type="checkbox" 
-                                        id="freigabe-thema-${thema.id}" 
-                                        onchange="window.toggleThemaFreigabe('${thema.id}')"
-                                        ${isEnabled ? 'checked' : ''}
-                                        class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500">
-                                    <label for="freigabe-thema-${thema.id}" class="font-bold text-lg cursor-pointer">
-                                        📁 ${thema.name}
-                                    </label>
-                                </div>
-                                
-                                <div id="filter-${thema.id}" class="ml-8 ${isEnabled ? '' : 'hidden opacity-50 pointer-events-none'}">
-                                    <p class="text-xs text-gray-600 mb-2">Sichtbare Felder/Filter:</p>
-                                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                        ${renderFilterCheckbox(thema.id, 'fuer', 'FÜR (Empfänger)', filter.fuer || [])}
-                                        ${renderFilterCheckbox(thema.id, 'von', 'VON (Schenker)', filter.von || [])}
-                                        ${renderFilterCheckbox(thema.id, 'ids', 'Spezifische IDs', filter.ids || [])}
-                                        ${renderFilterCheckbox(thema.id, 'bezahltVon', 'Bezahlt von', filter.bezahltVon || [])}
-                                        ${renderFilterCheckbox(thema.id, 'beteiligung', 'Beteiligung', filter.beteiligung || [])}
-                                        ${renderFilterCheckbox(thema.id, 'sollBezahlung', 'SOLL-Bezahlung', filter.sollBezahlung || [])}
-                                        ${renderFilterCheckbox(thema.id, 'istBezahlung', 'IST-Bezahlung', filter.istBezahlung || [])}
-                                        ${renderFilterCheckbox(thema.id, 'standort', 'Geschenke-Standort', filter.standort || [])}
-                                    </div>
-                                    
-                                    <!-- Detail-Konfiguration für ausgewählte Filter -->
-                                    <div id="filter-details-${thema.id}" class="mt-3 space-y-2">
-                                        <!-- Wird dynamisch befüllt wenn Filter ausgewählt werden -->
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    }).join('')}
-                </div>
+            <div class="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+                ${themenArray.length === 0 ? `
+                    <p class="text-gray-500 text-center py-8">Keine Themen vorhanden. Erstelle zuerst Themen.</p>
+                ` : `
+                    <div class="mb-4 p-4 bg-blue-50 border-l-4 border-blue-500 rounded">
+                        <p class="text-sm text-blue-800">
+                            <strong>💡 Hinweis:</strong> Wähle ein Thema aus und konfiguriere die Freigabe. 
+                            ${user.displayName} muss die Einladung annehmen, bevor die Freigabe aktiv wird.
+                        </p>
+                    </div>
+                    
+                    <button onclick="window.addThemaFreigabe()" 
+                        class="w-full mb-4 px-4 py-3 bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Neue Freigabe hinzufügen
+                    </button>
+                    
+                    <div id="freigaben-container" class="space-y-4">
+                        <!-- Wird dynamisch befüllt -->
+                    </div>
+                `}
             </div>
             
             <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-between gap-3">
                 <button onclick="window.closeFreigabeEditor()" class="px-6 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
-                    Abbrechen
+                    Schließen
                 </button>
-                <button onclick="window.saveFreigaben('${userId}')" class="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-500 text-white font-bold rounded-lg hover:shadow-lg transition">
-                    💾 Freigaben speichern
+                <button onclick="window.sendFreigabeEinladungen('${userId}')" class="px-6 py-2 bg-gradient-to-r from-green-600 to-blue-500 text-white font-bold rounded-lg hover:shadow-lg transition">
+                    📧 Einladungen senden
                 </button>
             </div>
         </div>
     `;
     
     modal.style.display = 'flex';
+    
+    // Initialisiere Freigaben-Liste
+    renderFreigabenListe(userId, userFreigaben, userEinladungen);
 };
 
-function renderFilterCheckbox(themaId, filterType, label, selectedValues) {
-    const isEnabled = selectedValues.length > 0 || false;
+// ========================================
+// NEUE HELPER-FUNKTIONEN
+// ========================================
+
+let freigabenCounter = 0; // Zähler für eindeutige IDs
+
+function renderFreigabenListe(userId, userFreigaben, userEinladungen) {
+    const container = document.getElementById('freigaben-container');
+    if (!container) return;
+    
+    const themenArray = Object.values(THEMEN).filter(t => !t.archiviert);
+    
+    if (themenArray.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-center py-4">Keine Themen verfügbar</p>';
+        return;
+    }
+    
+    container.innerHTML = '';
+    freigabenCounter = 0;
+}
+
+window.addThemaFreigabe = function() {
+    const container = document.getElementById('freigaben-container');
+    if (!container) return;
+    
+    const themenArray = Object.values(THEMEN).filter(t => !t.archiviert);
+    const freigabeId = `freigabe-${freigabenCounter++}`;
+    
+    const freigabeDiv = document.createElement('div');
+    freigabeDiv.id = freigabeId;
+    freigabeDiv.className = 'border-2 border-blue-300 rounded-lg p-4 bg-blue-50';
+    freigabeDiv.innerHTML = `
+        <div class="flex items-center justify-between mb-3">
+            <h4 class="font-bold text-lg text-blue-800">📁 Neue Freigabe</h4>
+            <button onclick="window.removeFreigabe('${freigabeId}')" class="text-red-500 hover:text-red-700 font-bold">
+                ✕ Entfernen
+            </button>
+        </div>
+        
+        <!-- Thema-Auswahl -->
+        <div class="mb-4">
+            <label class="block text-sm font-bold text-gray-700 mb-2">Thema auswählen:</label>
+            <select id="${freigabeId}-thema" onchange="window.updateFreigabeTypOptions('${freigabeId}')" 
+                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500">
+                <option value="">-- Thema wählen --</option>
+                ${themenArray.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+            </select>
+        </div>
+        
+        <div id="${freigabeId}-config" class="hidden">
+            <!-- Freigabe-Typ -->
+            <div class="mb-4 p-3 bg-white rounded-lg border-2">
+                <label class="block text-sm font-bold text-gray-700 mb-2">Freigabe-Typ:</label>
+                <div class="space-y-2">
+                    <label class="flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-blue-50">
+                        <input type="radio" name="${freigabeId}-typ" value="komplett" 
+                            onchange="window.updateFreigabeConfig('${freigabeId}')"
+                            class="w-4 h-4 text-blue-600">
+                        <div>
+                            <p class="font-semibold">📂 Komplettes Thema teilen</p>
+                            <p class="text-xs text-gray-500">Person sieht ALLE Einträge im Thema</p>
+                        </div>
+                    </label>
+                    <label class="flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-blue-50">
+                        <input type="radio" name="${freigabeId}-typ" value="gefiltert" checked
+                            onchange="window.updateFreigabeConfig('${freigabeId}')"
+                            class="w-4 h-4 text-blue-600">
+                        <div>
+                            <p class="font-semibold">🔍 Gefilterte Ansicht</p>
+                            <p class="text-xs text-gray-500">Nur bestimmte Einträge anzeigen (nach Kriterien)</p>
+                        </div>
+                    </label>
+                </div>
+            </div>
+            
+            <!-- Rechte -->
+            <div class="mb-4 p-3 bg-white rounded-lg border-2">
+                <label class="block text-sm font-bold text-gray-700 mb-2">Berechtigungen:</label>
+                <div class="flex gap-3">
+                    <label class="flex-1 flex items-center gap-2 p-3 rounded cursor-pointer hover:bg-blue-50 border-2 border-gray-300">
+                        <input type="radio" name="${freigabeId}-rechte" value="lesen" checked
+                            class="w-4 h-4 text-blue-600">
+                        <div>
+                            <p class="font-semibold">👁️ Leserechte</p>
+                            <p class="text-xs text-gray-500">Nur ansehen</p>
+                        </div>
+                    </label>
+                    <label class="flex-1 flex items-center gap-2 p-3 rounded cursor-pointer hover:bg-green-50 border-2 border-gray-300">
+                        <input type="radio" name="${freigabeId}-rechte" value="bearbeiten"
+                            class="w-4 h-4 text-green-600">
+                        <div>
+                            <p class="font-semibold">✏️ Bearbeitungsrechte</p>
+                            <p class="text-xs text-gray-500">Ansehen & ändern</p>
+                        </div>
+                    </label>
+                </div>
+            </div>
+            
+            <!-- Filter-Konfiguration (nur bei "gefiltert") -->
+            <div id="${freigabeId}-filter" class="p-3 bg-white rounded-lg border-2">
+                <label class="block text-sm font-bold text-gray-700 mb-2">Filter-Kriterien:</label>
+                <p class="text-xs text-gray-600 mb-3">Wähle aus, welche Einträge sichtbar sein sollen:</p>
+                
+                <div class="space-y-3">
+                    ${renderFilterOption(freigabeId, 'fuerPersonen', '🎁 FÜR Person(en)', 'Nur Geschenke FÜR diese Person(en) anzeigen')}
+                    ${renderFilterOption(freigabeId, 'vonPersonen', '🎀 VON Person(en)', 'Nur Geschenke VON diese Person(en) anzeigen')}
+                    ${renderFilterOption(freigabeId, 'beteiligungPersonen', '👥 BETEILIGUNG Person(en)', 'Nur Geschenke mit Beteiligung dieser Person(en)')}
+                    ${renderFilterOption(freigabeId, 'bezahltVonPersonen', '💳 BEZAHLT VON Person(en)', 'Nur Geschenke die von diesen Person(en) bezahlt wurden')}
+                    ${renderFilterOption(freigabeId, 'sollBezahlungKonten', '💰 SOLL-Bezahlung Konto(en)', 'Nur Geschenke mit diesen SOLL-Bezahlarten')}
+                    ${renderFilterOption(freigabeId, 'istBezahlungKonten', '✅ IST-Bezahlung Konto(en)', 'Nur Geschenke mit diesen IST-Bezahlarten')}
+                    ${renderFilterOption(freigabeId, 'bezahlungKonten', '🏦 Bezahlung Konto(en) (SOLL ODER IST)', 'Geschenke wo Konto bei SOLL ODER IST vorkommt')}
+                    ${renderFilterOption(freigabeId, 'spezifischeIds', '🔖 Spezifische Einträge', 'Bestimmte Einträge per ID auswählen')}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.appendChild(freigabeDiv);
+};
+
+function renderFilterOption(freigabeId, filterType, label, description) {
     return `
-        <label class="flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-blue-100 transition ${isEnabled ? 'bg-blue-200' : 'bg-white'} border">
-            <input type="checkbox" 
-                id="filter-${themaId}-${filterType}" 
-                data-thema="${themaId}"
-                data-filter="${filterType}"
-                onchange="window.toggleFilterType('${themaId}', '${filterType}')"
-                ${isEnabled ? 'checked' : ''}
-                class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
-            <span class="text-xs font-semibold">${label}</span>
-        </label>
+        <div class="border rounded-lg p-2 hover:bg-blue-50">
+            <label class="flex items-start gap-2 cursor-pointer">
+                <input type="checkbox" 
+                    id="${freigabeId}-filter-${filterType}" 
+                    onchange="window.toggleFilterDetails('${freigabeId}', '${filterType}')"
+                    class="w-4 h-4 text-blue-600 rounded mt-1">
+                <div class="flex-1">
+                    <p class="font-semibold text-sm">${label}</p>
+                    <p class="text-xs text-gray-500">${description}</p>
+                    <div id="${freigabeId}-filter-${filterType}-details" class="hidden mt-2">
+                        <!-- Wird dynamisch befüllt -->
+                    </div>
+                </div>
+            </label>
+        </div>
     `;
 }
 
-window.toggleThemaFreigabe = function(themaId) {
-    const checkbox = document.getElementById(`freigabe-thema-${themaId}`);
-    const filterContainer = document.getElementById(`filter-${themaId}`);
+window.updateFreigabeTypOptions = function(freigabeId) {
+    const themaSelect = document.getElementById(`${freigabeId}-thema`);
+    const configDiv = document.getElementById(`${freigabeId}-config`);
     
-    if (checkbox && filterContainer) {
-        if (checkbox.checked) {
-            filterContainer.classList.remove('hidden', 'opacity-50', 'pointer-events-none');
+    if (themaSelect && themaSelect.value) {
+        configDiv?.classList.remove('hidden');
+        window.updateFreigabeConfig(freigabeId);
+    } else {
+        configDiv?.classList.add('hidden');
+    }
+};
+
+window.updateFreigabeConfig = function(freigabeId) {
+    const typRadios = document.getElementsByName(`${freigabeId}-typ`);
+    const selectedTyp = Array.from(typRadios).find(r => r.checked)?.value;
+    const filterDiv = document.getElementById(`${freigabeId}-filter`);
+    
+    if (filterDiv) {
+        if (selectedTyp === 'komplett') {
+            filterDiv.style.display = 'none';
         } else {
-            filterContainer.classList.add('hidden', 'opacity-50', 'pointer-events-none');
+            filterDiv.style.display = 'block';
         }
     }
 };
 
-window.toggleFilterType = function(themaId, filterType) {
-    const checkbox = document.getElementById(`filter-${themaId}-${filterType}`);
-    const detailsContainer = document.getElementById(`filter-details-${themaId}`);
+window.toggleFilterDetails = function(freigabeId, filterType) {
+    const checkbox = document.getElementById(`${freigabeId}-filter-${filterType}`);
+    const detailsDiv = document.getElementById(`${freigabeId}-filter-${filterType}-details`);
     
-    if (!checkbox || !detailsContainer) return;
+    if (!checkbox || !detailsDiv) return;
     
     if (checkbox.checked) {
-        // Zeige Detail-Auswahl für diesen Filter
-        const detailId = `filter-detail-${themaId}-${filterType}`;
-        
-        // Entferne existierenden Detail-Container falls vorhanden
-        const existing = document.getElementById(detailId);
-        if (existing) existing.remove();
-        
-        const detailDiv = document.createElement('div');
-        detailDiv.id = detailId;
-        detailDiv.className = 'p-3 bg-white border-2 border-blue-300 rounded-lg';
-        detailDiv.innerHTML = renderFilterDetails(themaId, filterType);
-        detailsContainer.appendChild(detailDiv);
+        detailsDiv.classList.remove('hidden');
+        detailsDiv.innerHTML = renderFilterDetailsContent(freigabeId, filterType);
     } else {
-        // Entferne Detail-Auswahl
-        const detailDiv = document.getElementById(`filter-detail-${themaId}-${filterType}`);
-        if (detailDiv) detailDiv.remove();
+        detailsDiv.classList.add('hidden');
+        detailsDiv.innerHTML = '';
     }
 };
 
-function renderFilterDetails(themaId, filterType) {
-    const thema = THEMEN[themaId];
-    if (!thema) return '';
+function renderFilterDetailsContent(freigabeId, filterType) {
+    const themaSelectEl = document.getElementById(`${freigabeId}-thema`);
+    const themaId = themaSelectEl?.value;
+    
+    if (!themaId) return '<p class="text-xs text-gray-500">Bitte wähle zuerst ein Thema aus</p>';
     
     let options = [];
-    let title = '';
     
-    switch (filterType) {
-        case 'fuer':
-        case 'von':
-        case 'bezahltVon':
-        case 'beteiligung':
-            title = filterType === 'fuer' ? 'FÜR (Empfänger)' : 
-                    filterType === 'von' ? 'VON (Schenker)' : 
-                    filterType === 'bezahltVon' ? 'Bezahlt von' : 'Beteiligung';
-            options = Object.values(KONTAKTE).map(k => ({ value: k.id, label: k.name }));
-            break;
-        case 'ids':
-            title = 'Spezifische Eintrags-IDs';
-            return `
-                <p class="text-sm font-bold text-gray-700 mb-2">${title}</p>
-                <input type="text" 
-                    id="filter-value-${themaId}-${filterType}" 
-                    placeholder="IDs kommagetrennt eingeben (z.B. abc123, def456)"
-                    class="w-full p-2 border-2 border-gray-300 rounded-lg text-sm">
-                <p class="text-xs text-gray-500 mt-1">Nur diese spezifischen Einträge werden sichtbar sein.</p>
-            `;
-        case 'sollBezahlung':
-        case 'istBezahlung':
-            title = filterType === 'sollBezahlung' ? 'SOLL-Bezahlung' : 'IST-Bezahlung';
-            options = Object.entries(ZAHLUNGSARTEN).map(([k, v]) => ({ value: k, label: v.label }));
-            break;
-        case 'standort':
-            title = 'Geschenke-Standort';
-            const standorte = [...geschenkeSettings.geschenkeStandorte, ...geschenkeSettings.customGeschenkeStandorte];
-            options = standorte.map(s => ({ value: s, label: s }));
-            break;
+    // Bestimme Optionen basierend auf Filter-Typ
+    if (filterType === 'fuerPersonen' || filterType === 'vonPersonen' || 
+        filterType === 'beteiligungPersonen' || filterType === 'bezahltVonPersonen') {
+        options = Object.values(KONTAKTE).map(k => ({ value: k.id, label: k.name }));
+    } else if (filterType === 'sollBezahlungKonten' || filterType === 'istBezahlungKonten' || filterType === 'bezahlungKonten') {
+        options = Object.entries(ZAHLUNGSARTEN).map(([k, v]) => ({ value: k, label: v.label }));
+    } else if (filterType === 'spezifischeIds') {
+        // Lade Einträge aus dem Thema
+        return `
+            <p class="text-xs text-gray-600 mb-2">Einträge auswählen oder IDs eingeben:</p>
+            <div class="max-h-40 overflow-y-auto border rounded p-2 mb-2">
+                <p class="text-xs text-gray-500 italic">Einträge werden geladen...</p>
+            </div>
+            <input type="text" 
+                id="${freigabeId}-filter-${filterType}-input" 
+                placeholder="Oder IDs kommagetrennt: abc123, def456"
+                class="w-full p-2 border rounded text-xs">
+        `;
     }
     
-    if (options.length === 0 && filterType !== 'ids') {
-        return `<p class="text-sm text-gray-500">Keine Optionen verfügbar für ${title}</p>`;
+    if (options.length === 0) {
+        return '<p class="text-xs text-gray-500">Keine Optionen verfügbar</p>';
     }
     
     return `
-        <p class="text-sm font-bold text-gray-700 mb-2">${title} - Auswahl:</p>
-        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-2 bg-gray-50 rounded">
+        <div class="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 bg-gray-50 rounded">
             ${options.map(opt => `
-                <label class="flex items-center gap-2 p-1 hover:bg-blue-50 rounded cursor-pointer">
+                <label class="flex items-center gap-2 p-1 hover:bg-blue-100 rounded cursor-pointer text-xs">
                     <input type="checkbox" 
-                        name="filter-value-${themaId}-${filterType}" 
+                        name="${freigabeId}-filter-${filterType}-values" 
                         value="${opt.value}"
-                        class="w-4 h-4 text-blue-600 rounded">
-                    <span class="text-xs">${opt.label}</span>
+                        class="w-3 h-3 text-blue-600 rounded">
+                    <span>${opt.label}</span>
                 </label>
             `).join('')}
         </div>
-        <p class="text-xs text-gray-500 mt-1">Wähle die Werte aus, die sichtbar sein sollen.</p>
     `;
 }
 
-window.saveFreigaben = async function(userId) {
-    const themenCheckboxes = document.querySelectorAll('[id^="freigabe-thema-"]');
-    const freigabenData = [];
+window.removeFreigabe = function(freigabeId) {
+    const freigabeDiv = document.getElementById(freigabeId);
+    if (freigabeDiv && confirm('Diese Freigabe-Konfiguration entfernen?')) {
+        freigabeDiv.remove();
+    }
+};
+
+// ========================================
+// EINLADUNGSSYSTEM
+// ========================================
+
+window.sendFreigabeEinladungen = async function(userId) {
+    const user = USERS[userId];
+    if (!user) return;
     
-    themenCheckboxes.forEach(checkbox => {
-        if (checkbox.checked) {
-            const themaId = checkbox.id.replace('freigabe-thema-', '');
-            const thema = THEMEN[themaId];
+    // Sammle alle konfigurierten Freigaben
+    const freigabenConfigs = [];
+    const freigabenDivs = document.querySelectorAll('[id^="freigabe-"]');
+    
+    freigabenDivs.forEach(div => {
+        const freigabeId = div.id;
+        const themaSelect = document.getElementById(`${freigabeId}-thema`);
+        const themaId = themaSelect?.value;
+        
+        if (!themaId) return; // Keine Thema ausgewählt
+        
+        const thema = THEMEN[themaId];
+        if (!thema) return;
+        
+        // Freigabe-Typ
+        const typRadios = document.getElementsByName(`${freigabeId}-typ`);
+        const freigabeTyp = Array.from(typRadios).find(r => r.checked)?.value || 'gefiltert';
+        
+        // Rechte
+        const rechteRadios = document.getElementsByName(`${freigabeId}-rechte`);
+        const rechte = Array.from(rechteRadios).find(r => r.checked)?.value || 'lesen';
+        
+        // Filter (nur wenn "gefiltert")
+        const filter = {};
+        if (freigabeTyp === 'gefiltert') {
+            const filterTypes = ['fuerPersonen', 'vonPersonen', 'beteiligungPersonen', 'bezahltVonPersonen',
+                                'sollBezahlungKonten', 'istBezahlungKonten', 'bezahlungKonten', 'spezifischeIds'];
             
-            // Sammle alle aktivierten Filter
-            const filter = {};
-            const filterCheckboxes = document.querySelectorAll(`[data-thema="${themaId}"][data-filter]:checked`);
-            
-            filterCheckboxes.forEach(filterCb => {
-                const filterType = filterCb.dataset.filter;
-                
-                if (filterType === 'ids') {
-                    const idsInput = document.getElementById(`filter-value-${themaId}-${filterType}`);
-                    if (idsInput && idsInput.value.trim()) {
-                        filter[filterType] = idsInput.value.split(',').map(id => id.trim()).filter(id => id);
-                    }
-                } else {
-                    const selectedValues = Array.from(document.querySelectorAll(`input[name="filter-value-${themaId}-${filterType}"]:checked`))
-                        .map(cb => cb.value);
-                    if (selectedValues.length > 0) {
-                        filter[filterType] = selectedValues;
+            filterTypes.forEach(filterType => {
+                const checkbox = document.getElementById(`${freigabeId}-filter-${filterType}`);
+                if (checkbox && checkbox.checked) {
+                    if (filterType === 'spezifischeIds') {
+                        const input = document.getElementById(`${freigabeId}-filter-${filterType}-input`);
+                        if (input && input.value.trim()) {
+                            filter[filterType] = input.value.split(',').map(id => id.trim()).filter(id => id);
+                        }
+                    } else {
+                        const selectedValues = Array.from(document.querySelectorAll(`input[name="${freigabeId}-filter-${filterType}-values"]:checked`))
+                            .map(cb => cb.value);
+                        if (selectedValues.length > 0) {
+                            filter[filterType] = selectedValues;
+                        }
                     }
                 }
             });
-            
-            freigabenData.push({
-                themaId,
-                themaName: thema.name,
-                filter
-            });
         }
+        
+        freigabenConfigs.push({
+            themaId,
+            themaName: thema.name,
+            freigabeTyp,
+            rechte,
+            filter
+        });
     });
     
+    if (freigabenConfigs.length === 0) {
+        alertUser('Bitte konfiguriere mindestens eine Freigabe', 'warning');
+        return;
+    }
+    
     try {
-        // Lösche alte Freigaben für diesen Benutzer
-        const oldFreigaben = Object.values(FREIGABEN).filter(f => f.userId === userId);
-        for (const old of oldFreigaben) {
-            await deleteDoc(doc(geschenkeFreigabenRef, old.id));
+        // Erstelle Einladungen für jede Freigabe
+        for (const config of freigabenConfigs) {
+            // Prüfe ob bereits eine Einladung für dieses Thema existiert
+            const existingEinladung = Object.values(EINLADUNGEN).find(e =>
+                e.empfaengerId === userId &&
+                e.absenderId === currentUser.odooUserId &&
+                e.themaId === config.themaId &&
+                e.status === 'pending'
+            );
+            
+            if (existingEinladung) {
+                // Update existierende Einladung
+                await updateDoc(doc(geschenkeEinladungenRef, existingEinladung.id), {
+                    freigabeTyp: config.freigabeTyp,
+                    rechte: config.rechte,
+                    filter: config.filter,
+                    aktualisiertAm: serverTimestamp()
+                });
+            } else {
+                // Erstelle neue Einladung
+                await addDoc(geschenkeEinladungenRef, {
+                    absenderId: currentUser.odooUserId,
+                    absenderName: currentUser.displayName,
+                    empfaengerId: userId,
+                    empfaengerName: user.displayName || user.name,
+                    themaId: config.themaId,
+                    themaName: config.themaName,
+                    freigabeTyp: config.freigabeTyp,
+                    rechte: config.rechte,
+                    filter: config.filter,
+                    status: 'pending',
+                    erstelltAm: serverTimestamp()
+                });
+            }
         }
         
-        // Erstelle neue Freigaben
-        for (const freigabeData of freigabenData) {
-            await addDoc(geschenkeFreigabenRef, {
-                userId,
-                userName: USERS[userId]?.displayName || '',
-                themaId: freigabeData.themaId,
-                themaName: freigabeData.themaName,
-                filter: freigabeData.filter,
-                aktiv: true,
-                erstelltAm: serverTimestamp(),
-                erstelltVon: currentUser.displayName
-            });
-        }
-        
-        await loadFreigaben();
-        alertUser('Freigaben erfolgreich gespeichert!', 'success');
+        await loadEinladungen();
+        alertUser(`📧 ${freigabenConfigs.length} Einladung(en) erfolgreich gesendet!`, 'success');
         window.closeFreigabeEditor();
         renderFreigabenVerwaltung();
     } catch (e) {
-        console.error('Fehler beim Speichern der Freigaben:', e);
-        alertUser('Fehler beim Speichern: ' + e.message, 'error');
+        console.error('Fehler beim Senden der Einladungen:', e);
+        alertUser('Fehler: ' + e.message, 'error');
+    }
+};
+
+// Freigabe löschen
+window.deleteFreigabe = async function(freigabeId) {
+    if (!confirm('Diese Freigabe wirklich entfernen?')) return;
+    
+    try {
+        await deleteDoc(doc(geschenkeFreigabenRef, freigabeId));
+        await loadFreigaben();
+        alertUser('Freigabe entfernt!', 'success');
+        renderFreigabenVerwaltung();
+    } catch (e) {
+        alertUser('Fehler: ' + e.message, 'error');
     }
 };
 
@@ -1869,47 +2072,72 @@ function showPendingInvitationsModal(invitations) {
     modal.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]';
     modal.innerHTML = `
         <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 max-h-[80vh] overflow-hidden">
-            <div class="bg-gradient-to-r from-pink-500 to-purple-600 p-4 text-white">
-                <h2 class="text-xl font-bold">📨 Ausstehende Einladungen</h2>
-                <p class="text-sm opacity-90">Du hast ${invitations.length} neue Freigabe-Anfrage(n)</p>
+            <div class="bg-gradient-to-r from-green-500 to-blue-600 p-4 text-white">
+                <h2 class="text-2xl font-bold">📨 Neue Einladungen!</h2>
+                <p class="text-sm text-white/90 mt-1">Du hast ${invitations.length} ausstehende Einladung${invitations.length !== 1 ? 'en' : ''}</p>
             </div>
-            <div class="p-4 max-h-[60vh] overflow-y-auto space-y-4">
-                ${invitations.map(inv => `
-                    <div class="border rounded-xl p-4 bg-gray-50">
-                        <div class="flex items-center gap-3 mb-3">
-                            <div class="w-10 h-10 rounded-full bg-pink-500 flex items-center justify-center text-white font-bold">
-                                ${(inv.absenderName || 'U').charAt(0).toUpperCase()}
+            <div class="p-4 max-h-[60vh] overflow-y-auto space-y-3">
+                ${invitations.map(inv => {
+                    const filterCount = inv.filter ? Object.keys(inv.filter).length : 0;
+                    return `
+                        <div class="border-2 border-blue-200 rounded-xl p-4 bg-gradient-to-br from-blue-50 to-purple-50">
+                            <div class="flex items-center gap-3 mb-3">
+                                <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
+                                    ${(inv.absenderName || 'U').charAt(0).toUpperCase()}
+                                </div>
+                                <div class="flex-1">
+                                    <p class="font-bold text-lg">${inv.absenderName || 'Unbekannt'}</p>
+                                    <p class="text-sm text-gray-600">möchte ein Thema mit dir teilen</p>
+                                </div>
                             </div>
-                            <div>
-                                <p class="font-bold">${inv.absenderName || 'Unbekannt'}</p>
-                                <p class="text-xs text-gray-500">möchte Thema "${inv.themaName || 'Unbekannt'}" mit dir teilen</p>
+                            
+                            <div class="bg-white rounded-lg p-3 mb-3">
+                                <p class="text-sm font-bold text-gray-700 mb-2">📁 Thema: <span class="text-blue-600">${inv.themaName || 'Unbekannt'}</span></p>
+                                <div class="flex items-center gap-4 text-xs">
+                                    <span class="px-2 py-1 rounded ${inv.freigabeTyp === 'komplett' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}">
+                                        ${inv.freigabeTyp === 'komplett' ? '📂 Komplett' : `🔍 Gefiltert (${filterCount} Filter)`}
+                                    </span>
+                                    <span class="px-2 py-1 rounded ${inv.rechte === 'lesen' ? 'bg-gray-100 text-gray-800' : 'bg-yellow-100 text-yellow-800'}">
+                                        ${inv.rechte === 'lesen' ? '👁️ Leserechte' : '✏️ Bearbeitungsrechte'}
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            ${inv.freigabeTyp === 'gefiltert' && filterCount > 0 ? `
+                                <div class="bg-white rounded-lg p-3 mb-3">
+                                    <p class="text-xs font-bold text-gray-700 mb-2">🔍 Sichtbare Einträge:</p>
+                                    <div class="grid grid-cols-2 gap-1 text-xs">
+                                        ${inv.filter.fuerPersonen ? `<span class="text-blue-700">• FÜR ${inv.filter.fuerPersonen.length} Person(en)</span>` : ''}
+                                        ${inv.filter.vonPersonen ? `<span class="text-purple-700">• VON ${inv.filter.vonPersonen.length} Person(en)</span>` : ''}
+                                        ${inv.filter.beteiligungPersonen ? `<span class="text-green-700">• BETEILIGUNG ${inv.filter.beteiligungPersonen.length} Person(en)</span>` : ''}
+                                        ${inv.filter.bezahltVonPersonen ? `<span class="text-orange-700">• BEZAHLT VON ${inv.filter.bezahltVonPersonen.length} Person(en)</span>` : ''}
+                                        ${inv.filter.sollBezahlungKonten ? `<span class="text-cyan-700">• SOLL-Konto ${inv.filter.sollBezahlungKonten.length}x</span>` : ''}
+                                        ${inv.filter.istBezahlungKonten ? `<span class="text-teal-700">• IST-Konto ${inv.filter.istBezahlungKonten.length}x</span>` : ''}
+                                        ${inv.filter.bezahlungKonten ? `<span class="text-indigo-700">• Konto (SOLL/IST) ${inv.filter.bezahlungKonten.length}x</span>` : ''}
+                                        ${inv.filter.spezifischeIds ? `<span class="text-pink-700">• ${inv.filter.spezifischeIds.length} spez. Einträge</span>` : ''}
+                                    </div>
+                                </div>
+                            ` : ''}
+                            
+                            <div class="flex gap-2">
+                                <button onclick="window.acceptGeschenkeInvitation('${inv.id}')" 
+                                    class="flex-1 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-bold hover:shadow-lg transition flex items-center justify-center gap-2">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Annehmen
+                                </button>
+                                <button onclick="window.declineGeschenkeInvitation('${inv.id}')" 
+                                    class="flex-1 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg font-bold hover:shadow-lg transition flex items-center justify-center gap-2">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    Ablehnen
+                                </button>
                             </div>
                         </div>
-                        <div class="text-sm text-gray-600 mb-3">
-                            <p><strong>Freigaben:</strong></p>
-                            <ul class="list-disc list-inside text-xs">
-                                ${inv.freigaben?.fuer ? '<li>FÜR-Einträge sichtbar</li>' : ''}
-                                ${inv.freigaben?.von ? '<li>VON-Einträge sichtbar</li>' : ''}
-                                ${inv.freigaben?.id ? '<li>IDs sichtbar</li>' : ''}
-                                ${inv.freigaben?.bezahltVon ? '<li>Bezahlt von sichtbar</li>' : ''}
-                                ${inv.freigaben?.beteiligung ? '<li>Beteiligungen sichtbar</li>' : ''}
-                                ${inv.freigaben?.sollBezahlung ? '<li>SOLL-Bezahlung sichtbar</li>' : ''}
-                                ${inv.freigaben?.istBezahlung ? '<li>IST-Bezahlung sichtbar</li>' : ''}
-                                ${inv.freigaben?.standort ? '<li>Standort sichtbar</li>' : ''}
-                            </ul>
-                        </div>
-                        <div class="flex gap-2">
-                            <button onclick="window.acceptInvitation('${inv.id}')" 
-                                class="flex-1 py-2 bg-green-500 text-white rounded-lg font-bold hover:bg-green-600 transition">
-                                ✅ Annehmen
-                            </button>
-                            <button onclick="window.declineInvitation('${inv.id}')" 
-                                class="flex-1 py-2 bg-red-500 text-white rounded-lg font-bold hover:bg-red-600 transition">
-                                ❌ Ablehnen
-                            </button>
-                        </div>
-                    </div>
-                `).join('')}
+                    `;
+                }).join('')}
             </div>
             <div class="p-4 border-t">
                 <button onclick="document.getElementById('gm-einladungen-modal').remove()" 
@@ -1922,7 +2150,8 @@ function showPendingInvitationsModal(invitations) {
     document.body.appendChild(modal);
 }
 
-window.acceptInvitation = async function(invitationId) {
+// Einladung annehmen (NEUES SYSTEM)
+window.acceptGeschenkeInvitation = async function(invitationId) {
     try {
         const invitation = EINLADUNGEN[invitationId];
         if (!invitation) return;
@@ -1933,33 +2162,38 @@ window.acceptInvitation = async function(invitationId) {
             akzeptiertAm: serverTimestamp()
         });
         
-        // Freigabe erstellen
+        // Freigabe erstellen mit NEUEM Datenmodell
         const freigabeData = {
-            odooUserId: currentUser.odooUserId,
-            displayName: currentUser.displayName,
+            userId: currentUser.odooUserId,
+            userName: currentUser.displayName,
             themaId: invitation.themaId,
             themaName: invitation.themaName,
-            freigaben: invitation.freigaben,
+            freigabeTyp: invitation.freigabeTyp,
+            rechte: invitation.rechte,
+            filter: invitation.filter || {},
+            einladungId: invitationId,
             freigegebenVon: invitation.absenderId,
             freigegebenVonName: invitation.absenderName,
-            erstelltAm: serverTimestamp(),
-            aktiv: true
+            aktiv: true,
+            erstelltAm: serverTimestamp()
         };
         await addDoc(geschenkeFreigabenRef, freigabeData);
         
         EINLADUNGEN[invitationId].status = 'accepted';
-        alertUser('Einladung angenommen! Du kannst jetzt auf das geteilte Thema zugreifen.', 'success');
+        alertUser('✅ Einladung angenommen! Du kannst jetzt auf das Thema zugreifen.', 'success');
         
         document.getElementById('gm-einladungen-modal')?.remove();
         await loadFreigaben();
         renderDashboard();
     } catch (e) {
+        console.error('Fehler beim Annehmen:', e);
         alertUser('Fehler: ' + e.message, 'error');
     }
 };
 
-window.declineInvitation = async function(invitationId) {
-    if (!confirm('Einladung wirklich ablehnen? Der Absender kann dich erst wieder einladen, wenn du die Ablehnung zurücknimmst.')) return;
+// Einladung ablehnen
+window.declineGeschenkeInvitation = async function(invitationId) {
+    if (!confirm('Einladung wirklich ablehnen?\n\nDer Absender kann dich erst wieder einladen, wenn du die Ablehnung in deinen Einstellungen widerrufst.')) return;
     
     try {
         await updateDoc(doc(geschenkeEinladungenRef, invitationId), {
@@ -1968,27 +2202,88 @@ window.declineInvitation = async function(invitationId) {
         });
         
         EINLADUNGEN[invitationId].status = 'declined';
-        alertUser('Einladung abgelehnt.', 'info');
+        alertUser('❌ Einladung abgelehnt. Du kannst die Ablehnung in deinen Einstellungen widerrufen.', 'info');
         
         document.getElementById('gm-einladungen-modal')?.remove();
         checkPendingInvitations();
     } catch (e) {
+        console.error('Fehler beim Ablehnen:', e);
         alertUser('Fehler: ' + e.message, 'error');
     }
 };
 
-window.revokeDecline = async function(invitationId) {
+// Ablehnung widerrufen
+window.revokeDeclinedInvitation = async function(invitationId) {
+    if (!confirm('Möchtest du deine Ablehnung wirklich widerrufen?\n\nDer Absender kann dir dann wieder neue Einladungen senden.')) return;
+    
     try {
-        await updateDoc(doc(geschenkeEinladungenRef, invitationId), {
-            status: 'revoked',
-            widerrufenAm: serverTimestamp()
-        });
+        // Lösche die abgelehnte Einladung komplett
+        await deleteDoc(doc(geschenkeEinladungenRef, invitationId));
+        delete EINLADUNGEN[invitationId];
         
-        EINLADUNGEN[invitationId].status = 'revoked';
-        alertUser('Ablehnung zurückgenommen. Der Absender kann dich jetzt erneut einladen.', 'success');
+        alertUser('✅ Ablehnung widerrufen. Der Absender kann dich nun wieder einladen.', 'success');
+        await loadEinladungen();
+        renderFreigabenVerwaltung();
     } catch (e) {
+        console.error('Fehler beim Widerruf:', e);
         alertUser('Fehler: ' + e.message, 'error');
     }
+};
+
+// Zeige abgelehnte Einladungen in Einstellungen
+window.showDeclinedInvitations = function() {
+    const declinedInvitations = Object.values(EINLADUNGEN).filter(e => 
+        e.empfaengerId === currentUser?.odooUserId && e.status === 'declined'
+    );
+    
+    if (declinedInvitations.length === 0) {
+        alertUser('Du hast keine abgelehnten Einladungen.', 'info');
+        return;
+    }
+    
+    let modal = document.getElementById('declined-invitations-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'declined-invitations-modal';
+        modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4';
+        document.body.appendChild(modal);
+    }
+    
+    modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            <div class="bg-gradient-to-r from-red-500 to-orange-600 p-4 text-white">
+                <h2 class="text-2xl font-bold">❌ Abgelehnte Einladungen</h2>
+                <p class="text-sm text-white/90 mt-1">Du kannst Ablehnungen widerrufen</p>
+            </div>
+            <div class="p-4 max-h-[60vh] overflow-y-auto space-y-3">
+                ${declinedInvitations.map(inv => `
+                    <div class="border-2 border-red-200 rounded-lg p-4 bg-red-50">
+                        <div class="flex items-center justify-between mb-2">
+                            <div>
+                                <p class="font-bold text-lg">${inv.absenderName || 'Unbekannt'}</p>
+                                <p class="text-sm text-gray-600">Thema: ${inv.themaName || 'Unbekannt'}</p>
+                            </div>
+                            <span class="px-3 py-1 bg-red-200 text-red-800 rounded-full text-xs font-bold">
+                                Abgelehnt am ${inv.abgelehntAm ? new Date(inv.abgelehntAm.toDate()).toLocaleDateString('de-DE') : '-'}
+                            </span>
+                        </div>
+                        <button onclick="window.revokeDeclinedInvitation('${inv.id}')" 
+                            class="w-full mt-2 py-2 bg-gradient-to-r from-blue-500 to-green-500 text-white rounded-lg font-bold hover:shadow-lg transition">
+                            🔄 Ablehnung widerrufen
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="p-4 border-t">
+                <button onclick="document.getElementById('declined-invitations-modal').remove()" 
+                    class="w-full py-2 bg-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-400 transition">
+                    Schließen
+                </button>
+            </div>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
 };
 
 window.endSharing = async function(freigabeId) {

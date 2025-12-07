@@ -2509,7 +2509,12 @@
                         
                         <!-- Freigaben Tab -->
                         <div id="gm-tab-freigaben" class="gm-settings-content hidden">
-                            <h4 class="font-bold text-gray-800 mb-2">Freigabemanagement</h4>
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="font-bold text-gray-800">Freigabemanagement</h4>
+                                <button onclick="window.showDeclinedInvitations()" class="text-xs bg-red-500 text-white px-3 py-1.5 rounded-lg hover:bg-red-600 transition font-bold">
+                                    ❌ Abgelehnte Einladungen
+                                </button>
+                            </div>
                             <p class="text-xs text-gray-600 mb-4">Steuere, welche registrierten Personen welche Themen und Einträge sehen können.</p>
                             <div id="gm-freigaben-list" class="space-y-3 max-h-96 overflow-y-auto">
                                 <p class="text-gray-500 text-center py-4">Lade Freigaben...</p>
