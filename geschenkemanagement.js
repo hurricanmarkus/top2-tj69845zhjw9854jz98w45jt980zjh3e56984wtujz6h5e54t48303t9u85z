@@ -631,16 +631,16 @@ function openCreateModal() {
 // Aktions-Buttons im Modal ein-/ausblenden
 function updateModalActionButtons(showActions, showVorlageButton = false) {
     const actionsContainer = document.getElementById('gm-modal-actions');
+    const vorlageButton = document.getElementById('gm-btn-vorlage-laden');
+    
+    // Bearbeitungs-Buttons (Kopieren, Vorlage speichern, Löschen)
     if (actionsContainer) {
         actionsContainer.style.display = showActions ? 'flex' : 'none';
     }
     
     // "Vorlage laden" Button nur bei neuem Eintrag anzeigen
-    const vorlageButtons = actionsContainer?.querySelectorAll('button[onclick*="openVorlagenModal"]');
-    if (vorlageButtons) {
-        vorlageButtons.forEach(btn => {
-            btn.style.display = showVorlageButton ? 'inline-flex' : 'none';
-        });
+    if (vorlageButton) {
+        vorlageButton.style.display = showVorlageButton ? 'inline-flex' : 'none';
     }
 }
 
