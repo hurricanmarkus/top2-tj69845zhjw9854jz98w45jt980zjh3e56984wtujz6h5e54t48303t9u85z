@@ -22,6 +22,7 @@ import { initializeWertguthaben, listenForWertguthaben } from './wertguthaben.js
 import { initializeVertragsverwaltung, listenForVertraege } from './vertragsverwaltung.js';
 import { initRezeptverwaltung } from './rezeptverwaltung.js';
 import { initializeHaushaltszahlungen, listenForHaushaltszahlungen } from './haushaltszahlungen.js';
+import { initializeGeschenkemanagement, listenForGeschenke } from './geschenkemanagement.js';
 // // ENDE-ZIKA //
 
 
@@ -111,7 +112,8 @@ export const views = {
     wertguthabenSettings: { id: 'wertguthabenSettingsView' },
     vertragsverwaltung: { id: 'vertragsverwaltungView' },
     rezepte: { id: 'rezepteView' },
-    haushaltszahlungen: { id: 'haushaltszahlungenView' }
+    haushaltszahlungen: { id: 'haushaltszahlungenView' },
+    geschenkemanagement: { id: 'geschenkemanagementView' }
 };
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
 
@@ -728,6 +730,10 @@ export function navigate(targetViewName) {
     if (targetViewName === 'haushaltszahlungen') {
         initializeHaushaltszahlungen();
     }
+
+    if (targetViewName === 'geschenkemanagement') {
+        initializeGeschenkemanagement();
+    }
 }
 
 
@@ -804,6 +810,9 @@ export function setupEventListeners() {
 
     const haushaltszahlungenCard = document.getElementById('haushaltszahlungenCard');
     if (haushaltszahlungenCard) haushaltszahlungenCard.addEventListener('click', () => navigate('haushaltszahlungen'));
+
+    const geschenkemanagementCard = document.getElementById('geschenkemanagementCard');
+    if (geschenkemanagementCard) geschenkemanagementCard.addEventListener('click', () => navigate('geschenkemanagement'));
 
     // --- Modals (Login, Archived Lists etc.) ---
     const cancelSelectionButton = document.getElementById('cancelSelectionButton');

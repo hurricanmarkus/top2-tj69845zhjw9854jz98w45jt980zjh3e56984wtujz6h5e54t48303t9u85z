@@ -167,7 +167,9 @@ export function renderRoleManagement() {
         'VERTRAGSVERWALTUNG': { label: 'Vertragsverwaltung', indent: false },
         'REZEPTE': { label: 'Rezepte', indent: false },
         'HAUSHALTSZAHLUNGEN': { label: 'Haushaltszahlungen', indent: false },
-        'HAUSHALTSZAHLUNGEN_CREATE': { label: '-> Neue Zahlung anlegen', indent: true }
+        'HAUSHALTSZAHLUNGEN_CREATE': { label: '-> Neue Zahlung anlegen', indent: true },
+        'GESCHENKEMANAGEMENT': { label: 'Geschenkemanagement', indent: false },
+        'GESCHENKEMANAGEMENT_CREATE': { label: '-> Neues Geschenk anlegen', indent: true }
     };
     
     const newRolePermsContainer = document.getElementById('newRolePermissions');
@@ -175,7 +177,7 @@ export function renderRoleManagement() {
         const perm = allRolePermissions[permKey];
         const marginLeft = perm.indent ? 'pl-6' : '';
         
-        const isSubPermission = permKey.startsWith('CHECKLIST_') || permKey.startsWith('TERMINPLANER_') || permKey.startsWith('ZAHLUNGSVERWALTUNG_') || permKey.startsWith('TICKET_SUPPORT_') || permKey.startsWith('WERTGUTHABEN_') || permKey.startsWith('HAUSHALTSZAHLUNGEN_');
+        const isSubPermission = permKey.startsWith('CHECKLIST_') || permKey.startsWith('TERMINPLANER_') || permKey.startsWith('ZAHLUNGSVERWALTUNG_') || permKey.startsWith('TICKET_SUPPORT_') || permKey.startsWith('WERTGUTHABEN_') || permKey.startsWith('HAUSHALTSZAHLUNGEN_') || permKey.startsWith('GESCHENKEMANAGEMENT_');
         const isDisabled = isSubPermission ? 'disabled' : ''; 
         
         newRolePermsContainer.innerHTML += `
@@ -199,6 +201,7 @@ export function renderRoleManagement() {
             const isTerminplanerEnabled = role.permissions?.includes('TERMINPLANER'); 
             const isZahlungsverwaltungEnabled = role.permissions?.includes('ZAHLUNGSVERWALTUNG');
             const isHaushaltszahlungenEnabled = role.permissions?.includes('HAUSHALTSZAHLUNGEN');
+            const isGeschenkemanagementEnabled = role.permissions?.includes('GESCHENKEMANAGEMENT');
             
             permissionsCheckboxesHTML = Object.keys(allRolePermissions).map(permKey => {
                 const perm = allRolePermissions[permKey];
@@ -215,6 +218,9 @@ export function renderRoleManagement() {
                     isDisabled = true;
                 }
                 if (permKey.startsWith('HAUSHALTSZAHLUNGEN_') && !isHaushaltszahlungenEnabled) {
+                    isDisabled = true;
+                }
+                if (permKey.startsWith('GESCHENKEMANAGEMENT_') && !isGeschenkemanagementEnabled) {
                     isDisabled = true;
                 }
                 
@@ -271,6 +277,7 @@ export function renderRoleManagement() {
         setupPair('TERMINPLANER', ['TERMINPLANER_CREATE']);
         setupPair('ZAHLUNGSVERWALTUNG', ['ZAHLUNGSVERWALTUNG_CREATE']);
         setupPair('HAUSHALTSZAHLUNGEN', ['HAUSHALTSZAHLUNGEN_CREATE']);
+        setupPair('GESCHENKEMANAGEMENT', ['GESCHENKEMANAGEMENT_CREATE']);
     };
 
     userRolesList.querySelectorAll('.p-3.border').forEach(card => setupCheckboxDependencies(card));
@@ -423,6 +430,7 @@ export function renderRoleManagement() {
 
                                             <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainZahlungsverwaltung"> <span>-> Zahlungsverwaltung</span></label>
                                             <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainHaushaltszahlungen"> <span>-> Haushaltszahlungen</span></label>
+                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainGeschenkemanagement"> <span>-> Geschenkemanagement</span></label>
 
                                             </div>
                                         </div>
