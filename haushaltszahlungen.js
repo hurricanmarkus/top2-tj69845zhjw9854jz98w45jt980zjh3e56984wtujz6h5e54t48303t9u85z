@@ -775,6 +775,28 @@ function berechneDashboardStats() {
     // Alarme berechnen
     const alarme = berechneAlarme();
     
+    // NEUE ZÄHLER: Status-basiert statt Typ-basiert
+    let anzahlAktiv = 0;
+    let anzahlGeplant = 0;
+    let anzahlVergangen = 0;
+    let anzahlBetragFehlt = 0;
+    
+    eintraege.forEach(eintrag => {
+        const { status } = berechneStatus(eintrag);
+        
+        if (status === 'aktiv') {
+            anzahlAktiv++;
+            // Prüfe ob Betrag fehlt (nur bei aktiven Einträgen relevant)
+            if (eintrag.betrag === null || eintrag.betrag === undefined) {
+                anzahlBetragFehlt++;
+            }
+        } else if (status === 'n-aktiv-geplant') {
+            anzahlGeplant++;
+        } else if (status === 'n-aktiv-vergangen') {
+            anzahlVergangen++;
+        }
+    });
+    
     // Einträge ohne Betrag finden (für Alarm)
     // GEÄNDERT: 0 ist ein gültiger Betrag (z.B. Gratis-Monate), nur undefined/null/'' sind Fehler
     const eintraegeOhneBetrag = eintraege.filter(eintrag => {
@@ -845,6 +867,13 @@ function berechneDashboardStats() {
             gesamt: countAktiv + countNAktiv,
             abgelaufen: countAbgelaufen,
             zukuenftig: countZukuenftig
+        },
+        // NEUE ZÄHLER für Dashboard
+        anzahlen: {
+            aktiv: anzahlAktiv,
+            geplant: anzahlGeplant,
+            vergangen: anzahlVergangen,
+            betragFehlt: anzahlBetragFehlt
         },
         summenProMonat,
         summenJaehrlich,
@@ -966,11 +995,11 @@ function renderDashboard() {
     const stats = berechneDashboardStats();
     const gesamtStatus = berechneGesamtStatus(stats);
 
-    // Zähler aktualisieren (nur aktive Einträge für Belastung/Gutschrift)
-    updateElement('hz-stat-aktiv', stats.counts.aktiv);
-    updateElement('hz-stat-belastung', formatCurrency(stats.kosten.monatlich));
-    updateElement('hz-stat-gutschrift', formatCurrency(Math.abs(stats.gesamtGutschriftMonatlich)));
-    updateElement('hz-stat-alarm', stats.alarme.length);
+    // NEUE ZÄHLER: Status-basierte Anzahlen statt Beträge
+    updateElement('hz-stat-aktiv', stats.anzahlen.aktiv);
+    updateElement('hz-stat-geplant', stats.anzahlen.geplant);
+    updateElement('hz-stat-vergangen', stats.anzahlen.vergangen);
+    updateElement('hz-stat-betrag-fehlt', stats.anzahlen.betragFehlt);
 
     // Kosten-Übersicht
     updateElement('hz-kosten-monatlich', formatCurrency(stats.kosten.monatlich));
