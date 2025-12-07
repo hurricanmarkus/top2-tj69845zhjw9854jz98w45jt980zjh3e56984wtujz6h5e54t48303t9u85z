@@ -1110,7 +1110,7 @@ function renderMitgliederBeitraege(stats) {
                         <p class="font-bold h-5 flex items-center justify-center">${formatCurrency(sollJaehrlich)}</p>
                         <p class="text-white/60 h-4 flex items-center justify-center">Jährlich</p>
                     </div>
-                    <div class="bg-white/10 rounded p-1">
+                    <div>
                         <p class="font-bold h-5 flex items-center justify-center">${formatCurrency(sollJaehrlich / 12)}</p>
                         <p class="text-white/60 h-4 flex items-center justify-center">Effektiv/M</p>
                     </div>
