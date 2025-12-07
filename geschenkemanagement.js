@@ -83,21 +83,11 @@ export const STATUS_CONFIG = {
     storniert: { label: 'Storniert', color: 'bg-gray-200 text-gray-600', icon: '❌' }
 };
 
-export const ZAHLUNGSART_SOLL = {
+// Vereinheitlichte Zahlungsarten (für SOLL und IST)
+export const ZAHLUNGSARTEN = {
     konto_weihnachten: { label: 'Konto-Weihnachten' },
     hauptkonto: { label: 'Hauptkonto' },
-    kreditkarte: { label: 'Kreditkarte' },
-    bar: { label: 'Bar' },
-    nicht_bezahlt: { label: 'Nicht bezahlt' },
-    div_bezahlung: { label: 'div. Bezahlung' },
-    haushaltskonto_giro: { label: 'Haushaltskonto - Giro' },
-    haushaltskonto_geschenk: { label: 'Haush.k. (2) - Geschenk' }
-};
-
-export const ZAHLUNGSART_IST = {
-    konto_weihnachten: { label: 'Konto-Weihnachten' },
     lastschrift_hauptkonto: { label: 'Lastschrift-Hauptkonto' },
-    hauptkonto: { label: 'Hauptkonto' },
     kreditkarte: { label: 'Kreditkarte' },
     bar: { label: 'Bar' },
     rechnung: { label: 'Rechnung' },
@@ -110,12 +100,10 @@ export const ZAHLUNGSART_IST = {
 // Standard-Einstellungen
 let geschenkeSettings = {
     statusOptionen: Object.keys(STATUS_CONFIG),
-    zahlungsartSoll: Object.keys(ZAHLUNGSART_SOLL),
-    zahlungsartIst: Object.keys(ZAHLUNGSART_IST),
+    zahlungsarten: Object.keys(ZAHLUNGSARTEN),
     geschenkeStandorte: ['zu Hause', 'Anderer Standort'],
     customStatusOptionen: [],
-    customZahlungsartSoll: [],
-    customZahlungsartIst: [],
+    customZahlungsarten: [],
     customGeschenkeStandorte: []
 };
 
@@ -254,7 +242,7 @@ async function loadFreigaben() {
 
 function updateCollectionForThema() {
     if (currentThemaId && db) {
-        geschenkeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_themen', currentThemaId, 'eintraege');
+        geschenkeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_themen', currentThemaId, 'geschenke');
         listenForGeschenke();
     }
 }
@@ -395,45 +383,87 @@ function renderPersonenUebersicht() {
         return;
     }
     
-    // Personen-Karten mit Geschenke-Status
-    let html = '<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">';
+    // Gesamtstatistik berechnen
+    const alleGeschenke = Object.values(GESCHENKE);
+    const gesamtStats = {
+        total: alleGeschenke.length,
+        fertig: alleGeschenke.filter(g => g.status === 'abgeschlossen').length
+    };
     
-    thema.personen.forEach(personId => {
+    // Personen-Daten sammeln
+    const personenDaten = thema.personen.map(personId => {
         const person = KONTAKTE[personId];
-        if (!person) return;
+        if (!person) return null;
         
-        const geschenkeFuerPerson = Object.values(GESCHENKE).filter(g => 
-            g.fuer && g.fuer.includes(personId)
-        );
-        
-        const stats = {
+        const geschenkeFuerPerson = alleGeschenke.filter(g => g.fuer && g.fuer.includes(personId));
+        return {
+            id: personId,
+            name: person.name,
             total: geschenkeFuerPerson.length,
             offen: geschenkeFuerPerson.filter(g => ['offen', 'idee', 'zu_bestellen'].includes(g.status)).length,
             bestellt: geschenkeFuerPerson.filter(g => ['bestellt', 'teillieferung'].includes(g.status)).length,
             fertig: geschenkeFuerPerson.filter(g => g.status === 'abgeschlossen').length
         };
+    }).filter(p => p !== null);
+    
+    // HTML mit ausklappbarer Übersicht
+    let html = `
+        <div class="bg-white rounded-xl shadow-md p-4 mb-4">
+            <div class="flex items-center justify-between cursor-pointer" onclick="window.togglePersonenDetails()">
+                <div class="flex items-center gap-4">
+                    <div class="text-2xl">👥</div>
+                    <div>
+                        <p class="font-bold text-gray-800 text-lg">Personen-Übersicht</p>
+                        <p class="text-sm text-gray-600">
+                            <span class="font-bold text-green-600">${gesamtStats.fertig}</span> von 
+                            <span class="font-bold">${gesamtStats.total}</span> Geschenken fertig
+                        </p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="w-32 bg-gray-200 rounded-full h-3">
+                        <div class="bg-gradient-to-r from-green-500 to-emerald-500 h-3 rounded-full transition-all" 
+                             style="width: ${gesamtStats.total > 0 ? Math.round((gesamtStats.fertig / gesamtStats.total) * 100) : 0}%"></div>
+                    </div>
+                    <span id="gm-personen-toggle-icon" class="text-gray-500 transition-transform">▼</span>
+                </div>
+            </div>
+        </div>
         
-        const progressPercent = stats.total > 0 ? Math.round((stats.fertig / stats.total) * 100) : 0;
+        <div id="gm-personen-details" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+    `;
+    
+    personenDaten.forEach(p => {
+        const progressPercent = p.total > 0 ? Math.round((p.fertig / p.total) * 100) : 0;
         
         html += `
             <div class="bg-white rounded-xl shadow-md p-4 border-l-4 border-pink-500 hover:shadow-lg transition cursor-pointer" 
-                 onclick="window.filterByPerson('${personId}')">
-                <div class="flex items-center gap-3 mb-2">
-                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white font-bold">
-                        ${person.name.charAt(0).toUpperCase()}
+                 onclick="window.filterByPerson('${p.id}')">
+                <div class="flex items-center gap-3 mb-3">
+                    <div class="w-12 h-12 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
+                        ${p.name.charAt(0).toUpperCase()}
                     </div>
                     <div class="flex-1 min-w-0">
-                        <p class="font-bold text-gray-800 truncate">${person.name}</p>
-                        <p class="text-xs text-gray-500">${stats.total} Geschenk${stats.total !== 1 ? 'e' : ''}</p>
+                        <p class="font-bold text-gray-800 text-base leading-tight" style="word-wrap: break-word; overflow-wrap: break-word;">${p.name}</p>
+                        <p class="text-sm text-gray-500">${p.fertig}/${p.total} fertig</p>
                     </div>
                 </div>
                 <div class="w-full bg-gray-200 rounded-full h-2 mb-2">
                     <div class="bg-gradient-to-r from-pink-500 to-purple-500 h-2 rounded-full transition-all" style="width: ${progressPercent}%"></div>
                 </div>
-                <div class="flex justify-between text-xs text-gray-600">
-                    <span>🔴 ${stats.offen} offen</span>
-                    <span>📦 ${stats.bestellt} bestellt</span>
-                    <span>✅ ${stats.fertig} fertig</span>
+                <div class="grid grid-cols-3 gap-1 text-xs text-center">
+                    <div class="bg-red-50 rounded p-1">
+                        <span class="font-bold text-red-600">${p.offen}</span>
+                        <span class="text-gray-500 block">offen</span>
+                    </div>
+                    <div class="bg-blue-50 rounded p-1">
+                        <span class="font-bold text-blue-600">${p.bestellt}</span>
+                        <span class="text-gray-500 block">bestellt</span>
+                    </div>
+                    <div class="bg-green-50 rounded p-1">
+                        <span class="font-bold text-green-600">${p.fertig}</span>
+                        <span class="text-gray-500 block">fertig</span>
+                    </div>
                 </div>
             </div>
         `;
@@ -443,14 +473,31 @@ function renderPersonenUebersicht() {
         <div class="bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 p-4 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition"
              onclick="window.openAddPersonToThemaModal()">
             <div class="text-center text-gray-500">
-                <span class="text-2xl">+</span>
-                <p class="text-sm font-semibold">Person hinzufügen</p>
+                <span class="text-3xl">+</span>
+                <p class="text-sm font-semibold mt-1">Person hinzufügen</p>
             </div>
         </div>
     </div>`;
     
     container.innerHTML = html;
 }
+
+// Toggle für Personen-Details
+window.togglePersonenDetails = function() {
+    const details = document.getElementById('gm-personen-details');
+    const icon = document.getElementById('gm-personen-toggle-icon');
+    if (details && icon) {
+        if (details.style.display === 'none') {
+            details.style.display = 'grid';
+            icon.textContent = '▼';
+            icon.style.transform = 'rotate(0deg)';
+        } else {
+            details.style.display = 'none';
+            icon.textContent = '▶';
+            icon.style.transform = 'rotate(0deg)';
+        }
+    }
+};
 
 function renderGeschenkeTabelle() {
     const tbody = document.getElementById('geschenke-table-body');
@@ -556,6 +603,18 @@ function updateStatElement(id, value) {
 // MODAL FUNKTIONEN
 // ========================================
 function openCreateModal() {
+    // Prüfe ob ein Thema ausgewählt ist
+    if (!currentThemaId) {
+        alertUser('Bitte erstelle zuerst ein Thema in den Einstellungen, bevor du Geschenke hinzufügst.', 'warning');
+        return;
+    }
+    
+    const thema = THEMEN[currentThemaId];
+    if (!thema?.personen || thema.personen.length === 0) {
+        alertUser('Bitte füge zuerst Personen zum Thema hinzu, bevor du Geschenke erstellst.', 'warning');
+        return;
+    }
+    
     const modal = document.getElementById('geschenkModal');
     if (!modal) return;
     
@@ -563,7 +622,16 @@ function openCreateModal() {
     document.getElementById('gm-id').value = '';
     clearModalForm();
     renderModalSelects();
+    updateModalActionButtons(false); // Keine Aktions-Buttons bei neuem Eintrag
     modal.style.display = 'flex';
+}
+
+// Aktions-Buttons im Modal ein-/ausblenden
+function updateModalActionButtons(showActions) {
+    const actionsContainer = document.getElementById('gm-modal-actions');
+    if (actionsContainer) {
+        actionsContainer.style.display = showActions ? 'flex' : 'none';
+    }
 }
 
 window.openEditGeschenkModal = function(id) {
@@ -578,6 +646,7 @@ window.openEditGeschenkModal = function(id) {
     
     fillModalForm(geschenk);
     renderModalSelects(geschenk);
+    updateModalActionButtons(true); // Aktions-Buttons bei bestehendem Eintrag anzeigen
     modal.style.display = 'flex';
 };
 
@@ -609,35 +678,25 @@ function renderModalSelects(geschenk = null) {
         ).join('');
     }
     
-    // Kontakte für FÜR, VON, Beteiligung, Bezahlt von
+    // Checkbox-basierte Personenauswahl für FÜR, VON, Beteiligung
+    renderPersonenCheckboxes('gm-fuer-checkboxes', 'gm-fuer', geschenk?.fuer || []);
+    renderPersonenCheckboxes('gm-von-checkboxes', 'gm-von', geschenk?.von || []);
+    renderPersonenCheckboxes('gm-beteiligung-checkboxes', 'gm-beteiligung', geschenk?.beteiligung || []);
+    
+    // Bezahlt von (Single Select)
     const kontakteOptions = Object.values(KONTAKTE).map(k =>
         `<option value="${k.id}">${k.name}${k.istEigenePerson ? ' (Ich)' : ''}</option>`
     ).join('');
     
-    ['gm-fuer', 'gm-von', 'gm-beteiligung'].forEach(id => {
-        const select = document.getElementById(id);
-        if (select) {
-            select.innerHTML = kontakteOptions;
-            if (geschenk) {
-                const fieldMap = { 'gm-fuer': 'fuer', 'gm-von': 'von', 'gm-beteiligung': 'beteiligung' };
-                const values = geschenk[fieldMap[id]] || [];
-                Array.from(select.options).forEach(opt => {
-                    opt.selected = values.includes(opt.value);
-                });
-            }
-        }
-    });
-    
-    // Bezahlt von (Single Select)
     const bezahltVonSelect = document.getElementById('gm-bezahlt-von');
     if (bezahltVonSelect) {
         bezahltVonSelect.innerHTML = '<option value="">-- Auswählen --</option>' + kontakteOptions;
         if (geschenk?.bezahltVon) bezahltVonSelect.value = geschenk.bezahltVon;
     }
     
-    // Zahlungsarten
-    renderZahlungsartSelect('gm-soll-bezahlung', ZAHLUNGSART_SOLL, geschenk?.sollBezahlung);
-    renderZahlungsartSelect('gm-ist-bezahlung', ZAHLUNGSART_IST, geschenk?.istBezahlung);
+    // Zahlungsarten (beide nutzen dieselbe Liste)
+    renderZahlungsartSelect('gm-soll-bezahlung', ZAHLUNGSARTEN, geschenk?.sollBezahlung);
+    renderZahlungsartSelect('gm-ist-bezahlung', ZAHLUNGSARTEN, geschenk?.istBezahlung);
     
     // Standort
     const standortSelect = document.getElementById('gm-standort');
@@ -646,6 +705,38 @@ function renderModalSelects(geschenk = null) {
         standortSelect.innerHTML = '<option value="">-- Auswählen --</option>' + 
             standorte.map(s => `<option value="${s}" ${geschenk?.standort === s ? 'selected' : ''}>${s}</option>`).join('');
     }
+}
+
+// Checkbox-basierte Personenauswahl rendern
+function renderPersonenCheckboxes(containerId, fieldName, selectedValues) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    const kontakte = Object.values(KONTAKTE).sort((a, b) => {
+        if (a.istEigenePerson) return -1;
+        if (b.istEigenePerson) return 1;
+        return a.name.localeCompare(b.name);
+    });
+    
+    container.innerHTML = kontakte.map(k => {
+        const isChecked = selectedValues.includes(k.id);
+        return `
+            <label class="flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-pink-50 transition ${isChecked ? 'bg-pink-100' : ''}">
+                <input type="checkbox" name="${fieldName}" value="${k.id}" 
+                    ${isChecked ? 'checked' : ''}
+                    class="w-4 h-4 text-pink-600 rounded focus:ring-pink-500">
+                <span class="text-sm ${k.istEigenePerson ? 'font-bold text-pink-600' : 'text-gray-700'}">
+                    ${k.name}${k.istEigenePerson ? ' (Ich)' : ''}
+                </span>
+            </label>
+        `;
+    }).join('');
+}
+
+// Checkbox-Werte auslesen
+function getCheckboxValues(fieldName) {
+    const checkboxes = document.querySelectorAll(`input[name="${fieldName}"]:checked`);
+    return Array.from(checkboxes).map(cb => cb.value);
 }
 
 function renderZahlungsartSelect(id, options, selectedValue) {
@@ -669,9 +760,9 @@ async function saveGeschenk() {
     const geschenkData = {
         geschenk: document.getElementById('gm-geschenk').value.trim(),
         status: document.getElementById('gm-status').value,
-        fuer: getMultiSelectValues('gm-fuer'),
-        von: getMultiSelectValues('gm-von'),
-        beteiligung: getMultiSelectValues('gm-beteiligung'),
+        fuer: getCheckboxValues('gm-fuer'),
+        von: getCheckboxValues('gm-von'),
+        beteiligung: getCheckboxValues('gm-beteiligung'),
         bezahltVon: document.getElementById('gm-bezahlt-von').value,
         shop: document.getElementById('gm-shop').value.trim(),
         bestellnummer: document.getElementById('gm-bestellnummer').value.trim(),
@@ -828,10 +919,8 @@ function renderFreigabenVerwaltung() {
 function renderOptionenVerwaltung() {
     // Status-Optionen
     renderOptionList('gm-status-optionen', STATUS_CONFIG, geschenkeSettings.customStatusOptionen, 'status');
-    // Zahlungsart SOLL
-    renderOptionList('gm-zahlungsart-soll-optionen', ZAHLUNGSART_SOLL, geschenkeSettings.customZahlungsartSoll, 'zahlungsartSoll');
-    // Zahlungsart IST
-    renderOptionList('gm-zahlungsart-ist-optionen', ZAHLUNGSART_IST, geschenkeSettings.customZahlungsartIst, 'zahlungsartIst');
+    // Zahlungsarten (vereinheitlicht)
+    renderOptionList('gm-zahlungsarten-optionen', ZAHLUNGSARTEN, geschenkeSettings.customZahlungsarten, 'zahlungsarten');
     // Standorte
     renderStandortList();
 }
@@ -1090,15 +1179,107 @@ window.applyVorlage = async function(vorlageId) {
     if (!vorlage) return;
     
     try {
-        const geschenkData = { ...vorlage.geschenkData };
-        geschenkData.erstelltAm = serverTimestamp();
-        geschenkData.erstelltVon = currentUser.displayName;
-        geschenkData.status = 'offen';
-        
-        await addDoc(geschenkeCollection, geschenkData);
-        alertUser('Vorlage angewendet!', 'success');
+        const newGeschenk = {
+            ...vorlage,
+            erstelltAm: serverTimestamp(),
+            erstelltVon: currentUser.displayName
+        };
+        delete newGeschenk.id;
+        await addDoc(geschenkeCollection, newGeschenk);
+        alertUser('Vorlage wurde als neues Geschenk eingefügt!', 'success');
+        closeVorlagenModal();
     } catch (e) {
         alertUser('Fehler: ' + e.message, 'error');
+    }
+};
+
+// Vorlagen-Modal öffnen
+window.openVorlagenModal = function() {
+    let modal = document.getElementById('vorlagenModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'vorlagenModal';
+        modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+        document.body.appendChild(modal);
+    }
+    
+    const vorlagenArray = Object.values(VORLAGEN);
+    
+    modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+            <div class="sticky top-0 bg-gradient-to-r from-purple-600 to-pink-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                <h3 class="text-xl font-bold">📑 Vorlagen verwalten</h3>
+                <button onclick="closeVorlagenModal()" class="text-white/80 hover:text-white transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="p-4 overflow-y-auto max-h-[60vh]">
+                ${vorlagenArray.length === 0 ? `
+                    <div class="text-center py-8 text-gray-500">
+                        <span class="text-4xl">📂</span>
+                        <p class="mt-2 font-semibold">Keine Vorlagen vorhanden</p>
+                        <p class="text-sm">Speichere ein Geschenk als Vorlage, um es hier zu sehen.</p>
+                    </div>
+                ` : `
+                    <div class="space-y-3">
+                        ${vorlagenArray.map(v => `
+                            <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:border-purple-300 transition">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex-1">
+                                        <p class="font-bold text-gray-800">${v.geschenk || 'Unbenannte Vorlage'}</p>
+                                        <p class="text-sm text-gray-500">
+                                            ${v.shop ? `🛍️ ${v.shop}` : ''}
+                                            ${v.gesamtkosten ? ` • ${formatCurrency(v.gesamtkosten)}` : ''}
+                                        </p>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <button onclick="window.applyVorlage('${v.id}')" 
+                                            class="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm font-bold">
+                                            ➕ Einfügen
+                                        </button>
+                                        <button onclick="window.deleteVorlage('${v.id}')" 
+                                            class="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm">
+                                            🗑️
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `}
+            </div>
+            
+            <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl">
+                <button onclick="closeVorlagenModal()" class="w-full px-4 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
+                    Schließen
+                </button>
+            </div>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+};
+
+function closeVorlagenModal() {
+    const modal = document.getElementById('vorlagenModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeVorlagenModal = closeVorlagenModal;
+
+// Vorlage löschen
+window.deleteVorlage = async function(vorlageId) {
+    if (!confirm('Vorlage wirklich löschen?')) return;
+    
+    try {
+        await deleteDoc(doc(geschenkeVorlagenRef, vorlageId));
+        delete VORLAGEN[vorlageId];
+        alertUser('Vorlage gelöscht!', 'success');
+        window.openVorlagenModal(); // Modal neu rendern
+    } catch (e) {
+        alertUser('Fehler beim Löschen: ' + e.message, 'error');
     }
 };
 
@@ -1729,8 +1910,8 @@ window.exportToExcel = function() {
         (g.beteiligung || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join('; '),
         g.gesamtkosten || 0,
         g.eigeneKosten || 0,
-        ZAHLUNGSART_SOLL[g.sollBezahlung]?.label || g.sollBezahlung || '',
-        ZAHLUNGSART_IST[g.istBezahlung]?.label || g.istBezahlung || '',
+        ZAHLUNGSARTEN[g.sollBezahlung]?.label || g.sollBezahlung || '',
+        ZAHLUNGSARTEN[g.istBezahlung]?.label || g.istBezahlung || '',
         g.standort || '',
         g.bestellnummer || '',
         g.rechnungsnummer || '',

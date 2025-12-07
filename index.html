@@ -2338,29 +2338,33 @@
                             </div>
                         </div>
                         
-                        <!-- FÜR & VON (Multi-Select) -->
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-1">FÜR (Empfänger)</label>
-                                <select id="gm-fuer" multiple class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500 h-24"></select>
-                                <p class="text-xs text-gray-500 mt-1">Strg+Klick für Mehrfachauswahl</p>
+                        <!-- FÜR (Empfänger) - Checkboxen -->
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">🎁 FÜR (Empfänger)</label>
+                            <div id="gm-fuer-checkboxes" class="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 border-2 border-gray-300 rounded-lg bg-gray-50 max-h-32 overflow-y-auto">
+                                <!-- Wird dynamisch befüllt -->
                             </div>
-                            <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-1">VON (Schenker)</label>
-                                <select id="gm-von" multiple class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500 h-24"></select>
-                                <p class="text-xs text-gray-500 mt-1">Strg+Klick für Mehrfachauswahl</p>
+                        </div>
+                        
+                        <!-- VON (Schenker) - Checkboxen -->
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">🎀 VON (Schenker)</label>
+                            <div id="gm-von-checkboxes" class="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 border-2 border-gray-300 rounded-lg bg-gray-50 max-h-32 overflow-y-auto">
+                                <!-- Wird dynamisch befüllt -->
                             </div>
                         </div>
                         
                         <!-- Bezahlt von & Beteiligung -->
-                        <div class="grid grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-1">Bezahlt von</label>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">💳 Bezahlt von</label>
                                 <select id="gm-bezahlt-von" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500"></select>
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-1">Beteiligung</label>
-                                <select id="gm-beteiligung" multiple class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500 h-24"></select>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">👥 Beteiligung</label>
+                                <div id="gm-beteiligung-checkboxes" class="grid grid-cols-2 gap-2 p-3 border-2 border-gray-300 rounded-lg bg-gray-50 max-h-24 overflow-y-auto">
+                                    <!-- Wird dynamisch befüllt -->
+                                </div>
                             </div>
                         </div>
                         
@@ -2419,17 +2423,27 @@
                     </div>
                     
                     <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-between gap-3">
-                        <div class="flex gap-2">
-                            <button onclick="window.copyGeschenk(document.getElementById('gm-id').value)" class="px-3 py-2 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 transition text-sm" title="Kopieren">📋</button>
-                            <button onclick="window.saveAsVorlage(document.getElementById('gm-id').value)" class="px-3 py-2 bg-purple-500 text-white font-bold rounded-lg hover:bg-purple-600 transition text-sm" title="Als Vorlage">📑</button>
-                            <button onclick="window.deleteGeschenk(document.getElementById('gm-id').value)" class="px-3 py-2 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition text-sm" title="Löschen">🗑️</button>
+                        <!-- Aktions-Buttons (nur bei bestehendem Eintrag sichtbar) -->
+                        <div id="gm-modal-actions" class="flex gap-2" style="display: none;">
+                            <button onclick="window.copyGeschenk(document.getElementById('gm-id').value)" class="px-3 py-2 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 transition text-sm" title="Kopieren">
+                                📋 Kopieren
+                            </button>
+                            <button onclick="window.saveAsVorlage(document.getElementById('gm-id').value)" class="px-3 py-2 bg-purple-500 text-white font-bold rounded-lg hover:bg-purple-600 transition text-sm" title="Als Vorlage speichern">
+                                📑 Vorlage
+                            </button>
+                            <button onclick="window.openVorlagenModal()" class="px-3 py-2 bg-teal-500 text-white font-bold rounded-lg hover:bg-teal-600 transition text-sm" title="Vorlage einfügen">
+                                📥 Vorlage laden
+                            </button>
+                            <button onclick="window.deleteGeschenk(document.getElementById('gm-id').value)" class="px-3 py-2 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition text-sm" title="Löschen">
+                                🗑️
+                            </button>
                         </div>
-                        <div class="flex gap-3">
+                        <div class="flex gap-3 ml-auto">
                             <button id="cancelGeschenkBtn" class="px-6 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
                                 Abbrechen
                             </button>
                             <button id="saveGeschenkBtn" class="px-6 py-2 bg-gradient-to-r from-pink-600 to-purple-500 text-white font-bold rounded-lg hover:shadow-lg transition">
-                                Speichern
+                                💾 Speichern
                             </button>
                         </div>
                     </div>
@@ -2507,20 +2521,13 @@
                                     <button onclick="addCustomOption('status')" class="w-full mt-1 p-1 bg-pink-500 text-white rounded text-sm">+ Hinzufügen</button>
                                 </div>
                                 
-                                <!-- Zahlungsart SOLL -->
+                                <!-- Zahlungsarten (vereinheitlicht für SOLL und IST) -->
                                 <div class="bg-gray-50 p-3 rounded-lg">
-                                    <h5 class="font-bold text-sm text-gray-700 mb-2">Zahlungsart SOLL</h5>
-                                    <div id="gm-zahlungsart-soll-optionen" class="space-y-1 max-h-40 overflow-y-auto mb-2"></div>
-                                    <input type="text" id="gm-new-zahlungsart-soll" placeholder="Neue Zahlungsart..." class="w-full p-2 border rounded text-sm">
-                                    <button onclick="addCustomOption('zahlungsartSoll')" class="w-full mt-1 p-1 bg-pink-500 text-white rounded text-sm">+ Hinzufügen</button>
-                                </div>
-                                
-                                <!-- Zahlungsart IST -->
-                                <div class="bg-gray-50 p-3 rounded-lg">
-                                    <h5 class="font-bold text-sm text-gray-700 mb-2">Zahlungsart IST</h5>
-                                    <div id="gm-zahlungsart-ist-optionen" class="space-y-1 max-h-40 overflow-y-auto mb-2"></div>
-                                    <input type="text" id="gm-new-zahlungsart-ist" placeholder="Neue Zahlungsart..." class="w-full p-2 border rounded text-sm">
-                                    <button onclick="addCustomOption('zahlungsartIst')" class="w-full mt-1 p-1 bg-pink-500 text-white rounded text-sm">+ Hinzufügen</button>
+                                    <h5 class="font-bold text-sm text-gray-700 mb-2">Zahlungsarten</h5>
+                                    <p class="text-xs text-gray-500 mb-2">Wird für SOLL- und IST-Bezahlung verwendet</p>
+                                    <div id="gm-zahlungsarten-optionen" class="space-y-1 max-h-40 overflow-y-auto mb-2"></div>
+                                    <input type="text" id="gm-new-zahlungsarten" placeholder="Neue Zahlungsart..." class="w-full p-2 border rounded text-sm">
+                                    <button onclick="addCustomOption('zahlungsarten')" class="w-full mt-1 p-1 bg-pink-500 text-white rounded text-sm">+ Hinzufügen</button>
                                 </div>
                                 
                                 <!-- Standorte -->
