@@ -2485,10 +2485,17 @@ window.updateBetragHinweis = function(input) {
     if (!hinweis) return;
     
     const value = input.value.trim();
+    const numValue = parseFloat(value);
     
     // Zeige Hinweis nur wenn Feld komplett leer ist
     if (value === '') {
         hinweis.classList.remove('hidden');
+        hinweis.innerHTML = '⚠️ Betrag noch unbekannt? Für Gratis-Monate gib bitte 0 ein. Lass das Feld nur leer, wenn der Betrag wirklich noch unbekannt ist.';
+    } else if (numValue < 0) {
+        // Zeige Info bei Gutschrift
+        hinweis.classList.remove('hidden');
+        hinweis.className = 'mt-2 p-2 bg-green-50 border-l-4 border-green-400 text-green-800 text-xs';
+        hinweis.innerHTML = '💰 Gutschrift erkannt! Negative Beträge werden als Guthaben/Rückzahlung behandelt.';
     } else {
         hinweis.classList.add('hidden');
     }
