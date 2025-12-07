@@ -467,14 +467,15 @@ function setupIntervallCheckboxLogic() {
             einzelmonateCheckboxes.forEach(cb => {
                 cb.checked = false;
                 cb.disabled = true;
+                cb.parentElement.style.opacity = '0.5';
             });
         } else {
             // Aktiviere alle Einzelmonate wieder
             einzelmonateCheckboxes.forEach(cb => {
                 cb.disabled = false;
+                cb.parentElement.style.opacity = '1';
             });
         }
-        updateAlleMonateButton(); // Button-Text aktualisieren
     });
     monatlichCheckbox.dataset.logicAttached = 'true';
     
@@ -483,6 +484,15 @@ function setupIntervallCheckboxLogic() {
         if (cb.dataset.logicAttached) return;
         
         cb.addEventListener('change', function() {
+            const checkedCount = Array.from(einzelmonateCheckboxes).filter(c => c.checked).length;
+            
+            // NEUE REGEL: Verhindere alle 12 Monate (wäre = Monatlich)
+            if (checkedCount === 12) {
+                this.checked = false;
+                alertUser('⚠️ Für alle 12 Monate nutze bitte "Monatlich" statt einzelner Monate!', 'warning');
+                return;
+            }
+            
             // Prüfe ob irgendein Einzelmonat ausgewählt ist
             const anyMonthSelected = Array.from(einzelmonateCheckboxes).some(c => c.checked);
             
@@ -494,7 +504,6 @@ function setupIntervallCheckboxLogic() {
                 // Aktiviere "Monatlich" wieder
                 monatlichCheckbox.disabled = false;
             }
-            updateAlleMonateButton(); // Button-Text aktualisieren
         });
         cb.dataset.logicAttached = 'true';
     });
@@ -1260,35 +1269,9 @@ function renderMonatsUebersicht(stats) {
     container.innerHTML = html;
 }
 
-// Toggle alle Monate im Modal
-function toggleAlleMonate() {
-    const checkboxes = document.querySelectorAll('.hz-intervall-checkbox:not([value="monatlich"])');
-    const btn = document.getElementById('hz-alle-monate-btn');
-    
-    // Prüfen ob alle ausgewählt sind
-    const alleAusgewaehlt = Array.from(checkboxes).every(cb => cb.checked);
-    
-    // Toggle
-    checkboxes.forEach(cb => {
-        cb.checked = !alleAusgewaehlt;
-    });
-    
-    // Button-Text aktualisieren
-    if (btn) {
-        btn.textContent = alleAusgewaehlt ? '☐ Alle Monate auswählen' : '☑ Alle Monate abwählen';
-    }
-}
-
-// Aktualisiere Button-Text basierend auf Checkbox-Status
-function updateAlleMonateButton() {
-    const checkboxes = document.querySelectorAll('.hz-intervall-checkbox:not([value="monatlich"])');
-    const btn = document.getElementById('hz-alle-monate-btn');
-    
-    if (!btn) return;
-    
-    const alleAusgewaehlt = Array.from(checkboxes).every(cb => cb.checked);
-    btn.textContent = alleAusgewaehlt ? '☑ Alle Monate abwählen' : '☐ Alle Monate auswählen';
-}
+// toggleAlleMonate und updateAlleMonateButton wurden entfernt
+// Der "Alle Monate auswählen" Button wurde aus der UI entfernt
+// Regel: Entweder "Monatlich" ODER max. 11 einzelne Monate (nicht alle 12)
 
 function renderHaushaltszahlungenTable() {
     const tbody = document.getElementById('haushaltszahlungen-table-body');
