@@ -560,21 +560,22 @@ function validateEintrag(eintrag) {
     if (!eintrag.gueltigAb) {
         return 'Gültigkeitswert AB prüfen';
     }
-    if (!eintrag.gueltigBis) {
-        return 'Gültigkeitswert BIS prüfen';
+    // GEÄNDERT: gueltigBis ist jetzt OPTIONAL (für "fortlaufende" Verträge)
+    // Wenn leer, wird automatisch auf fernes Datum gesetzt (z.B. 31.12.2099)
+    
+    // Nur prüfen wenn BIS-Datum vorhanden ist
+    if (eintrag.gueltigBis && new Date(eintrag.gueltigAb) > new Date(eintrag.gueltigBis)) {
+        return 'Gültigkeitswert BIS prüfen (muss nach AB sein)';
     }
-    if (new Date(eintrag.gueltigAb) > new Date(eintrag.gueltigBis)) {
-        return 'Gültigkeitswert BIS prüfen';
-    }
+    
     // GEÄNDERT: Betrag ist jetzt OPTIONAL
     // null/undefined/'' = Betrag später nachtragen (wird als Warnung angezeigt)
     // 0 = Gratis-Monat (gültig)
     // X = Normaler Betrag (gültig)
     // --> Keine Validierungsfehler mehr für fehlenden Betrag!
     
-    if (eintrag.anteilMarkus === undefined || eintrag.anteilMarkus === null) {
-        return '% Kostenanteile prüfen';
-    }
+    // Kostenaufteilung wird im saveHaushaltszahlung validiert (muss 100% sein)
+    
     return '-'; // Alles OK
 }
 
@@ -1088,10 +1089,10 @@ function renderMitgliederBeitraege(stats) {
         return `
             <div class="bg-${color}-500/30 p-3 rounded-lg">
                 <!-- Header mit Name und Status -->
-                <div class="flex justify-between items-center mb-2">
-                    <p class="text-lg font-bold truncate" style="max-width: 150px;" title="${displayName}">${displayName}</p>
+                <div class="flex justify-between items-center mb-2" style="min-height: 40px;">
+                    <p class="text-lg font-bold truncate" style="max-width: 150px;" title="${displayName}">${displayName.length > 15 ? displayName.substring(0, 14) + '...' : displayName}</p>
                     <button onclick="toggleMitgliedDetails('${mitgliedId}')" 
-                        class="px-3 py-1 ${statusColor} text-white text-xs font-bold rounded-lg hover:opacity-80 transition cursor-pointer flex items-center gap-1">
+                        class="px-3 py-1 ${statusColor} text-white text-xs font-bold rounded-lg hover:opacity-80 transition cursor-pointer flex items-center gap-1 shrink-0">
                         ${statusText}
                         <svg id="hz-chevron-${mitgliedId}" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
@@ -1434,7 +1435,7 @@ function renderHaushaltszahlungenTable() {
                     })()}
                 </td>
                 <td class="px-3 py-3 text-xs text-gray-500">
-                    ${formatDate(eintrag.gueltigAb)} - ${formatDate(eintrag.gueltigBis)}
+                    ${formatDate(eintrag.gueltigAb)} - ${eintrag.gueltigBis === '2099-12-31' ? '<span class="text-blue-600 font-bold">∞ Fortlaufend</span>' : formatDate(eintrag.gueltigBis)}
                 </td>
                 <td class="px-3 py-3 text-center">
                     <div class="flex justify-center gap-1">
@@ -1543,7 +1544,14 @@ function openEditModal(eintrag) {
         }
         
         document.getElementById('hz-gueltig-ab').value = eintrag.gueltigAb || '';
-        document.getElementById('hz-gueltig-bis').value = eintrag.gueltigBis || '';
+        
+        // BIS-Datum: Wenn "fortlaufend" (2099-12-31), zeige leer
+        const gueltigBis = eintrag.gueltigBis || '';
+        if (gueltigBis === '2099-12-31') {
+            document.getElementById('hz-gueltig-bis').value = ''; // Leer = fortlaufend
+        } else {
+            document.getElementById('hz-gueltig-bis').value = gueltigBis;
+        }
         document.getElementById('hz-kundennummer').value = eintrag.kundennummer || '';
         document.getElementById('hz-vertragsnummer').value = eintrag.vertragsnummer || '';
         document.getElementById('hz-vormerk').value = eintrag.vormerk || '';
@@ -1767,7 +1775,13 @@ async function saveHaushaltszahlung() {
     }
     
     const gueltigAb = document.getElementById('hz-gueltig-ab')?.value || '';
-    const gueltigBis = document.getElementById('hz-gueltig-bis')?.value || '';
+    
+    // BIS-Datum: Wenn leer, setze auf "fortlaufend" (31.12.2099)
+    let gueltigBis = document.getElementById('hz-gueltig-bis')?.value?.trim();
+    if (!gueltigBis || gueltigBis === '') {
+        gueltigBis = '2099-12-31'; // Fortlaufend bis auf Widerruf
+        console.log("ℹ️ Kein BIS-Datum angegeben → Setze auf fortlaufend (31.12.2099)");
+    }
     
     // NEUE KOSTENAUFTEILUNG: Sammle Anteile aller Mitglieder
     const kostenaufteilung = {};
@@ -2033,74 +2047,8 @@ function renderMitgliederListe() {
     `}).join('');
 }
 
-function renderKostenaufteilung() {
-    const container = document.getElementById('hz-kostenaufteilung');
-    if (!container) return;
-    
-    const thema = THEMEN[currentThemaId];
-    if (!thema || !thema.mitglieder || thema.mitglieder.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 text-sm italic">Füge zuerst Mitglieder hinzu</p>';
-        return;
-    }
-    
-    // Berechne Gesamtanteil
-    const gesamtAnteil = thema.mitglieder.reduce((sum, m) => sum + (m.anteil || 0), 0);
-    const differenz = 100 - gesamtAnteil;
-    const hasError = gesamtAnteil !== 100;
-    
-    // Fehler-Banner wenn Prozente nicht 100% ergeben
-    let errorBanner = '';
-    if (hasError) {
-        const errorType = differenz > 0 ? 'fehlen' : 'zuviel';
-        const errorAmount = Math.abs(differenz);
-        errorBanner = `
-            <div class="mb-4 p-4 bg-red-100 border-2 border-red-500 rounded-lg">
-                <div class="flex items-center gap-2 mb-2">
-                    <span class="text-2xl">⚠️</span>
-                    <span class="text-lg font-bold text-red-700">Fehler in Prozentverteilung!</span>
-                </div>
-                <p class="text-red-700 mb-2">
-                    <strong>${errorAmount}%</strong> ${errorType} zur korrekten Verteilung.
-                    ${differenz > 0 
-                        ? 'Diese Prozente sind keiner Person zugewiesen und werden nicht berechnet.' 
-                        : 'Die Summe übersteigt 100% - bitte korrigiere die Anteile.'}
-                </p>
-                <p class="text-red-600 text-sm">
-                    Bitte verteile alle Prozente auf die vorhandenen Mitglieder, sodass die Summe genau 100% ergibt.
-                </p>
-            </div>
-        `;
-    }
-    
-    container.innerHTML = errorBanner + thema.mitglieder.map((mitglied, index) => {
-    // Vollen Namen ermitteln mit Null-Check
-    const userObj = USERS && typeof USERS === 'object'
-        ? Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name)
-        : null;
-    const displayName = userObj?.realName || mitglied.name || mitglied.userId;
-    
-    return `
-        <div class="flex items-center gap-3">
-            <span class="w-24 font-bold text-gray-700">${displayName}</span>
-            <input type="number" min="0" max="100" value="${mitglied.anteil || 0}" 
-                onchange="window.updateMitgliedAnteil(${index}, this.value)"
-                class="w-20 p-2 border-2 ${hasError ? 'border-red-400' : 'border-gray-300'} rounded-lg text-center font-bold">
-            <span class="text-gray-500">%</span>
-            <div class="flex-1 bg-gray-200 rounded-full h-3">
-                <div class="${hasError ? 'bg-red-500' : 'bg-cyan-500'} h-3 rounded-full" style="width: ${Math.min(mitglied.anteil || 0, 100)}%"></div>
-            </div>
-        </div>
-    `}).join('') + `
-        <div class="mt-3 p-3 rounded-lg ${gesamtAnteil === 100 ? 'bg-green-100 text-green-700 border border-green-300' : 'bg-red-100 text-red-700 border-2 border-red-400'}">
-            <div class="flex justify-between items-center">
-                <span class="font-bold text-lg">Gesamt: ${gesamtAnteil}%</span>
-                ${gesamtAnteil === 100 
-                    ? '<span class="text-green-600 font-bold">✓ Korrekt verteilt</span>' 
-                    : `<span class="text-red-600 font-bold">${differenz > 0 ? '+' : ''}${differenz}% ${differenz > 0 ? 'fehlen' : 'zuviel'}</span>`}
-            </div>
-        </div>
-    `;
-}
+// renderKostenaufteilung wurde entfernt - Kostenaufteilung erfolgt jetzt individuell pro Eintrag
+// Die Funktion wird nicht mehr benötigt, da die Aufteilung direkt im Eintrag-Modal definiert wird
 
 async function saveNewThema() {
     const nameInput = document.getElementById('hz-thema-name');
@@ -2336,12 +2284,15 @@ function openDauerauftraegeModal(userId) {
     content.innerHTML = `
         <p class="font-bold text-gray-700 mb-3">Daueraufträge für: ${mitglied.name}</p>
         ${intervalle.map(intervall => `
-            <div class="flex items-center gap-3">
-                <span class="w-24 text-sm font-medium text-gray-600">${INTERVALL_CONFIG[intervall]?.label || intervall}</span>
-                <input type="number" step="0.01" min="0" value="${mitglied.dauerauftraege?.[intervall] || 0}" 
-                    data-intervall="${intervall}"
-                    class="hz-dauerauftrag-input flex-1 p-2 border-2 border-gray-300 rounded-lg text-right font-bold">
-                <span class="text-gray-500">€</span>
+            <div class="flex items-center gap-3 justify-between">
+                <span class="text-sm font-medium text-gray-600 text-left" style="min-width: 80px;">${INTERVALL_CONFIG[intervall]?.label || intervall}</span>
+                <div class="flex items-center gap-2">
+                    <input type="number" step="0.01" min="0" value="${mitglied.dauerauftraege?.[intervall] || 0}" 
+                        data-intervall="${intervall}"
+                        class="hz-dauerauftrag-input w-28 p-2 border-2 border-gray-300 rounded-lg text-right font-bold"
+                        style="max-width: 120px;">
+                    <span class="text-gray-500">€</span>
+                </div>
             </div>
         `).join('')}
     `;
