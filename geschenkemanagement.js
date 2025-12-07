@@ -619,18 +619,28 @@ function openCreateModal() {
     if (!modal) return;
     
     document.getElementById('geschenkModalTitle').textContent = 'Neues Geschenk';
-    document.getElementById('gm-id').value = '';
+    const idField = document.getElementById('gm-id');
+    idField.value = '';
+    idField.removeAttribute('data-is-copy'); // Entferne Kopie-Markierung
     clearModalForm();
     renderModalSelects();
-    updateModalActionButtons(false); // Keine Aktions-Buttons bei neuem Eintrag
+    updateModalActionButtons(false, true); // Keine Aktions-Buttons, aber "Vorlage laden" anzeigen
     modal.style.display = 'flex';
 }
 
 // Aktions-Buttons im Modal ein-/ausblenden
-function updateModalActionButtons(showActions) {
+function updateModalActionButtons(showActions, showVorlageButton = false) {
     const actionsContainer = document.getElementById('gm-modal-actions');
     if (actionsContainer) {
         actionsContainer.style.display = showActions ? 'flex' : 'none';
+    }
+    
+    // "Vorlage laden" Button nur bei neuem Eintrag anzeigen
+    const vorlageButtons = actionsContainer?.querySelectorAll('button[onclick*="openVorlagenModal"]');
+    if (vorlageButtons) {
+        vorlageButtons.forEach(btn => {
+            btn.style.display = showVorlageButton ? 'inline-flex' : 'none';
+        });
     }
 }
 
@@ -642,11 +652,13 @@ window.openEditGeschenkModal = function(id) {
     if (!modal) return;
     
     document.getElementById('geschenkModalTitle').textContent = 'Geschenk bearbeiten';
-    document.getElementById('gm-id').value = id;
+    const idField = document.getElementById('gm-id');
+    idField.value = id;
+    idField.removeAttribute('data-is-copy'); // Entferne Kopie-Markierung
     
     fillModalForm(geschenk);
     renderModalSelects(geschenk);
-    updateModalActionButtons(true); // Aktions-Buttons bei bestehendem Eintrag anzeigen
+    updateModalActionButtons(true, false); // Aktions-Buttons anzeigen, aber KEIN "Vorlage laden" Button
     modal.style.display = 'flex';
 };
 
@@ -724,6 +736,7 @@ function renderPersonenCheckboxes(containerId, fieldName, selectedValues) {
             <label class="flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-pink-50 transition ${isChecked ? 'bg-pink-100' : ''}">
                 <input type="checkbox" name="${fieldName}" value="${k.id}" 
                     ${isChecked ? 'checked' : ''}
+                    onchange="window.updateEigeneKostenAuto()"
                     class="w-4 h-4 text-pink-600 rounded focus:ring-pink-500">
                 <span class="text-sm ${k.istEigenePerson ? 'font-bold text-pink-600' : 'text-gray-700'}">
                     ${k.name}${k.istEigenePerson ? ' (Ich)' : ''}
@@ -732,6 +745,33 @@ function renderPersonenCheckboxes(containerId, fieldName, selectedValues) {
         `;
     }).join('');
 }
+
+// Auto-Berechnung: Wenn nur ICH an Geschenk beteiligt bin → Eigene Kosten = Gesamtkosten
+window.updateEigeneKostenAuto = function() {
+    const beteiligungCheckboxes = document.querySelectorAll('input[name="gm-beteiligung"]:checked');
+    const gesamtkostenInput = document.getElementById('gm-gesamtkosten');
+    const eigeneKostenInput = document.getElementById('gm-eigene-kosten');
+    const hintElement = document.getElementById('gm-eigene-kosten-hint');
+    
+    if (!beteiligungCheckboxes || !gesamtkostenInput || !eigeneKostenInput) return;
+    
+    const beteiligteIds = Array.from(beteiligungCheckboxes).map(cb => cb.value);
+    
+    // Wenn nur ICH beteiligt bin (eigenePerson.id)
+    if (beteiligteIds.length === 1 && eigenePerson && beteiligteIds[0] === eigenePerson.id) {
+        const gesamtkosten = parseFloat(gesamtkostenInput.value) || 0;
+        eigeneKostenInput.value = gesamtkosten.toFixed(2);
+        eigeneKostenInput.readOnly = true;
+        eigeneKostenInput.style.backgroundColor = '#e0f2fe'; // Hellblau
+        eigeneKostenInput.style.borderColor = '#0ea5e9'; // Blau
+        if (hintElement) hintElement.textContent = '✨ Auto-berechnet';
+    } else {
+        eigeneKostenInput.readOnly = false;
+        eigeneKostenInput.style.backgroundColor = '';
+        eigeneKostenInput.style.borderColor = '';
+        if (hintElement) hintElement.textContent = '';
+    }
+};
 
 // Checkbox-Werte auslesen
 function getCheckboxValues(fieldName) {
@@ -892,29 +932,332 @@ function renderFreigabenVerwaltung() {
     if (!container) return;
     
     // Registrierte Benutzer aus USERS
-    const registrierteBenutzer = Object.values(USERS).filter(u => u.permissionType !== 'not_registered');
+    const registrierteBenutzer = Object.values(USERS).filter(u => u.permissionType !== 'not_registered' && u.id !== currentUser.odooUserId);
     
     container.innerHTML = registrierteBenutzer.length === 0
         ? '<p class="text-gray-500 text-center py-4">Keine registrierten Benutzer gefunden</p>'
         : registrierteBenutzer.map(user => {
-            const freigabe = Object.values(FREIGABEN).find(f => f.userId === user.id);
+            // Finde alle Freigaben für diesen Benutzer
+            const userFreigaben = Object.values(FREIGABEN).filter(f => f.userId === user.id && f.aktiv);
+            const themenCount = userFreigaben.length;
+            
             return `
                 <div class="p-4 bg-gray-50 rounded-lg border">
                     <div class="flex items-center justify-between mb-3">
-                        <span class="font-bold">${user.displayName || user.name}</span>
-                        <button onclick="window.openFreigabeEditor('${user.id}')" class="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">
-                            Freigaben bearbeiten
+                        <div>
+                            <span class="font-bold">${user.displayName || user.name}</span>
+                            ${themenCount > 0 ? `
+                                <span class="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">
+                                    ${themenCount} Thema${themenCount !== 1 ? 'n' : ''} freigegeben
+                                </span>
+                            ` : ''}
+                        </div>
+                        <button onclick="window.openFreigabeEditor('${user.id}', '${user.displayName || user.name}')" 
+                            class="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 font-bold">
+                            ⚙️ Freigaben verwalten
                         </button>
                     </div>
-                    ${freigabe ? `
-                        <div class="text-xs text-gray-600">
-                            <p>Themen: ${freigabe.themen?.length || 0} freigegeben</p>
+                    ${userFreigaben.length > 0 ? `
+                        <div class="text-xs text-gray-600 space-y-1">
+                            ${userFreigaben.map(f => {
+                                const thema = THEMEN[f.themaId];
+                                const filterCount = Object.keys(f.filter || {}).length;
+                                return `
+                                    <div class="flex items-center justify-between p-2 bg-white rounded">
+                                        <span>📁 ${thema?.name || 'Unbekanntes Thema'}</span>
+                                        <span class="text-xs text-blue-600">${filterCount} Filter aktiv</span>
+                                    </div>
+                                `;
+                            }).join('')}
                         </div>
-                    ` : '<p class="text-xs text-gray-400">Keine Freigaben konfiguriert</p>'}
+                    ` : '<p class="text-xs text-gray-400 italic">Keine Freigaben konfiguriert</p>'}
                 </div>
             `;
         }).join('');
 }
+
+// Freigabe-Editor öffnen
+window.openFreigabeEditor = function(userId, userName) {
+    const user = USERS[userId];
+    if (!user) return;
+    
+    // Finde bestehende Freigaben für diesen Benutzer
+    const userFreigaben = Object.values(FREIGABEN).filter(f => f.userId === userId && f.aktiv);
+    
+    let modal = document.getElementById('freigabeEditorModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'freigabeEditorModal';
+        modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+        document.body.appendChild(modal);
+    }
+    
+    const themenArray = Object.values(THEMEN).filter(t => !t.archiviert);
+    
+    modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+            <div class="sticky top-0 bg-gradient-to-r from-blue-600 to-purple-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                <h3 class="text-xl font-bold">🔐 Freigaben für ${userName || user.displayName}</h3>
+                <button onclick="window.closeFreigabeEditor()" class="text-white/80 hover:text-white transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+                <p class="text-sm text-gray-600 mb-4">
+                    Wähle die Themen aus, die <strong>${userName || user.displayName}</strong> sehen darf, 
+                    und konfiguriere für jedes Thema die granularen Sichtbarkeitsrechte.
+                </p>
+                
+                <div class="space-y-4" id="freigabe-themen-container">
+                    ${themenArray.length === 0 ? `
+                        <p class="text-gray-500 text-center py-8">Keine Themen vorhanden. Erstelle zuerst Themen.</p>
+                    ` : themenArray.map(thema => {
+                        const existingFreigabe = userFreigaben.find(f => f.themaId === thema.id);
+                        const isEnabled = !!existingFreigabe;
+                        const filter = existingFreigabe?.filter || {};
+                        
+                        return `
+                            <div class="border-2 rounded-lg p-4 ${isEnabled ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}">
+                                <div class="flex items-center gap-3 mb-3">
+                                    <input type="checkbox" 
+                                        id="freigabe-thema-${thema.id}" 
+                                        onchange="window.toggleThemaFreigabe('${thema.id}')"
+                                        ${isEnabled ? 'checked' : ''}
+                                        class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500">
+                                    <label for="freigabe-thema-${thema.id}" class="font-bold text-lg cursor-pointer">
+                                        📁 ${thema.name}
+                                    </label>
+                                </div>
+                                
+                                <div id="filter-${thema.id}" class="ml-8 ${isEnabled ? '' : 'hidden opacity-50 pointer-events-none'}">
+                                    <p class="text-xs text-gray-600 mb-2">Sichtbare Felder/Filter:</p>
+                                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                        ${renderFilterCheckbox(thema.id, 'fuer', 'FÜR (Empfänger)', filter.fuer || [])}
+                                        ${renderFilterCheckbox(thema.id, 'von', 'VON (Schenker)', filter.von || [])}
+                                        ${renderFilterCheckbox(thema.id, 'ids', 'Spezifische IDs', filter.ids || [])}
+                                        ${renderFilterCheckbox(thema.id, 'bezahltVon', 'Bezahlt von', filter.bezahltVon || [])}
+                                        ${renderFilterCheckbox(thema.id, 'beteiligung', 'Beteiligung', filter.beteiligung || [])}
+                                        ${renderFilterCheckbox(thema.id, 'sollBezahlung', 'SOLL-Bezahlung', filter.sollBezahlung || [])}
+                                        ${renderFilterCheckbox(thema.id, 'istBezahlung', 'IST-Bezahlung', filter.istBezahlung || [])}
+                                        ${renderFilterCheckbox(thema.id, 'standort', 'Geschenke-Standort', filter.standort || [])}
+                                    </div>
+                                    
+                                    <!-- Detail-Konfiguration für ausgewählte Filter -->
+                                    <div id="filter-details-${thema.id}" class="mt-3 space-y-2">
+                                        <!-- Wird dynamisch befüllt wenn Filter ausgewählt werden -->
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+            
+            <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-between gap-3">
+                <button onclick="window.closeFreigabeEditor()" class="px-6 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
+                    Abbrechen
+                </button>
+                <button onclick="window.saveFreigaben('${userId}')" class="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-500 text-white font-bold rounded-lg hover:shadow-lg transition">
+                    💾 Freigaben speichern
+                </button>
+            </div>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+};
+
+function renderFilterCheckbox(themaId, filterType, label, selectedValues) {
+    const isEnabled = selectedValues.length > 0 || false;
+    return `
+        <label class="flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-blue-100 transition ${isEnabled ? 'bg-blue-200' : 'bg-white'} border">
+            <input type="checkbox" 
+                id="filter-${themaId}-${filterType}" 
+                data-thema="${themaId}"
+                data-filter="${filterType}"
+                onchange="window.toggleFilterType('${themaId}', '${filterType}')"
+                ${isEnabled ? 'checked' : ''}
+                class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+            <span class="text-xs font-semibold">${label}</span>
+        </label>
+    `;
+}
+
+window.toggleThemaFreigabe = function(themaId) {
+    const checkbox = document.getElementById(`freigabe-thema-${themaId}`);
+    const filterContainer = document.getElementById(`filter-${themaId}`);
+    
+    if (checkbox && filterContainer) {
+        if (checkbox.checked) {
+            filterContainer.classList.remove('hidden', 'opacity-50', 'pointer-events-none');
+        } else {
+            filterContainer.classList.add('hidden', 'opacity-50', 'pointer-events-none');
+        }
+    }
+};
+
+window.toggleFilterType = function(themaId, filterType) {
+    const checkbox = document.getElementById(`filter-${themaId}-${filterType}`);
+    const detailsContainer = document.getElementById(`filter-details-${themaId}`);
+    
+    if (!checkbox || !detailsContainer) return;
+    
+    if (checkbox.checked) {
+        // Zeige Detail-Auswahl für diesen Filter
+        const detailId = `filter-detail-${themaId}-${filterType}`;
+        
+        // Entferne existierenden Detail-Container falls vorhanden
+        const existing = document.getElementById(detailId);
+        if (existing) existing.remove();
+        
+        const detailDiv = document.createElement('div');
+        detailDiv.id = detailId;
+        detailDiv.className = 'p-3 bg-white border-2 border-blue-300 rounded-lg';
+        detailDiv.innerHTML = renderFilterDetails(themaId, filterType);
+        detailsContainer.appendChild(detailDiv);
+    } else {
+        // Entferne Detail-Auswahl
+        const detailDiv = document.getElementById(`filter-detail-${themaId}-${filterType}`);
+        if (detailDiv) detailDiv.remove();
+    }
+};
+
+function renderFilterDetails(themaId, filterType) {
+    const thema = THEMEN[themaId];
+    if (!thema) return '';
+    
+    let options = [];
+    let title = '';
+    
+    switch (filterType) {
+        case 'fuer':
+        case 'von':
+        case 'bezahltVon':
+        case 'beteiligung':
+            title = filterType === 'fuer' ? 'FÜR (Empfänger)' : 
+                    filterType === 'von' ? 'VON (Schenker)' : 
+                    filterType === 'bezahltVon' ? 'Bezahlt von' : 'Beteiligung';
+            options = Object.values(KONTAKTE).map(k => ({ value: k.id, label: k.name }));
+            break;
+        case 'ids':
+            title = 'Spezifische Eintrags-IDs';
+            return `
+                <p class="text-sm font-bold text-gray-700 mb-2">${title}</p>
+                <input type="text" 
+                    id="filter-value-${themaId}-${filterType}" 
+                    placeholder="IDs kommagetrennt eingeben (z.B. abc123, def456)"
+                    class="w-full p-2 border-2 border-gray-300 rounded-lg text-sm">
+                <p class="text-xs text-gray-500 mt-1">Nur diese spezifischen Einträge werden sichtbar sein.</p>
+            `;
+        case 'sollBezahlung':
+        case 'istBezahlung':
+            title = filterType === 'sollBezahlung' ? 'SOLL-Bezahlung' : 'IST-Bezahlung';
+            options = Object.entries(ZAHLUNGSARTEN).map(([k, v]) => ({ value: k, label: v.label }));
+            break;
+        case 'standort':
+            title = 'Geschenke-Standort';
+            const standorte = [...geschenkeSettings.geschenkeStandorte, ...geschenkeSettings.customGeschenkeStandorte];
+            options = standorte.map(s => ({ value: s, label: s }));
+            break;
+    }
+    
+    if (options.length === 0 && filterType !== 'ids') {
+        return `<p class="text-sm text-gray-500">Keine Optionen verfügbar für ${title}</p>`;
+    }
+    
+    return `
+        <p class="text-sm font-bold text-gray-700 mb-2">${title} - Auswahl:</p>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-2 bg-gray-50 rounded">
+            ${options.map(opt => `
+                <label class="flex items-center gap-2 p-1 hover:bg-blue-50 rounded cursor-pointer">
+                    <input type="checkbox" 
+                        name="filter-value-${themaId}-${filterType}" 
+                        value="${opt.value}"
+                        class="w-4 h-4 text-blue-600 rounded">
+                    <span class="text-xs">${opt.label}</span>
+                </label>
+            `).join('')}
+        </div>
+        <p class="text-xs text-gray-500 mt-1">Wähle die Werte aus, die sichtbar sein sollen.</p>
+    `;
+}
+
+window.saveFreigaben = async function(userId) {
+    const themenCheckboxes = document.querySelectorAll('[id^="freigabe-thema-"]');
+    const freigabenData = [];
+    
+    themenCheckboxes.forEach(checkbox => {
+        if (checkbox.checked) {
+            const themaId = checkbox.id.replace('freigabe-thema-', '');
+            const thema = THEMEN[themaId];
+            
+            // Sammle alle aktivierten Filter
+            const filter = {};
+            const filterCheckboxes = document.querySelectorAll(`[data-thema="${themaId}"][data-filter]:checked`);
+            
+            filterCheckboxes.forEach(filterCb => {
+                const filterType = filterCb.dataset.filter;
+                
+                if (filterType === 'ids') {
+                    const idsInput = document.getElementById(`filter-value-${themaId}-${filterType}`);
+                    if (idsInput && idsInput.value.trim()) {
+                        filter[filterType] = idsInput.value.split(',').map(id => id.trim()).filter(id => id);
+                    }
+                } else {
+                    const selectedValues = Array.from(document.querySelectorAll(`input[name="filter-value-${themaId}-${filterType}"]:checked`))
+                        .map(cb => cb.value);
+                    if (selectedValues.length > 0) {
+                        filter[filterType] = selectedValues;
+                    }
+                }
+            });
+            
+            freigabenData.push({
+                themaId,
+                themaName: thema.name,
+                filter
+            });
+        }
+    });
+    
+    try {
+        // Lösche alte Freigaben für diesen Benutzer
+        const oldFreigaben = Object.values(FREIGABEN).filter(f => f.userId === userId);
+        for (const old of oldFreigaben) {
+            await deleteDoc(doc(geschenkeFreigabenRef, old.id));
+        }
+        
+        // Erstelle neue Freigaben
+        for (const freigabeData of freigabenData) {
+            await addDoc(geschenkeFreigabenRef, {
+                userId,
+                userName: USERS[userId]?.displayName || '',
+                themaId: freigabeData.themaId,
+                themaName: freigabeData.themaName,
+                filter: freigabeData.filter,
+                aktiv: true,
+                erstelltAm: serverTimestamp(),
+                erstelltVon: currentUser.displayName
+            });
+        }
+        
+        await loadFreigaben();
+        alertUser('Freigaben erfolgreich gespeichert!', 'success');
+        window.closeFreigabeEditor();
+        renderFreigabenVerwaltung();
+    } catch (e) {
+        console.error('Fehler beim Speichern der Freigaben:', e);
+        alertUser('Fehler beim Speichern: ' + e.message, 'error');
+    }
+};
+
+window.closeFreigabeEditor = function() {
+    const modal = document.getElementById('freigabeEditorModal');
+    if (modal) modal.remove();
+};
 
 function renderOptionenVerwaltung() {
     // Status-Optionen
@@ -1283,10 +1626,11 @@ window.copyGeschenk = function(id) {
         <span class="block text-sm font-normal bg-yellow-400 text-yellow-900 px-2 py-1 rounded mt-1">⚠️ Hier wird die KOPIE bearbeitet</span>
     `;
     document.getElementById('gm-id').value = ''; // Leere ID = neuer Eintrag
+    document.getElementById('gm-id').setAttribute('data-is-copy', 'true'); // Markierung dass es eine Kopie ist
     
     fillModalForm(kopie);
     renderModalSelects(kopie);
-    updateModalActionButtons(false); // Keine Aktions-Buttons bei Kopie
+    updateModalActionButtons(false); // Keine Aktions-Buttons bei Kopie (inkl. "Vorlage laden")
     modal.style.display = 'flex';
 };
 
@@ -1295,6 +1639,7 @@ window.deleteGeschenk = async function(id) {
     if (!confirm('Geschenk wirklich löschen?')) return;
     try {
         await deleteDoc(doc(geschenkeCollection, id));
+        closeGeschenkModal(); // Modal schließen nach erfolgreichem Löschen
         alertUser('Geschenk gelöscht!', 'success');
     } catch (e) {
         alertUser('Fehler: ' + e.message, 'error');
@@ -1361,11 +1706,13 @@ window.applyVorlage = function(vorlageId) {
         <span>Neues Geschenk aus Vorlage</span>
         <span class="block text-sm font-normal bg-purple-200 text-purple-800 px-2 py-1 rounded mt-1">📑 Vorlage: ${vorlage.name || 'Unbenannt'}</span>
     `;
-    document.getElementById('gm-id').value = ''; // Leere ID = neuer Eintrag
+    const idField = document.getElementById('gm-id');
+    idField.value = ''; // Leere ID = neuer Eintrag
+    idField.removeAttribute('data-is-copy'); // Keine Kopie, sondern Vorlage
     
     fillModalForm(geschenkData);
     renderModalSelects(geschenkData);
-    updateModalActionButtons(false); // Keine Aktions-Buttons bei neuem Eintrag
+    updateModalActionButtons(false, false); // Keine Aktions-Buttons, kein "Vorlage laden" (da bereits geladen)
     modal.style.display = 'flex';
     
     alertUser('Vorlage geladen! Passe die Daten an und speichere.', 'info');
