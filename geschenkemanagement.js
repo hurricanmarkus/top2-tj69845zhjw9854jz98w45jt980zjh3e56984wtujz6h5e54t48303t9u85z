@@ -988,19 +988,44 @@ function renderFreigabenVerwaltung() {
             return false;
         }
         
-        // NUR wenn odooUserId gesetzt ist, damit vergleichen
+        // WICHTIG: Mehrere Checks um SICHERZUSTELLEN dass eigene Person nicht angezeigt wird
+        
+        // 1. Vergleich über Firebase Auth UID (request.auth.uid)
+        if (currentUser?.uid && u.uid === currentUser.uid) {
+            console.log('❌ User ist ich selbst (uid):', u.displayName || u.name);
+            return false;
+        }
+        
+        // 2. Vergleich über Odoo User ID
         if (currentUser?.odooUserId && u.id === currentUser.odooUserId) {
-            console.log('❌ User ist ich selbst (ID):', u.displayName);
+            console.log('❌ User ist ich selbst (odooUserId):', u.displayName || u.name);
             return false;
         }
         
-        // Fallback: Vergleich über displayName (aber nur exakt!)
-        if (currentUser?.displayName && u.displayName === currentUser.displayName && u.id) {
-            console.log('❌ User ist ich selbst (Name):', u.displayName);
+        if (currentUser?.odooUserId && u.odooUserId === currentUser.odooUserId) {
+            console.log('❌ User ist ich selbst (odooUserId 2):', u.displayName || u.name);
             return false;
         }
         
-        console.log('✅ User wird angezeigt:', u.displayName || u.name);
+        // 3. Vergleich über displayName
+        if (currentUser?.displayName && u.displayName === currentUser.displayName) {
+            console.log('❌ User ist ich selbst (displayName):', u.displayName);
+            return false;
+        }
+        
+        // 4. Vergleich über name
+        if (currentUser?.displayName && u.name === currentUser.displayName) {
+            console.log('❌ User ist ich selbst (name):', u.name);
+            return false;
+        }
+        
+        // 5. Vergleich über ID (falls currentUser.id gesetzt ist)
+        if (currentUser?.id && u.id === currentUser.id) {
+            console.log('❌ User ist ich selbst (id):', u.displayName || u.name);
+            return false;
+        }
+        
+        console.log('✅ User wird angezeigt:', u.displayName || u.name, '| ID:', u.id, '| uid:', u.uid);
         return true;
     });
     
@@ -3211,121 +3236,5 @@ window.exportToPDF = function() {
 // ========================================
 // FREIGABE-EDITOR (erweitert)
 // ========================================
-window.openFreigabeEditor = function(userId) {
-    const user = Object.values(USERS).find(u => u.id === userId);
-    if (!user) return;
-    
-    const existingFreigabe = Object.values(FREIGABEN).find(f => f.odooUserId === userId);
-    
-    const existingModal = document.getElementById('gm-freigabe-editor-modal');
-    if (existingModal) existingModal.remove();
-    
-    const modal = document.createElement('div');
-    modal.id = 'gm-freigabe-editor-modal';
-    modal.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]';
-    modal.innerHTML = `
-        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden">
-            <div class="bg-gradient-to-r from-blue-500 to-indigo-600 p-4 text-white rounded-t-2xl">
-                <h2 class="text-xl font-bold">🔐 Freigaben für ${user.displayName || user.name}</h2>
-            </div>
-            <div class="p-6 max-h-[70vh] overflow-y-auto space-y-6">
-                <!-- Thema auswählen -->
-                <div>
-                    <label class="block text-sm font-bold text-gray-700 mb-2">Thema freigeben</label>
-                    <select id="freigabe-thema" class="w-full px-4 py-2 border rounded-lg">
-                        <option value="">-- Thema auswählen --</option>
-                        ${Object.values(THEMEN).filter(t => !t.archiviert).map(t => 
-                            `<option value="${t.id}">${t.name}</option>`
-                        ).join('')}
-                    </select>
-                </div>
-                
-                <!-- Sichtbare Felder -->
-                <div>
-                    <label class="block text-sm font-bold text-gray-700 mb-2">Sichtbare Felder</label>
-                    <div class="grid grid-cols-2 gap-2">
-                        <label class="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                            <input type="checkbox" id="freigabe-fuer" checked class="rounded">
-                            <span>FÜR</span>
-                        </label>
-                        <label class="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                            <input type="checkbox" id="freigabe-von" checked class="rounded">
-                            <span>VON</span>
-                        </label>
-                        <label class="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                            <input type="checkbox" id="freigabe-id" checked class="rounded">
-                            <span>ID</span>
-                        </label>
-                        <label class="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                            <input type="checkbox" id="freigabe-bezahlt-von" checked class="rounded">
-                            <span>Bezahlt von</span>
-                        </label>
-                        <label class="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                            <input type="checkbox" id="freigabe-beteiligung" checked class="rounded">
-                            <span>Beteiligung</span>
-                        </label>
-                        <label class="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                            <input type="checkbox" id="freigabe-soll" checked class="rounded">
-                            <span>SOLL-Bezahlung</span>
-                        </label>
-                        <label class="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                            <input type="checkbox" id="freigabe-ist" checked class="rounded">
-                            <span>IST-Bezahlung</span>
-                        </label>
-                        <label class="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                            <input type="checkbox" id="freigabe-standort" checked class="rounded">
-                            <span>Standort</span>
-                        </label>
-                    </div>
-                </div>
-                
-                <!-- Filter nach Personen -->
-                <div>
-                    <label class="block text-sm font-bold text-gray-700 mb-2">Nur Einträge FÜR bestimmte Personen zeigen (optional)</label>
-                    <select id="freigabe-fuer-personen" multiple class="w-full px-4 py-2 border rounded-lg h-24">
-                        ${Object.values(KONTAKTE).map(k => 
-                            `<option value="${k.id}">${k.name}</option>`
-                        ).join('')}
-                    </select>
-                    <p class="text-xs text-gray-500 mt-1">Mehrfachauswahl mit Strg/Cmd. Leer lassen = alle Einträge sichtbar.</p>
-                </div>
-            </div>
-            <div class="p-4 border-t flex gap-2">
-                <button onclick="document.getElementById('gm-freigabe-editor-modal').remove()" 
-                    class="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300 transition">
-                    Abbrechen
-                </button>
-                <button onclick="window.sendFreigabeInvitation('${userId}', '${user.displayName || user.name}')" 
-                    class="flex-1 py-2 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600 transition">
-                    📨 Einladung senden
-                </button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-};
-
-window.sendFreigabeInvitation = async function(userId, userName) {
-    const themaId = document.getElementById('freigabe-thema').value;
-    if (!themaId) {
-        alertUser('Bitte wähle ein Thema aus.', 'warning');
-        return;
-    }
-    
-    const freigaben = {
-        fuer: document.getElementById('freigabe-fuer').checked,
-        von: document.getElementById('freigabe-von').checked,
-        id: document.getElementById('freigabe-id').checked,
-        bezahltVon: document.getElementById('freigabe-bezahlt-von').checked,
-        beteiligung: document.getElementById('freigabe-beteiligung').checked,
-        sollBezahlung: document.getElementById('freigabe-soll').checked,
-        istBezahlung: document.getElementById('freigabe-ist').checked,
-        standort: document.getElementById('freigabe-standort').checked,
-        fuerPersonen: Array.from(document.getElementById('freigabe-fuer-personen').selectedOptions).map(o => o.value)
-    };
-    
-    const success = await window.sendInvitation(userId, userName, themaId, freigaben);
-    if (success) {
-        document.getElementById('gm-freigabe-editor-modal')?.remove();
-    }
-};
+// ALTE FREIGABE-FUNKTIONEN ENTFERNT
+// Die neuen Funktionen sind oben ab Zeile 1083
