@@ -430,7 +430,7 @@ function renderPersonenUebersicht() {
             </div>
         </div>
         
-        <div id="gm-personen-details" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div id="gm-personen-details" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
     `;
     
     personenDaten.forEach(p => {
@@ -487,12 +487,12 @@ window.togglePersonenDetails = function() {
     const details = document.getElementById('gm-personen-details');
     const icon = document.getElementById('gm-personen-toggle-icon');
     if (details && icon) {
-        if (details.style.display === 'none') {
-            details.style.display = 'grid';
+        if (details.classList.contains('hidden')) {
+            details.classList.remove('hidden');
             icon.textContent = '▼';
             icon.style.transform = 'rotate(0deg)';
         } else {
-            details.style.display = 'none';
+            details.classList.add('hidden');
             icon.textContent = '▶';
             icon.style.transform = 'rotate(0deg)';
         }
@@ -936,10 +936,17 @@ function renderFreigabenVerwaltung() {
     if (!container) return;
     
     // Registrierte Benutzer (außer ich selbst)
-    const registrierteBenutzer = Object.values(USERS).filter(u => 
-        u.permissionType !== 'not_registered' && 
-        u.id !== currentUser.odooUserId
-    );
+    const registrierteBenutzer = Object.values(USERS).filter(u => {
+        if (u.permissionType === 'not_registered') return false;
+        
+        // Vergleiche mit mehreren Feldern um sicherzugehen
+        if (u.id === currentUser?.odooUserId) return false;
+        if (u.odooUserId === currentUser?.odooUserId) return false;
+        if (u.displayName === currentUser?.displayName) return false;
+        if (u.name === currentUser?.displayName) return false;
+        
+        return true;
+    });
     
     if (registrierteBenutzer.length === 0) {
         container.innerHTML = '<p class="text-gray-500 text-center py-4">Keine registrierten Benutzer gefunden</p>';
