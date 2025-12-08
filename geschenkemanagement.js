@@ -54,6 +54,7 @@ let ERINNERUNGEN = {};
 let currentThemaId = null;
 let searchTerm = '';
 let currentFilter = {};
+let personenDetailsAusgeklappt = false; // ✅ State für Personen-Übersicht
 
 // Einladungs-Status
 const EINLADUNG_STATUS = {
@@ -430,26 +431,38 @@ function renderPersonenUebersicht() {
                         <div class="bg-gradient-to-r from-green-500 to-emerald-500 h-3 rounded-full transition-all" 
                              style="width: ${gesamtStats.total > 0 ? Math.round((gesamtStats.fertig / gesamtStats.total) * 100) : 0}%"></div>
                     </div>
-                    <span id="gm-personen-toggle-icon" class="text-gray-500 transition-transform">▼</span>
+                    <span id="gm-personen-toggle-icon" class="text-gray-500 transition-transform" style="transform: rotate(${personenDetailsAusgeklappt ? '0' : '180'}deg)">▼</span>
                 </div>
             </div>
         </div>
         
-        <div id="gm-personen-details" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div id="gm-personen-details" class="${personenDetailsAusgeklappt ? '' : 'hidden'} grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
     `;
     
     personenDaten.forEach(p => {
         const progressPercent = p.total > 0 ? Math.round((p.fertig / p.total) * 100) : 0;
         
+        // ✅ Personen-Status aus Thema holen (Default: 'offen')
+        const personenStatus = thema.personenStatus || {};
+        const pStatus = personenStatus[p.id] || 'offen';
+        
+        // ✅ Farben basierend auf Status
+        const statusConfig = {
+            offen: { color: 'border-red-500', bg: 'bg-red-50', label: 'Offen', icon: '🔴' },
+            teilweise: { color: 'border-yellow-500', bg: 'bg-yellow-50', label: 'Teilweise', icon: '🟡' },
+            abgeschlossen: { color: 'border-green-500', bg: 'bg-green-50', label: 'Abgeschlossen', icon: '🟢' }
+        };
+        const cfg = statusConfig[pStatus] || statusConfig.offen;
+        
         html += `
-            <div class="bg-white rounded-xl shadow-md p-4 border-l-4 border-pink-500 hover:shadow-lg transition cursor-pointer" 
-                 onclick="window.filterByPerson('${p.id}')">
+            <div class="bg-white rounded-xl shadow-md p-4 border-l-4 ${cfg.color} hover:shadow-lg transition cursor-pointer ${cfg.bg}" 
+                 onclick="window.openPersonModal('${p.id}')">
                 <div class="flex items-center gap-3 mb-3">
                     <div class="w-12 h-12 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
                         ${p.name.charAt(0).toUpperCase()}
                     </div>
                     <div class="flex-1 min-w-0">
-                        <p class="font-bold text-gray-800 text-base leading-tight" style="word-wrap: break-word; overflow-wrap: break-word;">${p.name}</p>
+                        <p class="font-bold text-gray-800 text-base leading-tight" style="word-wrap: break-word; overflow-wrap: break-word;">${p.name} ${cfg.icon}</p>
                         <p class="text-sm text-gray-500">${p.fertig}/${p.total} fertig</p>
                     </div>
                 </div>
@@ -488,6 +501,199 @@ function renderPersonenUebersicht() {
 }
 
 // Toggle für Personen-Details
+// ✅ Person-Modal mit umfangreichen Details
+window.openPersonModal = function(personId) {
+    const person = KONTAKTE[personId];
+    if (!person || !currentThemaId) return;
+    
+    const thema = THEMEN[currentThemaId];
+    const alleGeschenke = Object.values(GESCHENKE);
+    const personGeschenke = alleGeschenke.filter(g => g.fuer && g.fuer.includes(personId));
+    
+    // Statistiken berechnen
+    const stats = {
+        total: personGeschenke.length,
+        offen: personGeschenke.filter(g => ['offen', 'idee', 'zu_bestellen'].includes(g.status)).length,
+        bestellt: personGeschenke.filter(g => ['bestellt', 'teillieferung'].includes(g.status)).length,
+        fertig: personGeschenke.filter(g => g.status === 'abgeschlossen').length,
+        gesamtkosten: personGeschenke.reduce((sum, g) => sum + (parseFloat(g.gesamtkosten) || 0), 0),
+        eigeneKosten: personGeschenke.reduce((sum, g) => sum + (parseFloat(g.eigeneKosten) || 0), 0)
+    };
+    
+    // Aktueller Status
+    const personenStatus = thema.personenStatus || {};
+    const currentStatus = personenStatus[personId] || 'offen';
+    
+    // Modal erstellen
+    let modal = document.getElementById('personModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'personModal';
+        modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+        document.body.appendChild(modal);
+    }
+    
+    modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-hidden">
+            <div class="sticky top-0 bg-gradient-to-r from-pink-600 to-purple-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                <div>
+                    <h3 class="text-2xl font-bold">👤 ${person.name}</h3>
+                    <p class="text-sm text-white/90 mt-1">Umfassender Bericht & Einstellungen</p>
+                </div>
+                <button onclick="document.getElementById('personModal').style.display='none'" class="text-white/80 hover:text-white transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto max-h-[calc(95vh-180px)]">
+                <!-- Status-Auswahl -->
+                <div class="mb-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border-2 border-blue-200">
+                    <h4 class="text-lg font-bold text-gray-800 mb-3">🎯 Status festlegen</h4>
+                    <div class="grid grid-cols-3 gap-3">
+                        <button onclick="window.setPersonStatus('${personId}', 'offen')" 
+                            class="p-3 rounded-lg border-2 ${currentStatus === 'offen' ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white'} hover:border-red-400 transition">
+                            <div class="text-3xl mb-1">🔴</div>
+                            <p class="font-bold text-gray-800">Offen</p>
+                            <p class="text-xs text-gray-500">Noch nichts erledigt</p>
+                        </button>
+                        <button onclick="window.setPersonStatus('${personId}', 'teilweise')" 
+                            class="p-3 rounded-lg border-2 ${currentStatus === 'teilweise' ? 'border-yellow-500 bg-yellow-50' : 'border-gray-300 bg-white'} hover:border-yellow-400 transition">
+                            <div class="text-3xl mb-1">🟡</div>
+                            <p class="font-bold text-gray-800">Teilweise</p>
+                            <p class="text-xs text-gray-500">In Arbeit</p>
+                        </button>
+                        <button onclick="window.setPersonStatus('${personId}', 'abgeschlossen')" 
+                            class="p-3 rounded-lg border-2 ${currentStatus === 'abgeschlossen' ? 'border-green-500 bg-green-50' : 'border-gray-300 bg-white'} hover:border-green-400 transition">
+                            <div class="text-3xl mb-1">🟢</div>
+                            <p class="font-bold text-gray-800">Abgeschlossen</p>
+                            <p class="text-xs text-gray-500">Alles erledigt</p>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Statistiken -->
+                <div class="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                        <p class="text-2xl font-bold text-blue-600">${stats.total}</p>
+                        <p class="text-sm text-gray-600">Geschenke gesamt</p>
+                    </div>
+                    <div class="bg-red-50 p-4 rounded-lg border border-red-200">
+                        <p class="text-2xl font-bold text-red-600">${stats.offen}</p>
+                        <p class="text-sm text-gray-600">Offen</p>
+                    </div>
+                    <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                        <p class="text-2xl font-bold text-yellow-600">${stats.bestellt}</p>
+                        <p class="text-sm text-gray-600">Bestellt</p>
+                    </div>
+                    <div class="bg-green-50 p-4 rounded-lg border border-green-200">
+                        <p class="text-2xl font-bold text-green-600">${stats.fertig}</p>
+                        <p class="text-sm text-gray-600">Fertig</p>
+                    </div>
+                </div>
+                
+                <!-- Kosten -->
+                <div class="mb-6 grid grid-cols-2 gap-4">
+                    <div class="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                        <p class="text-2xl font-bold text-purple-600">${stats.gesamtkosten.toFixed(2)} €</p>
+                        <p class="text-sm text-gray-600">Gesamtkosten</p>
+                    </div>
+                    <div class="bg-pink-50 p-4 rounded-lg border border-pink-200">
+                        <p class="text-2xl font-bold text-pink-600">${stats.eigeneKosten.toFixed(2)} €</p>
+                        <p class="text-sm text-gray-600">Eigene Kosten</p>
+                    </div>
+                </div>
+                
+                <!-- Geschenke-Liste -->
+                <div class="mb-6">
+                    <h4 class="text-lg font-bold text-gray-800 mb-3">🎁 Geschenke für ${person.name}</h4>
+                    ${stats.total === 0 ? `
+                        <p class="text-gray-500 text-center py-8 bg-gray-50 rounded-lg">Noch keine Geschenke für diese Person</p>
+                    ` : `
+                        <div class="space-y-2 max-h-96 overflow-y-auto">
+                            ${personGeschenke.map(g => {
+                                const statusCfg = STATUS_CONFIG[g.status] || STATUS_CONFIG.offen;
+                                return `
+                                    <div class="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition cursor-pointer"
+                                         onclick="window.openEditGeschenkModal('${g.id}')">
+                                        <div class="flex items-center justify-between mb-2">
+                                            <span class="font-bold text-gray-800">${g.geschenk || 'Ohne Titel'}</span>
+                                            <span class="px-2 py-1 rounded-full text-xs font-bold ${statusCfg.color}">
+                                                ${statusCfg.icon} ${statusCfg.label}
+                                            </span>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                                            <div>💰 Gesamtkosten: <strong>${(parseFloat(g.gesamtkosten) || 0).toFixed(2)} €</strong></div>
+                                            <div>💳 Eigene: <strong>${(parseFloat(g.eigeneKosten) || 0).toFixed(2)} €</strong></div>
+                                            <div>🆔 ID: <strong>${g.id?.slice(-6) || '-'}</strong></div>
+                                            <div>🏪 Shop: <strong>${g.shop || '-'}</strong></div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    `}
+                </div>
+                
+                <!-- Aktionen -->
+                <div class="flex gap-3">
+                    <button onclick="window.removePersonFromThema('${personId}')" 
+                        class="flex-1 px-4 py-3 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition">
+                        🗑️ Person aus Thema entfernen
+                    </button>
+                    <button onclick="document.getElementById('personModal').style.display='none'" 
+                        class="flex-1 px-4 py-3 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
+                        Schließen
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+};
+
+// ✅ Personen-Status setzen
+window.setPersonStatus = async function(personId, status) {
+    if (!currentThemaId) return;
+    
+    try {
+        const thema = THEMEN[currentThemaId];
+        const personenStatus = thema.personenStatus || {};
+        personenStatus[personId] = status;
+        
+        await updateDoc(doc(geschenkeThemenRef, currentThemaId), { personenStatus });
+        THEMEN[currentThemaId].personenStatus = personenStatus;
+        
+        renderPersonenUebersicht();
+        window.openPersonModal(personId); // Modal neu laden
+        alertUser('Status aktualisiert!', 'success');
+    } catch (e) {
+        alertUser('Fehler: ' + e.message, 'error');
+    }
+};
+
+// ✅ Person aus Thema entfernen
+window.removePersonFromThema = async function(personId) {
+    if (!currentThemaId) return;
+    if (!confirm('Diese Person wirklich aus dem Thema entfernen?')) return;
+    
+    try {
+        const thema = THEMEN[currentThemaId];
+        const personen = (thema.personen || []).filter(id => id !== personId);
+        
+        await updateDoc(doc(geschenkeThemenRef, currentThemaId), { personen });
+        THEMEN[currentThemaId].personen = personen;
+        
+        renderPersonenUebersicht();
+        document.getElementById('personModal').style.display = 'none';
+        alertUser('Person wurde aus dem Thema entfernt!', 'success');
+    } catch (e) {
+        alertUser('Fehler: ' + e.message, 'error');
+    }
+};
+
 window.togglePersonenDetails = function() {
     const details = document.getElementById('gm-personen-details');
     const icon = document.getElementById('gm-personen-toggle-icon');
@@ -496,8 +702,10 @@ window.togglePersonenDetails = function() {
             details.classList.remove('hidden');
             icon.textContent = '▼';
             icon.style.transform = 'rotate(0deg)';
+            personenDetailsAusgeklappt = true; // ✅ State speichern
         } else {
             details.classList.add('hidden');
+            personenDetailsAusgeklappt = false; // ✅ State speichern
             icon.textContent = '▶';
             icon.style.transform = 'rotate(0deg)';
         }
@@ -757,24 +965,60 @@ window.updateEigeneKostenAuto = function() {
     const gesamtkostenInput = document.getElementById('gm-gesamtkosten');
     const eigeneKostenInput = document.getElementById('gm-eigene-kosten');
     const hintElement = document.getElementById('gm-eigene-kosten-hint');
+    const vorschlagContainer = document.getElementById('gm-kosten-vorschlag');
     
     if (!beteiligungCheckboxes || !gesamtkostenInput || !eigeneKostenInput) return;
     
     const beteiligteIds = Array.from(beteiligungCheckboxes).map(cb => cb.value);
+    const gesamtkosten = parseFloat(gesamtkostenInput.value) || 0;
     
     // Wenn nur ICH beteiligt bin (eigenePerson.id)
     if (beteiligteIds.length === 1 && eigenePerson && beteiligteIds[0] === eigenePerson.id) {
-        const gesamtkosten = parseFloat(gesamtkostenInput.value) || 0;
         eigeneKostenInput.value = gesamtkosten.toFixed(2);
         eigeneKostenInput.readOnly = true;
         eigeneKostenInput.style.backgroundColor = '#e0f2fe'; // Hellblau
         eigeneKostenInput.style.borderColor = '#0ea5e9'; // Blau
         if (hintElement) hintElement.textContent = '✨ Auto-berechnet';
+        if (vorschlagContainer) vorschlagContainer.style.display = 'none';
+    } else if (beteiligteIds.length > 1 && gesamtkosten > 0) {
+        // ✅ Mehrere Personen: Vorschlag berechnen
+        const anzahlPersonen = beteiligteIds.length;
+        const prozent = Math.round(100 / anzahlPersonen);
+        const vorschlagBetrag = (gesamtkosten * prozent / 100).toFixed(2);
+        
+        eigeneKostenInput.readOnly = false;
+        eigeneKostenInput.style.backgroundColor = '';
+        eigeneKostenInput.style.borderColor = '';
+        if (hintElement) hintElement.textContent = '';
+        
+        // Vorschlag anzeigen
+        if (vorschlagContainer) {
+            vorschlagContainer.style.display = 'flex';
+            vorschlagContainer.innerHTML = `
+                <div class="flex items-center gap-3 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                    <span class="text-sm text-gray-700">💡 Vorschlag: <strong>${prozent}%</strong> von Gesamtkosten = <strong>${vorschlagBetrag} €</strong></span>
+                    <button onclick="window.uebertrageKostenVorschlag(${vorschlagBetrag})" 
+                        class="px-3 py-1 bg-blue-500 text-white text-sm font-bold rounded hover:bg-blue-600 transition">
+                        ✓ Übertragen
+                    </button>
+                </div>
+            `;
+        }
     } else {
         eigeneKostenInput.readOnly = false;
         eigeneKostenInput.style.backgroundColor = '';
         eigeneKostenInput.style.borderColor = '';
         if (hintElement) hintElement.textContent = '';
+        if (vorschlagContainer) vorschlagContainer.style.display = 'none';
+    }
+};
+
+// ✅ Übertrage Kostenvorschlag in das Eingabefeld
+window.uebertrageKostenVorschlag = function(betrag) {
+    const eigeneKostenInput = document.getElementById('gm-eigene-kosten');
+    if (eigeneKostenInput) {
+        eigeneKostenInput.value = betrag.toFixed(2);
+        eigeneKostenInput.focus();
     }
 };
 
@@ -901,11 +1145,16 @@ function renderKontaktbuch() {
                 ${k.istEigenePerson ? '<span class="text-xs bg-pink-200 text-pink-800 px-2 py-0.5 rounded-full">Ich</span>' : ''}
             </div>
             ${!k.istEigenePerson ? `
-                <button onclick="window.deleteKontakt('${k.id}')" class="text-red-500 hover:text-red-700 p-1">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                    </svg>
-                </button>
+                <div class="flex gap-2">
+                    <button onclick="window.editKontakt('${k.id}')" class="text-blue-500 hover:text-blue-700 p-1" title="Bearbeiten">
+                        ✏️
+                    </button>
+                    <button onclick="window.deleteKontakt('${k.id}')" class="text-red-500 hover:text-red-700 p-1" title="Löschen">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                    </button>
+                </div>
             ` : ''}
         </div>
     `).join('');
@@ -2266,6 +2515,7 @@ window.addPersonToThema = async function(kontaktId) {
             personen.push(kontaktId);
             await updateDoc(doc(geschenkeThemenRef, currentThemaId), { personen });
             THEMEN[currentThemaId].personen = personen;
+            personenDetailsAusgeklappt = true; // ✅ Nach Hinzufügen ausgeklappt lassen
             renderPersonenUebersicht();
             alertUser(`${kontakt.name} wurde hinzugefügt!`, 'success');
         }
@@ -2282,6 +2532,32 @@ window.deleteKontakt = async function(id) {
         delete KONTAKTE[id];
         renderKontaktbuch();
         alertUser('Kontakt gelöscht!', 'success');
+    } catch (e) {
+        alertUser('Fehler: ' + e.message, 'error');
+    }
+};
+
+// ✅ Kontakt bearbeiten - Name wird systemweit aktualisiert
+window.editKontakt = async function(id) {
+    const kontakt = KONTAKTE[id];
+    if (!kontakt) return;
+    
+    const newName = prompt('Neuer Name für den Kontakt:', kontakt.name);
+    if (!newName || newName.trim() === '' || newName === kontakt.name) return;
+    
+    try {
+        // Update in Firestore
+        await updateDoc(doc(geschenkeKontakteRef, id), { name: newName.trim() });
+        
+        // Update im lokalen Cache
+        KONTAKTE[id].name = newName.trim();
+        
+        // ✅ Systemweite UI-Updates
+        renderKontaktbuch();          // Kontaktbuch
+        renderPersonenUebersicht();   // Dashboard Personen-Übersicht
+        renderGeschenkeTabelle();     // Geschenke-Tabelle (zeigt Namen)
+        
+        alertUser('Kontakt aktualisiert! Namen werden überall im System übernommen.', 'success');
     } catch (e) {
         alertUser('Fehler: ' + e.message, 'error');
     }
@@ -2388,7 +2664,7 @@ window.copyGeschenk = function(id) {
     
     // Kopie-Daten vorbereiten
     const kopie = { ...original };
-    kopie.geschenk = (kopie.geschenk || '') + ' (Kopie)';
+    // ✅ KEIN "(Kopie)" mehr im Titel - Benutzer-Wunsch
     
     // Modal als "Kopie bearbeiten" öffnen
     document.getElementById('geschenkModalTitle').innerHTML = `
