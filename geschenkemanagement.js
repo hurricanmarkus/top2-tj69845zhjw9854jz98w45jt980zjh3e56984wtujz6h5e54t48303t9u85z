@@ -862,6 +862,10 @@ function closeSettingsModalFn() {
 }
 
 function renderSettingsTabs() {
+    console.log('📋 renderSettingsTabs aufgerufen');
+    console.log('👥 USERS verfügbar:', Object.keys(USERS).length, 'User(s)');
+    console.log('🔑 currentUser:', currentUser?.displayName, currentUser?.odooUserId);
+    
     // Kontaktbuch rendern
     renderKontaktbuch();
     // Themen rendern
@@ -938,9 +942,10 @@ function renderFreigabenVerwaltung() {
     // DEBUG: Prüfe USERS und currentUser
     console.log('🔍 DEBUG Freigaben:', {
         totalUsers: Object.keys(USERS).length,
+        usersIsEmpty: Object.keys(USERS).length === 0,
         currentUserId: currentUser?.odooUserId,
         currentUserName: currentUser?.displayName,
-        usersArray: Object.values(USERS).map(u => ({
+        usersArray: Object.values(USERS).slice(0, 5).map(u => ({
             id: u.id,
             odooUserId: u.odooUserId,
             name: u.name || u.displayName,
@@ -948,8 +953,32 @@ function renderFreigabenVerwaltung() {
         }))
     });
     
+    // Prüfe ob USERS geladen ist
+    if (!USERS || Object.keys(USERS).length === 0) {
+        container.innerHTML = `
+            <div class="p-4 bg-yellow-50 border-l-4 border-yellow-500 rounded">
+                <p class="text-sm text-yellow-800">
+                    <strong>⚠️ Benutzerdaten werden geladen...</strong><br>
+                    Falls diese Meldung bestehen bleibt, lade die Seite bitte neu.
+                </p>
+                <button onclick="location.reload()" class="mt-2 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 font-bold">
+                    🔄 Seite neu laden
+                </button>
+            </div>
+        `;
+        
+        // Versuche nach 2 Sekunden erneut zu rendern
+        setTimeout(() => {
+            if (Object.keys(USERS).length > 0) {
+                renderFreigabenVerwaltung();
+            }
+        }, 2000);
+        return;
+    }
+    
     // Registrierte Benutzer (außer ich selbst)
     const registrierteBenutzer = Object.values(USERS).filter(u => {
+        if (!u) return false;
         if (u.permissionType === 'not_registered') return false;
         
         // Vergleiche mit mehreren Feldern um sicherzugehen
@@ -961,7 +990,7 @@ function renderFreigabenVerwaltung() {
         return true;
     });
     
-    console.log('✅ Gefilterte Benutzer:', registrierteBenutzer.length);
+    console.log('✅ Gefilterte Benutzer:', registrierteBenutzer.length, registrierteBenutzer.map(u => u.displayName || u.name));
     
     if (registrierteBenutzer.length === 0) {
         container.innerHTML = '<p class="text-gray-500 text-center py-4">Keine registrierten Benutzer gefunden</p>';
