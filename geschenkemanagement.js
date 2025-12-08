@@ -1037,11 +1037,11 @@ window.openFreigabeEditor = function(userId) {
     const themenArray = Object.values(THEMEN).filter(t => !t.archiviert);
     
     modal.innerHTML = `
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[95vh] overflow-hidden">
             <div class="sticky top-0 bg-gradient-to-r from-blue-600 to-purple-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
                 <div>
-                    <h3 class="text-xl font-bold">🔐 Freigaben für ${user.displayName || user.name}</h3>
-                    <p class="text-xs text-white/80 mt-1">Neue Freigaben werden per Einladung gesendet</p>
+                    <h3 class="text-2xl font-bold">🔐 Freigaben für ${user.displayName || user.name}</h3>
+                    <p class="text-sm text-white/90 mt-1">Themen auswählen und Berechtigungen festlegen</p>
                 </div>
                 <button onclick="window.closeFreigabeEditor()" class="text-white/80 hover:text-white transition">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1050,36 +1050,101 @@ window.openFreigabeEditor = function(userId) {
                 </button>
             </div>
             
-            <div class="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+            <div class="p-6 overflow-y-auto max-h-[calc(95vh-180px)]">
                 ${themenArray.length === 0 ? `
                     <p class="text-gray-500 text-center py-8">Keine Themen vorhanden. Erstelle zuerst Themen.</p>
                 ` : `
-                    <div class="mb-4 p-4 bg-blue-50 border-l-4 border-blue-500 rounded">
-                        <p class="text-sm text-blue-800">
-                            <strong>💡 Hinweis:</strong> Wähle ein Thema aus und konfiguriere die Freigabe. 
-                            ${user.displayName} muss die Einladung annehmen, bevor die Freigabe aktiv wird.
-                        </p>
+                    <!-- TEIL 1: THEMA AUSWÄHLEN -->
+                    <div class="mb-6 p-5 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border-2 border-blue-300">
+                        <h4 class="text-lg font-bold text-blue-900 mb-3">📁 TEIL 1: Thema auswählen</h4>
+                        <p class="text-sm text-gray-700 mb-4">Wähle aus, welche Themen ${user.displayName} sehen kann:</p>
+                        <div class="grid grid-cols-2 gap-3">
+                            ${themenArray.map(t => `
+                                <label class="flex items-center gap-3 p-3 bg-white rounded-lg border-2 cursor-pointer hover:border-blue-500 transition">
+                                    <input type="checkbox" 
+                                        id="thema-select-${t.id}" 
+                                        value="${t.id}"
+                                        onchange="window.updateTeil2Visibility()"
+                                        class="w-5 h-5 text-blue-600 rounded">
+                                    <span class="font-semibold text-gray-800">${t.name}</span>
+                                </label>
+                            `).join('')}
+                        </div>
                     </div>
                     
-                    <button onclick="window.addThemaFreigabe()" 
-                        class="w-full mb-4 px-4 py-3 bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center justify-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                        </svg>
-                        Neue Freigabe hinzufügen
-                    </button>
-                    
-                    <div id="freigaben-container" class="space-y-4">
-                        <!-- Wird dynamisch befüllt -->
+                    <!-- TEIL 2: BERECHTIGUNGEN FESTLEGEN -->
+                    <div id="teil2-container" class="mb-6 p-5 bg-gradient-to-r from-green-50 to-blue-50 rounded-xl border-2 border-green-300 hidden">
+                        <h4 class="text-lg font-bold text-green-900 mb-3">🔐 TEIL 2: Berechtigungen festlegen</h4>
+                        <p class="text-sm text-gray-700 mb-4">Wähle einen Filter aus und lege fest, welche Einträge sichtbar sind:</p>
+                        
+                        <!-- Filter-Auswahl -->
+                        <div class="bg-white rounded-lg p-4 mb-4 border-2 border-gray-300">
+                            <label class="block text-sm font-bold text-gray-700 mb-2">Filter-Typ wählen:</label>
+                            <select id="filter-typ-select" onchange="window.updateFilterDetails()" 
+                                class="w-full p-3 border-2 border-gray-300 rounded-lg font-semibold">
+                                <option value="">-- Bitte wählen --</option>
+                                <option value="fuerPerson">🎁 ALLE Einträge FÜR Person(en)</option>
+                                <option value="vonPerson">🎀 ALLE Einträge VON Person(en)</option>
+                                <option value="beteiligungPerson">👥 ALLE Einträge mit BETEILIGUNG Person(en)</option>
+                                <option value="bezahltVonPerson">💳 ALLE Einträge BEZAHLT VON Person(en)</option>
+                                <option value="sollBezahlungKonto">💰 ALLE Einträge mit SOLL-Bezahlung Konto</option>
+                                <option value="istBezahlungKonto">✅ ALLE Einträge mit IST-Bezahlung Konto</option>
+                                <option value="bezahlungKonto">🏦 ALLE Einträge mit Bezahlung Konto (SOLL ODER IST)</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Filter-Details (Person/Konto Auswahl) -->
+                        <div id="filter-details-container" class="hidden bg-white rounded-lg p-4 mb-4 border-2 border-blue-300">
+                            <!-- Wird dynamisch befüllt -->
+                        </div>
+                        
+                        <!-- Berechtigungen -->
+                        <div id="rechte-container" class="hidden bg-white rounded-lg p-4 mb-4 border-2 border-purple-300">
+                            <label class="block text-sm font-bold text-gray-700 mb-3">Berechtigung für diese Regel:</label>
+                            <div class="flex gap-4">
+                                <label class="flex-1 flex items-center gap-3 p-3 rounded-lg cursor-pointer border-2 border-gray-300 hover:border-blue-500">
+                                    <input type="radio" name="regel-rechte" value="lesen" checked class="w-4 h-4 text-blue-600">
+                                    <div>
+                                        <p class="font-bold">👁️ Leserechte</p>
+                                        <p class="text-xs text-gray-500">Nur ansehen</p>
+                                    </div>
+                                </label>
+                                <label class="flex-1 flex items-center gap-3 p-3 rounded-lg cursor-pointer border-2 border-gray-300 hover:border-green-500">
+                                    <input type="radio" name="regel-rechte" value="bearbeiten" class="w-4 h-4 text-green-600">
+                                    <div>
+                                        <p class="font-bold">✏️ Bearbeitungsrechte</p>
+                                        <p class="text-xs text-gray-500">Ansehen & ändern</p>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <!-- Hinzufügen Button -->
+                        <button id="add-regel-btn" onclick="window.addRegelToListe()" 
+                            class="hidden w-full py-3 bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold rounded-lg hover:shadow-lg transition">
+                            ➕ Regel zur Berechtigungsliste hinzufügen
+                        </button>
+                        
+                        <!-- Berechtigungsliste -->
+                        <div class="mt-6">
+                            <h5 class="text-md font-bold text-gray-800 mb-3">📋 Berechtigungsliste:</h5>
+                            <div id="berechtigungs-liste" class="space-y-2 min-h-[100px] p-3 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                                <p class="text-gray-400 text-sm text-center py-4">Noch keine Berechtigungen hinzugefügt</p>
+                            </div>
+                        </div>
                     </div>
                 `}
             </div>
             
             <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-between gap-3">
-                <button onclick="window.closeFreigabeEditor()" class="px-6 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
-                    Schließen
+                <button onclick="window.closeFreigabeEditor()" class="px-6 py-3 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
+                    Abbrechen
                 </button>
-                <button onclick="window.sendFreigabeEinladungen('${userId}')" class="px-6 py-2 bg-gradient-to-r from-green-600 to-blue-500 text-white font-bold rounded-lg hover:shadow-lg transition">
+                <button onclick="window.sendNeueFreigabeEinladungen('${userId}')" 
+                    class="px-6 py-3 bg-gradient-to-r from-green-600 to-blue-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
                     📧 Einladungen senden
                 </button>
             </div>
@@ -1088,30 +1153,184 @@ window.openFreigabeEditor = function(userId) {
     
     modal.style.display = 'flex';
     
-    // Initialisiere Freigaben-Liste
-    renderFreigabenListe(userId, userFreigaben, userEinladungen);
+    // Initialisiere Berechtigungsliste
+    window.berechtigungsListe = [];
 };
 
 // ========================================
-// NEUE HELPER-FUNKTIONEN
+// NEUE HELPER-FUNKTIONEN FÜR TEIL 2
 // ========================================
 
-let freigabenCounter = 0; // Zähler für eindeutige IDs
+// Globale Berechtigungsliste
+window.berechtigungsListe = [];
 
-function renderFreigabenListe(userId, userFreigaben, userEinladungen) {
-    const container = document.getElementById('freigaben-container');
+// Zeige/Verstecke Teil 2 basierend auf Thema-Auswahl
+window.updateTeil2Visibility = function() {
+    const themaCheckboxes = document.querySelectorAll('[id^="thema-select-"]:checked');
+    const teil2Container = document.getElementById('teil2-container');
+    
+    if (themaCheckboxes.length > 0) {
+        teil2Container?.classList.remove('hidden');
+    } else {
+        teil2Container?.classList.add('hidden');
+    }
+};
+
+// Aktualisiere Filter-Details basierend auf Filter-Typ
+window.updateFilterDetails = function() {
+    const filterTyp = document.getElementById('filter-typ-select')?.value;
+    const detailsContainer = document.getElementById('filter-details-container');
+    const rechteContainer = document.getElementById('rechte-container');
+    const addBtn = document.getElementById('add-regel-btn');
+    
+    if (!filterTyp || !detailsContainer) return;
+    
+    detailsContainer.classList.remove('hidden');
+    rechteContainer?.classList.remove('hidden');
+    addBtn?.classList.remove('hidden');
+    
+    let html = '';
+    
+    if (filterTyp.includes('Person')) {
+        // Person-Auswahl
+        const kontakte = Object.values(KONTAKTE);
+        html = `
+            <label class="block text-sm font-bold text-gray-700 mb-3">Person(en) auswählen:</label>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto p-2 bg-gray-50 rounded">
+                ${kontakte.map(k => `
+                    <label class="flex items-center gap-2 p-2 hover:bg-blue-100 rounded cursor-pointer">
+                        <input type="checkbox" 
+                            name="filter-wert-checkbox" 
+                            value="${k.id}"
+                            class="w-4 h-4 text-blue-600 rounded">
+                        <span class="text-sm ${k.istEigenePerson ? 'font-bold text-blue-600' : ''}">${k.name}</span>
+                    </label>
+                `).join('')}
+            </div>
+        `;
+    } else if (filterTyp.includes('Konto')) {
+        // Konto-Auswahl
+        const konten = Object.entries(ZAHLUNGSARTEN);
+        html = `
+            <label class="block text-sm font-bold text-gray-700 mb-3">Konto auswählen:</label>
+            <div class="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto p-2 bg-gray-50 rounded">
+                ${konten.map(([key, config]) => `
+                    <label class="flex items-center gap-2 p-2 hover:bg-blue-100 rounded cursor-pointer">
+                        <input type="radio" 
+                            name="filter-wert-radio" 
+                            value="${key}"
+                            class="w-4 h-4 text-blue-600">
+                        <span class="text-sm">${config.label}</span>
+                    </label>
+                `).join('')}
+            </div>
+        `;
+    }
+    
+    detailsContainer.innerHTML = html;
+};
+
+// Füge Regel zur Berechtigungsliste hinzu
+window.addRegelToListe = function() {
+    const filterTyp = document.getElementById('filter-typ-select')?.value;
+    if (!filterTyp) return;
+    
+    // Hole ausgewählte Werte
+    let selectedValues = [];
+    let filterLabel = '';
+    
+    if (filterTyp.includes('Person')) {
+        const checkboxes = document.querySelectorAll('input[name="filter-wert-checkbox"]:checked');
+        if (checkboxes.length === 0) {
+            alertUser('Bitte wähle mindestens eine Person aus', 'warning');
+            return;
+        }
+        selectedValues = Array.from(checkboxes).map(cb => ({
+            id: cb.value,
+            name: KONTAKTE[cb.value]?.name || 'Unbekannt'
+        }));
+        
+        switch(filterTyp) {
+            case 'fuerPerson': filterLabel = '🎁 FÜR'; break;
+            case 'vonPerson': filterLabel = '🎀 VON'; break;
+            case 'beteiligungPerson': filterLabel = '👥 BETEILIGUNG'; break;
+            case 'bezahltVonPerson': filterLabel = '💳 BEZAHLT VON'; break;
+        }
+    } else {
+        const radio = document.querySelector('input[name="filter-wert-radio"]:checked');
+        if (!radio) {
+            alertUser('Bitte wähle ein Konto aus', 'warning');
+            return;
+        }
+        selectedValues = [{
+            id: radio.value,
+            name: ZAHLUNGSARTEN[radio.value]?.label || 'Unbekannt'
+        }];
+        
+        switch(filterTyp) {
+            case 'sollBezahlungKonto': filterLabel = '💰 SOLL-Bezahlung'; break;
+            case 'istBezahlungKonto': filterLabel = '✅ IST-Bezahlung'; break;
+            case 'bezahlungKonto': filterLabel = '🏦 Bezahlung (SOLL/IST)'; break;
+        }
+    }
+    
+    // Hole Berechtigung
+    const rechteRadio = document.querySelector('input[name="regel-rechte"]:checked');
+    const rechte = rechteRadio?.value || 'lesen';
+    
+    // Füge zur Liste hinzu
+    const regel = {
+        id: Date.now(),
+        filterTyp,
+        filterLabel,
+        selectedValues,
+        rechte
+    };
+    
+    window.berechtigungsListe.push(regel);
+    renderBerechtigungsListe();
+    
+    // Reset
+    document.getElementById('filter-typ-select').value = '';
+    document.getElementById('filter-details-container').classList.add('hidden');
+    document.getElementById('rechte-container').classList.add('hidden');
+    document.getElementById('add-regel-btn').classList.add('hidden');
+};
+
+// Rendere Berechtigungsliste
+function renderBerechtigungsListe() {
+    const container = document.getElementById('berechtigungs-liste');
     if (!container) return;
     
-    const themenArray = Object.values(THEMEN).filter(t => !t.archiviert);
-    
-    if (themenArray.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 text-center py-4">Keine Themen verfügbar</p>';
+    if (window.berechtigungsListe.length === 0) {
+        container.innerHTML = '<p class="text-gray-400 text-sm text-center py-4">Noch keine Berechtigungen hinzugefügt</p>';
         return;
     }
     
-    container.innerHTML = '';
-    freigabenCounter = 0;
+    container.innerHTML = window.berechtigungsListe.map(regel => `
+        <div class="flex items-center justify-between p-3 bg-white rounded-lg border-2 border-blue-200">
+            <div class="flex-1">
+                <p class="font-bold text-sm">${regel.filterLabel}</p>
+                <p class="text-xs text-gray-600">
+                    ${regel.selectedValues.map(v => v.name).join(', ')}
+                </p>
+                <span class="inline-block mt-1 px-2 py-0.5 text-xs font-bold rounded ${regel.rechte === 'lesen' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}">
+                    ${regel.rechte === 'lesen' ? '👁️ Lesen' : '✏️ Bearbeiten'}
+                </span>
+            </div>
+            <button onclick="window.removeRegelFromListe(${regel.id})" 
+                class="ml-3 px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-bold text-sm">
+                🗑️
+            </button>
+        </div>
+    `).join('');
 }
+
+// Entferne Regel aus Liste
+window.removeRegelFromListe = function(regelId) {
+    window.berechtigungsListe = window.berechtigungsListe.filter(r => r.id !== regelId);
+    renderBerechtigungsListe();
+};
 
 window.addThemaFreigabe = function() {
     const container = document.getElementById('freigaben-container');
@@ -1328,9 +1547,93 @@ window.removeFreigabe = function(freigabeId) {
 };
 
 // ========================================
-// EINLADUNGSSYSTEM
+// EINLADUNGSSYSTEM (NEU)
 // ========================================
 
+window.sendNeueFreigabeEinladungen = async function(userId) {
+    const user = USERS[userId];
+    if (!user) return;
+    
+    // Hole ausgewählte Themen
+    const themaCheckboxes = document.querySelectorAll('[id^="thema-select-"]:checked');
+    if (themaCheckboxes.length === 0) {
+        alertUser('Bitte wähle mindestens ein Thema aus', 'warning');
+        return;
+    }
+    
+    if (window.berechtigungsListe.length === 0) {
+        alertUser('Bitte füge mindestens eine Berechtigung hinzu', 'warning');
+        return;
+    }
+    
+    const selectedThemen = Array.from(themaCheckboxes).map(cb => cb.value);
+    
+    try {
+        // Erstelle für jedes Thema eine Einladung
+        for (const themaId of selectedThemen) {
+            const thema = THEMEN[themaId];
+            if (!thema) continue;
+            
+            // Konvertiere Berechtigungsliste in Filter-Format
+            const filter = {};
+            const rechteMap = {}; // Für jede Regel die Rechte speichern
+            
+            window.berechtigungsListe.forEach(regel => {
+                const filterKey = regel.filterTyp;
+                const valueIds = regel.selectedValues.map(v => v.id);
+                
+                // Speichere Filter
+                filter[filterKey] = valueIds;
+                
+                // Speichere Rechte für diese Regel
+                rechteMap[filterKey] = regel.rechte;
+            });
+            
+            // Prüfe ob bereits Einladung existiert
+            const existingEinladung = Object.values(EINLADUNGEN).find(e =>
+                e.empfaengerId === userId &&
+                e.absenderId === currentUser.odooUserId &&
+                e.themaId === themaId &&
+                e.status === 'pending'
+            );
+            
+            if (existingEinladung) {
+                // Update
+                await updateDoc(doc(geschenkeEinladungenRef, existingEinladung.id), {
+                    filter,
+                    rechteMap,
+                    freigabeTyp: 'gefiltert',
+                    aktualisiertAm: serverTimestamp()
+                });
+            } else {
+                // Neu erstellen
+                await addDoc(geschenkeEinladungenRef, {
+                    absenderId: currentUser.odooUserId,
+                    absenderName: currentUser.displayName,
+                    empfaengerId: userId,
+                    empfaengerName: user.displayName || user.name,
+                    themaId,
+                    themaName: thema.name,
+                    filter,
+                    rechteMap,
+                    freigabeTyp: 'gefiltert',
+                    status: 'pending',
+                    erstelltAm: serverTimestamp()
+                });
+            }
+        }
+        
+        await loadEinladungen();
+        alertUser(`📧 ${selectedThemen.length} Einladung(en) erfolgreich gesendet!`, 'success');
+        window.closeFreigabeEditor();
+        renderFreigabenVerwaltung();
+    } catch (e) {
+        console.error('Fehler beim Senden:', e);
+        alertUser('Fehler: ' + e.message, 'error');
+    }
+};
+
+// ALTE Funktion (behalten für Kompatibilität)
 window.sendFreigabeEinladungen = async function(userId) {
     const user = USERS[userId];
     if (!user) return;

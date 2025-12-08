@@ -498,3 +498,5 @@ Implementierung:
 **Datum:** 6. Dezember 2025  
 **Version:** 2.0 - Finale Release
 
+
+
