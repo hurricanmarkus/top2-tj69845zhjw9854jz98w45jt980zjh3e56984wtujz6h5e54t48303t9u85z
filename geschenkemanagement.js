@@ -1286,17 +1286,48 @@ window.updateFilterDetails = function() {
         // Einzelne Einträge - Sammle alle Geschenke aus ausgewählten Themen
         const selectedThemen = Array.from(document.querySelectorAll('[id^="thema-select-"]:checked')).map(cb => cb.value);
         
+        console.log('🔍 DEBUG Einzelne Einträge:', {
+            selectedThemen,
+            totalGeschenke: Object.keys(GESCHENKE).length,
+            geschenkeArray: Object.values(GESCHENKE).slice(0, 3).map(g => ({
+                id: g.id,
+                themaId: g.themaId,
+                archiviert: g.archiviert,
+                geschenkIdee: g.geschenkIdee
+            }))
+        });
+        
         if (selectedThemen.length === 0) {
             html = `<p class="text-yellow-600 text-sm font-bold">⚠️ Bitte wähle zuerst mindestens ein Thema in TEIL 1 aus!</p>`;
         } else {
             // Sammle alle Geschenke aus den ausgewählten Themen
-            const alleGeschenke = Object.values(GESCHENKE).filter(g => 
-                selectedThemen.includes(g.themaId) && 
-                !g.archiviert
-            );
+            const alleGeschenke = Object.values(GESCHENKE).filter(g => {
+                const matches = selectedThemen.includes(g.themaId) && !g.archiviert;
+                console.log('Geschenk Check:', {
+                    id: g.id?.slice(0, 8),
+                    themaId: g.themaId,
+                    archiviert: g.archiviert,
+                    matches
+                });
+                return matches;
+            });
+            
+            console.log('✅ Gefilterte Geschenke:', alleGeschenke.length);
             
             if (alleGeschenke.length === 0) {
-                html = `<p class="text-gray-500 text-sm">Keine Einträge in den ausgewählten Themen vorhanden.</p>`;
+                html = `
+                    <div class="p-4 bg-yellow-50 border-l-4 border-yellow-500 rounded">
+                        <p class="text-yellow-800 font-bold mb-2">⚠️ Keine Einträge gefunden</p>
+                        <p class="text-sm text-yellow-700">
+                            Ausgewählte Themen: ${selectedThemen.length}<br>
+                            Gesamt Geschenke in System: ${Object.keys(GESCHENKE).length}<br>
+                            Nicht-archivierte: ${Object.values(GESCHENKE).filter(g => !g.archiviert).length}
+                        </p>
+                        <p class="text-xs text-yellow-600 mt-2">
+                            💡 Tipp: Erstelle zuerst Geschenke in den ausgewählten Themen oder prüfe die Konsole (F12) für Details.
+                        </p>
+                    </div>
+                `;
             } else {
                 html = `
                     <label class="block text-sm font-bold text-gray-700 mb-3">Einträge auswählen (${alleGeschenke.length} verfügbar):</label>
