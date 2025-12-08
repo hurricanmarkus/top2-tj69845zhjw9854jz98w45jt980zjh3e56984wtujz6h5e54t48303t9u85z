@@ -995,9 +995,18 @@ window.updateEigeneKostenAuto = function() {
         if (vorschlagContainer) {
             vorschlagContainer.style.display = 'flex';
             vorschlagContainer.innerHTML = `
-                <div class="flex items-center gap-3 p-2 bg-blue-50 border border-blue-200 rounded-lg">
-                    <span class="text-sm text-gray-700">💡 Vorschlag: <strong>${prozent}%</strong> von Gesamtkosten = <strong>${vorschlagBetrag} €</strong></span>
-                    <button onclick="window.uebertrageKostenVorschlag(${vorschlagBetrag})" 
+                <div class="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded-lg flex-wrap">
+                    <span class="text-sm text-gray-700">💡 Vorschlag:</span>
+                    <input type="number" 
+                        id="kosten-prozent-input" 
+                        value="${prozent}" 
+                        min="0" 
+                        max="100" 
+                        step="1"
+                        oninput="window.updateKostenVorschlagBetrag()"
+                        class="w-16 px-2 py-1 border border-blue-300 rounded text-center font-bold">
+                    <span class="text-sm text-gray-700">% von Gesamtkosten = <strong id="kosten-betrag-display">${vorschlagBetrag} €</strong></span>
+                    <button onclick="window.uebertrageKostenVorschlag()" 
                         class="px-3 py-1 bg-blue-500 text-white text-sm font-bold rounded hover:bg-blue-600 transition">
                         ✓ Übertragen
                     </button>
@@ -1013,10 +1022,33 @@ window.updateEigeneKostenAuto = function() {
     }
 };
 
+// ✅ Berechne Betrag basierend auf eingegebenem Prozent neu
+window.updateKostenVorschlagBetrag = function() {
+    const prozentInput = document.getElementById('kosten-prozent-input');
+    const betragDisplay = document.getElementById('kosten-betrag-display');
+    const gesamtkostenInput = document.getElementById('gm-gesamtkosten');
+    
+    if (!prozentInput || !betragDisplay || !gesamtkostenInput) return;
+    
+    const prozent = parseFloat(prozentInput.value) || 0;
+    const gesamtkosten = parseFloat(gesamtkostenInput.value) || 0;
+    const betrag = (gesamtkosten * prozent / 100).toFixed(2);
+    
+    betragDisplay.textContent = `${betrag} €`;
+};
+
 // ✅ Übertrage Kostenvorschlag in das Eingabefeld
-window.uebertrageKostenVorschlag = function(betrag) {
+window.uebertrageKostenVorschlag = function() {
+    const betragDisplay = document.getElementById('kosten-betrag-display');
     const eigeneKostenInput = document.getElementById('gm-eigene-kosten');
-    if (eigeneKostenInput) {
+    
+    if (!betragDisplay || !eigeneKostenInput) return;
+    
+    // Extrahiere Zahl aus "25.00 €"
+    const betragText = betragDisplay.textContent.replace(' €', '').trim();
+    const betrag = parseFloat(betragText);
+    
+    if (!isNaN(betrag)) {
         eigeneKostenInput.value = betrag.toFixed(2);
         eigeneKostenInput.focus();
     }
