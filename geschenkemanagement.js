@@ -1180,6 +1180,7 @@ window.openFreigabeEditor = function(userId) {
                                 <option value="sollBezahlungKonto">💰 ALLE Einträge mit SOLL-Bezahlung Konto</option>
                                 <option value="istBezahlungKonto">✅ ALLE Einträge mit IST-Bezahlung Konto</option>
                                 <option value="bezahlungKonto">🏦 ALLE Einträge mit Bezahlung Konto (SOLL ODER IST)</option>
+                                <option value="einzelneEintraege">📋 Einzelne Einträge (nach ID)</option>
                             </select>
                         </div>
                         
@@ -1281,7 +1282,74 @@ window.updateFilterDetails = function() {
     
     let html = '';
     
-    if (filterTyp.includes('Person')) {
+    if (filterTyp === 'einzelneEintraege') {
+        // Einzelne Einträge - Sammle alle Geschenke aus ausgewählten Themen
+        const selectedThemen = Array.from(document.querySelectorAll('[id^="thema-select-"]:checked')).map(cb => cb.value);
+        
+        if (selectedThemen.length === 0) {
+            html = `<p class="text-yellow-600 text-sm font-bold">⚠️ Bitte wähle zuerst mindestens ein Thema in TEIL 1 aus!</p>`;
+        } else {
+            // Sammle alle Geschenke aus den ausgewählten Themen
+            const alleGeschenke = Object.values(GESCHENKE).filter(g => 
+                selectedThemen.includes(g.themaId) && 
+                !g.archiviert
+            );
+            
+            if (alleGeschenke.length === 0) {
+                html = `<p class="text-gray-500 text-sm">Keine Einträge in den ausgewählten Themen vorhanden.</p>`;
+            } else {
+                html = `
+                    <label class="block text-sm font-bold text-gray-700 mb-3">Einträge auswählen (${alleGeschenke.length} verfügbar):</label>
+                    <div class="max-h-96 overflow-y-auto p-3 bg-gray-50 rounded border">
+                        <div class="space-y-2">
+                            ${alleGeschenke.map(g => {
+                                const fuerName = KONTAKTE[g.fuer]?.name || 'Unbekannt';
+                                const vonName = KONTAKTE[g.von]?.name || 'Unbekannt';
+                                const thema = THEMEN[g.themaId];
+                                const status = STATUS_CONFIG[g.status];
+                                
+                                return `
+                                    <label class="flex items-start gap-3 p-3 bg-white hover:bg-blue-50 rounded-lg border-2 border-gray-200 hover:border-blue-400 cursor-pointer transition">
+                                        <input type="checkbox" 
+                                            name="filter-geschenk-checkbox" 
+                                            value="${g.id}"
+                                            class="w-5 h-5 text-blue-600 rounded mt-1 shrink-0">
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-center gap-2 mb-1">
+                                                <span class="text-xs font-bold text-gray-500">#${g.id?.slice(0, 8)}</span>
+                                                <span class="text-xs px-2 py-0.5 rounded-full" style="background-color: ${status?.farbe}20; color: ${status?.farbe};">
+                                                    ${status?.icon || ''} ${status?.label || g.status}
+                                                </span>
+                                                <span class="text-xs text-gray-500">📁 ${thema?.name || 'Unbekannt'}</span>
+                                            </div>
+                                            <p class="font-bold text-gray-800 text-sm truncate">
+                                                ${g.geschenkIdee || 'Keine Beschreibung'}
+                                            </p>
+                                            <p class="text-xs text-gray-600 mt-1">
+                                                🎁 <strong>FÜR:</strong> ${fuerName} • 
+                                                🎀 <strong>VON:</strong> ${vonName}
+                                                ${g.gesamtKosten ? ` • 💰 ${g.gesamtKosten.toFixed(2)} €` : ''}
+                                            </p>
+                                        </div>
+                                    </label>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                    <div class="mt-2 flex gap-2">
+                        <button onclick="window.selectAllGeschenke(true)" 
+                            class="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 font-bold">
+                            ✅ Alle auswählen
+                        </button>
+                        <button onclick="window.selectAllGeschenke(false)" 
+                            class="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 font-bold">
+                            ❌ Alle abwählen
+                        </button>
+                    </div>
+                `;
+            }
+        }
+    } else if (filterTyp.includes('Person')) {
         // Person-Auswahl
         const kontakte = Object.values(KONTAKTE);
         html = `
@@ -1320,6 +1388,12 @@ window.updateFilterDetails = function() {
     detailsContainer.innerHTML = html;
 };
 
+// Helper: Alle Geschenke auswählen/abwählen
+window.selectAllGeschenke = function(select) {
+    const checkboxes = document.querySelectorAll('input[name="filter-geschenk-checkbox"]');
+    checkboxes.forEach(cb => cb.checked = select);
+};
+
 // Füge Regel zur Berechtigungsliste hinzu
 window.addRegelToListe = function() {
     const filterTyp = document.getElementById('filter-typ-select')?.value;
@@ -1329,7 +1403,24 @@ window.addRegelToListe = function() {
     let selectedValues = [];
     let filterLabel = '';
     
-    if (filterTyp.includes('Person')) {
+    if (filterTyp === 'einzelneEintraege') {
+        // Einzelne Einträge
+        const checkboxes = document.querySelectorAll('input[name="filter-geschenk-checkbox"]:checked');
+        if (checkboxes.length === 0) {
+            alertUser('Bitte wähle mindestens einen Eintrag aus', 'warning');
+            return;
+        }
+        selectedValues = Array.from(checkboxes).map(cb => {
+            const geschenk = GESCHENKE[cb.value];
+            return {
+                id: cb.value,
+                name: geschenk?.geschenkIdee || 'Unbekannt',
+                fuer: KONTAKTE[geschenk?.fuer]?.name || '?',
+                von: KONTAKTE[geschenk?.von]?.name || '?'
+            };
+        });
+        filterLabel = '📋 Einzelne Einträge';
+    } else if (filterTyp.includes('Person')) {
         const checkboxes = document.querySelectorAll('input[name="filter-wert-checkbox"]:checked');
         if (checkboxes.length === 0) {
             alertUser('Bitte wähle mindestens eine Person aus', 'warning');
@@ -1397,23 +1488,48 @@ function renderBerechtigungsListe() {
         return;
     }
     
-    container.innerHTML = window.berechtigungsListe.map(regel => `
-        <div class="flex items-center justify-between p-3 bg-white rounded-lg border-2 border-blue-200">
-            <div class="flex-1">
-                <p class="font-bold text-sm">${regel.filterLabel}</p>
+    container.innerHTML = window.berechtigungsListe.map(regel => {
+        let detailsHtml = '';
+        
+        if (regel.filterTyp === 'einzelneEintraege') {
+            // Spezielle Darstellung für einzelne Einträge
+            detailsHtml = `
+                <div class="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                    ${regel.selectedValues.map(v => `
+                        <div class="text-xs bg-gray-50 p-2 rounded border">
+                            <span class="font-mono text-gray-500">#${v.id?.slice(0, 8)}</span> • 
+                            <span class="font-semibold">${v.name}</span><br>
+                            <span class="text-gray-600">🎁 ${v.fuer} ← 🎀 ${v.von}</span>
+                        </div>
+                    `).join('')}
+                </div>
+                <p class="text-xs text-blue-600 font-bold mt-1">${regel.selectedValues.length} Eintrag/Einträge</p>
+            `;
+        } else {
+            // Normale Darstellung für Personen/Konten
+            detailsHtml = `
                 <p class="text-xs text-gray-600">
                     ${regel.selectedValues.map(v => v.name).join(', ')}
                 </p>
-                <span class="inline-block mt-1 px-2 py-0.5 text-xs font-bold rounded ${regel.rechte === 'lesen' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}">
-                    ${regel.rechte === 'lesen' ? '👁️ Lesen' : '✏️ Bearbeiten'}
-                </span>
+            `;
+        }
+        
+        return `
+            <div class="flex items-start justify-between p-3 bg-white rounded-lg border-2 border-blue-200">
+                <div class="flex-1">
+                    <p class="font-bold text-sm">${regel.filterLabel}</p>
+                    ${detailsHtml}
+                    <span class="inline-block mt-2 px-2 py-0.5 text-xs font-bold rounded ${regel.rechte === 'lesen' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}">
+                        ${regel.rechte === 'lesen' ? '👁️ Lesen' : '✏️ Bearbeiten'}
+                    </span>
+                </div>
+                <button onclick="window.removeRegelFromListe(${regel.id})" 
+                    class="ml-3 px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-bold text-sm shrink-0">
+                    🗑️
+                </button>
             </div>
-            <button onclick="window.removeRegelFromListe(${regel.id})" 
-                class="ml-3 px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-bold text-sm">
-                🗑️
-            </button>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 // Entferne Regel aus Liste
