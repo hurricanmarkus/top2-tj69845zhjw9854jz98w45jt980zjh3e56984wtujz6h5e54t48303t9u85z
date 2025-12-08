@@ -1,0 +1,331 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ═══════════════════════════════════════════════════════════════
+    // HELPER FUNCTIONS (Hilfsfunktionen)
+    // ═══════════════════════════════════════════════════════════════
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function hasAppRole(roleName) {
+      return isAuthenticated() && request.auth.token != null && request.auth.token.appRole == roleName;
+    }
+    
+    function isAdminOrSystemAdminClaim() {
+      return hasAppRole('ADMIN') || hasAppRole('SYSTEMADMIN');
+    }
+    
+    function isSystemAdminClaim() {
+      return hasAppRole('SYSTEMADMIN');
+    }
+
+    // Helper: Prüft ob User der Ersteller eines Dokuments ist
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // BENUTZERVERWALTUNG (User Management)
+    // ═══════════════════════════════════════════════════════════════
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/user-config/{userId} {
+      allow read: if true;
+      allow create, delete: if isSystemAdminClaim();
+      allow update: if isAuthenticated();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/user-roles/{roleId} {
+      allow read: if true;
+      allow write: if isSystemAdminClaim();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/admin-roles/{roleId} {
+      allow read: if true;
+      allow write: if isSystemAdminClaim();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // SYSTEM & ADMIN (System & Administration)
+    // ═══════════════════════════════════════════════════════════════
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/app-settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminOrSystemAdminClaim();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/audit-log/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdminOrSystemAdminClaim();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/role-change-requests/{requestId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isSystemAdminClaim();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/approval-requests/{requestId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isSystemAdminClaim();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // CHECKLISTEN-SYSTEM (Checklist System)
+    // ═══════════════════════════════════════════════════════════════
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/checklists/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/checklist-items/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/checklist-groups/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/checklist-categories/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/checklist-stacks/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/checklist-templates/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/checklist-templates/{templateId}/template-items/{itemId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TERMINPLANER (Appointment Scheduler)
+    // ═══════════════════════════════════════════════════════════════
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/votes/{voteId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ZAHLUNGSVERWALTUNG (Payment Management)
+    // ═══════════════════════════════════════════════════════════════
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/payments/{paymentId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/payment-templates/{document} {
+      allow read, write: if true;
+    }
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/private-contacts/{document} {
+      allow read, write: if true;
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/private-accounts/{document} {
+      allow read, write: if true;
+    }
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/payment-categories/{category} {
+      allow read, write: if true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TICKET SUPPORT (Ticket Support System)
+    // ═══════════════════════════════════════════════════════════════
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/tickets/{ticketId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // WERTGUTHABEN (Gift Cards & Vouchers Management)
+    // ═══════════════════════════════════════════════════════════════
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/wertguthaben/{wertguthabenId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+      
+      match /transaktionen/{transaktionId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update: if isAuthenticated();
+        allow delete: if isAuthenticated();
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // VERTRAGSVERWALTUNG (Contract Management)
+    // ═══════════════════════════════════════════════════════════════
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/vertraege/{vertragId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // REZEPTVERWALTUNG (Recipe Management)
+    // ═══════════════════════════════════════════════════════════════
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/rezepte/{rezeptId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // HAUSHALTSZAHLUNGEN (Household Payments Management)
+    // ═══════════════════════════════════════════════════════════════
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/haushaltszahlungen/{eintragId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/haushaltszahlungen_themen/{themaId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+      
+      match /eintraege/{eintragId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update: if isAuthenticated();
+        allow delete: if isAuthenticated();
+      }
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/haushaltszahlungen_protokoll/{protokollId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/haushaltszahlungen_einladungen/{einladungId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // GESCHENKEMANAGEMENT (Gift Management System)
+    // Mit umfangreichem Freigabemanagement-System (2-teilig)
+    // ═══════════════════════════════════════════════════════════════
+
+    // Themen für Geschenkemanagement (z.B. "Weihnachten 2025")
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_themen/{themaId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+      
+      // Geschenke als Sub-Collection unter Themen
+      match /geschenke/{geschenkId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update: if isAuthenticated();
+        allow delete: if isAuthenticated();
+      }
+    }
+
+    // Kontaktbuch für Geschenkemanagement
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_kontakte/{kontaktId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // Vorlagen für Geschenkemanagement
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_vorlagen/{vorlageId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // Freigaben für Geschenkemanagement
+    // WICHTIG: Alle authentifizierten User können lesen (Filterung im Code)
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_freigaben/{freigabeId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // Einladungen für Geschenkemanagement
+    // FIX: Alle authentifizierten User können ALLE Einladungen lesen
+    // Filterung erfolgt im JavaScript-Code
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_einladungen/{einladungId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // Budgets für Geschenkemanagement
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_budgets/{budgetId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // Erinnerungen für Geschenkemanagement
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_erinnerungen/{erinnerungId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // DEFAULT DENY (Alles andere verbieten)
+    // ═══════════════════════════════════════════════════════════════
+    
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

@@ -978,19 +978,33 @@ function renderFreigabenVerwaltung() {
     
     // Registrierte Benutzer (außer ich selbst)
     const registrierteBenutzer = Object.values(USERS).filter(u => {
-        if (!u) return false;
-        if (u.permissionType === 'not_registered') return false;
+        if (!u) {
+            console.log('❌ User ist null/undefined');
+            return false;
+        }
         
-        // Vergleiche mit mehreren Feldern um sicherzugehen
-        if (u.id === currentUser?.odooUserId) return false;
-        if (u.odooUserId === currentUser?.odooUserId) return false;
-        if (u.displayName === currentUser?.displayName) return false;
-        if (u.name === currentUser?.displayName) return false;
+        if (u.permissionType === 'not_registered') {
+            console.log('❌ User nicht registriert:', u.displayName || u.name);
+            return false;
+        }
         
+        // NUR wenn odooUserId gesetzt ist, damit vergleichen
+        if (currentUser?.odooUserId && u.id === currentUser.odooUserId) {
+            console.log('❌ User ist ich selbst (ID):', u.displayName);
+            return false;
+        }
+        
+        // Fallback: Vergleich über displayName (aber nur exakt!)
+        if (currentUser?.displayName && u.displayName === currentUser.displayName && u.id) {
+            console.log('❌ User ist ich selbst (Name):', u.displayName);
+            return false;
+        }
+        
+        console.log('✅ User wird angezeigt:', u.displayName || u.name);
         return true;
     });
     
-    console.log('✅ Gefilterte Benutzer:', registrierteBenutzer.length, registrierteBenutzer.map(u => u.displayName || u.name));
+    console.log('✅ Gefilterte Benutzer GESAMT:', registrierteBenutzer.length, registrierteBenutzer.map(u => u.displayName || u.name));
     
     if (registrierteBenutzer.length === 0) {
         container.innerHTML = '<p class="text-gray-500 text-center py-4">Keine registrierten Benutzer gefunden</p>';
