@@ -256,7 +256,12 @@ export function listenForGeschenke() {
     onSnapshot(query(geschenkeCollection, orderBy('erstelltAm', 'desc')), (snapshot) => {
         GESCHENKE = {};
         snapshot.forEach((docSnap) => {
-            GESCHENKE[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
+            // WICHTIG: Füge themaId zum Geschenk hinzu (für Freigabe-Filterung)
+            GESCHENKE[docSnap.id] = { 
+                id: docSnap.id, 
+                themaId: currentThemaId,  // ✅ ThemaId hinzugefügt!
+                ...docSnap.data() 
+            };
         });
         renderGeschenkeTabelle();
         updateDashboardStats();
@@ -1268,7 +1273,7 @@ window.updateTeil2Visibility = function() {
 };
 
 // Aktualisiere Filter-Details basierend auf Filter-Typ
-window.updateFilterDetails = function() {
+window.updateFilterDetails = async function() {
     const filterTyp = document.getElementById('filter-typ-select')?.value;
     const detailsContainer = document.getElementById('filter-details-container');
     const rechteContainer = document.getElementById('rechte-container');
@@ -1288,52 +1293,43 @@ window.updateFilterDetails = function() {
         
         console.log('🔍 DEBUG Einzelne Einträge:', {
             selectedThemen,
-            totalGeschenke: Object.keys(GESCHENKE).length,
-            geschenkeArray: Object.values(GESCHENKE).slice(0, 3).map(g => ({
-                id: g.id,
-                themaId: g.themaId,
-                archiviert: g.archiviert,
-                geschenkIdee: g.geschenkIdee
-            }))
+            totalGeschenkeInAktuellemThema: Object.keys(GESCHENKE).length
         });
         
         if (selectedThemen.length === 0) {
             html = `<p class="text-yellow-600 text-sm font-bold">⚠️ Bitte wähle zuerst mindestens ein Thema in TEIL 1 aus!</p>`;
         } else {
-            // Sammle alle Geschenke aus den ausgewählten Themen
-            const alleGeschenke = Object.values(GESCHENKE).filter(g => {
-                const matches = selectedThemen.includes(g.themaId) && !g.archiviert;
-                console.log('Geschenk Check:', {
-                    id: g.id?.slice(0, 8),
-                    themaId: g.themaId,
-                    archiviert: g.archiviert,
-                    matches
-                });
-                return matches;
-            });
+            // Zeige "Lade..." Nachricht
+            detailsContainer.innerHTML = '<p class="text-blue-600 text-sm font-bold animate-pulse">⏳ Lade Geschenke aus ausgewählten Themen...</p>';
             
-            console.log('✅ Gefilterte Geschenke:', alleGeschenke.length);
+            // Lade Geschenke aus allen ausgewählten Themen
+            const alleGeschenke = await loadGeschenkeFromMultipleThemen(selectedThemen);
             
-            if (alleGeschenke.length === 0) {
+            // Filtere nicht-archivierte
+            const filteredGeschenke = alleGeschenke.filter(g => !g.archiviert);
+            
+            console.log('✅ Gefilterte Geschenke:', filteredGeschenke.length);
+            
+            if (filteredGeschenke.length === 0) {
                 html = `
                     <div class="p-4 bg-yellow-50 border-l-4 border-yellow-500 rounded">
                         <p class="text-yellow-800 font-bold mb-2">⚠️ Keine Einträge gefunden</p>
                         <p class="text-sm text-yellow-700">
                             Ausgewählte Themen: ${selectedThemen.length}<br>
-                            Gesamt Geschenke in System: ${Object.keys(GESCHENKE).length}<br>
-                            Nicht-archivierte: ${Object.values(GESCHENKE).filter(g => !g.archiviert).length}
+                            Gesamt Geschenke geladen: ${alleGeschenke.length}<br>
+                            Nicht-archivierte: ${filteredGeschenke.length}
                         </p>
                         <p class="text-xs text-yellow-600 mt-2">
-                            💡 Tipp: Erstelle zuerst Geschenke in den ausgewählten Themen oder prüfe die Konsole (F12) für Details.
+                            💡 Tipp: Erstelle zuerst Geschenke in den ausgewählten Themen.
                         </p>
                     </div>
                 `;
             } else {
                 html = `
-                    <label class="block text-sm font-bold text-gray-700 mb-3">Einträge auswählen (${alleGeschenke.length} verfügbar):</label>
+                    <label class="block text-sm font-bold text-gray-700 mb-3">Einträge auswählen (${filteredGeschenke.length} verfügbar):</label>
                     <div class="max-h-96 overflow-y-auto p-3 bg-gray-50 rounded border">
                         <div class="space-y-2">
-                            ${alleGeschenke.map(g => {
+                            ${filteredGeschenke.map(g => {
                                 const fuerName = KONTAKTE[g.fuer]?.name || 'Unbekannt';
                                 const vonName = KONTAKTE[g.von]?.name || 'Unbekannt';
                                 const thema = THEMEN[g.themaId];
@@ -1379,6 +1375,10 @@ window.updateFilterDetails = function() {
                     </div>
                 `;
             }
+            
+            // Setze HTML für "einzelneEintraege" direkt (da async)
+            detailsContainer.innerHTML = html;
+            return; // Früher Return, da HTML bereits gesetzt
         }
     } else if (filterTyp.includes('Person')) {
         // Person-Auswahl
@@ -1424,6 +1424,33 @@ window.selectAllGeschenke = function(select) {
     const checkboxes = document.querySelectorAll('input[name="filter-geschenk-checkbox"]');
     checkboxes.forEach(cb => cb.checked = select);
 };
+
+// Helper: Lade Geschenke aus mehreren Themen (für Freigabe-System)
+async function loadGeschenkeFromMultipleThemen(themaIds) {
+    if (!db || !themaIds || themaIds.length === 0) return [];
+    
+    const alleGeschenke = [];
+    
+    for (const themaId of themaIds) {
+        try {
+            const geschenkeRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_themen', themaId, 'geschenke');
+            const geschenkeSnapshot = await getDocs(geschenkeRef);
+            
+            geschenkeSnapshot.forEach((docSnap) => {
+                alleGeschenke.push({
+                    id: docSnap.id,
+                    themaId: themaId,  // ✅ ThemaId hinzugefügt!
+                    ...docSnap.data()
+                });
+            });
+        } catch (error) {
+            console.error(`Fehler beim Laden der Geschenke aus Thema ${themaId}:`, error);
+        }
+    }
+    
+    console.log(`📦 ${alleGeschenke.length} Geschenke aus ${themaIds.length} Themen geladen`);
+    return alleGeschenke;
+}
 
 // Füge Regel zur Berechtigungsliste hinzu
 window.addRegelToListe = function() {
