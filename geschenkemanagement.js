@@ -935,6 +935,19 @@ function renderFreigabenVerwaltung() {
     const container = document.getElementById('gm-freigaben-list');
     if (!container) return;
     
+    // DEBUG: Prüfe USERS und currentUser
+    console.log('🔍 DEBUG Freigaben:', {
+        totalUsers: Object.keys(USERS).length,
+        currentUserId: currentUser?.odooUserId,
+        currentUserName: currentUser?.displayName,
+        usersArray: Object.values(USERS).map(u => ({
+            id: u.id,
+            odooUserId: u.odooUserId,
+            name: u.name || u.displayName,
+            permissionType: u.permissionType
+        }))
+    });
+    
     // Registrierte Benutzer (außer ich selbst)
     const registrierteBenutzer = Object.values(USERS).filter(u => {
         if (u.permissionType === 'not_registered') return false;
@@ -947,6 +960,8 @@ function renderFreigabenVerwaltung() {
         
         return true;
     });
+    
+    console.log('✅ Gefilterte Benutzer:', registrierteBenutzer.length);
     
     if (registrierteBenutzer.length === 0) {
         container.innerHTML = '<p class="text-gray-500 text-center py-4">Keine registrierten Benutzer gefunden</p>';
