@@ -213,24 +213,25 @@ export async function initializeGeschenkemanagement() {
     try {
         await loadSettings();
         await loadKontakte();
-        await loadFreigaben();  // ✅ Zuerst Freigaben laden (für geteilte Themen)
+        
+        // ✅ NEU: Starte Echtzeit-Listener statt einmaligem Laden
+        await loadFreigaben();  // Einmaliges Laden für Initialisierung
+        listenForFreigaben();   // Dann Echtzeit-Updates
+        
         await loadThemen();  // ✅ Lädt eigene + geteilte Themen
         await loadVorlagen();
-        await loadEinladungen();
+        
+        // ✅ NEU: Echtzeit-Listener für Einladungen (ersetzt loadEinladungen + checkPendingInvitations)
+        await loadEinladungen(); // Einmaliges Laden für Initialisierung
+        listenForEinladungen();  // Dann Echtzeit-Updates mit Auto-Modal
+        
         await loadBudgets();
         await loadErinnerungen();
         
-        console.log("✅ Alle Daten geladen!");
+        console.log("✅ Alle Daten geladen und Echtzeit-Listener aktiv!");
     } catch (e) {
         console.error("❌ Fehler beim Laden der Daten:", e);
         // Fortfahren trotz Fehler
-    }
-    
-    // Prüfe auf ausstehende Einladungen
-    try {
-        checkPendingInvitations();
-    } catch (e) {
-        console.error("❌ Fehler bei Einladungsprüfung:", e);
     }
     
     // Event-Listener und Dashboard IMMER initialisieren
@@ -367,7 +368,63 @@ async function loadVorlagen() {
     }
 }
 
+// ✅ ECHTZEIT-LISTENER für Freigaben
+function listenForFreigaben() {
+    if (!geschenkeFreigabenRef) {
+        console.error("❌ geschenkeFreigabenRef nicht verfügbar");
+        return;
+    }
+    
+    console.log("👂 Starte Echtzeit-Listener für Freigaben...");
+    
+    onSnapshot(geschenkeFreigabenRef, (snapshot) => {
+        console.log(`🔐 Freigaben-Update: ${snapshot.size} Freigaben gesamt`);
+        
+        const myUserId = getCurrentUserId();
+        let neueFreigaben = [];
+        
+        snapshot.docChanges().forEach((change) => {
+            const freigabe = { id: change.doc.id, ...change.doc.data() };
+            
+            if (change.type === 'added') {
+                FREIGABEN[freigabe.id] = freigabe;
+                
+                // Prüfe ob Freigabe für mich ist und aktiv
+                if (freigabe.userUid === auth?.currentUser?.uid && freigabe.aktiv) {
+                    console.log(`✨ Neue Freigabe für mich: ${freigabe.themaName} von ${freigabe.freigegebenVonName}`);
+                    neueFreigaben.push(freigabe);
+                }
+            }
+            
+            if (change.type === 'modified') {
+                FREIGABEN[freigabe.id] = freigabe;
+                console.log(`🔄 Freigabe aktualisiert: ${freigabe.id}`);
+            }
+            
+            if (change.type === 'removed') {
+                delete FREIGABEN[freigabe.id];
+                console.log(`🗑️ Freigabe gelöscht: ${freigabe.id}`);
+            }
+        });
+        
+        // Wenn neue Freigaben hinzugefügt wurden, lade Themen neu
+        if (neueFreigaben.length > 0) {
+            console.log(`🎉 ${neueFreigaben.length} neue Freigabe(en) erhalten - lade Themen neu`);
+            loadThemen(); // Lädt eigene + geteilte Themen neu
+        }
+        
+        // Update UI
+        if (document.getElementById('gm-freigaben-list')) {
+            renderFreigabenVerwaltung();
+        }
+    }, (error) => {
+        console.error("❌ Fehler beim Freigaben-Listener:", error);
+    });
+}
+
+// ✅ Legacy-Funktion für Kompatibilität
 async function loadFreigaben() {
+    console.warn("⚠️ loadFreigaben() ist veraltet, verwende listenForFreigaben()");
     try {
         const snapshot = await getDocs(geschenkeFreigabenRef);
         FREIGABEN = {};
@@ -2406,10 +2463,10 @@ window.sendNeueFreigabeEinladungen = async function(userId) {
             }
         }
         
-        await loadEinladungen();
+        // ✅ KEIN loadEinladungen() mehr nötig - der Echtzeit-Listener updated automatisch!
         alertUser(`📧 ${selectedThemen.length} Einladung(en) erfolgreich gesendet!`, 'success');
         window.closeFreigabeEditor();
-        renderFreigabenVerwaltung();
+        // renderFreigabenVerwaltung() wird automatisch durch Listener aktualisiert
     } catch (e) {
         console.error('Fehler beim Senden:', e);
         alertUser('Fehler: ' + e.message, 'error');
@@ -2522,10 +2579,10 @@ window.sendFreigabeEinladungen = async function(userId) {
             }
         }
         
-        await loadEinladungen();
+        // ✅ KEIN loadEinladungen() mehr nötig - der Echtzeit-Listener updated automatisch!
         alertUser(`📧 ${freigabenConfigs.length} Einladung(en) erfolgreich gesendet!`, 'success');
         window.closeFreigabeEditor();
-        renderFreigabenVerwaltung();
+        // renderFreigabenVerwaltung() wird automatisch durch Listener aktualisiert
     } catch (e) {
         console.error('Fehler beim Senden der Einladungen:', e);
         alertUser('Fehler: ' + e.message, 'error');
@@ -2538,9 +2595,8 @@ window.deleteFreigabe = async function(freigabeId) {
     
     try {
         await deleteDoc(doc(geschenkeFreigabenRef, freigabeId));
-        await loadFreigaben();
+        // ✅ Löschung wird durch Listener automatisch erkannt und UI aktualisiert
         alertUser('Freigabe entfernt!', 'success');
-        renderFreigabenVerwaltung();
     } catch (e) {
         alertUser('Fehler: ' + e.message, 'error');
     }
@@ -3165,9 +3221,69 @@ window.deleteVorlage = async function(vorlageId) {
 };
 
 // ========================================
-// EINLADUNGEN, BUDGETS, ERINNERUNGEN - LADEN
+// EINLADUNGEN, BUDGETS, ERINNERUNGEN - ECHTZEIT-LISTENER
 // ========================================
+
+// ✅ ECHTZEIT-LISTENER für Einladungen
+function listenForEinladungen() {
+    if (!geschenkeEinladungenRef) {
+        console.error("❌ geschenkeEinladungenRef nicht verfügbar");
+        return;
+    }
+    
+    console.log("👂 Starte Echtzeit-Listener für Einladungen...");
+    
+    onSnapshot(geschenkeEinladungenRef, (snapshot) => {
+        console.log(`📨 Einladungen-Update: ${snapshot.size} Einladungen gesamt`);
+        
+        const myUserId = getCurrentUserId();
+        let neueEinladungen = [];
+        
+        snapshot.docChanges().forEach((change) => {
+            const einladung = { id: change.doc.id, ...change.doc.data() };
+            
+            if (change.type === 'added') {
+                // Neue Einladung hinzugefügt
+                EINLADUNGEN[einladung.id] = einladung;
+                
+                // Prüfe ob Einladung für mich ist und status = pending
+                if (einladung.empfaengerId === myUserId && einladung.status === 'pending') {
+                    console.log(`✨ Neue Einladung für mich erhalten: ${einladung.themaName} von ${einladung.absenderName}`);
+                    neueEinladungen.push(einladung);
+                }
+            }
+            
+            if (change.type === 'modified') {
+                // Einladung geändert
+                EINLADUNGEN[einladung.id] = einladung;
+                console.log(`🔄 Einladung aktualisiert: ${einladung.id}`);
+            }
+            
+            if (change.type === 'removed') {
+                // Einladung gelöscht
+                delete EINLADUNGEN[einladung.id];
+                console.log(`🗑️ Einladung gelöscht: ${einladung.id}`);
+            }
+        });
+        
+        // Zeige Modal für neue Einladungen (nur wenn User gerade online ist)
+        if (neueEinladungen.length > 0) {
+            console.log(`🎉 ${neueEinladungen.length} neue Einladung(en) werden angezeigt`);
+            showPendingInvitationsModal(neueEinladungen);
+        }
+        
+        // Update UI falls im Freigaben-Tab
+        if (document.getElementById('gm-freigaben-list')) {
+            renderFreigabenVerwaltung();
+        }
+    }, (error) => {
+        console.error("❌ Fehler beim Einladungen-Listener:", error);
+    });
+}
+
+// ✅ Legacy-Funktion für Kompatibilität (wird nicht mehr verwendet)
 async function loadEinladungen() {
+    console.warn("⚠️ loadEinladungen() ist veraltet, verwende listenForEinladungen()");
     try {
         const snapshot = await getDocs(geschenkeEinladungenRef);
         EINLADUNGEN = {};
@@ -3206,7 +3322,11 @@ async function loadErinnerungen() {
 // ========================================
 // EINLADUNGSSYSTEM MIT ZUSTIMMUNG/ABLEHNUNG
 // ========================================
+
+// ✅ DEPRECATED: Diese Funktion wird nicht mehr verwendet, da der Echtzeit-Listener
+// automatisch neue Einladungen erkennt und das Modal öffnet
 function checkPendingInvitations() {
+    console.warn("⚠️ checkPendingInvitations() ist veraltet - verwende den Echtzeit-Listener");
     const myUserId = getCurrentUserId();
     const pendingForMe = Object.values(EINLADUNGEN).filter(e => 
         e.empfaengerId === myUserId && e.status === 'pending'
@@ -3218,8 +3338,20 @@ function checkPendingInvitations() {
 }
 
 function showPendingInvitationsModal(invitations) {
+    // ✅ Prüfe ob Modal bereits offen ist
     const existingModal = document.getElementById('gm-einladungen-modal');
-    if (existingModal) existingModal.remove();
+    if (existingModal) {
+        console.log("ℹ️ Einladungs-Modal ist bereits offen - wird aktualisiert");
+        existingModal.remove();
+    }
+    
+    // ✅ Prüfe ob es überhaupt Einladungen gibt
+    if (!invitations || invitations.length === 0) {
+        console.log("ℹ️ Keine ausstehenden Einladungen");
+        return;
+    }
+    
+    console.log(`📨 Zeige Modal für ${invitations.length} Einladung(en)`);
     
     const modal = document.createElement('div');
     modal.id = 'gm-einladungen-modal';
@@ -3341,12 +3473,11 @@ window.acceptGeschenkeInvitation = async function(invitationId) {
         };
         await setDoc(doc(geschenkeFreigabenRef, freigabeId), freigabeData);
         
-        EINLADUNGEN[invitationId].status = 'accepted';
+        // ✅ Status wird durch Listener automatisch aktualisiert
         alertUser('✅ Einladung angenommen! Du kannst jetzt auf das Thema zugreifen.', 'success');
         
         document.getElementById('gm-einladungen-modal')?.remove();
-        await loadFreigaben();
-        renderDashboard();
+        // loadFreigaben() und renderDashboard() werden durch Listener automatisch ausgeführt
     } catch (e) {
         console.error('Fehler beim Annehmen:', e);
         alertUser('Fehler: ' + e.message, 'error');
@@ -3363,11 +3494,11 @@ window.declineGeschenkeInvitation = async function(invitationId) {
             abgelehntAm: serverTimestamp()
         });
         
-        EINLADUNGEN[invitationId].status = 'declined';
+        // ✅ Status wird durch Listener automatisch aktualisiert
         alertUser('❌ Einladung abgelehnt. Du kannst die Ablehnung in deinen Einstellungen widerrufen.', 'info');
         
         document.getElementById('gm-einladungen-modal')?.remove();
-        checkPendingInvitations();
+        // checkPendingInvitations() nicht mehr nötig - Listener handled Updates
     } catch (e) {
         console.error('Fehler beim Ablehnen:', e);
         alertUser('Fehler: ' + e.message, 'error');
@@ -3381,11 +3512,10 @@ window.revokeDeclinedInvitation = async function(invitationId) {
     try {
         // Lösche die abgelehnte Einladung komplett
         await deleteDoc(doc(geschenkeEinladungenRef, invitationId));
-        delete EINLADUNGEN[invitationId];
+        // ✅ Löschung wird durch Listener automatisch erkannt
         
         alertUser('✅ Ablehnung widerrufen. Der Absender kann dich nun wieder einladen.', 'success');
-        await loadEinladungen();
-        renderFreigabenVerwaltung();
+        // loadEinladungen() und renderFreigabenVerwaltung() werden durch Listener automatisch ausgeführt
     } catch (e) {
         console.error('Fehler beim Widerruf:', e);
         alertUser('Fehler: ' + e.message, 'error');
@@ -3460,8 +3590,7 @@ window.endSharing = async function(freigabeId) {
         });
         
         alertUser('Freigabe beendet.', 'success');
-        await loadFreigaben();
-        renderDashboard();
+        // ✅ Update wird durch Listener automatisch erkannt und UI aktualisiert
     } catch (e) {
         alertUser('Fehler: ' + e.message, 'error');
     }
