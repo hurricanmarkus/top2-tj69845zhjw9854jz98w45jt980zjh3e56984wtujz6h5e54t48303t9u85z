@@ -1892,7 +1892,23 @@ window.selectAllGeschenke = function(select) {
 
 // Helper: Lade Geschenke aus mehreren Themen (für Freigabe-System)
 async function loadGeschenkeFromMultipleThemen(themaIds) {
-    if (!db || !themaIds || themaIds.length === 0 || !currentUser || !currentUser.uid) return [];
+    console.log("🔍 DIAGNOSE - loadGeschenkeFromMultipleThemen:");
+    console.log("  themaIds:", themaIds);
+    console.log("  auth.currentUser.uid:", auth?.currentUser?.uid);
+    console.log("  currentUser:", currentUser);
+    console.log("  THEMEN:", THEMEN);
+    
+    // ✅ KORRIGIERT: Prüfe auth.currentUser.uid
+    if (!db || !themaIds || themaIds.length === 0) {
+        console.warn("⚠️ Abbruch: db, themaIds oder currentUser fehlt");
+        return [];
+    }
+    
+    if (!auth?.currentUser?.uid) {
+        console.error("❌ FEHLER: auth.currentUser.uid nicht verfügbar!");
+        alertUser("Fehler: Benutzer nicht authentifiziert. Bitte neu einloggen!", "error");
+        return [];
+    }
     
     const alleGeschenke = [];
     
@@ -1900,12 +1916,31 @@ async function loadGeschenkeFromMultipleThemen(themaIds) {
         try {
             const thema = THEMEN[themaId];
             
-            // ✅ NEU: User-basierte Geschenke-Collection
-            // Bei geteilten Themen: verwende besitzerUid, sonst currentUser.uid
-            const ownerUid = thema?.besitzerUid || currentUser.uid;
+            if (!thema) {
+                console.warn(`⚠️ Thema ${themaId} nicht in THEMEN gefunden`);
+                continue;
+            }
+            
+            // ✅ KORRIGIERT: Verwende auth.currentUser.uid!
+            // Bei eigenen Themen: verwende auth.currentUser.uid
+            // Bei geteilten Themen: verwende besitzerUid
+            let ownerUid;
+            
+            if (thema.istGeteilt) {
+                ownerUid = thema.besitzerUid;
+            } else {
+                ownerUid = auth.currentUser.uid;
+            }
+            
+            console.log(`  📁 Lade Thema "${thema.name}" (${themaId})`);
+            console.log(`     Owner UID: ${ownerUid}`);
+            console.log(`     Ist geteilt: ${thema.istGeteilt}`);
             
             const geschenkeRef = collection(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', themaId, 'geschenke');
+            console.log(`     Pfad: ${geschenkeRef.path}`);
+            
             const geschenkeSnapshot = await getDocs(geschenkeRef);
+            console.log(`     Gefunden: ${geschenkeSnapshot.size} Geschenke`);
             
             geschenkeSnapshot.forEach((docSnap) => {
                 alleGeschenke.push({
@@ -1915,11 +1950,12 @@ async function loadGeschenkeFromMultipleThemen(themaIds) {
                 });
             });
         } catch (error) {
-            console.error(`Fehler beim Laden der Geschenke aus Thema ${themaId}:`, error);
+            console.error(`❌ Fehler beim Laden der Geschenke aus Thema ${themaId}:`, error);
+            console.error(`   Fehlermeldung: ${error.message}`);
         }
     }
     
-    console.log(`📦 ${alleGeschenke.length} Geschenke aus ${themaIds.length} Themen geladen`);
+    console.log(`✅ GESAMT: ${alleGeschenke.length} Geschenke aus ${themaIds.length} Themen geladen`);
     return alleGeschenke;
 }
 
