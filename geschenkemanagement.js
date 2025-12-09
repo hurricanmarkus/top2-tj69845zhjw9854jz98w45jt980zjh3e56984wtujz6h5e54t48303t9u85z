@@ -148,20 +148,37 @@ export async function initializeGeschenkemanagement() {
     
     console.log("✅ Collection-Referenzen erstellt für User:", currentUser.uid);
     
-    await loadSettings();
-    await loadKontakte();
-    await loadThemen();
-    await loadVorlagen();
-    await loadFreigaben();
-    await loadEinladungen();
-    await loadBudgets();
-    await loadErinnerungen();
+    try {
+        await loadSettings();
+        await loadKontakte();
+        await loadFreigaben();  // ✅ Zuerst Freigaben laden (für geteilte Themen)
+        await loadThemen();  // ✅ Lädt eigene + geteilte Themen
+        await loadVorlagen();
+        await loadEinladungen();
+        await loadBudgets();
+        await loadErinnerungen();
+        
+        console.log("✅ Alle Daten geladen!");
+    } catch (e) {
+        console.error("❌ Fehler beim Laden der Daten:", e);
+        // Fortfahren trotz Fehler
+    }
     
     // Prüfe auf ausstehende Einladungen
-    checkPendingInvitations();
+    try {
+        checkPendingInvitations();
+    } catch (e) {
+        console.error("❌ Fehler bei Einladungsprüfung:", e);
+    }
     
-    setupEventListeners();
-    renderDashboard();
+    // Event-Listener und Dashboard IMMER initialisieren
+    try {
+        setupEventListeners();
+        renderDashboard();
+        console.log("✅ Geschenkemanagement erfolgreich initialisiert!");
+    } catch (e) {
+        console.error("❌ Fehler bei UI-Initialisierung:", e);
+    }
 }
 
 // ========================================
@@ -231,7 +248,7 @@ async function loadThemen() {
         });
         
         // ✅ 2. Geteilte Themen laden (von anderen Usern via Freigaben)
-        await loadFreigaben();  // Freigaben laden
+        // HINWEIS: loadFreigaben() wird bereits in initializeGeschenkemanagement() aufgerufen
         
         for (const freigabeId in FREIGABEN) {
             const freigabe = FREIGABEN[freigabeId];
