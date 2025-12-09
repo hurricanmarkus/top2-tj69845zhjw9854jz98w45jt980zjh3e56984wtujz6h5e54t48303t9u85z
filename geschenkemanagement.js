@@ -11,7 +11,8 @@ import {
     currentUser,
     USERS,
     navigate,
-    appId
+    appId,
+    auth
 } from './haupteingang.js';
 
 import {
@@ -161,6 +162,18 @@ export async function initializeGeschenkemanagement() {
     const userId = getUserId(user);
     console.log("✅ User erkannt:", userId, user);
     
+    // ✅ WICHTIG: Verwende Firebase Auth UID für Firestore-Pfade!
+    const firebaseAuthUid = auth?.currentUser?.uid;
+    console.log("🔑 Firebase Auth UID:", firebaseAuthUid);
+    console.log("📋 App User ID:", userId);
+    
+    if (!firebaseAuthUid) {
+        console.error("❌ Firebase Auth UID nicht verfügbar!");
+        alertUser("Fehler: Firebase Auth nicht verfügbar!", "error");
+        setupEventListeners();
+        return;
+    }
+    
     // ✅ Setze currentUser global, damit der Rest des Codes funktioniert
     if (!currentUser || !getUserId(currentUser)) {
         window.currentUser = user;
@@ -175,8 +188,8 @@ export async function initializeGeschenkemanagement() {
         console.log("✅ currentUser.uid wurde auf", userId, "gesetzt");
     }
     
-    // ✅ NEU: User-basierte Collection-Referenzen
-    const userDataPath = ['artifacts', appId, 'public', 'data', 'users', userId];
+    // ✅ NEU: User-basierte Collection-Referenzen mit FIREBASE AUTH UID
+    const userDataPath = ['artifacts', appId, 'public', 'data', 'users', firebaseAuthUid];
     
     geschenkeSettingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'geschenkemanagement');
     geschenkeThemenRef = collection(db, ...userDataPath, 'geschenke_themen');
@@ -187,7 +200,8 @@ export async function initializeGeschenkemanagement() {
     geschenkeBudgetsRef = collection(db, ...userDataPath, 'geschenke_budgets');
     geschenkeErinnerungenRef = collection(db, ...userDataPath, 'geschenke_erinnerungen');
     
-    console.log("✅ Collection-Referenzen erstellt für User:", userId);
+    console.log("✅ Collection-Referenzen erstellt für Firebase Auth UID:", firebaseAuthUid);
+    console.log("✅ Pfad:", `users/${firebaseAuthUid}/geschenke_*`);
     
     try {
         await loadSettings();
