@@ -373,12 +373,15 @@ async function loadFreigaben() {
 }
 
 function updateCollectionForThema() {
-    if (currentThemaId && db && currentUser && currentUser.uid) {
+    if (currentThemaId && db && currentUser) {
         const thema = THEMEN[currentThemaId];
         
         // ✅ NEU: User-basierte Geschenke-Collection
-        // Bei geteilten Themen: verwende besitzerUid, sonst currentUser.uid
-        const ownerUid = thema?.besitzerUid || currentUser.uid;
+        // Bei geteilten Themen: verwende besitzerUid, sonst Firebase Auth UID
+        const ownerUid = thema?.besitzerUid || auth?.currentUser?.uid || currentUser.uid;
+        
+        console.log("📦 updateCollectionForThema - Owner UID:", ownerUid);
+        console.log("📦 Thema:", currentThemaId, "ist geteilt:", thema?.istGeteilt);
         
         geschenkeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', currentThemaId, 'geschenke');
         listenForGeschenke();
@@ -2795,10 +2798,14 @@ window.createNewThema = async function() {
         const themaData = {
             name: name.trim(),
             ersteller: currentUser.displayName,
+            besitzerUid: auth?.currentUser?.uid || currentUser.uid,  // ✅ Firebase Auth UID speichern!
             erstelltAm: serverTimestamp(),
             personen: [],
-            archiviert: false
+            archiviert: false,
+            istEigenes: true  // ✅ Markierung: eigenes Thema
         };
+        console.log("📝 Erstelle neues Thema mit besitzerUid:", themaData.besitzerUid);
+        
         const docRef = await addDoc(geschenkeThemenRef, themaData);
         THEMEN[docRef.id] = { id: docRef.id, ...themaData };
         currentThemaId = docRef.id;
@@ -2809,6 +2816,7 @@ window.createNewThema = async function() {
         renderDashboard();
         alertUser('Thema erstellt!', 'success');
     } catch (e) {
+        console.error("Fehler beim Erstellen des Themas:", e);
         alertUser('Fehler: ' + e.message, 'error');
     }
 };
