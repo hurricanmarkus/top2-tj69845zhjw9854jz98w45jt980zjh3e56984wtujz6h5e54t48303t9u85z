@@ -159,8 +159,7 @@ export async function initializeGeschenkemanagement() {
     
     // Prüfe auf ausstehende Einladungen
     checkPendingInvitations();
-    }
-
+    
     setupEventListeners();
     renderDashboard();
 }
