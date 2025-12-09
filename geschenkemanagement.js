@@ -578,19 +578,118 @@ function renderThemenDropdown() {
     if (!dropdown) return;
     
     const activeThemen = Object.values(THEMEN).filter(t => !t.archiviert);
-    dropdown.innerHTML = activeThemen.length === 0 
-        ? '<option value="">Kein Thema vorhanden</option>'
-        : activeThemen.map(thema => 
-            `<option value="${thema.id}" ${thema.id === currentThemaId ? 'selected' : ''}>${thema.name}</option>`
+    
+    if (activeThemen.length === 0) {
+        dropdown.innerHTML = '<option value="">Kein Thema vorhanden</option>';
+        
+        // ✅ NEU: Zeige hilfreiche Nachricht wenn keine Themen vorhanden
+        const myUserId = getCurrentUserId();
+        const pendingInvitations = Object.values(EINLADUNGEN).filter(e => 
+            e.empfaengerId === myUserId && e.status === 'pending'
+        );
+        
+        // Zeige Info-Box
+        const container = document.getElementById('gm-personen-uebersicht');
+        if (container) {
+            if (pendingInvitations.length > 0) {
+                container.innerHTML = `
+                    <div class="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-300 rounded-xl p-6 text-center">
+                        <div class="text-6xl mb-4">📨</div>
+                        <h3 class="text-2xl font-bold text-gray-800 mb-2">Du hast ${pendingInvitations.length} Einladung${pendingInvitations.length !== 1 ? 'en' : ''}!</h3>
+                        <p class="text-gray-600 mb-4">Andere Benutzer haben Themen mit dir geteilt.</p>
+                        <button onclick="window.showAllPendingInvitations()" 
+                            class="px-6 py-3 bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold rounded-lg hover:shadow-lg transition text-lg">
+                            📧 Einladungen anzeigen
+                        </button>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-6 text-center">
+                        <div class="text-6xl mb-4">🎁</div>
+                        <h3 class="text-xl font-bold text-gray-800 mb-2">Willkommen beim Geschenkemanagement!</h3>
+                        <p class="text-gray-600 mb-4">Erstelle dein erstes Thema, um loszulegen.</p>
+                        <button onclick="window.createNewThema()" 
+                            class="px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-lg hover:shadow-lg transition">
+                            ➕ Erstes Thema erstellen
+                        </button>
+                    </div>
+                `;
+            }
+        }
+    } else {
+        dropdown.innerHTML = activeThemen.map(thema => 
+            `<option value="${thema.id}" ${thema.id === currentThemaId ? 'selected' : ''}>${thema.name}${thema.istGeteilt ? ' 🔗' : ''}</option>`
         ).join('');
+    }
 }
 
 function renderDashboard() {
+    renderEinladungsBadge(); // ✅ NEU: Zeige Einladungs-Badge
     renderThemenDropdown();
     renderPersonenUebersicht();
     renderGeschenkeTabelle();
     updateDashboardStats();
 }
+
+// ✅ NEU: Zeige Badge für ausstehende Einladungen
+function renderEinladungsBadge() {
+    const myUserId = getCurrentUserId();
+    const pendingInvitations = Object.values(EINLADUNGEN).filter(e => 
+        e.empfaengerId === myUserId && e.status === 'pending'
+    );
+    
+    // Finde Badge-Container (erstelle ihn falls nicht vorhanden)
+    let badgeContainer = document.getElementById('gm-einladungen-badge-container');
+    if (!badgeContainer) {
+        // Erstelle Container im Header neben dem Einstellungen-Button
+        const header = document.querySelector('#geschenkemanagementView .flex.items-center.justify-between.mb-6');
+        if (header) {
+            badgeContainer = document.createElement('div');
+            badgeContainer.id = 'gm-einladungen-badge-container';
+            badgeContainer.className = 'ml-2';
+            
+            // Füge nach dem Einstellungen-Button ein
+            const settingsBtn = document.getElementById('btn-geschenke-settings');
+            if (settingsBtn && settingsBtn.parentNode) {
+                settingsBtn.parentNode.insertBefore(badgeContainer, settingsBtn.nextSibling);
+            }
+        }
+    }
+    
+    if (badgeContainer) {
+        if (pendingInvitations.length > 0) {
+            badgeContainer.innerHTML = `
+                <button onclick="window.showAllPendingInvitations()" 
+                    class="relative px-4 py-2 bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    📨 Einladungen
+                    <span class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center animate-pulse">
+                        ${pendingInvitations.length}
+                    </span>
+                </button>
+            `;
+        } else {
+            badgeContainer.innerHTML = '';
+        }
+    }
+}
+
+// ✅ NEU: Zeige alle ausstehenden Einladungen manuell
+window.showAllPendingInvitations = function() {
+    const myUserId = getCurrentUserId();
+    const pendingInvitations = Object.values(EINLADUNGEN).filter(e => 
+        e.empfaengerId === myUserId && e.status === 'pending'
+    );
+    
+    if (pendingInvitations.length > 0) {
+        showPendingInvitationsModal(pendingInvitations);
+    } else {
+        alertUser('Du hast keine ausstehenden Einladungen.', 'info');
+    }
+};
 
 function renderPersonenUebersicht() {
     const container = document.getElementById('gm-personen-uebersicht');
@@ -3271,6 +3370,10 @@ function listenForEinladungen() {
             console.log(`🎉 ${neueEinladungen.length} neue Einladung(en) werden angezeigt`);
             showPendingInvitationsModal(neueEinladungen);
         }
+        
+        // ✅ IMMER UI aktualisieren
+        renderEinladungsBadge(); // Badge im Header
+        renderThemenDropdown(); // Dropdown & Info-Box (falls keine Themen)
         
         // Update UI falls im Freigaben-Tab
         if (document.getElementById('gm-freigaben-list')) {
