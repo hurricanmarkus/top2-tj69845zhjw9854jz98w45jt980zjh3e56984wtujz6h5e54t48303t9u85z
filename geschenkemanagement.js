@@ -297,16 +297,15 @@ export async function initializeGeschenkemanagement() {
         // ✅ NEU: Lade User-UID-Mapping für Einladungen
         await loadUserUidMapping();
         
-        // ✅ NEU: Starte Echtzeit-Listener statt einmaligem Laden
-        await loadFreigaben();  // Einmaliges Laden für Initialisierung
-        listenForFreigaben();   // Dann Echtzeit-Updates
+        // ✅ Starte Echtzeit-Listener (laden automatisch die Daten)
+        listenForFreigaben();   // Lädt Freigaben + Updates
+        listenForEinladungen(); // Lädt Einladungen + Updates
+        
+        // Warte kurz, damit Listener Daten laden können
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         await loadThemen();  // ✅ Lädt eigene + geteilte Themen
         await loadVorlagen();
-        
-        // ✅ NEU: Echtzeit-Listener für Einladungen (ersetzt loadEinladungen + checkPendingInvitations)
-        await loadEinladungen(); // Einmaliges Laden für Initialisierung
-        listenForEinladungen();  // Dann Echtzeit-Updates mit Auto-Modal
         
         await loadBudgets();
         await loadErinnerungen();
@@ -381,6 +380,9 @@ async function createEigenePerson() {
 
 async function loadThemen() {
     try {
+        const myUid = auth?.currentUser?.uid || getCurrentUserId();
+        console.log("🔄 Lade Themen für User:", myUid);
+        
         // ✅ 1. Eigene Themen laden
         const snapshot = await getDocs(geschenkeThemenRef);
         THEMEN = {};
@@ -389,41 +391,64 @@ async function loadThemen() {
                 id: docSnap.id, 
                 ...docSnap.data(),
                 istEigenes: true,  // ✅ Markierung: eigenes Thema
-                besitzerUid: currentUser.uid  // ✅ Owner UID
+                istGeteilt: false, // ✅ Nicht geteilt
+                besitzerUid: myUid  // ✅ Owner UID
             };
         });
         
+        console.log(`📂 ${Object.keys(THEMEN).length} eigene Themen geladen`);
+        
         // ✅ 2. Geteilte Themen laden (von anderen Usern via Freigaben)
-        // HINWEIS: loadFreigaben() wird bereits in initializeGeschenkemanagement() aufgerufen
+        console.log(`🔍 Prüfe Freigaben:`, Object.keys(FREIGABEN).length, "gesamt");
         
         for (const freigabeId in FREIGABEN) {
             const freigabe = FREIGABEN[freigabeId];
             
+            console.log(`🔍 Prüfe Freigabe ${freigabeId}:`, {
+                aktiv: freigabe.aktiv,
+                userUid: freigabe.userUid,
+                myUid: myUid,
+                istFuerMich: freigabe.userUid === myUid
+            });
+            
             // Nur aktive Freigaben, die an den aktuellen User gerichtet sind
-            if (!freigabe.aktiv || freigabe.userUid !== currentUser.uid) continue;
+            if (!freigabe.aktiv) {
+                console.log(`  ⏭️ Übersprungen: Nicht aktiv`);
+                continue;
+            }
+            
+            if (freigabe.userUid !== myUid) {
+                console.log(`  ⏭️ Übersprungen: Nicht für mich (${freigabe.userUid} !== ${myUid})`);
+                continue;
+            }
             
             try {
+                console.log(`  ✅ Lade geteiltes Thema von ${freigabe.besitzerUid}`);
+                
                 // Lade Thema vom Besitzer
                 const themaRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', freigabe.besitzerUid, 'geschenke_themen', freigabe.themaId);
                 const themaSnap = await getDoc(themaRef);
                 
                 if (themaSnap.exists()) {
-                    // ✅ PUNKT 4: Speichere Besitzer-Name für Dropdown
                     THEMEN[themaSnap.id] = {
                         id: themaSnap.id,
                         ...themaSnap.data(),
                         istEigenes: false,  // ✅ Nicht eigenes Thema
                         istGeteilt: true,  // ✅ Geteilt
                         besitzerUid: freigabe.besitzerUid,  // ✅ Owner UID
-                        besitzerName: freigabe.freigegebenVonName,  // ✅ PUNKT 4: Owner Name
-                        freigabe: freigabe  // ✅ Freigabe-Details (enthält rechte!)
+                        besitzerName: freigabe.freigegebenVonName,  // ✅ Owner Name
+                        freigabe: freigabe  // ✅ Freigabe-Details
                     };
-                    console.log(`✅ Geteiltes Thema geladen: ${themaSnap.data().name} von ${freigabe.freigegebenVonName}`);
+                    console.log(`  ✅ Geteiltes Thema geladen: "${themaSnap.data().name}" von ${freigabe.freigegebenVonName}`);
+                } else {
+                    console.log(`  ❌ Thema existiert nicht mehr`);
                 }
             } catch (e) {
-                console.error(`Fehler beim Laden des geteilten Themas ${freigabe.themaId}:`, e);
+                console.error(`  ❌ Fehler beim Laden:`, e);
             }
         }
+        
+        console.log(`📊 GESAMT: ${Object.keys(THEMEN).length} Themen (eigene + geteilte)`);
         
         const savedThemaId = localStorage.getItem('gm_current_thema');
         if (savedThemaId && THEMEN[savedThemaId]) {
@@ -707,10 +732,55 @@ function renderDashboard() {
     ).length;
     updateInvitationBadge(pendingCount);
     
+    // ✅ NEU: Blinkender Button für offene Einladungen AM DASHBOARD
+    showPendingInvitationsAlert(pendingCount);
+    
     renderThemenDropdown();
     renderPersonenUebersicht();
     renderGeschenkeTabelle();
     updateDashboardStats();
+}
+
+// ✅ NEU: Blinkender Alert-Button für offene Einladungen
+function showPendingInvitationsAlert(count) {
+    // Finde oder erstelle Container für Einladungs-Alert
+    let alertContainer = document.getElementById('gm-einladungen-alert');
+    
+    if (!alertContainer) {
+        // Erstelle Container direkt unter dem Header (vor Personen-Übersicht)
+        const personenContainer = document.getElementById('gm-personen-uebersicht');
+        if (personenContainer) {
+            alertContainer = document.createElement('div');
+            alertContainer.id = 'gm-einladungen-alert';
+            personenContainer.parentNode.insertBefore(alertContainer, personenContainer);
+        }
+    }
+    
+    if (!alertContainer) return;
+    
+    if (count > 0) {
+        alertContainer.innerHTML = `
+            <div class="mb-4 bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500 p-4 rounded-2xl shadow-2xl animate-pulse border-4 border-white">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        <div class="text-6xl animate-bounce">📨</div>
+                        <div>
+                            <h3 class="text-2xl font-bold text-white drop-shadow-lg">
+                                ${count} Offene Einladung${count > 1 ? 'en' : ''}!
+                            </h3>
+                            <p class="text-white text-sm">Klicke hier, um sie anzusehen</p>
+                        </div>
+                    </div>
+                    <button onclick="showInvitationsModal()" 
+                        class="px-8 py-4 bg-white text-red-600 font-bold rounded-xl hover:bg-red-50 transition text-lg shadow-xl hover:scale-105 transform">
+                        🎁 Jetzt ansehen
+                    </button>
+                </div>
+            </div>
+        `;
+    } else {
+        alertContainer.innerHTML = '';
+    }
 }
 
 // ✅ NEU: Zeige Badge für ausstehende Einladungen
@@ -4650,6 +4720,9 @@ function listenForEinladungen() {
         
         // Badge aktualisieren
         updateInvitationBadge(pending.length);
+        
+        // ✅ Dashboard-Alert aktualisieren
+        showPendingInvitationsAlert(pending.length);
         
         // UI aktualisieren
         if (document.getElementById('gm-freigaben-list')) {
