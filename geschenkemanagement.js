@@ -116,26 +116,56 @@ export async function initializeGeschenkemanagement() {
 
     // ✅ Warte auf currentUser, falls noch nicht geladen
     let retries = 0;
-    while ((!currentUser || !currentUser.uid) && retries < 50) {
+    let user = currentUser;
+    
+    while ((!user || !user.uid) && retries < 100) {
         console.log("⏳ Warte auf currentUser... (Versuch", retries + 1, ")");
-        await new Promise(resolve => setTimeout(resolve, 100));
-        retries++;
+        console.log("   - currentUser:", currentUser);
+        console.log("   - window.currentUser:", window.currentUser);
+        
+        // Versuche verschiedene Quellen
+        user = currentUser || window.currentUser;
+        
+        if (!user || !user.uid) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            retries++;
+        }
+    }
+    
+    // Aktualisiere currentUser mit der gefundenen Quelle
+    if (user && user.uid) {
+        window.currentUser = user;  // Setze global für Fallback
     }
 
     if (!db) {
         console.error("❌ Firestore (db) ist nicht verfügbar!");
+        alertUser("Fehler: Firestore nicht verfügbar!", "error");
+        // Trotzdem UI initialisieren
+        setupEventListeners();
         return;
     }
 
+    if (!user || !user.uid) {
+        console.error("❌ currentUser ist nicht verfügbar nach 10 Sekunden!");
+        console.error("❌ currentUser:", currentUser);
+        console.error("❌ window.currentUser:", window.currentUser);
+        console.error("❌ Bitte Seite neu laden oder erneut einloggen!");
+        alertUser("Fehler: Benutzer nicht geladen. Bitte Seite neu laden!", "error");
+        // Trotzdem UI initialisieren
+        setupEventListeners();
+        return;
+    }
+
+    console.log("✅ User erkannt:", user.uid, user);
+    
+    // ✅ Setze currentUser global, damit der Rest des Codes funktioniert
     if (!currentUser || !currentUser.uid) {
-        console.error("❌ currentUser ist nicht verfügbar nach 5 Sekunden!");
-        return;
+        window.currentUser = user;
+        console.log("✅ currentUser wurde von user gesetzt");
     }
-
-    console.log("✅ User erkannt:", currentUser.uid);
     
     // ✅ NEU: User-basierte Collection-Referenzen
-    const userDataPath = ['artifacts', appId, 'public', 'data', 'users', currentUser.uid];
+    const userDataPath = ['artifacts', appId, 'public', 'data', 'users', user.uid];
     
     geschenkeSettingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'geschenkemanagement');
     geschenkeThemenRef = collection(db, ...userDataPath, 'geschenke_themen');
@@ -146,7 +176,7 @@ export async function initializeGeschenkemanagement() {
     geschenkeBudgetsRef = collection(db, ...userDataPath, 'geschenke_budgets');
     geschenkeErinnerungenRef = collection(db, ...userDataPath, 'geschenke_erinnerungen');
     
-    console.log("✅ Collection-Referenzen erstellt für User:", currentUser.uid);
+    console.log("✅ Collection-Referenzen erstellt für User:", user.uid);
     
     try {
         await loadSettings();
