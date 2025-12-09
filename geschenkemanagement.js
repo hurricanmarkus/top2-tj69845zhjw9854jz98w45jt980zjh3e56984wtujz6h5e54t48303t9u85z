@@ -56,6 +56,7 @@ let currentThemaId = null;
 let searchTerm = '';
 let currentFilter = {};
 let personenDetailsAusgeklappt = false; // ✅ State für Personen-Übersicht
+let freigabenCounter = 0; // ✅ Zähler für Freigabe-IDs
 
 // Einladungs-Status
 const EINLADUNG_STATUS = {
@@ -803,7 +804,11 @@ window.setPersonStatus = async function(personId, status) {
         const personenStatus = thema.personenStatus || {};
         personenStatus[personId] = status;
         
-        await updateDoc(doc(geschenkeThemenRef, currentThemaId), { personenStatus });
+        // ✅ KORRIGIERT: Verwende Owner-UID für Thema-Update
+        const ownerUid = thema?.besitzerUid || auth?.currentUser?.uid || currentUser.uid;
+        const themaDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', currentThemaId);
+        
+        await updateDoc(themaDocRef, { personenStatus });
         THEMEN[currentThemaId].personenStatus = personenStatus;
         
         renderPersonenUebersicht();
@@ -823,7 +828,11 @@ window.removePersonFromThema = async function(personId) {
         const thema = THEMEN[currentThemaId];
         const personen = (thema.personen || []).filter(id => id !== personId);
         
-        await updateDoc(doc(geschenkeThemenRef, currentThemaId), { personen });
+        // ✅ KORRIGIERT: Verwende Owner-UID für Thema-Update
+        const ownerUid = thema?.besitzerUid || auth?.currentUser?.uid || currentUser.uid;
+        const themaDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', currentThemaId);
+        
+        await updateDoc(themaDocRef, { personen });
         THEMEN[currentThemaId].personen = personen;
         
         renderPersonenUebersicht();
@@ -1751,8 +1760,9 @@ window.updateFilterDetails = async function() {
                     <div class="max-h-96 overflow-y-auto p-3 bg-gray-50 rounded border">
                         <div class="space-y-2">
                             ${filteredGeschenke.map(g => {
-                                const fuerName = KONTAKTE[g.fuer]?.name || 'Unbekannt';
-                                const vonName = KONTAKTE[g.von]?.name || 'Unbekannt';
+                                // ✅ KORRIGIERT: fuer und von sind Arrays
+                                const fuerName = (g.fuer || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join(', ') || 'Unbekannt';
+                                const vonName = (g.von || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join(', ') || 'Unbekannt';
                                 const thema = THEMEN[g.themaId];
                                 const status = STATUS_CONFIG[g.status];
                                 
@@ -1771,7 +1781,7 @@ window.updateFilterDetails = async function() {
                                                 <span class="text-xs text-gray-500">📁 ${thema?.name || 'Unbekannt'}</span>
                                             </div>
                                             <p class="font-bold text-gray-800 text-sm truncate">
-                                                ${g.geschenkIdee || 'Keine Beschreibung'}
+                                                ${g.geschenk || 'Keine Beschreibung'}
                                             </p>
                                             <p class="text-xs text-gray-600 mt-1">
                                                 🎁 <strong>FÜR:</strong> ${fuerName} • 
@@ -1899,7 +1909,7 @@ window.addRegelToListe = function() {
             const geschenk = GESCHENKE[cb.value];
             return {
                 id: cb.value,
-                name: geschenk?.geschenkIdee || 'Unbekannt',
+                name: geschenk?.geschenk || 'Unbekannt',
                 fuer: KONTAKTE[geschenk?.fuer]?.name || '?',
                 von: KONTAKTE[geschenk?.von]?.name || '?'
             };
@@ -2695,7 +2705,12 @@ window.addPersonToThema = async function(kontaktId) {
         const personen = thema.personen || [];
         if (!personen.includes(kontaktId)) {
             personen.push(kontaktId);
-            await updateDoc(doc(geschenkeThemenRef, currentThemaId), { personen });
+            
+            // ✅ KORRIGIERT: Verwende Owner-UID für Thema-Update
+            const ownerUid = thema?.besitzerUid || auth?.currentUser?.uid || currentUser.uid;
+            const themaDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', currentThemaId);
+            
+            await updateDoc(themaDocRef, { personen });
             THEMEN[currentThemaId].personen = personen;
             personenDetailsAusgeklappt = true; // ✅ Nach Hinzufügen ausgeklappt lassen
             renderPersonenUebersicht();
@@ -2749,11 +2764,17 @@ window.editThema = function(id) {
     const thema = THEMEN[id];
     const newName = prompt('Neuer Name für das Thema:', thema.name);
     if (newName && newName !== thema.name) {
-        updateDoc(doc(geschenkeThemenRef, id), { name: newName }).then(() => {
+        // ✅ KORRIGIERT: Verwende Owner-UID für Thema-Update
+        const ownerUid = thema?.besitzerUid || auth?.currentUser?.uid || currentUser.uid;
+        const themaDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', id);
+        
+        updateDoc(themaDocRef, { name: newName }).then(() => {
             THEMEN[id].name = newName;
             renderThemenDropdown();
             renderThemenVerwaltung();
             alertUser('Thema umbenannt!', 'success');
+        }).catch(e => {
+            alertUser('Fehler: ' + e.message, 'error');
         });
     }
 };
@@ -2761,7 +2782,11 @@ window.editThema = function(id) {
 window.toggleArchiveThema = async function(id) {
     const thema = THEMEN[id];
     try {
-        await updateDoc(doc(geschenkeThemenRef, id), { archiviert: !thema.archiviert });
+        // ✅ KORRIGIERT: Verwende Owner-UID für Thema-Update
+        const ownerUid = thema?.besitzerUid || auth?.currentUser?.uid || currentUser.uid;
+        const themaDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', id);
+        
+        await updateDoc(themaDocRef, { archiviert: !thema.archiviert });
         THEMEN[id].archiviert = !thema.archiviert;
         renderThemenDropdown();
         renderThemenVerwaltung();
@@ -2773,8 +2798,14 @@ window.toggleArchiveThema = async function(id) {
 
 window.deleteThema = async function(id) {
     if (!confirm('Thema und alle Geschenke darin wirklich löschen?')) return;
+    const thema = THEMEN[id];
+    
     try {
-        await deleteDoc(doc(geschenkeThemenRef, id));
+        // ✅ KORRIGIERT: Verwende Owner-UID für Thema-Löschung
+        const ownerUid = thema?.besitzerUid || auth?.currentUser?.uid || currentUser.uid;
+        const themaDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', id);
+        
+        await deleteDoc(themaDocRef);
         delete THEMEN[id];
         if (currentThemaId === id) {
             currentThemaId = Object.keys(THEMEN)[0] || null;
@@ -3205,7 +3236,8 @@ window.acceptGeschenkeInvitation = async function(invitationId) {
             besitzerId: invitation.besitzerId,  // ✅ Owner des Themas
             besitzerUid: invitation.besitzerUid,  // ✅ Firebase Auth UID des Owners
             freigabeTyp: invitation.freigabeTyp,
-            rechte: invitation.rechte,
+            rechte: invitation.rechte,  // Globale Rechte für die gesamte Freigabe
+            rechteMap: invitation.rechteMap || {},  // ✅ Regel-spezifische Rechte (für zukünftige Erweiterung)
             filter: invitation.filter || {},
             einladungId: invitationId,
             freigegebenVon: invitation.absenderId,
@@ -3399,56 +3431,86 @@ window.sendInvitation = async function(userId, userName, themaId, freigaben) {
 // FREIGABE-FILTER-LOGIK (Punkt 18)
 // ========================================
 function filterGeschenkeByFreigaben(geschenkeArray, freigabe) {
-    if (!freigabe || !freigabe.freigaben) return geschenkeArray;
+    if (!freigabe) return geschenkeArray;
+    
+    // ✅ KORRIGIERT: Unterstützt beide Filter-Strukturen (alte und neue)
+    const filter = freigabe.filter || freigabe.freigaben || {};
+    
+    // Wenn komplette Freigabe, zeige alle
+    if (freigabe.freigabeTyp === 'komplett') return geschenkeArray;
+    
+    // Wenn kein Filter, zeige alle
+    if (Object.keys(filter).length === 0) return geschenkeArray;
     
     return geschenkeArray.filter(geschenk => {
-        // Prüfe ob der Benutzer dieses Geschenk sehen darf basierend auf Freigaben
-        const f = freigabe.freigaben;
-        
-        // Wenn spezifische Personen-Filter gesetzt sind
-        if (f.fuerPersonen && f.fuerPersonen.length > 0) {
-            const hatFuerMatch = geschenk.fuer?.some(personId => f.fuerPersonen.includes(personId));
-            if (!hatFuerMatch) return false;
+        // ✅ Wenn einzelne Einträge spezifisch freigegeben sind
+        if (filter.einzelneEintraege && filter.einzelneEintraege.length > 0) {
+            return filter.einzelneEintraege.includes(geschenk.id);
         }
         
-        if (f.vonPersonen && f.vonPersonen.length > 0) {
-            const hatVonMatch = geschenk.von?.some(personId => f.vonPersonen.includes(personId));
-            if (!hatVonMatch) return false;
+        // ✅ Wenn Personen-Filter gesetzt sind (alle Bedingungen müssen erfüllt sein)
+        let matches = true;
+        
+        if (filter.fuerPerson && filter.fuerPerson.length > 0) {
+            const hatFuerMatch = geschenk.fuer?.some(personId => filter.fuerPerson.includes(personId));
+            if (!hatFuerMatch) matches = false;
         }
         
-        if (f.bezahltVonPersonen && f.bezahltVonPersonen.length > 0) {
-            if (!f.bezahltVonPersonen.includes(geschenk.bezahltVon)) return false;
+        if (filter.vonPerson && filter.vonPerson.length > 0) {
+            const hatVonMatch = geschenk.von?.some(personId => filter.vonPerson.includes(personId));
+            if (!hatVonMatch) matches = false;
         }
         
-        if (f.beteiligungPersonen && f.beteiligungPersonen.length > 0) {
-            const hatBeteiligungMatch = geschenk.beteiligung?.some(personId => f.beteiligungPersonen.includes(personId));
-            if (!hatBeteiligungMatch) return false;
+        if (filter.beteiligungPerson && filter.beteiligungPerson.length > 0) {
+            const hatBeteiligungMatch = geschenk.beteiligung?.some(personId => filter.beteiligungPerson.includes(personId));
+            if (!hatBeteiligungMatch) matches = false;
         }
         
-        // Wenn spezifische IDs freigegeben sind
-        if (f.spezifischeIds && f.spezifischeIds.length > 0) {
-            if (!f.spezifischeIds.includes(geschenk.id)) return false;
+        if (filter.bezahltVonPerson && filter.bezahltVonPerson.length > 0) {
+            if (!filter.bezahltVonPerson.includes(geschenk.bezahltVon)) matches = false;
         }
         
-        return true;
+        // ✅ Zahlungsart-Filter
+        if (filter.sollBezahlungKonto && filter.sollBezahlungKonto.length > 0) {
+            if (!filter.sollBezahlungKonto.includes(geschenk.sollBezahlung)) matches = false;
+        }
+        
+        if (filter.istBezahlungKonto && filter.istBezahlungKonto.length > 0) {
+            if (!filter.istBezahlungKonto.includes(geschenk.istBezahlung)) matches = false;
+        }
+        
+        if (filter.bezahlungKonto && filter.bezahlungKonto.length > 0) {
+            const hatKontoMatch = filter.bezahlungKonto.includes(geschenk.sollBezahlung) || 
+                                  filter.bezahlungKonto.includes(geschenk.istBezahlung);
+            if (!hatKontoMatch) matches = false;
+        }
+        
+        return matches;
     });
 }
 
 function getVisibleFieldsForFreigabe(freigabe) {
-    if (!freigabe || !freigabe.freigaben) {
+    if (!freigabe) {
         return { fuer: true, von: true, id: true, bezahltVon: true, beteiligung: true, sollBezahlung: true, istBezahlung: true, standort: true };
     }
     
-    return {
-        fuer: freigabe.freigaben.fuer !== false,
-        von: freigabe.freigaben.von !== false,
-        id: freigabe.freigaben.id !== false,
-        bezahltVon: freigabe.freigaben.bezahltVon !== false,
-        beteiligung: freigabe.freigaben.beteiligung !== false,
-        sollBezahlung: freigabe.freigaben.sollBezahlung !== false,
-        istBezahlung: freigabe.freigaben.istBezahlung !== false,
-        standort: freigabe.freigaben.standort !== false
+    // ✅ KORRIGIERT: Unterstützt beide Filter-Strukturen (alte und neue)
+    const rechte = freigabe.rechte || 'lesen';
+    
+    // Bei Leserechten: alle Felder sichtbar
+    // Bei Bearbeitungsrechten: abhängig von weiteren Einstellungen
+    const baseVisibility = {
+        fuer: true,
+        von: true,
+        id: true,
+        bezahltVon: rechte === 'bearbeiten',
+        beteiligung: rechte === 'bearbeiten',
+        sollBezahlung: rechte === 'bearbeiten',
+        istBezahlung: rechte === 'bearbeiten',
+        standort: rechte === 'bearbeiten'
     };
+    
+    return baseVisibility;
 }
 
 // ========================================
