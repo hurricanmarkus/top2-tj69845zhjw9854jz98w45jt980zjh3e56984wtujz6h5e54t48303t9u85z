@@ -40,6 +40,45 @@ function getCurrentUserId() {
     return auth?.currentUser?.uid || currentUser?.uid;
 }
 
+// ✅ HELPER: Finde Firebase Auth UID für einen User aus USERS
+// USERS enthält Firestore Document IDs, NICHT Firebase Auth UIDs!
+// Wir müssen die UID aus der user-config laden
+async function getUserFirebaseUid(userDocId) {
+    try {
+        // Prüfe ob es bereits im Cache ist
+        if (USERS[userDocId] && USERS[userDocId]._firebaseUid) {
+            return USERS[userDocId]._firebaseUid;
+        }
+        
+        // Lade user-config Dokument
+        // Die user-config ist unter /user-config/{firebaseAuthUid} gespeichert
+        // ABER wir haben nur die Document-ID aus USERS, nicht die Firebase Auth UID!
+        
+        // WORKAROUND: Durchsuche alle user-config Dokumente nach dem Namen
+        const userConfigRef = collection(db, 'artifacts', appId, 'public', 'data', 'user-config');
+        const snapshot = await getDocs(userConfigRef);
+        
+        let foundUid = null;
+        const userName = USERS[userDocId]?.name;
+        
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            if (data.name === userName || data.displayName === userName) {
+                foundUid = doc.id; // Die Document-ID ist die Firebase Auth UID!
+                // Cache it
+                if (USERS[userDocId]) {
+                    USERS[userDocId]._firebaseUid = foundUid;
+                }
+            }
+        });
+        
+        return foundUid;
+    } catch (e) {
+        console.error('Fehler beim Laden der Firebase Auth UID:', e);
+        return null;
+    }
+}
+
 let geschenkeCollection = null;
 let geschenkeSettingsRef = null;
 let geschenkeThemenRef = null;
@@ -1695,6 +1734,11 @@ function renderFreigabenVerwaltung() {
                                 ⏳ ${einladungen.filter(e => e.status === 'pending').length} Einladung${einladungen.filter(e => e.status === 'pending').length !== 1 ? 'en' : ''} ausstehend
                             </span>
                         ` : ''}
+                        ${einladungen.filter(e => e.status === 'declined').length > 0 ? `
+                            <span class="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full font-bold">
+                                ❌ ${einladungen.filter(e => e.status === 'declined').length} Abgelehnt
+                            </span>
+                        ` : ''}
                     </div>
                     <button onclick="window.openFreigabeEditor('${user.id}')" 
                         class="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold rounded-lg hover:shadow-lg transition">
@@ -1702,14 +1746,14 @@ function renderFreigabenVerwaltung() {
                     </button>
                 </div>
                 
-                ${aktiveFreigaben.length > 0 ? `
+                ${aktiveFreigaben.length > 0 || einladungen.length > 0 ? `
                     <div class="mt-2 space-y-1">
                         ${aktiveFreigaben.map(f => {
                             const thema = THEMEN[f.themaId];
                             return `
-                                <div class="flex items-center justify-between p-2 bg-white rounded-lg border">
+                                <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-green-300">
                                     <div class="flex items-center gap-2">
-                                        <span class="text-2xl">📁</span>
+                                        <span class="text-2xl">✅</span>
                                         <div>
                                             <p class="font-semibold text-sm">${thema?.name || 'Unbekanntes Thema'}</p>
                                             <p class="text-xs text-gray-500">
@@ -1727,8 +1771,39 @@ function renderFreigabenVerwaltung() {
                                 </div>
                             `;
                         }).join('')}
+                        ${einladungen.map(e => {
+                            const statusColors = {
+                                pending: 'border-yellow-300 bg-yellow-50',
+                                accepted: 'border-green-300 bg-green-50',
+                                declined: 'border-red-300 bg-red-50'
+                            };
+                            const statusIcons = {
+                                pending: '⏳',
+                                accepted: '✅',
+                                declined: '❌'
+                            };
+                            return `
+                                <div class="flex items-center justify-between p-2 bg-white rounded-lg border ${statusColors[e.status] || ''}">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-2xl">${statusIcons[e.status] || '📧'}</span>
+                                        <div>
+                                            <p class="font-semibold text-sm">${e.themaName || 'Unbekanntes Thema'}</p>
+                                            <p class="text-xs text-gray-500">
+                                                Einladung: ${e.status === 'pending' ? 'Ausstehend' : e.status === 'accepted' ? 'Angenommen' : 'Abgelehnt'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    ${e.status === 'pending' ? `
+                                        <button onclick="window.cancelEinladung('${e.id}')" 
+                                            class="text-red-500 hover:text-red-700 p-1 text-sm font-bold" title="Einladung zurücknehmen">
+                                            ❌ Zurücknehmen
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            `;
+                        }).join('')}
                     </div>
-                ` : '<p class="text-xs text-gray-400 italic mt-2">Keine aktiven Freigaben</p>'}
+                ` : '<p class="text-xs text-gray-400 italic mt-2">Keine aktiven Freigaben oder Einladungen</p>'}
             </div>
         `;
     }).join('');
@@ -2525,31 +2600,44 @@ window.sendNeueFreigabeEinladungen = async function(userId) {
                 rechteMap[filterKey] = regel.rechte;
             });
             
+            // ✅ NEU: Hole Firebase Auth UID des Empfängers
+            const empfaengerUid = await getUserFirebaseUid(userId);
+            if (!empfaengerUid) {
+                console.error(`❌ Firebase Auth UID nicht gefunden für User ${userId} (${user.name})`);
+                continue; // Überspringe dieses Thema
+            }
+            
+            console.log(`✅ Sende Einladung: ${user.name} (UID: ${empfaengerUid}) für Thema: ${thema.name}`);
+            
             // Prüfe ob bereits Einladung existiert
             const myUserId = getCurrentUserId();
             const existingEinladung = Object.values(EINLADUNGEN).find(e =>
-                e.empfaengerId === userId &&
+                (e.empfaengerUid === empfaengerUid || e.empfaengerId === userId) &&
                 e.absenderId === myUserId &&
                 e.themaId === themaId &&
                 e.status === 'pending'
             );
             
             if (existingEinladung) {
+                console.log("🔄 Aktualisiere bestehende Einladung");
                 // Update
                 await updateDoc(doc(geschenkeEinladungenRef, existingEinladung.id), {
                     filter,
                     rechteMap,
                     freigabeTyp: 'gefiltert',
+                    empfaengerUid: empfaengerUid, // ✅ Stelle sicher dass UID gesetzt ist
                     aktualisiertAm: serverTimestamp()
                 });
             } else {
-                // Neu erstellen
+                console.log("➕ Erstelle neue Einladung");
+                // ✅ NEU: Speichere BEIDE IDs
                 await addDoc(geschenkeEinladungenRef, {
                     absenderId: myUserId,
                     absenderName: currentUser.displayName,
                     besitzerId: myUserId,  // ✅ Owner des Themas
                     besitzerUid: auth.currentUser.uid,  // ✅ Firebase Auth UID des Owners
-                    empfaengerId: userId,
+                    empfaengerId: userId,  // Firestore Doc ID (für Kompatibilität)
+                    empfaengerUid: empfaengerUid,  // ✅ Firebase Auth UID (für Listener!)
                     empfaengerName: user.displayName || user.name,
                     themaId,
                     themaName: thema.name,
@@ -2696,6 +2784,19 @@ window.deleteFreigabe = async function(freigabeId) {
         await deleteDoc(doc(geschenkeFreigabenRef, freigabeId));
         // ✅ Löschung wird durch Listener automatisch erkannt und UI aktualisiert
         alertUser('Freigabe entfernt!', 'success');
+    } catch (e) {
+        alertUser('Fehler: ' + e.message, 'error');
+    }
+};
+
+// ✅ NEU: Einladung zurücknehmen (für Absender)
+window.cancelEinladung = async function(einladungId) {
+    if (!confirm('Einladung wirklich zurücknehmen?')) return;
+    
+    try {
+        await deleteDoc(doc(geschenkeEinladungenRef, einladungId));
+        // ✅ Löschung wird durch Listener automatisch erkannt und UI aktualisiert
+        alertUser('Einladung zurückgenommen!', 'success');
     } catch (e) {
         alertUser('Fehler: ' + e.message, 'error');
     }
@@ -3336,6 +3437,8 @@ function listenForEinladungen() {
         console.log(`📨 Einladungen-Update: ${snapshot.size} Einladungen gesamt`);
         
         const myUserId = getCurrentUserId();
+        console.log(`🔑 Meine Firebase Auth UID (für Filter): ${myUserId}`);
+        
         let neueEinladungen = [];
         
         snapshot.docChanges().forEach((change) => {
@@ -3345,8 +3448,19 @@ function listenForEinladungen() {
                 // Neue Einladung hinzugefügt
                 EINLADUNGEN[einladung.id] = einladung;
                 
+                // ✅ KORRIGIERT: Prüfe empfaengerUid (Firebase Auth UID) statt empfaengerId!
+                const istFuerMich = einladung.empfaengerUid === myUserId || einladung.empfaengerId === myUserId;
+                
+                console.log(`📧 Einladung ${einladung.id}:`, {
+                    empfaengerUid: einladung.empfaengerUid,
+                    empfaengerId: einladung.empfaengerId,
+                    myUserId: myUserId,
+                    istFuerMich: istFuerMich,
+                    status: einladung.status
+                });
+                
                 // Prüfe ob Einladung für mich ist und status = pending
-                if (einladung.empfaengerId === myUserId && einladung.status === 'pending') {
+                if (istFuerMich && einladung.status === 'pending') {
                     console.log(`✨ Neue Einladung für mich erhalten: ${einladung.themaName} von ${einladung.absenderName}`);
                     neueEinladungen.push(einladung);
                 }
