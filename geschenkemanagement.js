@@ -377,12 +377,29 @@ function updateCollectionForThema() {
     if (currentThemaId && db && currentUser) {
         const thema = THEMEN[currentThemaId];
         
-        // ✅ NEU: User-basierte Geschenke-Collection
-        // Bei geteilten Themen: verwende besitzerUid, sonst Firebase Auth UID
-        const ownerUid = thema?.besitzerUid || auth?.currentUser?.uid || currentUser.uid;
+        // ✅ KORRIGIERT: Priorisiere Firebase Auth UID!
+        // Bei eigenen Themen: verwende auth.currentUser.uid
+        // Bei geteilten Themen: verwende besitzerUid aus dem Thema
+        let ownerUid;
+        
+        if (thema?.istGeteilt) {
+            // Geteiltes Thema: verwende besitzerUid vom Owner
+            ownerUid = thema.besitzerUid;
+        } else {
+            // Eigenes Thema: verwende Firebase Auth UID
+            ownerUid = auth?.currentUser?.uid;
+        }
+        
+        // Fallback (sollte nie benötigt werden)
+        if (!ownerUid) {
+            console.error("❌ FEHLER: Keine Owner UID gefunden!");
+            alertUser("❌ FEHLER: Keine Benutzer-ID gefunden. Bitte neu einloggen!", "error");
+            return;
+        }
         
         console.log("📦 updateCollectionForThema - Owner UID:", ownerUid);
         console.log("📦 Thema:", currentThemaId, "ist geteilt:", thema?.istGeteilt);
+        console.log("📦 auth.currentUser.uid:", auth?.currentUser?.uid);
         
         geschenkeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', currentThemaId, 'geschenke');
         listenForGeschenke();
@@ -1226,6 +1243,23 @@ function closeGeschenkModal() {
 
 async function saveGeschenk() {
     const id = document.getElementById('gm-id').value;
+    
+    // ✅ DIAGNOSE: User-ID und Pfad überprüfen
+    console.log("🔍 DIAGNOSE - saveGeschenk:");
+    console.log("  auth.currentUser:", auth?.currentUser);
+    console.log("  auth.currentUser.uid:", auth?.currentUser?.uid);
+    console.log("  currentUser:", currentUser);
+    console.log("  currentUser.uid:", currentUser?.uid);
+    console.log("  currentThemaId:", currentThemaId);
+    console.log("  THEMEN[currentThemaId]:", THEMEN[currentThemaId]);
+    console.log("  geschenkeCollection.path:", geschenkeCollection?.path);
+    
+    // Prüfe ob Firebase Auth User vorhanden ist
+    if (!auth?.currentUser?.uid) {
+        alertUser('❌ FEHLER: Firebase Auth User nicht gefunden! Bitte neu einloggen.', 'error');
+        console.error("❌ auth.currentUser.uid ist nicht gesetzt!");
+        return;
+    }
     
     const geschenkData = {
         geschenk: document.getElementById('gm-geschenk').value.trim(),
@@ -2825,11 +2859,22 @@ window.createNewThema = async function() {
     const name = prompt('Name des neuen Themas (z.B. "Weihnachten 2025"):');
     if (!name) return;
     
+    // ✅ DIAGNOSE: Prüfe Firebase Auth
+    console.log("🔍 DIAGNOSE - createNewThema:");
+    console.log("  auth.currentUser.uid:", auth?.currentUser?.uid);
+    console.log("  currentUser.uid:", currentUser?.uid);
+    
+    if (!auth?.currentUser?.uid) {
+        alertUser('❌ FEHLER: Firebase Auth User nicht gefunden! Bitte neu einloggen.', 'error');
+        console.error("❌ auth.currentUser.uid ist nicht gesetzt!");
+        return;
+    }
+    
     try {
         const themaData = {
             name: name.trim(),
             ersteller: currentUser.displayName,
-            besitzerUid: auth?.currentUser?.uid || currentUser.uid,  // ✅ Firebase Auth UID speichern!
+            besitzerUid: auth.currentUser.uid,  // ✅ KORRIGIERT: Verwende IMMER auth.currentUser.uid!
             erstelltAm: serverTimestamp(),
             personen: [],
             archiviert: false,
