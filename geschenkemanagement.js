@@ -453,57 +453,33 @@ async function loadVorlagen() {
     }
 }
 
-// ✅ ECHTZEIT-LISTENER für Freigaben
+// 🎧 NEUER Freigaben-Listener
 function listenForFreigaben() {
     if (!geschenkeFreigabenRef) {
-        console.error("❌ geschenkeFreigabenRef nicht verfügbar");
+        console.error("❌ Freigaben-Ref fehlt");
         return;
     }
     
-    console.log("👂 Starte Echtzeit-Listener für Freigaben...");
+    console.log("🎧 NEU: Freigaben-Listener gestartet");
     
     onSnapshot(geschenkeFreigabenRef, (snapshot) => {
-        console.log(`🔐 Freigaben-Update: ${snapshot.size} Freigaben gesamt`);
+        console.log(`📦 Freigaben: ${snapshot.size} Dokumente`);
         
-        const myUserId = getCurrentUserId();
-        let neueFreigaben = [];
-        
-        snapshot.docChanges().forEach((change) => {
-            const freigabe = { id: change.doc.id, ...change.doc.data() };
-            
-            if (change.type === 'added') {
-                FREIGABEN[freigabe.id] = freigabe;
-                
-                // Prüfe ob Freigabe für mich ist und aktiv
-                if (freigabe.userUid === auth?.currentUser?.uid && freigabe.aktiv) {
-                    console.log(`✨ Neue Freigabe für mich: ${freigabe.themaName} von ${freigabe.freigegebenVonName}`);
-                    neueFreigaben.push(freigabe);
-                }
-            }
-            
-            if (change.type === 'modified') {
-                FREIGABEN[freigabe.id] = freigabe;
-                console.log(`🔄 Freigabe aktualisiert: ${freigabe.id}`);
-            }
-            
-            if (change.type === 'removed') {
-                delete FREIGABEN[freigabe.id];
-                console.log(`🗑️ Freigabe gelöscht: ${freigabe.id}`);
-            }
+        // Cache leeren und neu füllen
+        FREIGABEN = {};
+        snapshot.forEach(doc => {
+            FREIGABEN[doc.id] = { id: doc.id, ...doc.data() };
         });
         
-        // Wenn neue Freigaben hinzugefügt wurden, lade Themen neu
-        if (neueFreigaben.length > 0) {
-            console.log(`🎉 ${neueFreigaben.length} neue Freigabe(en) erhalten - lade Themen neu`);
-            loadThemen(); // Lädt eigene + geteilte Themen neu
+        console.log("✅ Freigaben geladen:", Object.keys(FREIGABEN).length);
+        
+        // UI aktualisieren
+        if (document.getElementById('gm-freigaben-list')) {
+            renderShareSettings();
         }
         
-        // Update UI
-        if (document.getElementById('gm-freigaben-list')) {
-            renderFreigabenVerwaltung();
-        }
-    }, (error) => {
-        console.error("❌ Fehler beim Freigaben-Listener:", error);
+        // Themen neu laden (für geteilte Themen)
+        loadGeschenkeThemen();
     });
 }
 
@@ -729,53 +705,7 @@ function renderDashboard() {
 }
 
 // ✅ NEU: Zeige Badge für ausstehende Einladungen
-function renderEinladungsBadge() {
-    const myName = currentUser?.displayName;
-    const pendingInvitations = Object.values(EINLADUNGEN).filter(e => 
-        e.empfaengerName === myName && e.status === 'pending'
-    );
-    
-    // Finde Badge-Container (erstelle ihn falls nicht vorhanden)
-    let badgeContainer = document.getElementById('gm-einladungen-badge-container');
-    if (!badgeContainer) {
-        // Erstelle Container im Header neben dem Einstellungen-Button
-        const header = document.querySelector('#geschenkemanagementView .flex.items-center.justify-between.mb-6');
-        if (header) {
-            badgeContainer = document.createElement('div');
-            badgeContainer.id = 'gm-einladungen-badge-container';
-            badgeContainer.className = 'ml-2';
-            
-            // Füge nach dem Einstellungen-Button ein
-            const settingsBtn = document.getElementById('btn-geschenke-settings');
-            if (settingsBtn && settingsBtn.parentNode) {
-                settingsBtn.parentNode.insertBefore(badgeContainer, settingsBtn.nextSibling);
-            }
-        }
-    }
-    
-    if (badgeContainer) {
-        if (pendingInvitations.length > 0) {
-            // ✅ PUNKT 3: Blinkender Button mit Animation
-            badgeContainer.innerHTML = `
-                <button onclick="window.showAllPendingInvitations()" 
-                    class="relative px-4 py-2 bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2 animate-bounce">
-                    <svg class="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                    <span class="animate-pulse">📨 Offene Antwort auf Einladung</span>
-                    <span class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center animate-ping">
-                        ${pendingInvitations.length}
-                    </span>
-                    <span class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
-                        ${pendingInvitations.length}
-                    </span>
-                </button>
-            `;
-        } else {
-            badgeContainer.innerHTML = '';
-        }
-    }
-}
+// ✅ ENTFERNT - Ersetzt durch updateInvitationBadge() im neuen System
 
 // ✅ PUNKT 3: Modal schließen aber Button bleibt sichtbar
 window.closeEinladungenModalAndRemind = function() {
@@ -1880,46 +1810,469 @@ function renderThemenVerwaltung() {
 // NEUES FREIGABEMANAGEMENT-SYSTEM
 // ========================================
 
+// ═══════════════════════════════════════════════════════════════
+// 🆕 NEUES FREIGABE-SYSTEM - KOMPLETT NEU AUFGEBAUT
+// ═══════════════════════════════════════════════════════════════
+
+// Hauptfunktion die von der UI aufgerufen wird
 function renderFreigabenVerwaltung() {
+    renderShareSettings();
+}
+
+// ═════════════════════════════════════════════════════════
+// RENDER-FUNKTION
+// ═════════════════════════════════════════════════════════
+
+function renderShareSettings() {
     const container = document.getElementById('gm-freigaben-list');
     if (!container) return;
     
-    // ✅ PUNKT 7: Zeige BEIDE Perspektiven mit Tabs
     const myName = currentUser?.displayName;
-    const myUserId = getCurrentUserId();
     
-    // Zähle meine aktiven Freigaben (die ICH erhalten habe)
-    const meineFreigaben = Object.values(FREIGABEN).filter(f => 
+    // Meine Freigaben (die ICH erhalten habe)
+    const receivedShares = Object.values(FREIGABEN).filter(f => 
         f.userName === myName && f.aktiv
     );
     
-    // Zähle Freigaben die ICH gegeben habe
-    const vonMirFreigaben = Object.values(FREIGABEN).filter(f => 
+    // Von mir geteilte Freigaben
+    const givenShares = Object.values(FREIGABEN).filter(f => 
         f.freigegebenVonName === myName && f.aktiv
     );
     
+    // Meine Einladungen (empfangen)
+    const receivedInvitations = Object.values(EINLADUNGEN).filter(e => 
+        e.empfaengerName === myName
+    );
+    
+    // Von mir gesendete Einladungen
+    const sentInvitations = Object.values(EINLADUNGEN).filter(e => 
+        e.absenderName === myName
+    );
+    
+    console.log("📊 Freigaben-Übersicht:", {
+        receivedShares: receivedShares.length,
+        givenShares: givenShares.length,
+        receivedInvitations: receivedInvitations.length,
+        sentInvitations: sentInvitations.length
+    });
+    
     container.innerHTML = `
-        <!-- ✅ PUNKT 7: TAB-NAVIGATION -->
-        <div class="mb-4 flex gap-2 border-b-2 border-gray-200">
-            <button onclick="window.switchFreigabenTab('ichTeile')" 
-                id="tab-ichTeile"
-                class="px-4 py-2 font-bold border-b-4 border-blue-500 text-blue-600">
-                📤 Von mir geteilt (${vonMirFreigaben.length})
-            </button>
-            <button onclick="window.switchFreigabenTab('mirGeteilt')" 
-                id="tab-mirGeteilt"
-                class="px-4 py-2 font-bold border-b-4 border-transparent text-gray-500 hover:text-blue-600">
-                📥 Mit mir geteilt (${meineFreigaben.length})
-            </button>
+        <div class="space-y-6">
+            <!-- MIT MIR GETEILT -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-xl font-bold mb-4">📥 Mit mir geteilt (${receivedShares.length})</h3>
+                
+                ${receivedShares.length === 0 ? `
+                    <p class="text-gray-500">Keine geteilten Themen</p>
+                ` : `
+                    <div class="space-y-2">
+                        ${receivedShares.map(share => `
+                            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <div>
+                                    <p class="font-bold">${share.themaName || 'Unbekannt'}</p>
+                                    <p class="text-sm text-gray-600">Von: ${share.freigegebenVonName}</p>
+                                    <span class="text-xs px-2 py-1 rounded ${share.rechte === 'lesen' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}">
+                                        ${share.rechte === 'lesen' ? '👁️ Leserechte' : '✏️ Bearbeitungsrechte'}
+                                    </span>
+                                </div>
+                                <button onclick="removeShare('${share.id}')" 
+                                    class="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">
+                                    🗑️ Entfernen
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                `}
+                
+                <!-- Offene Einladungen -->
+                ${receivedInvitations.filter(i => i.status === 'pending').length > 0 ? `
+                    <div class="mt-4">
+                        <h4 class="font-bold mb-2">📨 Offene Einladungen (${receivedInvitations.filter(i => i.status === 'pending').length})</h4>
+                        <div class="space-y-2">
+                            ${receivedInvitations.filter(i => i.status === 'pending').map(inv => `
+                                <div class="flex items-center justify-between p-3 bg-yellow-50 rounded-lg border-2 border-yellow-300">
+                                    <div>
+                                        <p class="font-bold">${inv.themaName}</p>
+                                        <p class="text-sm text-gray-600">Von: ${inv.absenderName}</p>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <button onclick="acceptInvitation('${inv.id}')" 
+                                            class="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-bold">
+                                            ✅ Annehmen
+                                        </button>
+                                        <button onclick="declineInvitation('${inv.id}')" 
+                                            class="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-bold">
+                                            ❌ Ablehnen
+                                        </button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+            
+            <!-- VON MIR GETEILT -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold">📤 Von mir geteilt (${givenShares.length})</h3>
+                    <button onclick="openShareModal()" 
+                        class="px-4 py-2 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600">
+                        ➕ Thema teilen
+                    </button>
+                </div>
+                
+                ${givenShares.length === 0 && sentInvitations.filter(i => i.status === 'pending').length === 0 ? `
+                    <p class="text-gray-500">Keine Freigaben</p>
+                ` : `
+                    <div class="space-y-2">
+                        ${givenShares.map(share => `
+                            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <div>
+                                    <p class="font-bold">${share.themaName || 'Unbekannt'}</p>
+                                    <p class="text-sm text-gray-600">An: ${share.userName}</p>
+                                    <span class="text-xs px-2 py-1 rounded bg-green-100 text-green-800">
+                                        ✅ Aktiv
+                                    </span>
+                                </div>
+                                <button onclick="revokeShare('${share.id}')" 
+                                    class="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">
+                                    🚫 Widerrufen
+                                </button>
+                            </div>
+                        `).join('')}
+                        
+                        ${sentInvitations.filter(i => i.status === 'pending').map(inv => `
+                            <div class="flex items-center justify-between p-3 bg-yellow-50 rounded-lg border-2 border-yellow-300">
+                                <div>
+                                    <p class="font-bold">${inv.themaName}</p>
+                                    <p class="text-sm text-gray-600">An: ${inv.empfaengerName}</p>
+                                    <span class="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-800">
+                                        ⏳ Ausstehend
+                                    </span>
+                                </div>
+                                <button onclick="cancelInvitation('${inv.id}')" 
+                                    class="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">
+                                    ❌ Zurücknehmen
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                `}
+            </div>
         </div>
+    `;
+}
+
+// ═════════════════════════════════════════════════════════
+// AKTIONEN
+// ═════════════════════════════════════════════════════════
+
+// ✅ Einladung annehmen
+window.acceptInvitation = async function(invitationId) {
+    try {
+        const inv = EINLADUNGEN[invitationId];
+        if (!inv) return;
         
-        <!-- Tab-Inhalte -->
-        <div id="freigaben-tab-content"></div>
+        console.log("✅ Nehme Einladung an:", inv.themaName);
+        
+        // Einladung aktualisieren
+        await updateDoc(doc(geschenkeEinladungenRef, invitationId), {
+            status: 'accepted',
+            akzeptiertAm: serverTimestamp()
+        });
+        
+        // Freigabe erstellen
+        const freigabeId = `${inv.themaId}_${getCurrentUserId()}`;
+        await setDoc(doc(geschenkeFreigabenRef, freigabeId), {
+            userId: getCurrentUserId(),
+            userUid: auth.currentUser.uid,
+            userName: currentUser.displayName,
+            themaId: inv.themaId,
+            themaName: inv.themaName,
+            besitzerId: inv.absenderId,
+            besitzerUid: inv.besitzerUid,
+            rechte: inv.rechte || 'lesen',
+            freigegebenVon: inv.absenderId,
+            freigegebenVonName: inv.absenderName,
+            aktiv: true,
+            erstelltAm: serverTimestamp()
+        });
+        
+        alertUser('✅ Einladung angenommen!', 'success');
+        
+        // Themen neu laden
+        await loadGeschenkeThemen();
+        renderDashboard();
+        
+    } catch (error) {
+        console.error("Fehler:", error);
+        alertUser('❌ Fehler: ' + error.message, 'error');
+    }
+};
+
+// ❌ Einladung ablehnen
+window.declineInvitation = async function(invitationId) {
+    try {
+        await updateDoc(doc(geschenkeEinladungenRef, invitationId), {
+            status: 'declined',
+            abgelehntAm: serverTimestamp()
+        });
+        
+        alertUser('Einladung abgelehnt', 'info');
+    } catch (error) {
+        alertUser('Fehler: ' + error.message, 'error');
+    }
+};
+
+// 🗑️ Freigabe entfernen (als Empfänger)
+window.removeShare = async function(shareId) {
+    if (!confirm('Freigabe wirklich entfernen?')) return;
+    
+    try {
+        await updateDoc(doc(geschenkeFreigabenRef, shareId), {
+            aktiv: false,
+            beendetAm: serverTimestamp()
+        });
+        
+        alertUser('Freigabe entfernt', 'success');
+        await loadGeschenkeThemen();
+        renderDashboard();
+    } catch (error) {
+        alertUser('Fehler: ' + error.message, 'error');
+    }
+};
+
+// 🚫 Freigabe widerrufen (als Ersteller)
+window.revokeShare = async function(shareId) {
+    if (!confirm('Freigabe wirklich widerrufen?')) return;
+    
+    try {
+        await updateDoc(doc(geschenkeFreigabenRef, shareId), {
+            aktiv: false,
+            widerrufenAm: serverTimestamp()
+        });
+        
+        alertUser('Freigabe widerrufen', 'success');
+    } catch (error) {
+        alertUser('Fehler: ' + error.message, 'error');
+    }
+};
+
+// ❌ Einladung zurücknehmen
+window.cancelInvitation = async function(invitationId) {
+    if (!confirm('Einladung zurücknehmen?')) return;
+    
+    try {
+        await deleteDoc(doc(geschenkeEinladungenRef, invitationId));
+        alertUser('Einladung zurückgenommen', 'success');
+    } catch (error) {
+        alertUser('Fehler: ' + error.message, 'error');
+    }
+};
+
+// ═════════════════════════════════════════════════════════
+// TEILEN-MODAL
+// ═════════════════════════════════════════════════════════
+
+window.openShareModal = function() {
+    const myThemen = Object.values(THEMEN).filter(t => 
+        t.istEigenes && !t.archiviert
+    );
+    
+    if (myThemen.length === 0) {
+        alertUser('Du hast keine Themen zum Teilen', 'warning');
+        return;
+    }
+    
+    const users = Object.values(USERS).filter(u => 
+        u.permissionType !== 'not_registered' && 
+        u.displayName !== currentUser.displayName
+    );
+    
+    if (users.length === 0) {
+        alertUser('Keine anderen Benutzer verfügbar', 'warning');
+        return;
+    }
+    
+    const modal = document.createElement('div');
+    modal.id = 'share-modal';
+    modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4';
+    modal.innerHTML = `
+        <div class="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            <div class="bg-blue-600 text-white p-4 flex justify-between items-center">
+                <h3 class="text-2xl font-bold">🔗 Thema teilen</h3>
+                <button onclick="closeShareModal()" class="text-white text-2xl">&times;</button>
+            </div>
+            
+            <div class="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
+                <!-- Thema wählen -->
+                <div>
+                    <label class="block font-bold mb-2">1. Thema auswählen:</label>
+                    <select id="share-thema" class="w-full p-3 border rounded-lg">
+                        <option value="">-- Bitte wählen --</option>
+                        ${myThemen.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+                    </select>
+                </div>
+                
+                <!-- Person wählen -->
+                <div>
+                    <label class="block font-bold mb-2">2. Person auswählen:</label>
+                    <select id="share-user" class="w-full p-3 border rounded-lg">
+                        <option value="">-- Bitte wählen --</option>
+                        ${users.map(u => `<option value="${u.id}" data-name="${u.displayName}">${u.displayName}</option>`).join('')}
+                    </select>
+                </div>
+                
+                <!-- Rechte wählen -->
+                <div>
+                    <label class="block font-bold mb-2">3. Berechtigung festlegen:</label>
+                    <div class="space-y-2">
+                        <label class="flex items-center p-3 border-2 rounded-lg cursor-pointer hover:bg-blue-50">
+                            <input type="radio" name="share-rechte" value="lesen" checked class="mr-3">
+                            <div>
+                                <p class="font-bold">👁️ Nur Lesen</p>
+                                <p class="text-sm text-gray-600">Kann Einträge nur ansehen</p>
+                            </div>
+                        </label>
+                        <label class="flex items-center p-3 border-2 rounded-lg cursor-pointer hover:bg-green-50">
+                            <input type="radio" name="share-rechte" value="bearbeiten" class="mr-3">
+                            <div>
+                                <p class="font-bold">✏️ Bearbeiten</p>
+                                <p class="text-sm text-gray-600">Kann Einträge ändern (keine neuen erstellen)</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="p-4 bg-gray-50 flex justify-end gap-2">
+                <button onclick="closeShareModal()" 
+                    class="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400">
+                    Abbrechen
+                </button>
+                <button onclick="sendShare()" 
+                    class="px-4 py-2 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600">
+                    📨 Einladung senden
+                </button>
+            </div>
+        </div>
     `;
     
-    // Zeige ersten Tab
-    window.switchFreigabenTab('ichTeile');
-}
+    document.body.appendChild(modal);
+};
+
+window.closeShareModal = function() {
+    document.getElementById('share-modal')?.remove();
+};
+
+window.sendShare = async function() {
+    const themaId = document.getElementById('share-thema').value;
+    const userSelect = document.getElementById('share-user');
+    const userId = userSelect.value;
+    const userName = userSelect.selectedOptions[0]?.dataset.name;
+    const rechte = document.querySelector('input[name="share-rechte"]:checked').value;
+    
+    if (!themaId || !userId) {
+        alertUser('Bitte alle Felder ausfüllen', 'warning');
+        return;
+    }
+    
+    try {
+        const thema = THEMEN[themaId];
+        
+        console.log("📨 Sende Einladung:", {
+            themaName: thema.name,
+            userName: userName,
+            rechte: rechte
+        });
+        
+        // Prüfe ob bereits Einladung existiert
+        const existing = Object.values(EINLADUNGEN).find(e => 
+            e.empfaengerName === userName && 
+            e.themaId === themaId &&
+            e.status === 'pending'
+        );
+        
+        if (existing) {
+            alertUser('Es gibt bereits eine ausstehende Einladung', 'warning');
+            return;
+        }
+        
+        // Einladung erstellen
+        await addDoc(geschenkeEinladungenRef, {
+            absenderId: getCurrentUserId(),
+            absenderName: currentUser.displayName,
+            besitzerId: getCurrentUserId(),
+            besitzerUid: auth.currentUser.uid,
+            empfaengerId: userId,
+            empfaengerName: userName,
+            themaId: themaId,
+            themaName: thema.name,
+            rechte: rechte,
+            status: 'pending',
+            erstelltAm: serverTimestamp()
+        });
+        
+        alertUser('✅ Einladung gesendet!', 'success');
+        closeShareModal();
+        
+    } catch (error) {
+        console.error("Fehler:", error);
+        alertUser('❌ Fehler: ' + error.message, 'error');
+    }
+};
+
+// ═════════════════════════════════════════════════════════
+// MODAL FÜR OFFENE EINLADUNGEN
+// ═════════════════════════════════════════════════════════
+
+window.showInvitationsModal = function() {
+    const myName = currentUser?.displayName;
+    const pending = Object.values(EINLADUNGEN).filter(e => 
+        e.empfaengerName === myName && e.status === 'pending'
+    );
+    
+    const modal = document.createElement('div');
+    modal.id = 'invitations-modal';
+    modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4';
+    modal.innerHTML = `
+        <div class="bg-white rounded-2xl w-full max-w-2xl">
+            <div class="bg-red-600 text-white p-4 flex justify-between items-center">
+                <h3 class="text-2xl font-bold">📨 Offene Einladungen (${pending.length})</h3>
+                <button onclick="closeInvitationsModal()" class="text-white text-2xl">&times;</button>
+            </div>
+            
+            <div class="p-6 space-y-4">
+                ${pending.map(inv => `
+                    <div class="p-4 bg-yellow-50 rounded-lg border-2 border-yellow-300">
+                        <p class="font-bold text-lg">${inv.themaName}</p>
+                        <p class="text-gray-600">Von: <strong>${inv.absenderName}</strong></p>
+                        <p class="text-sm text-gray-600 mt-2">
+                            Berechtigung: ${inv.rechte === 'lesen' ? '👁️ Lesen' : '✏️ Bearbeiten'}
+                        </p>
+                        <div class="flex gap-2 mt-3">
+                            <button onclick="acceptInvitation('${inv.id}'); closeInvitationsModal();" 
+                                class="flex-1 px-4 py-2 bg-green-500 text-white font-bold rounded-lg hover:bg-green-600">
+                                ✅ Annehmen
+                            </button>
+                            <button onclick="declineInvitation('${inv.id}'); closeInvitationsModal();" 
+                                class="flex-1 px-4 py-2 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600">
+                                ❌ Ablehnen
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+};
+
+window.closeInvitationsModal = function() {
+    document.getElementById('invitations-modal')?.remove();
+};
 
 // ✅ PUNKT 7: Tab-Wechsel
 window.switchFreigabenTab = function(tab) {
@@ -3951,83 +4304,60 @@ window.deleteVorlage = async function(vorlageId) {
 // EINLADUNGEN, BUDGETS, ERINNERUNGEN - ECHTZEIT-LISTENER
 // ========================================
 
-// ✅ ECHTZEIT-LISTENER für Einladungen
+// 🎧 NEUER Einladungen-Listener
 function listenForEinladungen() {
     if (!geschenkeEinladungenRef) {
-        console.error("❌ geschenkeEinladungenRef nicht verfügbar");
+        console.error("❌ Einladungen-Ref fehlt");
         return;
     }
     
-    console.log("👂 Starte Echtzeit-Listener für Einladungen...");
+    console.log("🎧 NEU: Einladungen-Listener gestartet");
     
     onSnapshot(geschenkeEinladungenRef, (snapshot) => {
-        console.log(`📨 Einladungen-Update: ${snapshot.size} Einladungen gesamt`);
+        console.log(`📨 Einladungen: ${snapshot.size} Dokumente`);
         
-        const myUserId = getCurrentUserId();
-        const myName = currentUser?.displayName;
-        console.log(`🔑 Mein Name: ${myName}`);
-        console.log(`🔑 Meine Firebase Auth UID: ${myUserId}`);
-        
-        let neueEinladungen = [];
-        
-        snapshot.docChanges().forEach((change) => {
-            const einladung = { id: change.doc.id, ...change.doc.data() };
-            
-            if (change.type === 'added') {
-                // Neue Einladung hinzugefügt
-                EINLADUNGEN[einladung.id] = einladung;
-                
-                // ✅ LÖSUNG: Namen-basiertes Matching!
-                const istFuerMich = einladung.empfaengerName === myName;
-                
-                console.log(`📧 Einladung ${einladung.id}:`, {
-                    empfaengerName: einladung.empfaengerName,
-                    myName: myName,
-                    istFuerMich: istFuerMich,
-                    status: einladung.status,
-                    themaName: einladung.themaName,
-                    absenderName: einladung.absenderName
-                });
-                
-                // Prüfe ob Einladung für mich ist und status = pending
-                if (istFuerMich && einladung.status === 'pending') {
-                    console.log(`✨✨✨ Neue Einladung für mich erhalten: ${einladung.themaName} von ${einladung.absenderName}`);
-                    neueEinladungen.push(einladung);
-                } else if (einladung.status === 'pending') {
-                    console.log(`  ℹ️ Einladung ist für anderen User: ${einladung.empfaengerName}`);
-                }
-            }
-            
-            if (change.type === 'modified') {
-                // Einladung geändert
-                EINLADUNGEN[einladung.id] = einladung;
-                console.log(`🔄 Einladung aktualisiert: ${einladung.id}`);
-            }
-            
-            if (change.type === 'removed') {
-                // Einladung gelöscht
-                delete EINLADUNGEN[einladung.id];
-                console.log(`🗑️ Einladung gelöscht: ${einladung.id}`);
-            }
+        // Cache leeren und neu füllen
+        EINLADUNGEN = {};
+        snapshot.forEach(doc => {
+            EINLADUNGEN[doc.id] = { id: doc.id, ...doc.data() };
         });
         
-        // Zeige Modal für neue Einladungen (nur wenn User gerade online ist)
-        if (neueEinladungen.length > 0) {
-            console.log(`🎉 ${neueEinladungen.length} neue Einladung(en) werden angezeigt`);
-            showPendingInvitationsModal(neueEinladungen);
-        }
+        console.log("✅ Einladungen geladen:", Object.keys(EINLADUNGEN).length);
         
-        // ✅ IMMER UI aktualisieren
-        renderEinladungsBadge(); // Badge im Header
-        renderThemenDropdown(); // Dropdown & Info-Box (falls keine Themen)
+        // Prüfe auf offene Einladungen für mich
+        const myName = currentUser?.displayName;
+        const pending = Object.values(EINLADUNGEN).filter(e => 
+            e.empfaengerName === myName && e.status === 'pending'
+        );
         
-        // Update UI falls im Freigaben-Tab
+        console.log(`📨 ${pending.length} offene Einladungen für ${myName}`);
+        
+        // Badge aktualisieren
+        updateInvitationBadge(pending.length);
+        
+        // UI aktualisieren
         if (document.getElementById('gm-freigaben-list')) {
-            renderFreigabenVerwaltung();
+            renderShareSettings();
         }
-    }, (error) => {
-        console.error("❌ Fehler beim Einladungen-Listener:", error);
     });
+}
+
+// 🔴 Badge für offene Einladungen
+function updateInvitationBadge(count) {
+    const badge = document.getElementById('gm-einladungen-badge');
+    if (!badge) return;
+    
+    if (count > 0) {
+        badge.innerHTML = `
+            <button onclick="showInvitationsModal()" 
+                class="px-4 py-2 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition animate-pulse">
+                📨 ${count} Einladung${count > 1 ? 'en' : ''}
+            </button>
+        `;
+        badge.style.display = 'block';
+    } else {
+        badge.style.display = 'none';
+    }
 }
 
 // ✅ Legacy-Funktion für Kompatibilität (wird nicht mehr verwendet)
