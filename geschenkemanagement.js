@@ -34,6 +34,12 @@ import {
 // ========================================
 // GLOBALE VARIABLEN
 // ========================================
+
+// ✅ HELPER: Hole aktuelle User-ID (Firebase Auth UID)
+function getCurrentUserId() {
+    return auth?.currentUser?.uid || currentUser?.uid;
+}
+
 let geschenkeCollection = null;
 let geschenkeSettingsRef = null;
 let geschenkeThemenRef = null;
@@ -1465,14 +1471,15 @@ function renderFreigabenVerwaltung() {
             return false;
         }
         
-        // 2. Vergleich über Odoo User ID
-        if (currentUser?.odooUserId && u.id === currentUser.odooUserId) {
-            console.log('❌ User ist ich selbst (odooUserId):', u.displayName || u.name);
+        // 2. Vergleich über User ID
+        const myUserId = getCurrentUserId();
+        if (myUserId && u.id === myUserId) {
+            console.log('❌ User ist ich selbst (userId):', u.displayName || u.name);
             return false;
         }
         
-        if (currentUser?.odooUserId && u.odooUserId === currentUser.odooUserId) {
-            console.log('❌ User ist ich selbst (odooUserId 2):', u.displayName || u.name);
+        if (myUserId && u.uid === myUserId) {
+            console.log('❌ User ist ich selbst (uid):', u.displayName || u.name);
             return false;
         }
         
@@ -1507,9 +1514,10 @@ function renderFreigabenVerwaltung() {
     
     container.innerHTML = registrierteBenutzer.map(user => {
         // Finde Einladungen für diesen Benutzer
+        const myUserId = getCurrentUserId();
         const einladungen = Object.values(EINLADUNGEN).filter(e => 
             e.empfaengerId === user.id && 
-            e.absenderId === currentUser.odooUserId
+            e.absenderId === myUserId
         );
         const aktiveFreigaben = Object.values(FREIGABEN).filter(f => 
             f.userId === user.id && 
@@ -1579,10 +1587,11 @@ window.openFreigabeEditor = function(userId) {
     if (!user) return;
     
     // Finde bestehende Freigaben/Einladungen für diesen Benutzer
+    const myUserId = getCurrentUserId();
     const userFreigaben = Object.values(FREIGABEN).filter(f => f.userId === userId && f.aktiv);
     const userEinladungen = Object.values(EINLADUNGEN).filter(e => 
         e.empfaengerId === userId && 
-        e.absenderId === currentUser.odooUserId
+        e.absenderId === myUserId
     );
     
     let modal = document.getElementById('freigabeEditorModal');
@@ -2361,9 +2370,10 @@ window.sendNeueFreigabeEinladungen = async function(userId) {
             });
             
             // Prüfe ob bereits Einladung existiert
+            const myUserId = getCurrentUserId();
             const existingEinladung = Object.values(EINLADUNGEN).find(e =>
                 e.empfaengerId === userId &&
-                e.absenderId === currentUser.odooUserId &&
+                e.absenderId === myUserId &&
                 e.themaId === themaId &&
                 e.status === 'pending'
             );
@@ -2379,10 +2389,10 @@ window.sendNeueFreigabeEinladungen = async function(userId) {
             } else {
                 // Neu erstellen
                 await addDoc(geschenkeEinladungenRef, {
-                    absenderId: currentUser.odooUserId,
+                    absenderId: myUserId,
                     absenderName: currentUser.displayName,
-                    besitzerId: currentUser.odooUserId,  // ✅ Owner des Themas
-                    besitzerUid: currentUser.uid,  // ✅ Firebase Auth UID des Owners
+                    besitzerId: myUserId,  // ✅ Owner des Themas
+                    besitzerUid: auth.currentUser.uid,  // ✅ Firebase Auth UID des Owners
                     empfaengerId: userId,
                     empfaengerName: user.displayName || user.name,
                     themaId,
@@ -2474,11 +2484,12 @@ window.sendFreigabeEinladungen = async function(userId) {
     
     try {
         // Erstelle Einladungen für jede Freigabe
+        const myUserId = getCurrentUserId();
         for (const config of freigabenConfigs) {
             // Prüfe ob bereits eine Einladung für dieses Thema existiert
             const existingEinladung = Object.values(EINLADUNGEN).find(e =>
                 e.empfaengerId === userId &&
-                e.absenderId === currentUser.odooUserId &&
+                e.absenderId === myUserId &&
                 e.themaId === config.themaId &&
                 e.status === 'pending'
             );
@@ -2494,10 +2505,10 @@ window.sendFreigabeEinladungen = async function(userId) {
             } else {
                 // Erstelle neue Einladung
                 await addDoc(geschenkeEinladungenRef, {
-                    absenderId: currentUser.odooUserId,
+                    absenderId: myUserId,
                     absenderName: currentUser.displayName,
-                    besitzerId: currentUser.odooUserId,  // ✅ Owner des Themas
-                    besitzerUid: currentUser.uid,  // ✅ Firebase Auth UID des Owners
+                    besitzerId: myUserId,  // ✅ Owner des Themas
+                    besitzerUid: auth.currentUser.uid,  // ✅ Firebase Auth UID des Owners
                     empfaengerId: userId,
                     empfaengerName: user.displayName || user.name,
                     themaId: config.themaId,
@@ -3196,8 +3207,9 @@ async function loadErinnerungen() {
 // EINLADUNGSSYSTEM MIT ZUSTIMMUNG/ABLEHNUNG
 // ========================================
 function checkPendingInvitations() {
+    const myUserId = getCurrentUserId();
     const pendingForMe = Object.values(EINLADUNGEN).filter(e => 
-        e.empfaengerId === currentUser?.odooUserId && e.status === 'pending'
+        e.empfaengerId === myUserId && e.status === 'pending'
     );
     
     if (pendingForMe.length > 0) {
@@ -3308,9 +3320,10 @@ window.acceptGeschenkeInvitation = async function(invitationId) {
         const freigabeId = `${invitation.themaId}_${currentUser.uid}`;
         
         // Freigabe erstellen mit NEUEM Datenmodell
+        const myUserId = getCurrentUserId();
         const freigabeData = {
-            userId: currentUser.odooUserId,
-            userUid: currentUser.uid,  // ✅ Firebase Auth UID
+            userId: myUserId,
+            userUid: auth.currentUser.uid,  // ✅ Firebase Auth UID
             userName: currentUser.displayName,
             themaId: invitation.themaId,
             themaName: invitation.themaName,
@@ -3381,8 +3394,9 @@ window.revokeDeclinedInvitation = async function(invitationId) {
 
 // Zeige abgelehnte Einladungen in Einstellungen
 window.showDeclinedInvitations = function() {
+    const myUserId = getCurrentUserId();
     const declinedInvitations = Object.values(EINLADUNGEN).filter(e => 
-        e.empfaengerId === currentUser?.odooUserId && e.status === 'declined'
+        e.empfaengerId === myUserId && e.status === 'declined'
     );
     
     if (declinedInvitations.length === 0) {
@@ -3455,11 +3469,13 @@ window.endSharing = async function(freigabeId) {
 
 // Einladung senden
 window.sendInvitation = async function(userId, userName, themaId, freigaben) {
+    const myUserId = getCurrentUserId();
+    
     // Prüfen ob bereits eine abgelehnte Einladung existiert
     const existingDeclined = Object.values(EINLADUNGEN).find(e => 
         e.empfaengerId === userId && 
         e.themaId === themaId && 
-        e.absenderId === currentUser.odooUserId &&
+        e.absenderId === myUserId &&
         e.status === 'declined'
     );
     
@@ -3472,7 +3488,7 @@ window.sendInvitation = async function(userId, userName, themaId, freigaben) {
     const existingPending = Object.values(EINLADUNGEN).find(e => 
         e.empfaengerId === userId && 
         e.themaId === themaId && 
-        e.absenderId === currentUser.odooUserId &&
+        e.absenderId === myUserId &&
         e.status === 'pending'
     );
     
@@ -3484,10 +3500,10 @@ window.sendInvitation = async function(userId, userName, themaId, freigaben) {
     try {
         const thema = THEMEN[themaId];
         const einladungData = {
-            absenderId: currentUser.odooUserId,
+            absenderId: myUserId,
             absenderName: currentUser.displayName,
-            besitzerId: currentUser.odooUserId,  // ✅ Owner des Themas
-            besitzerUid: currentUser.uid,  // ✅ Firebase Auth UID des Owners
+            besitzerId: myUserId,  // ✅ Owner des Themas
+            besitzerUid: auth.currentUser.uid,  // ✅ Firebase Auth UID des Owners
             empfaengerId: userId,
             empfaengerName: userName,
             themaId: themaId,
@@ -3783,13 +3799,14 @@ window.saveErinnerung = async function(geschenkId) {
     }
     
     try {
+        const myUserId = getCurrentUserId();
         const erinnerungData = {
             datum: new Date(datum),
             nachricht,
             typ,
             geschenkId: geschenkId || null,
             themaId: currentThemaId,
-            odooUserId: currentUser.odooUserId,
+            userId: myUserId,
             erstelltAm: serverTimestamp(),
             erledigt: false
         };
