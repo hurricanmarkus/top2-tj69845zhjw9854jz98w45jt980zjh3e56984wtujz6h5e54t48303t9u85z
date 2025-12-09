@@ -114,34 +114,51 @@ let geschenkeSettings = {
 export async function initializeGeschenkemanagement() {
     console.log("🎁 Geschenkemanagement-System wird initialisiert...");
 
-    if (db && currentUser && currentUser.uid) {
-        console.log("✅ User erkannt:", currentUser.uid);
-        
-        // ✅ NEU: User-basierte Collection-Referenzen
-        const userDataPath = ['artifacts', appId, 'public', 'data', 'users', currentUser.uid];
-        
-        geschenkeSettingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'geschenkemanagement');
-        geschenkeThemenRef = collection(db, ...userDataPath, 'geschenke_themen');
-        geschenkeKontakteRef = collection(db, ...userDataPath, 'geschenke_kontakte');
-        geschenkeVorlagenRef = collection(db, ...userDataPath, 'geschenke_vorlagen');
-        geschenkeFreigabenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_freigaben');
-        geschenkeEinladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_einladungen');
-        geschenkeBudgetsRef = collection(db, ...userDataPath, 'geschenke_budgets');
-        geschenkeErinnerungenRef = collection(db, ...userDataPath, 'geschenke_erinnerungen');
-        
-        console.log("✅ Collection-Referenzen erstellt für User:", currentUser.uid);
-        
-        await loadSettings();
-        await loadKontakte();
-        await loadThemen();
-        await loadVorlagen();
-        await loadFreigaben();
-        await loadEinladungen();
-        await loadBudgets();
-        await loadErinnerungen();
-        
-        // Prüfe auf ausstehende Einladungen
-        checkPendingInvitations();
+    // ✅ Warte auf currentUser, falls noch nicht geladen
+    let retries = 0;
+    while ((!currentUser || !currentUser.uid) && retries < 50) {
+        console.log("⏳ Warte auf currentUser... (Versuch", retries + 1, ")");
+        await new Promise(resolve => setTimeout(resolve, 100));
+        retries++;
+    }
+
+    if (!db) {
+        console.error("❌ Firestore (db) ist nicht verfügbar!");
+        return;
+    }
+
+    if (!currentUser || !currentUser.uid) {
+        console.error("❌ currentUser ist nicht verfügbar nach 5 Sekunden!");
+        return;
+    }
+
+    console.log("✅ User erkannt:", currentUser.uid);
+    
+    // ✅ NEU: User-basierte Collection-Referenzen
+    const userDataPath = ['artifacts', appId, 'public', 'data', 'users', currentUser.uid];
+    
+    geschenkeSettingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'geschenkemanagement');
+    geschenkeThemenRef = collection(db, ...userDataPath, 'geschenke_themen');
+    geschenkeKontakteRef = collection(db, ...userDataPath, 'geschenke_kontakte');
+    geschenkeVorlagenRef = collection(db, ...userDataPath, 'geschenke_vorlagen');
+    geschenkeFreigabenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_freigaben');
+    geschenkeEinladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_einladungen');
+    geschenkeBudgetsRef = collection(db, ...userDataPath, 'geschenke_budgets');
+    geschenkeErinnerungenRef = collection(db, ...userDataPath, 'geschenke_erinnerungen');
+    
+    console.log("✅ Collection-Referenzen erstellt für User:", currentUser.uid);
+    
+    await loadSettings();
+    await loadKontakte();
+    await loadThemen();
+    await loadVorlagen();
+    await loadFreigaben();
+    await loadEinladungen();
+    await loadBudgets();
+    await loadErinnerungen();
+    
+    // Prüfe auf ausstehende Einladungen
+    checkPendingInvitations();
     }
 
     setupEventListeners();
