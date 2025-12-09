@@ -683,16 +683,19 @@ function renderThemenDropdown() {
             }
         }
     } else {
-        // ✅ PUNKT 4: Geteilte Themen mit "Geteilt von [NAME]"
+        // ✅ PUNKT 1: Geteilte Themen mit "📘 Geteilt von [NAME]"
         dropdown.innerHTML = activeThemen.map(thema => {
             let displayName = thema.name;
             if (thema.istGeteilt && thema.besitzerName) {
-                displayName = `${thema.name} 🔗 (Geteilt von ${thema.besitzerName})`;
+                displayName = `${thema.name} 📘 [Geteilt von ${thema.besitzerName}]`;
             } else if (thema.istGeteilt) {
-                displayName = `${thema.name} 🔗 (Geteilt)`;
+                displayName = `${thema.name} 📘 [Geteilt]`;
             }
             return `<option value="${thema.id}" ${thema.id === currentThemaId ? 'selected' : ''}>${displayName}</option>`;
         }).join('');
+        
+        // ✅ Setze Dropdown-Style für bessere Sichtbarkeit
+        dropdown.className = 'p-3 border-2 border-gray-300 rounded-lg font-semibold text-lg bg-white';
     }
 }
 
@@ -2294,11 +2297,50 @@ function updateFilterValueInput() {
             <input type="text" id="filter-value-text" class="w-full p-2 border rounded-lg text-sm" placeholder="Konto-Name eingeben">
         `;
     } else if (filterType === 'einzelneEintraege') {
-        container.innerHTML = `
-            <input type="text" id="filter-value-text" class="w-full p-2 border rounded-lg text-sm" placeholder="Eintrags-IDs (kommagetrennt)">
-        `;
+        // ✅ PUNKT 2: Checkbox-Liste für Einträge
+        const geschenke = Object.values(GESCHENKE);
+        
+        if (geschenke.length === 0) {
+            container.innerHTML = `
+                <div class="p-3 bg-yellow-50 border border-yellow-300 rounded-lg text-sm">
+                    ⚠️ Keine Einträge vorhanden. Erstelle zuerst Geschenke.
+                </div>
+            `;
+        } else {
+            container.innerHTML = `
+                <div class="border-2 rounded-lg p-3 max-h-64 overflow-y-auto bg-gray-50">
+                    <div class="flex items-center justify-between mb-2 pb-2 border-b">
+                        <span class="text-xs font-bold text-gray-700">Wähle Einträge aus:</span>
+                        <button type="button" onclick="toggleAllEintraege()" class="text-xs text-blue-600 hover:underline">
+                            Alle auswählen
+                        </button>
+                    </div>
+                    <div id="eintraege-checkboxes" class="space-y-1">
+                        ${geschenke.map(g => `
+                            <label class="flex items-start gap-2 p-2 hover:bg-blue-50 rounded cursor-pointer">
+                                <input type="checkbox" value="${g.id}" class="mt-1 eintrag-checkbox">
+                                <div class="flex-1 text-sm">
+                                    <p class="font-semibold">${g.geschenk || 'Unbekannt'}</p>
+                                    <p class="text-xs text-gray-600">Status: ${g.status || 'offen'} | ID: ${g.id.substring(0, 8)}...</p>
+                                </div>
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
     }
 }
+
+// ✅ PUNKT 2: Alle Einträge an/abwählen
+window.toggleAllEintraege = function() {
+    const checkboxes = document.querySelectorAll('.eintrag-checkbox');
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    
+    checkboxes.forEach(cb => {
+        cb.checked = !allChecked;
+    });
+};
 
 // Regel zur Liste hinzufügen
 window.addFilterRule = function() {
@@ -2313,8 +2355,19 @@ window.addFilterRule = function() {
     
     const personSelect = document.getElementById('filter-value-person');
     const textInput = document.getElementById('filter-value-text');
+    const checkboxes = document.querySelectorAll('.eintrag-checkbox:checked');
     
-    if (personSelect && !personSelect.disabled) {
+    // ✅ PUNKT 2: Bei Einträgen - ausgewählte Checkboxen auslesen
+    if (filterType === 'einzelneEintraege') {
+        if (checkboxes.length === 0) {
+            alertUser('Bitte mindestens einen Eintrag auswählen', 'warning');
+            return;
+        }
+        
+        filterValue = Array.from(checkboxes).map(cb => cb.value).join(',');
+        filterLabel = `${checkboxes.length} Eintrag${checkboxes.length > 1 ? 'e' : ''}`;
+        
+    } else if (personSelect && !personSelect.disabled) {
         filterValue = personSelect.value;
         const selectedOption = personSelect.options[personSelect.selectedIndex];
         filterLabel = selectedOption?.text || filterValue;
@@ -2349,8 +2402,7 @@ window.addFilterRule = function() {
         type: filterType,
         typeLabel: typeLabels[filterType],
         value: filterValue,
-        valueLabel: filterLabel,
-        rechte: 'lesen' // Standard
+        valueLabel: filterLabel
     };
     
     window.shareRulesList.push(rule);
@@ -2362,6 +2414,7 @@ window.addFilterRule = function() {
 };
 
 // Regel-Liste rendern
+// ✅ PUNKT 3: Regel-Liste OHNE Berechtigung (wird in Schritt 4 festgelegt)
 function renderRulesList() {
     const container = document.getElementById('rules-list');
     if (!container) return;
@@ -2372,21 +2425,12 @@ function renderRulesList() {
     }
     
     container.innerHTML = window.shareRulesList.map((rule, index) => `
-        <div class="flex items-center justify-between p-3 bg-white rounded-lg border-2">
+        <div class="flex items-center justify-between p-3 bg-white rounded-lg border-2 border-purple-200">
             <div class="flex-1">
-                <p class="font-bold text-sm">${rule.typeLabel}: ${rule.valueLabel}</p>
-                <div class="flex gap-2 mt-1">
-                    <label class="text-xs">
-                        <input type="radio" name="rule-rechte-${index}" value="lesen" ${rule.rechte === 'lesen' ? 'checked' : ''} 
-                            onchange="updateRuleRechte(${index}, 'lesen')"> 👁️ Lesen
-                    </label>
-                    <label class="text-xs">
-                        <input type="radio" name="rule-rechte-${index}" value="bearbeiten" ${rule.rechte === 'bearbeiten' ? 'checked' : ''} 
-                            onchange="updateRuleRechte(${index}, 'bearbeiten')"> ✏️ Bearbeiten
-                    </label>
-                </div>
+                <p class="font-bold text-sm text-gray-800">${rule.typeLabel}: <span class="text-purple-600">${rule.valueLabel}</span></p>
+                <p class="text-xs text-gray-500 mt-1">💡 Berechtigung wird in Schritt 4 festgelegt</p>
             </div>
-            <button onclick="removeFilterRule(${index})" class="ml-2 px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm">
+            <button onclick="removeFilterRule(${index})" class="ml-2 px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm font-bold">
                 🗑️
             </button>
         </div>
@@ -2397,11 +2441,6 @@ function renderRulesList() {
 window.removeFilterRule = function(index) {
     window.shareRulesList.splice(index, 1);
     renderRulesList();
-};
-
-// Regel-Rechte aktualisieren
-window.updateRuleRechte = function(index, rechte) {
-    window.shareRulesList[index].rechte = rechte;
 };
 
 window.closeShareModal = function() {
@@ -2467,13 +2506,13 @@ window.sendShare = async function() {
             erstelltAm: serverTimestamp()
         };
         
-        // Bei gefilterter Freigabe: Regeln hinzufügen
+        // Bei gefilterter Freigabe: Regeln hinzufügen (ohne individuelle Rechte)
         if (shareType === 'gefiltert') {
             einladungData.filterRules = window.shareRulesList.map(rule => ({
                 type: rule.type,
                 value: rule.value,
-                valueLabel: rule.valueLabel,
-                rechte: rule.rechte
+                valueLabel: rule.valueLabel
+                // ✅ PUNKT 3: Keine individuellen Rechte mehr - nur globale Berechtigung aus Schritt 4
             }));
         }
         
@@ -2515,8 +2554,19 @@ window.showInvitationsModal = function() {
                         <p class="font-bold text-lg">${inv.themaName}</p>
                         <p class="text-gray-600">Von: <strong>${inv.absenderName}</strong></p>
                         <p class="text-sm text-gray-600 mt-2">
+                            Typ: ${inv.shareType === 'gefiltert' ? '🔍 Gefiltert' : '📂 Komplettes Thema'}
+                        </p>
+                        <p class="text-sm text-gray-600">
                             Berechtigung: ${inv.rechte === 'lesen' ? '👁️ Lesen' : '✏️ Bearbeiten'}
                         </p>
+                        ${inv.shareType === 'gefiltert' && inv.filterRules ? `
+                            <div class="mt-2 p-2 bg-white rounded border">
+                                <p class="text-xs font-bold text-gray-700 mb-1">Filter-Regeln:</p>
+                                ${inv.filterRules.map(rule => `
+                                    <p class="text-xs text-gray-600">• ${rule.valueLabel || rule.type}</p>
+                                `).join('')}
+                            </div>
+                        ` : ''}
                         <div class="flex gap-2 mt-3">
                             <button onclick="acceptInvitation('${inv.id}'); closeInvitationsModal();" 
                                 class="flex-1 px-4 py-2 bg-green-500 text-white font-bold rounded-lg hover:bg-green-600">
