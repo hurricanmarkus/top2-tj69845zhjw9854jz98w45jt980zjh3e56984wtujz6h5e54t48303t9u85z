@@ -479,7 +479,7 @@ function listenForFreigaben() {
         }
         
         // Themen neu laden (für geteilte Themen)
-        loadGeschenkeThemen();
+        loadThemen();
     });
 }
 
@@ -697,7 +697,13 @@ function renderThemenDropdown() {
 }
 
 function renderDashboard() {
-    renderEinladungsBadge(); // ✅ NEU: Zeige Einladungs-Badge
+    // ✅ NEU: Badge für Einladungen aktualisieren
+    const myName = currentUser?.displayName;
+    const pendingCount = Object.values(EINLADUNGEN).filter(e => 
+        e.empfaengerName === myName && e.status === 'pending'
+    ).length;
+    updateInvitationBadge(pendingCount);
+    
     renderThemenDropdown();
     renderPersonenUebersicht();
     renderGeschenkeTabelle();
@@ -707,10 +713,10 @@ function renderDashboard() {
 // ✅ NEU: Zeige Badge für ausstehende Einladungen
 // ✅ ENTFERNT - Ersetzt durch updateInvitationBadge() im neuen System
 
-// ✅ PUNKT 3: Modal schließen aber Button bleibt sichtbar
+// ✅ Modal schließen (Badge bleibt sichtbar)
 window.closeEinladungenModalAndRemind = function() {
     document.getElementById('gm-einladungen-modal')?.remove();
-    // Badge bleibt durch renderEinladungsBadge() sichtbar
+    // Badge bleibt durch updateInvitationBadge() sichtbar
     alertUser('💡 Der Button "Offene Antwort auf Einladung" bleibt oben sichtbar!', 'info');
 };
 
@@ -2002,7 +2008,7 @@ window.acceptInvitation = async function(invitationId) {
         alertUser('✅ Einladung angenommen!', 'success');
         
         // Themen neu laden
-        await loadGeschenkeThemen();
+        await loadThemen();
         renderDashboard();
         
     } catch (error) {
@@ -2036,7 +2042,7 @@ window.removeShare = async function(shareId) {
         });
         
         alertUser('Freigabe entfernt', 'success');
-        await loadGeschenkeThemen();
+        await loadThemen();
         renderDashboard();
     } catch (error) {
         alertUser('Fehler: ' + error.message, 'error');
