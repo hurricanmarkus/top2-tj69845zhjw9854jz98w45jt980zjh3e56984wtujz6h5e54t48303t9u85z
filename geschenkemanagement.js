@@ -40,41 +40,82 @@ function getCurrentUserId() {
     return auth?.currentUser?.uid || currentUser?.uid;
 }
 
-// ✅ HELPER: Finde Firebase Auth UID für einen User aus USERS
-// USERS enthält Firestore Document IDs, NICHT Firebase Auth UIDs!
-// Wir müssen die UID aus der user-config laden
-async function getUserFirebaseUid(userDocId) {
+// ✅ GLOBAL: Mapping von User-Namen zu Firebase Auth UIDs
+let userNameToUidMapping = {};
+
+// ✅ HELPER: Lade alle User-Config Dokumente und erstelle Mapping
+async function loadUserUidMapping() {
     try {
-        // Prüfe ob es bereits im Cache ist
-        if (USERS[userDocId] && USERS[userDocId]._firebaseUid) {
-            return USERS[userDocId]._firebaseUid;
-        }
-        
-        // Lade user-config Dokument
-        // Die user-config ist unter /user-config/{firebaseAuthUid} gespeichert
-        // ABER wir haben nur die Document-ID aus USERS, nicht die Firebase Auth UID!
-        
-        // WORKAROUND: Durchsuche alle user-config Dokumente nach dem Namen
+        console.log("🔄 Lade User-UID-Mapping...");
         const userConfigRef = collection(db, 'artifacts', appId, 'public', 'data', 'user-config');
         const snapshot = await getDocs(userConfigRef);
         
-        let foundUid = null;
-        const userName = USERS[userDocId]?.name;
+        userNameToUidMapping = {};
+        let count = 0;
         
         snapshot.forEach((doc) => {
             const data = doc.data();
-            if (data.name === userName || data.displayName === userName) {
-                foundUid = doc.id; // Die Document-ID ist die Firebase Auth UID!
-                // Cache it
-                if (USERS[userDocId]) {
-                    USERS[userDocId]._firebaseUid = foundUid;
-                }
+            const uid = doc.id; // Document-ID = Firebase Auth UID
+            const name = data.name || data.displayName || data.userName;
+            
+            if (name) {
+                userNameToUidMapping[name] = uid;
+                count++;
+                console.log(`  ✅ ${name} → ${uid}`);
             }
         });
         
-        return foundUid;
+        console.log(`✅ User-UID-Mapping geladen: ${count} Einträge`);
+        return userNameToUidMapping;
     } catch (e) {
-        console.error('Fehler beim Laden der Firebase Auth UID:', e);
+        console.error('❌ Fehler beim Laden des User-UID-Mappings:', e);
+        return {};
+    }
+}
+
+// ✅ HELPER: Finde Firebase Auth UID für einen User aus USERS
+async function getUserFirebaseUid(userDocId) {
+    try {
+        const user = USERS[userDocId];
+        if (!user) {
+            console.error(`❌ User ${userDocId} nicht in USERS gefunden`);
+            return null;
+        }
+        
+        const userName = user.name || user.displayName;
+        console.log(`🔍 Suche Firebase Auth UID für: ${userName} (Doc ID: ${userDocId})`);
+        
+        // Prüfe ob es bereits im Cache ist
+        if (user._firebaseUid) {
+            console.log(`  ✅ Aus Cache: ${user._firebaseUid}`);
+            return user._firebaseUid;
+        }
+        
+        // Prüfe Mapping
+        if (userNameToUidMapping[userName]) {
+            const uid = userNameToUidMapping[userName];
+            console.log(`  ✅ Aus Mapping: ${uid}`);
+            // Cache it
+            user._firebaseUid = uid;
+            return uid;
+        }
+        
+        // Fallback: Lade Mapping neu
+        console.log(`  ⚠️ UID nicht im Mapping gefunden, lade neu...`);
+        await loadUserUidMapping();
+        
+        if (userNameToUidMapping[userName]) {
+            const uid = userNameToUidMapping[userName];
+            console.log(`  ✅ Nach Neu-Laden gefunden: ${uid}`);
+            user._firebaseUid = uid;
+            return uid;
+        }
+        
+        console.error(`  ❌ Firebase Auth UID nicht gefunden für ${userName}`);
+        console.error(`  📋 Verfügbare Mappings:`, Object.keys(userNameToUidMapping));
+        return null;
+    } catch (e) {
+        console.error('❌ Fehler beim Laden der Firebase Auth UID:', e);
         return null;
     }
 }
@@ -252,6 +293,9 @@ export async function initializeGeschenkemanagement() {
     try {
         await loadSettings();
         await loadKontakte();
+        
+        // ✅ NEU: Lade User-UID-Mapping für Einladungen
+        await loadUserUidMapping();
         
         // ✅ NEU: Starte Echtzeit-Listener statt einmaligem Laden
         await loadFreigaben();  // Einmaliges Laden für Initialisierung
@@ -720,7 +764,7 @@ function renderEinladungsBadge() {
 window.showAllPendingInvitations = function() {
     const myUserId = getCurrentUserId();
     const pendingInvitations = Object.values(EINLADUNGEN).filter(e => 
-        e.empfaengerId === myUserId && e.status === 'pending'
+        (e.empfaengerUid === myUserId || e.empfaengerId === myUserId) && e.status === 'pending'
     );
     
     if (pendingInvitations.length > 0) {
@@ -728,6 +772,76 @@ window.showAllPendingInvitations = function() {
     } else {
         alertUser('Du hast keine ausstehenden Einladungen.', 'info');
     }
+};
+
+// ✅ DIAGNOSE-TOOL: Zeige User-UID-Mapping (für Entwicklung)
+window.diagnoseGeschenkeSystem = function() {
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("🔍 GESCHENKEMANAGEMENT DIAGNOSE");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("");
+    
+    console.log("👤 AKTUELLER USER:");
+    console.log("  Name:", currentUser?.displayName);
+    console.log("  Firebase Auth UID:", auth?.currentUser?.uid);
+    console.log("  getCurrentUserId():", getCurrentUserId());
+    console.log("");
+    
+    console.log("📋 USERS OBJEKT:");
+    Object.entries(USERS).forEach(([id, user]) => {
+        console.log(`  ${user.name}:`, {
+            firestoreDocId: id,
+            firebaseUid: user._firebaseUid || '❌ nicht gecached',
+            permissionType: user.permissionType
+        });
+    });
+    console.log("");
+    
+    console.log("🗺️ USER-UID-MAPPING:");
+    Object.entries(userNameToUidMapping).forEach(([name, uid]) => {
+        console.log(`  ${name} → ${uid}`);
+    });
+    console.log("");
+    
+    console.log("📨 EINLADUNGEN:");
+    Object.entries(EINLADUNGEN).forEach(([id, inv]) => {
+        console.log(`  ${inv.themaName}:`, {
+            absender: inv.absenderName,
+            empfaenger: inv.empfaengerName,
+            empfaengerId: inv.empfaengerId,
+            empfaengerUid: inv.empfaengerUid,
+            status: inv.status
+        });
+    });
+    console.log("");
+    
+    console.log("🔐 FREIGABEN:");
+    Object.entries(FREIGABEN).forEach(([id, f]) => {
+        console.log(`  ${f.themaName}:`, {
+            user: f.userName,
+            userId: f.userId,
+            userUid: f.userUid,
+            aktiv: f.aktiv
+        });
+    });
+    
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("💡 TIPPs:");
+    console.log("  - Alle User müssen in user-config existieren");
+    console.log("  - empfaengerUid muss mit Firebase Auth UID übereinstimmen");
+    console.log("  - Wenn Mapping leer ist: loadUserUidMapping() aufrufen");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    
+    return {
+        currentUser: {
+            name: currentUser?.displayName,
+            uid: getCurrentUserId()
+        },
+        users: USERS,
+        mapping: userNameToUidMapping,
+        einladungen: EINLADUNGEN,
+        freigaben: FREIGABEN
+    };
 };
 
 function renderPersonenUebersicht() {
@@ -2563,7 +2677,18 @@ window.removeFreigabe = function(freigabeId) {
 
 window.sendNeueFreigabeEinladungen = async function(userId) {
     const user = USERS[userId];
-    if (!user) return;
+    if (!user) {
+        console.error("❌ User nicht gefunden in USERS:", userId);
+        return;
+    }
+    
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("📤 SENDE EINLADUNGEN");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("👤 Empfänger:", user.name);
+    console.log("🆔 Firestore Doc ID:", userId);
+    console.log("📋 Verfügbare Felder in USERS:", Object.keys(user));
+    console.log("🗺️ User-UID-Mapping:", userNameToUidMapping);
     
     // Hole ausgewählte Themen
     const themaCheckboxes = document.querySelectorAll('[id^="thema-select-"]:checked');
