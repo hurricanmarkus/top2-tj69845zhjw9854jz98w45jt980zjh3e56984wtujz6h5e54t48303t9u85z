@@ -249,43 +249,69 @@ service cloud.firestore {
 
     // ═══════════════════════════════════════════════════════════════
     // GESCHENKEMANAGEMENT (Gift Management System)
-    // Mit umfangreichem Freigabemanagement-System (2-teilig)
+    // ✅ NEU: User-basierte Datenstruktur - jeder User hat seine eigenen Daten!
     // ═══════════════════════════════════════════════════════════════
 
-    // Themen für Geschenkemanagement (z.B. "Weihnachten 2025")
-    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_themen/{themaId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+    // ✅ User-spezifische Geschenkemanagement-Daten
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/users/{userId} {
       
-      // Geschenke als Sub-Collection unter Themen
-      match /geschenke/{geschenkId} {
-        allow read: if isAuthenticated();
-        allow create: if isAuthenticated();
-        allow update: if isAuthenticated();
-        allow delete: if isAuthenticated();
+      // Helper: Prüft ob User Zugriff über Freigabe hat
+      function hasFreigabeAccess(themaId) {
+        // Check if there's an active share (Freigabe) that grants access
+        return exists(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_freigaben/$(themaId + '_' + request.auth.uid));
+      }
+      
+      // Themen für Geschenkemanagement (z.B. "Weihnachten 2025")
+      match /geschenke_themen/{themaId} {
+        allow read: if isOwner(userId) || (isAuthenticated() && hasFreigabeAccess(themaId));
+        allow create: if isOwner(userId);
+        allow update: if isOwner(userId) || (isAuthenticated() && hasFreigabeAccess(themaId));
+        allow delete: if isOwner(userId);
+        
+        // Geschenke als Sub-Collection unter Themen
+        match /geschenke/{geschenkId} {
+          allow read: if isOwner(userId) || (isAuthenticated() && hasFreigabeAccess(themaId));
+          allow create: if isOwner(userId) || (isAuthenticated() && hasFreigabeAccess(themaId));
+          allow update: if isOwner(userId) || (isAuthenticated() && hasFreigabeAccess(themaId));
+          allow delete: if isOwner(userId) || (isAuthenticated() && hasFreigabeAccess(themaId));
+        }
+      }
+
+      // Kontaktbuch für Geschenkemanagement
+      match /geschenke_kontakte/{kontaktId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId);
+        allow update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+
+      // Vorlagen für Geschenkemanagement
+      match /geschenke_vorlagen/{vorlageId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId);
+        allow update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+
+      // Budgets für Geschenkemanagement
+      match /geschenke_budgets/{budgetId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId);
+        allow update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+
+      // Erinnerungen für Geschenkemanagement
+      match /geschenke_erinnerungen/{erinnerungId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId);
+        allow update: if isOwner(userId);
+        allow delete: if isOwner(userId);
       }
     }
 
-    // Kontaktbuch für Geschenkemanagement
-    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_kontakte/{kontaktId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
-      allow delete: if isAuthenticated();
-    }
-
-    // Vorlagen für Geschenkemanagement
-    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_vorlagen/{vorlageId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
-      allow delete: if isAuthenticated();
-    }
-
-    // Freigaben für Geschenkemanagement
-    // WICHTIG: Alle authentifizierten User können lesen (Filterung im Code)
+    // ✅ Freigaben für Geschenkemanagement (GLOBAL - Cross-User-Zugriff)
+    // User können anderen Usern Zugriff auf ihre Themen gewähren
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_freigaben/{freigabeId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
@@ -293,26 +319,8 @@ service cloud.firestore {
       allow delete: if isAuthenticated();
     }
 
-    // Einladungen für Geschenkemanagement
-    // FIX: Alle authentifizierten User können ALLE Einladungen lesen
-    // Filterung erfolgt im JavaScript-Code
+    // ✅ Einladungen für Geschenkemanagement (GLOBAL - Cross-User-Kommunikation)
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_einladungen/{einladungId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
-      allow delete: if isAuthenticated();
-    }
-
-    // Budgets für Geschenkemanagement
-    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_budgets/{budgetId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
-      allow delete: if isAuthenticated();
-    }
-
-    // Erinnerungen für Geschenkemanagement
-    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_erinnerungen/{erinnerungId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
       allow update: if isAuthenticated();
@@ -328,5 +336,6 @@ service cloud.firestore {
     }
   }
 }
+
 
 

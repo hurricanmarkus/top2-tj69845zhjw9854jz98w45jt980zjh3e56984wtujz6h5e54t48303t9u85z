@@ -114,15 +114,22 @@ let geschenkeSettings = {
 export async function initializeGeschenkemanagement() {
     console.log("🎁 Geschenkemanagement-System wird initialisiert...");
 
-    if (db) {
+    if (db && currentUser && currentUser.uid) {
+        console.log("✅ User erkannt:", currentUser.uid);
+        
+        // ✅ NEU: User-basierte Collection-Referenzen
+        const userDataPath = ['artifacts', appId, 'public', 'data', 'users', currentUser.uid];
+        
         geschenkeSettingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'geschenkemanagement');
-        geschenkeThemenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_themen');
-        geschenkeKontakteRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_kontakte');
-        geschenkeVorlagenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_vorlagen');
+        geschenkeThemenRef = collection(db, ...userDataPath, 'geschenke_themen');
+        geschenkeKontakteRef = collection(db, ...userDataPath, 'geschenke_kontakte');
+        geschenkeVorlagenRef = collection(db, ...userDataPath, 'geschenke_vorlagen');
         geschenkeFreigabenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_freigaben');
         geschenkeEinladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_einladungen');
-        geschenkeBudgetsRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_budgets');
-        geschenkeErinnerungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_erinnerungen');
+        geschenkeBudgetsRef = collection(db, ...userDataPath, 'geschenke_budgets');
+        geschenkeErinnerungenRef = collection(db, ...userDataPath, 'geschenke_erinnerungen');
+        
+        console.log("✅ Collection-Referenzen erstellt für User:", currentUser.uid);
         
         await loadSettings();
         await loadKontakte();
@@ -195,11 +202,47 @@ async function createEigenePerson() {
 
 async function loadThemen() {
     try {
+        // ✅ 1. Eigene Themen laden
         const snapshot = await getDocs(geschenkeThemenRef);
         THEMEN = {};
         snapshot.forEach((docSnap) => {
-            THEMEN[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
+            THEMEN[docSnap.id] = { 
+                id: docSnap.id, 
+                ...docSnap.data(),
+                istEigenes: true,  // ✅ Markierung: eigenes Thema
+                besitzerUid: currentUser.uid  // ✅ Owner UID
+            };
         });
+        
+        // ✅ 2. Geteilte Themen laden (von anderen Usern via Freigaben)
+        await loadFreigaben();  // Freigaben laden
+        
+        for (const freigabeId in FREIGABEN) {
+            const freigabe = FREIGABEN[freigabeId];
+            
+            // Nur aktive Freigaben, die an den aktuellen User gerichtet sind
+            if (!freigabe.aktiv || freigabe.userUid !== currentUser.uid) continue;
+            
+            try {
+                // Lade Thema vom Besitzer
+                const themaRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', freigabe.besitzerUid, 'geschenke_themen', freigabe.themaId);
+                const themaSnap = await getDoc(themaRef);
+                
+                if (themaSnap.exists()) {
+                    THEMEN[themaSnap.id] = {
+                        id: themaSnap.id,
+                        ...themaSnap.data(),
+                        istEigenes: false,  // ✅ Nicht eigenes Thema
+                        istGeteilt: true,  // ✅ Geteilt
+                        besitzerUid: freigabe.besitzerUid,  // ✅ Owner UID
+                        besitzerName: freigabe.freigegebenVonName,  // ✅ Owner Name
+                        freigabe: freigabe  // ✅ Freigabe-Details
+                    };
+                }
+            } catch (e) {
+                console.error(`Fehler beim Laden des geteilten Themas ${freigabe.themaId}:`, e);
+            }
+        }
         
         const savedThemaId = localStorage.getItem('gm_current_thema');
         if (savedThemaId && THEMEN[savedThemaId]) {
@@ -242,8 +285,14 @@ async function loadFreigaben() {
 }
 
 function updateCollectionForThema() {
-    if (currentThemaId && db) {
-        geschenkeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_themen', currentThemaId, 'geschenke');
+    if (currentThemaId && db && currentUser && currentUser.uid) {
+        const thema = THEMEN[currentThemaId];
+        
+        // ✅ NEU: User-basierte Geschenke-Collection
+        // Bei geteilten Themen: verwende besitzerUid, sonst currentUser.uid
+        const ownerUid = thema?.besitzerUid || currentUser.uid;
+        
+        geschenkeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', currentThemaId, 'geschenke');
         listenForGeschenke();
     }
 }
@@ -1708,13 +1757,19 @@ window.selectAllGeschenke = function(select) {
 
 // Helper: Lade Geschenke aus mehreren Themen (für Freigabe-System)
 async function loadGeschenkeFromMultipleThemen(themaIds) {
-    if (!db || !themaIds || themaIds.length === 0) return [];
+    if (!db || !themaIds || themaIds.length === 0 || !currentUser || !currentUser.uid) return [];
     
     const alleGeschenke = [];
     
     for (const themaId of themaIds) {
         try {
-            const geschenkeRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_themen', themaId, 'geschenke');
+            const thema = THEMEN[themaId];
+            
+            // ✅ NEU: User-basierte Geschenke-Collection
+            // Bei geteilten Themen: verwende besitzerUid, sonst currentUser.uid
+            const ownerUid = thema?.besitzerUid || currentUser.uid;
+            
+            const geschenkeRef = collection(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', themaId, 'geschenke');
             const geschenkeSnapshot = await getDocs(geschenkeRef);
             
             geschenkeSnapshot.forEach((docSnap) => {
@@ -2155,6 +2210,8 @@ window.sendNeueFreigabeEinladungen = async function(userId) {
                 await addDoc(geschenkeEinladungenRef, {
                     absenderId: currentUser.odooUserId,
                     absenderName: currentUser.displayName,
+                    besitzerId: currentUser.odooUserId,  // ✅ Owner des Themas
+                    besitzerUid: currentUser.uid,  // ✅ Firebase Auth UID des Owners
                     empfaengerId: userId,
                     empfaengerName: user.displayName || user.name,
                     themaId,
@@ -2268,6 +2325,8 @@ window.sendFreigabeEinladungen = async function(userId) {
                 await addDoc(geschenkeEinladungenRef, {
                     absenderId: currentUser.odooUserId,
                     absenderName: currentUser.displayName,
+                    besitzerId: currentUser.odooUserId,  // ✅ Owner des Themas
+                    besitzerUid: currentUser.uid,  // ✅ Firebase Auth UID des Owners
                     empfaengerId: userId,
                     empfaengerName: user.displayName || user.name,
                     themaId: config.themaId,
@@ -3037,12 +3096,18 @@ window.acceptGeschenkeInvitation = async function(invitationId) {
             akzeptiertAm: serverTimestamp()
         });
         
+        // ✅ NEU: Freigabe-ID nach Schema {themaId}_{userId} für Firestore Rules
+        const freigabeId = `${invitation.themaId}_${currentUser.uid}`;
+        
         // Freigabe erstellen mit NEUEM Datenmodell
         const freigabeData = {
             userId: currentUser.odooUserId,
+            userUid: currentUser.uid,  // ✅ Firebase Auth UID
             userName: currentUser.displayName,
             themaId: invitation.themaId,
             themaName: invitation.themaName,
+            besitzerId: invitation.besitzerId,  // ✅ Owner des Themas
+            besitzerUid: invitation.besitzerUid,  // ✅ Firebase Auth UID des Owners
             freigabeTyp: invitation.freigabeTyp,
             rechte: invitation.rechte,
             filter: invitation.filter || {},
@@ -3052,7 +3117,7 @@ window.acceptGeschenkeInvitation = async function(invitationId) {
             aktiv: true,
             erstelltAm: serverTimestamp()
         };
-        await addDoc(geschenkeFreigabenRef, freigabeData);
+        await setDoc(doc(geschenkeFreigabenRef, freigabeId), freigabeData);
         
         EINLADUNGEN[invitationId].status = 'accepted';
         alertUser('✅ Einladung angenommen! Du kannst jetzt auf das Thema zugreifen.', 'success');
@@ -3212,6 +3277,8 @@ window.sendInvitation = async function(userId, userName, themaId, freigaben) {
         const einladungData = {
             absenderId: currentUser.odooUserId,
             absenderName: currentUser.displayName,
+            besitzerId: currentUser.odooUserId,  // ✅ Owner des Themas
+            besitzerUid: currentUser.uid,  // ✅ Firebase Auth UID des Owners
             empfaengerId: userId,
             empfaengerName: userName,
             themaId: themaId,
