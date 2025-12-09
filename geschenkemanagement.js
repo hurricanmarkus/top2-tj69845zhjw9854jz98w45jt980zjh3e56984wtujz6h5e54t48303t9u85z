@@ -1974,13 +1974,13 @@ function renderShareSettings() {
 // AKTIONEN
 // ═════════════════════════════════════════════════════════
 
-// ✅ Einladung annehmen
+// ✅ Einladung annehmen (mit Filter-Unterstützung)
 window.acceptInvitation = async function(invitationId) {
     try {
         const inv = EINLADUNGEN[invitationId];
         if (!inv) return;
         
-        console.log("✅ Nehme Einladung an:", inv.themaName);
+        console.log("✅ Nehme Einladung an:", inv.themaName, "Typ:", inv.shareType || 'komplett');
         
         // Einladung aktualisieren
         await updateDoc(doc(geschenkeEinladungenRef, invitationId), {
@@ -1988,22 +1988,32 @@ window.acceptInvitation = async function(invitationId) {
             akzeptiertAm: serverTimestamp()
         });
         
-        // Freigabe erstellen
+        // Freigabe-Daten vorbereiten
         const freigabeId = `${inv.themaId}_${getCurrentUserId()}`;
-        await setDoc(doc(geschenkeFreigabenRef, freigabeId), {
+        const freigabeData = {
             userId: getCurrentUserId(),
             userUid: auth.currentUser.uid,
-            userName: currentUser.displayName,
+            userName: currentUser.displayName || currentUser.name,
             themaId: inv.themaId,
             themaName: inv.themaName,
             besitzerId: inv.absenderId,
             besitzerUid: inv.besitzerUid,
             rechte: inv.rechte || 'lesen',
+            shareType: inv.shareType || 'komplett', // 'komplett' oder 'gefiltert'
             freigegebenVon: inv.absenderId,
             freigegebenVonName: inv.absenderName,
             aktiv: true,
             erstelltAm: serverTimestamp()
-        });
+        };
+        
+        // Bei gefilterter Freigabe: Filter-Regeln übernehmen
+        if (inv.shareType === 'gefiltert' && inv.filterRules) {
+            freigabeData.filterRules = inv.filterRules;
+            console.log("📋 Filter-Regeln:", inv.filterRules);
+        }
+        
+        // Freigabe erstellen
+        await setDoc(doc(geschenkeFreigabenRef, freigabeId), freigabeData);
         
         alertUser('✅ Einladung angenommen!', 'success');
         
@@ -2081,6 +2091,13 @@ window.cancelInvitation = async function(invitationId) {
 // TEILEN-MODAL
 // ═════════════════════════════════════════════════════════
 
+// ═════════════════════════════════════════════════════════
+// 🆕 NEUES ERWEITERTES TEILEN-MODAL MIT FILTER-OPTIONEN
+// ═════════════════════════════════════════════════════════
+
+// Globale Variable für Regel-Liste
+window.shareRulesList = [];
+
 window.openShareModal = function() {
     const myThemen = Object.values(THEMEN).filter(t => 
         t.istEigenes && !t.archiviert
@@ -2091,92 +2108,313 @@ window.openShareModal = function() {
         return;
     }
     
-    const users = Object.values(USERS).filter(u => 
-        u.permissionType !== 'not_registered' && 
-        u.displayName !== currentUser.displayName
-    );
+    // ✅ FIX: Verwende name ODER displayName
+    const users = Object.values(USERS).filter(u => {
+        const userName = u.displayName || u.name;
+        const myName = currentUser.displayName || currentUser.name;
+        return u.permissionType !== 'not_registered' && userName !== myName;
+    });
     
     if (users.length === 0) {
         alertUser('Keine anderen Benutzer verfügbar', 'warning');
         return;
     }
     
+    console.log("👥 Verfügbare User:", users.map(u => u.displayName || u.name));
+    
+    // Lade Personen aus Kontaktbuch (für Filter)
+    const kontakte = Object.values(KONTAKTE);
+    
+    // Regel-Liste zurücksetzen
+    window.shareRulesList = [];
+    
     const modal = document.createElement('div');
     modal.id = 'share-modal';
     modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4';
     modal.innerHTML = `
-        <div class="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+        <div class="bg-white rounded-2xl w-full max-w-4xl max-h-[95vh] overflow-hidden">
             <div class="bg-blue-600 text-white p-4 flex justify-between items-center">
-                <h3 class="text-2xl font-bold">🔗 Thema teilen</h3>
+                <h3 class="text-2xl font-bold">🔗 Thema teilen - Erweitert</h3>
                 <button onclick="closeShareModal()" class="text-white text-2xl">&times;</button>
             </div>
             
-            <div class="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
-                <!-- Thema wählen -->
-                <div>
-                    <label class="block font-bold mb-2">1. Thema auswählen:</label>
-                    <select id="share-thema" class="w-full p-3 border rounded-lg">
+            <div class="p-6 space-y-6 overflow-y-auto max-h-[calc(95vh-180px)]">
+                <!-- SCHRITT 1: Thema wählen -->
+                <div class="bg-blue-50 p-4 rounded-lg border-2 border-blue-300">
+                    <label class="block font-bold mb-2 text-lg">1️⃣ Thema auswählen:</label>
+                    <select id="share-thema" class="w-full p-3 border-2 rounded-lg font-semibold">
                         <option value="">-- Bitte wählen --</option>
                         ${myThemen.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
                     </select>
                 </div>
                 
-                <!-- Person wählen -->
-                <div>
-                    <label class="block font-bold mb-2">2. Person auswählen:</label>
-                    <select id="share-user" class="w-full p-3 border rounded-lg">
+                <!-- SCHRITT 2: Person wählen -->
+                <div class="bg-green-50 p-4 rounded-lg border-2 border-green-300">
+                    <label class="block font-bold mb-2 text-lg">2️⃣ Person auswählen:</label>
+                    <select id="share-user" class="w-full p-3 border-2 rounded-lg font-semibold">
                         <option value="">-- Bitte wählen --</option>
-                        ${users.map(u => `<option value="${u.id}" data-name="${u.displayName}">${u.displayName}</option>`).join('')}
+                        ${users.map(u => {
+                            const userName = u.displayName || u.name;
+                            return `<option value="${u.id}" data-name="${userName}">${userName}</option>`;
+                        }).join('')}
                     </select>
                 </div>
                 
-                <!-- Rechte wählen -->
-                <div>
-                    <label class="block font-bold mb-2">3. Berechtigung festlegen:</label>
+                <!-- SCHRITT 3: NEU - Filter festlegen -->
+                <div class="bg-purple-50 p-4 rounded-lg border-2 border-purple-300">
+                    <label class="block font-bold mb-3 text-lg">3️⃣ Was soll geteilt werden?</label>
+                    
+                    <!-- Option: Komplettes Thema -->
+                    <div class="mb-4 p-3 bg-white rounded-lg border-2">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="share-type" value="komplett" checked onchange="toggleFilterOptions()">
+                            <span class="font-bold">📂 Komplettes Thema teilen (alle Einträge)</span>
+                        </label>
+                    </div>
+                    
+                    <!-- Option: Gefiltert -->
+                    <div class="mb-4 p-3 bg-white rounded-lg border-2">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="share-type" value="gefiltert" onchange="toggleFilterOptions()">
+                            <span class="font-bold">🔍 Gefiltert teilen (nur bestimmte Einträge)</span>
+                        </label>
+                    </div>
+                    
+                    <!-- Filter-Optionen (nur bei "gefiltert") -->
+                    <div id="filter-options" class="hidden mt-4 space-y-3">
+                        <p class="text-sm font-bold text-purple-800 mb-2">Wähle Filter aus und füge sie zur Liste hinzu:</p>
+                        
+                        <!-- Filter-Typ -->
+                        <div class="grid grid-cols-2 gap-2">
+                            <select id="filter-type" class="p-2 border rounded-lg text-sm">
+                                <option value="">-- Filter-Typ --</option>
+                                <option value="fuerPerson">🎁 FÜR Person</option>
+                                <option value="vonPerson">🎀 VON Person</option>
+                                <option value="beteiligungPerson">👥 BETEILIGUNG Person</option>
+                                <option value="bezahltVonPerson">💳 BEZAHLT VON Person</option>
+                                <option value="sollBezahlungKonto">💰 SOLL-Bezahlung Konto</option>
+                                <option value="istBezahlungKonto">✅ IST-Bezahlung Konto</option>
+                                <option value="bezahlungKonto">🏦 Bezahlung Konto (SOLL oder IST)</option>
+                                <option value="einzelneEintraege">📋 Einzelne Einträge (IDs)</option>
+                            </select>
+                            
+                            <!-- Wert (je nach Filter-Typ) -->
+                            <div id="filter-value-container">
+                                <select id="filter-value-person" class="w-full p-2 border rounded-lg text-sm">
+                                    <option value="">-- Person wählen --</option>
+                                    ${kontakte.map(k => `<option value="${k.id}">${k.name}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <button onclick="addFilterRule()" class="w-full py-2 bg-purple-500 text-white font-bold rounded-lg hover:bg-purple-600">
+                            ➕ Zur Liste hinzufügen
+                        </button>
+                        
+                        <!-- Regel-Liste -->
+                        <div id="rules-list" class="mt-4 space-y-2"></div>
+                    </div>
+                </div>
+                
+                <!-- SCHRITT 4: Berechtigung festlegen -->
+                <div class="bg-orange-50 p-4 rounded-lg border-2 border-orange-300">
+                    <label class="block font-bold mb-3 text-lg">4️⃣ Berechtigung festlegen:</label>
                     <div class="space-y-2">
-                        <label class="flex items-center p-3 border-2 rounded-lg cursor-pointer hover:bg-blue-50">
+                        <label class="flex items-center p-3 border-2 rounded-lg cursor-pointer hover:bg-blue-50 bg-white">
                             <input type="radio" name="share-rechte" value="lesen" checked class="mr-3">
                             <div>
                                 <p class="font-bold">👁️ Nur Lesen</p>
                                 <p class="text-sm text-gray-600">Kann Einträge nur ansehen</p>
                             </div>
                         </label>
-                        <label class="flex items-center p-3 border-2 rounded-lg cursor-pointer hover:bg-green-50">
+                        <label class="flex items-center p-3 border-2 rounded-lg cursor-pointer hover:bg-green-50 bg-white">
                             <input type="radio" name="share-rechte" value="bearbeiten" class="mr-3">
                             <div>
                                 <p class="font-bold">✏️ Bearbeiten</p>
-                                <p class="text-sm text-gray-600">Kann Einträge ändern (keine neuen erstellen)</p>
+                                <p class="text-sm text-gray-600">Kann gefilterte Einträge ändern (keine neuen erstellen)</p>
                             </div>
                         </label>
                     </div>
                 </div>
             </div>
             
-            <div class="p-4 bg-gray-50 flex justify-end gap-2">
+            <!-- SCHRITT 5: Senden -->
+            <div class="p-4 bg-gray-50 flex justify-end gap-2 border-t-2">
                 <button onclick="closeShareModal()" 
-                    class="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400">
+                    class="px-6 py-3 bg-gray-300 rounded-lg hover:bg-gray-400 font-bold">
                     Abbrechen
                 </button>
                 <button onclick="sendShare()" 
-                    class="px-4 py-2 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600">
-                    📨 Einladung senden
+                    class="px-6 py-3 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 text-lg">
+                    5️⃣ 📨 Einladung senden
                 </button>
             </div>
         </div>
     `;
     
     document.body.appendChild(modal);
+    
+    // Event Listener für Filter-Typ-Änderung
+    document.getElementById('filter-type')?.addEventListener('change', updateFilterValueInput);
+};
+
+// Toggle Filter-Optionen
+window.toggleFilterOptions = function() {
+    const type = document.querySelector('input[name="share-type"]:checked').value;
+    const filterOptions = document.getElementById('filter-options');
+    if (type === 'gefiltert') {
+        filterOptions.classList.remove('hidden');
+    } else {
+        filterOptions.classList.add('hidden');
+        window.shareRulesList = []; // Liste leeren
+        renderRulesList();
+    }
+};
+
+// Filter-Wert-Input anpassen
+function updateFilterValueInput() {
+    const filterType = document.getElementById('filter-type').value;
+    const container = document.getElementById('filter-value-container');
+    const kontakte = Object.values(KONTAKTE);
+    
+    if (!filterType) {
+        container.innerHTML = '<input type="text" disabled class="w-full p-2 border rounded-lg bg-gray-100" placeholder="Wähle zuerst einen Filter-Typ">';
+        return;
+    }
+    
+    if (['fuerPerson', 'vonPerson', 'beteiligungPerson', 'bezahltVonPerson'].includes(filterType)) {
+        container.innerHTML = `
+            <select id="filter-value-person" class="w-full p-2 border rounded-lg text-sm">
+                <option value="">-- Person wählen --</option>
+                ${kontakte.map(k => `<option value="${k.id}">${k.name}</option>`).join('')}
+            </select>
+        `;
+    } else if (['sollBezahlungKonto', 'istBezahlungKonto', 'bezahlungKonto'].includes(filterType)) {
+        container.innerHTML = `
+            <input type="text" id="filter-value-text" class="w-full p-2 border rounded-lg text-sm" placeholder="Konto-Name eingeben">
+        `;
+    } else if (filterType === 'einzelneEintraege') {
+        container.innerHTML = `
+            <input type="text" id="filter-value-text" class="w-full p-2 border rounded-lg text-sm" placeholder="Eintrags-IDs (kommagetrennt)">
+        `;
+    }
+}
+
+// Regel zur Liste hinzufügen
+window.addFilterRule = function() {
+    const filterType = document.getElementById('filter-type').value;
+    if (!filterType) {
+        alertUser('Bitte Filter-Typ auswählen', 'warning');
+        return;
+    }
+    
+    let filterValue = '';
+    let filterLabel = '';
+    
+    const personSelect = document.getElementById('filter-value-person');
+    const textInput = document.getElementById('filter-value-text');
+    
+    if (personSelect && !personSelect.disabled) {
+        filterValue = personSelect.value;
+        const selectedOption = personSelect.options[personSelect.selectedIndex];
+        filterLabel = selectedOption?.text || filterValue;
+        
+        if (!filterValue) {
+            alertUser('Bitte Person auswählen', 'warning');
+            return;
+        }
+    } else if (textInput) {
+        filterValue = textInput.value.trim();
+        filterLabel = filterValue;
+        
+        if (!filterValue) {
+            alertUser('Bitte Wert eingeben', 'warning');
+            return;
+        }
+    }
+    
+    // Filter-Typ Label
+    const typeLabels = {
+        'fuerPerson': '🎁 FÜR Person',
+        'vonPerson': '🎀 VON Person',
+        'beteiligungPerson': '👥 BETEILIGUNG Person',
+        'bezahltVonPerson': '💳 BEZAHLT VON Person',
+        'sollBezahlungKonto': '💰 SOLL-Bezahlung Konto',
+        'istBezahlungKonto': '✅ IST-Bezahlung Konto',
+        'bezahlungKonto': '🏦 Bezahlung Konto',
+        'einzelneEintraege': '📋 Einzelne Einträge'
+    };
+    
+    const rule = {
+        type: filterType,
+        typeLabel: typeLabels[filterType],
+        value: filterValue,
+        valueLabel: filterLabel,
+        rechte: 'lesen' // Standard
+    };
+    
+    window.shareRulesList.push(rule);
+    renderRulesList();
+    
+    // Reset
+    document.getElementById('filter-type').value = '';
+    updateFilterValueInput();
+};
+
+// Regel-Liste rendern
+function renderRulesList() {
+    const container = document.getElementById('rules-list');
+    if (!container) return;
+    
+    if (window.shareRulesList.length === 0) {
+        container.innerHTML = '<p class="text-sm text-gray-500 italic">Keine Regeln hinzugefügt</p>';
+        return;
+    }
+    
+    container.innerHTML = window.shareRulesList.map((rule, index) => `
+        <div class="flex items-center justify-between p-3 bg-white rounded-lg border-2">
+            <div class="flex-1">
+                <p class="font-bold text-sm">${rule.typeLabel}: ${rule.valueLabel}</p>
+                <div class="flex gap-2 mt-1">
+                    <label class="text-xs">
+                        <input type="radio" name="rule-rechte-${index}" value="lesen" ${rule.rechte === 'lesen' ? 'checked' : ''} 
+                            onchange="updateRuleRechte(${index}, 'lesen')"> 👁️ Lesen
+                    </label>
+                    <label class="text-xs">
+                        <input type="radio" name="rule-rechte-${index}" value="bearbeiten" ${rule.rechte === 'bearbeiten' ? 'checked' : ''} 
+                            onchange="updateRuleRechte(${index}, 'bearbeiten')"> ✏️ Bearbeiten
+                    </label>
+                </div>
+            </div>
+            <button onclick="removeFilterRule(${index})" class="ml-2 px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm">
+                🗑️
+            </button>
+        </div>
+    `).join('');
+}
+
+// Regel entfernen
+window.removeFilterRule = function(index) {
+    window.shareRulesList.splice(index, 1);
+    renderRulesList();
+};
+
+// Regel-Rechte aktualisieren
+window.updateRuleRechte = function(index, rechte) {
+    window.shareRulesList[index].rechte = rechte;
 };
 
 window.closeShareModal = function() {
     document.getElementById('share-modal')?.remove();
 };
 
+// ✅ NEUE sendShare() mit Filter-Unterstützung
 window.sendShare = async function() {
     const themaId = document.getElementById('share-thema').value;
     const userSelect = document.getElementById('share-user');
     const userId = userSelect.value;
     const userName = userSelect.selectedOptions[0]?.dataset.name;
+    const shareType = document.querySelector('input[name="share-type"]:checked').value;
     const rechte = document.querySelector('input[name="share-rechte"]:checked').value;
     
     if (!themaId || !userId) {
@@ -2184,13 +2422,21 @@ window.sendShare = async function() {
         return;
     }
     
+    // Bei gefilterter Freigabe: Prüfe ob Regeln vorhanden
+    if (shareType === 'gefiltert' && window.shareRulesList.length === 0) {
+        alertUser('Bitte mindestens eine Filter-Regel hinzufügen', 'warning');
+        return;
+    }
+    
     try {
         const thema = THEMEN[themaId];
         
-        console.log("📨 Sende Einladung:", {
+        console.log("📨 Sende erweiterte Einladung:", {
             themaName: thema.name,
             userName: userName,
-            rechte: rechte
+            shareType: shareType,
+            rechte: rechte,
+            rules: shareType === 'gefiltert' ? window.shareRulesList : []
         });
         
         // Prüfe ob bereits Einladung existiert
@@ -2205,22 +2451,36 @@ window.sendShare = async function() {
             return;
         }
         
-        // Einladung erstellen
-        await addDoc(geschenkeEinladungenRef, {
+        // Einladungs-Daten erstellen
+        const einladungData = {
             absenderId: getCurrentUserId(),
-            absenderName: currentUser.displayName,
+            absenderName: currentUser.displayName || currentUser.name,
             besitzerId: getCurrentUserId(),
             besitzerUid: auth.currentUser.uid,
             empfaengerId: userId,
             empfaengerName: userName,
             themaId: themaId,
             themaName: thema.name,
+            shareType: shareType, // 'komplett' oder 'gefiltert'
             rechte: rechte,
             status: 'pending',
             erstelltAm: serverTimestamp()
-        });
+        };
         
-        alertUser('✅ Einladung gesendet!', 'success');
+        // Bei gefilterter Freigabe: Regeln hinzufügen
+        if (shareType === 'gefiltert') {
+            einladungData.filterRules = window.shareRulesList.map(rule => ({
+                type: rule.type,
+                value: rule.value,
+                valueLabel: rule.valueLabel,
+                rechte: rule.rechte
+            }));
+        }
+        
+        // Einladung erstellen
+        await addDoc(geschenkeEinladungenRef, einladungData);
+        
+        alertUser('✅ Einladung erfolgreich gesendet!', 'success');
         closeShareModal();
         
     } catch (error) {
