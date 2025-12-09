@@ -43,29 +43,29 @@ function getCurrentUserId() {
 // ✅ GLOBAL: Mapping von User-Namen zu Firebase Auth UIDs
 let userNameToUidMapping = {};
 
-// ✅ HELPER: Lade alle User-Config Dokumente und erstelle Mapping
+// ✅ HELPER: Erstelle Mapping basierend auf eingeloggten Usern
+// Da user-config Document-IDs NICHT die Firebase Auth UIDs sind,
+// müssen wir das Mapping anders erstellen
 async function loadUserUidMapping() {
     try {
         console.log("🔄 Lade User-UID-Mapping...");
-        const userConfigRef = collection(db, 'artifacts', appId, 'public', 'data', 'user-config');
-        const snapshot = await getDocs(userConfigRef);
         
+        // Durchsuche USERS und versuche, die Firebase Auth UIDs zu finden
+        // Für den aktuell eingeloggten User kennen wir die UID
         userNameToUidMapping = {};
-        let count = 0;
         
-        snapshot.forEach((doc) => {
-            const data = doc.data();
-            const uid = doc.id; // Document-ID = Firebase Auth UID
-            const name = data.name || data.displayName || data.userName;
-            
-            if (name) {
-                userNameToUidMapping[name] = uid;
-                count++;
-                console.log(`  ✅ ${name} → ${uid}`);
-            }
-        });
+        // Füge aktuellen User hinzu
+        if (currentUser?.displayName && auth?.currentUser?.uid) {
+            userNameToUidMapping[currentUser.displayName] = auth.currentUser.uid;
+            console.log(`  ✅ ${currentUser.displayName} → ${auth.currentUser.uid} (aktueller User)`);
+        }
         
-        console.log(`✅ User-UID-Mapping geladen: ${count} Einträge`);
+        // ⚠️ PROBLEM: Wir kennen die Firebase Auth UIDs der ANDEREN User nicht!
+        // LÖSUNG: Verwende einen alternativen Ansatz mit Namen statt UIDs
+        
+        console.log("⚠️ WARNUNG: Nur aktueller User im Mapping verfügbar");
+        console.log("💡 LÖSUNG: Verwende Namen-basiertes Matching für Einladungen");
+        
         return userNameToUidMapping;
     } catch (e) {
         console.error('❌ Fehler beim Laden des User-UID-Mappings:', e);
@@ -666,9 +666,9 @@ function renderThemenDropdown() {
         dropdown.innerHTML = '<option value="">Kein Thema vorhanden</option>';
         
         // ✅ NEU: Zeige hilfreiche Nachricht wenn keine Themen vorhanden
-        const myUserId = getCurrentUserId();
+        const myName = currentUser?.displayName;
         const pendingInvitations = Object.values(EINLADUNGEN).filter(e => 
-            e.empfaengerId === myUserId && e.status === 'pending'
+            e.empfaengerName === myName && e.status === 'pending'
         );
         
         // Zeige Info-Box
@@ -717,9 +717,9 @@ function renderDashboard() {
 
 // ✅ NEU: Zeige Badge für ausstehende Einladungen
 function renderEinladungsBadge() {
-    const myUserId = getCurrentUserId();
+    const myName = currentUser?.displayName;
     const pendingInvitations = Object.values(EINLADUNGEN).filter(e => 
-        e.empfaengerId === myUserId && e.status === 'pending'
+        e.empfaengerName === myName && e.status === 'pending'
     );
     
     // Finde Badge-Container (erstelle ihn falls nicht vorhanden)
@@ -762,10 +762,13 @@ function renderEinladungsBadge() {
 
 // ✅ NEU: Zeige alle ausstehenden Einladungen manuell
 window.showAllPendingInvitations = function() {
-    const myUserId = getCurrentUserId();
+    const myName = currentUser?.displayName;
     const pendingInvitations = Object.values(EINLADUNGEN).filter(e => 
-        (e.empfaengerUid === myUserId || e.empfaengerId === myUserId) && e.status === 'pending'
+        e.empfaengerName === myName && e.status === 'pending'
     );
+    
+    console.log(`🔍 Suche Einladungen für: ${myName}`);
+    console.log(`📨 Gefunden: ${pendingInvitations.length} Einladungen`);
     
     if (pendingInvitations.length > 0) {
         showPendingInvitationsModal(pendingInvitations);
@@ -2725,19 +2728,14 @@ window.sendNeueFreigabeEinladungen = async function(userId) {
                 rechteMap[filterKey] = regel.rechte;
             });
             
-            // ✅ NEU: Hole Firebase Auth UID des Empfängers
-            const empfaengerUid = await getUserFirebaseUid(userId);
-            if (!empfaengerUid) {
-                console.error(`❌ Firebase Auth UID nicht gefunden für User ${userId} (${user.name})`);
-                continue; // Überspringe dieses Thema
-            }
-            
-            console.log(`✅ Sende Einladung: ${user.name} (UID: ${empfaengerUid}) für Thema: ${thema.name}`);
+            console.log(`📤 Erstelle Einladung für: ${user.name} für Thema: ${thema.name}`);
             
             // Prüfe ob bereits Einladung existiert
             const myUserId = getCurrentUserId();
+            const empfaengerName = user.displayName || user.name;
+            
             const existingEinladung = Object.values(EINLADUNGEN).find(e =>
-                (e.empfaengerUid === empfaengerUid || e.empfaengerId === userId) &&
+                e.empfaengerName === empfaengerName &&
                 e.absenderId === myUserId &&
                 e.themaId === themaId &&
                 e.status === 'pending'
@@ -2745,25 +2743,22 @@ window.sendNeueFreigabeEinladungen = async function(userId) {
             
             if (existingEinladung) {
                 console.log("🔄 Aktualisiere bestehende Einladung");
-                // Update
                 await updateDoc(doc(geschenkeEinladungenRef, existingEinladung.id), {
                     filter,
                     rechteMap,
                     freigabeTyp: 'gefiltert',
-                    empfaengerUid: empfaengerUid, // ✅ Stelle sicher dass UID gesetzt ist
                     aktualisiertAm: serverTimestamp()
                 });
             } else {
                 console.log("➕ Erstelle neue Einladung");
-                // ✅ NEU: Speichere BEIDE IDs
-                await addDoc(geschenkeEinladungenRef, {
+                // ✅ LÖSUNG: Verwende Namen-basiertes Matching!
+                const einladungData = {
                     absenderId: myUserId,
                     absenderName: currentUser.displayName,
-                    besitzerId: myUserId,  // ✅ Owner des Themas
-                    besitzerUid: auth.currentUser.uid,  // ✅ Firebase Auth UID des Owners
-                    empfaengerId: userId,  // Firestore Doc ID (für Kompatibilität)
-                    empfaengerUid: empfaengerUid,  // ✅ Firebase Auth UID (für Listener!)
-                    empfaengerName: user.displayName || user.name,
+                    besitzerId: myUserId,
+                    besitzerUid: auth.currentUser.uid,
+                    empfaengerId: userId,  // Firestore Doc ID (für Rückwärtskompatibilität)
+                    empfaengerName: empfaengerName,  // ✅ WICHTIG: Name für Matching!
                     themaId,
                     themaName: thema.name,
                     filter,
@@ -2771,7 +2766,16 @@ window.sendNeueFreigabeEinladungen = async function(userId) {
                     freigabeTyp: 'gefiltert',
                     status: 'pending',
                     erstelltAm: serverTimestamp()
+                };
+                
+                console.log("📨 Einladungs-Daten:", {
+                    empfaengerName: einladungData.empfaengerName,
+                    themaName: einladungData.themaName,
+                    absenderName: einladungData.absenderName
                 });
+                
+                await addDoc(geschenkeEinladungenRef, einladungData);
+                console.log("✅ Einladung erfolgreich erstellt!");
             }
         }
         
@@ -3562,7 +3566,9 @@ function listenForEinladungen() {
         console.log(`📨 Einladungen-Update: ${snapshot.size} Einladungen gesamt`);
         
         const myUserId = getCurrentUserId();
-        console.log(`🔑 Meine Firebase Auth UID (für Filter): ${myUserId}`);
+        const myName = currentUser?.displayName;
+        console.log(`🔑 Mein Name: ${myName}`);
+        console.log(`🔑 Meine Firebase Auth UID: ${myUserId}`);
         
         let neueEinladungen = [];
         
@@ -3573,21 +3579,24 @@ function listenForEinladungen() {
                 // Neue Einladung hinzugefügt
                 EINLADUNGEN[einladung.id] = einladung;
                 
-                // ✅ KORRIGIERT: Prüfe empfaengerUid (Firebase Auth UID) statt empfaengerId!
-                const istFuerMich = einladung.empfaengerUid === myUserId || einladung.empfaengerId === myUserId;
+                // ✅ LÖSUNG: Namen-basiertes Matching!
+                const istFuerMich = einladung.empfaengerName === myName;
                 
                 console.log(`📧 Einladung ${einladung.id}:`, {
-                    empfaengerUid: einladung.empfaengerUid,
-                    empfaengerId: einladung.empfaengerId,
-                    myUserId: myUserId,
+                    empfaengerName: einladung.empfaengerName,
+                    myName: myName,
                     istFuerMich: istFuerMich,
-                    status: einladung.status
+                    status: einladung.status,
+                    themaName: einladung.themaName,
+                    absenderName: einladung.absenderName
                 });
                 
                 // Prüfe ob Einladung für mich ist und status = pending
                 if (istFuerMich && einladung.status === 'pending') {
-                    console.log(`✨ Neue Einladung für mich erhalten: ${einladung.themaName} von ${einladung.absenderName}`);
+                    console.log(`✨✨✨ Neue Einladung für mich erhalten: ${einladung.themaName} von ${einladung.absenderName}`);
                     neueEinladungen.push(einladung);
+                } else if (einladung.status === 'pending') {
+                    console.log(`  ℹ️ Einladung ist für anderen User: ${einladung.empfaengerName}`);
                 }
             }
             
@@ -3795,17 +3804,27 @@ window.acceptGeschenkeInvitation = async function(invitationId) {
         
         // Freigabe erstellen mit NEUEM Datenmodell
         const myUserId = getCurrentUserId();
+        const myName = currentUser.displayName;
+        
+        console.log("✅ Erstelle Freigabe:", {
+            freigabeId: freigabeId,
+            myUserId: myUserId,
+            myName: myName,
+            themaId: invitation.themaId,
+            themaName: invitation.themaName
+        });
+        
         const freigabeData = {
-            userId: myUserId,
-            userUid: auth.currentUser.uid,  // ✅ Firebase Auth UID
-            userName: currentUser.displayName,
+            userId: myUserId,  // Für Kompatibilität
+            userUid: auth.currentUser.uid,  // ✅ Firebase Auth UID (für Firestore Rules!)
+            userName: myName,
             themaId: invitation.themaId,
             themaName: invitation.themaName,
-            besitzerId: invitation.besitzerId,  // ✅ Owner des Themas
-            besitzerUid: invitation.besitzerUid,  // ✅ Firebase Auth UID des Owners
+            besitzerId: invitation.besitzerId,
+            besitzerUid: invitation.besitzerUid,
             freigabeTyp: invitation.freigabeTyp,
-            rechte: invitation.rechte,  // Globale Rechte für die gesamte Freigabe
-            rechteMap: invitation.rechteMap || {},  // ✅ Regel-spezifische Rechte (für zukünftige Erweiterung)
+            rechte: invitation.rechte,
+            rechteMap: invitation.rechteMap || {},
             filter: invitation.filter || {},
             einladungId: invitationId,
             freigegebenVon: invitation.absenderId,
@@ -3813,7 +3832,10 @@ window.acceptGeschenkeInvitation = async function(invitationId) {
             aktiv: true,
             erstelltAm: serverTimestamp()
         };
+        
+        console.log("📝 Freigabe-Daten:", freigabeData);
         await setDoc(doc(geschenkeFreigabenRef, freigabeId), freigabeData);
+        console.log("✅ Freigabe erfolgreich erstellt!");
         
         // ✅ Status wird durch Listener automatisch aktualisiert
         alertUser('✅ Einladung angenommen! Du kannst jetzt auf das Thema zugreifen.', 'success');
@@ -3866,9 +3888,9 @@ window.revokeDeclinedInvitation = async function(invitationId) {
 
 // Zeige abgelehnte Einladungen in Einstellungen
 window.showDeclinedInvitations = function() {
-    const myUserId = getCurrentUserId();
+    const myName = currentUser?.displayName;
     const declinedInvitations = Object.values(EINLADUNGEN).filter(e => 
-        e.empfaengerId === myUserId && e.status === 'declined'
+        e.empfaengerName === myName && e.status === 'declined'
     );
     
     if (declinedInvitations.length === 0) {
