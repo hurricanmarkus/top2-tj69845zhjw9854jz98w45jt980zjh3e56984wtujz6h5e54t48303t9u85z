@@ -408,15 +408,17 @@ async function loadThemen() {
                 const themaSnap = await getDoc(themaRef);
                 
                 if (themaSnap.exists()) {
+                    // ✅ PUNKT 4: Speichere Besitzer-Name für Dropdown
                     THEMEN[themaSnap.id] = {
                         id: themaSnap.id,
                         ...themaSnap.data(),
                         istEigenes: false,  // ✅ Nicht eigenes Thema
                         istGeteilt: true,  // ✅ Geteilt
                         besitzerUid: freigabe.besitzerUid,  // ✅ Owner UID
-                        besitzerName: freigabe.freigegebenVonName,  // ✅ Owner Name
-                        freigabe: freigabe  // ✅ Freigabe-Details
+                        besitzerName: freigabe.freigegebenVonName,  // ✅ PUNKT 4: Owner Name
+                        freigabe: freigabe  // ✅ Freigabe-Details (enthält rechte!)
                     };
+                    console.log(`✅ Geteiltes Thema geladen: ${themaSnap.data().name} von ${freigabe.freigegebenVonName}`);
                 }
             } catch (e) {
                 console.error(`Fehler beim Laden des geteilten Themas ${freigabe.themaId}:`, e);
@@ -586,17 +588,21 @@ function setupEventListeners() {
             currentThemaId = e.target.value;
             localStorage.setItem('gm_current_thema', currentThemaId);
             updateCollectionForThema();
+            updateCreateButtonVisibility(); // ✅ PUNKT 6: Button Sichtbarkeit prüfen
             renderDashboard();
         });
         themaDropdown.dataset.listenerAttached = 'true';
     }
 
-    // Neuer Eintrag Button
+    // Neuer Eintrag Button - ✅ PUNKT 6: Nur bei eigenen Themen!
     const createBtn = document.getElementById('btn-create-geschenk');
     if (createBtn && !createBtn.dataset.listenerAttached) {
         createBtn.addEventListener('click', openCreateModal);
         createBtn.dataset.listenerAttached = 'true';
     }
+    
+    // ✅ PUNKT 5 & 6: Button Sichtbarkeit basierend auf Thema-Typ
+    updateCreateButtonVisibility();
 
     // Einstellungen Button
     const settingsBtn = document.getElementById('btn-geschenke-settings');
@@ -701,9 +707,16 @@ function renderThemenDropdown() {
             }
         }
     } else {
-        dropdown.innerHTML = activeThemen.map(thema => 
-            `<option value="${thema.id}" ${thema.id === currentThemaId ? 'selected' : ''}>${thema.name}${thema.istGeteilt ? ' 🔗' : ''}</option>`
-        ).join('');
+        // ✅ PUNKT 4: Geteilte Themen mit "Geteilt von [NAME]"
+        dropdown.innerHTML = activeThemen.map(thema => {
+            let displayName = thema.name;
+            if (thema.istGeteilt && thema.besitzerName) {
+                displayName = `${thema.name} 🔗 (Geteilt von ${thema.besitzerName})`;
+            } else if (thema.istGeteilt) {
+                displayName = `${thema.name} 🔗 (Geteilt)`;
+            }
+            return `<option value="${thema.id}" ${thema.id === currentThemaId ? 'selected' : ''}>${displayName}</option>`;
+        }).join('');
     }
 }
 
@@ -742,14 +755,18 @@ function renderEinladungsBadge() {
     
     if (badgeContainer) {
         if (pendingInvitations.length > 0) {
+            // ✅ PUNKT 3: Blinkender Button mit Animation
             badgeContainer.innerHTML = `
                 <button onclick="window.showAllPendingInvitations()" 
-                    class="relative px-4 py-2 bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    class="relative px-4 py-2 bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2 animate-bounce">
+                    <svg class="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
-                    📨 Einladungen
-                    <span class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center animate-pulse">
+                    <span class="animate-pulse">📨 Offene Antwort auf Einladung</span>
+                    <span class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center animate-ping">
+                        ${pendingInvitations.length}
+                    </span>
+                    <span class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
                         ${pendingInvitations.length}
                     </span>
                 </button>
@@ -758,6 +775,118 @@ function renderEinladungsBadge() {
             badgeContainer.innerHTML = '';
         }
     }
+}
+
+// ✅ PUNKT 3: Modal schließen aber Button bleibt sichtbar
+window.closeEinladungenModalAndRemind = function() {
+    document.getElementById('gm-einladungen-modal')?.remove();
+    // Badge bleibt durch renderEinladungsBadge() sichtbar
+    alertUser('💡 Der Button "Offene Antwort auf Einladung" bleibt oben sichtbar!', 'info');
+};
+
+// ✅ PUNKT 5 & 6: Button-Sichtbarkeit basierend auf Rechten
+function updateCreateButtonVisibility() {
+    const createBtn = document.getElementById('btn-create-geschenk');
+    if (!createBtn || !currentThemaId) return;
+    
+    const thema = THEMEN[currentThemaId];
+    
+    // Bei eigenen Themen: Immer erlaubt
+    if (!thema || thema.istEigenes || !thema.istGeteilt) {
+        createBtn.style.display = 'inline-flex';
+        createBtn.disabled = false;
+        createBtn.title = '';
+        console.log("✅ Eigenes Thema - Button sichtbar");
+        return;
+    }
+    
+    // ✅ PUNKT 6: Bei geteilten Themen - IMMER verstecken (keine neuen Einträge!)
+    createBtn.style.display = 'none';
+    console.log("🚫 Geteiltes Thema - Button versteckt (keine neuen Einträge erlaubt)");
+}
+
+// ✅ PUNKT 5: Prüfe ob aktuelles Thema Schreibrechte hat
+function hasWriteRightsForCurrentThema() {
+    if (!currentThemaId) return false;
+    
+    const thema = THEMEN[currentThemaId];
+    
+    // Eigene Themen: Volle Rechte
+    if (!thema || thema.istEigenes || !thema.istGeteilt) return true;
+    
+    // Geteilte Themen: Prüfe Rechte aus Freigabe
+    return thema.freigabe?.rechte === 'bearbeiten';
+}
+
+// ✅ PUNKT 5: Prüfe ob Feld editierbar ist
+function isFieldEditable() {
+    if (!currentThemaId) return false;
+    const thema = THEMEN[currentThemaId];
+    
+    // Eigene Themen: Alles editierbar
+    if (!thema || thema.istEigenes || !thema.istGeteilt) return true;
+    
+    // Geteilte Themen: Nur bei Schreibrechten
+    return thema.freigabe?.rechte === 'bearbeiten';
+}
+
+// ✅ PUNKT 5: Setze alle Modal-Felder auf readonly
+function setModalFieldsReadOnly(readonly) {
+    const fieldIds = [
+        'gm-geschenk', 'gm-status', 'gm-shop', 'gm-bestellnummer', 
+        'gm-rechnungsnummer', 'gm-gesamtkosten', 'gm-eigene-kosten',
+        'gm-bezahlt-von', 'gm-soll-bezahlung', 'gm-ist-bezahlung',
+        'gm-standort', 'gm-notizen'
+    ];
+    
+    fieldIds.forEach(id => {
+        const field = document.getElementById(id);
+        if (field) {
+            field.disabled = readonly;
+            if (readonly) {
+                field.classList.add('bg-gray-100', 'cursor-not-allowed');
+            } else {
+                field.classList.remove('bg-gray-100', 'cursor-not-allowed');
+            }
+        }
+    });
+    
+    // Checkboxen deaktivieren
+    const checkboxContainers = ['gm-fuer-checkboxes', 'gm-von-checkboxes', 'gm-beteiligung-checkboxes'];
+    checkboxContainers.forEach(containerId => {
+        const container = document.getElementById(containerId);
+        if (container) {
+            const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.disabled = readonly;
+                if (readonly) {
+                    cb.classList.add('cursor-not-allowed');
+                    cb.parentElement?.classList.add('opacity-60');
+                } else {
+                    cb.classList.remove('cursor-not-allowed');
+                    cb.parentElement?.classList.remove('opacity-60');
+                }
+            });
+        }
+    });
+    
+    // Speichern-Button anpassen
+    const saveBtn = document.getElementById('saveGeschenkBtn');
+    if (saveBtn) {
+        if (readonly) {
+            saveBtn.style.display = 'none';
+        } else {
+            saveBtn.style.display = 'inline-flex';
+        }
+    }
+    
+    // Aktions-Buttons bei Leserechten verstecken
+    const actionsContainer = document.getElementById('gm-modal-actions');
+    if (actionsContainer && readonly) {
+        actionsContainer.style.display = 'none';
+    }
+    
+    console.log(`🔒 Modal-Felder ${readonly ? 'DEAKTIVIERT' : 'AKTIVIERT'}`);
 }
 
 // ✅ NEU: Zeige alle ausstehenden Einladungen manuell
@@ -1348,14 +1477,43 @@ window.openEditGeschenkModal = function(id) {
     const modal = document.getElementById('geschenkModal');
     if (!modal) return;
     
-    document.getElementById('geschenkModalTitle').textContent = 'Geschenk bearbeiten';
+    // ✅ PUNKT 5: Prüfe ob Bearbeiten erlaubt ist
+    const canEdit = isFieldEditable();
+    const thema = THEMEN[currentThemaId];
+    
+    if (!canEdit) {
+        document.getElementById('geschenkModalTitle').innerHTML = `
+            <div>
+                <span>Geschenk ansehen</span>
+                <span class="block text-sm font-normal bg-blue-100 text-blue-800 px-2 py-1 rounded mt-1">
+                    👁️ Nur Leserechte - Geteilt von ${thema?.besitzerName || 'Unbekannt'}
+                </span>
+            </div>
+        `;
+    } else if (thema?.istGeteilt) {
+        document.getElementById('geschenkModalTitle').innerHTML = `
+            <div>
+                <span>Geschenk bearbeiten</span>
+                <span class="block text-sm font-normal bg-green-100 text-green-800 px-2 py-1 rounded mt-1">
+                    ✏️ Bearbeitungsrechte - Geteilt von ${thema?.besitzerName || 'Unbekannt'}
+                </span>
+            </div>
+        `;
+    } else {
+        document.getElementById('geschenkModalTitle').textContent = 'Geschenk bearbeiten';
+    }
+    
     const idField = document.getElementById('gm-id');
     idField.value = id;
-    idField.removeAttribute('data-is-copy'); // Entferne Kopie-Markierung
+    idField.removeAttribute('data-is-copy');
     
     fillModalForm(geschenk);
     renderModalSelects(geschenk);
-    updateModalActionButtons(true, false); // Aktions-Buttons anzeigen, aber KEIN "Vorlage laden" Button
+    updateModalActionButtons(true, false);
+    
+    // ✅ PUNKT 5: Bei Leserechten - alle Felder deaktivieren
+    setModalFieldsReadOnly(!canEdit);
+    
     modal.style.display = 'flex';
 };
 
@@ -1726,6 +1884,69 @@ function renderFreigabenVerwaltung() {
     const container = document.getElementById('gm-freigaben-list');
     if (!container) return;
     
+    // ✅ PUNKT 7: Zeige BEIDE Perspektiven mit Tabs
+    const myName = currentUser?.displayName;
+    const myUserId = getCurrentUserId();
+    
+    // Zähle meine aktiven Freigaben (die ICH erhalten habe)
+    const meineFreigaben = Object.values(FREIGABEN).filter(f => 
+        f.userName === myName && f.aktiv
+    );
+    
+    // Zähle Freigaben die ICH gegeben habe
+    const vonMirFreigaben = Object.values(FREIGABEN).filter(f => 
+        f.freigegebenVonName === myName && f.aktiv
+    );
+    
+    container.innerHTML = `
+        <!-- ✅ PUNKT 7: TAB-NAVIGATION -->
+        <div class="mb-4 flex gap-2 border-b-2 border-gray-200">
+            <button onclick="window.switchFreigabenTab('ichTeile')" 
+                id="tab-ichTeile"
+                class="px-4 py-2 font-bold border-b-4 border-blue-500 text-blue-600">
+                📤 Von mir geteilt (${vonMirFreigaben.length})
+            </button>
+            <button onclick="window.switchFreigabenTab('mirGeteilt')" 
+                id="tab-mirGeteilt"
+                class="px-4 py-2 font-bold border-b-4 border-transparent text-gray-500 hover:text-blue-600">
+                📥 Mit mir geteilt (${meineFreigaben.length})
+            </button>
+        </div>
+        
+        <!-- Tab-Inhalte -->
+        <div id="freigaben-tab-content"></div>
+    `;
+    
+    // Zeige ersten Tab
+    window.switchFreigabenTab('ichTeile');
+}
+
+// ✅ PUNKT 7: Tab-Wechsel
+window.switchFreigabenTab = function(tab) {
+    // Update Tab-Buttons
+    document.getElementById('tab-ichTeile')?.classList.toggle('border-blue-500', tab === 'ichTeile');
+    document.getElementById('tab-ichTeile')?.classList.toggle('text-blue-600', tab === 'ichTeile');
+    document.getElementById('tab-ichTeile')?.classList.toggle('border-transparent', tab !== 'ichTeile');
+    document.getElementById('tab-ichTeile')?.classList.toggle('text-gray-500', tab !== 'ichTeile');
+    
+    document.getElementById('tab-mirGeteilt')?.classList.toggle('border-blue-500', tab === 'mirGeteilt');
+    document.getElementById('tab-mirGeteilt')?.classList.toggle('text-blue-600', tab === 'mirGeteilt');
+    document.getElementById('tab-mirGeteilt')?.classList.toggle('border-transparent', tab !== 'mirGeteilt');
+    document.getElementById('tab-mirGeteilt')?.classList.toggle('text-gray-500', tab !== 'mirGeteilt');
+    
+    // Zeige entsprechenden Inhalt
+    if (tab === 'ichTeile') {
+        renderFreigabenICHTeile();
+    } else {
+        renderFreigabenMIRGeteilt();
+    }
+};
+
+// ✅ PUNKT 7a: Freigaben die ICH ANDEREN gegeben habe (Person A)
+function renderFreigabenICHTeile() {
+    const container = document.getElementById('freigaben-tab-content');
+    if (!container) return;
+    
     // DEBUG: Prüfe USERS und currentUser
     console.log('🔍 DEBUG Freigaben:', {
         totalUsers: Object.keys(USERS).length,
@@ -1825,12 +2046,14 @@ function renderFreigabenVerwaltung() {
     }
     
     container.innerHTML = registrierteBenutzer.map(user => {
-        // Finde Einladungen für diesen Benutzer
+        // Finde Einladungen für diesen Benutzer (die ICH gesendet habe)
         const myUserId = getCurrentUserId();
         const einladungen = Object.values(EINLADUNGEN).filter(e => 
-            e.empfaengerId === user.id && 
+            e.empfaengerName === (user.displayName || user.name) && 
             e.absenderId === myUserId
         );
+        
+        console.log(`📊 Einladungen für ${user.name}:`, einladungen.length);
         const aktiveFreigaben = Object.values(FREIGABEN).filter(f => 
             f.userId === user.id && 
             f.aktiv
@@ -1925,6 +2148,167 @@ function renderFreigabenVerwaltung() {
         `;
     }).join('');
 }
+
+// ✅ PUNKT 7b: Freigaben die MIR gegeben wurden (Person B)
+function renderFreigabenMIRGeteilt() {
+    const container = document.getElementById('freigaben-tab-content');
+    if (!container) return;
+    
+    const myName = currentUser?.displayName;
+    const myUserId = getCurrentUserId();
+    
+    // Freigaben die ICH erhalten habe (aktiv)
+    const meineFreigaben = Object.values(FREIGABEN).filter(f => 
+        f.userName === myName && f.aktiv
+    );
+    
+    // Einladungen die ICH erhalten habe (alle Status)
+    const meineEinladungen = Object.values(EINLADUNGEN).filter(e => 
+        e.empfaengerName === myName
+    );
+    
+    if (meineFreigaben.length === 0 && meineEinladungen.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-8 text-gray-500">
+                <span class="text-6xl">📭</span>
+                <p class="mt-3 font-semibold">Keine Freigaben erhalten</p>
+                <p class="text-sm">Wenn andere Benutzer Themen mit dir teilen, erscheinen sie hier.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = `
+        <div class="space-y-4">
+            <!-- Aktive Freigaben -->
+            ${meineFreigaben.length > 0 ? `
+                <div>
+                    <h4 class="text-lg font-bold text-gray-800 mb-3">✅ Aktive Freigaben (${meineFreigaben.length})</h4>
+                    <div class="space-y-2">
+                        ${meineFreigaben.map(f => {
+                            const thema = THEMEN[f.themaId];
+                            return `
+                                <div class="bg-white rounded-lg p-4 border-2 border-green-300">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-3">
+                                            <span class="text-3xl">📁</span>
+                                            <div>
+                                                <p class="font-bold text-gray-800">${thema?.name || f.themaName}</p>
+                                                <p class="text-sm text-gray-600">
+                                                    Geteilt von: <strong>${f.freigegebenVonName}</strong>
+                                                </p>
+                                                <div class="flex gap-2 mt-1">
+                                                    <span class="text-xs px-2 py-1 rounded ${f.rechte === 'lesen' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}">
+                                                        ${f.rechte === 'lesen' ? '👁️ Leserechte' : '✏️ Bearbeitungsrechte'}
+                                                    </span>
+                                                    <span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-800">
+                                                        ${f.freigabeTyp === 'komplett' ? '📂 Komplett' : `🔍 ${Object.keys(f.filter || {}).length} Filter`}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button onclick="window.endSharing('${f.id}')" 
+                                            class="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm font-bold">
+                                            🚫 Zugriff beenden
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            ` : ''}
+            
+            <!-- Einladungen (ausstehend, angenommen, abgelehnt) -->
+            ${meineEinladungen.length > 0 ? `
+                <div>
+                    <h4 class="text-lg font-bold text-gray-800 mb-3">📨 Einladungen (${meineEinladungen.length})</h4>
+                    <div class="space-y-2">
+                        ${meineEinladungen.map(inv => {
+                            const statusConfig = {
+                                pending: { bg: 'bg-yellow-50', border: 'border-yellow-300', text: 'text-yellow-800', label: 'Ausstehend', icon: '⏳' },
+                                accepted: { bg: 'bg-green-50', border: 'border-green-300', text: 'text-green-800', label: 'Angenommen', icon: '✅' },
+                                declined: { bg: 'bg-red-50', border: 'border-red-300', text: 'text-red-800', label: 'Abgelehnt', icon: '❌' }
+                            };
+                            const cfg = statusConfig[inv.status] || statusConfig.pending;
+                            
+                            return `
+                                <div class="bg-white rounded-lg p-4 border-2 ${cfg.border} ${cfg.bg}">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-3">
+                                            <span class="text-3xl">${cfg.icon}</span>
+                                            <div>
+                                                <p class="font-bold text-gray-800">${inv.themaName}</p>
+                                                <p class="text-sm text-gray-600">
+                                                    Von: <strong>${inv.absenderName}</strong>
+                                                </p>
+                                                <span class="text-xs px-2 py-1 rounded ${cfg.bg} ${cfg.text} font-bold mt-1 inline-block">
+                                                    ${cfg.label}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="flex flex-col gap-2">
+                                            ${inv.status === 'pending' ? `
+                                                <button onclick="window.acceptGeschenkeInvitation('${inv.id}')" 
+                                                    class="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm font-bold">
+                                                    ✅ Annehmen
+                                                </button>
+                                                <button onclick="window.declineGeschenkeInvitation('${inv.id}')" 
+                                                    class="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm font-bold">
+                                                    ❌ Ablehnen
+                                                </button>
+                                            ` : inv.status === 'declined' ? `
+                                                <button onclick="window.revokeDeclinedInvitation('${inv.id}')" 
+                                                    class="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm font-bold">
+                                                    🔄 Widerrufen
+                                                </button>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+// ✅ PUNKT 7: Freigabe beenden (Person B entfernt eigenen Zugriff)
+window.endSharing = async function(freigabeId) {
+    if (!confirm('Möchtest du wirklich den Zugriff auf dieses geteilte Thema beenden?')) return;
+    
+    try {
+        const freigabeDoc = doc(db, 'artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_freigaben', freigabeId);
+        await updateDoc(freigabeDoc, {
+            aktiv: false,
+            deaktiviertAm: serverTimestamp(),
+            deaktiviertVon: currentUser.displayName
+        });
+        alertUser('✅ Zugriff beendet', 'success');
+        console.log(`✅ Freigabe ${freigabeId} deaktiviert`);
+    } catch (error) {
+        console.error('Fehler beim Beenden der Freigabe:', error);
+        alertUser('❌ Fehler: ' + error.message, 'error');
+    }
+};
+
+// ✅ PUNKT 7: Abgelehnte Einladung widerrufen (Person B ändert Meinung)
+window.revokeDeclinedInvitation = async function(invitationId) {
+    try {
+        const einladungDoc = doc(db, 'artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_einladungen', invitationId);
+        await updateDoc(einladungDoc, {
+            status: 'pending',
+            aktualisiertAm: serverTimestamp()
+        });
+        alertUser('✅ Ablehnung widerrufen - Einladung ist wieder ausstehend', 'success');
+        console.log(`✅ Einladung ${invitationId} wieder auf pending gesetzt`);
+    } catch (error) {
+        console.error('Fehler beim Widerrufen:', error);
+        alertUser('❌ Fehler: ' + error.message, 'error');
+    }
+};
 
 // ========================================
 // NEUER FREIGABE-EDITOR
@@ -2730,16 +3114,30 @@ window.sendNeueFreigabeEinladungen = async function(userId) {
             
             console.log(`📤 Erstelle Einladung für: ${user.name} für Thema: ${thema.name}`);
             
-            // Prüfe ob bereits Einladung existiert
+            // ✅ PUNKT 2: Starke Duplikat-Prüfung
             const myUserId = getCurrentUserId();
             const empfaengerName = user.displayName || user.name;
             
+            // Prüfe auf JEDE existierende Einladung (nicht nur pending!)
             const existingEinladung = Object.values(EINLADUNGEN).find(e =>
                 e.empfaengerName === empfaengerName &&
                 e.absenderId === myUserId &&
-                e.themaId === themaId &&
-                e.status === 'pending'
+                e.themaId === themaId
             );
+            
+            // Wenn bereits eine Einladung existiert (egal welcher Status)
+            if (existingEinladung && existingEinladung.status !== 'pending') {
+                if (existingEinladung.status === 'accepted') {
+                    console.log(`⚠️ Thema wurde bereits geteilt und angenommen!`);
+                    alertUser(`"${thema.name}" wurde bereits mit ${empfaengerName} geteilt!`, 'warning');
+                    continue; // Überspringe
+                }
+                if (existingEinladung.status === 'declined') {
+                    console.log(`⚠️ ${empfaengerName} hat diese Einladung bereits abgelehnt!`);
+                    alertUser(`${empfaengerName} hat "${thema.name}" bereits abgelehnt.`, 'warning');
+                    continue; // Überspringe
+                }
+            }
             
             if (existingEinladung) {
                 console.log("🔄 Aktualisiere bestehende Einladung");
@@ -3777,9 +4175,9 @@ function showPendingInvitationsModal(invitations) {
                 }).join('')}
             </div>
             <div class="p-4 border-t">
-                <button onclick="document.getElementById('gm-einladungen-modal').remove()" 
+                <button onclick="window.closeEinladungenModalAndRemind()" 
                     class="w-full py-2 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300 transition">
-                    Später entscheiden
+                    ⏰ Später entscheiden (Erinnerung bleibt sichtbar)
                 </button>
             </div>
         </div>
