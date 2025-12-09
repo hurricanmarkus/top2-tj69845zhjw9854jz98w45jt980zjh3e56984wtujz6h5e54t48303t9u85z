@@ -118,23 +118,25 @@ export async function initializeGeschenkemanagement() {
     let retries = 0;
     let user = currentUser;
     
-    while ((!user || !user.uid) && retries < 100) {
+    // ✅ Helper: Hole User-ID aus verschiedenen möglichen Feldern
+    const getUserId = (u) => u?.uid || u?.mode || u?.id || u?.odooUserId;
+    
+    while ((!user || !getUserId(user)) && retries < 50) {
         console.log("⏳ Warte auf currentUser... (Versuch", retries + 1, ")");
-        console.log("   - currentUser:", currentUser);
-        console.log("   - window.currentUser:", window.currentUser);
         
         // Versuche verschiedene Quellen
         user = currentUser || window.currentUser;
         
-        if (!user || !user.uid) {
+        if (!user || !getUserId(user)) {
             await new Promise(resolve => setTimeout(resolve, 100));
             retries++;
         }
     }
     
     // Aktualisiere currentUser mit der gefundenen Quelle
-    if (user && user.uid) {
+    if (user && getUserId(user)) {
         window.currentUser = user;  // Setze global für Fallback
+        console.log("✅ User-ID gefunden:", getUserId(user), "aus Feld:", user.uid ? 'uid' : user.mode ? 'mode' : user.id ? 'id' : 'odooUserId');
     }
 
     if (!db) {
@@ -145,8 +147,8 @@ export async function initializeGeschenkemanagement() {
         return;
     }
 
-    if (!user || !user.uid) {
-        console.error("❌ currentUser ist nicht verfügbar nach 10 Sekunden!");
+    if (!user || !getUserId(user)) {
+        console.error("❌ currentUser ist nicht verfügbar nach 5 Sekunden!");
         console.error("❌ currentUser:", currentUser);
         console.error("❌ window.currentUser:", window.currentUser);
         console.error("❌ Bitte Seite neu laden oder erneut einloggen!");
@@ -156,16 +158,25 @@ export async function initializeGeschenkemanagement() {
         return;
     }
 
-    console.log("✅ User erkannt:", user.uid, user);
+    const userId = getUserId(user);
+    console.log("✅ User erkannt:", userId, user);
     
     // ✅ Setze currentUser global, damit der Rest des Codes funktioniert
-    if (!currentUser || !currentUser.uid) {
+    if (!currentUser || !getUserId(currentUser)) {
         window.currentUser = user;
         console.log("✅ currentUser wurde von user gesetzt");
     }
     
+    // ✅ Ergänze user.uid falls nicht vorhanden (für Kompatibilität)
+    if (!user.uid && userId) {
+        user.uid = userId;
+        if (currentUser) currentUser.uid = userId;
+        if (window.currentUser) window.currentUser.uid = userId;
+        console.log("✅ currentUser.uid wurde auf", userId, "gesetzt");
+    }
+    
     // ✅ NEU: User-basierte Collection-Referenzen
-    const userDataPath = ['artifacts', appId, 'public', 'data', 'users', user.uid];
+    const userDataPath = ['artifacts', appId, 'public', 'data', 'users', userId];
     
     geschenkeSettingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'geschenkemanagement');
     geschenkeThemenRef = collection(db, ...userDataPath, 'geschenke_themen');
@@ -176,7 +187,7 @@ export async function initializeGeschenkemanagement() {
     geschenkeBudgetsRef = collection(db, ...userDataPath, 'geschenke_budgets');
     geschenkeErinnerungenRef = collection(db, ...userDataPath, 'geschenke_erinnerungen');
     
-    console.log("✅ Collection-Referenzen erstellt für User:", user.uid);
+    console.log("✅ Collection-Referenzen erstellt für User:", userId);
     
     try {
         await loadSettings();
