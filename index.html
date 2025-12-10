@@ -2477,7 +2477,6 @@
                         <div class="flex border-b border-gray-200 gap-1">
                             <button onclick="showSettingsTab('kontaktbuch')" class="gm-settings-tab px-4 py-2 font-bold text-pink-600 border-b-2 border-pink-600" data-tab="kontaktbuch">👥 Kontaktbuch</button>
                             <button onclick="showSettingsTab('themen')" class="gm-settings-tab px-4 py-2 font-bold text-gray-500 hover:text-pink-600" data-tab="themen">📁 Themen</button>
-                            <button onclick="showSettingsTab('freigaben')" class="gm-settings-tab px-4 py-2 font-bold text-gray-500 hover:text-pink-600" data-tab="freigaben">🔐 Freigaben</button>
                             <button onclick="showSettingsTab('optionen')" class="gm-settings-tab px-4 py-2 font-bold text-gray-500 hover:text-pink-600" data-tab="optionen">⚙️ Optionen</button>
                         </div>
                         
@@ -2506,20 +2505,6 @@
                             <p class="text-xs text-gray-600 mb-3">Erstelle Themen wie "Weihnachten 2025", "Geburtstage 2025" etc.</p>
                             <div id="gm-themen-list" class="space-y-2 max-h-64 overflow-y-auto">
                                 <p class="text-gray-500 text-center py-4">Lade Themen...</p>
-                            </div>
-                        </div>
-                        
-                        <!-- Freigaben Tab -->
-                        <div id="gm-tab-freigaben" class="gm-settings-content hidden">
-                            <div class="flex justify-between items-center mb-2">
-                                <h4 class="font-bold text-gray-800">Freigabemanagement</h4>
-                                <button onclick="window.showDeclinedInvitations()" class="text-xs bg-red-500 text-white px-3 py-1.5 rounded-lg hover:bg-red-600 transition font-bold">
-                                    ❌ Abgelehnte Einladungen
-                                </button>
-                            </div>
-                            <p class="text-xs text-gray-600 mb-4">Steuere, welche registrierten Personen welche Themen und Einträge sehen können.</p>
-                            <div id="gm-freigaben-list" class="space-y-3 max-h-96 overflow-y-auto">
-                                <p class="text-gray-500 text-center py-4">Lade Freigaben...</p>
                             </div>
                         </div>
                         
