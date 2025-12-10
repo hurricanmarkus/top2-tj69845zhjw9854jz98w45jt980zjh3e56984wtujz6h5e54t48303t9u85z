@@ -515,6 +515,11 @@ function listenForErinnerungen() {
         });
         
         console.log("✅ Erinnerungen geladen:", Object.keys(ERINNERUNGEN).length);
+        
+        // ✅ Startseiten-Benachrichtigung aktualisieren
+        if (typeof window.updateHomeAlerts === 'function') {
+            window.updateHomeAlerts();
+        }
     }, (error) => {
         console.error("Fehler beim Laden der Erinnerungen:", error);
         if (error.code === 'permission-denied') {
@@ -2785,3 +2790,7 @@ window.createNewThema = async function() {
     }
 };
 
+// ========================================
+// EXPORT FÜR STARTSEITEN-BENACHRICHTIGUNG
+// ========================================
+export { ERINNERUNGEN };
