@@ -1840,10 +1840,13 @@ function renderThemenVerwaltung() {
         `).join('');
 }
 
-
 // ========================================
 // BUDGET-SYSTEM
 // ========================================
+
+window.openBudgetModal = function() {
+    const existingModal = document.getElementById('gm-budget-modal');
+    if (existingModal) existingModal.remove();
     
     const thema = THEMEN[currentThemaId];
     const budget = Object.values(BUDGETS).find(b => b.themaId === currentThemaId);
