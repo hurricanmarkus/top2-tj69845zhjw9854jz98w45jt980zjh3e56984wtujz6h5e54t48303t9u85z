@@ -2460,12 +2460,12 @@ window.copyGeschenk = function(geschenkId) {
     document.getElementById('gm-soll-bezahlung').value = geschenk.sollBezahlung || '';
     document.getElementById('gm-standort').value = geschenk.standort || '';
     document.getElementById('gm-notizen').value = geschenk.notizen || '';
+    document.getElementById('gm-bezahlt-von').value = geschenk.bezahltVon || '';  // ✅ FIX: Bezahlt von mitkopieren
     
     // ✅ Diese Felder LEEREN (nicht kopieren)
     document.getElementById('gm-ist-bezahlung').value = '';
     document.getElementById('gm-bestellnummer').value = '';
     document.getElementById('gm-rechnungsnummer').value = '';
-    document.getElementById('gm-bezahlt-von').value = '';
     
     // ✅ Checkboxen befüllen (FÜR, VON, Beteiligung)
     fillCheckboxes('gm-fuer', geschenk.fuer || []);
@@ -2482,8 +2482,11 @@ window.copyGeschenk = function(geschenkId) {
         </div>
     `;
     
-    // Aktions-Buttons verstecken (Vorlage laden ausblenden, andere Buttons auch)
-    updateModalButtons(false);
+    // ✅ Aktions-Buttons ausblenden (da wir jetzt eine Kopie bearbeiten)
+    const actionsContainer = document.getElementById('gm-modal-actions');
+    const vorlageButton = document.getElementById('gm-btn-vorlage-laden');
+    if (actionsContainer) actionsContainer.style.display = 'none';
+    if (vorlageButton) vorlageButton.style.display = 'none';
     
     alertUser('Geschenk kopiert! Bearbeite die Kopie und speichere sie.', 'info');
 };
@@ -2499,7 +2502,7 @@ window.saveAsVorlage = async function(geschenkId) {
     if (!vorlageName || vorlageName.trim() === '') return;
     
     try {
-        // ✅ Vorlage speichern MIT allen relevanten Feldern
+        // ✅ Vorlage speichern MIT allen relevanten Feldern (inkl. Bestellnummer & Rechnungsnummer)
         const vorlageData = {
             name: vorlageName.trim(),
             geschenk: geschenk.geschenk,
@@ -2508,6 +2511,8 @@ window.saveAsVorlage = async function(geschenkId) {
             beteiligung: geschenk.beteiligung || [],
             bezahltVon: geschenk.bezahltVon || '',
             shop: geschenk.shop || '',
+            bestellnummer: geschenk.bestellnummer || '',  // ✅ FIX: Bestellnummer speichern
+            rechnungsnummer: geschenk.rechnungsnummer || '',  // ✅ FIX: Rechnungsnummer speichern
             gesamtkosten: geschenk.gesamtkosten || 0,
             eigeneKosten: geschenk.eigeneKosten || 0,
             sollBezahlung: geschenk.sollBezahlung || '',
@@ -2581,9 +2586,11 @@ window.loadVorlage = function(vorlageId) {
         return;
     }
     
-    // ✅ Alle Felder aus Vorlage befüllen
+    // ✅ Alle Felder aus Vorlage befüllen (inkl. Bestellnummer & Rechnungsnummer)
     document.getElementById('gm-geschenk').value = vorlage.geschenk || '';
     document.getElementById('gm-shop').value = vorlage.shop || '';
+    document.getElementById('gm-bestellnummer').value = vorlage.bestellnummer || '';  // ✅ FIX: Bestellnummer laden
+    document.getElementById('gm-rechnungsnummer').value = vorlage.rechnungsnummer || '';  // ✅ FIX: Rechnungsnummer laden
     document.getElementById('gm-gesamtkosten').value = vorlage.gesamtkosten || '';
     document.getElementById('gm-eigene-kosten').value = vorlage.eigeneKosten || '';
     document.getElementById('gm-soll-bezahlung').value = vorlage.sollBezahlung || '';
@@ -2596,10 +2603,8 @@ window.loadVorlage = function(vorlageId) {
     fillCheckboxes('gm-von', vorlage.von || []);
     fillCheckboxes('gm-beteiligung', vorlage.beteiligung || []);
     
-    // ✅ Diese Felder NICHT befüllen (bleiben leer)
+    // ✅ IST-Bezahlung bleibt leer (wird nicht gespeichert in Vorlagen)
     document.getElementById('gm-ist-bezahlung').value = '';
-    document.getElementById('gm-bestellnummer').value = '';
-    document.getElementById('gm-rechnungsnummer').value = '';
     
     // Status auf "offen" setzen
     document.getElementById('gm-status').value = 'offen';
