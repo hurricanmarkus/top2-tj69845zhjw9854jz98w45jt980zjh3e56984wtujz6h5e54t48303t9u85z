@@ -2365,6 +2365,40 @@ window.deleteKontakt = async function(id) {
     }
 };
 
+// ========================================
+// GESCHENK-LÖSCHEN (mit Erinnerungen)
+// ========================================
+
+window.deleteGeschenk = async function(geschenkId) {
+    if (!confirm('Geschenk und alle zugehörigen Erinnerungen wirklich löschen?')) return;
+    
+    try {
+        console.log(`🗑️ Lösche Geschenk ${geschenkId}...`);
+        
+        // ✅ SCHRITT 1: Erinnerungen löschen (die zu diesem Geschenk gehören)
+        const erinnerungenToDelete = Object.values(ERINNERUNGEN).filter(e => 
+            e.geschenkId === geschenkId
+        );
+        console.log(`  🔔 Gefunden: ${erinnerungenToDelete.length} Erinnerungen`);
+        
+        const erinnerungenDeletePromises = erinnerungenToDelete.map(erinnerung => 
+            deleteDoc(doc(geschenkeErinnerungenRef, erinnerung.id))
+        );
+        await Promise.all(erinnerungenDeletePromises);
+        console.log(`  ✅ ${erinnerungenToDelete.length} Erinnerungen gelöscht`);
+        
+        // ✅ SCHRITT 2: Geschenk selbst löschen
+        await deleteDoc(doc(geschenkeCollection, geschenkId));
+        console.log(`  ✅ Geschenk gelöscht`);
+        
+        alertUser('Geschenk und zugehörige Erinnerungen wurden gelöscht!', 'success');
+        closeGeschenkModal();
+    } catch (e) {
+        console.error("❌ Fehler beim Löschen des Geschenks:", e);
+        alertUser('Fehler beim Löschen: ' + e.message, 'error');
+    }
+};
+
 window.editKontakt = async function(id) {
     const kontakt = KONTAKTE[id];
     if (!kontakt) return;
@@ -2411,15 +2445,63 @@ window.toggleArchiveThema = async function(id) {
 };
 
 window.deleteThema = async function(id) {
-    if (!confirm('Thema und alle Geschenke darin wirklich löschen?')) return;
+    if (!confirm('Thema und alle zugehörigen Daten wirklich löschen?')) return;
     
     try {
-        const themaDocRef = doc(geschenkeThemenRef, id);
+        console.log(`🗑️ Starte Löschvorgang für Thema ${id}...`);
         
+        // ✅ SCHRITT 1: Geschenke löschen (Subcollection)
+        // Geschenke befinden sich in: users/{userId}/geschenke_themen/{themaId}/geschenke/
+        const ownerUserId = currentUser.mode;
+        const geschenkeInThemaRef = collection(db, 'artifacts', appId, 'public', 'data', 'users', ownerUserId, 'geschenke_themen', id, 'geschenke');
+        
+        const geschenkeSnapshot = await getDocs(geschenkeInThemaRef);
+        console.log(`  📦 Gefunden: ${geschenkeSnapshot.size} Geschenke`);
+        
+        // Sammle alle Geschenk-IDs für Erinnerungen-Löschung
+        const geschenkIds = [];
+        const geschenkDeletePromises = [];
+        
+        geschenkeSnapshot.forEach((geschenkDoc) => {
+            geschenkIds.push(geschenkDoc.id);
+            geschenkDeletePromises.push(deleteDoc(doc(geschenkeInThemaRef, geschenkDoc.id)));
+        });
+        
+        await Promise.all(geschenkDeletePromises);
+        console.log(`  ✅ ${geschenkeSnapshot.size} Geschenke gelöscht`);
+        
+        // ✅ SCHRITT 2: Budgets löschen (die zu diesem Thema gehören)
+        const budgetsToDelete = Object.values(BUDGETS).filter(b => b.themaId === id);
+        console.log(`  💰 Gefunden: ${budgetsToDelete.length} Budgets`);
+        
+        const budgetDeletePromises = budgetsToDelete.map(budget => 
+            deleteDoc(doc(geschenkeBudgetsRef, budget.id))
+        );
+        await Promise.all(budgetDeletePromises);
+        console.log(`  ✅ ${budgetsToDelete.length} Budgets gelöscht`);
+        
+        // ✅ SCHRITT 3: Erinnerungen löschen (die zu Geschenken dieses Themas gehören)
+        const erinnerungenToDelete = Object.values(ERINNERUNGEN).filter(e => 
+            e.geschenkId && geschenkIds.includes(e.geschenkId)
+        );
+        console.log(`  🔔 Gefunden: ${erinnerungenToDelete.length} Erinnerungen`);
+        
+        const erinnerungenDeletePromises = erinnerungenToDelete.map(erinnerung => 
+            deleteDoc(doc(geschenkeErinnerungenRef, erinnerung.id))
+        );
+        await Promise.all(erinnerungenDeletePromises);
+        console.log(`  ✅ ${erinnerungenToDelete.length} Erinnerungen gelöscht`);
+        
+        // ✅ SCHRITT 4: Thema selbst löschen
+        const themaDocRef = doc(geschenkeThemenRef, id);
         await deleteDoc(themaDocRef);
-        alertUser('Thema gelöscht!', 'success');
+        console.log(`  ✅ Thema-Dokument gelöscht`);
+        
+        console.log(`✅ KOMPLETT: Thema ${id} und alle zugehörigen Daten wurden gelöscht!`);
+        alertUser('Thema und alle zugehörigen Daten wurden gelöscht!', 'success');
     } catch (e) {
-        alertUser('Fehler: ' + e.message, 'error');
+        console.error("❌ Fehler beim Löschen des Themas:", e);
+        alertUser('Fehler beim Löschen: ' + e.message, 'error');
     }
 };
 
