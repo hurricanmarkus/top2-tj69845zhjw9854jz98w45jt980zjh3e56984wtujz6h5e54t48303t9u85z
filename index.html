@@ -2190,6 +2190,13 @@
                                     <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 0 1 1.262.125l1.669 1.669a1 1 0 0 1 .125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 0 1 .804.98v2.361a1 1 0 0 1-.804.98l-1.473.295a6.95 6.95 0 0 1-.587 1.416l.834 1.25a1 1 0 0 1-.125 1.262l-1.669 1.669a1 1 0 0 1-1.262.125l-1.25-.834a6.953 6.953 0 0 1-1.416.587l-.294 1.473a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.295-1.473a6.957 6.957 0 0 1-1.416-.587l-1.25.834a1 1 0 0 1-1.262-.125l-1.669-1.669a1 1 0 0 1-.125-1.262l.834-1.25a6.957 6.957 0 0 1-.587-1.416l-1.473-.294A1 1 0 0 1 1 11.18V8.82a1 1 0 0 1 .804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 0 1 .125-1.262l1.669-1.669a1 1 0 0 1 1.262-.125l1.25.834c.445-.245.919-.443 1.416-.587l.294-1.473ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd" />
                                 </svg>
                             </button>
+                            <button onclick="window.openErinnerungModal()" class="py-2 px-4 bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2 text-sm">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                                    <path d="M5.85 3.5a.75.75 0 0 0-1.117-1 9.719 9.719 0 0 0-2.348 4.876.75.75 0 0 0 1.479.248A8.219 8.219 0 0 1 5.85 3.5ZM19.267 2.5a.75.75 0 1 0-1.118 1 8.22 8.22 0 0 1 1.987 4.124.75.75 0 0 0 1.48-.248A9.72 9.72 0 0 0 19.266 2.5Z" />
+                                    <path fill-rule="evenodd" d="M12 2.25A6.75 6.75 0 0 0 5.25 9v.75a8.217 8.217 0 0 1-2.119 5.52.75.75 0 0 0 .298 1.206c1.544.57 3.16.99 4.831 1.243a3.75 3.75 0 1 0 7.48 0 24.583 24.583 0 0 0 4.83-1.244.75.75 0 0 0 .298-1.205 8.217 8.217 0 0 1-2.118-5.52V9A6.75 6.75 0 0 0 12 2.25ZM9.75 18c0-.034 0-.067.002-.1a25.05 25.05 0 0 0 4.496 0l.002.1a2.25 2.25 0 1 1-4.5 0Z" clip-rule="evenodd" />
+                                </svg>
+                                🔔 Erinnerung
+                            </button>
                             <button id="btn-create-geschenk" class="py-2 px-4 bg-gradient-to-r from-pink-600 to-purple-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2 text-sm">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
                                     <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
@@ -2242,6 +2249,9 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Erinnerungen-Übersicht -->
+                <div id="gm-erinnerungen-uebersicht" class="mb-3"></div>
 
                 <!-- Personen-Übersicht -->
                 <div class="bg-white rounded-lg shadow p-3 mb-3">
@@ -2437,6 +2447,9 @@
                             
                             <!-- Bearbeitungs-Buttons (nur bei bestehendem Eintrag sichtbar) -->
                             <div id="gm-modal-actions" class="flex gap-2" style="display: none;">
+                                <button onclick="window.openErinnerungModal(document.getElementById('gm-id').value)" class="px-3 py-2 bg-orange-500 text-white font-bold rounded-lg hover:bg-orange-600 transition text-sm" title="Erinnerung für dieses Geschenk">
+                                    🔔 Erinnerung
+                                </button>
                                 <button onclick="window.copyGeschenk(document.getElementById('gm-id').value)" class="px-3 py-2 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 transition text-sm" title="Kopieren">
                                     📋 Kopieren
                                 </button>
