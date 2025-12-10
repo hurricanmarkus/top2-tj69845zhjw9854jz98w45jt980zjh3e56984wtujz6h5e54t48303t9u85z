@@ -1,4 +1,5 @@
 // // @ts-check
+
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 //
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, getDocs, writeBatch, addDoc, query, where, serverTimestamp, orderBy, limit, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";

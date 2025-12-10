@@ -126,8 +126,6 @@ let geschenkeSettingsRef = null;
 let geschenkeThemenRef = null;
 let geschenkeKontakteRef = null;
 let geschenkeVorlagenRef = null;
-let geschenkeFreigabenRef = null;
-let geschenkeEinladungenRef = null;
 let geschenkeBudgetsRef = null;
 let geschenkeErinnerungenRef = null;
 
@@ -135,14 +133,8 @@ let GESCHENKE = {};
 let THEMEN = {};
 let KONTAKTE = {};
 let VORLAGEN = {};
-let FREIGABEN = {};
-let EINLADUNGEN = {};
 let BUDGETS = {};
 let ERINNERUNGEN = {};
-
-// ✅ NEU: Cache für geteilte Daten
-let SHARED_KONTAKTE = {};  // Kontakte vom Owner bei geteilten Themen
-let currentFreigabe = null;  // Aktuelle Freigabe für gefiltertes Laden
 let currentThemaId = null;
 let searchTerm = '';
 let currentFilter = {};
@@ -336,8 +328,6 @@ export async function initializeGeschenkemanagement() {
     geschenkeThemenRef = collection(db, ...userDataPath, 'geschenke_themen');
     geschenkeKontakteRef = collection(db, ...userDataPath, 'geschenke_kontakte');
     geschenkeVorlagenRef = collection(db, ...userDataPath, 'geschenke_vorlagen');
-    geschenkeFreigabenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_freigaben');
-    geschenkeEinladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_einladungen');
     geschenkeBudgetsRef = collection(db, ...userDataPath, 'geschenke_budgets');
     geschenkeErinnerungenRef = collection(db, ...userDataPath, 'geschenke_erinnerungen');
     
@@ -356,8 +346,6 @@ export async function initializeGeschenkemanagement() {
         listenForVorlagen();      // 📑 Vorlagen
         listenForBudgets();       // 💰 Budgets
         listenForErinnerungen();  // 🔔 Erinnerungen
-        listenForFreigaben();     // 🔐 Freigaben
-        listenForEinladungen();   // 📨 Einladungen
         
         // Warte kurz, damit Listener initial Daten laden können
         await new Promise(resolve => setTimeout(resolve, 800));
@@ -472,11 +460,10 @@ function listenForThemen() {
         return;
     }
     
-    console.log("🎧 Themen-Listener gestartet (eigene Themen)");
+    console.log("🎧 Themen-Listener gestartet");
     
-    // 1️⃣ Eigene Themen
-    onSnapshot(geschenkeThemenRef, async (snapshot) => {
-        console.log(`📂 Eigene Themen: ${snapshot.size} Dokumente`);
+    onSnapshot(geschenkeThemenRef, (snapshot) => {
+        console.log(`📂 Themen: ${snapshot.size} Dokumente`);
         
         const oldThemaId = currentThemaId;
         THEMEN = {};
@@ -485,17 +472,11 @@ function listenForThemen() {
             const data = docSnap.data();
             THEMEN[docSnap.id] = { 
                 id: docSnap.id, 
-                ...data,
-                istEigenes: true,
-                istGeteilt: false,
-                besitzerUserId: currentUser.mode
+                ...data
             };
         });
         
-        // 2️⃣ Geteilte Themen laden (via Freigaben) - ✅ MIT AWAIT!
-        await loadSharedThemen();
-        
-        console.log("✅ ALLE Themen geladen (eigene + geteilte):", Object.keys(THEMEN).length);
+        console.log("✅ Themen geladen:", Object.keys(THEMEN).length);
         
         // Gespeichertes Thema wiederherstellen oder erstes Thema wählen
         const savedThemaId = localStorage.getItem('gm_current_thema');
@@ -527,74 +508,7 @@ function listenForThemen() {
     });
 }
 
-// ✅ Geteilte Themen laden (von anderen Usern via Freigaben)
-async function loadSharedThemen() {
-    const myAppUserId = currentUser?.mode;
-    if (!myAppUserId) {
-        console.log("⚠️ loadSharedThemen: currentUser.mode nicht vorhanden");
-        return;
-    }
-    
-    console.log("🔍 Prüfe geteilte Themen für User:", myAppUserId);
-    console.log("📋 Verfügbare Freigaben:", Object.keys(FREIGABEN).length);
-    
-    let gefundenCount = 0;
-    
-    // Finde alle aktiven Freigaben für mich
-    for (const freigabeId in FREIGABEN) {
-        const freigabe = FREIGABEN[freigabeId];
-        
-        console.log(`  🔍 Prüfe Freigabe ${freigabeId}:`, {
-            aktiv: freigabe.aktiv,
-            userId: freigabe.userId,
-            myAppUserId: myAppUserId,
-            passt: freigabe.aktiv && freigabe.userId === myAppUserId
-        });
-        
-        // Nur aktive Freigaben, die für mich sind
-        if (!freigabe.aktiv) {
-            console.log(`    ⏭️ Übersprungen: nicht aktiv`);
-            continue;
-        }
-        
-        if (freigabe.userId !== myAppUserId) {
-            console.log(`    ⏭️ Übersprungen: nicht für mich (${freigabe.userId} !== ${myAppUserId})`);
-            continue;
-        }
-        
-        try {
-            const ownerUserId = freigabe.besitzerId;  // App User ID des Besitzers
-            const themaId = freigabe.themaId;
-            
-            console.log(`  📖 Lade geteiltes Thema von ${ownerUserId}, Thema ID: ${themaId}`);
-            
-            // Lade Thema vom Besitzer
-            const themaRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', ownerUserId, 'geschenke_themen', themaId);
-            const themaSnap = await getDoc(themaRef);
-            
-            if (themaSnap.exists()) {
-                const themaData = themaSnap.data();
-                THEMEN[themaSnap.id] = {
-                    id: themaSnap.id,
-                    ...themaData,
-                    istEigenes: false,
-                    istGeteilt: true,
-                    besitzerUserId: ownerUserId,
-                    besitzerName: freigabe.freigegebenVonName,
-                    freigabe: freigabe
-                };
-                gefundenCount++;
-                console.log(`  ✅ Geteiltes Thema geladen: "${themaData.name}" von ${freigabe.freigegebenVonName}`);
-            } else {
-                console.log(`  ❌ Thema existiert nicht (mehr): ${themaId}`);
-            }
-        } catch (e) {
-            console.error(`  ❌ Fehler beim Laden:`, e);
-        }
-    }
-    
-    console.log(`✅ loadSharedThemen abgeschlossen: ${gefundenCount} geteilte Themen gefunden`);
-}
+// Funktion entfernt - Freigabesystem wurde deaktiviert
 
 // ❌ VERALTET: Wird durch listenForThemen() ersetzt
 async function loadThemen() {
@@ -635,129 +549,19 @@ async function loadVorlagen() {
 }
 
 // 🎧 NEUER Freigaben-Listener
-function listenForFreigaben() {
-    if (!geschenkeFreigabenRef) {
-        console.error("❌ Freigaben-Ref fehlt");
-        return;
-    }
-    
-    console.log("🎧 NEU: Freigaben-Listener gestartet");
-    
-    onSnapshot(geschenkeFreigabenRef, async (snapshot) => {
-        console.log(`📦 Freigaben: ${snapshot.size} Dokumente`);
-        
-        // Cache leeren und neu füllen
-        FREIGABEN = {};
-        snapshot.forEach(doc => {
-            FREIGABEN[doc.id] = { id: doc.id, ...doc.data() };
-        });
-        
-        console.log("✅ Freigaben geladen:", Object.keys(FREIGABEN).length);
-        
-        // ✅ Geteilte Themen neu laden wenn Freigaben sich ändern - MIT AWAIT!
-        await loadSharedThemen();
-        
-        // UI aktualisieren
-        renderThemenDropdown();
-        
-        if (document.getElementById('gm-freigaben-list')) {
-            renderShareSettings();
-        }
-    });
-}
+// Funktionen entfernt - Freigabesystem wurde deaktiviert
 
-// ✅ Legacy-Funktion für Kompatibilität
-async function loadFreigaben() {
-    console.warn("⚠️ loadFreigaben() ist veraltet, verwende listenForFreigaben()");
-    try {
-        const snapshot = await getDocs(geschenkeFreigabenRef);
-        FREIGABEN = {};
-        snapshot.forEach((docSnap) => {
-            FREIGABEN[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
-        });
-    } catch (e) {
-        console.error("Fehler beim Laden der Freigaben:", e);
-    }
-}
-
-async function updateCollectionForThema() {
+function updateCollectionForThema() {
     if (currentThemaId && db && currentUser?.mode) {
-        const thema = THEMEN[currentThemaId];
-        
-        // ✅ KORRIGIERT: Verwende Owner-User-ID (auch bei geteilten Themen!)
-        let ownerUserId;
-        let istGeteilt = false;
-        
-        if (thema?.istGeteilt) {
-            // Geteiltes Thema: verwende besitzerUserId vom Owner
-            ownerUserId = thema.besitzerUserId;
-            istGeteilt = true;
-            console.log("📖 Geteiltes Thema von:", ownerUserId);
-            
-            // ✅ NEU: Lade Kontakte vom Owner
-            await loadOwnerKontakte(ownerUserId);
-            
-            // ✅ NEU: Setze aktuelle Freigabe für Filterung
-            const freigabeId = `${currentThemaId}_${currentUser.mode}`;
-            currentFreigabe = FREIGABEN[freigabeId] || null;
-            console.log("🔐 Aktuelle Freigabe:", currentFreigabe);
-        } else {
-            // Eigenes Thema: verwende eigene User-ID
-            ownerUserId = currentUser.mode;
-            istGeteilt = false;
-            currentFreigabe = null;
-            SHARED_KONTAKTE = {};  // Leere shared contacts
-            console.log("📂 Eigenes Thema");
-        }
-        
-        if (!ownerUserId) {
-            console.error("❌ FEHLER: Owner User ID nicht gefunden!");
-            return;
-        }
+        const ownerUserId = currentUser.mode;
         
         // Geschenke werden als Subcollection unter dem User-Thema gespeichert
         geschenkeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'users', ownerUserId, 'geschenke_themen', currentThemaId, 'geschenke');
         
-        console.log("📦 updateCollectionForThema - Owner:", ownerUserId, "Thema:", currentThemaId);
+        console.log("📦 updateCollectionForThema - User:", ownerUserId, "Thema:", currentThemaId);
         console.log("📦 Collection-Pfad:", geschenkeCollection.path);
-        console.log("📦 Ist geteilt:", istGeteilt);
         
         listenForGeschenke();
-    }
-}
-
-// ✅ NEU: Lade Kontakte vom Owner (bei geteilten Themen)
-async function loadOwnerKontakte(ownerUserId) {
-    if (!ownerUserId) return;
-    
-    console.log("👥 Lade Kontakte vom Owner:", ownerUserId);
-    
-    try {
-        const ownerKontakteRef = collection(db, 'artifacts', appId, 'public', 'data', 'users', ownerUserId, 'geschenke_kontakte');
-        const snapshot = await getDocs(ownerKontakteRef);
-        
-        SHARED_KONTAKTE = {};
-        snapshot.forEach((docSnap) => {
-            SHARED_KONTAKTE[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
-        });
-        
-        console.log("✅ Owner-Kontakte geladen:", Object.keys(SHARED_KONTAKTE).length);
-    } catch (error) {
-        console.error("❌ Fehler beim Laden der Owner-Kontakte:", error);
-        SHARED_KONTAKTE = {};
-    }
-}
-
-// ✅ NEU: Hilfsfunktion - gibt die richtigen Kontakte zurück
-function getActiveKontakte() {
-    const thema = THEMEN[currentThemaId];
-    
-    if (thema?.istGeteilt && Object.keys(SHARED_KONTAKTE).length > 0) {
-        // Bei geteilten Themen: verwende Owner-Kontakte
-        return SHARED_KONTAKTE;
-    } else {
-        // Bei eigenen Themen: verwende eigene Kontakte
-        return KONTAKTE;
     }
 }
 
@@ -768,104 +572,24 @@ export function listenForGeschenke() {
     if (!geschenkeCollection) return;
     
     onSnapshot(query(geschenkeCollection, orderBy('erstelltAm', 'desc')), (snapshot) => {
-        const thema = THEMEN[currentThemaId];
-        const istGeteilt = thema?.istGeteilt || false;
-        
         console.log("📦 listenForGeschenke - Geladen:", snapshot.size, "Geschenke");
-        console.log("📦 Ist geteilt:", istGeteilt);
-        console.log("📦 Aktuelle Freigabe:", currentFreigabe);
         
-        // ALLE Geschenke laden
-        const alleGeschenkeRaw = {};
+        GESCHENKE = {};
         snapshot.forEach((docSnap) => {
-            alleGeschenkeRaw[docSnap.id] = { 
+            GESCHENKE[docSnap.id] = { 
                 id: docSnap.id, 
                 themaId: currentThemaId,
                 ...docSnap.data() 
             };
         });
         
-        // ✅ NEU: Bei geteilten Themen Freigabe-Filter anwenden
-        if (istGeteilt && currentFreigabe) {
-            console.log("🔍 Wende Freigabe-Filter an...");
-            GESCHENKE = filterGeschenkeByFreigabe(alleGeschenkeRaw, currentFreigabe);
-            console.log("✅ Gefiltert:", Object.keys(GESCHENKE).length, "von", Object.keys(alleGeschenkeRaw).length);
-        } else {
-            // Eigenes Thema oder komplette Freigabe: alle Geschenke
-            GESCHENKE = alleGeschenkeRaw;
-            console.log("✅ Ungefiltert:", Object.keys(GESCHENKE).length);
-        }
+        console.log("✅ Geschenke geladen:", Object.keys(GESCHENKE).length);
         
         renderGeschenkeTabelle();
         updateDashboardStats();
     }, (error) => {
         console.error("Fehler beim Laden der Geschenke:", error);
     });
-}
-
-// ✅ NEU: Filtert Geschenke basierend auf Freigabe-Regeln
-function filterGeschenkeByFreigabe(geschenkeObj, freigabe) {
-    if (!freigabe) return geschenkeObj;
-    
-    // Wenn "komplett" oder kein Filter: alles durchlassen
-    if (freigabe.shareType === 'komplett' || freigabe.freigabeTyp === 'komplett') {
-        console.log("  ℹ️ Komplette Freigabe - keine Filterung");
-        return geschenkeObj;
-    }
-    
-    // Gefilterte Freigabe
-    const filter = freigabe.filter || {};
-    const filterRules = freigabe.filterRules || {};
-    
-    console.log("  🔍 Freigabe-Typ:", freigabe.shareType || freigabe.freigabeTyp);
-    console.log("  🔍 Filter:", filter);
-    console.log("  🔍 FilterRules:", filterRules);
-    
-    if (Object.keys(filter).length === 0 && Object.keys(filterRules).length === 0) {
-        console.log("  ℹ️ Keine Filter-Regeln - zeige alles");
-        return geschenkeObj;
-    }
-    
-    const gefiltert = {};
-    
-    for (const [id, geschenk] of Object.entries(geschenkeObj)) {
-        let matches = false;
-        
-        // Prüfe Filter-Regeln
-        // Filter: { fuer: ['person1', 'person2'], von: ['person3'] }
-        if (filter.fuer && Array.isArray(filter.fuer) && filter.fuer.length > 0) {
-            // Geschenk muss für eine der Personen sein
-            const fuerArray = geschenk.fuer || [];
-            if (fuerArray.some(personId => filter.fuer.includes(personId))) {
-                matches = true;
-            }
-        }
-        
-        if (filter.von && Array.isArray(filter.von) && filter.von.length > 0) {
-            // Geschenk muss von einer der Personen sein
-            const vonArray = geschenk.von || [];
-            if (vonArray.some(personId => filter.von.includes(personId))) {
-                matches = true;
-            }
-        }
-        
-        // filterRules ist alternatives Format (legacy)
-        if (filterRules.personen && Array.isArray(filterRules.personen)) {
-            const fuerArray = geschenk.fuer || [];
-            const vonArray = geschenk.von || [];
-            if (fuerArray.some(personId => filterRules.personen.includes(personId)) ||
-                vonArray.some(personId => filterRules.personen.includes(personId))) {
-                matches = true;
-            }
-        }
-        
-        if (matches) {
-            gefiltert[id] = geschenk;
-        }
-    }
-    
-    console.log("  ✅ Gefilterte Geschenke:", Object.keys(gefiltert).length);
-    return gefiltert;
 }
 
 // ========================================
@@ -1023,51 +747,15 @@ function renderThemenDropdown() {
 }
 
 function renderDashboard() {
-    // ✅ NEU: Badge für Einladungen aktualisieren
-    const myName = currentUser?.displayName;
-    const pendingCount = Object.values(EINLADUNGEN).filter(e => 
-        e.empfaengerName === myName && e.status === 'pending'
-    ).length;
-    updateInvitationBadge(pendingCount);
-    
-    // ✅ NEU: Blinkender Button für offene Einladungen AM DASHBOARD
-    showPendingInvitationsAlert(pendingCount);
-    
     renderThemenDropdown();
     renderPersonenUebersicht();
     renderGeschenkeTabelle();
     updateDashboardStats();
 }
 
-// ✅ NEU: Blinkender Alert-Button für offene Einladungen
+// Funktion entfernt - Freigabesystem wurde deaktiviert
 function showPendingInvitationsAlert(count) {
-    // Finde oder erstelle Container für Einladungs-Alert
-    let alertContainer = document.getElementById('gm-einladungen-alert');
-    
-    if (!alertContainer) {
-        // Erstelle Container direkt unter dem Header (vor Personen-Übersicht)
-        const personenContainer = document.getElementById('gm-personen-uebersicht');
-        if (personenContainer) {
-            alertContainer = document.createElement('div');
-            alertContainer.id = 'gm-einladungen-alert';
-            personenContainer.parentNode.insertBefore(alertContainer, personenContainer);
-        }
-    }
-    
-    if (!alertContainer) return;
-    
-    if (count > 0) {
-        alertContainer.innerHTML = `
-            <div class="mb-4 bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500 p-4 rounded-2xl shadow-2xl animate-pulse border-4 border-white">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-4">
-                        <div class="text-6xl animate-bounce">📨</div>
-                        <div>
-                            <h3 class="text-2xl font-bold text-white drop-shadow-lg">
-                                ${count} Offene Einladung${count > 1 ? 'en' : ''}!
-                            </h3>
-                            <p class="text-white text-sm">Klicke hier, um sie anzusehen</p>
-                        </div>
+    // Deaktiviert
                     </div>
                     <button onclick="showInvitationsModal()" 
                         class="px-8 py-4 bg-white text-red-600 font-bold rounded-xl hover:bg-red-50 transition text-lg shadow-xl hover:scale-105 transform">
@@ -1138,68 +826,7 @@ window.showAllPendingInvitations = function() {
     }
 };
 
-// ✅ TEST-FUNKTION: Simuliere geteiltes Thema
-window.testSharedThema = async function() {
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("🧪 TEST: Geteiltes Thema");
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    
-    const thema = THEMEN[currentThemaId];
-    if (!thema) {
-        console.error("❌ Kein Thema aktiv!");
-        return;
-    }
-    
-    console.log("📂 Aktuelles Thema:", thema.name);
-    console.log("  Ist geteilt:", thema.istGeteilt);
-    console.log("  Besitzer:", thema.besitzerUserId, "-", thema.besitzerName);
-    console.log("");
-    
-    console.log("👥 KONTAKTE:");
-    console.log("  Eigene KONTAKTE:", Object.keys(KONTAKTE).length);
-    Object.entries(KONTAKTE).forEach(([id, k]) => {
-        console.log(`    ${id}: ${k.name}`);
-    });
-    console.log("");
-    
-    console.log("  Geteilte KONTAKTE:", Object.keys(SHARED_KONTAKTE).length);
-    Object.entries(SHARED_KONTAKTE).forEach(([id, k]) => {
-        console.log(`    ${id}: ${k.name}`);
-    });
-    console.log("");
-    
-    console.log("  Active Kontakte:", Object.keys(getActiveKontakte()).length);
-    console.log("");
-    
-    console.log("🎁 GESCHENKE:", Object.keys(GESCHENKE).length);
-    Object.values(GESCHENKE).slice(0, 5).forEach(g => {
-        const activeK = getActiveKontakte();
-        const fuerNames = (g.fuer || []).map(id => activeK[id]?.name || `MISSING:${id}`);
-        const vonNames = (g.von || []).map(id => activeK[id]?.name || `MISSING:${id}`);
-        console.log(`  ${g.geschenk || 'Unbekannt'}`);
-        console.log(`    FÜR: ${fuerNames.join(', ')}`);
-        console.log(`    VON: ${vonNames.join(', ')}`);
-    });
-    console.log("");
-    
-    console.log("🔐 AKTUELLE FREIGABE:", currentFreigabe ? "Ja" : "Nein");
-    if (currentFreigabe) {
-        console.log("  Typ:", currentFreigabe.freigabeTyp || currentFreigabe.shareType);
-        console.log("  Filter:", currentFreigabe.filter);
-        console.log("  Filter Rules:", currentFreigabe.filterRules);
-    }
-    
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    
-    return {
-        thema,
-        eigeneKontakte: KONTAKTE,
-        sharedKontakte: SHARED_KONTAKTE,
-        activeKontakte: getActiveKontakte(),
-        geschenke: GESCHENKE,
-        freigabe: currentFreigabe
-    };
-};
+// Funktion entfernt - Freigabesystem wurde deaktiviert
 
 // ✅ DIAGNOSE-TOOL: Zeige kompletten Status
 window.diagnoseGeschenkeSystem = function() {
@@ -1215,49 +842,20 @@ window.diagnoseGeschenkeSystem = function() {
     console.log("  getCurrentUserId():", getCurrentUserId());
     console.log("");
     
-    console.log("📂 THEMEN (GESAMT):", Object.keys(THEMEN).length);
+    console.log("📂 THEMEN:", Object.keys(THEMEN).length);
     Object.values(THEMEN).forEach(t => {
-        console.log(`  ${t.istGeteilt ? '📘' : '📁'} ${t.name}:`, {
+        console.log(`  📁 ${t.name}:`, {
             id: t.id,
-            istEigenes: t.istEigenes,
-            istGeteilt: t.istGeteilt,
-            besitzerUserId: t.besitzerUserId,
-            besitzerName: t.besitzerName,
             archiviert: t.archiviert
-        });
-    });
-    console.log("");
-    
-    console.log("📨 EINLADUNGEN:", Object.keys(EINLADUNGEN).length);
-    Object.entries(EINLADUNGEN).forEach(([id, inv]) => {
-        console.log(`  ${inv.themaName}:`, {
-            absender: inv.absenderName,
-            empfaenger: inv.empfaengerName,
-            status: inv.status
-        });
-    });
-    console.log("");
-    
-    console.log("🔐 FREIGABEN:", Object.keys(FREIGABEN).length);
-    Object.entries(FREIGABEN).forEach(([id, f]) => {
-        console.log(`  ${f.themaName}:`, {
-            userId: f.userId,
-            userName: f.userName,
-            besitzerId: f.besitzerId,
-            aktiv: f.aktiv,
-            rechte: f.rechte
         });
     });
     console.log("");
     
     console.log("👥 KONTAKTE:", Object.keys(KONTAKTE).length);
     console.log("🎁 GESCHENKE:", Object.keys(GESCHENKE).length);
+    console.log("📑 VORLAGEN:", Object.keys(VORLAGEN).length);
+    console.log("💰 BUDGETS:", Object.keys(BUDGETS).length);
     
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("💡 ERWARTUNG:");
-    console.log("  - Eigene Themen: istGeteilt = false");
-    console.log("  - Geteilte Themen: istGeteilt = true + besitzerName");
-    console.log("  - Freigabe.userId muss mit currentUser.mode übereinstimmen");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     
     return {
@@ -1267,10 +865,10 @@ window.diagnoseGeschenkeSystem = function() {
             appUserId: getCurrentUserId()
         },
         themen: THEMEN,
-        freigaben: FREIGABEN,
-        einladungen: EINLADUNGEN,
         kontakte: KONTAKTE,
-        geschenke: GESCHENKE
+        geschenke: GESCHENKE,
+        vorlagen: VORLAGEN,
+        budgets: BUDGETS
     };
 };
 
@@ -1279,49 +877,18 @@ function renderPersonenUebersicht() {
     if (!container || !currentThemaId) return;
     
     const thema = THEMEN[currentThemaId];
-    const istGeteilt = thema?.istGeteilt || false;
-    
-    // ✅ NEU: Verwende die richtigen Kontakte
-    const activeKontakte = getActiveKontakte();
-    
-    console.log("👥 renderPersonenUebersicht");
-    console.log("  Ist geteilt:", istGeteilt);
-    console.log("  Active Kontakte:", Object.keys(activeKontakte).length);
-    console.log("  Thema Personen:", thema?.personen?.length || 0);
     
     if (!thema?.personen || thema.personen.length === 0) {
         container.innerHTML = `
             <div class="text-center py-8 text-gray-500">
                 <p class="text-lg font-semibold">Keine Personen hinzugefügt</p>
                 <p class="text-sm">Füge Personen aus deinem Kontaktbuch hinzu, um Geschenke zu planen.</p>
-                ${!istGeteilt ? `
-                    <button onclick="window.openAddPersonToThemaModal()" class="mt-3 px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition">
-                        + Person hinzufügen
-                    </button>
-                ` : '<p class="text-xs text-gray-400 mt-2">📘 Dies ist ein geteiltes Thema</p>'}
+                <button onclick="window.openAddPersonToThemaModal()" class="mt-3 px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition">
+                    + Person hinzufügen
+                </button>
             </div>
         `;
         return;
-    }
-    
-    // ✅ NEU: Bei gefilterten Freigaben nur freigegebene Personen anzeigen
-    let sichtbarePersonen = thema.personen;
-    
-    if (istGeteilt && currentFreigabe && currentFreigabe.freigabeTyp === 'gefiltert') {
-        const filter = currentFreigabe.filter || {};
-        const filterRules = currentFreigabe.filterRules || {};
-        
-        // Sammle alle freigegebenen Personen-IDs
-        const freigegebenePersonen = new Set();
-        
-        if (filter.fuer) freigegebenePersonen.add(...filter.fuer);
-        if (filter.von) freigegebenePersonen.add(...filter.von);
-        if (filterRules.personen) freigegebenePersonen.add(...filterRules.personen);
-        
-        if (freigegebenePersonen.size > 0) {
-            sichtbarePersonen = thema.personen.filter(pid => freigegebenePersonen.has(pid));
-            console.log("  🔍 Gefilterte Personen:", sichtbarePersonen.length, "von", thema.personen.length);
-        }
     }
     
     // Gesamtstatistik berechnen
@@ -1331,13 +898,10 @@ function renderPersonenUebersicht() {
         fertig: alleGeschenke.filter(g => g.status === 'abgeschlossen').length
     };
     
-    // Personen-Daten sammeln - ✅ WICHTIG: Verwende activeKontakte!
-    const personenDaten = sichtbarePersonen.map(personId => {
-        const person = activeKontakte[personId];
-        if (!person) {
-            console.warn("  ⚠️ Person nicht gefunden:", personId);
-            return null;
-        }
+    // Personen-Daten sammeln
+    const personenDaten = thema.personen.map(personId => {
+        const person = KONTAKTE[personId];
+        if (!person) return null;
         
         const geschenkeFuerPerson = alleGeschenke.filter(g => g.fuer && g.fuer.includes(personId));
         return {
@@ -1698,13 +1262,10 @@ function renderGeschenkeTabelle() {
 }
 
 function renderGeschenkRow(geschenk) {
-    // ✅ NEU: Verwende aktive Kontakte (eigene oder geteilte)
-    const activeKontakte = getActiveKontakte();
-    
     const statusConfig = STATUS_CONFIG[geschenk.status] || STATUS_CONFIG.offen;
-    const fuerPersonen = (geschenk.fuer || []).map(id => activeKontakte[id]?.name || 'Unbekannt').join(', ');
-    const vonPersonen = (geschenk.von || []).map(id => activeKontakte[id]?.name || 'Unbekannt').join(', ');
-    const beteiligtePersonen = (geschenk.beteiligung || []).map(id => activeKontakte[id]?.name || 'Unbekannt').join(', ');
+    const fuerPersonen = (geschenk.fuer || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join(', ');
+    const vonPersonen = (geschenk.von || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join(', ');
+    const beteiligtePersonen = (geschenk.beteiligung || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join(', ');
     
     return `
         <tr class="hover:bg-pink-50 transition cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">
@@ -1717,7 +1278,7 @@ function renderGeschenkRow(geschenk) {
             <td class="px-3 py-3 text-sm text-gray-600">${vonPersonen || '-'}</td>
             <td class="px-3 py-3 text-sm text-gray-600">${geschenk.id?.slice(-4) || '-'}</td>
             <td class="px-3 py-3 text-sm font-medium text-gray-900">${geschenk.geschenk || '-'}</td>
-            <td class="px-3 py-3 text-sm text-gray-600">${geschenk.bezahltVon ? (activeKontakte[geschenk.bezahltVon]?.name || '-') : '-'}</td>
+            <td class="px-3 py-3 text-sm text-gray-600">${geschenk.bezahltVon ? (KONTAKTE[geschenk.bezahltVon]?.name || '-') : '-'}</td>
             <td class="px-3 py-3 text-sm text-gray-600">${beteiligtePersonen || '-'}</td>
             <td class="px-3 py-3 text-sm font-bold text-gray-900">${geschenk.gesamtkosten ? formatCurrency(geschenk.gesamtkosten) : '-'}</td>
             <td class="px-3 py-3 text-sm font-bold text-green-700">${geschenk.eigeneKosten ? formatCurrency(geschenk.eigeneKosten) : '-'}</td>
@@ -2144,8 +1705,6 @@ function renderSettingsTabs() {
     renderKontaktbuch();
     // Themen rendern
     renderThemenVerwaltung();
-    // Freigaben rendern
-    renderFreigabenVerwaltung();
     // Optionen rendern
     renderOptionenVerwaltung();
 }
@@ -5004,77 +4563,7 @@ window.deleteVorlage = async function(vorlageId) {
 // ========================================
 
 // 🎧 NEUER Einladungen-Listener
-function listenForEinladungen() {
-    if (!geschenkeEinladungenRef) {
-        console.error("❌ Einladungen-Ref fehlt");
-        return;
-    }
-    
-    console.log("🎧 NEU: Einladungen-Listener gestartet");
-    
-    onSnapshot(geschenkeEinladungenRef, (snapshot) => {
-        console.log(`📨 Einladungen: ${snapshot.size} Dokumente`);
-        
-        // Cache leeren und neu füllen
-        EINLADUNGEN = {};
-        snapshot.forEach(doc => {
-            EINLADUNGEN[doc.id] = { id: doc.id, ...doc.data() };
-        });
-        
-        console.log("✅ Einladungen geladen:", Object.keys(EINLADUNGEN).length);
-        
-        // Prüfe auf offene Einladungen für mich
-        const myName = currentUser?.displayName;
-        const pending = Object.values(EINLADUNGEN).filter(e => 
-            e.empfaengerName === myName && e.status === 'pending'
-        );
-        
-        console.log(`📨 ${pending.length} offene Einladungen für ${myName}`);
-        
-        // Badge aktualisieren
-        updateInvitationBadge(pending.length);
-        
-        // ✅ Dashboard-Alert aktualisieren
-        showPendingInvitationsAlert(pending.length);
-        
-        // UI aktualisieren
-        if (document.getElementById('gm-freigaben-list')) {
-            renderShareSettings();
-        }
-    });
-}
-
-// 🔴 Badge für offene Einladungen
-function updateInvitationBadge(count) {
-    const badge = document.getElementById('gm-einladungen-badge');
-    if (!badge) return;
-    
-    if (count > 0) {
-        badge.innerHTML = `
-            <button onclick="showInvitationsModal()" 
-                class="px-4 py-2 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition animate-pulse">
-                📨 ${count} Einladung${count > 1 ? 'en' : ''}
-            </button>
-        `;
-        badge.style.display = 'block';
-    } else {
-        badge.style.display = 'none';
-    }
-}
-
-// ✅ Legacy-Funktion für Kompatibilität (wird nicht mehr verwendet)
-async function loadEinladungen() {
-    console.warn("⚠️ loadEinladungen() ist veraltet, verwende listenForEinladungen()");
-    try {
-        const snapshot = await getDocs(geschenkeEinladungenRef);
-        EINLADUNGEN = {};
-        snapshot.forEach((docSnap) => {
-            EINLADUNGEN[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
-        });
-    } catch (e) {
-        console.error("Fehler beim Laden der Einladungen:", e);
-    }
-}
+// Funktionen entfernt - Freigabesystem wurde deaktiviert
 
 // ✅ LIVE-LISTENER für Budgets
 function listenForBudgets() {
@@ -5879,18 +5368,15 @@ window.exportToExcel = function() {
     // CSV erstellen (Excel-kompatibel)
     const headers = ['Status', 'FÜR', 'VON', 'ID', 'Geschenk', 'Shop', 'Bezahlt von', 'Beteiligung', 'Gesamtkosten', 'Eigene Kosten', 'SOLL-Bezahlung', 'IST-Bezahlung', 'Standort', 'Bestellnummer', 'Rechnungsnummer', 'Notizen'];
     
-    // ✅ Verwende aktive Kontakte für Namen-Auflösung
-    const activeKontakte = getActiveKontakte();
-    
     const rows = geschenkeArray.map(g => [
         STATUS_CONFIG[g.status]?.label || g.status,
-        (g.fuer || []).map(id => activeKontakte[id]?.name || 'Unbekannt').join('; '),
-        (g.von || []).map(id => activeKontakte[id]?.name || 'Unbekannt').join('; '),
+        (g.fuer || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join('; '),
+        (g.von || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join('; '),
         g.id?.slice(-4) || '',
         g.geschenk || '',
         g.shop || '',
-        activeKontakte[g.bezahltVon]?.name || '',
-        (g.beteiligung || []).map(id => activeKontakte[id]?.name || 'Unbekannt').join('; '),
+        KONTAKTE[g.bezahltVon]?.name || '',
+        (g.beteiligung || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join('; '),
         g.gesamtkosten || 0,
         g.eigeneKosten || 0,
         ZAHLUNGSARTEN[g.sollBezahlung]?.label || g.sollBezahlung || '',
@@ -5981,19 +5467,16 @@ window.exportToPDF = function() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${(() => {
-                        const activeKontakte = getActiveKontakte();
-                        return geschenkeArray.map(g => `
-                            <tr>
-                                <td>${STATUS_CONFIG[g.status]?.icon || ''} ${STATUS_CONFIG[g.status]?.label || g.status}</td>
-                                <td>${(g.fuer || []).map(id => activeKontakte[id]?.name || 'Unbekannt').join(', ')}</td>
-                                <td>${g.geschenk || '-'}</td>
-                                <td>${formatCurrency(g.gesamtkosten || 0)}</td>
-                                <td>${formatCurrency(g.eigeneKosten || 0)}</td>
-                                <td>${g.standort || '-'}</td>
-                            </tr>
-                        `).join('');
-                    })()}
+                    ${geschenkeArray.map(g => `
+                        <tr>
+                            <td>${STATUS_CONFIG[g.status]?.icon || ''} ${STATUS_CONFIG[g.status]?.label || g.status}</td>
+                            <td>${(g.fuer || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join(', ')}</td>
+                            <td>${g.geschenk || '-'}</td>
+                            <td>${formatCurrency(g.gesamtkosten || 0)}</td>
+                            <td>${formatCurrency(g.eigeneKosten || 0)}</td>
+                            <td>${g.standort || '-'}</td>
+                        </tr>
+                    `).join('')}
                 </tbody>
             </table>
             <div class="footer">
