@@ -2428,6 +2428,175 @@ window.deleteGeschenk = async function(geschenkId) {
     }
 };
 
+// ========================================
+// VORLAGEN-SYSTEM (Kopieren, Speichern, Laden)
+// ========================================
+
+window.copyGeschenk = async function(geschenkId) {
+    const geschenk = GESCHENKE[geschenkId];
+    if (!geschenk) {
+        alertUser('Geschenk nicht gefunden!', 'error');
+        return;
+    }
+    
+    try {
+        // Geschenk-Daten kopieren (ohne ID)
+        const geschenkData = {
+            geschenk: geschenk.geschenk + ' (Kopie)',
+            status: 'offen',  // Reset Status bei Kopie
+            fuer: geschenk.fuer || [],
+            von: geschenk.von || [],
+            beteiligung: geschenk.beteiligung || [],
+            bezahltVon: geschenk.bezahltVon || '',
+            shop: geschenk.shop || '',
+            bestellnummer: '',  // Bestellnummer leeren
+            rechnungsnummer: '',  // Rechnungsnummer leeren
+            gesamtkosten: geschenk.gesamtkosten || 0,
+            eigeneKosten: geschenk.eigeneKosten || 0,
+            sollBezahlung: geschenk.sollBezahlung || '',
+            istBezahlung: '',  // Ist-Bezahlung leeren
+            standort: geschenk.standort || '',
+            notizen: geschenk.notizen || '',
+            erstelltAm: serverTimestamp(),
+            erstelltVon: currentUser.displayName
+        };
+        
+        await addDoc(geschenkeCollection, geschenkData);
+        alertUser('Geschenk kopiert!', 'success');
+        closeGeschenkModal();
+    } catch (e) {
+        console.error("❌ Fehler beim Kopieren:", e);
+        alertUser('Fehler beim Kopieren: ' + e.message, 'error');
+    }
+};
+
+window.saveAsVorlage = async function(geschenkId) {
+    const geschenk = GESCHENKE[geschenkId];
+    if (!geschenk) {
+        alertUser('Geschenk nicht gefunden!', 'error');
+        return;
+    }
+    
+    const vorlageName = prompt('Name für die Vorlage:', geschenk.geschenk);
+    if (!vorlageName || vorlageName.trim() === '') return;
+    
+    try {
+        // Vorlage speichern (ohne Status, Bestellnummern, etc.)
+        const vorlageData = {
+            name: vorlageName.trim(),
+            geschenk: geschenk.geschenk,
+            shop: geschenk.shop || '',
+            gesamtkosten: geschenk.gesamtkosten || 0,
+            sollBezahlung: geschenk.sollBezahlung || '',
+            standort: geschenk.standort || '',
+            notizen: geschenk.notizen || '',
+            erstelltAm: serverTimestamp(),
+            erstelltVon: currentUser.displayName
+        };
+        
+        await addDoc(geschenkeVorlagenRef, vorlageData);
+        alertUser('Vorlage gespeichert!', 'success');
+    } catch (e) {
+        console.error("❌ Fehler beim Speichern der Vorlage:", e);
+        alertUser('Fehler beim Speichern: ' + e.message, 'error');
+    }
+};
+
+window.openVorlagenModal = function() {
+    const vorlagenArray = Object.values(VORLAGEN);
+    
+    if (vorlagenArray.length === 0) {
+        alertUser('Keine Vorlagen vorhanden. Erstelle zuerst eine Vorlage!', 'info');
+        return;
+    }
+    
+    // Modal erstellen
+    const modal = document.createElement('div');
+    modal.id = 'vorlagenModal';
+    modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4';
+    modal.style.display = 'flex';
+    
+    modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto">
+            <div class="sticky top-0 bg-gradient-to-r from-purple-600 to-pink-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                <h3 class="text-xl font-bold">📑 Vorlage auswählen</h3>
+                <button onclick="document.getElementById('vorlagenModal').remove()" class="text-white/80 hover:text-white transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="p-6 space-y-3">
+                ${vorlagenArray.map(v => `
+                    <div class="border-2 border-gray-200 rounded-lg p-4 hover:border-purple-500 transition cursor-pointer"
+                         onclick="window.loadVorlage('${v.id}')">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <p class="font-bold text-gray-800 text-lg">${v.name}</p>
+                                <p class="text-sm text-gray-600 mt-1">${v.geschenk}</p>
+                                ${v.shop ? `<p class="text-xs text-gray-500 mt-1">🏪 ${v.shop}</p>` : ''}
+                                ${v.gesamtkosten ? `<p class="text-xs text-gray-500 mt-1">💰 ${formatCurrency(v.gesamtkosten)}</p>` : ''}
+                            </div>
+                            <button onclick="event.stopPropagation(); window.deleteVorlage('${v.id}')" 
+                                    class="text-red-500 hover:text-red-700 p-2" title="Vorlage löschen">
+                                🗑️
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+};
+
+window.loadVorlage = function(vorlageId) {
+    const vorlage = VORLAGEN[vorlageId];
+    if (!vorlage) {
+        alertUser('Vorlage nicht gefunden!', 'error');
+        return;
+    }
+    
+    // Felder aus Vorlage befüllen
+    document.getElementById('gm-geschenk').value = vorlage.geschenk || '';
+    document.getElementById('gm-shop').value = vorlage.shop || '';
+    document.getElementById('gm-gesamtkosten').value = vorlage.gesamtkosten || '';
+    document.getElementById('gm-soll-bezahlung').value = vorlage.sollBezahlung || '';
+    document.getElementById('gm-standort').value = vorlage.standort || '';
+    document.getElementById('gm-notizen').value = vorlage.notizen || '';
+    
+    // Status auf "offen" setzen
+    document.getElementById('gm-status').value = 'offen';
+    
+    // Modal schließen
+    document.getElementById('vorlagenModal')?.remove();
+    
+    alertUser('Vorlage geladen! Fülle noch die fehlenden Felder aus.', 'success');
+};
+
+window.deleteVorlage = async function(vorlageId) {
+    if (!confirm('Vorlage wirklich löschen?')) return;
+    
+    try {
+        await deleteDoc(doc(geschenkeVorlagenRef, vorlageId));
+        alertUser('Vorlage gelöscht!', 'success');
+        
+        // Modal neu rendern wenn noch offen
+        if (document.getElementById('vorlagenModal')) {
+            document.getElementById('vorlagenModal').remove();
+            
+            // Wenn noch Vorlagen vorhanden, Modal neu öffnen
+            if (Object.keys(VORLAGEN).length > 0) {
+                setTimeout(() => window.openVorlagenModal(), 100);
+            }
+        }
+    } catch (e) {
+        console.error("❌ Fehler beim Löschen der Vorlage:", e);
+        alertUser('Fehler beim Löschen: ' + e.message, 'error');
+    }
+};
+
 window.editKontakt = async function(id) {
     const kontakt = KONTAKTE[id];
     if (!kontakt) return;
