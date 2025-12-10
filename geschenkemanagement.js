@@ -2633,6 +2633,27 @@ window.deleteVorlage = async function(vorlageId) {
     }
 };
 
+// ✅ NEUER KONTAKT ERSTELLEN
+window.createNewKontakt = async function() {
+    const name = prompt('Name des neuen Kontakts:');
+    if (!name || name.trim() === '') return;
+    
+    try {
+        const kontaktData = {
+            name: name.trim(),
+            istEigenePerson: false,
+            erstelltAm: serverTimestamp(),
+            erstelltVon: currentUser.displayName
+        };
+        
+        await addDoc(geschenkeKontakteRef, kontaktData);
+        alertUser('Kontakt erstellt!', 'success');
+    } catch (e) {
+        console.error("Fehler beim Erstellen des Kontakts:", e);
+        alertUser('Fehler: ' + e.message, 'error');
+    }
+};
+
 window.editKontakt = async function(id) {
     const kontakt = KONTAKTE[id];
     if (!kontakt) return;
