@@ -275,19 +275,33 @@ export async function initializeGeschenkemanagement() {
         console.log("✅ currentUser.uid wurde auf", userId, "gesetzt");
     }
     
-    // ✅ KORRIGIERT: Zentrale Collection-Referenzen (wie andere Module!)
-    // NICHT mehr user-spezifisch, sondern zentral für alle zugänglich
+    // ✅ KORRIGIERT: User-spezifische Collections mit APP USER ID (currentUser.mode)!
+    // WICHTIG: Verwende currentUser.mode (z.B. "SYSTEMADMIN"), NICHT Firebase Auth UID!
+    // currentUser.mode bleibt gleich über alle Geräte → geräteübergreifend + privat!
+    const appUserId = currentUser?.mode || user?.mode;
+    
+    if (!appUserId) {
+        console.error("❌ FEHLER: App User ID (currentUser.mode) nicht gefunden!");
+        alertUser("❌ Fehler: Benutzer-ID nicht gefunden!", "error");
+        setupEventListeners();
+        return;
+    }
+    
+    console.log("🔑 App User ID:", appUserId);
+    
+    const userDataPath = ['artifacts', appId, 'public', 'data', 'users', appUserId];
+    
     geschenkeSettingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'geschenkemanagement');
-    geschenkeThemenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_themen');
-    geschenkeKontakteRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_kontakte');
-    geschenkeVorlagenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_vorlagen');
+    geschenkeThemenRef = collection(db, ...userDataPath, 'geschenke_themen');
+    geschenkeKontakteRef = collection(db, ...userDataPath, 'geschenke_kontakte');
+    geschenkeVorlagenRef = collection(db, ...userDataPath, 'geschenke_vorlagen');
     geschenkeFreigabenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_freigaben');
     geschenkeEinladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_einladungen');
-    geschenkeBudgetsRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_budgets');
-    geschenkeErinnerungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_erinnerungen');
+    geschenkeBudgetsRef = collection(db, ...userDataPath, 'geschenke_budgets');
+    geschenkeErinnerungenRef = collection(db, ...userDataPath, 'geschenke_erinnerungen');
     
-    console.log("✅ Collection-Referenzen erstellt (ZENTRAL)");
-    console.log("✅ Pfad: artifacts/", appId, "/public/data/geschenke_*");
+    console.log("✅ Collection-Referenzen erstellt (USER-SPEZIFISCH)");
+    console.log("✅ Pfad: users/", appUserId, "/geschenke_*");
     
     try {
         await loadSettings();
@@ -406,17 +420,18 @@ async function createEigenePerson() {
     }
 }
 
-// ✅ LIVE-LISTENER für Themen
+// ✅ LIVE-LISTENER für Themen (eigene + geteilte)
 function listenForThemen() {
     if (!geschenkeThemenRef) {
         console.error("❌ Themen-Ref fehlt");
         return;
     }
     
-    console.log("🎧 Themen-Listener gestartet");
+    console.log("🎧 Themen-Listener gestartet (eigene Themen)");
     
+    // 1️⃣ Eigene Themen
     onSnapshot(geschenkeThemenRef, (snapshot) => {
-        console.log(`📂 Themen: ${snapshot.size} Dokumente`);
+        console.log(`📂 Eigene Themen: ${snapshot.size} Dokumente`);
         
         const oldThemaId = currentThemaId;
         THEMEN = {};
@@ -427,9 +442,13 @@ function listenForThemen() {
                 id: docSnap.id, 
                 ...data,
                 istEigenes: true,
-                istGeteilt: false
+                istGeteilt: false,
+                besitzerUserId: currentUser.mode
             };
         });
+        
+        // 2️⃣ Geteilte Themen laden (via Freigaben)
+        loadSharedThemen();
         
         console.log("✅ Themen geladen:", Object.keys(THEMEN).length);
         
@@ -458,6 +477,48 @@ function listenForThemen() {
     }, (error) => {
         console.error("Fehler beim Laden der Themen:", error);
     });
+}
+
+// ✅ Geteilte Themen laden (von anderen Usern via Freigaben)
+async function loadSharedThemen() {
+    const myAppUserId = currentUser?.mode;
+    if (!myAppUserId) return;
+    
+    console.log("🔍 Prüfe geteilte Themen für User:", myAppUserId);
+    
+    // Finde alle aktiven Freigaben für mich
+    for (const freigabeId in FREIGABEN) {
+        const freigabe = FREIGABEN[freigabeId];
+        
+        // Nur aktive Freigaben, die für mich sind
+        if (!freigabe.aktiv || freigabe.userId !== myAppUserId) continue;
+        
+        try {
+            const ownerUserId = freigabe.besitzerId;  // App User ID des Besitzers
+            const themaId = freigabe.themaId;
+            
+            console.log(`  📖 Lade geteiltes Thema von ${ownerUserId}`);
+            
+            // Lade Thema vom Besitzer
+            const themaRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', ownerUserId, 'geschenke_themen', themaId);
+            const themaSnap = await getDoc(themaRef);
+            
+            if (themaSnap.exists()) {
+                THEMEN[themaSnap.id] = {
+                    id: themaSnap.id,
+                    ...themaSnap.data(),
+                    istEigenes: false,
+                    istGeteilt: true,
+                    besitzerUserId: ownerUserId,
+                    besitzerName: freigabe.freigegebenVonName,
+                    freigabe: freigabe
+                };
+                console.log(`  ✅ Geteiltes Thema: "${themaSnap.data().name}"`);
+            }
+        } catch (e) {
+            console.error(`  ❌ Fehler beim Laden:`, e);
+        }
+    }
 }
 
 // ❌ VERALTET: Wird durch listenForThemen() ersetzt
@@ -515,13 +576,13 @@ function listenForFreigaben() {
         
         console.log("✅ Freigaben geladen:", Object.keys(FREIGABEN).length);
         
+        // ✅ Geteilte Themen neu laden wenn Freigaben sich ändern
+        loadSharedThemen();
+        
         // UI aktualisieren
         if (document.getElementById('gm-freigaben-list')) {
             renderShareSettings();
         }
-        
-        // Themen neu laden (für geteilte Themen)
-        loadThemen();
     });
 }
 
@@ -540,12 +601,31 @@ async function loadFreigaben() {
 }
 
 function updateCollectionForThema() {
-    if (currentThemaId && db) {
-        // ✅ KORRIGIERT: Zentrale Collection (wie Haushaltszahlungen!)
-        // Geschenke werden als Subcollection unter dem Thema gespeichert
-        geschenkeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_themen', currentThemaId, 'geschenke');
+    if (currentThemaId && db && currentUser?.mode) {
+        const thema = THEMEN[currentThemaId];
         
-        console.log("📦 updateCollectionForThema - Thema:", currentThemaId);
+        // ✅ KORRIGIERT: Verwende Owner-User-ID (auch bei geteilten Themen!)
+        let ownerUserId;
+        
+        if (thema?.istGeteilt) {
+            // Geteiltes Thema: verwende besitzerUserId vom Owner
+            ownerUserId = thema.besitzerUserId;
+            console.log("📖 Geteiltes Thema von:", ownerUserId);
+        } else {
+            // Eigenes Thema: verwende eigene User-ID
+            ownerUserId = currentUser.mode;
+            console.log("📂 Eigenes Thema");
+        }
+        
+        if (!ownerUserId) {
+            console.error("❌ FEHLER: Owner User ID nicht gefunden!");
+            return;
+        }
+        
+        // Geschenke werden als Subcollection unter dem User-Thema gespeichert
+        geschenkeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'users', ownerUserId, 'geschenke_themen', currentThemaId, 'geschenke');
+        
+        console.log("📦 updateCollectionForThema - Owner:", ownerUserId, "Thema:", currentThemaId);
         console.log("📦 Collection-Pfad:", geschenkeCollection.path);
         
         listenForGeschenke();
@@ -4328,11 +4408,12 @@ window.createNewThema = async function() {
         const themaData = {
             name: name.trim(),
             ersteller: currentUser.displayName || 'Unbekannt',
+            besitzerUserId: currentUser.mode,  // ✅ App User ID für Freigaben
             erstelltAm: serverTimestamp(),
             personen: [],
             archiviert: false
         };
-        console.log("📝 Erstelle neues Thema (zentral):", themaData.name);
+        console.log("📝 Erstelle neues Thema für User:", currentUser.mode, "Name:", themaData.name);
         
         const docRef = await addDoc(geschenkeThemenRef, themaData);
         // ✅ THEMEN wird automatisch durch listenForThemen() aktualisiert
