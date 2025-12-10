@@ -275,20 +275,19 @@ export async function initializeGeschenkemanagement() {
         console.log("✅ currentUser.uid wurde auf", userId, "gesetzt");
     }
     
-    // ✅ NEU: User-basierte Collection-Referenzen mit FIREBASE AUTH UID
-    const userDataPath = ['artifacts', appId, 'public', 'data', 'users', firebaseAuthUid];
-    
+    // ✅ KORRIGIERT: Zentrale Collection-Referenzen (wie andere Module!)
+    // NICHT mehr user-spezifisch, sondern zentral für alle zugänglich
     geschenkeSettingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'geschenkemanagement');
-    geschenkeThemenRef = collection(db, ...userDataPath, 'geschenke_themen');
-    geschenkeKontakteRef = collection(db, ...userDataPath, 'geschenke_kontakte');
-    geschenkeVorlagenRef = collection(db, ...userDataPath, 'geschenke_vorlagen');
+    geschenkeThemenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_themen');
+    geschenkeKontakteRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_kontakte');
+    geschenkeVorlagenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_vorlagen');
     geschenkeFreigabenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_freigaben');
     geschenkeEinladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_einladungen');
-    geschenkeBudgetsRef = collection(db, ...userDataPath, 'geschenke_budgets');
-    geschenkeErinnerungenRef = collection(db, ...userDataPath, 'geschenke_erinnerungen');
+    geschenkeBudgetsRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_budgets');
+    geschenkeErinnerungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_erinnerungen');
     
-    console.log("✅ Collection-Referenzen erstellt für Firebase Auth UID:", firebaseAuthUid);
-    console.log("✅ Pfad:", `users/${firebaseAuthUid}/geschenke_*`);
+    console.log("✅ Collection-Referenzen erstellt (ZENTRAL)");
+    console.log("✅ Pfad: artifacts/", appId, "/public/data/geschenke_*");
     
     try {
         await loadSettings();
@@ -380,76 +379,24 @@ async function createEigenePerson() {
 
 async function loadThemen() {
     try {
-        const myUid = auth?.currentUser?.uid || getCurrentUserId();
-        console.log("🔄 Lade Themen für User:", myUid);
+        console.log("🔄 Lade Themen (zentral)...");
         
-        // ✅ 1. Eigene Themen laden
+        // ✅ KORRIGIERT: Alle Themen zentral laden (keine user-spezifischen Pfade mehr!)
         const snapshot = await getDocs(geschenkeThemenRef);
         THEMEN = {};
         snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
             THEMEN[docSnap.id] = { 
                 id: docSnap.id, 
-                ...docSnap.data(),
-                istEigenes: true,  // ✅ Markierung: eigenes Thema
-                istGeteilt: false, // ✅ Nicht geteilt
-                besitzerUid: myUid  // ✅ Owner UID
+                ...data,
+                istEigenes: true,  // ✅ Alle Themen sind nun "zentral" (nicht mehr user-spezifisch)
+                istGeteilt: false
             };
         });
         
-        console.log(`📂 ${Object.keys(THEMEN).length} eigene Themen geladen`);
+        console.log(`📂 ${Object.keys(THEMEN).length} Themen geladen`);
         
-        // ✅ 2. Geteilte Themen laden (von anderen Usern via Freigaben)
-        console.log(`🔍 Prüfe Freigaben:`, Object.keys(FREIGABEN).length, "gesamt");
-        
-        for (const freigabeId in FREIGABEN) {
-            const freigabe = FREIGABEN[freigabeId];
-            
-            console.log(`🔍 Prüfe Freigabe ${freigabeId}:`, {
-                aktiv: freigabe.aktiv,
-                userUid: freigabe.userUid,
-                myUid: myUid,
-                istFuerMich: freigabe.userUid === myUid
-            });
-            
-            // Nur aktive Freigaben, die an den aktuellen User gerichtet sind
-            if (!freigabe.aktiv) {
-                console.log(`  ⏭️ Übersprungen: Nicht aktiv`);
-                continue;
-            }
-            
-            if (freigabe.userUid !== myUid) {
-                console.log(`  ⏭️ Übersprungen: Nicht für mich (${freigabe.userUid} !== ${myUid})`);
-                continue;
-            }
-            
-            try {
-                console.log(`  ✅ Lade geteiltes Thema von ${freigabe.besitzerUid}`);
-                
-                // Lade Thema vom Besitzer
-                const themaRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', freigabe.besitzerUid, 'geschenke_themen', freigabe.themaId);
-                const themaSnap = await getDoc(themaRef);
-                
-                if (themaSnap.exists()) {
-                    THEMEN[themaSnap.id] = {
-                        id: themaSnap.id,
-                        ...themaSnap.data(),
-                        istEigenes: false,  // ✅ Nicht eigenes Thema
-                        istGeteilt: true,  // ✅ Geteilt
-                        besitzerUid: freigabe.besitzerUid,  // ✅ Owner UID
-                        besitzerName: freigabe.freigegebenVonName,  // ✅ Owner Name
-                        freigabe: freigabe  // ✅ Freigabe-Details
-                    };
-                    console.log(`  ✅ Geteiltes Thema geladen: "${themaSnap.data().name}" von ${freigabe.freigegebenVonName}`);
-                } else {
-                    console.log(`  ❌ Thema existiert nicht mehr`);
-                }
-            } catch (e) {
-                console.error(`  ❌ Fehler beim Laden:`, e);
-            }
-        }
-        
-        console.log(`📊 GESAMT: ${Object.keys(THEMEN).length} Themen (eigene + geteilte)`);
-        
+        // Gespeichertes Thema wiederherstellen oder erstes Thema wählen
         const savedThemaId = localStorage.getItem('gm_current_thema');
         if (savedThemaId && THEMEN[savedThemaId]) {
             currentThemaId = savedThemaId;
@@ -523,34 +470,14 @@ async function loadFreigaben() {
 }
 
 function updateCollectionForThema() {
-    if (currentThemaId && db && currentUser) {
-        const thema = THEMEN[currentThemaId];
+    if (currentThemaId && db) {
+        // ✅ KORRIGIERT: Zentrale Collection (wie Haushaltszahlungen!)
+        // Geschenke werden als Subcollection unter dem Thema gespeichert
+        geschenkeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_themen', currentThemaId, 'geschenke');
         
-        // ✅ KORRIGIERT: Priorisiere Firebase Auth UID!
-        // Bei eigenen Themen: verwende auth.currentUser.uid
-        // Bei geteilten Themen: verwende besitzerUid aus dem Thema
-        let ownerUid;
+        console.log("📦 updateCollectionForThema - Thema:", currentThemaId);
+        console.log("📦 Collection-Pfad:", geschenkeCollection.path);
         
-        if (thema?.istGeteilt) {
-            // Geteiltes Thema: verwende besitzerUid vom Owner
-            ownerUid = thema.besitzerUid;
-        } else {
-            // Eigenes Thema: verwende Firebase Auth UID
-            ownerUid = auth?.currentUser?.uid;
-        }
-        
-        // Fallback (sollte nie benötigt werden)
-        if (!ownerUid) {
-            console.error("❌ FEHLER: Keine Owner UID gefunden!");
-            alertUser("❌ FEHLER: Keine Benutzer-ID gefunden. Bitte neu einloggen!", "error");
-            return;
-        }
-        
-        console.log("📦 updateCollectionForThema - Owner UID:", ownerUid);
-        console.log("📦 Thema:", currentThemaId, "ist geteilt:", thema?.istGeteilt);
-        console.log("📦 auth.currentUser.uid:", auth?.currentUser?.uid);
-        
-        geschenkeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', currentThemaId, 'geschenke');
         listenForGeschenke();
     }
 }
@@ -708,15 +635,9 @@ function renderThemenDropdown() {
             }
         }
     } else {
-        // ✅ PUNKT 1: Geteilte Themen mit "📘 Geteilt von [NAME]"
+        // ✅ Themen anzeigen (alle zentral gespeichert)
         dropdown.innerHTML = activeThemen.map(thema => {
-            let displayName = thema.name;
-            if (thema.istGeteilt && thema.besitzerName) {
-                displayName = `${thema.name} 📘 [Geteilt von ${thema.besitzerName}]`;
-            } else if (thema.istGeteilt) {
-                displayName = `${thema.name} 📘 [Geteilt]`;
-            }
-            return `<option value="${thema.id}" ${thema.id === currentThemaId ? 'selected' : ''}>${displayName}</option>`;
+            return `<option value="${thema.id}" ${thema.id === currentThemaId ? 'selected' : ''}>${thema.name}</option>`;
         }).join('');
         
         // ✅ Setze Dropdown-Style für bessere Sichtbarkeit
@@ -798,104 +719,29 @@ function updateCreateButtonVisibility() {
     const createBtn = document.getElementById('btn-create-geschenk');
     if (!createBtn || !currentThemaId) return;
     
-    const thema = THEMEN[currentThemaId];
-    
-    // Bei eigenen Themen: Immer erlaubt
-    if (!thema || thema.istEigenes || !thema.istGeteilt) {
-        createBtn.style.display = 'inline-flex';
-        createBtn.disabled = false;
-        createBtn.title = '';
-        console.log("✅ Eigenes Thema - Button sichtbar");
-        return;
-    }
-    
-    // ✅ PUNKT 6: Bei geteilten Themen - IMMER verstecken (keine neuen Einträge!)
-    createBtn.style.display = 'none';
-    console.log("🚫 Geteiltes Thema - Button versteckt (keine neuen Einträge erlaubt)");
+    // ✅ VEREINFACHT: Alle Themen sind zentral → Button immer sichtbar
+    createBtn.style.display = 'inline-flex';
+    createBtn.disabled = false;
+    createBtn.title = '';
 }
 
-// ✅ PUNKT 5: Prüfe ob aktuelles Thema Schreibrechte hat
+// ✅ VEREINFACHT: Alle User haben Schreibrechte (zentrale Themen)
 function hasWriteRightsForCurrentThema() {
-    if (!currentThemaId) return false;
-    
-    const thema = THEMEN[currentThemaId];
-    
-    // Eigene Themen: Volle Rechte
-    if (!thema || thema.istEigenes || !thema.istGeteilt) return true;
-    
-    // Geteilte Themen: Prüfe Rechte aus Freigabe
-    return thema.freigabe?.rechte === 'bearbeiten';
+    return currentThemaId ? true : false;
 }
 
-// ✅ PUNKT 5: Prüfe ob Feld editierbar ist
+// ✅ VEREINFACHT: Alle Felder sind editierbar (zentrale Themen)
 function isFieldEditable() {
-    if (!currentThemaId) return false;
-    const thema = THEMEN[currentThemaId];
-    
-    // Eigene Themen: Alles editierbar
-    if (!thema || thema.istEigenes || !thema.istGeteilt) return true;
-    
-    // Geteilte Themen: Nur bei Schreibrechten
-    return thema.freigabe?.rechte === 'bearbeiten';
+    return currentThemaId ? true : false;
 }
 
-// ✅ PUNKT 5: Setze alle Modal-Felder auf readonly
+// ✅ VEREINFACHT: Da alle Themen zentral sind, sind Felder immer editierbar
 function setModalFieldsReadOnly(readonly) {
-    const fieldIds = [
-        'gm-geschenk', 'gm-status', 'gm-shop', 'gm-bestellnummer', 
-        'gm-rechnungsnummer', 'gm-gesamtkosten', 'gm-eigene-kosten',
-        'gm-bezahlt-von', 'gm-soll-bezahlung', 'gm-ist-bezahlung',
-        'gm-standort', 'gm-notizen'
-    ];
-    
-    fieldIds.forEach(id => {
-        const field = document.getElementById(id);
-        if (field) {
-            field.disabled = readonly;
-            if (readonly) {
-                field.classList.add('bg-gray-100', 'cursor-not-allowed');
-            } else {
-                field.classList.remove('bg-gray-100', 'cursor-not-allowed');
-            }
-        }
-    });
-    
-    // Checkboxen deaktivieren
-    const checkboxContainers = ['gm-fuer-checkboxes', 'gm-von-checkboxes', 'gm-beteiligung-checkboxes'];
-    checkboxContainers.forEach(containerId => {
-        const container = document.getElementById(containerId);
-        if (container) {
-            const checkboxes = container.querySelectorAll('input[type="checkbox"]');
-            checkboxes.forEach(cb => {
-                cb.disabled = readonly;
-                if (readonly) {
-                    cb.classList.add('cursor-not-allowed');
-                    cb.parentElement?.classList.add('opacity-60');
-                } else {
-                    cb.classList.remove('cursor-not-allowed');
-                    cb.parentElement?.classList.remove('opacity-60');
-                }
-            });
-        }
-    });
-    
-    // Speichern-Button anpassen
-    const saveBtn = document.getElementById('saveGeschenkBtn');
-    if (saveBtn) {
-        if (readonly) {
-            saveBtn.style.display = 'none';
-        } else {
-            saveBtn.style.display = 'inline-flex';
-        }
+    // Diese Funktion ist nicht mehr nötig, aber wir behalten sie für Kompatibilität
+    // Bei zentralen Themen sind alle Felder immer editierbar (readonly = false)
+    if (readonly) {
+        console.log("⚠️ Warnung: setModalFieldsReadOnly(true) aufgerufen, aber bei zentralen Themen ignoriert");
     }
-    
-    // Aktions-Buttons bei Leserechten verstecken
-    const actionsContainer = document.getElementById('gm-modal-actions');
-    if (actionsContainer && readonly) {
-        actionsContainer.style.display = 'none';
-    }
-    
-    console.log(`🔒 Modal-Felder ${readonly ? 'DEAKTIVIERT' : 'AKTIVIERT'}`);
 }
 
 // ✅ NEU: Zeige alle ausstehenden Einladungen manuell
@@ -1277,9 +1123,8 @@ window.setPersonStatus = async function(personId, status) {
         const personenStatus = thema.personenStatus || {};
         personenStatus[personId] = status;
         
-        // ✅ KORRIGIERT: Verwende Owner-UID für Thema-Update
-        const ownerUid = thema?.besitzerUid || auth?.currentUser?.uid || currentUser.uid;
-        const themaDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', currentThemaId);
+        // ✅ KORRIGIERT: Zentrale Collection
+        const themaDocRef = doc(geschenkeThemenRef, currentThemaId);
         
         await updateDoc(themaDocRef, { personenStatus });
         THEMEN[currentThemaId].personenStatus = personenStatus;
@@ -1301,9 +1146,8 @@ window.removePersonFromThema = async function(personId) {
         const thema = THEMEN[currentThemaId];
         const personen = (thema.personen || []).filter(id => id !== personId);
         
-        // ✅ KORRIGIERT: Verwende Owner-UID für Thema-Update
-        const ownerUid = thema?.besitzerUid || auth?.currentUser?.uid || currentUser.uid;
-        const themaDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', currentThemaId);
+        // ✅ KORRIGIERT: Zentrale Collection
+        const themaDocRef = doc(geschenkeThemenRef, currentThemaId);
         
         await updateDoc(themaDocRef, { personen });
         THEMEN[currentThemaId].personen = personen;
@@ -3019,7 +2863,7 @@ window.endSharing = async function(freigabeId) {
     if (!confirm('Möchtest du wirklich den Zugriff auf dieses geteilte Thema beenden?')) return;
     
     try {
-        const freigabeDoc = doc(db, 'artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_freigaben', freigabeId);
+        const freigabeDoc = doc(geschenkeFreigabenRef, freigabeId);
         await updateDoc(freigabeDoc, {
             aktiv: false,
             deaktiviertAm: serverTimestamp(),
@@ -3036,7 +2880,7 @@ window.endSharing = async function(freigabeId) {
 // ✅ PUNKT 7: Abgelehnte Einladung widerrufen (Person B ändert Meinung)
 window.revokeDeclinedInvitation = async function(invitationId) {
     try {
-        const einladungDoc = doc(db, 'artifacts/20LVob88b3ovXRUyX3ra/public/data/geschenke_einladungen', invitationId);
+        const einladungDoc = doc(geschenkeEinladungenRef, invitationId);
         await updateDoc(einladungDoc, {
             status: 'pending',
             aktualisiertAm: serverTimestamp()
@@ -3416,7 +3260,7 @@ async function loadGeschenkeFromMultipleThemen(themaIds) {
             console.log(`     Owner UID: ${ownerUid}`);
             console.log(`     Ist geteilt: ${thema.istGeteilt}`);
             
-            const geschenkeRef = collection(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', themaId, 'geschenke');
+            const geschenkeRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_themen', themaId, 'geschenke');
             console.log(`     Pfad: ${geschenkeRef.path}`);
             
             const geschenkeSnapshot = await getDocs(geschenkeRef);
@@ -4309,9 +4153,8 @@ window.addPersonToThema = async function(kontaktId) {
         if (!personen.includes(kontaktId)) {
             personen.push(kontaktId);
             
-            // ✅ KORRIGIERT: Verwende Owner-UID für Thema-Update
-            const ownerUid = thema?.besitzerUid || auth?.currentUser?.uid || currentUser.uid;
-            const themaDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', currentThemaId);
+            // ✅ KORRIGIERT: Zentrale Collection
+            const themaDocRef = doc(geschenkeThemenRef, currentThemaId);
             
             await updateDoc(themaDocRef, { personen });
             THEMEN[currentThemaId].personen = personen;
@@ -4367,9 +4210,8 @@ window.editThema = function(id) {
     const thema = THEMEN[id];
     const newName = prompt('Neuer Name für das Thema:', thema.name);
     if (newName && newName !== thema.name) {
-        // ✅ KORRIGIERT: Verwende Owner-UID für Thema-Update
-        const ownerUid = thema?.besitzerUid || auth?.currentUser?.uid || currentUser.uid;
-        const themaDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', id);
+        // ✅ KORRIGIERT: Zentrale Collection
+        const themaDocRef = doc(geschenkeThemenRef, id);
         
         updateDoc(themaDocRef, { name: newName }).then(() => {
             THEMEN[id].name = newName;
@@ -4385,9 +4227,8 @@ window.editThema = function(id) {
 window.toggleArchiveThema = async function(id) {
     const thema = THEMEN[id];
     try {
-        // ✅ KORRIGIERT: Verwende Owner-UID für Thema-Update
-        const ownerUid = thema?.besitzerUid || auth?.currentUser?.uid || currentUser.uid;
-        const themaDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', id);
+        // ✅ KORRIGIERT: Zentrale Collection
+        const themaDocRef = doc(geschenkeThemenRef, id);
         
         await updateDoc(themaDocRef, { archiviert: !thema.archiviert });
         THEMEN[id].archiviert = !thema.archiviert;
@@ -4404,9 +4245,8 @@ window.deleteThema = async function(id) {
     const thema = THEMEN[id];
     
     try {
-        // ✅ KORRIGIERT: Verwende Owner-UID für Thema-Löschung
-        const ownerUid = thema?.besitzerUid || auth?.currentUser?.uid || currentUser.uid;
-        const themaDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', ownerUid, 'geschenke_themen', id);
+        // ✅ KORRIGIERT: Zentrale Collection
+        const themaDocRef = doc(geschenkeThemenRef, id);
         
         await deleteDoc(themaDocRef);
         delete THEMEN[id];
@@ -4428,28 +4268,15 @@ window.createNewThema = async function() {
     const name = prompt('Name des neuen Themas (z.B. "Weihnachten 2025"):');
     if (!name) return;
     
-    // ✅ DIAGNOSE: Prüfe Firebase Auth
-    console.log("🔍 DIAGNOSE - createNewThema:");
-    console.log("  auth.currentUser.uid:", auth?.currentUser?.uid);
-    console.log("  currentUser.uid:", currentUser?.uid);
-    
-    if (!auth?.currentUser?.uid) {
-        alertUser('❌ FEHLER: Firebase Auth User nicht gefunden! Bitte neu einloggen.', 'error');
-        console.error("❌ auth.currentUser.uid ist nicht gesetzt!");
-        return;
-    }
-    
     try {
         const themaData = {
             name: name.trim(),
-            ersteller: currentUser.displayName,
-            besitzerUid: auth.currentUser.uid,  // ✅ KORRIGIERT: Verwende IMMER auth.currentUser.uid!
+            ersteller: currentUser.displayName || 'Unbekannt',
             erstelltAm: serverTimestamp(),
             personen: [],
-            archiviert: false,
-            istEigenes: true  // ✅ Markierung: eigenes Thema
+            archiviert: false
         };
-        console.log("📝 Erstelle neues Thema mit besitzerUid:", themaData.besitzerUid);
+        console.log("📝 Erstelle neues Thema (zentral):", themaData.name);
         
         const docRef = await addDoc(geschenkeThemenRef, themaData);
         THEMEN[docRef.id] = { id: docRef.id, ...themaData };
