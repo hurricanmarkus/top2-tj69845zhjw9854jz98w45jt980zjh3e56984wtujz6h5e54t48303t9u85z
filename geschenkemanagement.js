@@ -291,27 +291,25 @@ export async function initializeGeschenkemanagement() {
     
     try {
         await loadSettings();
-        await loadKontakte();
         
         // ✅ NEU: Lade User-UID-Mapping für Einladungen
         await loadUserUidMapping();
         
-        // ✅ Starte Echtzeit-Listener (laden automatisch die Daten)
-        listenForFreigaben();   // Lädt Freigaben + Updates
-        listenForEinladungen(); // Lädt Einladungen + Updates
+        // ✅ Starte ALLE Echtzeit-Listener (laden automatisch die Daten + Live-Updates!)
+        listenForKontakte();      // 👥 Kontakte
+        listenForThemen();        // 📂 Themen
+        listenForVorlagen();      // 📑 Vorlagen
+        listenForBudgets();       // 💰 Budgets
+        listenForErinnerungen();  // 🔔 Erinnerungen
+        listenForFreigaben();     // 🔐 Freigaben
+        listenForEinladungen();   // 📨 Einladungen
         
-        // Warte kurz, damit Listener Daten laden können
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Warte kurz, damit Listener initial Daten laden können
+        await new Promise(resolve => setTimeout(resolve, 800));
         
-        await loadThemen();  // ✅ Lädt eigene + geteilte Themen
-        await loadVorlagen();
-        
-        await loadBudgets();
-        await loadErinnerungen();
-        
-        console.log("✅ Alle Daten geladen und Echtzeit-Listener aktiv!");
+        console.log("✅ Alle Echtzeit-Listener aktiv! Daten werden automatisch synchronisiert.");
     } catch (e) {
-        console.error("❌ Fehler beim Laden der Daten:", e);
+        console.error("❌ Fehler beim Starten der Listener:", e);
         // Fortfahren trotz Fehler
     }
     
@@ -341,14 +339,27 @@ async function loadSettings() {
     }
 }
 
-async function loadKontakte() {
-    try {
-        const snapshot = await getDocs(geschenkeKontakteRef);
+// ✅ LIVE-LISTENER für Kontakte
+function listenForKontakte() {
+    if (!geschenkeKontakteRef) {
+        console.error("❌ Kontakte-Ref fehlt");
+        return;
+    }
+    
+    console.log("🎧 Kontakte-Listener gestartet");
+    
+    onSnapshot(geschenkeKontakteRef, async (snapshot) => {
+        console.log(`👥 Kontakte: ${snapshot.size} Dokumente`);
+        
         KONTAKTE = {};
+        eigenePerson = null;
+        
         snapshot.forEach((docSnap) => {
-            KONTAKTE[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
-            if (docSnap.data().istEigenePerson) {
-                eigenePerson = { id: docSnap.id, ...docSnap.data() };
+            const data = docSnap.data();
+            KONTAKTE[docSnap.id] = { id: docSnap.id, ...data };
+            
+            if (data.istEigenePerson) {
+                eigenePerson = { id: docSnap.id, ...data };
             }
         });
         
@@ -356,9 +367,27 @@ async function loadKontakte() {
         if (!eigenePerson && currentUser?.displayName) {
             await createEigenePerson();
         }
-    } catch (e) {
-        console.error("Fehler beim Laden der Kontakte:", e);
-    }
+        
+        console.log("✅ Kontakte geladen:", Object.keys(KONTAKTE).length);
+        
+        // UI aktualisieren wenn Kontaktbuch offen ist
+        if (document.getElementById('gm-kontaktbuch-list')) {
+            renderKontaktbuch();
+        }
+        
+        // Dashboard aktualisieren (Personen-Übersicht)
+        if (currentThemaId) {
+            renderPersonenUebersicht();
+        }
+    }, (error) => {
+        console.error("Fehler beim Laden der Kontakte:", error);
+    });
+}
+
+// ❌ VERALTET: Wird durch listenForKontakte() ersetzt
+async function loadKontakte() {
+    console.warn("⚠️ loadKontakte() ist veraltet, verwende listenForKontakte()");
+    // Funktion bleibt leer, da Listener aktiv ist
 }
 
 async function createEigenePerson() {
@@ -377,24 +406,32 @@ async function createEigenePerson() {
     }
 }
 
-async function loadThemen() {
-    try {
-        console.log("🔄 Lade Themen (zentral)...");
+// ✅ LIVE-LISTENER für Themen
+function listenForThemen() {
+    if (!geschenkeThemenRef) {
+        console.error("❌ Themen-Ref fehlt");
+        return;
+    }
+    
+    console.log("🎧 Themen-Listener gestartet");
+    
+    onSnapshot(geschenkeThemenRef, (snapshot) => {
+        console.log(`📂 Themen: ${snapshot.size} Dokumente`);
         
-        // ✅ KORRIGIERT: Alle Themen zentral laden (keine user-spezifischen Pfade mehr!)
-        const snapshot = await getDocs(geschenkeThemenRef);
+        const oldThemaId = currentThemaId;
         THEMEN = {};
+        
         snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             THEMEN[docSnap.id] = { 
                 id: docSnap.id, 
                 ...data,
-                istEigenes: true,  // ✅ Alle Themen sind nun "zentral" (nicht mehr user-spezifisch)
+                istEigenes: true,
                 istGeteilt: false
             };
         });
         
-        console.log(`📂 ${Object.keys(THEMEN).length} Themen geladen`);
+        console.log("✅ Themen geladen:", Object.keys(THEMEN).length);
         
         // Gespeichertes Thema wiederherstellen oder erstes Thema wählen
         const savedThemaId = localStorage.getItem('gm_current_thema');
@@ -402,27 +439,60 @@ async function loadThemen() {
             currentThemaId = savedThemaId;
         } else if (Object.keys(THEMEN).length > 0) {
             currentThemaId = Object.keys(THEMEN)[0];
+        } else {
+            currentThemaId = null;
         }
         
+        // UI aktualisieren
         renderThemenDropdown();
-        if (currentThemaId) {
+        
+        // Wenn Thema gewechselt wurde oder zum ersten Mal gesetzt
+        if (currentThemaId && currentThemaId !== oldThemaId) {
             updateCollectionForThema();
         }
-    } catch (e) {
-        console.error("Fehler beim Laden der Themen:", e);
-    }
+        
+        // Themen-Verwaltung aktualisieren falls offen
+        if (document.getElementById('gm-themen-list')) {
+            renderThemenVerwaltung();
+        }
+    }, (error) => {
+        console.error("Fehler beim Laden der Themen:", error);
+    });
 }
 
-async function loadVorlagen() {
-    try {
-        const snapshot = await getDocs(geschenkeVorlagenRef);
+// ❌ VERALTET: Wird durch listenForThemen() ersetzt
+async function loadThemen() {
+    console.warn("⚠️ loadThemen() ist veraltet, verwende listenForThemen()");
+    // Funktion bleibt leer, da Listener aktiv ist
+}
+
+// ✅ LIVE-LISTENER für Vorlagen
+function listenForVorlagen() {
+    if (!geschenkeVorlagenRef) {
+        console.error("❌ Vorlagen-Ref fehlt");
+        return;
+    }
+    
+    console.log("🎧 Vorlagen-Listener gestartet");
+    
+    onSnapshot(geschenkeVorlagenRef, (snapshot) => {
+        console.log(`📑 Vorlagen: ${snapshot.size} Dokumente`);
+        
         VORLAGEN = {};
         snapshot.forEach((docSnap) => {
             VORLAGEN[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
         });
-    } catch (e) {
-        console.error("Fehler beim Laden der Vorlagen:", e);
-    }
+        
+        console.log("✅ Vorlagen geladen:", Object.keys(VORLAGEN).length);
+    }, (error) => {
+        console.error("Fehler beim Laden der Vorlagen:", error);
+    });
+}
+
+// ❌ VERALTET: Wird durch listenForVorlagen() ersetzt
+async function loadVorlagen() {
+    console.warn("⚠️ loadVorlagen() ist veraltet, verwende listenForVorlagen()");
+    // Funktion bleibt leer, da Listener aktiv ist
 }
 
 // 🎧 NEUER Freigaben-Listener
@@ -1934,9 +2004,8 @@ window.acceptInvitation = async function(invitationId) {
         
         alertUser('✅ Einladung angenommen!', 'success');
         
-        // Themen neu laden
-        await loadThemen();
-        renderDashboard();
+        // ✅ Themen werden automatisch durch listenForThemen() aktualisiert
+        // ✅ UI wird automatisch aktualisiert
         
     } catch (error) {
         console.error("Fehler:", error);
@@ -1969,8 +2038,8 @@ window.removeShare = async function(shareId) {
         });
         
         alertUser('Freigabe entfernt', 'success');
-        await loadThemen();
-        renderDashboard();
+        // ✅ Themen werden automatisch durch listenForThemen() aktualisiert
+        // ✅ UI wird automatisch aktualisiert
     } catch (error) {
         alertUser('Fehler: ' + error.message, 'error');
     }
@@ -4172,8 +4241,8 @@ window.deleteKontakt = async function(id) {
     if (!confirm('Kontakt wirklich löschen?')) return;
     try {
         await deleteDoc(doc(geschenkeKontakteRef, id));
-        delete KONTAKTE[id];
-        renderKontaktbuch();
+        // ✅ KONTAKTE wird automatisch durch listenForKontakte() aktualisiert
+        // ✅ UI wird automatisch aktualisiert
         alertUser('Kontakt gelöscht!', 'success');
     } catch (e) {
         alertUser('Fehler: ' + e.message, 'error');
@@ -4192,13 +4261,8 @@ window.editKontakt = async function(id) {
         // Update in Firestore
         await updateDoc(doc(geschenkeKontakteRef, id), { name: newName.trim() });
         
-        // Update im lokalen Cache
-        KONTAKTE[id].name = newName.trim();
-        
-        // ✅ Systemweite UI-Updates
-        renderKontaktbuch();          // Kontaktbuch
-        renderPersonenUebersicht();   // Dashboard Personen-Übersicht
-        renderGeschenkeTabelle();     // Geschenke-Tabelle (zeigt Namen)
+        // ✅ KONTAKTE wird automatisch durch listenForKontakte() aktualisiert
+        // ✅ UI wird automatisch systemweit aktualisiert (Kontaktbuch, Personen-Übersicht, Tabelle)
         
         alertUser('Kontakt aktualisiert! Namen werden überall im System übernommen.', 'success');
     } catch (e) {
@@ -4214,9 +4278,8 @@ window.editThema = function(id) {
         const themaDocRef = doc(geschenkeThemenRef, id);
         
         updateDoc(themaDocRef, { name: newName }).then(() => {
-            THEMEN[id].name = newName;
-            renderThemenDropdown();
-            renderThemenVerwaltung();
+            // ✅ THEMEN wird automatisch durch listenForThemen() aktualisiert
+            // ✅ UI wird automatisch aktualisiert
             alertUser('Thema umbenannt!', 'success');
         }).catch(e => {
             alertUser('Fehler: ' + e.message, 'error');
@@ -4231,9 +4294,8 @@ window.toggleArchiveThema = async function(id) {
         const themaDocRef = doc(geschenkeThemenRef, id);
         
         await updateDoc(themaDocRef, { archiviert: !thema.archiviert });
-        THEMEN[id].archiviert = !thema.archiviert;
-        renderThemenDropdown();
-        renderThemenVerwaltung();
+        // ✅ THEMEN wird automatisch durch listenForThemen() aktualisiert
+        // ✅ UI wird automatisch aktualisiert
         alertUser(thema.archiviert ? 'Thema wiederhergestellt!' : 'Thema archiviert!', 'success');
     } catch (e) {
         alertUser('Fehler: ' + e.message, 'error');
@@ -4249,14 +4311,8 @@ window.deleteThema = async function(id) {
         const themaDocRef = doc(geschenkeThemenRef, id);
         
         await deleteDoc(themaDocRef);
-        delete THEMEN[id];
-        if (currentThemaId === id) {
-            currentThemaId = Object.keys(THEMEN)[0] || null;
-            localStorage.setItem('gm_current_thema', currentThemaId || '');
-        }
-        renderThemenDropdown();
-        renderThemenVerwaltung();
-        renderDashboard();
+        // ✅ THEMEN wird automatisch durch listenForThemen() aktualisiert
+        // ✅ UI wird automatisch aktualisiert
         alertUser('Thema gelöscht!', 'success');
     } catch (e) {
         alertUser('Fehler: ' + e.message, 'error');
@@ -4279,13 +4335,11 @@ window.createNewThema = async function() {
         console.log("📝 Erstelle neues Thema (zentral):", themaData.name);
         
         const docRef = await addDoc(geschenkeThemenRef, themaData);
-        THEMEN[docRef.id] = { id: docRef.id, ...themaData };
+        // ✅ THEMEN wird automatisch durch listenForThemen() aktualisiert
         currentThemaId = docRef.id;
         localStorage.setItem('gm_current_thema', docRef.id);
-        renderThemenDropdown();
-        renderThemenVerwaltung();
+        // ✅ UI wird automatisch durch Listener aktualisiert
         updateCollectionForThema();
-        renderDashboard();
         alertUser('Thema erstellt!', 'success');
     } catch (e) {
         console.error("Fehler beim Erstellen des Themas:", e);
@@ -4304,9 +4358,9 @@ window.createNewKontakt = async function() {
             erstelltAm: serverTimestamp(),
             erstelltVon: currentUser.displayName
         };
-        const docRef = await addDoc(geschenkeKontakteRef, kontaktData);
-        KONTAKTE[docRef.id] = { id: docRef.id, ...kontaktData };
-        renderKontaktbuch();
+        await addDoc(geschenkeKontakteRef, kontaktData);
+        // ✅ KONTAKTE wird automatisch durch listenForKontakte() aktualisiert
+        // ✅ UI wird automatisch aktualisiert
         alertUser('Kontakt erstellt!', 'success');
     } catch (e) {
         alertUser('Fehler: ' + e.message, 'error');
@@ -4590,28 +4644,62 @@ async function loadEinladungen() {
     }
 }
 
-async function loadBudgets() {
-    try {
-        const snapshot = await getDocs(geschenkeBudgetsRef);
+// ✅ LIVE-LISTENER für Budgets
+function listenForBudgets() {
+    if (!geschenkeBudgetsRef) {
+        console.error("❌ Budgets-Ref fehlt");
+        return;
+    }
+    
+    console.log("🎧 Budgets-Listener gestartet");
+    
+    onSnapshot(geschenkeBudgetsRef, (snapshot) => {
+        console.log(`💰 Budgets: ${snapshot.size} Dokumente`);
+        
         BUDGETS = {};
         snapshot.forEach((docSnap) => {
             BUDGETS[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
         });
-    } catch (e) {
-        console.error("Fehler beim Laden der Budgets:", e);
-    }
+        
+        console.log("✅ Budgets geladen:", Object.keys(BUDGETS).length);
+    }, (error) => {
+        console.error("Fehler beim Laden der Budgets:", error);
+    });
 }
 
-async function loadErinnerungen() {
-    try {
-        const snapshot = await getDocs(geschenkeErinnerungenRef);
+// ❌ VERALTET: Wird durch listenForBudgets() ersetzt
+async function loadBudgets() {
+    console.warn("⚠️ loadBudgets() ist veraltet, verwende listenForBudgets()");
+    // Funktion bleibt leer, da Listener aktiv ist
+}
+
+// ✅ LIVE-LISTENER für Erinnerungen
+function listenForErinnerungen() {
+    if (!geschenkeErinnerungenRef) {
+        console.error("❌ Erinnerungen-Ref fehlt");
+        return;
+    }
+    
+    console.log("🎧 Erinnerungen-Listener gestartet");
+    
+    onSnapshot(geschenkeErinnerungenRef, (snapshot) => {
+        console.log(`🔔 Erinnerungen: ${snapshot.size} Dokumente`);
+        
         ERINNERUNGEN = {};
         snapshot.forEach((docSnap) => {
             ERINNERUNGEN[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
         });
-    } catch (e) {
-        console.error("Fehler beim Laden der Erinnerungen:", e);
-    }
+        
+        console.log("✅ Erinnerungen geladen:", Object.keys(ERINNERUNGEN).length);
+    }, (error) => {
+        console.error("Fehler beim Laden der Erinnerungen:", error);
+    });
+}
+
+// ❌ VERALTET: Wird durch listenForErinnerungen() ersetzt
+async function loadErinnerungen() {
+    console.warn("⚠️ loadErinnerungen() ist veraltet, verwende listenForErinnerungen()");
+    // Funktion bleibt leer, da Listener aktiv ist
 }
 
 // ========================================
