@@ -374,6 +374,7 @@ function listenForThemen() {
         console.log(`📂 Themen: ${snapshot.size} Dokumente`);
         
         const oldThemaId = currentThemaId;
+        const oldThemenCount = Object.keys(THEMEN).length;
         THEMEN = {};
         
         snapshot.forEach((docSnap) => {
@@ -384,7 +385,8 @@ function listenForThemen() {
             };
         });
         
-        console.log("✅ Themen geladen:", Object.keys(THEMEN).length);
+        const newThemenCount = Object.keys(THEMEN).length;
+        console.log("✅ Themen geladen:", newThemenCount);
         
         // Gespeichertes Thema wiederherstellen oder erstes Thema wählen
         const savedThemaId = localStorage.getItem('gm_current_thema');
@@ -396,12 +398,21 @@ function listenForThemen() {
             currentThemaId = null;
         }
         
-        // UI aktualisieren
+        // ✅ WICHTIG: Prüfe ob sich die Anzahl der Themen geändert hat
+        const themenCountChanged = oldThemenCount !== newThemenCount;
+        
+        // ✅ UI IMMER aktualisieren (Dropdown + Dashboard)
         renderThemenDropdown();
         
-        // Wenn Thema gewechselt wurde oder zum ersten Mal gesetzt
-        if (currentThemaId && currentThemaId !== oldThemaId) {
+        // Wenn Thema gewechselt wurde ODER Themen-Anzahl sich geändert hat
+        if (currentThemaId && (currentThemaId !== oldThemaId || themenCountChanged)) {
+            console.log(`🔄 Thema-Wechsel oder Anzahl geändert → Collection & Dashboard aktualisieren`);
             updateCollectionForThema();
+            renderDashboard();  // ✅ Komplettes Dashboard neu rendern
+        } else if (!currentThemaId && oldThemaId) {
+            // Letztes Thema wurde gelöscht
+            console.log(`🗑️ Letztes Thema gelöscht → Dashboard zurücksetzen`);
+            renderDashboard();
         }
         
         // Themen-Verwaltung aktualisieren falls offen
@@ -852,19 +863,37 @@ function renderPersonenUebersicht() {
         const personenStatus = thema.personenStatus || {};
         const pStatus = personenStatus[p.id] || 'offen';
         
-        // ✅ Farben basierend auf Status
+        // ✅ Farben basierend auf Status (mit deutlicher Schattierung)
         const statusConfig = {
-            offen: { color: 'border-red-500', bg: 'bg-red-50', label: 'Offen', icon: '🔴' },
-            teilweise: { color: 'border-yellow-500', bg: 'bg-yellow-50', label: 'Teilweise', icon: '🟡' },
-            abgeschlossen: { color: 'border-green-500', bg: 'bg-green-50', label: 'Abgeschlossen', icon: '🟢' }
+            offen: { 
+                color: 'border-red-500', 
+                bg: 'bg-red-100', 
+                shadow: 'shadow-red-200/50',
+                label: 'Offen', 
+                icon: '🔴' 
+            },
+            teilweise: { 
+                color: 'border-yellow-500', 
+                bg: 'bg-yellow-100', 
+                shadow: 'shadow-yellow-200/50',
+                label: 'Teilweise', 
+                icon: '🟡' 
+            },
+            abgeschlossen: { 
+                color: 'border-green-500', 
+                bg: 'bg-green-100', 
+                shadow: 'shadow-green-200/50',
+                label: 'Abgeschlossen', 
+                icon: '🟢' 
+            }
         };
         const cfg = statusConfig[pStatus] || statusConfig.offen;
         
         html += `
-            <div class="bg-white rounded-xl shadow-md p-4 border-l-4 ${cfg.color} hover:shadow-lg transition cursor-pointer ${cfg.bg}" 
+            <div class="rounded-xl shadow-md p-4 border-l-4 ${cfg.color} ${cfg.bg} hover:shadow-lg transition cursor-pointer" 
                  onclick="window.openPersonModal('${p.id}')">
                 <div class="flex items-center gap-3 mb-3">
-                    <div class="w-12 h-12 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
+                    <div class="w-12 h-12 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white font-bold text-lg shadow-md">
                         ${p.name.charAt(0).toUpperCase()}
                     </div>
                     <div class="flex-1 min-w-0">
@@ -2497,6 +2526,19 @@ window.deleteThema = async function(id) {
         await deleteDoc(themaDocRef);
         console.log(`  ✅ Thema-Dokument gelöscht`);
         
+        // ✅ SCHRITT 5: Wenn das gelöschte Thema das aktuelle war → zurücksetzen
+        if (currentThemaId === id) {
+            currentThemaId = null;
+            localStorage.removeItem('gm_current_thema');
+            geschenkeCollection = null;
+            GESCHENKE = {};
+            
+            console.log(`  ℹ️ Aktuelles Thema wurde gelöscht → zurückgesetzt`);
+            
+            // UI sofort aktualisieren
+            renderDashboard();
+        }
+        
         console.log(`✅ KOMPLETT: Thema ${id} und alle zugehörigen Daten wurden gelöscht!`);
         alertUser('Thema und alle zugehörigen Daten wurden gelöscht!', 'success');
     } catch (e) {
@@ -2523,6 +2565,13 @@ window.createNewThema = async function() {
         const docRef = await addDoc(geschenkeThemenRef, themaData);
         currentThemaId = docRef.id;
         localStorage.setItem('gm_current_thema', currentThemaId);
+        
+        console.log(`✅ Neues Thema erstellt: ${docRef.id} - "${name}"`);
+        
+        // ✅ WICHTIG: UI sofort aktualisieren!
+        // Der Listener wird das Thema in THEMEN einfügen, aber wir müssen die Collection und UI aktivieren
+        updateCollectionForThema();  // Geschenke-Collection aktivieren
+        renderDashboard();            // Dashboard mit neuem Thema aktualisieren
         
         alertUser('Thema erstellt!', 'success');
     } catch (e) {
