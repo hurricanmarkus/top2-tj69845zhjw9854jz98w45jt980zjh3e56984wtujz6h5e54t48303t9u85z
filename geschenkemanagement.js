@@ -2447,25 +2447,23 @@ window.copyGeschenk = function(geschenkId) {
         return;
     }
     
-    // ✅ Modal bleibt offen, Felder werden mit Kopie-Daten befüllt
+    // ✅ Modal bleibt offen, ALLE Felder werden mit Kopie-Daten befüllt
     // ID leeren (neues Geschenk)
     document.getElementById('gm-id').value = '';
     
-    // Felder mit Daten befüllen (OHNE "(Kopie)" Zusatz)
+    // ✅ ALLE Felder mit Daten befüllen (OHNE "(Kopie)" Zusatz)
     document.getElementById('gm-geschenk').value = geschenk.geschenk || '';
-    document.getElementById('gm-status').value = 'offen';  // Status zurücksetzen
+    document.getElementById('gm-status').value = geschenk.status || 'offen';
     document.getElementById('gm-shop').value = geschenk.shop || '';
+    document.getElementById('gm-bestellnummer').value = geschenk.bestellnummer || '';
+    document.getElementById('gm-rechnungsnummer').value = geschenk.rechnungsnummer || '';
     document.getElementById('gm-gesamtkosten').value = geschenk.gesamtkosten || '';
     document.getElementById('gm-eigene-kosten').value = geschenk.eigeneKosten || '';
     document.getElementById('gm-soll-bezahlung').value = geschenk.sollBezahlung || '';
+    document.getElementById('gm-ist-bezahlung').value = geschenk.istBezahlung || '';
     document.getElementById('gm-standort').value = geschenk.standort || '';
     document.getElementById('gm-notizen').value = geschenk.notizen || '';
-    document.getElementById('gm-bezahlt-von').value = geschenk.bezahltVon || '';  // ✅ FIX: Bezahlt von mitkopieren
-    
-    // ✅ Diese Felder LEEREN (nicht kopieren)
-    document.getElementById('gm-ist-bezahlung').value = '';
-    document.getElementById('gm-bestellnummer').value = '';
-    document.getElementById('gm-rechnungsnummer').value = '';
+    document.getElementById('gm-bezahlt-von').value = geschenk.bezahltVon || '';
     
     // ✅ Checkboxen befüllen (FÜR, VON, Beteiligung)
     fillCheckboxes('gm-fuer', geschenk.fuer || []);
@@ -2488,7 +2486,7 @@ window.copyGeschenk = function(geschenkId) {
     if (actionsContainer) actionsContainer.style.display = 'none';
     if (vorlageButton) vorlageButton.style.display = 'none';
     
-    alertUser('Geschenk kopiert! Bearbeite die Kopie und speichere sie.', 'info');
+    alertUser('Geschenk vollständig kopiert! Bearbeite die Kopie und speichere sie.', 'info');
 };
 
 window.saveAsVorlage = async function(geschenkId) {
@@ -2502,20 +2500,22 @@ window.saveAsVorlage = async function(geschenkId) {
     if (!vorlageName || vorlageName.trim() === '') return;
     
     try {
-        // ✅ Vorlage speichern MIT allen relevanten Feldern (inkl. Bestellnummer & Rechnungsnummer)
+        // ✅ Vorlage speichern mit ALLEN Feldern
         const vorlageData = {
             name: vorlageName.trim(),
             geschenk: geschenk.geschenk,
+            status: geschenk.status || 'offen',
             fuer: geschenk.fuer || [],
             von: geschenk.von || [],
             beteiligung: geschenk.beteiligung || [],
             bezahltVon: geschenk.bezahltVon || '',
             shop: geschenk.shop || '',
-            bestellnummer: geschenk.bestellnummer || '',  // ✅ FIX: Bestellnummer speichern
-            rechnungsnummer: geschenk.rechnungsnummer || '',  // ✅ FIX: Rechnungsnummer speichern
+            bestellnummer: geschenk.bestellnummer || '',
+            rechnungsnummer: geschenk.rechnungsnummer || '',
             gesamtkosten: geschenk.gesamtkosten || 0,
             eigeneKosten: geschenk.eigeneKosten || 0,
             sollBezahlung: geschenk.sollBezahlung || '',
+            istBezahlung: geschenk.istBezahlung || '',
             standort: geschenk.standort || '',
             notizen: geschenk.notizen || '',
             erstelltAm: serverTimestamp(),
@@ -2523,7 +2523,7 @@ window.saveAsVorlage = async function(geschenkId) {
         };
         
         await addDoc(geschenkeVorlagenRef, vorlageData);
-        alertUser('Vorlage gespeichert!', 'success');
+        alertUser('Vorlage mit allen Daten gespeichert!', 'success');
     } catch (e) {
         console.error("❌ Fehler beim Speichern der Vorlage:", e);
         alertUser('Fehler beim Speichern: ' + e.message, 'error');
@@ -2586,14 +2586,16 @@ window.loadVorlage = function(vorlageId) {
         return;
     }
     
-    // ✅ Alle Felder aus Vorlage befüllen (inkl. Bestellnummer & Rechnungsnummer)
+    // ✅ ALLE Felder aus Vorlage befüllen
     document.getElementById('gm-geschenk').value = vorlage.geschenk || '';
+    document.getElementById('gm-status').value = vorlage.status || 'offen';
     document.getElementById('gm-shop').value = vorlage.shop || '';
-    document.getElementById('gm-bestellnummer').value = vorlage.bestellnummer || '';  // ✅ FIX: Bestellnummer laden
-    document.getElementById('gm-rechnungsnummer').value = vorlage.rechnungsnummer || '';  // ✅ FIX: Rechnungsnummer laden
+    document.getElementById('gm-bestellnummer').value = vorlage.bestellnummer || '';
+    document.getElementById('gm-rechnungsnummer').value = vorlage.rechnungsnummer || '';
     document.getElementById('gm-gesamtkosten').value = vorlage.gesamtkosten || '';
     document.getElementById('gm-eigene-kosten').value = vorlage.eigeneKosten || '';
     document.getElementById('gm-soll-bezahlung').value = vorlage.sollBezahlung || '';
+    document.getElementById('gm-ist-bezahlung').value = vorlage.istBezahlung || '';
     document.getElementById('gm-standort').value = vorlage.standort || '';
     document.getElementById('gm-notizen').value = vorlage.notizen || '';
     document.getElementById('gm-bezahlt-von').value = vorlage.bezahltVon || '';
@@ -2603,16 +2605,10 @@ window.loadVorlage = function(vorlageId) {
     fillCheckboxes('gm-von', vorlage.von || []);
     fillCheckboxes('gm-beteiligung', vorlage.beteiligung || []);
     
-    // ✅ IST-Bezahlung bleibt leer (wird nicht gespeichert in Vorlagen)
-    document.getElementById('gm-ist-bezahlung').value = '';
-    
-    // Status auf "offen" setzen
-    document.getElementById('gm-status').value = 'offen';
-    
     // Modal schließen
     document.getElementById('vorlagenModal')?.remove();
     
-    alertUser('Vorlage geladen! Prüfe die Daten und speichere.', 'success');
+    alertUser('Vorlage vollständig geladen! Prüfe die Daten und speichere.', 'success');
 };
 
 window.deleteVorlage = async function(vorlageId) {
