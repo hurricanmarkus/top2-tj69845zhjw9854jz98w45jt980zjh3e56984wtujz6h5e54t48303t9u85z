@@ -139,6 +139,10 @@ let FREIGABEN = {};
 let EINLADUNGEN = {};
 let BUDGETS = {};
 let ERINNERUNGEN = {};
+
+// ✅ NEU: Cache für geteilte Daten
+let SHARED_KONTAKTE = {};  // Kontakte vom Owner bei geteilten Themen
+let currentFreigabe = null;  // Aktuelle Freigabe für gefiltertes Laden
 let currentThemaId = null;
 let searchTerm = '';
 let currentFilter = {};
@@ -676,20 +680,33 @@ async function loadFreigaben() {
     }
 }
 
-function updateCollectionForThema() {
+async function updateCollectionForThema() {
     if (currentThemaId && db && currentUser?.mode) {
         const thema = THEMEN[currentThemaId];
         
         // ✅ KORRIGIERT: Verwende Owner-User-ID (auch bei geteilten Themen!)
         let ownerUserId;
+        let istGeteilt = false;
         
         if (thema?.istGeteilt) {
             // Geteiltes Thema: verwende besitzerUserId vom Owner
             ownerUserId = thema.besitzerUserId;
+            istGeteilt = true;
             console.log("📖 Geteiltes Thema von:", ownerUserId);
+            
+            // ✅ NEU: Lade Kontakte vom Owner
+            await loadOwnerKontakte(ownerUserId);
+            
+            // ✅ NEU: Setze aktuelle Freigabe für Filterung
+            const freigabeId = `${currentThemaId}_${currentUser.mode}`;
+            currentFreigabe = FREIGABEN[freigabeId] || null;
+            console.log("🔐 Aktuelle Freigabe:", currentFreigabe);
         } else {
             // Eigenes Thema: verwende eigene User-ID
             ownerUserId = currentUser.mode;
+            istGeteilt = false;
+            currentFreigabe = null;
+            SHARED_KONTAKTE = {};  // Leere shared contacts
             console.log("📂 Eigenes Thema");
         }
         
@@ -703,8 +720,44 @@ function updateCollectionForThema() {
         
         console.log("📦 updateCollectionForThema - Owner:", ownerUserId, "Thema:", currentThemaId);
         console.log("📦 Collection-Pfad:", geschenkeCollection.path);
+        console.log("📦 Ist geteilt:", istGeteilt);
         
         listenForGeschenke();
+    }
+}
+
+// ✅ NEU: Lade Kontakte vom Owner (bei geteilten Themen)
+async function loadOwnerKontakte(ownerUserId) {
+    if (!ownerUserId) return;
+    
+    console.log("👥 Lade Kontakte vom Owner:", ownerUserId);
+    
+    try {
+        const ownerKontakteRef = collection(db, 'artifacts', appId, 'public', 'data', 'users', ownerUserId, 'geschenke_kontakte');
+        const snapshot = await getDocs(ownerKontakteRef);
+        
+        SHARED_KONTAKTE = {};
+        snapshot.forEach((docSnap) => {
+            SHARED_KONTAKTE[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
+        });
+        
+        console.log("✅ Owner-Kontakte geladen:", Object.keys(SHARED_KONTAKTE).length);
+    } catch (error) {
+        console.error("❌ Fehler beim Laden der Owner-Kontakte:", error);
+        SHARED_KONTAKTE = {};
+    }
+}
+
+// ✅ NEU: Hilfsfunktion - gibt die richtigen Kontakte zurück
+function getActiveKontakte() {
+    const thema = THEMEN[currentThemaId];
+    
+    if (thema?.istGeteilt && Object.keys(SHARED_KONTAKTE).length > 0) {
+        // Bei geteilten Themen: verwende Owner-Kontakte
+        return SHARED_KONTAKTE;
+    } else {
+        // Bei eigenen Themen: verwende eigene Kontakte
+        return KONTAKTE;
     }
 }
 
@@ -715,20 +768,104 @@ export function listenForGeschenke() {
     if (!geschenkeCollection) return;
     
     onSnapshot(query(geschenkeCollection, orderBy('erstelltAm', 'desc')), (snapshot) => {
-        GESCHENKE = {};
+        const thema = THEMEN[currentThemaId];
+        const istGeteilt = thema?.istGeteilt || false;
+        
+        console.log("📦 listenForGeschenke - Geladen:", snapshot.size, "Geschenke");
+        console.log("📦 Ist geteilt:", istGeteilt);
+        console.log("📦 Aktuelle Freigabe:", currentFreigabe);
+        
+        // ALLE Geschenke laden
+        const alleGeschenkeRaw = {};
         snapshot.forEach((docSnap) => {
-            // WICHTIG: Füge themaId zum Geschenk hinzu (für Freigabe-Filterung)
-            GESCHENKE[docSnap.id] = { 
+            alleGeschenkeRaw[docSnap.id] = { 
                 id: docSnap.id, 
-                themaId: currentThemaId,  // ✅ ThemaId hinzugefügt!
+                themaId: currentThemaId,
                 ...docSnap.data() 
             };
         });
+        
+        // ✅ NEU: Bei geteilten Themen Freigabe-Filter anwenden
+        if (istGeteilt && currentFreigabe) {
+            console.log("🔍 Wende Freigabe-Filter an...");
+            GESCHENKE = filterGeschenkeByFreigabe(alleGeschenkeRaw, currentFreigabe);
+            console.log("✅ Gefiltert:", Object.keys(GESCHENKE).length, "von", Object.keys(alleGeschenkeRaw).length);
+        } else {
+            // Eigenes Thema oder komplette Freigabe: alle Geschenke
+            GESCHENKE = alleGeschenkeRaw;
+            console.log("✅ Ungefiltert:", Object.keys(GESCHENKE).length);
+        }
+        
         renderGeschenkeTabelle();
         updateDashboardStats();
     }, (error) => {
         console.error("Fehler beim Laden der Geschenke:", error);
     });
+}
+
+// ✅ NEU: Filtert Geschenke basierend auf Freigabe-Regeln
+function filterGeschenkeByFreigabe(geschenkeObj, freigabe) {
+    if (!freigabe) return geschenkeObj;
+    
+    // Wenn "komplett" oder kein Filter: alles durchlassen
+    if (freigabe.shareType === 'komplett' || freigabe.freigabeTyp === 'komplett') {
+        console.log("  ℹ️ Komplette Freigabe - keine Filterung");
+        return geschenkeObj;
+    }
+    
+    // Gefilterte Freigabe
+    const filter = freigabe.filter || {};
+    const filterRules = freigabe.filterRules || {};
+    
+    console.log("  🔍 Freigabe-Typ:", freigabe.shareType || freigabe.freigabeTyp);
+    console.log("  🔍 Filter:", filter);
+    console.log("  🔍 FilterRules:", filterRules);
+    
+    if (Object.keys(filter).length === 0 && Object.keys(filterRules).length === 0) {
+        console.log("  ℹ️ Keine Filter-Regeln - zeige alles");
+        return geschenkeObj;
+    }
+    
+    const gefiltert = {};
+    
+    for (const [id, geschenk] of Object.entries(geschenkeObj)) {
+        let matches = false;
+        
+        // Prüfe Filter-Regeln
+        // Filter: { fuer: ['person1', 'person2'], von: ['person3'] }
+        if (filter.fuer && Array.isArray(filter.fuer) && filter.fuer.length > 0) {
+            // Geschenk muss für eine der Personen sein
+            const fuerArray = geschenk.fuer || [];
+            if (fuerArray.some(personId => filter.fuer.includes(personId))) {
+                matches = true;
+            }
+        }
+        
+        if (filter.von && Array.isArray(filter.von) && filter.von.length > 0) {
+            // Geschenk muss von einer der Personen sein
+            const vonArray = geschenk.von || [];
+            if (vonArray.some(personId => filter.von.includes(personId))) {
+                matches = true;
+            }
+        }
+        
+        // filterRules ist alternatives Format (legacy)
+        if (filterRules.personen && Array.isArray(filterRules.personen)) {
+            const fuerArray = geschenk.fuer || [];
+            const vonArray = geschenk.von || [];
+            if (fuerArray.some(personId => filterRules.personen.includes(personId)) ||
+                vonArray.some(personId => filterRules.personen.includes(personId))) {
+                matches = true;
+            }
+        }
+        
+        if (matches) {
+            gefiltert[id] = geschenk;
+        }
+    }
+    
+    console.log("  ✅ Gefilterte Geschenke:", Object.keys(gefiltert).length);
+    return gefiltert;
 }
 
 // ========================================
@@ -1001,6 +1138,69 @@ window.showAllPendingInvitations = function() {
     }
 };
 
+// ✅ TEST-FUNKTION: Simuliere geteiltes Thema
+window.testSharedThema = async function() {
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("🧪 TEST: Geteiltes Thema");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    
+    const thema = THEMEN[currentThemaId];
+    if (!thema) {
+        console.error("❌ Kein Thema aktiv!");
+        return;
+    }
+    
+    console.log("📂 Aktuelles Thema:", thema.name);
+    console.log("  Ist geteilt:", thema.istGeteilt);
+    console.log("  Besitzer:", thema.besitzerUserId, "-", thema.besitzerName);
+    console.log("");
+    
+    console.log("👥 KONTAKTE:");
+    console.log("  Eigene KONTAKTE:", Object.keys(KONTAKTE).length);
+    Object.entries(KONTAKTE).forEach(([id, k]) => {
+        console.log(`    ${id}: ${k.name}`);
+    });
+    console.log("");
+    
+    console.log("  Geteilte KONTAKTE:", Object.keys(SHARED_KONTAKTE).length);
+    Object.entries(SHARED_KONTAKTE).forEach(([id, k]) => {
+        console.log(`    ${id}: ${k.name}`);
+    });
+    console.log("");
+    
+    console.log("  Active Kontakte:", Object.keys(getActiveKontakte()).length);
+    console.log("");
+    
+    console.log("🎁 GESCHENKE:", Object.keys(GESCHENKE).length);
+    Object.values(GESCHENKE).slice(0, 5).forEach(g => {
+        const activeK = getActiveKontakte();
+        const fuerNames = (g.fuer || []).map(id => activeK[id]?.name || `MISSING:${id}`);
+        const vonNames = (g.von || []).map(id => activeK[id]?.name || `MISSING:${id}`);
+        console.log(`  ${g.geschenk || 'Unbekannt'}`);
+        console.log(`    FÜR: ${fuerNames.join(', ')}`);
+        console.log(`    VON: ${vonNames.join(', ')}`);
+    });
+    console.log("");
+    
+    console.log("🔐 AKTUELLE FREIGABE:", currentFreigabe ? "Ja" : "Nein");
+    if (currentFreigabe) {
+        console.log("  Typ:", currentFreigabe.freigabeTyp || currentFreigabe.shareType);
+        console.log("  Filter:", currentFreigabe.filter);
+        console.log("  Filter Rules:", currentFreigabe.filterRules);
+    }
+    
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    
+    return {
+        thema,
+        eigeneKontakte: KONTAKTE,
+        sharedKontakte: SHARED_KONTAKTE,
+        activeKontakte: getActiveKontakte(),
+        geschenke: GESCHENKE,
+        freigabe: currentFreigabe
+    };
+};
+
 // ✅ DIAGNOSE-TOOL: Zeige kompletten Status
 window.diagnoseGeschenkeSystem = function() {
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -1079,17 +1279,49 @@ function renderPersonenUebersicht() {
     if (!container || !currentThemaId) return;
     
     const thema = THEMEN[currentThemaId];
+    const istGeteilt = thema?.istGeteilt || false;
+    
+    // ✅ NEU: Verwende die richtigen Kontakte
+    const activeKontakte = getActiveKontakte();
+    
+    console.log("👥 renderPersonenUebersicht");
+    console.log("  Ist geteilt:", istGeteilt);
+    console.log("  Active Kontakte:", Object.keys(activeKontakte).length);
+    console.log("  Thema Personen:", thema?.personen?.length || 0);
+    
     if (!thema?.personen || thema.personen.length === 0) {
         container.innerHTML = `
             <div class="text-center py-8 text-gray-500">
                 <p class="text-lg font-semibold">Keine Personen hinzugefügt</p>
                 <p class="text-sm">Füge Personen aus deinem Kontaktbuch hinzu, um Geschenke zu planen.</p>
-                <button onclick="window.openAddPersonToThemaModal()" class="mt-3 px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition">
-                    + Person hinzufügen
-                </button>
+                ${!istGeteilt ? `
+                    <button onclick="window.openAddPersonToThemaModal()" class="mt-3 px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition">
+                        + Person hinzufügen
+                    </button>
+                ` : '<p class="text-xs text-gray-400 mt-2">📘 Dies ist ein geteiltes Thema</p>'}
             </div>
         `;
         return;
+    }
+    
+    // ✅ NEU: Bei gefilterten Freigaben nur freigegebene Personen anzeigen
+    let sichtbarePersonen = thema.personen;
+    
+    if (istGeteilt && currentFreigabe && currentFreigabe.freigabeTyp === 'gefiltert') {
+        const filter = currentFreigabe.filter || {};
+        const filterRules = currentFreigabe.filterRules || {};
+        
+        // Sammle alle freigegebenen Personen-IDs
+        const freigegebenePersonen = new Set();
+        
+        if (filter.fuer) freigegebenePersonen.add(...filter.fuer);
+        if (filter.von) freigegebenePersonen.add(...filter.von);
+        if (filterRules.personen) freigegebenePersonen.add(...filterRules.personen);
+        
+        if (freigegebenePersonen.size > 0) {
+            sichtbarePersonen = thema.personen.filter(pid => freigegebenePersonen.has(pid));
+            console.log("  🔍 Gefilterte Personen:", sichtbarePersonen.length, "von", thema.personen.length);
+        }
     }
     
     // Gesamtstatistik berechnen
@@ -1099,10 +1331,13 @@ function renderPersonenUebersicht() {
         fertig: alleGeschenke.filter(g => g.status === 'abgeschlossen').length
     };
     
-    // Personen-Daten sammeln
-    const personenDaten = thema.personen.map(personId => {
-        const person = KONTAKTE[personId];
-        if (!person) return null;
+    // Personen-Daten sammeln - ✅ WICHTIG: Verwende activeKontakte!
+    const personenDaten = sichtbarePersonen.map(personId => {
+        const person = activeKontakte[personId];
+        if (!person) {
+            console.warn("  ⚠️ Person nicht gefunden:", personId);
+            return null;
+        }
         
         const geschenkeFuerPerson = alleGeschenke.filter(g => g.fuer && g.fuer.includes(personId));
         return {
@@ -1463,10 +1698,13 @@ function renderGeschenkeTabelle() {
 }
 
 function renderGeschenkRow(geschenk) {
+    // ✅ NEU: Verwende aktive Kontakte (eigene oder geteilte)
+    const activeKontakte = getActiveKontakte();
+    
     const statusConfig = STATUS_CONFIG[geschenk.status] || STATUS_CONFIG.offen;
-    const fuerPersonen = (geschenk.fuer || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join(', ');
-    const vonPersonen = (geschenk.von || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join(', ');
-    const beteiligtePersonen = (geschenk.beteiligung || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join(', ');
+    const fuerPersonen = (geschenk.fuer || []).map(id => activeKontakte[id]?.name || 'Unbekannt').join(', ');
+    const vonPersonen = (geschenk.von || []).map(id => activeKontakte[id]?.name || 'Unbekannt').join(', ');
+    const beteiligtePersonen = (geschenk.beteiligung || []).map(id => activeKontakte[id]?.name || 'Unbekannt').join(', ');
     
     return `
         <tr class="hover:bg-pink-50 transition cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">
@@ -1479,7 +1717,7 @@ function renderGeschenkRow(geschenk) {
             <td class="px-3 py-3 text-sm text-gray-600">${vonPersonen || '-'}</td>
             <td class="px-3 py-3 text-sm text-gray-600">${geschenk.id?.slice(-4) || '-'}</td>
             <td class="px-3 py-3 text-sm font-medium text-gray-900">${geschenk.geschenk || '-'}</td>
-            <td class="px-3 py-3 text-sm text-gray-600">${geschenk.bezahltVon ? (KONTAKTE[geschenk.bezahltVon]?.name || '-') : '-'}</td>
+            <td class="px-3 py-3 text-sm text-gray-600">${geschenk.bezahltVon ? (activeKontakte[geschenk.bezahltVon]?.name || '-') : '-'}</td>
             <td class="px-3 py-3 text-sm text-gray-600">${beteiligtePersonen || '-'}</td>
             <td class="px-3 py-3 text-sm font-bold text-gray-900">${geschenk.gesamtkosten ? formatCurrency(geschenk.gesamtkosten) : '-'}</td>
             <td class="px-3 py-3 text-sm font-bold text-green-700">${geschenk.eigeneKosten ? formatCurrency(geschenk.eigeneKosten) : '-'}</td>
@@ -2167,16 +2405,23 @@ window.acceptInvitation = async function(invitationId) {
             besitzerId: inv.absenderId,  // ✅ App User ID des Besitzers
             rechte: inv.rechte || 'lesen',
             shareType: inv.shareType || 'komplett',
+            freigabeTyp: inv.shareType || 'komplett',  // ✅ Beide Formate
             freigegebenVon: inv.absenderId,
             freigegebenVonName: inv.absenderName,
             aktiv: true,
             erstelltAm: serverTimestamp()
         };
         
-        // Bei gefilterter Freigabe: Filter-Regeln übernehmen
-        if (inv.shareType === 'gefiltert' && inv.filterRules) {
-            freigabeData.filterRules = inv.filterRules;
-            console.log("📋 Filter-Regeln:", inv.filterRules);
+        // ✅ Bei gefilterter Freigabe: Filter übernehmen (beide Formate)
+        if (inv.shareType === 'gefiltert') {
+            if (inv.filter) {
+                freigabeData.filter = inv.filter;  // Strukturiertes Format
+                console.log("📋 Filter (strukturiert):", inv.filter);
+            }
+            if (inv.filterRules) {
+                freigabeData.filterRules = inv.filterRules;  // Legacy Format
+                console.log("📋 Filter-Regeln (legacy):", inv.filterRules);
+            }
         }
         
         // Freigabe erstellen
@@ -2657,31 +2902,36 @@ window.sendShare = async function() {
             return;
         }
         
+        // ✅ Filter-Regeln in strukturiertes Format konvertieren
+        const filter = {};
+        
+        if (shareType === 'gefiltert' && window.shareRulesList.length > 0) {
+            window.shareRulesList.forEach(rule => {
+                if (!filter[rule.type]) {
+                    filter[rule.type] = [];
+                }
+                filter[rule.type].push(rule.value);
+            });
+            
+            console.log("📝 Konvertierte Filter:", filter);
+        }
+        
         // Einladungs-Daten erstellen
         const einladungData = {
-            absenderId: getCurrentUserId(),
+            absenderId: getCurrentUserId(),  // ✅ App User ID
             absenderName: currentUser.displayName || currentUser.name,
-            besitzerId: getCurrentUserId(),
-            besitzerUid: auth.currentUser.uid,
-            empfaengerId: userId,
+            besitzerId: getCurrentUserId(),  // ✅ App User ID
+            empfaengerId: userId,  // ✅ App User ID
             empfaengerName: userName,
             themaId: themaId,
             themaName: thema.name,
             shareType: shareType, // 'komplett' oder 'gefiltert'
             rechte: rechte,
+            filter: filter,  // ✅ NEU: Strukturierter Filter
+            filterRules: window.shareRulesList,  // ✅ Legacy-Support für UI
             status: 'pending',
             erstelltAm: serverTimestamp()
         };
-        
-        // Bei gefilterter Freigabe: Regeln hinzufügen (ohne individuelle Rechte)
-        if (shareType === 'gefiltert') {
-            einladungData.filterRules = window.shareRulesList.map(rule => ({
-                type: rule.type,
-                value: rule.value,
-                valueLabel: rule.valueLabel
-                // ✅ PUNKT 3: Keine individuellen Rechte mehr - nur globale Berechtigung aus Schritt 4
-            }));
-        }
         
         // Einladung erstellen
         await addDoc(geschenkeEinladungenRef, einladungData);
@@ -5629,15 +5879,18 @@ window.exportToExcel = function() {
     // CSV erstellen (Excel-kompatibel)
     const headers = ['Status', 'FÜR', 'VON', 'ID', 'Geschenk', 'Shop', 'Bezahlt von', 'Beteiligung', 'Gesamtkosten', 'Eigene Kosten', 'SOLL-Bezahlung', 'IST-Bezahlung', 'Standort', 'Bestellnummer', 'Rechnungsnummer', 'Notizen'];
     
+    // ✅ Verwende aktive Kontakte für Namen-Auflösung
+    const activeKontakte = getActiveKontakte();
+    
     const rows = geschenkeArray.map(g => [
         STATUS_CONFIG[g.status]?.label || g.status,
-        (g.fuer || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join('; '),
-        (g.von || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join('; '),
+        (g.fuer || []).map(id => activeKontakte[id]?.name || 'Unbekannt').join('; '),
+        (g.von || []).map(id => activeKontakte[id]?.name || 'Unbekannt').join('; '),
         g.id?.slice(-4) || '',
         g.geschenk || '',
         g.shop || '',
-        KONTAKTE[g.bezahltVon]?.name || '',
-        (g.beteiligung || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join('; '),
+        activeKontakte[g.bezahltVon]?.name || '',
+        (g.beteiligung || []).map(id => activeKontakte[id]?.name || 'Unbekannt').join('; '),
         g.gesamtkosten || 0,
         g.eigeneKosten || 0,
         ZAHLUNGSARTEN[g.sollBezahlung]?.label || g.sollBezahlung || '',
@@ -5728,16 +5981,19 @@ window.exportToPDF = function() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${geschenkeArray.map(g => `
-                        <tr>
-                            <td>${STATUS_CONFIG[g.status]?.icon || ''} ${STATUS_CONFIG[g.status]?.label || g.status}</td>
-                            <td>${(g.fuer || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join(', ')}</td>
-                            <td>${g.geschenk || '-'}</td>
-                            <td>${formatCurrency(g.gesamtkosten || 0)}</td>
-                            <td>${formatCurrency(g.eigeneKosten || 0)}</td>
-                            <td>${g.standort || '-'}</td>
-                        </tr>
-                    `).join('')}
+                    ${(() => {
+                        const activeKontakte = getActiveKontakte();
+                        return geschenkeArray.map(g => `
+                            <tr>
+                                <td>${STATUS_CONFIG[g.status]?.icon || ''} ${STATUS_CONFIG[g.status]?.label || g.status}</td>
+                                <td>${(g.fuer || []).map(id => activeKontakte[id]?.name || 'Unbekannt').join(', ')}</td>
+                                <td>${g.geschenk || '-'}</td>
+                                <td>${formatCurrency(g.gesamtkosten || 0)}</td>
+                                <td>${formatCurrency(g.eigeneKosten || 0)}</td>
+                                <td>${g.standort || '-'}</td>
+                            </tr>
+                        `).join('');
+                    })()}
                 </tbody>
             </table>
             <div class="footer">
