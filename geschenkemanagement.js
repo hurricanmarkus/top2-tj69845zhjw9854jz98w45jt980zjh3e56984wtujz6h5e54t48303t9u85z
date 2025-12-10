@@ -35,9 +35,10 @@ import {
 // GLOBALE VARIABLEN
 // ========================================
 
-// ✅ HELPER: Hole aktuelle User-ID (Firebase Auth UID)
+// ✅ HELPER: Hole aktuelle App User-ID (currentUser.mode)
+// WICHTIG: Gibt die App User ID zurück (z.B. "SYSTEMADMIN"), NICHT Firebase Auth UID!
 function getCurrentUserId() {
-    return auth?.currentUser?.uid || currentUser?.uid;
+    return currentUser?.mode || currentUser?.uid;
 }
 
 // ✅ GLOBAL: Mapping von User-Namen zu Firebase Auth UIDs
@@ -249,6 +250,42 @@ export async function initializeGeschenkemanagement() {
     const userId = getUserId(user);
     console.log("✅ User erkannt:", userId, user);
     
+    // ✅ NEU: Warte bis Firebase Custom Claim (appRole) gesetzt ist
+    console.log("⏳ Warte auf Firebase Custom Claim (appRole)...");
+    let claimRetries = 0;
+    let hasAppRole = false;
+    
+    while (!hasAppRole && claimRetries < 30) {
+        try {
+            if (auth?.currentUser) {
+                const idTokenResult = await auth.currentUser.getIdTokenResult(true);
+                if (idTokenResult.claims.appRole) {
+                    hasAppRole = true;
+                    console.log("✅ Custom Claim gefunden:", idTokenResult.claims.appRole);
+                    break;
+                }
+            }
+        } catch (e) {
+            console.warn("⚠️ Fehler beim Abrufen des Tokens:", e);
+        }
+        
+        console.log("⏳ Warte auf Custom Claim... (Versuch", claimRetries + 1, ")");
+        await new Promise(resolve => setTimeout(resolve, 200));
+        claimRetries++;
+    }
+    
+    if (!hasAppRole) {
+        console.warn("⚠️ Custom Claim nicht gefunden nach 6 Sekunden.");
+        
+        // ✅ Wenn kein Claim: Prüfe ob Gast-Modus
+        if (currentUser?.mode === 'Gast' || userId === 'Gast') {
+            console.log("👤 Gast-Modus erkannt - Geschenkemanagement nicht verfügbar");
+            alertUser("Geschenkemanagement ist nur für registrierte Benutzer verfügbar.", "info");
+            setupEventListeners(); // UI trotzdem initialisieren
+            return;
+        }
+    }
+    
     // ✅ WICHTIG: Verwende Firebase Auth UID für Firestore-Pfade!
     const firebaseAuthUid = auth?.currentUser?.uid;
     console.log("🔑 Firebase Auth UID:", firebaseAuthUid);
@@ -395,6 +432,10 @@ function listenForKontakte() {
         }
     }, (error) => {
         console.error("Fehler beim Laden der Kontakte:", error);
+        if (error.code === 'permission-denied') {
+            console.warn("⚠️ Keine Berechtigung für Kontakte. Bitte einloggen!");
+            alertUser("Bitte melde dich an, um das Geschenkemanagement zu nutzen.", "info");
+        }
     });
 }
 
@@ -430,7 +471,7 @@ function listenForThemen() {
     console.log("🎧 Themen-Listener gestartet (eigene Themen)");
     
     // 1️⃣ Eigene Themen
-    onSnapshot(geschenkeThemenRef, (snapshot) => {
+    onSnapshot(geschenkeThemenRef, async (snapshot) => {
         console.log(`📂 Eigene Themen: ${snapshot.size} Dokumente`);
         
         const oldThemaId = currentThemaId;
@@ -447,10 +488,10 @@ function listenForThemen() {
             };
         });
         
-        // 2️⃣ Geteilte Themen laden (via Freigaben)
-        loadSharedThemen();
+        // 2️⃣ Geteilte Themen laden (via Freigaben) - ✅ MIT AWAIT!
+        await loadSharedThemen();
         
-        console.log("✅ Themen geladen:", Object.keys(THEMEN).length);
+        console.log("✅ ALLE Themen geladen (eigene + geteilte):", Object.keys(THEMEN).length);
         
         // Gespeichertes Thema wiederherstellen oder erstes Thema wählen
         const savedThemaId = localStorage.getItem('gm_current_thema');
@@ -476,49 +517,79 @@ function listenForThemen() {
         }
     }, (error) => {
         console.error("Fehler beim Laden der Themen:", error);
+        if (error.code === 'permission-denied') {
+            console.warn("⚠️ Keine Berechtigung für Themen. Bitte einloggen!");
+        }
     });
 }
 
 // ✅ Geteilte Themen laden (von anderen Usern via Freigaben)
 async function loadSharedThemen() {
     const myAppUserId = currentUser?.mode;
-    if (!myAppUserId) return;
+    if (!myAppUserId) {
+        console.log("⚠️ loadSharedThemen: currentUser.mode nicht vorhanden");
+        return;
+    }
     
     console.log("🔍 Prüfe geteilte Themen für User:", myAppUserId);
+    console.log("📋 Verfügbare Freigaben:", Object.keys(FREIGABEN).length);
+    
+    let gefundenCount = 0;
     
     // Finde alle aktiven Freigaben für mich
     for (const freigabeId in FREIGABEN) {
         const freigabe = FREIGABEN[freigabeId];
         
+        console.log(`  🔍 Prüfe Freigabe ${freigabeId}:`, {
+            aktiv: freigabe.aktiv,
+            userId: freigabe.userId,
+            myAppUserId: myAppUserId,
+            passt: freigabe.aktiv && freigabe.userId === myAppUserId
+        });
+        
         // Nur aktive Freigaben, die für mich sind
-        if (!freigabe.aktiv || freigabe.userId !== myAppUserId) continue;
+        if (!freigabe.aktiv) {
+            console.log(`    ⏭️ Übersprungen: nicht aktiv`);
+            continue;
+        }
+        
+        if (freigabe.userId !== myAppUserId) {
+            console.log(`    ⏭️ Übersprungen: nicht für mich (${freigabe.userId} !== ${myAppUserId})`);
+            continue;
+        }
         
         try {
             const ownerUserId = freigabe.besitzerId;  // App User ID des Besitzers
             const themaId = freigabe.themaId;
             
-            console.log(`  📖 Lade geteiltes Thema von ${ownerUserId}`);
+            console.log(`  📖 Lade geteiltes Thema von ${ownerUserId}, Thema ID: ${themaId}`);
             
             // Lade Thema vom Besitzer
             const themaRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', ownerUserId, 'geschenke_themen', themaId);
             const themaSnap = await getDoc(themaRef);
             
             if (themaSnap.exists()) {
+                const themaData = themaSnap.data();
                 THEMEN[themaSnap.id] = {
                     id: themaSnap.id,
-                    ...themaSnap.data(),
+                    ...themaData,
                     istEigenes: false,
                     istGeteilt: true,
                     besitzerUserId: ownerUserId,
                     besitzerName: freigabe.freigegebenVonName,
                     freigabe: freigabe
                 };
-                console.log(`  ✅ Geteiltes Thema: "${themaSnap.data().name}"`);
+                gefundenCount++;
+                console.log(`  ✅ Geteiltes Thema geladen: "${themaData.name}" von ${freigabe.freigegebenVonName}`);
+            } else {
+                console.log(`  ❌ Thema existiert nicht (mehr): ${themaId}`);
             }
         } catch (e) {
             console.error(`  ❌ Fehler beim Laden:`, e);
         }
     }
+    
+    console.log(`✅ loadSharedThemen abgeschlossen: ${gefundenCount} geteilte Themen gefunden`);
 }
 
 // ❌ VERALTET: Wird durch listenForThemen() ersetzt
@@ -547,6 +618,9 @@ function listenForVorlagen() {
         console.log("✅ Vorlagen geladen:", Object.keys(VORLAGEN).length);
     }, (error) => {
         console.error("Fehler beim Laden der Vorlagen:", error);
+        if (error.code === 'permission-denied') {
+            console.warn("⚠️ Keine Berechtigung für Vorlagen. Bitte einloggen!");
+        }
     });
 }
 
@@ -565,7 +639,7 @@ function listenForFreigaben() {
     
     console.log("🎧 NEU: Freigaben-Listener gestartet");
     
-    onSnapshot(geschenkeFreigabenRef, (snapshot) => {
+    onSnapshot(geschenkeFreigabenRef, async (snapshot) => {
         console.log(`📦 Freigaben: ${snapshot.size} Dokumente`);
         
         // Cache leeren und neu füllen
@@ -576,10 +650,12 @@ function listenForFreigaben() {
         
         console.log("✅ Freigaben geladen:", Object.keys(FREIGABEN).length);
         
-        // ✅ Geteilte Themen neu laden wenn Freigaben sich ändern
-        loadSharedThemen();
+        // ✅ Geteilte Themen neu laden wenn Freigaben sich ändern - MIT AWAIT!
+        await loadSharedThemen();
         
         // UI aktualisieren
+        renderThemenDropdown();
+        
         if (document.getElementById('gm-freigaben-list')) {
             renderShareSettings();
         }
@@ -746,6 +822,11 @@ function renderThemenDropdown() {
     
     const activeThemen = Object.values(THEMEN).filter(t => !t.archiviert);
     
+    console.log("🎨 renderThemenDropdown - Aktive Themen:", activeThemen.length);
+    activeThemen.forEach(t => {
+        console.log(`  - ${t.name} (istGeteilt: ${t.istGeteilt}, besitzerName: ${t.besitzerName})`);
+    });
+    
     if (activeThemen.length === 0) {
         dropdown.innerHTML = '<option value="">Kein Thema vorhanden</option>';
         
@@ -785,9 +866,18 @@ function renderThemenDropdown() {
             }
         }
     } else {
-        // ✅ Themen anzeigen (alle zentral gespeichert)
+        // ✅ Themen anzeigen (eigene + geteilte)
         dropdown.innerHTML = activeThemen.map(thema => {
-            return `<option value="${thema.id}" ${thema.id === currentThemaId ? 'selected' : ''}>${thema.name}</option>`;
+            let displayName = thema.name;
+            
+            // ✅ Markiere geteilte Themen
+            if (thema.istGeteilt && thema.besitzerName) {
+                displayName = `${thema.name} 📘 [von ${thema.besitzerName}]`;
+            } else if (thema.istGeteilt) {
+                displayName = `${thema.name} 📘 [geteilt]`;
+            }
+            
+            return `<option value="${thema.id}" ${thema.id === currentThemaId ? 'selected' : ''}>${displayName}</option>`;
         }).join('');
         
         // ✅ Setze Dropdown-Style für bessere Sichtbarkeit
@@ -911,7 +1001,7 @@ window.showAllPendingInvitations = function() {
     }
 };
 
-// ✅ DIAGNOSE-TOOL: Zeige User-UID-Mapping (für Entwicklung)
+// ✅ DIAGNOSE-TOOL: Zeige kompletten Status
 window.diagnoseGeschenkeSystem = function() {
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("🔍 GESCHENKEMANAGEMENT DIAGNOSE");
@@ -920,64 +1010,67 @@ window.diagnoseGeschenkeSystem = function() {
     
     console.log("👤 AKTUELLER USER:");
     console.log("  Name:", currentUser?.displayName);
+    console.log("  App User ID (mode):", currentUser?.mode);
     console.log("  Firebase Auth UID:", auth?.currentUser?.uid);
     console.log("  getCurrentUserId():", getCurrentUserId());
     console.log("");
     
-    console.log("📋 USERS OBJEKT:");
-    Object.entries(USERS).forEach(([id, user]) => {
-        console.log(`  ${user.name}:`, {
-            firestoreDocId: id,
-            firebaseUid: user._firebaseUid || '❌ nicht gecached',
-            permissionType: user.permissionType
+    console.log("📂 THEMEN (GESAMT):", Object.keys(THEMEN).length);
+    Object.values(THEMEN).forEach(t => {
+        console.log(`  ${t.istGeteilt ? '📘' : '📁'} ${t.name}:`, {
+            id: t.id,
+            istEigenes: t.istEigenes,
+            istGeteilt: t.istGeteilt,
+            besitzerUserId: t.besitzerUserId,
+            besitzerName: t.besitzerName,
+            archiviert: t.archiviert
         });
     });
     console.log("");
     
-    console.log("🗺️ USER-UID-MAPPING:");
-    Object.entries(userNameToUidMapping).forEach(([name, uid]) => {
-        console.log(`  ${name} → ${uid}`);
-    });
-    console.log("");
-    
-    console.log("📨 EINLADUNGEN:");
+    console.log("📨 EINLADUNGEN:", Object.keys(EINLADUNGEN).length);
     Object.entries(EINLADUNGEN).forEach(([id, inv]) => {
         console.log(`  ${inv.themaName}:`, {
             absender: inv.absenderName,
             empfaenger: inv.empfaengerName,
-            empfaengerId: inv.empfaengerId,
-            empfaengerUid: inv.empfaengerUid,
             status: inv.status
         });
     });
     console.log("");
     
-    console.log("🔐 FREIGABEN:");
+    console.log("🔐 FREIGABEN:", Object.keys(FREIGABEN).length);
     Object.entries(FREIGABEN).forEach(([id, f]) => {
         console.log(`  ${f.themaName}:`, {
-            user: f.userName,
             userId: f.userId,
-            userUid: f.userUid,
-            aktiv: f.aktiv
+            userName: f.userName,
+            besitzerId: f.besitzerId,
+            aktiv: f.aktiv,
+            rechte: f.rechte
         });
     });
+    console.log("");
+    
+    console.log("👥 KONTAKTE:", Object.keys(KONTAKTE).length);
+    console.log("🎁 GESCHENKE:", Object.keys(GESCHENKE).length);
     
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("💡 TIPPs:");
-    console.log("  - Alle User müssen in user-config existieren");
-    console.log("  - empfaengerUid muss mit Firebase Auth UID übereinstimmen");
-    console.log("  - Wenn Mapping leer ist: loadUserUidMapping() aufrufen");
+    console.log("💡 ERWARTUNG:");
+    console.log("  - Eigene Themen: istGeteilt = false");
+    console.log("  - Geteilte Themen: istGeteilt = true + besitzerName");
+    console.log("  - Freigabe.userId muss mit currentUser.mode übereinstimmen");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     
     return {
         currentUser: {
             name: currentUser?.displayName,
-            uid: getCurrentUserId()
+            mode: currentUser?.mode,
+            appUserId: getCurrentUserId()
         },
-        users: USERS,
-        mapping: userNameToUidMapping,
+        themen: THEMEN,
+        freigaben: FREIGABEN,
         einladungen: EINLADUNGEN,
-        freigaben: FREIGABEN
+        kontakte: KONTAKTE,
+        geschenke: GESCHENKE
     };
 };
 
@@ -2056,17 +2149,24 @@ window.acceptInvitation = async function(invitationId) {
         });
         
         // Freigabe-Daten vorbereiten
-        const freigabeId = `${inv.themaId}_${getCurrentUserId()}`;
+        const myAppUserId = currentUser.mode;
+        const freigabeId = `${inv.themaId}_${myAppUserId}`;
+        
+        console.log("📝 Erstelle Freigabe:", {
+            freigabeId: freigabeId,
+            myAppUserId: myAppUserId,
+            themaId: inv.themaId,
+            besitzerId: inv.absenderId
+        });
+        
         const freigabeData = {
-            userId: getCurrentUserId(),
-            userUid: auth.currentUser.uid,
+            userId: myAppUserId,  // ✅ App User ID (z.B. "SYSTEMADMIN")
             userName: currentUser.displayName || currentUser.name,
             themaId: inv.themaId,
             themaName: inv.themaName,
-            besitzerId: inv.absenderId,
-            besitzerUid: inv.besitzerUid,
+            besitzerId: inv.absenderId,  // ✅ App User ID des Besitzers
             rechte: inv.rechte || 'lesen',
-            shareType: inv.shareType || 'komplett', // 'komplett' oder 'gefiltert'
+            shareType: inv.shareType || 'komplett',
             freigegebenVon: inv.absenderId,
             freigegebenVonName: inv.absenderName,
             aktiv: true,
@@ -2081,10 +2181,14 @@ window.acceptInvitation = async function(invitationId) {
         
         // Freigabe erstellen
         await setDoc(doc(geschenkeFreigabenRef, freigabeId), freigabeData);
+        console.log("✅ Freigabe erfolgreich erstellt!");
         
-        alertUser('✅ Einladung angenommen!', 'success');
+        // ✅ Warte kurz, damit Listener die Freigabe laden kann
+        await new Promise(resolve => setTimeout(resolve, 500));
         
-        // ✅ Themen werden automatisch durch listenForThemen() aktualisiert
+        alertUser('✅ Einladung angenommen! Das geteilte Thema erscheint gleich im Dropdown.', 'success');
+        
+        // ✅ Themen werden automatisch durch listenForFreigaben() → loadSharedThemen() aktualisiert
         // ✅ UI wird automatisch aktualisiert
         
     } catch (error) {
@@ -3394,19 +3498,19 @@ async function loadGeschenkeFromMultipleThemen(themaIds) {
                 continue;
             }
             
-            // ✅ KORRIGIERT: Verwende auth.currentUser.uid!
-            // Bei eigenen Themen: verwende auth.currentUser.uid
-            // Bei geteilten Themen: verwende besitzerUid
-            let ownerUid;
+            // ✅ KORRIGIERT: Verwende App User ID (currentUser.mode)
+            // Bei eigenen Themen: verwende currentUser.mode
+            // Bei geteilten Themen: verwende besitzerUserId
+            let ownerUserId;
             
             if (thema.istGeteilt) {
-                ownerUid = thema.besitzerUid;
+                ownerUserId = thema.besitzerUserId;
             } else {
-                ownerUid = auth.currentUser.uid;
+                ownerUserId = currentUser.mode;
             }
             
             console.log(`  📁 Lade Thema "${thema.name}" (${themaId})`);
-            console.log(`     Owner UID: ${ownerUid}`);
+            console.log(`     Owner User ID: ${ownerUserId}`);
             console.log(`     Ist geteilt: ${thema.istGeteilt}`);
             
             const geschenkeRef = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke_themen', themaId, 'geschenke');
@@ -3881,14 +3985,12 @@ window.sendNeueFreigabeEinladungen = async function(userId) {
                 });
             } else {
                 console.log("➕ Erstelle neue Einladung");
-                // ✅ LÖSUNG: Verwende Namen-basiertes Matching!
                 const einladungData = {
-                    absenderId: myUserId,
+                    absenderId: myUserId,  // ✅ App User ID
                     absenderName: currentUser.displayName,
-                    besitzerId: myUserId,
-                    besitzerUid: auth.currentUser.uid,
-                    empfaengerId: userId,  // Firestore Doc ID (für Rückwärtskompatibilität)
-                    empfaengerName: empfaengerName,  // ✅ WICHTIG: Name für Matching!
+                    besitzerId: myUserId,  // ✅ App User ID
+                    empfaengerId: userId,  // ✅ App User ID
+                    empfaengerName: empfaengerName,
                     themaId,
                     themaName: thema.name,
                     filter,
@@ -4008,11 +4110,10 @@ window.sendFreigabeEinladungen = async function(userId) {
             } else {
                 // Erstelle neue Einladung
                 await addDoc(geschenkeEinladungenRef, {
-                    absenderId: myUserId,
+                    absenderId: myUserId,  // ✅ App User ID
                     absenderName: currentUser.displayName,
-                    besitzerId: myUserId,  // ✅ Owner des Themas
-                    besitzerUid: auth.currentUser.uid,  // ✅ Firebase Auth UID des Owners
-                    empfaengerId: userId,
+                    besitzerId: myUserId,  // ✅ App User ID
+                    empfaengerId: userId,  // ✅ App User ID
                     empfaengerName: user.displayName || user.name,
                     themaId: config.themaId,
                     themaName: config.themaName,
@@ -4745,6 +4846,9 @@ function listenForBudgets() {
         console.log("✅ Budgets geladen:", Object.keys(BUDGETS).length);
     }, (error) => {
         console.error("Fehler beim Laden der Budgets:", error);
+        if (error.code === 'permission-denied') {
+            console.warn("⚠️ Keine Berechtigung für Budgets. Bitte einloggen!");
+        }
     });
 }
 
@@ -4774,6 +4878,9 @@ function listenForErinnerungen() {
         console.log("✅ Erinnerungen geladen:", Object.keys(ERINNERUNGEN).length);
     }, (error) => {
         console.error("Fehler beim Laden der Erinnerungen:", error);
+        if (error.code === 'permission-denied') {
+            console.warn("⚠️ Keine Berechtigung für Erinnerungen. Bitte einloggen!");
+        }
     });
 }
 
@@ -4928,13 +5035,11 @@ window.acceptGeschenkeInvitation = async function(invitationId) {
         });
         
         const freigabeData = {
-            userId: myUserId,  // Für Kompatibilität
-            userUid: auth.currentUser.uid,  // ✅ Firebase Auth UID (für Firestore Rules!)
+            userId: myUserId,  // ✅ App User ID
             userName: myName,
             themaId: invitation.themaId,
             themaName: invitation.themaName,
-            besitzerId: invitation.besitzerId,
-            besitzerUid: invitation.besitzerUid,
+            besitzerId: invitation.besitzerId,  // ✅ App User ID des Besitzers
             freigabeTyp: invitation.freigabeTyp,
             rechte: invitation.rechte,
             rechteMap: invitation.rechteMap || {},
@@ -5106,11 +5211,10 @@ window.sendInvitation = async function(userId, userName, themaId, freigaben) {
     try {
         const thema = THEMEN[themaId];
         const einladungData = {
-            absenderId: myUserId,
+            absenderId: myUserId,  // ✅ App User ID des Absenders
             absenderName: currentUser.displayName,
-            besitzerId: myUserId,  // ✅ Owner des Themas
-            besitzerUid: auth.currentUser.uid,  // ✅ Firebase Auth UID des Owners
-            empfaengerId: userId,
+            besitzerId: myUserId,  // ✅ App User ID des Besitzers (gleich wie Absender)
+            empfaengerId: userId,  // ✅ App User ID des Empfängers
             empfaengerName: userName,
             themaId: themaId,
             themaName: thema?.name || 'Unbekannt',
@@ -5118,6 +5222,8 @@ window.sendInvitation = async function(userId, userName, themaId, freigaben) {
             status: 'pending',
             erstelltAm: serverTimestamp()
         };
+        
+        console.log("📨 Einladungs-Daten:", einladungData);
         
         const docRef = await addDoc(geschenkeEinladungenRef, einladungData);
         EINLADUNGEN[docRef.id] = { id: docRef.id, ...einladungData };
@@ -5649,3 +5755,4 @@ window.exportToPDF = function() {
 // ========================================
 // ALTE FREIGABE-FUNKTIONEN ENTFERNT
 // Die neuen Funktionen sind oben ab Zeile 1083
+
