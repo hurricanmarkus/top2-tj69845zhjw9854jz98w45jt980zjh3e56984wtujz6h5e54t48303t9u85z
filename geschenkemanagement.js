@@ -515,11 +515,6 @@ function listenForErinnerungen() {
         });
         
         console.log("✅ Erinnerungen geladen:", Object.keys(ERINNERUNGEN).length);
-        
-        // ✅ Startseiten-Benachrichtigung aktualisieren
-        if (typeof window.updateHomeAlerts === 'function') {
-            window.updateHomeAlerts();
-        }
     }, (error) => {
         console.error("Fehler beim Laden der Erinnerungen:", error);
         if (error.code === 'permission-denied') {
@@ -711,84 +706,9 @@ function renderThemenDropdown() {
 
 function renderDashboard() {
     renderThemenDropdown();
-    renderErinnerungenUebersicht();
     renderPersonenUebersicht();
     renderGeschenkeTabelle();
     updateDashboardStats();
-}
-
-// ========================================
-// ERINNERUNGEN-ÜBERSICHT IM DASHBOARD
-// ========================================
-function renderErinnerungenUebersicht() {
-    const container = document.getElementById('gm-erinnerungen-uebersicht');
-    if (!container || !currentThemaId) return;
-    
-    // Filtere Erinnerungen für aktuelles Thema
-    const themaErinnerungen = Object.values(ERINNERUNGEN).filter(e => e.themaId === currentThemaId && !e.erledigt);
-    
-    if (themaErinnerungen.length === 0) {
-        container.innerHTML = '';
-        return;
-    }
-    
-    // Sortiere nach Datum (älteste zuerst)
-    themaErinnerungen.sort((a, b) => {
-        const dateA = a.datum?.toDate ? a.datum.toDate() : new Date(a.datum);
-        const dateB = b.datum?.toDate ? b.datum.toDate() : new Date(b.datum);
-        return dateA - dateB;
-    });
-    
-    const now = new Date();
-    
-    container.innerHTML = `
-        <div class="bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-xl shadow-md p-4 mb-4">
-            <div class="flex items-center justify-between mb-3">
-                <div class="flex items-center gap-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
-                        <path d="M5.85 3.5a.75.75 0 0 0-1.117-1 9.719 9.719 0 0 0-2.348 4.876.75.75 0 0 0 1.479.248A8.219 8.219 0 0 1 5.85 3.5ZM19.267 2.5a.75.75 0 1 0-1.118 1 8.22 8.22 0 0 1 1.987 4.124.75.75 0 0 0 1.48-.248A9.72 9.72 0 0 0 19.266 2.5Z" />
-                        <path fill-rule="evenodd" d="M12 2.25A6.75 6.75 0 0 0 5.25 9v.75a8.217 8.217 0 0 1-2.119 5.52.75.75 0 0 0 .298 1.206c1.544.57 3.16.99 4.831 1.243a3.75 3.75 0 1 0 7.48 0 24.583 24.583 0 0 0 4.83-1.244.75.75 0 0 0 .298-1.205 8.217 8.217 0 0 1-2.118-5.52V9A6.75 6.75 0 0 0 12 2.25ZM9.75 18c0-.034 0-.067.002-.1a25.05 25.05 0 0 0 4.496 0l.002.1a2.25 2.25 0 1 1-4.5 0Z" clip-rule="evenodd" />
-                    </svg>
-                    <div>
-                        <h3 class="text-lg font-bold">🔔 Erinnerungen</h3>
-                        <p class="text-sm opacity-90">${themaErinnerungen.length} aktive Erinnerung${themaErinnerungen.length > 1 ? 'en' : ''}</p>
-                    </div>
-                </div>
-                <button onclick="window.openErinnerungModal()" class="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-bold transition">
-                    + Neu
-                </button>
-            </div>
-            
-            <div class="space-y-2 max-h-40 overflow-y-auto">
-                ${themaErinnerungen.map(e => {
-                    const datum = e.datum?.toDate ? e.datum.toDate() : new Date(e.datum);
-                    const isFaellig = datum <= now;
-                    const geschenk = e.geschenkId ? GESCHENKE[e.geschenkId] : null;
-                    
-                    return `
-                        <div class="bg-white/10 backdrop-blur rounded-lg p-3 ${isFaellig ? 'ring-2 ring-yellow-300 animate-pulse' : ''}">
-                            <div class="flex items-start justify-between gap-3">
-                                <div class="flex-1 min-w-0">
-                                    <div class="flex items-center gap-2 mb-1">
-                                        ${isFaellig ? '<span class="text-yellow-300 font-bold text-xs">⚠️ FÄLLIG</span>' : ''}
-                                        <span class="text-xs opacity-75">${datum.toLocaleDateString('de-DE')} ${datum.toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'})}</span>
-                                    </div>
-                                    <p class="font-semibold text-sm">${e.nachricht || 'Keine Nachricht'}</p>
-                                    ${geschenk ? `<p class="text-xs opacity-75 mt-1">📦 ${geschenk.geschenk}</p>` : ''}
-                                    <span class="text-xs bg-white/20 px-2 py-0.5 rounded-full mt-1 inline-block">${e.typ || 'Allgemein'}</span>
-                                </div>
-                                <button onclick="window.markErinnerungDone('${e.id}')" 
-                                        class="flex-shrink-0 px-2 py-1 bg-green-500 hover:bg-green-600 rounded text-xs font-bold transition"
-                                        title="Als erledigt markieren">
-                                    ✓
-                                </button>
-                            </div>
-                        </div>
-                    `;
-                }).join('')}
-            </div>
-        </div>
-    `;
 }
 
 
@@ -2865,7 +2785,3 @@ window.createNewThema = async function() {
     }
 };
 
-// ========================================
-// EXPORT FÜR STARTSEITEN-BENACHRICHTIGUNG
-// ========================================
-export { ERINNERUNGEN };
