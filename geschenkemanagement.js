@@ -823,11 +823,16 @@ function renderPersonenUebersicht() {
             id: personId,
             name: person.name,
             total: geschenkeFuerPerson.length,
-            offen: geschenkeFuerPerson.filter(g => ['offen', 'idee', 'zu_bestellen'].includes(g.status)).length,
+            offen: geschenkeFuerPerson.filter(g => !['abgeschlossen', 'storniert', 'bestellt'].includes(g.status)).length,
             bestellt: geschenkeFuerPerson.filter(g => ['bestellt', 'teillieferung'].includes(g.status)).length,
             fertig: geschenkeFuerPerson.filter(g => g.status === 'abgeschlossen').length
         };
     }).filter(p => p !== null);
+    
+    // Personen fertig zählen (Status = abgeschlossen)
+    const personenStatus = thema.personenStatus || {};
+    const personenFertig = personenDaten.filter(p => personenStatus[p.id] === 'abgeschlossen').length;
+    const personenGesamt = personenDaten.length;
     
     // HTML mit ausklappbarer Übersicht
     let html = `
@@ -838,15 +843,15 @@ function renderPersonenUebersicht() {
                     <div>
                         <p class="font-bold text-gray-800 text-lg">Personen-Übersicht</p>
                         <p class="text-sm text-gray-600">
-                            <span class="font-bold text-green-600">${gesamtStats.fertig}</span> von 
-                            <span class="font-bold">${gesamtStats.total}</span> Geschenken fertig
+                            <span class="font-bold text-green-600">${personenFertig}</span> von 
+                            <span class="font-bold">${personenGesamt}</span> Personen fertig
                         </p>
                     </div>
                 </div>
                 <div class="flex items-center gap-3">
                     <div class="w-32 bg-gray-200 rounded-full h-3">
                         <div class="bg-gradient-to-r from-green-500 to-emerald-500 h-3 rounded-full transition-all" 
-                             style="width: ${gesamtStats.total > 0 ? Math.round((gesamtStats.fertig / gesamtStats.total) * 100) : 0}%"></div>
+                             style="width: ${personenGesamt > 0 ? Math.round((personenFertig / personenGesamt) * 100) : 0}%"></div>
                     </div>
                     <span id="gm-personen-toggle-icon" class="text-gray-500 transition-transform" style="transform: rotate(${personenDetailsAusgeklappt ? '0' : '180'}deg)">▼</span>
                 </div>
@@ -948,7 +953,7 @@ window.openPersonModal = function(personId) {
     // Statistiken berechnen
     const stats = {
         total: personGeschenke.length,
-        offen: personGeschenke.filter(g => ['offen', 'idee', 'zu_bestellen'].includes(g.status)).length,
+        offen: personGeschenke.filter(g => !['abgeschlossen', 'storniert', 'bestellt'].includes(g.status)).length,
         bestellt: personGeschenke.filter(g => ['bestellt', 'teillieferung'].includes(g.status)).length,
         fertig: personGeschenke.filter(g => g.status === 'abgeschlossen').length,
         gesamtkosten: personGeschenke.reduce((sum, g) => sum + (parseFloat(g.gesamtkosten) || 0), 0),
@@ -1200,12 +1205,17 @@ function renderGeschenkRow(geschenk) {
     const vonPersonen = (geschenk.von || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join(', ');
     const beteiligtePersonen = (geschenk.beteiligung || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join(', ');
     
+    const kontoDifferenz = geschenk.sollBezahlung && geschenk.istBezahlung && geschenk.sollBezahlung !== geschenk.istBezahlung;
+    
     return `
         <tr class="hover:bg-pink-50 transition cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">
             <td class="px-3 py-3">
-                <span class="px-2 py-1 rounded-full text-xs font-bold ${statusConfig.color}">
-                    ${statusConfig.icon} ${statusConfig.label}
-                </span>
+                <div class="flex flex-col gap-1">
+                    <span class="px-2 py-1 rounded-full text-xs font-bold ${statusConfig.color}">
+                        ${statusConfig.icon} ${statusConfig.label}
+                    </span>
+                    ${kontoDifferenz ? '<span class="px-2 py-1 rounded text-xs font-bold bg-red-500 text-white animate-pulse">⚠️ Konto-Differenz</span>' : ''}
+                </div>
             </td>
             <td class="px-3 py-3 text-sm font-medium text-gray-900">${fuerPersonen || '-'}</td>
             <td class="px-3 py-3 text-sm text-gray-600">${vonPersonen || '-'}</td>
@@ -1228,7 +1238,7 @@ function updateDashboardStats() {
     // Status-Statistiken
     const stats = {
         total: geschenkeArray.length,
-        offen: geschenkeArray.filter(g => ['offen', 'idee'].includes(g.status)).length,
+        offen: geschenkeArray.filter(g => !['abgeschlossen', 'storniert', 'bestellt'].includes(g.status)).length,
         zuBestellen: geschenkeArray.filter(g => g.status === 'zu_bestellen').length,
         bestellt: geschenkeArray.filter(g => ['bestellt', 'teillieferung', 'teillieferung_temp', 'geliefert_temp'].includes(g.status)).length,
         abgeschlossen: geschenkeArray.filter(g => g.status === 'abgeschlossen').length,

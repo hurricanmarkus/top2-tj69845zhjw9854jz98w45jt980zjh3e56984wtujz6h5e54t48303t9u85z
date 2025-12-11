@@ -386,7 +386,7 @@ function getStatusBadge(wertguthaben, restzeit) {
 // ========================================
 // MODAL FUNKTIONEN
 // ========================================
-function openCreateModal() {
+window.openCreateModal = function() {
     document.getElementById('wertguthabenModalTitle').textContent = 'Neues Wertguthaben';
     document.getElementById('editWertguthabenId').value = '';
     
@@ -411,6 +411,10 @@ function openCreateModal() {
     handleTypChange();
 
     document.getElementById('wertguthabenModal').style.display = 'flex';
+};
+
+function openCreateModal() {
+    window.openCreateModal();
 }
 
 function closeWertguthabenModal() {
