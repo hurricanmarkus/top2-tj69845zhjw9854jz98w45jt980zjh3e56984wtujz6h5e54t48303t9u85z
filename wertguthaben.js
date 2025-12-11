@@ -891,14 +891,19 @@ window.openWertguthabenDetails = async function(id) {
     document.getElementById('addTransaktionBtn').dataset.wertguthabenId = id;
 
     // Event-Listener für Buttons
+    document.getElementById('addTransaktionBtn').onclick = () => {
+        document.getElementById('wertguthabenDetailsModal').style.display = 'none';
+        window.openTransaktionModal(id);
+    };
+
     document.getElementById('editWertguthabenDetailsBtn').onclick = () => {
         document.getElementById('wertguthabenDetailsModal').style.display = 'none';
-        openEditWertguthaben(id);
+        window.openEditWertguthaben(id);
     };
 
     document.getElementById('deleteWertguthabenBtn').onclick = () => {
         if (confirm('Wertguthaben wirklich löschen?')) {
-            deleteWertguthaben(id);
+            window.deleteWertguthaben(id);
             document.getElementById('wertguthabenDetailsModal').style.display = 'none';
         }
     };
