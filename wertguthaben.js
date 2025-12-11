@@ -670,7 +670,7 @@ window.openTransaktionModal = function(wertguthabenId) {
             const wgId = addTransBtn.dataset.wertguthabenId;
             if (wgId) {
                 document.getElementById('wertguthabenDetailsModal').style.display = 'none';
-                openTransaktionModal(wgId);
+                window.openTransaktionModal(wgId);
             }
         });
         addTransBtn.dataset.listenerAttached = 'true';
