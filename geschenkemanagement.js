@@ -565,6 +565,7 @@ export function listenForGeschenke() {
         
         renderGeschenkeTabelle();
         updateDashboardStats();
+        populateFilterDropdowns();
     }, (error) => {
         console.error("Fehler beim Laden der Geschenke:", error);
     });
@@ -612,6 +613,76 @@ function setupEventListeners() {
             renderGeschenkeTabelle();
         });
         searchInput.dataset.listenerAttached = 'true';
+    }
+
+    // Status-Filter
+    const statusFilter = document.getElementById('filter-gm-status');
+    if (statusFilter && !statusFilter.dataset.listenerAttached) {
+        statusFilter.addEventListener('change', (e) => {
+            currentFilter.status = e.target.value;
+            renderGeschenkeTabelle();
+        });
+        statusFilter.dataset.listenerAttached = 'true';
+    }
+
+    // FÜR-Filter
+    const fuerFilter = document.getElementById('filter-gm-fuer');
+    if (fuerFilter && !fuerFilter.dataset.listenerAttached) {
+        fuerFilter.addEventListener('change', (e) => {
+            currentFilter.fuer = e.target.value;
+            renderGeschenkeTabelle();
+        });
+        fuerFilter.dataset.listenerAttached = 'true';
+    }
+
+    // VON-Filter
+    const vonFilter = document.getElementById('filter-gm-von');
+    if (vonFilter && !vonFilter.dataset.listenerAttached) {
+        vonFilter.addEventListener('change', (e) => {
+            currentFilter.von = e.target.value;
+            renderGeschenkeTabelle();
+        });
+        vonFilter.dataset.listenerAttached = 'true';
+    }
+
+    // SOLL-Konto-Filter
+    const sollKontoFilter = document.getElementById('filter-gm-sollkonto');
+    if (sollKontoFilter && !sollKontoFilter.dataset.listenerAttached) {
+        sollKontoFilter.addEventListener('change', (e) => {
+            currentFilter.sollKonto = e.target.value;
+            renderGeschenkeTabelle();
+        });
+        sollKontoFilter.dataset.listenerAttached = 'true';
+    }
+
+    // IST-Konto-Filter
+    const istKontoFilter = document.getElementById('filter-gm-istkonto');
+    if (istKontoFilter && !istKontoFilter.dataset.listenerAttached) {
+        istKontoFilter.addEventListener('change', (e) => {
+            currentFilter.istKonto = e.target.value;
+            renderGeschenkeTabelle();
+        });
+        istKontoFilter.dataset.listenerAttached = 'true';
+    }
+
+    // Kontodifferenz-Filter
+    const kontodifferenzFilter = document.getElementById('filter-gm-kontodifferenz');
+    if (kontodifferenzFilter && !kontodifferenzFilter.dataset.listenerAttached) {
+        kontodifferenzFilter.addEventListener('change', (e) => {
+            currentFilter.kontodifferenz = e.target.value;
+            renderGeschenkeTabelle();
+        });
+        kontodifferenzFilter.dataset.listenerAttached = 'true';
+    }
+
+    // Standort-Filter
+    const standortFilter = document.getElementById('filter-gm-standort');
+    if (standortFilter && !standortFilter.dataset.listenerAttached) {
+        standortFilter.addEventListener('change', (e) => {
+            currentFilter.standort = e.target.value;
+            renderGeschenkeTabelle();
+        });
+        standortFilter.dataset.listenerAttached = 'true';
     }
 
     // Filter Reset
@@ -1181,6 +1252,39 @@ function renderGeschenkeTabelle() {
         geschenkeArray = geschenkeArray.filter(g => 
             g.fuer?.includes(currentFilter.personId) || g.von?.includes(currentFilter.personId)
         );
+    }
+    
+    // FÜR-Filter
+    if (currentFilter.fuer) {
+        geschenkeArray = geschenkeArray.filter(g => g.fuer?.includes(currentFilter.fuer));
+    }
+    
+    // VON-Filter
+    if (currentFilter.von) {
+        geschenkeArray = geschenkeArray.filter(g => g.von?.includes(currentFilter.von));
+    }
+    
+    // SOLL-Konto-Filter
+    if (currentFilter.sollKonto) {
+        geschenkeArray = geschenkeArray.filter(g => g.sollBezahlung === currentFilter.sollKonto);
+    }
+    
+    // IST-Konto-Filter
+    if (currentFilter.istKonto) {
+        geschenkeArray = geschenkeArray.filter(g => g.istBezahlung === currentFilter.istKonto);
+    }
+    
+    // Kontodifferenz-Filter
+    if (currentFilter.kontodifferenz) {
+        geschenkeArray = geschenkeArray.filter(g => {
+            const hatDifferenz = g.sollBezahlung && g.istBezahlung && g.sollBezahlung !== g.istBezahlung;
+            return currentFilter.kontodifferenz === 'ja' ? hatDifferenz : !hatDifferenz;
+        });
+    }
+    
+    // Standort-Filter
+    if (currentFilter.standort) {
+        geschenkeArray = geschenkeArray.filter(g => g.standort === currentFilter.standort);
     }
     
     if (geschenkeArray.length === 0) {
@@ -1811,7 +1915,115 @@ function resetFilters() {
     currentFilter = {};
     const searchInput = document.getElementById('search-geschenke');
     if (searchInput) searchInput.value = '';
+    
+    // Reset alle Filter-Dropdowns
+    const statusFilter = document.getElementById('filter-gm-status');
+    const fuerFilter = document.getElementById('filter-gm-fuer');
+    const vonFilter = document.getElementById('filter-gm-von');
+    const sollKontoFilter = document.getElementById('filter-gm-sollkonto');
+    const istKontoFilter = document.getElementById('filter-gm-istkonto');
+    const kontodifferenzFilter = document.getElementById('filter-gm-kontodifferenz');
+    const standortFilter = document.getElementById('filter-gm-standort');
+    
+    if (statusFilter) statusFilter.value = '';
+    if (fuerFilter) fuerFilter.value = '';
+    if (vonFilter) vonFilter.value = '';
+    if (sollKontoFilter) sollKontoFilter.value = '';
+    if (istKontoFilter) istKontoFilter.value = '';
+    if (kontodifferenzFilter) kontodifferenzFilter.value = '';
+    if (standortFilter) standortFilter.value = '';
+    
     renderGeschenkeTabelle();
+}
+
+function populateFilterDropdowns() {
+    const geschenkeArray = Object.values(GESCHENKE);
+    
+    // FÜR-Filter befüllen
+    const fuerFilter = document.getElementById('filter-gm-fuer');
+    if (fuerFilter) {
+        const fuerPersonen = new Set();
+        geschenkeArray.forEach(g => {
+            if (g.fuer && Array.isArray(g.fuer)) {
+                g.fuer.forEach(id => fuerPersonen.add(id));
+            }
+        });
+        
+        fuerFilter.innerHTML = '<option value="">Alle FÜR</option>';
+        Array.from(fuerPersonen).sort((a, b) => {
+            const nameA = KONTAKTE[a]?.name || 'Unbekannt';
+            const nameB = KONTAKTE[b]?.name || 'Unbekannt';
+            return nameA.localeCompare(nameB);
+        }).forEach(id => {
+            const name = KONTAKTE[id]?.name || 'Unbekannt';
+            fuerFilter.innerHTML += `<option value="${id}">${name}</option>`;
+        });
+    }
+    
+    // VON-Filter befüllen
+    const vonFilter = document.getElementById('filter-gm-von');
+    if (vonFilter) {
+        const vonPersonen = new Set();
+        geschenkeArray.forEach(g => {
+            if (g.von && Array.isArray(g.von)) {
+                g.von.forEach(id => vonPersonen.add(id));
+            }
+        });
+        
+        vonFilter.innerHTML = '<option value="">Alle VON</option>';
+        Array.from(vonPersonen).sort((a, b) => {
+            const nameA = KONTAKTE[a]?.name || 'Unbekannt';
+            const nameB = KONTAKTE[b]?.name || 'Unbekannt';
+            return nameA.localeCompare(nameB);
+        }).forEach(id => {
+            const name = KONTAKTE[id]?.name || 'Unbekannt';
+            vonFilter.innerHTML += `<option value="${id}">${name}</option>`;
+        });
+    }
+    
+    // SOLL-Konto-Filter befüllen
+    const sollKontoFilter = document.getElementById('filter-gm-sollkonto');
+    if (sollKontoFilter) {
+        const sollKonten = new Set();
+        geschenkeArray.forEach(g => {
+            if (g.sollBezahlung) sollKonten.add(g.sollBezahlung);
+        });
+        
+        sollKontoFilter.innerHTML = '<option value="">Alle SOLL-Konten</option>';
+        Array.from(sollKonten).sort().forEach(konto => {
+            const label = ZAHLUNGSARTEN_CONFIG[konto]?.label || konto;
+            sollKontoFilter.innerHTML += `<option value="${konto}">${label}</option>`;
+        });
+    }
+    
+    // IST-Konto-Filter befüllen
+    const istKontoFilter = document.getElementById('filter-gm-istkonto');
+    if (istKontoFilter) {
+        const istKonten = new Set();
+        geschenkeArray.forEach(g => {
+            if (g.istBezahlung) istKonten.add(g.istBezahlung);
+        });
+        
+        istKontoFilter.innerHTML = '<option value="">Alle IST-Konten</option>';
+        Array.from(istKonten).sort().forEach(konto => {
+            const label = ZAHLUNGSARTEN_CONFIG[konto]?.label || konto;
+            istKontoFilter.innerHTML += `<option value="${konto}">${label}</option>`;
+        });
+    }
+    
+    // Standort-Filter befüllen
+    const standortFilter = document.getElementById('filter-gm-standort');
+    if (standortFilter) {
+        const standorte = new Set();
+        geschenkeArray.forEach(g => {
+            if (g.standort) standorte.add(g.standort);
+        });
+        
+        standortFilter.innerHTML = '<option value="">Alle Standorte</option>';
+        Array.from(standorte).sort().forEach(standort => {
+            standortFilter.innerHTML += `<option value="${standort}">${standort}</option>`;
+        });
+    }
 }
 
 window.filterByPerson = function(personId) {
