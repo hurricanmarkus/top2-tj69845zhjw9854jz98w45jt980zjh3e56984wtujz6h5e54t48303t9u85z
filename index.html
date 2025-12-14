@@ -2253,49 +2253,31 @@
 
                 <!-- Such- und Filterleiste -->
                 <div class="bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
-                    <div class="flex flex-wrap gap-2">
-                        <input type="text" id="search-geschenke" placeholder="🔍 Suchen... (Geschenk, Shop, Notizen)" 
+                    <div class="flex flex-wrap gap-2 mb-3">
+                        <input type="text" id="search-geschenke" placeholder="🔍 Suchbegriff eingeben..." 
                             class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:ring-2 focus:ring-pink-200 text-sm">
                         
-                        <select id="filter-gm-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle Status</option>
-                            <option value="offen">⭕ Offen</option>
-                            <option value="idee">💡 Idee</option>
-                            <option value="zu_bestellen">🛒 zu Bestellen</option>
-                            <option value="bestellt">📦 Bestellt</option>
-                            <option value="abgeschlossen">✅ Abgeschlossen</option>
-                            <option value="storniert">❌ Storniert</option>
-                        </select>
-
-                        <select id="filter-gm-fuer" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle FÜR</option>
-                        </select>
-
-                        <select id="filter-gm-von" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle VON</option>
-                        </select>
-
-                        <select id="filter-gm-sollkonto" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle SOLL-Konten</option>
-                        </select>
-
-                        <select id="filter-gm-istkonto" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle IST-Konten</option>
-                        </select>
-
-                        <select id="filter-gm-kontodifferenz" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Kontodifferenz</option>
-                            <option value="ja">⚠️ Nur mit Differenz</option>
-                            <option value="nein">✅ Nur ohne Differenz</option>
-                        </select>
-
-                        <select id="filter-gm-standort" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle Standorte</option>
+                        <select id="filter-category-select" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                            <option value="">Kategorie wählen...</option>
+                            <option value="status">Status</option>
+                            <option value="fuer">Für</option>
+                            <option value="von">Von</option>
+                            <option value="sollkonto">Soll-Konto</option>
+                            <option value="istkonto">Ist-Konto</option>
+                            <option value="kontodifferenz">Kontodifferenz</option>
+                            <option value="standort">Standort</option>
                         </select>
                         
-                        <button id="reset-filters-geschenke" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
-                            ✕ Reset
+                        <button id="btn-add-filter" class="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 font-bold transition text-sm">
+                            + Filter hinzufügen
                         </button>
+                        
+                        <button id="reset-filters-geschenke" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
+                            ✕ Alle Filter löschen
+                        </button>
+                    </div>
+                    
+                    <div id="active-filters-container" class="flex flex-wrap gap-2 empty:hidden">
                     </div>
                 </div>
 

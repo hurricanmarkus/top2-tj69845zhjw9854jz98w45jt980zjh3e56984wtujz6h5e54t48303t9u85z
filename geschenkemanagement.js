@@ -57,7 +57,7 @@ let BUDGETS = {};
 let ERINNERUNGEN = {};
 let currentThemaId = null;
 let searchTerm = '';
-let currentFilter = {};
+let activeFilters = [];
 let personenDetailsAusgeklappt = false; // ✅ State für Personen-Übersicht
 
 // Eigene Person (unlöschbar)
@@ -605,84 +605,22 @@ function setupEventListeners() {
         settingsBtn.dataset.listenerAttached = 'true';
     }
 
-    // Suche
+    // Add Filter Button
+    const addFilterBtn = document.getElementById('btn-add-filter');
+    if (addFilterBtn && !addFilterBtn.dataset.listenerAttached) {
+        addFilterBtn.addEventListener('click', addFilter);
+        addFilterBtn.dataset.listenerAttached = 'true';
+    }
+
+    // Search Input - Enter key to add filter
     const searchInput = document.getElementById('search-geschenke');
     if (searchInput && !searchInput.dataset.listenerAttached) {
-        searchInput.addEventListener('input', (e) => {
-            searchTerm = e.target.value.toLowerCase();
-            renderGeschenkeTabelle();
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addFilter();
+            }
         });
         searchInput.dataset.listenerAttached = 'true';
-    }
-
-    // Status-Filter
-    const statusFilter = document.getElementById('filter-gm-status');
-    if (statusFilter && !statusFilter.dataset.listenerAttached) {
-        statusFilter.addEventListener('change', (e) => {
-            currentFilter.status = e.target.value;
-            renderGeschenkeTabelle();
-        });
-        statusFilter.dataset.listenerAttached = 'true';
-    }
-
-    // FÜR-Filter
-    const fuerFilter = document.getElementById('filter-gm-fuer');
-    if (fuerFilter && !fuerFilter.dataset.listenerAttached) {
-        fuerFilter.addEventListener('change', (e) => {
-            currentFilter.fuer = e.target.value;
-            renderGeschenkeTabelle();
-        });
-        fuerFilter.dataset.listenerAttached = 'true';
-    }
-
-    // VON-Filter
-    const vonFilter = document.getElementById('filter-gm-von');
-    if (vonFilter && !vonFilter.dataset.listenerAttached) {
-        vonFilter.addEventListener('change', (e) => {
-            currentFilter.von = e.target.value;
-            renderGeschenkeTabelle();
-        });
-        vonFilter.dataset.listenerAttached = 'true';
-    }
-
-    // SOLL-Konto-Filter
-    const sollKontoFilter = document.getElementById('filter-gm-sollkonto');
-    if (sollKontoFilter && !sollKontoFilter.dataset.listenerAttached) {
-        sollKontoFilter.addEventListener('change', (e) => {
-            currentFilter.sollKonto = e.target.value;
-            renderGeschenkeTabelle();
-        });
-        sollKontoFilter.dataset.listenerAttached = 'true';
-    }
-
-    // IST-Konto-Filter
-    const istKontoFilter = document.getElementById('filter-gm-istkonto');
-    if (istKontoFilter && !istKontoFilter.dataset.listenerAttached) {
-        istKontoFilter.addEventListener('change', (e) => {
-            currentFilter.istKonto = e.target.value;
-            renderGeschenkeTabelle();
-        });
-        istKontoFilter.dataset.listenerAttached = 'true';
-    }
-
-    // Kontodifferenz-Filter
-    const kontodifferenzFilter = document.getElementById('filter-gm-kontodifferenz');
-    if (kontodifferenzFilter && !kontodifferenzFilter.dataset.listenerAttached) {
-        kontodifferenzFilter.addEventListener('change', (e) => {
-            currentFilter.kontodifferenz = e.target.value;
-            renderGeschenkeTabelle();
-        });
-        kontodifferenzFilter.dataset.listenerAttached = 'true';
-    }
-
-    // Standort-Filter
-    const standortFilter = document.getElementById('filter-gm-standort');
-    if (standortFilter && !standortFilter.dataset.listenerAttached) {
-        standortFilter.addEventListener('change', (e) => {
-            currentFilter.standort = e.target.value;
-            renderGeschenkeTabelle();
-        });
-        standortFilter.dataset.listenerAttached = 'true';
     }
 
     // Filter Reset
@@ -1235,57 +1173,54 @@ function renderGeschenkeTabelle() {
     
     let geschenkeArray = Object.values(GESCHENKE);
     
-    // Filter anwenden
-    if (searchTerm) {
-        geschenkeArray = geschenkeArray.filter(g => 
-            g.geschenk?.toLowerCase().includes(searchTerm) ||
-            g.shop?.toLowerCase().includes(searchTerm) ||
-            g.notizen?.toLowerCase().includes(searchTerm)
-        );
-    }
-    
-    if (currentFilter.status) {
-        geschenkeArray = geschenkeArray.filter(g => g.status === currentFilter.status);
-    }
-    
-    if (currentFilter.personId) {
-        geschenkeArray = geschenkeArray.filter(g => 
-            g.fuer?.includes(currentFilter.personId) || g.von?.includes(currentFilter.personId)
-        );
-    }
-    
-    // FÜR-Filter
-    if (currentFilter.fuer) {
-        geschenkeArray = geschenkeArray.filter(g => g.fuer?.includes(currentFilter.fuer));
-    }
-    
-    // VON-Filter
-    if (currentFilter.von) {
-        geschenkeArray = geschenkeArray.filter(g => g.von?.includes(currentFilter.von));
-    }
-    
-    // SOLL-Konto-Filter
-    if (currentFilter.sollKonto) {
-        geschenkeArray = geschenkeArray.filter(g => g.sollBezahlung === currentFilter.sollKonto);
-    }
-    
-    // IST-Konto-Filter
-    if (currentFilter.istKonto) {
-        geschenkeArray = geschenkeArray.filter(g => g.istBezahlung === currentFilter.istKonto);
-    }
-    
-    // Kontodifferenz-Filter
-    if (currentFilter.kontodifferenz) {
+    // Apply all active filters
+    activeFilters.forEach(filter => {
         geschenkeArray = geschenkeArray.filter(g => {
-            const hatDifferenz = g.sollBezahlung && g.istBezahlung && g.sollBezahlung !== g.istBezahlung;
-            return currentFilter.kontodifferenz === 'ja' ? hatDifferenz : !hatDifferenz;
+            const value = filter.value.toLowerCase();
+            
+            switch(filter.category) {
+                case 'status':
+                    return g.status?.toLowerCase().includes(value) || 
+                           STATUS_CONFIG[g.status]?.label?.toLowerCase().includes(value);
+                
+                case 'fuer':
+                    if (g.fuer && Array.isArray(g.fuer)) {
+                        return g.fuer.some(id => {
+                            const name = KONTAKTE[id]?.name?.toLowerCase() || '';
+                            return name.includes(value);
+                        });
+                    }
+                    return false;
+                
+                case 'von':
+                    if (g.von && Array.isArray(g.von)) {
+                        return g.von.some(id => {
+                            const name = KONTAKTE[id]?.name?.toLowerCase() || '';
+                            return name.includes(value);
+                        });
+                    }
+                    return false;
+                
+                case 'sollkonto':
+                    const sollLabel = ZAHLUNGSARTEN[g.sollBezahlung]?.label?.toLowerCase() || g.sollBezahlung?.toLowerCase() || '';
+                    return sollLabel.includes(value);
+                
+                case 'istkonto':
+                    const istLabel = ZAHLUNGSARTEN[g.istBezahlung]?.label?.toLowerCase() || g.istBezahlung?.toLowerCase() || '';
+                    return istLabel.includes(value);
+                
+                case 'kontodifferenz':
+                    const hatDifferenz = g.sollBezahlung && g.istBezahlung && g.sollBezahlung !== g.istBezahlung;
+                    return value.includes('ja') || value.includes('mit') ? hatDifferenz : !hatDifferenz;
+                
+                case 'standort':
+                    return g.standort?.toLowerCase().includes(value);
+                
+                default:
+                    return true;
+            }
         });
-    }
-    
-    // Standort-Filter
-    if (currentFilter.standort) {
-        geschenkeArray = geschenkeArray.filter(g => g.standort === currentFilter.standort);
-    }
+    });
     
     if (geschenkeArray.length === 0) {
         tbody.innerHTML = `
@@ -1910,124 +1845,100 @@ function formatCurrency(value) {
     return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
 }
 
-function resetFilters() {
-    searchTerm = '';
-    currentFilter = {};
+function addFilter() {
     const searchInput = document.getElementById('search-geschenke');
-    if (searchInput) searchInput.value = '';
+    const categorySelect = document.getElementById('filter-category-select');
     
-    // Reset alle Filter-Dropdowns
-    const statusFilter = document.getElementById('filter-gm-status');
-    const fuerFilter = document.getElementById('filter-gm-fuer');
-    const vonFilter = document.getElementById('filter-gm-von');
-    const sollKontoFilter = document.getElementById('filter-gm-sollkonto');
-    const istKontoFilter = document.getElementById('filter-gm-istkonto');
-    const kontodifferenzFilter = document.getElementById('filter-gm-kontodifferenz');
-    const standortFilter = document.getElementById('filter-gm-standort');
+    const value = searchInput?.value?.trim();
+    const category = categorySelect?.value;
     
-    if (statusFilter) statusFilter.value = '';
-    if (fuerFilter) fuerFilter.value = '';
-    if (vonFilter) vonFilter.value = '';
-    if (sollKontoFilter) sollKontoFilter.value = '';
-    if (istKontoFilter) istKontoFilter.value = '';
-    if (kontodifferenzFilter) kontodifferenzFilter.value = '';
-    if (standortFilter) standortFilter.value = '';
+    if (!value || !category) {
+        alertUser('Bitte Suchbegriff und Kategorie eingeben!', 'warning');
+        return;
+    }
     
+    // Add filter to active filters
+    activeFilters.push({ category, value, id: Date.now() });
+    
+    // Clear inputs
+    searchInput.value = '';
+    categorySelect.value = '';
+    
+    // Update UI
+    renderActiveFilters();
     renderGeschenkeTabelle();
+    
+    console.log('✅ Filter hinzugefügt:', { category, value });
 }
 
+function removeFilter(filterId) {
+    activeFilters = activeFilters.filter(f => f.id !== filterId);
+    renderActiveFilters();
+    renderGeschenkeTabelle();
+    console.log('🗑️ Filter entfernt:', filterId);
+}
+
+function resetFilters() {
+    activeFilters = [];
+    const searchInput = document.getElementById('search-geschenke');
+    const categorySelect = document.getElementById('filter-category-select');
+    
+    if (searchInput) searchInput.value = '';
+    if (categorySelect) categorySelect.value = '';
+    
+    renderActiveFilters();
+    renderGeschenkeTabelle();
+    console.log('🔄 Alle Filter zurückgesetzt');
+}
+
+function renderActiveFilters() {
+    const container = document.getElementById('active-filters-container');
+    if (!container) return;
+    
+    if (activeFilters.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    const categoryLabels = {
+        status: 'Status',
+        fuer: 'Für',
+        von: 'Von',
+        sollkonto: 'Soll-Konto',
+        istkonto: 'Ist-Konto',
+        kontodifferenz: 'Kontodifferenz',
+        standort: 'Standort'
+    };
+    
+    container.innerHTML = activeFilters.map(filter => `
+        <div class="flex items-center gap-2 px-3 py-1.5 bg-pink-100 text-pink-800 rounded-full text-sm font-medium border border-pink-300">
+            <span class="font-bold">${categoryLabels[filter.category]}:</span>
+            <span>${filter.value}</span>
+            <button onclick="window.removeFilterById(${filter.id})" class="ml-1 hover:bg-pink-200 rounded-full p-0.5 transition" title="Filter entfernen">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+    `).join('');
+}
+
+// Global function for onclick
+window.removeFilterById = removeFilter;
+
 function populateFilterDropdowns() {
-    const geschenkeArray = Object.values(GESCHENKE);
-    
-    // FÜR-Filter befüllen
-    const fuerFilter = document.getElementById('filter-gm-fuer');
-    if (fuerFilter) {
-        const fuerPersonen = new Set();
-        geschenkeArray.forEach(g => {
-            if (g.fuer && Array.isArray(g.fuer)) {
-                g.fuer.forEach(id => fuerPersonen.add(id));
-            }
-        });
-        
-        fuerFilter.innerHTML = '<option value="">Alle FÜR</option>';
-        Array.from(fuerPersonen).sort((a, b) => {
-            const nameA = KONTAKTE[a]?.name || 'Unbekannt';
-            const nameB = KONTAKTE[b]?.name || 'Unbekannt';
-            return nameA.localeCompare(nameB);
-        }).forEach(id => {
-            const name = KONTAKTE[id]?.name || 'Unbekannt';
-            fuerFilter.innerHTML += `<option value="${id}">${name}</option>`;
-        });
-    }
-    
-    // VON-Filter befüllen
-    const vonFilter = document.getElementById('filter-gm-von');
-    if (vonFilter) {
-        const vonPersonen = new Set();
-        geschenkeArray.forEach(g => {
-            if (g.von && Array.isArray(g.von)) {
-                g.von.forEach(id => vonPersonen.add(id));
-            }
-        });
-        
-        vonFilter.innerHTML = '<option value="">Alle VON</option>';
-        Array.from(vonPersonen).sort((a, b) => {
-            const nameA = KONTAKTE[a]?.name || 'Unbekannt';
-            const nameB = KONTAKTE[b]?.name || 'Unbekannt';
-            return nameA.localeCompare(nameB);
-        }).forEach(id => {
-            const name = KONTAKTE[id]?.name || 'Unbekannt';
-            vonFilter.innerHTML += `<option value="${id}">${name}</option>`;
-        });
-    }
-    
-    // SOLL-Konto-Filter befüllen
-    const sollKontoFilter = document.getElementById('filter-gm-sollkonto');
-    if (sollKontoFilter) {
-        const sollKonten = new Set();
-        geschenkeArray.forEach(g => {
-            if (g.sollBezahlung) sollKonten.add(g.sollBezahlung);
-        });
-        
-        sollKontoFilter.innerHTML = '<option value="">Alle SOLL-Konten</option>';
-        Array.from(sollKonten).sort().forEach(konto => {
-            const label = ZAHLUNGSARTEN_CONFIG[konto]?.label || konto;
-            sollKontoFilter.innerHTML += `<option value="${konto}">${label}</option>`;
-        });
-    }
-    
-    // IST-Konto-Filter befüllen
-    const istKontoFilter = document.getElementById('filter-gm-istkonto');
-    if (istKontoFilter) {
-        const istKonten = new Set();
-        geschenkeArray.forEach(g => {
-            if (g.istBezahlung) istKonten.add(g.istBezahlung);
-        });
-        
-        istKontoFilter.innerHTML = '<option value="">Alle IST-Konten</option>';
-        Array.from(istKonten).sort().forEach(konto => {
-            const label = ZAHLUNGSARTEN_CONFIG[konto]?.label || konto;
-            istKontoFilter.innerHTML += `<option value="${konto}">${label}</option>`;
-        });
-    }
-    
-    // Standort-Filter befüllen
-    const standortFilter = document.getElementById('filter-gm-standort');
-    if (standortFilter) {
-        const standorte = new Set();
-        geschenkeArray.forEach(g => {
-            if (g.standort) standorte.add(g.standort);
-        });
-        
-        standortFilter.innerHTML = '<option value="">Alle Standorte</option>';
-        Array.from(standorte).sort().forEach(standort => {
-            standortFilter.innerHTML += `<option value="${standort}">${standort}</option>`;
-        });
-    }
+    // No longer needed - filters are now dynamic
+    // Keeping function for compatibility
 }
 
 window.filterByPerson = function(personId) {
-    currentFilter.personId = personId;
+    const personName = KONTAKTE[personId]?.name || 'Unbekannt';
+    activeFilters.push({ 
+        category: 'fuer', 
+        value: personName, 
+        id: Date.now() 
+    });
+    renderActiveFilters();
     renderGeschenkeTabelle();
 };
 
