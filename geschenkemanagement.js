@@ -1177,48 +1177,57 @@ function renderGeschenkeTabelle() {
     activeFilters.forEach(filter => {
         geschenkeArray = geschenkeArray.filter(g => {
             const value = filter.value.toLowerCase();
+            let matches = false;
             
             switch(filter.category) {
                 case 'status':
-                    return g.status?.toLowerCase().includes(value) || 
+                    matches = g.status?.toLowerCase().includes(value) || 
                            STATUS_CONFIG[g.status]?.label?.toLowerCase().includes(value);
+                    break;
                 
                 case 'fuer':
                     if (g.fuer && Array.isArray(g.fuer)) {
-                        return g.fuer.some(id => {
+                        matches = g.fuer.some(id => {
                             const name = KONTAKTE[id]?.name?.toLowerCase() || '';
                             return name.includes(value);
                         });
                     }
-                    return false;
+                    break;
                 
                 case 'von':
                     if (g.von && Array.isArray(g.von)) {
-                        return g.von.some(id => {
+                        matches = g.von.some(id => {
                             const name = KONTAKTE[id]?.name?.toLowerCase() || '';
                             return name.includes(value);
                         });
                     }
-                    return false;
+                    break;
                 
                 case 'sollkonto':
                     const sollLabel = ZAHLUNGSARTEN[g.sollBezahlung]?.label?.toLowerCase() || g.sollBezahlung?.toLowerCase() || '';
-                    return sollLabel.includes(value);
+                    matches = sollLabel.includes(value);
+                    break;
                 
                 case 'istkonto':
                     const istLabel = ZAHLUNGSARTEN[g.istBezahlung]?.label?.toLowerCase() || g.istBezahlung?.toLowerCase() || '';
-                    return istLabel.includes(value);
+                    matches = istLabel.includes(value);
+                    break;
                 
                 case 'kontodifferenz':
                     const hatDifferenz = g.sollBezahlung && g.istBezahlung && g.sollBezahlung !== g.istBezahlung;
-                    return value.includes('ja') || value.includes('mit') ? hatDifferenz : !hatDifferenz;
+                    matches = value.includes('ja') || value.includes('mit') ? hatDifferenz : !hatDifferenz;
+                    break;
                 
                 case 'standort':
-                    return g.standort?.toLowerCase().includes(value);
+                    matches = g.standort?.toLowerCase().includes(value);
+                    break;
                 
                 default:
-                    return true;
+                    matches = true;
             }
+            
+            // Apply negation if filter is negated
+            return filter.negate ? !matches : matches;
         });
     });
     
@@ -1848,9 +1857,11 @@ function formatCurrency(value) {
 function addFilter() {
     const searchInput = document.getElementById('search-geschenke');
     const categorySelect = document.getElementById('filter-category-select');
+    const negateCheckbox = document.getElementById('filter-negate-checkbox');
     
     const value = searchInput?.value?.trim();
     const category = categorySelect?.value;
+    const negate = negateCheckbox?.checked || false;
     
     if (!value || !category) {
         alertUser('Bitte Suchbegriff und Kategorie eingeben!', 'warning');
@@ -1858,17 +1869,18 @@ function addFilter() {
     }
     
     // Add filter to active filters
-    activeFilters.push({ category, value, id: Date.now() });
+    activeFilters.push({ category, value, negate, id: Date.now() });
     
     // Clear inputs
     searchInput.value = '';
     categorySelect.value = '';
+    negateCheckbox.checked = false;
     
     // Update UI
     renderActiveFilters();
     renderGeschenkeTabelle();
     
-    console.log('✅ Filter hinzugefügt:', { category, value });
+    console.log('✅ Filter hinzugefügt:', { category, value, negate });
 }
 
 function removeFilter(filterId) {
@@ -1911,10 +1923,11 @@ function renderActiveFilters() {
     };
     
     container.innerHTML = activeFilters.map(filter => `
-        <div class="flex items-center gap-2 px-3 py-1.5 bg-pink-100 text-pink-800 rounded-full text-sm font-medium border border-pink-300">
+        <div class="flex items-center gap-2 px-3 py-1.5 ${filter.negate ? 'bg-red-100 text-red-800 border-red-300' : 'bg-pink-100 text-pink-800 border-pink-300'} rounded-full text-sm font-medium border">
+            ${filter.negate ? '<span class="font-bold text-red-600">NICHT</span>' : ''}
             <span class="font-bold">${categoryLabels[filter.category]}:</span>
             <span>${filter.value}</span>
-            <button onclick="window.removeFilterById(${filter.id})" class="ml-1 hover:bg-pink-200 rounded-full p-0.5 transition" title="Filter entfernen">
+            <button onclick="window.removeFilterById(${filter.id})" class="ml-1 ${filter.negate ? 'hover:bg-red-200' : 'hover:bg-pink-200'} rounded-full p-0.5 transition" title="Filter entfernen">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                 </svg>
