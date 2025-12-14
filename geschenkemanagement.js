@@ -630,6 +630,13 @@ function setupEventListeners() {
         resetBtn.dataset.listenerAttached = 'true';
     }
 
+    // Select All Checkbox
+    const selectAllCheckbox = document.getElementById('gm-select-all');
+    if (selectAllCheckbox && !selectAllCheckbox.dataset.listenerAttached) {
+        selectAllCheckbox.addEventListener('change', toggleSelectAll);
+        selectAllCheckbox.dataset.listenerAttached = 'true';
+    }
+
     // Modal schließen
     setupModalListeners();
 }
@@ -1234,17 +1241,25 @@ function renderGeschenkeTabelle() {
     if (geschenkeArray.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="12" class="px-4 py-8 text-center text-gray-400 italic">
+                <td colspan="13" class="px-4 py-8 text-center text-gray-400 italic">
                     ${Object.keys(GESCHENKE).length === 0 
                         ? 'Keine Einträge vorhanden. Erstelle deinen ersten Geschenk-Eintrag!' 
                         : 'Keine Einträge gefunden für die aktuelle Filterung.'}
                 </td>
             </tr>
         `;
+        updateExportButtonState();
         return;
     }
     
     tbody.innerHTML = geschenkeArray.map(g => renderGeschenkRow(g)).join('');
+    
+    // Add event listeners to checkboxes for export button state
+    document.querySelectorAll('.gm-row-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', updateExportButtonState);
+    });
+    
+    updateExportButtonState();
 }
 
 function renderGeschenkRow(geschenk) {
@@ -1256,8 +1271,11 @@ function renderGeschenkRow(geschenk) {
     const kontoDifferenz = geschenk.sollBezahlung && geschenk.istBezahlung && geschenk.sollBezahlung !== geschenk.istBezahlung;
     
     return `
-        <tr class="hover:bg-pink-50 transition cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">
-            <td class="px-3 py-3">
+        <tr class="hover:bg-pink-50 transition">
+            <td class="px-2 py-3 text-center" onclick="event.stopPropagation()">
+                <input type="checkbox" class="gm-row-checkbox w-4 h-4 rounded cursor-pointer" data-geschenk-id="${geschenk.id}">
+            </td>
+            <td class="px-3 py-3 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">
                 <div class="flex flex-col gap-1">
                     <span class="px-2 py-1 rounded-full text-xs font-bold ${statusConfig.color}">
                         ${statusConfig.icon} ${statusConfig.label}
@@ -1265,17 +1283,17 @@ function renderGeschenkRow(geschenk) {
                     ${kontoDifferenz ? '<span class="px-2 py-1 rounded text-xs font-bold bg-red-500 text-white animate-pulse">⚠️ Konto-Differenz</span>' : ''}
                 </div>
             </td>
-            <td class="px-3 py-3 text-sm font-medium text-gray-900">${fuerPersonen || '-'}</td>
-            <td class="px-3 py-3 text-sm text-gray-600">${vonPersonen || '-'}</td>
-            <td class="px-3 py-3 text-sm text-gray-600">${geschenk.id?.slice(-4) || '-'}</td>
-            <td class="px-3 py-3 text-sm font-medium text-gray-900">${geschenk.geschenk || '-'}</td>
-            <td class="px-3 py-3 text-sm text-gray-600">${geschenk.bezahltVon ? (KONTAKTE[geschenk.bezahltVon]?.name || '-') : '-'}</td>
-            <td class="px-3 py-3 text-sm text-gray-600">${beteiligtePersonen || '-'}</td>
-            <td class="px-3 py-3 text-sm font-bold text-gray-900">${geschenk.gesamtkosten ? formatCurrency(geschenk.gesamtkosten) : '-'}</td>
-            <td class="px-3 py-3 text-sm font-bold text-green-700">${geschenk.eigeneKosten ? formatCurrency(geschenk.eigeneKosten) : '-'}</td>
-            <td class="px-3 py-3 text-sm text-gray-600">${geschenk.sollBezahlung || '-'}</td>
-            <td class="px-3 py-3 text-sm text-gray-600">${geschenk.istBezahlung || '-'}</td>
-            <td class="px-3 py-3 text-sm text-gray-600">${geschenk.standort || '-'}</td>
+            <td class="px-3 py-3 text-sm font-medium text-gray-900 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${fuerPersonen || '-'}</td>
+            <td class="px-3 py-3 text-sm text-gray-600 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${vonPersonen || '-'}</td>
+            <td class="px-3 py-3 text-sm text-gray-600 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${geschenk.id?.slice(-4) || '-'}</td>
+            <td class="px-3 py-3 text-sm font-medium text-gray-900 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${geschenk.geschenk || '-'}</td>
+            <td class="px-3 py-3 text-sm text-gray-600 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${geschenk.bezahltVon ? (KONTAKTE[geschenk.bezahltVon]?.name || '-') : '-'}</td>
+            <td class="px-3 py-3 text-sm text-gray-600 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${beteiligtePersonen || '-'}</td>
+            <td class="px-3 py-3 text-sm font-bold text-gray-900 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${geschenk.gesamtkosten ? formatCurrency(geschenk.gesamtkosten) : '-'}</td>
+            <td class="px-3 py-3 text-sm font-bold text-green-700 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${geschenk.eigeneKosten ? formatCurrency(geschenk.eigeneKosten) : '-'}</td>
+            <td class="px-3 py-3 text-sm text-gray-600 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${geschenk.sollBezahlung || '-'}</td>
+            <td class="px-3 py-3 text-sm text-gray-600 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${geschenk.istBezahlung || '-'}</td>
+            <td class="px-3 py-3 text-sm text-gray-600 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${geschenk.standort || '-'}</td>
         </tr>
     `;
 }
@@ -1954,6 +1972,117 @@ window.filterByPerson = function(personId) {
     renderActiveFilters();
     renderGeschenkeTabelle();
 };
+
+function toggleSelectAll() {
+    const selectAllCheckbox = document.getElementById('gm-select-all');
+    const rowCheckboxes = document.querySelectorAll('.gm-row-checkbox');
+    
+    rowCheckboxes.forEach(checkbox => {
+        checkbox.checked = selectAllCheckbox?.checked || false;
+    });
+    
+    updateExportButtonState();
+}
+
+function updateExportButtonState() {
+    const selectedCount = document.querySelectorAll('.gm-row-checkbox:checked').length;
+    const exportBtn = document.getElementById('btn-export-selected');
+    
+    if (exportBtn) {
+        if (selectedCount > 0) {
+            exportBtn.textContent = `📊 ${selectedCount} Einträge exportieren`;
+            exportBtn.disabled = false;
+            exportBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        } else {
+            exportBtn.textContent = '📊 Auswahl exportieren';
+            exportBtn.disabled = true;
+            exportBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+    }
+}
+
+window.exportSelectedToExcel = function() {
+    const selectedCheckboxes = document.querySelectorAll('.gm-row-checkbox:checked');
+    const selectedIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.geschenkId);
+    
+    if (selectedIds.length === 0) {
+        alertUser('Bitte wähle mindestens einen Eintrag zum Exportieren aus.', 'warning');
+        return;
+    }
+    
+    const selectedGeschenke = selectedIds.map(id => GESCHENKE[id]).filter(g => g);
+    
+    if (selectedGeschenke.length === 0) {
+        alertUser('Keine gültigen Einträge zum Exportieren gefunden.', 'error');
+        return;
+    }
+    
+    const themaName = THEMEN[currentThemaId]?.name || 'Geschenke';
+    const csvContent = generateCSV(selectedGeschenke);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${themaName}_Auswahl_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    alertUser(`${selectedGeschenke.length} Einträge erfolgreich exportiert!`, 'success');
+    console.log('✅ Excel-Export abgeschlossen:', selectedGeschenke.length, 'Einträge');
+};
+
+function generateCSV(geschenke) {
+    const headers = [
+        'Status',
+        'Für',
+        'Von',
+        'ID',
+        'Geschenk',
+        'Shop',
+        'Bezahlt von',
+        'Beteiligung',
+        'Gesamtkosten',
+        'Eigene Kosten',
+        'SOLL-Bezahlung',
+        'IST-Bezahlung',
+        'Standort',
+        'Bestellnummer',
+        'Rechnungsnummer',
+        'Notizen'
+    ];
+    
+    const rows = geschenke.map(g => {
+        const statusConfig = STATUS_CONFIG[g.status] || STATUS_CONFIG.offen;
+        const fuerPersonen = (g.fuer || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join('; ');
+        const vonPersonen = (g.von || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join('; ');
+        const beteiligtePersonen = (g.beteiligung || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join('; ');
+        const bezahltVonName = g.bezahltVon ? (KONTAKTE[g.bezahltVon]?.name || '-') : '-';
+        
+        return [
+            statusConfig.label,
+            fuerPersonen || '-',
+            vonPersonen || '-',
+            g.id || '-',
+            g.geschenk || '-',
+            g.shop || '-',
+            bezahltVonName,
+            beteiligtePersonen || '-',
+            g.gesamtkosten || '0',
+            g.eigeneKosten || '0',
+            g.sollBezahlung || '-',
+            g.istBezahlung || '-',
+            g.standort || '-',
+            g.bestellnummer || '-',
+            g.rechnungsnummer || '-',
+            (g.notizen || '').replace(/\n/g, ' ')
+        ].map(field => `"${String(field).replace(/"/g, '""')}"`).join(',');
+    });
+    
+    return [headers.join(','), ...rows].join('\n');
+}
 
 function renderKontaktbuch() {
     const container = document.getElementById('gm-kontaktbuch-list');

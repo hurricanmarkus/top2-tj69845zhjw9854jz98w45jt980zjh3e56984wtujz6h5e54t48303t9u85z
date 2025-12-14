@@ -2185,6 +2185,9 @@
                         </select>
                         
                         <div class="flex gap-2 flex-shrink-0">
+                            <button id="btn-export-selected" onclick="window.exportSelectedToExcel()" class="py-2 px-4 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition text-sm whitespace-nowrap opacity-50 cursor-not-allowed" disabled title="Wähle Einträge zum Exportieren aus">
+                                📊 Auswahl exportieren
+                            </button>
                             <button id="btn-geschenke-settings" class="p-2 text-gray-500 hover:text-gray-800 transition rounded-full hover:bg-gray-200" title="Einstellungen">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6">
                                     <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 0 1 1.262.125l1.669 1.669a1 1 0 0 1 .125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 0 1 .804.98v2.361a1 1 0 0 1-.804.98l-1.473.295a6.95 6.95 0 0 1-.587 1.416l.834 1.25a1 1 0 0 1-.125 1.262l-1.669 1.669a1 1 0 0 1-1.262.125l-1.25-.834a6.953 6.953 0 0 1-1.416.587l-.294 1.473a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.295-1.473a6.957 6.957 0 0 1-1.416-.587l-1.25.834a1 1 0 0 1-1.262-.125l-1.669-1.669a1 1 0 0 1-.125-1.262l.834-1.25a6.957 6.957 0 0 1-.587-1.416l-1.473-.294A1 1 0 0 1 1 11.18V8.82a1 1 0 0 1 .804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 0 1 .125-1.262l1.669-1.669a1 1 0 0 1 1.262-.125l1.25.834c.445-.245.919-.443 1.416-.587l.294-1.473ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd" />
@@ -2292,6 +2295,9 @@
                         <table class="min-w-full">
                             <thead class="bg-pink-50 border-b-2 border-pink-200">
                                 <tr>
+                                    <th class="px-2 py-3 text-center text-xs font-bold text-pink-800">
+                                        <input type="checkbox" id="gm-select-all" class="w-4 h-4 rounded cursor-pointer" title="Alle auswählen/abwählen">
+                                    </th>
                                     <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Status</th>
                                     <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">FÜR</th>
                                     <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">VON</th>
@@ -2308,7 +2314,7 @@
                             </thead>
                             <tbody id="geschenke-table-body" class="divide-y divide-gray-200">
                                 <tr>
-                                    <td colspan="12" class="px-4 py-8 text-center text-gray-400 italic">
+                                    <td colspan="13" class="px-4 py-8 text-center text-gray-400 italic">
                                         Keine Einträge vorhanden. Erstelle deinen ersten Geschenk-Eintrag!
                                     </td>
                                 </tr>
