@@ -73,6 +73,7 @@
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
         import { getFirestore, doc, setDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+        import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
 
         const firebaseConfig = {
             apiKey: "AIzaSyDSZ5_VvLjpkk-KuRjJCVFvGJtz7BYvMhg",
@@ -85,9 +86,20 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
+        const auth = getAuth(app);
         const APP_ID = '20LVob88b3ovXRUyX3ra';
 
         let parsedData = null;
+
+        // Automatische User-ID Erkennung
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                document.getElementById('userId').value = user.uid;
+                showStatus(`✅ Eingeloggt als: ${user.email || user.uid}`, 'success');
+            } else {
+                showStatus('⚠️ Nicht eingeloggt! Bitte erst in der TOP2-App einloggen.', 'error');
+            }
+        });
 
         window.analyzeData = function() {
             const userId = document.getElementById('userId').value.trim();
@@ -164,12 +176,24 @@
                 // 1. Kontakte erstellen
                 updateProgress(10, 'Erstelle Kontakte...');
                 const kontakteIds = {};
+                let kontaktCount = 0;
                 for (const kontakt of kontakte) {
                     const id = 'kontakt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                     kontakteIds[kontakt] = id;
-                    await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', userId, 'geschenke_kontakte', id), {
-                        id, name: kontakt, createdAt: new Date(), createdBy: userId
-                    });
+                    
+                    try {
+                        await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', userId, 'geschenke_kontakte', id), {
+                            id, name: kontakt, createdAt: new Date(), createdBy: userId
+                        });
+                        kontaktCount++;
+                        updateProgress(10 + (kontaktCount / kontakte.length * 20), `Kontakt ${kontaktCount}/${kontakte.length}: ${kontakt}`);
+                        
+                        // Kleine Pause zwischen Schreibvorgängen
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    } catch (error) {
+                        console.error('Fehler bei Kontakt:', kontakt, error);
+                        throw new Error(`Kontakt-Fehler bei "${kontakt}": ${error.message}`);
+                    }
                 }
 
                 // 2. Themen + Geschenke
@@ -209,7 +233,10 @@
 
                         imported++;
                         const progress = 30 + (imported / totalGeschenke * 70);
-                        updateProgress(progress, `Importiere Geschenk ${imported}/${totalGeschenke}...`);
+                        updateProgress(progress, `Geschenk ${imported}/${totalGeschenke}: ${g.titel.substring(0, 30)}...`);
+                        
+                        // Kleine Pause zwischen Schreibvorgängen
+                        await new Promise(resolve => setTimeout(resolve, 50));
                     }
                 }
 
