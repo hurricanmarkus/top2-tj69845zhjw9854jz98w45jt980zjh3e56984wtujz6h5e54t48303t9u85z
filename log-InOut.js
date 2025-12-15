@@ -433,15 +433,10 @@ export function updateUIForMode() {
         loginButton.className = 'font-bold text-indigo-400 hover:text-indigo-300';
 
         loginButton.onclick = () => {
-            console.log("Anmelden-Button geklickt! Zeige Modal."); // Spion
             const userSelectionModal = document.getElementById('userSelectionModal');
             if (userSelectionModal) {
-                console.log("Modal gefunden, classList vor:", userSelectionModal.classList.toString());
                 userSelectionModal.classList.remove('hidden');
                 userSelectionModal.style.display = 'flex';
-                console.log("Modal classList nach:", userSelectionModal.classList.toString(), "display:", userSelectionModal.style.display);
-            } else {
-                console.error("FEHLER: Konnte #userSelectionModal nicht finden!"); // Spion
             }
         };
 
