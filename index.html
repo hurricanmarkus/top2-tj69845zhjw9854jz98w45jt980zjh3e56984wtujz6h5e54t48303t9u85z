@@ -2238,7 +2238,6 @@
                             <div>
                                 <p class="text-lg font-bold text-green-300" id="gm-kosten-eigen">0,00 €</p>
                                 <p class="text-[10px]">Eigene Kosten</p>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -2254,47 +2253,34 @@
                 <!-- Such- und Filterleiste -->
                 <div class="bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
                     <div class="flex flex-wrap gap-2 mb-3">
-                        <input type="text" id="search-geschenke" placeholder="🔍 Suchbegriff eingeben..." 
-                            class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:ring-2 focus:ring-pink-200 text-sm">
-                        
-                        <select id="filter-category-select" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Kategorie wählen...</option>
-                            <option value="status">Status</option>
-                            <option value="fuer">Für</option>
-                            <option value="von">Von</option>
-                            <option value="geschenk">Geschenk</option>
-                            <option value="shop">Shop</option>
-                            <option value="bezahltvon">Bezahlt von</option>
-                            <option value="beteiligung">Beteiligung</option>
-                            <option value="gesamtkosten">Gesamtkosten</option>
-                            <option value="eigenekosten">Eigene Kosten</option>
-                            <option value="bestellnummer">Bestellnummer</option>
-                            <option value="rechnungsnummer">Rechnungsnummer</option>
-                            <option value="notizen">Notizen</option>
-                            <option value="sollkonto">Soll-Konto</option>
-                            <option value="istkonto">Ist-Konto</option>
-                            <option value="kontodifferenz">Kontodifferenz</option>
-                            <option value="standort">Standort</option>
-                        </select>
-                        
+                        <div class="relative flex-1 min-w-[200px]">
+                            <input type="text" id="search-geschenke" placeholder="🔍 Suchbegriff eingeben..." 
+                                class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:ring-2 focus:ring-pink-200 text-sm">
+
+                            <div id="gm-search-suggestions-box"
+                                class="hidden absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto z-50">
+                                <ul id="gm-search-suggestions-list" class="text-sm text-gray-700"></ul>
+                            </div>
+                        </div>
+
                         <label class="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition text-sm">
                             <input type="checkbox" id="filter-negate-checkbox" class="w-4 h-4 text-pink-600 rounded">
                             <span class="font-bold text-gray-700">NICHT</span>
                         </label>
-                        
+
                         <button id="btn-add-filter" class="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 font-bold transition text-sm">
                             + Filter hinzufügen
                         </button>
-                        
+
                         <button id="reset-filters-geschenke" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
                             ✕ Alle Filter löschen
                         </button>
-                        
+
                         <button id="btn-export-selected" onclick="window.exportSelectedToExcel()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold transition text-sm opacity-50 cursor-not-allowed ml-auto" disabled title="Wähle Einträge zum Exportieren aus">
                             📊 Auswahl exportieren
                         </button>
                     </div>
-                    
+
                     <div id="active-filters-container" class="flex flex-wrap gap-2 empty:hidden">
                     </div>
                 </div>

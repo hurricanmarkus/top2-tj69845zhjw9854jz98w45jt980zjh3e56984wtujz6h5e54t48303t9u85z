@@ -52,6 +52,108 @@ let geschenkeErinnerungenRef = null;
 let geschenkeUiSettingsRef = null;
 
 let GESCHENKE = {};
+
+ function updateGeschenkeSearchSuggestions(term) {
+     const box = document.getElementById('gm-search-suggestions-box');
+     const list = document.getElementById('gm-search-suggestions-list');
+     if (!box || !list) return;
+
+     const rawTerm = (term || '').toString().trim();
+     if (!rawTerm) {
+         box.classList.add('hidden');
+         gmSearchSuggestions = [];
+         gmSearchSuggestionIndex = -1;
+         return;
+     }
+
+     const lowerTerm = rawTerm.toLowerCase();
+     list.innerHTML = '';
+     gmSearchSuggestions = [];
+     gmSearchSuggestionIndex = -1;
+
+     const addSuggestion = (label, icon, category, subtext = '') => {
+         const idx = gmSearchSuggestions.length;
+         gmSearchSuggestions.push({ category, term: rawTerm });
+
+         const li = document.createElement('li');
+         li.className = 'px-3 py-2 hover:bg-pink-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2';
+         li.dataset.index = String(idx);
+         li.innerHTML = `
+             <span class="text-lg">${icon}</span>
+             <div class="flex-grow leading-tight">
+                 <span class="font-bold text-gray-800 block">${label}</span>
+                 ${subtext ? `<span class="text-xs text-gray-500">${subtext}</span>` : ''}
+             </div>
+         `;
+         li.onclick = () => addFilterQuick(category, rawTerm);
+         list.appendChild(li);
+     };
+
+     const geschenkeArray = Object.values(GESCHENKE);
+
+     if (geschenkeArray.some(g => normalizeText(STATUS_CONFIG[g.status]?.label || g.status).includes(lowerTerm))) {
+         addSuggestion(`Status: ${rawTerm}`, '🏷️', 'status', 'Suche im Status');
+     }
+     if (geschenkeArray.some(g => normalizeText(getPersonNamesFromIds(g.fuer)).includes(lowerTerm))) {
+         addSuggestion(`Für: ${rawTerm}`, '🎁', 'fuer', 'Suche in Empfänger');
+     }
+     if (geschenkeArray.some(g => normalizeText(getPersonNamesFromIds(g.von)).includes(lowerTerm))) {
+         addSuggestion(`Von: ${rawTerm}`, '👤', 'von', 'Suche in Schenker');
+     }
+     if (geschenkeArray.some(g => normalizeText(g.geschenk).includes(lowerTerm))) {
+         addSuggestion(`Geschenk: ${rawTerm}`, '📝', 'geschenk', 'Suche im Geschenktext');
+     }
+     if (geschenkeArray.some(g => normalizeText(g.shop).includes(lowerTerm))) {
+         addSuggestion(`Shop: ${rawTerm}`, '🛒', 'shop', 'Suche im Shop');
+     }
+     if (geschenkeArray.some(g => g.bezahltVon && normalizeText(KONTAKTE[g.bezahltVon]?.name || '').includes(lowerTerm))) {
+         addSuggestion(`Bezahlt von: ${rawTerm}`, '💳', 'bezahltvon', 'Suche im Bezahlt-von');
+     }
+     if (geschenkeArray.some(g => normalizeText(getPersonNamesFromIds(g.beteiligung)).includes(lowerTerm))) {
+         addSuggestion(`Beteiligung: ${rawTerm}`, '🤝', 'beteiligung', 'Suche in Beteiligten');
+     }
+     if (geschenkeArray.some(g => normalizeText(g.bestellnummer).includes(lowerTerm))) {
+         addSuggestion(`Bestellnummer: ${rawTerm}`, '#️⃣', 'bestellnummer', 'Suche in Bestellnr.');
+     }
+     if (geschenkeArray.some(g => normalizeText(g.rechnungsnummer).includes(lowerTerm))) {
+         addSuggestion(`Rechnungsnummer: ${rawTerm}`, '🧾', 'rechnungsnummer', 'Suche in Rechnungsnr.');
+     }
+     if (geschenkeArray.some(g => normalizeText(g.notizen).includes(lowerTerm))) {
+         addSuggestion(`Notizen: ${rawTerm}`, '📌', 'notizen', 'Suche in Notizen');
+     }
+     if (geschenkeArray.some(g => {
+         const s = (parseFloat(g.gesamtkosten) || 0).toFixed(2);
+         return normalizeText(s).includes(lowerTerm);
+     })) {
+         addSuggestion(`Gesamtkosten: ${rawTerm}`, '💶', 'gesamtkosten', 'Suche in Gesamtkosten');
+     }
+     if (geschenkeArray.some(g => {
+         const s = (parseFloat(g.eigeneKosten) || 0).toFixed(2);
+         return normalizeText(s).includes(lowerTerm);
+     })) {
+         addSuggestion(`Eigene Kosten: ${rawTerm}`, '💶', 'eigenekosten', 'Suche in eigenen Kosten');
+     }
+
+     addSuggestion(`Alles: "${rawTerm}"`, '🔍', 'all', 'Volltextsuche überall');
+
+     if (gmSearchSuggestions.length > 0) box.classList.remove('hidden');
+     else box.classList.add('hidden');
+ }
+
+ function updateGeschenkeSuggestionActive() {
+     const list = document.getElementById('gm-search-suggestions-list');
+     if (!list) return;
+     const items = list.querySelectorAll('li');
+     items.forEach(li => {
+         const idx = parseInt(li.dataset.index || '-1', 10);
+         if (idx === gmSearchSuggestionIndex) {
+             li.classList.add('bg-pink-50');
+             li.scrollIntoView({ block: 'nearest' });
+         } else {
+             li.classList.remove('bg-pink-50');
+         }
+     });
+ }
 let THEMEN = {};
 let KONTAKTE = {};
 let VORLAGEN = {};
@@ -66,6 +168,9 @@ let sortState = {
     key: null,
     direction: 'asc'
 };
+
+ let gmSearchSuggestions = [];
+ let gmSearchSuggestionIndex = -1;
 
 // Eigene Person (unlöschbar)
 let eigenePerson = null;
@@ -661,12 +766,56 @@ function setupEventListeners() {
         addFilterBtn.dataset.listenerAttached = 'true';
     }
 
-    // Search Input - Enter key to add filter
+    // Search Input
     const searchInput = document.getElementById('search-geschenke');
     if (searchInput && !searchInput.dataset.listenerAttached) {
-        searchInput.addEventListener('keypress', (e) => {
+        searchInput.addEventListener('input', (e) => {
+            const val = e.target.value;
+            if (!val) {
+                document.getElementById('gm-search-suggestions-box')?.classList.add('hidden');
+                gmSearchSuggestions = [];
+                gmSearchSuggestionIndex = -1;
+                renderGeschenkeTabelle();
+            } else {
+                updateGeschenkeSearchSuggestions(val);
+            }
+        });
+        searchInput.addEventListener('focus', (e) => {
+            if (e.target.value.trim()) updateGeschenkeSearchSuggestions(e.target.value);
+        });
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#search-geschenke') && !e.target.closest('#gm-search-suggestions-box')) {
+                document.getElementById('gm-search-suggestions-box')?.classList.add('hidden');
+            }
+        });
+
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') {
+                const box = document.getElementById('gm-search-suggestions-box');
+                if (!box || box.classList.contains('hidden') || gmSearchSuggestions.length === 0) return;
+                e.preventDefault();
+                gmSearchSuggestionIndex = Math.min(gmSearchSuggestions.length - 1, gmSearchSuggestionIndex + 1);
+                updateGeschenkeSuggestionActive();
+                return;
+            }
+
+            if (e.key === 'ArrowUp') {
+                const box = document.getElementById('gm-search-suggestions-box');
+                if (!box || box.classList.contains('hidden') || gmSearchSuggestions.length === 0) return;
+                e.preventDefault();
+                gmSearchSuggestionIndex = Math.max(0, gmSearchSuggestionIndex - 1);
+                updateGeschenkeSuggestionActive();
+                return;
+            }
+
             if (e.key === 'Enter') {
-                addFilter();
+                e.preventDefault();
+                if (gmSearchSuggestions.length > 0 && gmSearchSuggestionIndex >= 0) {
+                    const s = gmSearchSuggestions[gmSearchSuggestionIndex];
+                    addFilterQuick(s.category, s.term);
+                } else {
+                    addFilter();
+                }
             }
         });
         searchInput.dataset.listenerAttached = 'true';
@@ -734,7 +883,7 @@ function getStatusSortRank(status, direction) {
 
     // Spezieller Wunsch: "abgeschlossen" bei aufsteigend unten
     if (key === 'abgeschlossen') {
-        return direction === 'asc' ? 9999 : -1;
+        return 9999;
     }
 
     const order = Object.keys(STATUS_CONFIG);
@@ -1397,6 +1546,38 @@ function renderGeschenkeTabelle() {
                 let matches = false;
 
                 switch (group.category) {
+                    case 'all': {
+                        const statusKey = normalizeText(g.status);
+                        const statusLabel = normalizeText(STATUS_CONFIG[g.status]?.label);
+                        const fuerNames = normalizeText(getPersonNamesFromIds(g.fuer));
+                        const vonNames = normalizeText(getPersonNamesFromIds(g.von));
+                        const beteiligtNames = normalizeText(getPersonNamesFromIds(g.beteiligung));
+                        const bezahltName = g.bezahltVon ? normalizeText(KONTAKTE[g.bezahltVon]?.name || '') : '';
+                        const sollLabel = normalizeText(ZAHLUNGSARTEN[g.sollBezahlung]?.label || g.sollBezahlung);
+                        const istLabel = normalizeText(ZAHLUNGSARTEN[g.istBezahlung]?.label || g.istBezahlung);
+                        const gesamtkostenStr = (parseFloat(g.gesamtkosten) || 0).toFixed(2);
+                        const eigeneKostenStr = (parseFloat(g.eigeneKosten) || 0).toFixed(2);
+                        const haystack = [
+                            statusKey,
+                            statusLabel,
+                            normalizeText(g.geschenk),
+                            normalizeText(g.shop),
+                            bezahltName,
+                            fuerNames,
+                            vonNames,
+                            beteiligtNames,
+                            normalizeText(g.bestellnummer),
+                            normalizeText(g.rechnungsnummer),
+                            normalizeText(g.notizen),
+                            normalizeText(g.standort),
+                            sollLabel,
+                            istLabel,
+                            normalizeText(gesamtkostenStr),
+                            normalizeText(eigeneKostenStr)
+                        ].filter(Boolean).join(' ');
+                        matches = haystack.includes(value);
+                        break;
+                    }
                     case 'status': {
                         const s = normalizeText(g.status);
                         const label = normalizeText(STATUS_CONFIG[g.status]?.label);
@@ -2147,12 +2328,12 @@ function formatCurrency(value) {
 
 function addFilter() {
     const searchInput = document.getElementById('search-geschenke');
-    const categorySelect = document.getElementById('filter-category-select');
     const negateCheckbox = document.getElementById('filter-negate-checkbox');
     
     const value = searchInput?.value?.trim();
-    const category = categorySelect?.value;
     const negate = negateCheckbox?.checked || false;
+
+    const category = 'all';
     
     if (!value || !category) {
         alertUser('Bitte Suchbegriff und Kategorie eingeben!', 'warning');
@@ -2177,7 +2358,6 @@ function addFilter() {
     
     // Clear inputs
     searchInput.value = '';
-    categorySelect.value = '';
     negateCheckbox.checked = false;
     
     // Update UI
@@ -2186,6 +2366,30 @@ function addFilter() {
     
     console.log('✅ Filter hinzugefügt:', { category, values: parts, negate });
 }
+
+ function addFilterQuick(category, term) {
+     const negateCheckbox = document.getElementById('filter-negate-checkbox');
+     const negate = negateCheckbox?.checked || false;
+
+     if (!term || !term.toString().trim()) return;
+     if (!category) return;
+
+     activeFilters.push({ category, value: term.toString().trim(), negate, id: Date.now() + Math.floor(Math.random() * 1000) });
+
+     const input = document.getElementById('search-geschenke');
+     if (input) {
+         input.value = '';
+         input.focus();
+     }
+     if (negateCheckbox) negateCheckbox.checked = false;
+
+     document.getElementById('gm-search-suggestions-box')?.classList.add('hidden');
+     gmSearchSuggestions = [];
+     gmSearchSuggestionIndex = -1;
+
+     renderActiveFilters();
+     renderGeschenkeTabelle();
+ }
 
 function removeFilter(filterId) {
     activeFilters = activeFilters.filter(f => f.id !== filterId);
@@ -2217,6 +2421,7 @@ function renderActiveFilters() {
     }
     
     const categoryLabels = {
+        all: 'Alles',
         status: 'Status',
         fuer: 'Für',
         von: 'Von',
