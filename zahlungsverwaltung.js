@@ -61,7 +61,9 @@ const SYSTEM_CATEGORIES = [
 
 // --- INITIALISIERUNG HAUPTANSICHT ---
 export function initializeZahlungsverwaltungView() {
+    console.log('🔧 initializeZahlungsverwaltungView aufgerufen');
     const view = document.getElementById('zahlungsverwaltungView');
+    console.log('🔧 zahlungsverwaltungView gefunden:', !!view);
     
     // Listener Setup (nur einmalig beim ersten Laden)
     if (view && !view.dataset.listenerAttached) {
@@ -106,13 +108,16 @@ export function initializeZahlungsverwaltungView() {
     if (createBtn) createBtn.style.display = canCreate ? 'flex' : 'none';
     if (settingsBtn) settingsBtn.style.display = canCreate ? 'block' : 'none';
 
+    console.log('🔧 currentUser.mode:', currentUser.mode, 'GUEST_MODE:', GUEST_MODE);
     if (currentUser.mode !== GUEST_MODE) {
+        console.log('🔧 Starte Zahlungsverwaltung Listener...');
         listenForPayments();
         listenForTemplates();
         listenForContacts();
         listenForAccounts();
         listenForCategories();
     } else {
+        console.log('🔧 Gast-Modus: Zeige leere Liste');
         renderPaymentList([]);
     }
 }
