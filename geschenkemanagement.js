@@ -550,7 +550,7 @@ function updateCollectionForThema() {
 export function listenForGeschenke() {
     if (!geschenkeCollection) return;
     
-    onSnapshot(query(geschenkeCollection, orderBy('erstelltAm', 'desc')), (snapshot) => {
+    onSnapshot(geschenkeCollection, (snapshot) => {
         console.log("📦 listenForGeschenke - Geladen:", snapshot.size, "Geschenke");
         
         GESCHENKE = {};
