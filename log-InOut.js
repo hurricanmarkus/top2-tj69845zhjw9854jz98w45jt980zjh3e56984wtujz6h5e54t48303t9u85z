@@ -436,6 +436,7 @@ export function updateUIForMode() {
             console.log("Anmelden-Button geklickt! Zeige Modal."); // Spion
             const userSelectionModal = document.getElementById('userSelectionModal');
             if (userSelectionModal) {
+                userSelectionModal.classList.remove('hidden');
                 userSelectionModal.style.display = 'flex';
             } else {
                 console.error("FEHLER: Konnte #userSelectionModal nicht finden!"); // Spion
