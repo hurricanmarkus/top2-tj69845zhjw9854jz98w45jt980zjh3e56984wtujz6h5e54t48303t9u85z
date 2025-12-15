@@ -12,10 +12,19 @@
 async function importGeschenkeData() {
     console.log('🎁 === GESCHENKE IMPORT GESTARTET ===');
     
+    // Hole Variablen aus window-Objekt
+    const db = window.db;
+    const appId = window.appId;
+    const currentUser = window.currentUser;
+    
     // Prüfe ob alle benötigten Variablen verfügbar sind
-    if (typeof db === 'undefined' || typeof appId === 'undefined' || typeof currentUser === 'undefined') {
+    if (!db || !appId || !currentUser) {
         console.error('❌ FEHLER: Bitte stelle sicher, dass du in der TOP2-App eingeloggt bist!');
         console.error('   Gehe zu: Geschenkemanagement und versuche es erneut.');
+        console.error('   Debug Info:');
+        console.error('   - db:', typeof db, db ? '✅' : '❌');
+        console.error('   - appId:', typeof appId, appId ? '✅' : '❌');
+        console.error('   - currentUser:', typeof currentUser, currentUser ? '✅' : '❌');
         return;
     }
     
