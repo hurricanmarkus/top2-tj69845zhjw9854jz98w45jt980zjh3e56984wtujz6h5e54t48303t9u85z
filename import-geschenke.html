@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geschenke Import</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-purple-50 to-pink-50 min-h-screen p-8">
+    <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-2xl p-8">
+        <h1 class="text-3xl font-bold text-center mb-6 bg-gradient-to-r from-pink-600 to-purple-600 bg-clip-text text-transparent">
+            🎁 Geschenke Import Tool
+        </h1>
+        
+        <div class="space-y-6">
+            <!-- Status -->
+            <div id="status" class="hidden p-4 rounded-lg"></div>
+            
+            <!-- Schritt 1: User-ID -->
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+                <h3 class="font-bold text-blue-900 mb-2">Schritt 1: User-ID eingeben</h3>
+                <input type="text" id="userId" placeholder="z.B. V7IOJlD7edJBeVjwe52b" 
+                       class="w-full p-3 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                <p class="text-sm text-blue-700 mt-2">💡 Öffne TOP2-App → Console (F12) → Tippe: <code class="bg-blue-200 px-2 py-1 rounded">currentUser.mode</code></p>
+            </div>
+            
+            <!-- Schritt 2: Daten einfügen -->
+            <div class="bg-green-50 border-l-4 border-green-500 p-4 rounded">
+                <h3 class="font-bold text-green-900 mb-2">Schritt 2: Excel-Daten einfügen</h3>
+                <textarea id="excelData" rows="8" placeholder="Füge hier deine Excel-Daten ein (Semikolon-getrennt)..."
+                          class="w-full p-3 border-2 border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 font-mono text-sm"></textarea>
+            </div>
+            
+            <!-- Schritt 3: Import -->
+            <div class="flex gap-4">
+                <button onclick="analyzeData()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition">
+                    📊 Daten analysieren
+                </button>
+                <button onclick="startImport()" id="importBtn" disabled 
+                        class="flex-1 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
+                    🚀 Import starten
+                </button>
+            </div>
+            
+            <!-- Statistiken -->
+            <div id="stats" class="hidden grid grid-cols-3 gap-4">
+                <div class="bg-pink-100 p-4 rounded-lg text-center">
+                    <div class="text-3xl font-bold text-pink-600" id="statGeschenke">0</div>
+                    <div class="text-sm text-pink-800">Geschenke</div>
+                </div>
+                <div class="bg-purple-100 p-4 rounded-lg text-center">
+                    <div class="text-3xl font-bold text-purple-600" id="statThemen">0</div>
+                    <div class="text-sm text-purple-800">Themen</div>
+                </div>
+                <div class="bg-blue-100 p-4 rounded-lg text-center">
+                    <div class="text-3xl font-bold text-blue-600" id="statKontakte">0</div>
+                    <div class="text-sm text-blue-800">Kontakte</div>
+                </div>
+            </div>
+            
+            <!-- Progress -->
+            <div id="progress" class="hidden">
+                <div class="bg-gray-200 rounded-full h-6 overflow-hidden">
+                    <div id="progressBar" class="bg-gradient-to-r from-pink-600 to-purple-600 h-full flex items-center justify-center text-white text-sm font-bold transition-all duration-300" style="width: 0%">
+                        0%
+                    </div>
+                </div>
+                <p id="progressText" class="text-center text-sm text-gray-600 mt-2"></p>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { getFirestore, doc, setDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDSZ5_VvLjpkk-KuRjJCVFvGJtz7BYvMhg",
+            authDomain: "top2-app.firebaseapp.com",
+            projectId: "top2-app",
+            storageBucket: "top2-app.firebasestorage.app",
+            messagingSenderId: "1081941858114",
+            appId: "1:1081941858114:web:a6f6c0b9e0a0c0a0c0a0c0"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const APP_ID = '20LVob88b3ovXRUyX3ra';
+
+        let parsedData = null;
+
+        window.analyzeData = function() {
+            const userId = document.getElementById('userId').value.trim();
+            const excelData = document.getElementById('excelData').value.trim();
+            
+            if (!userId || !excelData) {
+                showStatus('Bitte User-ID und Daten eingeben!', 'error');
+                return;
+            }
+
+            try {
+                const lines = excelData.split('\n').filter(l => l.trim());
+                const geschenkeByThema = {};
+                const kontakte = new Set();
+
+                lines.forEach(line => {
+                    const parts = line.split(';');
+                    if (parts.length < 16) return;
+
+                    const thema = parts[0].trim();
+                    if (!geschenkeByThema[thema]) geschenkeByThema[thema] = [];
+
+                    parts[2].split(/und|,/).forEach(n => { if (n.trim() && n.trim() !== 'ALLE') kontakte.add(n.trim()); });
+                    parts[3].split(/und|,/).forEach(n => { if (n.trim()) kontakte.add(n.trim()); });
+
+                    geschenkeByThema[thema].push({
+                        status: parts[1].trim() === 'Abgeschlossen' ? 'gekauft' : parts[1].trim() === 'Storniert' ? 'storniert' : 'offen',
+                        fuer: parts[2].split(/und|,/).map(n => n.trim()).filter(n => n && n !== 'ALLE'),
+                        von: parts[3].split(/und|,/).map(n => n.trim()).filter(n => n),
+                        titel: parts[4].trim(),
+                        sollBezahlung: parts[10].trim(),
+                        istBezahlung: parts[11].trim(),
+                        sollPreis: parseFloat(parts[8].replace(',', '.')) || 0,
+                        istPreis: parseFloat(parts[9].replace(',', '.')) || 0,
+                        standort: parts[12].trim(),
+                        notizen: `Shop: ${parts[5]}\nBezahlt: ${parts[6]}\nBeteiligung: ${parts[7]}\nBestellnr: ${parts[13]}\nRechnungsnr: ${parts[14]}\n${parts[15]}`
+                    });
+                });
+
+                const themen = Object.keys(geschenkeByThema);
+                let totalGeschenke = 0;
+                themen.forEach(t => totalGeschenke += geschenkeByThema[t].length);
+
+                parsedData = { userId, geschenkeByThema, kontakte: Array.from(kontakte), themen };
+
+                document.getElementById('statGeschenke').textContent = totalGeschenke;
+                document.getElementById('statThemen').textContent = themen.length;
+                document.getElementById('statKontakte').textContent = kontakte.size;
+                document.getElementById('stats').classList.remove('hidden');
+                document.getElementById('importBtn').disabled = false;
+
+                showStatus(`✅ Analyse erfolgreich! ${totalGeschenke} Geschenke in ${themen.length} Themen gefunden.`, 'success');
+            } catch (error) {
+                showStatus('❌ Fehler beim Analysieren: ' + error.message, 'error');
+            }
+        };
+
+        window.startImport = async function() {
+            if (!parsedData) {
+                showStatus('Bitte erst Daten analysieren!', 'error');
+                return;
+            }
+
+            if (!confirm(`Import starten?\n\n${parsedData.themen.length} Themen\n${parsedData.kontakte.length} Kontakte\n\nFür User: ${parsedData.userId}`)) {
+                return;
+            }
+
+            document.getElementById('progress').classList.remove('hidden');
+            document.getElementById('importBtn').disabled = true;
+
+            try {
+                const { userId, geschenkeByThema, kontakte, themen } = parsedData;
+
+                // 1. Kontakte erstellen
+                updateProgress(10, 'Erstelle Kontakte...');
+                const kontakteIds = {};
+                for (const kontakt of kontakte) {
+                    const id = 'kontakt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                    kontakteIds[kontakt] = id;
+                    await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', userId, 'geschenke_kontakte', id), {
+                        id, name: kontakt, createdAt: new Date(), createdBy: userId
+                    });
+                }
+
+                // 2. Themen + Geschenke
+                updateProgress(30, 'Erstelle Themen und Geschenke...');
+                let imported = 0;
+                let totalGeschenke = 0;
+                themen.forEach(t => totalGeschenke += geschenkeByThema[t].length);
+
+                for (const themaName of themen) {
+                    const themaId = 'thema_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+
+                    // Thema erstellen
+                    await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', userId, 'geschenke_themen', themaId), {
+                        id: themaId, name: themaName, createdAt: new Date(), createdBy: userId, istEigenes: true, personen: []
+                    });
+
+                    // Geschenke für dieses Thema
+                    for (const g of geschenkeByThema[themaName]) {
+                        const geschenkId = 'geschenk_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+
+                        await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', userId, 'geschenke_themen', themaId, 'geschenke', geschenkId), {
+                            id: geschenkId,
+                            themaId: themaId,
+                            fuer: g.fuer.map(n => kontakteIds[n]).filter(i => i),
+                            von: g.von.map(n => kontakteIds[n]).filter(i => i),
+                            titel: g.titel,
+                            status: g.status,
+                            sollBezahlung: g.sollBezahlung,
+                            istBezahlung: g.istBezahlung,
+                            sollPreis: g.sollPreis,
+                            istPreis: g.istPreis,
+                            standort: g.standort,
+                            notizen: g.notizen,
+                            createdAt: new Date(),
+                            createdBy: userId
+                        });
+
+                        imported++;
+                        const progress = 30 + (imported / totalGeschenke * 70);
+                        updateProgress(progress, `Importiere Geschenk ${imported}/${totalGeschenke}...`);
+                    }
+                }
+
+                updateProgress(100, 'Import abgeschlossen!');
+                showStatus(`🎉 Import erfolgreich! ${themen.length} Themen, ${kontakte.length} Kontakte, ${imported} Geschenke importiert!`, 'success');
+                alert('✅ Import erfolgreich!\n\nÖffne jetzt die TOP2-App und gehe zum Geschenkemanagement!');
+
+            } catch (error) {
+                showStatus('❌ Import fehlgeschlagen: ' + error.message, 'error');
+                console.error(error);
+            }
+        };
+
+        function updateProgress(percent, text) {
+            document.getElementById('progressBar').style.width = percent + '%';
+            document.getElementById('progressBar').textContent = Math.round(percent) + '%';
+            document.getElementById('progressText').textContent = text;
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.className = `p-4 rounded-lg ${type === 'success' ? 'bg-green-100 text-green-800 border-l-4 border-green-500' : 'bg-red-100 text-red-800 border-l-4 border-red-500'}`;
+            status.textContent = message;
+            status.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
