@@ -181,15 +181,24 @@ async function startImport() {
     console.log('🎁 START');
     
     // Firebase laden
-    const { getFirestore, collection, doc, setDoc } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js');
+    const { getFirestore, collection, doc, setDoc, getAuth } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js');
+    const { getAuth: getAuthFunc } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js');
     const db = getFirestore();
     const appId = 'top2-tj69845zhjw9854jz98w45jt980zjh3e56984wtujz6h5e54t48303t9u85z';
     
-    // User-ID abfragen
-    const userId = prompt('Deine User-ID (z.B. SYSTEMADMIN):', 'SYSTEMADMIN');
-    if (!userId) return console.error('❌ Abgebrochen');
+    // Hole Firebase Auth UID (für Berechtigungen)
+    const auth = getAuthFunc();
+    const firebaseUid = auth.currentUser?.uid;
     
-    console.log('👤 User:', userId);
+    if (!firebaseUid) {
+        return console.error('❌ Nicht eingeloggt! Bitte in der TOP2-App einloggen.');
+    }
+    
+    // App-User-ID für createdBy
+    const appUserId = window.currentUser?.mode || 'SYSTEMADMIN';
+    
+    console.log('👤 Firebase UID:', firebaseUid);
+    console.log('👤 App User:', appUserId);
     
     // Daten parsen
     const zeilen = DATEN.trim().split('\n');
@@ -234,8 +243,8 @@ async function startImport() {
         for (const t of Array.from(themen)) {
             const id = 'thema_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             themenIds[t] = id;
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', userId, 'geschenke_themen', id), {
-                id, name: t, createdAt: new Date(), createdBy: userId, istEigenes: true, personen: []
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', firebaseUid, 'geschenke_themen', id), {
+                id, name: t, createdAt: new Date(), createdBy: appUserId, istEigenes: true, personen: []
             });
             console.log(`  ✅ ${t}`);
         }
@@ -246,8 +255,8 @@ async function startImport() {
         for (const k of Array.from(kontakte)) {
             const id = 'kontakt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             kontakteIds[k] = id;
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', userId, 'geschenke_kontakte', id), {
-                id, name: k, createdAt: new Date(), createdBy: userId
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', firebaseUid, 'geschenke_kontakte', id), {
+                id, name: k, createdAt: new Date(), createdBy: appUserId
             });
         }
         console.log(`  ✅ ${kontakte.size} Kontakte`);
@@ -257,7 +266,7 @@ async function startImport() {
         let n = 0;
         for (const g of geschenke) {
             const id = 'geschenk_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', userId, 'geschenke', id), {
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', firebaseUid, 'geschenke', id), {
                 id,
                 themaId: themenIds[g.thema],
                 fuer: g.fuer.map(n => kontakteIds[n]).filter(i => i),
@@ -271,7 +280,7 @@ async function startImport() {
                 standort: g.standort,
                 notizen: g.notizen,
                 createdAt: new Date(),
-                createdBy: userId
+                createdBy: appUserId
             });
             n++;
             if (n % 10 === 0) console.log(`  ${n}/${geschenke.length}`);
