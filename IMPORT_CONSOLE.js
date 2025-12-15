@@ -16,8 +16,9 @@
     const APP_ID = '20LVob88b3ovXRUyX3ra';
     
     // Importiere Firebase Funktionen
-    const { getFirestore, getApp } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js');
+    const { getFirestore } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js');
     const { getAuth } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js');
+    const { getApp } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js');
     
     // Nutze existierende Firebase App
     const app = getApp();
