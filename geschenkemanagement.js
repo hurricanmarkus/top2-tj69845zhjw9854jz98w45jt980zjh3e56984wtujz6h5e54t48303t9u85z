@@ -2035,6 +2035,9 @@ window.exportSelectedToExcel = function() {
 };
 
 function generateCSV(geschenke) {
+    // BOM für UTF-8 Excel-Kompatibilität
+    const BOM = '\uFEFF';
+    
     const headers = [
         'Status',
         'Für',
@@ -2044,8 +2047,8 @@ function generateCSV(geschenke) {
         'Shop',
         'Bezahlt von',
         'Beteiligung',
-        'Gesamtkosten',
-        'Eigene Kosten',
+        'Gesamtkosten (€)',
+        'Eigene Kosten (€)',
         'SOLL-Bezahlung',
         'IST-Bezahlung',
         'Standort',
@@ -2056,10 +2059,14 @@ function generateCSV(geschenke) {
     
     const rows = geschenke.map(g => {
         const statusConfig = STATUS_CONFIG[g.status] || STATUS_CONFIG.offen;
-        const fuerPersonen = (g.fuer || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join('; ');
-        const vonPersonen = (g.von || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join('; ');
-        const beteiligtePersonen = (g.beteiligung || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join('; ');
+        const fuerPersonen = (g.fuer || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join(', ');
+        const vonPersonen = (g.von || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join(', ');
+        const beteiligtePersonen = (g.beteiligung || []).map(id => KONTAKTE[id]?.name || 'Unbekannt').join(', ');
         const bezahltVonName = g.bezahltVon ? (KONTAKTE[g.bezahltVon]?.name || '-') : '-';
+        
+        // Formatiere Zahlen für Excel
+        const gesamtkosten = g.gesamtkosten ? parseFloat(g.gesamtkosten).toFixed(2) : '0,00';
+        const eigeneKosten = g.eigeneKosten ? parseFloat(g.eigeneKosten).toFixed(2) : '0,00';
         
         return [
             statusConfig.label,
@@ -2070,18 +2077,22 @@ function generateCSV(geschenke) {
             g.shop || '-',
             bezahltVonName,
             beteiligtePersonen || '-',
-            g.gesamtkosten || '0',
-            g.eigeneKosten || '0',
-            g.sollBezahlung || '-',
-            g.istBezahlung || '-',
+            gesamtkosten.replace('.', ','), // Excel verwendet Komma als Dezimaltrennzeichen
+            eigeneKosten.replace('.', ','),
+            ZAHLUNGSARTEN[g.sollBezahlung]?.label || g.sollBezahlung || '-',
+            ZAHLUNGSARTEN[g.istBezahlung]?.label || g.istBezahlung || '-',
             g.standort || '-',
             g.bestellnummer || '-',
             g.rechnungsnummer || '-',
-            (g.notizen || '').replace(/\n/g, ' ')
-        ].map(field => `"${String(field).replace(/"/g, '""')}"`).join(',');
+            (g.notizen || '').replace(/\n/g, ' ').replace(/\r/g, '')
+        ].map(field => {
+            // Escape Anführungszeichen und umschließe mit Anführungszeichen
+            const escaped = String(field).replace(/"/g, '""');
+            return `"${escaped}"`;
+        }).join(';'); // Semikolon als Trennzeichen für deutsche Excel-Version
     });
     
-    return [headers.join(','), ...rows].join('\n');
+    return BOM + [headers.join(';'), ...rows].join('\r\n');
 }
 
 function renderKontaktbuch() {
