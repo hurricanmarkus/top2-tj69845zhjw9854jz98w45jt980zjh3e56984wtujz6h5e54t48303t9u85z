@@ -594,7 +594,7 @@ export function setButtonLoading(button, isLoading) {
 }
 
 export function navigate(targetViewName) {
-    console.log(`Navigiere zu: ${targetViewName}`); 
+    console.log(`Navigiere zu: ${targetViewName}`);
     const targetView = views[targetViewName];
     if (!targetView) {
         console.error(`Navigation fehlgeschlagen: View "${targetViewName}" nicht gefunden.`);
@@ -663,7 +663,8 @@ export function navigate(targetViewName) {
     const mainContent = document.querySelector('.main-content');
     if (mainContent) mainContent.scrollTop = 0;
 
-    Object.values(viewElements).forEach(el => el && el.classList.remove('active'));
+    // Alle Views deaktivieren (direkt aus DOM holen, nicht aus gecachter Variable)
+    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
     const targetElement = document.getElementById(targetView.id);
     if (targetElement) {
         targetElement.classList.add('active');
