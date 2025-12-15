@@ -12,44 +12,26 @@
 (async function() {
     console.log('🎁 === GESCHENKE IMPORT START ===');
     
-    // Prüfe ob wir in der App sind und hole Variablen
-    let db, userId;
+    // Hole Firebase und User-ID
     const APP_ID = '20LVob88b3ovXRUyX3ra';
     
-    if (typeof window.db !== 'undefined' && typeof window.currentUser !== 'undefined') {
-        // Im Geschenkemanagement
-        db = window.db;
-        userId = window.currentUser.mode;
-        console.log('✅ Variablen aus Geschenkemanagement geladen');
-    } else {
-        // Außerhalb - Firebase manuell initialisieren
-        console.log('⚠️ Nicht im Geschenkemanagement - initialisiere Firebase...');
-        const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js');
-        const { getFirestore } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js');
-        const { getAuth } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js');
-        
-        const app = initializeApp({
-            apiKey: "AIzaSyDSZ5_VvLjpkk-KuRjJCVFvGJtz7BYvMhg",
-            authDomain: "top2-app.firebaseapp.com",
-            projectId: "top2-app",
-            storageBucket: "top2-app.firebasestorage.app",
-            messagingSenderId: "1081941858114",
-            appId: "1:1081941858114:web:a6f6c0b9e0a0c0a0c0a0c0"
-        });
-        
-        db = getFirestore(app);
-        const auth = getAuth(app);
-        const user = auth.currentUser;
-        
-        if (!user) {
-            console.error('❌ Nicht eingeloggt! Bitte erst einloggen.');
-            return;
-        }
-        
-        userId = user.uid;
-        console.log('✅ Firebase initialisiert');
+    // Importiere Firebase Funktionen
+    const { getFirestore, getApp } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js');
+    const { getAuth } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js');
+    
+    // Nutze existierende Firebase App
+    const app = getApp();
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+    const user = auth.currentUser;
+    
+    if (!user) {
+        console.error('❌ Nicht eingeloggt!');
+        return;
     }
     
+    const userId = user.uid;
+    console.log('✅ Firebase geladen');
     console.log('👤 User:', userId);
     
     // DEINE EXCEL-DATEN HIER EINFÜGEN
