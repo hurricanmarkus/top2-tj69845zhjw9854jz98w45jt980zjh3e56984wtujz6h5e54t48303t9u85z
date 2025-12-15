@@ -613,6 +613,7 @@ export function listenForGeschenke() {
         
         renderGeschenkeTabelle();
         updateDashboardStats();
+        renderPersonenUebersicht();
         populateFilterDropdowns();
     }, (error) => {
         console.error("Fehler beim Laden der Geschenke:", error);
@@ -685,22 +686,27 @@ function setupEventListeners() {
         selectAllCheckbox.dataset.listenerAttached = 'true';
     }
 
-    // Sortierung: Status-Spalte
-    const sortStatusHeader = document.getElementById('gm-sort-status');
-    if (sortStatusHeader && !sortStatusHeader.dataset.listenerAttached) {
-        sortStatusHeader.addEventListener('click', async () => {
-            console.log('↕️ Sort-Click: Status');
-            if (sortState.key === 'status') {
-                sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
-            } else {
-                sortState.key = 'status';
-                sortState.direction = 'asc';
-            }
-            updateSortIndicators();
-            await saveUiSettings();
-            renderGeschenkeTabelle();
+    // Sortierung: alle Spalten (th[data-sort-key])
+    const tableHead = document.querySelector('#geschenkemanagementView thead');
+    if (tableHead && !tableHead.dataset.sortListenersAttached) {
+        const sortableHeaders = tableHead.querySelectorAll('th[data-sort-key]');
+        sortableHeaders.forEach(th => {
+            th.addEventListener('click', async () => {
+                const key = th.getAttribute('data-sort-key');
+                if (!key) return;
+                console.log('↕️ Sort-Click:', key);
+                if (sortState.key === key) {
+                    sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+                } else {
+                    sortState.key = key;
+                    sortState.direction = 'asc';
+                }
+                updateSortIndicators();
+                await saveUiSettings();
+                renderGeschenkeTabelle();
+            });
         });
-        sortStatusHeader.dataset.listenerAttached = 'true';
+        tableHead.dataset.sortListenersAttached = 'true';
     }
 
     // Modal schließen
@@ -708,14 +714,19 @@ function setupEventListeners() {
 }
 
 function updateSortIndicators() {
-    const statusIndicator = document.getElementById('gm-sort-status-indicator');
-    if (statusIndicator) {
-        if (sortState.key === 'status') {
-            statusIndicator.textContent = sortState.direction === 'asc' ? '▲' : '▼';
+    const keys = [
+        'status', 'fuer', 'von', 'id', 'geschenk', 'bezahltvon', 'beteiligung',
+        'gesamtkosten', 'eigenekosten', 'sollkonto', 'istkonto', 'standort'
+    ];
+    keys.forEach(k => {
+        const el = document.getElementById(`gm-sort-indicator-${k}`);
+        if (!el) return;
+        if (sortState.key === k) {
+            el.textContent = sortState.direction === 'asc' ? '▲' : '▼';
         } else {
-            statusIndicator.textContent = '';
+            el.textContent = '';
         }
-    }
+    });
 }
 
 function getStatusSortRank(status, direction) {
@@ -731,26 +742,103 @@ function getStatusSortRank(status, direction) {
     return idx === -1 ? 5000 : idx;
 }
 
+function getPersonNamesFromIds(ids) {
+    if (!ids || !Array.isArray(ids)) return '';
+    return ids
+        .map(id => (KONTAKTE[id]?.name || '').toString().trim())
+        .filter(Boolean)
+        .join(', ');
+}
+
+function normalizeText(value) {
+    return (value ?? '').toString().toLowerCase().trim();
+}
+
+function parseNumericFilter(text) {
+    const raw = (text || '').toString().trim().replace(',', '.');
+    const match = raw.match(/^(<=|>=|=|<|>)\s*(-?\d+(?:\.\d+)?)$/);
+    if (!match) {
+        const n = parseFloat(raw);
+        if (isNaN(n)) return null;
+        return { op: 'contains', num: n };
+    }
+    return { op: match[1], num: parseFloat(match[2]) };
+}
+
+function compareNumbers(a, b) {
+    const na = Number.isFinite(a) ? a : 0;
+    const nb = Number.isFinite(b) ? b : 0;
+    return na - nb;
+}
+
+function compareStrings(a, b) {
+    return normalizeText(a).localeCompare(normalizeText(b), 'de');
+}
+
+function getSortValue(g, key) {
+    switch (key) {
+        case 'status':
+            return g.status || '';
+        case 'fuer':
+            return getPersonNamesFromIds(g.fuer);
+        case 'von':
+            return getPersonNamesFromIds(g.von);
+        case 'id':
+            return g.id || '';
+        case 'geschenk':
+            return g.geschenk || '';
+        case 'shop':
+            return g.shop || '';
+        case 'bezahltvon':
+            return g.bezahltVon ? (KONTAKTE[g.bezahltVon]?.name || '') : '';
+        case 'beteiligung':
+            return getPersonNamesFromIds(g.beteiligung);
+        case 'gesamtkosten':
+            return parseFloat(g.gesamtkosten) || 0;
+        case 'eigenekosten':
+            return parseFloat(g.eigeneKosten) || 0;
+        case 'sollkonto':
+            return ZAHLUNGSARTEN[g.sollBezahlung]?.label || g.sollBezahlung || '';
+        case 'istkonto':
+            return ZAHLUNGSARTEN[g.istBezahlung]?.label || g.istBezahlung || '';
+        case 'standort':
+            return g.standort || '';
+        default:
+            return '';
+    }
+}
+
 function applySorting(geschenkeArray) {
     if (!sortState?.key) return geschenkeArray;
 
-    if (sortState.key === 'status') {
-        const direction = sortState.direction === 'desc' ? 'desc' : 'asc';
-        const copy = [...geschenkeArray];
-        copy.sort((a, b) => {
+    const direction = sortState.direction === 'desc' ? 'desc' : 'asc';
+    const key = sortState.key;
+    const copy = [...geschenkeArray];
+
+    copy.sort((a, b) => {
+        if (key === 'status') {
             const ra = getStatusSortRank(a.status, direction);
             const rb = getStatusSortRank(b.status, direction);
-            if (ra === rb) {
-                const nameA = (a.geschenk || '').toString().toLowerCase();
-                const nameB = (b.geschenk || '').toString().toLowerCase();
-                return nameA.localeCompare(nameB);
-            }
-            return direction === 'asc' ? ra - rb : rb - ra;
-        });
-        return copy;
-    }
+            if (ra !== rb) return direction === 'asc' ? ra - rb : rb - ra;
+            return compareStrings(a.geschenk, b.geschenk);
+        }
 
-    return geschenkeArray;
+        const va = getSortValue(a, key);
+        const vb = getSortValue(b, key);
+
+        const isNum = typeof va === 'number' || typeof vb === 'number';
+        if (isNum) {
+            const c = compareNumbers(Number(va), Number(vb));
+            if (c !== 0) return direction === 'asc' ? c : -c;
+            return compareStrings(a.geschenk, b.geschenk);
+        }
+
+        const c = compareStrings(va, vb);
+        if (c !== 0) return direction === 'asc' ? c : -c;
+        return compareStrings(a.geschenk, b.geschenk);
+    });
+
+    return copy;
 }
 
 function setupModalListeners() {
@@ -1292,61 +1380,132 @@ function renderGeschenkeTabelle() {
     
     let geschenkeArray = Object.values(GESCHENKE);
     
-    // Apply all active filters
-    activeFilters.forEach(filter => {
-        geschenkeArray = geschenkeArray.filter(g => {
-            const value = filter.value.toLowerCase();
-            let matches = false;
-            
-            switch(filter.category) {
-                case 'status':
-                    matches = g.status?.toLowerCase().includes(value) || 
-                           STATUS_CONFIG[g.status]?.label?.toLowerCase().includes(value);
-                    break;
-                
-                case 'fuer':
-                    if (g.fuer && Array.isArray(g.fuer)) {
-                        matches = g.fuer.some(id => {
-                            const name = KONTAKTE[id]?.name?.toLowerCase() || '';
-                            return name.includes(value);
-                        });
+    // Filter: OR innerhalb Kategorie, AND zwischen Kategorien
+    const groups = {};
+    activeFilters.forEach(f => {
+        const groupKey = `${f.category}__${f.negate ? 'not' : 'is'}`;
+        if (!groups[groupKey]) groups[groupKey] = { category: f.category, negate: !!f.negate, values: [] };
+        groups[groupKey].values.push(f.value);
+    });
+
+    const groupList = Object.values(groups);
+    geschenkeArray = geschenkeArray.filter(g => {
+        return groupList.every(group => {
+            const anyMatch = group.values.some(raw => {
+                const value = normalizeText(raw);
+                if (!value) return false;
+                let matches = false;
+
+                switch (group.category) {
+                    case 'status': {
+                        const s = normalizeText(g.status);
+                        const label = normalizeText(STATUS_CONFIG[g.status]?.label);
+                        matches = s.includes(value) || label.includes(value);
+                        break;
                     }
-                    break;
-                
-                case 'von':
-                    if (g.von && Array.isArray(g.von)) {
-                        matches = g.von.some(id => {
-                            const name = KONTAKTE[id]?.name?.toLowerCase() || '';
-                            return name.includes(value);
-                        });
+                    case 'fuer': {
+                        matches = normalizeText(getPersonNamesFromIds(g.fuer)).includes(value);
+                        break;
                     }
-                    break;
-                
-                case 'sollkonto':
-                    const sollLabel = ZAHLUNGSARTEN[g.sollBezahlung]?.label?.toLowerCase() || g.sollBezahlung?.toLowerCase() || '';
-                    matches = sollLabel.includes(value);
-                    break;
-                
-                case 'istkonto':
-                    const istLabel = ZAHLUNGSARTEN[g.istBezahlung]?.label?.toLowerCase() || g.istBezahlung?.toLowerCase() || '';
-                    matches = istLabel.includes(value);
-                    break;
-                
-                case 'kontodifferenz':
-                    const hatDifferenz = g.sollBezahlung && g.istBezahlung && g.sollBezahlung !== g.istBezahlung;
-                    matches = value.includes('ja') || value.includes('mit') ? hatDifferenz : !hatDifferenz;
-                    break;
-                
-                case 'standort':
-                    matches = g.standort?.toLowerCase().includes(value);
-                    break;
-                
-                default:
-                    matches = true;
-            }
-            
-            // Apply negation if filter is negated
-            return filter.negate ? !matches : matches;
+                    case 'von': {
+                        matches = normalizeText(getPersonNamesFromIds(g.von)).includes(value);
+                        break;
+                    }
+                    case 'geschenk': {
+                        matches = normalizeText(g.geschenk).includes(value);
+                        break;
+                    }
+                    case 'shop': {
+                        matches = normalizeText(g.shop).includes(value);
+                        break;
+                    }
+                    case 'bezahltvon': {
+                        const name = g.bezahltVon ? (KONTAKTE[g.bezahltVon]?.name || '') : '';
+                        matches = normalizeText(name).includes(value);
+                        break;
+                    }
+                    case 'beteiligung': {
+                        matches = normalizeText(getPersonNamesFromIds(g.beteiligung)).includes(value);
+                        break;
+                    }
+                    case 'gesamtkosten': {
+                        const parsed = parseNumericFilter(value);
+                        const num = parseFloat(g.gesamtkosten) || 0;
+                        if (!parsed) return false;
+                        if (parsed.op === 'contains') {
+                            matches = num.toFixed(2).includes(parsed.num.toFixed(2).replace(/\.00$/, ''));
+                        } else if (parsed.op === '=') {
+                            matches = num === parsed.num;
+                        } else if (parsed.op === '>') {
+                            matches = num > parsed.num;
+                        } else if (parsed.op === '<') {
+                            matches = num < parsed.num;
+                        } else if (parsed.op === '>=') {
+                            matches = num >= parsed.num;
+                        } else if (parsed.op === '<=') {
+                            matches = num <= parsed.num;
+                        }
+                        break;
+                    }
+                    case 'eigenekosten': {
+                        const parsed = parseNumericFilter(value);
+                        const num = parseFloat(g.eigeneKosten) || 0;
+                        if (!parsed) return false;
+                        if (parsed.op === 'contains') {
+                            matches = num.toFixed(2).includes(parsed.num.toFixed(2).replace(/\.00$/, ''));
+                        } else if (parsed.op === '=') {
+                            matches = num === parsed.num;
+                        } else if (parsed.op === '>') {
+                            matches = num > parsed.num;
+                        } else if (parsed.op === '<') {
+                            matches = num < parsed.num;
+                        } else if (parsed.op === '>=') {
+                            matches = num >= parsed.num;
+                        } else if (parsed.op === '<=') {
+                            matches = num <= parsed.num;
+                        }
+                        break;
+                    }
+                    case 'bestellnummer': {
+                        matches = normalizeText(g.bestellnummer).includes(value);
+                        break;
+                    }
+                    case 'rechnungsnummer': {
+                        matches = normalizeText(g.rechnungsnummer).includes(value);
+                        break;
+                    }
+                    case 'notizen': {
+                        matches = normalizeText(g.notizen).includes(value);
+                        break;
+                    }
+                    case 'sollkonto': {
+                        const sollLabel = normalizeText(ZAHLUNGSARTEN[g.sollBezahlung]?.label || g.sollBezahlung);
+                        matches = sollLabel.includes(value);
+                        break;
+                    }
+                    case 'istkonto': {
+                        const istLabel = normalizeText(ZAHLUNGSARTEN[g.istBezahlung]?.label || g.istBezahlung);
+                        matches = istLabel.includes(value);
+                        break;
+                    }
+                    case 'kontodifferenz': {
+                        const hatDifferenz = g.sollBezahlung && g.istBezahlung && g.sollBezahlung !== g.istBezahlung;
+                        matches = value.includes('ja') || value.includes('mit') ? hatDifferenz : !hatDifferenz;
+                        break;
+                    }
+                    case 'standort': {
+                        matches = normalizeText(g.standort).includes(value);
+                        break;
+                    }
+                    default:
+                        matches = true;
+                }
+
+                return matches;
+            });
+
+            // OR innerhalb Gruppe; Negation: keine der Werte darf matchen
+            return group.negate ? !anyMatch : anyMatch;
         });
     });
 
@@ -2000,8 +2159,21 @@ function addFilter() {
         return;
     }
     
-    // Add filter to active filters
-    activeFilters.push({ category, value, negate, id: Date.now() });
+    // Mehrere Begriffe auf einmal erlauben (Trennzeichen: ; oder ,)
+    const parts = value
+        .split(/[;,]/)
+        .map(v => v.trim())
+        .filter(Boolean);
+
+    if (parts.length === 0) {
+        alertUser('Bitte Suchbegriff eingeben!', 'warning');
+        return;
+    }
+
+    // Add filter(s) to active filters
+    parts.forEach(part => {
+        activeFilters.push({ category, value: part, negate, id: Date.now() + Math.floor(Math.random() * 1000) });
+    });
     
     // Clear inputs
     searchInput.value = '';
@@ -2012,7 +2184,7 @@ function addFilter() {
     renderActiveFilters();
     renderGeschenkeTabelle();
     
-    console.log('✅ Filter hinzugefügt:', { category, value, negate });
+    console.log('✅ Filter hinzugefügt:', { category, values: parts, negate });
 }
 
 function removeFilter(filterId) {
@@ -2048,6 +2220,15 @@ function renderActiveFilters() {
         status: 'Status',
         fuer: 'Für',
         von: 'Von',
+        geschenk: 'Geschenk',
+        shop: 'Shop',
+        bezahltvon: 'Bezahlt von',
+        beteiligung: 'Beteiligung',
+        gesamtkosten: 'Gesamtkosten',
+        eigenekosten: 'Eigene Kosten',
+        bestellnummer: 'Bestellnummer',
+        rechnungsnummer: 'Rechnungsnummer',
+        notizen: 'Notizen',
         sollkonto: 'Soll-Konto',
         istkonto: 'Ist-Konto',
         kontodifferenz: 'Kontodifferenz',

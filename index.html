@@ -2262,6 +2262,15 @@
                             <option value="status">Status</option>
                             <option value="fuer">Für</option>
                             <option value="von">Von</option>
+                            <option value="geschenk">Geschenk</option>
+                            <option value="shop">Shop</option>
+                            <option value="bezahltvon">Bezahlt von</option>
+                            <option value="beteiligung">Beteiligung</option>
+                            <option value="gesamtkosten">Gesamtkosten</option>
+                            <option value="eigenekosten">Eigene Kosten</option>
+                            <option value="bestellnummer">Bestellnummer</option>
+                            <option value="rechnungsnummer">Rechnungsnummer</option>
+                            <option value="notizen">Notizen</option>
                             <option value="sollkonto">Soll-Konto</option>
                             <option value="istkonto">Ist-Konto</option>
                             <option value="kontodifferenz">Kontodifferenz</option>
@@ -2299,20 +2308,42 @@
                                     <th class="px-2 py-3 text-center text-xs font-bold text-pink-800">
                                         <input type="checkbox" id="gm-select-all" class="w-4 h-4 rounded cursor-pointer" title="Alle auswählen/abwählen">
                                     </th>
-                                    <th id="gm-sort-status" data-sort-key="status" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
-                                        Status <span id="gm-sort-status-indicator" class="ml-1"></span>
+                                    <th data-sort-key="status" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
+                                        Status <span id="gm-sort-indicator-status" class="ml-1"></span>
                                     </th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">FÜR</th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">VON</th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">ID</th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Geschenk</th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Bezahlt von</th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Beteiligung</th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Gesamt</th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Eigen</th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">SOLL</th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">IST</th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Standort</th>
+                                    <th data-sort-key="fuer" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
+                                        FÜR <span id="gm-sort-indicator-fuer" class="ml-1"></span>
+                                    </th>
+                                    <th data-sort-key="von" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
+                                        VON <span id="gm-sort-indicator-von" class="ml-1"></span>
+                                    </th>
+                                    <th data-sort-key="id" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
+                                        ID <span id="gm-sort-indicator-id" class="ml-1"></span>
+                                    </th>
+                                    <th data-sort-key="geschenk" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
+                                        Geschenk <span id="gm-sort-indicator-geschenk" class="ml-1"></span>
+                                    </th>
+                                    <th data-sort-key="bezahltvon" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
+                                        Bezahlt von <span id="gm-sort-indicator-bezahltvon" class="ml-1"></span>
+                                    </th>
+                                    <th data-sort-key="beteiligung" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
+                                        Beteiligung <span id="gm-sort-indicator-beteiligung" class="ml-1"></span>
+                                    </th>
+                                    <th data-sort-key="gesamtkosten" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
+                                        Gesamt <span id="gm-sort-indicator-gesamtkosten" class="ml-1"></span>
+                                    </th>
+                                    <th data-sort-key="eigenekosten" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
+                                        Eigen <span id="gm-sort-indicator-eigenekosten" class="ml-1"></span>
+                                    </th>
+                                    <th data-sort-key="sollkonto" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
+                                        SOLL <span id="gm-sort-indicator-sollkonto" class="ml-1"></span>
+                                    </th>
+                                    <th data-sort-key="istkonto" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
+                                        IST <span id="gm-sort-indicator-istkonto" class="ml-1"></span>
+                                    </th>
+                                    <th data-sort-key="standort" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
+                                        Standort <span id="gm-sort-indicator-standort" class="ml-1"></span>
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody id="geschenke-table-body" class="divide-y divide-gray-200">
