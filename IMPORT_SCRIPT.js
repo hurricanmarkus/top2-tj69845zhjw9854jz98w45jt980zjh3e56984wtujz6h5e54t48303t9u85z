@@ -12,21 +12,21 @@
 async function importGeschenkeData() {
     console.log('🎁 === GESCHENKE IMPORT GESTARTET ===');
     
-    // Hole Variablen aus window-Objekt
-    const db = window.db;
-    const appId = window.appId;
+    // Importiere Firebase Firestore Funktionen
+    const { getFirestore, collection, doc, setDoc } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js');
+    
+    // Hole Variablen - db und appId müssen wir aus dem DOM oder anders holen
     const currentUser = window.currentUser;
     
-    // Prüfe ob alle benötigten Variablen verfügbar sind
-    if (!db || !appId || !currentUser) {
-        console.error('❌ FEHLER: Bitte stelle sicher, dass du in der TOP2-App eingeloggt bist!');
-        console.error('   Gehe zu: Geschenkemanagement und versuche es erneut.');
-        console.error('   Debug Info:');
-        console.error('   - db:', typeof db, db ? '✅' : '❌');
-        console.error('   - appId:', typeof appId, appId ? '✅' : '❌');
-        console.error('   - currentUser:', typeof currentUser, currentUser ? '✅' : '❌');
+    if (!currentUser) {
+        console.error('❌ FEHLER: currentUser nicht gefunden!');
+        console.error('   Bitte stelle sicher, dass du eingeloggt bist.');
         return;
     }
+    
+    // Verwende die Firebase-App Konfiguration
+    const appId = 'top2-tj69845zhjw9854jz98w45jt980zjh3e56984wtujz6h5e54t48303t9u85z';
+    const db = getFirestore();
     
     const userId = currentUser.mode;
     console.log(`👤 Importiere für User: ${userId}`);
@@ -280,8 +280,8 @@ Weihnachten 2019;Storniert;Jasmin Mokricky;Markus Zika;Küchenspatel;Amazon.de;M
                 personen: []
             };
             
-            const themaRef = window.doc(db, 'artifacts', appId, 'public', 'data', 'users', userId, 'geschenke_themen', id);
-            await window.setDoc(themaRef, themaData);
+            const themaRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', userId, 'geschenke_themen', id);
+            await setDoc(themaRef, themaData);
             console.log(`  ✅ Thema erstellt: ${themaName}`);
         }
         
@@ -300,8 +300,8 @@ Weihnachten 2019;Storniert;Jasmin Mokricky;Markus Zika;Küchenspatel;Amazon.de;M
                 createdBy: userId
             };
             
-            const kontaktRef = window.doc(db, 'artifacts', appId, 'public', 'data', 'users', userId, 'geschenke_kontakte', id);
-            await window.setDoc(kontaktRef, kontaktData);
+            const kontaktRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', userId, 'geschenke_kontakte', id);
+            await setDoc(kontaktRef, kontaktData);
             console.log(`  ✅ Kontakt erstellt: ${kontaktName}`);
         }
         
@@ -334,8 +334,8 @@ Weihnachten 2019;Storniert;Jasmin Mokricky;Markus Zika;Küchenspatel;Amazon.de;M
                 createdBy: userId
             };
             
-            const geschenkRef = window.doc(db, 'artifacts', appId, 'public', 'data', 'users', userId, 'geschenke', id);
-            await window.setDoc(geschenkRef, geschenkData);
+            const geschenkRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', userId, 'geschenke', id);
+            await setDoc(geschenkRef, geschenkData);
             
             imported++;
             if (imported % 10 === 0) {
