@@ -49,6 +49,7 @@ let geschenkeKontakteRef = null;
 let geschenkeVorlagenRef = null;
 let geschenkeBudgetsRef = null;
 let geschenkeErinnerungenRef = null;
+let geschenkeUiSettingsRef = null;
 
 let GESCHENKE = {};
 let THEMEN = {};
@@ -60,6 +61,11 @@ let currentThemaId = null;
 let searchTerm = '';
 let activeFilters = [];
 let personenDetailsAusgeklappt = false; // ✅ State für Personen-Übersicht
+
+let sortState = {
+    key: null,
+    direction: 'asc'
+};
 
 // Eigene Person (unlöschbar)
 let eigenePerson = null;
@@ -242,12 +248,14 @@ export async function initializeGeschenkemanagement() {
     geschenkeVorlagenRef = collection(db, ...userDataPath, 'geschenke_vorlagen');
     geschenkeBudgetsRef = collection(db, ...userDataPath, 'geschenke_budgets');
     geschenkeErinnerungenRef = collection(db, ...userDataPath, 'geschenke_erinnerungen');
+    geschenkeUiSettingsRef = doc(db, ...userDataPath, 'ui_settings', 'geschenkemanagement');
     
     console.log("✅ Collection-Referenzen erstellt (USER-SPEZIFISCH)");
     console.log("✅ Pfad: users/", appUserId, "/geschenke_*");
     
     try {
         await loadSettings();
+        await loadUiSettings();
         
         // ✅ Starte ALLE Echtzeit-Listener (laden automatisch die Daten + Live-Updates!)
         listenForKontakte();      // 👥 Kontakte
@@ -268,6 +276,7 @@ export async function initializeGeschenkemanagement() {
     // Event-Listener und Dashboard IMMER initialisieren
     try {
         setupEventListeners();
+        updateSortIndicators();
         renderDashboard();
         console.log("✅ Geschenkemanagement erfolgreich initialisiert!");
     } catch (e) {
@@ -288,6 +297,44 @@ async function loadSettings() {
         }
     } catch (e) {
         console.error("Fehler beim Laden der Einstellungen:", e);
+    }
+}
+
+async function loadUiSettings() {
+    try {
+        if (!geschenkeUiSettingsRef) {
+            console.log('⚠️ loadUiSettings: geschenkeUiSettingsRef fehlt');
+            return;
+        }
+        console.log('⚙️ loadUiSettings startet...');
+        const uiDoc = await getDoc(geschenkeUiSettingsRef);
+        if (uiDoc.exists()) {
+            const data = uiDoc.data() || {};
+            if (data.sortState && typeof data.sortState === 'object') {
+                sortState = {
+                    key: data.sortState.key || null,
+                    direction: data.sortState.direction === 'desc' ? 'desc' : 'asc'
+                };
+                console.log('✅ loadUiSettings: sortState geladen', sortState);
+            }
+        } else {
+            console.log('ℹ️ loadUiSettings: Keine UI-Settings vorhanden (erstelle Default bei erster Änderung)');
+        }
+    } catch (e) {
+        console.error('❌ Fehler beim Laden der UI-Settings:', e);
+    }
+}
+
+async function saveUiSettings() {
+    try {
+        if (!geschenkeUiSettingsRef) {
+            console.log('⚠️ saveUiSettings: geschenkeUiSettingsRef fehlt');
+            return;
+        }
+        console.log('💾 saveUiSettings: Speichere sortState', sortState);
+        await setDoc(geschenkeUiSettingsRef, { sortState }, { merge: true });
+    } catch (e) {
+        console.error('❌ Fehler beim Speichern der UI-Settings:', e);
     }
 }
 
@@ -638,8 +685,72 @@ function setupEventListeners() {
         selectAllCheckbox.dataset.listenerAttached = 'true';
     }
 
+    // Sortierung: Status-Spalte
+    const sortStatusHeader = document.getElementById('gm-sort-status');
+    if (sortStatusHeader && !sortStatusHeader.dataset.listenerAttached) {
+        sortStatusHeader.addEventListener('click', async () => {
+            console.log('↕️ Sort-Click: Status');
+            if (sortState.key === 'status') {
+                sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortState.key = 'status';
+                sortState.direction = 'asc';
+            }
+            updateSortIndicators();
+            await saveUiSettings();
+            renderGeschenkeTabelle();
+        });
+        sortStatusHeader.dataset.listenerAttached = 'true';
+    }
+
     // Modal schließen
     setupModalListeners();
+}
+
+function updateSortIndicators() {
+    const statusIndicator = document.getElementById('gm-sort-status-indicator');
+    if (statusIndicator) {
+        if (sortState.key === 'status') {
+            statusIndicator.textContent = sortState.direction === 'asc' ? '▲' : '▼';
+        } else {
+            statusIndicator.textContent = '';
+        }
+    }
+}
+
+function getStatusSortRank(status, direction) {
+    const key = status || 'offen';
+
+    // Spezieller Wunsch: "abgeschlossen" bei aufsteigend unten
+    if (key === 'abgeschlossen') {
+        return direction === 'asc' ? 9999 : -1;
+    }
+
+    const order = Object.keys(STATUS_CONFIG);
+    const idx = order.indexOf(key);
+    return idx === -1 ? 5000 : idx;
+}
+
+function applySorting(geschenkeArray) {
+    if (!sortState?.key) return geschenkeArray;
+
+    if (sortState.key === 'status') {
+        const direction = sortState.direction === 'desc' ? 'desc' : 'asc';
+        const copy = [...geschenkeArray];
+        copy.sort((a, b) => {
+            const ra = getStatusSortRank(a.status, direction);
+            const rb = getStatusSortRank(b.status, direction);
+            if (ra === rb) {
+                const nameA = (a.geschenk || '').toString().toLowerCase();
+                const nameB = (b.geschenk || '').toString().toLowerCase();
+                return nameA.localeCompare(nameB);
+            }
+            return direction === 'asc' ? ra - rb : rb - ra;
+        });
+        return copy;
+    }
+
+    return geschenkeArray;
 }
 
 function setupModalListeners() {
@@ -1238,6 +1349,8 @@ function renderGeschenkeTabelle() {
             return filter.negate ? !matches : matches;
         });
     });
+
+    geschenkeArray = applySorting(geschenkeArray);
     
     if (geschenkeArray.length === 0) {
         tbody.innerHTML = `
