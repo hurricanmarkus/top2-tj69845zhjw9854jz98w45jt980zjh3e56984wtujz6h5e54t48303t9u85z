@@ -72,7 +72,7 @@ export async function checkCurrentUserValidity() {
         }
     }
 
-    if (!userFromFirestore.isActive) {
+    if (userFromFirestore && !userFromFirestore.isActive) {
         console.warn("checkCurrentUserValidity: Benutzer ist als INAKTIV (gesperrt) markiert. Erzwinge Logout.");
         switchToGuestMode(true, "Ihr Konto wurde von einem Administrator gesperrt.", 'error_long');
         return; 

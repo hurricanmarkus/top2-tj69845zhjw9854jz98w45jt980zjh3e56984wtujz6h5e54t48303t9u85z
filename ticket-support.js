@@ -255,8 +255,8 @@ function renderTickets() {
         tickets = tickets.filter(t => {
             const ticketId = `#TK-${String(t.ticketNumber || 0).padStart(4, '0')}`.toLowerCase();
             const subject = (t.subject || '').toLowerCase();
-            const creatorName = (USERS[t.createdBy]?.name || '').toLowerCase();
-            const assigneeName = (USERS[t.assignedTo]?.name || '').toLowerCase();
+            const creatorName = (USERS && USERS[t.createdBy]?.name || '').toLowerCase();
+            const assigneeName = (USERS && USERS[t.assignedTo]?.name || '').toLowerCase();
             
             return ticketId.includes(searchTerm) || 
                    subject.includes(searchTerm) || 

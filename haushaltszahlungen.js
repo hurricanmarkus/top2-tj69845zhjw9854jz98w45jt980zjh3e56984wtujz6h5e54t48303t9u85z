@@ -1073,10 +1073,10 @@ function renderMitgliederBeitraege(stats) {
         const mitgliedId = mitgliedKey.replace(/[^a-zA-Z0-9]/g, '_');
         
     // Vollen Namen ermitteln mit Null-Check
-    const userObj = USERS && typeof USERS === 'object'
+    const userObj = (USERS && typeof USERS === 'object' && Object.keys(USERS).length > 0)
         ? Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name)
         : null;
-    const displayName = userObj?.realName || mitglied.name || mitglied.userId;
+    const displayName = userObj?.realName || mitglied.name || mitglied.userId || 'Unbekannt';
         
         // SOLL-Werte aus der neuen Berechnung (basierend auf individuellem anteilMarkus pro Eintrag)
         const mitgliedSoll = stats.sollProMitgliedUndIntervall?.[mitgliedKey] || {};
@@ -1656,10 +1656,10 @@ function renderKostenaufteilungInputs(existingEintrag) {
     
     container.innerHTML = mitglieder.map((mitglied, index) => {
         const userId = mitglied.userId || mitglied.name;
-        const userObj = USERS && typeof USERS === 'object'
+        const userObj = (USERS && typeof USERS === 'object' && Object.keys(USERS).length > 0)
             ? Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name)
             : null;
-        const displayName = userObj?.realName || mitglied.name || mitglied.userId;
+        const displayName = userObj?.realName || mitglied.name || mitglied.userId || 'Unbekannt';
         const color = colors[index % colors.length];
         const anteil = anteile[userId] || 0;
         const isLast = isLastPerson(index);
@@ -2028,10 +2028,10 @@ function renderMitgliederListe() {
     
     container.innerHTML = thema.mitglieder.map((mitglied, index) => {
         // Vollen Namen ermitteln (aus USERS oder direkt aus mitglied.name) mit Null-Check
-        const userObj = USERS && typeof USERS === 'object'
+        const userObj = (USERS && typeof USERS === 'object' && Object.keys(USERS).length > 0)
             ? Object.values(USERS).find(u => u.id === mitglied.userId || u.name === mitglied.userId || u.name === mitglied.name)
             : null;
-        const displayName = userObj?.realName || mitglied.name || mitglied.userId;
+        const displayName = userObj?.realName || mitglied.name || mitglied.userId || 'Unbekannt';
         const isCurrentUser = mitglied.userId === currentUser.displayName || mitglied.userId === currentUser.mode;
         
         return `

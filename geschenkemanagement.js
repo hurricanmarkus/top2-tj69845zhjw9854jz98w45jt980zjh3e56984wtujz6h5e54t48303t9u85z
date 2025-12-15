@@ -37,8 +37,9 @@ import {
 
 // ✅ HELPER: Hole aktuelle App User-ID (currentUser.mode)
 // WICHTIG: Gibt die App User ID zurück (z.B. "SYSTEMADMIN"), NICHT Firebase Auth UID!
+// IMMER currentUser.mode verwenden für geräteübergreifende Konsistenz
 function getCurrentUserId() {
-    return currentUser?.mode || currentUser?.uid;
+    return currentUser?.mode || null;
 }
 
 let geschenkeCollection = null;
