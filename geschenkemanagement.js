@@ -172,6 +172,10 @@ let sortState = {
  let gmSearchSuggestions = [];
  let gmSearchSuggestionIndex = -1;
 
+ const GM_UI_SETTINGS_LOCAL_KEY = 'gm_ui_settings_sortState';
+ let gmUiSettingsLocalOnly = false;
+ let gmUiSettingsWarnedNoPermission = false;
+
 // Eigene Person (unlöschbar)
 let eigenePerson = null;
 
@@ -409,6 +413,17 @@ async function loadUiSettings() {
     try {
         if (!geschenkeUiSettingsRef) {
             console.log('⚠️ loadUiSettings: geschenkeUiSettingsRef fehlt');
+            const raw = localStorage.getItem(GM_UI_SETTINGS_LOCAL_KEY);
+            if (raw) {
+                const data = JSON.parse(raw);
+                if (data && typeof data === 'object' && data.sortState) {
+                    sortState = {
+                        key: data.sortState.key || null,
+                        direction: data.sortState.direction === 'desc' ? 'desc' : 'asc'
+                    };
+                    console.log('✅ loadUiSettings (local): sortState geladen', sortState);
+                }
+            }
             return;
         }
         console.log('⚙️ loadUiSettings startet...');
@@ -426,19 +441,53 @@ async function loadUiSettings() {
             console.log('ℹ️ loadUiSettings: Keine UI-Settings vorhanden (erstelle Default bei erster Änderung)');
         }
     } catch (e) {
+        const code = e?.code || e?.message || '';
+        if (code === 'permission-denied' || String(code).toLowerCase().includes('insufficient permissions')) {
+            gmUiSettingsLocalOnly = true;
+            if (!gmUiSettingsWarnedNoPermission) {
+                gmUiSettingsWarnedNoPermission = true;
+                console.warn('⚠️ Keine Berechtigung für UI-Settings (Firestore). Verwende localStorage.');
+            }
+            const raw = localStorage.getItem(GM_UI_SETTINGS_LOCAL_KEY);
+            if (raw) {
+                const data = JSON.parse(raw);
+                if (data && typeof data === 'object' && data.sortState) {
+                    sortState = {
+                        key: data.sortState.key || null,
+                        direction: data.sortState.direction === 'desc' ? 'desc' : 'asc'
+                    };
+                    console.log('✅ loadUiSettings (local): sortState geladen', sortState);
+                }
+            }
+            return;
+        }
         console.error('❌ Fehler beim Laden der UI-Settings:', e);
     }
 }
 
 async function saveUiSettings() {
     try {
+        if (gmUiSettingsLocalOnly) {
+            localStorage.setItem(GM_UI_SETTINGS_LOCAL_KEY, JSON.stringify({ sortState }));
+            return;
+        }
         if (!geschenkeUiSettingsRef) {
-            console.log('⚠️ saveUiSettings: geschenkeUiSettingsRef fehlt');
+            localStorage.setItem(GM_UI_SETTINGS_LOCAL_KEY, JSON.stringify({ sortState }));
             return;
         }
         console.log('💾 saveUiSettings: Speichere sortState', sortState);
         await setDoc(geschenkeUiSettingsRef, { sortState }, { merge: true });
     } catch (e) {
+        const code = e?.code || e?.message || '';
+        if (code === 'permission-denied' || String(code).toLowerCase().includes('insufficient permissions')) {
+            gmUiSettingsLocalOnly = true;
+            localStorage.setItem(GM_UI_SETTINGS_LOCAL_KEY, JSON.stringify({ sortState }));
+            if (!gmUiSettingsWarnedNoPermission) {
+                gmUiSettingsWarnedNoPermission = true;
+                console.warn('⚠️ Keine Berechtigung für UI-Settings (Firestore). Speichere lokal in localStorage.');
+            }
+            return;
+        }
         console.error('❌ Fehler beim Speichern der UI-Settings:', e);
     }
 }
@@ -769,6 +818,14 @@ function setupEventListeners() {
     // Search Input
     const searchInput = document.getElementById('search-geschenke');
     if (searchInput && !searchInput.dataset.listenerAttached) {
+        // Bugfix: Text im Suchfeld immer sichtbar machen (auch wenn Eltern-Container text-white o.ä. hat)
+        try {
+            searchInput.style.color = '#111827';
+            searchInput.style.backgroundColor = '#ffffff';
+        } catch (e) {
+            console.warn('⚠️ Konnte Suchfeld-Styles nicht setzen:', e);
+        }
+
         searchInput.addEventListener('input', (e) => {
             const val = e.target.value;
             if (!val) {
