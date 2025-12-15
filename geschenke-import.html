@@ -294,8 +294,12 @@ Weihnachten 2024;Abgeschlossen;Regina Mokricky;Haushaltskonto;Dinner & Crime..."
                     };
                 });
 
-                const themenRef = doc(db, 'artifacts', appId, 'public', 'data', 'geschenke-themen');
-                await setDoc(themenRef, themenObj, { merge: true });
+                // Themen als einzelne Dokumente in Collection speichern
+                const themenCollection = collection(db, 'artifacts', appId, 'public', 'data', 'users', 'IMPORT', 'geschenke_themen');
+                
+                for (const [id, thema] of Object.entries(themenObj)) {
+                    await setDoc(doc(themenCollection, id), thema);
+                }
 
                 // 2. Kontakte erstellen
                 updateProgress(30, 'Erstelle Kontakte...');
@@ -310,12 +314,16 @@ Weihnachten 2024;Abgeschlossen;Regina Mokricky;Haushaltskonto;Dinner & Crime..."
                     };
                 });
 
-                const kontakteRef = doc(db, 'artifacts', appId, 'public', 'data', 'geschenke-kontakte');
-                await setDoc(kontakteRef, kontakteObj, { merge: true });
+                // Kontakte als einzelne Dokumente in Collection speichern
+                const kontakteCollection = collection(db, 'artifacts', appId, 'public', 'data', 'users', 'IMPORT', 'geschenke_kontakte');
+                
+                for (const [id, kontakt] of Object.entries(kontakteObj)) {
+                    await setDoc(doc(kontakteCollection, id), kontakt);
+                }
 
                 // 3. Geschenke importieren
                 updateProgress(50, 'Importiere Geschenke...');
-                const geschenkeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'geschenke');
+                const geschenkeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'users', 'IMPORT', 'geschenke');
                 
                 let imported = 0;
                 for (const g of parsedData.geschenke) {
