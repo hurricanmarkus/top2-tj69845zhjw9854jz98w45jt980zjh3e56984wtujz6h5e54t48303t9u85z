@@ -668,7 +668,6 @@ export function navigate(targetViewName) {
     const targetElement = document.getElementById(targetView.id);
     if (targetElement) {
         targetElement.classList.add('active');
-        console.log('🔧 View aktiviert:', targetView.id, 'classList:', targetElement.classList.toString());
     } else {
         console.error(`Navigation fehlgeschlagen: Element mit ID "${targetView.id}" nicht gefunden.`);
         const homeElement = document.getElementById(views.home.id);
@@ -707,7 +706,6 @@ export function navigate(targetViewName) {
     }
 
     if (targetViewName === 'zahlungsverwaltung') {
-        console.log('🔧 Navigate: zahlungsverwaltungView classList:', document.getElementById('zahlungsverwaltungView')?.classList?.toString());
         initializeZahlungsverwaltungView();
     }
     

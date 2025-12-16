@@ -61,9 +61,7 @@ const SYSTEM_CATEGORIES = [
 
 // --- INITIALISIERUNG HAUPTANSICHT ---
 export function initializeZahlungsverwaltungView() {
-    console.log('🔧 initializeZahlungsverwaltungView aufgerufen');
     const view = document.getElementById('zahlungsverwaltungView');
-    console.log('🔧 zahlungsverwaltungView gefunden:', !!view);
     
     // Listener Setup (nur einmalig beim ersten Laden)
     if (view && !view.dataset.listenerAttached) {
@@ -108,16 +106,13 @@ export function initializeZahlungsverwaltungView() {
     if (createBtn) createBtn.style.display = canCreate ? 'flex' : 'none';
     if (settingsBtn) settingsBtn.style.display = canCreate ? 'block' : 'none';
 
-    console.log('🔧 currentUser.mode:', currentUser.mode, 'GUEST_MODE:', GUEST_MODE);
     if (currentUser.mode !== GUEST_MODE) {
-        console.log('🔧 Starte Zahlungsverwaltung Listener...');
         listenForPayments();
         listenForTemplates();
         listenForContacts();
         listenForAccounts();
         listenForCategories();
     } else {
-        console.log('🔧 Gast-Modus: Zeige leere Liste');
         renderPaymentList([]);
     }
 }
@@ -410,7 +405,6 @@ function setupSettingsListeners() {
 
 
 function listenForPayments() {
-    console.log('🔧 listenForPayments gestartet');
     if (unsubscribePayments) unsubscribePayments();
     const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
 
@@ -418,7 +412,6 @@ function listenForPayments() {
     const q = query(paymentsRef, where('involvedUserIds', 'array-contains', currentUser.mode));
 
     unsubscribePayments = onSnapshot(q, (snapshot) => {
-        console.log('🔧 Payments Snapshot empfangen, Anzahl:', snapshot.size);
         allPayments = [];
         snapshot.forEach(doc => {
             const data = doc.data();
@@ -3699,7 +3692,6 @@ function updateSearchSuggestions(term) {
 
 
 function applyFilters() {
-    console.log('🔧 applyFilters: allPayments.length =', allPayments.length);
     const statusSelect = document.getElementById('payment-filter-status');
     const categorySelect = document.getElementById('payment-filter-category');
     const dirSelect = document.getElementById('payment-filter-direction');
@@ -3715,33 +3707,19 @@ function applyFilters() {
     const isIdSearch = hasTags && activeSearchFilters.some(f => f.type === 'numbers' || f.type === 'id');
 
     let filtered = allPayments.filter(p => {
-        // --- DEBUG: Zeige warum Payments gefiltert werden ---
-        console.log('🔧 Filter prüft Payment:', p.id, 'status:', p.status, 'createdBy:', p.createdBy, 'currentUser.mode:', currentUser.mode);
-        
         // --- BASIS CHECKS ---
         if (p.createdBy !== currentUser.mode) {
             const myAccess = p.accessRights ? p.accessRights[currentUser.mode] : null;
-            console.log('🔧 Nicht Ersteller, myAccess:', myAccess);
-            if (myAccess && myAccess.status !== 'accepted') {
-                console.log('🔧 GEFILTERT: accessRights status !== accepted');
-                return false;
-            }
+            if (myAccess && myAccess.status !== 'accepted') return false;
         }
 
         // Archiv & Papierkorb nur anzeigen wenn ID-Suche
-        if (!isIdSearch && (p.status === 'archived' || p.status === 'trash')) {
-            console.log('🔧 GEFILTERT: archived/trash');
-            return false;
-        }
+        if (!isIdSearch && (p.status === 'archived' || p.status === 'trash')) return false;
 
         // Dropdown Filter (nur wenn KEINE ID-Suche)
-        console.log('🔧 statusFilter:', statusFilter, 'p.status:', p.status);
         if (!isIdSearch) {
             if (statusFilter !== 'all') {
-                if (statusFilter === 'open' && p.status !== 'open') {
-                    console.log('🔧 GEFILTERT: statusFilter=open aber p.status=', p.status);
-                    return false;
-                }
+                if (statusFilter === 'open' && p.status !== 'open') return false;
                 if (statusFilter === 'pending' && p.status !== 'pending_approval') return false;
                 
                 // --- FIX: Auch 'closed' (Merge) und 'settled' (Bilanz) als erledigt anzeigen ---
@@ -3836,9 +3814,7 @@ function applyFilters() {
 
 
 function renderPaymentList(payments) {
-    console.log('🔧 renderPaymentList aufgerufen, Anzahl:', payments.length);
     const container = document.getElementById('payments-list-container');
-    console.log('🔧 payments-list-container gefunden:', !!container);
     if (!container) return;
     container.innerHTML = '';
     
