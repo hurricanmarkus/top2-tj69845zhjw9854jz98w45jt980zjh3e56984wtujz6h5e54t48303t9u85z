@@ -2238,6 +2238,7 @@
                             <div>
                                 <p class="text-lg font-bold text-green-300" id="gm-kosten-eigen">0,00 €</p>
                                 <p class="text-[10px]">Eigene Kosten</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2253,34 +2254,38 @@
                 <!-- Such- und Filterleiste -->
                 <div class="bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
                     <div class="flex flex-wrap gap-2 mb-3">
-                        <div class="relative flex-1 min-w-[200px]">
-                            <input type="text" id="search-geschenke" placeholder="🔍 Suchbegriff eingeben..." 
-                                class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:ring-2 focus:ring-pink-200 text-sm">
-
-                            <div id="gm-search-suggestions-box"
-                                class="hidden absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto z-50">
-                                <ul id="gm-search-suggestions-list" class="text-sm text-gray-700"></ul>
-                            </div>
-                        </div>
-
+                        <input type="text" id="search-geschenke" placeholder="🔍 Suchbegriff eingeben..." 
+                            class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:ring-2 focus:ring-pink-200 text-sm">
+                        
+                        <select id="filter-category-select" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                            <option value="">Kategorie wählen...</option>
+                            <option value="status">Status</option>
+                            <option value="fuer">Für</option>
+                            <option value="von">Von</option>
+                            <option value="sollkonto">Soll-Konto</option>
+                            <option value="istkonto">Ist-Konto</option>
+                            <option value="kontodifferenz">Kontodifferenz</option>
+                            <option value="standort">Standort</option>
+                        </select>
+                        
                         <label class="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition text-sm">
                             <input type="checkbox" id="filter-negate-checkbox" class="w-4 h-4 text-pink-600 rounded">
                             <span class="font-bold text-gray-700">NICHT</span>
                         </label>
-
+                        
                         <button id="btn-add-filter" class="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 font-bold transition text-sm">
                             + Filter hinzufügen
                         </button>
-
+                        
                         <button id="reset-filters-geschenke" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
                             ✕ Alle Filter löschen
                         </button>
-
+                        
                         <button id="btn-export-selected" onclick="window.exportSelectedToExcel()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold transition text-sm opacity-50 cursor-not-allowed ml-auto" disabled title="Wähle Einträge zum Exportieren aus">
                             📊 Auswahl exportieren
                         </button>
                     </div>
-
+                    
                     <div id="active-filters-container" class="flex flex-wrap gap-2 empty:hidden">
                     </div>
                 </div>
@@ -2294,42 +2299,18 @@
                                     <th class="px-2 py-3 text-center text-xs font-bold text-pink-800">
                                         <input type="checkbox" id="gm-select-all" class="w-4 h-4 rounded cursor-pointer" title="Alle auswählen/abwählen">
                                     </th>
-                                    <th data-sort-key="status" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
-                                        Status <span id="gm-sort-indicator-status" class="ml-1"></span>
-                                    </th>
-                                    <th data-sort-key="fuer" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
-                                        FÜR <span id="gm-sort-indicator-fuer" class="ml-1"></span>
-                                    </th>
-                                    <th data-sort-key="von" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
-                                        VON <span id="gm-sort-indicator-von" class="ml-1"></span>
-                                    </th>
-                                    <th data-sort-key="id" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
-                                        ID <span id="gm-sort-indicator-id" class="ml-1"></span>
-                                    </th>
-                                    <th data-sort-key="geschenk" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
-                                        Geschenk <span id="gm-sort-indicator-geschenk" class="ml-1"></span>
-                                    </th>
-                                    <th data-sort-key="bezahltvon" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
-                                        Bezahlt von <span id="gm-sort-indicator-bezahltvon" class="ml-1"></span>
-                                    </th>
-                                    <th data-sort-key="beteiligung" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
-                                        Beteiligung <span id="gm-sort-indicator-beteiligung" class="ml-1"></span>
-                                    </th>
-                                    <th data-sort-key="gesamtkosten" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
-                                        Gesamt <span id="gm-sort-indicator-gesamtkosten" class="ml-1"></span>
-                                    </th>
-                                    <th data-sort-key="eigenekosten" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
-                                        Eigen <span id="gm-sort-indicator-eigenekosten" class="ml-1"></span>
-                                    </th>
-                                    <th data-sort-key="sollkonto" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
-                                        SOLL <span id="gm-sort-indicator-sollkonto" class="ml-1"></span>
-                                    </th>
-                                    <th data-sort-key="istkonto" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
-                                        IST <span id="gm-sort-indicator-istkonto" class="ml-1"></span>
-                                    </th>
-                                    <th data-sort-key="standort" class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer select-none">
-                                        Standort <span id="gm-sort-indicator-standort" class="ml-1"></span>
-                                    </th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Status</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">FÜR</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">VON</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">ID</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Geschenk</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Bezahlt von</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Beteiligung</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Gesamt</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Eigen</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">SOLL</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">IST</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Standort</th>
                                 </tr>
                             </thead>
                             <tbody id="geschenke-table-body" class="divide-y divide-gray-200">
@@ -3979,6 +3960,49 @@
 
 
             </div>
+            <div id="userSelectionModal"
+                class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
+                <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-xs">
+                    <h3 class="text-xl font-bold mb-4 text-gray-800">Benutzer auswählen</h3>
+                    <p class="text-sm text-gray-600 mb-4">Wählen Sie den Modus, in dem Sie sich anmelden möchten.
+                    </p>
+                    <div id="modalUserButtons" class="space-y-3"></div>
+                    <div class="flex justify-end mt-4">
+                        <button id="cancelSelectionButton"
+                            class="py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition">Abbrechen</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="pinModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
+                <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-xs">
+                    <div id="pinRegularContent">
+                        <h3 id="pinModalTitle" class="text-xl font-bold mb-4 text-gray-800">Schlüssel eingeben</h3>
+                        <p class="text-sm text-gray-600 mb-4">Geben Sie den Schlüssel für den gewählten Benutzer
+                            ein.
+                        </p>
+                        <input type="password" id="adminPinInput"
+                            class="w-full p-3 border-2 border-gray-300 rounded-lg text-center tracking-widest text-lg focus:ring-blue-500 focus:border-blue-500"
+                            maxlength="20">
+                        <div id="pinError" class="text-red-500 text-sm mt-2 hidden">Falscher Schlüssel!</div>
+                        <div class="flex justify-between space-x-3 mt-6">
+                            <button id="backToSelectionButton"
+                                class="py-2 px-3 bg-gray-400 text-white font-medium rounded-lg hover:bg-gray-500 transition">Zurück</button>
+                            <button id="submitAdminKeyButton"
+                                class="py-2 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition">Bestätigen</button>
+                        </div>
+                    </div>
+                    <div id="pinLockedContent" class="hidden text-center">
+                        <h3 class="text-xl font-bold mb-4 text-red-700">Zugriff verweigert</h3>
+                        <p class="text-gray-600 mb-6">Dieser Benutzer ist gesperrt. Bitte kontaktieren Sie einen
+                            Administrator.</p>
+                        <button id="closeLockedModalButton"
+                            class="w-full py-2 px-4 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition">Zurück
+                            zur Auswahl</button>
+                    </div>
+                </div>
+            </div>
+
 
             <div id="logoutConfirmModal"
                 class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
@@ -4720,44 +4744,6 @@
 
         </main>
 
-        <!-- Login Modals - AUSSERHALB von main für korrekte fixed Positionierung -->
-        <div id="userSelectionModal"
-            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
-            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-xs">
-                <h3 class="text-xl font-bold mb-4 text-gray-800">Benutzer auswählen</h3>
-                <p class="text-sm text-gray-600 mb-4">Wählen Sie den Modus, in dem Sie sich anmelden möchten.</p>
-                <div id="modalUserButtons" class="space-y-3"></div>
-                <div class="flex justify-end mt-4">
-                    <button id="cancelSelectionButton"
-                        class="py-2 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition">Abbrechen</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="pinModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
-            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-xs">
-                <div id="pinRegularContent">
-                    <h3 id="pinModalTitle" class="text-xl font-bold mb-4 text-gray-800">Schlüssel eingeben</h3>
-                    <p class="text-sm text-gray-600 mb-4">Geben Sie den Schlüssel für den gewählten Benutzer ein.</p>
-                    <input type="password" id="adminPinInput"
-                        class="w-full p-3 border-2 border-gray-300 rounded-lg text-center tracking-widest text-lg focus:ring-blue-500 focus:border-blue-500"
-                        maxlength="20">
-                    <div id="pinError" class="text-red-500 text-sm mt-2 hidden">Falscher Schlüssel!</div>
-                    <div class="flex justify-between space-x-3 mt-6">
-                        <button id="backToSelectionButton"
-                            class="py-2 px-3 bg-gray-400 text-white font-medium rounded-lg hover:bg-gray-500 transition">Zurück</button>
-                        <button id="submitAdminKeyButton"
-                            class="py-2 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition">Bestätigen</button>
-                    </div>
-                </div>
-                <div id="pinLockedContent" class="hidden text-center">
-                    <h3 class="text-xl font-bold mb-4 text-red-700">Zugriff verweigert</h3>
-                    <p class="text-gray-600 mb-6">Dieser Benutzer ist gesperrt. Bitte kontaktieren Sie einen Administrator.</p>
-                    <button id="closeLockedModalButton"
-                        class="w-full py-2 px-4 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition">Zurück zur Auswahl</button>
-                </div>
-            </div>
-        </div>
 
         <div id="sticky-save-bar" class="hidden flex-shrink-0 bg-red-700 text-white p-3
             flex justify-between items-center shadow-lg border-t-4 border-red-400 animate-pulse
@@ -6134,8 +6120,10 @@
             </div>
         </div>
 
-    </div>
-    </div>
+
+</body>
+
+</html>
 
 <script type="module" src="haupteingang.js"></script>
 <script type="module" src="log-InOut.js"></script>
