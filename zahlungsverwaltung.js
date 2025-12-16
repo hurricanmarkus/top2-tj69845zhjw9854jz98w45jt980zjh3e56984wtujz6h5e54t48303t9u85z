@@ -3699,6 +3699,7 @@ function updateSearchSuggestions(term) {
 
 
 function applyFilters() {
+    console.log('🔧 applyFilters: allPayments.length =', allPayments.length);
     const statusSelect = document.getElementById('payment-filter-status');
     const categorySelect = document.getElementById('payment-filter-category');
     const dirSelect = document.getElementById('payment-filter-direction');
