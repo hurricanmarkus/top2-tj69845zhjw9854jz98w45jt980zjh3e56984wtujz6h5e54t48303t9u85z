@@ -49,111 +49,8 @@ let geschenkeKontakteRef = null;
 let geschenkeVorlagenRef = null;
 let geschenkeBudgetsRef = null;
 let geschenkeErinnerungenRef = null;
-let geschenkeUiSettingsRef = null;
 
 let GESCHENKE = {};
-
- function updateGeschenkeSearchSuggestions(term) {
-     const box = document.getElementById('gm-search-suggestions-box');
-     const list = document.getElementById('gm-search-suggestions-list');
-     if (!box || !list) return;
-
-     const rawTerm = (term || '').toString().trim();
-     if (!rawTerm) {
-         box.classList.add('hidden');
-         gmSearchSuggestions = [];
-         gmSearchSuggestionIndex = -1;
-         return;
-     }
-
-     const lowerTerm = rawTerm.toLowerCase();
-     list.innerHTML = '';
-     gmSearchSuggestions = [];
-     gmSearchSuggestionIndex = -1;
-
-     const addSuggestion = (label, icon, category, subtext = '') => {
-         const idx = gmSearchSuggestions.length;
-         gmSearchSuggestions.push({ category, term: rawTerm });
-
-         const li = document.createElement('li');
-         li.className = 'px-3 py-2 hover:bg-pink-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2';
-         li.dataset.index = String(idx);
-         li.innerHTML = `
-             <span class="text-lg">${icon}</span>
-             <div class="flex-grow leading-tight">
-                 <span class="font-bold text-gray-800 block">${label}</span>
-                 ${subtext ? `<span class="text-xs text-gray-500">${subtext}</span>` : ''}
-             </div>
-         `;
-         li.onclick = () => addFilterQuick(category, rawTerm);
-         list.appendChild(li);
-     };
-
-     const geschenkeArray = Object.values(GESCHENKE);
-
-     if (geschenkeArray.some(g => normalizeText(STATUS_CONFIG[g.status]?.label || g.status).includes(lowerTerm))) {
-         addSuggestion(`Status: ${rawTerm}`, '🏷️', 'status', 'Suche im Status');
-     }
-     if (geschenkeArray.some(g => normalizeText(getPersonNamesFromIds(g.fuer)).includes(lowerTerm))) {
-         addSuggestion(`Für: ${rawTerm}`, '🎁', 'fuer', 'Suche in Empfänger');
-     }
-     if (geschenkeArray.some(g => normalizeText(getPersonNamesFromIds(g.von)).includes(lowerTerm))) {
-         addSuggestion(`Von: ${rawTerm}`, '👤', 'von', 'Suche in Schenker');
-     }
-     if (geschenkeArray.some(g => normalizeText(g.geschenk).includes(lowerTerm))) {
-         addSuggestion(`Geschenk: ${rawTerm}`, '📝', 'geschenk', 'Suche im Geschenktext');
-     }
-     if (geschenkeArray.some(g => normalizeText(g.shop).includes(lowerTerm))) {
-         addSuggestion(`Shop: ${rawTerm}`, '🛒', 'shop', 'Suche im Shop');
-     }
-     if (geschenkeArray.some(g => g.bezahltVon && normalizeText(KONTAKTE[g.bezahltVon]?.name || '').includes(lowerTerm))) {
-         addSuggestion(`Bezahlt von: ${rawTerm}`, '💳', 'bezahltvon', 'Suche im Bezahlt-von');
-     }
-     if (geschenkeArray.some(g => normalizeText(getPersonNamesFromIds(g.beteiligung)).includes(lowerTerm))) {
-         addSuggestion(`Beteiligung: ${rawTerm}`, '🤝', 'beteiligung', 'Suche in Beteiligten');
-     }
-     if (geschenkeArray.some(g => normalizeText(g.bestellnummer).includes(lowerTerm))) {
-         addSuggestion(`Bestellnummer: ${rawTerm}`, '#️⃣', 'bestellnummer', 'Suche in Bestellnr.');
-     }
-     if (geschenkeArray.some(g => normalizeText(g.rechnungsnummer).includes(lowerTerm))) {
-         addSuggestion(`Rechnungsnummer: ${rawTerm}`, '🧾', 'rechnungsnummer', 'Suche in Rechnungsnr.');
-     }
-     if (geschenkeArray.some(g => normalizeText(g.notizen).includes(lowerTerm))) {
-         addSuggestion(`Notizen: ${rawTerm}`, '📌', 'notizen', 'Suche in Notizen');
-     }
-     if (geschenkeArray.some(g => {
-         const s = (parseFloat(g.gesamtkosten) || 0).toFixed(2);
-         return normalizeText(s).includes(lowerTerm);
-     })) {
-         addSuggestion(`Gesamtkosten: ${rawTerm}`, '💶', 'gesamtkosten', 'Suche in Gesamtkosten');
-     }
-     if (geschenkeArray.some(g => {
-         const s = (parseFloat(g.eigeneKosten) || 0).toFixed(2);
-         return normalizeText(s).includes(lowerTerm);
-     })) {
-         addSuggestion(`Eigene Kosten: ${rawTerm}`, '💶', 'eigenekosten', 'Suche in eigenen Kosten');
-     }
-
-     addSuggestion(`Alles: "${rawTerm}"`, '🔍', 'all', 'Volltextsuche überall');
-
-     if (gmSearchSuggestions.length > 0) box.classList.remove('hidden');
-     else box.classList.add('hidden');
- }
-
- function updateGeschenkeSuggestionActive() {
-     const list = document.getElementById('gm-search-suggestions-list');
-     if (!list) return;
-     const items = list.querySelectorAll('li');
-     items.forEach(li => {
-         const idx = parseInt(li.dataset.index || '-1', 10);
-         if (idx === gmSearchSuggestionIndex) {
-             li.classList.add('bg-pink-50');
-             li.scrollIntoView({ block: 'nearest' });
-         } else {
-             li.classList.remove('bg-pink-50');
-         }
-     });
- }
 let THEMEN = {};
 let KONTAKTE = {};
 let VORLAGEN = {};
@@ -163,18 +60,6 @@ let currentThemaId = null;
 let searchTerm = '';
 let activeFilters = [];
 let personenDetailsAusgeklappt = false; // ✅ State für Personen-Übersicht
-
-let sortState = {
-    key: null,
-    direction: 'asc'
-};
-
- let gmSearchSuggestions = [];
- let gmSearchSuggestionIndex = -1;
-
- const GM_UI_SETTINGS_LOCAL_KEY = 'gm_ui_settings_sortState';
- let gmUiSettingsLocalOnly = false;
- let gmUiSettingsWarnedNoPermission = false;
 
 // Eigene Person (unlöschbar)
 let eigenePerson = null;
@@ -357,14 +242,12 @@ export async function initializeGeschenkemanagement() {
     geschenkeVorlagenRef = collection(db, ...userDataPath, 'geschenke_vorlagen');
     geschenkeBudgetsRef = collection(db, ...userDataPath, 'geschenke_budgets');
     geschenkeErinnerungenRef = collection(db, ...userDataPath, 'geschenke_erinnerungen');
-    geschenkeUiSettingsRef = doc(db, ...userDataPath, 'ui_settings', 'geschenkemanagement');
     
     console.log("✅ Collection-Referenzen erstellt (USER-SPEZIFISCH)");
     console.log("✅ Pfad: users/", appUserId, "/geschenke_*");
     
     try {
         await loadSettings();
-        await loadUiSettings();
         
         // ✅ Starte ALLE Echtzeit-Listener (laden automatisch die Daten + Live-Updates!)
         listenForKontakte();      // 👥 Kontakte
@@ -385,7 +268,6 @@ export async function initializeGeschenkemanagement() {
     // Event-Listener und Dashboard IMMER initialisieren
     try {
         setupEventListeners();
-        updateSortIndicators();
         renderDashboard();
         console.log("✅ Geschenkemanagement erfolgreich initialisiert!");
     } catch (e) {
@@ -406,89 +288,6 @@ async function loadSettings() {
         }
     } catch (e) {
         console.error("Fehler beim Laden der Einstellungen:", e);
-    }
-}
-
-async function loadUiSettings() {
-    try {
-        if (!geschenkeUiSettingsRef) {
-            console.log('⚠️ loadUiSettings: geschenkeUiSettingsRef fehlt');
-            const raw = localStorage.getItem(GM_UI_SETTINGS_LOCAL_KEY);
-            if (raw) {
-                const data = JSON.parse(raw);
-                if (data && typeof data === 'object' && data.sortState) {
-                    sortState = {
-                        key: data.sortState.key || null,
-                        direction: data.sortState.direction === 'desc' ? 'desc' : 'asc'
-                    };
-                    console.log('✅ loadUiSettings (local): sortState geladen', sortState);
-                }
-            }
-            return;
-        }
-        console.log('⚙️ loadUiSettings startet...');
-        const uiDoc = await getDoc(geschenkeUiSettingsRef);
-        if (uiDoc.exists()) {
-            const data = uiDoc.data() || {};
-            if (data.sortState && typeof data.sortState === 'object') {
-                sortState = {
-                    key: data.sortState.key || null,
-                    direction: data.sortState.direction === 'desc' ? 'desc' : 'asc'
-                };
-                console.log('✅ loadUiSettings: sortState geladen', sortState);
-            }
-        } else {
-            console.log('ℹ️ loadUiSettings: Keine UI-Settings vorhanden (erstelle Default bei erster Änderung)');
-        }
-    } catch (e) {
-        const code = e?.code || e?.message || '';
-        if (code === 'permission-denied' || String(code).toLowerCase().includes('insufficient permissions')) {
-            gmUiSettingsLocalOnly = true;
-            if (!gmUiSettingsWarnedNoPermission) {
-                gmUiSettingsWarnedNoPermission = true;
-                console.warn('⚠️ Keine Berechtigung für UI-Settings (Firestore). Verwende localStorage.');
-            }
-            const raw = localStorage.getItem(GM_UI_SETTINGS_LOCAL_KEY);
-            if (raw) {
-                const data = JSON.parse(raw);
-                if (data && typeof data === 'object' && data.sortState) {
-                    sortState = {
-                        key: data.sortState.key || null,
-                        direction: data.sortState.direction === 'desc' ? 'desc' : 'asc'
-                    };
-                    console.log('✅ loadUiSettings (local): sortState geladen', sortState);
-                }
-            }
-            return;
-        }
-        console.error('❌ Fehler beim Laden der UI-Settings:', e);
-    }
-}
-
-async function saveUiSettings() {
-    try {
-        if (gmUiSettingsLocalOnly) {
-            localStorage.setItem(GM_UI_SETTINGS_LOCAL_KEY, JSON.stringify({ sortState }));
-            return;
-        }
-        if (!geschenkeUiSettingsRef) {
-            localStorage.setItem(GM_UI_SETTINGS_LOCAL_KEY, JSON.stringify({ sortState }));
-            return;
-        }
-        console.log('💾 saveUiSettings: Speichere sortState', sortState);
-        await setDoc(geschenkeUiSettingsRef, { sortState }, { merge: true });
-    } catch (e) {
-        const code = e?.code || e?.message || '';
-        if (code === 'permission-denied' || String(code).toLowerCase().includes('insufficient permissions')) {
-            gmUiSettingsLocalOnly = true;
-            localStorage.setItem(GM_UI_SETTINGS_LOCAL_KEY, JSON.stringify({ sortState }));
-            if (!gmUiSettingsWarnedNoPermission) {
-                gmUiSettingsWarnedNoPermission = true;
-                console.warn('⚠️ Keine Berechtigung für UI-Settings (Firestore). Speichere lokal in localStorage.');
-            }
-            return;
-        }
-        console.error('❌ Fehler beim Speichern der UI-Settings:', e);
     }
 }
 
@@ -767,7 +566,6 @@ export function listenForGeschenke() {
         
         renderGeschenkeTabelle();
         updateDashboardStats();
-        renderPersonenUebersicht();
         populateFilterDropdowns();
     }, (error) => {
         console.error("Fehler beim Laden der Geschenke:", error);
@@ -815,64 +613,12 @@ function setupEventListeners() {
         addFilterBtn.dataset.listenerAttached = 'true';
     }
 
-    // Search Input
+    // Search Input - Enter key to add filter
     const searchInput = document.getElementById('search-geschenke');
     if (searchInput && !searchInput.dataset.listenerAttached) {
-        // Bugfix: Text im Suchfeld immer sichtbar machen (auch wenn Eltern-Container text-white o.ä. hat)
-        try {
-            searchInput.style.color = '#111827';
-            searchInput.style.backgroundColor = '#ffffff';
-        } catch (e) {
-            console.warn('⚠️ Konnte Suchfeld-Styles nicht setzen:', e);
-        }
-
-        searchInput.addEventListener('input', (e) => {
-            const val = e.target.value;
-            if (!val) {
-                document.getElementById('gm-search-suggestions-box')?.classList.add('hidden');
-                gmSearchSuggestions = [];
-                gmSearchSuggestionIndex = -1;
-                renderGeschenkeTabelle();
-            } else {
-                updateGeschenkeSearchSuggestions(val);
-            }
-        });
-        searchInput.addEventListener('focus', (e) => {
-            if (e.target.value.trim()) updateGeschenkeSearchSuggestions(e.target.value);
-        });
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest('#search-geschenke') && !e.target.closest('#gm-search-suggestions-box')) {
-                document.getElementById('gm-search-suggestions-box')?.classList.add('hidden');
-            }
-        });
-
-        searchInput.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowDown') {
-                const box = document.getElementById('gm-search-suggestions-box');
-                if (!box || box.classList.contains('hidden') || gmSearchSuggestions.length === 0) return;
-                e.preventDefault();
-                gmSearchSuggestionIndex = Math.min(gmSearchSuggestions.length - 1, gmSearchSuggestionIndex + 1);
-                updateGeschenkeSuggestionActive();
-                return;
-            }
-
-            if (e.key === 'ArrowUp') {
-                const box = document.getElementById('gm-search-suggestions-box');
-                if (!box || box.classList.contains('hidden') || gmSearchSuggestions.length === 0) return;
-                e.preventDefault();
-                gmSearchSuggestionIndex = Math.max(0, gmSearchSuggestionIndex - 1);
-                updateGeschenkeSuggestionActive();
-                return;
-            }
-
+        searchInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
-                e.preventDefault();
-                if (gmSearchSuggestions.length > 0 && gmSearchSuggestionIndex >= 0) {
-                    const s = gmSearchSuggestions[gmSearchSuggestionIndex];
-                    addFilterQuick(s.category, s.term);
-                } else {
-                    addFilter();
-                }
+                addFilter();
             }
         });
         searchInput.dataset.listenerAttached = 'true';
@@ -892,159 +638,8 @@ function setupEventListeners() {
         selectAllCheckbox.dataset.listenerAttached = 'true';
     }
 
-    // Sortierung: alle Spalten (th[data-sort-key])
-    const tableHead = document.querySelector('#geschenkemanagementView thead');
-    if (tableHead && !tableHead.dataset.sortListenersAttached) {
-        const sortableHeaders = tableHead.querySelectorAll('th[data-sort-key]');
-        sortableHeaders.forEach(th => {
-            th.addEventListener('click', async () => {
-                const key = th.getAttribute('data-sort-key');
-                if (!key) return;
-                console.log('↕️ Sort-Click:', key);
-                if (sortState.key === key) {
-                    sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
-                } else {
-                    sortState.key = key;
-                    sortState.direction = 'asc';
-                }
-                updateSortIndicators();
-                await saveUiSettings();
-                renderGeschenkeTabelle();
-            });
-        });
-        tableHead.dataset.sortListenersAttached = 'true';
-    }
-
     // Modal schließen
     setupModalListeners();
-}
-
-function updateSortIndicators() {
-    const keys = [
-        'status', 'fuer', 'von', 'id', 'geschenk', 'bezahltvon', 'beteiligung',
-        'gesamtkosten', 'eigenekosten', 'sollkonto', 'istkonto', 'standort'
-    ];
-    keys.forEach(k => {
-        const el = document.getElementById(`gm-sort-indicator-${k}`);
-        if (!el) return;
-        if (sortState.key === k) {
-            el.textContent = sortState.direction === 'asc' ? '▲' : '▼';
-        } else {
-            el.textContent = '';
-        }
-    });
-}
-
-function getStatusSortRank(status, direction) {
-    const key = status || 'offen';
-
-    // Spezieller Wunsch: "abgeschlossen" bei aufsteigend unten
-    if (key === 'abgeschlossen') {
-        return 9999;
-    }
-
-    const order = Object.keys(STATUS_CONFIG);
-    const idx = order.indexOf(key);
-    return idx === -1 ? 5000 : idx;
-}
-
-function getPersonNamesFromIds(ids) {
-    if (!ids || !Array.isArray(ids)) return '';
-    return ids
-        .map(id => (KONTAKTE[id]?.name || '').toString().trim())
-        .filter(Boolean)
-        .join(', ');
-}
-
-function normalizeText(value) {
-    return (value ?? '').toString().toLowerCase().trim();
-}
-
-function parseNumericFilter(text) {
-    const raw = (text || '').toString().trim().replace(',', '.');
-    const match = raw.match(/^(<=|>=|=|<|>)\s*(-?\d+(?:\.\d+)?)$/);
-    if (!match) {
-        const n = parseFloat(raw);
-        if (isNaN(n)) return null;
-        return { op: 'contains', num: n };
-    }
-    return { op: match[1], num: parseFloat(match[2]) };
-}
-
-function compareNumbers(a, b) {
-    const na = Number.isFinite(a) ? a : 0;
-    const nb = Number.isFinite(b) ? b : 0;
-    return na - nb;
-}
-
-function compareStrings(a, b) {
-    return normalizeText(a).localeCompare(normalizeText(b), 'de');
-}
-
-function getSortValue(g, key) {
-    switch (key) {
-        case 'status':
-            return g.status || '';
-        case 'fuer':
-            return getPersonNamesFromIds(g.fuer);
-        case 'von':
-            return getPersonNamesFromIds(g.von);
-        case 'id':
-            return g.id || '';
-        case 'geschenk':
-            return g.geschenk || '';
-        case 'shop':
-            return g.shop || '';
-        case 'bezahltvon':
-            return g.bezahltVon ? (KONTAKTE[g.bezahltVon]?.name || '') : '';
-        case 'beteiligung':
-            return getPersonNamesFromIds(g.beteiligung);
-        case 'gesamtkosten':
-            return parseFloat(g.gesamtkosten) || 0;
-        case 'eigenekosten':
-            return parseFloat(g.eigeneKosten) || 0;
-        case 'sollkonto':
-            return ZAHLUNGSARTEN[g.sollBezahlung]?.label || g.sollBezahlung || '';
-        case 'istkonto':
-            return ZAHLUNGSARTEN[g.istBezahlung]?.label || g.istBezahlung || '';
-        case 'standort':
-            return g.standort || '';
-        default:
-            return '';
-    }
-}
-
-function applySorting(geschenkeArray) {
-    if (!sortState?.key) return geschenkeArray;
-
-    const direction = sortState.direction === 'desc' ? 'desc' : 'asc';
-    const key = sortState.key;
-    const copy = [...geschenkeArray];
-
-    copy.sort((a, b) => {
-        if (key === 'status') {
-            const ra = getStatusSortRank(a.status, direction);
-            const rb = getStatusSortRank(b.status, direction);
-            if (ra !== rb) return direction === 'asc' ? ra - rb : rb - ra;
-            return compareStrings(a.geschenk, b.geschenk);
-        }
-
-        const va = getSortValue(a, key);
-        const vb = getSortValue(b, key);
-
-        const isNum = typeof va === 'number' || typeof vb === 'number';
-        if (isNum) {
-            const c = compareNumbers(Number(va), Number(vb));
-            if (c !== 0) return direction === 'asc' ? c : -c;
-            return compareStrings(a.geschenk, b.geschenk);
-        }
-
-        const c = compareStrings(va, vb);
-        if (c !== 0) return direction === 'asc' ? c : -c;
-        return compareStrings(a.geschenk, b.geschenk);
-    });
-
-    return copy;
 }
 
 function setupModalListeners() {
@@ -1586,168 +1181,63 @@ function renderGeschenkeTabelle() {
     
     let geschenkeArray = Object.values(GESCHENKE);
     
-    // Filter: OR innerhalb Kategorie, AND zwischen Kategorien
-    const groups = {};
-    activeFilters.forEach(f => {
-        const groupKey = `${f.category}__${f.negate ? 'not' : 'is'}`;
-        if (!groups[groupKey]) groups[groupKey] = { category: f.category, negate: !!f.negate, values: [] };
-        groups[groupKey].values.push(f.value);
-    });
-
-    const groupList = Object.values(groups);
-    geschenkeArray = geschenkeArray.filter(g => {
-        return groupList.every(group => {
-            const anyMatch = group.values.some(raw => {
-                const value = normalizeText(raw);
-                if (!value) return false;
-                let matches = false;
-
-                switch (group.category) {
-                    case 'all': {
-                        const statusKey = normalizeText(g.status);
-                        const statusLabel = normalizeText(STATUS_CONFIG[g.status]?.label);
-                        const fuerNames = normalizeText(getPersonNamesFromIds(g.fuer));
-                        const vonNames = normalizeText(getPersonNamesFromIds(g.von));
-                        const beteiligtNames = normalizeText(getPersonNamesFromIds(g.beteiligung));
-                        const bezahltName = g.bezahltVon ? normalizeText(KONTAKTE[g.bezahltVon]?.name || '') : '';
-                        const sollLabel = normalizeText(ZAHLUNGSARTEN[g.sollBezahlung]?.label || g.sollBezahlung);
-                        const istLabel = normalizeText(ZAHLUNGSARTEN[g.istBezahlung]?.label || g.istBezahlung);
-                        const gesamtkostenStr = (parseFloat(g.gesamtkosten) || 0).toFixed(2);
-                        const eigeneKostenStr = (parseFloat(g.eigeneKosten) || 0).toFixed(2);
-                        const haystack = [
-                            statusKey,
-                            statusLabel,
-                            normalizeText(g.geschenk),
-                            normalizeText(g.shop),
-                            bezahltName,
-                            fuerNames,
-                            vonNames,
-                            beteiligtNames,
-                            normalizeText(g.bestellnummer),
-                            normalizeText(g.rechnungsnummer),
-                            normalizeText(g.notizen),
-                            normalizeText(g.standort),
-                            sollLabel,
-                            istLabel,
-                            normalizeText(gesamtkostenStr),
-                            normalizeText(eigeneKostenStr)
-                        ].filter(Boolean).join(' ');
-                        matches = haystack.includes(value);
-                        break;
+    // Apply all active filters
+    activeFilters.forEach(filter => {
+        geschenkeArray = geschenkeArray.filter(g => {
+            const value = filter.value.toLowerCase();
+            let matches = false;
+            
+            switch(filter.category) {
+                case 'status':
+                    matches = g.status?.toLowerCase().includes(value) || 
+                           STATUS_CONFIG[g.status]?.label?.toLowerCase().includes(value);
+                    break;
+                
+                case 'fuer':
+                    if (g.fuer && Array.isArray(g.fuer)) {
+                        matches = g.fuer.some(id => {
+                            const name = KONTAKTE[id]?.name?.toLowerCase() || '';
+                            return name.includes(value);
+                        });
                     }
-                    case 'status': {
-                        const s = normalizeText(g.status);
-                        const label = normalizeText(STATUS_CONFIG[g.status]?.label);
-                        matches = s.includes(value) || label.includes(value);
-                        break;
+                    break;
+                
+                case 'von':
+                    if (g.von && Array.isArray(g.von)) {
+                        matches = g.von.some(id => {
+                            const name = KONTAKTE[id]?.name?.toLowerCase() || '';
+                            return name.includes(value);
+                        });
                     }
-                    case 'fuer': {
-                        matches = normalizeText(getPersonNamesFromIds(g.fuer)).includes(value);
-                        break;
-                    }
-                    case 'von': {
-                        matches = normalizeText(getPersonNamesFromIds(g.von)).includes(value);
-                        break;
-                    }
-                    case 'geschenk': {
-                        matches = normalizeText(g.geschenk).includes(value);
-                        break;
-                    }
-                    case 'shop': {
-                        matches = normalizeText(g.shop).includes(value);
-                        break;
-                    }
-                    case 'bezahltvon': {
-                        const name = g.bezahltVon ? (KONTAKTE[g.bezahltVon]?.name || '') : '';
-                        matches = normalizeText(name).includes(value);
-                        break;
-                    }
-                    case 'beteiligung': {
-                        matches = normalizeText(getPersonNamesFromIds(g.beteiligung)).includes(value);
-                        break;
-                    }
-                    case 'gesamtkosten': {
-                        const parsed = parseNumericFilter(value);
-                        const num = parseFloat(g.gesamtkosten) || 0;
-                        if (!parsed) return false;
-                        if (parsed.op === 'contains') {
-                            matches = num.toFixed(2).includes(parsed.num.toFixed(2).replace(/\.00$/, ''));
-                        } else if (parsed.op === '=') {
-                            matches = num === parsed.num;
-                        } else if (parsed.op === '>') {
-                            matches = num > parsed.num;
-                        } else if (parsed.op === '<') {
-                            matches = num < parsed.num;
-                        } else if (parsed.op === '>=') {
-                            matches = num >= parsed.num;
-                        } else if (parsed.op === '<=') {
-                            matches = num <= parsed.num;
-                        }
-                        break;
-                    }
-                    case 'eigenekosten': {
-                        const parsed = parseNumericFilter(value);
-                        const num = parseFloat(g.eigeneKosten) || 0;
-                        if (!parsed) return false;
-                        if (parsed.op === 'contains') {
-                            matches = num.toFixed(2).includes(parsed.num.toFixed(2).replace(/\.00$/, ''));
-                        } else if (parsed.op === '=') {
-                            matches = num === parsed.num;
-                        } else if (parsed.op === '>') {
-                            matches = num > parsed.num;
-                        } else if (parsed.op === '<') {
-                            matches = num < parsed.num;
-                        } else if (parsed.op === '>=') {
-                            matches = num >= parsed.num;
-                        } else if (parsed.op === '<=') {
-                            matches = num <= parsed.num;
-                        }
-                        break;
-                    }
-                    case 'bestellnummer': {
-                        matches = normalizeText(g.bestellnummer).includes(value);
-                        break;
-                    }
-                    case 'rechnungsnummer': {
-                        matches = normalizeText(g.rechnungsnummer).includes(value);
-                        break;
-                    }
-                    case 'notizen': {
-                        matches = normalizeText(g.notizen).includes(value);
-                        break;
-                    }
-                    case 'sollkonto': {
-                        const sollLabel = normalizeText(ZAHLUNGSARTEN[g.sollBezahlung]?.label || g.sollBezahlung);
-                        matches = sollLabel.includes(value);
-                        break;
-                    }
-                    case 'istkonto': {
-                        const istLabel = normalizeText(ZAHLUNGSARTEN[g.istBezahlung]?.label || g.istBezahlung);
-                        matches = istLabel.includes(value);
-                        break;
-                    }
-                    case 'kontodifferenz': {
-                        const hatDifferenz = g.sollBezahlung && g.istBezahlung && g.sollBezahlung !== g.istBezahlung;
-                        matches = value.includes('ja') || value.includes('mit') ? hatDifferenz : !hatDifferenz;
-                        break;
-                    }
-                    case 'standort': {
-                        matches = normalizeText(g.standort).includes(value);
-                        break;
-                    }
-                    default:
-                        matches = true;
-                }
-
-                return matches;
-            });
-
-            // OR innerhalb Gruppe; Negation: keine der Werte darf matchen
-            return group.negate ? !anyMatch : anyMatch;
+                    break;
+                
+                case 'sollkonto':
+                    const sollLabel = ZAHLUNGSARTEN[g.sollBezahlung]?.label?.toLowerCase() || g.sollBezahlung?.toLowerCase() || '';
+                    matches = sollLabel.includes(value);
+                    break;
+                
+                case 'istkonto':
+                    const istLabel = ZAHLUNGSARTEN[g.istBezahlung]?.label?.toLowerCase() || g.istBezahlung?.toLowerCase() || '';
+                    matches = istLabel.includes(value);
+                    break;
+                
+                case 'kontodifferenz':
+                    const hatDifferenz = g.sollBezahlung && g.istBezahlung && g.sollBezahlung !== g.istBezahlung;
+                    matches = value.includes('ja') || value.includes('mit') ? hatDifferenz : !hatDifferenz;
+                    break;
+                
+                case 'standort':
+                    matches = g.standort?.toLowerCase().includes(value);
+                    break;
+                
+                default:
+                    matches = true;
+            }
+            
+            // Apply negation if filter is negated
+            return filter.negate ? !matches : matches;
         });
     });
-
-    geschenkeArray = applySorting(geschenkeArray);
     
     if (geschenkeArray.length === 0) {
         tbody.innerHTML = `
@@ -2385,68 +1875,32 @@ function formatCurrency(value) {
 
 function addFilter() {
     const searchInput = document.getElementById('search-geschenke');
+    const categorySelect = document.getElementById('filter-category-select');
     const negateCheckbox = document.getElementById('filter-negate-checkbox');
     
     const value = searchInput?.value?.trim();
+    const category = categorySelect?.value;
     const negate = negateCheckbox?.checked || false;
-
-    const category = 'all';
     
     if (!value || !category) {
         alertUser('Bitte Suchbegriff und Kategorie eingeben!', 'warning');
         return;
     }
     
-    // Mehrere Begriffe auf einmal erlauben (Trennzeichen: ; oder ,)
-    const parts = value
-        .split(/[;,]/)
-        .map(v => v.trim())
-        .filter(Boolean);
-
-    if (parts.length === 0) {
-        alertUser('Bitte Suchbegriff eingeben!', 'warning');
-        return;
-    }
-
-    // Add filter(s) to active filters
-    parts.forEach(part => {
-        activeFilters.push({ category, value: part, negate, id: Date.now() + Math.floor(Math.random() * 1000) });
-    });
+    // Add filter to active filters
+    activeFilters.push({ category, value, negate, id: Date.now() });
     
     // Clear inputs
     searchInput.value = '';
+    categorySelect.value = '';
     negateCheckbox.checked = false;
     
     // Update UI
     renderActiveFilters();
     renderGeschenkeTabelle();
     
-    console.log('✅ Filter hinzugefügt:', { category, values: parts, negate });
+    console.log('✅ Filter hinzugefügt:', { category, value, negate });
 }
-
- function addFilterQuick(category, term) {
-     const negateCheckbox = document.getElementById('filter-negate-checkbox');
-     const negate = negateCheckbox?.checked || false;
-
-     if (!term || !term.toString().trim()) return;
-     if (!category) return;
-
-     activeFilters.push({ category, value: term.toString().trim(), negate, id: Date.now() + Math.floor(Math.random() * 1000) });
-
-     const input = document.getElementById('search-geschenke');
-     if (input) {
-         input.value = '';
-         input.focus();
-     }
-     if (negateCheckbox) negateCheckbox.checked = false;
-
-     document.getElementById('gm-search-suggestions-box')?.classList.add('hidden');
-     gmSearchSuggestions = [];
-     gmSearchSuggestionIndex = -1;
-
-     renderActiveFilters();
-     renderGeschenkeTabelle();
- }
 
 function removeFilter(filterId) {
     activeFilters = activeFilters.filter(f => f.id !== filterId);
@@ -2478,19 +1932,9 @@ function renderActiveFilters() {
     }
     
     const categoryLabels = {
-        all: 'Alles',
         status: 'Status',
         fuer: 'Für',
         von: 'Von',
-        geschenk: 'Geschenk',
-        shop: 'Shop',
-        bezahltvon: 'Bezahlt von',
-        beteiligung: 'Beteiligung',
-        gesamtkosten: 'Gesamtkosten',
-        eigenekosten: 'Eigene Kosten',
-        bestellnummer: 'Bestellnummer',
-        rechnungsnummer: 'Rechnungsnummer',
-        notizen: 'Notizen',
         sollkonto: 'Soll-Konto',
         istkonto: 'Ist-Konto',
         kontodifferenz: 'Kontodifferenz',
