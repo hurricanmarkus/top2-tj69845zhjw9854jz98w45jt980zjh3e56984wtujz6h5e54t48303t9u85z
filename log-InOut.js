@@ -1,4 +1,4 @@
-// // @ts-check
+// // @ts-check 
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 //
 import { db, usersCollectionRef, setButtonLoading, adminSectionsState, modalUserButtons, ADMIN_ROLES, adminRolesCollectionRef, rolesCollectionRef, ROLES, alertUser, initialAuthCheckDone, currentUser, GUEST_MODE, adminSettings, CHECKLISTS, ADMIN_STORAGE_KEY, USERS, navigate, auth } from './haupteingang.js';
 import { renderModalUserButtons } from './admin_benutzersteuerung.js';
@@ -433,10 +433,12 @@ export function updateUIForMode() {
         loginButton.className = 'font-bold text-indigo-400 hover:text-indigo-300';
 
         loginButton.onclick = () => {
+            console.log("Anmelden-Button geklickt! Zeige Modal."); // Spion
             const userSelectionModal = document.getElementById('userSelectionModal');
             if (userSelectionModal) {
-                userSelectionModal.classList.remove('hidden');
                 userSelectionModal.style.display = 'flex';
+            } else {
+                console.error("FEHLER: Konnte #userSelectionModal nicht finden!"); // Spion
             }
         };
 
