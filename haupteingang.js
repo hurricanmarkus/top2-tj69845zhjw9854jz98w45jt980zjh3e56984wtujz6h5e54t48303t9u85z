@@ -663,10 +663,12 @@ export function navigate(targetViewName) {
     const mainContent = document.querySelector('.main-content');
     if (mainContent) mainContent.scrollTop = 0;
 
-    Object.values(viewElements).forEach(el => el && el.classList.remove('active'));
+    // Alle Views deaktivieren - direkt aus DOM holen für Zuverlässigkeit
+    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
     const targetElement = document.getElementById(targetView.id);
     if (targetElement) {
         targetElement.classList.add('active');
+        console.log('🔧 View aktiviert:', targetView.id, 'classList:', targetElement.classList.toString());
     } else {
         console.error(`Navigation fehlgeschlagen: Element mit ID "${targetView.id}" nicht gefunden.`);
         const homeElement = document.getElementById(views.home.id);
@@ -705,6 +707,7 @@ export function navigate(targetViewName) {
     }
 
     if (targetViewName === 'zahlungsverwaltung') {
+        console.log('🔧 Navigate: zahlungsverwaltungView classList:', document.getElementById('zahlungsverwaltungView')?.classList?.toString());
         initializeZahlungsverwaltungView();
     }
     
