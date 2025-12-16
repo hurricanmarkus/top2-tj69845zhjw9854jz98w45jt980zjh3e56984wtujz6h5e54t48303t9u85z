@@ -387,30 +387,6 @@ export function initializeTerminplanerView() {
     // ENDE DER ÄNDERUNG
     // =================================================================
 
-    // --- WICHTIG: Starte Daten-Listener NEU ---
-    console.log("🎯 Terminplaner: Starte Daten-Listener...");
-    
-    // Listener MÜSSEN bei jedem View-Wechsel neu starten (wie bei Zahlungsverwaltung)
-    // damit sie die Daten frisch laden und in die nun sichtbare View rendern
-    
-    // Öffentliche Umfragen laden (für alle Benutzer)
-    if (typeof listenForPublicVotes === 'function') {
-        listenForPublicVotes();
-    }
-    
-    // Persönliche Umfragen laden (nur für registrierte Benutzer)
-    if (currentUser && currentUser.mode && currentUser.mode !== GUEST_MODE) {
-        if (typeof listenForMyVotes === 'function') {
-            listenForMyVotes(currentUser.mode);
-        }
-    } else {
-        // Für Gäste: Zeige leeres Dashboard
-        sortAndRenderAllVotes([]);
-    }
-    
-    console.log("✅ Terminplaner: Listener gestartet");
-    // --- ENDE Daten-Listener ---
-
     // --- NEU: Logik für die Haupt-URL-Share-Box ---
     const mainUrlInput = document.getElementById('main-share-url');
     if (mainUrlInput) {
@@ -1511,12 +1487,7 @@ function listenToCurrentVote(voteId) {
 
 function renderPublicVotes(votes) {
     const listContainer = document.getElementById('public-votes-list');
-    if (!listContainer) {
-        console.warn("⚠️ renderPublicVotes: DOM-Element 'public-votes-list' nicht gefunden!");
-        return;
-    }
-    
-    console.log(`📊 renderPublicVotes: Rendere ${votes.length} öffentliche Umfragen`);
+    if (!listContainer) return;
 
     // NEU: Sortierlogik (Punkt 2, identisch zu renderVoteList)
     const now = new Date();
@@ -4256,12 +4227,12 @@ function hideVoteCreatedModal() {
         modal.classList.add('hidden');
     }
 }
+
+// ----- NEUE FUNKTIONEN FÜR DAS DASHBOARD (AB HIER HINZUFÜGEN) -----
 // Der neue "Gehirn"-Prozess: Nimmt ALLE Umfragen und sortiert sie
 // in die 4 Listen und die "Ausfällig"-Box.
 
 function sortAndRenderAllVotes(allPolls) {
-    console.log(` sortAndRenderAllVotes: Starte Rendering mit ${allPolls.length} Umfragen`);
-    
     if (currentUser.mode === GUEST_MODE) {
         allPolls = []; // Gäste sehen keine persönlichen Umfragen
     }
