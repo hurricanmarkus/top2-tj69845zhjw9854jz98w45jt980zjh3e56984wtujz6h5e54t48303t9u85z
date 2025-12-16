@@ -3821,7 +3821,9 @@ function applyFilters() {
 
 
 function renderPaymentList(payments) {
+    console.log('🔧 renderPaymentList aufgerufen, Anzahl:', payments.length);
     const container = document.getElementById('payments-list-container');
+    console.log('🔧 payments-list-container gefunden:', !!container);
     if (!container) return;
     container.innerHTML = '';
     
