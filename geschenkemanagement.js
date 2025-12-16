@@ -656,6 +656,25 @@ function setupEventListeners() {
         }
     });
 
+    // Filter hinzufügen Button
+    const addFilterBtn = document.getElementById('btn-add-geschenke-filter');
+    if (addFilterBtn && !addFilterBtn.dataset.listenerAttached) {
+        addFilterBtn.addEventListener('click', () => {
+            const suggestionsList = document.getElementById('gm-search-suggestions-list');
+            if (!suggestionsList) return;
+            
+            const suggestions = suggestionsList.querySelectorAll('li');
+            if (suggestions.length === 0) return;
+            
+            if (selectedSuggestionIndex >= 0 && suggestions[selectedSuggestionIndex]) {
+                suggestions[selectedSuggestionIndex].click();
+            } else if (suggestions.length > 0) {
+                suggestions[0].click();
+            }
+        });
+        addFilterBtn.dataset.listenerAttached = 'true';
+    }
+
     // Filter Reset
     const resetBtn = document.getElementById('reset-filters-geschenke');
     if (resetBtn && !resetBtn.dataset.listenerAttached) {
@@ -3213,6 +3232,7 @@ function updateGeschenkeSuggestions(term) {
     }
 
     const lowerTerm = term.toLowerCase().trim();
+    const normalizedTerm = lowerTerm.replace(',', '.');
     list.innerHTML = '';
     let hasHits = false;
 
@@ -3255,10 +3275,10 @@ function updateGeschenkeSuggestions(term) {
     const hasBeteiligung = geschenkeArray.some(g => g.beteiligung && Array.isArray(g.beteiligung) && g.beteiligung.some(b => KONTAKTE[b.personId]?.name?.toLowerCase().includes(lowerTerm)));
     if (hasBeteiligung) addSuggestion(`Beteiligung: ${term}`, "🤝", "beteiligung", "Suche in Beteiligten");
 
-    const hasGesamtkosten = geschenkeArray.some(g => parseFloat(g.gesamtkosten || 0).toFixed(2).includes(lowerTerm));
+    const hasGesamtkosten = geschenkeArray.some(g => parseFloat(g.gesamtkosten || 0).toFixed(2).includes(normalizedTerm));
     if (hasGesamtkosten) addSuggestion(`Gesamtkosten: ${term}`, "💶", "gesamtkosten", "Suche in Gesamtkosten");
 
-    const hasEigeneKosten = geschenkeArray.some(g => parseFloat(g.eigeneKosten || 0).toFixed(2).includes(lowerTerm));
+    const hasEigeneKosten = geschenkeArray.some(g => parseFloat(g.eigeneKosten || 0).toFixed(2).includes(normalizedTerm));
     if (hasEigeneKosten) addSuggestion(`Eigene Kosten: ${term}`, "💵", "eigeneKosten", "Suche in eigenen Kosten");
 
     const hasBestellnummer = geschenkeArray.some(g => g.bestellnummer?.toLowerCase().includes(lowerTerm));
