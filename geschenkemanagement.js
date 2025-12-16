@@ -1271,10 +1271,10 @@ function renderGeschenkeTabelle() {
                         matches = g.beteiligung && Array.isArray(g.beteiligung) && g.beteiligung.some(b => KONTAKTE[b.personId]?.name?.toLowerCase().includes(value));
                         break;
                     case 'gesamtkosten':
-                        matches = parseFloat(g.gesamtkosten || 0).toFixed(2).includes(value);
+                        matches = parseFloat(g.gesamtkosten || 0).toFixed(2).includes(value.replace(',', '.'));
                         break;
                     case 'eigeneKosten':
-                        matches = parseFloat(g.eigeneKosten || 0).toFixed(2).includes(value);
+                        matches = parseFloat(g.eigeneKosten || 0).toFixed(2).includes(value.replace(',', '.'));
                         break;
                     case 'bestellnummer':
                         matches = g.bestellnummer?.toLowerCase().includes(value);
@@ -2055,20 +2055,10 @@ function renderActiveFilters() {
         return;
     }
     
-    const categoryLabels = {
-        status: 'Status',
-        fuer: 'Für',
-        von: 'Von',
-        sollkonto: 'Soll-Konto',
-        istkonto: 'Ist-Konto',
-        kontodifferenz: 'Kontodifferenz',
-        standort: 'Standort'
-    };
-    
     container.innerHTML = activeFilters.map(filter => `
         <div class="flex items-center gap-2 px-3 py-1.5 ${filter.negate ? 'bg-red-100 text-red-800 border-red-300' : 'bg-pink-100 text-pink-800 border-pink-300'} rounded-full text-sm font-medium border">
             ${filter.negate ? '<span class="font-bold text-red-600">NICHT</span>' : ''}
-            <span class="font-bold">${categoryLabels[filter.category]}:</span>
+            <span class="font-bold">${filter.label || filter.category}:</span>
             <span>${filter.value}</span>
             <button onclick="window.removeFilterById(${filter.id})" class="ml-1 ${filter.negate ? 'hover:bg-red-200' : 'hover:bg-pink-200'} rounded-full p-0.5 transition" title="Filter entfernen">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
