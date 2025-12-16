@@ -387,6 +387,20 @@ export function initializeTerminplanerView() {
     // ENDE DER ÄNDERUNG
     // =================================================================
 
+    // --- WICHTIG: Starte Daten-Listener ---
+    console.log("🎯 Terminplaner: Starte Daten-Listener...");
+    
+    // Öffentliche Umfragen laden (für alle Benutzer)
+    listenForPublicVotes();
+    
+    // Persönliche Umfragen laden (nur für registrierte Benutzer)
+    if (currentUser && currentUser.mode && currentUser.mode !== GUEST_MODE) {
+        listenForMyVotes(currentUser.mode);
+    }
+    
+    console.log("✅ Terminplaner: Listener gestartet");
+    // --- ENDE Daten-Listener ---
+
     // --- NEU: Logik für die Haupt-URL-Share-Box ---
     const mainUrlInput = document.getElementById('main-share-url');
     if (mainUrlInput) {
