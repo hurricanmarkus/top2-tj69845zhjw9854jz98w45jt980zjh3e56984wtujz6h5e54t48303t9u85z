@@ -3715,19 +3715,33 @@ function applyFilters() {
     const isIdSearch = hasTags && activeSearchFilters.some(f => f.type === 'numbers' || f.type === 'id');
 
     let filtered = allPayments.filter(p => {
+        // --- DEBUG: Zeige warum Payments gefiltert werden ---
+        console.log('🔧 Filter prüft Payment:', p.id, 'status:', p.status, 'createdBy:', p.createdBy, 'currentUser.mode:', currentUser.mode);
+        
         // --- BASIS CHECKS ---
         if (p.createdBy !== currentUser.mode) {
             const myAccess = p.accessRights ? p.accessRights[currentUser.mode] : null;
-            if (myAccess && myAccess.status !== 'accepted') return false;
+            console.log('🔧 Nicht Ersteller, myAccess:', myAccess);
+            if (myAccess && myAccess.status !== 'accepted') {
+                console.log('🔧 GEFILTERT: accessRights status !== accepted');
+                return false;
+            }
         }
 
         // Archiv & Papierkorb nur anzeigen wenn ID-Suche
-        if (!isIdSearch && (p.status === 'archived' || p.status === 'trash')) return false;
+        if (!isIdSearch && (p.status === 'archived' || p.status === 'trash')) {
+            console.log('🔧 GEFILTERT: archived/trash');
+            return false;
+        }
 
         // Dropdown Filter (nur wenn KEINE ID-Suche)
+        console.log('🔧 statusFilter:', statusFilter, 'p.status:', p.status);
         if (!isIdSearch) {
             if (statusFilter !== 'all') {
-                if (statusFilter === 'open' && p.status !== 'open') return false;
+                if (statusFilter === 'open' && p.status !== 'open') {
+                    console.log('🔧 GEFILTERT: statusFilter=open aber p.status=', p.status);
+                    return false;
+                }
                 if (statusFilter === 'pending' && p.status !== 'pending_approval') return false;
                 
                 // --- FIX: Auch 'closed' (Merge) und 'settled' (Bilanz) als erledigt anzeigen ---
