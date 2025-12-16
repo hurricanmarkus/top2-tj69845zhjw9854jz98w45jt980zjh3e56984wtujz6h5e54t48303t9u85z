@@ -1,4 +1,4 @@
-// // @ts-check
+// // @ts-check 
 // Import aller benötigten Funktionen aus haupteingang.js
 import { alertUser, db, votesCollectionRef, currentUser, USERS, setButtonLoading, GUEST_MODE, navigate, cleanUrlParams } from './haupteingang.js';
 import {
