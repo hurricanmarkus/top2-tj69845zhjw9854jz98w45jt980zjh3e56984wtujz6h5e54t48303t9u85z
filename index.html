@@ -2254,28 +2254,20 @@
                 <!-- Such- und Filterleiste -->
                 <div class="bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
                     <div class="flex flex-wrap gap-2 mb-3">
-                        <input type="text" id="search-geschenke" placeholder="🔍 Suchbegriff eingeben..." 
-                            class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:ring-2 focus:ring-pink-200 text-sm">
-                        
-                        <select id="filter-category-select" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Kategorie wählen...</option>
-                            <option value="status">Status</option>
-                            <option value="fuer">Für</option>
-                            <option value="von">Von</option>
-                            <option value="sollkonto">Soll-Konto</option>
-                            <option value="istkonto">Ist-Konto</option>
-                            <option value="kontodifferenz">Kontodifferenz</option>
-                            <option value="standort">Standort</option>
-                        </select>
+                        <div class="flex-1 min-w-[200px] relative">
+                            <input type="text" id="search-geschenke" placeholder="🔍 Suchbegriff eingeben..." 
+                                class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:ring-2 focus:ring-pink-200 text-sm">
+                            
+                            <!-- Smart-Suggest Box (wie Zahlungsverwaltung) -->
+                            <div id="gm-search-suggestions-box" class="hidden absolute z-30 bg-white border-2 border-pink-400 rounded-lg shadow-xl mt-1 w-full max-h-80 overflow-y-auto">
+                                <ul id="gm-search-suggestions-list" class="text-sm"></ul>
+                            </div>
+                        </div>
                         
                         <label class="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition text-sm">
                             <input type="checkbox" id="filter-negate-checkbox" class="w-4 h-4 text-pink-600 rounded">
                             <span class="font-bold text-gray-700">NICHT</span>
                         </label>
-                        
-                        <button id="btn-add-filter" class="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 font-bold transition text-sm">
-                            + Filter hinzufügen
-                        </button>
                         
                         <button id="reset-filters-geschenke" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
                             ✕ Alle Filter löschen
@@ -2299,18 +2291,18 @@
                                     <th class="px-2 py-3 text-center text-xs font-bold text-pink-800">
                                         <input type="checkbox" id="gm-select-all" class="w-4 h-4 rounded cursor-pointer" title="Alle auswählen/abwählen">
                                     </th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Status</th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">FÜR</th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">VON</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer hover:bg-pink-50 select-none" data-sort-key="status" onclick="sortGeschenkeBy('status')">Status</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer hover:bg-pink-50 select-none" data-sort-key="fuer" onclick="sortGeschenkeBy('fuer')">FÜR</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer hover:bg-pink-50 select-none" data-sort-key="von" onclick="sortGeschenkeBy('von')">VON</th>
                                     <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">ID</th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Geschenk</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer hover:bg-pink-50 select-none" data-sort-key="geschenk" onclick="sortGeschenkeBy('geschenk')">Geschenk</th>
                                     <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Bezahlt von</th>
                                     <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Beteiligung</th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Gesamt</th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Eigen</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer hover:bg-pink-50 select-none" data-sort-key="gesamtkosten" onclick="sortGeschenkeBy('gesamtkosten')">Gesamt</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer hover:bg-pink-50 select-none" data-sort-key="eigeneKosten" onclick="sortGeschenkeBy('eigeneKosten')">Eigen</th>
                                     <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">SOLL</th>
                                     <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">IST</th>
-                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase">Standort</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-pink-800 uppercase cursor-pointer hover:bg-pink-50 select-none" data-sort-key="standort" onclick="sortGeschenkeBy('standort')">Standort</th>
                                 </tr>
                             </thead>
                             <tbody id="geschenke-table-body" class="divide-y divide-gray-200">

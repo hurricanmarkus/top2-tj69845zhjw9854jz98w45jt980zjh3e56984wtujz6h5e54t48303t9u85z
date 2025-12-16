@@ -59,7 +59,9 @@ let ERINNERUNGEN = {};
 let currentThemaId = null;
 let searchTerm = '';
 let activeFilters = [];
-let personenDetailsAusgeklappt = false; // ✅ State für Personen-Übersicht
+let personenDetailsAusgeklappt = false;
+let selectedSuggestionIndex = -1;
+let sortState = { key: null, direction: 'asc' };
 
 // Eigene Person (unlöschbar)
 let eigenePerson = null;
@@ -267,6 +269,7 @@ export async function initializeGeschenkemanagement() {
     
     // Event-Listener und Dashboard IMMER initialisieren
     try {
+        await loadUiSettings();
         setupEventListeners();
         renderDashboard();
         console.log("✅ Geschenkemanagement erfolgreich initialisiert!");
@@ -566,6 +569,7 @@ export function listenForGeschenke() {
         
         renderGeschenkeTabelle();
         updateDashboardStats();
+        renderPersonenUebersicht();
         populateFilterDropdowns();
     }, (error) => {
         console.error("Fehler beim Laden der Geschenke:", error);
@@ -606,23 +610,51 @@ function setupEventListeners() {
         settingsBtn.dataset.listenerAttached = 'true';
     }
 
-    // Add Filter Button
-    const addFilterBtn = document.getElementById('btn-add-filter');
-    if (addFilterBtn && !addFilterBtn.dataset.listenerAttached) {
-        addFilterBtn.addEventListener('click', addFilter);
-        addFilterBtn.dataset.listenerAttached = 'true';
-    }
-
-    // Search Input - Enter key to add filter
+    // Search Input - Smart-Suggest mit Pfeiltasten
     const searchInput = document.getElementById('search-geschenke');
     if (searchInput && !searchInput.dataset.listenerAttached) {
-        searchInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                addFilter();
+        searchInput.addEventListener('input', (e) => {
+            updateGeschenkeSuggestions(e.target.value);
+        });
+        
+        searchInput.addEventListener('keydown', (e) => {
+            const suggestionsList = document.getElementById('gm-search-suggestions-list');
+            if (!suggestionsList) return;
+            
+            const suggestions = suggestionsList.querySelectorAll('li');
+            if (suggestions.length === 0) return;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                selectedSuggestionIndex = (selectedSuggestionIndex + 1) % suggestions.length;
+                updateSuggestionHighlight(suggestions);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                selectedSuggestionIndex = selectedSuggestionIndex <= 0 ? suggestions.length - 1 : selectedSuggestionIndex - 1;
+                updateSuggestionHighlight(suggestions);
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (selectedSuggestionIndex >= 0 && suggestions[selectedSuggestionIndex]) {
+                    suggestions[selectedSuggestionIndex].click();
+                }
+            } else if (e.key === 'Escape') {
+                document.getElementById('gm-search-suggestions-box')?.classList.add('hidden');
+                selectedSuggestionIndex = -1;
             }
         });
+        
         searchInput.dataset.listenerAttached = 'true';
     }
+    
+    // Click outside schließt Suggestion-Box
+    document.addEventListener('click', (e) => {
+        const box = document.getElementById('gm-search-suggestions-box');
+        const input = document.getElementById('search-geschenke');
+        if (box && input && !box.contains(e.target) && e.target !== input) {
+            box.classList.add('hidden');
+            selectedSuggestionIndex = -1;
+        }
+    });
 
     // Filter Reset
     const resetBtn = document.getElementById('reset-filters-geschenke');
@@ -1181,63 +1213,137 @@ function renderGeschenkeTabelle() {
     
     let geschenkeArray = Object.values(GESCHENKE);
     
-    // Apply all active filters
+    // Gruppiere Filter nach Kategorie für OR-Verknüpfung
+    const filtersByCategory = {};
     activeFilters.forEach(filter => {
-        geschenkeArray = geschenkeArray.filter(g => {
-            const value = filter.value.toLowerCase();
-            let matches = false;
-            
-            switch(filter.category) {
-                case 'status':
-                    matches = g.status?.toLowerCase().includes(value) || 
-                           STATUS_CONFIG[g.status]?.label?.toLowerCase().includes(value);
-                    break;
+        if (!filtersByCategory[filter.category]) {
+            filtersByCategory[filter.category] = [];
+        }
+        filtersByCategory[filter.category].push(filter);
+    });
+    
+    // Wende Filter an: OR innerhalb einer Kategorie, AND zwischen Kategorien
+    geschenkeArray = geschenkeArray.filter(g => {
+        return Object.entries(filtersByCategory).every(([category, filters]) => {
+            return filters.some(filter => {
+                const value = filter.value.toLowerCase();
+                let matches = false;
                 
-                case 'fuer':
-                    if (g.fuer && Array.isArray(g.fuer)) {
-                        matches = g.fuer.some(id => {
-                            const name = KONTAKTE[id]?.name?.toLowerCase() || '';
-                            return name.includes(value);
-                        });
-                    }
-                    break;
+                switch(category) {
+                    case 'status':
+                        matches = g.status?.toLowerCase().includes(value) || STATUS_CONFIG[g.status]?.label?.toLowerCase().includes(value);
+                        break;
+                    case 'fuer':
+                        matches = g.fuer && Array.isArray(g.fuer) && g.fuer.some(id => KONTAKTE[id]?.name?.toLowerCase().includes(value));
+                        break;
+                    case 'von':
+                        matches = g.von && Array.isArray(g.von) && g.von.some(id => KONTAKTE[id]?.name?.toLowerCase().includes(value));
+                        break;
+                    case 'geschenk':
+                        matches = g.geschenk?.toLowerCase().includes(value);
+                        break;
+                    case 'shop':
+                        matches = g.shop?.toLowerCase().includes(value);
+                        break;
+                    case 'bezahltVon':
+                        matches = g.bezahltVon && Array.isArray(g.bezahltVon) && g.bezahltVon.some(id => KONTAKTE[id]?.name?.toLowerCase().includes(value));
+                        break;
+                    case 'beteiligung':
+                        matches = g.beteiligung && Array.isArray(g.beteiligung) && g.beteiligung.some(b => KONTAKTE[b.personId]?.name?.toLowerCase().includes(value));
+                        break;
+                    case 'gesamtkosten':
+                        matches = parseFloat(g.gesamtkosten || 0).toFixed(2).includes(value);
+                        break;
+                    case 'eigeneKosten':
+                        matches = parseFloat(g.eigeneKosten || 0).toFixed(2).includes(value);
+                        break;
+                    case 'bestellnummer':
+                        matches = g.bestellnummer?.toLowerCase().includes(value);
+                        break;
+                    case 'rechnungsnummer':
+                        matches = g.rechnungsnummer?.toLowerCase().includes(value);
+                        break;
+                    case 'notizen':
+                        matches = g.notizen?.toLowerCase().includes(value);
+                        break;
+                    case 'sollkonto':
+                        matches = ZAHLUNGSARTEN[g.sollBezahlung]?.label?.toLowerCase().includes(value);
+                        break;
+                    case 'istkonto':
+                        matches = ZAHLUNGSARTEN[g.istBezahlung]?.label?.toLowerCase().includes(value);
+                        break;
+                    case 'kontodifferenz':
+                        const hatDifferenz = g.sollBezahlung && g.istBezahlung && g.sollBezahlung !== g.istBezahlung;
+                        matches = value.includes('ja') || value.includes('mit') ? hatDifferenz : !hatDifferenz;
+                        break;
+                    case 'standort':
+                        matches = g.standort?.toLowerCase().includes(value);
+                        break;
+                    case 'all':
+                        matches = g.geschenk?.toLowerCase().includes(value) || g.shop?.toLowerCase().includes(value) || 
+                                  g.notizen?.toLowerCase().includes(value) || g.bestellnummer?.toLowerCase().includes(value) ||
+                                  g.rechnungsnummer?.toLowerCase().includes(value) || g.standort?.toLowerCase().includes(value);
+                        break;
+                    default:
+                        matches = true;
+                }
                 
-                case 'von':
-                    if (g.von && Array.isArray(g.von)) {
-                        matches = g.von.some(id => {
-                            const name = KONTAKTE[id]?.name?.toLowerCase() || '';
-                            return name.includes(value);
-                        });
-                    }
-                    break;
-                
-                case 'sollkonto':
-                    const sollLabel = ZAHLUNGSARTEN[g.sollBezahlung]?.label?.toLowerCase() || g.sollBezahlung?.toLowerCase() || '';
-                    matches = sollLabel.includes(value);
-                    break;
-                
-                case 'istkonto':
-                    const istLabel = ZAHLUNGSARTEN[g.istBezahlung]?.label?.toLowerCase() || g.istBezahlung?.toLowerCase() || '';
-                    matches = istLabel.includes(value);
-                    break;
-                
-                case 'kontodifferenz':
-                    const hatDifferenz = g.sollBezahlung && g.istBezahlung && g.sollBezahlung !== g.istBezahlung;
-                    matches = value.includes('ja') || value.includes('mit') ? hatDifferenz : !hatDifferenz;
-                    break;
-                
-                case 'standort':
-                    matches = g.standort?.toLowerCase().includes(value);
-                    break;
-                
-                default:
-                    matches = true;
-            }
-            
-            // Apply negation if filter is negated
-            return filter.negate ? !matches : matches;
+                return filter.negate ? !matches : matches;
+            });
         });
     });
+    
+    // Sortierung anwenden
+    if (sortState.key) {
+        geschenkeArray.sort((a, b) => {
+            let aVal, bVal;
+            
+            switch(sortState.key) {
+                case 'status':
+                    aVal = STATUS_CONFIG[a.status]?.label || a.status || '';
+                    bVal = STATUS_CONFIG[b.status]?.label || b.status || '';
+                    break;
+                case 'geschenk':
+                    aVal = a.geschenk || '';
+                    bVal = b.geschenk || '';
+                    break;
+                case 'fuer':
+                    aVal = a.fuer && a.fuer[0] ? KONTAKTE[a.fuer[0]]?.name || '' : '';
+                    bVal = b.fuer && b.fuer[0] ? KONTAKTE[b.fuer[0]]?.name || '' : '';
+                    break;
+                case 'von':
+                    aVal = a.von && a.von[0] ? KONTAKTE[a.von[0]]?.name || '' : '';
+                    bVal = b.von && b.von[0] ? KONTAKTE[b.von[0]]?.name || '' : '';
+                    break;
+                case 'gesamtkosten':
+                    aVal = parseFloat(a.gesamtkosten || 0);
+                    bVal = parseFloat(b.gesamtkosten || 0);
+                    break;
+                case 'eigeneKosten':
+                    aVal = parseFloat(a.eigeneKosten || 0);
+                    bVal = parseFloat(b.eigeneKosten || 0);
+                    break;
+                case 'shop':
+                    aVal = a.shop || '';
+                    bVal = b.shop || '';
+                    break;
+                case 'standort':
+                    aVal = a.standort || '';
+                    bVal = b.standort || '';
+                    break;
+                default:
+                    aVal = '';
+                    bVal = '';
+            }
+            
+            if (typeof aVal === 'number' && typeof bVal === 'number') {
+                return sortState.direction === 'asc' ? aVal - bVal : bVal - aVal;
+            } else {
+                const comparison = String(aVal).localeCompare(String(bVal));
+                return sortState.direction === 'asc' ? comparison : -comparison;
+            }
+        });
+    }
     
     if (geschenkeArray.length === 0) {
         tbody.innerHTML = `
@@ -1255,7 +1361,6 @@ function renderGeschenkeTabelle() {
     
     tbody.innerHTML = geschenkeArray.map(g => renderGeschenkRow(g)).join('');
     
-    // Add event listeners to checkboxes for export button state
     document.querySelectorAll('.gm-row-checkbox').forEach(checkbox => {
         checkbox.addEventListener('change', updateExportButtonState);
     });
@@ -3093,3 +3198,171 @@ window.createNewThema = async function() {
     }
 };
 
+// ========================================
+// SMART-SUGGEST SYSTEM & ERWEITERTE SUCHE
+// ========================================
+
+function updateGeschenkeSuggestions(term) {
+    const box = document.getElementById('gm-search-suggestions-box');
+    const list = document.getElementById('gm-search-suggestions-list');
+    
+    if (!term || !term.trim()) {
+        box?.classList.add('hidden');
+        selectedSuggestionIndex = -1;
+        return;
+    }
+
+    const lowerTerm = term.toLowerCase().trim();
+    list.innerHTML = '';
+    let hasHits = false;
+
+    const addSuggestion = (label, icon, filterType, subtext = "") => {
+        hasHits = true;
+        const li = document.createElement('li');
+        li.className = "px-3 py-2 hover:bg-pink-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2";
+        li.innerHTML = `
+            <span class="text-lg">${icon}</span>
+            <div class="flex-grow leading-tight">
+                <span class="font-bold text-gray-800 block">${label}</span>
+                ${subtext ? `<span class="text-xs text-gray-500">${subtext}</span>` : ''}
+            </div>
+        `;
+        li.onclick = () => addGeschenkeSearchFilter(filterType, lowerTerm, label);
+        list.appendChild(li);
+    };
+
+    const geschenkeArray = Object.values(GESCHENKE);
+
+    // Suche in allen Kategorien
+    const hasStatus = geschenkeArray.some(g => g.status?.toLowerCase().includes(lowerTerm) || STATUS_CONFIG[g.status]?.label?.toLowerCase().includes(lowerTerm));
+    if (hasStatus) addSuggestion(`Status: ${term}`, "📊", "status", "Suche in Status");
+
+    const hasFuer = geschenkeArray.some(g => g.fuer && Array.isArray(g.fuer) && g.fuer.some(id => KONTAKTE[id]?.name?.toLowerCase().includes(lowerTerm)));
+    if (hasFuer) addSuggestion(`Für: ${term}`, "🎁", "fuer", "Suche in Empfänger");
+
+    const hasVon = geschenkeArray.some(g => g.von && Array.isArray(g.von) && g.von.some(id => KONTAKTE[id]?.name?.toLowerCase().includes(lowerTerm)));
+    if (hasVon) addSuggestion(`Von: ${term}`, "👤", "von", "Suche in Schenker");
+
+    const hasGeschenk = geschenkeArray.some(g => g.geschenk?.toLowerCase().includes(lowerTerm));
+    if (hasGeschenk) addSuggestion(`Geschenk: ${term}`, "🎀", "geschenk", "Suche in Geschenk-Name");
+
+    const hasShop = geschenkeArray.some(g => g.shop?.toLowerCase().includes(lowerTerm));
+    if (hasShop) addSuggestion(`Shop: ${term}`, "🏪", "shop", "Suche in Shop");
+
+    const hasBezahltVon = geschenkeArray.some(g => g.bezahltVon && Array.isArray(g.bezahltVon) && g.bezahltVon.some(id => KONTAKTE[id]?.name?.toLowerCase().includes(lowerTerm)));
+    if (hasBezahltVon) addSuggestion(`Bezahlt von: ${term}`, "💰", "bezahltVon", "Suche in Zahler");
+
+    const hasBeteiligung = geschenkeArray.some(g => g.beteiligung && Array.isArray(g.beteiligung) && g.beteiligung.some(b => KONTAKTE[b.personId]?.name?.toLowerCase().includes(lowerTerm)));
+    if (hasBeteiligung) addSuggestion(`Beteiligung: ${term}`, "🤝", "beteiligung", "Suche in Beteiligten");
+
+    const hasGesamtkosten = geschenkeArray.some(g => parseFloat(g.gesamtkosten || 0).toFixed(2).includes(lowerTerm));
+    if (hasGesamtkosten) addSuggestion(`Gesamtkosten: ${term}`, "💶", "gesamtkosten", "Suche in Gesamtkosten");
+
+    const hasEigeneKosten = geschenkeArray.some(g => parseFloat(g.eigeneKosten || 0).toFixed(2).includes(lowerTerm));
+    if (hasEigeneKosten) addSuggestion(`Eigene Kosten: ${term}`, "💵", "eigeneKosten", "Suche in eigenen Kosten");
+
+    const hasBestellnummer = geschenkeArray.some(g => g.bestellnummer?.toLowerCase().includes(lowerTerm));
+    if (hasBestellnummer) addSuggestion(`Bestellnr: ${term}`, "#️⃣", "bestellnummer", "Suche in Bestellnummern");
+
+    const hasRechnungsnummer = geschenkeArray.some(g => g.rechnungsnummer?.toLowerCase().includes(lowerTerm));
+    if (hasRechnungsnummer) addSuggestion(`Rechnungsnr: ${term}`, "📄", "rechnungsnummer", "Suche in Rechnungsnummern");
+
+    const hasNotizen = geschenkeArray.some(g => g.notizen?.toLowerCase().includes(lowerTerm));
+    if (hasNotizen) addSuggestion(`Notizen: ${term}`, "📝", "notizen", "Suche in Notizen");
+
+    const hasSollKonto = geschenkeArray.some(g => ZAHLUNGSARTEN[g.sollBezahlung]?.label?.toLowerCase().includes(lowerTerm));
+    if (hasSollKonto) addSuggestion(`Soll-Konto: ${term}`, "🏦", "sollkonto", "Suche in Soll-Konten");
+
+    const hasIstKonto = geschenkeArray.some(g => ZAHLUNGSARTEN[g.istBezahlung]?.label?.toLowerCase().includes(lowerTerm));
+    if (hasIstKonto) addSuggestion(`Ist-Konto: ${term}`, "💳", "istkonto", "Suche in Ist-Konten");
+
+    const hasStandort = geschenkeArray.some(g => g.standort?.toLowerCase().includes(lowerTerm));
+    if (hasStandort) addSuggestion(`Standort: ${term}`, "📍", "standort", "Suche in Standorten");
+
+    addSuggestion(`Alles: "${term}"`, "🔍", "all", "Volltextsuche überall");
+
+    if (hasHits) box?.classList.remove('hidden');
+    else box?.classList.add('hidden');
+}
+
+function updateSuggestionHighlight(suggestions) {
+    suggestions.forEach((item, index) => {
+        if (index === selectedSuggestionIndex) {
+            item.classList.add('bg-pink-100');
+            item.scrollIntoView({ block: 'nearest' });
+        } else {
+            item.classList.remove('bg-pink-100');
+        }
+    });
+}
+
+function addGeschenkeSearchFilter(filterType, term, label) {
+    const negateCheckbox = document.getElementById('filter-negate-checkbox');
+    const negate = negateCheckbox?.checked || false;
+
+    activeFilters.push({ category: filterType, value: term, negate: negate, label: label, id: Date.now() });
+
+    const searchInput = document.getElementById('search-geschenke');
+    if (searchInput) searchInput.value = '';
+    if (negateCheckbox) negateCheckbox.checked = false;
+
+    document.getElementById('gm-search-suggestions-box')?.classList.add('hidden');
+    selectedSuggestionIndex = -1;
+
+    renderActiveFilters();
+    renderGeschenkeTabelle();
+}
+
+function sortGeschenkeBy(key) {
+    if (sortState.key === key) {
+        sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortState.key = key;
+        sortState.direction = 'asc';
+    }
+    updateSortIndicators();
+    renderGeschenkeTabelle();
+    saveUiSettings();
+}
+
+function updateSortIndicators() {
+    document.querySelectorAll('[data-sort-key]').forEach(th => {
+        const indicator = th.querySelector('.sort-indicator');
+        if (indicator) indicator.remove();
+    });
+
+    if (sortState.key) {
+        const th = document.querySelector(`[data-sort-key="${sortState.key}"]`);
+        if (th) {
+            const indicator = document.createElement('span');
+            indicator.className = 'sort-indicator ml-1';
+            indicator.textContent = sortState.direction === 'asc' ? '▲' : '▼';
+            th.appendChild(indicator);
+        }
+    }
+}
+
+async function saveUiSettings() {
+    if (!geschenkeSettingsRef) return;
+    try {
+        await setDoc(geschenkeSettingsRef, { sortState }, { merge: true });
+        console.log('✅ UI-Einstellungen gespeichert');
+    } catch (e) {
+        console.error('❌ Fehler beim Speichern:', e);
+    }
+}
+
+async function loadUiSettings() {
+    if (!geschenkeSettingsRef) return;
+    try {
+        const docSnap = await getDoc(geschenkeSettingsRef);
+        if (docSnap.exists() && docSnap.data().sortState) {
+            sortState = docSnap.data().sortState;
+            updateSortIndicators();
+        }
+    } catch (e) {
+        console.error('❌ Fehler beim Laden:', e);
+    }
+}
+
+window.sortGeschenkeBy = sortGeschenkeBy;
