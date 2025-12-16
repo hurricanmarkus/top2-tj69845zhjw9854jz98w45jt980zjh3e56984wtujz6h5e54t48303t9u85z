@@ -736,6 +736,10 @@ export function navigate(targetViewName) {
     if (targetViewName === 'geschenkemanagement') {
         initializeGeschenkemanagement();
     }
+
+    if (targetViewName === 'terminplaner') {
+        initializeTerminplanerView();
+    }
 }
 
 
