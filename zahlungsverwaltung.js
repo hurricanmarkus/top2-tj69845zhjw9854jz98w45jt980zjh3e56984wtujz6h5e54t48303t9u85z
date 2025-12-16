@@ -1,4 +1,4 @@
-// // @ts-check
+// // @ts-check 
 
 import { alertUser, db, currentUser, USERS, setButtonLoading, GUEST_MODE, navigate, appId } from './haupteingang.js';
 import {
