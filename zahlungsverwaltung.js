@@ -410,6 +410,7 @@ function setupSettingsListeners() {
 
 
 function listenForPayments() {
+    console.log('🔧 listenForPayments gestartet');
     if (unsubscribePayments) unsubscribePayments();
     const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
 
@@ -417,6 +418,7 @@ function listenForPayments() {
     const q = query(paymentsRef, where('involvedUserIds', 'array-contains', currentUser.mode));
 
     unsubscribePayments = onSnapshot(q, (snapshot) => {
+        console.log('🔧 Payments Snapshot empfangen, Anzahl:', snapshot.size);
         allPayments = [];
         snapshot.forEach(doc => {
             const data = doc.data();
