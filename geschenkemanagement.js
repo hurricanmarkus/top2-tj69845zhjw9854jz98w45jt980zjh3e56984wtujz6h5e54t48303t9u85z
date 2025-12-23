@@ -1232,83 +1232,159 @@ function renderGeschenkeTabelle() {
     
     let geschenkeArray = Object.values(GESCHENKE);
     
-    // Gruppiere Filter nach Kategorie für OR-Verknüpfung
+    // Gruppiere Filter nach Kategorie und negate-Status
     const filtersByCategory = {};
     activeFilters.forEach(filter => {
-        if (!filtersByCategory[filter.category]) {
-            filtersByCategory[filter.category] = [];
+        const key = `${filter.category}_${filter.negate ? 'negate' : 'normal'}`;
+        if (!filtersByCategory[key]) {
+            filtersByCategory[key] = [];
         }
-        filtersByCategory[filter.category].push(filter);
+        filtersByCategory[key].push(filter);
     });
     
-    // Wende Filter an: OR innerhalb einer Kategorie, AND zwischen Kategorien
+    // Wende Filter an: 
+    // - Normale Filter: OR innerhalb Kategorie, AND zwischen Kategorien
+    // - Negate Filter: AND innerhalb Kategorie, AND zwischen Kategorien
     geschenkeArray = geschenkeArray.filter(g => {
-        return Object.entries(filtersByCategory).every(([category, filters]) => {
-            return filters.some(filter => {
-                const value = filter.value.toLowerCase();
-                let matches = false;
-                
-                switch(category) {
-                    case 'status':
-                        matches = g.status?.toLowerCase().includes(value) || STATUS_CONFIG[g.status]?.label?.toLowerCase().includes(value);
-                        break;
-                    case 'fuer':
-                        matches = g.fuer && Array.isArray(g.fuer) && g.fuer.some(id => KONTAKTE[id]?.name?.toLowerCase().includes(value));
-                        break;
-                    case 'von':
-                        matches = g.von && Array.isArray(g.von) && g.von.some(id => KONTAKTE[id]?.name?.toLowerCase().includes(value));
-                        break;
-                    case 'geschenk':
-                        matches = g.geschenk?.toLowerCase().includes(value);
-                        break;
-                    case 'shop':
-                        matches = g.shop?.toLowerCase().includes(value);
-                        break;
-                    case 'bezahltVon':
-                        matches = g.bezahltVon && Array.isArray(g.bezahltVon) && g.bezahltVon.some(id => KONTAKTE[id]?.name?.toLowerCase().includes(value));
-                        break;
-                    case 'beteiligung':
-                        matches = g.beteiligung && Array.isArray(g.beteiligung) && g.beteiligung.some(b => KONTAKTE[b.personId]?.name?.toLowerCase().includes(value));
-                        break;
-                    case 'gesamtkosten':
-                        matches = parseFloat(g.gesamtkosten || 0).toFixed(2).includes(value.replace(',', '.'));
-                        break;
-                    case 'eigeneKosten':
-                        matches = parseFloat(g.eigeneKosten || 0).toFixed(2).includes(value.replace(',', '.'));
-                        break;
-                    case 'bestellnummer':
-                        matches = g.bestellnummer?.toLowerCase().includes(value);
-                        break;
-                    case 'rechnungsnummer':
-                        matches = g.rechnungsnummer?.toLowerCase().includes(value);
-                        break;
-                    case 'notizen':
-                        matches = g.notizen?.toLowerCase().includes(value);
-                        break;
-                    case 'sollkonto':
-                        matches = ZAHLUNGSARTEN[g.sollBezahlung]?.label?.toLowerCase().includes(value);
-                        break;
-                    case 'istkonto':
-                        matches = ZAHLUNGSARTEN[g.istBezahlung]?.label?.toLowerCase().includes(value);
-                        break;
-                    case 'kontodifferenz':
-                        const hatDifferenz = g.sollBezahlung && g.istBezahlung && g.sollBezahlung !== g.istBezahlung;
-                        matches = value.includes('ja') || value.includes('mit') ? hatDifferenz : !hatDifferenz;
-                        break;
-                    case 'standort':
-                        matches = g.standort?.toLowerCase().includes(value);
-                        break;
-                    case 'all':
-                        matches = g.geschenk?.toLowerCase().includes(value) || g.shop?.toLowerCase().includes(value) || 
-                                  g.notizen?.toLowerCase().includes(value) || g.bestellnummer?.toLowerCase().includes(value) ||
-                                  g.rechnungsnummer?.toLowerCase().includes(value) || g.standort?.toLowerCase().includes(value);
-                        break;
-                    default:
-                        matches = true;
-                }
-                
-                return filter.negate ? !matches : matches;
-            });
+        return Object.entries(filtersByCategory).every(([key, filters]) => {
+            const isNegate = key.endsWith('_negate');
+            const category = key.replace(/_negate$|_normal$/, '');
+            
+            if (isNegate) {
+                // Bei NICHT-Filtern müssen ALLE Filter erfüllt sein (AND)
+                return filters.every(filter => {
+                    const value = filter.value.toLowerCase();
+                    let matches = false;
+                    
+                    switch(category) {
+                        case 'status':
+                            matches = g.status?.toLowerCase().includes(value) || STATUS_CONFIG[g.status]?.label?.toLowerCase().includes(value);
+                            break;
+                        case 'fuer':
+                            matches = g.fuer && Array.isArray(g.fuer) && g.fuer.some(id => KONTAKTE[id]?.name?.toLowerCase().includes(value));
+                            break;
+                        case 'von':
+                            matches = g.von && Array.isArray(g.von) && g.von.some(id => KONTAKTE[id]?.name?.toLowerCase().includes(value));
+                            break;
+                        case 'geschenk':
+                            matches = g.geschenk?.toLowerCase().includes(value);
+                            break;
+                        case 'shop':
+                            matches = g.shop?.toLowerCase().includes(value);
+                            break;
+                        case 'bezahltVon':
+                            matches = g.bezahltVon && Array.isArray(g.bezahltVon) && g.bezahltVon.some(id => KONTAKTE[id]?.name?.toLowerCase().includes(value));
+                            break;
+                        case 'beteiligung':
+                            matches = g.beteiligung && Array.isArray(g.beteiligung) && g.beteiligung.some(b => KONTAKTE[b.personId]?.name?.toLowerCase().includes(value));
+                            break;
+                        case 'gesamtkosten':
+                            matches = parseFloat(g.gesamtkosten || 0).toFixed(2).includes(value.replace(',', '.'));
+                            break;
+                        case 'eigeneKosten':
+                            matches = parseFloat(g.eigeneKosten || 0).toFixed(2).includes(value.replace(',', '.'));
+                            break;
+                        case 'bestellnummer':
+                            matches = g.bestellnummer?.toLowerCase().includes(value);
+                            break;
+                        case 'rechnungsnummer':
+                            matches = g.rechnungsnummer?.toLowerCase().includes(value);
+                            break;
+                        case 'notizen':
+                            matches = g.notizen?.toLowerCase().includes(value);
+                            break;
+                        case 'sollkonto':
+                            matches = ZAHLUNGSARTEN[g.sollBezahlung]?.label?.toLowerCase().includes(value);
+                            break;
+                        case 'istkonto':
+                            matches = ZAHLUNGSARTEN[g.istBezahlung]?.label?.toLowerCase().includes(value);
+                            break;
+                        case 'kontodifferenz':
+                            const hatDifferenz = g.sollBezahlung && g.istBezahlung && g.sollBezahlung !== g.istBezahlung;
+                            matches = value.includes('ja') || value.includes('mit') ? hatDifferenz : !hatDifferenz;
+                            break;
+                        case 'standort':
+                            matches = g.standort?.toLowerCase().includes(value);
+                            break;
+                        case 'all':
+                            matches = g.geschenk?.toLowerCase().includes(value) || g.shop?.toLowerCase().includes(value) || 
+                                      g.notizen?.toLowerCase().includes(value) || g.bestellnummer?.toLowerCase().includes(value) ||
+                                      g.rechnungsnummer?.toLowerCase().includes(value) || g.standort?.toLowerCase().includes(value);
+                            break;
+                        default:
+                            matches = true;
+                    }
+                    
+                    return !matches;
+                });
+            } else {
+                // Bei normalen Filtern muss MINDESTENS EINER matchen (OR)
+                return filters.some(filter => {
+                    const value = filter.value.toLowerCase();
+                    let matches = false;
+                    
+                    switch(category) {
+                        case 'status':
+                            matches = g.status?.toLowerCase().includes(value) || STATUS_CONFIG[g.status]?.label?.toLowerCase().includes(value);
+                            break;
+                        case 'fuer':
+                            matches = g.fuer && Array.isArray(g.fuer) && g.fuer.some(id => KONTAKTE[id]?.name?.toLowerCase().includes(value));
+                            break;
+                        case 'von':
+                            matches = g.von && Array.isArray(g.von) && g.von.some(id => KONTAKTE[id]?.name?.toLowerCase().includes(value));
+                            break;
+                        case 'geschenk':
+                            matches = g.geschenk?.toLowerCase().includes(value);
+                            break;
+                        case 'shop':
+                            matches = g.shop?.toLowerCase().includes(value);
+                            break;
+                        case 'bezahltVon':
+                            matches = g.bezahltVon && Array.isArray(g.bezahltVon) && g.bezahltVon.some(id => KONTAKTE[id]?.name?.toLowerCase().includes(value));
+                            break;
+                        case 'beteiligung':
+                            matches = g.beteiligung && Array.isArray(g.beteiligung) && g.beteiligung.some(b => KONTAKTE[b.personId]?.name?.toLowerCase().includes(value));
+                            break;
+                        case 'gesamtkosten':
+                            matches = parseFloat(g.gesamtkosten || 0).toFixed(2).includes(value.replace(',', '.'));
+                            break;
+                        case 'eigeneKosten':
+                            matches = parseFloat(g.eigeneKosten || 0).toFixed(2).includes(value.replace(',', '.'));
+                            break;
+                        case 'bestellnummer':
+                            matches = g.bestellnummer?.toLowerCase().includes(value);
+                            break;
+                        case 'rechnungsnummer':
+                            matches = g.rechnungsnummer?.toLowerCase().includes(value);
+                            break;
+                        case 'notizen':
+                            matches = g.notizen?.toLowerCase().includes(value);
+                            break;
+                        case 'sollkonto':
+                            matches = ZAHLUNGSARTEN[g.sollBezahlung]?.label?.toLowerCase().includes(value);
+                            break;
+                        case 'istkonto':
+                            matches = ZAHLUNGSARTEN[g.istBezahlung]?.label?.toLowerCase().includes(value);
+                            break;
+                        case 'kontodifferenz':
+                            const hatDifferenz2 = g.sollBezahlung && g.istBezahlung && g.sollBezahlung !== g.istBezahlung;
+                            matches = value.includes('ja') || value.includes('mit') ? hatDifferenz2 : !hatDifferenz2;
+                            break;
+                        case 'standort':
+                            matches = g.standort?.toLowerCase().includes(value);
+                            break;
+                        case 'all':
+                            matches = g.geschenk?.toLowerCase().includes(value) || g.shop?.toLowerCase().includes(value) || 
+                                      g.notizen?.toLowerCase().includes(value) || g.bestellnummer?.toLowerCase().includes(value) ||
+                                      g.rechnungsnummer?.toLowerCase().includes(value) || g.standort?.toLowerCase().includes(value);
+                            break;
+                        default:
+                            matches = true;
+                    }
+                    
+                    return matches;
+                });
+            }
         });
     });
     
@@ -1580,14 +1656,16 @@ function renderModalSelects(geschenk = null) {
     renderPersonenCheckboxes('gm-beteiligung-checkboxes', 'gm-beteiligung', geschenk?.beteiligung || []);
     
     // Bezahlt von (Single Select)
-    const kontakteOptions = Object.values(KONTAKTE).map(k =>
-        `<option value="${k.id}">${k.name}${k.istEigenePerson ? ' (Ich)' : ''}</option>`
-    ).join('');
+    const selectedBezahltVon = geschenk?.bezahltVon;
+    const kontakteOptions = Object.values(KONTAKTE)
+        .filter(k => !k.archiviert || k.id === selectedBezahltVon)
+        .map(k => `<option value="${k.id}">${k.name}${k.istEigenePerson ? ' (Ich)' : ''}${k.archiviert ? ' (Archiviert)' : ''}</option>`)
+        .join('');
     
     const bezahltVonSelect = document.getElementById('gm-bezahlt-von');
     if (bezahltVonSelect) {
         bezahltVonSelect.innerHTML = '<option value="">-- Auswählen --</option>' + kontakteOptions;
-        if (geschenk?.bezahltVon) bezahltVonSelect.value = geschenk.bezahltVon;
+        if (selectedBezahltVon) bezahltVonSelect.value = selectedBezahltVon;
     }
     
     // Zahlungsarten (beide nutzen dieselbe Liste)
@@ -1608,11 +1686,13 @@ function renderPersonenCheckboxes(containerId, fieldName, selectedValues) {
     const container = document.getElementById(containerId);
     if (!container) return;
     
-    const kontakte = Object.values(KONTAKTE).sort((a, b) => {
-        if (a.istEigenePerson) return -1;
-        if (b.istEigenePerson) return 1;
-        return a.name.localeCompare(b.name);
-    });
+    const kontakte = Object.values(KONTAKTE)
+        .filter(k => !k.archiviert || selectedValues.includes(k.id))
+        .sort((a, b) => {
+            if (a.istEigenePerson) return -1;
+            if (b.istEigenePerson) return 1;
+            return a.name.localeCompare(b.name);
+        });
     
     container.innerHTML = kontakte.map(k => {
         const isChecked = selectedValues.includes(k.id);
@@ -1623,7 +1703,7 @@ function renderPersonenCheckboxes(containerId, fieldName, selectedValues) {
                     onchange="window.updateEigeneKostenAuto()"
                     class="w-4 h-4 text-pink-600 rounded focus:ring-pink-500">
                 <span class="text-sm ${k.istEigenePerson ? 'font-bold text-pink-600' : 'text-gray-700'}">
-                    ${k.name}${k.istEigenePerson ? ' (Ich)' : ''}
+                    ${k.name}${k.istEigenePerson ? ' (Ich)' : ''}${k.archiviert ? ' (Archiviert)' : ''}
                 </span>
             </label>
         `;
@@ -2217,22 +2297,28 @@ function renderKontaktbuch() {
     const kontakteArray = Object.values(KONTAKTE).sort((a, b) => {
         if (a.istEigenePerson) return -1;
         if (b.istEigenePerson) return 1;
+        if (a.archiviert && !b.archiviert) return 1;
+        if (!a.archiviert && b.archiviert) return -1;
         return a.name.localeCompare(b.name);
     });
     
     container.innerHTML = kontakteArray.map(k => `
-        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg ${k.istEigenePerson ? 'border-2 border-pink-400' : ''}">
+        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg ${k.istEigenePerson ? 'border-2 border-pink-400' : ''} ${k.archiviert ? 'opacity-50' : ''}">
             <div class="flex items-center gap-3">
                 <div class="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
                     ${k.name.charAt(0).toUpperCase()}
                 </div>
                 <span class="font-medium">${k.name}</span>
                 ${k.istEigenePerson ? '<span class="text-xs bg-pink-200 text-pink-800 px-2 py-0.5 rounded-full">Ich</span>' : ''}
+                ${k.archiviert ? '<span class="text-xs bg-gray-300 text-gray-700 px-2 py-0.5 rounded-full ml-2">Archiviert</span>' : ''}
             </div>
             ${!k.istEigenePerson ? `
                 <div class="flex gap-2">
                     <button onclick="window.editKontakt('${k.id}')" class="text-blue-500 hover:text-blue-700 p-1" title="Bearbeiten">
                         ✏️
+                    </button>
+                    <button onclick="window.toggleArchiveKontakt('${k.id}')" class="text-yellow-500 hover:text-yellow-700 p-1" title="${k.archiviert ? 'Wiederherstellen' : 'Archivieren'}">
+                        ${k.archiviert ? '📤' : '📥'}
                     </button>
                     <button onclick="window.deleteKontakt('${k.id}')" class="text-red-500 hover:text-red-700 p-1" title="Löschen">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2705,7 +2791,7 @@ window.exportToPDF = function() {
 
 window.openAddPersonToThemaModal = function() {
     const verfuegbareKontakte = Object.values(KONTAKTE)
-        .filter(k => !THEMEN[currentThemaId]?.personen?.includes(k.id));
+        .filter(k => !k.archiviert && !THEMEN[currentThemaId]?.personen?.includes(k.id));
     
     if (verfuegbareKontakte.length === 0) {
         alertUser('Alle Kontakte sind bereits hinzugefügt oder es gibt keine Kontakte. Erstelle neue Kontakte in den Einstellungen.', 'info');
@@ -3065,6 +3151,19 @@ window.editKontakt = async function(id) {
     try {
         await updateDoc(doc(geschenkeKontakteRef, id), { name: newName.trim() });
         alertUser('Kontakt aktualisiert!', 'success');
+    } catch (e) {
+        alertUser('Fehler: ' + e.message, 'error');
+    }
+};
+
+window.toggleArchiveKontakt = async function(id) {
+    const kontakt = KONTAKTE[id];
+    if (!kontakt) return;
+    
+    try {
+        const kontaktDocRef = doc(geschenkeKontakteRef, id);
+        await updateDoc(kontaktDocRef, { archiviert: !kontakt.archiviert });
+        alertUser(kontakt.archiviert ? 'Kontakt wiederhergestellt!' : 'Kontakt archiviert!', 'success');
     } catch (e) {
         alertUser('Fehler: ' + e.message, 'error');
     }
