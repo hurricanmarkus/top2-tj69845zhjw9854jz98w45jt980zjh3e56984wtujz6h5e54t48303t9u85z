@@ -2033,8 +2033,11 @@
 
                 <!-- Monatsübersicht -->
                 <div class="bg-white rounded-lg shadow p-3 mb-3">
-                    <h3 class="text-sm font-bold text-gray-700 mb-2">Monatsübersicht (Gutschrift / Belastung)</h3>
-                    <div id="hz-monats-uebersicht" class="overflow-x-auto text-xs">
+                    <div class="flex items-center justify-between mb-2 cursor-pointer" onclick="document.getElementById('hz-monats-uebersicht').classList.toggle('hidden'); this.querySelector('span').textContent = document.getElementById('hz-monats-uebersicht').classList.contains('hidden') ? '▶' : '▼';">
+                        <h3 class="text-sm font-bold text-gray-700">Monatsübersicht (Gutschrift / Belastung)</h3>
+                        <span class="text-gray-500 font-bold">▶</span>
+                    </div>
+                    <div id="hz-monats-uebersicht" class="overflow-x-auto text-xs hidden">
                         <!-- Wird dynamisch gefüllt -->
                     </div>
                 </div>
@@ -2254,6 +2257,11 @@
                 <!-- Such- und Filterleiste -->
                 <div class="bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
                     <div class="flex flex-wrap gap-2 mb-3">
+                        <label class="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition text-sm">
+                            <input type="checkbox" id="filter-negate-checkbox" class="w-4 h-4 text-pink-600 rounded">
+                            <span class="font-bold text-gray-700">NICHT</span>
+                        </label>
+                        
                         <div class="flex-1 min-w-[200px] relative">
                             <input type="text" id="search-geschenke" placeholder="🔍 Suchbegriff eingeben..." 
                                 class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:ring-2 focus:ring-pink-200 text-sm">
@@ -2263,11 +2271,6 @@
                                 <ul id="gm-search-suggestions-list" class="text-sm"></ul>
                             </div>
                         </div>
-                        
-                        <label class="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition text-sm">
-                            <input type="checkbox" id="filter-negate-checkbox" class="w-4 h-4 text-pink-600 rounded">
-                            <span class="font-bold text-gray-700">NICHT</span>
-                        </label>
                         
                         <button id="btn-add-geschenke-filter" class="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 font-bold transition text-sm">
                             ➕ Filter hinzufügen

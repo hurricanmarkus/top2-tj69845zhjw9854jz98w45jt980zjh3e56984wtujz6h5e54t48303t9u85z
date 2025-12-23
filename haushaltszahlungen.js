@@ -1265,22 +1265,22 @@ function renderMonatsUebersicht(stats) {
             </thead>
             <tbody>
                 <tr>
-                    <td class="p-2 font-bold text-green-700 border bg-green-50">📥 Gutschrift</td>
+                    <td class="p-2 font-bold text-green-700 border">📥 Gutschrift</td>
                     ${monate.map(m => {
                         const wert = stats.summenProMonat.gutschrift[m] || 0;
-                        return `<td class="p-1 text-center border ${wert > 0 ? 'bg-green-100 text-green-700 font-medium' : 'text-gray-400'}">${wert > 0 ? formatCurrency(wert) : '-'}</td>`;
+                        return `<td class="p-1 text-center border ${wert > 0 ? 'text-green-700 font-medium' : 'text-gray-400'}">${wert > 0 ? formatCurrency(wert) : '-'}</td>`;
                     }).join('')}
-                    <td class="p-2 text-center font-bold text-green-700 border bg-green-100">${formatCurrency(stats.summenJaehrlich?.gutschrift || 0)}</td>
+                    <td class="p-2 text-center font-bold text-green-700 border">${formatCurrency(stats.summenJaehrlich?.gutschrift || 0)}</td>
                 </tr>
                 <tr>
-                    <td class="p-2 font-bold text-red-700 border bg-red-50">📤 Belastung</td>
+                    <td class="p-2 font-bold text-red-700 border">📤 Belastung</td>
                     ${monate.map(m => {
                         const wert = stats.summenProMonat.belastung[m] || 0;
-                        return `<td class="p-1 text-center border ${wert > 0 ? 'bg-red-100 text-red-700 font-medium' : 'text-gray-400'}">${wert > 0 ? formatCurrency(wert) : '-'}</td>`;
+                        return `<td class="p-1 text-center border ${wert > 0 ? 'text-red-700 font-medium' : 'text-gray-400'}">${wert > 0 ? formatCurrency(wert) : '-'}</td>`;
                     }).join('')}
-                    <td class="p-2 text-center font-bold text-red-700 border bg-red-100">${formatCurrency(stats.summenJaehrlich?.belastung || 0)}</td>
+                    <td class="p-2 text-center font-bold text-red-700 border">${formatCurrency(stats.summenJaehrlich?.belastung || 0)}</td>
                 </tr>
-                <tr class="bg-gray-50">
+                <tr>
                     <td class="p-2 font-bold text-gray-700 border">📊 Saldo</td>
                     ${monate.map(m => {
                         const gutschrift = stats.summenProMonat.gutschrift[m] || 0;
@@ -1289,7 +1289,7 @@ function renderMonatsUebersicht(stats) {
                         const color = saldo > 0 ? 'text-green-600' : saldo < 0 ? 'text-red-600' : 'text-gray-400';
                         return `<td class="p-1 text-center border ${color} font-medium">${saldo !== 0 ? formatCurrency(saldo) : '-'}</td>`;
                     }).join('')}
-                    <td class="p-2 text-center font-bold border ${(stats.summenJaehrlich?.gutschrift || 0) - (stats.summenJaehrlich?.belastung || 0) >= 0 ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}">${formatCurrency((stats.summenJaehrlich?.gutschrift || 0) - (stats.summenJaehrlich?.belastung || 0))}</td>
+                    <td class="p-2 text-center font-bold border ${(stats.summenJaehrlich?.gutschrift || 0) - (stats.summenJaehrlich?.belastung || 0) >= 0 ? 'text-green-700' : 'text-red-700'}">${formatCurrency((stats.summenJaehrlich?.gutschrift || 0) - (stats.summenJaehrlich?.belastung || 0))}</td>
                 </tr>
             </tbody>
         </table>
