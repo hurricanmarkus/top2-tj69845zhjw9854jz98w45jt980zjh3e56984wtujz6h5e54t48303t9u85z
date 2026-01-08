@@ -345,8 +345,7 @@ async function acceptVertragsEinladung(einladungId) {
         const overlay = document.getElementById('vvEinladungenOverlay');
         if (overlay) overlay.remove();
         
-        // Themen neu laden
-        await loadVertraegeThemen();
+        // Themen werden durch onSnapshot automatisch aktualisiert
         
         alertUser('Einladung angenommen! Das Thema ist jetzt verfügbar.', 'success');
     } catch (error) {
