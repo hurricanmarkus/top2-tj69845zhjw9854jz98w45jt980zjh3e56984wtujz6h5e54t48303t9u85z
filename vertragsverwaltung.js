@@ -40,6 +40,7 @@ let currentThemaId = null;
 let currentFilter = { rhythmus: '', absicht: '' };
 let searchTerm = '';
 let unsubscribeVertraege = null;
+let unsubscribeThemen = null;
 
 // Zugriffsrechte-Konfiguration
 const ZUGRIFFSRECHTE = {
@@ -87,7 +88,7 @@ export async function initializeVertragsverwaltung() {
         console.log("  - Themen:", vertraegeThemenRef.path);
         console.log("  - Einladungen:", vertraegeEinladungenRef.path);
         
-        await loadVertraegeThemen();
+        loadVertraegeThemen();
         loadVertraegeEinladungen();
     }
 
@@ -97,14 +98,19 @@ export async function initializeVertragsverwaltung() {
 // ========================================
 // THEMEN-SYSTEM (REVISIERT)
 // ========================================
-async function loadVertraegeThemen() {
-    try {
-        console.log("🔄 Lade Vertrags-Themen...");
-        const snapshot = await getDocs(vertraegeThemenRef);
+function loadVertraegeThemen() {
+    // Vorherigen Listener entfernen falls vorhanden
+    if (unsubscribeThemen) {
+        unsubscribeThemen();
+    }
+    
+    const userId = currentUser?.mode || currentUser?.displayName;
+    console.log("🔄 Starte Echtzeit-Listener für Vertrags-Themen...");
+    console.log("👤 Aktueller User-ID:", userId);
+    
+    // Echtzeit-Listener für Live-Updates
+    unsubscribeThemen = onSnapshot(vertraegeThemenRef, async (snapshot) => {
         VERTRAEGE_THEMEN = {};
-        
-        const userId = currentUser?.mode || currentUser?.displayName;
-        console.log("👤 Aktueller User-ID:", userId);
         
         snapshot.forEach((docSnap) => {
             const thema = { id: docSnap.id, ...docSnap.data() };
@@ -115,17 +121,16 @@ async function loadVertraegeThemen() {
             
             if (isCreator || isMember) {
                 VERTRAEGE_THEMEN[docSnap.id] = thema;
-                console.log(`  📁 Thema: "${thema.name}" (Ersteller: ${isCreator}, Mitglied: ${isMember})`);
             }
         });
         
-        console.log(`✅ ${Object.keys(VERTRAEGE_THEMEN).length} Vertrags-Themen geladen`);
+        console.log(`✅ ${Object.keys(VERTRAEGE_THEMEN).length} Vertrags-Themen geladen (Live-Update)`);
         
         // WICHTIG: Nur Standard-Thema erstellen wenn WIRKLICH keines existiert
-        // Prüfe ob der User überhaupt schon ein "Privat"-Thema hat
         if (Object.keys(VERTRAEGE_THEMEN).length === 0) {
             console.log("⚠️ Keine Themen für diesen User - erstelle Standard-Thema");
             await createDefaultVertragsThema();
+            return; // Nach Erstellung wird der Listener erneut ausgelöst
         }
         
         // Gespeichertes Thema oder erstes Thema auswählen
@@ -133,17 +138,18 @@ async function loadVertraegeThemen() {
         
         if (savedThemaId && VERTRAEGE_THEMEN[savedThemaId]) {
             currentThemaId = savedThemaId;
-        } else {
+        } else if (!currentThemaId || !VERTRAEGE_THEMEN[currentThemaId]) {
             currentThemaId = Object.keys(VERTRAEGE_THEMEN)[0];
         }
         
         console.log(`✅ Aktives Thema: ${VERTRAEGE_THEMEN[currentThemaId]?.name}`);
         
         renderVertraegeThemenDropdown();
+        renderThemenListe();
         updateCollectionForVertragsThema();
-    } catch (e) {
-        console.error("❌ Fehler beim Laden der Vertrags-Themen:", e);
-    }
+    }, (error) => {
+        console.error("❌ Fehler beim Laden der Vertrags-Themen:", error);
+    });
 }
 
 async function createDefaultVertragsThema() {
@@ -577,23 +583,13 @@ function closeThemaMitgliederModal() {
 
 function renderMitgliederListe(thema) {
     const container = document.getElementById('vv-mitglieder-liste');
-    if (!container) {
-        console.error("renderMitgliederListe: Container 'vv-mitglieder-liste' nicht gefunden!");
-        return;
-    }
+    if (!container) return;
     
     const mitglieder = thema.mitglieder || [];
     const currentUserId = currentUser?.mode || currentUser?.displayName;
     
     // Prüfe ob aktueller User der Ersteller des Themas ist
     const amICreator = thema.erstellerId === currentUserId || thema.ersteller === currentUser?.displayName;
-    
-    console.log("renderMitgliederListe Debug:");
-    console.log("  currentUserId:", currentUserId);
-    console.log("  thema.erstellerId:", thema.erstellerId);
-    console.log("  thema.ersteller:", thema.ersteller);
-    console.log("  amICreator:", amICreator);
-    console.log("  mitglieder:", mitglieder);
     
     container.innerHTML = mitglieder.map((m, index) => {
         // Prüfe ob dieses Mitglied der Ersteller ist
@@ -602,13 +598,10 @@ function renderMitgliederListe(thema) {
         const isMe = m.userId === currentUserId;
         const zugriffsrecht = ZUGRIFFSRECHTE[m.zugriffsrecht] || ZUGRIFFSRECHTE.lesen;
         
-        console.log(`  Mitglied ${index}: ${m.name}, userId: ${m.userId}, isMemberCreator: ${isMemberCreator}, isMe: ${isMe}`);
-        
         // Löschen-Button: Ersteller kann alle außer sich selbst löschen
         // Austreten-Button: Eingeladene können selbst austreten
         let actionButton = '';
         if (amICreator && !isMemberCreator) {
-            console.log(`    -> Zeige Löschen-Button für ${m.name}`);
             // Ersteller kann andere Mitglieder entfernen
             actionButton = `
                 <button data-remove-index="${index}" class="btn-remove-mitglied p-1 text-red-500 hover:bg-red-100 rounded" title="Mitglied entfernen">
@@ -644,24 +637,20 @@ function renderMitgliederListe(thema) {
     container.querySelectorAll('.btn-remove-mitglied').forEach(btn => {
         btn.addEventListener('click', async function() {
             const index = parseInt(this.getAttribute('data-remove-index'), 10);
-            console.log("Löschen-Button geklickt, Index:", index);
             
             if (!currentEditingThemaId) {
-                console.error("removeMitglied: Keine currentEditingThemaId");
                 alertUser('Fehler: Kein Thema ausgewählt.', 'error');
                 return;
             }
             
             const thema = VERTRAEGE_THEMEN[currentEditingThemaId];
             if (!thema || !thema.mitglieder) {
-                console.error("removeMitglied: Thema oder Mitglieder nicht gefunden");
                 alertUser('Fehler: Thema nicht gefunden.', 'error');
                 return;
             }
             
             const mitglied = thema.mitglieder[index];
             if (!mitglied) {
-                console.error("removeMitglied: Mitglied nicht gefunden bei Index:", index);
                 alertUser('Fehler: Mitglied nicht gefunden.', 'error');
                 return;
             }
@@ -671,14 +660,11 @@ function renderMitgliederListe(thema) {
             }
             
             try {
-                console.log("Entferne Mitglied...");
                 const updatedMitglieder = thema.mitglieder.filter((_, i) => i !== index);
                 
                 await updateDoc(doc(vertraegeThemenRef, currentEditingThemaId), {
                     mitglieder: updatedMitglieder
                 });
-                
-                console.log("Firebase Update erfolgreich");
                 
                 VERTRAEGE_THEMEN[currentEditingThemaId].mitglieder = updatedMitglieder;
                 renderMitgliederListe(VERTRAEGE_THEMEN[currentEditingThemaId]);
@@ -766,64 +752,6 @@ async function addMitgliedToThema() {
     } catch (error) {
         console.error("Fehler beim Senden der Einladung:", error);
         alertUser('Fehler beim Senden der Einladung.', 'error');
-    }
-}
-
-window.removeMitglied = async function(index) {
-    // WICHTIG: index kommt als String vom HTML onclick, daher parseInt
-    const indexNum = parseInt(index, 10);
-    
-    console.log("removeMitglied aufgerufen mit index:", index, "-> indexNum:", indexNum);
-    console.log("currentEditingThemaId:", currentEditingThemaId);
-    
-    if (!currentEditingThemaId) {
-        console.error("removeMitglied: Keine currentEditingThemaId");
-        alertUser('Fehler: Kein Thema ausgewählt.', 'error');
-        return;
-    }
-    
-    const thema = VERTRAEGE_THEMEN[currentEditingThemaId];
-    console.log("Thema gefunden:", thema);
-    console.log("Mitglieder:", thema?.mitglieder);
-    
-    if (!thema || !thema.mitglieder) {
-        console.error("removeMitglied: Thema oder Mitglieder nicht gefunden");
-        alertUser('Fehler: Thema nicht gefunden.', 'error');
-        return;
-    }
-    
-    const mitglied = thema.mitglieder[indexNum];
-    console.log("Mitglied bei Index", indexNum, ":", mitglied);
-    
-    if (!mitglied) {
-        console.error("removeMitglied: Mitglied nicht gefunden bei Index:", indexNum);
-        alertUser('Fehler: Mitglied nicht gefunden.', 'error');
-        return;
-    }
-    
-    if (!confirm(`Möchtest du ${mitglied.name} wirklich aus dem Thema entfernen?`)) {
-        return;
-    }
-    
-    try {
-        console.log("Entferne Mitglied...");
-        const updatedMitglieder = thema.mitglieder.filter((_, i) => i !== indexNum);
-        console.log("Neue Mitgliederliste:", updatedMitglieder);
-        
-        await updateDoc(doc(vertraegeThemenRef, currentEditingThemaId), {
-            mitglieder: updatedMitglieder
-        });
-        
-        console.log("Firebase Update erfolgreich");
-        
-        VERTRAEGE_THEMEN[currentEditingThemaId].mitglieder = updatedMitglieder;
-        renderMitgliederListe(VERTRAEGE_THEMEN[currentEditingThemaId]);
-        renderThemenListe();
-        
-        alertUser('Mitglied entfernt.', 'success');
-    } catch (error) {
-        console.error("Fehler beim Entfernen des Mitglieds:", error);
-        alertUser('Fehler beim Entfernen des Mitglieds.', 'error');
     }
 }
 
