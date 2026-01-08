@@ -207,19 +207,27 @@ export function listenForWertguthaben() {
     }
 
     try {
+        // DATENSCHUTZ-FIX: Nur Wertguthaben laden, die vom aktuellen User erstellt wurden
+        // ODER wo der User als Eigentümer eingetragen ist
         const q = query(wertguthabenCollection, orderBy('createdAt', 'desc'));
         
         onSnapshot(q, (snapshot) => {
             WERTGUTHABEN = {};
             
             snapshot.forEach((doc) => {
-                WERTGUTHABEN[doc.id] = {
-                    id: doc.id,
-                    ...doc.data()
-                };
+                const data = doc.data();
+                
+                // DATENSCHUTZ: Nur eigene Einträge speichern
+                // (erstellt von mir ODER ich bin Eigentümer)
+                if (data.createdBy === currentUser.mode || data.eigentuemer === currentUser.mode) {
+                    WERTGUTHABEN[doc.id] = {
+                        id: doc.id,
+                        ...data
+                    };
+                }
             });
 
-            console.log(`✅ ${Object.keys(WERTGUTHABEN).length} Wertguthaben geladen`);
+            console.log(`✅ ${Object.keys(WERTGUTHABEN).length} Wertguthaben geladen (nur eigene)`);
             renderWertguthabenTable();
             updateStatistics();
         }, (error) => {

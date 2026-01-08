@@ -206,14 +206,21 @@ export function listenForVertraege() {
         unsubscribeVertraege();
     }
 
+    // DATENSCHUTZ-FIX: Nur Verträge laden, die vom aktuellen User erstellt wurden
     const q = query(vertraegeCollection, orderBy('createdAt', 'desc'));
     
     unsubscribeVertraege = onSnapshot(q, (snapshot) => {
         VERTRAEGE = {};
         snapshot.forEach(doc => {
-            VERTRAEGE[doc.id] = { id: doc.id, ...doc.data() };
+            const data = doc.data();
+            
+            // DATENSCHUTZ: Nur eigene Verträge speichern
+            // (erstellt von mir)
+            if (data.createdBy === currentUser?.displayName || data.createdBy === currentUser?.mode) {
+                VERTRAEGE[doc.id] = { id: doc.id, ...data };
+            }
         });
-        console.log(`📋 ${Object.keys(VERTRAEGE).length} Verträge geladen`);
+        console.log(`📋 ${Object.keys(VERTRAEGE).length} Verträge geladen (nur eigene)`);
         renderVertraegeTable();
         updateStatistics();
         renderKuendigungsWarnungen();

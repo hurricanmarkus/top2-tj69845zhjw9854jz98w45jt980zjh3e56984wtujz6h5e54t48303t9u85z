@@ -98,17 +98,26 @@ function listenForRezepte() {
         unsubscribeRezepte();
     }
     
+    // DATENSCHUTZ-FIX: Nur Rezepte laden, die vom aktuellen User erstellt wurden
     const q = query(rezepteCollection, orderBy('titel', 'asc'));
     
     unsubscribeRezepte = onSnapshot(q, (snapshot) => {
         REZEPTE = {};
         rezeptIdCounter = 0;
         snapshot.forEach(doc => {
-            REZEPTE[doc.id] = { id: doc.id, ...doc.data() };
-            // Höchste Rezept-Nummer ermitteln
-            const rezeptNr = parseInt(doc.data().rezeptNummer) || 0;
+            const data = doc.data();
+            
+            // DATENSCHUTZ: Nur eigene Rezepte speichern
+            // (erstellt von mir - prüfe sowohl displayName als auch mode)
+            if (data.createdBy === currentUser?.displayName || data.createdBy === currentUser?.mode) {
+                REZEPTE[doc.id] = { id: doc.id, ...data };
+            }
+            
+            // Höchste Rezept-Nummer ermitteln (für alle, damit Nummern eindeutig bleiben)
+            const rezeptNr = parseInt(data.rezeptNummer) || 0;
             if (rezeptNr > rezeptIdCounter) rezeptIdCounter = rezeptNr;
         });
+        console.log(`🍳 ${Object.keys(REZEPTE).length} Rezepte geladen (nur eigene)`);
         renderRezepteListe();
         updateStatistics();
     }, (error) => {

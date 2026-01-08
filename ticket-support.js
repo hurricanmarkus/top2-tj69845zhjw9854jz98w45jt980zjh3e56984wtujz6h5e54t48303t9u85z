@@ -30,7 +30,7 @@ import {
 // ========================================
 let ticketsCollection = null;
 let TICKETS = {};
-let activeTab = 'my';
+let activeTab = 'all';
 let unsubscribeTickets = null;
 let ticketIdCounter = 1;
 
@@ -184,6 +184,10 @@ export function listenForTickets() {
 
     if (unsubscribeTickets) unsubscribeTickets();
 
+    // DATENSCHUTZ-FIX: Lade nur Tickets, die den aktuellen User betreffen
+    // (createdBy ODER assignedTo = currentUser.mode)
+    // Da Firestore keine OR-Queries unterstützt, laden wir alle und filtern clientseitig
+    // ABER: Wir speichern nur Tickets, die den User betreffen
     const q = query(ticketsCollection, orderBy('createdAt', 'desc'));
 
     unsubscribeTickets = onSnapshot(q, (snapshot) => {
@@ -192,16 +196,21 @@ export function listenForTickets() {
         
         snapshot.forEach((docSnap) => {
             const data = docSnap.data();
-            TICKETS[docSnap.id] = { id: docSnap.id, ...data };
             
-            // Ticket-ID-Counter aktualisieren
+            // DATENSCHUTZ: Nur Tickets speichern, die den User betreffen
+            // (erstellt von mir ODER mir zugewiesen)
+            if (data.createdBy === currentUser.mode || data.assignedTo === currentUser.mode) {
+                TICKETS[docSnap.id] = { id: docSnap.id, ...data };
+            }
+            
+            // Ticket-ID-Counter aktualisieren (für alle, damit Nummern eindeutig bleiben)
             if (data.ticketNumber) {
                 maxTicketNumber = Math.max(maxTicketNumber, data.ticketNumber);
             }
         });
         
         ticketIdCounter = maxTicketNumber + 1;
-        console.log(`📊 ${Object.keys(TICKETS).length} Tickets geladen`);
+        console.log(`📊 ${Object.keys(TICKETS).length} Tickets geladen (nur eigene/zugewiesene)`);
         renderTickets();
         updateStats();
     }, (error) => {
@@ -560,6 +569,15 @@ async function saveTicket() {
 async function updateTicketStatus(ticketId, newStatus) {
     try {
         const ticket = TICKETS[ticketId];
+        
+        // SICHERHEITSFRAGE: Vor dem Abschließen bestätigen lassen
+        if (newStatus === 'done') {
+            const confirmed = confirm(`Möchtest du das Ticket "${ticket.subject}" wirklich als erledigt markieren?`);
+            if (!confirmed) {
+                return; // Abbruch, wenn nicht bestätigt
+            }
+        }
+        
         const activityLog = ticket.activityLog || [];
         
         activityLog.push({
