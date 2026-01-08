@@ -395,6 +395,7 @@ function renderThemenListe() {
     if (!container) return;
     
     const themen = Object.values(VERTRAEGE_THEMEN).filter(t => !t.archiviert);
+    const currentUserId = currentUser?.mode || currentUser?.displayName;
     
     if (themen.length === 0) {
         container.innerHTML = '<p class="text-gray-500 italic text-center py-4">Keine Themen vorhanden.</p>';
@@ -402,7 +403,8 @@ function renderThemenListe() {
     }
     
     container.innerHTML = themen.map(thema => {
-        const isCreator = thema.ersteller === currentUser?.displayName || thema.ersteller === currentUser?.mode;
+        // WICHTIG: Prüfe mit erstellerId UND ersteller für Kompatibilität
+        const isCreator = thema.erstellerId === currentUserId || thema.ersteller === currentUser?.displayName;
         const mitgliederCount = thema.mitglieder?.length || 1;
         
         return `
@@ -411,7 +413,7 @@ function renderThemenListe() {
                     <div>
                         <h4 class="font-bold text-gray-800">${thema.name}</h4>
                         <p class="text-xs text-gray-500">
-                            ${isCreator ? '👑 Ersteller' : '👤 Mitglied'} • ${mitgliederCount} Mitglied${mitgliederCount > 1 ? 'er' : ''}
+                            ${isCreator ? '👑 Ersteller' : `👤 Mitglied (geteilt von ${thema.ersteller})`} • ${mitgliederCount} Mitglied${mitgliederCount > 1 ? 'er' : ''}
                         </p>
                     </div>
                     <div class="flex gap-1">
@@ -434,7 +436,12 @@ function renderThemenListe() {
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                 </svg>
                             </button>
-                        ` : ''}
+                        ` : `
+                            <button onclick="window.leaveThemaFromList('${thema.id}')" 
+                                class="px-2 py-1 text-xs bg-red-100 text-red-600 hover:bg-red-200 rounded font-medium" title="Aus Thema austreten">
+                                Austreten
+                            </button>
+                        `}
                     </div>
                 </div>
             </div>
@@ -776,6 +783,48 @@ async function leaveThema() {
         
         // Wenn das aktuelle Thema das war, wechsle zum ersten verfügbaren
         if (currentThemaId === currentEditingThemaId) {
+            currentThemaId = Object.keys(VERTRAEGE_THEMEN)[0];
+            localStorage.setItem('vv_current_thema', currentThemaId);
+            updateCollectionForVertragsThema();
+        }
+        
+        renderThemenListe();
+        renderVertraegeThemenDropdown();
+        
+        alertUser('Du bist aus dem Thema ausgetreten.', 'success');
+    } catch (error) {
+        console.error("Fehler beim Austreten aus dem Thema:", error);
+        alertUser('Fehler beim Austreten aus dem Thema.', 'error');
+    }
+}
+
+// Austreten direkt aus der Themen-Liste (ohne Modal)
+async function leaveThemaFromList(themaId) {
+    const thema = VERTRAEGE_THEMEN[themaId];
+    if (!thema) {
+        console.error("leaveThemaFromList: Thema nicht gefunden:", themaId);
+        return;
+    }
+    
+    if (!confirm(`Möchtest du wirklich aus dem Thema "${thema.name}" austreten? Du verlierst den Zugriff auf alle Verträge in diesem Thema.`)) {
+        return;
+    }
+    
+    const currentUserId = currentUser?.mode || currentUser?.displayName;
+    
+    try {
+        // Entferne mich selbst aus der Mitgliederliste
+        const updatedMitglieder = thema.mitglieder.filter(m => m.userId !== currentUserId);
+        
+        await updateDoc(doc(vertraegeThemenRef, themaId), {
+            mitglieder: updatedMitglieder
+        });
+        
+        // Thema aus lokalem Speicher entfernen
+        delete VERTRAEGE_THEMEN[themaId];
+        
+        // Wenn das aktuelle Thema das war, wechsle zum ersten verfügbaren
+        if (currentThemaId === themaId) {
             currentThemaId = Object.keys(VERTRAEGE_THEMEN)[0];
             localStorage.setItem('vv_current_thema', currentThemaId);
             updateCollectionForVertragsThema();
@@ -1711,6 +1760,7 @@ window.editVertragsThema = function(themaId) {
 window.deleteVertragsThema = deleteVertragsThema;
 window.removeMitglied = removeMitglied;
 window.leaveThema = leaveThema;
+window.leaveThemaFromList = leaveThemaFromList;
 window.openVertraegeSettingsModal = openVertraegeSettingsModal;
 
 // Einladungen-Funktionen
