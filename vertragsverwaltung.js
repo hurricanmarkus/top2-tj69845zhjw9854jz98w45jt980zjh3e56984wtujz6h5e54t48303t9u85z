@@ -22,17 +22,32 @@ import {
     doc,
     updateDoc,
     deleteDoc,
-    getDoc
+    getDoc,
+    getDocs,
+    setDoc
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ========================================
 // GLOBALE VARIABLEN
 // ========================================
 let vertraegeCollection = null;
+let vertraegeThemenRef = null;
+let vertraegeEinladungenRef = null;
 let VERTRAEGE = {};
+let VERTRAEGE_THEMEN = {};
+let VERTRAEGE_EINLADUNGEN = {};
+let currentThemaId = null;
 let currentFilter = { rhythmus: '', absicht: '' };
 let searchTerm = '';
 let unsubscribeVertraege = null;
+
+// Zugriffsrechte-Konfiguration
+const ZUGRIFFSRECHTE = {
+    nicht_teilen: { label: 'Nicht teilen', icon: '🔒', canEdit: false, canView: false },
+    lesen: { label: 'Nur Lesen', icon: '👁️', canEdit: false, canView: true },
+    bearbeiten: { label: 'Bearbeiten', icon: '✏️', canEdit: true, canView: true },
+    vollzugriff: { label: 'Vollzugriff', icon: '🔓', canEdit: true, canView: true, canDelete: true }
+};
 
 // Rhythmus-Konfiguration
 const RHYTHMUS_CONFIG = {
@@ -61,18 +76,525 @@ let tempSonderzahlungen = [];
 // ========================================
 // INITIALISIERUNG
 // ========================================
-export function initializeVertragsverwaltung() {
+export async function initializeVertragsverwaltung() {
     console.log("📋 Vertragsverwaltung wird initialisiert...");
 
     if (db) {
-        vertraegeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'vertraege');
+        vertraegeThemenRef = collection(db, 'artifacts', appId, 'public', 'data', 'vertraege_themen');
+        vertraegeEinladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'vertraege_einladungen');
+        
+        console.log("📂 Firebase Referenzen erstellt:");
+        console.log("  - Themen:", vertraegeThemenRef.path);
+        console.log("  - Einladungen:", vertraegeEinladungenRef.path);
+        
+        await loadVertraegeThemen();
+        loadVertraegeEinladungen();
     }
 
     setupEventListeners();
-    listenForVertraege();
+}
+
+// ========================================
+// THEMEN-SYSTEM
+// ========================================
+async function loadVertraegeThemen() {
+    try {
+        console.log("🔄 Lade Vertrags-Themen...");
+        const snapshot = await getDocs(vertraegeThemenRef);
+        VERTRAEGE_THEMEN = {};
+        
+        snapshot.forEach((docSnap) => {
+            const thema = { id: docSnap.id, ...docSnap.data() };
+            // DATENSCHUTZ: Nur Themen laden, die ich erstellt habe oder wo ich Mitglied bin
+            const userId = currentUser?.mode || currentUser?.displayName;
+            const isMember = thema.mitglieder?.some(m => m.userId === userId || m.name === currentUser?.displayName);
+            const isCreator = thema.ersteller === currentUser?.displayName || thema.ersteller === userId;
+            
+            if (isCreator || isMember) {
+                VERTRAEGE_THEMEN[docSnap.id] = thema;
+                console.log(`  📁 Thema gefunden: "${thema.name}" (ID: ${docSnap.id})`);
+            }
+        });
+        
+        console.log(`✅ ${Object.keys(VERTRAEGE_THEMEN).length} Vertrags-Themen geladen`);
+        
+        // Wenn kein Thema existiert, erstelle ein Standard-Thema
+        if (Object.keys(VERTRAEGE_THEMEN).length === 0) {
+            console.log("⚠️ Keine Themen gefunden - erstelle Standard-Thema");
+            await createDefaultVertragsThema();
+        }
+        
+        // Gespeichertes Thema oder erstes Thema auswählen
+        const savedThemaId = localStorage.getItem('vv_current_thema');
+        console.log("💾 Gespeichertes Thema aus localStorage:", savedThemaId);
+        
+        if (savedThemaId && VERTRAEGE_THEMEN[savedThemaId]) {
+            currentThemaId = savedThemaId;
+            console.log(`✅ Verwende gespeichertes Thema: ${VERTRAEGE_THEMEN[savedThemaId].name}`);
+        } else {
+            currentThemaId = Object.keys(VERTRAEGE_THEMEN)[0];
+            console.log(`✅ Verwende erstes Thema: ${VERTRAEGE_THEMEN[currentThemaId]?.name}`);
+        }
+        
+        renderVertraegeThemenDropdown();
+        updateCollectionForVertragsThema();
+    } catch (e) {
+        console.error("❌ Fehler beim Laden der Vertrags-Themen:", e);
+    }
+}
+
+async function createDefaultVertragsThema() {
+    try {
+        const defaultThema = {
+            name: 'Privat',
+            ersteller: currentUser?.displayName || 'Unbekannt',
+            erstelltAm: serverTimestamp(),
+            mitglieder: [{
+                userId: currentUser?.mode || currentUser?.displayName,
+                name: currentUser?.displayName || 'Unbekannt',
+                zugriffsrecht: 'vollzugriff'
+            }]
+        };
+        const docRef = await addDoc(vertraegeThemenRef, defaultThema);
+        VERTRAEGE_THEMEN[docRef.id] = { id: docRef.id, ...defaultThema };
+        currentThemaId = docRef.id;
+        console.log("✅ Standard-Thema erstellt:", docRef.id);
+    } catch (e) {
+        console.error("Fehler beim Erstellen des Standard-Themas:", e);
+    }
+}
+
+function updateCollectionForVertragsThema() {
+    if (currentThemaId && db) {
+        // Verträge liegen als Sub-Collection unter dem Thema-Dokument
+        vertraegeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'vertraege_themen', currentThemaId, 'vertraege');
+        console.log("📂 Verträge-Collection aktualisiert:", vertraegeCollection.path);
+        listenForVertraege();
+    } else {
+        console.warn("⚠️ updateCollectionForVertragsThema: currentThemaId oder db fehlt");
+    }
+}
+
+function renderVertraegeThemenDropdown() {
+    const dropdown = document.getElementById('vv-thema-dropdown');
+    if (!dropdown) return;
+    
+    // Nur aktive (nicht archivierte) Themen anzeigen
+    dropdown.innerHTML = Object.values(VERTRAEGE_THEMEN)
+        .filter(thema => !thema.archiviert)
+        .map(thema => 
+            `<option value="${thema.id}" ${thema.id === currentThemaId ? 'selected' : ''}>${thema.name}</option>`
+        ).join('');
+}
+
+function switchVertragsThema(themaId) {
+    if (!themaId || !VERTRAEGE_THEMEN[themaId]) return;
+    
+    currentThemaId = themaId;
+    localStorage.setItem('vv_current_thema', themaId);
+    console.log(`🔄 Wechsle zu Thema: ${VERTRAEGE_THEMEN[themaId].name}`);
+    
+    updateCollectionForVertragsThema();
+}
+
+// Einladungen laden
+function loadVertraegeEinladungen() {
+    if (!vertraegeEinladungenRef || !currentUser?.displayName) return;
+    
+    try {
+        const userId = currentUser.mode || currentUser.displayName;
+        
+        onSnapshot(vertraegeEinladungenRef, (snapshot) => {
+            VERTRAEGE_EINLADUNGEN = {};
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                // Nur Einladungen für den aktuellen Benutzer laden
+                if (data.targetUserId === userId || data.targetUserName === currentUser.displayName) {
+                    VERTRAEGE_EINLADUNGEN[docSnap.id] = { id: docSnap.id, ...data };
+                }
+            });
+            renderVertraegeEinladungenBadge();
+        }, (error) => {
+            console.error("Fehler beim Laden der Vertrags-Einladungen:", error);
+        });
+    } catch (e) {
+        console.error("Fehler beim Initialisieren des Einladungs-Listeners:", e);
+    }
+}
+
+function renderVertraegeEinladungenBadge() {
+    const pendingCount = Object.values(VERTRAEGE_EINLADUNGEN).filter(e => e.status === 'pending').length;
+    const badge = document.getElementById('vv-einladungen-badge');
+    if (badge) {
+        if (pendingCount > 0) {
+            badge.textContent = pendingCount;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+}
+
+// ========================================
+// THEMEN-EINSTELLUNGEN MODAL
+// ========================================
+function openVertraegeSettingsModal() {
+    const modal = document.getElementById('vertraegeSettingsModal');
+    if (!modal) {
+        console.error("vertraegeSettingsModal nicht gefunden!");
+        return;
+    }
+    
+    renderThemenListe();
+    modal.style.display = 'flex';
+}
+
+function closeVertraegeSettingsModal() {
+    const modal = document.getElementById('vertraegeSettingsModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function renderThemenListe() {
+    const container = document.getElementById('vv-themen-liste');
+    if (!container) return;
+    
+    const themen = Object.values(VERTRAEGE_THEMEN).filter(t => !t.archiviert);
+    
+    if (themen.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 italic text-center py-4">Keine Themen vorhanden.</p>';
+        return;
+    }
+    
+    container.innerHTML = themen.map(thema => {
+        const isCreator = thema.ersteller === currentUser?.displayName || thema.ersteller === currentUser?.mode;
+        const mitgliederCount = thema.mitglieder?.length || 1;
+        
+        return `
+            <div class="p-3 bg-gray-50 rounded-lg border ${thema.id === currentThemaId ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'}">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h4 class="font-bold text-gray-800">${thema.name}</h4>
+                        <p class="text-xs text-gray-500">
+                            ${isCreator ? '👑 Ersteller' : '👤 Mitglied'} • ${mitgliederCount} Mitglied${mitgliederCount > 1 ? 'er' : ''}
+                        </p>
+                    </div>
+                    <div class="flex gap-1">
+                        ${isCreator ? `
+                            <button onclick="window.openThemaMitgliederModal('${thema.id}')" 
+                                class="p-1.5 text-blue-600 hover:bg-blue-100 rounded" title="Mitglieder verwalten">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                                </svg>
+                            </button>
+                            <button onclick="window.editVertragsThema('${thema.id}')" 
+                                class="p-1.5 text-gray-600 hover:bg-gray-200 rounded" title="Bearbeiten">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                            </button>
+                            <button onclick="window.deleteVertragsThema('${thema.id}')" 
+                                class="p-1.5 text-red-600 hover:bg-red-100 rounded" title="Löschen">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function createNewVertragsThema() {
+    const nameInput = document.getElementById('vv-neues-thema-name');
+    const name = nameInput?.value?.trim();
+    
+    if (!name) {
+        alertUser('Bitte gib einen Namen für das Thema ein.', 'error');
+        return;
+    }
+    
+    try {
+        const newThema = {
+            name: name,
+            ersteller: currentUser?.displayName || 'Unbekannt',
+            erstelltAm: serverTimestamp(),
+            mitglieder: [{
+                userId: currentUser?.mode || currentUser?.displayName,
+                name: currentUser?.displayName || 'Unbekannt',
+                zugriffsrecht: 'vollzugriff'
+            }]
+        };
+        
+        const docRef = await addDoc(vertraegeThemenRef, newThema);
+        VERTRAEGE_THEMEN[docRef.id] = { id: docRef.id, ...newThema };
+        
+        // Input leeren
+        if (nameInput) nameInput.value = '';
+        
+        // Liste aktualisieren
+        renderThemenListe();
+        renderVertraegeThemenDropdown();
+        
+        alertUser(`Thema "${name}" erfolgreich erstellt!`, 'success');
+    } catch (error) {
+        console.error("Fehler beim Erstellen des Themas:", error);
+        alertUser('Fehler beim Erstellen des Themas.', 'error');
+    }
+}
+
+async function deleteVertragsThema(themaId) {
+    const thema = VERTRAEGE_THEMEN[themaId];
+    if (!thema) return;
+    
+    // Prüfen ob es das letzte Thema ist
+    if (Object.keys(VERTRAEGE_THEMEN).length <= 1) {
+        alertUser('Das letzte Thema kann nicht gelöscht werden.', 'error');
+        return;
+    }
+    
+    if (!confirm(`Möchtest du das Thema "${thema.name}" wirklich löschen? Alle Verträge in diesem Thema werden ebenfalls gelöscht!`)) {
+        return;
+    }
+    
+    try {
+        await deleteDoc(doc(vertraegeThemenRef, themaId));
+        delete VERTRAEGE_THEMEN[themaId];
+        
+        // Wenn das aktuelle Thema gelöscht wurde, wechsle zum ersten verfügbaren
+        if (currentThemaId === themaId) {
+            currentThemaId = Object.keys(VERTRAEGE_THEMEN)[0];
+            localStorage.setItem('vv_current_thema', currentThemaId);
+            updateCollectionForVertragsThema();
+        }
+        
+        renderThemenListe();
+        renderVertraegeThemenDropdown();
+        
+        alertUser('Thema erfolgreich gelöscht!', 'success');
+    } catch (error) {
+        console.error("Fehler beim Löschen des Themas:", error);
+        alertUser('Fehler beim Löschen des Themas.', 'error');
+    }
+}
+
+// Mitglieder-Modal für Thema
+let currentEditingThemaId = null;
+
+function openThemaMitgliederModal(themaId) {
+    currentEditingThemaId = themaId;
+    const thema = VERTRAEGE_THEMEN[themaId];
+    if (!thema) return;
+    
+    const modal = document.getElementById('themaMitgliederModal');
+    if (!modal) return;
+    
+    document.getElementById('mitglieder-thema-name').textContent = thema.name;
+    renderMitgliederListe(thema);
+    populateUserDropdown(thema);
+    
+    modal.style.display = 'flex';
+}
+
+function populateUserDropdown(thema) {
+    const userSelect = document.getElementById('vv-mitglied-user');
+    if (!userSelect) return;
+    
+    // Alle verfügbaren Benutzer laden (außer die, die schon Mitglied sind)
+    const existingMemberIds = (thema.mitglieder || []).map(m => m.userId);
+    
+    let options = '<option value="">Benutzer wählen...</option>';
+    
+    if (USERS && Object.keys(USERS).length > 0) {
+        Object.entries(USERS).forEach(([userId, user]) => {
+            // Nur Benutzer anzeigen, die noch nicht Mitglied sind
+            if (!existingMemberIds.includes(userId) && userId !== currentUser?.mode) {
+                options += `<option value="${userId}">${user.displayName || userId}</option>`;
+            }
+        });
+    } else {
+        options += '<option value="" disabled>Keine Benutzer verfügbar</option>';
+    }
+    
+    userSelect.innerHTML = options;
+}
+
+function closeThemaMitgliederModal() {
+    const modal = document.getElementById('themaMitgliederModal');
+    if (modal) modal.style.display = 'none';
+    currentEditingThemaId = null;
+}
+
+function renderMitgliederListe(thema) {
+    const container = document.getElementById('vv-mitglieder-liste');
+    if (!container) return;
+    
+    const mitglieder = thema.mitglieder || [];
+    
+    container.innerHTML = mitglieder.map((m, index) => {
+        const isCreator = m.userId === thema.ersteller || m.name === thema.ersteller;
+        const zugriffsrecht = ZUGRIFFSRECHTE[m.zugriffsrecht] || ZUGRIFFSRECHTE.lesen;
+        
+        return `
+            <div class="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">${isCreator ? '👑' : '👤'}</span>
+                    <span class="font-medium">${m.name}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm px-2 py-1 bg-gray-200 rounded">${zugriffsrecht.icon} ${zugriffsrecht.label}</span>
+                    ${!isCreator ? `
+                        <button onclick="window.removeMitglied(${index})" class="p-1 text-red-500 hover:bg-red-100 rounded">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function addMitgliedToThema() {
+    if (!currentEditingThemaId) return;
+    
+    const userSelect = document.getElementById('vv-mitglied-user');
+    const rechtSelect = document.getElementById('vv-mitglied-recht');
+    
+    const selectedUserId = userSelect?.value;
+    const selectedRecht = rechtSelect?.value || 'lesen';
+    
+    if (!selectedUserId) {
+        alertUser('Bitte wähle einen Benutzer aus.', 'error');
+        return;
+    }
+    
+    const selectedUser = USERS[selectedUserId];
+    if (!selectedUser) return;
+    
+    const thema = VERTRAEGE_THEMEN[currentEditingThemaId];
+    if (!thema) return;
+    
+    // Prüfen ob User bereits Mitglied ist
+    if (thema.mitglieder?.some(m => m.userId === selectedUserId || m.name === selectedUser.displayName)) {
+        alertUser('Dieser Benutzer ist bereits Mitglied.', 'error');
+        return;
+    }
+    
+    try {
+        const newMitglied = {
+            userId: selectedUserId,
+            name: selectedUser.displayName || selectedUserId,
+            zugriffsrecht: selectedRecht
+        };
+        
+        const updatedMitglieder = [...(thema.mitglieder || []), newMitglied];
+        
+        await updateDoc(doc(vertraegeThemenRef, currentEditingThemaId), {
+            mitglieder: updatedMitglieder
+        });
+        
+        VERTRAEGE_THEMEN[currentEditingThemaId].mitglieder = updatedMitglieder;
+        renderMitgliederListe(VERTRAEGE_THEMEN[currentEditingThemaId]);
+        renderThemenListe();
+        
+        // Einladung erstellen
+        await addDoc(vertraegeEinladungenRef, {
+            themaId: currentEditingThemaId,
+            themaName: thema.name,
+            targetUserId: selectedUserId,
+            targetUserName: selectedUser.displayName,
+            senderName: currentUser?.displayName,
+            zugriffsrecht: selectedRecht,
+            status: 'pending',
+            createdAt: serverTimestamp()
+        });
+        
+        alertUser(`${selectedUser.displayName} wurde eingeladen!`, 'success');
+    } catch (error) {
+        console.error("Fehler beim Hinzufügen des Mitglieds:", error);
+        alertUser('Fehler beim Hinzufügen des Mitglieds.', 'error');
+    }
+}
+
+async function removeMitglied(index) {
+    if (!currentEditingThemaId) return;
+    
+    const thema = VERTRAEGE_THEMEN[currentEditingThemaId];
+    if (!thema || !thema.mitglieder) return;
+    
+    const mitglied = thema.mitglieder[index];
+    if (!mitglied) return;
+    
+    if (!confirm(`Möchtest du ${mitglied.name} wirklich aus dem Thema entfernen?`)) {
+        return;
+    }
+    
+    try {
+        const updatedMitglieder = thema.mitglieder.filter((_, i) => i !== index);
+        
+        await updateDoc(doc(vertraegeThemenRef, currentEditingThemaId), {
+            mitglieder: updatedMitglieder
+        });
+        
+        VERTRAEGE_THEMEN[currentEditingThemaId].mitglieder = updatedMitglieder;
+        renderMitgliederListe(VERTRAEGE_THEMEN[currentEditingThemaId]);
+        renderThemenListe();
+        
+        alertUser('Mitglied entfernt.', 'success');
+    } catch (error) {
+        console.error("Fehler beim Entfernen des Mitglieds:", error);
+        alertUser('Fehler beim Entfernen des Mitglieds.', 'error');
+    }
 }
 
 function setupEventListeners() {
+    // Themen-Dropdown
+    const themaDropdown = document.getElementById('vv-thema-dropdown');
+    if (themaDropdown && !themaDropdown.dataset.listenerAttached) {
+        themaDropdown.addEventListener('change', (e) => {
+            switchVertragsThema(e.target.value);
+        });
+        themaDropdown.dataset.listenerAttached = 'true';
+    }
+    
+    // Einstellungen Button
+    const settingsBtn = document.getElementById('btn-vertraege-settings');
+    if (settingsBtn && !settingsBtn.dataset.listenerAttached) {
+        settingsBtn.addEventListener('click', openVertraegeSettingsModal);
+        settingsBtn.dataset.listenerAttached = 'true';
+    }
+    
+    // Einstellungen Modal schließen
+    const closeSettingsBtn = document.getElementById('closeVertraegeSettingsModal');
+    if (closeSettingsBtn && !closeSettingsBtn.dataset.listenerAttached) {
+        closeSettingsBtn.addEventListener('click', closeVertraegeSettingsModal);
+        closeSettingsBtn.dataset.listenerAttached = 'true';
+    }
+    
+    // Neues Thema erstellen Button
+    const createThemaBtn = document.getElementById('btn-create-vertrags-thema');
+    if (createThemaBtn && !createThemaBtn.dataset.listenerAttached) {
+        createThemaBtn.addEventListener('click', createNewVertragsThema);
+        createThemaBtn.dataset.listenerAttached = 'true';
+    }
+    
+    // Mitglieder Modal schließen
+    const closeMitgliederBtn = document.getElementById('closeThemaMitgliederModal');
+    if (closeMitgliederBtn && !closeMitgliederBtn.dataset.listenerAttached) {
+        closeMitgliederBtn.addEventListener('click', closeThemaMitgliederModal);
+        closeMitgliederBtn.dataset.listenerAttached = 'true';
+    }
+    
+    // Mitglied hinzufügen Button
+    const addMitgliedBtn = document.getElementById('btn-add-mitglied');
+    if (addMitgliedBtn && !addMitgliedBtn.dataset.listenerAttached) {
+        addMitgliedBtn.addEventListener('click', addMitgliedToThema);
+        addMitgliedBtn.dataset.listenerAttached = 'true';
+    }
+    
     // Create Button
     const createBtn = document.getElementById('btn-create-vertrag');
     if (createBtn && !createBtn.dataset.listenerAttached) {
@@ -915,6 +1437,32 @@ window.removeSonderzahlung = removeSonderzahlung;
 window.updateSonderzahlung = updateSonderzahlung;
 window.toggleSonderzahlungMonat = toggleSonderzahlungMonat;
 window.renderSonderzahlungenRefresh = renderSonderzahlungen;
+
+// Themen-Funktionen
+window.openThemaMitgliederModal = openThemaMitgliederModal;
+window.editVertragsThema = function(themaId) {
+    // Einfaches Umbenennen per Prompt
+    const thema = VERTRAEGE_THEMEN[themaId];
+    if (!thema) return;
+    
+    const newName = prompt('Neuer Name für das Thema:', thema.name);
+    if (newName && newName.trim() && newName !== thema.name) {
+        updateDoc(doc(vertraegeThemenRef, themaId), { name: newName.trim() })
+            .then(() => {
+                VERTRAEGE_THEMEN[themaId].name = newName.trim();
+                renderThemenListe();
+                renderVertraegeThemenDropdown();
+                alertUser('Thema umbenannt!', 'success');
+            })
+            .catch(err => {
+                console.error("Fehler beim Umbenennen:", err);
+                alertUser('Fehler beim Umbenennen.', 'error');
+            });
+    }
+};
+window.deleteVertragsThema = deleteVertragsThema;
+window.removeMitglied = removeMitglied;
+window.openVertraegeSettingsModal = openVertraegeSettingsModal;
 
 // ========================================
 // HINWEIS: Initialisierung erfolgt durch haupteingang.js

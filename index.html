@@ -1294,7 +1294,7 @@
             <!-- ========== VERTRAGSVERWALTUNG VIEW ========== -->
             <div id="vertragsverwaltungView" class="view">
                 <div class="back-link-container w-full mb-3">
-                    <div class="flex justify-between items-center">
+                    <div class="flex justify-between items-center flex-wrap gap-2">
                         <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition"
                             data-target="home">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
@@ -1304,14 +1304,36 @@
                             </svg>
                             <span class="text-base font-semibold">zurück</span>
                         </button>
-
-                        <button id="btn-create-vertrag" 
-                            class="py-2 px-4 bg-gradient-to-r from-indigo-600 to-purple-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2 text-sm">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
-                                <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-                            </svg>
-                            Neuer Vertrag
-                        </button>
+                        
+                        <!-- Thema-Dropdown -->
+                        <select id="vv-thema-dropdown" class="flex-1 min-w-[150px] max-w-[300px] p-2 border-2 border-indigo-500 rounded-lg bg-white text-sm font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-300">
+                            <option value="">Thema wählen...</option>
+                        </select>
+                        
+                        <div class="flex gap-2">
+                            <!-- Einladungen Button mit Badge -->
+                            <button id="btn-vv-einladungen" class="relative p-2 text-gray-500 hover:text-purple-600 transition rounded-full hover:bg-purple-100" title="Einladungen">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6">
+                                    <path d="M3 4a2 2 0 0 0-2 2v1.161l8.441 4.221a1.25 1.25 0 0 0 1.118 0L19 7.162V6a2 2 0 0 0-2-2H3Z" />
+                                    <path d="m19 8.839-7.77 3.885a2.75 2.75 0 0 1-2.46 0L1 8.839V14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.839Z" />
+                                </svg>
+                                <span id="vv-einladungen-badge" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">0</span>
+                            </button>
+                            <!-- Einstellungen Button -->
+                            <button id="btn-vertraege-settings" class="p-2 text-gray-500 hover:text-gray-800 transition rounded-full hover:bg-gray-200" title="Themen-Einstellungen">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6">
+                                    <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 0 1 1.262.125l1.669 1.669a1 1 0 0 1 .125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 0 1 .804.98v2.361a1 1 0 0 1-.804.98l-1.473.295a6.95 6.95 0 0 1-.587 1.416l.834 1.25a1 1 0 0 1-.125 1.262l-1.669 1.669a1 1 0 0 1-1.262.125l-1.25-.834a6.953 6.953 0 0 1-1.416.587l-.294 1.473a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.295-1.473a6.957 6.957 0 0 1-1.416-.587l-1.25.834a1 1 0 0 1-1.262-.125l-1.669-1.669a1 1 0 0 1-.125-1.262l.834-1.25a6.957 6.957 0 0 1-.587-1.416l-1.473-.294A1 1 0 0 1 1 11.18V8.82a1 1 0 0 1 .804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 0 1 .125-1.262l1.669-1.669a1 1 0 0 1 1.262-.125l1.25.834c.445-.245.919-.443 1.416-.587l.294-1.473ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                            <!-- Neuer Vertrag Button -->
+                            <button id="btn-create-vertrag" 
+                                class="py-2 px-4 bg-gradient-to-r from-indigo-600 to-purple-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2 text-sm">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                                    <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                                </svg>
+                                Neu
+                            </button>
+                        </div>
                     </div>
                     <div class="border-t border-gray-300 mt-2"></div>
                 </div>
@@ -1587,6 +1609,83 @@
                     </div>
                     <div id="vertragDetailsContent" class="p-6">
                         <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== VERTRAEGE SETTINGS MODAL ========== -->
+            <div id="vertraegeSettingsModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                    <div class="sticky top-0 bg-gradient-to-r from-indigo-600 to-purple-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                        <h3 class="text-xl font-bold">Themen-Einstellungen</h3>
+                        <button id="closeVertraegeSettingsModal" class="text-white/80 hover:text-white transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <!-- Neues Thema erstellen -->
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <h4 class="font-bold text-gray-800 mb-3">Neues Thema erstellen</h4>
+                            <div class="flex gap-2">
+                                <input type="text" id="vv-neues-thema-name" placeholder="z.B. Haushalt, Fitness, Versicherungen..." 
+                                    class="flex-1 p-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                                <button id="btn-create-vertrags-thema" class="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition">
+                                    Erstellen
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Themen-Liste -->
+                        <div>
+                            <h4 class="font-bold text-gray-800 mb-3">Meine Themen</h4>
+                            <div id="vv-themen-liste" class="space-y-2">
+                                <!-- Wird dynamisch gefüllt -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== THEMA MITGLIEDER MODAL ========== -->
+            <div id="themaMitgliederModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                    <div class="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                        <h3 class="text-xl font-bold">Mitglieder: <span id="mitglieder-thema-name"></span></h3>
+                        <button id="closeThemaMitgliederModal" class="text-white/80 hover:text-white transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <!-- Mitglied hinzufügen -->
+                        <div class="bg-blue-50 p-4 rounded-lg">
+                            <h4 class="font-bold text-blue-800 mb-3">Mitglied hinzufügen</h4>
+                            <div class="space-y-2">
+                                <select id="vv-mitglied-user" class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-blue-500">
+                                    <option value="">Benutzer wählen...</option>
+                                    <!-- Wird dynamisch mit USERS gefüllt -->
+                                </select>
+                                <select id="vv-mitglied-recht" class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-blue-500">
+                                    <option value="lesen">Nur Lesen</option>
+                                    <option value="bearbeiten">Bearbeiten</option>
+                                    <option value="vollzugriff">Vollzugriff</option>
+                                </select>
+                                <button id="btn-add-mitglied" class="w-full px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition">
+                                    Hinzufügen
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Mitglieder-Liste -->
+                        <div>
+                            <h4 class="font-bold text-gray-800 mb-3">Aktuelle Mitglieder</h4>
+                            <div id="vv-mitglieder-liste" class="space-y-2">
+                                <!-- Wird dynamisch gefüllt -->
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
