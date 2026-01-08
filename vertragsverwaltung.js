@@ -95,7 +95,7 @@ export async function initializeVertragsverwaltung() {
 }
 
 // ========================================
-// THEMEN-SYSTEM
+// THEMEN-SYSTEM (REVISIERT)
 // ========================================
 async function loadVertraegeThemen() {
     try {
@@ -103,38 +103,41 @@ async function loadVertraegeThemen() {
         const snapshot = await getDocs(vertraegeThemenRef);
         VERTRAEGE_THEMEN = {};
         
+        const userId = currentUser?.mode || currentUser?.displayName;
+        console.log("👤 Aktueller User-ID:", userId);
+        
         snapshot.forEach((docSnap) => {
             const thema = { id: docSnap.id, ...docSnap.data() };
+            
             // DATENSCHUTZ: Nur Themen laden, die ich erstellt habe oder wo ich Mitglied bin
-            const userId = currentUser?.mode || currentUser?.displayName;
-            const isMember = thema.mitglieder?.some(m => m.userId === userId || m.name === currentUser?.displayName);
-            const isCreator = thema.ersteller === currentUser?.displayName || thema.ersteller === userId;
+            const isCreator = thema.erstellerId === userId || thema.ersteller === currentUser?.displayName;
+            const isMember = thema.mitglieder?.some(m => m.userId === userId);
             
             if (isCreator || isMember) {
                 VERTRAEGE_THEMEN[docSnap.id] = thema;
-                console.log(`  📁 Thema gefunden: "${thema.name}" (ID: ${docSnap.id})`);
+                console.log(`  📁 Thema: "${thema.name}" (Ersteller: ${isCreator}, Mitglied: ${isMember})`);
             }
         });
         
         console.log(`✅ ${Object.keys(VERTRAEGE_THEMEN).length} Vertrags-Themen geladen`);
         
-        // Wenn kein Thema existiert, erstelle ein Standard-Thema
+        // WICHTIG: Nur Standard-Thema erstellen wenn WIRKLICH keines existiert
+        // Prüfe ob der User überhaupt schon ein "Privat"-Thema hat
         if (Object.keys(VERTRAEGE_THEMEN).length === 0) {
-            console.log("⚠️ Keine Themen gefunden - erstelle Standard-Thema");
+            console.log("⚠️ Keine Themen für diesen User - erstelle Standard-Thema");
             await createDefaultVertragsThema();
         }
         
         // Gespeichertes Thema oder erstes Thema auswählen
         const savedThemaId = localStorage.getItem('vv_current_thema');
-        console.log("💾 Gespeichertes Thema aus localStorage:", savedThemaId);
         
         if (savedThemaId && VERTRAEGE_THEMEN[savedThemaId]) {
             currentThemaId = savedThemaId;
-            console.log(`✅ Verwende gespeichertes Thema: ${VERTRAEGE_THEMEN[savedThemaId].name}`);
         } else {
             currentThemaId = Object.keys(VERTRAEGE_THEMEN)[0];
-            console.log(`✅ Verwende erstes Thema: ${VERTRAEGE_THEMEN[currentThemaId]?.name}`);
         }
+        
+        console.log(`✅ Aktives Thema: ${VERTRAEGE_THEMEN[currentThemaId]?.name}`);
         
         renderVertraegeThemenDropdown();
         updateCollectionForVertragsThema();
@@ -145,13 +148,17 @@ async function loadVertraegeThemen() {
 
 async function createDefaultVertragsThema() {
     try {
+        const userId = currentUser?.mode || currentUser?.displayName;
+        const userName = currentUser?.displayName || 'Unbekannt';
+        
         const defaultThema = {
             name: 'Privat',
-            ersteller: currentUser?.displayName || 'Unbekannt',
+            ersteller: userName,
+            erstellerId: userId,
             erstelltAm: serverTimestamp(),
             mitglieder: [{
-                userId: currentUser?.mode || currentUser?.displayName,
-                name: currentUser?.displayName || 'Unbekannt',
+                userId: userId,
+                name: userName,
                 zugriffsrecht: 'vollzugriff'
             }]
         };
@@ -179,12 +186,23 @@ function renderVertraegeThemenDropdown() {
     const dropdown = document.getElementById('vv-thema-dropdown');
     if (!dropdown) return;
     
+    const userId = currentUser?.mode || currentUser?.displayName;
+    
     // Nur aktive (nicht archivierte) Themen anzeigen
     dropdown.innerHTML = Object.values(VERTRAEGE_THEMEN)
         .filter(thema => !thema.archiviert)
-        .map(thema => 
-            `<option value="${thema.id}" ${thema.id === currentThemaId ? 'selected' : ''}>${thema.name}</option>`
-        ).join('');
+        .map(thema => {
+            // Prüfe ob User der Ersteller ist
+            const isCreator = thema.erstellerId === userId || thema.ersteller === currentUser?.displayName;
+            
+            // Wenn nicht Ersteller, zeige "(eingeladen von ...)"
+            let displayName = thema.name;
+            if (!isCreator && thema.ersteller) {
+                displayName = `${thema.name} (eingeladen von ${thema.ersteller})`;
+            }
+            
+            return `<option value="${thema.id}" ${thema.id === currentThemaId ? 'selected' : ''}>${displayName}</option>`;
+        }).join('');
 }
 
 function switchVertragsThema(themaId) {
@@ -433,14 +451,18 @@ async function createNewVertragsThema() {
         return;
     }
     
+    const userId = currentUser?.mode || currentUser?.displayName;
+    const userName = currentUser?.displayName || 'Unbekannt';
+    
     try {
         const newThema = {
             name: name,
-            ersteller: currentUser?.displayName || 'Unbekannt',
+            ersteller: userName,
+            erstellerId: userId,
             erstelltAm: serverTimestamp(),
             mitglieder: [{
-                userId: currentUser?.mode || currentUser?.displayName,
-                name: currentUser?.displayName || 'Unbekannt',
+                userId: userId,
+                name: userName,
                 zugriffsrecht: 'vollzugriff'
             }]
         };
@@ -553,7 +575,8 @@ function renderMitgliederListe(thema) {
     const mitglieder = thema.mitglieder || [];
     
     container.innerHTML = mitglieder.map((m, index) => {
-        const isCreator = m.userId === thema.ersteller || m.name === thema.ersteller;
+        // Prüfe ob Mitglied der Ersteller ist (über erstellerId oder ersteller-Name)
+        const isCreator = m.userId === thema.erstellerId || m.name === thema.ersteller;
         const zugriffsrecht = ZUGRIFFSRECHTE[m.zugriffsrecht] || ZUGRIFFSRECHTE.lesen;
         
         return `
@@ -578,7 +601,10 @@ function renderMitgliederListe(thema) {
 }
 
 async function addMitgliedToThema() {
-    if (!currentEditingThemaId) return;
+    if (!currentEditingThemaId) {
+        console.error("addMitgliedToThema: Keine currentEditingThemaId");
+        return;
+    }
     
     const userSelect = document.getElementById('vv-mitglied-user');
     const rechtSelect = document.getElementById('vv-mitglied-recht');
@@ -592,68 +618,91 @@ async function addMitgliedToThema() {
     }
     
     const selectedUser = USERS[selectedUserId];
-    if (!selectedUser) return;
+    if (!selectedUser) {
+        console.error("addMitgliedToThema: User nicht gefunden:", selectedUserId);
+        alertUser('Benutzer nicht gefunden.', 'error');
+        return;
+    }
+    
+    // WICHTIG: Verwende user.name (nicht displayName!)
+    const userName = selectedUser.name || selectedUserId;
     
     const thema = VERTRAEGE_THEMEN[currentEditingThemaId];
-    if (!thema) return;
+    if (!thema) {
+        console.error("addMitgliedToThema: Thema nicht gefunden:", currentEditingThemaId);
+        return;
+    }
     
     // Prüfen ob User bereits Mitglied ist
-    if (thema.mitglieder?.some(m => m.userId === selectedUserId || m.name === selectedUser.displayName)) {
+    if (thema.mitglieder?.some(m => m.userId === selectedUserId)) {
         alertUser('Dieser Benutzer ist bereits Mitglied.', 'error');
         return;
     }
     
+    // Prüfen ob bereits eine Einladung existiert
+    const existingInvite = Object.values(VERTRAEGE_EINLADUNGEN).find(
+        e => e.targetUserId === selectedUserId && e.themaId === currentEditingThemaId && e.status === 'pending'
+    );
+    if (existingInvite) {
+        alertUser('Dieser Benutzer wurde bereits eingeladen.', 'error');
+        return;
+    }
+    
     try {
-        const newMitglied = {
-            userId: selectedUserId,
-            name: selectedUser.displayName || selectedUserId,
-            zugriffsrecht: selectedRecht
-        };
-        
-        const updatedMitglieder = [...(thema.mitglieder || []), newMitglied];
-        
-        await updateDoc(doc(vertraegeThemenRef, currentEditingThemaId), {
-            mitglieder: updatedMitglieder
-        });
-        
-        VERTRAEGE_THEMEN[currentEditingThemaId].mitglieder = updatedMitglieder;
-        renderMitgliederListe(VERTRAEGE_THEMEN[currentEditingThemaId]);
-        renderThemenListe();
-        
-        // Einladung erstellen
+        // NUR Einladung erstellen - Mitglied wird erst nach Annahme hinzugefügt!
         await addDoc(vertraegeEinladungenRef, {
             themaId: currentEditingThemaId,
             themaName: thema.name,
             targetUserId: selectedUserId,
-            targetUserName: selectedUser.displayName,
-            senderName: currentUser?.displayName,
+            targetUserName: userName,
+            fromUserId: currentUser?.mode || currentUser?.displayName,
+            fromUserName: currentUser?.displayName,
             zugriffsrecht: selectedRecht,
             status: 'pending',
             createdAt: serverTimestamp()
         });
         
-        alertUser(`${selectedUser.displayName} wurde eingeladen!`, 'success');
+        // Dropdown zurücksetzen
+        if (userSelect) userSelect.value = '';
+        
+        // Dropdown neu befüllen (User aus Liste entfernen)
+        populateUserDropdown(thema);
+        
+        alertUser(`Einladung an ${userName} gesendet!`, 'success');
+        console.log(`✅ Einladung gesendet an ${userName} für Thema "${thema.name}"`);
     } catch (error) {
-        console.error("Fehler beim Hinzufügen des Mitglieds:", error);
-        alertUser('Fehler beim Hinzufügen des Mitglieds.', 'error');
+        console.error("Fehler beim Senden der Einladung:", error);
+        alertUser('Fehler beim Senden der Einladung.', 'error');
     }
 }
 
 async function removeMitglied(index) {
-    if (!currentEditingThemaId) return;
+    // WICHTIG: index kommt als String vom HTML onclick, daher parseInt
+    const indexNum = parseInt(index, 10);
+    
+    if (!currentEditingThemaId) {
+        console.error("removeMitglied: Keine currentEditingThemaId");
+        return;
+    }
     
     const thema = VERTRAEGE_THEMEN[currentEditingThemaId];
-    if (!thema || !thema.mitglieder) return;
+    if (!thema || !thema.mitglieder) {
+        console.error("removeMitglied: Thema oder Mitglieder nicht gefunden");
+        return;
+    }
     
-    const mitglied = thema.mitglieder[index];
-    if (!mitglied) return;
+    const mitglied = thema.mitglieder[indexNum];
+    if (!mitglied) {
+        console.error("removeMitglied: Mitglied nicht gefunden bei Index:", indexNum);
+        return;
+    }
     
     if (!confirm(`Möchtest du ${mitglied.name} wirklich aus dem Thema entfernen?`)) {
         return;
     }
     
     try {
-        const updatedMitglieder = thema.mitglieder.filter((_, i) => i !== index);
+        const updatedMitglieder = thema.mitglieder.filter((_, i) => i !== indexNum);
         
         await updateDoc(doc(vertraegeThemenRef, currentEditingThemaId), {
             mitglieder: updatedMitglieder
