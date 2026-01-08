@@ -195,10 +195,10 @@ function renderVertraegeThemenDropdown() {
             // Prüfe ob User der Ersteller ist
             const isCreator = thema.erstellerId === userId || thema.ersteller === currentUser?.displayName;
             
-            // Wenn nicht Ersteller, zeige "(eingeladen von ...)"
+            // Wenn nicht Ersteller, zeige "(geteilt von ...)"
             let displayName = thema.name;
             if (!isCreator && thema.ersteller) {
-                displayName = `${thema.name} (eingeladen von ${thema.ersteller})`;
+                displayName = `${thema.name} (geteilt von ${thema.ersteller})`;
             }
             
             return `<option value="${thema.id}" ${thema.id === currentThemaId ? 'selected' : ''}>${displayName}</option>`;
@@ -573,27 +573,48 @@ function renderMitgliederListe(thema) {
     if (!container) return;
     
     const mitglieder = thema.mitglieder || [];
+    const currentUserId = currentUser?.mode || currentUser?.displayName;
+    
+    // Prüfe ob aktueller User der Ersteller des Themas ist
+    const amICreator = thema.erstellerId === currentUserId || thema.ersteller === currentUser?.displayName;
     
     container.innerHTML = mitglieder.map((m, index) => {
-        // Prüfe ob Mitglied der Ersteller ist (über erstellerId oder ersteller-Name)
-        const isCreator = m.userId === thema.erstellerId || m.name === thema.ersteller;
+        // Prüfe ob dieses Mitglied der Ersteller ist
+        const isMemberCreator = m.userId === thema.erstellerId || m.name === thema.ersteller;
+        // Prüfe ob dieses Mitglied ich selbst bin
+        const isMe = m.userId === currentUserId;
         const zugriffsrecht = ZUGRIFFSRECHTE[m.zugriffsrecht] || ZUGRIFFSRECHTE.lesen;
+        
+        // Löschen-Button: Ersteller kann alle außer sich selbst löschen
+        // Austreten-Button: Eingeladene können selbst austreten
+        let actionButton = '';
+        if (amICreator && !isMemberCreator) {
+            // Ersteller kann andere Mitglieder entfernen
+            actionButton = `
+                <button onclick="window.removeMitglied(${index})" class="p-1 text-red-500 hover:bg-red-100 rounded" title="Mitglied entfernen">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            `;
+        } else if (!amICreator && isMe) {
+            // Eingeladener kann selbst austreten
+            actionButton = `
+                <button onclick="window.leaveThema()" class="px-2 py-1 text-xs bg-red-100 text-red-600 hover:bg-red-200 rounded font-medium" title="Aus Thema austreten">
+                    Austreten
+                </button>
+            `;
+        }
         
         return `
             <div class="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                 <div class="flex items-center gap-2">
-                    <span class="text-lg">${isCreator ? '👑' : '👤'}</span>
-                    <span class="font-medium">${m.name}</span>
+                    <span class="text-lg">${isMemberCreator ? '👑' : '👤'}</span>
+                    <span class="font-medium">${m.name}${isMe ? ' (Du)' : ''}</span>
                 </div>
                 <div class="flex items-center gap-2">
                     <span class="text-sm px-2 py-1 bg-gray-200 rounded">${zugriffsrecht.icon} ${zugriffsrecht.label}</span>
-                    ${!isCreator ? `
-                        <button onclick="window.removeMitglied(${index})" class="p-1 text-red-500 hover:bg-red-100 rounded">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    ` : ''}
+                    ${actionButton}
                 </div>
             </div>
         `;
@@ -716,6 +737,57 @@ async function removeMitglied(index) {
     } catch (error) {
         console.error("Fehler beim Entfernen des Mitglieds:", error);
         alertUser('Fehler beim Entfernen des Mitglieds.', 'error');
+    }
+}
+
+// Eingeladene Person kann selbst aus dem Thema austreten
+async function leaveThema() {
+    if (!currentEditingThemaId) {
+        console.error("leaveThema: Keine currentEditingThemaId");
+        return;
+    }
+    
+    const thema = VERTRAEGE_THEMEN[currentEditingThemaId];
+    if (!thema) {
+        console.error("leaveThema: Thema nicht gefunden");
+        return;
+    }
+    
+    if (!confirm(`Möchtest du wirklich aus dem Thema "${thema.name}" austreten? Du verlierst den Zugriff auf alle Verträge in diesem Thema.`)) {
+        return;
+    }
+    
+    const currentUserId = currentUser?.mode || currentUser?.displayName;
+    
+    try {
+        // Entferne mich selbst aus der Mitgliederliste
+        const updatedMitglieder = thema.mitglieder.filter(m => m.userId !== currentUserId);
+        
+        await updateDoc(doc(vertraegeThemenRef, currentEditingThemaId), {
+            mitglieder: updatedMitglieder
+        });
+        
+        // Thema aus lokalem Speicher entfernen
+        delete VERTRAEGE_THEMEN[currentEditingThemaId];
+        
+        // Modal schließen
+        closeThemaMitgliederModal();
+        closeVertraegeSettingsModal();
+        
+        // Wenn das aktuelle Thema das war, wechsle zum ersten verfügbaren
+        if (currentThemaId === currentEditingThemaId) {
+            currentThemaId = Object.keys(VERTRAEGE_THEMEN)[0];
+            localStorage.setItem('vv_current_thema', currentThemaId);
+            updateCollectionForVertragsThema();
+        }
+        
+        renderThemenListe();
+        renderVertraegeThemenDropdown();
+        
+        alertUser('Du bist aus dem Thema ausgetreten.', 'success');
+    } catch (error) {
+        console.error("Fehler beim Austreten aus dem Thema:", error);
+        alertUser('Fehler beim Austreten aus dem Thema.', 'error');
     }
 }
 
@@ -1638,6 +1710,7 @@ window.editVertragsThema = function(themaId) {
 };
 window.deleteVertragsThema = deleteVertragsThema;
 window.removeMitglied = removeMitglied;
+window.leaveThema = leaveThema;
 window.openVertraegeSettingsModal = openVertraegeSettingsModal;
 
 // Einladungen-Funktionen
