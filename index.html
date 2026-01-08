@@ -1668,11 +1668,10 @@
                                     <option value="">Benutzer wählen...</option>
                                     <!-- Wird dynamisch mit USERS gefüllt -->
                                 </select>
-                                <select id="vv-mitglied-recht" class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-blue-500">
-                                    <option value="lesen">Nur Lesen</option>
-                                    <option value="bearbeiten">Bearbeiten</option>
-                                    <option value="vollzugriff">Vollzugriff</option>
-                                </select>
+                                <input type="hidden" id="vv-mitglied-recht" value="lesen">
+                                <p class="text-sm text-gray-600 bg-gray-100 p-2 rounded-lg">
+                                    <span class="font-medium">Zugriffsrecht:</span> 👁️ Nur Lesen
+                                </p>
                                 <button id="btn-add-mitglied" class="w-full px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition">
                                     Hinzufügen
                                 </button>

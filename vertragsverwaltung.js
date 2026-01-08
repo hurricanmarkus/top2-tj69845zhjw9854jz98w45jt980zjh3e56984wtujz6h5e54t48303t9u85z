@@ -235,6 +235,124 @@ function renderVertraegeEinladungenBadge() {
     }
 }
 
+// Einladungen Modal öffnen
+function openVertraegeEinladungenModal() {
+    const pendingEinladungen = Object.values(VERTRAEGE_EINLADUNGEN).filter(e => e.status === 'pending');
+    
+    if (pendingEinladungen.length === 0) {
+        alertUser('Keine offenen Einladungen vorhanden.', 'info');
+        return;
+    }
+    
+    // Einfaches Alert-Modal mit Einladungen
+    let einladungenHtml = pendingEinladungen.map(einladung => `
+        <div class="bg-blue-50 p-3 rounded-lg mb-2 border border-blue-200">
+            <p class="font-bold text-blue-800">${einladung.themaName || 'Unbekanntes Thema'}</p>
+            <p class="text-sm text-gray-600">Von: ${einladung.fromUserName || 'Unbekannt'}</p>
+            <p class="text-sm text-gray-500">Zugriffsrecht: 👁️ Nur Lesen</p>
+            <div class="flex gap-2 mt-2">
+                <button onclick="window.acceptVertragsEinladung('${einladung.id}')" 
+                    class="flex-1 px-3 py-1 bg-green-500 text-white text-sm font-bold rounded hover:bg-green-600">
+                    ✓ Annehmen
+                </button>
+                <button onclick="window.declineVertragsEinladung('${einladung.id}')" 
+                    class="flex-1 px-3 py-1 bg-red-500 text-white text-sm font-bold rounded hover:bg-red-600">
+                    ✗ Ablehnen
+                </button>
+            </div>
+        </div>
+    `).join('');
+    
+    // Verwende ein einfaches Modal-Overlay
+    const modalHtml = `
+        <div id="vvEinladungenOverlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto">
+                <div class="sticky top-0 bg-gradient-to-r from-purple-600 to-indigo-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                    <h3 class="text-xl font-bold">📬 Einladungen</h3>
+                    <button onclick="document.getElementById('vvEinladungenOverlay').remove()" class="text-white/80 hover:text-white transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-4">
+                    ${einladungenHtml}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Entferne vorheriges Overlay falls vorhanden
+    const existingOverlay = document.getElementById('vvEinladungenOverlay');
+    if (existingOverlay) existingOverlay.remove();
+    
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+// Einladung annehmen
+async function acceptVertragsEinladung(einladungId) {
+    const einladung = VERTRAEGE_EINLADUNGEN[einladungId];
+    if (!einladung) return;
+    
+    try {
+        // Thema laden und Benutzer als Mitglied hinzufügen
+        const themaDocRef = doc(vertraegeThemenRef, einladung.themaId);
+        const themaSnap = await getDoc(themaDocRef);
+        
+        if (themaSnap.exists()) {
+            const themaData = themaSnap.data();
+            const mitglieder = themaData.mitglieder || [];
+            
+            // Benutzer hinzufügen
+            mitglieder.push({
+                userId: currentUser.mode || currentUser.displayName,
+                name: currentUser.displayName,
+                zugriffsrecht: 'lesen',
+                addedAt: new Date().toISOString()
+            });
+            
+            await updateDoc(themaDocRef, { mitglieder });
+        }
+        
+        // Einladung als angenommen markieren
+        await updateDoc(doc(vertraegeEinladungenRef, einladungId), { status: 'accepted' });
+        
+        // Overlay schließen
+        const overlay = document.getElementById('vvEinladungenOverlay');
+        if (overlay) overlay.remove();
+        
+        // Themen neu laden
+        await loadVertraegeThemen();
+        
+        alertUser('Einladung angenommen! Das Thema ist jetzt verfügbar.', 'success');
+    } catch (error) {
+        console.error("Fehler beim Annehmen der Einladung:", error);
+        alertUser('Fehler beim Annehmen der Einladung.', 'error');
+    }
+}
+
+// Einladung ablehnen
+async function declineVertragsEinladung(einladungId) {
+    try {
+        await deleteDoc(doc(vertraegeEinladungenRef, einladungId));
+        
+        // Overlay aktualisieren oder schließen
+        const overlay = document.getElementById('vvEinladungenOverlay');
+        if (overlay) overlay.remove();
+        
+        // Wenn noch Einladungen da sind, Modal neu öffnen
+        const remainingPending = Object.values(VERTRAEGE_EINLADUNGEN).filter(e => e.status === 'pending' && e.id !== einladungId);
+        if (remainingPending.length > 0) {
+            openVertraegeEinladungenModal();
+        }
+        
+        alertUser('Einladung abgelehnt.', 'info');
+    } catch (error) {
+        console.error("Fehler beim Ablehnen der Einladung:", error);
+        alertUser('Fehler beim Ablehnen der Einladung.', 'error');
+    }
+}
+
 // ========================================
 // THEMEN-EINSTELLUNGEN MODAL
 // ========================================
@@ -408,9 +526,11 @@ function populateUserDropdown(thema) {
     
     if (USERS && Object.keys(USERS).length > 0) {
         Object.entries(USERS).forEach(([userId, user]) => {
-            // Nur Benutzer anzeigen, die noch nicht Mitglied sind
+            // Nur Benutzer anzeigen, die noch nicht Mitglied sind und nicht der aktuelle User
             if (!existingMemberIds.includes(userId) && userId !== currentUser?.mode) {
-                options += `<option value="${userId}">${user.displayName || userId}</option>`;
+                // Verwende 'name' statt 'displayName' (so ist die USERS-Struktur aufgebaut)
+                const userName = user.name || userId;
+                options += `<option value="${userId}">${userName}</option>`;
             }
         });
     } else {
@@ -558,6 +678,13 @@ function setupEventListeners() {
             switchVertragsThema(e.target.value);
         });
         themaDropdown.dataset.listenerAttached = 'true';
+    }
+    
+    // Einladungen Button
+    const einladungenBtn = document.getElementById('btn-vv-einladungen');
+    if (einladungenBtn && !einladungenBtn.dataset.listenerAttached) {
+        einladungenBtn.addEventListener('click', openVertraegeEinladungenModal);
+        einladungenBtn.dataset.listenerAttached = 'true';
     }
     
     // Einstellungen Button
@@ -1463,6 +1590,10 @@ window.editVertragsThema = function(themaId) {
 window.deleteVertragsThema = deleteVertragsThema;
 window.removeMitglied = removeMitglied;
 window.openVertraegeSettingsModal = openVertraegeSettingsModal;
+
+// Einladungen-Funktionen
+window.acceptVertragsEinladung = acceptVertragsEinladung;
+window.declineVertragsEinladung = declineVertragsEinladung;
 
 // ========================================
 // HINWEIS: Initialisierung erfolgt durch haupteingang.js
