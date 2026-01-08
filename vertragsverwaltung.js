@@ -577,13 +577,23 @@ function closeThemaMitgliederModal() {
 
 function renderMitgliederListe(thema) {
     const container = document.getElementById('vv-mitglieder-liste');
-    if (!container) return;
+    if (!container) {
+        console.error("renderMitgliederListe: Container 'vv-mitglieder-liste' nicht gefunden!");
+        return;
+    }
     
     const mitglieder = thema.mitglieder || [];
     const currentUserId = currentUser?.mode || currentUser?.displayName;
     
     // Prüfe ob aktueller User der Ersteller des Themas ist
     const amICreator = thema.erstellerId === currentUserId || thema.ersteller === currentUser?.displayName;
+    
+    console.log("renderMitgliederListe Debug:");
+    console.log("  currentUserId:", currentUserId);
+    console.log("  thema.erstellerId:", thema.erstellerId);
+    console.log("  thema.ersteller:", thema.ersteller);
+    console.log("  amICreator:", amICreator);
+    console.log("  mitglieder:", mitglieder);
     
     container.innerHTML = mitglieder.map((m, index) => {
         // Prüfe ob dieses Mitglied der Ersteller ist
@@ -592,13 +602,16 @@ function renderMitgliederListe(thema) {
         const isMe = m.userId === currentUserId;
         const zugriffsrecht = ZUGRIFFSRECHTE[m.zugriffsrecht] || ZUGRIFFSRECHTE.lesen;
         
+        console.log(`  Mitglied ${index}: ${m.name}, userId: ${m.userId}, isMemberCreator: ${isMemberCreator}, isMe: ${isMe}`);
+        
         // Löschen-Button: Ersteller kann alle außer sich selbst löschen
         // Austreten-Button: Eingeladene können selbst austreten
         let actionButton = '';
         if (amICreator && !isMemberCreator) {
+            console.log(`    -> Zeige Löschen-Button für ${m.name}`);
             // Ersteller kann andere Mitglieder entfernen
             actionButton = `
-                <button onclick="window.removeMitglied(${index})" class="p-1 text-red-500 hover:bg-red-100 rounded" title="Mitglied entfernen">
+                <button onclick="console.log('Button geklickt für Index ${index}'); window.removeMitglied(${index})" class="p-1 text-red-500 hover:bg-red-100 rounded" title="Mitglied entfernen">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
