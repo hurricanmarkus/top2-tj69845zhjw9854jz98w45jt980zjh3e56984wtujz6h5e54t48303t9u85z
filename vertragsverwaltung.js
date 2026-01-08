@@ -717,7 +717,7 @@ async function addMitgliedToThema() {
     }
 }
 
-async function removeMitglied(index) {
+window.removeMitglied = async function(index) {
     // WICHTIG: index kommt als String vom HTML onclick, daher parseInt
     const indexNum = parseInt(index, 10);
     
@@ -1786,7 +1786,6 @@ window.editVertragsThema = function(themaId) {
     }
 };
 window.deleteVertragsThema = deleteVertragsThema;
-window.removeMitglied = removeMitglied;
 window.leaveThema = leaveThema;
 window.leaveThemaFromList = leaveThemaFromList;
 window.openVertraegeSettingsModal = openVertraegeSettingsModal;
