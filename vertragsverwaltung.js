@@ -708,20 +708,31 @@ async function removeMitglied(index) {
     // WICHTIG: index kommt als String vom HTML onclick, daher parseInt
     const indexNum = parseInt(index, 10);
     
+    console.log("removeMitglied aufgerufen mit index:", index, "-> indexNum:", indexNum);
+    console.log("currentEditingThemaId:", currentEditingThemaId);
+    
     if (!currentEditingThemaId) {
         console.error("removeMitglied: Keine currentEditingThemaId");
+        alertUser('Fehler: Kein Thema ausgewählt.', 'error');
         return;
     }
     
     const thema = VERTRAEGE_THEMEN[currentEditingThemaId];
+    console.log("Thema gefunden:", thema);
+    console.log("Mitglieder:", thema?.mitglieder);
+    
     if (!thema || !thema.mitglieder) {
         console.error("removeMitglied: Thema oder Mitglieder nicht gefunden");
+        alertUser('Fehler: Thema nicht gefunden.', 'error');
         return;
     }
     
     const mitglied = thema.mitglieder[indexNum];
+    console.log("Mitglied bei Index", indexNum, ":", mitglied);
+    
     if (!mitglied) {
         console.error("removeMitglied: Mitglied nicht gefunden bei Index:", indexNum);
+        alertUser('Fehler: Mitglied nicht gefunden.', 'error');
         return;
     }
     
@@ -730,11 +741,15 @@ async function removeMitglied(index) {
     }
     
     try {
+        console.log("Entferne Mitglied...");
         const updatedMitglieder = thema.mitglieder.filter((_, i) => i !== indexNum);
+        console.log("Neue Mitgliederliste:", updatedMitglieder);
         
         await updateDoc(doc(vertraegeThemenRef, currentEditingThemaId), {
             mitglieder: updatedMitglieder
         });
+        
+        console.log("Firebase Update erfolgreich");
         
         VERTRAEGE_THEMEN[currentEditingThemaId].mitglieder = updatedMitglieder;
         renderMitgliederListe(VERTRAEGE_THEMEN[currentEditingThemaId]);
