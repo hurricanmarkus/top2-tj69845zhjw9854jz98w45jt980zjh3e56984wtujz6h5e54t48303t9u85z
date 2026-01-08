@@ -611,7 +611,7 @@ function renderMitgliederListe(thema) {
             console.log(`    -> Zeige Löschen-Button für ${m.name}`);
             // Ersteller kann andere Mitglieder entfernen
             actionButton = `
-                <button onclick="console.log('Button geklickt für Index ${index}'); window.removeMitglied(${index})" class="p-1 text-red-500 hover:bg-red-100 rounded" title="Mitglied entfernen">
+                <button data-remove-index="${index}" class="btn-remove-mitglied p-1 text-red-500 hover:bg-red-100 rounded" title="Mitglied entfernen">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -639,6 +639,58 @@ function renderMitgliederListe(thema) {
             </div>
         `;
     }).join('');
+    
+    // Event-Listener für Löschen-Buttons hinzufügen
+    container.querySelectorAll('.btn-remove-mitglied').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const index = parseInt(this.getAttribute('data-remove-index'), 10);
+            console.log("Löschen-Button geklickt, Index:", index);
+            
+            if (!currentEditingThemaId) {
+                console.error("removeMitglied: Keine currentEditingThemaId");
+                alertUser('Fehler: Kein Thema ausgewählt.', 'error');
+                return;
+            }
+            
+            const thema = VERTRAEGE_THEMEN[currentEditingThemaId];
+            if (!thema || !thema.mitglieder) {
+                console.error("removeMitglied: Thema oder Mitglieder nicht gefunden");
+                alertUser('Fehler: Thema nicht gefunden.', 'error');
+                return;
+            }
+            
+            const mitglied = thema.mitglieder[index];
+            if (!mitglied) {
+                console.error("removeMitglied: Mitglied nicht gefunden bei Index:", index);
+                alertUser('Fehler: Mitglied nicht gefunden.', 'error');
+                return;
+            }
+            
+            if (!confirm(`Möchtest du ${mitglied.name} wirklich aus dem Thema entfernen?`)) {
+                return;
+            }
+            
+            try {
+                console.log("Entferne Mitglied...");
+                const updatedMitglieder = thema.mitglieder.filter((_, i) => i !== index);
+                
+                await updateDoc(doc(vertraegeThemenRef, currentEditingThemaId), {
+                    mitglieder: updatedMitglieder
+                });
+                
+                console.log("Firebase Update erfolgreich");
+                
+                VERTRAEGE_THEMEN[currentEditingThemaId].mitglieder = updatedMitglieder;
+                renderMitgliederListe(VERTRAEGE_THEMEN[currentEditingThemaId]);
+                renderThemenListe();
+                
+                alertUser('Mitglied entfernt.', 'success');
+            } catch (error) {
+                console.error("Fehler beim Entfernen des Mitglieds:", error);
+                alertUser('Fehler beim Entfernen des Mitglieds.', 'error');
+            }
+        });
+    });
 }
 
 async function addMitgliedToThema() {
