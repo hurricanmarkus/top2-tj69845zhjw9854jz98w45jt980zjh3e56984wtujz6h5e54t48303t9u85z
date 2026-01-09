@@ -1372,7 +1372,17 @@
                 <div class="bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
                     <div class="flex flex-wrap gap-2">
                         <input type="text" id="search-vertraege" placeholder="🔍 Suchen... (Name, Anbieter)" 
-                            class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm">
+                            class="flex-1 min-w-[150px] p-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm">
+                        
+                        <select id="filter-kategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                            <option value="">Alle Kategorien</option>
+                            <!-- Wird dynamisch gefüllt -->
+                        </select>
+                        
+                        <select id="filter-unterkategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                            <option value="">Alle Unterkategorien</option>
+                            <!-- Wird dynamisch gefüllt -->
+                        </select>
                         
                         <select id="filter-zahlungsrhythmus" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Rhythmen</option>
@@ -1392,8 +1402,15 @@
                             <option value="dringend">Dringend kündigen</option>
                         </select>
                         
+                        <select id="filter-vertragsstatus" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                            <option value="aktiv" selected>Nur Aktive</option>
+                            <option value="">Alle Status</option>
+                            <option value="zukuenftig">Zukünftig</option>
+                            <option value="abgelaufen">Abgelaufen</option>
+                        </select>
+                        
                         <button id="reset-filters-vertraege" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
-                            ✕ Filter zurücksetzen
+                            ✕ Reset
                         </button>
                     </div>
                 </div>
@@ -1404,18 +1421,19 @@
                         <table class="min-w-full">
                             <thead class="bg-indigo-50 border-b-2 border-indigo-200">
                                 <tr>
-                                    <th class="px-4 py-3 text-left text-xs font-bold text-indigo-800 uppercase">Name</th>
-                                    <th class="px-4 py-3 text-left text-xs font-bold text-indigo-800 uppercase">Anbieter</th>
-                                    <th class="px-4 py-3 text-left text-xs font-bold text-indigo-800 uppercase">Betrag</th>
-                                    <th class="px-4 py-3 text-left text-xs font-bold text-indigo-800 uppercase">Rhythmus</th>
-                                    <th class="px-4 py-3 text-left text-xs font-bold text-indigo-800 uppercase">Kündigungsfrist</th>
-                                    <th class="px-4 py-3 text-left text-xs font-bold text-indigo-800 uppercase">Absicht</th>
-                                    <th class="px-4 py-3 text-center text-xs font-bold text-indigo-800 uppercase">Aktionen</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-indigo-800 uppercase">Name</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-indigo-800 uppercase">Anbieter</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-indigo-800 uppercase">Kategorie</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-indigo-800 uppercase">Betrag</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-indigo-800 uppercase">Rhythmus</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-indigo-800 uppercase">Status</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-indigo-800 uppercase">Absicht</th>
+                                    <th class="px-3 py-3 text-center text-xs font-bold text-indigo-800 uppercase">Aktionen</th>
                                 </tr>
                             </thead>
                             <tbody id="vertraege-table-body" class="divide-y divide-gray-200">
                                 <tr>
-                                    <td colspan="7" class="px-4 py-8 text-center text-gray-400 italic">
+                                    <td colspan="8" class="px-4 py-8 text-center text-gray-400 italic">
                                         Keine Verträge vorhanden. Erstelle deinen ersten Vertrag!
                                     </td>
                                 </tr>
@@ -1440,87 +1458,126 @@
                     <div class="p-6 space-y-4">
                         <input type="hidden" id="vertragId">
                         
-                        <!-- Vertragsname -->
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-1">Vertragsname *</label>
-                            <input type="text" id="vertragName" placeholder="z.B. Netflix, Spotify, Handyvertrag..." 
-                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
-                        </div>
-                        
-                        <!-- Anbieter -->
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-1">Anbieter / Unternehmen</label>
-                            <input type="text" id="vertragAnbieter" placeholder="z.B. Netflix Inc., Telekom..." 
-                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
-                        </div>
-                        
-                        <!-- Betrag und Rhythmus -->
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-1">Regelmäßiger Betrag (€) *</label>
-                                <input type="number" id="vertragBetrag" step="0.01" min="0" placeholder="0.00" 
+                        <!-- ===== ABSCHNITT 1: VERTRAGSDETAILS ===== -->
+                        <div class="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
+                            <h4 class="font-bold text-indigo-800 mb-3">📋 Vertragsdetails</h4>
+                            
+                            <!-- Vertragsname -->
+                            <div class="mb-3">
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Vertragsname *</label>
+                                <input type="text" id="vertragName" placeholder="z.B. Netflix, Spotify, Handyvertrag..." 
                                     class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
                             </div>
-                            <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-1">Zahlungsrhythmus *</label>
-                                <select id="vertragRhythmus" class="w-full p-3 border-2 border-gray-300 rounded-lg bg-white focus:border-indigo-500">
-                                    <option value="monatlich">Monatlich</option>
-                                    <option value="taeglich">Täglich</option>
-                                    <option value="woechentlich">Wöchentlich</option>
-                                    <option value="quartalsweise">Quartalsweise (alle 3 Monate)</option>
-                                    <option value="halbjaehrlich">Halbjährlich</option>
-                                    <option value="jaehrlich">Jährlich</option>
-                                </select>
+                            
+                            <!-- Anbieter -->
+                            <div class="mb-3">
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Anbieter / Unternehmen</label>
+                                <input type="text" id="vertragAnbieter" placeholder="z.B. Netflix Inc., Telekom..." 
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
                             </div>
-                        </div>
-                        
-                        <!-- Einmalige Sonderzahlungen (Zusatzbeträge & Gutschriften) -->
-                        <div class="bg-gradient-to-r from-yellow-50 to-green-50 p-4 rounded-lg border border-yellow-200">
-                            <div class="flex justify-between items-center mb-3">
+                            
+                            <!-- Kategorie und Unterkategorie -->
+                            <div class="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label class="block text-sm font-bold text-gray-800">📌 Einmalige Sonderzahlungen (optional)</label>
-                                    <p class="text-xs text-gray-600">Zusatzbeträge (z.B. Servicepauschale) oder Gutschriften (z.B. Rabatt)</p>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Kategorie</label>
+                                    <select id="vertragKategorie" class="w-full p-3 border-2 border-gray-300 rounded-lg bg-white focus:border-indigo-500">
+                                        <option value="">Keine Kategorie</option>
+                                        <!-- Wird dynamisch gefüllt -->
+                                    </select>
                                 </div>
-                                <button type="button" id="btn-add-sonderzahlung" 
-                                    class="px-3 py-1 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 transition flex items-center gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                                    </svg>
-                                    Hinzufügen
-                                </button>
-                            </div>
-                            
-                            <!-- Container für Sonderzahlungen -->
-                            <div id="sonderzahlungen-container" class="space-y-3">
-                                <!-- Dynamisch hinzugefügte Sonderzahlungen erscheinen hier -->
-                            </div>
-                            
-                            <!-- Leerer Zustand -->
-                            <div id="sonderzahlungen-empty" class="text-center py-4 text-gray-400 text-sm italic">
-                                Keine Sonderzahlungen hinzugefügt
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Unterkategorie</label>
+                                    <select id="vertragUnterkategorie" class="w-full p-3 border-2 border-gray-300 rounded-lg bg-white focus:border-indigo-500">
+                                        <option value="">Keine Unterkategorie</option>
+                                        <!-- Wird dynamisch gefüllt basierend auf Kategorie -->
+                                    </select>
+                                </div>
                             </div>
                         </div>
                         
-                        <!-- Vertragsbeginn und Laufzeit -->
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-1">Vertragsbeginn</label>
-                                <input type="date" id="vertragBeginn" 
-                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500">
+                        <!-- ===== ABSCHNITT 2: BETRAG & RHYTHMUS ===== -->
+                        <div class="bg-green-50 p-4 rounded-lg border border-green-200">
+                            <h4 class="font-bold text-green-800 mb-3">💰 Betrag & Rhythmus</h4>
+                            
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Regelmäßiger Betrag (€) *</label>
+                                    <input type="number" id="vertragBetrag" step="0.01" min="0" placeholder="0.00" 
+                                        class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Zahlungsrhythmus *</label>
+                                    <select id="vertragRhythmus" class="w-full p-3 border-2 border-gray-300 rounded-lg bg-white focus:border-green-500">
+                                        <option value="monatlich">Monatlich</option>
+                                        <option value="taeglich">Täglich</option>
+                                        <option value="woechentlich">Wöchentlich</option>
+                                        <option value="quartalsweise">Quartalsweise (alle 3 Monate)</option>
+                                        <option value="halbjaehrlich">Halbjährlich</option>
+                                        <option value="jaehrlich">Jährlich</option>
+                                    </select>
+                                </div>
                             </div>
+                            
+                            <!-- Einmalige Sonderzahlungen -->
+                            <div class="mt-3 bg-gradient-to-r from-yellow-50 to-green-50 p-3 rounded-lg border border-yellow-200">
+                                <div class="flex justify-between items-center mb-2">
+                                    <div>
+                                        <label class="block text-sm font-bold text-gray-800">📌 Sonderzahlungen (optional)</label>
+                                        <p class="text-xs text-gray-600">Zusatzbeträge oder Gutschriften</p>
+                                    </div>
+                                    <button type="button" id="btn-add-sonderzahlung" 
+                                        class="px-3 py-1 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 transition flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                        </svg>
+                                        Hinzufügen
+                                    </button>
+                                </div>
+                                <div id="sonderzahlungen-container" class="space-y-3"></div>
+                                <div id="sonderzahlungen-empty" class="text-center py-2 text-gray-400 text-sm italic">
+                                    Keine Sonderzahlungen hinzugefügt
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- ===== ABSCHNITT 3: VERTRAGSLAUFZEIT ===== -->
+                        <div class="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                            <h4 class="font-bold text-purple-800 mb-3">📅 Vertragslaufzeit</h4>
+                            
+                            <div class="grid grid-cols-2 gap-3 mb-3">
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Vertragsbeginn</label>
+                                    <input type="date" id="vertragBeginn" 
+                                        class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-purple-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Vertragsende</label>
+                                    <input type="date" id="vertragEnde" 
+                                        class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-purple-500" disabled>
+                                </div>
+                            </div>
+                            
+                            <!-- Unbegrenzt Checkbox -->
+                            <div class="flex items-center gap-2 mb-3">
+                                <input type="checkbox" id="vertragUnbegrenzt" class="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500">
+                                <label for="vertragUnbegrenzt" class="text-sm font-medium text-gray-700">Unbegrenzte Laufzeit (kein Vertragsende)</label>
+                            </div>
+                            
                             <div>
                                 <label class="block text-sm font-bold text-gray-700 mb-1">Mindestlaufzeit (Monate)</label>
                                 <input type="number" id="vertragLaufzeit" min="0" placeholder="z.B. 24" 
-                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500">
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-purple-500">
                             </div>
                         </div>
                         
-                        <!-- Kündigungsfrist -->
+                        <!-- ===== ABSCHNITT 4: KÜNDIGUNG ===== -->
                         <div class="bg-red-50 p-4 rounded-lg border border-red-200">
-                            <label class="block text-sm font-bold text-red-800 mb-2">⚠️ Kündigungsfrist</label>
-                            <div class="grid grid-cols-2 gap-4">
+                            <h4 class="font-bold text-red-800 mb-3">⚠️ Kündigung</h4>
+                            
+                            <!-- Kündigungsfrist -->
+                            <div class="grid grid-cols-2 gap-3 mb-3">
                                 <div>
-                                    <label class="block text-xs font-semibold text-gray-600 mb-1">Frist (Anzahl)</label>
+                                    <label class="block text-xs font-semibold text-gray-600 mb-1">Kündigungsfrist (Anzahl)</label>
                                     <input type="number" id="vertragKuendigungsfrist" min="0" placeholder="z.B. 3" 
                                         class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-red-500">
                                 </div>
@@ -1533,65 +1590,84 @@
                                     </select>
                                 </div>
                             </div>
-                            <div class="mt-3">
+                            
+                            <div class="mb-3">
                                 <label class="block text-xs font-semibold text-gray-600 mb-1">Nächstes Kündigungsdatum (falls bekannt)</label>
                                 <input type="date" id="vertragKuendigungsdatum" 
                                     class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-red-500">
                             </div>
-                        </div>
-                        
-                        <!-- Kündigungsabsicht -->
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-2">Kündigungsabsicht</label>
-                            <div class="grid grid-cols-2 gap-2">
-                                <label class="flex items-center p-3 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition kuendigungs-option" data-value="behalten">
-                                    <input type="radio" name="kuendigungsabsicht" value="behalten" class="hidden">
-                                    <span class="w-4 h-4 rounded-full border-2 border-gray-400 mr-3 flex items-center justify-center radio-circle"></span>
-                                    <span class="text-sm">✅ Behalten</span>
-                                </label>
-                                <label class="flex items-center p-3 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition kuendigungs-option" data-value="ueberlege">
-                                    <input type="radio" name="kuendigungsabsicht" value="ueberlege" class="hidden">
-                                    <span class="w-4 h-4 rounded-full border-2 border-gray-400 mr-3 flex items-center justify-center radio-circle"></span>
-                                    <span class="text-sm">🤔 Überlege zu kündigen</span>
-                                </label>
-                                <label class="flex items-center p-3 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition kuendigungs-option" data-value="kuendigen">
-                                    <input type="radio" name="kuendigungsabsicht" value="kuendigen" class="hidden">
-                                    <span class="w-4 h-4 rounded-full border-2 border-gray-400 mr-3 flex items-center justify-center radio-circle"></span>
-                                    <span class="text-sm">📝 Will kündigen</span>
-                                </label>
-                                <label class="flex items-center p-3 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition kuendigungs-option" data-value="dringend">
-                                    <input type="radio" name="kuendigungsabsicht" value="dringend" class="hidden">
-                                    <span class="w-4 h-4 rounded-full border-2 border-gray-400 mr-3 flex items-center justify-center radio-circle"></span>
-                                    <span class="text-sm">🚨 Dringend kündigen!</span>
-                                </label>
+                            
+                            <!-- Kündigungsstatus -->
+                            <div class="mb-3">
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Kündigungsstatus</label>
+                                <select id="vertragKuendigungsstatus" class="w-full p-2 border-2 border-gray-300 rounded-lg bg-white focus:border-red-500">
+                                    <option value="laufend">🟢 Laufend</option>
+                                    <option value="kuendigung_gesendet">📤 Kündigung gesendet</option>
+                                    <option value="kuendigung_bestaetigt">✅ Kündigung bestätigt</option>
+                                    <option value="storniert">❌ Storniert</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Kündigungsabsicht -->
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Kündigungsabsicht</label>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <label class="flex items-center p-2 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition kuendigungs-option border-gray-200" data-value="behalten">
+                                        <input type="radio" name="kuendigungsabsicht" value="behalten" class="hidden">
+                                        <span class="w-4 h-4 rounded-full border-2 border-gray-400 mr-2 flex items-center justify-center radio-circle"></span>
+                                        <span class="text-sm">✅ Behalten</span>
+                                    </label>
+                                    <label class="flex items-center p-2 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition kuendigungs-option border-gray-200" data-value="ueberlege">
+                                        <input type="radio" name="kuendigungsabsicht" value="ueberlege" class="hidden">
+                                        <span class="w-4 h-4 rounded-full border-2 border-gray-400 mr-2 flex items-center justify-center radio-circle"></span>
+                                        <span class="text-sm">🤔 Überlege</span>
+                                    </label>
+                                    <label class="flex items-center p-2 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition kuendigungs-option border-gray-200" data-value="kuendigen">
+                                        <input type="radio" name="kuendigungsabsicht" value="kuendigen" class="hidden">
+                                        <span class="w-4 h-4 rounded-full border-2 border-gray-400 mr-2 flex items-center justify-center radio-circle"></span>
+                                        <span class="text-sm">📝 Will kündigen</span>
+                                    </label>
+                                    <label class="flex items-center p-2 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition kuendigungs-option border-gray-200" data-value="dringend">
+                                        <input type="radio" name="kuendigungsabsicht" value="dringend" class="hidden">
+                                        <span class="w-4 h-4 rounded-full border-2 border-gray-400 mr-2 flex items-center justify-center radio-circle"></span>
+                                        <span class="text-sm">🚨 Dringend!</span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
                         
-                        <!-- Erinnerung -->
+                        <!-- ===== ABSCHNITT 5: ERINNERUNG & NOTIZEN ===== -->
                         <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                            <label class="block text-sm font-bold text-blue-800 mb-2">🔔 Kündigungserinnerung</label>
-                            <div class="flex items-center gap-3">
+                            <h4 class="font-bold text-blue-800 mb-3">🔔 Erinnerung & Notizen</h4>
+                            
+                            <div class="flex items-center gap-3 mb-3">
                                 <input type="number" id="vertragErinnerungTage" min="1" value="30" 
                                     class="w-24 p-2 border-2 border-gray-300 rounded-lg focus:border-blue-500">
                                 <span class="text-sm text-gray-700">Tage vor Kündigungsfrist erinnern</span>
                             </div>
-                        </div>
-                        
-                        <!-- Notizen -->
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-1">Notizen</label>
-                            <textarea id="vertragNotizen" rows="3" placeholder="Zusätzliche Informationen..." 
-                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 resize-none"></textarea>
+                            
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Notizen</label>
+                                <textarea id="vertragNotizen" rows="2" placeholder="Zusätzliche Informationen..." 
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 resize-none"></textarea>
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-3">
-                        <button id="cancelVertragBtn" class="px-6 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
-                            Abbrechen
+                    <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-between items-center">
+                        <!-- Abtausch Button (nur bei Bearbeitung sichtbar) -->
+                        <button id="vertragAbtauschBtn" class="hidden px-4 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 transition flex items-center gap-2">
+                            🔄 Abtausch
                         </button>
-                        <button id="saveVertragBtn" class="px-6 py-2 bg-gradient-to-r from-indigo-600 to-purple-500 text-white font-bold rounded-lg hover:shadow-lg transition">
-                            Speichern
-                        </button>
+                        <div class="flex-1"></div>
+                        <div class="flex gap-3">
+                            <button id="cancelVertragBtn" class="px-6 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
+                                Abbrechen
+                            </button>
+                            <button id="saveVertragBtn" class="px-6 py-2 bg-gradient-to-r from-indigo-600 to-purple-500 text-white font-bold rounded-lg hover:shadow-lg transition">
+                                Speichern
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1615,9 +1691,9 @@
 
             <!-- ========== VERTRAEGE SETTINGS MODAL ========== -->
             <div id="vertraegeSettingsModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
-                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                     <div class="sticky top-0 bg-gradient-to-r from-indigo-600 to-purple-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
-                        <h3 class="text-xl font-bold">Themen-Einstellungen</h3>
+                        <h3 class="text-xl font-bold">⚙️ Einstellungen</h3>
                         <button id="closeVertraegeSettingsModal" class="text-white/80 hover:text-white transition">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -1625,22 +1701,70 @@
                         </button>
                     </div>
                     <div class="p-6 space-y-4">
-                        <!-- Neues Thema erstellen -->
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            <h4 class="font-bold text-gray-800 mb-3">Neues Thema erstellen</h4>
-                            <div class="flex gap-2">
+                        <!-- ===== KATEGORIEN VERWALTEN ===== -->
+                        <div class="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
+                            <h4 class="font-bold text-indigo-800 mb-3">📁 Kategorien verwalten</h4>
+                            
+                            <!-- Neue Kategorie -->
+                            <div class="flex gap-2 mb-3">
+                                <input type="text" id="vv-neue-kategorie" placeholder="Neue Kategorie (z.B. Versicherung, Mietvertrag...)" 
+                                    class="flex-1 p-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500">
+                                <button id="btn-add-kategorie" class="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition">
+                                    + Hinzufügen
+                                </button>
+                            </div>
+                            
+                            <!-- Kategorien-Liste -->
+                            <div id="vv-kategorien-liste" class="space-y-2 max-h-40 overflow-y-auto">
+                                <!-- Wird dynamisch gefüllt -->
+                                <p class="text-gray-400 text-sm italic text-center py-2">Keine Kategorien vorhanden</p>
+                            </div>
+                        </div>
+                        
+                        <!-- ===== UNTERKATEGORIEN VERWALTEN ===== -->
+                        <div class="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                            <h4 class="font-bold text-purple-800 mb-3">📂 Unterkategorien verwalten</h4>
+                            
+                            <!-- Kategorie auswählen -->
+                            <div class="mb-3">
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Für Kategorie:</label>
+                                <select id="vv-unterkategorie-parent" class="w-full p-2 border-2 border-gray-300 rounded-lg bg-white focus:border-purple-500">
+                                    <option value="">Kategorie wählen...</option>
+                                    <!-- Wird dynamisch gefüllt -->
+                                </select>
+                            </div>
+                            
+                            <!-- Neue Unterkategorie -->
+                            <div class="flex gap-2 mb-3">
+                                <input type="text" id="vv-neue-unterkategorie" placeholder="Neue Unterkategorie (z.B. Fitnessstudio, Wiener Netze...)" 
+                                    class="flex-1 p-2 border-2 border-gray-300 rounded-lg focus:border-purple-500">
+                                <button id="btn-add-unterkategorie" class="px-4 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 transition">
+                                    + Hinzufügen
+                                </button>
+                            </div>
+                            
+                            <!-- Unterkategorien-Liste -->
+                            <div id="vv-unterkategorien-liste" class="space-y-2 max-h-40 overflow-y-auto">
+                                <!-- Wird dynamisch gefüllt -->
+                                <p class="text-gray-400 text-sm italic text-center py-2">Kategorie wählen um Unterkategorien zu sehen</p>
+                            </div>
+                        </div>
+                        
+                        <!-- ===== THEMEN VERWALTEN ===== -->
+                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <h4 class="font-bold text-gray-800 mb-3">📋 Themen verwalten</h4>
+                            
+                            <!-- Neues Thema erstellen -->
+                            <div class="flex gap-2 mb-3">
                                 <input type="text" id="vv-neues-thema-name" placeholder="z.B. Haushalt, Fitness, Versicherungen..." 
                                     class="flex-1 p-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
                                 <button id="btn-create-vertrags-thema" class="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition">
                                     Erstellen
                                 </button>
                             </div>
-                        </div>
-                        
-                        <!-- Themen-Liste -->
-                        <div>
-                            <h4 class="font-bold text-gray-800 mb-3">Meine Themen</h4>
-                            <div id="vv-themen-liste" class="space-y-2">
+                            
+                            <!-- Themen-Liste -->
+                            <div id="vv-themen-liste" class="space-y-2 max-h-40 overflow-y-auto">
                                 <!-- Wird dynamisch gefüllt -->
                             </div>
                         </div>
@@ -1685,6 +1809,158 @@
                                 <!-- Wird dynamisch gefüllt -->
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== VERTRAG ABTAUSCH MODAL ========== -->
+            <div id="vertragAbtauschModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <div class="sticky top-0 bg-gradient-to-r from-purple-600 to-indigo-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                        <h3 class="text-xl font-bold">🔄 Vertrag abtauschen</h3>
+                        <button id="closeVertragAbtauschModal" class="text-white/80 hover:text-white transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <!-- Alter Eintrag Info -->
+                        <div class="bg-gray-100 rounded-lg p-4">
+                            <h4 class="font-bold text-gray-700 mb-2">📋 Aktueller Vertrag (wird beendet)</h4>
+                            <div class="grid grid-cols-2 gap-2 text-sm">
+                                <div>
+                                    <span class="text-gray-500">Name:</span>
+                                    <span id="vv-abtausch-alter-name" class="font-medium ml-1">-</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Anbieter:</span>
+                                    <span id="vv-abtausch-alter-anbieter" class="font-medium ml-1">-</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Betrag:</span>
+                                    <span id="vv-abtausch-alter-betrag" class="font-medium ml-1">-</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Laufzeit:</span>
+                                    <span id="vv-abtausch-alter-laufzeit" class="font-medium ml-1">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Datumsfelder -->
+                        <div class="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                            <h4 class="font-bold text-purple-800 mb-3">📅 Zeitraum</h4>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Neuer Beginn *</label>
+                                    <input type="date" id="vv-abtausch-neuer-beginn" class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-purple-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Alter Eintrag endet am</label>
+                                    <input type="date" id="vv-abtausch-altes-ende" class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-purple-500">
+                                    <p class="text-xs text-gray-500 mt-1">Automatisch: Tag vor neuem Beginn</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Nicht bearbeitbare Felder (vom alten Vertrag übernommen) -->
+                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <h4 class="font-bold text-gray-700 mb-3">🔒 Übernommene Daten (nicht änderbar)</h4>
+                            <div class="grid grid-cols-2 gap-3 text-sm">
+                                <div>
+                                    <span class="text-gray-500">Name:</span>
+                                    <span id="vv-abtausch-fix-name" class="font-medium ml-1">-</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Anbieter:</span>
+                                    <span id="vv-abtausch-fix-anbieter" class="font-medium ml-1">-</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Kategorie:</span>
+                                    <span id="vv-abtausch-fix-kategorie" class="font-medium ml-1">-</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Unterkategorie:</span>
+                                    <span id="vv-abtausch-fix-unterkategorie" class="font-medium ml-1">-</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Kündigungsabsicht:</span>
+                                    <span id="vv-abtausch-fix-absicht" class="font-medium ml-1">-</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Kündigungsstatus:</span>
+                                    <span id="vv-abtausch-fix-status" class="font-medium ml-1">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bearbeitbare Felder -->
+                        <div class="bg-green-50 p-4 rounded-lg border border-green-200">
+                            <h4 class="font-bold text-green-800 mb-3">✨ Neue Werte (anpassbar)</h4>
+                            
+                            <div class="grid grid-cols-2 gap-3 mb-3">
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">💰 Neuer Betrag (€) *</label>
+                                    <input type="number" step="0.01" id="vv-abtausch-betrag" class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-green-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Zahlungsrhythmus</label>
+                                    <select id="vv-abtausch-rhythmus" class="w-full p-2 border-2 border-gray-300 rounded-lg bg-white focus:border-green-500">
+                                        <option value="monatlich">Monatlich</option>
+                                        <option value="taeglich">Täglich</option>
+                                        <option value="woechentlich">Wöchentlich</option>
+                                        <option value="quartalsweise">Quartalsweise</option>
+                                        <option value="halbjaehrlich">Halbjährlich</option>
+                                        <option value="jaehrlich">Jährlich</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-3 mb-3">
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Vertragsende</label>
+                                    <input type="date" id="vv-abtausch-ende" class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-green-500">
+                                </div>
+                                <div class="flex items-end pb-2">
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" id="vv-abtausch-unbegrenzt" class="w-5 h-5 rounded border-gray-300 text-green-600 focus:ring-green-500">
+                                        <span class="text-sm font-medium text-gray-700">Unbegrenzt</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Kündigungsfrist</label>
+                                    <input type="number" id="vv-abtausch-kuendigungsfrist" min="0" class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-green-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Einheit</label>
+                                    <select id="vv-abtausch-kuendigungsfrist-einheit" class="w-full p-2 border-2 border-gray-300 rounded-lg bg-white focus:border-green-500">
+                                        <option value="tage">Tage</option>
+                                        <option value="wochen">Wochen</option>
+                                        <option value="monate" selected>Monate</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Notizen -->
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">📝 Notizen zum neuen Eintrag</label>
+                            <textarea id="vv-abtausch-notizen" rows="2" placeholder="z.B. Preiserhöhung ab..." 
+                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 resize-none"></textarea>
+                        </div>
+                    </div>
+                    
+                    <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-3">
+                        <button id="cancelVertragAbtauschBtn" class="px-6 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
+                            Abbrechen
+                        </button>
+                        <button id="saveVertragAbtauschBtn" class="px-6 py-2 bg-gradient-to-r from-purple-600 to-indigo-500 text-white font-bold rounded-lg hover:shadow-lg transition">
+                            🔄 Abtausch speichern
+                        </button>
                     </div>
                 </div>
             </div>

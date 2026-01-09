@@ -33,14 +33,18 @@ import {
 let vertraegeCollection = null;
 let vertraegeThemenRef = null;
 let vertraegeEinladungenRef = null;
+let vertraegeKategorienRef = null;
 let VERTRAEGE = {};
 let VERTRAEGE_THEMEN = {};
 let VERTRAEGE_EINLADUNGEN = {};
+let VERTRAEGE_KATEGORIEN = {};
 let currentThemaId = null;
-let currentFilter = { rhythmus: '', absicht: '' };
+let currentFilter = { rhythmus: '', absicht: '', kategorie: '', unterkategorie: '', status: 'aktiv' };
 let searchTerm = '';
 let unsubscribeVertraege = null;
 let unsubscribeThemen = null;
+let unsubscribeKategorien = null;
+let currentAbtauschVertragId = null;
 
 // Zugriffsrechte-Konfiguration
 const ZUGRIFFSRECHTE = {
@@ -68,6 +72,46 @@ const ABSICHT_CONFIG = {
     dringend: { label: 'Dringend!', icon: '🚨', color: 'bg-red-100 text-red-800', priority: 3 }
 };
 
+// Kündigungsstatus-Konfiguration
+const KUENDIGUNGSSTATUS_CONFIG = {
+    laufend: { label: 'Laufend', icon: '🟢', color: 'bg-green-100 text-green-800' },
+    kuendigung_gesendet: { label: 'Kündigung gesendet', icon: '📤', color: 'bg-yellow-100 text-yellow-800' },
+    kuendigung_bestaetigt: { label: 'Kündigung bestätigt', icon: '✅', color: 'bg-blue-100 text-blue-800' },
+    storniert: { label: 'Storniert', icon: '❌', color: 'bg-red-100 text-red-800' }
+};
+
+// Vertragsstatus-Konfiguration (basierend auf Zeitraum)
+const VERTRAGSSTATUS_CONFIG = {
+    aktiv: { label: 'Aktiv', icon: '🟢', color: 'bg-green-100 text-green-800' },
+    zukuenftig: { label: 'Zukünftig', icon: '📅', color: 'bg-blue-100 text-blue-800' },
+    abgelaufen: { label: 'Abgelaufen', icon: '⏰', color: 'bg-gray-100 text-gray-600' }
+};
+
+// Berechnet den Vertragsstatus basierend auf Beginn und Ende
+function berechneVertragsstatus(vertrag) {
+    const heute = new Date();
+    heute.setHours(0, 0, 0, 0);
+    
+    const beginn = vertrag.beginn ? new Date(vertrag.beginn) : null;
+    const ende = vertrag.ende ? new Date(vertrag.ende) : null;
+    
+    if (beginn) beginn.setHours(0, 0, 0, 0);
+    if (ende) ende.setHours(0, 0, 0, 0);
+    
+    // Wenn Vertragsbeginn in der Zukunft liegt
+    if (beginn && beginn > heute) {
+        return 'zukuenftig';
+    }
+    
+    // Wenn Vertragsende in der Vergangenheit liegt (und nicht unbegrenzt)
+    if (ende && !vertrag.unbegrenzt && ende < heute) {
+        return 'abgelaufen';
+    }
+    
+    // Sonst ist der Vertrag aktiv
+    return 'aktiv';
+}
+
 // Monatsnamen
 const MONATSNAMEN = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 
@@ -83,13 +127,16 @@ export async function initializeVertragsverwaltung() {
     if (db) {
         vertraegeThemenRef = collection(db, 'artifacts', appId, 'public', 'data', 'vertraege_themen');
         vertraegeEinladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'vertraege_einladungen');
+        vertraegeKategorienRef = collection(db, 'artifacts', appId, 'public', 'data', 'vertraege_kategorien');
         
         console.log("📂 Firebase Referenzen erstellt:");
         console.log("  - Themen:", vertraegeThemenRef.path);
         console.log("  - Einladungen:", vertraegeEinladungenRef.path);
+        console.log("  - Kategorien:", vertraegeKategorienRef.path);
         
         loadVertraegeThemen();
         loadVertraegeEinladungen();
+        loadVertraegeKategorien();
     }
 
     setupEventListeners();
@@ -377,6 +424,237 @@ async function declineVertragsEinladung(einladungId) {
 }
 
 // ========================================
+// KATEGORIEN-SYSTEM
+// ========================================
+function loadVertraegeKategorien() {
+    if (!vertraegeKategorienRef) return;
+    
+    if (unsubscribeKategorien) {
+        unsubscribeKategorien();
+    }
+    
+    unsubscribeKategorien = onSnapshot(vertraegeKategorienRef, (snapshot) => {
+        VERTRAEGE_KATEGORIEN = {};
+        snapshot.forEach(docSnap => {
+            VERTRAEGE_KATEGORIEN[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
+        });
+        console.log(`📁 ${Object.keys(VERTRAEGE_KATEGORIEN).length} Kategorien geladen`);
+        renderKategorienDropdowns();
+        renderKategorienListe();
+    }, (error) => {
+        console.error("Fehler beim Laden der Kategorien:", error);
+    });
+}
+
+function renderKategorienDropdowns() {
+    // Kategorien für Modal-Dropdown
+    const kategorieSelect = document.getElementById('vertragKategorie');
+    const filterKategorie = document.getElementById('filter-kategorie');
+    const unterkategorieParent = document.getElementById('vv-unterkategorie-parent');
+    
+    const kategorien = Object.values(VERTRAEGE_KATEGORIEN).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    
+    const optionsHtml = '<option value="">Keine Kategorie</option>' + 
+        kategorien.map(k => `<option value="${k.id}">${k.name}</option>`).join('');
+    
+    if (kategorieSelect) kategorieSelect.innerHTML = optionsHtml;
+    if (filterKategorie) filterKategorie.innerHTML = '<option value="">Alle Kategorien</option>' + 
+        kategorien.map(k => `<option value="${k.id}">${k.name}</option>`).join('');
+    if (unterkategorieParent) unterkategorieParent.innerHTML = '<option value="">Kategorie wählen...</option>' + 
+        kategorien.map(k => `<option value="${k.id}">${k.name}</option>`).join('');
+}
+
+function renderUnterkategorienDropdown(kategorieId) {
+    const unterkategorieSelect = document.getElementById('vertragUnterkategorie');
+    const filterUnterkategorie = document.getElementById('filter-unterkategorie');
+    
+    if (!kategorieId) {
+        if (unterkategorieSelect) unterkategorieSelect.innerHTML = '<option value="">Keine Unterkategorie</option>';
+        if (filterUnterkategorie) filterUnterkategorie.innerHTML = '<option value="">Alle Unterkategorien</option>';
+        return;
+    }
+    
+    const kategorie = VERTRAEGE_KATEGORIEN[kategorieId];
+    const unterkategorien = kategorie?.unterkategorien || [];
+    
+    const optionsHtml = '<option value="">Keine Unterkategorie</option>' + 
+        unterkategorien.map(u => `<option value="${u}">${u}</option>`).join('');
+    
+    if (unterkategorieSelect) unterkategorieSelect.innerHTML = optionsHtml;
+    if (filterUnterkategorie) filterUnterkategorie.innerHTML = '<option value="">Alle Unterkategorien</option>' + 
+        unterkategorien.map(u => `<option value="${u}">${u}</option>`).join('');
+}
+
+function renderKategorienListe() {
+    const container = document.getElementById('vv-kategorien-liste');
+    if (!container) return;
+    
+    const kategorien = Object.values(VERTRAEGE_KATEGORIEN).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    
+    if (kategorien.length === 0) {
+        container.innerHTML = '<p class="text-gray-400 text-sm italic text-center py-2">Keine Kategorien vorhanden</p>';
+        return;
+    }
+    
+    container.innerHTML = kategorien.map(k => `
+        <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-gray-200">
+            <span class="font-medium text-gray-800">${k.name}</span>
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-500">${(k.unterkategorien || []).length} Unterkategorien</span>
+                <button onclick="window.deleteKategorie('${k.id}')" class="p-1 text-red-500 hover:bg-red-100 rounded" title="Löschen">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderUnterkategorienListe(kategorieId) {
+    const container = document.getElementById('vv-unterkategorien-liste');
+    if (!container) return;
+    
+    if (!kategorieId) {
+        container.innerHTML = '<p class="text-gray-400 text-sm italic text-center py-2">Kategorie wählen um Unterkategorien zu sehen</p>';
+        return;
+    }
+    
+    const kategorie = VERTRAEGE_KATEGORIEN[kategorieId];
+    const unterkategorien = kategorie?.unterkategorien || [];
+    
+    if (unterkategorien.length === 0) {
+        container.innerHTML = '<p class="text-gray-400 text-sm italic text-center py-2">Keine Unterkategorien vorhanden</p>';
+        return;
+    }
+    
+    container.innerHTML = unterkategorien.map(u => `
+        <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-gray-200">
+            <span class="font-medium text-gray-800">${u}</span>
+            <button onclick="window.deleteUnterkategorie('${kategorieId}', '${u}')" class="p-1 text-red-500 hover:bg-red-100 rounded" title="Löschen">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+    `).join('');
+}
+
+async function addKategorie() {
+    const input = document.getElementById('vv-neue-kategorie');
+    const name = input?.value?.trim();
+    
+    if (!name) {
+        alertUser('Bitte gib einen Namen für die Kategorie ein.', 'error');
+        return;
+    }
+    
+    // Prüfen ob Kategorie bereits existiert
+    const exists = Object.values(VERTRAEGE_KATEGORIEN).some(k => k.name?.toLowerCase() === name.toLowerCase());
+    if (exists) {
+        alertUser('Diese Kategorie existiert bereits.', 'error');
+        return;
+    }
+    
+    try {
+        await addDoc(vertraegeKategorienRef, {
+            name: name,
+            unterkategorien: [],
+            createdAt: serverTimestamp(),
+            createdBy: currentUser?.displayName || 'Unbekannt'
+        });
+        
+        if (input) input.value = '';
+        alertUser(`Kategorie "${name}" erstellt!`, 'success');
+    } catch (error) {
+        console.error("Fehler beim Erstellen der Kategorie:", error);
+        alertUser('Fehler beim Erstellen der Kategorie.', 'error');
+    }
+}
+
+async function deleteKategorie(kategorieId) {
+    const kategorie = VERTRAEGE_KATEGORIEN[kategorieId];
+    if (!kategorie) return;
+    
+    if (!confirm(`Möchtest du die Kategorie "${kategorie.name}" wirklich löschen?`)) {
+        return;
+    }
+    
+    try {
+        await deleteDoc(doc(vertraegeKategorienRef, kategorieId));
+        alertUser('Kategorie gelöscht!', 'success');
+    } catch (error) {
+        console.error("Fehler beim Löschen der Kategorie:", error);
+        alertUser('Fehler beim Löschen der Kategorie.', 'error');
+    }
+}
+
+async function addUnterkategorie() {
+    const parentSelect = document.getElementById('vv-unterkategorie-parent');
+    const input = document.getElementById('vv-neue-unterkategorie');
+    
+    const kategorieId = parentSelect?.value;
+    const name = input?.value?.trim();
+    
+    if (!kategorieId) {
+        alertUser('Bitte wähle zuerst eine Kategorie aus.', 'error');
+        return;
+    }
+    
+    if (!name) {
+        alertUser('Bitte gib einen Namen für die Unterkategorie ein.', 'error');
+        return;
+    }
+    
+    const kategorie = VERTRAEGE_KATEGORIEN[kategorieId];
+    if (!kategorie) return;
+    
+    const unterkategorien = kategorie.unterkategorien || [];
+    
+    // Prüfen ob Unterkategorie bereits existiert
+    if (unterkategorien.some(u => u.toLowerCase() === name.toLowerCase())) {
+        alertUser('Diese Unterkategorie existiert bereits.', 'error');
+        return;
+    }
+    
+    try {
+        unterkategorien.push(name);
+        await updateDoc(doc(vertraegeKategorienRef, kategorieId), {
+            unterkategorien: unterkategorien
+        });
+        
+        if (input) input.value = '';
+        renderUnterkategorienListe(kategorieId);
+        alertUser(`Unterkategorie "${name}" hinzugefügt!`, 'success');
+    } catch (error) {
+        console.error("Fehler beim Hinzufügen der Unterkategorie:", error);
+        alertUser('Fehler beim Hinzufügen der Unterkategorie.', 'error');
+    }
+}
+
+async function deleteUnterkategorie(kategorieId, unterkategorieName) {
+    const kategorie = VERTRAEGE_KATEGORIEN[kategorieId];
+    if (!kategorie) return;
+    
+    if (!confirm(`Möchtest du die Unterkategorie "${unterkategorieName}" wirklich löschen?`)) {
+        return;
+    }
+    
+    try {
+        const unterkategorien = (kategorie.unterkategorien || []).filter(u => u !== unterkategorieName);
+        await updateDoc(doc(vertraegeKategorienRef, kategorieId), {
+            unterkategorien: unterkategorien
+        });
+        
+        renderUnterkategorienListe(kategorieId);
+        alertUser('Unterkategorie gelöscht!', 'success');
+    } catch (error) {
+        console.error("Fehler beim Löschen der Unterkategorie:", error);
+        alertUser('Fehler beim Löschen der Unterkategorie.', 'error');
+    }
+}
+
+// ========================================
 // THEMEN-EINSTELLUNGEN MODAL
 // ========================================
 function openVertraegeSettingsModal() {
@@ -387,6 +665,7 @@ function openVertraegeSettingsModal() {
     }
     
     renderThemenListe();
+    renderKategorienListe();
     modal.style.display = 'flex';
 }
 
@@ -990,14 +1269,50 @@ function setupEventListeners() {
     const resetFilters = document.getElementById('reset-filters-vertraege');
     if (resetFilters && !resetFilters.dataset.listenerAttached) {
         resetFilters.addEventListener('click', () => {
-            currentFilter = { rhythmus: '', absicht: '' };
+            currentFilter = { rhythmus: '', absicht: '', kategorie: '', unterkategorie: '', status: 'aktiv' };
             searchTerm = '';
             document.getElementById('search-vertraege').value = '';
             document.getElementById('filter-zahlungsrhythmus').value = '';
             document.getElementById('filter-kuendigungsabsicht').value = '';
+            document.getElementById('filter-kategorie').value = '';
+            document.getElementById('filter-unterkategorie').value = '';
+            document.getElementById('filter-vertragsstatus').value = 'aktiv';
             renderVertraegeTable();
         });
         resetFilters.dataset.listenerAttached = 'true';
+    }
+
+    // Kategorie-Filter
+    const filterKategorie = document.getElementById('filter-kategorie');
+    if (filterKategorie && !filterKategorie.dataset.listenerAttached) {
+        filterKategorie.addEventListener('change', (e) => {
+            currentFilter.kategorie = e.target.value;
+            currentFilter.unterkategorie = '';
+            renderUnterkategorienDropdown(e.target.value);
+            document.getElementById('filter-unterkategorie').value = '';
+            renderVertraegeTable();
+        });
+        filterKategorie.dataset.listenerAttached = 'true';
+    }
+
+    // Unterkategorie-Filter
+    const filterUnterkategorie = document.getElementById('filter-unterkategorie');
+    if (filterUnterkategorie && !filterUnterkategorie.dataset.listenerAttached) {
+        filterUnterkategorie.addEventListener('change', (e) => {
+            currentFilter.unterkategorie = e.target.value;
+            renderVertraegeTable();
+        });
+        filterUnterkategorie.dataset.listenerAttached = 'true';
+    }
+
+    // Vertragsstatus-Filter
+    const filterStatus = document.getElementById('filter-vertragsstatus');
+    if (filterStatus && !filterStatus.dataset.listenerAttached) {
+        filterStatus.addEventListener('change', (e) => {
+            currentFilter.status = e.target.value;
+            renderVertraegeTable();
+        });
+        filterStatus.dataset.listenerAttached = 'true';
     }
 
     // Navigation Card
@@ -1012,6 +1327,102 @@ function setupEventListeners() {
     if (addSonderzahlungBtn && !addSonderzahlungBtn.dataset.listenerAttached) {
         addSonderzahlungBtn.addEventListener('click', addSonderzahlung);
         addSonderzahlungBtn.dataset.listenerAttached = 'true';
+    }
+
+    // Kategorie-Dropdown im Modal
+    const vertragKategorie = document.getElementById('vertragKategorie');
+    if (vertragKategorie && !vertragKategorie.dataset.listenerAttached) {
+        vertragKategorie.addEventListener('change', (e) => {
+            renderUnterkategorienDropdown(e.target.value);
+        });
+        vertragKategorie.dataset.listenerAttached = 'true';
+    }
+
+    // Unbegrenzt-Checkbox
+    const unbegrenztCheckbox = document.getElementById('vertragUnbegrenzt');
+    if (unbegrenztCheckbox && !unbegrenztCheckbox.dataset.listenerAttached) {
+        unbegrenztCheckbox.addEventListener('change', (e) => {
+            const endeInput = document.getElementById('vertragEnde');
+            if (endeInput) {
+                endeInput.disabled = e.target.checked;
+                if (e.target.checked) endeInput.value = '';
+            }
+        });
+        unbegrenztCheckbox.dataset.listenerAttached = 'true';
+    }
+
+    // Kategorien-Verwaltung Buttons
+    const addKategorieBtn = document.getElementById('btn-add-kategorie');
+    if (addKategorieBtn && !addKategorieBtn.dataset.listenerAttached) {
+        addKategorieBtn.addEventListener('click', addKategorie);
+        addKategorieBtn.dataset.listenerAttached = 'true';
+    }
+
+    const addUnterkategorieBtn = document.getElementById('btn-add-unterkategorie');
+    if (addUnterkategorieBtn && !addUnterkategorieBtn.dataset.listenerAttached) {
+        addUnterkategorieBtn.addEventListener('click', addUnterkategorie);
+        addUnterkategorieBtn.dataset.listenerAttached = 'true';
+    }
+
+    // Unterkategorie-Parent Dropdown in Einstellungen
+    const unterkategorieParent = document.getElementById('vv-unterkategorie-parent');
+    if (unterkategorieParent && !unterkategorieParent.dataset.listenerAttached) {
+        unterkategorieParent.addEventListener('change', (e) => {
+            renderUnterkategorienListe(e.target.value);
+        });
+        unterkategorieParent.dataset.listenerAttached = 'true';
+    }
+
+    // Abtausch-Button im Vertrag-Modal
+    const abtauschBtn = document.getElementById('vertragAbtauschBtn');
+    if (abtauschBtn && !abtauschBtn.dataset.listenerAttached) {
+        abtauschBtn.addEventListener('click', () => {
+            const vertragId = document.getElementById('vertragId').value;
+            if (vertragId) {
+                closeVertragModal();
+                openVertragAbtauschModal(vertragId);
+            }
+        });
+        abtauschBtn.dataset.listenerAttached = 'true';
+    }
+
+    // Abtausch-Modal Buttons
+    const closeAbtauschBtn = document.getElementById('closeVertragAbtauschModal');
+    if (closeAbtauschBtn && !closeAbtauschBtn.dataset.listenerAttached) {
+        closeAbtauschBtn.addEventListener('click', closeVertragAbtauschModal);
+        closeAbtauschBtn.dataset.listenerAttached = 'true';
+    }
+
+    const cancelAbtauschBtn = document.getElementById('cancelVertragAbtauschBtn');
+    if (cancelAbtauschBtn && !cancelAbtauschBtn.dataset.listenerAttached) {
+        cancelAbtauschBtn.addEventListener('click', closeVertragAbtauschModal);
+        cancelAbtauschBtn.dataset.listenerAttached = 'true';
+    }
+
+    const saveAbtauschBtn = document.getElementById('saveVertragAbtauschBtn');
+    if (saveAbtauschBtn && !saveAbtauschBtn.dataset.listenerAttached) {
+        saveAbtauschBtn.addEventListener('click', saveVertragAbtausch);
+        saveAbtauschBtn.dataset.listenerAttached = 'true';
+    }
+
+    // Abtausch Neuer-Beginn Datum-Listener
+    const abtauschNeuerBeginn = document.getElementById('vv-abtausch-neuer-beginn');
+    if (abtauschNeuerBeginn && !abtauschNeuerBeginn.dataset.listenerAttached) {
+        abtauschNeuerBeginn.addEventListener('change', updateAbtauschEnde);
+        abtauschNeuerBeginn.dataset.listenerAttached = 'true';
+    }
+
+    // Abtausch Unbegrenzt-Checkbox
+    const abtauschUnbegrenzt = document.getElementById('vv-abtausch-unbegrenzt');
+    if (abtauschUnbegrenzt && !abtauschUnbegrenzt.dataset.listenerAttached) {
+        abtauschUnbegrenzt.addEventListener('change', (e) => {
+            const endeInput = document.getElementById('vv-abtausch-ende');
+            if (endeInput) {
+                endeInput.disabled = e.target.checked;
+                if (e.target.checked) endeInput.value = '';
+            }
+        });
+        abtauschUnbegrenzt.dataset.listenerAttached = 'true';
     }
 }
 
@@ -1065,19 +1476,32 @@ function openCreateModal() {
     // Formular zurücksetzen
     document.getElementById('vertragName').value = '';
     document.getElementById('vertragAnbieter').value = '';
+    document.getElementById('vertragKategorie').value = '';
+    document.getElementById('vertragUnterkategorie').value = '';
     document.getElementById('vertragBetrag').value = '';
     document.getElementById('vertragRhythmus').value = 'monatlich';
     document.getElementById('vertragBeginn').value = '';
+    document.getElementById('vertragEnde').value = '';
+    document.getElementById('vertragEnde').disabled = true;
+    document.getElementById('vertragUnbegrenzt').checked = true;
     document.getElementById('vertragLaufzeit').value = '';
     document.getElementById('vertragKuendigungsfrist').value = '';
     document.getElementById('vertragKuendigungsfristEinheit').value = 'monate';
     document.getElementById('vertragKuendigungsdatum').value = '';
+    document.getElementById('vertragKuendigungsstatus').value = 'laufend';
     document.getElementById('vertragErinnerungTage').value = '30';
     document.getElementById('vertragNotizen').value = '';
     
     // Sonderzahlungen zurücksetzen
     tempSonderzahlungen = [];
     renderSonderzahlungen();
+    
+    // Unterkategorien-Dropdown zurücksetzen
+    renderUnterkategorienDropdown('');
+    
+    // Abtausch-Button verstecken (neuer Eintrag)
+    const abtauschBtn = document.getElementById('vertragAbtauschBtn');
+    if (abtauschBtn) abtauschBtn.classList.add('hidden');
     
     // Kündigungsabsicht zurücksetzen
     document.querySelectorAll('.kuendigungs-option').forEach(opt => {
@@ -1108,19 +1532,30 @@ function openEditModal(vertragId) {
     
     document.getElementById('vertragName').value = vertrag.name || '';
     document.getElementById('vertragAnbieter').value = vertrag.anbieter || '';
+    document.getElementById('vertragKategorie').value = vertrag.kategorie || '';
+    renderUnterkategorienDropdown(vertrag.kategorie || '');
+    document.getElementById('vertragUnterkategorie').value = vertrag.unterkategorie || '';
     document.getElementById('vertragBetrag').value = vertrag.betrag || '';
     document.getElementById('vertragRhythmus').value = vertrag.rhythmus || 'monatlich';
     document.getElementById('vertragBeginn').value = vertrag.beginn || '';
+    document.getElementById('vertragEnde').value = vertrag.ende || '';
+    document.getElementById('vertragUnbegrenzt').checked = vertrag.unbegrenzt !== false;
+    document.getElementById('vertragEnde').disabled = vertrag.unbegrenzt !== false;
     document.getElementById('vertragLaufzeit').value = vertrag.laufzeit || '';
     document.getElementById('vertragKuendigungsfrist').value = vertrag.kuendigungsfrist || '';
     document.getElementById('vertragKuendigungsfristEinheit').value = vertrag.kuendigungsfristEinheit || 'monate';
     document.getElementById('vertragKuendigungsdatum').value = vertrag.kuendigungsdatum || '';
+    document.getElementById('vertragKuendigungsstatus').value = vertrag.kuendigungsstatus || 'laufend';
     document.getElementById('vertragErinnerungTage').value = vertrag.erinnerungTage || '30';
     document.getElementById('vertragNotizen').value = vertrag.notizen || '';
     
     // Sonderzahlungen laden
     tempSonderzahlungen = vertrag.sonderzahlungen ? [...vertrag.sonderzahlungen] : [];
     renderSonderzahlungen();
+    
+    // Abtausch-Button anzeigen (bei Bearbeitung)
+    const abtauschBtn = document.getElementById('vertragAbtauschBtn');
+    if (abtauschBtn) abtauschBtn.classList.remove('hidden');
     
     // Kündigungsabsicht setzen
     document.querySelectorAll('.kuendigungs-option').forEach(opt => {
@@ -1168,17 +1603,24 @@ async function saveVertrag() {
     const selectedAbsicht = document.querySelector('input[name="kuendigungsabsicht"]:checked');
     const kuendigungsabsicht = selectedAbsicht ? selectedAbsicht.value : 'behalten';
     
+    const unbegrenzt = document.getElementById('vertragUnbegrenzt').checked;
+    
     const vertragData = {
         name: name,
         anbieter: document.getElementById('vertragAnbieter').value.trim(),
+        kategorie: document.getElementById('vertragKategorie').value,
+        unterkategorie: document.getElementById('vertragUnterkategorie').value,
         betrag: betrag,
         rhythmus: document.getElementById('vertragRhythmus').value,
         sonderzahlungen: tempSonderzahlungen,
         beginn: document.getElementById('vertragBeginn').value,
+        ende: unbegrenzt ? '' : document.getElementById('vertragEnde').value,
+        unbegrenzt: unbegrenzt,
         laufzeit: parseInt(document.getElementById('vertragLaufzeit').value) || 0,
         kuendigungsfrist: parseInt(document.getElementById('vertragKuendigungsfrist').value) || 0,
         kuendigungsfristEinheit: document.getElementById('vertragKuendigungsfristEinheit').value,
         kuendigungsdatum: document.getElementById('vertragKuendigungsdatum').value,
+        kuendigungsstatus: document.getElementById('vertragKuendigungsstatus').value,
         kuendigungsabsicht: kuendigungsabsicht,
         erinnerungTage: parseInt(document.getElementById('vertragErinnerungTage').value) || 30,
         notizen: document.getElementById('vertragNotizen').value.trim(),
@@ -1238,6 +1680,16 @@ function renderVertraegeTable() {
     if (currentFilter.absicht) {
         vertraege = vertraege.filter(v => v.kuendigungsabsicht === currentFilter.absicht);
     }
+    if (currentFilter.kategorie) {
+        vertraege = vertraege.filter(v => v.kategorie === currentFilter.kategorie);
+    }
+    if (currentFilter.unterkategorie) {
+        vertraege = vertraege.filter(v => v.unterkategorie === currentFilter.unterkategorie);
+    }
+    // Status-Filter (basierend auf berechnetem Status)
+    if (currentFilter.status) {
+        vertraege = vertraege.filter(v => berechneVertragsstatus(v) === currentFilter.status);
+    }
     
     // Suche anwenden
     if (searchTerm) {
@@ -1258,8 +1710,8 @@ function renderVertraegeTable() {
     if (vertraege.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="7" class="px-4 py-8 text-center text-gray-400 italic">
-                    ${searchTerm || currentFilter.rhythmus || currentFilter.absicht 
+                <td colspan="8" class="px-4 py-8 text-center text-gray-400 italic">
+                    ${searchTerm || currentFilter.rhythmus || currentFilter.absicht || currentFilter.kategorie || currentFilter.status
                         ? 'Keine Verträge gefunden.' 
                         : 'Keine Verträge vorhanden. Erstelle deinen ersten Vertrag!'}
                 </td>
@@ -1272,62 +1724,52 @@ function renderVertraegeTable() {
         const rhythmusConfig = RHYTHMUS_CONFIG[vertrag.rhythmus] || RHYTHMUS_CONFIG.monatlich;
         const absichtConfig = ABSICHT_CONFIG[vertrag.kuendigungsabsicht] || ABSICHT_CONFIG.behalten;
         
-        // Kündigungsfrist berechnen
-        let kuendigungsfristText = '-';
-        if (vertrag.kuendigungsfrist) {
-            const einheit = vertrag.kuendigungsfristEinheit === 'tage' ? 'Tage' : 
-                           vertrag.kuendigungsfristEinheit === 'wochen' ? 'Wochen' : 'Monate';
-            kuendigungsfristText = `${vertrag.kuendigungsfrist} ${einheit}`;
-        }
+        // Vertragsstatus berechnen
+        const vertragsstatus = berechneVertragsstatus(vertrag);
+        const statusConfig = VERTRAGSSTATUS_CONFIG[vertragsstatus] || VERTRAGSSTATUS_CONFIG.aktiv;
         
-        // Warnung wenn Kündigung bald fällig
-        let kuendigungsWarnung = '';
-        if (vertrag.kuendigungsdatum && vertrag.kuendigungsabsicht !== 'behalten') {
-            const kuendigungsDatum = new Date(vertrag.kuendigungsdatum);
-            const heute = new Date();
-            const diffTage = Math.ceil((kuendigungsDatum - heute) / (1000 * 60 * 60 * 24));
-            const erinnerungTage = vertrag.erinnerungTage || 30;
-            
-            if (diffTage <= 0) {
-                kuendigungsWarnung = '<span class="ml-2 text-red-600 font-bold animate-pulse">⚠️ ÜBERFÄLLIG!</span>';
-            } else if (diffTage <= erinnerungTage) {
-                kuendigungsWarnung = `<span class="ml-2 text-orange-600 font-semibold">⏰ ${diffTage} Tage</span>`;
-            }
-        }
+        // Kategorie-Name ermitteln
+        const kategorie = VERTRAEGE_KATEGORIEN[vertrag.kategorie];
+        const kategorieName = kategorie ? kategorie.name : '-';
+        const unterkategorieName = vertrag.unterkategorie || '';
         
         return `
             <tr class="hover:bg-gray-50 transition cursor-pointer" onclick="window.showVertragDetails('${vertrag.id}')">
-                <td class="px-4 py-3">
+                <td class="px-3 py-3">
                     <div class="font-semibold text-gray-900">${vertrag.name || '-'}</div>
                 </td>
-                <td class="px-4 py-3 text-gray-600">${vertrag.anbieter || '-'}</td>
-                <td class="px-4 py-3">
+                <td class="px-3 py-3 text-gray-600 text-sm">${vertrag.anbieter || '-'}</td>
+                <td class="px-3 py-3">
+                    <div class="text-xs text-gray-600">${kategorieName}</div>
+                    ${unterkategorieName ? `<div class="text-xs text-gray-400">${unterkategorieName}</div>` : ''}
+                </td>
+                <td class="px-3 py-3">
                     <span class="font-bold text-gray-900">${formatCurrency(vertrag.betrag)}</span>
-                    ${vertrag.zusatzbetrag ? `<span class="text-xs text-yellow-600 block">+${formatCurrency(vertrag.zusatzbetrag)}/Jahr</span>` : ''}
                 </td>
-                <td class="px-4 py-3">
-                    <span class="text-sm">${rhythmusConfig.icon} ${rhythmusConfig.label}</span>
+                <td class="px-3 py-3">
+                    <span class="text-xs">${rhythmusConfig.icon} ${rhythmusConfig.label}</span>
                 </td>
-                <td class="px-4 py-3">
-                    <span class="text-sm">${kuendigungsfristText}</span>
-                    ${kuendigungsWarnung}
+                <td class="px-3 py-3">
+                    <span class="px-2 py-1 rounded-full text-xs font-bold ${statusConfig.color}">
+                        ${statusConfig.icon} ${statusConfig.label}
+                    </span>
                 </td>
-                <td class="px-4 py-3">
+                <td class="px-3 py-3">
                     <span class="px-2 py-1 rounded-full text-xs font-bold ${absichtConfig.color}">
                         ${absichtConfig.icon} ${absichtConfig.label}
                     </span>
                 </td>
-                <td class="px-4 py-3 text-center" onclick="event.stopPropagation()">
-                    <div class="flex justify-center gap-2">
+                <td class="px-3 py-3 text-center" onclick="event.stopPropagation()">
+                    <div class="flex justify-center gap-1">
                         <button onclick="window.editVertrag('${vertrag.id}')" 
-                            class="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="Bearbeiten">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            class="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="Bearbeiten">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
                         </button>
                         <button onclick="window.deleteVertrag('${vertrag.id}')" 
-                            class="p-2 text-red-600 hover:bg-red-100 rounded-lg transition" title="Löschen">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            class="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition" title="Löschen">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
                         </button>
@@ -1732,6 +2174,140 @@ function renderSonderzahlungen() {
 }
 
 // ========================================
+// ABTAUSCH-FUNKTIONEN
+// ========================================
+function openVertragAbtauschModal(vertragId) {
+    const vertrag = VERTRAEGE[vertragId];
+    if (!vertrag) {
+        alertUser('Vertrag nicht gefunden.', 'error');
+        return;
+    }
+    
+    currentAbtauschVertragId = vertragId;
+    
+    // Aktueller Vertrag Info anzeigen
+    document.getElementById('vv-abtausch-alter-name').textContent = vertrag.name || '-';
+    document.getElementById('vv-abtausch-alter-betrag').textContent = formatCurrency(vertrag.betrag);
+    document.getElementById('vv-abtausch-alter-rhythmus').textContent = 
+        (RHYTHMUS_CONFIG[vertrag.rhythmus]?.label || 'Monatlich');
+    
+    // Übernommene Daten (nicht änderbar)
+    document.getElementById('vv-abtausch-name').textContent = vertrag.name || '-';
+    document.getElementById('vv-abtausch-anbieter').textContent = vertrag.anbieter || '-';
+    document.getElementById('vv-abtausch-kategorie').textContent = 
+        VERTRAEGE_KATEGORIEN[vertrag.kategorie]?.name || '-';
+    
+    // Neue Werte vorausfüllen
+    document.getElementById('vv-abtausch-betrag').value = vertrag.betrag || '';
+    document.getElementById('vv-abtausch-rhythmus').value = vertrag.rhythmus || 'monatlich';
+    document.getElementById('vv-abtausch-ende').value = '';
+    document.getElementById('vv-abtausch-unbegrenzt').checked = true;
+    document.getElementById('vv-abtausch-ende').disabled = true;
+    document.getElementById('vv-abtausch-kuendigungsfrist').value = vertrag.kuendigungsfrist || '';
+    document.getElementById('vv-abtausch-notizen').value = '';
+    
+    // Neuer Beginn = heute
+    const heute = new Date().toISOString().split('T')[0];
+    document.getElementById('vv-abtausch-neuer-beginn').value = heute;
+    updateAbtauschEnde();
+    
+    document.getElementById('vertragAbtauschModal').style.display = 'flex';
+}
+
+function closeVertragAbtauschModal() {
+    document.getElementById('vertragAbtauschModal').style.display = 'none';
+    currentAbtauschVertragId = null;
+}
+
+function updateAbtauschEnde() {
+    const neuerBeginn = document.getElementById('vv-abtausch-neuer-beginn').value;
+    if (neuerBeginn) {
+        const beginn = new Date(neuerBeginn);
+        beginn.setDate(beginn.getDate() - 1);
+        document.getElementById('vv-abtausch-altes-ende').value = beginn.toISOString().split('T')[0];
+    }
+}
+
+async function saveVertragAbtausch() {
+    if (!currentAbtauschVertragId) {
+        alertUser('Kein Vertrag für Abtausch ausgewählt.', 'error');
+        return;
+    }
+    
+    const alterVertrag = VERTRAEGE[currentAbtauschVertragId];
+    if (!alterVertrag) {
+        alertUser('Alter Vertrag nicht gefunden.', 'error');
+        return;
+    }
+    
+    const neuerBeginn = document.getElementById('vv-abtausch-neuer-beginn').value;
+    const altesEnde = document.getElementById('vv-abtausch-altes-ende').value;
+    const neuerBetrag = parseFloat(document.getElementById('vv-abtausch-betrag').value);
+    const neuerRhythmus = document.getElementById('vv-abtausch-rhythmus').value;
+    const unbegrenzt = document.getElementById('vv-abtausch-unbegrenzt').checked;
+    const neuesEnde = unbegrenzt ? '' : document.getElementById('vv-abtausch-ende').value;
+    const neueKuendigungsfrist = parseInt(document.getElementById('vv-abtausch-kuendigungsfrist').value) || 0;
+    const notizen = document.getElementById('vv-abtausch-notizen').value.trim();
+    
+    if (!neuerBeginn) {
+        alertUser('Bitte gib einen neuen Beginn an.', 'error');
+        return;
+    }
+    
+    if (isNaN(neuerBetrag) || neuerBetrag < 0) {
+        alertUser('Bitte gib einen gültigen Betrag ein.', 'error');
+        return;
+    }
+    
+    try {
+        // 1. Alten Vertrag beenden
+        await updateDoc(doc(vertraegeCollection, currentAbtauschVertragId), {
+            ende: altesEnde,
+            unbegrenzt: false,
+            kuendigungsstatus: 'storniert',
+            notizen: (alterVertrag.notizen || '') + `\n[Abtausch am ${new Date().toLocaleDateString('de-DE')}]`,
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUser?.displayName || 'Unbekannt'
+        });
+        
+        // 2. Neuen Vertrag erstellen
+        const neuerVertragData = {
+            name: alterVertrag.name,
+            anbieter: alterVertrag.anbieter,
+            kategorie: alterVertrag.kategorie,
+            unterkategorie: alterVertrag.unterkategorie,
+            betrag: neuerBetrag,
+            rhythmus: neuerRhythmus,
+            sonderzahlungen: [],
+            beginn: neuerBeginn,
+            ende: neuesEnde,
+            unbegrenzt: unbegrenzt,
+            laufzeit: 0,
+            kuendigungsfrist: neueKuendigungsfrist,
+            kuendigungsfristEinheit: alterVertrag.kuendigungsfristEinheit || 'monate',
+            kuendigungsdatum: '',
+            kuendigungsstatus: 'laufend',
+            kuendigungsabsicht: 'behalten',
+            erinnerungTage: alterVertrag.erinnerungTage || 30,
+            notizen: notizen + `\n[Abtausch von Vertrag vom ${alterVertrag.beginn || 'unbekannt'}]`,
+            vorgaengerId: currentAbtauschVertragId,
+            createdAt: serverTimestamp(),
+            createdBy: currentUser?.displayName || 'Unbekannt',
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUser?.displayName || 'Unbekannt'
+        };
+        
+        await addDoc(vertraegeCollection, neuerVertragData);
+        
+        closeVertragAbtauschModal();
+        alertUser('Vertrag erfolgreich abgetauscht! Alter Vertrag wurde beendet, neuer Vertrag erstellt.', 'success');
+    } catch (error) {
+        console.error("Fehler beim Abtausch:", error);
+        alertUser('Fehler beim Abtausch des Vertrags.', 'error');
+    }
+}
+
+// ========================================
 // GLOBALE FUNKTIONEN FÜR HTML ONCLICK
 // ========================================
 window.editVertrag = openEditModal;
@@ -1741,6 +2317,17 @@ window.removeSonderzahlung = removeSonderzahlung;
 window.updateSonderzahlung = updateSonderzahlung;
 window.toggleSonderzahlungMonat = toggleSonderzahlungMonat;
 window.renderSonderzahlungenRefresh = renderSonderzahlungen;
+
+// Abtausch-Funktionen
+window.openVertragAbtauschModal = openVertragAbtauschModal;
+window.closeVertragAbtauschModal = closeVertragAbtauschModal;
+window.saveVertragAbtausch = saveVertragAbtausch;
+
+// Kategorien-Funktionen
+window.addKategorie = addKategorie;
+window.deleteKategorie = deleteKategorie;
+window.addUnterkategorie = addUnterkategorie;
+window.deleteUnterkategorie = deleteUnterkategorie;
 
 // Themen-Funktionen
 window.openThemaMitgliederModal = openThemaMitgliederModal;
