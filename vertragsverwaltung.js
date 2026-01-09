@@ -2208,46 +2208,72 @@ function openVertragAbtauschModal(vertragId) {
     
     currentAbtauschVertragId = vertragId;
     
-    // Aktueller Vertrag Info anzeigen
-    document.getElementById('vv-abtausch-alter-name').textContent = vertrag.name || '-';
-    document.getElementById('vv-abtausch-alter-betrag').textContent = formatCurrency(vertrag.betrag);
-    document.getElementById('vv-abtausch-alter-rhythmus').textContent = 
-        (RHYTHMUS_CONFIG[vertrag.rhythmus]?.label || 'Monatlich');
+    // Aktueller Vertrag Info anzeigen (Alter Eintrag)
+    const alterNameEl = document.getElementById('vv-abtausch-alter-name');
+    const alterAnbieterEl = document.getElementById('vv-abtausch-alter-anbieter');
+    const alterBetragEl = document.getElementById('vv-abtausch-alter-betrag');
+    const alterLaufzeitEl = document.getElementById('vv-abtausch-alter-laufzeit');
     
-    // Übernommene Daten (nicht änderbar)
-    document.getElementById('vv-abtausch-name').textContent = vertrag.name || '-';
-    document.getElementById('vv-abtausch-anbieter').textContent = vertrag.anbieter || '-';
-    document.getElementById('vv-abtausch-kategorie').textContent = 
-        VERTRAEGE_KATEGORIEN[vertrag.kategorie]?.name || '-';
+    if (alterNameEl) alterNameEl.textContent = vertrag.name || '-';
+    if (alterAnbieterEl) alterAnbieterEl.textContent = vertrag.anbieter || '-';
+    if (alterBetragEl) alterBetragEl.textContent = formatCurrency(vertrag.betrag);
+    if (alterLaufzeitEl) alterLaufzeitEl.textContent = RHYTHMUS_CONFIG[vertrag.rhythmus]?.label || 'Monatlich';
+    
+    // Übernommene Daten (Fix-Felder - nicht änderbar)
+    const fixNameEl = document.getElementById('vv-abtausch-fix-name');
+    const fixAnbieterEl = document.getElementById('vv-abtausch-fix-anbieter');
+    const fixKategorieEl = document.getElementById('vv-abtausch-fix-kategorie');
+    const fixUnterkategorieEl = document.getElementById('vv-abtausch-fix-unterkategorie');
+    const fixAbsichtEl = document.getElementById('vv-abtausch-fix-absicht');
+    const fixStatusEl = document.getElementById('vv-abtausch-fix-status');
+    
+    if (fixNameEl) fixNameEl.textContent = vertrag.name || '-';
+    if (fixAnbieterEl) fixAnbieterEl.textContent = vertrag.anbieter || '-';
+    if (fixKategorieEl) fixKategorieEl.textContent = VERTRAEGE_KATEGORIEN[vertrag.kategorie]?.name || '-';
+    if (fixUnterkategorieEl) fixUnterkategorieEl.textContent = vertrag.unterkategorie || '-';
+    if (fixAbsichtEl) fixAbsichtEl.textContent = ABSICHT_CONFIG[vertrag.kuendigungsabsicht]?.label || '-';
+    if (fixStatusEl) fixStatusEl.textContent = KUENDIGUNGSSTATUS_CONFIG[vertrag.kuendigungsstatus]?.label || '-';
     
     // Neue Werte vorausfüllen
-    document.getElementById('vv-abtausch-betrag').value = vertrag.betrag || '';
-    document.getElementById('vv-abtausch-rhythmus').value = vertrag.rhythmus || 'monatlich';
-    document.getElementById('vv-abtausch-ende').value = '';
-    document.getElementById('vv-abtausch-unbegrenzt').checked = true;
-    document.getElementById('vv-abtausch-ende').disabled = true;
-    document.getElementById('vv-abtausch-kuendigungsfrist').value = vertrag.kuendigungsfrist || '';
-    document.getElementById('vv-abtausch-notizen').value = '';
+    const betragEl = document.getElementById('vv-abtausch-betrag');
+    const rhythmusEl = document.getElementById('vv-abtausch-rhythmus');
+    const endeEl = document.getElementById('vv-abtausch-ende');
+    const unbegrenztEl = document.getElementById('vv-abtausch-unbegrenzt');
+    const kuendigungsfristEl = document.getElementById('vv-abtausch-kuendigungsfrist');
+    const notizenEl = document.getElementById('vv-abtausch-notizen');
+    const neuerBeginnEl = document.getElementById('vv-abtausch-neuer-beginn');
+    
+    if (betragEl) betragEl.value = vertrag.betrag || '';
+    if (rhythmusEl) rhythmusEl.value = vertrag.rhythmus || 'monatlich';
+    if (endeEl) endeEl.value = '';
+    if (unbegrenztEl) unbegrenztEl.checked = true;
+    if (endeEl) endeEl.disabled = true;
+    if (kuendigungsfristEl) kuendigungsfristEl.value = vertrag.kuendigungsfrist || '';
+    if (notizenEl) notizenEl.value = '';
     
     // Neuer Beginn = heute
     const heute = new Date().toISOString().split('T')[0];
-    document.getElementById('vv-abtausch-neuer-beginn').value = heute;
+    if (neuerBeginnEl) neuerBeginnEl.value = heute;
     updateAbtauschEnde();
     
-    document.getElementById('vertragAbtauschModal').style.display = 'flex';
+    const modal = document.getElementById('vertragAbtauschModal');
+    if (modal) modal.style.display = 'flex';
 }
 
 function closeVertragAbtauschModal() {
-    document.getElementById('vertragAbtauschModal').style.display = 'none';
+    const modal = document.getElementById('vertragAbtauschModal');
+    if (modal) modal.style.display = 'none';
     currentAbtauschVertragId = null;
 }
 
 function updateAbtauschEnde() {
-    const neuerBeginn = document.getElementById('vv-abtausch-neuer-beginn').value;
-    if (neuerBeginn) {
-        const beginn = new Date(neuerBeginn);
+    const neuerBeginnEl = document.getElementById('vv-abtausch-neuer-beginn');
+    const altesEndeEl = document.getElementById('vv-abtausch-altes-ende');
+    
+    if (neuerBeginnEl && neuerBeginnEl.value && altesEndeEl) {
+        const beginn = new Date(neuerBeginnEl.value);
         beginn.setDate(beginn.getDate() - 1);
-        document.getElementById('vv-abtausch-altes-ende').value = beginn.toISOString().split('T')[0];
+        altesEndeEl.value = beginn.toISOString().split('T')[0];
     }
 }
 
@@ -2263,14 +2289,24 @@ async function saveVertragAbtausch() {
         return;
     }
     
-    const neuerBeginn = document.getElementById('vv-abtausch-neuer-beginn').value;
-    const altesEnde = document.getElementById('vv-abtausch-altes-ende').value;
-    const neuerBetrag = parseFloat(document.getElementById('vv-abtausch-betrag').value);
-    const neuerRhythmus = document.getElementById('vv-abtausch-rhythmus').value;
-    const unbegrenzt = document.getElementById('vv-abtausch-unbegrenzt').checked;
-    const neuesEnde = unbegrenzt ? '' : document.getElementById('vv-abtausch-ende').value;
-    const neueKuendigungsfrist = parseInt(document.getElementById('vv-abtausch-kuendigungsfrist').value) || 0;
-    const notizen = document.getElementById('vv-abtausch-notizen').value.trim();
+    // Elemente mit null-Checks holen
+    const neuerBeginnEl = document.getElementById('vv-abtausch-neuer-beginn');
+    const altesEndeEl = document.getElementById('vv-abtausch-altes-ende');
+    const betragEl = document.getElementById('vv-abtausch-betrag');
+    const rhythmusEl = document.getElementById('vv-abtausch-rhythmus');
+    const unbegrenztEl = document.getElementById('vv-abtausch-unbegrenzt');
+    const endeEl = document.getElementById('vv-abtausch-ende');
+    const kuendigungsfristEl = document.getElementById('vv-abtausch-kuendigungsfrist');
+    const notizenEl = document.getElementById('vv-abtausch-notizen');
+    
+    const neuerBeginn = neuerBeginnEl?.value || '';
+    const altesEnde = altesEndeEl?.value || '';
+    const neuerBetrag = parseFloat(betragEl?.value || '0');
+    const neuerRhythmus = rhythmusEl?.value || 'monatlich';
+    const unbegrenzt = unbegrenztEl?.checked || false;
+    const neuesEnde = unbegrenzt ? '' : (endeEl?.value || '');
+    const neueKuendigungsfrist = parseInt(kuendigungsfristEl?.value || '0') || 0;
+    const notizen = (notizenEl?.value || '').trim();
     
     if (!neuerBeginn) {
         alertUser('Bitte gib einen neuen Beginn an.', 'error');
