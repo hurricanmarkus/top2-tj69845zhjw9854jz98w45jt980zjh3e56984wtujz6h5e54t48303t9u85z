@@ -74,7 +74,7 @@ const ABSICHT_CONFIG = {
 
 // Kündigungsstatus-Konfiguration
 const KUENDIGUNGSSTATUS_CONFIG = {
-    laufend: { label: 'Laufend', icon: '🟢', color: 'bg-green-100 text-green-800' },
+    laufend: { label: 'Nicht gekündigt', icon: '🟢', color: 'bg-green-100 text-green-800' },
     kuendigung_gesendet: { label: 'Kündigung gesendet', icon: '📤', color: 'bg-yellow-100 text-yellow-800' },
     kuendigung_bestaetigt: { label: 'Kündigung bestätigt', icon: '✅', color: 'bg-blue-100 text-blue-800' },
     storniert: { label: 'Storniert', icon: '❌', color: 'bg-red-100 text-red-800' }
@@ -127,16 +127,13 @@ export async function initializeVertragsverwaltung() {
     if (db) {
         vertraegeThemenRef = collection(db, 'artifacts', appId, 'public', 'data', 'vertraege_themen');
         vertraegeEinladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'vertraege_einladungen');
-        vertraegeKategorienRef = collection(db, 'artifacts', appId, 'public', 'data', 'vertraege_kategorien');
         
         console.log("📂 Firebase Referenzen erstellt:");
         console.log("  - Themen:", vertraegeThemenRef.path);
         console.log("  - Einladungen:", vertraegeEinladungenRef.path);
-        console.log("  - Kategorien:", vertraegeKategorienRef.path);
         
         loadVertraegeThemen();
         loadVertraegeEinladungen();
-        loadVertraegeKategorien();
     }
 
     setupEventListeners();
@@ -228,8 +225,12 @@ function updateCollectionForVertragsThema() {
     if (currentThemaId && db) {
         // Verträge liegen als Sub-Collection unter dem Thema-Dokument
         vertraegeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'vertraege_themen', currentThemaId, 'vertraege');
+        // Kategorien liegen ebenfalls als Sub-Collection unter dem Thema-Dokument
+        vertraegeKategorienRef = collection(db, 'artifacts', appId, 'public', 'data', 'vertraege_themen', currentThemaId, 'kategorien');
         console.log("📂 Verträge-Collection aktualisiert:", vertraegeCollection.path);
+        console.log("📂 Kategorien-Collection aktualisiert:", vertraegeKategorienRef.path);
         listenForVertraege();
+        loadVertraegeKategorien();
     } else {
         console.warn("⚠️ updateCollectionForVertragsThema: currentThemaId oder db fehlt");
     }
@@ -576,11 +577,33 @@ async function deleteKategorie(kategorieId) {
     const kategorie = VERTRAEGE_KATEGORIEN[kategorieId];
     if (!kategorie) return;
     
-    if (!confirm(`Möchtest du die Kategorie "${kategorie.name}" wirklich löschen?`)) {
+    // Zähle betroffene Verträge
+    const betroffeneVertraege = Object.values(VERTRAEGE).filter(v => v.kategorie === kategorieId);
+    const anzahl = betroffeneVertraege.length;
+    
+    const confirmMsg = anzahl > 0 
+        ? `Möchtest du die Kategorie "${kategorie.name}" wirklich löschen?\n\n⚠️ ${anzahl} Vertrag/Verträge verwenden diese Kategorie und werden auf "Keine Kategorie" gesetzt.`
+        : `Möchtest du die Kategorie "${kategorie.name}" wirklich löschen?`;
+    
+    if (!confirm(confirmMsg)) {
         return;
     }
     
     try {
+        // Zuerst alle Verträge mit dieser Kategorie aktualisieren
+        if (betroffeneVertraege.length > 0) {
+            const updatePromises = betroffeneVertraege.map(vertrag => 
+                updateDoc(doc(vertraegeCollection, vertrag.id), {
+                    kategorie: '',
+                    unterkategorie: '',
+                    updatedAt: serverTimestamp()
+                })
+            );
+            await Promise.all(updatePromises);
+            console.log(`📋 ${betroffeneVertraege.length} Verträge aktualisiert (Kategorie entfernt)`);
+        }
+        
+        // Dann die Kategorie löschen
         await deleteDoc(doc(vertraegeKategorienRef, kategorieId));
         alertUser('Kategorie gelöscht!', 'success');
     } catch (error) {
