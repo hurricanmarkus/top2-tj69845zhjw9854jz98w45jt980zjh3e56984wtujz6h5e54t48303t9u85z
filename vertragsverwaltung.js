@@ -442,6 +442,7 @@ function loadVertraegeKategorien() {
         console.log(`📁 ${Object.keys(VERTRAEGE_KATEGORIEN).length} Kategorien geladen`);
         renderKategorienDropdowns();
         renderKategorienListe();
+        renderVertraegeTable();
     }, (error) => {
         console.error("Fehler beim Laden der Kategorien:", error);
     });
