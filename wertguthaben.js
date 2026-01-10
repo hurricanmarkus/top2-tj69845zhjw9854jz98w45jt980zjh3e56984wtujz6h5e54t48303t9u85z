@@ -829,13 +829,6 @@ window.openEditWertguthaben = function(id) {
 
     handleTypChange();
 
-    // Kopier-Buttons für Details-Modal initialisieren
-    setTimeout(() => {
-        window.addCopyButton('wgCode', 'wgCodeCopyBtn');
-        window.addCopyButton('wgPin', 'wgPinCopyBtn');
-        window.addCopyButton('wgSeriennummer', 'wgSeriennummerCopyBtn');
-    }, 100);
-
     document.getElementById('wertguthabenModal').style.display = 'flex';
 };
 
@@ -1218,6 +1211,7 @@ window.openWertguthabenDetails = async function(id) {
                 <p class="text-sm font-bold text-gray-600">Unternehmen</p>
                 <p class="text-lg">${wg.unternehmen || '-'}</p>
             </div>
+            ${wg.typ !== 'aktionscode' ? `
             <div>
                 <p class="text-sm font-bold text-gray-600">Ursprungswert</p>
                 <p class="text-xl font-bold text-gray-600">${ursprungswert.toFixed(2)} €</p>
@@ -1225,7 +1219,7 @@ window.openWertguthabenDetails = async function(id) {
             <div>
                 <p class="text-sm font-bold text-gray-600">Aktueller Restwert</p>
                 <p class="text-2xl font-bold text-emerald-700">${restwert.toFixed(2)} €</p>
-            </div>
+            </div>` : ''}
             <div>
                 <p class="text-sm font-bold text-gray-600">Restzeit</p>
                 <p class="text-lg">${restzeit}</p>
@@ -1521,13 +1515,6 @@ window.deleteTransaktion = async function(wertguthabenId, transaktionId) {
     }
 };
 
-// Kopier-Buttons initialisieren
-window.addEventListener('DOMContentLoaded', () => {
-    // Kopier-Buttons für alle Felder initialisieren
-    window.addCopyButton('wgCode', 'wgCodeCopyBtn');
-    window.addCopyButton('wgPin', 'wgPinCopyBtn');
-    window.addCopyButton('wgSeriennummer', 'wgSeriennummerCopyBtn');
-});
 
 // Einstellungen beim Initialisieren laden
 loadSettings();
