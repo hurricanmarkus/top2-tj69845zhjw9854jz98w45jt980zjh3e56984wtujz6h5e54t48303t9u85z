@@ -457,6 +457,7 @@ window.openCreateModal = function() {
     // Aktionscode-Felder zurücksetzen
     document.getElementById('wgRabattTyp').value = 'prozent';
     document.getElementById('wgRabattWert').value = '';
+    document.getElementById('wgRabattEinheit').value = '%';
     document.getElementById('wgMindestbestellwert').value = '';
     document.getElementById('wgMaxRabatt').value = '';
     document.getElementById('wgGueltigAb').value = '';
@@ -489,17 +490,33 @@ function handleTypChange() {
     const gutscheinFelder = document.getElementById('gutschein-felder');
     const wertguthabenFelder = document.getElementById('wertguthaben-felder');
     const aktionscodeFelder = document.getElementById('aktionscode-felder');
+    const wertInput = document.getElementById('wgWert');
+    const einloesefristInput = document.getElementById('wgEinloesefrist');
 
     gutscheinFelder.classList.add('hidden');
     wertguthabenFelder.classList.add('hidden');
     aktionscodeFelder.classList.add('hidden');
 
-    if (typ === 'gutschein') {
-        gutscheinFelder.classList.remove('hidden');
-    } else if (typ === 'wertguthaben' || typ === 'wertguthaben_gesetzlich') {
-        wertguthabenFelder.classList.remove('hidden');
-    } else if (typ === 'aktionscode') {
+    // Wert und Einlösefrist für Aktionscode deaktivieren
+    if (typ === 'aktionscode') {
+        wertInput.disabled = true;
+        wertInput.value = '';
+        wertInput.classList.add('bg-gray-100', 'cursor-not-allowed');
+        einloesefristInput.disabled = true;
+        einloesefristInput.value = '';
+        einloesefristInput.classList.add('bg-gray-100', 'cursor-not-allowed');
         aktionscodeFelder.classList.remove('hidden');
+    } else {
+        wertInput.disabled = false;
+        wertInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
+        einloesefristInput.disabled = false;
+        einloesefristInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
+        
+        if (typ === 'gutschein') {
+            gutscheinFelder.classList.remove('hidden');
+        } else if (typ === 'wertguthaben' || typ === 'wertguthaben_gesetzlich') {
+            wertguthabenFelder.classList.remove('hidden');
+        }
     }
 }
 
@@ -521,6 +538,84 @@ function setKaufdatumToToday() {
         kaufdatumInput.value = today;
     }
 }
+
+// Rabatt-Typ Änderung: Felder ein-/ausblenden
+window.handleRabattTypChange = function() {
+    const rabattTyp = document.getElementById('wgRabattTyp').value;
+    const rabattWertContainer = document.getElementById('rabattWertContainer');
+    const rabattWertInput = document.getElementById('wgRabattWert');
+    const rabattEinheit = document.getElementById('wgRabattEinheit');
+    const maxRabattInput = document.getElementById('wgMaxRabatt');
+    
+    // Bei Gratis Versand oder Geschenk: Rabattwert und Max-Rabatt deaktivieren
+    if (rabattTyp === 'gratis_versand' || rabattTyp === 'geschenk') {
+        rabattWertInput.disabled = true;
+        rabattWertInput.value = '';
+        rabattWertInput.classList.add('bg-gray-100', 'cursor-not-allowed');
+        rabattEinheit.disabled = true;
+        rabattEinheit.classList.add('bg-gray-100', 'cursor-not-allowed');
+        maxRabattInput.disabled = true;
+        maxRabattInput.value = '';
+        maxRabattInput.classList.add('bg-gray-100', 'cursor-not-allowed');
+    } else {
+        rabattWertInput.disabled = false;
+        rabattWertInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
+        rabattEinheit.disabled = false;
+        rabattEinheit.classList.remove('bg-gray-100', 'cursor-not-allowed');
+        
+        // Einheit basierend auf Rabatt-Typ setzen
+        if (rabattTyp === 'prozent') {
+            rabattEinheit.value = '%';
+            // Max-Rabatt nur bei Prozent sinnvoll
+            maxRabattInput.disabled = false;
+            maxRabattInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
+        } else if (rabattTyp === 'betrag') {
+            rabattEinheit.value = '€';
+            // Max-Rabatt bei Betrag nicht sinnvoll
+            maxRabattInput.disabled = true;
+            maxRabattInput.value = '';
+            maxRabattInput.classList.add('bg-gray-100', 'cursor-not-allowed');
+        }
+    }
+    
+    // Konto-Feld basierend auf Kontogebunden
+    handleKontogebundenChange();
+};
+
+// Kontogebunden Änderung: Konto-Feld ein-/ausblenden
+window.handleKontogebundenChange = function() {
+    const kontogebunden = document.getElementById('wgKontogebunden').value;
+    const kontoInput = document.getElementById('wgKonto');
+    
+    if (kontogebunden === 'ja') {
+        kontoInput.disabled = false;
+        kontoInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
+    } else {
+        kontoInput.disabled = true;
+        kontoInput.value = '';
+        kontoInput.classList.add('bg-gray-100', 'cursor-not-allowed');
+    }
+};
+
+// Validierung: bereitsEingeloest <= maxEinloesungen
+window.validateEinloesungen = function() {
+    const maxEinloesungen = parseInt(document.getElementById('wgMaxEinloesungen').value) || 0;
+    const bereitsEingeloest = parseInt(document.getElementById('wgBereitsEingeloest').value) || 0;
+    const bereitsInput = document.getElementById('wgBereitsEingeloest');
+    
+    // Wenn maxEinloesungen 0 ist (unbegrenzt), keine Beschränkung
+    if (maxEinloesungen > 0 && bereitsEingeloest > maxEinloesungen) {
+        bereitsInput.value = maxEinloesungen;
+        alertUser(`Bereits eingelöst kann nicht größer als Max. Einlösungen (${maxEinloesungen}) sein!`, 'warning');
+    }
+    
+    // Max für bereitsEingeloest setzen
+    if (maxEinloesungen > 0) {
+        bereitsInput.max = maxEinloesungen;
+    } else {
+        bereitsInput.removeAttribute('max');
+    }
+};
 
 // ========================================
 // SPEICHERN
@@ -583,6 +678,7 @@ async function saveWertguthaben() {
     } else if (typ === 'aktionscode') {
         data.rabattTyp = document.getElementById('wgRabattTyp').value;
         data.rabattWert = parseFloat(document.getElementById('wgRabattWert').value) || null;
+        data.rabattEinheit = document.getElementById('wgRabattEinheit').value;
         data.mindestbestellwert = parseFloat(document.getElementById('wgMindestbestellwert').value) || null;
         data.maxRabatt = parseFloat(document.getElementById('wgMaxRabatt').value) || null;
         data.gueltigAb = document.getElementById('wgGueltigAb').value;
@@ -662,6 +758,7 @@ window.openEditWertguthaben = function(id) {
     // Aktionscode-Felder
     document.getElementById('wgRabattTyp').value = wg.rabattTyp || 'prozent';
     document.getElementById('wgRabattWert').value = wg.rabattWert || '';
+    document.getElementById('wgRabattEinheit').value = wg.rabattEinheit || '%';
     document.getElementById('wgMindestbestellwert').value = wg.mindestbestellwert || '';
     document.getElementById('wgMaxRabatt').value = wg.maxRabatt || '';
     document.getElementById('wgGueltigAb').value = wg.gueltigAb || '';
