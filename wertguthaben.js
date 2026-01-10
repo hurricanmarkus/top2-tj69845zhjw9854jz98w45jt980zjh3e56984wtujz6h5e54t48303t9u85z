@@ -889,9 +889,19 @@ function populateEigentuemerDropdowns() {
 // ========================================
 
 // Transaktion Modal öffnen
-window.openTransaktionModal = function(wertguthabenId) {
-    const wg = WERTGUTHABEN[wertguthabenId];
-    if (!wg) return;
+window.openTransaktionModal = async function(wertguthabenId) {
+    // WICHTIG: Aktuelle Daten aus der Datenbank holen, nicht aus Cache
+    const wertguthabenRef = doc(wertguthabenCollection, wertguthabenId);
+    const wertguthabenDoc = await getDoc(wertguthabenRef);
+    
+    if (!wertguthabenDoc.exists()) {
+        return alertUser('Wertguthaben nicht gefunden!', 'error');
+    }
+    
+    const wg = wertguthabenDoc.data();
+    
+    // Cache aktualisieren
+    WERTGUTHABEN[wertguthabenId] = { ...wg, id: wertguthabenId };
 
     document.getElementById('transaktionWertguthabenId').value = wertguthabenId;
     
@@ -921,6 +931,7 @@ window.openTransaktionModal = function(wertguthabenId) {
     }
     
     transaktionTypSelect.value = typ;
+    transaktionTypSelect.disabled = true; // Typ nicht änderbar machen
     transaktionBetragInput.value = betragPlatzhalter;
     
     // Sichtbarkeit der Container anpassen
@@ -931,8 +942,8 @@ window.openTransaktionModal = function(wertguthabenId) {
             <div class="text-center">
                 <div class="text-3xl font-bold text-pink-600 mb-2">${wg.bereitsEingeloest || 0} / ${wg.maxEinloesungen || '∞'}</div>
                 <div class="text-sm text-gray-600">Einlösungen verwendet</div>
-                <div class="mt-2 text-lg font-semibold ${wg.bereitsEingeloest >= (wg.maxEinloesungen || 0) ? 'text-red-600' : 'text-green-600'}">
-                    ${wg.bereitsEingeloest >= (wg.maxEinloesungen || 0) ? '❌ Keine Einlösungen mehr verfügbar' : `✅ ${wg.maxEinloesungen - wg.bereitsEingeloest} Einlösung(en) verfügbar`}
+                <div class="mt-2 text-lg font-semibold ${(wg.maxEinloesungen > 0 && wg.bereitsEingeloest >= wg.maxEinloesungen) ? 'text-red-600' : 'text-green-600'}">
+                    ${(wg.maxEinloesungen > 0 && wg.bereitsEingeloest >= wg.maxEinloesungen) ? '❌ Keine Einlösungen mehr verfügbar' : `✅ ${wg.maxEinloesungen > 0 ? (wg.maxEinloesungen - (wg.bereitsEingeloest || 0)) : '∞'} Einlösung(en) verfügbar`}
                 </div>
             </div>
         `;
@@ -1227,9 +1238,9 @@ window.openWertguthabenDetails = async function(id) {
                 <p class="text-sm font-bold text-gray-600">Einlösefrist</p>
                 <p>${wg.einloesefrist ? new Date(wg.einloesefrist).toLocaleDateString('de-DE') : 'Unbegrenzt'}</p>
             </div>
-            ${wg.code ? `<div><p class="text-sm font-bold text-gray-600">Code</p><p class="font-mono bg-gray-100 p-2 rounded">${wg.code}</p></div>` : ''}
-            ${wg.pin ? `<div><p class="text-sm font-bold text-gray-600">PIN</p><p class="font-mono bg-gray-100 p-2 rounded">${wg.pin}</p></div>` : ''}
-            ${wg.seriennummer ? `<div><p class="text-sm font-bold text-gray-600">Seriennummer</p><p class="font-mono bg-gray-100 p-2 rounded">${wg.seriennummer}</p></div>` : ''}
+            ${wg.code ? `<div><p class="text-sm font-bold text-gray-600">Code</p><div class="flex items-center gap-2"><p class="font-mono bg-gray-100 p-2 rounded flex-1">${wg.code}</p><button onclick="window.copyToClipboard('${wg.code}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg" title="Kopieren">📋</button></div></div>` : ''}
+            ${wg.pin ? `<div><p class="text-sm font-bold text-gray-600">PIN</p><div class="flex items-center gap-2"><p class="font-mono bg-gray-100 p-2 rounded flex-1">${wg.pin}</p><button onclick="window.copyToClipboard('${wg.pin}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg" title="Kopieren">📋</button></div></div>` : ''}
+            ${wg.seriennummer ? `<div><p class="text-sm font-bold text-gray-600">Seriennummer</p><div class="flex items-center gap-2"><p class="font-mono bg-gray-100 p-2 rounded flex-1">${wg.seriennummer}</p><button onclick="window.copyToClipboard('${wg.seriennummer}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg" title="Kopieren">📋</button></div></div>` : ''}
             ${wg.warnung ? `<div><p class="text-sm font-bold text-gray-600">Warnung</p><p>${wg.warnung} Tage vor Ablauf</p></div>` : ''}
         </div>
         
@@ -1276,13 +1287,31 @@ window.openWertguthabenDetails = async function(id) {
         transaktionsList.innerHTML = '<p class="text-center text-gray-400 italic py-4">Noch keine Transaktionen vorhanden.</p>';
     } else {
         transaktionsList.innerHTML = transaktionen.map(t => {
-            const datum = t.datum ? new Date(t.datum).toLocaleString('de-DE', { 
-                day: '2-digit', 
-                month: '2-digit', 
-                year: 'numeric', 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            }) : '-';
+            // Firebase Timestamp korrekt in Date konvertieren
+            let datum = '-';
+            if (t.datum) {
+                // Firebase Timestamp hat toDate() Methode, oder es ist ein Objekt mit seconds
+                let dateObj;
+                if (t.datum.toDate && typeof t.datum.toDate === 'function') {
+                    dateObj = t.datum.toDate();
+                } else if (t.datum.seconds) {
+                    dateObj = new Date(t.datum.seconds * 1000);
+                } else if (typeof t.datum === 'string') {
+                    dateObj = new Date(t.datum);
+                } else {
+                    dateObj = new Date(t.datum);
+                }
+                
+                if (!isNaN(dateObj.getTime())) {
+                    datum = dateObj.toLocaleString('de-DE', { 
+                        day: '2-digit', 
+                        month: '2-digit', 
+                        year: 'numeric', 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    });
+                }
+            }
             const icon = t.typ === 'verwendung' ? '📉' : (t.typ === 'einloesung' ? '🎟️' : '📈');
             const colorClass = t.typ === 'verwendung' ? 'text-red-600' : (t.typ === 'einloesung' ? 'text-pink-600' : 'text-green-600');
             const betragText = t.typ === 'verwendung' ? `- ${t.betrag.toFixed(2)} €` : (t.typ === 'einloesung' ? '1x Einlösung' : `+ ${t.betrag.toFixed(2)} €`);
@@ -1435,8 +1464,17 @@ window.deleteTransaktion = async function(wertguthabenId, transaktionId) {
     }
 
     try {
-        // Transaktion aus Firestore löschen
+        // WICHTIG: Transaktionsdetails VORHER holen, bevor sie gelöscht wird
         const transaktionRef = doc(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen', transaktionId);
+        const transaktionDoc = await getDoc(transaktionRef);
+        
+        if (!transaktionDoc.exists()) {
+            return alertUser('Transaktion nicht gefunden!', 'error');
+        }
+        
+        const gelöschteTransaktion = transaktionDoc.data();
+        
+        // Jetzt Transaktion löschen
         await deleteDoc(transaktionRef);
 
         // Wertguthaben-Daten anpassen
@@ -1445,31 +1483,27 @@ window.deleteTransaktion = async function(wertguthabenId, transaktionId) {
             updatedAt: serverTimestamp(),
             updatedBy: currentUser.mode
         };
-
-        // Transaktionsdetails holen, um die Auswirkungen zu berechnen
-        const transaktionen = await loadTransaktionen(wertguthabenId);
-        const gelöschteTransaktion = transaktionen.find(t => t.id === transaktionId);
         
-        if (gelöschteTransaktion) {
-            if (gelöschteTransaktion.typ === 'verwendung') {
-                // Verwendung wieder hinzufügen
-                const aktuellerRestwert = wg.restwert !== undefined ? wg.restwert : wg.wert || 0;
-                updateData.restwert = aktuellerRestwert + gelöschteTransaktion.betrag;
-            } else if (gelöschteTransaktion.typ === 'gutschrift') {
-                // Gutschrift wieder abziehen
-                const aktuellerRestwert = wg.restwert !== undefined ? wg.restwert : wg.wert || 0;
-                updateData.restwert = Math.max(0, aktuellerRestwert - gelöschteTransaktion.betrag);
-            } else if (gelöschteTransaktion.typ === 'einloesung' && wg.typ === 'aktionscode') {
-                // Einlösung wieder zurücknehmen - Aktuelle Daten aus DB holen
-                const wertguthabenDoc = await getDoc(doc(wertguthabenCollection, wertguthabenId));
-                const aktuelleDaten = wertguthabenDoc.data();
-                const bereitsEingeloest = aktuelleDaten.bereitsEingeloest || 0;
-                updateData.bereitsEingeloest = Math.max(0, bereitsEingeloest - 1);
-                
-                // Status ggf. wieder auf "aktiv" setzen
-                if (aktuelleDaten.status === 'eingeloest') {
-                    updateData.status = 'aktiv';
-                }
+        // Aktuelle Wertguthaben-Daten aus DB holen für korrekte Berechnung
+        const wertguthabenDoc = await getDoc(wertguthabenRef);
+        const aktuelleDaten = wertguthabenDoc.data();
+        
+        if (gelöschteTransaktion.typ === 'verwendung') {
+            // Verwendung wieder hinzufügen
+            const aktuellerRestwert = aktuelleDaten.restwert !== undefined ? aktuelleDaten.restwert : aktuelleDaten.wert || 0;
+            updateData.restwert = aktuellerRestwert + (gelöschteTransaktion.betrag || 0);
+        } else if (gelöschteTransaktion.typ === 'gutschrift') {
+            // Gutschrift wieder abziehen
+            const aktuellerRestwert = aktuelleDaten.restwert !== undefined ? aktuelleDaten.restwert : aktuelleDaten.wert || 0;
+            updateData.restwert = Math.max(0, aktuellerRestwert - (gelöschteTransaktion.betrag || 0));
+        } else if (gelöschteTransaktion.typ === 'einloesung' && aktuelleDaten.typ === 'aktionscode') {
+            // Einlösung wieder zurücknehmen
+            const bereitsEingeloest = aktuelleDaten.bereitsEingeloest || 0;
+            updateData.bereitsEingeloest = Math.max(0, bereitsEingeloest - 1);
+            
+            // Status ggf. wieder auf "aktiv" setzen
+            if (aktuelleDaten.status === 'eingeloest') {
+                updateData.status = 'aktiv';
             }
         }
 
