@@ -314,7 +314,8 @@ function renderWertguthabenTable() {
     tbody.innerHTML = wertguthaben.map(w => {
         const typConfig = TYP_CONFIG[w.typ] || TYP_CONFIG.guthaben;
         const eigentuemerName = USERS[w.eigentuemer]?.name || w.eigentuemer || 'Unbekannt';
-        const restzeit = calculateRestzeit(w.einloesefrist);
+        // Bei Aktionscode: gueltigBis statt einloesefrist verwenden
+        const restzeit = w.typ === 'aktionscode' ? calculateRestzeit(w.gueltigBis) : calculateRestzeit(w.einloesefrist);
         const statusBadge = getStatusBadge(w, restzeit);
         const restwert = w.restwert !== undefined ? w.restwert : w.wert;
         
@@ -927,6 +928,19 @@ window.openTransaktionModal = async function(wertguthabenId) {
     transaktionTypSelect.disabled = true; // Typ nicht änderbar machen
     transaktionBetragInput.value = betragPlatzhalter;
     
+    // Einlösung-Vormerkung zurücksetzen (wichtig für erneutes Öffnen)
+    const einloesungBtn = document.getElementById('einloesungVormerkenBtn');
+    const vorgemerktDiv = document.getElementById('einloesungVorgemerkt');
+    if (einloesungBtn) {
+        einloesungBtn.disabled = false;
+        einloesungBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+        einloesungBtn.classList.add('bg-pink-600', 'hover:bg-pink-700');
+        einloesungBtn.textContent = '🎟️ 1x Einlösung buchen';
+    }
+    if (vorgemerktDiv) {
+        vorgemerktDiv.classList.add('hidden');
+    }
+    
     // Sichtbarkeit der Container anpassen
     if (wg.typ === 'aktionscode') {
         if (transaktionBetragContainer) transaktionBetragContainer.classList.add('hidden');
@@ -1180,7 +1194,8 @@ window.openWertguthabenDetails = async function(id) {
 
     const typConfig = TYP_CONFIG[wg.typ] || TYP_CONFIG.guthaben;
     const eigentuemerName = USERS[wg.eigentuemer]?.name || wg.eigentuemer || 'Unbekannt';
-    const restzeit = calculateRestzeit(wg.einloesefrist);
+    // Bei Aktionscode: gueltigBis statt einloesefrist verwenden
+    const restzeit = wg.typ === 'aktionscode' ? calculateRestzeit(wg.gueltigBis) : calculateRestzeit(wg.einloesefrist);
     const restwert = wg.restwert !== undefined ? wg.restwert : wg.wert || 0;
     const ursprungswert = wg.wert || 0;
 
@@ -1224,6 +1239,7 @@ window.openWertguthabenDetails = async function(id) {
                 <p class="text-sm font-bold text-gray-600">Restzeit</p>
                 <p class="text-lg">${restzeit}</p>
             </div>
+            ${wg.typ !== 'aktionscode' ? `
             <div>
                 <p class="text-sm font-bold text-gray-600">Kaufdatum</p>
                 <p>${wg.kaufdatum ? new Date(wg.kaufdatum).toLocaleDateString('de-DE') : '-'}</p>
@@ -1231,7 +1247,7 @@ window.openWertguthabenDetails = async function(id) {
             <div>
                 <p class="text-sm font-bold text-gray-600">Einlösefrist</p>
                 <p>${wg.einloesefrist ? new Date(wg.einloesefrist).toLocaleDateString('de-DE') : 'Unbegrenzt'}</p>
-            </div>
+            </div>` : ''}
             ${wg.code ? `<div><p class="text-sm font-bold text-gray-600">Code</p><div class="flex items-center gap-2"><p class="font-mono bg-gray-100 p-2 rounded flex-1">${wg.code}</p><button onclick="window.copyToClipboard('${wg.code}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg" title="Kopieren">📋</button></div></div>` : ''}
             ${wg.pin ? `<div><p class="text-sm font-bold text-gray-600">PIN</p><div class="flex items-center gap-2"><p class="font-mono bg-gray-100 p-2 rounded flex-1">${wg.pin}</p><button onclick="window.copyToClipboard('${wg.pin}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg" title="Kopieren">📋</button></div></div>` : ''}
             ${wg.seriennummer ? `<div><p class="text-sm font-bold text-gray-600">Seriennummer</p><div class="flex items-center gap-2"><p class="font-mono bg-gray-100 p-2 rounded flex-1">${wg.seriennummer}</p><button onclick="window.copyToClipboard('${wg.seriennummer}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg" title="Kopieren">📋</button></div></div>` : ''}
@@ -1308,7 +1324,7 @@ window.openWertguthabenDetails = async function(id) {
             }
             const icon = t.typ === 'verwendung' ? '📉' : (t.typ === 'einloesung' ? '🎟️' : '📈');
             const colorClass = t.typ === 'verwendung' ? 'text-red-600' : (t.typ === 'einloesung' ? 'text-pink-600' : 'text-green-600');
-            const betragText = t.typ === 'verwendung' ? `- ${t.betrag.toFixed(2)} €` : (t.typ === 'einloesung' ? '1x Einlösung' : `+ ${t.betrag.toFixed(2)} €`);
+            const betragText = t.typ === 'verwendung' ? `- ${(t.betrag || 0).toFixed(2)} €` : (t.typ === 'einloesung' ? '1x Einlösung' : `+ ${(t.betrag || 0).toFixed(2)} €`);
             
             return `
                 <div class="p-3 bg-gray-50 rounded-lg border border-gray-200">
