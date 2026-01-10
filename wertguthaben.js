@@ -37,7 +37,8 @@ let wertguthabenSettings = {
         gutschein: 14,
         guthaben: 30,
         wertguthaben: 90,
-        wertguthaben_gesetzlich: 180
+        wertguthaben_gesetzlich: 180,
+        aktionscode: 7
     }
 };
 
@@ -62,6 +63,11 @@ const TYP_CONFIG = {
         label: 'Wertguthaben (gesetzlich)', 
         icon: '⚖️', 
         color: 'bg-yellow-100 text-yellow-800' 
+    },
+    aktionscode: { 
+        label: 'Aktionscode', 
+        icon: '🏷️', 
+        color: 'bg-pink-100 text-pink-800' 
     }
 };
 
@@ -416,6 +422,23 @@ window.openCreateModal = function() {
     document.getElementById('wgBedingungen').value = '';
     document.getElementById('wgWertAblauf').value = '';
 
+    // Aktionscode-Felder zurücksetzen
+    document.getElementById('wgRabattTyp').value = 'prozent';
+    document.getElementById('wgRabattWert').value = '';
+    document.getElementById('wgMindestbestellwert').value = '';
+    document.getElementById('wgMaxRabatt').value = '';
+    document.getElementById('wgGueltigAb').value = '';
+    document.getElementById('wgGueltigBis').value = '';
+    document.getElementById('wgMaxEinloesungen').value = '';
+    document.getElementById('wgBereitsEingeloest').value = '0';
+    document.getElementById('wgKontogebunden').value = 'nein';
+    document.getElementById('wgKonto').value = '';
+    document.getElementById('wgNeukunde').value = 'nein';
+    document.getElementById('wgKombinierbar').value = 'ja';
+    document.getElementById('wgKategorien').value = '';
+    document.getElementById('wgAusnahmen').value = '';
+    document.getElementById('wgQuelle').value = '';
+
     handleTypChange();
 
     document.getElementById('wertguthabenModal').style.display = 'flex';
@@ -433,14 +456,18 @@ function handleTypChange() {
     const typ = document.getElementById('wgTyp').value;
     const gutscheinFelder = document.getElementById('gutschein-felder');
     const wertguthabenFelder = document.getElementById('wertguthaben-felder');
+    const aktionscodeFelder = document.getElementById('aktionscode-felder');
 
     gutscheinFelder.classList.add('hidden');
     wertguthabenFelder.classList.add('hidden');
+    aktionscodeFelder.classList.add('hidden');
 
     if (typ === 'gutschein') {
         gutscheinFelder.classList.remove('hidden');
     } else if (typ === 'wertguthaben' || typ === 'wertguthaben_gesetzlich') {
         wertguthabenFelder.classList.remove('hidden');
+    } else if (typ === 'aktionscode') {
+        aktionscodeFelder.classList.remove('hidden');
     }
 }
 
@@ -519,6 +546,22 @@ async function saveWertguthaben() {
         data.bedingungen = document.getElementById('wgBedingungen').value.trim();
     } else if (typ === 'wertguthaben' || typ === 'wertguthaben_gesetzlich') {
         data.wertAblauf = document.getElementById('wgWertAblauf').value;
+    } else if (typ === 'aktionscode') {
+        data.rabattTyp = document.getElementById('wgRabattTyp').value;
+        data.rabattWert = parseFloat(document.getElementById('wgRabattWert').value) || null;
+        data.mindestbestellwert = parseFloat(document.getElementById('wgMindestbestellwert').value) || null;
+        data.maxRabatt = parseFloat(document.getElementById('wgMaxRabatt').value) || null;
+        data.gueltigAb = document.getElementById('wgGueltigAb').value;
+        data.gueltigBis = document.getElementById('wgGueltigBis').value;
+        data.maxEinloesungen = parseInt(document.getElementById('wgMaxEinloesungen').value) || 0;
+        data.bereitsEingeloest = parseInt(document.getElementById('wgBereitsEingeloest').value) || 0;
+        data.kontogebunden = document.getElementById('wgKontogebunden').value;
+        data.konto = document.getElementById('wgKonto').value.trim();
+        data.neukunde = document.getElementById('wgNeukunde').value;
+        data.kombinierbar = document.getElementById('wgKombinierbar').value;
+        data.kategorien = document.getElementById('wgKategorien').value.trim();
+        data.ausnahmen = document.getElementById('wgAusnahmen').value.trim();
+        data.quelle = document.getElementById('wgQuelle').value.trim();
     }
 
     try {
@@ -580,6 +623,23 @@ window.openEditWertguthaben = function(id) {
     document.getElementById('wgCodeAblauf').value = wg.codeAblauf || '';
     document.getElementById('wgBedingungen').value = wg.bedingungen || '';
     document.getElementById('wgWertAblauf').value = wg.wertAblauf || '';
+
+    // Aktionscode-Felder
+    document.getElementById('wgRabattTyp').value = wg.rabattTyp || 'prozent';
+    document.getElementById('wgRabattWert').value = wg.rabattWert || '';
+    document.getElementById('wgMindestbestellwert').value = wg.mindestbestellwert || '';
+    document.getElementById('wgMaxRabatt').value = wg.maxRabatt || '';
+    document.getElementById('wgGueltigAb').value = wg.gueltigAb || '';
+    document.getElementById('wgGueltigBis').value = wg.gueltigBis || '';
+    document.getElementById('wgMaxEinloesungen').value = wg.maxEinloesungen || '';
+    document.getElementById('wgBereitsEingeloest').value = wg.bereitsEingeloest || '0';
+    document.getElementById('wgKontogebunden').value = wg.kontogebunden || 'nein';
+    document.getElementById('wgKonto').value = wg.konto || '';
+    document.getElementById('wgNeukunde').value = wg.neukunde || 'nein';
+    document.getElementById('wgKombinierbar').value = wg.kombinierbar || 'ja';
+    document.getElementById('wgKategorien').value = wg.kategorien || '';
+    document.getElementById('wgAusnahmen').value = wg.ausnahmen || '';
+    document.getElementById('wgQuelle').value = wg.quelle || '';
 
     handleTypChange();
 
@@ -850,6 +910,26 @@ window.openWertguthabenDetails = async function(id) {
             <div class="mt-4 p-4 bg-blue-50 rounded-lg">
                 <p class="text-sm font-bold text-blue-800 mb-2">📋 Bedingungen</p>
                 <p class="text-sm whitespace-pre-wrap">${wg.bedingungen}</p>
+            </div>
+        ` : ''}
+        
+        ${wg.typ === 'aktionscode' ? `
+            <div class="mt-4 p-4 bg-pink-50 rounded-lg border-2 border-pink-200">
+                <p class="text-sm font-bold text-pink-800 mb-3">🏷️ Aktionscode-Details</p>
+                <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div><span class="font-bold">Rabatt:</span> ${wg.rabattWert ? (wg.rabattTyp === 'prozent' ? wg.rabattWert + '%' : wg.rabattWert.toFixed(2) + ' €') : (wg.rabattTyp === 'gratis_versand' ? 'Gratis Versand' : (wg.rabattTyp === 'geschenk' ? 'Gratis Geschenk' : '-'))}</div>
+                    <div><span class="font-bold">Mindestbestellwert:</span> ${wg.mindestbestellwert ? wg.mindestbestellwert.toFixed(2) + ' €' : 'Keiner'}</div>
+                    <div><span class="font-bold">Max. Rabatt:</span> ${wg.maxRabatt ? wg.maxRabatt.toFixed(2) + ' €' : 'Unbegrenzt'}</div>
+                    <div><span class="font-bold">Gültig ab:</span> ${wg.gueltigAb ? new Date(wg.gueltigAb).toLocaleDateString('de-DE') : 'Unbekannt'}</div>
+                    <div><span class="font-bold">Gültig bis:</span> ${wg.gueltigBis ? new Date(wg.gueltigBis).toLocaleDateString('de-DE') : 'Unbekannt'}</div>
+                    <div><span class="font-bold">Einlösungen:</span> ${wg.bereitsEingeloest || 0} / ${wg.maxEinloesungen || '∞'}</div>
+                    <div><span class="font-bold">Kontogebunden:</span> ${wg.kontogebunden === 'ja' ? 'Ja' + (wg.konto ? ' (' + wg.konto + ')' : '') : (wg.kontogebunden === 'unbekannt' ? 'Unbekannt' : 'Nein')}</div>
+                    <div><span class="font-bold">Nur Neukunden:</span> ${wg.neukunde === 'ja' ? 'Ja' : (wg.neukunde === 'unbekannt' ? 'Unbekannt' : 'Nein')}</div>
+                    <div><span class="font-bold">Kombinierbar:</span> ${wg.kombinierbar === 'ja' ? 'Ja' : (wg.kombinierbar === 'unbekannt' ? 'Unbekannt' : 'Nein')}</div>
+                    ${wg.kategorien ? `<div class="col-span-2"><span class="font-bold">Kategorien:</span> ${wg.kategorien}</div>` : ''}
+                    ${wg.ausnahmen ? `<div class="col-span-2"><span class="font-bold">Ausnahmen:</span> ${wg.ausnahmen}</div>` : ''}
+                    ${wg.quelle ? `<div class="col-span-2"><span class="font-bold">Quelle:</span> ${wg.quelle}</div>` : ''}
+                </div>
             </div>
         ` : ''}
         

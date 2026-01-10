@@ -6181,6 +6181,7 @@
                                 <option value="guthaben">💳 Guthaben</option>
                                 <option value="wertguthaben">🏦 Wertguthaben</option>
                                 <option value="wertguthaben_gesetzlich">⚖️ Wertguthaben (gesetzlich)</option>
+                                <option value="aktionscode">🏷️ Aktionscode</option>
                             </select>
                         </div>
 
@@ -6254,6 +6255,130 @@
                             </div>
                             <input type="date" id="wgWertAblauf" placeholder="Oder benutzerdefiniert"
                                 class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-emerald-500">
+                        </div>
+                    </div>
+
+                    <!-- Spezielle Felder für Typ: Aktionscode -->
+                    <div id="aktionscode-felder" class="hidden space-y-4 p-4 bg-pink-50 rounded-lg border-2 border-pink-200">
+                        <h4 class="font-bold text-pink-800">🏷️ Aktionscode-spezifische Felder</h4>
+                        
+                        <!-- Rabatt-Typ und Wert -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Rabatt-Typ *</label>
+                                <select id="wgRabattTyp" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500 bg-white">
+                                    <option value="prozent">% Prozent-Rabatt</option>
+                                    <option value="betrag">€ Betrag-Rabatt</option>
+                                    <option value="gratis_versand">📦 Gratis Versand</option>
+                                    <option value="geschenk">🎁 Gratis Geschenk</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Rabatt-Wert</label>
+                                <input type="number" id="wgRabattWert" step="0.01" min="0" placeholder="z.B. 20 (für 20% oder 20€)"
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500">
+                            </div>
+                        </div>
+
+                        <!-- Mindestbestellwert und Max-Rabatt -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Mindestbestellwert (€)</label>
+                                <input type="number" id="wgMindestbestellwert" step="0.01" min="0" placeholder="z.B. 50.00 (leer = keiner)"
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Max. Rabatt (€)</label>
+                                <input type="number" id="wgMaxRabatt" step="0.01" min="0" placeholder="z.B. 50.00 (leer = unbegrenzt)"
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500">
+                            </div>
+                        </div>
+
+                        <!-- Gültigkeitszeitraum -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Gültig ab</label>
+                                <input type="date" id="wgGueltigAb"
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500">
+                                <p class="text-xs text-gray-500 mt-1">Leer = unbekannt/sofort</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Gültig bis</label>
+                                <input type="date" id="wgGueltigBis"
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500">
+                                <p class="text-xs text-gray-500 mt-1">Leer = unbekannt/unbegrenzt</p>
+                            </div>
+                        </div>
+
+                        <!-- Einlösungen -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Max. Einlösungen</label>
+                                <input type="number" id="wgMaxEinloesungen" min="0" placeholder="z.B. 1 (0 oder leer = unbegrenzt)"
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Bereits eingelöst</label>
+                                <input type="number" id="wgBereitsEingeloest" min="0" value="0"
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500">
+                            </div>
+                        </div>
+
+                        <!-- Kontogebunden -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Kontogebunden?</label>
+                                <select id="wgKontogebunden" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500 bg-white">
+                                    <option value="nein">Nein</option>
+                                    <option value="ja">Ja</option>
+                                    <option value="unbekannt">Unbekannt</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Konto / E-Mail</label>
+                                <input type="text" id="wgKonto" placeholder="z.B. max@example.com"
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500">
+                            </div>
+                        </div>
+
+                        <!-- Einschränkungen -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Nur für Neukunden?</label>
+                                <select id="wgNeukunde" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500 bg-white">
+                                    <option value="nein">Nein</option>
+                                    <option value="ja">Ja</option>
+                                    <option value="unbekannt">Unbekannt</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Kombinierbar?</label>
+                                <select id="wgKombinierbar" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500 bg-white">
+                                    <option value="ja">Ja</option>
+                                    <option value="nein">Nein</option>
+                                    <option value="unbekannt">Unbekannt</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Kategorien und Ausnahmen -->
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">Gültig für Kategorien</label>
+                            <input type="text" id="wgKategorien" placeholder="z.B. Elektronik, Kleidung (leer = alle)"
+                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">Ausnahmen / Ausgeschlossen</label>
+                            <input type="text" id="wgAusnahmen" placeholder="z.B. Apple-Produkte, Sale-Artikel"
+                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500">
+                        </div>
+
+                        <!-- Quelle -->
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">Quelle / Herkunft</label>
+                            <input type="text" id="wgQuelle" placeholder="z.B. Newsletter, Influencer XY, Cashback-Portal"
+                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-pink-500">
                         </div>
                     </div>
 
