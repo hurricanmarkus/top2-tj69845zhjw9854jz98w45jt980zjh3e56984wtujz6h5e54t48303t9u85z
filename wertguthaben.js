@@ -429,13 +429,56 @@ function getStatusBadge(wertguthaben, restzeit) {
 }
 
 // ========================================
-// MODAL FUNKTIONEN
+// HELPER FUNKTIONEN
 // ========================================
-window.openCreateModal = function() {
-    document.getElementById('wertguthabenModalTitle').textContent = 'Neues Wertguthaben';
-    document.getElementById('editWertguthabenId').value = '';
+
+// Funktion zum Kopieren von Text in die Zwischenablage
+window.copyToClipboard = async function(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        alertUser('In die Zwischenablage kopiert!', 'success');
+    } catch (err) {
+        console.error('Fehler beim Kopieren:', err);
+        alertUser('Fehler beim Kopieren: ' + err.message, 'error');
+    }
+};
+
+// Kopier-Button zu Input-Feld hinzufügen
+window.addCopyButton = function(inputId, buttonId) {
+    const input = document.getElementById(inputId);
+    const button = document.getElementById(buttonId);
     
-    // Reset form
+    if (!input || !button) return;
+    
+    // Button initialisieren
+    button.innerHTML = '📋';
+    button.className = 'ml-2 p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer';
+    button.title = 'Kopieren';
+    
+    // Click-Handler
+    button.onclick = async () => {
+        const text = input.value.trim();
+        if (text) {
+            await window.copyToClipboard(text);
+        } else {
+            alertUser('Kein Text zum Kopieren vorhanden!', 'warning');
+        }
+    };
+    
+    // Button sichtbar machen, wenn Text vorhanden
+    const updateButtonVisibility = () => {
+        button.style.display = input.value.trim() ? 'inline-block' : 'none';
+    };
+    
+    // Event-Listener für Input-Änderungen
+    input.addEventListener('input', updateButtonVisibility);
+    input.addEventListener('change', updateButtonVisibility);
+    
+    // Initiale Sichtbarkeit prüfen
+    updateButtonVisibility();
+};
+
+// Reset form
     document.getElementById('wgEigentuemer').value = 'self';
     document.getElementById('wgEigentuemerFrei').classList.add('hidden');
     document.getElementById('wgTyp').value = 'gutschein';
@@ -833,19 +876,12 @@ function populateEigentuemerDropdowns() {
         });
     });
 }
-
 // ========================================
 // TRANSAKTIONS-SYSTEM
 // ========================================
 
-// Transaktions-Modal öffnen
-window.openTransaktionModal = function(wertguthabenId) {
-    const wg = WERTGUTHABEN[wertguthabenId];
-    if (!wg) return;
-
-    document.getElementById('transaktionWertguthabenId').value = wertguthabenId;
-    document.getElementById('transaktionDatum').value = new Date().toISOString().split('T')[0];
-    document.getElementById('transaktionBestellnr').value = '';
+// Transaktion löschen
+window.deleteTransaktion = async function(wertguthabenId, transaktionId) {
     document.getElementById('transaktionRechnungsnr').value = '';
     document.getElementById('transaktionBeschreibung').value = '';
 
@@ -914,6 +950,30 @@ window.openTransaktionModal = function(wertguthabenId) {
     if (saveBtn && !saveBtn.dataset.listenerAttached) {
         saveBtn.addEventListener('click', saveTransaktion);
         saveBtn.dataset.listenerAttached = 'true';
+    }
+
+    // Event-Listener für Einlösung-Vormerken-Button
+    const einloesungBtn = document.getElementById('einloesungVormerkenBtn');
+    if (einloesungBtn && !einloesungBtn.dataset.listenerAttached) {
+        einloesungBtn.addEventListener('click', function() {
+            const btn = this;
+            const vorgemerktDiv = document.getElementById('einloesungVorgemerkt');
+            
+            // Einlösung vormerken
+            btn.disabled = true;
+            btn.classList.add('bg-gray-400', 'cursor-not-allowed');
+            btn.classList.remove('bg-pink-600', 'hover:bg-pink-700');
+            btn.textContent = '✅ 1x Einlösung vorgemerkt';
+            
+            // Vorgemerkt-Info anzeigen
+            if (vorgemerktDiv) {
+                vorgemerktDiv.classList.remove('hidden');
+            }
+            
+            // Transaktionstyp auf "einloesung" setzen
+            document.getElementById('transaktionTyp').value = 'einloesung';
+        });
+        einloesungBtn.dataset.listenerAttached = 'true';
     }
 
     // Event-Listener für "Transaktion buchen" Button im Details-Modal
@@ -1203,9 +1263,9 @@ window.openWertguthabenDetails = async function(id) {
     } else {
         transaktionsList.innerHTML = transaktionen.map(t => {
             const datum = t.datum ? new Date(t.datum).toLocaleDateString('de-DE') : '-';
-            const icon = t.typ === 'verwendung' ? '📉' : '📈';
-            const colorClass = t.typ === 'verwendung' ? 'text-red-600' : 'text-green-600';
-            const betragText = t.typ === 'verwendung' ? `- ${t.betrag.toFixed(2)} €` : `+ ${t.betrag.toFixed(2)} €`;
+            const icon = t.typ === 'verwendung' ? '📉' : (t.typ === 'einloesung' ? '🎟️' : '📈');
+            const colorClass = t.typ === 'verwendung' ? 'text-red-600' : (t.typ === 'einloesung' ? 'text-pink-600' : 'text-green-600');
+            const betragText = t.typ === 'verwendung' ? `- ${t.betrag.toFixed(2)} €` : (t.typ === 'einloesung' ? '1x Einlösung' : `+ ${t.betrag.toFixed(2)} €`);
             
             return `
                 <div class="p-3 bg-gray-50 rounded-lg border border-gray-200">
@@ -1222,6 +1282,11 @@ window.openWertguthabenDetails = async function(id) {
                                 ${t.rechnungsnr ? `<span>🧾 Rech.-Nr: ${t.rechnungsnr}</span>` : ''}
                             </div>
                         </div>
+                        <button onclick="deleteTransaktion('${id}', '${t.id}')" 
+                                class="ml-2 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Transaktion löschen">
+                            🗑️
+                        </button>
                     </div>
                 </div>
             `;
@@ -1330,6 +1395,83 @@ function loadSettings() {
         console.warn('Konnte Einstellungen nicht laden:', error);
     }
 }
+
+// Transaktion löschen
+window.deleteTransaktion = async function(wertguthabenId, transaktionId) {
+    const wg = WERTGUTHABEN[wertguthabenId];
+    if (!wg) {
+        return alertUser('Wertguthaben nicht gefunden!', 'error');
+    }
+
+    // Sicherheitsabfrage
+    const confirmDelete = confirm(
+        `Möchten Sie diese Transaktion wirklich löschen?\n\n` +
+        `Dadurch wird die Buchung rückgängig gemacht und der Status des Wertguthabens angepasst.\n\n` +
+        `Diese Aktion kann nicht rückgängig gemacht werden!`
+    );
+
+    if (!confirmDelete) {
+        return;
+    }
+
+    try {
+        // Transaktion aus Firestore löschen
+        const transaktionRef = doc(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen', transaktionId);
+        await deleteDoc(transaktionRef);
+
+        // Wertguthaben-Daten anpassen
+        const wertguthabenRef = doc(wertguthabenCollection, wertguthabenId);
+        const updateData = {
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUser.mode
+        };
+
+        // Transaktionsdetails holen, um die Auswirkungen zu berechnen
+        const transaktionen = await loadTransaktionen(wertguthabenId);
+        const gelöschteTransaktion = transaktionen.find(t => t.id === transaktionId);
+        
+        if (gelöschteTransaktion) {
+            if (gelöschteTransaktion.typ === 'verwendung') {
+                // Verwendung wieder hinzufügen
+                const aktuellerRestwert = wg.restwert !== undefined ? wg.restwert : wg.wert || 0;
+                updateData.restwert = aktuellerRestwert + gelöschteTransaktion.betrag;
+            } else if (gelöschteTransaktion.typ === 'gutschrift') {
+                // Gutschrift wieder abziehen
+                const aktuellerRestwert = wg.restwert !== undefined ? wg.restwert : wg.wert || 0;
+                updateData.restwert = Math.max(0, aktuellerRestwert - gelöschteTransaktion.betrag);
+            } else if (gelöschteTransaktion.typ === 'einloesung' && wg.typ === 'aktionscode') {
+                // Einlösung wieder zurücknehmen
+                const bereitsEingeloest = wg.bereitsEingeloest || 0;
+                updateData.bereitsEingeloest = Math.max(0, bereitsEingeloest - 1);
+                
+                // Status ggf. wieder auf "aktiv" setzen
+                if (wg.status === 'eingeloest') {
+                    updateData.status = 'aktiv';
+                }
+            }
+        }
+
+        await updateDoc(wertguthabenRef, updateData);
+
+        alertUser('Transaktion erfolgreich gelöscht!', 'success');
+        
+        // Details-Modal neu laden
+        if (document.getElementById('wertguthabenDetailsModal').style.display === 'flex') {
+            setTimeout(() => openWertguthabenDetails(wertguthabenId), 300);
+        }
+    } catch (error) {
+        console.error('Fehler beim Löschen der Transaktion:', error);
+        alertUser('Fehler beim Löschen: ' + error.message, 'error');
+    }
+};
+
+// Kopier-Buttons initialisieren
+window.addEventListener('DOMContentLoaded', () => {
+    // Kopier-Buttons für alle Felder initialisieren
+    window.addCopyButton('wgCode', 'wgCodeCopyBtn');
+    window.addCopyButton('wgPin', 'wgPinCopyBtn');
+    window.addCopyButton('wgSeriennummer', 'wgSeriennummerCopyBtn');
+});
 
 // Einstellungen beim Initialisieren laden
 loadSettings();
