@@ -30,7 +30,7 @@ import {
 // ========================================
 let wertguthabenCollection = null;
 let WERTGUTHABEN = {};
-let currentFilter = { typ: '', eigentuemer: '' };
+let currentFilter = { typ: '', eigentuemer: '', status: 'aktiv' };
 let searchTerm = '';
 let wertguthabenSettings = {
     defaultWarnings: {
@@ -40,6 +40,16 @@ let wertguthabenSettings = {
         wertguthaben_gesetzlich: 180,
         aktionscode: 7
     }
+};
+
+// Status-Konfiguration
+const STATUS_CONFIG = {
+    aktiv: { label: 'Aktiv', icon: '✅', color: 'bg-green-100 text-green-800' },
+    eingeloest: { label: 'Eingelöst', icon: '🎯', color: 'bg-blue-100 text-blue-800' },
+    abgelaufen: { label: 'Abgelaufen', icon: '⏰', color: 'bg-orange-100 text-orange-800' },
+    storniert: { label: 'Storniert', icon: '❌', color: 'bg-red-100 text-red-800' },
+    verschenkt: { label: 'Verschenkt', icon: '🎁', color: 'bg-purple-100 text-purple-800' },
+    verloren: { label: 'Verloren', icon: '❓', color: 'bg-gray-100 text-gray-800' }
 };
 
 // Typ-Konfiguration
@@ -188,14 +198,24 @@ function setupEventListeners() {
         filterEigentuemer.dataset.listenerAttached = 'true';
     }
 
+    const filterStatus = document.getElementById('filter-status');
+    if (filterStatus && !filterStatus.dataset.listenerAttached) {
+        filterStatus.addEventListener('change', (e) => {
+            currentFilter.status = e.target.value;
+            renderWertguthabenTable();
+        });
+        filterStatus.dataset.listenerAttached = 'true';
+    }
+
     const resetFilters = document.getElementById('reset-filters-wertguthaben');
     if (resetFilters && !resetFilters.dataset.listenerAttached) {
         resetFilters.addEventListener('click', () => {
-            currentFilter = { typ: '', eigentuemer: '' };
+            currentFilter = { typ: '', eigentuemer: '', status: 'aktiv' };
             searchTerm = '';
             document.getElementById('search-wertguthaben').value = '';
             document.getElementById('filter-typ').value = '';
             document.getElementById('filter-eigentuemer').value = '';
+            document.getElementById('filter-status').value = 'aktiv';
             renderWertguthabenTable();
         });
         resetFilters.dataset.listenerAttached = 'true';
@@ -260,6 +280,9 @@ function renderWertguthabenTable() {
     }
     if (currentFilter.eigentuemer) {
         wertguthaben = wertguthaben.filter(w => w.eigentuemer === currentFilter.eigentuemer);
+    }
+    if (currentFilter.status) {
+        wertguthaben = wertguthaben.filter(w => (w.status || 'aktiv') === currentFilter.status);
     }
 
     // Suche anwenden
@@ -377,6 +400,14 @@ function calculateRestzeit(einloesefrist) {
 // STATUS BADGE
 // ========================================
 function getStatusBadge(wertguthaben, restzeit) {
+    // Manueller Status hat Vorrang (außer "aktiv")
+    const manuellerStatus = wertguthaben.status || 'aktiv';
+    if (manuellerStatus !== 'aktiv') {
+        const statusConfig = STATUS_CONFIG[manuellerStatus] || STATUS_CONFIG.aktiv;
+        return `<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${statusConfig.color}">${statusConfig.icon} ${statusConfig.label}</span>`;
+    }
+
+    // Automatischer Status basierend auf Einlösefrist
     if (!wertguthaben.einloesefrist) {
         return '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-800">∞ Gültig</span>';
     }
@@ -408,6 +439,7 @@ window.openCreateModal = function() {
     document.getElementById('wgEigentuemer').value = 'self';
     document.getElementById('wgEigentuemerFrei').classList.add('hidden');
     document.getElementById('wgTyp').value = 'gutschein';
+    document.getElementById('wgStatus').value = 'aktiv';
     document.getElementById('wgWert').value = '';
     document.getElementById('wgName').value = '';
     document.getElementById('wgUnternehmen').value = '';
@@ -513,6 +545,7 @@ async function saveWertguthaben() {
     }
 
     const typ = document.getElementById('wgTyp').value;
+    const status = document.getElementById('wgStatus').value;
     const wert = parseFloat(document.getElementById('wgWert').value) || 0;
     const unternehmen = document.getElementById('wgUnternehmen').value.trim();
     const kaufdatum = document.getElementById('wgKaufdatum').value;
@@ -526,6 +559,7 @@ async function saveWertguthaben() {
     const data = {
         eigentuemer,
         typ,
+        status,
         name,
         unternehmen,
         wert,
@@ -610,6 +644,7 @@ window.openEditWertguthaben = function(id) {
     }
 
     document.getElementById('wgTyp').value = wg.typ;
+    document.getElementById('wgStatus').value = wg.status || 'aktiv';
     document.getElementById('wgWert').value = wg.wert || '';
     document.getElementById('wgName').value = wg.name || '';
     document.getElementById('wgUnternehmen').value = wg.unternehmen || '';
@@ -870,6 +905,12 @@ window.openWertguthabenDetails = async function(id) {
                 <p class="text-sm font-bold text-gray-600">Typ</p>
                 <p><span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${typConfig.color}">
                     ${typConfig.icon} ${typConfig.label}
+                </span></p>
+            </div>
+            <div>
+                <p class="text-sm font-bold text-gray-600">Status</p>
+                <p><span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${(STATUS_CONFIG[wg.status] || STATUS_CONFIG.aktiv).color}">
+                    ${(STATUS_CONFIG[wg.status] || STATUS_CONFIG.aktiv).icon} ${(STATUS_CONFIG[wg.status] || STATUS_CONFIG.aktiv).label}
                 </span></p>
             </div>
             <div>

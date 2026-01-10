@@ -1251,10 +1251,21 @@
                             <option value="guthaben">💳 Guthaben</option>
                             <option value="wertguthaben">🏦 Wertguthaben</option>
                             <option value="wertguthaben_gesetzlich">⚖️ Wertguthaben (gesetzlich)</option>
+                            <option value="aktionscode">🏷️ Aktionscode</option>
                         </select>
                         
                         <select id="filter-eigentuemer" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1 min-w-[150px]">
                             <option value="">Alle Eigentümer</option>
+                        </select>
+
+                        <select id="filter-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                            <option value="">Alle Status</option>
+                            <option value="aktiv" selected>✅ Aktiv</option>
+                            <option value="eingeloest">🎯 Eingelöst</option>
+                            <option value="abgelaufen">⏰ Abgelaufen</option>
+                            <option value="storniert">❌ Storniert</option>
+                            <option value="verschenkt">🎁 Verschenkt</option>
+                            <option value="verloren">❓ Verloren</option>
                         </select>
                         
                         <button id="reset-filters-wertguthaben" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
@@ -6172,7 +6183,7 @@
                             class="hidden w-full mt-2 p-3 border-2 border-gray-300 rounded-lg focus:border-emerald-500">
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4">
+                    <div class="grid grid-cols-3 gap-4">
                         <!-- Typ -->
                         <div>
                             <label class="block text-sm font-bold text-gray-700 mb-2">Typ *</label>
@@ -6182,6 +6193,19 @@
                                 <option value="wertguthaben">🏦 Wertguthaben</option>
                                 <option value="wertguthaben_gesetzlich">⚖️ Wertguthaben (gesetzlich)</option>
                                 <option value="aktionscode">🏷️ Aktionscode</option>
+                            </select>
+                        </div>
+
+                        <!-- Status -->
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">Status</label>
+                            <select id="wgStatus" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-emerald-500 bg-white">
+                                <option value="aktiv">✅ Aktiv</option>
+                                <option value="eingeloest">🎯 Eingelöst</option>
+                                <option value="abgelaufen">⏰ Abgelaufen</option>
+                                <option value="storniert">❌ Storniert</option>
+                                <option value="verschenkt">🎁 Verschenkt</option>
+                                <option value="verloren">❓ Verloren</option>
                             </select>
                         </div>
 
