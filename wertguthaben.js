@@ -180,7 +180,7 @@ function setupEventListeners() {
         searchInput.dataset.listenerAttached = 'true';
     }
 
-    const filterTyp = document.getElementById('filter-typ');
+    const filterTyp = document.getElementById('filter-wg-typ');
     if (filterTyp && !filterTyp.dataset.listenerAttached) {
         filterTyp.addEventListener('change', (e) => {
             currentFilter.typ = e.target.value;
@@ -189,7 +189,7 @@ function setupEventListeners() {
         filterTyp.dataset.listenerAttached = 'true';
     }
 
-    const filterEigentuemer = document.getElementById('filter-eigentuemer');
+    const filterEigentuemer = document.getElementById('filter-wg-eigentuemer');
     if (filterEigentuemer && !filterEigentuemer.dataset.listenerAttached) {
         filterEigentuemer.addEventListener('change', (e) => {
             currentFilter.eigentuemer = e.target.value;
@@ -198,7 +198,7 @@ function setupEventListeners() {
         filterEigentuemer.dataset.listenerAttached = 'true';
     }
 
-    const filterStatus = document.getElementById('filter-status');
+    const filterStatus = document.getElementById('filter-wg-status');
     if (filterStatus && !filterStatus.dataset.listenerAttached) {
         filterStatus.addEventListener('change', (e) => {
             currentFilter.status = e.target.value;
@@ -213,9 +213,9 @@ function setupEventListeners() {
             currentFilter = { typ: '', eigentuemer: '', status: 'aktiv' };
             searchTerm = '';
             document.getElementById('search-wertguthaben').value = '';
-            document.getElementById('filter-typ').value = '';
-            document.getElementById('filter-eigentuemer').value = '';
-            document.getElementById('filter-status').value = 'aktiv';
+            document.getElementById('filter-wg-typ').value = '';
+            document.getElementById('filter-wg-eigentuemer').value = '';
+            document.getElementById('filter-wg-status').value = 'aktiv';
             renderWertguthabenTable();
         });
         resetFilters.dataset.listenerAttached = 'true';
@@ -855,7 +855,7 @@ window.deleteWertguthaben = async function(id) {
 function populateEigentuemerDropdowns() {
     const dropdowns = [
         document.getElementById('wgEigentuemer'),
-        document.getElementById('filter-eigentuemer')
+        document.getElementById('filter-wg-eigentuemer')
     ];
 
     dropdowns.forEach(dropdown => {
