@@ -984,20 +984,16 @@ window.openTransaktionModal = async function(wertguthabenId) {
         saveBtn.dataset.listenerAttached = 'true';
     }
 
-    // Event-Listener für Einlösung-Vormerken-Button
-    const einloesungBtn = document.getElementById('einloesungVormerkenBtn');
+    // Event-Listener für Einlösung-Vormerken-Button (einloesungBtn bereits oben deklariert)
     if (einloesungBtn && !einloesungBtn.dataset.listenerAttached) {
         einloesungBtn.addEventListener('click', function() {
-            const btn = this;
-            const vorgemerktDiv = document.getElementById('einloesungVorgemerkt');
-            
             // Einlösung vormerken
-            btn.disabled = true;
-            btn.classList.add('bg-gray-400', 'cursor-not-allowed');
-            btn.classList.remove('bg-pink-600', 'hover:bg-pink-700');
-            btn.textContent = '✅ 1x Einlösung vorgemerkt';
+            this.disabled = true;
+            this.classList.add('bg-gray-400', 'cursor-not-allowed');
+            this.classList.remove('bg-pink-600', 'hover:bg-pink-700');
+            this.textContent = '✅ 1x Einlösung vorgemerkt';
             
-            // Vorgemerkt-Info anzeigen
+            // Vorgemerkt-Info anzeigen (vorgemerktDiv bereits oben deklariert)
             if (vorgemerktDiv) {
                 vorgemerktDiv.classList.remove('hidden');
             }
