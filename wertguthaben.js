@@ -479,6 +479,7 @@ window.addCopyButton = function(inputId, buttonId) {
 };
 
 // Reset form
+function resetForm() {
     document.getElementById('wgEigentuemer').value = 'self';
     document.getElementById('wgEigentuemerFrei').classList.add('hidden');
     document.getElementById('wgTyp').value = 'gutschein';
@@ -518,10 +519,10 @@ window.addCopyButton = function(inputId, buttonId) {
     handleTypChange();
 
     document.getElementById('wertguthabenModal').style.display = 'flex';
-};
+}
 
 function openCreateModal() {
-    window.openCreateModal();
+    resetForm();
 }
 
 function closeWertguthabenModal() {
