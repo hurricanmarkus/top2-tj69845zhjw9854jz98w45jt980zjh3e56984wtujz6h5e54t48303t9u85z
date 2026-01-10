@@ -1046,7 +1046,7 @@ async function saveTransaktion() {
             const transaktionData = {
                 typ: 'einloesung',
                 betrag: 0,
-                datum,
+                datum: serverTimestamp(),
                 bestellnr,
                 rechnungsnr,
                 beschreibung: beschreibung || 'Aktionscode eingelöst',
@@ -1110,7 +1110,7 @@ async function saveTransaktion() {
         const transaktionData = {
             typ,
             betrag,
-            datum,
+            datum: serverTimestamp(),
             bestellnr,
             rechnungsnr,
             beschreibung,
@@ -1460,12 +1460,14 @@ window.deleteTransaktion = async function(wertguthabenId, transaktionId) {
                 const aktuellerRestwert = wg.restwert !== undefined ? wg.restwert : wg.wert || 0;
                 updateData.restwert = Math.max(0, aktuellerRestwert - gelöschteTransaktion.betrag);
             } else if (gelöschteTransaktion.typ === 'einloesung' && wg.typ === 'aktionscode') {
-                // Einlösung wieder zurücknehmen
-                const bereitsEingeloest = wg.bereitsEingeloest || 0;
+                // Einlösung wieder zurücknehmen - Aktuelle Daten aus DB holen
+                const wertguthabenDoc = await getDoc(doc(wertguthabenCollection, wertguthabenId));
+                const aktuelleDaten = wertguthabenDoc.data();
+                const bereitsEingeloest = aktuelleDaten.bereitsEingeloest || 0;
                 updateData.bereitsEingeloest = Math.max(0, bereitsEingeloest - 1);
                 
                 // Status ggf. wieder auf "aktiv" setzen
-                if (wg.status === 'eingeloest') {
+                if (aktuelleDaten.status === 'eingeloest') {
                     updateData.status = 'aktiv';
                 }
             }
