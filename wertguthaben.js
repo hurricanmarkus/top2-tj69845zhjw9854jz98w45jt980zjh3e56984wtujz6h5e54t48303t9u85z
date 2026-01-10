@@ -1362,11 +1362,10 @@ window.openWertguthabenDetails = async function(id) {
         window.openEditWertguthaben(id);
     };
 
-    document.getElementById('deleteWertguthabenBtn').onclick = () => {
-        if (confirm('Wertguthaben wirklich löschen?')) {
-            window.deleteWertguthaben(id);
-            document.getElementById('wertguthabenDetailsModal').style.display = 'none';
-        }
+    document.getElementById('deleteWertguthabenBtn').onclick = async () => {
+        // confirm() ist bereits in deleteWertguthaben() enthalten
+        await window.deleteWertguthaben(id);
+        document.getElementById('wertguthabenDetailsModal').style.display = 'none';
     };
 
     document.getElementById('wertguthabenDetailsModal').style.display = 'flex';
