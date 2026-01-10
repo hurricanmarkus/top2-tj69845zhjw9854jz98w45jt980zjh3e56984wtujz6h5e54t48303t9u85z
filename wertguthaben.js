@@ -492,12 +492,13 @@ function handleTypChange() {
     const aktionscodeFelder = document.getElementById('aktionscode-felder');
     const wertInput = document.getElementById('wgWert');
     const einloesefristInput = document.getElementById('wgEinloesefrist');
+    const kaufdatumInput = document.getElementById('wgKaufdatum');
 
     gutscheinFelder.classList.add('hidden');
     wertguthabenFelder.classList.add('hidden');
     aktionscodeFelder.classList.add('hidden');
 
-    // Wert und Einlösefrist für Aktionscode deaktivieren
+    // Wert, Einlösefrist und Kaufdatum für Aktionscode deaktivieren
     if (typ === 'aktionscode') {
         wertInput.disabled = true;
         wertInput.value = '';
@@ -505,12 +506,21 @@ function handleTypChange() {
         einloesefristInput.disabled = true;
         einloesefristInput.value = '';
         einloesefristInput.classList.add('bg-gray-100', 'cursor-not-allowed');
+        kaufdatumInput.disabled = true;
+        kaufdatumInput.value = '';
+        kaufdatumInput.classList.add('bg-gray-100', 'cursor-not-allowed');
         aktionscodeFelder.classList.remove('hidden');
+        // Rabatt-Typ Handler aufrufen um Einheit-Dropdown zu setzen
+        if (typeof handleRabattTypChange === 'function') {
+            handleRabattTypChange();
+        }
     } else {
         wertInput.disabled = false;
         wertInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
         einloesefristInput.disabled = false;
         einloesefristInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
+        kaufdatumInput.disabled = false;
+        kaufdatumInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
         
         if (typ === 'gutschein') {
             gutscheinFelder.classList.remove('hidden');
@@ -542,28 +552,28 @@ function setKaufdatumToToday() {
 // Rabatt-Typ Änderung: Felder ein-/ausblenden
 window.handleRabattTypChange = function() {
     const rabattTyp = document.getElementById('wgRabattTyp').value;
-    const rabattWertContainer = document.getElementById('rabattWertContainer');
     const rabattWertInput = document.getElementById('wgRabattWert');
     const rabattEinheit = document.getElementById('wgRabattEinheit');
     const maxRabattInput = document.getElementById('wgMaxRabatt');
+    
+    // Einheit-Dropdown immer deaktiviert (wird automatisch gesetzt)
+    rabattEinheit.disabled = true;
+    rabattEinheit.classList.add('bg-gray-100', 'cursor-not-allowed');
     
     // Bei Gratis Versand oder Geschenk: Rabattwert und Max-Rabatt deaktivieren
     if (rabattTyp === 'gratis_versand' || rabattTyp === 'geschenk') {
         rabattWertInput.disabled = true;
         rabattWertInput.value = '';
         rabattWertInput.classList.add('bg-gray-100', 'cursor-not-allowed');
-        rabattEinheit.disabled = true;
-        rabattEinheit.classList.add('bg-gray-100', 'cursor-not-allowed');
+        rabattEinheit.value = '';
         maxRabattInput.disabled = true;
         maxRabattInput.value = '';
         maxRabattInput.classList.add('bg-gray-100', 'cursor-not-allowed');
     } else {
         rabattWertInput.disabled = false;
         rabattWertInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
-        rabattEinheit.disabled = false;
-        rabattEinheit.classList.remove('bg-gray-100', 'cursor-not-allowed');
         
-        // Einheit basierend auf Rabatt-Typ setzen
+        // Einheit automatisch basierend auf Rabatt-Typ setzen
         if (rabattTyp === 'prozent') {
             rabattEinheit.value = '%';
             // Max-Rabatt nur bei Prozent sinnvoll
@@ -834,15 +844,58 @@ window.openTransaktionModal = function(wertguthabenId) {
     if (!wg) return;
 
     document.getElementById('transaktionWertguthabenId').value = wertguthabenId;
-    document.getElementById('transaktionTyp').value = 'verwendung';
-    document.getElementById('transaktionBetrag').value = '';
     document.getElementById('transaktionDatum').value = new Date().toISOString().split('T')[0];
     document.getElementById('transaktionBestellnr').value = '';
     document.getElementById('transaktionRechnungsnr').value = '';
     document.getElementById('transaktionBeschreibung').value = '';
 
-    const restwert = wg.restwert !== undefined ? wg.restwert : wg.wert || 0;
-    document.getElementById('transaktionVerfuegbar').textContent = restwert.toFixed(2) + ' €';
+    const transaktionBetragContainer = document.getElementById('transaktionBetragContainer');
+    const transaktionEinloesungContainer = document.getElementById('transaktionEinloesungContainer');
+    const transaktionTypSelect = document.getElementById('transaktionTyp');
+    const transaktionBetragInput = document.getElementById('transaktionBetrag');
+    const transaktionVerfuegbar = document.getElementById('transaktionVerfuegbar');
+
+    // Aktionscode: Einlösungs-Modus
+    if (wg.typ === 'aktionscode') {
+        // Betrag-Container ausblenden, Einlösungs-Container einblenden
+        if (transaktionBetragContainer) transaktionBetragContainer.classList.add('hidden');
+        if (transaktionEinloesungContainer) transaktionEinloesungContainer.classList.remove('hidden');
+        
+        // Typ auf "einloesung" setzen
+        transaktionTypSelect.value = 'einloesung';
+        transaktionTypSelect.disabled = true;
+        transaktionTypSelect.classList.add('bg-gray-100', 'cursor-not-allowed');
+        
+        // Einlösungs-Info anzeigen
+        const maxEinloesungen = wg.maxEinloesungen || 0;
+        const bereitsEingeloest = wg.bereitsEingeloest || 0;
+        const verbleibend = maxEinloesungen > 0 ? maxEinloesungen - bereitsEingeloest : '∞';
+        
+        transaktionVerfuegbar.innerHTML = `
+            <div class="text-center">
+                <div class="text-3xl font-bold text-pink-600 mb-2">${bereitsEingeloest} / ${maxEinloesungen > 0 ? maxEinloesungen : '∞'}</div>
+                <div class="text-sm text-gray-600">Einlösungen verwendet</div>
+                <div class="mt-2 text-lg font-semibold ${verbleibend === 0 ? 'text-red-600' : 'text-green-600'}">
+                    ${verbleibend === 0 ? '❌ Keine Einlösungen mehr verfügbar' : `✅ ${verbleibend} Einlösung(en) verfügbar`}
+                </div>
+            </div>
+        `;
+        
+        // Betrag auf 0 setzen (nicht relevant für Aktionscode)
+        transaktionBetragInput.value = '0';
+    } else {
+        // Normaler Modus: Betrag-Container einblenden, Einlösungs-Container ausblenden
+        if (transaktionBetragContainer) transaktionBetragContainer.classList.remove('hidden');
+        if (transaktionEinloesungContainer) transaktionEinloesungContainer.classList.add('hidden');
+        
+        transaktionTypSelect.value = 'verwendung';
+        transaktionTypSelect.disabled = false;
+        transaktionTypSelect.classList.remove('bg-gray-100', 'cursor-not-allowed');
+        transaktionBetragInput.value = '';
+        
+        const restwert = wg.restwert !== undefined ? wg.restwert : wg.wert || 0;
+        transaktionVerfuegbar.textContent = restwert.toFixed(2) + ' €';
+    }
 
     // Event-Listener für Transaktions-Modal (nur einmal)
     const closeBtn = document.getElementById('closeTransaktionModal');
@@ -887,16 +940,11 @@ function closeTransaktionModal() {
 async function saveTransaktion() {
     const wertguthabenId = document.getElementById('transaktionWertguthabenId').value;
     const typ = document.getElementById('transaktionTyp').value;
-    const betrag = parseFloat(document.getElementById('transaktionBetrag').value);
+    const betrag = parseFloat(document.getElementById('transaktionBetrag').value) || 0;
     const datum = document.getElementById('transaktionDatum').value;
     const bestellnr = document.getElementById('transaktionBestellnr').value.trim();
     const rechnungsnr = document.getElementById('transaktionRechnungsnr').value.trim();
     const beschreibung = document.getElementById('transaktionBeschreibung').value.trim();
-
-    // Validierung
-    if (!betrag || betrag <= 0) {
-        return alertUser('Bitte einen gültigen Betrag eingeben!', 'error');
-    }
 
     if (!datum) {
         return alertUser('Bitte ein Datum eingeben!', 'error');
@@ -905,6 +953,73 @@ async function saveTransaktion() {
     const wg = WERTGUTHABEN[wertguthabenId];
     if (!wg) {
         return alertUser('Wertguthaben nicht gefunden!', 'error');
+    }
+
+    // Aktionscode: Einlösung buchen
+    if (wg.typ === 'aktionscode' && typ === 'einloesung') {
+        const maxEinloesungen = wg.maxEinloesungen || 0;
+        const bereitsEingeloest = wg.bereitsEingeloest || 0;
+        
+        // Prüfen ob noch Einlösungen verfügbar (0 = unbegrenzt)
+        if (maxEinloesungen > 0 && bereitsEingeloest >= maxEinloesungen) {
+            return alertUser('Keine Einlösungen mehr verfügbar! Der Aktionscode ist bereits vollständig eingelöst.', 'error');
+        }
+
+        try {
+            // Transaktion als Subcollection speichern
+            const transaktionenRef = collection(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen');
+            
+            const transaktionData = {
+                typ: 'einloesung',
+                betrag: 0,
+                datum,
+                bestellnr,
+                rechnungsnr,
+                beschreibung: beschreibung || 'Aktionscode eingelöst',
+                createdAt: serverTimestamp(),
+                createdBy: currentUser.mode
+            };
+
+            await addDoc(transaktionenRef, transaktionData);
+
+            // Einlösungen erhöhen
+            const neueEinloesungen = bereitsEingeloest + 1;
+            
+            // Update-Daten vorbereiten
+            const updateData = {
+                bereitsEingeloest: neueEinloesungen,
+                updatedAt: serverTimestamp(),
+                updatedBy: currentUser.mode
+            };
+            
+            // Status auf "eingeloest" setzen wenn max erreicht
+            if (maxEinloesungen > 0 && neueEinloesungen >= maxEinloesungen) {
+                updateData.status = 'eingeloest';
+            }
+
+            const wertguthabenRef = doc(wertguthabenCollection, wertguthabenId);
+            await updateDoc(wertguthabenRef, updateData);
+
+            const statusMsg = (maxEinloesungen > 0 && neueEinloesungen >= maxEinloesungen) 
+                ? ' Der Aktionscode ist jetzt vollständig eingelöst!' 
+                : '';
+            alertUser(`Einlösung erfolgreich gebucht! (${neueEinloesungen}/${maxEinloesungen > 0 ? maxEinloesungen : '∞'})${statusMsg}`, 'success');
+            closeTransaktionModal();
+
+            // Details-Modal neu laden, falls offen
+            if (document.getElementById('wertguthabenDetailsModal').style.display === 'flex') {
+                setTimeout(() => openWertguthabenDetails(wertguthabenId), 300);
+            }
+        } catch (error) {
+            console.error('Fehler beim Buchen der Einlösung:', error);
+            alertUser('Fehler beim Buchen: ' + error.message, 'error');
+        }
+        return;
+    }
+
+    // Normaler Modus: Betrag-basierte Transaktion
+    if (!betrag || betrag <= 0) {
+        return alertUser('Bitte einen gültigen Betrag eingeben!', 'error');
     }
 
     const aktuellerRestwert = wg.restwert !== undefined ? wg.restwert : wg.wert || 0;
