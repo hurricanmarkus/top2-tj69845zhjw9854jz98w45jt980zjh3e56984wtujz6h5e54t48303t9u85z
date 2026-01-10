@@ -894,15 +894,58 @@ window.openTransaktionModal = function(wertguthabenId) {
     if (!wg) return;
 
     document.getElementById('transaktionWertguthabenId').value = wertguthabenId;
-    document.getElementById('transaktionTyp').value = 'verwendung';
-    document.getElementById('transaktionBetrag').value = '';
+    
+    // Transaktionstyp basierend auf Wertguthaben-Typ setzen
+    const transaktionTypSelect = document.getElementById('transaktionTyp');
+    const transaktionBetragInput = document.getElementById('transaktionBetrag');
+    const transaktionBetragContainer = document.getElementById('transaktionBetragContainer');
+    const transaktionEinloesungContainer = document.getElementById('transaktionEinloesungContainer');
+    const transaktionVerfuegbar = document.getElementById('transaktionVerfuegbar');
+    
+    // Standard: Verwendung
+    let typ = 'verwendung';
+    let betragPlatzhalter = '';
+    let verfuegbarText = '';
+    
+    if (wg.typ === 'aktionscode') {
+        // Bei Aktionscode: Einlösung als Standard
+        typ = 'einloesung';
+        betragPlatzhalter = '0';
+        verfuegbarText = `${wg.bereitsEingeloest || 0} / ${wg.maxEinloesungen || '∞'} Einlösungen`;
+    } else if (wg.typ === 'gutschein' || wg.typ === 'wertguthaben' || wg.typ === 'wertguthaben_gesetzlich') {
+        // Bei Gutscheinen/Guthaben: Betrag eingeben
+        typ = 'verwendung';
+        betragPlatzhalter = '';
+        const restwert = wg.restwert !== undefined ? wg.restwert : wg.wert || 0;
+        verfuegbarText = restwert.toFixed(2) + ' €';
+    }
+    
+    transaktionTypSelect.value = typ;
+    transaktionBetragInput.value = betragPlatzhalter;
+    
+    // Sichtbarkeit der Container anpassen
+    if (wg.typ === 'aktionscode') {
+        if (transaktionBetragContainer) transaktionBetragContainer.classList.add('hidden');
+        if (transaktionEinloesungContainer) transaktionEinloesungContainer.classList.remove('hidden');
+        transaktionVerfuegbar.innerHTML = `
+            <div class="text-center">
+                <div class="text-3xl font-bold text-pink-600 mb-2">${wg.bereitsEingeloest || 0} / ${wg.maxEinloesungen || '∞'}</div>
+                <div class="text-sm text-gray-600">Einlösungen verwendet</div>
+                <div class="mt-2 text-lg font-semibold ${wg.bereitsEingeloest >= (wg.maxEinloesungen || 0) ? 'text-red-600' : 'text-green-600'}">
+                    ${wg.bereitsEingeloest >= (wg.maxEinloesungen || 0) ? '❌ Keine Einlösungen mehr verfügbar' : `✅ ${wg.maxEinloesungen - wg.bereitsEingeloest} Einlösung(en) verfügbar`}
+                </div>
+            </div>
+        `;
+    } else {
+        if (transaktionBetragContainer) transaktionBetragContainer.classList.remove('hidden');
+        if (transaktionEinloesungContainer) transaktionEinloesungContainer.classList.add('hidden');
+        transaktionVerfuegbar.textContent = verfuegbarText;
+    }
+    
     document.getElementById('transaktionDatum').value = new Date().toISOString().split('T')[0];
     document.getElementById('transaktionBestellnr').value = '';
     document.getElementById('transaktionRechnungsnr').value = '';
     document.getElementById('transaktionBeschreibung').value = '';
-
-    const restwert = wg.restwert !== undefined ? wg.restwert : wg.wert || 0;
-    document.getElementById('transaktionVerfuegbar').textContent = restwert.toFixed(2) + ' €';
 
     // Event-Listener für Transaktions-Modal (nur einmal)
     const closeBtn = document.getElementById('closeTransaktionModal');
