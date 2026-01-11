@@ -1,4 +1,4 @@
-// @ts-check
+// // @ts-check
 // ========================================
 // GESCHENKEMANAGEMENT SYSTEM
 // Professionelle Geschenkeverwaltung für alle Anlässe

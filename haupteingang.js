@@ -370,6 +370,18 @@ async function initializeFirebase() {
                     console.error("Fehler: listenForHaushaltszahlungen ist nicht importiert!");
                 }
 
+                if (typeof listenForVertraege === 'function') {
+                    listenForVertraege();
+                } else {
+                    console.error("Fehler: listenForVertraege ist nicht importiert!");
+                }
+
+                if (typeof listenForGeschenke === 'function') {
+                    listenForGeschenke();
+                } else {
+                    console.error("Fehler: listenForGeschenke ist nicht importiert!");
+                }
+
             } catch (error) {
                 console.error("initializeFirebase: FEHLER beim Starten der Listener:", error);
                 alertUser("Fehler beim Initialisieren der Daten-Listener.", "error");
