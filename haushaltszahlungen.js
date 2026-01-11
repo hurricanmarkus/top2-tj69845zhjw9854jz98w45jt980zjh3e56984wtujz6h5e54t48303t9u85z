@@ -46,6 +46,9 @@ let currentFilter = { status: 'aktiv', typ: '', person: '', intervalle: [] }; //
 let searchTerm = '';
 let simulationsDatum = null; // Für Datums-Simulation (wie W7 in Excel)
 
+let unsubscribeHaushaltszahlungen = null;
+let unsubscribeEinladungen = null;
+
 // Standard-Einstellungen
 let haushaltszahlungenSettings = {
     personen: [],
@@ -156,6 +159,19 @@ async function loadThemen() {
     }
 }
 
+export function stopHaushaltszahlungenListeners() {
+    if (unsubscribeHaushaltszahlungen) {
+        unsubscribeHaushaltszahlungen();
+        unsubscribeHaushaltszahlungen = null;
+    }
+    if (unsubscribeEinladungen) {
+        unsubscribeEinladungen();
+        unsubscribeEinladungen = null;
+    }
+    HAUSHALTSZAHLUNGEN = {};
+    EINLADUNGEN = {};
+}
+
 async function createDefaultThema() {
     try {
         const defaultThema = {
@@ -202,8 +218,13 @@ function loadEinladungen() {
     try {
         // Echtzeit-Listener statt getDocs für automatische Updates
         const userId = currentUser.mode || currentUser.displayName;
-        
-        onSnapshot(haushaltszahlungenEinladungenRef, (snapshot) => {
+
+        if (unsubscribeEinladungen) {
+            unsubscribeEinladungen();
+            unsubscribeEinladungen = null;
+        }
+
+        unsubscribeEinladungen = onSnapshot(haushaltszahlungenEinladungenRef, (snapshot) => {
             EINLADUNGEN = {};
             snapshot.forEach(docSnap => {
                 const data = docSnap.data();
@@ -530,8 +551,13 @@ export function listenForHaushaltszahlungen() {
     
     // Ohne orderBy, da das Feld moeglicherweise nicht existiert
     const q = query(haushaltszahlungenCollection);
-    
-    return onSnapshot(q, (snapshot) => {
+
+    if (unsubscribeHaushaltszahlungen) {
+        unsubscribeHaushaltszahlungen();
+        unsubscribeHaushaltszahlungen = null;
+    }
+
+    unsubscribeHaushaltszahlungen = onSnapshot(q, (snapshot) => {
         HAUSHALTSZAHLUNGEN = {};
         console.log(`📦 Snapshot erhalten: ${snapshot.size} Dokumente gefunden`);
         
@@ -551,6 +577,8 @@ export function listenForHaushaltszahlungen() {
         console.error("   Error Code:", error.code);
         console.error("   Error Message:", error.message);
     });
+
+    return unsubscribeHaushaltszahlungen;
 }
 
 // ========================================

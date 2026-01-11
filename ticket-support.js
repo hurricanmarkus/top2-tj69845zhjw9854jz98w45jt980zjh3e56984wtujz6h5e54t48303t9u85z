@@ -175,14 +175,38 @@ function setupEventListeners() {
 // ========================================
 // FIREBASE LISTENER
 // ========================================
+export function stopTicketsListener() {
+    if (unsubscribeTickets) {
+        unsubscribeTickets();
+        unsubscribeTickets = null;
+        console.log("🛑 Ticket-Listener gestoppt.");
+    }
+
+    TICKETS = {};
+    try {
+        renderTickets();
+        updateStats();
+    } catch (e) {
+        console.warn("Ticket-Support: UI konnte nach stopTicketsListener nicht aktualisiert werden:", e);
+    }
+}
+
 export function listenForTickets() {
+    if (!currentUser?.mode || currentUser.mode === 'Gast') {
+        stopTicketsListener();
+        TICKETS = {};
+        renderTickets();
+        updateStats();
+        return;
+    }
+
     if (!ticketsCollection) {
         console.warn("⚠️ Collection noch nicht bereit...");
         setTimeout(listenForTickets, 1000);
         return;
     }
 
-    if (unsubscribeTickets) unsubscribeTickets();
+    stopTicketsListener();
 
     // DATENSCHUTZ-FIX: Lade nur Tickets, die den aktuellen User betreffen
     // (createdBy ODER assignedTo = currentUser.mode)

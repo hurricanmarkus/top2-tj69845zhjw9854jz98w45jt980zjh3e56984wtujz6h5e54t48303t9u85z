@@ -31,6 +31,7 @@ import {
 // ========================================
 let wertguthabenCollection = null;
 let WERTGUTHABEN = {};
+let unsubscribeWertguthaben = null;
 let currentFilter = { typ: '', eigentuemer: '', status: 'aktiv' };
 let searchTerm = '';
 let wertguthabenSettings = {
@@ -229,7 +230,31 @@ function setupEventListeners() {
 // ========================================
 // FIREBASE LISTENER
 // ========================================
+export function stopWertguthabenListener() {
+    if (unsubscribeWertguthaben) {
+        unsubscribeWertguthaben();
+        unsubscribeWertguthaben = null;
+        console.log("🛑 Wertguthaben-Listener gestoppt.");
+    }
+
+    WERTGUTHABEN = {};
+    try {
+        renderWertguthabenTable();
+        updateStatistics();
+    } catch (e) {
+        console.warn("Wertguthaben: UI konnte nach stopWertguthabenListener nicht aktualisiert werden:", e);
+    }
+}
+
 export function listenForWertguthaben() {
+    if (!currentUser?.mode || currentUser.mode === 'Gast') {
+        stopWertguthabenListener();
+        WERTGUTHABEN = {};
+        renderWertguthabenTable();
+        updateStatistics();
+        return;
+    }
+
     if (!wertguthabenCollection) {
         console.warn("⚠️ Wertguthaben-Collection noch nicht initialisiert. Warte...");
         setTimeout(listenForWertguthaben, 500);
@@ -237,11 +262,13 @@ export function listenForWertguthaben() {
     }
 
     try {
+        stopWertguthabenListener();
+
         // DATENSCHUTZ-FIX: Nur Wertguthaben laden, die vom aktuellen User erstellt wurden
         // ODER wo der User als Eigentümer eingetragen ist
         const q = query(wertguthabenCollection, orderBy('createdAt', 'desc'));
         
-        onSnapshot(q, (snapshot) => {
+        unsubscribeWertguthaben = onSnapshot(q, (snapshot) => {
             WERTGUTHABEN = {};
             
             snapshot.forEach((doc) => {

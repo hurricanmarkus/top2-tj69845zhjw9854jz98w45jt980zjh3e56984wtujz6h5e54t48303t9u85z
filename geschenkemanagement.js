@@ -43,6 +43,40 @@ function getCurrentUserId() {
     return currentUser?.mode || null;
 }
 
+export function stopGeschenkemanagementListeners() {
+    if (unsubscribeKontakte) {
+        unsubscribeKontakte();
+        unsubscribeKontakte = null;
+    }
+    if (unsubscribeThemen) {
+        unsubscribeThemen();
+        unsubscribeThemen = null;
+    }
+    if (unsubscribeVorlagen) {
+        unsubscribeVorlagen();
+        unsubscribeVorlagen = null;
+    }
+    if (unsubscribeBudgets) {
+        unsubscribeBudgets();
+        unsubscribeBudgets = null;
+    }
+    if (unsubscribeErinnerungen) {
+        unsubscribeErinnerungen();
+        unsubscribeErinnerungen = null;
+    }
+    if (unsubscribeGeschenke) {
+        unsubscribeGeschenke();
+        unsubscribeGeschenke = null;
+    }
+
+    GESCHENKE = {};
+    THEMEN = {};
+    KONTAKTE = {};
+    VORLAGEN = {};
+    BUDGETS = {};
+    ERINNERUNGEN = {};
+}
+
 let geschenkeCollection = null;
 let geschenkeSettingsRef = null;
 let geschenkeThemenRef = null;
@@ -63,6 +97,13 @@ let activeFilters = [];
 let personenDetailsAusgeklappt = false;
 let selectedSuggestionIndex = -1;
 let sortState = { key: null, direction: 'asc' };
+
+let unsubscribeKontakte = null;
+let unsubscribeThemen = null;
+let unsubscribeVorlagen = null;
+let unsubscribeBudgets = null;
+let unsubscribeErinnerungen = null;
+let unsubscribeGeschenke = null;
 
 // Eigene Person (unlöschbar)
 let eigenePerson = null;
@@ -304,7 +345,12 @@ function listenForKontakte() {
     
     console.log("🎧 Kontakte-Listener gestartet");
     
-    onSnapshot(geschenkeKontakteRef, async (snapshot) => {
+    if (unsubscribeKontakte) {
+        unsubscribeKontakte();
+        unsubscribeKontakte = null;
+    }
+
+    unsubscribeKontakte = onSnapshot(geschenkeKontakteRef, async (snapshot) => {
         console.log(`👥 Kontakte: ${snapshot.size} Dokumente`);
         
         KONTAKTE = {};
@@ -375,7 +421,12 @@ function listenForThemen() {
     
     console.log("🎧 Themen-Listener gestartet");
     
-    onSnapshot(geschenkeThemenRef, (snapshot) => {
+    if (unsubscribeThemen) {
+        unsubscribeThemen();
+        unsubscribeThemen = null;
+    }
+
+    unsubscribeThemen = onSnapshot(geschenkeThemenRef, (snapshot) => {
         console.log(`📂 Themen: ${snapshot.size} Dokumente`);
         
         const oldThemaId = currentThemaId;
@@ -447,7 +498,12 @@ function listenForVorlagen() {
     
     console.log("🎧 Vorlagen-Listener gestartet");
     
-    onSnapshot(geschenkeVorlagenRef, (snapshot) => {
+    if (unsubscribeVorlagen) {
+        unsubscribeVorlagen();
+        unsubscribeVorlagen = null;
+    }
+
+    unsubscribeVorlagen = onSnapshot(geschenkeVorlagenRef, (snapshot) => {
         console.log(`📑 Vorlagen: ${snapshot.size} Dokumente`);
         
         VORLAGEN = {};
@@ -479,7 +535,12 @@ function listenForBudgets() {
     
     console.log("🎧 Budgets-Listener gestartet");
     
-    onSnapshot(geschenkeBudgetsRef, (snapshot) => {
+    if (unsubscribeBudgets) {
+        unsubscribeBudgets();
+        unsubscribeBudgets = null;
+    }
+
+    unsubscribeBudgets = onSnapshot(geschenkeBudgetsRef, (snapshot) => {
         console.log(`💰 Budgets: ${snapshot.size} Dokumente`);
         
         BUDGETS = {};
@@ -511,7 +572,12 @@ function listenForErinnerungen() {
     
     console.log("🎧 Erinnerungen-Listener gestartet");
     
-    onSnapshot(geschenkeErinnerungenRef, (snapshot) => {
+    if (unsubscribeErinnerungen) {
+        unsubscribeErinnerungen();
+        unsubscribeErinnerungen = null;
+    }
+
+    unsubscribeErinnerungen = onSnapshot(geschenkeErinnerungenRef, (snapshot) => {
         console.log(`🔔 Erinnerungen: ${snapshot.size} Dokumente`);
         
         ERINNERUNGEN = {};
@@ -553,8 +619,13 @@ function updateCollectionForThema() {
 // ========================================
 export function listenForGeschenke() {
     if (!geschenkeCollection) return;
+
+    if (unsubscribeGeschenke) {
+        unsubscribeGeschenke();
+        unsubscribeGeschenke = null;
+    }
     
-    onSnapshot(geschenkeCollection, (snapshot) => {
+    unsubscribeGeschenke = onSnapshot(geschenkeCollection, (snapshot) => {
         console.log("📦 listenForGeschenke - Geladen:", snapshot.size, "Geschenke");
         
         GESCHENKE = {};

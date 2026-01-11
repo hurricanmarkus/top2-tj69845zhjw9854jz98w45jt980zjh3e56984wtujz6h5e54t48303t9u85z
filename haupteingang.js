@@ -18,12 +18,12 @@ import { renderUserKeyList } from './admin_benutzersteuerung.js';
 // NEU: Wir importieren die Start-Funktion aus deiner neuen Datei
 import { initializeTerminplanerView, listenForPublicVotes, joinVoteById, joinVoteByToken, joinVoteAsGuest } from './terminplaner.js';
 import { initializeZahlungsverwaltungView, initializeZahlungsverwaltungSettingsView } from './zahlungsverwaltung.js';
-import { initializeTicketSupport, listenForTickets } from './ticket-support.js';
-import { initializeWertguthaben, listenForWertguthaben } from './wertguthaben.js';
-import { initializeVertragsverwaltung, listenForVertraege } from './vertragsverwaltung.js';
+import { initializeTicketSupport, listenForTickets, stopTicketsListener } from './ticket-support.js';
+import { initializeWertguthaben, listenForWertguthaben, stopWertguthabenListener } from './wertguthaben.js';
+import { initializeVertragsverwaltung, listenForVertraege, stopVertragsverwaltungListeners } from './vertragsverwaltung.js';
 import { initRezeptverwaltung } from './rezeptverwaltung.js';
-import { initializeHaushaltszahlungen, listenForHaushaltszahlungen } from './haushaltszahlungen.js';
-import { initializeGeschenkemanagement, listenForGeschenke } from './geschenkemanagement.js';
+import { initializeHaushaltszahlungen, listenForHaushaltszahlungen, stopHaushaltszahlungenListeners } from './haushaltszahlungen.js';
+import { initializeGeschenkemanagement, listenForGeschenke, stopGeschenkemanagementListeners } from './geschenkemanagement.js';
 // // ENDE-ZIKA //
 
 
@@ -117,6 +117,131 @@ export const views = {
     geschenkemanagement: { id: 'geschenkemanagementView' }
 };
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
+
+ let globalListenersStarted = false;
+ let lastUserDependentListenerMode = null;
+
+ export function stopAllUserDependentListeners(resetMode = false) {
+     if (typeof stopTicketsListener === 'function') {
+         stopTicketsListener();
+     }
+     if (typeof stopWertguthabenListener === 'function') {
+         stopWertguthabenListener();
+     }
+     if (typeof stopVertragsverwaltungListeners === 'function') {
+         stopVertragsverwaltungListeners();
+     }
+     if (typeof stopHaushaltszahlungenListeners === 'function') {
+         stopHaushaltszahlungenListeners();
+     }
+     if (typeof stopGeschenkemanagementListeners === 'function') {
+         stopGeschenkemanagementListeners();
+     }
+
+     if (resetMode) {
+         lastUserDependentListenerMode = null;
+     }
+ }
+
+ function startGlobalListeners() {
+     if (globalListenersStarted) return;
+     globalListenersStarted = true;
+
+     try {
+         console.log("initializeFirebase: Starte globale Daten-Listener...");
+
+         onSnapshot(settingsDocRef, (docSnap) => {
+             if (docSnap.exists()) {
+                 adminSettings = docSnap.data();
+             } else {
+                 console.warn("Firebase App Settings Document 'main' not found.");
+                 adminSettings = {};
+             }
+         }, (error) => {
+             console.error("Error listening to settings:", error);
+         });
+
+         onSnapshot(notrufSettingsDocRef, (docSnap) => {
+             if (docSnap.exists()) {
+                 notrufSettings = docSnap.data();
+                 if (!notrufSettings.modes) notrufSettings.modes = [];
+                 if (!notrufSettings.contacts) notrufSettings.contacts = [];
+                 if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
+                 if (!notrufSettings.sounds) notrufSettings.sounds = [];
+                 if (!notrufSettings.flicAssignments) notrufSettings.flicAssignments = { einfach: null, doppel: null, halten: null };
+             } else {
+                 console.warn("Firebase Notruf Settings Document 'notruf' not found, creating default.");
+                 notrufSettings = { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } };
+             }
+         }, (error) => {
+             console.error("Error listening to notruf settings:", error);
+         });
+
+         listenForRoleUpdates();
+         listenForAdminRoleUpdates();
+         listenForUserUpdates();
+         listenForApprovalRequests();
+         listenForChecklists();
+         listenForChecklistItems();
+         listenForChecklistGroups();
+         listenForChecklistCategories();
+         listenForTemplates();
+         listenForStacks();
+     } catch (error) {
+         console.error("initializeFirebase: FEHLER beim Starten globaler Listener:", error);
+         alertUser("Fehler beim Initialisieren der globalen Daten-Listener.", "error");
+     }
+ }
+
+ function startUserDependentListeners() {
+     const mode = currentUser?.mode || GUEST_MODE;
+     if (lastUserDependentListenerMode === mode) return;
+     lastUserDependentListenerMode = mode;
+
+     stopAllUserDependentListeners(false);
+
+     console.log("initializeFirebase: Starte user-abhängige Listener für Mode:", mode);
+
+     if (typeof listenForPublicVotes === 'function') {
+         listenForPublicVotes();
+     } else {
+         console.error("Fehler: listenForPublicVotes ist nicht importiert!");
+     }
+
+     if (mode === GUEST_MODE) {
+         return;
+     }
+
+     if (typeof listenForTickets === 'function') {
+         listenForTickets();
+     } else {
+         console.error("Fehler: listenForTickets ist nicht importiert!");
+     }
+
+     if (typeof listenForWertguthaben === 'function') {
+         listenForWertguthaben();
+     } else {
+         console.error("Fehler: listenForWertguthaben ist nicht importiert!");
+     }
+
+     if (typeof listenForHaushaltszahlungen === 'function') {
+         listenForHaushaltszahlungen();
+     } else {
+         console.error("Fehler: listenForHaushaltszahlungen ist nicht importiert!");
+     }
+
+     if (typeof listenForVertraege === 'function') {
+         listenForVertraege();
+     } else {
+         console.error("Fehler: listenForVertraege ist nicht importiert!");
+     }
+
+     if (typeof listenForGeschenke === 'function') {
+         listenForGeschenke();
+     } else {
+         console.error("Fehler: listenForGeschenke ist nicht importiert!");
+     }
+ }
 
 export let currentMeal = (() => {
     // Versuche, eine gespeicherte Mahlzeit aus dem sessionStorage zu laden
@@ -305,87 +430,7 @@ async function initializeFirebase() {
             }
 
             // Listener starten (unabhängig vom Login-Status)
-            try {
-                console.log("initializeFirebase: Starte Daten-Listener...");
-
-                onSnapshot(settingsDocRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        adminSettings = docSnap.data();
-                    } else {
-                        console.warn("Firebase App Settings Document 'main' not found.");
-                        adminSettings = {};
-                    }
-                }, (error) => {
-                    console.error("Error listening to settings:", error);
-                });
-
-                onSnapshot(notrufSettingsDocRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        notrufSettings = docSnap.data();
-                        if (!notrufSettings.modes) notrufSettings.modes = [];
-                        if (!notrufSettings.contacts) notrufSettings.contacts = [];
-                        if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
-                        if (!notrufSettings.sounds) notrufSettings.sounds = [];
-                        if (!notrufSettings.flicAssignments) notrufSettings.flicAssignments = { einfach: null, doppel: null, halten: null };
-                    } else {
-                        console.warn("Firebase Notruf Settings Document 'notruf' not found, creating default.");
-                        notrufSettings = { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } };
-                    }
-                }, (error) => {
-                    console.error("Error listening to notruf settings:", error);
-                });
-
-                listenForRoleUpdates();
-                listenForAdminRoleUpdates();
-                listenForUserUpdates();
-                listenForApprovalRequests();
-                listenForChecklists();
-                listenForChecklistItems();
-                listenForChecklistGroups();
-                listenForChecklistCategories();
-                listenForTemplates();
-                listenForStacks();
-
-                if (typeof listenForPublicVotes === 'function') {
-                    listenForPublicVotes();
-                } else {
-                    console.error("Fehler: listenForPublicVotes ist nicht importiert!");
-                }
-
-                if (typeof listenForTickets === 'function') {
-                    listenForTickets();
-                } else {
-                    console.error("Fehler: listenForTickets ist nicht importiert!");
-                }
-
-                if (typeof listenForWertguthaben === 'function') {
-                    listenForWertguthaben();
-                } else {
-                    console.error("Fehler: listenForWertguthaben ist nicht importiert!");
-                }
-
-                if (typeof listenForHaushaltszahlungen === 'function') {
-                    listenForHaushaltszahlungen();
-                } else {
-                    console.error("Fehler: listenForHaushaltszahlungen ist nicht importiert!");
-                }
-
-                if (typeof listenForVertraege === 'function') {
-                    listenForVertraege();
-                } else {
-                    console.error("Fehler: listenForVertraege ist nicht importiert!");
-                }
-
-                if (typeof listenForGeschenke === 'function') {
-                    listenForGeschenke();
-                } else {
-                    console.error("Fehler: listenForGeschenke ist nicht importiert!");
-                }
-
-            } catch (error) {
-                console.error("initializeFirebase: FEHLER beim Starten der Listener:", error);
-                alertUser("Fehler beim Initialisieren der Daten-Listener.", "error");
-            }
+            startGlobalListeners();
 
             // UI basierend auf User-Status aktualisieren
             if (user) {
@@ -399,6 +444,8 @@ async function initializeFirebase() {
                 initializeVertragsverwaltung();
                 initRezeptverwaltung();
 
+                startUserDependentListeners();
+
             } else {
                 console.log("Firebase meldet KEINEN User, wechsle explizit zum Gastmodus.");
                 switchToGuestMode(false);
@@ -410,6 +457,8 @@ async function initializeFirebase() {
                 initializeWertguthaben();
                 initializeVertragsverwaltung();
                 initRezeptverwaltung();
+
+                startUserDependentListeners();
             }
 
             // =================================================================
@@ -960,6 +1009,8 @@ export function setupEventListeners() {
             localStorage.setItem(ADMIN_STORAGE_KEY, appUserId);
             await checkCurrentUserValidity();
 
+            startUserDependentListeners();
+
             // 7. Erfolgsmeldung
             alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet! Rolle: ${newClaimRole}`, "success");
 
@@ -973,6 +1024,8 @@ export function setupEventListeners() {
 
             switchToGuestMode(false);
             updateUIForMode();
+
+            startUserDependentListeners();
         }
     };
 

@@ -45,6 +45,7 @@ let searchTerm = '';
 let unsubscribeVertraege = null;
 let unsubscribeThemen = null;
 let unsubscribeKategorien = null;
+let unsubscribeEinladungen = null;
 let currentAbtauschVertragId = null;
 
 // Zugriffsrechte-Konfiguration
@@ -276,8 +277,13 @@ function loadVertraegeEinladungen() {
     
     try {
         const userId = currentUser.mode || currentUser.displayName;
-        
-        onSnapshot(vertraegeEinladungenRef, (snapshot) => {
+
+        if (unsubscribeEinladungen) {
+            unsubscribeEinladungen();
+            unsubscribeEinladungen = null;
+        }
+
+        unsubscribeEinladungen = onSnapshot(vertraegeEinladungenRef, (snapshot) => {
             VERTRAEGE_EINLADUNGEN = {};
             snapshot.forEach(docSnap => {
                 const data = docSnap.data();
@@ -1454,7 +1460,43 @@ function setupEventListeners() {
 // ========================================
 // FIREBASE LISTENER
 // ========================================
+export function stopVertragsverwaltungListeners() {
+    if (unsubscribeVertraege) {
+        unsubscribeVertraege();
+        unsubscribeVertraege = null;
+    }
+    if (unsubscribeThemen) {
+        unsubscribeThemen();
+        unsubscribeThemen = null;
+    }
+    if (unsubscribeKategorien) {
+        unsubscribeKategorien();
+        unsubscribeKategorien = null;
+    }
+    if (unsubscribeEinladungen) {
+        unsubscribeEinladungen();
+        unsubscribeEinladungen = null;
+    }
+
+    VERTRAEGE = {};
+    VERTRAEGE_THEMEN = {};
+    VERTRAEGE_EINLADUNGEN = {};
+    VERTRAEGE_KATEGORIEN = {};
+}
+
 export function listenForVertraege() {
+    if (!currentUser?.mode || currentUser.mode === 'Gast') {
+        stopVertragsverwaltungListeners();
+        try {
+            renderVertraegeTable();
+            updateStatistics();
+            renderKuendigungsWarnungen();
+        } catch (e) {
+            console.warn("Vertragsverwaltung: UI konnte im Gastmodus nicht aktualisiert werden:", e);
+        }
+        return;
+    }
+
     if (!vertraegeCollection) {
         if (db) {
             vertraegeCollection = collection(db, 'artifacts', appId, 'public', 'data', 'vertraege');
@@ -1466,6 +1508,7 @@ export function listenForVertraege() {
 
     if (unsubscribeVertraege) {
         unsubscribeVertraege();
+        unsubscribeVertraege = null;
     }
 
     // DATENSCHUTZ-FIX: Nur Verträge laden, die vom aktuellen User erstellt wurden
