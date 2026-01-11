@@ -55,6 +55,10 @@ export function clearAllUserData() {
         adminPermissions: {}
     });
     
+    // 4. userSettings Cache leeren (WICHTIG für Sicherheit!)
+    Object.keys(userSettings).forEach(key => delete userSettings[key]);
+    console.log("   ✓ userSettings Cache geleert");
+    
     console.log("🔒 SICHERHEIT: Alle Benutzerdaten erfolgreich gelöscht!");
 }
 // =================================================================
