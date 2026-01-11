@@ -8,6 +8,59 @@ import { listenForMyVotes, stopMyVotesListener } from './terminplaner.js';
 
 const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
+// =================================================================
+// SICHERHEITS-FIX: Lösche ALLE benutzerspezifischen Daten beim Logout/Login
+// =================================================================
+export function clearAllUserData() {
+    console.log("🔒 SICHERHEIT: Lösche alle benutzerspezifischen Daten...");
+    
+    // 1. Alle localStorage Keys löschen (benutzerspezifisch)
+    const localStorageKeysToRemove = [
+        ADMIN_STORAGE_KEY,      // Benutzer-Login
+        'vv_current_thema',     // Vertragsverwaltung
+        'hz_current_thema',     // Haushaltszahlungen
+        'gm_current_thema',     // Geschenkemanagement
+        'zv_view_mode',         // Zahlungsverwaltung Ansicht
+        'wertguthabenSettings'  // Wertguthaben Einstellungen
+    ];
+    
+    localStorageKeysToRemove.forEach(key => {
+        if (localStorage.getItem(key) !== null) {
+            localStorage.removeItem(key);
+            console.log(`   ✓ localStorage '${key}' gelöscht`);
+        }
+    });
+    
+    // 2. Alle sessionStorage Keys löschen
+    const sessionStorageKeysToRemove = [
+        'currentMealData',      // Essensberechnung
+        'lastActiveView',       // Letzte Ansicht
+        'adminScrollY'          // Admin Scroll-Position
+    ];
+    
+    sessionStorageKeysToRemove.forEach(key => {
+        if (sessionStorage.getItem(key) !== null) {
+            sessionStorage.removeItem(key);
+            console.log(`   ✓ sessionStorage '${key}' gelöscht`);
+        }
+    });
+    
+    // 3. currentUser Objekt zurücksetzen
+    Object.keys(currentUser).forEach(key => delete currentUser[key]);
+    Object.assign(currentUser, {
+        displayName: GUEST_MODE,
+        mode: GUEST_MODE,
+        role: 'GUEST',
+        permissions: [],
+        adminPermissions: {}
+    });
+    
+    console.log("🔒 SICHERHEIT: Alle Benutzerdaten erfolgreich gelöscht!");
+}
+// =================================================================
+// ENDE SICHERHEITS-FIX
+// =================================================================
+
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
 // In log-InOut.js
 export async function checkCurrentUserValidity() { 
@@ -203,21 +256,21 @@ export async function checkCurrentUserValidity() {
 
 // In log-InOut.js
 export function switchToGuestMode(showNotification = true, message = "Abgemeldet. Modus ist nun 'Gast'.", type = 'success') {
+    console.log("🚪 LOGOUT: switchToGuestMode wird ausgeführt...");
     
-// NEU: Stoppe den Spion für "An mich zugewiesen", da wir jetzt Gast sind
+    // NEU: Stoppe den Spion für "An mich zugewiesen", da wir jetzt Gast sind
     stopMyVotesListener();
 
-    Object.keys(currentUser).forEach(key => delete currentUser[key]);
-    Object.assign(currentUser, {
-        displayName: GUEST_MODE,
-        mode: GUEST_MODE,
-        role: 'GUEST',
-        permissions: []
-    });
-    localStorage.removeItem(ADMIN_STORAGE_KEY);
+    // =================================================================
+    // SICHERHEITS-FIX: Lösche ALLE benutzerspezifischen Daten!
+    // =================================================================
+    clearAllUserData();
+    // =================================================================
+    
     updateUIForMode();
     navigate('home');
     
+    console.log("🚪 LOGOUT: Alle Daten gelöscht, navigiere zur Startseite.");
     if (showNotification) alertUser(message, type);
 }
 

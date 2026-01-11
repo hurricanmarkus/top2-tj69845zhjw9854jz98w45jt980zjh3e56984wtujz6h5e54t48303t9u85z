@@ -4,7 +4,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, getDocs, writeBatch, addDoc, query, where, serverTimestamp, orderBy, limit, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode } from './log-InOut.js';
+import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode, clearAllUserData } from './log-InOut.js';
 import { renderModalUserButtons, listenForUserUpdates, toggleNewUserRoleField, addAdminUserManagementListeners, renderUserManagement } from './admin_benutzersteuerung.js';
 import { listenForRoleUpdates, listenForAdminRoleUpdates, renderRoleManagement } from './admin_rollenverwaltung.js';
 import { listenForApprovalRequests, createApprovalRequest, renderApprovalProcess } from './admin_genehmigungsprozess.js';
@@ -936,6 +936,13 @@ export function setupEventListeners() {
             // 5. Finales Token aktualisieren und UI updaten
             const idTokenResult = await auth.currentUser.getIdTokenResult(true);
             const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle zugewiesen';
+
+            // =================================================================
+            // SICHERHEITS-FIX: Lösche alle alten Benutzerdaten VOR dem neuen Login!
+            // =================================================================
+            console.log("🔐 LOGIN: Lösche alte Benutzerdaten vor neuem Login...");
+            clearAllUserData();
+            // =================================================================
 
             // 6. Lokale Zustände aktualisieren
             localStorage.setItem(ADMIN_STORAGE_KEY, appUserId);
