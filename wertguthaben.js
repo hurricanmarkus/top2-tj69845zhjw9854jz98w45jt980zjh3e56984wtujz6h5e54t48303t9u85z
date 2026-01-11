@@ -11,6 +11,7 @@ import {
     navigate,
     appId
 } from './haupteingang.js';
+import { saveUserSetting, getUserSetting } from './log-InOut.js';
 
 import {
     collection,
@@ -1422,9 +1423,9 @@ async function saveSettings() {
         wertguthaben_gesetzlich
     };
 
-    // In localStorage speichern
+    // In Firebase speichern (geräteübergreifend)
     try {
-        localStorage.setItem('wertguthabenSettings', JSON.stringify(wertguthabenSettings));
+        saveUserSetting('wertguthabenSettings', wertguthabenSettings);
         alertUser('Einstellungen gespeichert!', 'success');
         closeSettingsModal();
     } catch (error) {
@@ -1436,9 +1437,9 @@ async function saveSettings() {
 // Einstellungen beim Start laden
 function loadSettings() {
     try {
-        const saved = localStorage.getItem('wertguthabenSettings');
+        const saved = getUserSetting('wertguthabenSettings');
         if (saved) {
-            const parsed = JSON.parse(saved);
+            const parsed = saved; // Bereits ein Objekt, kein JSON.parse nötig
             wertguthabenSettings.defaultWarnings = {
                 ...wertguthabenSettings.defaultWarnings,
                 ...parsed.defaultWarnings

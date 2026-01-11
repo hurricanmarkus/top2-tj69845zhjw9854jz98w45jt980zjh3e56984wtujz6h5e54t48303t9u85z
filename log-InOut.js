@@ -2,7 +2,7 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 //
 import { db, usersCollectionRef, setButtonLoading, adminSectionsState, modalUserButtons, ADMIN_ROLES, adminRolesCollectionRef, rolesCollectionRef, ROLES, alertUser, initialAuthCheckDone, currentUser, GUEST_MODE, adminSettings, CHECKLISTS, ADMIN_STORAGE_KEY, USERS, navigate, auth } from './haupteingang.js';
 import { renderModalUserButtons } from './admin_benutzersteuerung.js';
-import { doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { doc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { listenForMyVotes, stopMyVotesListener } from './terminplaner.js';
 // ENDE-ZIKA //
 
@@ -59,6 +59,86 @@ export function clearAllUserData() {
 }
 // =================================================================
 // ENDE SICHERHEITS-FIX
+// =================================================================
+
+// =================================================================
+// BENUTZEREINSTELLUNGEN IN FIREBASE (geräteübergreifend)
+// =================================================================
+
+// Globales Objekt für gecachte Benutzereinstellungen
+export let userSettings = {};
+
+/**
+ * Speichert eine Benutzereinstellung in Firebase
+ * @param {string} key - Einstellungs-Key (z.B. 'vv_current_thema')
+ * @param {any} value - Wert der Einstellung
+ */
+export async function saveUserSetting(key, value) {
+    if (!currentUser.mode || currentUser.mode === GUEST_MODE) {
+        console.log(`⚠️ Einstellung '${key}' nicht gespeichert (Gast-Modus)`);
+        return;
+    }
+    
+    try {
+        const userDocRef = doc(usersCollectionRef, currentUser.mode);
+        
+        // Aktualisiere das userSettings Feld im Benutzerdokument
+        await updateDoc(userDocRef, {
+            [`userSettings.${key}`]: value
+        });
+        
+        // Lokalen Cache aktualisieren
+        userSettings[key] = value;
+        
+        console.log(`💾 Einstellung '${key}' in Firebase gespeichert:`, value);
+    } catch (error) {
+        console.error(`❌ Fehler beim Speichern von '${key}':`, error);
+    }
+}
+
+/**
+ * Lädt alle Benutzereinstellungen aus Firebase
+ * Wird beim Login aufgerufen
+ */
+export async function loadUserSettings() {
+    if (!currentUser.mode || currentUser.mode === GUEST_MODE) {
+        console.log("⚠️ Einstellungen nicht geladen (Gast-Modus)");
+        userSettings = {};
+        return {};
+    }
+    
+    try {
+        const userDocRef = doc(usersCollectionRef, currentUser.mode);
+        const docSnap = await getDoc(userDocRef);
+        
+        if (docSnap.exists()) {
+            const userData = docSnap.data();
+            userSettings = userData.userSettings || {};
+            console.log("📥 Benutzereinstellungen aus Firebase geladen:", userSettings);
+            return userSettings;
+        } else {
+            console.log("📥 Keine Benutzereinstellungen gefunden");
+            userSettings = {};
+            return {};
+        }
+    } catch (error) {
+        console.error("❌ Fehler beim Laden der Benutzereinstellungen:", error);
+        userSettings = {};
+        return {};
+    }
+}
+
+/**
+ * Holt eine einzelne Einstellung (aus Cache oder Firebase)
+ * @param {string} key - Einstellungs-Key
+ * @param {any} defaultValue - Standardwert falls nicht vorhanden
+ */
+export function getUserSetting(key, defaultValue = null) {
+    return userSettings[key] !== undefined ? userSettings[key] : defaultValue;
+}
+
+// =================================================================
+// ENDE BENUTZEREINSTELLUNGEN
 // =================================================================
 
 // ERSETZE die komplette checkCurrentUserValidity Funktion in log-InOut.js hiermit:
@@ -231,6 +311,13 @@ export async function checkCurrentUserValidity() {
         });
 
         console.log("currentUser Objekt aktualisiert:", currentUser);
+
+        // =================================================================
+        // LADEN DER BENUTZEREINSTELLUNGEN AUS FIREBASE
+        // =================================================================
+        await loadUserSettings();
+        console.log("📥 Benutzereinstellungen geladen nach Login");
+        // =================================================================
 
 // NEU: Starte den Spion für "An mich zugewiesen"
         // Wir übergeben die ID des eingeloggten Benutzers

@@ -13,6 +13,7 @@ import {
     navigate,
     appId
 } from './haupteingang.js';
+import { saveUserSetting, getUserSetting } from './log-InOut.js';
 
 import {
     collection,
@@ -137,8 +138,8 @@ async function loadThemen() {
         }
         
         // Erstes Thema auswählen oder gespeichertes
-        const savedThemaId = localStorage.getItem('hz_current_thema');
-        console.log("💾 Gespeichertes Thema aus localStorage:", savedThemaId);
+        const savedThemaId = getUserSetting('hz_current_thema');
+        console.log("💾 Gespeichertes Thema aus Firebase:", savedThemaId);
         
         if (savedThemaId && THEMEN[savedThemaId]) {
             currentThemaId = savedThemaId;
@@ -263,7 +264,7 @@ function setupEventListeners() {
     if (themaDropdown && !themaDropdown.dataset.listenerAttached) {
         themaDropdown.addEventListener('change', (e) => {
             currentThemaId = e.target.value;
-            localStorage.setItem('hz_current_thema', currentThemaId);
+            saveUserSetting('hz_current_thema', currentThemaId);
             updateCollectionForThema();
             renderDashboard();
         });

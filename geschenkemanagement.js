@@ -14,6 +14,7 @@ import {
     appId,
     auth
 } from './haupteingang.js';
+import { saveUserSetting, getUserSetting } from './log-InOut.js';
 
 import {
     collection,
@@ -393,7 +394,7 @@ function listenForThemen() {
         console.log("✅ Themen geladen:", newThemenCount);
         
         // Gespeichertes Thema wiederherstellen oder erstes Thema wählen
-        const savedThemaId = localStorage.getItem('gm_current_thema');
+        const savedThemaId = getUserSetting('gm_current_thema');
         if (savedThemaId && THEMEN[savedThemaId]) {
             currentThemaId = savedThemaId;
         } else if (Object.keys(THEMEN).length > 0) {
@@ -585,7 +586,7 @@ function setupEventListeners() {
     if (themaDropdown && !themaDropdown.dataset.listenerAttached) {
         themaDropdown.addEventListener('change', (e) => {
             currentThemaId = e.target.value;
-            localStorage.setItem('gm_current_thema', currentThemaId);
+            saveUserSetting('gm_current_thema', currentThemaId);
             updateCollectionForThema();
             updateCreateButtonVisibility(); // ✅ PUNKT 6: Button Sichtbarkeit prüfen
             renderDashboard();
@@ -3257,7 +3258,7 @@ window.deleteThema = async function(id) {
         // ✅ SCHRITT 5: Wenn das gelöschte Thema das aktuelle war → zurücksetzen
         if (currentThemaId === id) {
             currentThemaId = null;
-            localStorage.removeItem('gm_current_thema');
+            saveUserSetting('gm_current_thema', null);
             geschenkeCollection = null;
             GESCHENKE = {};
             
@@ -3292,7 +3293,7 @@ window.createNewThema = async function() {
         
         const docRef = await addDoc(geschenkeThemenRef, themaData);
         currentThemaId = docRef.id;
-        localStorage.setItem('gm_current_thema', currentThemaId);
+        saveUserSetting('gm_current_thema', currentThemaId);
         
         console.log(`✅ Neues Thema erstellt: ${docRef.id} - "${name}"`);
         

@@ -11,6 +11,7 @@ import {
     navigate,
     appId
 } from './haupteingang.js';
+import { saveUserSetting, getUserSetting } from './log-InOut.js';
 
 import {
     collection,
@@ -177,8 +178,8 @@ function loadVertraegeThemen() {
             return; // Nach Erstellung wird der Listener erneut ausgelöst
         }
         
-        // Gespeichertes Thema oder erstes Thema auswählen
-        const savedThemaId = localStorage.getItem('vv_current_thema');
+        // Gespeichertes Thema oder erstes Thema auswählen (aus Firebase)
+        const savedThemaId = getUserSetting('vv_current_thema');
         
         if (savedThemaId && VERTRAEGE_THEMEN[savedThemaId]) {
             currentThemaId = savedThemaId;
@@ -263,7 +264,7 @@ function switchVertragsThema(themaId) {
     if (!themaId || !VERTRAEGE_THEMEN[themaId]) return;
     
     currentThemaId = themaId;
-    localStorage.setItem('vv_current_thema', themaId);
+    saveUserSetting('vv_current_thema', themaId);
     console.log(`🔄 Wechsle zu Thema: ${VERTRAEGE_THEMEN[themaId].name}`);
     
     updateCollectionForVertragsThema();
@@ -820,7 +821,7 @@ async function deleteVertragsThema(themaId) {
         // Wenn das aktuelle Thema gelöscht wurde, wechsle zum ersten verfügbaren
         if (currentThemaId === themaId) {
             currentThemaId = Object.keys(VERTRAEGE_THEMEN)[0];
-            localStorage.setItem('vv_current_thema', currentThemaId);
+            saveUserSetting('vv_current_thema', currentThemaId);
             updateCollectionForVertragsThema();
         }
         
@@ -1094,7 +1095,7 @@ async function leaveThema() {
         // Wenn das aktuelle Thema das war, wechsle zum ersten verfügbaren
         if (currentThemaId === currentEditingThemaId) {
             currentThemaId = Object.keys(VERTRAEGE_THEMEN)[0];
-            localStorage.setItem('vv_current_thema', currentThemaId);
+            saveUserSetting('vv_current_thema', currentThemaId);
             updateCollectionForVertragsThema();
         }
         
@@ -1136,7 +1137,7 @@ async function leaveThemaFromList(themaId) {
         // Wenn das aktuelle Thema das war, wechsle zum ersten verfügbaren
         if (currentThemaId === themaId) {
             currentThemaId = Object.keys(VERTRAEGE_THEMEN)[0];
-            localStorage.setItem('vv_current_thema', currentThemaId);
+            saveUserSetting('vv_current_thema', currentThemaId);
             updateCollectionForVertragsThema();
         }
         

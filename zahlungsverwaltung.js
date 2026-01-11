@@ -1,6 +1,7 @@
 // // @ts-check 
 
 import { alertUser, db, currentUser, USERS, setButtonLoading, GUEST_MODE, navigate, appId } from './haupteingang.js';
+import { saveUserSetting, getUserSetting } from './log-InOut.js';
 import {
 collection,
     addDoc,
@@ -46,7 +47,7 @@ let currentPositions = [];
 let currentSplitOffsets = {};
 let currentSplitAdjustments = {};
 let activeSearchFilters = [];
-let isListView = localStorage.getItem('zv_view_mode') === 'list';
+let isListView = getUserSetting('zv_view_mode') === 'list';
 let isTrashAdvancedMode = false;
 let selectedTrashIds = new Set();
 
@@ -330,7 +331,7 @@ function setupEventListeners() {
     // Ansicht umschalten
     document.getElementById('btn-toggle-view-mode')?.addEventListener('click', () => {
         isListView = !isListView;
-        localStorage.setItem('zv_view_mode', isListView ? 'list' : 'card');
+        saveUserSetting('zv_view_mode', isListView ? 'list' : 'card');
         const btn = document.getElementById('btn-toggle-view-mode');
         if (btn) btn.textContent = isListView ? "📱" : "📋";
         applyFilters();
