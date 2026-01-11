@@ -68,6 +68,26 @@ export function clearAllUserData() {
 // =================================================================
 // BENUTZEREINSTELLUNGEN IN FIREBASE (geräteübergreifend)
 // =================================================================
+// 
+// ⚠️ WICHTIGE TIMING-REGEL für getUserSetting() / saveUserSetting():
+// 
+// Der userSettings-Cache wird erst durch loadUserSettings() befüllt,
+// das in checkCurrentUserValidity() NACH dem Login aufgerufen wird.
+//
+// ❌ FALSCH - NIEMALS bei Modul-Import aufrufen:
+//    let isListView = getUserSetting('key'); // Cache ist noch leer!
+//
+// ✅ RICHTIG - In der initializeXXXView() Funktion aufrufen:
+//    export function initializeXXXView() {
+//        isListView = getUserSetting('key'); // Jetzt sind Daten da!
+//    }
+//
+// ABLAUF:
+// 1. Module werden importiert (KEIN getUserSetting hier!)
+// 2. onAuthStateChanged → checkCurrentUserValidity → loadUserSettings()
+// 3. initializeXXXView() → HIER ist getUserSetting() sicher
+//
+// =================================================================
 
 // Globales Objekt für gecachte Benutzereinstellungen
 export let userSettings = {};
