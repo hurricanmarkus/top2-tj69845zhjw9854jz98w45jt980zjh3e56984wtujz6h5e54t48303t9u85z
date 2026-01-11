@@ -47,7 +47,7 @@ let currentPositions = [];
 let currentSplitOffsets = {};
 let currentSplitAdjustments = {};
 let activeSearchFilters = [];
-let isListView = getUserSetting('zv_view_mode') === 'list';
+let isListView = false; // Wird in initializeZahlungsverwaltungView gesetzt
 let isTrashAdvancedMode = false;
 let selectedTrashIds = new Set();
 
@@ -62,6 +62,9 @@ const SYSTEM_CATEGORIES = [
 
 // --- INITIALISIERUNG HAUPTANSICHT ---
 export function initializeZahlungsverwaltungView() {
+    // Einstellung aus Firebase laden (NACH loadUserSettings)
+    isListView = getUserSetting('zv_view_mode') === 'list';
+    
     const view = document.getElementById('zahlungsverwaltungView');
     
     // Listener Setup (nur einmalig beim ersten Laden)

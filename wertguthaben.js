@@ -88,6 +88,9 @@ const TYP_CONFIG = {
 export function initializeWertguthaben() {
     console.log("💰 Wertguthaben-System wird initialisiert...");
 
+    // Einstellungen aus Firebase laden (NACH loadUserSettings)
+    loadSettings();
+
     if (db) {
         wertguthabenCollection = collection(db, 'artifacts', appId, 'public', 'data', 'wertguthaben');
     }
@@ -1528,6 +1531,5 @@ window.deleteTransaktion = async function(wertguthabenId, transaktionId) {
 };
 
 
-// Einstellungen beim Initialisieren laden
-loadSettings();
+// Einstellungen werden in initializeWertguthaben() geladen (NACH loadUserSettings)
 
