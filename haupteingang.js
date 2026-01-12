@@ -854,6 +854,88 @@ export function setupEventListeners() {
         return Number.isFinite(n) ? n : fallback;
     };
 
+    const getPushoverSettingsRecipientId = () => {
+        const select = document.getElementById('pushoverSettingsRecipientSelect');
+        const value = String(select?.value || '').trim();
+        return value || null;
+    };
+
+    const setPushoverSettingsRecipientId = (recipientId) => {
+        const select = document.getElementById('pushoverSettingsRecipientSelect');
+        if (!select) return;
+        select.value = recipientId || '';
+    };
+
+    const setPushoverSettingsFormEnabled = (enabled) => {
+        const ids = [
+            'pushoverConfigApiToken',
+            'pushoverConfigUserKey',
+            'pushoverConfigTitles',
+            'pushoverConfigAllowTitleFreeText',
+            'pushoverConfigMessages',
+            'pushoverConfigAllowMessageFreeText',
+            'pushoverConfigPriorityMinus2',
+            'pushoverConfigPriorityMinus1',
+            'pushoverConfigPriority0',
+            'pushoverConfigPriority1',
+            'pushoverConfigPriority2',
+            'pushoverConfigDefaultPriority',
+            'pushoverConfigRetryPresets',
+            'pushoverConfigExpirePresets'
+        ];
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.disabled = !enabled;
+        });
+
+        const grantList = document.getElementById('pushoverGrantUsersList');
+        if (grantList) {
+            grantList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                cb.disabled = !enabled;
+            });
+        }
+    };
+
+    const clearPushoverSettingsForm = () => {
+        const apiTokenInput = document.getElementById('pushoverConfigApiToken');
+        const userKeyInput = document.getElementById('pushoverConfigUserKey');
+        const titlesArea = document.getElementById('pushoverConfigTitles');
+        const allowTitleFreeText = document.getElementById('pushoverConfigAllowTitleFreeText');
+        const messagesArea = document.getElementById('pushoverConfigMessages');
+        const allowMessageFreeText = document.getElementById('pushoverConfigAllowMessageFreeText');
+
+        const prMinus2 = document.getElementById('pushoverConfigPriorityMinus2');
+        const prMinus1 = document.getElementById('pushoverConfigPriorityMinus1');
+        const pr0 = document.getElementById('pushoverConfigPriority0');
+        const pr1 = document.getElementById('pushoverConfigPriority1');
+        const pr2 = document.getElementById('pushoverConfigPriority2');
+        const defaultPrioritySelect = document.getElementById('pushoverConfigDefaultPriority');
+
+        const retryPresetsArea = document.getElementById('pushoverConfigRetryPresets');
+        const expirePresetsArea = document.getElementById('pushoverConfigExpirePresets');
+
+        if (apiTokenInput) apiTokenInput.value = '';
+        if (userKeyInput) userKeyInput.value = '';
+        if (titlesArea) titlesArea.value = '';
+        if (allowTitleFreeText) allowTitleFreeText.checked = false;
+        if (messagesArea) messagesArea.value = '';
+        if (allowMessageFreeText) allowMessageFreeText.checked = false;
+
+        if (prMinus2) prMinus2.checked = false;
+        if (prMinus1) prMinus1.checked = false;
+        if (pr0) pr0.checked = false;
+        if (pr1) pr1.checked = false;
+        if (pr2) pr2.checked = false;
+        if (defaultPrioritySelect) defaultPrioritySelect.value = '0';
+
+        if (retryPresetsArea) retryPresetsArea.value = '';
+        if (expirePresetsArea) expirePresetsArea.value = '';
+
+        const grantList = document.getElementById('pushoverGrantUsersList');
+        if (grantList) grantList.innerHTML = '';
+    };
+
     const showPushoverSettingsStatus = (msg, show = true) => {
         const el = document.getElementById('pushoverSettingsStatus');
         if (!el) return;
@@ -1025,9 +1107,56 @@ export function setupEventListeners() {
         }
     };
 
-    const loadAndRenderPushoverSettings = async () => {
-        if (!currentUser?.mode || currentUser.mode === GUEST_MODE) {
-            showPushoverSettingsStatus('Bitte anmelden, um Einstellungen zu ändern.', true);
+    const renderPushoverProfilesGrid = async () => {
+        const grid = document.getElementById('pushoverProfilesGrid');
+        if (!grid) return;
+        grid.innerHTML = '';
+
+        if (!pushoverProgramsCollectionRef) return;
+
+        const selectedId = getPushoverSettingsRecipientId();
+        const canManageAll = currentUser.role === 'SYSTEMADMIN';
+        const allowedIds = canManageAll
+            ? Object.keys(USERS || {}).filter(uid => uid && USERS[uid]?.isActive !== false)
+            : [currentUser.mode];
+
+        let createdIds = new Set();
+        try {
+            const snaps = await getDocs(pushoverProgramsCollectionRef);
+            snaps.forEach(s => {
+                if (allowedIds.includes(s.id)) {
+                    createdIds.add(s.id);
+                }
+            });
+        } catch (e) {
+            console.error('PushoverProgram: Fehler beim Laden der Profile:', e);
+        }
+
+        Array.from(createdIds).forEach(recipientId => {
+            const name = USERS[recipientId]?.name || recipientId;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.dataset.recipientId = recipientId;
+            btn.className = selectedId === recipientId
+                ? 'py-3 px-2 rounded-lg border border-indigo-400 bg-indigo-50 text-indigo-900 font-semibold text-sm hover:bg-indigo-100 transition'
+                : 'py-3 px-2 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-900 font-semibold text-sm hover:bg-emerald-100 transition';
+            btn.textContent = name;
+            grid.appendChild(btn);
+        });
+
+        const newBtn = document.createElement('button');
+        newBtn.type = 'button';
+        newBtn.dataset.action = 'new';
+        newBtn.className = 'py-3 px-2 rounded-lg border-2 border-dashed border-gray-300 bg-white text-gray-700 font-semibold text-sm hover:bg-gray-50 transition';
+        newBtn.textContent = '+ Neue anlegen';
+        grid.appendChild(newBtn);
+    };
+
+    const loadAndRenderPushoverSettingsForRecipient = async (recipientId) => {
+        if (!recipientId) {
+            clearPushoverSettingsForm();
+            setPushoverSettingsFormEnabled(false);
+            showPushoverSettingsStatus('Bitte zuerst einen Namen auswählen oder + Neue anlegen.', true);
             return;
         }
 
@@ -1035,6 +1164,8 @@ export function setupEventListeners() {
             showPushoverSettingsStatus('Bitte warten... (Firebase lädt noch)', true);
             return;
         }
+
+        setPushoverSettingsFormEnabled(true);
 
         const apiTokenInput = document.getElementById('pushoverConfigApiToken');
         const userKeyInput = document.getElementById('pushoverConfigUserKey');
@@ -1053,7 +1184,7 @@ export function setupEventListeners() {
         const retryPresetsArea = document.getElementById('pushoverConfigRetryPresets');
         const expirePresetsArea = document.getElementById('pushoverConfigExpirePresets');
 
-        const cfg = await loadPushoverProgramConfig(currentUser.mode);
+        const cfg = await loadPushoverProgramConfig(recipientId);
         if (cfg) {
             if (apiTokenInput) apiTokenInput.value = cfg.apiToken || '';
             if (userKeyInput) userKeyInput.value = cfg.userKey || '';
@@ -1073,9 +1204,10 @@ export function setupEventListeners() {
             if (retryPresetsArea) retryPresetsArea.value = (Array.isArray(cfg.retryPresets) ? cfg.retryPresets : []).join('\n');
             if (expirePresetsArea) expirePresetsArea.value = (Array.isArray(cfg.expirePresets) ? cfg.expirePresets : []).join('\n');
 
-            showPushoverSettingsStatus('Einstellungen geladen.', true);
+            showPushoverSettingsStatus('Profil geladen.', true);
         } else {
-            showPushoverSettingsStatus('Noch keine Einstellungen gespeichert. Bitte ausfüllen und speichern.', true);
+            clearPushoverSettingsForm();
+            showPushoverSettingsStatus('Neues Profil: Felder ausfüllen und speichern.', true);
         }
 
         const grantList = document.getElementById('pushoverGrantUsersList');
@@ -1085,7 +1217,7 @@ export function setupEventListeners() {
 
         let activeGrants = {};
         try {
-            const sendersCol = collection(doc(pushoverGrantsByRecipientCollectionRef, currentUser.mode), 'senders');
+            const sendersCol = collection(doc(pushoverGrantsByRecipientCollectionRef, recipientId), 'senders');
             const snaps = await getDocs(sendersCol);
             snaps.forEach(s => {
                 activeGrants[s.id] = true;
@@ -1095,7 +1227,7 @@ export function setupEventListeners() {
         }
 
         if (grantList) {
-            const userIds = Object.keys(USERS || {}).filter(uid => uid && uid !== currentUser.mode);
+            const userIds = Object.keys(USERS || {}).filter(uid => uid && uid !== recipientId);
             if (!userIds.length) {
                 grantList.innerHTML = '<div class="text-sm text-gray-500">Keine Benutzer gefunden.</div>';
                 return;
@@ -1123,9 +1255,49 @@ export function setupEventListeners() {
         }
     };
 
+    const loadAndRenderPushoverSettings = async (forcedRecipientId = null) => {
+        if (!currentUser?.mode || currentUser.mode === GUEST_MODE) {
+            showPushoverSettingsStatus('Bitte anmelden, um Einstellungen zu ändern.', true);
+            return;
+        }
+
+        if (!pushoverProgramsCollectionRef || !pushoverGrantsByRecipientCollectionRef) {
+            showPushoverSettingsStatus('Bitte warten... (Firebase lädt noch)', true);
+            return;
+        }
+
+        const recipientSelect = document.getElementById('pushoverSettingsRecipientSelect');
+        if (recipientSelect) {
+            const canManageAll = currentUser.role === 'SYSTEMADMIN';
+            const ids = canManageAll
+                ? Object.keys(USERS || {}).filter(uid => uid && USERS[uid]?.isActive !== false)
+                : [currentUser.mode];
+            setSelectOptions(
+                recipientSelect,
+                ids.map(uid => ({ value: uid, label: USERS[uid]?.name || uid })),
+                'Bitte wählen...'
+            );
+        }
+
+        await renderPushoverProfilesGrid();
+
+        const targetRecipientId = forcedRecipientId || getPushoverSettingsRecipientId();
+        if (targetRecipientId) {
+            setPushoverSettingsRecipientId(targetRecipientId);
+        }
+
+        await loadAndRenderPushoverSettingsForRecipient(getPushoverSettingsRecipientId());
+    };
+
     const savePushoverProgramConfig = async () => {
         if (!currentUser?.mode || currentUser.mode === GUEST_MODE) {
             showPushoverSettingsStatus('Bitte anmelden.', true);
+            return;
+        }
+
+        const recipientId = getPushoverSettingsRecipientId();
+        if (!recipientId) {
+            showPushoverSettingsStatus('Bitte zuerst einen Namen auswählen.', true);
             return;
         }
 
@@ -1182,10 +1354,10 @@ export function setupEventListeners() {
         };
 
         try {
-            console.log('PushoverProgram: Speichere Konfiguration für:', currentUser.mode);
-            await setDoc(doc(pushoverProgramsCollectionRef, currentUser.mode), payload, { merge: true });
-            pushoverProgramConfigCache[currentUser.mode] = payload;
-            showPushoverSettingsStatus('Einstellungen gespeichert.', true);
+            console.log('PushoverProgram: Speichere Konfiguration für:', recipientId);
+            await setDoc(doc(pushoverProgramsCollectionRef, recipientId), payload, { merge: true });
+            pushoverProgramConfigCache[recipientId] = payload;
+            showPushoverSettingsStatus('Profil gespeichert.', true);
         } catch (e) {
             console.error('PushoverProgram: Fehler beim Speichern der Konfiguration:', e);
             showPushoverSettingsStatus('Fehler beim Speichern. Bitte später erneut versuchen.', true);
@@ -1195,6 +1367,12 @@ export function setupEventListeners() {
     const savePushoverGrants = async () => {
         if (!currentUser?.mode || currentUser.mode === GUEST_MODE) {
             showPushoverSettingsStatus('Bitte anmelden.', true);
+            return;
+        }
+
+        const recipientId = getPushoverSettingsRecipientId();
+        if (!recipientId) {
+            showPushoverSettingsStatus('Bitte zuerst einen Namen auswählen.', true);
             return;
         }
 
@@ -1211,7 +1389,7 @@ export function setupEventListeners() {
 
         let existing = {};
         try {
-            const sendersCol = collection(doc(pushoverGrantsByRecipientCollectionRef, currentUser.mode), 'senders');
+            const sendersCol = collection(doc(pushoverGrantsByRecipientCollectionRef, recipientId), 'senders');
             const snaps = await getDocs(sendersCol);
             snaps.forEach(s => { existing[s.id] = true; });
         } catch (e) {
@@ -1219,8 +1397,7 @@ export function setupEventListeners() {
         }
 
         const batch = writeBatch(db);
-        const recipientId = currentUser.mode;
-        const recipientName = USERS[recipientId]?.name || currentUser.displayName || recipientId;
+        const recipientName = USERS[recipientId]?.name || recipientId;
 
         const toCreate = selectedSenderIds.filter(id => !existing[id]);
         const toDelete = Object.keys(existing).filter(id => !selectedSenderIds.includes(id));
@@ -1260,6 +1437,66 @@ export function setupEventListeners() {
         } catch (e) {
             console.error('PushoverProgram: Fehler beim Speichern der Grants:', e);
             showPushoverSettingsStatus('Fehler beim Speichern der Berechtigungen.', true);
+        }
+    };
+
+    const deletePushoverProfile = async () => {
+        if (!currentUser?.mode || currentUser.mode === GUEST_MODE) {
+            showPushoverSettingsStatus('Bitte anmelden.', true);
+            return;
+        }
+
+        const recipientId = getPushoverSettingsRecipientId();
+        if (!recipientId) {
+            showPushoverSettingsStatus('Bitte zuerst einen Namen auswählen.', true);
+            return;
+        }
+
+        const ok = confirm(`Profil wirklich löschen: ${USERS[recipientId]?.name || recipientId}?`);
+        if (!ok) return;
+
+        try {
+            let senderIds = [];
+            try {
+                const sendersCol = collection(doc(pushoverGrantsByRecipientCollectionRef, recipientId), 'senders');
+                const snaps = await getDocs(sendersCol);
+                senderIds = snaps.docs.map(d => d.id);
+            } catch (e) {
+                console.error('PushoverProgram: Fehler beim Laden der Sender für Delete:', e);
+            }
+
+            let batch = writeBatch(db);
+            let count = 0;
+            const commitIfNeeded = async (force = false) => {
+                if (count === 0) return;
+                if (!force && count < 450) return;
+                await batch.commit();
+                batch = writeBatch(db);
+                count = 0;
+            };
+
+            const sendersColRef = collection(doc(pushoverGrantsByRecipientCollectionRef, recipientId), 'senders');
+            for (let i = 0; i < senderIds.length; i++) {
+                const senderId = senderIds[i];
+                batch.delete(doc(sendersColRef, senderId));
+                count++;
+                const bySenderDoc = doc(collection(doc(pushoverGrantsBySenderCollectionRef, senderId), 'recipients'), recipientId);
+                batch.delete(bySenderDoc);
+                count++;
+                await commitIfNeeded(false);
+            }
+
+            batch.delete(doc(pushoverProgramsCollectionRef, recipientId));
+            count++;
+            await commitIfNeeded(true);
+
+            delete pushoverProgramConfigCache[recipientId];
+            showPushoverSettingsStatus('Profil gelöscht.', true);
+            setPushoverSettingsRecipientId('');
+            await loadAndRenderPushoverSettings(null);
+        } catch (e) {
+            console.error('PushoverProgram: Fehler beim Löschen des Profils:', e);
+            showPushoverSettingsStatus('Fehler beim Löschen.', true);
         }
     };
 
@@ -1491,17 +1728,6 @@ export function setupEventListeners() {
             // 5. Finales Token aktualisieren und UI updaten
             const idTokenResult = await auth.currentUser.getIdTokenResult(true);
             const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle zugewiesen';
-            const newClaimAppUserId = idTokenResult.claims.appUserId || null;
-
-            console.log('Login: Custom Claims geprüft:', {
-                appRole: newClaimRole,
-                appUserId: newClaimAppUserId
-            });
-
-            if (!newClaimAppUserId) {
-                console.warn('WARNUNG: Custom Claim appUserId fehlt. Die neuen Firestore Rules für das Pushover-Programm benötigen appUserId!');
-                alertUser('Warnung: appUserId-Claim fehlt. Pushover-Programm kann blockiert sein. Bitte Cloud Function setRoleClaim prüfen.', 'info');
-            }
 
             // =================================================================
             // SICHERHEITS-FIX: Lösche alle alten Benutzerdaten VOR dem neuen Login!
@@ -1725,20 +1951,54 @@ export function setupEventListeners() {
         clearPushoverFormButton.dataset.listenerAttached = 'true';
     }
 
-    const savePushoverProgramConfigButton = document.getElementById('savePushoverProgramConfigButton');
-    if (savePushoverProgramConfigButton && !savePushoverProgramConfigButton.dataset.listenerAttached) {
-        savePushoverProgramConfigButton.addEventListener('click', async () => {
-            await savePushoverProgramConfig();
+    const pushoverSettingsRecipientSelect = document.getElementById('pushoverSettingsRecipientSelect');
+    if (pushoverSettingsRecipientSelect && !pushoverSettingsRecipientSelect.dataset.listenerAttached) {
+        pushoverSettingsRecipientSelect.addEventListener('change', async () => {
+            await loadAndRenderPushoverSettingsForRecipient(getPushoverSettingsRecipientId());
         });
-        savePushoverProgramConfigButton.dataset.listenerAttached = 'true';
+        pushoverSettingsRecipientSelect.dataset.listenerAttached = 'true';
     }
 
-    const savePushoverGrantsButton = document.getElementById('savePushoverGrantsButton');
-    if (savePushoverGrantsButton && !savePushoverGrantsButton.dataset.listenerAttached) {
-        savePushoverGrantsButton.addEventListener('click', async () => {
-            await savePushoverGrants();
+    const pushoverProfilesGrid = document.getElementById('pushoverProfilesGrid');
+    if (pushoverProfilesGrid && !pushoverProfilesGrid.dataset.listenerAttached) {
+        pushoverProfilesGrid.addEventListener('click', async (e) => {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+            const action = btn.dataset.action;
+            const recipientId = btn.dataset.recipientId;
+
+            if (action === 'new') {
+                setPushoverSettingsRecipientId('');
+                clearPushoverSettingsForm();
+                setPushoverSettingsFormEnabled(false);
+                showPushoverSettingsStatus('Bitte Namen auswählen und dann speichern.', true);
+                return;
+            }
+
+            if (recipientId) {
+                setPushoverSettingsRecipientId(recipientId);
+                await loadAndRenderPushoverSettingsForRecipient(recipientId);
+            }
         });
-        savePushoverGrantsButton.dataset.listenerAttached = 'true';
+        pushoverProfilesGrid.dataset.listenerAttached = 'true';
+    }
+
+    const savePushoverProfileButton = document.getElementById('savePushoverProfileButton');
+    if (savePushoverProfileButton && !savePushoverProfileButton.dataset.listenerAttached) {
+        savePushoverProfileButton.addEventListener('click', async () => {
+            await savePushoverProgramConfig();
+            await savePushoverGrants();
+            await loadAndRenderPushoverSettings(getPushoverSettingsRecipientId());
+        });
+        savePushoverProfileButton.dataset.listenerAttached = 'true';
+    }
+
+    const deletePushoverProfileButton = document.getElementById('deletePushoverProfileButton');
+    if (deletePushoverProfileButton && !deletePushoverProfileButton.dataset.listenerAttached) {
+        deletePushoverProfileButton.addEventListener('click', async () => {
+            await deletePushoverProfile();
+        });
+        deletePushoverProfileButton.dataset.listenerAttached = 'true';
     }
 
     const nachrichtencenterTitle = document.getElementById('nachrichtencenterTitle');

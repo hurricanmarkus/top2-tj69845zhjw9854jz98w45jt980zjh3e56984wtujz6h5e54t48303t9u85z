@@ -734,9 +734,33 @@
 
                     <div id="pushoverSettingsStatus" class="hidden p-3 rounded-lg bg-gray-100 border border-gray-200 text-sm text-gray-700"></div>
 
+                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-indigo-600 space-y-4">
+                        <div class="text-sm font-semibold text-gray-800">Profile</div>
+                        <div id="pushoverProfilesGrid" class="grid grid-cols-2 gap-2"></div>
+
+                        <div>
+                            <label for="pushoverSettingsRecipientSelect" class="block text-sm font-medium text-gray-700 mb-1">Name auswählen</label>
+                            <select id="pushoverSettingsRecipientSelect"
+                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-5900 bg-white">
+                                <option value="" disabled selected>Bitte wählen...</option>
+                            </select>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <button id="savePushoverProfileButton"
+                                class="w-full py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-200">
+                                Profil speichern
+                            </button>
+                            <button id="deletePushoverProfileButton"
+                                class="w-full py-3 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-300 transition duration-200">
+                                Profil löschen
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-gray-400 space-y-4">
                         <div class="text-sm text-gray-600">
-                            Du richtest hier dein Pushover-Profil ein (Token + User-Key) und legst fest, was andere berechtigte Personen an dich senden dürfen.
+                            Du richtest hier das Pushover-Profil für die ausgewählte Person ein (Token + User-Key) und legst fest, was andere berechtigte Personen an sie senden dürfen.
                         </div>
 
                         <div>
@@ -751,10 +775,6 @@
                                 class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
                         </div>
 
-                        <button id="savePushoverProgramConfigButton"
-                            class="w-full py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-200">
-                            Einstellungen speichern
-                        </button>
                     </div>
 
                     <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-indigo-500 space-y-4">
@@ -823,15 +843,10 @@
                     </div>
 
                     <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-red-500 space-y-4">
-                        <div class="text-sm font-semibold text-gray-800">Berechtigungen (Person X darf an dich senden)</div>
+                        <div class="text-sm font-semibold text-gray-800">Berechtigungen (wer darf an diese Person senden)</div>
                         <div class="text-sm text-gray-600">Häkchen setzen = berechtigen. Entfernen = Zugriff entziehen.</div>
 
                         <div id="pushoverGrantUsersList" class="space-y-2"></div>
-
-                        <button id="savePushoverGrantsButton"
-                            class="w-full py-3 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 transition duration-200">
-                            Berechtigungen speichern
-                        </button>
                     </div>
                 </div>
             </div>

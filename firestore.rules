@@ -260,6 +260,21 @@ service cloud.firestore {
       allow delete: if isAuthenticated();
     }
 
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/pushover_programs/{recipientId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/pushover_grants_by_sender/{senderId}/recipients/{recipientId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/pushover_grants_by_recipient/{recipientId}/senders/{senderId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // DEFAULT DENY (Alles andere verbieten)
     // ═══════════════════════════════════════════════════════════════
