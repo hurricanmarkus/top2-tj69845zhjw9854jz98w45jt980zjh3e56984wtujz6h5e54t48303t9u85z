@@ -814,14 +814,17 @@
                 </div>
 
                 <div class="mb-6">
-                    <div id="notruf-settings-tabs" class="grid grid-cols-2 gap-1 border rounded-lg bg-gray-100 p-1">
+                    <div id="notruf-settings-tabs" class="grid grid-cols-3 gap-1 border rounded-lg bg-gray-100 p-1">
                         <button data-target-card="card-flic-notruf"
                             class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">
                             Flic-Notruf-Button
                         </button>
+                        <button data-target-card="card-nachrichtencenter" class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">
+                            Nachrichtencenter
+                        </button>
                         <button data-target-card="card-app-notruf"
                             class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">
-                            APP-Notruf
+                            Alarm-Programme
                         </button>
                     </div>
                 </div>
@@ -1066,9 +1069,46 @@
                         </div>
                     </div>
                 </div>
+
+                <div id="card-nachrichtencenter" class="notruf-settings-card hidden space-y-6">
+                    <h2 class="text-2xl font-bold text-gray-800">Nachricht senden</h2>
+
+                    <div class="bg-white p-5 rounded-xl shadow-lg border border-gray-100">
+                        <div class="mb-4">
+                            <label for="nachrichtencenterTitle" class="block text-sm font-medium text-gray-700 mb-1">Titel</label>
+                            <input type="text" id="nachrichtencenterTitle" placeholder="Info über TOP 2 APP"
+                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                value="Wichtig: TOP 2 Meldung">
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="nachrichtencenterMessage" class="block text-sm font-medium text-gray-700 mb-1">Nachricht</label>
+                            <textarea id="nachrichtencenterMessage" rows="3"
+                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="Ihre Nachricht..."></textarea>
+                        </div>
+
+                        <div class="mb-6">
+                            <label for="nachrichtencenterRecipient" class="block text-sm font-medium text-gray-700 mb-1">Empfänger</label>
+                            <select id="nachrichtencenterRecipient"
+                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-5900 bg-white">
+                                <option value="Markus">Markus</option>
+                                <option value="Jasmin">Jasmin</option>
+                                <option value="ALLE">ALLE</option>
+                            </select>
+                        </div>
+
+                        <button id="sendNachrichtencenterButton"
+                            class="w-full py-3 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 transition duration-200 flex items-center justify-center">
+                            <span class="button-text">Nachricht senden</span>
+                            <div class="loading-spinner"></div>
+                        </button>
+                    </div>
+                </div>
+
                 <div id="card-app-notruf" class="notruf-settings-card hidden space-y-6">
                     <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-gray-400">
-                        <h2 class="text-xl font-bold text-gray-800">APP-Notruf</h2>
+                        <h2 class="text-xl font-bold text-gray-800">Alarm-Programme</h2>
                         <p class="mt-2 text-gray-600">Diese Funktion befindet sich derzeit im Aufbau.</p>
                     </div>
                 </div>

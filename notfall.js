@@ -1,6 +1,6 @@
-// // @ts-check
 // ---------- IMPORTS ----------
 import { notrufSettings, notrufSettingsDocRef, alertUser, setButtonLoading } from './haupteingang.js';
+import { getUserSetting } from './log-InOut.js';
 import { setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ---------- KONSTANTEN ----------
@@ -1142,6 +1142,20 @@ export function initializeNotrufSettingsView() {
 
   // Stelle sicher, dass die Modal-Listener gesetzt sind
   ensureModalListeners();
+
+  try {
+    const titleEl = document.getElementById('nachrichtencenterTitle');
+    const messageEl = document.getElementById('nachrichtencenterMessage');
+    const recipientEl = document.getElementById('nachrichtencenterRecipient');
+    if (titleEl) titleEl.value = getUserSetting('nachrichtencenter_title', titleEl.value || '');
+    if (messageEl) messageEl.value = getUserSetting('nachrichtencenter_message', messageEl.value || '');
+    if (recipientEl) {
+      const savedRecipient = getUserSetting('nachrichtencenter_recipient', recipientEl.value || '');
+      if (savedRecipient) recipientEl.value = savedRecipient;
+    }
+  } catch (e) {
+    console.warn('initializeNotrufSettingsView: Nachrichtencenter Felder konnten nicht geladen werden:', e);
+  }
 }
 
 // ---------- EXPORT SHOWCASE (falls von anderen Modulen benötigt) ----------

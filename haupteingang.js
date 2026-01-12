@@ -4,7 +4,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, getDocs, writeBatch, addDoc, query, where, serverTimestamp, orderBy, limit, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode, clearAllUserData } from './log-InOut.js';
+import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode, clearAllUserData, saveUserSetting } from './log-InOut.js';
 import { renderModalUserButtons, listenForUserUpdates, toggleNewUserRoleField, addAdminUserManagementListeners, renderUserManagement } from './admin_benutzersteuerung.js';
 import { listenForRoleUpdates, listenForAdminRoleUpdates, renderRoleManagement } from './admin_rollenverwaltung.js';
 import { listenForApprovalRequests, createApprovalRequest, renderApprovalProcess } from './admin_genehmigungsprozess.js';
@@ -1117,6 +1117,76 @@ export function setupEventListeners() {
                 if (data.status !== 1) throw new Error(data.errors ? data.errors.join(', ') : 'Unbekannter Pushover Fehler');
                 alertUser('Nachricht gesendet!', 'success');
                 messageInput.value = ''; // Nachricht leeren
+            } catch (error) {
+                alertUser(`Fehler: ${error.message}`, 'error');
+            } finally {
+                setButtonLoading(buttonEl, false);
+            }
+        });
+    }
+
+    const nachrichtencenterTitle = document.getElementById('nachrichtencenterTitle');
+    if (nachrichtencenterTitle && !nachrichtencenterTitle.dataset.listenerAttached) {
+        nachrichtencenterTitle.addEventListener('change', () => {
+            saveUserSetting('nachrichtencenter_title', nachrichtencenterTitle.value || '');
+        });
+        nachrichtencenterTitle.dataset.listenerAttached = 'true';
+    }
+
+    const nachrichtencenterMessage = document.getElementById('nachrichtencenterMessage');
+    if (nachrichtencenterMessage && !nachrichtencenterMessage.dataset.listenerAttached) {
+        nachrichtencenterMessage.addEventListener('change', () => {
+            saveUserSetting('nachrichtencenter_message', nachrichtencenterMessage.value || '');
+        });
+        nachrichtencenterMessage.dataset.listenerAttached = 'true';
+    }
+
+    const nachrichtencenterRecipient = document.getElementById('nachrichtencenterRecipient');
+    if (nachrichtencenterRecipient && !nachrichtencenterRecipient.dataset.listenerAttached) {
+        nachrichtencenterRecipient.addEventListener('change', () => {
+            saveUserSetting('nachrichtencenter_recipient', nachrichtencenterRecipient.value || '');
+        });
+        nachrichtencenterRecipient.dataset.listenerAttached = 'true';
+    }
+
+    const sendNachrichtencenterButton = document.getElementById('sendNachrichtencenterButton');
+    if (sendNachrichtencenterButton) {
+        sendNachrichtencenterButton.addEventListener('click', async (e) => {
+            const buttonEl = e.currentTarget;
+            const messageInput = document.getElementById('nachrichtencenterMessage');
+            const recipientSelect = document.getElementById('nachrichtencenterRecipient');
+            const titleInput = document.getElementById('nachrichtencenterTitle');
+            if (!messageInput || !recipientSelect || !titleInput) return;
+
+            const message = messageInput.value;
+            if (!message) return alertUser('Bitte Nachricht eingeben.', 'error');
+
+            saveUserSetting('nachrichtencenter_title', titleInput.value || '');
+            saveUserSetting('nachrichtencenter_recipient', recipientSelect.value || '');
+            saveUserSetting('nachrichtencenter_message', messageInput.value || '');
+
+            console.log('Nachrichtencenter: Sende Nachricht...');
+            setButtonLoading(buttonEl, true);
+
+            const formData = new FormData();
+            formData.append('token', PUSHOVER_TOKEN);
+            const recipientKey = RECIPIENT_KEYS ? RECIPIENT_KEYS[recipientSelect.value] : null;
+            if (!recipientKey) {
+                alertUser('Fehler: Empfänger-Schlüssel nicht gefunden.', 'error');
+                setButtonLoading(buttonEl, false);
+                return;
+            }
+            formData.append('user', recipientKey);
+            formData.append('title', titleInput.value);
+            formData.append('message', message);
+
+            try {
+                const response = await fetch('https://api.pushover.net/1/messages.json', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (data.status !== 1) throw new Error(data.errors ? data.errors.join(', ') : 'Unbekannter Pushover Fehler');
+                alertUser('Nachricht gesendet!', 'success');
+                messageInput.value = '';
+                saveUserSetting('nachrichtencenter_message', '');
             } catch (error) {
                 alertUser(`Fehler: ${error.message}`, 'error');
             } finally {
