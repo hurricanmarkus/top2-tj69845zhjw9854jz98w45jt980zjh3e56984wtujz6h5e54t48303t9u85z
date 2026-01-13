@@ -260,6 +260,40 @@ service cloud.firestore {
       allow delete: if isAuthenticated();
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // GESCHENKEMANAGEMENT (Gift Management)
+    // ═══════════════════════════════════════════════════════════════
+
+    // User-spezifische Daten (Pfad wird im Frontend über currentUser.mode gebaut)
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/users/{userId} {
+      allow read, write: if isAuthenticated();
+
+      match /geschenke_kontakte/{docId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      match /geschenke_themen/{themaId} {
+        allow read, write: if isAuthenticated();
+
+        // Geschenke liegen als Sub-Collection unter Themen
+        match /geschenke/{geschenkId} {
+          allow read, write: if isAuthenticated();
+        }
+      }
+
+      match /geschenke_vorlagen/{docId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      match /geschenke_budgets/{docId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      match /geschenke_erinnerungen/{docId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/pushover_programs/{recipientId} {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated();
