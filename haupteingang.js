@@ -858,40 +858,21 @@ export function setupEventListeners() {
         return currentUser?.mode && currentUser.mode !== GUEST_MODE ? currentUser.mode : null;
     };
 
+    const setPushoverSetupOpen = (open) => {
+        const card = document.getElementById('pushoverSetupCard');
+        const btn = document.getElementById('pushoverSetupToggleButton');
+        if (!card || !btn) return;
+        card.classList.toggle('hidden', !open);
+        btn.textContent = open ? 'Pushover einrichten schließen' : 'Pushover einrichten';
+        btn.dataset.open = open ? 'true' : 'false';
+    };
+
     const clearPushoverSettingsForm = () => {
         const apiTokenInput = document.getElementById('pushoverConfigApiToken');
         const userKeyInput = document.getElementById('pushoverConfigUserKey');
-        const titlesArea = document.getElementById('pushoverConfigTitles');
-        const allowTitleFreeText = document.getElementById('pushoverConfigAllowTitleFreeText');
-        const messagesArea = document.getElementById('pushoverConfigMessages');
-        const allowMessageFreeText = document.getElementById('pushoverConfigAllowMessageFreeText');
-
-        const prMinus2 = document.getElementById('pushoverConfigPriorityMinus2');
-        const prMinus1 = document.getElementById('pushoverConfigPriorityMinus1');
-        const pr0 = document.getElementById('pushoverConfigPriority0');
-        const pr1 = document.getElementById('pushoverConfigPriority1');
-        const pr2 = document.getElementById('pushoverConfigPriority2');
-        const defaultPrioritySelect = document.getElementById('pushoverConfigDefaultPriority');
-
-        const retryPresetsArea = document.getElementById('pushoverConfigRetryPresets');
-        const expirePresetsArea = document.getElementById('pushoverConfigExpirePresets');
 
         if (apiTokenInput) apiTokenInput.value = '';
         if (userKeyInput) userKeyInput.value = '';
-        if (titlesArea) titlesArea.value = '';
-        if (allowTitleFreeText) allowTitleFreeText.checked = false;
-        if (messagesArea) messagesArea.value = '';
-        if (allowMessageFreeText) allowMessageFreeText.checked = false;
-
-        if (prMinus2) prMinus2.checked = false;
-        if (prMinus1) prMinus1.checked = false;
-        if (pr0) pr0.checked = false;
-        if (pr1) pr1.checked = false;
-        if (pr2) pr2.checked = false;
-        if (defaultPrioritySelect) defaultPrioritySelect.value = '0';
-
-        if (retryPresetsArea) retryPresetsArea.value = '';
-        if (expirePresetsArea) expirePresetsArea.value = '';
     };
 
     let pushoverSenderGrantCache = {};
@@ -903,11 +884,31 @@ export function setupEventListeners() {
         const messagesArea = document.getElementById('pushoverGrantAllowedMessages');
         const allowTitle = document.getElementById('pushoverGrantAllowTitleFreeText');
         const allowMessage = document.getElementById('pushoverGrantAllowMessageFreeText');
+
+        const prMinus2 = document.getElementById('pushoverGrantPriorityMinus2');
+        const prMinus1 = document.getElementById('pushoverGrantPriorityMinus1');
+        const pr0 = document.getElementById('pushoverGrantPriority0');
+        const pr1 = document.getElementById('pushoverGrantPriority1');
+        const pr2 = document.getElementById('pushoverGrantPriority2');
+        const defaultPrioritySelect = document.getElementById('pushoverGrantDefaultPriority');
+
+        const retryPresetsArea = document.getElementById('pushoverGrantRetryPresets');
+        const expirePresetsArea = document.getElementById('pushoverGrantExpirePresets');
+
         if (senderSelect) senderSelect.value = '';
         if (titlesArea) titlesArea.value = '';
         if (messagesArea) messagesArea.value = '';
         if (allowTitle) allowTitle.checked = false;
         if (allowMessage) allowMessage.checked = false;
+
+        if (prMinus2) prMinus2.checked = false;
+        if (prMinus1) prMinus1.checked = false;
+        if (pr0) pr0.checked = true;
+        if (pr1) pr1.checked = false;
+        if (pr2) pr2.checked = false;
+        if (defaultPrioritySelect) defaultPrioritySelect.value = '0';
+        if (retryPresetsArea) retryPresetsArea.value = '';
+        if (expirePresetsArea) expirePresetsArea.value = '';
     };
 
     const applyPushoverSenderGrantToEditor = (senderId, grantData) => {
@@ -917,15 +918,38 @@ export function setupEventListeners() {
         const allowTitle = document.getElementById('pushoverGrantAllowTitleFreeText');
         const allowMessage = document.getElementById('pushoverGrantAllowMessageFreeText');
 
+        const prMinus2 = document.getElementById('pushoverGrantPriorityMinus2');
+        const prMinus1 = document.getElementById('pushoverGrantPriorityMinus1');
+        const pr0 = document.getElementById('pushoverGrantPriority0');
+        const pr1 = document.getElementById('pushoverGrantPriority1');
+        const pr2 = document.getElementById('pushoverGrantPriority2');
+        const defaultPrioritySelect = document.getElementById('pushoverGrantDefaultPriority');
+        const retryPresetsArea = document.getElementById('pushoverGrantRetryPresets');
+        const expirePresetsArea = document.getElementById('pushoverGrantExpirePresets');
+
         if (senderSelect) senderSelect.value = senderId || '';
 
         const titles = Array.isArray(grantData?.allowedTitles) ? grantData.allowedTitles : [];
         const messages = Array.isArray(grantData?.allowedMessages) ? grantData.allowedMessages : [];
 
+        const allowedPriorities = Array.isArray(grantData?.allowedPriorities) ? grantData.allowedPriorities.map(v => toInt(v, 0)) : [0];
+        const defaultPriority = toInt(grantData?.defaultPriority, 0);
+        const retryPresets = Array.isArray(grantData?.retryPresets) ? grantData.retryPresets : [];
+        const expirePresets = Array.isArray(grantData?.expirePresets) ? grantData.expirePresets : [];
+
         if (titlesArea) titlesArea.value = titles.join('\n');
         if (messagesArea) messagesArea.value = messages.join('\n');
         if (allowTitle) allowTitle.checked = grantData?.allowTitleFreeText === true;
         if (allowMessage) allowMessage.checked = grantData?.allowMessageFreeText === true;
+
+        if (prMinus2) prMinus2.checked = allowedPriorities.includes(-2);
+        if (prMinus1) prMinus1.checked = allowedPriorities.includes(-1);
+        if (pr0) pr0.checked = allowedPriorities.includes(0) || (!allowedPriorities.length && defaultPriority === 0);
+        if (pr1) pr1.checked = allowedPriorities.includes(1);
+        if (pr2) pr2.checked = allowedPriorities.includes(2);
+        if (defaultPrioritySelect) defaultPrioritySelect.value = String(defaultPriority);
+        if (retryPresetsArea) retryPresetsArea.value = (retryPresets || []).map(v => String(v)).join('\n');
+        if (expirePresetsArea) expirePresetsArea.value = (expirePresets || []).map(v => String(v)).join('\n');
     };
 
     const renderPushoverSenderGrantTiles = () => {
@@ -1089,8 +1113,8 @@ export function setupEventListeners() {
         if (titleInput) titleInput.disabled = !allowTitleFreeText;
         if (messageInput) messageInput.disabled = !allowMessageFreeText;
 
-        const allowedPriorities = Array.isArray(cfg?.allowedPriorities) ? cfg.allowedPriorities : [0];
-        const defaultPriority = toInt(cfg?.defaultPriority, 0);
+        const allowedPriorities = Array.isArray(grantMeta?.allowedPriorities) ? grantMeta.allowedPriorities : [0];
+        const defaultPriority = toInt(grantMeta?.defaultPriority, 0);
 
         if (prioritySelect) {
             prioritySelect.innerHTML = '';
@@ -1117,8 +1141,8 @@ export function setupEventListeners() {
             prioritySelect.value = hasDefault ? String(defaultPriority) : (sorted.length ? String(sorted[0]) : '0');
         }
 
-        const retryPresets = Array.isArray(cfg?.retryPresets) ? cfg.retryPresets : [];
-        const expirePresets = Array.isArray(cfg?.expirePresets) ? cfg.expirePresets : [];
+        const retryPresets = Array.isArray(grantMeta?.retryPresets) ? grantMeta.retryPresets : [];
+        const expirePresets = Array.isArray(grantMeta?.expirePresets) ? grantMeta.expirePresets : [];
         setSelectOptions(retryPresetSelect, retryPresets.map(v => ({ value: String(v), label: String(v) })), retryPresets.length ? 'Preset wählen...' : 'Keine Presets');
         setSelectOptions(expirePresetSelect, expirePresets.map(v => ({ value: String(v), label: String(v) })), expirePresets.length ? 'Preset wählen...' : 'Keine Presets');
 
@@ -1191,48 +1215,9 @@ export function setupEventListeners() {
 
         const apiTokenInput = document.getElementById('pushoverConfigApiToken');
         const userKeyInput = document.getElementById('pushoverConfigUserKey');
-        const titlesArea = document.getElementById('pushoverConfigTitles');
-        const allowTitleFreeText = document.getElementById('pushoverConfigAllowTitleFreeText');
-        const messagesArea = document.getElementById('pushoverConfigMessages');
-        const allowMessageFreeText = document.getElementById('pushoverConfigAllowMessageFreeText');
-
-        const prMinus2 = document.getElementById('pushoverConfigPriorityMinus2');
-        const prMinus1 = document.getElementById('pushoverConfigPriorityMinus1');
-        const pr0 = document.getElementById('pushoverConfigPriority0');
-        const pr1 = document.getElementById('pushoverConfigPriority1');
-        const pr2 = document.getElementById('pushoverConfigPriority2');
-        const defaultPrioritySelect = document.getElementById('pushoverConfigDefaultPriority');
-
-        const retryPresetsArea = document.getElementById('pushoverConfigRetryPresets');
-        const expirePresetsArea = document.getElementById('pushoverConfigExpirePresets');
-
-        const allowed = [];
-        if (prMinus2?.checked) allowed.push(-2);
-        if (prMinus1?.checked) allowed.push(-1);
-        if (pr0?.checked) allowed.push(0);
-        if (pr1?.checked) allowed.push(1);
-        if (pr2?.checked) allowed.push(2);
-        const defaultPriority = toInt(defaultPrioritySelect?.value, 0);
-        if (!allowed.includes(defaultPriority)) {
-            allowed.push(defaultPriority);
-        }
-
-        const titles = parseLines(titlesArea?.value);
-        const messages = parseLines(messagesArea?.value);
-        const retryPresets = parseLines(retryPresetsArea?.value).map(v => toInt(v, 60)).filter(v => v >= 30 && v <= 10800);
-        const expirePresets = parseLines(expirePresetsArea?.value).map(v => toInt(v, 3600)).filter(v => v >= 30 && v <= 10800);
-
         const payload = {
             apiToken: String(apiTokenInput?.value || '').trim(),
             userKey: String(userKeyInput?.value || '').trim(),
-            titles,
-            messages,
-            allowTitleFreeText: allowTitleFreeText?.checked === true,
-            allowMessageFreeText: allowMessageFreeText?.checked === true,
-            allowedPriorities: Array.from(new Set(allowed)).sort((a, b) => a - b),
-            defaultPriority,
-            retryPresets,
-            expirePresets,
             updatedAt: serverTimestamp()
         };
 
@@ -1241,6 +1226,8 @@ export function setupEventListeners() {
             await setDoc(doc(pushoverProgramsCollectionRef, recipientId), payload, { merge: true });
             pushoverProgramConfigCache[recipientId] = payload;
             showPushoverSettingsStatus('Einstellungen gespeichert.', true);
+
+            setPushoverSetupOpen(false);
         } catch (e) {
             console.error('PushoverProgram: Fehler beim Speichern der Konfiguration:', e);
             showPushoverSettingsStatus('Fehler beim Speichern. Bitte später erneut versuchen.', true);
@@ -1273,6 +1260,21 @@ export function setupEventListeners() {
         const allowedTitles = parseLines(titlesArea?.value);
         const allowedMessages = parseLines(messagesArea?.value);
 
+        const allowedPriorities = [];
+        if (prMinus2?.checked) allowedPriorities.push(-2);
+        if (prMinus1?.checked) allowedPriorities.push(-1);
+        if (pr0?.checked) allowedPriorities.push(0);
+        if (pr1?.checked) allowedPriorities.push(1);
+        if (pr2?.checked) allowedPriorities.push(2);
+
+        const defaultPriority = toInt(defaultPrioritySelect?.value, 0);
+        if (!allowedPriorities.includes(defaultPriority)) {
+            allowedPriorities.push(defaultPriority);
+        }
+
+        const retryPresets = parseLines(retryPresetsArea?.value).map(v => toInt(v, 60)).filter(v => v >= 30 && v <= 10800);
+        const expirePresets = parseLines(expirePresetsArea?.value).map(v => toInt(v, 3600)).filter(v => v >= 30 && v <= 10800);
+
         const recipientName = USERS[recipientId]?.name || recipientId;
         const senderName = USERS[senderId]?.name || senderId;
 
@@ -1286,6 +1288,10 @@ export function setupEventListeners() {
             allowedMessages,
             allowTitleFreeText: allowTitle?.checked === true,
             allowMessageFreeText: allowMessage?.checked === true,
+            allowedPriorities: Array.from(new Set(allowedPriorities)).sort((a, b) => a - b),
+            defaultPriority,
+            retryPresets,
+            expirePresets,
             updatedAt: serverTimestamp()
         };
 
@@ -1358,46 +1364,18 @@ export function setupEventListeners() {
 
         const apiTokenInput = document.getElementById('pushoverConfigApiToken');
         const userKeyInput = document.getElementById('pushoverConfigUserKey');
-        const titlesArea = document.getElementById('pushoverConfigTitles');
-        const allowTitleFreeText = document.getElementById('pushoverConfigAllowTitleFreeText');
-        const messagesArea = document.getElementById('pushoverConfigMessages');
-        const allowMessageFreeText = document.getElementById('pushoverConfigAllowMessageFreeText');
-
-        const prMinus2 = document.getElementById('pushoverConfigPriorityMinus2');
-        const prMinus1 = document.getElementById('pushoverConfigPriorityMinus1');
-        const pr0 = document.getElementById('pushoverConfigPriority0');
-        const pr1 = document.getElementById('pushoverConfigPriority1');
-        const pr2 = document.getElementById('pushoverConfigPriority2');
-        const defaultPrioritySelect = document.getElementById('pushoverConfigDefaultPriority');
-
-        const retryPresetsArea = document.getElementById('pushoverConfigRetryPresets');
-        const expirePresetsArea = document.getElementById('pushoverConfigExpirePresets');
 
         const cfg = await loadPushoverProgramConfig(recipientId);
         if (cfg) {
             if (apiTokenInput) apiTokenInput.value = cfg.apiToken || '';
             if (userKeyInput) userKeyInput.value = cfg.userKey || '';
-            if (titlesArea) titlesArea.value = (Array.isArray(cfg.titles) ? cfg.titles : []).join('\n');
-            if (allowTitleFreeText) allowTitleFreeText.checked = cfg.allowTitleFreeText === true;
-            if (messagesArea) messagesArea.value = (Array.isArray(cfg.messages) ? cfg.messages : []).join('\n');
-            if (allowMessageFreeText) allowMessageFreeText.checked = cfg.allowMessageFreeText === true;
-
-            const allowed = Array.isArray(cfg.allowedPriorities) ? cfg.allowedPriorities.map(v => toInt(v, 0)) : [];
-            if (prMinus2) prMinus2.checked = allowed.includes(-2);
-            if (prMinus1) prMinus1.checked = allowed.includes(-1);
-            if (pr0) pr0.checked = allowed.includes(0);
-            if (pr1) pr1.checked = allowed.includes(1);
-            if (pr2) pr2.checked = allowed.includes(2);
-            if (defaultPrioritySelect) defaultPrioritySelect.value = String(toInt(cfg.defaultPriority, 0));
-
-            if (retryPresetsArea) retryPresetsArea.value = (Array.isArray(cfg.retryPresets) ? cfg.retryPresets : []).join('\n');
-            if (expirePresetsArea) expirePresetsArea.value = (Array.isArray(cfg.expirePresets) ? cfg.expirePresets : []).join('\n');
-
             showPushoverSettingsStatus('Einstellungen geladen.', true);
         } else {
             clearPushoverSettingsForm();
             showPushoverSettingsStatus('Noch keine Einstellungen gespeichert. Bitte ausfüllen und speichern.', true);
         }
+
+        setPushoverSetupOpen(false);
 
         await loadPushoverSenderGrantsForCurrentUser();
     };
@@ -1749,6 +1727,9 @@ export function setupEventListeners() {
                 const allowMessageFreeText = grantMeta.allowMessageFreeText === true;
                 const allowedTitles = Array.isArray(grantMeta.allowedTitles) ? grantMeta.allowedTitles : [];
                 const allowedMessages = Array.isArray(grantMeta.allowedMessages) ? grantMeta.allowedMessages : [];
+                const allowedPriorities = Array.isArray(grantMeta.allowedPriorities) ? grantMeta.allowedPriorities.map(v => toInt(v, 0)) : [0];
+                const retryPresets = Array.isArray(grantMeta.retryPresets) ? grantMeta.retryPresets.map(v => toInt(v, 60)) : [];
+                const expirePresets = Array.isArray(grantMeta.expirePresets) ? grantMeta.expirePresets.map(v => toInt(v, 3600)) : [];
 
                 const message = String(messageInput.value || '').trim();
                 const title = String(titleInput.value || '').trim();
@@ -1775,6 +1756,10 @@ export function setupEventListeners() {
 
                 const priority = toInt(prioritySelect.value, 0);
 
+                if (allowedPriorities.length && !allowedPriorities.includes(priority)) {
+                    return alertUser('Priorität ist nicht erlaubt.', 'error');
+                }
+
                 setButtonLoading(buttonEl, true);
 
                 const formData = new FormData();
@@ -1791,6 +1776,17 @@ export function setupEventListeners() {
                         setButtonLoading(buttonEl, false);
                         return alertUser('Retry/Expire muss zwischen 30 und 10800 Sekunden liegen.', 'error');
                     }
+
+                    if (retryPresets.length && !retryPresets.includes(retry)) {
+                        setButtonLoading(buttonEl, false);
+                        return alertUser('Retry ist nicht erlaubt (kein gültiges Preset).', 'error');
+                    }
+
+                    if (expirePresets.length && !expirePresets.includes(expire)) {
+                        setButtonLoading(buttonEl, false);
+                        return alertUser('Expire ist nicht erlaubt (kein gültiges Preset).', 'error');
+                    }
+
                     formData.append('retry', String(retry));
                     formData.append('expire', String(expire));
                 }
@@ -1879,6 +1875,15 @@ export function setupEventListeners() {
             clearPushoverSendForm();
         });
         clearPushoverFormButton.dataset.listenerAttached = 'true';
+    }
+
+    const pushoverSetupToggleButton = document.getElementById('pushoverSetupToggleButton');
+    if (pushoverSetupToggleButton && !pushoverSetupToggleButton.dataset.listenerAttached) {
+        pushoverSetupToggleButton.addEventListener('click', () => {
+            const isOpen = pushoverSetupToggleButton.dataset.open === 'true';
+            setPushoverSetupOpen(!isOpen);
+        });
+        pushoverSetupToggleButton.dataset.listenerAttached = 'true';
     }
 
     const savePushoverProgramConfigButton = document.getElementById('savePushoverProgramConfigButton');

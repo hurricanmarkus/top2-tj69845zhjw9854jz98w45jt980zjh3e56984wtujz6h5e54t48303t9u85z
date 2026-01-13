@@ -734,9 +734,14 @@
 
                     <div id="pushoverSettingsStatus" class="hidden p-3 rounded-lg bg-gray-100 border border-gray-200 text-sm text-gray-700"></div>
 
-                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-gray-400 space-y-4">
+                    <button id="pushoverSetupToggleButton"
+                        class="w-full py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-200">
+                        Pushover einrichten
+                    </button>
+
+                    <div id="pushoverSetupCard" class="hidden card bg-white p-4 rounded-xl shadow-lg border-t-4 border-gray-400 space-y-4">
                         <div class="text-sm text-gray-600">
-                            Du richtest hier dein Pushover-Profil ein (Token + User-Key) und legst fest, was andere berechtigte Personen an dich senden dürfen.
+                            Du richtest hier dein Pushover-Profil ein (Token + User-Key).
                         </div>
 
                         <div>
@@ -752,80 +757,14 @@
                         </div>
 
                         <button id="savePushoverProgramConfigButton"
-                            class="w-full py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-200">
-                            Einstellungen speichern
+                            class="w-full py-3 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 transition duration-200">
+                            Speichern
                         </button>
 
                     </div>
 
-                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-indigo-500 space-y-4">
-                        <div class="text-sm font-semibold text-gray-800">Titel-Vorlagen (optional)</div>
-                        <div class="text-xs text-gray-500">Diese Vorlagen sind deine Defaults. Was ein Sender nutzen darf, legst du unten pro Person fest.</div>
-                        <textarea id="pushoverConfigTitles" rows="5"
-                            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="Wichtig: TOP 2 Meldung\nInfo\nErinnerung"></textarea>
-                        <label class="flex items-center gap-2 text-sm text-gray-700">
-                            <input type="checkbox" id="pushoverConfigAllowTitleFreeText" class="h-4 w-4">
-                            Freitext beim Titel erlauben
-                        </label>
-                    </div>
-
-                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-indigo-500 space-y-4">
-                        <div class="text-sm font-semibold text-gray-800">Nachrichten-Vorlagen (optional)</div>
-                        <div class="text-xs text-gray-500">Diese Vorlagen sind deine Defaults. Was ein Sender nutzen darf, legst du unten pro Person fest.</div>
-                        <textarea id="pushoverConfigMessages" rows="6"
-                            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="Bitte melde dich\nBitte kurz anrufen\nDanke!"></textarea>
-                        <label class="flex items-center gap-2 text-sm text-gray-700">
-                            <input type="checkbox" id="pushoverConfigAllowMessageFreeText" class="h-4 w-4">
-                            Freitext bei der Nachricht erlauben
-                        </label>
-                    </div>
-
-                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-indigo-500 space-y-4">
-                        <div class="text-sm font-semibold text-gray-800">Erlaubte Prioritäten</div>
-                        <div class="grid grid-cols-2 gap-2 text-sm text-gray-700">
-                            <label class="flex items-center gap-2"><input type="checkbox" id="pushoverConfigPriorityMinus2" class="h-4 w-4"> -2 (Ganz leise)</label>
-                            <label class="flex items-center gap-2"><input type="checkbox" id="pushoverConfigPriorityMinus1" class="h-4 w-4"> -1 (Leise)</label>
-                            <label class="flex items-center gap-2"><input type="checkbox" id="pushoverConfigPriority0" class="h-4 w-4"> 0 (Normal)</label>
-                            <label class="flex items-center gap-2"><input type="checkbox" id="pushoverConfigPriority1" class="h-4 w-4"> 1 (Hoch)</label>
-                            <label class="flex items-center gap-2"><input type="checkbox" id="pushoverConfigPriority2" class="h-4 w-4"> 2 (Notfall / Wiederholen)</label>
-                        </div>
-                        <div>
-                            <label for="pushoverConfigDefaultPriority" class="block text-sm font-medium text-gray-700 mb-1">Standard-Priorität</label>
-                            <select id="pushoverConfigDefaultPriority"
-                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-5900 bg-white">
-                                <option value="-2">-2</option>
-                                <option value="-1">-1</option>
-                                <option value="0" selected>0</option>
-                                <option value="1">1</option>
-                                <option value="2">2</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-indigo-500 space-y-4">
-                        <div class="text-sm font-semibold text-gray-800">Notfall (Priorität 2): Presets</div>
-                        <div class="text-xs text-gray-500">Eine Zahl pro Zeile (Sekunden). Mindestwert: 30. Max: 10800.</div>
-
-                        <div>
-                            <label for="pushoverConfigRetryPresets" class="block text-sm font-medium text-gray-700 mb-1">retry-Vorlagen (Wiederholen alle)</label>
-                            <textarea id="pushoverConfigRetryPresets" rows="4"
-                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                                placeholder="30\n60\n120\n300"></textarea>
-                        </div>
-
-                        <div>
-                            <label for="pushoverConfigExpirePresets" class="block text-sm font-medium text-gray-700 mb-1">expire-Vorlagen (Max. Dauer)</label>
-                            <textarea id="pushoverConfigExpirePresets" rows="4"
-                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                                placeholder="600\n1800\n3600\n7200"></textarea>
-                        </div>
-                    </div>
-
                     <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-red-500 space-y-4">
                         <div class="text-sm font-semibold text-gray-800">Berechtigungen pro Person (wer darf was an dich senden)</div>
-                        <div class="text-sm text-gray-600">Hier legst du pro Sender fest, welche Titel/Nachrichten er verwenden darf.</div>
 
                         <div id="pushoverSenderGrantTiles" class="grid grid-cols-2 gap-2"></div>
 
@@ -857,6 +796,47 @@
                                 <input type="checkbox" id="pushoverGrantAllowMessageFreeText" class="h-4 w-4">
                                 Freitext bei der Nachricht erlauben
                             </label>
+                        </div>
+
+                        <div>
+                            <div class="text-sm font-semibold text-gray-800 mb-2">Erlaubte Priorität</div>
+                            <div class="grid grid-cols-2 gap-2 text-sm text-gray-700">
+                                <label class="flex items-center gap-2"><input type="checkbox" id="pushoverGrantPriorityMinus2" class="h-4 w-4"> -2 (Ganz leise)</label>
+                                <label class="flex items-center gap-2"><input type="checkbox" id="pushoverGrantPriorityMinus1" class="h-4 w-4"> -1 (Leise)</label>
+                                <label class="flex items-center gap-2"><input type="checkbox" id="pushoverGrantPriority0" class="h-4 w-4" checked> 0 (Normal)</label>
+                                <label class="flex items-center gap-2"><input type="checkbox" id="pushoverGrantPriority1" class="h-4 w-4"> 1 (Hoch)</label>
+                                <label class="flex items-center gap-2"><input type="checkbox" id="pushoverGrantPriority2" class="h-4 w-4"> 2 (Notfall / Wiederholen)</label>
+                            </div>
+                            <div class="mt-3">
+                                <label for="pushoverGrantDefaultPriority" class="block text-sm font-medium text-gray-700 mb-1">Standard-Priorität</label>
+                                <select id="pushoverGrantDefaultPriority"
+                                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-5900 bg-white">
+                                    <option value="-2">-2</option>
+                                    <option value="-1">-1</option>
+                                    <option value="0" selected>0</option>
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="text-sm font-semibold text-gray-800">Notfall (Priorität 2)</div>
+                            <div class="text-xs text-gray-500">Eine Zahl pro Zeile (Sekunden). Mindestwert: 30. Max: 10800. Wenn du Presets einträgst, darf der Sender nur diese Werte nutzen.</div>
+
+                            <div class="mt-3">
+                                <label for="pushoverGrantRetryPresets" class="block text-sm font-medium text-gray-700 mb-1">retry-Vorlagen (Wiederholen alle)</label>
+                                <textarea id="pushoverGrantRetryPresets" rows="3"
+                                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="30\n60\n120\n300"></textarea>
+                            </div>
+
+                            <div class="mt-3">
+                                <label for="pushoverGrantExpirePresets" class="block text-sm font-medium text-gray-700 mb-1">expire-Vorlagen (Max. Dauer)</label>
+                                <textarea id="pushoverGrantExpirePresets" rows="3"
+                                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="600\n1800\n3600\n7200"></textarea>
+                            </div>
                         </div>
 
                         <div class="grid grid-cols-2 gap-2">
