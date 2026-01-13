@@ -642,6 +642,12 @@
                             <div id="pushoverGrantedBy" class="text-xs text-gray-500 mt-1"></div>
                         </div>
 
+                        <div id="pushoverNoRecipientsNotice" class="hidden p-3 rounded-lg bg-gray-50 border border-gray-200 text-sm text-gray-700">
+                            Du wurdest von niemandem berechtigt. Bitte lass dich von einer Person freischalten.
+                        </div>
+
+                        <div id="pushoverSendDetails" class="hidden">
+
                         <div class="mb-4">
                             <label for="pushoverTitlePreset" class="block text-sm font-medium text-gray-700 mb-1">Titel (Vorlage)</label>
                             <select id="pushoverTitlePreset"
@@ -726,6 +732,7 @@
                             class="w-full mt-2 py-3 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-300 transition duration-200">
                             Formular leeren
                         </button>
+                        </div>
                     </div>
                 </div>
 
@@ -766,13 +773,19 @@
                     <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-red-500 space-y-4">
                         <div class="text-sm font-semibold text-gray-800">Berechtigungen pro Person (wer darf was an dich senden)</div>
 
-                        <div id="pushoverSenderGrantTiles" class="grid grid-cols-2 gap-2"></div>
-
-                        <div class="text-xs text-gray-500">
-                            Bitte zuerst eine Person oben anklicken (oder "+ Neue anlegen"), dann öffnet sich unten der Editor.
+                        <div id="pushoverGrantTilesArea">
+                            <div id="pushoverSenderGrantTiles" class="grid grid-cols-2 gap-2"></div>
                         </div>
 
                         <div id="pushoverGrantEditor" class="hidden space-y-4">
+                            <div class="flex items-center justify-between">
+                                <div class="text-sm font-semibold text-gray-800">Rechte bearbeiten</div>
+                                <button id="closePushoverGrantEditorButton" type="button"
+                                    class="px-3 py-1 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition">
+                                    X
+                                </button>
+                            </div>
+
                             <div>
                                 <label for="pushoverGrantSenderSelect" class="block text-sm font-medium text-gray-700 mb-1">Person</label>
                                 <select id="pushoverGrantSenderSelect"

@@ -880,8 +880,22 @@ export function setupEventListeners() {
 
     const setPushoverGrantEditorOpen = (open) => {
         const editor = document.getElementById('pushoverGrantEditor');
+        const tilesArea = document.getElementById('pushoverGrantTilesArea');
         if (!editor) return;
         editor.classList.toggle('hidden', !open);
+        if (tilesArea) tilesArea.classList.toggle('hidden', open);
+    };
+
+    const setPushoverSendDetailsOpen = (open) => {
+        const details = document.getElementById('pushoverSendDetails');
+        if (!details) return;
+        details.classList.toggle('hidden', !open);
+    };
+
+    const setPushoverNoRecipientsNoticeOpen = (open) => {
+        const notice = document.getElementById('pushoverNoRecipientsNotice');
+        if (!notice) return;
+        notice.classList.toggle('hidden', !open);
     };
 
     const updatePushoverGrantPriorityUI = () => {
@@ -1281,11 +1295,17 @@ export function setupEventListeners() {
         if (!pushoverGrantsBySenderCollectionRef) {
             recipientSelect.innerHTML = '<option value="" disabled selected>Bitte warten...</option>';
             if (grantedByEl) grantedByEl.textContent = '';
+            recipientSelect.disabled = true;
+            setPushoverSendDetailsOpen(false);
+            setPushoverNoRecipientsNoticeOpen(false);
             return;
         }
         if (!currentUser?.mode || currentUser.mode === GUEST_MODE) {
             recipientSelect.innerHTML = '<option value="" disabled selected>Bitte anmelden...</option>';
             if (grantedByEl) grantedByEl.textContent = '';
+            recipientSelect.disabled = true;
+            setPushoverSendDetailsOpen(false);
+            setPushoverNoRecipientsNoticeOpen(false);
             return;
         }
 
@@ -1308,16 +1328,25 @@ export function setupEventListeners() {
                 recipientSelect.innerHTML = '<option value="" disabled selected>Keine Berechtigung gefunden</option>';
                 if (grantedByEl) grantedByEl.textContent = '';
                 pushoverSelectedRecipientId = null;
+                recipientSelect.disabled = true;
+                setPushoverSendDetailsOpen(false);
+                setPushoverNoRecipientsNoticeOpen(true);
                 return;
             }
 
             setSelectOptions(recipientSelect, options, 'Empfänger wählen...');
             if (grantedByEl) grantedByEl.textContent = '';
             pushoverSelectedRecipientId = null;
+            recipientSelect.disabled = false;
+            setPushoverSendDetailsOpen(false);
+            setPushoverNoRecipientsNoticeOpen(false);
         } catch (e) {
             console.error('PushoverProgram: Fehler beim Laden der Empfänger-Grants:', e);
             recipientSelect.innerHTML = '<option value="" disabled selected>Fehler beim Laden</option>';
             if (grantedByEl) grantedByEl.textContent = '';
+            recipientSelect.disabled = true;
+            setPushoverSendDetailsOpen(false);
+            setPushoverNoRecipientsNoticeOpen(false);
         }
     };
 
@@ -1440,7 +1469,9 @@ export function setupEventListeners() {
                 setDoc(bySenderDoc, payload, { merge: true }),
                 setDoc(byRecipientDoc, payload, { merge: true })
             ]);
-            pushoverSelectedSenderId = senderId;
+            pushoverSelectedSenderId = null;
+            clearPushoverSenderGrantEditor();
+            setPushoverGrantEditorOpen(false);
             showPushoverSettingsStatus('Berechtigung gespeichert.', true);
             await loadPushoverSenderGrantsForCurrentUser();
         } catch (e) {
@@ -1542,6 +1573,15 @@ export function setupEventListeners() {
         if (emergencyOptions) emergencyOptions.classList.add('hidden');
         if (grantedByEl) grantedByEl.textContent = '';
         pushoverSelectedRecipientId = null;
+
+        const recipientSelect = document.getElementById('pushoverRecipient');
+        if (recipientSelect) {
+            recipientSelect.disabled = false;
+            recipientSelect.value = '';
+            if (recipientSelect.selectedIndex < 0) recipientSelect.selectedIndex = 0;
+        }
+        setPushoverSendDetailsOpen(false);
+        setPushoverNoRecipientsNoticeOpen(false);
     };
 
     // Event listener for the app header to navigate home
@@ -1954,11 +1994,26 @@ export function setupEventListeners() {
         pushoverRecipientSelect.addEventListener('change', async () => {
             const rid = pushoverRecipientSelect.value;
             pushoverSelectedRecipientId = rid;
-            const cfg = await loadPushoverProgramConfig(rid);
-            if (!cfg) {
-                alertUser('Empfänger ist noch nicht eingerichtet.', 'error');
+
+            setPushoverNoRecipientsNoticeOpen(false);
+
+            if (!rid) {
+                setPushoverSendDetailsOpen(false);
+                pushoverRecipientSelect.disabled = false;
+                return;
             }
-            applyPushoverConfigToSendForm(rid, cfg || {});
+
+            const cfg = await loadPushoverProgramConfig(rid);
+            if (!cfg || !cfg.apiToken || !cfg.userKey) {
+                alertUser('Empfänger ist noch nicht eingerichtet.', 'error');
+                setPushoverSendDetailsOpen(false);
+                pushoverRecipientSelect.disabled = false;
+                return;
+            }
+
+            applyPushoverConfigToSendForm(rid, cfg);
+            setPushoverSendDetailsOpen(true);
+            pushoverRecipientSelect.disabled = true;
         });
         pushoverRecipientSelect.dataset.listenerAttached = 'true';
     }
@@ -2047,7 +2102,13 @@ export function setupEventListeners() {
                 const recipientId = getPushoverSettingsRecipientId();
                 const availableUserIds = Object.keys(USERS || {})
                     .filter(uid => uid && uid !== recipientId)
-                    .filter(uid => USERS[uid]?.isActive !== false);
+                    .filter(uid => USERS[uid]?.isActive !== false)
+                    .filter(uid => !Object.prototype.hasOwnProperty.call(pushoverSenderGrantCache || {}, uid));
+
+                if (!availableUserIds.length) {
+                    showPushoverSettingsStatus('Für alle Personen existiert bereits eine Berechtigung.', true);
+                    return;
+                }
 
                 const chosen = await openPushoverGrantPersonPicker(availableUserIds);
                 if (!chosen) {
@@ -2069,6 +2130,17 @@ export function setupEventListeners() {
             }
         });
         pushoverSenderGrantTiles.dataset.listenerAttached = 'true';
+    }
+
+    const closePushoverGrantEditorButton = document.getElementById('closePushoverGrantEditorButton');
+    if (closePushoverGrantEditorButton && !closePushoverGrantEditorButton.dataset.listenerAttached) {
+        closePushoverGrantEditorButton.addEventListener('click', () => {
+            pushoverSelectedSenderId = null;
+            clearPushoverSenderGrantEditor();
+            setPushoverGrantEditorOpen(false);
+            renderPushoverSenderGrantTiles();
+        });
+        closePushoverGrantEditorButton.dataset.listenerAttached = 'true';
     }
 
     const pushoverGrantSenderSelect = document.getElementById('pushoverGrantSenderSelect');
