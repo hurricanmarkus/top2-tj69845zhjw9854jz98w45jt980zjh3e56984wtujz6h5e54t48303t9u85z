@@ -768,86 +768,92 @@
 
                         <div id="pushoverSenderGrantTiles" class="grid grid-cols-2 gap-2"></div>
 
-                        <div>
-                            <label for="pushoverGrantSenderSelect" class="block text-sm font-medium text-gray-700 mb-1">Person</label>
-                            <select id="pushoverGrantSenderSelect"
-                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-5900 bg-white">
-                                <option value="" disabled selected>Bitte wählen...</option>
-                            </select>
+                        <div class="text-xs text-gray-500">
+                            Bitte zuerst eine Person oben anklicken (oder "+ Neue anlegen"), dann öffnet sich unten der Editor.
                         </div>
 
-                        <div>
-                            <label for="pushoverGrantAllowedTitles" class="block text-sm font-medium text-gray-700 mb-1">Erlaubte Titel (eine Zeile pro Titel)</label>
-                            <textarea id="pushoverGrantAllowedTitles" rows="4"
-                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                                placeholder="Wichtig: TOP 2 Meldung\nInfo"></textarea>
-                            <label class="flex items-center gap-2 text-sm text-gray-700 mt-2">
-                                <input type="checkbox" id="pushoverGrantAllowTitleFreeText" class="h-4 w-4">
-                                Freitext beim Titel erlauben
-                            </label>
-                        </div>
-
-                        <div>
-                            <label for="pushoverGrantAllowedMessages" class="block text-sm font-medium text-gray-700 mb-1">Erlaubte Nachrichten (eine Zeile pro Nachricht)</label>
-                            <textarea id="pushoverGrantAllowedMessages" rows="5"
-                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                                placeholder="Hallo\nTest"></textarea>
-                            <label class="flex items-center gap-2 text-sm text-gray-700 mt-2">
-                                <input type="checkbox" id="pushoverGrantAllowMessageFreeText" class="h-4 w-4">
-                                Freitext bei der Nachricht erlauben
-                            </label>
-                        </div>
-
-                        <div>
-                            <div class="text-sm font-semibold text-gray-800 mb-2">Erlaubte Priorität</div>
-                            <div class="grid grid-cols-2 gap-2 text-sm text-gray-700">
-                                <label class="flex items-center gap-2"><input type="checkbox" id="pushoverGrantPriorityMinus2" class="h-4 w-4"> -2 (Ganz leise)</label>
-                                <label class="flex items-center gap-2"><input type="checkbox" id="pushoverGrantPriorityMinus1" class="h-4 w-4"> -1 (Leise)</label>
-                                <label class="flex items-center gap-2"><input type="checkbox" id="pushoverGrantPriority0" class="h-4 w-4" checked> 0 (Normal)</label>
-                                <label class="flex items-center gap-2"><input type="checkbox" id="pushoverGrantPriority1" class="h-4 w-4"> 1 (Hoch)</label>
-                                <label class="flex items-center gap-2"><input type="checkbox" id="pushoverGrantPriority2" class="h-4 w-4"> 2 (Notfall / Wiederholen)</label>
-                            </div>
-                            <div class="mt-3">
-                                <label for="pushoverGrantDefaultPriority" class="block text-sm font-medium text-gray-700 mb-1">Standard-Priorität</label>
-                                <select id="pushoverGrantDefaultPriority"
+                        <div id="pushoverGrantEditor" class="hidden space-y-4">
+                            <div>
+                                <label for="pushoverGrantSenderSelect" class="block text-sm font-medium text-gray-700 mb-1">Person</label>
+                                <select id="pushoverGrantSenderSelect"
                                     class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-5900 bg-white">
-                                    <option value="-2">-2</option>
-                                    <option value="-1">-1</option>
-                                    <option value="0" selected>0</option>
-                                    <option value="1">1</option>
-                                    <option value="2">2</option>
+                                    <option value="" disabled selected>Bitte wählen...</option>
                                 </select>
                             </div>
-                        </div>
 
-                        <div>
-                            <div class="text-sm font-semibold text-gray-800">Notfall (Priorität 2)</div>
-                            <div class="text-xs text-gray-500">Eine Zahl pro Zeile (Sekunden). Mindestwert: 30. Max: 10800. Wenn du Presets einträgst, darf der Sender nur diese Werte nutzen.</div>
-
-                            <div class="mt-3">
-                                <label for="pushoverGrantRetryPresets" class="block text-sm font-medium text-gray-700 mb-1">retry-Vorlagen (Wiederholen alle)</label>
-                                <textarea id="pushoverGrantRetryPresets" rows="3"
+                            <div>
+                                <label for="pushoverGrantAllowedTitles" class="block text-sm font-medium text-gray-700 mb-1">Erlaubte Titel (eine Zeile pro Titel)</label>
+                                <textarea id="pushoverGrantAllowedTitles" rows="4"
                                     class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="30\n60\n120\n300"></textarea>
+                                    placeholder="Wichtig: TOP 2 Meldung\nInfo"></textarea>
+                                <label class="flex items-center gap-2 text-sm text-gray-700 mt-2">
+                                    <input type="checkbox" id="pushoverGrantAllowTitleFreeText" class="h-4 w-4">
+                                    Freitext beim Titel erlauben
+                                </label>
                             </div>
 
-                            <div class="mt-3">
-                                <label for="pushoverGrantExpirePresets" class="block text-sm font-medium text-gray-700 mb-1">expire-Vorlagen (Max. Dauer)</label>
-                                <textarea id="pushoverGrantExpirePresets" rows="3"
+                            <div>
+                                <label for="pushoverGrantAllowedMessages" class="block text-sm font-medium text-gray-700 mb-1">Erlaubte Nachrichten (eine Zeile pro Nachricht)</label>
+                                <textarea id="pushoverGrantAllowedMessages" rows="5"
                                     class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="600\n1800\n3600\n7200"></textarea>
+                                    placeholder="Hallo\nTest"></textarea>
+                                <label class="flex items-center gap-2 text-sm text-gray-700 mt-2">
+                                    <input type="checkbox" id="pushoverGrantAllowMessageFreeText" class="h-4 w-4">
+                                    Freitext bei der Nachricht erlauben
+                                </label>
                             </div>
-                        </div>
 
-                        <div class="grid grid-cols-2 gap-2">
-                            <button id="savePushoverSenderGrantButton"
-                                class="w-full py-3 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 transition duration-200">
-                                Berechtigung speichern
-                            </button>
-                            <button id="deletePushoverSenderGrantButton"
-                                class="w-full py-3 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-300 transition duration-200">
-                                Berechtigung löschen
-                            </button>
+                            <div>
+                                <div class="text-sm font-semibold text-gray-800 mb-2">Erlaubte Priorität</div>
+                                <div class="grid grid-cols-2 gap-2 text-sm text-gray-700">
+                                    <label class="flex items-center gap-2"><input type="checkbox" id="pushoverGrantPriorityMinus2" class="h-4 w-4"> -2 (Ganz leise)</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" id="pushoverGrantPriorityMinus1" class="h-4 w-4"> -1 (Leise)</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" id="pushoverGrantPriority0" class="h-4 w-4" checked> 0 (Normal)</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" id="pushoverGrantPriority1" class="h-4 w-4"> 1 (Hoch)</label>
+                                    <label class="flex items-center gap-2"><input type="checkbox" id="pushoverGrantPriority2" class="h-4 w-4"> 2 (Notfall / Wiederholen)</label>
+                                </div>
+                                <div class="mt-3">
+                                    <label for="pushoverGrantDefaultPriority" class="block text-sm font-medium text-gray-700 mb-1">Standard-Priorität</label>
+                                    <select id="pushoverGrantDefaultPriority"
+                                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-5900 bg-white">
+                                        <option value="-2">-2</option>
+                                        <option value="-1">-1</option>
+                                        <option value="0" selected>0</option>
+                                        <option value="1">1</option>
+                                        <option value="2">2</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="text-sm font-semibold text-gray-800">Notfall (Priorität 2)</div>
+                                <div class="text-xs text-gray-500">Eine Zahl pro Zeile (Sekunden). Mindestwert: 30. Max: 10800. Wenn du Presets einträgst, darf der Sender nur diese Werte nutzen.</div>
+
+                                <div class="mt-3">
+                                    <label for="pushoverGrantRetryPresets" class="block text-sm font-medium text-gray-700 mb-1">retry-Vorlagen (Wiederholen alle)</label>
+                                    <textarea id="pushoverGrantRetryPresets" rows="3"
+                                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="30\n60\n120\n300"></textarea>
+                                </div>
+
+                                <div class="mt-3">
+                                    <label for="pushoverGrantExpirePresets" class="block text-sm font-medium text-gray-700 mb-1">expire-Vorlagen (Max. Dauer)</label>
+                                    <textarea id="pushoverGrantExpirePresets" rows="3"
+                                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="600\n1800\n3600\n7200"></textarea>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2">
+                                <button id="savePushoverSenderGrantButton"
+                                    class="w-full py-3 bg-emerald-600 text-white font-semibold rounded-lg shadow-md hover:bg-emerald-700 transition duration-200">
+                                    Berechtigung speichern
+                                </button>
+                                <button id="deletePushoverSenderGrantButton"
+                                    class="w-full py-3 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 transition duration-200">
+                                    Berechtigung löschen
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

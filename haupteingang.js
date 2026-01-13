@@ -878,6 +878,122 @@ export function setupEventListeners() {
     let pushoverSenderGrantCache = {};
     let pushoverSelectedSenderId = null;
 
+    const setPushoverGrantEditorOpen = (open) => {
+        const editor = document.getElementById('pushoverGrantEditor');
+        if (!editor) return;
+        editor.classList.toggle('hidden', !open);
+    };
+
+    const updatePushoverGrantPriorityUI = () => {
+        const prMinus2 = document.getElementById('pushoverGrantPriorityMinus2');
+        const prMinus1 = document.getElementById('pushoverGrantPriorityMinus1');
+        const pr0 = document.getElementById('pushoverGrantPriority0');
+        const pr1 = document.getElementById('pushoverGrantPriority1');
+        const pr2 = document.getElementById('pushoverGrantPriority2');
+        const defaultPrioritySelect = document.getElementById('pushoverGrantDefaultPriority');
+        if (!defaultPrioritySelect || !pr0) return;
+
+        const allowed = [];
+        if (prMinus2?.checked) allowed.push(-2);
+        if (prMinus1?.checked) allowed.push(-1);
+        if (pr0?.checked) allowed.push(0);
+        if (pr1?.checked) allowed.push(1);
+        if (pr2?.checked) allowed.push(2);
+
+        if (!allowed.length) {
+            pr0.checked = true;
+            allowed.push(0);
+        }
+
+        Array.from(defaultPrioritySelect.options || []).forEach(opt => {
+            const val = toInt(opt.value, 0);
+            opt.disabled = !allowed.includes(val);
+        });
+
+        const currentDefault = toInt(defaultPrioritySelect.value, 0);
+        if (!allowed.includes(currentDefault)) {
+            defaultPrioritySelect.value = String(Math.min(...allowed));
+        }
+    };
+
+    const openPushoverGrantPersonPicker = (availableUserIds) => {
+        return new Promise((resolve) => {
+            let resolved = false;
+            const close = (value = null) => {
+                if (resolved) return;
+                resolved = true;
+                if (modal) {
+                    modal.style.display = 'none';
+                    modal.onclick = null;
+                }
+                resolve(value);
+            };
+
+            let modal = document.getElementById('pushoverGrantPersonModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'pushoverGrantPersonModal';
+                modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+                document.body.appendChild(modal);
+            }
+
+            const ids = Array.isArray(availableUserIds) ? availableUserIds : [];
+            const listHtml = ids.length
+                ? ids.map(uid => {
+                    const name = USERS[uid]?.name || uid;
+                    return `
+                        <button type="button" data-sender-id="${uid}"
+                            class="w-full p-3 text-left bg-gray-50 hover:bg-indigo-50 border border-gray-200 hover:border-indigo-300 rounded-lg transition flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold">
+                                ${(name || '?').charAt(0).toUpperCase()}
+                            </div>
+                            <span class="font-semibold text-gray-800">${name}</span>
+                        </button>
+                    `;
+                }).join('')
+                : '<div class="text-sm text-gray-600">Keine verfügbare Person gefunden.</div>';
+
+            modal.innerHTML = `
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                    <div class="bg-gradient-to-r from-indigo-600 to-blue-600 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                        <h3 class="text-xl font-bold">Person auswählen</h3>
+                        <button type="button" id="closePushoverGrantPersonModal" class="text-white/80 hover:text-white transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="p-4">
+                        <p class="text-sm text-gray-600 mb-3">Für welche Person willst du eine neue Berechtigung anlegen?</p>
+                        <div class="space-y-2 max-h-64 overflow-y-auto">${listHtml}</div>
+                    </div>
+                    <div class="p-4 bg-gray-100 rounded-b-2xl">
+                        <button type="button" id="cancelPushoverGrantPersonModal"
+                            class="w-full px-4 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
+                            Abbrechen
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            modal.style.display = 'flex';
+
+            modal.onclick = (e) => {
+                if (e.target === modal) close(null);
+            };
+
+            modal.querySelector('#closePushoverGrantPersonModal')?.addEventListener('click', () => close(null));
+            modal.querySelector('#cancelPushoverGrantPersonModal')?.addEventListener('click', () => close(null));
+
+            modal.querySelectorAll('button[data-sender-id]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = btn.getAttribute('data-sender-id');
+                    close(id || null);
+                });
+            });
+        });
+    };
+
     const clearPushoverSenderGrantEditor = () => {
         const senderSelect = document.getElementById('pushoverGrantSenderSelect');
         const titlesArea = document.getElementById('pushoverGrantAllowedTitles');
@@ -891,7 +1007,6 @@ export function setupEventListeners() {
         const pr1 = document.getElementById('pushoverGrantPriority1');
         const pr2 = document.getElementById('pushoverGrantPriority2');
         const defaultPrioritySelect = document.getElementById('pushoverGrantDefaultPriority');
-
         const retryPresetsArea = document.getElementById('pushoverGrantRetryPresets');
         const expirePresetsArea = document.getElementById('pushoverGrantExpirePresets');
 
@@ -909,6 +1024,8 @@ export function setupEventListeners() {
         if (defaultPrioritySelect) defaultPrioritySelect.value = '0';
         if (retryPresetsArea) retryPresetsArea.value = '';
         if (expirePresetsArea) expirePresetsArea.value = '';
+
+        updatePushoverGrantPriorityUI();
     };
 
     const applyPushoverSenderGrantToEditor = (senderId, grantData) => {
@@ -950,6 +1067,8 @@ export function setupEventListeners() {
         if (defaultPrioritySelect) defaultPrioritySelect.value = String(defaultPriority);
         if (retryPresetsArea) retryPresetsArea.value = (retryPresets || []).map(v => String(v)).join('\n');
         if (expirePresetsArea) expirePresetsArea.value = (expirePresets || []).map(v => String(v)).join('\n');
+
+        updatePushoverGrantPriorityUI();
     };
 
     const renderPushoverSenderGrantTiles = () => {
@@ -1023,8 +1142,10 @@ export function setupEventListeners() {
 
         if (pushoverSelectedSenderId) {
             applyPushoverSenderGrantToEditor(pushoverSelectedSenderId, pushoverSenderGrantCache[pushoverSelectedSenderId] || null);
+            setPushoverGrantEditorOpen(true);
         } else {
             clearPushoverSenderGrantEditor();
+            setPushoverGrantEditorOpen(false);
         }
     };
 
@@ -1257,6 +1378,15 @@ export function setupEventListeners() {
         const allowTitle = document.getElementById('pushoverGrantAllowTitleFreeText');
         const allowMessage = document.getElementById('pushoverGrantAllowMessageFreeText');
 
+        const prMinus2 = document.getElementById('pushoverGrantPriorityMinus2');
+        const prMinus1 = document.getElementById('pushoverGrantPriorityMinus1');
+        const pr0 = document.getElementById('pushoverGrantPriority0');
+        const pr1 = document.getElementById('pushoverGrantPriority1');
+        const pr2 = document.getElementById('pushoverGrantPriority2');
+        const defaultPrioritySelect = document.getElementById('pushoverGrantDefaultPriority');
+        const retryPresetsArea = document.getElementById('pushoverGrantRetryPresets');
+        const expirePresetsArea = document.getElementById('pushoverGrantExpirePresets');
+
         const allowedTitles = parseLines(titlesArea?.value);
         const allowedMessages = parseLines(messagesArea?.value);
 
@@ -1267,9 +1397,16 @@ export function setupEventListeners() {
         if (pr1?.checked) allowedPriorities.push(1);
         if (pr2?.checked) allowedPriorities.push(2);
 
-        const defaultPriority = toInt(defaultPrioritySelect?.value, 0);
+        if (!allowedPriorities.length) {
+            if (pr0) pr0.checked = true;
+            allowedPriorities.push(0);
+            updatePushoverGrantPriorityUI();
+        }
+
+        let defaultPriority = toInt(defaultPrioritySelect?.value, 0);
         if (!allowedPriorities.includes(defaultPriority)) {
-            allowedPriorities.push(defaultPriority);
+            defaultPriority = Math.min(...allowedPriorities);
+            if (defaultPrioritySelect) defaultPrioritySelect.value = String(defaultPriority);
         }
 
         const retryPresets = parseLines(retryPresetsArea?.value).map(v => toInt(v, 60)).filter(v => v >= 30 && v <= 10800);
@@ -1343,6 +1480,7 @@ export function setupEventListeners() {
             ]);
             if (pushoverSelectedSenderId === senderId) pushoverSelectedSenderId = null;
             clearPushoverSenderGrantEditor();
+            setPushoverGrantEditorOpen(false);
             showPushoverSettingsStatus('Berechtigung gelöscht.', true);
             await loadPushoverSenderGrantsForCurrentUser();
         } catch (e) {
@@ -1376,6 +1514,9 @@ export function setupEventListeners() {
         }
 
         setPushoverSetupOpen(false);
+
+        pushoverSelectedSenderId = null;
+        setPushoverGrantEditorOpen(false);
 
         await loadPushoverSenderGrantsForCurrentUser();
     };
@@ -1903,8 +2044,19 @@ export function setupEventListeners() {
             const senderId = btn.dataset.senderId;
 
             if (action === 'new') {
-                pushoverSelectedSenderId = null;
-                clearPushoverSenderGrantEditor();
+                const recipientId = getPushoverSettingsRecipientId();
+                const availableUserIds = Object.keys(USERS || {})
+                    .filter(uid => uid && uid !== recipientId)
+                    .filter(uid => USERS[uid]?.isActive !== false);
+
+                const chosen = await openPushoverGrantPersonPicker(availableUserIds);
+                if (!chosen) {
+                    return;
+                }
+
+                pushoverSelectedSenderId = chosen;
+                applyPushoverSenderGrantToEditor(chosen, pushoverSenderGrantCache[chosen] || null);
+                setPushoverGrantEditorOpen(true);
                 renderPushoverSenderGrantTiles();
                 return;
             }
@@ -1912,6 +2064,7 @@ export function setupEventListeners() {
             if (senderId) {
                 pushoverSelectedSenderId = senderId;
                 applyPushoverSenderGrantToEditor(senderId, pushoverSenderGrantCache[senderId] || null);
+                setPushoverGrantEditorOpen(true);
                 renderPushoverSenderGrantTiles();
             }
         });
@@ -1923,11 +2076,42 @@ export function setupEventListeners() {
         pushoverGrantSenderSelect.addEventListener('change', () => {
             const senderId = String(pushoverGrantSenderSelect.value || '').trim();
             pushoverSelectedSenderId = senderId || null;
+            if (!senderId) {
+                clearPushoverSenderGrantEditor();
+                setPushoverGrantEditorOpen(false);
+                renderPushoverSenderGrantTiles();
+                return;
+            }
             applyPushoverSenderGrantToEditor(senderId, pushoverSenderGrantCache[senderId] || null);
+            setPushoverGrantEditorOpen(true);
             renderPushoverSenderGrantTiles();
         });
         pushoverGrantSenderSelect.dataset.listenerAttached = 'true';
     }
+
+    const pushoverGrantDefaultPriority = document.getElementById('pushoverGrantDefaultPriority');
+    if (pushoverGrantDefaultPriority && !pushoverGrantDefaultPriority.dataset.listenerAttached) {
+        pushoverGrantDefaultPriority.addEventListener('change', () => {
+            updatePushoverGrantPriorityUI();
+        });
+        pushoverGrantDefaultPriority.dataset.listenerAttached = 'true';
+    }
+
+    const grantPriorityCheckboxIds = [
+        'pushoverGrantPriorityMinus2',
+        'pushoverGrantPriorityMinus1',
+        'pushoverGrantPriority0',
+        'pushoverGrantPriority1',
+        'pushoverGrantPriority2'
+    ];
+    grantPriorityCheckboxIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el || el.dataset.listenerAttached) return;
+        el.addEventListener('change', () => {
+            updatePushoverGrantPriorityUI();
+        });
+        el.dataset.listenerAttached = 'true';
+    });
 
     const savePushoverSenderGrantButton = document.getElementById('savePushoverSenderGrantButton');
     if (savePushoverSenderGrantButton && !savePushoverSenderGrantButton.dataset.listenerAttached) {
