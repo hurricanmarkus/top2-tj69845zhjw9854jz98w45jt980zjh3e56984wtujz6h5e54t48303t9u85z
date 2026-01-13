@@ -154,6 +154,11 @@ export function renderRoleManagement() {
     const allRolePermissions = {
         'ENTRANCE': { label: 'Haupteingang öffnen', indent: false },
         'PUSHOVER': { label: 'Push-Nachricht senden', indent: false },
+        'PUSHOVER_SETTINGS_GRANTS': { label: '-> Einstellungen-Button zum Berechtigungen anlegen', indent: true },
+        'PUSHOVER_NOTRUF_SETTINGS': { label: '-> Notruf-Einstellungen', indent: true },
+        'PUSHOVER_NOTRUF_SETTINGS_FLIC': { label: '-> -> Flic-Notruf-Button', indent: true },
+        'PUSHOVER_NOTRUF_SETTINGS_NACHRICHTENCENTER': { label: '-> -> Nachrichtencenter', indent: true },
+        'PUSHOVER_NOTRUF_SETTINGS_ALARM_PROGRAMME': { label: '-> -> Alarm-Programme', indent: true },
         'CHECKLIST': { label: 'Aktuelle Checkliste', indent: false },
         'CHECKLIST_SWITCH': { label: '-> Listen umschalten', indent: true },
         'CHECKLIST_SETTINGS': { label: '-> Checkliste-Einstellungen', indent: true },
@@ -175,10 +180,8 @@ export function renderRoleManagement() {
     const newRolePermsContainer = document.getElementById('newRolePermissions');
     Object.keys(allRolePermissions).forEach(permKey => {
         const perm = allRolePermissions[permKey];
-        const marginLeft = perm.indent ? 'pl-6' : '';
-        
-        const isSubPermission = permKey.startsWith('CHECKLIST_') || permKey.startsWith('TERMINPLANER_') || permKey.startsWith('ZAHLUNGSVERWALTUNG_') || permKey.startsWith('TICKET_SUPPORT_') || permKey.startsWith('WERTGUTHABEN_') || permKey.startsWith('HAUSHALTSZAHLUNGEN_') || permKey.startsWith('GESCHENKEMANAGEMENT_');
-        const isDisabled = isSubPermission ? 'disabled' : ''; 
+        const marginLeft = permKey.startsWith('PUSHOVER_NOTRUF_SETTINGS_') ? 'pl-12' : (perm.indent ? 'pl-6' : '');
+        const isDisabled = perm.indent ? 'disabled' : ''; 
         
         newRolePermsContainer.innerHTML += `
             <label class="flex items-center gap-2 cursor-pointer ${marginLeft}">
@@ -198,6 +201,8 @@ export function renderRoleManagement() {
             permissionsCheckboxesHTML = `<p class="text-sm font-semibold text-purple-700 italic p-2 bg-purple-50 rounded-lg">Alle Rechte freigeschaltet</p>`;
         } else {
             const isChecklistEnabled = role.permissions?.includes('CHECKLIST'); 
+            const isPushoverEnabled = role.permissions?.includes('PUSHOVER');
+            const isPushoverNotrufEnabled = role.permissions?.includes('PUSHOVER_NOTRUF_SETTINGS');
             const isTerminplanerEnabled = role.permissions?.includes('TERMINPLANER'); 
             const isZahlungsverwaltungEnabled = role.permissions?.includes('ZAHLUNGSVERWALTUNG');
             const isHaushaltszahlungenEnabled = role.permissions?.includes('HAUSHALTSZAHLUNGEN');
@@ -209,6 +214,12 @@ export function renderRoleManagement() {
                 
                 let isDisabled = !canEditThisRole;
                 if (permKey.startsWith('CHECKLIST_') && !isChecklistEnabled) {
+                    isDisabled = true;
+                }
+                if (permKey.startsWith('PUSHOVER_') && permKey !== 'PUSHOVER' && !isPushoverEnabled) {
+                    isDisabled = true;
+                }
+                if (permKey.startsWith('PUSHOVER_NOTRUF_SETTINGS_') && !isPushoverNotrufEnabled) {
                     isDisabled = true;
                 }
                 if (permKey.startsWith('TERMINPLANER_') && !isTerminplanerEnabled) {
@@ -224,11 +235,10 @@ export function renderRoleManagement() {
                     isDisabled = true;
                 }
                 
-                const disabledAttr = isDisabled ? 'disabled' : '';
-                const marginLeft = perm.indent ? 'pl-6' : '';
+                const marginLeft = permKey.startsWith('PUSHOVER_NOTRUF_SETTINGS_') ? 'pl-12' : (perm.indent ? 'pl-6' : '');
                 return `
-                    <label class="flex items-center gap-2 ${canEditThisRole ? 'cursor-pointer' : ''} ${marginLeft} ${disabledAttr ? 'opacity-50' : ''}">
-                        <input type="checkbox" class="role-perm-toggle" data-roleid="${role.id}" data-perm="${permKey}" ${isChecked} ${disabledAttr}> 
+                    <label class="flex items-center gap-2 ${canEditThisRole ? 'cursor-pointer' : ''} ${marginLeft} ${isDisabled ? 'opacity-50' : ''}">
+                        <input type="checkbox" class="role-perm-toggle" data-roleid="${role.id}" data-perm="${permKey}" ${isChecked} ${isDisabled ? 'disabled' : ''}> 
                         <span>${perm.label}</span>
                     </label>`;
             }).join('');
@@ -274,6 +284,8 @@ export function renderRoleManagement() {
         };
 
         setupPair('CHECKLIST', ['CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS']);
+        setupPair('PUSHOVER', ['PUSHOVER_SETTINGS_GRANTS', 'PUSHOVER_NOTRUF_SETTINGS']);
+        setupPair('PUSHOVER_NOTRUF_SETTINGS', ['PUSHOVER_NOTRUF_SETTINGS_FLIC', 'PUSHOVER_NOTRUF_SETTINGS_NACHRICHTENCENTER', 'PUSHOVER_NOTRUF_SETTINGS_ALARM_PROGRAMME']);
         setupPair('TERMINPLANER', ['TERMINPLANER_CREATE']);
         setupPair('ZAHLUNGSVERWALTUNG', ['ZAHLUNGSVERWALTUNG_CREATE']);
         setupPair('HAUSHALTSZAHLUNGEN', ['HAUSHALTSZAHLUNGEN_CREATE']);

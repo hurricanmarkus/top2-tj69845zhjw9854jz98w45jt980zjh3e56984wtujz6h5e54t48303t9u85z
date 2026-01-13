@@ -37,7 +37,10 @@ export function setupPermissionDependencies(container) {
                 // Wenn der Haupt-Haken AUSgeschaltet wird...
                 if (!isEnabled) {
                     // ...muss auch der Haken beim Unter-Punkt entfernt werden.
-                    toggle.checked = false;
+                    if (toggle.checked) {
+                        toggle.checked = false;
+                        toggle.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
                 }
             });
         };
@@ -82,6 +85,23 @@ export function setupPermissionDependencies(container) {
         [ // Unter-Schalter
             '[data-perm="CHECKLIST_SWITCH"]',
             '[data-perm="CHECKLIST_SETTINGS"]'
+        ]
+    );
+
+    setupToggleLogic(
+        '[data-perm="PUSHOVER"]',
+        [
+            '[data-perm="PUSHOVER_SETTINGS_GRANTS"]',
+            '[data-perm="PUSHOVER_NOTRUF_SETTINGS"]'
+        ]
+    );
+
+    setupToggleLogic(
+        '[data-perm="PUSHOVER_NOTRUF_SETTINGS"]',
+        [
+            '[data-perm="PUSHOVER_NOTRUF_SETTINGS_FLIC"]',
+            '[data-perm="PUSHOVER_NOTRUF_SETTINGS_NACHRICHTENCENTER"]',
+            '[data-perm="PUSHOVER_NOTRUF_SETTINGS_ALARM_PROGRAMME"]'
         ]
     );
 

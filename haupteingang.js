@@ -699,7 +699,7 @@ export function navigate(targetViewName) {
                 return alertUser("Zugriff verweigert (Admin).", 'error');
             }
         }
-        if (targetViewName === 'notrufSettings' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Notruf-Einstellungen).", 'error');
+        if (targetViewName === 'notrufSettings' && (!userPermissions.includes('PUSHOVER') || !userPermissions.includes('PUSHOVER_NOTRUF_SETTINGS'))) return alertUser("Zugriff verweigert (Notruf-Einstellungen).", 'error');
         
         // Zugriffsschutz für Zahlungsverwaltung
         if ((targetViewName === 'zahlungsverwaltung' || targetViewName === 'zahlungsverwaltungSettings') && !userPermissions.includes('ZAHLUNGSVERWALTUNG')) {
@@ -1664,6 +1664,12 @@ export function setupEventListeners() {
             const toggleBtn = document.getElementById('pushoverSettingsToggleButton');
             const currentMode = toggleBtn?.dataset?.mode || 'send';
             const next = currentMode === 'settings' ? 'send' : 'settings';
+            const userPermissions = currentUser.permissions || [];
+            const isSystemAdmin = currentUser.role === 'SYSTEMADMIN';
+            if (next === 'settings' && !(isSystemAdmin || userPermissions.includes('PUSHOVER_SETTINGS_GRANTS'))) {
+                alertUser('Zugriff verweigert (Einstellungen).', 'error');
+                return;
+            }
             setPushoverViewMode(next);
             if (next === 'settings') {
                 loadAndRenderPushoverSettings();

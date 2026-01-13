@@ -297,7 +297,19 @@ export async function checkCurrentUserValidity() {
             userPermissions = [...(user.customPermissions || [])];
         }
         if (effectiveRole === 'SYSTEMADMIN') {
-            userPermissions = ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG'];
+            userPermissions = [
+                'ENTRANCE',
+                'PUSHOVER',
+                'PUSHOVER_SETTINGS_GRANTS',
+                'PUSHOVER_NOTRUF_SETTINGS',
+                'PUSHOVER_NOTRUF_SETTINGS_FLIC',
+                'PUSHOVER_NOTRUF_SETTINGS_NACHRICHTENCENTER',
+                'PUSHOVER_NOTRUF_SETTINGS_ALARM_PROGRAMME',
+                'CHECKLIST',
+                'CHECKLIST_SWITCH',
+                'CHECKLIST_SETTINGS',
+                'ESSENSBERECHNUNG'
+            ];
         }
 
         // --- TEIL 2: Lade ADMIN-Rechte ---
@@ -428,6 +440,48 @@ export function updateUIForMode() {
             card.style.display = isAllowed ? 'flex' : 'none';
         }
     });
+
+    const userPermissions = currentUser.permissions || [];
+    const isAllowedBySysadmin = currentUser.role === 'SYSTEMADMIN';
+
+    const pushoverSettingsToggleButton = document.getElementById('pushoverSettingsToggleButton');
+    const canSeePushoverSettings = isAllowedBySysadmin || userPermissions.includes('PUSHOVER_SETTINGS_GRANTS');
+    if (pushoverSettingsToggleButton) pushoverSettingsToggleButton.style.display = canSeePushoverSettings ? 'block' : 'none';
+
+    if (!canSeePushoverSettings) {
+        const sendSection = document.getElementById('pushoverSendSection');
+        const settingsSection = document.getElementById('pushoverSettingsSection');
+        if (sendSection) sendSection.classList.remove('hidden');
+        if (settingsSection) settingsSection.classList.add('hidden');
+        if (pushoverSettingsToggleButton) pushoverSettingsToggleButton.dataset.mode = 'send';
+    }
+
+    const notrufSettingsButton = document.getElementById('notrufSettingsButton');
+    const canSeeNotrufSettings = isAllowedBySysadmin || userPermissions.includes('PUSHOVER_NOTRUF_SETTINGS');
+    if (notrufSettingsButton) notrufSettingsButton.style.display = canSeeNotrufSettings ? 'block' : 'none';
+
+    const notrufView = document.getElementById('notrufSettingsView');
+    if (notrufView) {
+        const tabsContainer = notrufView.querySelector('#notruf-settings-tabs');
+        const tabFlic = tabsContainer?.querySelector('[data-target-card="card-flic-notruf"]');
+        const tabNachrichtencenter = tabsContainer?.querySelector('[data-target-card="card-nachrichtencenter"]');
+        const tabAlarmProgramme = tabsContainer?.querySelector('[data-target-card="card-app-notruf"]');
+
+        const canSeeFlic = isAllowedBySysadmin || userPermissions.includes('PUSHOVER_NOTRUF_SETTINGS_FLIC');
+        const canSeeNachrichtencenter = isAllowedBySysadmin || userPermissions.includes('PUSHOVER_NOTRUF_SETTINGS_NACHRICHTENCENTER');
+        const canSeeAlarmProgramme = isAllowedBySysadmin || userPermissions.includes('PUSHOVER_NOTRUF_SETTINGS_ALARM_PROGRAMME');
+
+        if (tabFlic) tabFlic.style.display = canSeeFlic ? 'block' : 'none';
+        if (tabNachrichtencenter) tabNachrichtencenter.style.display = canSeeNachrichtencenter ? 'block' : 'none';
+        if (tabAlarmProgramme) tabAlarmProgramme.style.display = canSeeAlarmProgramme ? 'block' : 'none';
+
+        const flicCard = document.getElementById('card-flic-notruf');
+        const nachrichtencenterCard = document.getElementById('card-nachrichtencenter');
+        const alarmCard = document.getElementById('card-app-notruf');
+        if (flicCard && !canSeeFlic) flicCard.classList.add('hidden');
+        if (nachrichtencenterCard && !canSeeNachrichtencenter) nachrichtencenterCard.classList.add('hidden');
+        if (alarmCard && !canSeeAlarmProgramme) alarmCard.classList.add('hidden');
+    }
     // =================================================================
     // ENDE DER KORREKTUR
     // =================================================================

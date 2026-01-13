@@ -397,6 +397,11 @@ export function renderUserManagement() {
     const allPermissions = {
         'ENTRANCE': 'Haupteingang öffnen',
         'PUSHOVER': 'Push-Nachricht senden',
+        'PUSHOVER_SETTINGS_GRANTS': '-> Einstellungen-Button zum Berechtigungen anlegen',
+        'PUSHOVER_NOTRUF_SETTINGS': '-> Notruf-Einstellungen',
+        'PUSHOVER_NOTRUF_SETTINGS_FLIC': '-> -> Flic-Notruf-Button',
+        'PUSHOVER_NOTRUF_SETTINGS_NACHRICHTENCENTER': '-> -> Nachrichtencenter',
+        'PUSHOVER_NOTRUF_SETTINGS_ALARM_PROGRAMME': '-> -> Alarm-Programme',
         'CHECKLIST': 'Aktuelle Checkliste',
         'CHECKLIST_SWITCH': '-> Listen umschalten',
         'CHECKLIST_SETTINGS': '-> Checkliste-Einstellungen',
@@ -493,9 +498,19 @@ export function renderUserManagement() {
             // Diese Schleife erstellt jetzt automatisch die neuen Checkboxen
             // basierend auf der von uns geänderten 'allPermissions'-Liste.
             const allPermissionsHTML = Object.keys(allPermissions).map(permKey => {
-                // Hier prüfen wir, ob die Berechtigung eingerückt werden soll
-                const isSubPermission = permKey.startsWith('CHECKLIST_') || permKey.startsWith('TERMINPLANER_') || permKey.startsWith('ZAHLUNGSVERWALTUNG_') || permKey.startsWith('TICKET_SUPPORT_') || permKey.startsWith('WERTGUTHABEN_');
-                const marginLeft = isSubPermission ? 'pl-6' : '';
+                let marginLeft = '';
+                if (permKey.startsWith('PUSHOVER_NOTRUF_SETTINGS_')) {
+                    marginLeft = 'pl-12';
+                } else {
+                    const isSubPermission =
+                        permKey.startsWith('CHECKLIST_') ||
+                        permKey.startsWith('TERMINPLANER_') ||
+                        permKey.startsWith('ZAHLUNGSVERWALTUNG_') ||
+                        permKey.startsWith('TICKET_SUPPORT_') ||
+                        permKey.startsWith('WERTGUTHABEN_') ||
+                        (permKey.startsWith('PUSHOVER_') && permKey !== 'PUSHOVER');
+                    marginLeft = isSubPermission ? 'pl-6' : '';
+                }
 
                 return `<label class="flex items-center ${marginLeft}">
                            <input type="checkbox" class="custom-perm-checkbox h-4 w-4" data-perm="${permKey}" ${(user.customPermissions || []).includes(permKey) ? 'checked' : ''} ${!canChangePerms ? 'disabled' : ''}>
