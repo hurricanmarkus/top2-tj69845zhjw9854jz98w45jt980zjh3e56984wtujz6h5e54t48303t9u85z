@@ -898,6 +898,44 @@ export function setupEventListeners() {
         notice.classList.toggle('hidden', !open);
     };
 
+    const updatePushoverSendButtonState = () => {
+        const sendBtn = document.getElementById('sendDynamicPostButton');
+        if (!sendBtn) return;
+
+        const details = document.getElementById('pushoverSendDetails');
+        const recipientSelect = document.getElementById('pushoverRecipient');
+        const titleInput = document.getElementById('pushoverTitle');
+        const messageInput = document.getElementById('pushoverMessage');
+        const prioritySelect = document.getElementById('pushoverPriority');
+
+        const hasRecipient = Boolean(String(recipientSelect?.value || '').trim());
+        const hasTitle = Boolean(String(titleInput?.value || '').trim());
+        const hasMessage = Boolean(String(messageInput?.value || '').trim());
+        const hasPriority = Boolean(String(prioritySelect?.value ?? '').trim());
+        const detailsOpen = details ? !details.classList.contains('hidden') : false;
+
+        sendBtn.disabled = !(detailsOpen && hasRecipient && hasTitle && hasMessage && hasPriority);
+    };
+
+    const updatePushoverGrantSaveButtonState = () => {
+        const saveBtn = document.getElementById('savePushoverSenderGrantButton');
+        if (!saveBtn) return;
+
+        const senderSelect = document.getElementById('pushoverGrantSenderSelect');
+        const titlesArea = document.getElementById('pushoverGrantAllowedTitles');
+        const messagesArea = document.getElementById('pushoverGrantAllowedMessages');
+        const allowTitle = document.getElementById('pushoverGrantAllowTitleFreeText');
+        const allowMessage = document.getElementById('pushoverGrantAllowMessageFreeText');
+
+        const senderOk = Boolean(String(senderSelect?.value || '').trim());
+        const titles = parseLines(titlesArea?.value);
+        const messages = parseLines(messagesArea?.value);
+        const titleOk = allowTitle?.checked === true || titles.length > 0;
+        const messageOk = allowMessage?.checked === true || messages.length > 0;
+
+        saveBtn.disabled = !(senderOk && titleOk && messageOk);
+    };
+
     const updatePushoverGrantPriorityUI = () => {
         const prMinus2 = document.getElementById('pushoverGrantPriorityMinus2');
         const prMinus1 = document.getElementById('pushoverGrantPriorityMinus1');
@@ -1040,6 +1078,7 @@ export function setupEventListeners() {
         if (expirePresetsArea) expirePresetsArea.value = '';
 
         updatePushoverGrantPriorityUI();
+        updatePushoverGrantSaveButtonState();
     };
 
     const applyPushoverSenderGrantToEditor = (senderId, grantData) => {
@@ -1083,6 +1122,7 @@ export function setupEventListeners() {
         if (expirePresetsArea) expirePresetsArea.value = (expirePresets || []).map(v => String(v)).join('\n');
 
         updatePushoverGrantPriorityUI();
+        updatePushoverGrantSaveButtonState();
     };
 
     const renderPushoverSenderGrantTiles = () => {
@@ -1298,6 +1338,7 @@ export function setupEventListeners() {
             recipientSelect.disabled = true;
             setPushoverSendDetailsOpen(false);
             setPushoverNoRecipientsNoticeOpen(false);
+            updatePushoverSendButtonState();
             return;
         }
         if (!currentUser?.mode || currentUser.mode === GUEST_MODE) {
@@ -1306,6 +1347,7 @@ export function setupEventListeners() {
             recipientSelect.disabled = true;
             setPushoverSendDetailsOpen(false);
             setPushoverNoRecipientsNoticeOpen(false);
+            updatePushoverSendButtonState();
             return;
         }
 
@@ -1331,6 +1373,7 @@ export function setupEventListeners() {
                 recipientSelect.disabled = true;
                 setPushoverSendDetailsOpen(false);
                 setPushoverNoRecipientsNoticeOpen(true);
+                updatePushoverSendButtonState();
                 return;
             }
 
@@ -1340,6 +1383,7 @@ export function setupEventListeners() {
             recipientSelect.disabled = false;
             setPushoverSendDetailsOpen(false);
             setPushoverNoRecipientsNoticeOpen(false);
+            updatePushoverSendButtonState();
         } catch (e) {
             console.error('PushoverProgram: Fehler beim Laden der Empfänger-Grants:', e);
             recipientSelect.innerHTML = '<option value="" disabled selected>Fehler beim Laden</option>';
@@ -1347,6 +1391,7 @@ export function setupEventListeners() {
             recipientSelect.disabled = true;
             setPushoverSendDetailsOpen(false);
             setPushoverNoRecipientsNoticeOpen(false);
+            updatePushoverSendButtonState();
         }
     };
 
@@ -1419,6 +1464,20 @@ export function setupEventListeners() {
         const allowedTitles = parseLines(titlesArea?.value);
         const allowedMessages = parseLines(messagesArea?.value);
 
+        const allowTitleFreeText = allowTitle?.checked === true;
+        const allowMessageFreeText = allowMessage?.checked === true;
+
+        if (!allowTitleFreeText && !allowedTitles.length) {
+            showPushoverSettingsStatus('Bitte mindestens einen Titel eintragen oder Freitext beim Titel erlauben.', true);
+            updatePushoverGrantSaveButtonState();
+            return;
+        }
+        if (!allowMessageFreeText && !allowedMessages.length) {
+            showPushoverSettingsStatus('Bitte mindestens eine Nachricht eintragen oder Freitext bei der Nachricht erlauben.', true);
+            updatePushoverGrantSaveButtonState();
+            return;
+        }
+
         const allowedPriorities = [];
         if (prMinus2?.checked) allowedPriorities.push(-2);
         if (prMinus1?.checked) allowedPriorities.push(-1);
@@ -1452,8 +1511,8 @@ export function setupEventListeners() {
             grantedBy: recipientName,
             allowedTitles,
             allowedMessages,
-            allowTitleFreeText: allowTitle?.checked === true,
-            allowMessageFreeText: allowMessage?.checked === true,
+            allowTitleFreeText,
+            allowMessageFreeText,
             allowedPriorities: Array.from(new Set(allowedPriorities)).sort((a, b) => a - b),
             defaultPriority,
             retryPresets,
@@ -1582,6 +1641,7 @@ export function setupEventListeners() {
         }
         setPushoverSendDetailsOpen(false);
         setPushoverNoRecipientsNoticeOpen(false);
+        updatePushoverSendButtonState();
     };
 
     // Event listener for the app header to navigate home
@@ -1917,6 +1977,9 @@ export function setupEventListeners() {
                 if (!title) return alertUser('Bitte Titel wählen/eingeben.', 'error');
                 if (!message) return alertUser('Bitte Nachricht wählen/eingeben.', 'error');
 
+                const priorityRaw = String(prioritySelect.value ?? '').trim();
+                if (priorityRaw === '') return alertUser('Bitte Priorität wählen.', 'error');
+
                 if (!allowTitleFreeText) {
                     if (!allowedTitles.length) {
                         return alertUser('Titel ist nicht erlaubt (keine Titel freigegeben).', 'error');
@@ -1987,6 +2050,7 @@ export function setupEventListeners() {
             });
             sendDynamicPostButton.dataset.listenerAttached = 'true';
         }
+        updatePushoverSendButtonState();
     }
 
     const pushoverRecipientSelect = document.getElementById('pushoverRecipient');
@@ -2000,6 +2064,7 @@ export function setupEventListeners() {
             if (!rid) {
                 setPushoverSendDetailsOpen(false);
                 pushoverRecipientSelect.disabled = false;
+                updatePushoverSendButtonState();
                 return;
             }
 
@@ -2008,12 +2073,14 @@ export function setupEventListeners() {
                 alertUser('Empfänger ist noch nicht eingerichtet.', 'error');
                 setPushoverSendDetailsOpen(false);
                 pushoverRecipientSelect.disabled = false;
+                updatePushoverSendButtonState();
                 return;
             }
 
             applyPushoverConfigToSendForm(rid, cfg);
             setPushoverSendDetailsOpen(true);
             pushoverRecipientSelect.disabled = true;
+            updatePushoverSendButtonState();
         });
         pushoverRecipientSelect.dataset.listenerAttached = 'true';
     }
@@ -2023,6 +2090,7 @@ export function setupEventListeners() {
         titlePresetSelect.addEventListener('change', () => {
             const titleInput = document.getElementById('pushoverTitle');
             if (titleInput) titleInput.value = titlePresetSelect.value || '';
+            updatePushoverSendButtonState();
         });
         titlePresetSelect.dataset.listenerAttached = 'true';
     }
@@ -2032,6 +2100,7 @@ export function setupEventListeners() {
         messagePresetSelect.addEventListener('change', () => {
             const messageInput = document.getElementById('pushoverMessage');
             if (messageInput) messageInput.value = messagePresetSelect.value || '';
+            updatePushoverSendButtonState();
         });
         messagePresetSelect.dataset.listenerAttached = 'true';
     }
@@ -2043,8 +2112,25 @@ export function setupEventListeners() {
             if (!emergencyOptions) return;
             const show = toInt(prioritySelect.value, 0) === 2;
             emergencyOptions.classList.toggle('hidden', !show);
+            updatePushoverSendButtonState();
         });
         prioritySelect.dataset.listenerAttached = 'true';
+    }
+
+    const pushoverTitleInput = document.getElementById('pushoverTitle');
+    if (pushoverTitleInput && !pushoverTitleInput.dataset.listenerAttached) {
+        pushoverTitleInput.addEventListener('input', () => {
+            updatePushoverSendButtonState();
+        });
+        pushoverTitleInput.dataset.listenerAttached = 'true';
+    }
+
+    const pushoverMessageInput = document.getElementById('pushoverMessage');
+    if (pushoverMessageInput && !pushoverMessageInput.dataset.listenerAttached) {
+        pushoverMessageInput.addEventListener('input', () => {
+            updatePushoverSendButtonState();
+        });
+        pushoverMessageInput.dataset.listenerAttached = 'true';
     }
 
     const retryPresetSelect = document.getElementById('pushoverRetryPreset');
@@ -2157,8 +2243,41 @@ export function setupEventListeners() {
             applyPushoverSenderGrantToEditor(senderId, pushoverSenderGrantCache[senderId] || null);
             setPushoverGrantEditorOpen(true);
             renderPushoverSenderGrantTiles();
+            updatePushoverGrantSaveButtonState();
         });
         pushoverGrantSenderSelect.dataset.listenerAttached = 'true';
+    }
+
+    const pushoverGrantAllowedTitles = document.getElementById('pushoverGrantAllowedTitles');
+    if (pushoverGrantAllowedTitles && !pushoverGrantAllowedTitles.dataset.listenerAttached) {
+        pushoverGrantAllowedTitles.addEventListener('input', () => {
+            updatePushoverGrantSaveButtonState();
+        });
+        pushoverGrantAllowedTitles.dataset.listenerAttached = 'true';
+    }
+
+    const pushoverGrantAllowedMessages = document.getElementById('pushoverGrantAllowedMessages');
+    if (pushoverGrantAllowedMessages && !pushoverGrantAllowedMessages.dataset.listenerAttached) {
+        pushoverGrantAllowedMessages.addEventListener('input', () => {
+            updatePushoverGrantSaveButtonState();
+        });
+        pushoverGrantAllowedMessages.dataset.listenerAttached = 'true';
+    }
+
+    const pushoverGrantAllowTitleFreeText = document.getElementById('pushoverGrantAllowTitleFreeText');
+    if (pushoverGrantAllowTitleFreeText && !pushoverGrantAllowTitleFreeText.dataset.listenerAttached) {
+        pushoverGrantAllowTitleFreeText.addEventListener('change', () => {
+            updatePushoverGrantSaveButtonState();
+        });
+        pushoverGrantAllowTitleFreeText.dataset.listenerAttached = 'true';
+    }
+
+    const pushoverGrantAllowMessageFreeText = document.getElementById('pushoverGrantAllowMessageFreeText');
+    if (pushoverGrantAllowMessageFreeText && !pushoverGrantAllowMessageFreeText.dataset.listenerAttached) {
+        pushoverGrantAllowMessageFreeText.addEventListener('change', () => {
+            updatePushoverGrantSaveButtonState();
+        });
+        pushoverGrantAllowMessageFreeText.dataset.listenerAttached = 'true';
     }
 
     const pushoverGrantDefaultPriority = document.getElementById('pushoverGrantDefaultPriority');
@@ -2188,10 +2307,16 @@ export function setupEventListeners() {
     const savePushoverSenderGrantButton = document.getElementById('savePushoverSenderGrantButton');
     if (savePushoverSenderGrantButton && !savePushoverSenderGrantButton.dataset.listenerAttached) {
         savePushoverSenderGrantButton.addEventListener('click', async () => {
+            updatePushoverGrantSaveButtonState();
+            if (savePushoverSenderGrantButton.disabled) {
+                showPushoverSettingsStatus('Bitte Titel und Nachricht so konfigurieren, dass Senden möglich ist (Liste oder Freitext).', true);
+                return;
+            }
             await savePushoverSenderGrant();
         });
         savePushoverSenderGrantButton.dataset.listenerAttached = 'true';
     }
+    updatePushoverGrantSaveButtonState();
 
     const deletePushoverSenderGrantButton = document.getElementById('deletePushoverSenderGrantButton');
     if (deletePushoverSenderGrantButton && !deletePushoverSenderGrantButton.dataset.listenerAttached) {

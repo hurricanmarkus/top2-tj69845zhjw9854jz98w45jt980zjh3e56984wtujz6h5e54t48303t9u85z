@@ -648,35 +648,38 @@
 
                         <div id="pushoverSendDetails" class="hidden">
 
-                        <div class="mb-4">
-                            <label for="pushoverTitlePreset" class="block text-sm font-medium text-gray-700 mb-1">Titel (Vorlage)</label>
-                            <select id="pushoverTitlePreset"
-                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-5900 bg-white">
-                                <option value="" disabled selected>Bitte warten...</option>
-                            </select>
+                        <div class="mb-4 p-3 rounded-lg border border-gray-200 bg-gray-50 space-y-3">
+                            <div>
+                                <label for="pushoverTitlePreset" class="block text-sm font-medium text-gray-700 mb-1">Titel (Vorlage)</label>
+                                <select id="pushoverTitlePreset"
+                                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-5900 bg-white">
+                                    <option value="" disabled selected>Bitte warten...</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label for="pushoverTitle" class="block text-sm font-medium text-gray-700 mb-1">Titel</label>
+                                <input type="text" id="pushoverTitle" placeholder="Ihr Betreff..."
+                                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                    value="">
+                            </div>
                         </div>
 
-                        <div class="mb-4">
-                            <label for="pushoverTitle" class="block text-sm font-medium text-gray-700 mb-1">Titel</label>
-                            <input type="text" id="pushoverTitle" placeholder="Info über TOP 2 APP"
-                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                                value="Wichtig: TOP 2 Meldung">
-                        </div>
+                        <div class="mb-4 p-3 rounded-lg border border-gray-200 bg-gray-50 space-y-3">
+                            <div>
+                                <label for="pushoverMessagePreset" class="block text-sm font-medium text-gray-700 mb-1">Nachricht (Vorlage)</label>
+                                <select id="pushoverMessagePreset"
+                                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-5900 bg-white">
+                                    <option value="" disabled selected>Bitte warten...</option>
+                                </select>
+                            </div>
 
-                        <div class="mb-4">
-                            <label for="pushoverMessagePreset" class="block text-sm font-medium text-gray-700 mb-1">Nachricht (Vorlage)</label>
-                            <select id="pushoverMessagePreset"
-                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-5900 bg-white">
-                                <option value="" disabled selected>Bitte warten...</option>
-                            </select>
-                        </div>
-
-                        <div class="mb-4">
-                            <label for="pushoverMessage"
-                                class="block text-sm font-medium text-gray-700 mb-1">Nachricht</label>
-                            <textarea id="pushoverMessage" rows="3"
-                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                                placeholder="Ihre Nachricht..."></textarea>
+                            <div>
+                                <label for="pushoverMessage" class="block text-sm font-medium text-gray-700 mb-1">Nachricht</label>
+                                <textarea id="pushoverMessage" rows="3"
+                                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Ihre Nachricht..."></textarea>
+                            </div>
                         </div>
 
                         <div class="mb-4">
@@ -722,16 +725,18 @@
                             </div>
                         </div>
 
-                        <button id="sendDynamicPostButton"
-                            class="w-full py-3 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 transition duration-200 flex items-center justify-center">
-                            <span class="button-text">Nachricht senden</span>
-                            <div class="loading-spinner"></div>
-                        </button>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button id="sendDynamicPostButton"
+                                class="w-full py-3 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 transition duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                                <span class="button-text">Nachricht senden</span>
+                                <div class="loading-spinner"></div>
+                            </button>
 
-                        <button id="clearPushoverFormButton"
-                            class="w-full mt-2 py-3 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-300 transition duration-200">
-                            Formular leeren
-                        </button>
+                            <button id="clearPushoverFormButton"
+                                class="w-full py-3 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-300 transition duration-200">
+                                Formular leeren
+                            </button>
+                        </div>
                         </div>
                     </div>
                 </div>
@@ -859,7 +864,7 @@
 
                             <div class="grid grid-cols-2 gap-2">
                                 <button id="savePushoverSenderGrantButton"
-                                    class="w-full py-3 bg-emerald-600 text-white font-semibold rounded-lg shadow-md hover:bg-emerald-700 transition duration-200">
+                                    class="w-full py-3 bg-emerald-600 text-white font-semibold rounded-lg shadow-md hover:bg-emerald-700 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
                                     Berechtigung speichern
                                 </button>
                                 <button id="deletePushoverSenderGrantButton"
