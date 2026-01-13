@@ -333,13 +333,10 @@ export function renderRoleManagement() {
         toggle.addEventListener('change', async (e) => {
             const { roleid, perm } = e.target.dataset;
             const role = ROLES[roleid];
-            let permissions = role.permissions || [];
-            if (e.target.checked) {
-                if (!permissions.includes(perm)) permissions.push(perm);
-            } else {
-                permissions = permissions.filter(p => p !== perm);
-            }
+            const permissions = Array.from(document.querySelectorAll(`.role-perm-toggle[data-roleid="${roleid}"]:checked`))
+                .map(cb => cb.dataset.perm);
             await updateDoc(doc(rolesCollectionRef, roleid), { permissions });
+            if (ROLES[roleid]) ROLES[roleid].permissions = permissions;
             await logAdminAction('role_permissions_changed', `Berechtigungen für Rolle '${role.name}' geändert: ${perm} ${e.target.checked ? 'aktiviert' : 'deaktiviert'}.`);
             renderRoleManagement();
         });
