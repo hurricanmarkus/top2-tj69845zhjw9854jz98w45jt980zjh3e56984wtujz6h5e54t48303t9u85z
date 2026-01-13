@@ -1,0 +1,19 @@
+name: Deploy Firebase Rules
+on:
+  push:
+    branches:
+      - main  # Oder dein Haupt-Branch
+    paths:
+      - 'firestore.rules' # Workflow startet nur, wenn sich die Regeln ändern
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Firebase
+        uses: w9jds/firebase-action@master
+        with:
+          args: deploy --only firestore:rules,storage:rules
+        env:
+          GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TOKEN }}
