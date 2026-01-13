@@ -5,7 +5,6 @@ on:
       - main  # Oder dein Haupt-Branch
     paths:
       - 'firestore.rules' # Workflow startet nur, wenn sich die Regeln ändern
-      - 'storage.rules'
 
 jobs:
   deploy:
