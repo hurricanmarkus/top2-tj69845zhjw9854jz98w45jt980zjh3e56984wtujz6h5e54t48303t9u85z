@@ -142,114 +142,114 @@ export function stopAllUserDependentListeners(resetMode = false) {
         stopGeschenkemanagementListeners();
     }
 
-     if (resetMode) {
+    if (resetMode) {
         lastUserDependentListenerMode = null;
     }
 }
 
- function startGlobalListeners() {
-     if (globalListenersStarted) return;
-     globalListenersStarted = true;
+function startGlobalListeners() {
+    if (globalListenersStarted) return;
+    globalListenersStarted = true;
 
-     try {
-         console.log("initializeFirebase: Starte globale Daten-Listener...");
+    try {
+        console.log("initializeFirebase: Starte globale Daten-Listener...");
 
-         onSnapshot(settingsDocRef, (docSnap) => {
-             if (docSnap.exists()) {
-                 adminSettings = docSnap.data();
-             } else {
-                 console.warn("Firebase App Settings Document 'main' not found.");
-                 adminSettings = {};
-             }
-         }, (error) => {
-             console.error("Error listening to settings:", error);
-         });
+        onSnapshot(settingsDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                adminSettings = docSnap.data();
+            } else {
+                console.warn("Firebase App Settings Document 'main' not found.");
+                adminSettings = {};
+            }
+        }, (error) => {
+            console.error("Error listening to settings:", error);
+        });
 
-         onSnapshot(notrufSettingsDocRef, (docSnap) => {
-             if (docSnap.exists()) {
-                 notrufSettings = docSnap.data();
-                 if (!notrufSettings.modes) notrufSettings.modes = [];
-                 if (!notrufSettings.contacts) notrufSettings.contacts = [];
-                 if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
-                 if (!notrufSettings.sounds) notrufSettings.sounds = [];
-                 if (!notrufSettings.flicAssignments) notrufSettings.flicAssignments = { einfach: null, doppel: null, halten: null };
-             } else {
-                 console.warn("Firebase Notruf Settings Document 'notruf' not found, creating default.");
-                 notrufSettings = { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } };
-             }
-         }, (error) => {
-             console.error("Error listening to notruf settings:", error);
-         });
+        onSnapshot(notrufSettingsDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                notrufSettings = docSnap.data();
+                if (!notrufSettings.modes) notrufSettings.modes = [];
+                if (!notrufSettings.contacts) notrufSettings.contacts = [];
+                if (!notrufSettings.apiTokens) notrufSettings.apiTokens = [];
+                if (!notrufSettings.sounds) notrufSettings.sounds = [];
+                if (!notrufSettings.flicAssignments) notrufSettings.flicAssignments = { einfach: null, doppel: null, halten: null };
+            } else {
+                console.warn("Firebase Notruf Settings Document 'notruf' not found, creating default.");
+                notrufSettings = { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } };
+            }
+        }, (error) => {
+            console.error("Error listening to notruf settings:", error);
+        });
 
-         listenForRoleUpdates();
-         listenForAdminRoleUpdates();
-         listenForUserUpdates();
-         listenForApprovalRequests();
-         listenForChecklists();
-         listenForChecklistItems();
-         listenForChecklistGroups();
-         listenForChecklistCategories();
-         listenForTemplates();
-         listenForStacks();
-     } catch (error) {
-         console.error("initializeFirebase: FEHLER beim Starten globaler Listener:", error);
-         alertUser("Fehler beim Initialisieren der globalen Daten-Listener.", "error");
-     }
- }
+        listenForRoleUpdates();
+        listenForAdminRoleUpdates();
+        listenForUserUpdates();
+        listenForApprovalRequests();
+        listenForChecklists();
+        listenForChecklistItems();
+        listenForChecklistGroups();
+        listenForChecklistCategories();
+        listenForTemplates();
+        listenForStacks();
+    } catch (error) {
+        console.error("initializeFirebase: FEHLER beim Starten globaler Listener:", error);
+        alertUser("Fehler beim Initialisieren der globalen Daten-Listener.", "error");
+    }
+}
 
- function startUserDependentListeners() {
-     const mode = currentUser?.mode || GUEST_MODE;
-     if (lastUserDependentListenerMode === mode) return;
-     lastUserDependentListenerMode = mode;
+function startUserDependentListeners() {
+    const mode = currentUser?.mode || GUEST_MODE;
+    if (lastUserDependentListenerMode === mode) return;
+    lastUserDependentListenerMode = mode;
 
-     pushoverProgramConfigCache = {};
-     pushoverRecipientGrantCache = {};
-     pushoverSelectedRecipientId = null;
+    pushoverProgramConfigCache = {};
+    pushoverRecipientGrantCache = {};
+    pushoverSelectedRecipientId = null;
 
-     stopAllUserDependentListeners(false);
+    stopAllUserDependentListeners(false);
 
-     console.log("initializeFirebase: Starte user-abhängige Listener für Mode:", mode);
+    console.log("initializeFirebase: Starte user-abhängige Listener für Mode:", mode);
 
-     if (typeof listenForPublicVotes === 'function') {
-         listenForPublicVotes();
-     } else {
-         console.error("Fehler: listenForPublicVotes ist nicht importiert!");
-     }
+    if (typeof listenForPublicVotes === 'function') {
+        listenForPublicVotes();
+    } else {
+        console.error("Fehler: listenForPublicVotes ist nicht importiert!");
+    }
 
-     if (mode === GUEST_MODE) {
-         return;
-     }
+    if (mode === GUEST_MODE) {
+        return;
+    }
 
-     if (typeof listenForTickets === 'function') {
-         listenForTickets();
-     } else {
-         console.error("Fehler: listenForTickets ist nicht importiert!");
-     }
+    if (typeof listenForTickets === 'function') {
+        listenForTickets();
+    } else {
+        console.error("Fehler: listenForTickets ist nicht importiert!");
+    }
 
-     if (typeof listenForWertguthaben === 'function') {
-         listenForWertguthaben();
-     } else {
-         console.error("Fehler: listenForWertguthaben ist nicht importiert!");
-     }
+    if (typeof listenForWertguthaben === 'function') {
+        listenForWertguthaben();
+    } else {
+        console.error("Fehler: listenForWertguthaben ist nicht importiert!");
+    }
 
-     if (typeof listenForHaushaltszahlungen === 'function') {
-         listenForHaushaltszahlungen();
-     } else {
-         console.error("Fehler: listenForHaushaltszahlungen ist nicht importiert!");
-     }
+    if (typeof listenForHaushaltszahlungen === 'function') {
+        listenForHaushaltszahlungen();
+    } else {
+        console.error("Fehler: listenForHaushaltszahlungen ist nicht importiert!");
+    }
 
-     if (typeof listenForVertraege === 'function') {
-         listenForVertraege();
-     } else {
-         console.error("Fehler: listenForVertraege ist nicht importiert!");
-     }
+    if (typeof listenForVertraege === 'function') {
+        listenForVertraege();
+    } else {
+        console.error("Fehler: listenForVertraege ist nicht importiert!");
+    }
 
-     if (typeof listenForGeschenke === 'function') {
-         listenForGeschenke();
-     } else {
-         console.error("Fehler: listenForGeschenke ist nicht importiert!");
-     }
- }
+    if (typeof listenForGeschenke === 'function') {
+        listenForGeschenke();
+    } else {
+        console.error("Fehler: listenForGeschenke ist nicht importiert!");
+    }
+}
 
 export let currentMeal = (() => {
     // Versuche, eine gespeicherte Mahlzeit aus dem sessionStorage zu laden
@@ -323,21 +323,21 @@ export const USER_COLORS = {
 window.onload = function () {
     // KORREKTUR: Kein 'const' mehr für diese Variablen, damit sie global gespeichert werden!
     modalUserButtons = document.getElementById('modalUserButtons');
-    /* const distributionList... (nicht global benötigt) */ 
+    /* const distributionList... (nicht global benötigt) */
     appHeader = document.getElementById('appHeader'); // Global
     /* const footerModeHandler... */
-    
+
     userSelectionModal = document.getElementById('userSelectionModal'); // Global
     pinModal = document.getElementById('pinModal');
     pinModalTitle = document.getElementById('pinModalTitle'); // Global
     adminPinInput = document.getElementById('adminPinInput');
     pinError = document.getElementById('pinError');
-    
+
     const mainSettingsButton = document.getElementById('mainSettingsButton');
     const adminRightsSection = document.getElementById('adminRightsSection');
     adminRightsToggle = document.getElementById('adminRightsToggle');
     submitAdminKeyButton = document.getElementById('submitAdminKeyButton');
-    
+
     // Admin Toggles (Global machen)
     roleSettingsToggle = document.getElementById('roleSettingsToggle');
     passwordSettingsToggle = document.getElementById('passwordSettingsToggle');
@@ -477,7 +477,7 @@ async function initializeFirebase() {
             // URL-PRÜFUNG (KORRIGIERT: Lädt letzte Ansicht)
             // =================================================================
             let navigatedByUrl = false; // Merker, ob ein Link uns navigiert hat
-            
+
             // Definiere die Variablen HIER oben, damit sie im gesamten Block verfügbar sind
             const urlParams = new URLSearchParams(window.location.search);
             const voteId = urlParams.get('vote_id');
@@ -538,8 +538,8 @@ async function initializeFirebase() {
             // --- URL PRÜFUNG (ZAHLUNGSVERWALTUNG GAST LINK) ---
             // HIER WAR DER BUG: Es wurde nur auf guestId geprüft.
             // FIX: Wir prüfen, ob guestId da ist UND KEIN voteId da ist.
-            
-            if (guestId && !voteId) { 
+
+            if (guestId && !voteId) {
                 console.log("Gast-Link (Zahlungsverwaltung) erkannt! Starte Gast-Ansicht...");
                 // Wir importieren die Funktion dynamisch, um Zyklen zu vermeiden oder rufen sie direkt auf wenn verfügbar
                 import('./zahlungsverwaltung.js').then(module => {
@@ -547,7 +547,7 @@ async function initializeFirebase() {
                     document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
                     document.getElementById('appHeader').style.display = 'none';
                     document.getElementById('appFooter').style.display = 'none';
-                    
+
                     // Starte Gast Modus der Zahlungsverwaltung
                     module.initializeGuestView(guestId);
                 });
@@ -634,7 +634,7 @@ export function alertUser(message, type) {
     tempAlert.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 rounded-xl text-white font-bold shadow-2xl transition-opacity duration-300 z-[100] text-center ${colorClass} border-2 border-white/20`;
 
     document.body.appendChild(tempAlert);
-    
+
     // Animation starten
     requestAnimationFrame(() => {
         tempAlert.style.opacity = '1';
@@ -667,7 +667,7 @@ export function setButtonLoading(button, isLoading) {
 }
 
 export function navigate(targetViewName) {
-    console.log(`Navigiere zu: ${targetViewName}`); 
+    console.log(`Navigiere zu: ${targetViewName}`);
     const targetView = views[targetViewName];
     if (!targetView) {
         console.error(`Navigation fehlgeschlagen: View "${targetViewName}" nicht gefunden.`);
@@ -682,7 +682,7 @@ export function navigate(targetViewName) {
     const userPermissions = currentUser.permissions || [];
     // FIX: Systemadmin hat immer Zugriff (Master-Key)
     const isSystemAdmin = currentUser.role === 'SYSTEMADMIN';
-    
+
     // Wenn NICHT Systemadmin, dann prüfe die Rechte
     if (targetViewName !== 'terminplaner' && !isSystemAdmin) {
         if (targetViewName === 'entrance' && !userPermissions.includes('ENTRANCE')) return alertUser("Zugriff verweigert (Eingang).", 'error');
@@ -692,18 +692,18 @@ export function navigate(targetViewName) {
         if (targetViewName === 'essensberechnung' && !userPermissions.includes('ESSENSBERECHNUNG')) return alertUser("Zugriff verweigert (Essensberechnung).", 'error');
 
         if (targetViewName === 'admin') {
-            const isAdminRole = currentUser.role === 'ADMIN'; 
+            const isAdminRole = currentUser.role === 'ADMIN';
             const isIndividualAdminDisplay = currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN';
-            
+
             if (!isAdminRole && !isIndividualAdminDisplay) {
                 return alertUser("Zugriff verweigert (Admin).", 'error');
             }
         }
         if (targetViewName === 'notrufSettings' && (!userPermissions.includes('PUSHOVER') || !userPermissions.includes('PUSHOVER_NOTRUF_SETTINGS'))) return alertUser("Zugriff verweigert (Notruf-Einstellungen).", 'error');
-        
+
         // Zugriffsschutz für Zahlungsverwaltung
         if ((targetViewName === 'zahlungsverwaltung' || targetViewName === 'zahlungsverwaltungSettings') && !userPermissions.includes('ZAHLUNGSVERWALTUNG')) {
-             return alertUser("Zugriff verweigert (Zahlungsverwaltung).", 'error');
+            return alertUser("Zugriff verweigert (Zahlungsverwaltung).", 'error');
         }
 
         // Zugriffsschutz für Ticket Support
@@ -743,7 +743,7 @@ export function navigate(targetViewName) {
     } else {
         console.error(`Navigation fehlgeschlagen: Element mit ID "${targetView.id}" nicht gefunden.`);
         const homeElement = document.getElementById(views.home.id);
-        if (homeElement) homeElement.classList.add('active'); 
+        if (homeElement) homeElement.classList.add('active');
         return;
     }
 
@@ -780,7 +780,7 @@ export function navigate(targetViewName) {
     if (targetViewName === 'zahlungsverwaltung') {
         initializeZahlungsverwaltungView();
     }
-    
+
     if (targetViewName === 'zahlungsverwaltungSettings') {
         initializeZahlungsverwaltungSettingsView();
     }
@@ -1649,7 +1649,7 @@ export function setupEventListeners() {
 
     // Central click handler for the main content area (für globale Elemente)
     document.querySelector('.main-content').addEventListener('click', function (e) {
-        
+
         // --- NEU: Klick auf Warn-Box -> zur Zahlungsverwaltung ---
         if (e.target.closest('#global-app-alert-box')) { navigate('zahlungsverwaltung'); return; }
         // ---------------------------------------------------------
@@ -1715,7 +1715,7 @@ export function setupEventListeners() {
 
     const ticketSupportCard = document.getElementById('ticketSupportCard');
     if (ticketSupportCard) ticketSupportCard.addEventListener('click', () => navigate('ticketSupport'));
-    
+
     const wertguthabenCard = document.getElementById('wertguthabenCard');
     if (wertguthabenCard) wertguthabenCard.addEventListener('click', () => navigate('wertguthaben'));
 
@@ -1855,8 +1855,8 @@ export function setupEventListeners() {
             // 5. Finales Token aktualisieren und UI updaten
             const idTokenResult = await auth.currentUser.getIdTokenResult(true);
             console.log("TOKEN CLAIMS:", idTokenResult.claims);
-console.log("TOKEN appUserId:", idTokenResult.claims?.appUserId);
-console.log("TOKEN appRole:", idTokenResult.claims?.appRole);
+            console.log("TOKEN appUserId:", idTokenResult.claims?.appUserId);
+            console.log("TOKEN appRole:", idTokenResult.claims?.appRole);
             const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle zugewiesen';
 
             // =================================================================
