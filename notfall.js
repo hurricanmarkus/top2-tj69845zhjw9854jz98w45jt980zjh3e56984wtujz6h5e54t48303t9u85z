@@ -1,7 +1,7 @@
 // ---------- IMPORTS ----------
-import { notrufSettings, notrufSettingsDocRef, alertUser, setButtonLoading } from './haupteingang.js';
-import { getUserSetting } from './log-InOut.js';
-import { setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { notrufSettings, notrufSettingsDocRef, alertUser, setButtonLoading, db, appId, currentUser, auth } from './haupteingang.js';
+import { getUserSetting, saveUserSetting } from './log-InOut.js';
+import { setDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ---------- KONSTANTEN ----------
 export const IFTTT_EVENT = 'NFC_Stick_Switchbot_Bauteil_2_Wohnungsanlage_oeffnen';
@@ -13,7 +13,21 @@ let activeFlicEditorKlickTyp = null;
 let tempSelectedApiTokenId = null;
 let tempSelectedSoundId = null;
 
-// ---------- HILFSFUNKTIONS-HELPER ----------
+let nachrichtencenterActiveScope = 'global';
+let nachrichtencenterSelectedRef = '';
+let nachrichtencenterGlobalContacts = {};
+let nachrichtencenterPrivateContacts = {};
+let unsubscribeNachrichtencenterGlobal = null;
+let unsubscribeNachrichtencenterPrivate = null;
+
+function canUseNachrichtencenterContactBook() {
+  if (!db) return false;
+  if (!appId) return false;
+  if (!currentUser || !currentUser.mode) return false;
+  if (!auth || !auth.currentUser) return false;
+  return true;
+}
+
 function canSaveToNotrufSettings() {
   if (typeof setDoc !== 'function') {
     alertUser('Interner Fehler: Firestore-Funktion setDoc nicht verfügbar.', 'error');
@@ -24,6 +38,272 @@ function canSaveToNotrufSettings() {
     return false;
   }
   return true;
+}
+
+function getNachrichtencenterGlobalContactsRef() {
+  if (!canUseNachrichtencenterContactBook()) return null;
+  return collection(db, 'artifacts', appId, 'public', 'data', 'nachrichtencenter_global_contacts');
+}
+
+function getNachrichtencenterPrivateContactsRef() {
+  if (!canUseNachrichtencenterContactBook()) return null;
+  return collection(db, 'artifacts', appId, 'public', 'data', 'nachrichtencenter_private_contacts', currentUser.mode, 'contacts');
+}
+
+function getNachrichtencenterContactByRefValue(refValue) {
+  const raw = String(refValue || '');
+  if (!raw) return null;
+  if (raw.startsWith('global:')) {
+    const id = raw.slice('global:'.length);
+    return nachrichtencenterGlobalContacts[id] || null;
+  }
+  if (raw.startsWith('private:')) {
+    const id = raw.slice('private:'.length);
+    return nachrichtencenterPrivateContacts[id] || null;
+  }
+  return null;
+}
+
+function getNachrichtencenterContactDocRefFromRefValue(refValue) {
+  const raw = String(refValue || '');
+  if (!raw) return null;
+  if (raw.startsWith('global:')) {
+    const id = raw.slice('global:'.length);
+    const col = getNachrichtencenterGlobalContactsRef();
+    if (!col || !id) return null;
+    return doc(col, id);
+  }
+  if (raw.startsWith('private:')) {
+    const id = raw.slice('private:'.length);
+    const col = getNachrichtencenterPrivateContactsRef();
+    if (!col || !id) return null;
+    return doc(col, id);
+  }
+  return null;
+}
+
+async function syncNachrichtencenterRecipientDisplayFromRef() {
+  const display = document.getElementById('nachrichtencenterRecipientDisplay');
+  const refInput = document.getElementById('nachrichtencenterRecipientRef');
+  const keyInput = document.getElementById('nachrichtencenterRecipientKey');
+  if (!display || !refInput) return;
+
+  const refValue = String(refInput.value || '');
+  if (!refValue) {
+    display.innerHTML = '<span class="text-gray-400 italic">Kein Empfänger ausgewählt</span>';
+    if (keyInput) keyInput.value = '';
+    return;
+  }
+
+  let contact = getNachrichtencenterContactByRefValue(refValue);
+  if (!contact) {
+    try {
+      const docRef = getNachrichtencenterContactDocRefFromRefValue(refValue);
+      if (docRef) {
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          contact = { id: snap.id, ...snap.data() };
+        }
+      }
+    } catch (e) {
+      console.warn('Nachrichtencenter: Empfänger konnte nicht geladen werden:', e);
+    }
+  }
+
+  if (!contact) {
+    display.innerHTML = '<span class="text-gray-400 italic">Empfänger nicht gefunden</span>';
+    if (keyInput) keyInput.value = '';
+    return;
+  }
+
+  display.innerHTML = `<span class="contact-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full">${contact.name || '—'}</span>`;
+  if (keyInput) keyInput.value = contact.key ? String(contact.key) : '';
+}
+
+function setNachrichtencenterContactsScope(scope) {
+  nachrichtencenterActiveScope = scope === 'private' ? 'private' : 'global';
+  const tabGlobal = document.getElementById('nachrichtencenterContactsTabGlobal');
+  const tabPrivate = document.getElementById('nachrichtencenterContactsTabPrivate');
+  const listGlobal = document.getElementById('nachrichtencenterContactsListGlobal');
+  const listPrivate = document.getElementById('nachrichtencenterContactsListPrivate');
+
+  if (tabGlobal && tabPrivate) {
+    tabGlobal.classList.toggle('bg-white', nachrichtencenterActiveScope === 'global');
+    tabGlobal.classList.toggle('shadow', nachrichtencenterActiveScope === 'global');
+    tabGlobal.classList.toggle('text-indigo-600', nachrichtencenterActiveScope === 'global');
+    tabPrivate.classList.toggle('bg-white', nachrichtencenterActiveScope === 'private');
+    tabPrivate.classList.toggle('shadow', nachrichtencenterActiveScope === 'private');
+    tabPrivate.classList.toggle('text-indigo-600', nachrichtencenterActiveScope === 'private');
+  }
+  if (listGlobal && listPrivate) {
+    listGlobal.classList.toggle('hidden', nachrichtencenterActiveScope !== 'global');
+    listPrivate.classList.toggle('hidden', nachrichtencenterActiveScope !== 'private');
+  }
+}
+
+function renderNachrichtencenterContactLists() {
+  const listGlobal = document.getElementById('nachrichtencenterContactsListGlobal');
+  const listPrivate = document.getElementById('nachrichtencenterContactsListPrivate');
+  if (!listGlobal || !listPrivate) return;
+
+  const refInput = document.getElementById('nachrichtencenterRecipientRef');
+  const selectedRef = nachrichtencenterSelectedRef || (refInput ? String(refInput.value || '') : '');
+
+  const renderList = (scope, container, contactsMap) => {
+    const contacts = Object.values(contactsMap || {}).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'de'));
+    if (contacts.length === 0) {
+      container.innerHTML = '<p class="text-sm text-center text-gray-400">Keine Kontakte gefunden.</p>';
+      return;
+    }
+    container.innerHTML = contacts.map(c => {
+      const refValue = `${scope === 'private' ? 'private:' : 'global:'}${c.id}`;
+      const isChecked = refValue === selectedRef ? 'checked' : '';
+      const canEdit = String(c.createdByAppUserId || '') === String(currentUser?.mode || '');
+      const keyPreview = c.key ? `${String(c.key).substring(0, 4)}...${String(c.key).substring(Math.max(0, String(c.key).length - 4))}` : '—';
+      return `
+        <div class="flex items-center justify-between p-2 hover:bg-gray-100 rounded-md">
+          <label class="flex items-center gap-3 cursor-pointer flex-grow">
+            <input type="radio" name="nachrichtencenterRecipientSelection" value="${refValue}" class="h-4 w-4 nachrichtencenter-contact-radio" ${isChecked}>
+            <div>
+              <span class="font-semibold text-gray-800">${c.name || '—'}</span>
+              <p class="text-xs text-gray-500 font-mono">${keyPreview}</p>
+            </div>
+          </label>
+          <div class="flex items-center gap-1 flex-shrink-0">
+            ${canEdit ? `<button data-contact-ref="${refValue}" class="nachrichtencenter-edit-contact-btn p-2 text-blue-500 hover:bg-blue-100 rounded-full" title="Bearbeiten">✎</button>` : ''}
+            ${canEdit ? `<button data-contact-ref="${refValue}" class="nachrichtencenter-delete-contact-btn p-2 text-red-500 hover:bg-red-100 rounded-full" title="Löschen">🗑</button>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  };
+
+  renderList('global', listGlobal, nachrichtencenterGlobalContacts);
+  renderList('private', listPrivate, nachrichtencenterPrivateContacts);
+}
+
+function startNachrichtencenterContactListeners() {
+  if (!canUseNachrichtencenterContactBook()) return;
+
+  const globalRef = getNachrichtencenterGlobalContactsRef();
+  const privateRef = getNachrichtencenterPrivateContactsRef();
+  if (!globalRef || !privateRef) return;
+
+  if (unsubscribeNachrichtencenterGlobal) {
+    unsubscribeNachrichtencenterGlobal();
+    unsubscribeNachrichtencenterGlobal = null;
+  }
+  if (unsubscribeNachrichtencenterPrivate) {
+    unsubscribeNachrichtencenterPrivate();
+    unsubscribeNachrichtencenterPrivate = null;
+  }
+
+  unsubscribeNachrichtencenterGlobal = onSnapshot(globalRef, (snap) => {
+    nachrichtencenterGlobalContacts = {};
+    snap.forEach(d => { nachrichtencenterGlobalContacts[d.id] = { id: d.id, ...d.data() }; });
+    renderNachrichtencenterContactLists();
+    syncNachrichtencenterRecipientDisplayFromRef();
+  }, (err) => {
+    console.warn('Nachrichtencenter: Globales Adressbuch konnte nicht geladen werden:', err);
+  });
+
+  unsubscribeNachrichtencenterPrivate = onSnapshot(privateRef, (snap) => {
+    nachrichtencenterPrivateContacts = {};
+    snap.forEach(d => { nachrichtencenterPrivateContacts[d.id] = { id: d.id, ...d.data() }; });
+    renderNachrichtencenterContactLists();
+    syncNachrichtencenterRecipientDisplayFromRef();
+  }, (err) => {
+    console.warn('Nachrichtencenter: Privates Adressbuch konnte nicht geladen werden:', err);
+  });
+}
+
+function resetNachrichtencenterContactForm() {
+  const title = document.getElementById('nachrichtencenterContactsFormTitle');
+  const editingId = document.getElementById('nachrichtencenterEditingContactId');
+  const nameInput = document.getElementById('nachrichtencenterContactName');
+  const keyInput = document.getElementById('nachrichtencenterContactKey');
+  if (title) title.textContent = 'Neuen Kontakt anlegen';
+  if (editingId) editingId.value = '';
+  if (nameInput) nameInput.value = '';
+  if (keyInput) keyInput.value = '';
+}
+
+async function saveNachrichtencenterContactFromForm() {
+  if (!canUseNachrichtencenterContactBook()) {
+    alertUser('Datenbank/Benutzer noch nicht bereit. Bitte kurz warten.', 'error');
+    return;
+  }
+  const nameInput = document.getElementById('nachrichtencenterContactName');
+  const keyInput = document.getElementById('nachrichtencenterContactKey');
+  const editingIdInput = document.getElementById('nachrichtencenterEditingContactId');
+  if (!nameInput || !keyInput || !editingIdInput) return;
+
+  const name = String(nameInput.value || '').trim();
+  const key = String(keyInput.value || '').trim();
+  if (!name || !key) {
+    alertUser('Bitte Anzeigename und Pushover-Key eingeben.', 'error');
+    return;
+  }
+
+  const contactId = String(editingIdInput.value || '').trim();
+  const isEdit = Boolean(contactId);
+
+  try {
+    if (nachrichtencenterActiveScope === 'global') {
+      const col = getNachrichtencenterGlobalContactsRef();
+      if (!col) return;
+      if (isEdit) {
+        await updateDoc(doc(col, contactId), { name, key, updatedAt: serverTimestamp(), updatedByAppUserId: currentUser.mode });
+        alertUser('Kontakt aktualisiert.', 'success');
+      } else {
+        await addDoc(col, { name, key, createdAt: serverTimestamp(), createdByAppUserId: currentUser.mode, createdByName: currentUser.displayName || currentUser.mode, createdByAuthUid: auth?.currentUser?.uid || null });
+        alertUser('Kontakt gespeichert.', 'success');
+      }
+    } else {
+      const col = getNachrichtencenterPrivateContactsRef();
+      if (!col) return;
+      if (isEdit) {
+        await updateDoc(doc(col, contactId), { name, key, updatedAt: serverTimestamp(), updatedByAppUserId: currentUser.mode });
+        alertUser('Kontakt aktualisiert.', 'success');
+      } else {
+        await addDoc(col, { name, key, createdAt: serverTimestamp(), createdByAppUserId: currentUser.mode, createdByName: currentUser.displayName || currentUser.mode, createdByAuthUid: auth?.currentUser?.uid || null });
+        alertUser('Kontakt gespeichert.', 'success');
+      }
+    }
+  } catch (e) {
+    console.error('Nachrichtencenter: Fehler beim Speichern des Kontakts:', e);
+    alertUser('Fehler beim Speichern des Kontakts.', 'error');
+    return;
+  }
+
+  resetNachrichtencenterContactForm();
+}
+
+function openNachrichtencenterContactBook() {
+  startNachrichtencenterContactListeners();
+  renderNachrichtencenterContactLists();
+  resetNachrichtencenterContactForm();
+  setNachrichtencenterContactsScope(nachrichtencenterActiveScope);
+  const modal = document.getElementById('nachrichtencenterContactBookModal');
+  if (modal) modal.style.display = 'flex';
+}
+
+async function deleteNachrichtencenterContactByRef(refValue) {
+  const contact = getNachrichtencenterContactByRefValue(refValue);
+  if (!contact) return;
+  if (String(contact.createdByAppUserId || '') !== String(currentUser?.mode || '')) {
+    alertUser('Du darfst nur eigene Einträge löschen.', 'error');
+    return;
+  }
+  const docRef = getNachrichtencenterContactDocRefFromRefValue(refValue);
+  if (!docRef) return;
+  try {
+    await deleteDoc(docRef);
+    alertUser('Kontakt gelöscht.', 'success');
+  } catch (e) {
+    console.error('Nachrichtencenter: Fehler beim Löschen:', e);
+    alertUser('Fehler beim Löschen.', 'error');
+  }
 }
 
 // ---------- IDMPOTENTE MODAL-LISTENER (ein Handler für alle relevanten Buttons) ----------
@@ -265,6 +545,76 @@ export function ensureModalListeners() {
             display.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
           }
         }
+        if (modal) modal.style.display = 'none';
+        return;
+      }
+
+      // -------------------- NACHRICHTENCENTER CONTACTBOOK MODAL --------------------
+      if (e.target.closest('#nachrichtencenterOpenContactBook')) {
+        openNachrichtencenterContactBook();
+        return;
+      }
+      if (e.target.closest('#nachrichtencenterContactBookCloseButton')) {
+        const modal = document.getElementById('nachrichtencenterContactBookModal');
+        if (modal) modal.style.display = 'none';
+        return;
+      }
+      if (e.target.closest('#nachrichtencenterContactsTabGlobal')) {
+        setNachrichtencenterContactsScope('global');
+        return;
+      }
+      if (e.target.closest('#nachrichtencenterContactsTabPrivate')) {
+        setNachrichtencenterContactsScope('private');
+        return;
+      }
+      if (e.target.closest('#nachrichtencenterContactSaveButton')) {
+        await saveNachrichtencenterContactFromForm();
+        return;
+      }
+      const editNcBtn = e.target.closest('.nachrichtencenter-edit-contact-btn');
+      if (editNcBtn) {
+        const refValue = String(editNcBtn.dataset.contactRef || '');
+        const contact = getNachrichtencenterContactByRefValue(refValue);
+        if (!contact) return;
+        if (String(contact.createdByAppUserId || '') !== String(currentUser?.mode || '')) {
+          alertUser('Du darfst nur eigene Einträge bearbeiten.', 'error');
+          return;
+        }
+        const title = document.getElementById('nachrichtencenterContactsFormTitle');
+        const editingId = document.getElementById('nachrichtencenterEditingContactId');
+        const nameInput = document.getElementById('nachrichtencenterContactName');
+        const keyInput = document.getElementById('nachrichtencenterContactKey');
+        if (title) title.textContent = 'Kontakt bearbeiten';
+        if (editingId) editingId.value = String(contact.id);
+        if (nameInput) nameInput.value = String(contact.name || '');
+        if (keyInput) keyInput.value = String(contact.key || '');
+        return;
+      }
+      const deleteNcBtn = e.target.closest('.nachrichtencenter-delete-contact-btn');
+      if (deleteNcBtn) {
+        const refValue = String(deleteNcBtn.dataset.contactRef || '');
+        if (!refValue) return;
+        if (!confirm('Kontakt wirklich löschen?')) return;
+        await deleteNachrichtencenterContactByRef(refValue);
+        return;
+      }
+      const radioNc = e.target.closest('.nachrichtencenter-contact-radio');
+      if (radioNc) {
+        nachrichtencenterSelectedRef = String(radioNc.value || '');
+        return;
+      }
+      if (e.target.closest('#nachrichtencenterContactBookApplyButton')) {
+        const modal = document.getElementById('nachrichtencenterContactBookModal');
+        const selected = modal ? modal.querySelector('input[name="nachrichtencenterRecipientSelection"]:checked') : null;
+        const selectedRef = selected ? String(selected.value || '') : '';
+        const refInput = document.getElementById('nachrichtencenterRecipientRef');
+        const keyInput = document.getElementById('nachrichtencenterRecipientKey');
+        if (refInput) refInput.value = selectedRef;
+        if (keyInput) keyInput.value = '';
+        if (selectedRef) {
+          saveUserSetting('nachrichtencenter_recipient_ref', selectedRef);
+        }
+        await syncNachrichtencenterRecipientDisplayFromRef();
         if (modal) modal.style.display = 'none';
         return;
       }
@@ -1146,13 +1496,18 @@ export function initializeNotrufSettingsView() {
   try {
     const titleEl = document.getElementById('nachrichtencenterTitle');
     const messageEl = document.getElementById('nachrichtencenterMessage');
-    const recipientEl = document.getElementById('nachrichtencenterRecipient');
     if (titleEl) titleEl.value = getUserSetting('nachrichtencenter_title', titleEl.value || '');
     if (messageEl) messageEl.value = getUserSetting('nachrichtencenter_message', messageEl.value || '');
-    if (recipientEl) {
-      const savedRecipient = getUserSetting('nachrichtencenter_recipient', recipientEl.value || '');
-      if (savedRecipient) recipientEl.value = savedRecipient;
+    const recipientRefEl = document.getElementById('nachrichtencenterRecipientRef');
+    const recipientKeyEl = document.getElementById('nachrichtencenterRecipientKey');
+    if (recipientRefEl) {
+      const savedRef = getUserSetting('nachrichtencenter_recipient_ref', '');
+      if (savedRef) recipientRefEl.value = savedRef;
     }
+    if (recipientKeyEl) recipientKeyEl.value = '';
+
+    startNachrichtencenterContactListeners();
+    syncNachrichtencenterRecipientDisplayFromRef();
   } catch (e) {
     console.warn('initializeNotrufSettingsView: Nachrichtencenter Felder konnten nicht geladen werden:', e);
   }

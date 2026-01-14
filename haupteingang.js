@@ -2348,36 +2348,59 @@ export function setupEventListeners() {
         nachrichtencenterMessage.dataset.listenerAttached = 'true';
     }
 
-    const nachrichtencenterRecipient = document.getElementById('nachrichtencenterRecipient');
-    if (nachrichtencenterRecipient && !nachrichtencenterRecipient.dataset.listenerAttached) {
-        nachrichtencenterRecipient.addEventListener('change', () => {
-            saveUserSetting('nachrichtencenter_recipient', nachrichtencenterRecipient.value || '');
-        });
-        nachrichtencenterRecipient.dataset.listenerAttached = 'true';
-    }
-
     const sendNachrichtencenterButton = document.getElementById('sendNachrichtencenterButton');
     if (sendNachrichtencenterButton) {
         sendNachrichtencenterButton.addEventListener('click', async (e) => {
             const buttonEl = e.currentTarget;
             const messageInput = document.getElementById('nachrichtencenterMessage');
-            const recipientSelect = document.getElementById('nachrichtencenterRecipient');
+            const recipientRefInput = document.getElementById('nachrichtencenterRecipientRef');
+            const recipientKeyInput = document.getElementById('nachrichtencenterRecipientKey');
             const titleInput = document.getElementById('nachrichtencenterTitle');
-            if (!messageInput || !recipientSelect || !titleInput) return;
+            if (!messageInput || !titleInput) return;
 
             const message = messageInput.value;
             if (!message) return alertUser('Bitte Nachricht eingeben.', 'error');
 
             saveUserSetting('nachrichtencenter_title', titleInput.value || '');
-            saveUserSetting('nachrichtencenter_recipient', recipientSelect.value || '');
             saveUserSetting('nachrichtencenter_message', messageInput.value || '');
+
+            const recipientRef = recipientRefInput ? String(recipientRefInput.value || '') : '';
+            if (!recipientRef) {
+                return alertUser('Bitte Empfänger wählen.', 'error');
+            }
+            saveUserSetting('nachrichtencenter_recipient_ref', recipientRef);
 
             console.log('Nachrichtencenter: Sende Nachricht...');
             setButtonLoading(buttonEl, true);
 
             const formData = new FormData();
             formData.append('token', PUSHOVER_TOKEN);
-            const recipientKey = RECIPIENT_KEYS ? RECIPIENT_KEYS[recipientSelect.value] : null;
+            let recipientKey = recipientKeyInput ? String(recipientKeyInput.value || '') : '';
+
+            if (!recipientKey) {
+                try {
+                    let recipientDocRef = null;
+                    if (recipientRef.startsWith('global:')) {
+                        const contactId = recipientRef.slice('global:'.length);
+                        recipientDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'nachrichtencenter_global_contacts', contactId);
+                    } else if (recipientRef.startsWith('private:')) {
+                        const contactId = recipientRef.slice('private:'.length);
+                        recipientDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'nachrichtencenter_private_contacts', currentUser.mode, 'contacts', contactId);
+                    }
+
+                    if (recipientDocRef) {
+                        const snap = await getDoc(recipientDocRef);
+                        if (snap.exists()) {
+                            const data = snap.data() || {};
+                            if (data.key) recipientKey = String(data.key);
+                            if (recipientKeyInput && recipientKey) recipientKeyInput.value = recipientKey;
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Nachrichtencenter: Fehler beim Laden des Empfängers:', err);
+                }
+            }
+
             if (!recipientKey) {
                 alertUser('Fehler: Empfänger-Schlüssel nicht gefunden.', 'error');
                 setButtonLoading(buttonEl, false);

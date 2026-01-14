@@ -294,6 +294,23 @@ service cloud.firestore {
       }
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // NACHRICHTENCENTER (Adressbuch)
+    // ═══════════════════════════════════════════════════════════════
+
+    // WICHTIG: Für private Daten wird ein stabiles appUserId Custom-Claim benötigt.
+    // Erwartet: request.auth.token.appUserId
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/nachrichtencenter_global_contacts/{contactId} {
+      allow read: if isAuthenticated();
+      allow create: if isSystemAdminClaim() || (isAuthenticated() && request.auth.token.appUserId == request.resource.data.createdByAppUserId);
+      allow update, delete: if isSystemAdminClaim() || (isAuthenticated() && request.auth.token.appUserId == resource.data.createdByAppUserId);
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/nachrichtencenter_private_contacts/{userId}/contacts/{contactId} {
+      allow read, write: if isSystemAdminClaim() || (isAuthenticated() && request.auth.token.appUserId == userId);
+    }
+
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/pushover_programs/{recipientId} {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated();
