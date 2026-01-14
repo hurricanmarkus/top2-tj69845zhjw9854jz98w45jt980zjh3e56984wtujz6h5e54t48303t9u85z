@@ -1,7 +1,7 @@
 // // @ts-check
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 //
 // KORREKTUR: serverTimestamp (von Firebase) hinzugefügt
-import { onSnapshot, query, orderBy, getDocs, addDoc, doc, updateDoc, writeBatch, getDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { onSnapshot, query, where, orderBy, getDocs, addDoc, doc, updateDoc, writeBatch, getDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // KORREKTUR: Fehlende Imports (currentUser, alertUser, USERS) und
 // die KORREKTE Sammlung (approvalRequestsCollectionRef) hinzugefügt.
@@ -73,7 +73,11 @@ export async function createApprovalRequest(type, userId, details = {}) {
 export function listenForApprovalRequests() {
     // KORREKTUR: 'async' und 'await import' ENTFERNT
 
-    onSnapshot(query(approvalRequestsCollectionRef, orderBy('timestamp', 'desc')), (snapshot) => {
+    const q = currentUser?.role === 'SYSTEMADMIN'
+        ? query(approvalRequestsCollectionRef, orderBy('timestamp', 'desc'))
+        : query(approvalRequestsCollectionRef, where('requestedById', '==', currentUser?.mode || ''));
+
+    onSnapshot(q, (snapshot) => {
         
         // 1. Leere die globale Liste
         Object.keys(PENDING_REQUESTS).forEach(key => delete PENDING_REQUESTS[key]);
@@ -113,7 +117,10 @@ export async function renderApprovalProcess(snapshot = null) {
     if (!snapshot) {
         // KORREKTUR: Liest von der korrekten Sammlung
         // ALT: snapshot = await getDocs(query(roleChangeRequestsCollectionRef, orderBy('timestamp', 'desc')));
-        snapshot = await getDocs(query(approvalRequestsCollectionRef, orderBy('timestamp', 'desc')));
+        const q = currentUser?.role === 'SYSTEMADMIN'
+            ? query(approvalRequestsCollectionRef, orderBy('timestamp', 'desc'))
+            : query(approvalRequestsCollectionRef, where('requestedById', '==', currentUser?.mode || ''));
+        snapshot = await getDocs(q);
     }
 
     if (!snapshot || snapshot.empty) {
@@ -214,11 +221,11 @@ export async function renderApprovalProcess(snapshot = null) {
                  if (request.status === 'failed') {
                     buttonsHTML = `
                     <button class="deny-request-btn py-1 px-3 text-sm font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700" data-request-id="${requestId}">Löschen (Fehler)</button>`;
-                 } else {
-                     buttonsHTML = `
+                } else {
+                    buttonsHTML = `
                         <button class="deny-request-btn py-1 px-3 text-sm font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700" data-request-id="${requestId}">Ablehnen</button>
                         <button class="approve-request-btn py-1 px-3 text-sm font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700" data-request-id="${requestId}">Annehmen</button>`;
-                 }
+                }
             } else if (currentUser.mode === request.requestedById) {
                 buttonsHTML = `<button class="withdraw-request-btn py-1 px-3 text-sm font-semibold bg-gray-500 text-white rounded-lg hover:bg-gray-600" data-request-id="${requestId}">Zurückziehen</button>`;
             }
@@ -238,95 +245,140 @@ export async function renderApprovalProcess(snapshot = null) {
     });
 
     // Event-Handler: Approve
-    approvalProcessArea.querySelectorAll('.approve-request-btn').forEach(button => button.addEventListener('click', async (e) => {
-        const requestId = e.currentTarget.dataset.requestId;
-        try {
-            // KORREKTUR: Liest von der korrekten Sammlung
-            const requestDoc = await getDoc(doc(approvalRequestsCollectionRef, requestId));
-            if (!requestDoc.exists()) return;
-            const request = requestDoc.data();
-            const { type, userId, details } = request;
-            let batch = writeBatch(db);
+    approvalProcessArea.querySelectorAll('.approve-request-btn').forEach(button => {
+        if (button.dataset.listenerAttached) return;
+        button.dataset.listenerAttached = 'true';
+        button.addEventListener('click', async (e) => {
+            const requestId = e.currentTarget.dataset.requestId;
+            let requestType = null;
+            try {
+                // KORREKTUR: Liest von der korrekten Sammlung
+                const requestDoc = await getDoc(doc(approvalRequestsCollectionRef, requestId));
+                if (!requestDoc.exists()) return;
+                const request = requestDoc.data();
+                const { type, userId, details } = request;
+                requestType = type;
 
-            // KORREKTUR: Logik für 'CHANGE_PERMISSION_TYPE' und 'CREATE_USER' (mit 'realName')
-            switch (type) {
-                case 'CREATE_USER': {
-                    // NEU: 'realName' wird jetzt auch korrekt übernommen
-                    const { name, key, role, isActive, newUserId, realName } = details.userData || {};
+                if (type === 'CREATE_USER') {
+                    const userDataRaw = details.userData || {};
+                    const newUserId = userDataRaw.newUserId;
+                    const key = userDataRaw.key;
+
                     if (newUserId) {
-                         const userData = { name, key, role, isActive, realName: realName || "" };
-                         // Entferne undefined Felder, um Firebase-Fehler zu vermeiden
-                         Object.keys(userData).forEach((k) => (userData[k] === undefined && delete userData[k]));
-                         batch.set(doc(usersCollectionRef, newUserId), userData);
+                        const { key: _key, newUserId: _newUserId, ...userData } = userDataRaw;
+                        Object.keys(userData).forEach((k) => (userData[k] === undefined && delete userData[k]));
+
+                        const createBatch = writeBatch(db);
+                        createBatch.set(doc(usersCollectionRef, newUserId), userData);
+                        await createBatch.commit();
+
+                        if (key) {
+                            if (!window.setUserKey) {
+                                throw new Error("Cloud Function (setUserKey) ist noch nicht initialisiert. Bitte warten.");
+                            }
+                            await window.setUserKey({ appUserId: newUserId, newKey: String(key) });
+                        }
                     }
-                    break;
+
+                    await updateDoc(doc(approvalRequestsCollectionRef, requestId), { status: 'approved', actionTakenByName: currentUser.displayName });
+                    alertUser('Antrag genehmigt!', 'success');
+                    return;
                 }
-                case 'DELETE_USER':
-                    batch.delete(doc(usersCollectionRef, userId));
-                    break;
-                case 'RENAME_USER':
-                    batch.update(doc(usersCollectionRef, userId), { name: details.newName });
-                    break;
-                case 'TOGGLE_USER_ACTIVE':
-                    batch.update(doc(usersCollectionRef, userId), { isActive: details.isActive });
-                    break;
-                case 'SET_ADMIN_STATUS':
-                    batch.update(doc(usersCollectionRef, userId), { role: 'ADMIN', permissionType: 'role', assignedAdminRoleId: null });
-                    break;
-                case 'CHANGE_PERMISSION_TYPE':
-                    let updateData = {};
-                    if (details.type === 'role') {
-                        updateData = { permissionType: 'role', role: details.newRole, customPermissions: [], displayRole: null };
-                    } else {
-                        updateData = { permissionType: 'individual', role: null, customPermissions: details.customPermissions || [], displayRole: details.displayRole || null };
+
+                let batch = writeBatch(db);
+
+                // KORREKTUR: Logik für 'CHANGE_PERMISSION_TYPE' und 'CREATE_USER' (mit 'realName')
+                switch (type) {
+                    case 'DELETE_USER':
+                        batch.delete(doc(usersCollectionRef, userId));
+                        break;
+                    case 'RENAME_USER':
+                        batch.update(doc(usersCollectionRef, userId), { name: details.newName });
+                        break;
+                    case 'TOGGLE_USER_ACTIVE':
+                        batch.update(doc(usersCollectionRef, userId), { isActive: details.isActive });
+                        break;
+                    case 'SET_ADMIN_STATUS':
+                        batch.update(doc(usersCollectionRef, userId), { role: 'ADMIN', permissionType: 'role', assignedAdminRoleId: null });
+                        break;
+                    case 'CHANGE_PERMISSION_TYPE':
+                        {
+                            let updateData = {};
+                            if (details.type === 'role') {
+                                updateData = { permissionType: 'role', role: details.newRole, customPermissions: [], displayRole: null };
+                            } else {
+                                updateData = { permissionType: 'individual', role: null, customPermissions: details.customPermissions || [], displayRole: details.displayRole || null };
+                            }
+                            batch.update(doc(usersCollectionRef, userId), updateData);
+                        }
+                        break;
+                    case 'CHANGE_CUSTOM_PERMISSIONS':
+                        batch.update(doc(usersCollectionRef, userId), { customPermissions: details.permissions || [] });
+                        break;
+                }
+
+                // KORREKTUR: Schreibt in die korrekte Sammlung
+                batch.update(doc(approvalRequestsCollectionRef, requestId), { status: 'approved', actionTakenByName: currentUser.displayName });
+                await batch.commit();
+                alertUser('Antrag genehmigt!', 'success');
+
+            } catch (error) {
+                console.error("Error approving request:", error);
+                if (requestType === 'CREATE_USER') {
+                    try {
+                        await updateDoc(doc(approvalRequestsCollectionRef, requestId), {
+                            status: 'failed',
+                            actionTakenByName: currentUser.displayName,
+                            errorMessage: String(error?.message || error)
+                        });
+                    } catch (e2) {
+                        console.error("Error marking request as failed:", e2);
                     }
-                    batch.update(doc(usersCollectionRef, userId), updateData);
-                    break;
-                case 'CHANGE_CUSTOM_PERMISSIONS':
-                    batch.update(doc(usersCollectionRef, userId), { customPermissions: details.permissions || [] });
-                    break;
+                }
+                alertUser('Fehler bei der Genehmigung.', 'error');
             }
-            // KORREKTUR: Schreibt in die korrekte Sammlung
-            batch.update(doc(approvalRequestsCollectionRef, requestId), { status: 'approved', actionTakenByName: currentUser.displayName });
-            await batch.commit();
-            alertUser('Antrag genehmigt!', 'success');
-        } catch (error) {
-            console.error("Error approving request:", error);
-            alertUser('Fehler bei der Genehmigung.', 'error');
-        }
-    }));
+        });
+    });
 
     // Deny handler
-    approvalProcessArea.querySelectorAll('.deny-request-btn').forEach(button => button.addEventListener('click', async (e) => {
-        const requestId = e.currentTarget.dataset.requestId;
-        try {
-            // KORREKTUR: SysAdmin, der eine 'failed' Anfrage löscht, löscht sie.
-            const requestDoc = await getDoc(doc(approvalRequestsCollectionRef, requestId));
-            if(requestDoc.exists() && requestDoc.data().status === 'failed') {
-                 await deleteDoc(doc(approvalRequestsCollectionRef, requestId));
-                 alertUser('Fehlgeschlagene Anfrage gelöscht.', 'success');
-            } else {
-                 // Normales Ablehnen
-                await updateDoc(doc(approvalRequestsCollectionRef, requestId), { status: 'denied', actionTakenByName: currentUser.displayName });
-                alertUser('Antrag abgelehnt.', 'success');
+    approvalProcessArea.querySelectorAll('.deny-request-btn').forEach(button => {
+        if (button.dataset.listenerAttached) return;
+        button.dataset.listenerAttached = 'true';
+        button.addEventListener('click', async (e) => {
+            const requestId = e.currentTarget.dataset.requestId;
+            try {
+                // KORREKTUR: SysAdmin, der eine 'failed' Anfrage löscht, löscht sie.
+                const requestDoc = await getDoc(doc(approvalRequestsCollectionRef, requestId));
+                if(requestDoc.exists() && requestDoc.data().status === 'failed') {
+                    await deleteDoc(doc(approvalRequestsCollectionRef, requestId));
+                    alertUser('Fehlgeschlagene Anfrage gelöscht.', 'success');
+                } else {
+                    // Normales Ablehnen
+                    await updateDoc(doc(approvalRequestsCollectionRef, requestId), { status: 'denied', actionTakenByName: currentUser.displayName });
+                    alertUser('Antrag abgelehnt.', 'success');
+                }
+            } catch (error) {
+                console.error("Error denying/deleting request:", error);
+                alertUser('Fehler beim Ablehnen/Löschen des Antrags.', 'error');
             }
-        } catch (error) {
-            console.error("Error denying/deleting request:", error);
-            alertUser('Fehler beim Ablehnen/Löschen des Antrags.', 'error');
-        }
-    }));
+        });
+    });
 
     // Withdraw handler
-    approvalProcessArea.querySelectorAll('.withdraw-request-btn').forEach(button => button.addEventListener('click', async (e) => {
-        const requestId = e.currentTarget.dataset.requestId;
-        try {
-            // KORREKTUR: Schreibt in die korrekte Sammlung
-            await updateDoc(doc(approvalRequestsCollectionRef, requestId), { status: 'withdrawn', actionTakenByName: currentUser.displayName });
-            alertUser('Antrag zurückgezogen.', 'success');
-        } catch (error) {
-            console.error("Error withdrawing request:", error);
-        }
-    }));
+    approvalProcessArea.querySelectorAll('.withdraw-request-btn').forEach(button => {
+        if (button.dataset.listenerAttached) return;
+        button.dataset.listenerAttached = 'true';
+        button.addEventListener('click', async (e) => {
+            const requestId = e.currentTarget.dataset.requestId;
+            try {
+                // KORREKTUR: Schreibt in die korrekte Sammlung
+                await updateDoc(doc(approvalRequestsCollectionRef, requestId), { status: 'withdrawn', actionTakenByName: currentUser.displayName });
+                alertUser('Antrag zurückgezogen.', 'success');
+            } catch (error) {
+                console.error("Error withdrawing request:", error);
+            }
+        });
+    });
 }
 // =================================================================
 // ENDE DER KORREKTUR

@@ -93,9 +93,16 @@ service cloud.firestore {
 
     // APPROVAL-REQUESTS: Genehmigungsanfragen
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/approval-requests/{requestId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update, delete: if isSystemAdminClaim();
+      allow read: if isSystemAdminClaim() || (hasAppUserIdClaim() && appUserId() == resource.data.requestedById);
+      allow create: if hasAppUserIdClaim() && request.resource.data.requestedById == appUserId() && request.resource.data.status == 'pending';
+      allow update: if isSystemAdminClaim() || (
+        hasAppUserIdClaim() &&
+        appUserId() == resource.data.requestedById &&
+        resource.data.status == 'pending' &&
+        request.resource.data.status == 'withdrawn' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'actionTakenByName'])
+      );
+      allow delete: if isSystemAdminClaim();
     }
 
     // SETTINGS: Modulspezifische Einstellungen
