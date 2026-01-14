@@ -436,6 +436,7 @@ async function initializeFirebase() {
                 const functions = getFunctions(app);
                 window.setRoleClaim = httpsCallable(functions, 'setRoleClaim');
                 window.checkVoteToken = httpsCallable(functions, 'checkVoteToken');
+                window.getGuestPayments = httpsCallable(functions, 'getGuestPayments');
 
                 window.firebaseFunctionsInitialised = true;
                 console.log("Firebase Functions initialisiert und global verfügbar gemacht.");

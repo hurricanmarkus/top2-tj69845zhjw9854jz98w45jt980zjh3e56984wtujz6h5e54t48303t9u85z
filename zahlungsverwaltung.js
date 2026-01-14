@@ -6338,7 +6338,31 @@ async function shareContactLink(contactId) {
     // ist das für diesen Zweck ("geheimer Link") ausreichend.
 
     const baseUrl = window.location.origin + window.location.pathname;
-    const link = `${baseUrl}?guest_id=${contactId}`;
+    let tokenToUse = null;
+
+    try {
+        const ref = doc(db, 'artifacts', appId, 'public', 'data', 'private-contacts', contactId);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+            const d = snap.data();
+            tokenToUse = d.guestToken || null;
+        }
+
+        if (!tokenToUse) {
+            tokenToUse = generateGuestToken();
+            await updateDoc(ref, {
+                guestToken: tokenToUse,
+                guestTokenCreatedAt: serverTimestamp(),
+                guestTokenViews: 0
+            });
+        }
+    } catch (e) {
+        console.error(e);
+    }
+
+    const link = tokenToUse
+        ? `${baseUrl}?guest_id=${contactId}&token=${tokenToUse}`
+        : `${baseUrl}?guest_id=${contactId}`;
 
     try {
         await navigator.clipboard.writeText(link);
@@ -6369,86 +6393,22 @@ export async function initializeGuestView(guestId) {
     try {
         const urlParams = new URLSearchParams(window.location.search);
         const urlToken = urlParams.get('token');
-        const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
-        
         let docsList = [];
         let isSinglePaymentMode = false;
 
-        // --- FALL 1: EINZELNE ZAHLUNG ---
-        if (guestId.startsWith('PAYMENT:')) {
-            const realPaymentId = guestId.split(':')[1];
-            isSinglePaymentMode = true;
-            const q = query(paymentsRef, where('__name__', '==', realPaymentId));
-            const snapshot = await getDocs(q);
-            snapshot.forEach(doc => docsList.push({ id: doc.id, ...doc.data() }));
-        } 
-        // --- FALL 2: ADRESSBUCH / USER LINK ---
-        else {
-            // 1. SICHERHEITS-CHECK & NAMEN LADEN
-            let actorDoc = null;
-
-            try {
-                // Versuche Kontakt
-                const snap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'private-contacts', guestId));
-                if (snap.exists()) {
-                    actorDoc = snap;
-                    // BUGFIX 5: Namen setzen
-                    guestRealName = snap.data().name || "Gast";
-                }
-            } catch(e) {}
-
-            if (!actorDoc) {
-                try {
-                    // Versuche User
-                    const snap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'user-config', guestId));
-                    if (snap.exists()) {
-                        actorDoc = snap;
-                        // BUGFIX 5: Namen setzen (RealName oder Name)
-                        const d = snap.data();
-                        guestRealName = d.realName || d.name || "Gast";
-                    }
-                } catch(e) {}
-            }
-
-            if (!actorDoc) {
-                alert("Link ungültig: Benutzer/Kontakt nicht gefunden.");
-                return;
-            }
-
-            const actorData = actorDoc.data();
-            const dbToken = actorData.guestToken;
-
-            if (dbToken && dbToken !== urlToken) {
-                document.getElementById('guestView').innerHTML = `
-                    <div class="flex flex-col items-center justify-center h-screen bg-gray-100 p-4 text-center">
-                        <div class="bg-white p-8 rounded-xl shadow-xl">
-                            <h1 class="text-2xl font-bold text-red-600 mb-2">Link abgelaufen</h1>
-                            <p class="text-gray-600">Dieser Sicherheits-Link ist nicht mehr gültig.<br>Bitte fordere einen neuen Link an.</p>
-                        </div>
-                    </div>`;
-                return;
-            }
-
-            if (dbToken && urlToken === dbToken) {
-                try {
-                    updateDoc(actorDoc.ref, { guestTokenViews: increment(1) });
-                } catch (err) { console.warn(err); }
-            }
-
-            // 2. DATEN LADEN
-            const q1 = query(paymentsRef, where('involvedUserIds', 'array-contains', guestId));
-            const q2 = query(paymentsRef, where('debtorId', '==', guestId));
-            const q3 = query(paymentsRef, where('creditorId', '==', guestId));
-
-            const [s1, s2, s3] = await Promise.all([getDocs(q1), getDocs(q2), getDocs(q3)]);
-            
-            const merged = new Map();
-            s1.forEach(d => merged.set(d.id, { id: d.id, ...d.data() }));
-            s2.forEach(d => merged.set(d.id, { id: d.id, ...d.data() }));
-            s3.forEach(d => merged.set(d.id, { id: d.id, ...d.data() }));
-            
-            docsList = Array.from(merged.values());
+        console.log("initializeGuestView: starte - rufe Cloud Function getGuestPayments an...");
+        if (!window.getGuestPayments) {
+            throw new Error("Cloud Function 'getGuestPayments' ist nicht initialisiert.");
         }
+
+        const result = await window.getGuestPayments({ guestId: guestId, token: urlToken });
+        if (!result.data || result.data.status !== 'success') {
+            throw new Error("Fehler: Ungültige Antwort von getGuestPayments.");
+        }
+
+        docsList = result.data.payments || [];
+        isSinglePaymentMode = !!result.data.isSinglePaymentMode;
+        guestRealName = result.data.guestRealName || "Gast";
 
         // --- RENDERING ---
         const listContainer = document.getElementById('guest-payment-list');
@@ -6590,6 +6550,22 @@ export async function initializeGuestView(guestId) {
 
     } catch (e) {
         console.error(e);
+        if (e && (e.code === 'functions/permission-denied' || String(e.message || '').toLowerCase().includes('abgelaufen'))) {
+            document.getElementById('guestView').innerHTML = `
+                <div class="flex flex-col items-center justify-center h-screen bg-gray-100 p-4 text-center">
+                    <div class="bg-white p-8 rounded-xl shadow-xl">
+                        <h1 class="text-2xl font-bold text-red-600 mb-2">Link abgelaufen</h1>
+                        <p class="text-gray-600">Dieser Sicherheits-Link ist nicht mehr gültig.<br>Bitte fordere einen neuen Link an.</p>
+                    </div>
+                </div>`;
+            return;
+        }
+
+        if (e && e.code === 'functions/not-found') {
+            alert("Link ungültig: Benutzer/Kontakt/Zahlung nicht gefunden.");
+            return;
+        }
+
         alert("Fehler beim Laden der Daten.");
     }
 }
@@ -7630,17 +7606,34 @@ function openShareModal(id) {
         }
 
         const baseUrl = window.location.origin + window.location.pathname;
-        
-        // WICHTIG: Wir nutzen hier IMMER das Format "PAYMENT:ID".
-        // Das zwingt die Gast-Ansicht in den "Single Payment Mode".
-        // Der Gast sieht dann NUR diese eine Schulde, egal wie viele andere er noch hat.
-        const link = `${baseUrl}?guest_id=PAYMENT:${id}`;
-        
-        navigator.clipboard.writeText(link).then(() => { 
-            alertUser("Link für DIESE EINE Zahlung kopiert!", "success"); 
-        }).catch(() => {
-            prompt("Link kopieren:", link);
-        });
+
+        (async () => {
+            let tokenToUse = p.guestToken || null;
+
+            if (!tokenToUse) {
+                try {
+                    tokenToUse = generateGuestToken();
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', id), {
+                        guestToken: tokenToUse,
+                        guestTokenCreatedAt: serverTimestamp(),
+                        guestTokenViews: 0
+                    });
+                    p.guestToken = tokenToUse;
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+
+            const link = tokenToUse
+                ? `${baseUrl}?guest_id=PAYMENT:${id}&token=${tokenToUse}`
+                : `${baseUrl}?guest_id=PAYMENT:${id}`;
+
+            navigator.clipboard.writeText(link).then(() => { 
+                alertUser("Link für DIESE EINE Zahlung kopiert!", "success"); 
+            }).catch(() => {
+                prompt("Link kopieren:", link);
+            });
+        })();
     };
 
     modal.style.display = 'flex';
