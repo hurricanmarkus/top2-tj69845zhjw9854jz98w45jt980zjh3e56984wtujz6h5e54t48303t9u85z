@@ -275,7 +275,7 @@ function openAssignUserModal() {
     // Filtere alle Benutzer, die "registriert" sind (ein Passwort haben)
     // und nicht der Ersteller (currentUser) selbst sind.
     const registeredUsers = Object.values(USERS).filter(user =>
-        user.key &&
+        user.permissionType !== 'not_registered' &&
         user.isActive &&
         user.id !== currentUser.mode // Man muss sich nicht selbst zuweisen
     );

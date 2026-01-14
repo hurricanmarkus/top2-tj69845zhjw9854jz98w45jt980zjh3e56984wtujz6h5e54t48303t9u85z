@@ -29,7 +29,9 @@ export function listenForUserUpdates() {
             // 2. Cache leeren und neu befüllen
             Object.keys(USERS).forEach(key => delete USERS[key]);
             snapshot.forEach((doc) => {
-                USERS[doc.id] = { id: doc.id, ...doc.data() };
+                const data = doc.data() || {};
+                const { key, ...safeData } = data;
+                USERS[doc.id] = { id: doc.id, ...safeData };
             });
 
             // 3. Eigene Berechtigung prüfen (Live-Schutz)
@@ -194,7 +196,7 @@ export function renderUserKeyList() {
             // Nur SysAdmin darf SysAdmin bearbeiten (sich selbst nicht), Admin darf nur Nicht-Admins/SysAdmins
             const canEditKey = (isSysAdmin && !isTargetSysAdmin && !isSelf) || (isAdmin && !isTargetSysAdmin && user.role !== 'ADMIN') || isSelf;
             const canViewKey = canEditKey; // Gleiche Logik für das Sehen des Schlüssels
-            const keyDisplay = canViewKey ? (user.key || 'Nicht gesetzt') : '••••••••••';
+            const keyDisplay = '••••••••••';
             const currentUserLabel = isSelf ? '<span class="bg-indigo-100 text-indigo-800 font-bold text-xs px-2 py-1 rounded-full ml-2">AKTUELL</span>' : '';
 
             const userDiv = document.createElement('div');
@@ -249,8 +251,10 @@ export function renderUserKeyList() {
                     setButtonLoading(currentButton, true); // Ladezustand aktivieren
                     console.log(`Versuche Passwort für User ${userId} zu ändern...`); // Debug
 
-                    // Warten auf Firebase Update
-                    await updateDoc(doc(usersCollectionRef, userId), { key: newKey });
+                    if (!window.setUserKey) {
+                        throw new Error("Cloud Function (setUserKey) ist noch nicht initialisiert. Bitte warten.");
+                    }
+                    await window.setUserKey({ appUserId: userId, newKey });
                     console.log(`Passwort für User ${userId} erfolgreich in Firebase geändert.`); // Debug
 
                     // Warten auf Log-Eintrag

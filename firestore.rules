@@ -23,15 +23,36 @@ service cloud.firestore {
       return hasAppRole('SYSTEMADMIN');
     }
 
+    function hasAppUserIdClaim() {
+      return isAuthenticated() && request.auth.token != null && request.auth.token.appUserId != null;
+    }
+
+    function appUserId() {
+      return request.auth.token.appUserId;
+    }
+
+    function isSelfAppUser(userId) {
+      return hasAppUserIdClaim() && appUserId() == userId;
+    }
+
+    function isUserConfigKeyUnchanged() {
+      return request.resource.data.key == resource.data.key;
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // BENUTZERVERWALTUNG (User Management)
     // ═══════════════════════════════════════════════════════════════
     
     // USER-CONFIG: Benutzerprofile
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/user-config/{userId} {
-      allow read: if true;
-      allow create, delete: if isSystemAdminClaim();
-      allow update: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow create: if isSystemAdminClaim() && !('key' in request.resource.data);
+      allow delete: if isSystemAdminClaim();
+      allow update: if (isAdminOrSystemAdminClaim() || isSelfAppUser(userId)) && isUserConfigKeyUnchanged();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/private/secrets/{path=**} {
+      allow read, write: if false;
     }
 
     // USER-ROLES: Definitionen der Standard-Rollen
@@ -139,30 +160,38 @@ service cloud.firestore {
     
     // PAYMENTS: Zahlungen
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/payments/{paymentId} {
-      allow read: if true;
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow read: if hasAppUserIdClaim() && resource.data.involvedUserIds.hasAny([appUserId()]);
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId() && request.resource.data.involvedUserIds.hasAny([appUserId()]);
+      allow update: if hasAppUserIdClaim() && resource.data.involvedUserIds.hasAny([appUserId()]);
+      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
     }
     
     // PAYMENT-TEMPLATES: Zahlungsvorlagen
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/payment-templates/{document} {
-      allow read, write: if true;
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update, delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
     }
     
     // PRIVATE-CONTACTS: Private Kontakte
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/private-contacts/{document} {
-      allow read, write: if true;
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update, delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
     }
 
     // PRIVATE-ACCOUNTS: Private Konten
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/private-accounts/{document} {
-      allow read, write: if true;
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update, delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
     }
     
     // PAYMENT-CATEGORIES: Zahlungskategorien
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/payment-categories/{category} {
-      allow read, write: if true;
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update, delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
     }
 
     // ═══════════════════════════════════════════════════════════════

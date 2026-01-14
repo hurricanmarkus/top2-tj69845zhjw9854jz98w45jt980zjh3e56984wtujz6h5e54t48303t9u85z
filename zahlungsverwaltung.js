@@ -528,7 +528,11 @@ function listenForSystemUsers() {
     
     unsubscribeSystemUsers = onSnapshot(usersRef, (snapshot) => {
         allSystemUsers = [];
-        snapshot.forEach(doc => allSystemUsers.push({ id: doc.id, ...doc.data() }));
+        snapshot.forEach(doc => {
+            const data = doc.data() || {};
+            const { key, ...safeData } = data;
+            allSystemUsers.push({ id: doc.id, ...safeData });
+        });
 
         // Wenn der Settings-View aktiv ist und der Tab "Adressbuch" offen ist (oder generell), updaten
         if (document.getElementById('zahlungsverwaltungSettingsView').classList.contains('active')) {

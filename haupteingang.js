@@ -437,6 +437,8 @@ async function initializeFirebase() {
                 window.setRoleClaim = httpsCallable(functions, 'setRoleClaim');
                 window.checkVoteToken = httpsCallable(functions, 'checkVoteToken');
                 window.getGuestPayments = httpsCallable(functions, 'getGuestPayments');
+                window.setUserKey = httpsCallable(functions, 'setUserKey');
+                window.migrateUserKeysToSecrets = httpsCallable(functions, 'migrateUserKeysToSecrets');
 
                 window.firebaseFunctionsInitialised = true;
                 console.log("Firebase Functions initialisiert und global verfügbar gemacht.");
@@ -755,9 +757,7 @@ export function navigate(targetViewName) {
         const userKeyDisplayEl = document.getElementById('currentUserKeyDisplay');
         if (userNameEl) userNameEl.textContent = `Passwort für ${currentUser.displayName} ändern`;
         if (userKeyDisplayEl) {
-            const user = USERS[currentUser.mode];
-            userKeyDisplayEl.style.display = user?.key ? 'block' : 'none';
-            if (user?.key) userKeyDisplayEl.innerHTML = `<p class="text-lg">Dein aktuelles Passwort lautet: <strong class="font-bold">${user.key}</strong></p>`;
+            userKeyDisplayEl.style.display = 'none';
         }
     }
     if (targetViewName === 'essensberechnung') {
@@ -1794,18 +1794,6 @@ export function setupEventListeners() {
             return;
         }
 
-        // 1. Lokale PIN-Prüfung
-        if (userFromFirestore.key !== enteredPin) {
-            pinError.style.display = 'block';
-            adminPinInput.value = '';
-            return;
-        }
-
-        // 2. PIN korrekt, Modal schließen
-        pinModal.style.display = 'none';
-        adminPinInput.value = '';
-        pinError.style.display = 'none';
-
         try {
             // --- 3. KORREKTUR: Cloud Function mit dem Firebase SDK aufrufen (NICHT fetch) ---
 
@@ -1869,6 +1857,11 @@ export function setupEventListeners() {
 
             startUserDependentListeners();
 
+            // PIN korrekt, Modal schließen
+            pinModal.style.display = 'none';
+            adminPinInput.value = '';
+            pinError.style.display = 'none';
+
             // 7. Erfolgsmeldung
             alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet! Rolle: ${newClaimRole}`, "success");
 
@@ -1876,9 +1869,22 @@ export function setupEventListeners() {
             // 8. Fehlerbehandlung
             console.error("Fehler beim Cloud Function Aufruf oder Token Refresh:", error);
 
+            const errCode = String(error?.code || '');
+            const errMsg = String(error?.message || '');
+            const isInvalidPin = errCode === 'functions/permission-denied' || errCode === 'permission-denied' || errMsg.toLowerCase().includes('ungültiger pin');
+
+            if (isInvalidPin) {
+                pinError.style.display = 'block';
+                adminPinInput.value = '';
+                pinModal.style.display = 'flex';
+                return;
+            }
+
             // KORREKTUR: Zeige die Fehlermeldung der Cloud Function an
             // (z.B. "Ungültiger PIN." oder "Benutzer nicht authentifiziert.")
             alertUser(`Fehler: ${error.message || 'Interner Fehler'}`, "error");
+
+            if (pinModal) pinModal.style.display = 'none';
 
             switchToGuestMode(false);
             updateUIForMode();
@@ -2465,10 +2471,12 @@ export function setupEventListeners() {
             if (newKey.length < 4) return alertUser("Der Schlüssel muss mindestens 4 Zeichen lang sein.", "error");
 
             try {
-                await updateDoc(doc(usersCollectionRef, currentUser.mode), { key: newKey });
+                if (!window.setUserKey) {
+                    throw new Error("Cloud Function (setUserKey) ist noch nicht initialisiert. Bitte warten.");
+                }
+                await window.setUserKey({ appUserId: currentUser.mode, newKey });
                 await logAdminAction('self_password_changed', `Eigenes Passwort geändert.`);
                 alertUser(`Ihr Schlüssel wurde erfolgreich aktualisiert!`, "success");
-                if (USERS[currentUser.mode]) USERS[currentUser.mode].key = newKey;
 
                 const userKeyDisplayEl = document.getElementById('currentUserKeyDisplay');
                 if (userKeyDisplayEl) {
