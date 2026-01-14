@@ -1854,15 +1854,11 @@ export function setupEventListeners() {
 
             // 5. Finales Token aktualisieren und UI updaten
             const idTokenResult = await auth.currentUser.getIdTokenResult(true);
-            console.log("TOKEN CLAIMS:", idTokenResult.claims);
-            console.log("TOKEN appUserId:", idTokenResult.claims?.appUserId);
-            console.log("TOKEN appRole:", idTokenResult.claims?.appRole);
             const newClaimRole = idTokenResult.claims.appRole || 'Keine Rolle zugewiesen';
 
             // =================================================================
             // SICHERHEITS-FIX: Lösche alle alten Benutzerdaten VOR dem neuen Login!
             // =================================================================
-            console.log("🔐 LOGIN: Lösche alte Benutzerdaten vor neuem Login...");
             clearAllUserData();
             // =================================================================
 
