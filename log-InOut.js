@@ -250,6 +250,17 @@ export async function checkCurrentUserValidity() {
             throw new Error("Konnte kein gültiges ID Token abrufen.");
         }
 
+        const tokenAppUserId = idTokenResult.claims.appUserId || null;
+        if (tokenAppUserId && storedAppUserId && tokenAppUserId !== storedAppUserId) {
+            console.warn(`CHECK-MISMATCH! appUserId im Token: '${tokenAppUserId}', App User im Speicher: '${storedAppUserId}'`);
+            switchToGuestMode(
+                true,
+                "Ihre Anmeldung ist inkonsistent (Token/User passt nicht). Bitte melden Sie sich erneut an.",
+                "info"
+            );
+            return;
+        }
+
         // 2. Lese die Rolle aus dem Token (der alte "Ausweis")
         //    Wir verwenden 'appRole', wie in 'handleLogin' definiert.
         const tokenRole = idTokenResult.claims.appRole || null;

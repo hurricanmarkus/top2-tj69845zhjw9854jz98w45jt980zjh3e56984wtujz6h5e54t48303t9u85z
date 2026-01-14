@@ -205,6 +205,34 @@ service cloud.firestore {
       allow delete: if isAuthenticated();
     }
 
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/vertraege_themen/{themaId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+
+      match /vertraege/{vertragId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update: if isAuthenticated();
+        allow delete: if isAuthenticated();
+      }
+
+      match /kategorien/{kategorieId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update: if isAuthenticated();
+        allow delete: if isAuthenticated();
+      }
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/vertraege_einladungen/{einladungId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // REZEPTVERWALTUNG (Recipe Management)
     // ═══════════════════════════════════════════════════════════════
