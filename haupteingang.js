@@ -2364,57 +2364,86 @@ export function setupEventListeners() {
             saveUserSetting('nachrichtencenter_title', titleInput.value || '');
             saveUserSetting('nachrichtencenter_message', messageInput.value || '');
 
-            const recipientRef = recipientRefInput ? String(recipientRefInput.value || '') : '';
-            if (!recipientRef) {
+            const rawRecipientRefs = recipientRefInput ? String(recipientRefInput.value || '') : '';
+            let recipientRefs = [];
+            if (rawRecipientRefs) {
+                try {
+                    const parsed = JSON.parse(rawRecipientRefs);
+                    if (Array.isArray(parsed)) recipientRefs = parsed.map(v => String(v || '').trim()).filter(Boolean);
+                    else recipientRefs = [String(parsed || '').trim()].filter(Boolean);
+                } catch (err) {
+                    recipientRefs = [rawRecipientRefs];
+                }
+            }
+
+            if (!recipientRefs.length) {
                 return alertUser('Bitte Empfänger wählen.', 'error');
             }
-            saveUserSetting('nachrichtencenter_recipient_ref', recipientRef);
+
+            const payload = JSON.stringify(recipientRefs);
+            saveUserSetting('nachrichtencenter_recipient_refs', payload);
+            saveUserSetting('nachrichtencenter_recipient_ref', recipientRefs[0] || '');
 
             console.log('Nachrichtencenter: Sende Nachricht...');
             setButtonLoading(buttonEl, true);
 
-            const formData = new FormData();
-            formData.append('token', PUSHOVER_TOKEN);
-            let recipientKey = recipientKeyInput ? String(recipientKeyInput.value || '') : '';
+            try {
+                const errors = [];
 
-            if (!recipientKey) {
-                try {
-                    let recipientDocRef = null;
-                    if (recipientRef.startsWith('global:')) {
-                        const contactId = recipientRef.slice('global:'.length);
-                        recipientDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'nachrichtencenter_global_contacts', contactId);
-                    } else if (recipientRef.startsWith('private:')) {
-                        const contactId = recipientRef.slice('private:'.length);
-                        recipientDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'nachrichtencenter_private_contacts', currentUser.mode, 'contacts', contactId);
+                for (const recipientRef of recipientRefs) {
+                    let recipientKey = '';
+
+                    // Ein-Empfänger-Fallback: wenn Key bereits im hidden Input steht
+                    if (recipientRefs.length === 1) {
+                        recipientKey = recipientKeyInput ? String(recipientKeyInput.value || '') : '';
                     }
 
-                    if (recipientDocRef) {
-                        const snap = await getDoc(recipientDocRef);
-                        if (snap.exists()) {
-                            const data = snap.data() || {};
-                            if (data.key) recipientKey = String(data.key);
-                            if (recipientKeyInput && recipientKey) recipientKeyInput.value = recipientKey;
+                    if (!recipientKey) {
+                        try {
+                            let recipientDocRef = null;
+                            if (recipientRef.startsWith('global:')) {
+                                const contactId = recipientRef.slice('global:'.length);
+                                recipientDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'nachrichtencenter_global_contacts', contactId);
+                            } else if (recipientRef.startsWith('private:')) {
+                                const contactId = recipientRef.slice('private:'.length);
+                                recipientDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'nachrichtencenter_private_contacts', currentUser.mode, 'contacts', contactId);
+                            }
+
+                            if (recipientDocRef) {
+                                const snap = await getDoc(recipientDocRef);
+                                if (snap.exists()) {
+                                    const data = snap.data() || {};
+                                    if (data.key) recipientKey = String(data.key);
+                                }
+                            }
+                        } catch (err) {
+                            console.warn('Nachrichtencenter: Fehler beim Laden des Empfängers:', err);
                         }
                     }
-                } catch (err) {
-                    console.warn('Nachrichtencenter: Fehler beim Laden des Empfängers:', err);
+
+                    if (!recipientKey) {
+                        errors.push('Empfänger-Schlüssel nicht gefunden');
+                        continue;
+                    }
+
+                    const formData = new FormData();
+                    formData.append('token', PUSHOVER_TOKEN);
+                    formData.append('user', recipientKey);
+                    formData.append('title', titleInput.value);
+                    formData.append('message', message);
+
+                    const response = await fetch('https://api.pushover.net/1/messages.json', { method: 'POST', body: formData });
+                    const data = await response.json();
+                    if (data.status !== 1) {
+                        errors.push(data.errors ? data.errors.join(', ') : 'Unbekannter Pushover Fehler');
+                    }
                 }
-            }
 
-            if (!recipientKey) {
-                alertUser('Fehler: Empfänger-Schlüssel nicht gefunden.', 'error');
-                setButtonLoading(buttonEl, false);
-                return;
-            }
-            formData.append('user', recipientKey);
-            formData.append('title', titleInput.value);
-            formData.append('message', message);
+                if (errors.length) {
+                    throw new Error(errors[0]);
+                }
 
-            try {
-                const response = await fetch('https://api.pushover.net/1/messages.json', { method: 'POST', body: formData });
-                const data = await response.json();
-                if (data.status !== 1) throw new Error(data.errors ? data.errors.join(', ') : 'Unbekannter Pushover Fehler');
-                alertUser('Nachricht gesendet!', 'success');
+                alertUser(`Nachricht gesendet! (${recipientRefs.length} Empfänger)`, 'success');
                 messageInput.value = '';
                 saveUserSetting('nachrichtencenter_message', '');
             } catch (error) {

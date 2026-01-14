@@ -5577,7 +5577,11 @@
                 <div class="p-4 border rounded-xl bg-green-50 space-y-2">
                     <h4 id="nachrichtencenterContactsFormTitle" class="font-semibold text-green-800">Neuen Kontakt anlegen</h4>
                     <input type="hidden" id="nachrichtencenterEditingContactId">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <select id="nachrichtencenterContactType" class="p-2 border rounded-lg bg-white">
+                            <option value="User" selected>User</option>
+                            <option value="Gruppe">Gruppe</option>
+                        </select>
                         <input type="text" id="nachrichtencenterContactName" class="p-2 border rounded-lg" placeholder="Anzeigename">
                         <input type="text" id="nachrichtencenterContactKey" class="p-2 border rounded-lg" placeholder="Pushover Key">
                     </div>

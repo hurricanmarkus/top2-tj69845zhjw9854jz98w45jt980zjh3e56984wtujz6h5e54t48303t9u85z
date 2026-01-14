@@ -14,7 +14,7 @@ let tempSelectedApiTokenId = null;
 let tempSelectedSoundId = null;
 
 let nachrichtencenterActiveScope = 'global';
-let nachrichtencenterSelectedRef = '';
+let nachrichtencenterSelectedRefs = new Set();
 let nachrichtencenterGlobalContacts = {};
 let nachrichtencenterPrivateContacts = {};
 let unsubscribeNachrichtencenterGlobal = null;
@@ -88,36 +88,64 @@ async function syncNachrichtencenterRecipientDisplayFromRef() {
   const keyInput = document.getElementById('nachrichtencenterRecipientKey');
   if (!display || !refInput) return;
 
-  const refValue = String(refInput.value || '');
-  if (!refValue) {
+  const refs = parseNachrichtencenterRecipientRefs(refInput.value);
+  if (refs.length === 0) {
     display.innerHTML = '<span class="text-gray-400 italic">Kein Empfänger ausgewählt</span>';
     if (keyInput) keyInput.value = '';
     return;
   }
 
-  let contact = getNachrichtencenterContactByRefValue(refValue);
-  if (!contact) {
-    try {
-      const docRef = getNachrichtencenterContactDocRefFromRefValue(refValue);
-      if (docRef) {
-        const snap = await getDoc(docRef);
-        if (snap.exists()) {
-          contact = { id: snap.id, ...snap.data() };
+  const badges = [];
+  for (const refValue of refs) {
+    let contact = getNachrichtencenterContactByRefValue(refValue);
+    if (!contact) {
+      try {
+        const docRef = getNachrichtencenterContactDocRefFromRefValue(refValue);
+        if (docRef) {
+          const snap = await getDoc(docRef);
+          if (snap.exists()) {
+            contact = { id: snap.id, ...snap.data() };
+          }
         }
+      } catch (e) {
+        console.warn('Nachrichtencenter: Empfänger konnte nicht geladen werden:', e);
       }
-    } catch (e) {
-      console.warn('Nachrichtencenter: Empfänger konnte nicht geladen werden:', e);
     }
+
+    if (!contact) continue;
+    const typeLabel = String(contact.type || 'User') === 'Gruppe' ? 'Gruppe' : 'User';
+    badges.push(
+      `<span class="contact-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full">` +
+      `<span class="bg-white/70 text-blue-900 px-2 py-0.5 rounded-full text-[10px] font-semibold">${typeLabel}</span>` +
+      `<span>${contact.name || '—'}</span>` +
+      `</span>`
+    );
   }
 
-  if (!contact) {
+  if (badges.length === 0) {
     display.innerHTML = '<span class="text-gray-400 italic">Empfänger nicht gefunden</span>';
     if (keyInput) keyInput.value = '';
     return;
   }
 
-  display.innerHTML = `<span class="contact-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full">${contact.name || '—'}</span>`;
-  if (keyInput) keyInput.value = contact.key ? String(contact.key) : '';
+  display.innerHTML = badges.join('');
+  if (keyInput) keyInput.value = '';
+}
+
+function parseNachrichtencenterRecipientRefs(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return [];
+  try {
+    const arr = JSON.parse(s);
+    if (Array.isArray(arr)) return arr.map(v => String(v || '').trim()).filter(Boolean);
+  } catch (e) {
+  }
+  return [s];
+}
+
+function stringifyNachrichtencenterRecipientRefs(refs) {
+  const arr = (refs || []).map(v => String(v || '').trim()).filter(Boolean);
+  return JSON.stringify(Array.from(new Set(arr)));
 }
 
 function setNachrichtencenterContactsScope(scope) {
@@ -147,7 +175,8 @@ function renderNachrichtencenterContactLists() {
   if (!listGlobal || !listPrivate) return;
 
   const refInput = document.getElementById('nachrichtencenterRecipientRef');
-  const selectedRef = nachrichtencenterSelectedRef || (refInput ? String(refInput.value || '') : '');
+  const selectedFromInput = refInput ? parseNachrichtencenterRecipientRefs(refInput.value) : [];
+  const selectedRefs = new Set([ ...Array.from(nachrichtencenterSelectedRefs || []), ...selectedFromInput ]);
 
   const renderList = (scope, container, contactsMap) => {
     const contacts = Object.values(contactsMap || {}).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'de'));
@@ -157,15 +186,19 @@ function renderNachrichtencenterContactLists() {
     }
     container.innerHTML = contacts.map(c => {
       const refValue = `${scope === 'private' ? 'private:' : 'global:'}${c.id}`;
-      const isChecked = refValue === selectedRef ? 'checked' : '';
+      const isChecked = selectedRefs.has(refValue) ? 'checked' : '';
       const canEdit = String(c.createdByAppUserId || '') === String(currentUser?.mode || '');
       const keyPreview = c.key ? `${String(c.key).substring(0, 4)}...${String(c.key).substring(Math.max(0, String(c.key).length - 4))}` : '—';
+      const typeLabel = String(c.type || 'User') === 'Gruppe' ? 'Gruppe' : 'User';
       return `
         <div class="flex items-center justify-between p-2 hover:bg-gray-100 rounded-md">
           <label class="flex items-center gap-3 cursor-pointer flex-grow">
-            <input type="radio" name="nachrichtencenterRecipientSelection" value="${refValue}" class="h-4 w-4 nachrichtencenter-contact-radio" ${isChecked}>
+            <input type="checkbox" value="${refValue}" class="h-4 w-4 nachrichtencenter-contact-checkbox" ${isChecked}>
             <div>
-              <span class="font-semibold text-gray-800">${c.name || '—'}</span>
+              <div class="flex items-center gap-2">
+                <span class="font-semibold text-gray-800">${c.name || '—'}</span>
+                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">${typeLabel}</span>
+              </div>
               <p class="text-xs text-gray-500 font-mono">${keyPreview}</p>
             </div>
           </label>
@@ -220,10 +253,12 @@ function startNachrichtencenterContactListeners() {
 function resetNachrichtencenterContactForm() {
   const title = document.getElementById('nachrichtencenterContactsFormTitle');
   const editingId = document.getElementById('nachrichtencenterEditingContactId');
+  const typeInput = document.getElementById('nachrichtencenterContactType');
   const nameInput = document.getElementById('nachrichtencenterContactName');
   const keyInput = document.getElementById('nachrichtencenterContactKey');
   if (title) title.textContent = 'Neuen Kontakt anlegen';
   if (editingId) editingId.value = '';
+  if (typeInput) typeInput.value = 'User';
   if (nameInput) nameInput.value = '';
   if (keyInput) keyInput.value = '';
 }
@@ -233,11 +268,13 @@ async function saveNachrichtencenterContactFromForm() {
     alertUser('Datenbank/Benutzer noch nicht bereit. Bitte kurz warten.', 'error');
     return;
   }
+  const typeInput = document.getElementById('nachrichtencenterContactType');
   const nameInput = document.getElementById('nachrichtencenterContactName');
   const keyInput = document.getElementById('nachrichtencenterContactKey');
   const editingIdInput = document.getElementById('nachrichtencenterEditingContactId');
-  if (!nameInput || !keyInput || !editingIdInput) return;
+  if (!typeInput || !nameInput || !keyInput || !editingIdInput) return;
 
+  const type = String(typeInput.value || 'User') === 'Gruppe' ? 'Gruppe' : 'User';
   const name = String(nameInput.value || '').trim();
   const key = String(keyInput.value || '').trim();
   if (!name || !key) {
@@ -253,20 +290,20 @@ async function saveNachrichtencenterContactFromForm() {
       const col = getNachrichtencenterGlobalContactsRef();
       if (!col) return;
       if (isEdit) {
-        await updateDoc(doc(col, contactId), { name, key, updatedAt: serverTimestamp(), updatedByAppUserId: currentUser.mode });
+        await updateDoc(doc(col, contactId), { type, name, key, updatedAt: serverTimestamp(), updatedByAppUserId: currentUser.mode });
         alertUser('Kontakt aktualisiert.', 'success');
       } else {
-        await addDoc(col, { name, key, createdAt: serverTimestamp(), createdByAppUserId: currentUser.mode, createdByName: currentUser.displayName || currentUser.mode, createdByAuthUid: auth?.currentUser?.uid || null });
+        await addDoc(col, { type, name, key, createdAt: serverTimestamp(), createdByAppUserId: currentUser.mode, createdByName: currentUser.displayName || currentUser.mode, createdByAuthUid: auth?.currentUser?.uid || null });
         alertUser('Kontakt gespeichert.', 'success');
       }
     } else {
       const col = getNachrichtencenterPrivateContactsRef();
       if (!col) return;
       if (isEdit) {
-        await updateDoc(doc(col, contactId), { name, key, updatedAt: serverTimestamp(), updatedByAppUserId: currentUser.mode });
+        await updateDoc(doc(col, contactId), { type, name, key, updatedAt: serverTimestamp(), updatedByAppUserId: currentUser.mode });
         alertUser('Kontakt aktualisiert.', 'success');
       } else {
-        await addDoc(col, { name, key, createdAt: serverTimestamp(), createdByAppUserId: currentUser.mode, createdByName: currentUser.displayName || currentUser.mode, createdByAuthUid: auth?.currentUser?.uid || null });
+        await addDoc(col, { type, name, key, createdAt: serverTimestamp(), createdByAppUserId: currentUser.mode, createdByName: currentUser.displayName || currentUser.mode, createdByAuthUid: auth?.currentUser?.uid || null });
         alertUser('Kontakt gespeichert.', 'success');
       }
     }
@@ -582,10 +619,12 @@ export function ensureModalListeners() {
         }
         const title = document.getElementById('nachrichtencenterContactsFormTitle');
         const editingId = document.getElementById('nachrichtencenterEditingContactId');
+        const typeInput = document.getElementById('nachrichtencenterContactType');
         const nameInput = document.getElementById('nachrichtencenterContactName');
         const keyInput = document.getElementById('nachrichtencenterContactKey');
         if (title) title.textContent = 'Kontakt bearbeiten';
         if (editingId) editingId.value = String(contact.id);
+        if (typeInput) typeInput.value = String(contact.type || 'User') === 'Gruppe' ? 'Gruppe' : 'User';
         if (nameInput) nameInput.value = String(contact.name || '');
         if (keyInput) keyInput.value = String(contact.key || '');
         return;
@@ -598,22 +637,24 @@ export function ensureModalListeners() {
         await deleteNachrichtencenterContactByRef(refValue);
         return;
       }
-      const radioNc = e.target.closest('.nachrichtencenter-contact-radio');
-      if (radioNc) {
-        nachrichtencenterSelectedRef = String(radioNc.value || '');
+      const checkboxNc = e.target.closest('.nachrichtencenter-contact-checkbox');
+      if (checkboxNc) {
+        const refValue = String(checkboxNc.value || '');
+        if (!refValue) return;
+        if (checkboxNc.checked) nachrichtencenterSelectedRefs.add(refValue);
+        else nachrichtencenterSelectedRefs.delete(refValue);
         return;
       }
       if (e.target.closest('#nachrichtencenterContactBookApplyButton')) {
         const modal = document.getElementById('nachrichtencenterContactBookModal');
-        const selected = modal ? modal.querySelector('input[name="nachrichtencenterRecipientSelection"]:checked') : null;
-        const selectedRef = selected ? String(selected.value || '') : '';
+        const selectedNodes = modal ? modal.querySelectorAll('.nachrichtencenter-contact-checkbox:checked') : [];
+        const selectedRefs = Array.from(selectedNodes || []).map(n => String(n.value || '')).filter(Boolean);
         const refInput = document.getElementById('nachrichtencenterRecipientRef');
         const keyInput = document.getElementById('nachrichtencenterRecipientKey');
-        if (refInput) refInput.value = selectedRef;
+        const payload = stringifyNachrichtencenterRecipientRefs(selectedRefs);
+        if (refInput) refInput.value = payload;
         if (keyInput) keyInput.value = '';
-        if (selectedRef) {
-          saveUserSetting('nachrichtencenter_recipient_ref', selectedRef);
-        }
+        saveUserSetting('nachrichtencenter_recipient_refs', payload);
         await syncNachrichtencenterRecipientDisplayFromRef();
         if (modal) modal.style.display = 'none';
         return;
@@ -900,115 +941,98 @@ function openModeConfigForm(modeId = null) {
   if (deleteBtn) deleteBtn.classList.add('hidden');
   if (cancelBtn) cancelBtn.classList.remove('hidden');
 
-  // --- Edit-Modus (falls modeId angegeben) ---
-  if (modeId) {
-    const modeToEdit = (notrufSettings.modes || []).find(m => String(m.id) === String(modeId));
-    if (!modeToEdit) {
-      console.warn('openModeConfigForm: Modus mit ID nicht gefunden:', modeId);
-      formContainer.classList.remove('hidden');
-      return;
-    }
+  formContainer.classList.remove('hidden');
+  formContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-    if (editingModeIdInput) editingModeIdInput.value = String(modeToEdit.id);
-    if (titleInput) titleInput.value = modeToEdit.title || '';
-    if (descInput) descInput.value = modeToEdit.description || '';
-    const config = modeToEdit.config || {};
-    if (pushoverTitleInput) pushoverTitleInput.value = config.title || '';
-    if (messageInput) messageInput.value = config.message || '';
+  if (!modeId) return;
 
-    const prio = (typeof config.priority !== 'undefined' && config.priority !== null) ? Number(config.priority) : 0;
-    if (priorityButtons && priorityButtons.length) {
-      priorityButtons.forEach(btn => btn.classList.remove('bg-indigo-600','text-white','bg-yellow-600','text-yellow-900'));
-      const prioBtn = document.querySelector(`.priority-btn[data-priority="${prio}"]`) || document.querySelector('.priority-btn[data-priority="0"]');
-      if (prioBtn) prioBtn.classList.add('bg-indigo-600','text-white');
-    }
-
-    const savedRetry = (typeof config.retry !== 'undefined') ? config.retry : 30;
-    if (savedRetry === 0) {
-      if (retryCheckbox) retryCheckbox.checked = true;
-      if (retrySecondsInput) { retrySecondsInput.value = 30; retrySecondsInput.disabled = true; }
-    } else {
-      if (retryCheckbox) retryCheckbox.checked = false;
-      if (retrySecondsInput) { retrySecondsInput.value = Math.max(30, Number(savedRetry) || 30); retrySecondsInput.disabled = false; }
-    }
-
-    // API Token / Sound / UserKeys befüllen
-    if (typeof config.selectedApiTokenId !== 'undefined' && config.selectedApiTokenId !== null) {
-      tempSelectedApiTokenId = config.selectedApiTokenId;
-      const token = (notrufSettings.apiTokens || []).find(t => String(t.id) === String(tempSelectedApiTokenId));
-      if (apiTokenDisplay) apiTokenDisplay.innerHTML = token ? `<span class="api-token-badge" data-token-id="${token.id}">${token.name}</span>` : '<span class="text-gray-400 italic">Token nicht gefunden</span>';
-    } else {
-      tempSelectedApiTokenId = null;
-      if (apiTokenDisplay) apiTokenDisplay.innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
-    }
-
-    if (typeof config.selectedSoundId !== 'undefined' && config.selectedSoundId !== null) {
-      tempSelectedSoundId = config.selectedSoundId;
-      const sound = (notrufSettings.sounds || []).find(s => String(s.id) === String(tempSelectedSoundId));
-      if (soundDisplay) soundDisplay.innerHTML = sound ? `<span class="sound-badge" data-sound-id="${sound.id}">${sound.useCustomName && sound.customName ? sound.customName : sound.code}</span>` : '<span class="text-gray-400 italic">Sound nicht gefunden</span>';
-    } else {
-      tempSelectedSoundId = null;
-      if (soundDisplay) soundDisplay.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
-    }
-
-    if (Array.isArray(config.userKeys) && userKeyDisplay) {
-      userKeyDisplay.innerHTML = '';
-      config.userKeys.forEach(uk => {
-        let id = null, name = null;
-        if (typeof uk === 'object') { id = uk.id; name = uk.name || null; } else { id = uk; }
-        const contact = (notrufSettings.contacts || []).find(c => String(c.id) === String(id));
-        const label = contact ? contact.name : (name ? String(name) : `#${id}`);
-        if (id != null) userKeyDisplay.innerHTML += `<span class="contact-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-contact-id="${id}">${label}</span>`;
-      });
-    }
-
-    // VISUAL: orange Hintergrund & primary button orange
-    formContainer.classList.remove('bg-white','border-gray-200');
-    formContainer.classList.add('bg-yellow-100','border','border-yellow-300','rounded-lg','p-4');
-
-    // setze primary button in Edit-Mode (robust)
-    setPrimaryToEditModeStyle();
-
-    // Falls es einen separaten updateBtn element gibt: style/show ihn
-    if (updateBtnById) {
-      updateBtnById.classList.remove('hidden');
-      updateBtnById.textContent = 'Änderung übernehmen';
-      updateBtnById.classList.remove('bg-indigo-600','text-white');
-      updateBtnById.classList.add('bg-yellow-600','text-white');
-    }
-
-    // delete visible
-    if (deleteBtn) { deleteBtn.classList.remove('hidden'); deleteBtn.classList.add('bg-red-100','text-red-600'); }
-    if (cancelBtn) cancelBtn.classList.remove('hidden');
-
-    // Highlight in Mode-Liste (orange)
-    try {
-      const previous = document.querySelector('.mode-list-item.is-editing');
-      if (previous) previous.classList.remove('is-editing','bg-yellow-100','border-yellow-300');
-      const item = document.querySelector(`.mode-list-item[data-mode-id="${modeId}"]`);
-      if (item) item.classList.add('is-editing','bg-yellow-100','border-yellow-300');
-    } catch (e) { /* ignore */ }
-
+  // Edit-Modus (falls modeId angegeben)
+  const modeToEdit = (notrufSettings.modes || []).find(m => String(m.id) === String(modeId));
+  if (!modeToEdit) {
+    console.warn('openModeConfigForm: Modus mit ID nicht gefunden:', modeId);
     formContainer.classList.remove('hidden');
-    formContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
 
-  // Kein modeId => New Mode: Standard-Style wiederherstellen
-  setPrimaryToNewModeStyle();
-  if (updateBtnById) updateBtnById.classList.add('hidden');
-  if (deleteBtn) deleteBtn.classList.add('hidden');
-  if (cancelBtn) cancelBtn.classList.remove('hidden');
+  // Edit-UI: Werte reinladen, damit beim Speichern nichts "verschwindet"
+  if (editingModeIdInput) editingModeIdInput.value = String(modeToEdit.id);
+  if (titleInput) titleInput.value = modeToEdit.title || '';
+  if (descInput) descInput.value = modeToEdit.description || '';
+  const config = modeToEdit.config || {};
+  if (pushoverTitleInput) pushoverTitleInput.value = String(config.title || '');
+  if (messageInput) messageInput.value = String(config.message || '');
 
-  formContainer.classList.remove('bg-yellow-100','border-yellow-300');
-  formContainer.classList.add('bg-white','border','border-gray-200');
-  formContainer.classList.remove('hidden');
+  tempSelectedApiTokenId = typeof config.selectedApiTokenId !== 'undefined' ? config.selectedApiTokenId : null;
+  tempSelectedSoundId = typeof config.selectedSoundId !== 'undefined' ? config.selectedSoundId : null;
+
+  // Priorität
+  const prioVal = (typeof config.priority !== 'undefined' && config.priority !== null) ? String(config.priority) : '0';
+  if (priorityButtons && priorityButtons.length) {
+    priorityButtons.forEach(btn => btn.classList.remove('bg-indigo-600', 'text-white'));
+    const btn = document.querySelector(`.priority-btn[data-priority="${prioVal}"]`) || document.querySelector('.priority-btn[data-priority="0"]');
+    if (btn) btn.classList.add('bg-indigo-600', 'text-white');
+  }
+
+  // Retry
+  const retryVal = (typeof config.retry !== 'undefined' && config.retry !== null) ? parseInt(config.retry) : 30;
+  if (retryCheckbox) retryCheckbox.checked = (retryVal === 0);
+  if (retrySecondsInput) {
+    retrySecondsInput.disabled = (retryVal === 0);
+    if (retryVal !== 0) retrySecondsInput.value = Math.max(30, retryVal);
+  }
+
+  // API Token Anzeige
+  if (apiTokenDisplay) {
+    if (tempSelectedApiTokenId !== null && typeof tempSelectedApiTokenId !== 'undefined') {
+      const tok = (notrufSettings.apiTokens || []).find(t => String(t.id) === String(tempSelectedApiTokenId));
+      apiTokenDisplay.innerHTML = tok ? `<span class="api-token-badge" data-token-id="${tok.id}">${tok.name}</span>` : '<span class="text-gray-400 italic">Token nicht gefunden</span>';
+    } else {
+      apiTokenDisplay.innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
+    }
+  }
+
+  // Sound Anzeige
+  if (soundDisplay) {
+    if (tempSelectedSoundId !== null && typeof tempSelectedSoundId !== 'undefined') {
+      const snd = (notrufSettings.sounds || []).find(s => String(s.id) === String(tempSelectedSoundId));
+      if (snd) {
+        const label = snd.useCustomName && snd.customName ? snd.customName : snd.code;
+        soundDisplay.innerHTML = `<span class="sound-badge" data-sound-id="${snd.id}">${label}</span>`;
+      } else {
+        soundDisplay.innerHTML = '<span class="text-gray-400 italic">Sound nicht gefunden</span>';
+      }
+    } else {
+      soundDisplay.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
+    }
+  }
+
+  // Empfänger Anzeige
+  if (userKeyDisplay) {
+    userKeyDisplay.innerHTML = '';
+    (config.userKeys || []).forEach(u => {
+      const id = (u && typeof u === 'object') ? u.id : u;
+      const name = (u && typeof u === 'object') ? (u.name || `#${u.id}`) : ((notrufSettings.contacts || []).find(c => String(c.id) === String(u))?.name || `#${u}`);
+      if (typeof id === 'undefined' || id === null) return;
+      userKeyDisplay.innerHTML += `<span class="contact-badge" data-contact-id="${id}">${name}</span>`;
+    });
+  }
+
+  formContainer.classList.remove('bg-white','border-gray-200');
+  formContainer.classList.add('bg-yellow-100','border','border-yellow-300','rounded-lg','p-4');
+  setPrimaryToEditModeStyle();
+  if (deleteBtn) deleteBtn.classList.remove('hidden');
+  if (cancelBtn) cancelBtn.classList.remove('hidden');
+  return;
 }
 
-// Ersetze oder füge diese Funktion in notfall.js ein (komplett 1:1).
 async function saveNotrufMode() {
-  // DOM-Elemente / Felder
+  console.log('saveNotrufMode startet');
   const formContainer = document.getElementById('modeConfigFormContainer');
+  if (!formContainer) {
+    console.error('saveNotrufMode: #modeConfigFormContainer nicht gefunden!');
+    return;
+  }
+
   const editingModeIdInput = document.getElementById('editingModeId');
   const titleInput = document.getElementById('notrufModeTitle');
   const descInput = document.getElementById('notrufModeDescInput');
@@ -1145,8 +1169,6 @@ async function saveNotrufMode() {
     }
   }
 }
-
-
 
 // ---------- RENDER / MODAL-BUCH Funktionen ----------
 function renderContactBook() {
@@ -1501,8 +1523,10 @@ export function initializeNotrufSettingsView() {
     const recipientRefEl = document.getElementById('nachrichtencenterRecipientRef');
     const recipientKeyEl = document.getElementById('nachrichtencenterRecipientKey');
     if (recipientRefEl) {
-      const savedRef = getUserSetting('nachrichtencenter_recipient_ref', '');
-      if (savedRef) recipientRefEl.value = savedRef;
+      const savedRefs = getUserSetting('nachrichtencenter_recipient_refs', '');
+      const legacySingle = getUserSetting('nachrichtencenter_recipient_ref', '');
+      const resolved = savedRefs || (legacySingle ? stringifyNachrichtencenterRecipientRefs([legacySingle]) : '');
+      if (resolved) recipientRefEl.value = resolved;
     }
     if (recipientKeyEl) recipientKeyEl.value = '';
 
