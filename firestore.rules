@@ -36,7 +36,36 @@ service cloud.firestore {
     }
 
     function isUserConfigKeyUnchanged() {
-      return request.resource.data.key == resource.data.key;
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['key']);
+    }
+
+    function currentUserConfig() {
+      return get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/public/data/user-config/$(appUserId())).data;
+    }
+
+    function adminHasPermission(permKey) {
+      let u = currentUserConfig();
+
+      // Admins sind über Custom Claim abgesichert
+      if (!hasAppRole('ADMIN')) {
+        return false;
+      }
+
+      // Default: wenn adminPermissionType fehlt, behandeln wir es als 'role'
+      let permType = ('adminPermissionType' in u) ? u.adminPermissionType : 'role';
+
+      // 1) Individuelle Admin-Rechte
+      if (permType == 'individual') {
+        return ('adminPermissions' in u) && (permKey in u.adminPermissions) && u.adminPermissions[permKey] == true;
+      }
+
+      // 2) Rollen-basierte Admin-Rechte
+      if (('assignedAdminRoleId' in u) && u.assignedAdminRoleId != null) {
+        let rolePerms = get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/public/data/admin-roles/$(u.assignedAdminRoleId)).data.permissions;
+        return (permKey in rolePerms) && rolePerms[permKey] == true;
+      }
+
+      return false;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -167,7 +196,7 @@ service cloud.firestore {
     
     // PAYMENTS: Zahlungen
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/payments/{paymentId} {
-      allow read: if isSystemAdminClaim() || (hasAppUserIdClaim() && resource.data.involvedUserIds.hasAny([appUserId()]));
+      allow read: if isSystemAdminClaim() || adminHasPermission('canDeleteUser') || adminHasPermission('canRenameUser') || (hasAppUserIdClaim() && resource.data.involvedUserIds.hasAny([appUserId()]));
       allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId() && request.resource.data.involvedUserIds.hasAny([appUserId()]);
       allow update: if hasAppUserIdClaim() && resource.data.involvedUserIds.hasAny([appUserId()]);
       allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();

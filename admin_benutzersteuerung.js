@@ -305,7 +305,7 @@ export function renderUserManagement() {
     if (isAdmin) {
         const adminUser = USERS[currentUser.mode];
         if (adminUser) {
-            if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
+            if (adminUser.adminPermissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
                 effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
             } else {
                 effectiveAdminPerms = adminUser.adminPermissions || {};
