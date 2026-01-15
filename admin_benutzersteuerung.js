@@ -1,7 +1,7 @@
 // // @ts-check
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 // TEST 2
 import { onSnapshot, doc, updateDoc, setDoc, deleteDoc, getDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { db, usersCollectionRef, setButtonLoading, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES, ADMIN_STORAGE_KEY, PENDING_REQUESTS, appId } from './haupteingang.js';
+import { db, auth, usersCollectionRef, setButtonLoading, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES, ADMIN_STORAGE_KEY, PENDING_REQUESTS, appId } from './haupteingang.js';
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js'; // NEU: renderProtocolHistory importiert
 import { setupPermissionDependencies, renderAdminRightsManagement } from './admin_rechteverwaltung.js'; // Oder der richtige Dateiname
 // NEU: renderAdminVotesTable importiert
@@ -787,11 +787,29 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                     return;
                 }
             } catch (err) {
-                console.error("Fehler beim Guthaben-Check:", err);
-                // Optional: Trotzdem weitermachen oder abbrechen? 
-                // Wir brechen ab und warnen, falls appId fehlt.
-                alertUser("Fehler bei der Guthaben-Prüfung. Benutzer kann nicht sicher gelöscht werden.", "error");
-                return;
+                console.error("Fehler beim Guthaben-Check (1. Versuch):", err);
+
+                try {
+                    console.log("Guthaben-Check: Versuche Token/Claims zu refreshen und prüfe erneut...");
+                    await auth?.currentUser?.getIdTokenResult(true);
+
+                    const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
+                    const qCredit = query(paymentsRef,
+                        where('type', '==', 'credit'),
+                        where('status', '==', 'open'),
+                        where('involvedUserIds', 'array-contains', userId)
+                    );
+                    const snapCredit = await getDocs(qCredit);
+
+                    if (!snapCredit.empty) {
+                        alertUser("Löschen nicht möglich: Benutzer hat noch aktives Guthaben (Schulden oder Guthaben)!", "error");
+                        return;
+                    }
+                } catch (retryErr) {
+                    console.error("Fehler beim Guthaben-Check (2. Versuch):", retryErr);
+                    alertUser("Fehler bei der Guthaben-Prüfung. Benutzer kann nicht sicher gelöscht werden.", "error");
+                    return;
+                }
             }
 
             // 2. Sicherheitsabfrage
@@ -1052,7 +1070,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                     }
 
                 } catch (error) {
-                    console.error(`Fehler beim Senden der ${actionText}-Anfrage:`, error);
+                    console.error("Fehler beim Senden der ${actionText}-Anfrage:", error);
                     alertUser(`Fehler: ${error.message}`, "error");
                     target.checked = !newIsLocked;
                 }
@@ -1381,12 +1399,16 @@ export function renderAdminUserDetails(userId) {
             const container = e.currentTarget.closest('.p-4');
             const adminUserForUpdate = USERS[userId];
 
-            const typeRadio = container.querySelector('input[name^="perm-type-"]:checked');
+            const typeRadio = container?.querySelector('.perm-type-toggle:checked') || container?.querySelector('input[name^="perm-type-"]:checked');
+            const selectedType = typeRadio?.value || adminUserForUpdate?.adminPermissionType || 'role';
+
             if (!typeRadio) {
-                alertUser("Fehler: Berechtigungs-Typ konnte nicht ermittelt werden.", "error");
-                return;
+                console.warn("Admin-Rechte speichern: Kein ausgewählter Berechtigungs-Typ gefunden. Fallback auf:", selectedType);
+                console.log(
+                    "Admin-Rechte speichern: Gefundene Radios:",
+                    Array.from(container?.querySelectorAll('.perm-type-toggle') || []).map(r => ({ name: r.name, value: r.value, checked: r.checked, disabled: r.disabled }))
+                );
             }
-            const selectedType = typeRadio.value;
 
             e.currentTarget.disabled = true;
             e.currentTarget.textContent = 'Speichere...';
@@ -1425,6 +1447,17 @@ export function renderAdminUserDetails(userId) {
             Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
 
             try {
+                try {
+                    const tokenResult = await auth?.currentUser?.getIdTokenResult(true);
+                    console.log("Admin-Rechte speichern: Token-Claims", {
+                        uid: auth?.currentUser?.uid || null,
+                        appRole: tokenResult?.claims?.appRole || null,
+                        appUserId: tokenResult?.claims?.appUserId || null
+                    });
+                } catch (tokenErr) {
+                    console.warn("Admin-Rechte speichern: Konnte Token/Claims nicht refreshen.", tokenErr);
+                }
+
                 await updateDoc(doc(usersCollectionRef, userId), updateData);
                 await logAdminAction('admin_perms_updated', `Admin-Berechtigungen für ${adminUserForUpdate.name} (${selectedType}) geändert.`);
                 alertUser("Änderungen gespeichert!", "success");

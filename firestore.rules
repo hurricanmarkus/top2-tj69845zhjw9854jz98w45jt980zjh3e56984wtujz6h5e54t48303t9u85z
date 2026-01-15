@@ -167,7 +167,7 @@ service cloud.firestore {
     
     // PAYMENTS: Zahlungen
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/payments/{paymentId} {
-      allow read: if hasAppUserIdClaim() && resource.data.involvedUserIds.hasAny([appUserId()]);
+      allow read: if isSystemAdminClaim() || (hasAppUserIdClaim() && resource.data.involvedUserIds.hasAny([appUserId()]));
       allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId() && request.resource.data.involvedUserIds.hasAny([appUserId()]);
       allow update: if hasAppUserIdClaim() && resource.data.involvedUserIds.hasAny([appUserId()]);
       allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
