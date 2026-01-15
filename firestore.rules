@@ -43,29 +43,27 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/public/data/user-config/$(appUserId())).data;
     }
 
+    function adminRoleHasPermission(roleId, permKey) {
+      let rolePerms = get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/public/data/admin-roles/$(roleId)).data.permissions;
+      return (permKey in rolePerms) && rolePerms[permKey] == true;
+    }
+
     function adminHasPermission(permKey) {
       let u = currentUserConfig();
 
       // Admins sind über Custom Claim abgesichert
-      if (!hasAppRole('ADMIN')) {
-        return false;
-      }
+      let isAdminClaim = hasAppRole('ADMIN');
 
       // Default: wenn adminPermissionType fehlt, behandeln wir es als 'role'
       let permType = ('adminPermissionType' in u) ? u.adminPermissionType : 'role';
 
       // 1) Individuelle Admin-Rechte
-      if (permType == 'individual') {
-        return ('adminPermissions' in u) && (permKey in u.adminPermissions) && u.adminPermissions[permKey] == true;
-      }
+      let hasIndividualPerm = ('adminPermissions' in u) && (permKey in u.adminPermissions) && u.adminPermissions[permKey] == true;
 
       // 2) Rollen-basierte Admin-Rechte
-      if (('assignedAdminRoleId' in u) && u.assignedAdminRoleId != null) {
-        let rolePerms = get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/public/data/admin-roles/$(u.assignedAdminRoleId)).data.permissions;
-        return (permKey in rolePerms) && rolePerms[permKey] == true;
-      }
+      let hasRolePerm = ('assignedAdminRoleId' in u) && u.assignedAdminRoleId != null && adminRoleHasPermission(u.assignedAdminRoleId, permKey);
 
-      return false;
+      return isAdminClaim && ((permType == 'individual') ? hasIndividualPerm : hasRolePerm);
     }
 
     // ═══════════════════════════════════════════════════════════════
