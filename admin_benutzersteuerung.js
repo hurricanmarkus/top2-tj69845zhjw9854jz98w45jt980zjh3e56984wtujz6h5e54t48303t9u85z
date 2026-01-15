@@ -79,7 +79,8 @@ export function listenForUserUpdates() {
                 }
                 
                 // Admin-Vote Tabelle aktualisieren (falls vorhanden)
-                if (document.getElementById('admin-votes-table-body')) {
+                if (document.getElementById('terminplaner-admin-tbody')) {
+                    console.log("Live-Update: Terminplaner Admin-Tabelle wird aktualisiert...");
                     if (typeof renderAdminVotesTable === 'function') renderAdminVotesTable();
                 }
             }

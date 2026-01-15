@@ -1794,8 +1794,13 @@ export function setupEventListeners() {
         }
 
         const loginButton = submitAdminKeyButton;
+        const loginLoadingOverlay = document.getElementById('loginLoadingOverlay');
 
         try {
+            if (loginLoadingOverlay) {
+                console.log("Login: Vollbild-Overlay wird angezeigt...");
+                loginLoadingOverlay.style.display = 'flex';
+            }
             if (loginButton) setButtonLoading(loginButton, true);
             adminPinInput.disabled = true;
 
@@ -1905,6 +1910,10 @@ export function setupEventListeners() {
         } finally {
             adminPinInput.disabled = false;
             if (loginButton) setButtonLoading(loginButton, false);
+            if (loginLoadingOverlay) {
+                console.log("Login: Vollbild-Overlay wird ausgeblendet.");
+                loginLoadingOverlay.style.display = 'none';
+            }
         }
     };
 

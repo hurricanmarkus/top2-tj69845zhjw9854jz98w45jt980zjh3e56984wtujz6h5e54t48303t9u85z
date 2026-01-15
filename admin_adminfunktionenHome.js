@@ -315,6 +315,7 @@ export function renderMainFunctionsAdminArea() {
             searchInput.addEventListener('input', renderAdminVotesTable);
             searchInput.dataset.listenerAttached = 'true';
         }
+        renderAdminVotesTable();
     }
 
     // =========================================================
@@ -592,6 +593,10 @@ export function renderAdminVotesTable() {
         return; 
     }
 
+    if (!adminVotesSnapshotReceived && allPollsData.length === 0) {
+        return;
+    }
+
     // =================================================================
     // BEGINN DER FEHLERBEHEBUNG (Bug 2: Token-Spalten-Inhalt)
     // =================================================================
@@ -810,6 +815,7 @@ export function toggleAdminSection(section) {
 
 let allPollsData = []; // Speichert alle Umfragen im Cache
 let unsubscribeAdminVotes = null; // Der Live-Spion
+let adminVotesSnapshotReceived = false;
 
 /**
  * Helfer-Funktion: Formatiert die verbleibende Zeit.
@@ -844,6 +850,8 @@ function formatTimeRemaining(endTime) {
 function listenForAdminVotes(stopListener = false) {
     // Wenn die Sektion geschlossen wird, stoppe den Spion
     if (stopListener) {
+        adminVotesSnapshotReceived = false;
+        allPollsData = [];
         if (unsubscribeAdminVotes) {
             console.log("Stoppe Admin-Umfragen-Listener.");
             unsubscribeAdminVotes();
@@ -865,6 +873,7 @@ function listenForAdminVotes(stopListener = false) {
     const q = query(votesCollectionRef, orderBy('createdAt', 'desc'));
     
     unsubscribeAdminVotes = onSnapshot(q, (snapshot) => {
+        adminVotesSnapshotReceived = true;
         allPollsData = []; // Cache leeren
         snapshot.forEach(doc => {
             allPollsData.push({ id: doc.id, ...doc.data() });
