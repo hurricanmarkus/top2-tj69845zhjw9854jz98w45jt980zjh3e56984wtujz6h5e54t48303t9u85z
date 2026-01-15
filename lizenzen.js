@@ -22,8 +22,11 @@ let LIZENZEN = {};
 let KATEGORIEN = [];
 let PRODUKTE = [];
 
-let currentFilter = { produktId: '', kategorieId: '', status: 'aktiv', ohneSpiele: false };
+let currentFilter = { status: 'aktiv' };
 let searchTerm = '';
+let activeLizenzFilters = [];
+
+let lizenzModalMode = 'create';
 
 let unsubscribeLizenzen = null;
 let unsubscribeKategorien = null;
@@ -114,31 +117,60 @@ function setupEventListeners() {
         aktiviertAufSelect.dataset.listenerAttached = 'true';
     }
 
-    const searchInput = document.getElementById('search-lizenzen');
-    if (searchInput && !searchInput.dataset.listenerAttached) {
-        searchInput.addEventListener('input', (e) => {
-            searchTerm = String(e.target.value || '').toLowerCase();
-            renderLizenzenTable();
+    const ablaufModus = document.getElementById('lizAblaufModus');
+    if (ablaufModus && !ablaufModus.dataset.listenerAttached) {
+        ablaufModus.addEventListener('change', () => {
+            console.log('🔑 Lizenzen: Ablaufmodus geändert');
+            handleAblaufModusChange();
         });
-        searchInput.dataset.listenerAttached = 'true';
+        ablaufModus.dataset.listenerAttached = 'true';
     }
 
-    const filterProdukt = document.getElementById('filter-liz-produkt');
-    if (filterProdukt && !filterProdukt.dataset.listenerAttached) {
-        filterProdukt.addEventListener('change', (e) => {
-            currentFilter.produktId = String(e.target.value || '');
-            renderLizenzenTable();
-        });
-        filterProdukt.dataset.listenerAttached = 'true';
+    const ablaufTage = document.getElementById('lizAblaufTage');
+    if (ablaufTage && !ablaufTage.dataset.listenerAttached) {
+        ablaufTage.addEventListener('input', updateAblaufDatumFromTage);
+        ablaufTage.dataset.listenerAttached = 'true';
     }
 
-    const filterKategorie = document.getElementById('filter-liz-kategorie');
-    if (filterKategorie && !filterKategorie.dataset.listenerAttached) {
-        filterKategorie.addEventListener('change', (e) => {
-            currentFilter.kategorieId = String(e.target.value || '');
-            renderLizenzenTable();
+    const kaufdatum = document.getElementById('lizKaufdatum');
+    if (kaufdatum && !kaufdatum.dataset.listenerAttached) {
+        kaufdatum.addEventListener('change', updateAblaufDatumFromTage);
+        kaufdatum.dataset.listenerAttached = 'true';
+    }
+
+    const aktivierungsdatum = document.getElementById('lizAktivierungsdatum');
+    if (aktivierungsdatum && !aktivierungsdatum.dataset.listenerAttached) {
+        aktivierungsdatum.addEventListener('change', updateAblaufDatumFromTage);
+        aktivierungsdatum.dataset.listenerAttached = 'true';
+    }
+
+    const volGesamt = document.getElementById('lizVolumenGesamt');
+    if (volGesamt && !volGesamt.dataset.listenerAttached) {
+        volGesamt.addEventListener('input', updateVolumenFrei);
+        volGesamt.dataset.listenerAttached = 'true';
+    }
+
+    const volAktiv = document.getElementById('lizVolumenAktiv');
+    if (volAktiv && !volAktiv.dataset.listenerAttached) {
+        volAktiv.addEventListener('input', updateVolumenFrei);
+        volAktiv.dataset.listenerAttached = 'true';
+    }
+
+    const filterInput = document.getElementById('liz-filter-input');
+    if (filterInput && !filterInput.dataset.listenerAttached) {
+        filterInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addLizenzFilterFromUi();
+            }
         });
-        filterKategorie.dataset.listenerAttached = 'true';
+        filterInput.dataset.listenerAttached = 'true';
+    }
+
+    const addFilterBtn = document.getElementById('btn-add-liz-filter');
+    if (addFilterBtn && !addFilterBtn.dataset.listenerAttached) {
+        addFilterBtn.addEventListener('click', addLizenzFilterFromUi);
+        addFilterBtn.dataset.listenerAttached = 'true';
     }
 
     const filterStatus = document.getElementById('filter-liz-status');
@@ -150,37 +182,206 @@ function setupEventListeners() {
         filterStatus.dataset.listenerAttached = 'true';
     }
 
-    const toggleOhneSpiele = document.getElementById('filter-liz-ohne-spiele');
-    if (toggleOhneSpiele && !toggleOhneSpiele.dataset.listenerAttached) {
-        toggleOhneSpiele.addEventListener('change', (e) => {
-            currentFilter.ohneSpiele = !!e.target.checked;
-            renderLizenzenTable();
-        });
-        toggleOhneSpiele.dataset.listenerAttached = 'true';
-    }
-
     const resetFilters = document.getElementById('reset-filters-lizenzen');
     if (resetFilters && !resetFilters.dataset.listenerAttached) {
         resetFilters.addEventListener('click', () => {
-            currentFilter = { produktId: '', kategorieId: '', status: 'aktiv', ohneSpiele: false };
-            searchTerm = '';
+            currentFilter = { status: 'aktiv' };
+            activeLizenzFilters = [];
 
-            const s = document.getElementById('search-lizenzen');
-            const fp = document.getElementById('filter-liz-produkt');
-            const fk = document.getElementById('filter-liz-kategorie');
             const fs = document.getElementById('filter-liz-status');
-            const tog = document.getElementById('filter-liz-ohne-spiele');
+            const ft = document.getElementById('liz-filter-type');
+            const fe = document.getElementById('liz-filter-exclude');
+            const fi = document.getElementById('liz-filter-input');
 
-            if (s) s.value = '';
-            if (fp) fp.value = '';
-            if (fk) fk.value = '';
             if (fs) fs.value = 'aktiv';
-            if (tog) tog.checked = false;
+            if (ft) ft.value = 'all';
+            if (fe) fe.checked = false;
+            if (fi) fi.value = '';
+
+            renderLizenzSearchTags();
 
             renderLizenzenTable();
         });
         resetFilters.dataset.listenerAttached = 'true';
     }
+}
+
+function addLizenzFilterFromUi() {
+    const typeEl = document.getElementById('liz-filter-type');
+    const excludeEl = document.getElementById('liz-filter-exclude');
+    const inputEl = document.getElementById('liz-filter-input');
+
+    const type = String(typeEl?.value || 'all');
+    const exclude = !!excludeEl?.checked;
+    const term = String(inputEl?.value || '').trim();
+    if (!term) return;
+
+    addLizenzSearchTag(type, term, exclude);
+
+    if (inputEl) {
+        inputEl.value = '';
+        inputEl.focus();
+    }
+}
+
+function addLizenzSearchTag(type, term, exclude) {
+    const normalizedTerm = String(term || '').trim().toLowerCase();
+    if (!normalizedTerm) return;
+
+    const duplicate = activeLizenzFilters.some(f => f.type === type && f.term === normalizedTerm && !!f.exclude === !!exclude);
+    if (duplicate) return;
+
+    const typeLabels = {
+        all: 'Alles',
+        produkt: 'Produkt',
+        kategorie: 'Kategorie',
+        titel: 'Titel',
+        version: 'Version',
+        aktiviertAuf: 'Aktiviert auf',
+        shop: 'Shop',
+        code: 'Code'
+    };
+
+    const label = type === 'all'
+        ? `${exclude ? 'NICHT ' : ''}Alles: "${term}"`
+        : `${exclude ? 'NICHT ' : ''}${typeLabels[type] || type}: ${term}`;
+
+    console.log('🔑 Lizenzen: Filter-Tag hinzugefügt:', label);
+    activeLizenzFilters.push({ type, term: normalizedTerm, exclude: !!exclude, label });
+    renderLizenzSearchTags();
+    renderLizenzenTable();
+}
+
+function renderLizenzSearchTags() {
+    const container = document.getElementById('active-liz-search-tags');
+    if (!container) return;
+    container.innerHTML = '';
+
+    activeLizenzFilters.forEach((filter, index) => {
+        const tag = document.createElement('div');
+        tag.className = 'flex items-center bg-orange-100 text-orange-800 text-xs font-bold px-2 py-1 rounded-full border border-orange-200';
+        tag.innerHTML = `
+            <span>${escapeHtml(filter.label)}</span>
+            <button class="ml-1 text-orange-600 hover:text-orange-900 focus:outline-none" onclick="window.removeLizenzSearchTagGlobal(${index})">&times;</button>
+        `;
+        container.appendChild(tag);
+    });
+}
+
+window.removeLizenzSearchTagGlobal = (index) => {
+    activeLizenzFilters.splice(index, 1);
+    renderLizenzSearchTags();
+    renderLizenzenTable();
+};
+
+function parseOptionalInt(value) {
+    const v = String(value || '').trim();
+    if (!v) return null;
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) ? n : null;
+}
+
+function formatDateInputValue(d) {
+    if (!d || !Number.isFinite(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function updateVolumenFrei() {
+    const gesamt = parseOptionalInt(getInputValue('lizVolumenGesamt'));
+    const aktiv = parseOptionalInt(getInputValue('lizVolumenAktiv'));
+
+    if (gesamt === null) {
+        setInputValue('lizVolumenFrei', '');
+        return;
+    }
+
+    const aktivSafe = aktiv === null ? 0 : aktiv;
+    const frei = Math.max(gesamt - aktivSafe, 0);
+    setInputValue('lizVolumenFrei', String(frei));
+}
+
+function handleAblaufModusChange() {
+    const modusEl = document.getElementById('lizAblaufModus');
+    const tageEl = document.getElementById('lizAblaufTage');
+    const dateEl = document.getElementById('lizAblaufdatum');
+    if (!modusEl || !tageEl || !dateEl) return;
+
+    const isView = lizenzModalMode === 'view';
+
+    if (modusEl.value === 'tage') {
+        tageEl.classList.remove('hidden');
+        dateEl.disabled = true;
+        updateAblaufDatumFromTage();
+        return;
+    }
+
+    tageEl.classList.add('hidden');
+    tageEl.value = '';
+    dateEl.disabled = isView;
+}
+
+function updateAblaufDatumFromTage() {
+    const modus = getSelectValue('lizAblaufModus');
+    if (modus !== 'tage') return;
+
+    const tage = parseOptionalInt(getInputValue('lizAblaufTage'));
+    const dateEl = document.getElementById('lizAblaufdatum');
+    if (!dateEl) return;
+
+    if (tage === null) {
+        dateEl.value = '';
+        return;
+    }
+
+    const basisStr = getInputValue('lizAktivierungsdatum') || getInputValue('lizKaufdatum');
+    const basis = getSafeDate(basisStr) || new Date();
+    basis.setHours(0, 0, 0, 0);
+
+    const d = new Date(basis);
+    d.setDate(d.getDate() + tage);
+    dateEl.value = formatDateInputValue(d);
+}
+
+function doesLizenzMatchSearchFilter(lizenz, filter) {
+    const term = String(filter?.term || '').toLowerCase().trim();
+    if (!term) return true;
+
+    const contains = (val) => String(val || '').toLowerCase().includes(term);
+
+    const produktName = resolveProduktName(lizenz.produktId);
+    const kategorieName = resolveKategorieName(lizenz.kategorieId);
+    const aktiviertAuf = resolveAktiviertAufDisplay(lizenz);
+    const titel = lizenz.titel || lizenz.title || '';
+
+    if (filter.type === 'produkt') return contains(produktName);
+    if (filter.type === 'kategorie') return contains(kategorieName);
+    if (filter.type === 'titel') return contains(titel);
+    if (filter.type === 'version') return contains(lizenz.version);
+    if (filter.type === 'aktiviertAuf') return contains(aktiviertAuf);
+    if (filter.type === 'shop') return contains(lizenz.shop);
+    if (filter.type === 'code') return contains(lizenz.code);
+
+    return [
+        produktName,
+        kategorieName,
+        titel,
+        lizenz.version,
+        lizenz.code,
+        aktiviertAuf,
+        lizenz.lizenziertAn,
+        lizenz.shop,
+        lizenz.notizen,
+        lizenz.beschraenkungen,
+        lizenz.kaufdatum,
+        lizenz.aktivierungsdatum,
+        lizenz.ablaufdatum,
+        lizenz.ablaufTage,
+        lizenz.volumenGesamt,
+        lizenz.volumenAktiv
+    ].some(contains);
 }
 
 export function stopLizenzenListener() {
@@ -349,41 +550,16 @@ function renderLizenzenTable() {
 
     let list = Object.values(LIZENZEN);
 
-    if (currentFilter.produktId) {
-        list = list.filter(l => l.produktId === currentFilter.produktId);
-    }
-    if (currentFilter.kategorieId) {
-        list = list.filter(l => String(l.kategorieId || '') === currentFilter.kategorieId);
-    }
     if (currentFilter.status) {
         list = list.filter(l => getDerivedStatus(l) === currentFilter.status);
     }
-    if (currentFilter.ohneSpiele) {
-        list = list.filter((l) => {
-            const pName = resolveProduktName(l.produktId);
-            const kName = resolveKategorieName(l.kategorieId);
-            const text = `${pName} ${kName}`.toLowerCase();
-            return !text.includes('spiel') && !text.includes('game');
-        });
-    }
-    if (searchTerm) {
-        list = list.filter((l) => {
-            const searchText = [
-                resolveProduktName(l.produktId),
-                resolveKategorieName(l.kategorieId),
-                l.version,
-                l.code,
-                resolveAktiviertAufDisplay(l),
-                l.lizenziertAn,
-                l.shop,
-                l.volumen,
-                l.notizen
-            ]
-                .filter(Boolean)
-                .join(' ')
-                .toLowerCase();
 
-            return searchText.includes(searchTerm);
+    if (activeLizenzFilters.length > 0) {
+        list = list.filter((l) => {
+            return activeLizenzFilters.every((filter) => {
+                const matches = doesLizenzMatchSearchFilter(l, filter);
+                return filter.exclude ? !matches : matches;
+            });
         });
     }
 
@@ -418,8 +594,8 @@ function renderLizenzenTable() {
     tbody.innerHTML = list.map((l) => {
         const produkt = escapeHtml(resolveProduktName(l.produktId));
         const kategorie = escapeHtml(resolveKategorieName(l.kategorieId));
+        const titel = escapeHtml(l.titel || l.title || '-');
         const version = escapeHtml(l.version || '-');
-        const code = escapeHtml(l.code || '-');
         const aktiviertAuf = escapeHtml(resolveAktiviertAufDisplay(l));
         const ablauf = escapeHtml(l.ablaufdatum || '-');
         const restzeitHtml = calculateRestzeitHtml(l.ablaufdatum);
@@ -432,16 +608,17 @@ function renderLizenzenTable() {
 
         return `
             <tr class="hover:bg-gray-50 transition">
-                <td class="px-4 py-3 text-sm font-semibold">${produkt}</td>
+                <td class="px-4 py-3 text-sm">${statusHtml}</td>
                 <td class="px-4 py-3 text-sm">${kategorie}</td>
+                <td class="px-4 py-3 text-sm">${restzeitHtml}</td>
+                <td class="px-4 py-3 text-sm font-semibold">${produkt}</td>
+                <td class="px-4 py-3 text-sm">${titel}</td>
                 <td class="px-4 py-3 text-sm">${version}</td>
-                <td class="px-4 py-3 text-sm font-mono">${code}</td>
                 <td class="px-4 py-3 text-sm">${aktiviertAuf}</td>
                 <td class="px-4 py-3 text-sm">${ablauf}</td>
-                <td class="px-4 py-3 text-sm">${restzeitHtml}</td>
-                <td class="px-4 py-3 text-sm">${statusHtml}</td>
                 <td class="px-4 py-3 text-center">
                     <div class="flex justify-center gap-2">
+                        <button onclick="window.openViewLizenz('${l.id}')" class="p-1 text-gray-700 hover:text-gray-900" title="Ansehen">👁️</button>
                         <button onclick="window.openEditLizenz('${l.id}')" class="p-1 text-blue-600 hover:text-blue-800" title="Bearbeiten">✏️</button>
                         <button onclick="window.deleteLizenz('${l.id}')" class="p-1 text-red-600 hover:text-red-800" title="Löschen">🗑️</button>
                     </div>
@@ -474,6 +651,11 @@ function calculateRestzeitHtml(ablaufdatum) {
 
 function getSafeDate(v) {
     if (!v) return null;
+    if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+        const parts = v.split('-').map((x) => parseInt(x, 10));
+        const d = new Date(parts[0], parts[1] - 1, parts[2]);
+        return Number.isFinite(d.getTime()) ? d : null;
+    }
     const d = new Date(v);
     return Number.isFinite(d.getTime()) ? d : null;
 }
@@ -520,19 +702,54 @@ function resolveAktiviertAufDisplay(lizenz) {
 }
 
 function openCreateLizenzModal() {
+    lizenzModalMode = 'create';
     resetLizenzForm();
     openLizenzModal();
 }
 
-window.openEditLizenz = function (id) {
-    const liz = LIZENZEN[id];
-    if (!liz) return;
+function applyLizenzModalModeToUi() {
+    const isView = lizenzModalMode === 'view';
 
-    document.getElementById('lizenzModalTitle').textContent = 'Lizenz bearbeiten';
-    document.getElementById('editLizenzId').value = id;
+    const saveBtn = document.getElementById('saveLizenzBtn');
+    if (saveBtn) saveBtn.style.display = isView ? 'none' : '';
 
+    const ids = [
+        'lizProduktId',
+        'lizKategorieId',
+        'lizTitel',
+        'lizVersion',
+        'lizCode',
+        'lizLizenziertAn',
+        'lizAktiviertAufSelect',
+        'lizAktiviertAufFrei',
+        'lizKaufdatum',
+        'lizAktivierungsdatum',
+        'lizAblaufModus',
+        'lizAblaufTage',
+        'lizAblaufdatum',
+        'lizStatus',
+        'lizVolumenGesamt',
+        'lizVolumenAktiv',
+        'lizShop',
+        'lizBeschraenkungen',
+        'lizNotizen'
+    ];
+
+    ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.disabled = isView;
+    });
+
+    const freiEl = document.getElementById('lizVolumenFrei');
+    if (freiEl) freiEl.disabled = isView;
+}
+
+function populateLizenzForm(liz) {
     setSelectValue('lizKategorieId', liz.kategorieId || '');
     setSelectValue('lizProduktId', liz.produktId || '');
+
+    setInputValue('lizTitel', liz.titel || liz.title || '');
 
     setInputValue('lizVersion', liz.version || '');
     setInputValue('lizCode', liz.code || '');
@@ -542,12 +759,16 @@ window.openEditLizenz = function (id) {
     setInputValue('lizAktivierungsdatum', liz.aktivierungsdatum || '');
     setInputValue('lizAblaufdatum', liz.ablaufdatum || '');
 
-    setInputValue('lizVolumen', liz.volumen || '');
+    const mode = liz.ablaufModus ? String(liz.ablaufModus) : (liz.ablaufTage != null ? 'tage' : 'datum');
+    setSelectValue('lizAblaufModus', mode === 'tage' ? 'tage' : 'datum');
+    setInputValue('lizAblaufTage', liz.ablaufTage != null ? String(liz.ablaufTage) : '');
+
+    setInputValue('lizVolumenGesamt', liz.volumenGesamt != null ? String(liz.volumenGesamt) : '');
+    setInputValue('lizVolumenAktiv', liz.volumenAktiv != null ? String(liz.volumenAktiv) : '');
+
     setInputValue('lizShop', liz.shop || '');
 
     setSelectValue('lizStatus', liz.status || 'aktiv');
-
-    fillAktiviertAufDropdown();
 
     if (liz.aktiviertAufId) {
         setSelectValue('lizAktiviertAufSelect', liz.aktiviertAufId);
@@ -560,10 +781,34 @@ window.openEditLizenz = function (id) {
         setInputValue('lizAktiviertAufFrei', '');
     }
 
-    handleAktiviertAufChange();
-
     setInputValue('lizBeschraenkungen', liz.beschraenkungen || '');
     setInputValue('lizNotizen', liz.notizen || '');
+}
+
+window.openViewLizenz = function (id) {
+    const liz = LIZENZEN[id];
+    if (!liz) return;
+
+    lizenzModalMode = 'view';
+
+    const titleEl = document.getElementById('lizenzModalTitle');
+    if (titleEl) titleEl.textContent = 'Lizenz ansehen';
+    setInputValue('editLizenzId', id);
+
+    populateLizenzForm(liz);
+    openLizenzModal();
+};
+
+window.openEditLizenz = function (id) {
+    const liz = LIZENZEN[id];
+    if (!liz) return;
+
+    lizenzModalMode = 'edit';
+
+    document.getElementById('lizenzModalTitle').textContent = 'Lizenz bearbeiten';
+    document.getElementById('editLizenzId').value = id;
+
+    populateLizenzForm(liz);
 
     openLizenzModal();
 };
@@ -586,7 +831,10 @@ function openLizenzModal() {
     fillKategorieDropdown();
     fillProduktDropdown();
     fillAktiviertAufDropdown();
+    applyLizenzModalModeToUi();
     handleAktiviertAufChange();
+    handleAblaufModusChange();
+    updateVolumenFrei();
 
     const modal = document.getElementById('lizenzModal');
     if (modal) modal.style.display = 'flex';
@@ -606,6 +854,8 @@ function resetLizenzForm() {
     setSelectValue('lizKategorieId', '');
     setSelectValue('lizProduktId', '');
 
+    setInputValue('lizTitel', '');
+
     setInputValue('lizVersion', '');
     setInputValue('lizCode', '');
     setInputValue('lizLizenziertAn', '');
@@ -613,18 +863,29 @@ function resetLizenzForm() {
     setSelectValue('lizAktiviertAufSelect', '');
     setInputValue('lizAktiviertAufFrei', '');
 
-    setInputValue('lizKaufdatum', '');
-    setInputValue('lizAktivierungsdatum', '');
+    const heute = new Date();
+    heute.setHours(0, 0, 0, 0);
+    const heuteStr = formatDateInputValue(heute);
+
+    setInputValue('lizKaufdatum', heuteStr);
+    setInputValue('lizAktivierungsdatum', heuteStr);
     setInputValue('lizAblaufdatum', '');
+
+    setSelectValue('lizAblaufModus', 'datum');
+    setInputValue('lizAblaufTage', '');
 
     setSelectValue('lizStatus', 'aktiv');
 
-    setInputValue('lizVolumen', '');
+    setInputValue('lizVolumenGesamt', '');
+    setInputValue('lizVolumenAktiv', '');
+    setInputValue('lizVolumenFrei', '');
     setInputValue('lizShop', '');
     setInputValue('lizBeschraenkungen', '');
     setInputValue('lizNotizen', '');
 
     handleAktiviertAufChange();
+    handleAblaufModusChange();
+    updateVolumenFrei();
 }
 
 async function saveLizenz() {
@@ -665,17 +926,62 @@ async function saveLizenz() {
             aktivData.aktiviertAufId = aktiviertAufSelect;
         }
 
+        const volumenGesamt = parseOptionalInt(getInputValue('lizVolumenGesamt'));
+        const volumenAktiv = parseOptionalInt(getInputValue('lizVolumenAktiv'));
+        if (volumenGesamt !== null && volumenAktiv !== null && volumenAktiv > volumenGesamt) {
+            alertUser('Volumen: Aktiv darf nicht größer als Gesamt sein.', 'error');
+            return;
+        }
+
+        let volumenFrei = null;
+        if (volumenGesamt !== null) {
+            const aktivSafe = volumenAktiv === null ? 0 : volumenAktiv;
+            volumenFrei = Math.max(volumenGesamt - aktivSafe, 0);
+        }
+
+        const ablaufModus = getSelectValue('lizAblaufModus') || 'datum';
+        let ablaufTage = null;
+        let ablaufdatum = getInputValue('lizAblaufdatum') || null;
+
+        if (ablaufModus === 'tage') {
+            const tage = parseOptionalInt(getInputValue('lizAblaufTage'));
+            if (tage !== null && tage < 0) {
+                alertUser('Ablauf-Tage darf nicht negativ sein.', 'error');
+                return;
+            }
+
+            if (tage === null) {
+                ablaufTage = null;
+                ablaufdatum = null;
+            } else {
+                ablaufTage = tage;
+
+                const basisStr = getInputValue('lizAktivierungsdatum') || getInputValue('lizKaufdatum');
+                const basis = getSafeDate(basisStr) || new Date();
+                basis.setHours(0, 0, 0, 0);
+
+                const d = new Date(basis);
+                d.setDate(d.getDate() + tage);
+                ablaufdatum = formatDateInputValue(d);
+            }
+        }
+
         const data = {
             kategorieId: kategorieId || null,
             produktId: produktId,
+            titel: getInputValue('lizTitel').trim() || null,
             version: getInputValue('lizVersion').trim() || null,
             code: getInputValue('lizCode').trim() || null,
             lizenziertAn: getInputValue('lizLizenziertAn').trim() || null,
             kaufdatum: getInputValue('lizKaufdatum') || null,
             aktivierungsdatum: getInputValue('lizAktivierungsdatum') || null,
-            ablaufdatum: getInputValue('lizAblaufdatum') || null,
+            ablaufdatum: ablaufdatum || null,
+            ablaufModus: ablaufModus,
+            ablaufTage: ablaufTage,
             status: getSelectValue('lizStatus') || 'aktiv',
-            volumen: getInputValue('lizVolumen').trim() || null,
+            volumenGesamt: volumenGesamt,
+            volumenAktiv: volumenAktiv,
+            volumenFrei: volumenFrei,
             shop: getInputValue('lizShop').trim() || null,
             beschraenkungen: getInputValue('lizBeschraenkungen').trim() || null,
             notizen: getInputValue('lizNotizen').trim() || null,
@@ -801,9 +1107,42 @@ function renderKategorienList() {
         div.className = 'flex justify-between items-center p-2 bg-white rounded shadow-sm border';
         div.innerHTML = `
             <span class="font-bold text-gray-800">${escapeHtml(k.name || '-')}</span>
-            <button class="delete-liz-kat-btn p-1 text-red-400 hover:bg-red-50 rounded" data-id="${k.id}">🗑️</button>
+            <div class="flex items-center gap-2">
+                <button class="rename-liz-kat-btn p-1 text-blue-500 hover:bg-blue-50 rounded" data-id="${k.id}" title="Umbenennen">✏️</button>
+                <button class="delete-liz-kat-btn p-1 text-red-400 hover:bg-red-50 rounded" data-id="${k.id}" title="Löschen">🗑️</button>
+            </div>
         `;
         container.appendChild(div);
+    });
+
+    container.querySelectorAll('.rename-liz-kat-btn').forEach((btn) => {
+        if (btn.dataset.listenerAttached) return;
+        btn.addEventListener('click', async (e) => {
+            const id = e.currentTarget.dataset.id;
+            if (!id) return;
+
+            const k = KATEGORIEN.find(x => x.id === id);
+            const currentName = k?.name || '';
+            const newName = prompt('Neuer Kategoriename:', currentName);
+            if (newName === null) return;
+            const name = String(newName || '').trim();
+            if (!name) return;
+
+            const exists = KATEGORIEN.some(x => x.id !== id && String(x.name || '').toLowerCase() === name.toLowerCase());
+            if (exists) {
+                alertUser('Kategorie existiert bereits.', 'error');
+                return;
+            }
+
+            try {
+                await updateDoc(doc(kategorienRef, id), { name: name });
+                alertUser('Kategorie umbenannt!', 'success');
+            } catch (err) {
+                console.error(err);
+                alertUser('Fehler beim Umbenennen.', 'error');
+            }
+        });
+        btn.dataset.listenerAttached = 'true';
     });
 
     container.querySelectorAll('.delete-liz-kat-btn').forEach((btn) => {
@@ -839,9 +1178,42 @@ function renderProdukteList() {
         div.className = 'flex justify-between items-center p-2 bg-white rounded shadow-sm border';
         div.innerHTML = `
             <span class="font-bold text-gray-800">${escapeHtml(p.name || '-')}</span>
-            <button class="delete-liz-prod-btn p-1 text-red-400 hover:bg-red-50 rounded" data-id="${p.id}">🗑️</button>
+            <div class="flex items-center gap-2">
+                <button class="rename-liz-prod-btn p-1 text-blue-500 hover:bg-blue-50 rounded" data-id="${p.id}" title="Umbenennen">✏️</button>
+                <button class="delete-liz-prod-btn p-1 text-red-400 hover:bg-red-50 rounded" data-id="${p.id}" title="Löschen">🗑️</button>
+            </div>
         `;
         container.appendChild(div);
+    });
+
+    container.querySelectorAll('.rename-liz-prod-btn').forEach((btn) => {
+        if (btn.dataset.listenerAttached) return;
+        btn.addEventListener('click', async (e) => {
+            const id = e.currentTarget.dataset.id;
+            if (!id) return;
+
+            const p = PRODUKTE.find(x => x.id === id);
+            const currentName = p?.name || '';
+            const newName = prompt('Neuer Produktname:', currentName);
+            if (newName === null) return;
+            const name = String(newName || '').trim();
+            if (!name) return;
+
+            const exists = PRODUKTE.some(x => x.id !== id && String(x.name || '').toLowerCase() === name.toLowerCase());
+            if (exists) {
+                alertUser('Produkt existiert bereits.', 'error');
+                return;
+            }
+
+            try {
+                await updateDoc(doc(produkteRef, id), { name: name });
+                alertUser('Produkt umbenannt!', 'success');
+            } catch (err) {
+                console.error(err);
+                alertUser('Fehler beim Umbenennen.', 'error');
+            }
+        });
+        btn.dataset.listenerAttached = 'true';
     });
 
     container.querySelectorAll('.delete-liz-prod-btn').forEach((btn) => {
@@ -863,7 +1235,6 @@ function renderProdukteList() {
 
 function fillKategorieDropdown() {
     const select = document.getElementById('lizKategorieId');
-    const filterSelect = document.getElementById('filter-liz-kategorie');
 
     if (select) {
         const current = select.value;
@@ -878,26 +1249,10 @@ function fillKategorieDropdown() {
 
         if (current) select.value = current;
     }
-
-    if (filterSelect) {
-        const current = filterSelect.value;
-        filterSelect.innerHTML = '<option value="">Alle Kategorien</option>';
-
-        KATEGORIEN.forEach((k) => {
-            const opt = document.createElement('option');
-            opt.value = k.id;
-            opt.textContent = k.name || k.id;
-            filterSelect.appendChild(opt);
-        });
-
-        if (current) filterSelect.value = current;
-        currentFilter.kategorieId = filterSelect.value;
-    }
 }
 
 function fillProduktDropdown() {
     const select = document.getElementById('lizProduktId');
-    const filterSelect = document.getElementById('filter-liz-produkt');
 
     if (select) {
         const current = select.value;
@@ -911,21 +1266,6 @@ function fillProduktDropdown() {
         });
 
         if (current) select.value = current;
-    }
-
-    if (filterSelect) {
-        const current = filterSelect.value;
-        filterSelect.innerHTML = '<option value="">Alle Produkte</option>';
-
-        PRODUKTE.forEach((p) => {
-            const opt = document.createElement('option');
-            opt.value = p.id;
-            opt.textContent = p.name || p.id;
-            filterSelect.appendChild(opt);
-        });
-
-        if (current) filterSelect.value = current;
-        currentFilter.produktId = filterSelect.value;
     }
 }
 
