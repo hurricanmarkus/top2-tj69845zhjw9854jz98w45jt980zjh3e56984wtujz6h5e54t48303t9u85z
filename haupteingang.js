@@ -7,7 +7,7 @@ import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged }
 import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode, clearAllUserData, saveUserSetting } from './log-InOut.js';
 import { renderModalUserButtons, listenForUserUpdates, toggleNewUserRoleField, addAdminUserManagementListeners, renderUserManagement } from './admin_benutzersteuerung.js';
 import { listenForRoleUpdates, listenForAdminRoleUpdates, renderRoleManagement } from './admin_rollenverwaltung.js';
-import { listenForApprovalRequests, createApprovalRequest, renderApprovalProcess } from './admin_genehmigungsprozess.js';
+import { listenForApprovalRequests, stopApprovalRequestsListener, createApprovalRequest, renderApprovalProcess } from './admin_genehmigungsprozess.js';
 import { toggleAdminSection, rememberAdminScroll, restoreAdminScrollIfAny, renderMainFunctionsAdminArea } from './admin_adminfunktionenHome.js';
 import { initializeEssensberechnungView } from './essensberechnung.js';
 import { IFTTT_URL, initializeNotrufSettingsView } from './notfall.js';
@@ -132,6 +132,9 @@ export function stopAllUserDependentListeners(resetMode = false) {
     if (typeof stopWertguthabenListener === 'function') {
         stopWertguthabenListener();
     }
+    if (typeof stopApprovalRequestsListener === 'function') {
+        stopApprovalRequestsListener();
+    }
     if (typeof stopVertragsverwaltungListeners === 'function') {
         stopVertragsverwaltungListeners();
     }
@@ -184,7 +187,6 @@ function startGlobalListeners() {
         listenForRoleUpdates();
         listenForAdminRoleUpdates();
         listenForUserUpdates();
-        listenForApprovalRequests();
         listenForChecklists();
         listenForChecklistItems();
         listenForChecklistGroups();
@@ -218,6 +220,12 @@ function startUserDependentListeners() {
 
     if (mode === GUEST_MODE) {
         return;
+    }
+
+    if (typeof listenForApprovalRequests === 'function') {
+        listenForApprovalRequests();
+    } else {
+        console.error("Fehler: listenForApprovalRequests ist nicht importiert!");
     }
 
     if (typeof listenForTickets === 'function') {

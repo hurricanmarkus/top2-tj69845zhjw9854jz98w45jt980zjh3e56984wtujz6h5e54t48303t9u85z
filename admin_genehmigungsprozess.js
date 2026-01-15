@@ -12,6 +12,7 @@ import { adminSectionsState, approvalRequestsCollectionRef, usersCollectionRef, 
 import { renderUserManagement } from './admin_benutzersteuerung.js';
 // ENDE-ZIKA //
 
+let approvalRequestsUnsubscribe = null;
 
 // =================================================================
 // BEGINN DER KORREKTUR (FUNKTION ERSETZEN)
@@ -77,7 +78,17 @@ export function listenForApprovalRequests() {
         ? query(approvalRequestsCollectionRef, orderBy('timestamp', 'desc'))
         : query(approvalRequestsCollectionRef, where('requestedById', '==', currentUser?.mode || ''));
 
-    onSnapshot(q, (snapshot) => {
+    if (approvalRequestsUnsubscribe) {
+        approvalRequestsUnsubscribe();
+        approvalRequestsUnsubscribe = null;
+    }
+
+    console.log("listenForApprovalRequests: Starte Listener", {
+        mode: currentUser?.mode,
+        role: currentUser?.role
+    });
+
+    approvalRequestsUnsubscribe = onSnapshot(q, (snapshot) => {
         
         // 1. Leere die globale Liste
         Object.keys(PENDING_REQUESTS).forEach(key => delete PENDING_REQUESTS[key]);
@@ -101,7 +112,19 @@ export function listenForApprovalRequests() {
         if (adminSectionsState.user) {
             renderUserManagement(); // Diese Funktion wird die Sperre jetzt anzeigen
         }
+    }, (error) => {
+        console.error("listenForApprovalRequests: Fehler im Listener:", error);
     });
+}
+
+
+export function stopApprovalRequestsListener() {
+    if (approvalRequestsUnsubscribe) {
+        approvalRequestsUnsubscribe();
+        approvalRequestsUnsubscribe = null;
+    }
+    Object.keys(PENDING_REQUESTS).forEach(key => delete PENDING_REQUESTS[key]);
+    console.log("stopApprovalRequestsListener: Listener gestoppt.");
 }
 
 
@@ -128,7 +151,18 @@ export async function renderApprovalProcess(snapshot = null) {
         return;
     }
 
-    snapshot.forEach(docSnap => {
+    const getTimestampMillis = (requestData) => {
+        const ts = requestData?.timestamp;
+        if (ts && typeof ts.toMillis === 'function') return ts.toMillis();
+        if (ts && typeof ts.seconds === 'number') return ts.seconds * 1000;
+        return 0;
+    };
+
+    const sortedDocs = (snapshot.docs || []).slice().sort((a, b) => {
+        return getTimestampMillis(b.data()) - getTimestampMillis(a.data());
+    });
+
+    sortedDocs.forEach(docSnap => {
         const request = docSnap.data();
         const requestId = docSnap.id;
 
