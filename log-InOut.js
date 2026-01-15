@@ -419,7 +419,7 @@ export function switchToGuestMode(showNotification = true, message = "Abgemeldet
 // In log-InOut.js
 export function updateUIForMode() {
     // Ermittle Admin-Status und effektive Admin-Rechte
-    const isAdmin = currentUser.role === 'ADMIN';
+    const isAdmin = currentUser.role === 'ADMIN' || (currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN');
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
 
     // =================================================================
@@ -428,6 +428,21 @@ export function updateUIForMode() {
     // Wir holen sie direkt aus dem 'currentUser'-Objekt,
     // das von 'checkCurrentUserValidity' korrekt befüllt wurde.
     let effectiveAdminPerms = currentUser.adminPermissions || {};
+
+    const adminView = document.getElementById('adminView');
+    if (adminView?.classList.contains('active')) {
+        console.log("updateUIForMode (ADMIN-DEBUG):", {
+            mode: currentUser.mode,
+            role: currentUser.role,
+            permissionType: currentUser.permissionType,
+            displayRole: currentUser.displayRole,
+            adminPermissionType: currentUser.adminPermissionType,
+            assignedAdminRoleId: currentUser.assignedAdminRoleId,
+            isAdmin,
+            isSysAdmin,
+            effectiveAdminPerms
+        });
+    }
     // =================================================================
     // ENDE DER KORREKTUR
     // =================================================================
@@ -637,8 +652,6 @@ export function updateUIForMode() {
     }
 
     // Zeige Admin-Keine-Rechte-Meldung nur, wenn Admin-Seite aktiv ist
-    const adminView = document.getElementById('adminView');
-
     if (adminView?.classList.contains('active') && noAdminPermissionsPrompt) { // Nur ausführen, wenn Admin-Seite aktiv ist
         // Prüfe, ob IRGENDWELCHE effektiven Admin-Rechte vorhanden sind
         // HIER: Nutze die 'effectiveAdminPerms', die wir oben geladen haben.

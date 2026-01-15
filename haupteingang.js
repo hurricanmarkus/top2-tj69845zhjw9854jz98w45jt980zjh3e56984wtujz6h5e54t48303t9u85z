@@ -1785,16 +1785,20 @@ export function setupEventListeners() {
             return;
         }
 
-        const appUserId = selectedUserForLogin;
-        const enteredPin = adminPinInput.value;
-        const userFromFirestore = USERS[appUserId];
-
-        if (!userFromFirestore) {
-            alertUser("Benutzerdaten noch nicht geladen. Bitte kurz warten und erneut versuchen.", "error");
-            return;
-        }
+        const loginButton = submitAdminKeyButton;
 
         try {
+            if (loginButton) setButtonLoading(loginButton, true);
+            adminPinInput.disabled = true;
+
+            const appUserId = selectedUserForLogin;
+            const enteredPin = adminPinInput.value;
+            const userFromFirestore = USERS[appUserId];
+
+            if (!userFromFirestore) {
+                alertUser("Benutzerdaten noch nicht geladen. Bitte kurz warten und erneut versuchen.", "error");
+                return;
+            }
             // --- 3. KORREKTUR: Cloud Function mit dem Firebase SDK aufrufen (NICHT fetch) ---
 
             // Sicherstellen, dass Auth User vorhanden ist
@@ -1890,6 +1894,9 @@ export function setupEventListeners() {
             updateUIForMode();
 
             startUserDependentListeners();
+        } finally {
+            adminPinInput.disabled = false;
+            if (loginButton) setButtonLoading(loginButton, false);
         }
     };
 
