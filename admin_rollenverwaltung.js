@@ -111,13 +111,18 @@ export function renderRoleManagement() {
 
     roleManagementArea.innerHTML = '';
     let effectiveAdminPerms = {};
-    const isAdmin = currentUser.role === 'ADMIN';
+    const isAdmin = currentUser.role === 'ADMIN' || (currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN');
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
     
     if (isAdmin && USERS && USERS[currentUser.mode]) { 
         const adminUser = USERS[currentUser.mode];
-        if (adminUser && adminUser.adminPermissions) {
-            effectiveAdminPerms = adminUser.adminPermissions;
+        if (adminUser) {
+            const adminPermType = adminUser.adminPermissionType || 'role';
+            if (adminPermType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
+                effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
+            } else {
+                effectiveAdminPerms = adminUser.adminPermissions || {};
+            }
         }
     }
 

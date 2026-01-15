@@ -181,7 +181,7 @@ export function renderUserKeyList() {
         return;
     }
 
-    const isAdmin = currentUser.role === 'ADMIN';
+    const isAdmin = currentUser.role === 'ADMIN' || (currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN');
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
 
     Object.values(USERS || {}) // || {} zur Sicherheit
@@ -193,8 +193,9 @@ export function renderUserKeyList() {
 
             const isSelf = userId === currentUser.mode;
             const isTargetSysAdmin = user.role === 'SYSTEMADMIN';
+            const isTargetAdmin = user.role === 'ADMIN' || (user.permissionType === 'individual' && user.displayRole === 'ADMIN');
             // Nur SysAdmin darf SysAdmin bearbeiten (sich selbst nicht), Admin darf nur Nicht-Admins/SysAdmins
-            const canEditKey = (isSysAdmin && !isTargetSysAdmin && !isSelf) || (isAdmin && !isTargetSysAdmin && user.role !== 'ADMIN') || isSelf;
+            const canEditKey = (isSysAdmin && !isTargetSysAdmin && !isSelf) || (isAdmin && !isTargetSysAdmin && !isTargetAdmin) || isSelf;
             const canViewKey = canEditKey; // Gleiche Logik für das Sehen des Schlüssels
             const keyDisplay = '••••••••••';
             const currentUserLabel = isSelf ? '<span class="bg-indigo-100 text-indigo-800 font-bold text-xs px-2 py-1 rounded-full ml-2">AKTUELL</span>' : '';
@@ -300,12 +301,13 @@ export function renderUserManagement() {
 
     // Admin-Berechtigungen ermitteln
     let effectiveAdminPerms = {};
-    const isAdmin = currentUser.role === 'ADMIN';
+    const isAdmin = currentUser.role === 'ADMIN' || (currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN');
     const isSysAdminEditing = currentUser.role === 'SYSTEMADMIN';
     if (isAdmin) {
         const adminUser = USERS[currentUser.mode];
         if (adminUser) {
-            if (adminUser.adminPermissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
+            const adminPermType = adminUser.adminPermissionType || 'role';
+            if (adminPermType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
                 effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
             } else {
                 effectiveAdminPerms = adminUser.adminPermissions || {};

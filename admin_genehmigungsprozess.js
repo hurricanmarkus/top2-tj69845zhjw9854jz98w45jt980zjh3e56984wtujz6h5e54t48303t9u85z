@@ -307,7 +307,8 @@ export async function renderApprovalProcess(snapshot = null) {
                             if (details.type === 'role') {
                                 updateData = { permissionType: 'role', role: details.newRole, customPermissions: [], displayRole: null };
                             } else {
-                                updateData = { permissionType: 'individual', role: null, customPermissions: details.customPermissions || [], displayRole: details.displayRole || null };
+                                let derivedRole = details.displayRole || 'NO_RIGHTS';
+                                updateData = { permissionType: 'individual', role: derivedRole, customPermissions: details.customPermissions || [], displayRole: details.displayRole || null };
                             }
                             batch.update(doc(usersCollectionRef, userId), updateData);
                         }

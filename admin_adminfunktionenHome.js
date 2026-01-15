@@ -139,13 +139,14 @@ export function renderMainFunctionsAdminArea() {
     const tabsContainer = document.getElementById('main-functions-tabs');
     if (!tabsContainer) return;
 
-    const isAdmin = currentUser.role === 'ADMIN';
+    const isAdmin = currentUser.role === 'ADMIN' || (currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN');
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
     let effectiveAdminPerms = {};
     if (isAdmin) {
         const adminUser = USERS[currentUser.mode];
         if (adminUser) {
-            if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
+            const adminPermType = adminUser.adminPermissionType || 'role';
+            if (adminPermType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
                 effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
             } else {
                 effectiveAdminPerms = adminUser.adminPermissions || {};
@@ -379,7 +380,7 @@ export function renderMainFunctionsAdminArea() {
 
 
 
-// --- NEUE HELPER FUNKTIONEN FÜR ADMIN ZAHLUNGSVERWALTUNG ---
+// --- NEUE HELFER FUNKTIONEN FÜR ADMIN ZAHLUNGSVERWALTUNG ---
 
 async function executeAdminZVSearch() {
     const input = document.getElementById('admin-zv-user-search');
@@ -596,19 +597,21 @@ export function renderAdminVotesTable() {
     // =================================================================
     
     // NEU: Admin-Rechte holen, um zu entscheiden, ob Spalten angezeigt werden
-    const isAdmin = currentUser.role === 'ADMIN';
+    const isAdmin = currentUser.role === 'ADMIN' || (currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN');
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';
     let effectiveAdminPerms = {};
     if (isAdmin) {
         const adminUser = USERS[currentUser.mode];
         if (adminUser) {
-            if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
+            const adminPermType = adminUser.adminPermissionType || 'role';
+            if (adminPermType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
                 effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
             } else {
                 effectiveAdminPerms = adminUser.adminPermissions || {};
             }
         }
     }
+    
     const canSeePollToken = isSysAdmin || effectiveAdminPerms.canSeePollToken;
     const canSeePollEditToken = isSysAdmin || effectiveAdminPerms.canSeePollEditToken;
     

@@ -60,12 +60,13 @@ export async function renderProtocolHistory() {
     let effectiveAdminPerms = {}; // Hier speichern wir die Rechte
 
     // 4. Wir prüfen, ob der aktuelle Benutzer ein 'ADMIN' ist (so wie Jasmin)
-    if (currentUser.role === 'ADMIN') {
+    if (currentUser.role === 'ADMIN' || (currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN')) {
         
         // 4a. Finde die genauen Rechte für diesen Admin-Benutzer
         const adminUser = USERS[currentUser.mode];
         if (adminUser) {
-            if (adminUser.permissionType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
+            const adminPermType = adminUser.adminPermissionType || 'role';
+            if (adminPermType === 'role' && adminUser.assignedAdminRoleId && ADMIN_ROLES[adminUser.assignedAdminRoleId]) {
                 effectiveAdminPerms = ADMIN_ROLES[adminUser.assignedAdminRoleId].permissions || {};
             } else {
                 effectiveAdminPerms = adminUser.adminPermissions || {};

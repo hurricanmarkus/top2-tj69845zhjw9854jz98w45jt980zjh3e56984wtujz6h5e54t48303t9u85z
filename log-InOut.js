@@ -294,6 +294,10 @@ export async function checkCurrentUserValidity() {
         const user = userFromFirestore; 
         const effectiveRole = user.role; 
 
+        const isIndividualAdminDisplay = user.permissionType === 'individual' && user.displayRole === 'ADMIN';
+
+        const isAdminRoleOrDisplay = effectiveRole === 'ADMIN' || isIndividualAdminDisplay;
+
         let userPermissions = [];
         let adminPermissions = {};
         let currentAssignedAdminRoleId = null; 
@@ -324,7 +328,7 @@ export async function checkCurrentUserValidity() {
         }
 
         // --- TEIL 2: Lade ADMIN-Rechte ---
-        if (effectiveRole === 'ADMIN') {
+        if (isAdminRoleOrDisplay) {
             if (user.adminPermissionType === 'role' && user.assignedAdminRoleId && ADMIN_ROLES[user.assignedAdminRoleId]) {
                 adminPermissions = ADMIN_ROLES[user.assignedAdminRoleId].permissions || {};
                 currentAssignedAdminRoleId = user.assignedAdminRoleId;
@@ -374,7 +378,7 @@ export async function checkCurrentUserValidity() {
 
         // Navigationsprüfung
          const activeView = document.querySelector('.view.active');
-         const isAdminOrSysAdmin = effectiveRole === 'ADMIN' || effectiveRole === 'SYSTEMADMIN';
+         const isAdminOrSysAdmin = isAdminRoleOrDisplay || effectiveRole === 'SYSTEMADMIN';
 
          if (activeView && activeView.id === 'adminView' && !isAdminOrSysAdmin) {
              alertUser("Ihre Administrator-Rechte wurden entzogen.", "error");
@@ -535,6 +539,7 @@ export function updateUIForMode() {
     const adminButton = document.getElementById('mainAdminButton');
     const homeActionButtons = document.getElementById('homeActionButtons'); // Container holen
 
+
     // Standardmäßig beide Buttons ausblenden
     if (settingsButton) settingsButton.style.display = 'none';
     if (adminButton) adminButton.style.display = 'none';
@@ -562,7 +567,7 @@ export function updateUIForMode() {
         // ODER wenn Admin/Sysadmin KEINE Passwort-Rechte hat (selten, aber möglich)
         
         // HIER: Nutze die 'effectiveAdminPerms', die wir oben geladen haben.
-        const canSeePasswords = isSysAdmin || (isAdminRole && effectiveAdminPerms.canSeePasswords);
+        const canSeePasswords = isSysAdmin || ((isAdminRole || isIndividualAdminDisplay) && effectiveAdminPerms.canSeePasswords);
         
         if (currentUser.mode !== GUEST_MODE && !showAdminButton && settingsButton) { // Zeige nur an, wenn KEIN Admin-Button angezeigt wird
             settingsButton.style.display = 'block';
