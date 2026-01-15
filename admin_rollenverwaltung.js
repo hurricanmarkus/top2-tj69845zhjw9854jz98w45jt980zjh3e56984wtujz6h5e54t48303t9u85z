@@ -174,6 +174,7 @@ export function renderRoleManagement() {
         'ZAHLUNGSVERWALTUNG_CREATE': { label: '-> Neue Zahlung anlegen', indent: true },
         'TICKET_SUPPORT': { label: 'Ticket Support', indent: false },
         'WERTGUTHABEN': { label: 'Wertguthaben', indent: false },
+        'LIZENZEN': { label: 'Lizenzen', indent: false },
         'VERTRAGSVERWALTUNG': { label: 'Vertragsverwaltung', indent: false },
         'REZEPTE': { label: 'Rezepte', indent: false },
         'HAUSHALTSZAHLUNGEN': { label: 'Haushaltszahlungen', indent: false },

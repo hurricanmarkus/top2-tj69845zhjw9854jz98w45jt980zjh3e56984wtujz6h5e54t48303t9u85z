@@ -20,6 +20,7 @@ import { initializeTerminplanerView, listenForPublicVotes, joinVoteById, joinVot
 import { initializeZahlungsverwaltungView, initializeZahlungsverwaltungSettingsView } from './zahlungsverwaltung.js';
 import { initializeTicketSupport, listenForTickets, stopTicketsListener } from './ticket-support.js';
 import { initializeWertguthaben, listenForWertguthaben, stopWertguthabenListener } from './wertguthaben.js';
+import { initializeLizenzen, listenForLizenzen, stopLizenzenListener } from './lizenzen.js';
 import { initializeVertragsverwaltung, listenForVertraege, stopVertragsverwaltungListeners } from './vertragsverwaltung.js';
 import { initRezeptverwaltung } from './rezeptverwaltung.js';
 import { initializeHaushaltszahlungen, listenForHaushaltszahlungen, stopHaushaltszahlungenListeners } from './haushaltszahlungen.js';
@@ -111,6 +112,7 @@ export const views = {
     ticketSupport: { id: 'ticketSupportView' },
     wertguthaben: { id: 'wertguthabenView' },
     wertguthabenSettings: { id: 'wertguthabenSettingsView' },
+    lizenzen: { id: 'lizenzenView' },
     vertragsverwaltung: { id: 'vertragsverwaltungView' },
     rezepte: { id: 'rezepteView' },
     haushaltszahlungen: { id: 'haushaltszahlungenView' },
@@ -131,6 +133,9 @@ export function stopAllUserDependentListeners(resetMode = false) {
     }
     if (typeof stopWertguthabenListener === 'function') {
         stopWertguthabenListener();
+    }
+    if (typeof stopLizenzenListener === 'function') {
+        stopLizenzenListener();
     }
     if (typeof stopApprovalRequestsListener === 'function') {
         stopApprovalRequestsListener();
@@ -238,6 +243,12 @@ function startUserDependentListeners() {
         listenForWertguthaben();
     } else {
         console.error("Fehler: listenForWertguthaben ist nicht importiert!");
+    }
+
+    if (typeof listenForLizenzen === 'function') {
+        listenForLizenzen();
+    } else {
+        console.error("Fehler: listenForLizenzen ist nicht importiert!");
     }
 
     if (typeof listenForHaushaltszahlungen === 'function') {
@@ -464,6 +475,7 @@ async function initializeFirebase() {
                 initializeZahlungsverwaltungView();
                 initializeTicketSupport();
                 initializeWertguthaben();
+                initializeLizenzen();
                 initializeVertragsverwaltung();
                 initRezeptverwaltung();
 
@@ -478,6 +490,7 @@ async function initializeFirebase() {
                 initializeZahlungsverwaltungView();
                 initializeTicketSupport();
                 initializeWertguthaben();
+                initializeLizenzen();
                 initializeVertragsverwaltung();
                 initRezeptverwaltung();
 
@@ -727,6 +740,11 @@ export function navigate(targetViewName) {
             return alertUser("Zugriff verweigert (Wertguthaben).", 'error');
         }
 
+        // Zugriffsschutz für Lizenzen
+        if (targetViewName === 'lizenzen' && !userPermissions.includes('LIZENZEN')) {
+            return alertUser("Zugriff verweigert (Lizenzen).", 'error');
+        }
+
         // Zugriffsschutz für Vertragsverwaltung
         if (targetViewName === 'vertragsverwaltung' && !userPermissions.includes('VERTRAGSVERWALTUNG')) {
             return alertUser("Zugriff verweigert (Vertragsverwaltung).", 'error');
@@ -800,6 +818,10 @@ export function navigate(targetViewName) {
 
     if (targetViewName === 'wertguthaben') {
         initializeWertguthaben();
+    }
+
+    if (targetViewName === 'lizenzen') {
+        initializeLizenzen();
     }
 
     if (targetViewName === 'vertragsverwaltung') {
@@ -1727,6 +1749,9 @@ export function setupEventListeners() {
 
     const wertguthabenCard = document.getElementById('wertguthabenCard');
     if (wertguthabenCard) wertguthabenCard.addEventListener('click', () => navigate('wertguthaben'));
+
+    const lizenzenCard = document.getElementById('lizenzenCard');
+    if (lizenzenCard) lizenzenCard.addEventListener('click', () => navigate('lizenzen'));
 
     const vertragsverwaltungCard = document.getElementById('vertragsverwaltungCard');
     if (vertragsverwaltungCard) vertragsverwaltungCard.addEventListener('click', () => navigate('vertragsverwaltung'));

@@ -257,6 +257,27 @@ service cloud.firestore {
       }
     }
 
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/lizenzen/{lizenzId} {
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();
+      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/lizenzen_kategorien/{kategorieId} {
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();
+      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/lizenzen_produkte/{produktId} {
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();
+      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // VERTRAGSVERWALTUNG (Contract Management)
     // ═══════════════════════════════════════════════════════════════

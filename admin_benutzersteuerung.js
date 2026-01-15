@@ -419,6 +419,7 @@ export function renderUserManagement() {
         'ZAHLUNGSVERWALTUNG_CREATE': '-> Neue Zahlung anlegen',
         'TICKET_SUPPORT': 'Ticket Support',
         'WERTGUTHABEN': 'Wertguthaben',
+        'LIZENZEN': 'Lizenzen',
         'VERTRAGSVERWALTUNG': 'Vertragsverwaltung',
         'REZEPTE': 'Rezepte'
     };
