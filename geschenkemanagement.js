@@ -1353,11 +1353,6 @@ async function analyzeGmImportCsvFile() {
                 continue;
             }
 
-            if (row.length < 16) {
-                invalidRows++;
-                continue;
-            }
-
             let rowThemaName = '';
             let statusRaw = '';
             let fuerRaw = '';
@@ -1377,6 +1372,14 @@ async function analyzeGmImportCsvFile() {
 
             const firstCellLowerNonEmpty = String(row[0] || '').trim().toLowerCase();
             const hasThemaColumn = Boolean(firstCellLowerNonEmpty) && knownThemenLower.has(firstCellLowerNonEmpty);
+
+            const requiredCols = hasThemaColumn ? 16 : 15;
+            if (row.length < requiredCols) {
+                invalidRows++;
+                continue;
+            }
+
+            while (row.length < requiredCols) row.push('');
 
             if (hasThemaColumn) {
                 rowThemaName = normalizeGmImportText(row[0]);
