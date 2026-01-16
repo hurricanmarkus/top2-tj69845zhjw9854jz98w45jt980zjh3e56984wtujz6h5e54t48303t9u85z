@@ -326,8 +326,11 @@ export async function initializeGeschenkemanagement() {
 async function startGmImportCsvImport() {
     console.log('🚀 GM CSV Import: Import startet (async)');
 
+    const thema = currentThemaId ? THEMEN[currentThemaId] : null;
+    const themaName = (thema?.name || '').trim() || 'aktuelles Thema';
+
     if (!isGmWeihnachten2024ImportAllowed()) {
-        alertUser('CSV Import ist aktuell nicht erlaubt. Bitte Thema "Weihnachten 2024" wählen und sicherstellen, dass noch keine Geschenke vorhanden sind.', 'warning');
+        alertUser(`CSV Import ist aktuell nicht erlaubt. Bitte Thema "${themaName}" wählen und sicherstellen, dass noch keine Geschenke vorhanden sind.`, 'warning');
         updateGmImportButtonVisibility();
         return;
     }
@@ -356,7 +359,7 @@ async function startGmImportCsvImport() {
         return;
     }
 
-    if (!confirm(`Import starten?\n\nDatei: ${gmImportCsvAnalysis.fileName}\nZeilen: ${gmImportCsvAnalysis.parsedCount}\nNeue Kontakte: ${gmImportCsvAnalysis.newKontaktNames.length}\nNeue Standorte: ${gmImportCsvAnalysis.newStandorte.length}\n\nZiel-Thema: Weihnachten 2024`)) {
+    if (!confirm(`Import starten?\n\nDatei: ${gmImportCsvAnalysis.fileName}\nZeilen: ${gmImportCsvAnalysis.parsedCount}\nNeue Kontakte: ${gmImportCsvAnalysis.newKontaktNames.length}\nNeue Standorte: ${gmImportCsvAnalysis.newStandorte.length}\n\nZiel-Thema: ${themaName}`)) {
         return;
     }
 
@@ -509,7 +512,7 @@ async function startGmImportCsvImport() {
 
         // 5) Import-Flag setzen (nur bei Erfolg)
         updateGmImportProgress(98, 'Setze Import-Flag...');
-        await saveUserSetting('gm_weihnachten_2024_imported', true);
+        await saveUserSetting(getGmCsvImportFlagKey(currentThemaId), true);
 
         updateGmImportProgress(100, 'Import abgeschlossen!');
         console.log('✅ GM CSV Import: Fertig', { imported });
@@ -985,15 +988,15 @@ function setupEventListeners() {
 
 function isGmWeihnachten2024ImportAllowed() {
     const thema = currentThemaId ? THEMEN[currentThemaId] : null;
-    const isWeihnachten2024 = (thema?.name || '').trim() === 'Weihnachten 2024';
+    const hasThema = Boolean((thema?.name || '').trim());
 
-    const importFlag = getUserSetting('gm_weihnachten_2024_imported', false);
+    const importFlag = getUserSetting(getGmCsvImportFlagKey(currentThemaId), false);
     const isImported = importFlag === true || importFlag === 'true' || importFlag === 1;
 
     const geschenkeLoaded = gmGeschenkeLoadedThemaId === currentThemaId;
     const isEmpty = geschenkeLoaded && Object.keys(GESCHENKE).length === 0;
 
-    return Boolean(currentThemaId) && isWeihnachten2024 && !isImported && isEmpty;
+    return Boolean(currentThemaId) && hasThema && !isImported && isEmpty;
 }
 
 function updateGmImportButtonVisibility() {
@@ -1004,253 +1007,33 @@ function updateGmImportButtonVisibility() {
 
     importBtn.style.display = shouldShow ? 'inline-flex' : 'none';
     importBtn.disabled = !shouldShow;
-    importBtn.title = shouldShow ? 'Einmaliger CSV Import (nur Weihnachten 2024)' : '';
+    importBtn.title = shouldShow ? `Einmaliger CSV Import für "${THEMEN[currentThemaId]?.name}"` : '';
 
     const thema = currentThemaId ? THEMEN[currentThemaId] : null;
-    console.log('📥 GM Import Button update:', {
+    console.log('📥 GM CSV Import: Button Visibility', {
         currentThemaId,
         themaName: thema?.name,
         geschenkeLoaded: gmGeschenkeLoadedThemaId === currentThemaId,
         geschenkeCount: Object.keys(GESCHENKE).length,
-        importedFlag: getUserSetting('gm_weihnachten_2024_imported', false),
+        importedFlag: getUserSetting(getGmCsvImportFlagKey(currentThemaId), false),
         shouldShow
     });
 }
 
-function resetGmImportCsvModalUi() {
-    const fileInput = document.getElementById('gm-import-csv-file');
-    if (fileInput) fileInput.value = '';
-
-    gmImportCsvAnalysis = null;
-
-    const closeBtn = document.getElementById('closeGmImportCsvModal');
-    if (closeBtn) closeBtn.disabled = false;
-
-    const cancelBtn = document.getElementById('gm-import-cancel-btn');
-    if (cancelBtn) cancelBtn.disabled = false;
-
-    const analyzeBtn = document.getElementById('gm-import-analyze-btn');
-    if (analyzeBtn) analyzeBtn.disabled = true;
-
-    const startBtn = document.getElementById('gm-import-start-btn');
-    if (startBtn) startBtn.disabled = true;
-
-    const summary = document.getElementById('gm-import-summary');
-    if (summary) summary.classList.add('hidden');
-
-    const summaryText = document.getElementById('gm-import-summary-text');
-    if (summaryText) summaryText.textContent = '';
-
-    const mapping = document.getElementById('gm-import-mapping');
-    if (mapping) {
-        mapping.classList.add('hidden');
-        mapping.innerHTML = '';
-    }
-
-    const progress = document.getElementById('gm-import-progress');
-    if (progress) progress.classList.add('hidden');
-
-    const bar = document.getElementById('gm-import-progress-bar');
-    if (bar) {
-        bar.style.width = '0%';
-        bar.textContent = '0%';
-    }
-
-    const progressText = document.getElementById('gm-import-progress-text');
-    if (progressText) progressText.textContent = '';
-}
-
-function escapeGmImportHtml(str) {
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
-
-function normalizeGmImportText(value) {
-    const v = String(value ?? '').trim();
-    if (!v || v === '-') return '';
-    return v;
-}
-
-function parseGmImportNumber(value) {
-    const v = normalizeGmImportText(value);
-    if (!v || v === '?') return 0;
-
-    const cleaned = v
-        .replace(/\s/g, '')
-        .replace(/\./g, '')
-        .replace(',', '.');
-
-    const num = parseFloat(cleaned);
-    return Number.isFinite(num) ? num : 0;
-}
-
-function parseGmImportSemicolonCsv(text) {
-    const input = String(text ?? '').replace(/^\uFEFF/, '');
-    const rows = [];
-    let row = [];
-    let field = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < input.length; i++) {
-        const ch = input[i];
-
-        if (ch === '"') {
-            if (inQuotes && input[i + 1] === '"') {
-                field += '"';
-                i++;
-            } else {
-                inQuotes = !inQuotes;
-            }
-            continue;
-        }
-
-        if (ch === ';' && !inQuotes) {
-            row.push(field);
-            field = '';
-            continue;
-        }
-
-        if (ch === '\n' && !inQuotes) {
-            row.push(field);
-            field = '';
-
-            const hasContent = row.some(c => String(c || '').trim() !== '');
-            if (hasContent) rows.push(row);
-
-            row = [];
-            continue;
-        }
-
-        if (ch === '\r') {
-            continue;
-        }
-
-        field += ch;
-    }
-
-    row.push(field);
-    const hasContent = row.some(c => String(c || '').trim() !== '');
-    if (hasContent) rows.push(row);
-
-    return rows;
-}
-
-function splitGmImportNames(raw) {
-    const v = normalizeGmImportText(raw);
-    if (!v) return [];
-
-    const cleaned = v.replace(/\r?\n/g, ',');
-
-    return cleaned
-        .split(/\s*(?:,|\bund\b)\s*/i)
-        .map(s => s.trim())
-        .filter(s => s && s.toUpperCase() !== 'ALLE');
-}
-
-function extractGmImportBeteiligungNames(raw) {
-    const v = normalizeGmImportText(raw);
-    if (!v) return [];
-
-    let cleaned = v;
-    cleaned = cleaned.replace(/\([^)]*\)/g, '');
-    cleaned = cleaned.replace(/[0-9]/g, '');
-    cleaned = cleaned.replace(/[€%]/g, '');
-    cleaned = cleaned.replace(/[–—-]/g, ' ');
-    cleaned = cleaned.replace(/\r?\n/g, ',');
-    cleaned = cleaned.replace(/;/g, ',');
-    cleaned = cleaned.trim();
-
-    return cleaned
-        .split(/\s*(?:,|\bund\b)\s*/i)
-        .map(s => s.trim())
-        .filter(Boolean);
-}
-
-function mapGmImportStatusToKey(raw) {
-    const v = normalizeGmImportText(raw);
-    if (!v) return 'offen';
-
-    const lower = v.toLowerCase();
-
-    if (STATUS_CONFIG[lower]) return lower;
-
-    const byLabel = Object.entries(STATUS_CONFIG).find(([, cfg]) => (cfg.label || '').toLowerCase() === lower);
-    if (byLabel) return byLabel[0];
-
-    const map = {
-        gekauft: 'abgeschlossen',
-        abgeschlossen: 'abgeschlossen',
-        storniert: 'storniert',
-        offen: 'offen',
-        bestellt: 'bestellt',
-        'zu bestellen': 'zu_bestellen',
-        teillieferung: 'teillieferung'
-    };
-
-    return map[lower] || null;
-}
-
-function mapGmImportZahlungsartToKey(raw) {
-    const v = normalizeGmImportText(raw);
-    if (!v) return '';
-
-    if (ZAHLUNGSARTEN[v]) return v;
-
-    const lower = v.toLowerCase();
-    if (ZAHLUNGSARTEN[lower]) return lower;
-
-    const byLabel = Object.entries(ZAHLUNGSARTEN).find(([, cfg]) => (cfg.label || '').toLowerCase() === lower);
-    if (byLabel) return byLabel[0];
-
-    const normalized = lower.replace(/[^a-z0-9]/g, '');
-    const byNormalizedLabel = Object.entries(ZAHLUNGSARTEN).find(([, cfg]) => (cfg.label || '').toLowerCase().replace(/[^a-z0-9]/g, '') === normalized);
-    if (byNormalizedLabel) return byNormalizedLabel[0];
-
-    return null;
-}
-
-function buildGmImportKontaktNameIndex() {
-    const index = {};
-
-    Object.values(KONTAKTE).forEach(k => {
-        const name = String(k?.name || '').trim();
-        if (!name) return;
-
-        const key = name.toLowerCase();
-        if (!index[key]) index[key] = k.id;
-    });
-
-    return index;
-}
-
-function updateGmImportProgress(percent, text) {
-    const progress = document.getElementById('gm-import-progress');
-    if (progress) progress.classList.remove('hidden');
-
-    const bar = document.getElementById('gm-import-progress-bar');
-    if (bar) {
-        const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
-        bar.style.width = safePercent + '%';
-        bar.textContent = Math.round(safePercent) + '%';
-    }
-
-    const progressText = document.getElementById('gm-import-progress-text');
-    if (progressText) progressText.textContent = text || '';
-}
-
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+function getGmCsvImportFlagKey(themaId = null) {
+    const id = themaId || currentThemaId || 'unknown';
+    return `gm_${id}_imported`;
 }
 
 async function analyzeGmImportCsvFile() {
     console.log('📊 GM CSV Import: Analyse startet (async)');
 
+    const thema = currentThemaId ? THEMEN[currentThemaId] : null;
+    const selectedThemaName = (thema?.name || '').trim();
+    const themaNameForUi = selectedThemaName || 'aktuelles Thema';
+
     if (!isGmWeihnachten2024ImportAllowed()) {
-        alertUser('CSV Import ist aktuell nicht erlaubt. Bitte Thema "Weihnachten 2024" wählen und sicherstellen, dass noch keine Geschenke vorhanden sind.', 'warning');
+        alertUser(`CSV Import ist aktuell nicht erlaubt. Bitte Thema "${themaNameForUi}" wählen und sicherstellen, dass noch keine Geschenke vorhanden sind.`, 'warning');
         updateGmImportButtonVisibility();
         return;
     }
@@ -1303,6 +1086,13 @@ async function analyzeGmImportCsvFile() {
         let invalidRows = 0;
         let ignoredRows = 0;
 
+        const knownThemenLower = new Set(
+            Object.values(THEMEN)
+                .map(t => String(t?.name || '').trim())
+                .filter(Boolean)
+                .map(n => n.toLowerCase())
+        );
+
         for (const rawRow of rawRows) {
             const row = rawRow.map(c => String(c ?? '').trim());
 
@@ -1317,7 +1107,7 @@ async function analyzeGmImportCsvFile() {
                 continue;
             }
 
-            let themaName = '';
+            let rowThemaName = '';
             let statusRaw = '';
             let fuerRaw = '';
             let vonRaw = '';
@@ -1334,10 +1124,11 @@ async function analyzeGmImportCsvFile() {
             let rechnungsnummerRaw = '';
             let notizenRaw = '';
 
-            const hasThemaColumn = /weihnachten\s+\d{4}/i.test(row[0] || '');
+            const firstCellLowerNonEmpty = String(row[0] || '').trim().toLowerCase();
+            const hasThemaColumn = Boolean(firstCellLowerNonEmpty) && knownThemenLower.has(firstCellLowerNonEmpty);
 
             if (hasThemaColumn) {
-                themaName = normalizeGmImportText(row[0]);
+                rowThemaName = normalizeGmImportText(row[0]);
                 statusRaw = row[1];
                 fuerRaw = row[2];
                 vonRaw = row[3];
@@ -1354,26 +1145,26 @@ async function analyzeGmImportCsvFile() {
                 rechnungsnummerRaw = row[14];
                 notizenRaw = row[15];
             } else {
-                themaName = 'Weihnachten 2024';
+                rowThemaName = selectedThemaName;
                 statusRaw = row[0];
                 fuerRaw = row[1];
                 vonRaw = row[2];
-                geschenkRaw = row[4];
-                shopRaw = row[5];
-                bezahltVonRaw = row[6];
-                beteiligungRaw = row[7];
-                gesamtkostenRaw = row[8];
-                eigeneKostenRaw = row[9];
-                sollBezahlungRaw = row[10];
-                istBezahlungRaw = row[11];
-                standortRaw = row[12];
-                bestellnummerRaw = row[13];
-                rechnungsnummerRaw = row[14];
-                notizenRaw = row[15];
+                geschenkRaw = row[3];
+                shopRaw = row[4];
+                bezahltVonRaw = row[5];
+                beteiligungRaw = row[6];
+                gesamtkostenRaw = row[7];
+                eigeneKostenRaw = row[8];
+                sollBezahlungRaw = row[9];
+                istBezahlungRaw = row[10];
+                standortRaw = row[11];
+                bestellnummerRaw = row[12];
+                rechnungsnummerRaw = row[13];
+                notizenRaw = row[14];
             }
 
-            if (themaName !== 'Weihnachten 2024') {
-                if (themaName) otherThemes.add(themaName);
+            if (selectedThemaName && (rowThemaName || '').trim() !== selectedThemaName) {
+                if (rowThemaName) otherThemes.add(rowThemaName);
                 ignoredRows++;
                 continue;
             }
@@ -1513,9 +1304,9 @@ async function analyzeGmImportCsvFile() {
         if (startBtn) startBtn.disabled = !canStart;
 
         if (gmImportCsvAnalysis.parsedCount === 0) {
-            alertUser('Keine passenden Zeilen für "Weihnachten 2024" gefunden.', 'warning');
+            alertUser(`Keine passenden Zeilen für "${themaNameForUi}" gefunden.`, 'warning');
         } else if (!canStart) {
-            alertUser('Analyse fertig. Es gibt noch unbekannte Werte → Mapping wird als nächstes eingebaut.', 'warning');
+            alertUser('Analyse fertig. Es gibt noch unbekannte Werte → Mapping wird als nächster Schritt eingebaut.', 'warning');
         } else {
             alertUser(`Analyse erfolgreich: ${gmImportCsvAnalysis.parsedCount} Zeilen bereit für Import.`, 'success');
         }
@@ -1532,7 +1323,9 @@ function openGmImportCsvModal() {
     console.log('📥 GM CSV Import: Modal öffnen');
 
     if (!isGmWeihnachten2024ImportAllowed()) {
-        alertUser('CSV Import ist nur möglich, wenn Thema "Weihnachten 2024" gewählt ist und noch keine Geschenke vorhanden sind.', 'warning');
+        const thema = currentThemaId ? THEMEN[currentThemaId] : null;
+        const themaName = (thema?.name || '').trim() || 'aktuelles Thema';
+        alertUser(`CSV Import ist nur möglich, wenn Thema "${themaName}" gewählt ist und noch keine Geschenke vorhanden sind.`, 'warning');
         updateGmImportButtonVisibility();
         return;
     }
