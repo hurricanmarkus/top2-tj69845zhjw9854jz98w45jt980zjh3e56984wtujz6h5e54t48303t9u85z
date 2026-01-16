@@ -1101,7 +1101,7 @@ function parseGmImportNumber(value) {
     return Number.isFinite(num) ? num : 0;
 }
 
-function parseGmImportSemicolonCsv(text) {
+function parseGmImportDelimitedCsv(text, delimiter) {
     const input = String(text ?? '').replace(/^\uFEFF/, '');
     const rows = [];
     let row = [];
@@ -1121,7 +1121,7 @@ function parseGmImportSemicolonCsv(text) {
             continue;
         }
 
-        if (ch === ';' && !inQuotes) {
+        if (ch === delimiter && !inQuotes) {
             row.push(field);
             field = '';
             continue;
@@ -1146,6 +1146,31 @@ function parseGmImportSemicolonCsv(text) {
     if (hasContent) rows.push(row);
 
     return rows;
+}
+
+function detectGmImportDelimiter(text) {
+    const input = String(text ?? '').replace(/^\uFEFF/, '');
+    const firstLine = input.split(/\r?\n/).find(l => String(l || '').trim() !== '') || '';
+
+    const candidates = [';', ',', '\t'];
+    let best = ';';
+    let bestCount = -1;
+
+    for (const c of candidates) {
+        const count = firstLine.split(c).length - 1;
+        if (count > bestCount) {
+            bestCount = count;
+            best = c;
+        }
+    }
+
+    return best;
+}
+
+function parseGmImportCsv(text) {
+    const delimiter = detectGmImportDelimiter(text);
+    console.log('📊 GM CSV Import: Detected delimiter', delimiter === '\t' ? 'TAB' : delimiter);
+    return parseGmImportDelimitedCsv(text, delimiter);
 }
 
 function splitGmImportNames(raw) {
@@ -1291,7 +1316,7 @@ async function analyzeGmImportCsvFile() {
             size: file.size
         });
 
-        const rawRows = parseGmImportSemicolonCsv(text);
+        const rawRows = parseGmImportCsv(text);
 
         console.log('📊 GM CSV Import: Zeilen geparst', rawRows.length);
 
