@@ -87,6 +87,12 @@ function setupEventListeners() {
         saveBtn.dataset.listenerAttached = 'true';
     }
 
+    const copyBtn = document.getElementById('copyLizenzBtn');
+    if (copyBtn && !copyBtn.dataset.listenerAttached) {
+        copyBtn.addEventListener('click', startCopyLizenzFromView);
+        copyBtn.dataset.listenerAttached = 'true';
+    }
+
     const closeSettingsBtn = document.getElementById('closeLizenzenSettingsModal');
     if (closeSettingsBtn && !closeSettingsBtn.dataset.listenerAttached) {
         closeSettingsBtn.addEventListener('click', closeLizenzenSettingsModal);
@@ -607,7 +613,7 @@ function renderLizenzenTable() {
                 : '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800">✅ Aktiv</span>';
 
         return `
-            <tr class="hover:bg-gray-50 transition">
+            <tr class="hover:bg-gray-50 transition cursor-pointer" onclick="window.openViewLizenz('${l.id}')">
                 <td class="px-4 py-3 text-sm">${statusHtml}</td>
                 <td class="px-4 py-3 text-sm">${kategorie}</td>
                 <td class="px-4 py-3 text-sm">${restzeitHtml}</td>
@@ -618,9 +624,8 @@ function renderLizenzenTable() {
                 <td class="px-4 py-3 text-sm">${ablauf}</td>
                 <td class="px-4 py-3 text-center">
                     <div class="flex justify-center gap-2">
-                        <button onclick="window.openViewLizenz('${l.id}')" class="p-1 text-gray-700 hover:text-gray-900" title="Ansehen">👁️</button>
-                        <button onclick="window.openEditLizenz('${l.id}')" class="p-1 text-blue-600 hover:text-blue-800" title="Bearbeiten">✏️</button>
-                        <button onclick="window.deleteLizenz('${l.id}')" class="p-1 text-red-600 hover:text-red-800" title="Löschen">🗑️</button>
+                        <button onclick="event.stopPropagation(); window.openEditLizenz('${l.id}')" class="p-1 text-blue-600 hover:text-blue-800" title="Bearbeiten">✏️</button>
+                        <button onclick="event.stopPropagation(); window.deleteLizenz('${l.id}')" class="p-1 text-red-600 hover:text-red-800" title="Löschen">🗑️</button>
                     </div>
                 </td>
             </tr>
@@ -709,9 +714,16 @@ function openCreateLizenzModal() {
 
 function applyLizenzModalModeToUi() {
     const isView = lizenzModalMode === 'view';
+    const isCopy = lizenzModalMode === 'copy';
 
     const saveBtn = document.getElementById('saveLizenzBtn');
     if (saveBtn) saveBtn.style.display = isView ? 'none' : '';
+
+    const copyBtn = document.getElementById('copyLizenzBtn');
+    if (copyBtn) copyBtn.style.display = isView ? '' : 'none';
+
+    const copyInfo = document.getElementById('lizenzCopyInfo');
+    if (copyInfo) copyInfo.style.display = isCopy ? '' : 'none';
 
     const ids = [
         'lizProduktId',
@@ -798,6 +810,27 @@ window.openViewLizenz = function (id) {
     populateLizenzForm(liz);
     openLizenzModal();
 };
+
+function startCopyLizenzFromView() {
+    if (lizenzModalMode !== 'view') return;
+
+    const sourceId = getInputValue('editLizenzId');
+    if (!sourceId) return;
+
+    const liz = LIZENZEN[sourceId];
+    if (!liz) return;
+
+    console.log('🔑 Lizenzen: Kopie erstellen startet...', sourceId);
+
+    lizenzModalMode = 'copy';
+
+    const titleEl = document.getElementById('lizenzModalTitle');
+    if (titleEl) titleEl.textContent = 'Lizenz kopieren';
+
+    setInputValue('editLizenzId', '');
+    populateLizenzForm(liz);
+    openLizenzModal();
+}
 
 window.openEditLizenz = function (id) {
     const liz = LIZENZEN[id];
