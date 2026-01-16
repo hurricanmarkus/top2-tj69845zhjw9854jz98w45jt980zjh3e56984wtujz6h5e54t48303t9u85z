@@ -34,6 +34,8 @@ let unsubscribeProdukte = null;
 
 let lizenzenInitialisiert = false;
 
+let selectedTrashLizenzIds = new Set();
+
 export function initializeLizenzen() {
     if (lizenzenInitialisiert) return;
     lizenzenInitialisiert = true;
@@ -51,6 +53,7 @@ export function initializeLizenzen() {
     try {
         renderLizenzenTable();
         updateLizenzenStats();
+        renderLizenzenTrashList();
     } catch (e) {
         console.warn("Lizenzen: UI konnte nicht initial gerendert werden:", e);
     }
@@ -209,6 +212,30 @@ function setupEventListeners() {
             renderLizenzenTable();
         });
         resetFilters.dataset.listenerAttached = 'true';
+    }
+
+    const trashSelectAllBtn = document.getElementById('lizenzen-trash-select-all');
+    if (trashSelectAllBtn && !trashSelectAllBtn.dataset.listenerAttached) {
+        trashSelectAllBtn.addEventListener('click', selectAllTrashLizenzen);
+        trashSelectAllBtn.dataset.listenerAttached = 'true';
+    }
+
+    const trashDeselectAllBtn = document.getElementById('lizenzen-trash-deselect-all');
+    if (trashDeselectAllBtn && !trashDeselectAllBtn.dataset.listenerAttached) {
+        trashDeselectAllBtn.addEventListener('click', deselectAllTrashLizenzen);
+        trashDeselectAllBtn.dataset.listenerAttached = 'true';
+    }
+
+    const trashRestoreBtn = document.getElementById('lizenzen-trash-restore-btn');
+    if (trashRestoreBtn && !trashRestoreBtn.dataset.listenerAttached) {
+        trashRestoreBtn.addEventListener('click', restoreSelectedTrashLizenzen);
+        trashRestoreBtn.dataset.listenerAttached = 'true';
+    }
+
+    const trashDeleteBtn = document.getElementById('lizenzen-trash-delete-btn');
+    if (trashDeleteBtn && !trashDeleteBtn.dataset.listenerAttached) {
+        trashDeleteBtn.addEventListener('click', deleteSelectedTrashLizenzen);
+        trashDeleteBtn.dataset.listenerAttached = 'true';
     }
 }
 
@@ -411,6 +438,7 @@ export function stopLizenzenListener() {
     try {
         renderLizenzenTable();
         updateLizenzenStats();
+        renderLizenzenTrashList();
         renderKategorienList();
         renderProdukteList();
         fillKategorieDropdown();
@@ -461,6 +489,7 @@ export function listenForLizenzen() {
             console.log(`✅ Lizenzen geladen: ${arr.length}`);
             renderLizenzenTable();
             updateLizenzenStats();
+            renderLizenzenTrashList();
         }, (error) => {
             console.error("Lizenzen: Fehler beim Laden:", error);
             alertUser("Fehler beim Laden der Lizenzen. Bitte Firestore-Regeln prüfen.", 'error');
@@ -486,6 +515,7 @@ function listenForKategorien() {
             fillKategorieDropdown();
             renderKategorienList();
             renderLizenzenTable();
+            renderLizenzenTrashList();
         }, (error) => {
             console.error("Lizenzen: Fehler beim Laden der Kategorien:", error);
         });
@@ -510,6 +540,7 @@ function listenForProdukte() {
             fillProduktDropdown();
             renderProdukteList();
             renderLizenzenTable();
+            renderLizenzenTrashList();
         }, (error) => {
             console.error("Lizenzen: Fehler beim Laden der Produkte:", error);
         });
@@ -519,7 +550,7 @@ function listenForProdukte() {
 }
 
 function updateLizenzenStats() {
-    const list = Object.values(LIZENZEN);
+    const list = Object.values(LIZENZEN).filter(l => !l?.inTrash);
 
     const heute = new Date();
     heute.setHours(0, 0, 0, 0);
@@ -554,7 +585,7 @@ function renderLizenzenTable() {
     const tbody = document.getElementById('lizenzen-table-body');
     if (!tbody) return;
 
-    let list = Object.values(LIZENZEN);
+    let list = Object.values(LIZENZEN).filter(l => !l?.inTrash);
 
     if (currentFilter.status) {
         list = list.filter(l => getDerivedStatus(l) === currentFilter.status);
@@ -829,7 +860,9 @@ function startCopyLizenzFromView() {
 
     setInputValue('editLizenzId', '');
     populateLizenzForm(liz);
+    setInputValue('lizCode', '');
     openLizenzModal();
+    scrollLizenzModalToTop();
 }
 
 window.openEditLizenz = function (id) {
@@ -847,13 +880,26 @@ window.openEditLizenz = function (id) {
 };
 
 window.deleteLizenz = async function (id) {
-    if (!confirm('Lizenz wirklich löschen?')) return;
+    if (!confirm('Lizenz in den Papierkorb verschieben?')) return;
 
     if (!lizenzenRef) return;
 
     try {
-        await deleteDoc(doc(lizenzenRef, id));
-        alertUser('Lizenz gelöscht!', 'success');
+        console.log('🗑️ Lizenzen: Verschiebe in Papierkorb...', id);
+        await updateDoc(doc(lizenzenRef, id), {
+            inTrash: true,
+            trashedAt: serverTimestamp(),
+            trashedBy: currentUser.mode,
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUser.mode
+        });
+        if (LIZENZEN[id]) {
+            LIZENZEN[id].inTrash = true;
+        }
+        renderLizenzenTable();
+        updateLizenzenStats();
+        renderLizenzenTrashList();
+        alertUser('Lizenz in Papierkorb verschoben!', 'success');
     } catch (error) {
         console.error('Lizenzen: Fehler beim Löschen:', error);
         alertUser('Fehler beim Löschen: ' + error.message, 'error');
@@ -870,7 +916,15 @@ function openLizenzModal() {
     updateVolumenFrei();
 
     const modal = document.getElementById('lizenzModal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) {
+        modal.style.display = 'flex';
+        modal.style.zIndex = '100';
+    }
+}
+
+function scrollLizenzModalToTop() {
+    const box = document.querySelector('#lizenzModal > div');
+    if (box) box.scrollTop = 0;
 }
 
 function closeLizenzModal() {
@@ -1053,13 +1107,198 @@ function openLizenzenSettingsModal() {
     const modal = document.getElementById('lizenzenSettingsModal');
     if (modal) modal.style.display = 'flex';
 
+    selectedTrashLizenzIds.clear();
     renderKategorienList();
     renderProdukteList();
+    renderLizenzenTrashList();
 }
 
 function closeLizenzenSettingsModal() {
     const modal = document.getElementById('lizenzenSettingsModal');
     if (modal) modal.style.display = 'none';
+}
+
+function getTrashedLizenzenList() {
+    const list = Object.values(LIZENZEN).filter(l => !!l?.inTrash);
+    list.sort((a, b) => {
+        const aTs = a.trashedAt?.toDate ? a.trashedAt.toDate().getTime() : 0;
+        const bTs = b.trashedAt?.toDate ? b.trashedAt.toDate().getTime() : 0;
+        if (aTs !== bTs) return bTs - aTs;
+
+        const aCreated = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+        const bCreated = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+        return bCreated - aCreated;
+    });
+    return list;
+}
+
+function renderLizenzenTrashList() {
+    const container = document.getElementById('lizenzen-trash-list');
+    if (!container) return;
+
+    const list = getTrashedLizenzenList();
+    container.innerHTML = '';
+
+    if (list.length === 0) {
+        container.innerHTML = '<p class="text-sm text-center text-gray-400 italic">Papierkorb leer.</p>';
+        return;
+    }
+
+    list.forEach((l) => {
+        const checked = selectedTrashLizenzIds.has(l.id);
+        const div = document.createElement('div');
+        div.className = `trash-liz-row flex justify-between items-start gap-2 p-2 rounded border cursor-pointer ${checked ? 'bg-emerald-50 border-emerald-200' : 'bg-white hover:bg-gray-50'}`;
+        div.dataset.id = l.id;
+
+        const produkt = escapeHtml(resolveProduktName(l.produktId));
+        const titel = escapeHtml(l.titel || l.title || '-');
+        const code = escapeHtml(l.code || '-');
+        const idShort = escapeHtml(String(l.id || '').slice(-4).toUpperCase());
+
+        div.innerHTML = `
+            <div class="flex items-start gap-2 min-w-0 flex-1">
+                <input type="checkbox" class="trash-liz-checkbox mt-1" data-id="${l.id}" ${checked ? 'checked' : ''}>
+                <div class="min-w-0">
+                    <p class="font-bold text-gray-800 truncate">${produkt}</p>
+                    <p class="text-xs text-gray-600 truncate">${titel}</p>
+                    <p class="text-[10px] text-gray-500 truncate">ID: #${idShort} • Code: ${code}</p>
+                </div>
+            </div>
+            <div class="flex gap-1 flex-shrink-0">
+                <button class="trash-liz-view-btn text-xs bg-gray-50 text-gray-700 border border-gray-200 px-2 py-1 rounded hover:bg-gray-100" data-id="${l.id}" title="Ansehen">Ansehen</button>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+
+    container.querySelectorAll('.trash-liz-row').forEach((row) => {
+        if (row.dataset.listenerAttached) return;
+        row.addEventListener('click', (e) => {
+            const id = e.currentTarget?.dataset?.id;
+            if (!id) return;
+            if (selectedTrashLizenzIds.has(id)) selectedTrashLizenzIds.delete(id);
+            else selectedTrashLizenzIds.add(id);
+            renderLizenzenTrashList();
+        });
+        row.dataset.listenerAttached = 'true';
+    });
+
+    container.querySelectorAll('.trash-liz-checkbox').forEach((cb) => {
+        if (cb.dataset.listenerAttached) return;
+        cb.addEventListener('click', (e) => e.stopPropagation());
+        cb.addEventListener('change', (e) => {
+            const id = e.currentTarget?.dataset?.id;
+            if (!id) return;
+            if (e.currentTarget.checked) selectedTrashLizenzIds.add(id);
+            else selectedTrashLizenzIds.delete(id);
+            renderLizenzenTrashList();
+        });
+        cb.dataset.listenerAttached = 'true';
+    });
+
+    container.querySelectorAll('.trash-liz-view-btn').forEach((btn) => {
+        if (btn.dataset.listenerAttached) return;
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = e.currentTarget?.dataset?.id;
+            if (!id) return;
+            window.openViewLizenz(id);
+        });
+        btn.dataset.listenerAttached = 'true';
+    });
+}
+
+function selectAllTrashLizenzen() {
+    selectedTrashLizenzIds.clear();
+    getTrashedLizenzenList().forEach((l) => selectedTrashLizenzIds.add(l.id));
+    renderLizenzenTrashList();
+}
+
+function deselectAllTrashLizenzen() {
+    selectedTrashLizenzIds.clear();
+    renderLizenzenTrashList();
+}
+
+async function restoreSelectedTrashLizenzen() {
+    if (!currentUser?.mode || currentUser.mode === 'Gast') {
+        alertUser('Bitte anmelden.', 'error');
+        return;
+    }
+
+    if (!lizenzenRef) return;
+
+    const ids = Array.from(selectedTrashLizenzIds);
+    if (ids.length === 0) {
+        alertUser('Papierkorb: Bitte mindestens einen Eintrag auswählen.', 'error');
+        return;
+    }
+
+    const confirmText = prompt('Zum Wiederherstellen bitte WIEDERHERSTELLEN eingeben:');
+    if (confirmText !== 'WIEDERHERSTELLEN') return;
+
+    console.log('♻️ Lizenzen: Wiederherstellen startet...', ids);
+
+    try {
+        for (const id of ids) {
+            await updateDoc(doc(lizenzenRef, id), {
+                inTrash: false,
+                trashedAt: null,
+                trashedBy: null,
+                updatedAt: serverTimestamp(),
+                updatedBy: currentUser.mode
+            });
+            if (LIZENZEN[id]) {
+                LIZENZEN[id].inTrash = false;
+                LIZENZEN[id].trashedAt = null;
+                LIZENZEN[id].trashedBy = null;
+            }
+        }
+
+        selectedTrashLizenzIds.clear();
+        renderLizenzenTable();
+        updateLizenzenStats();
+        renderLizenzenTrashList();
+        alertUser(`Wiederhergestellt: ${ids.length}`, 'success');
+    } catch (err) {
+        console.error(err);
+        alertUser('Fehler beim Wiederherstellen: ' + err.message, 'error');
+    }
+}
+
+async function deleteSelectedTrashLizenzen() {
+    if (!currentUser?.mode || currentUser.mode === 'Gast') {
+        alertUser('Bitte anmelden.', 'error');
+        return;
+    }
+
+    if (!lizenzenRef) return;
+
+    const ids = Array.from(selectedTrashLizenzIds);
+    if (ids.length === 0) {
+        alertUser('Papierkorb: Bitte mindestens einen Eintrag auswählen.', 'error');
+        return;
+    }
+
+    const confirmText = prompt('Endgültig löschen: Bitte JA LÖSCHEN eingeben:');
+    if (confirmText !== 'JA LÖSCHEN') return;
+
+    console.log('🗑️ Lizenzen: Endgültig löschen startet...', ids);
+
+    try {
+        for (const id of ids) {
+            await deleteDoc(doc(lizenzenRef, id));
+            if (LIZENZEN[id]) delete LIZENZEN[id];
+        }
+
+        selectedTrashLizenzIds.clear();
+        renderLizenzenTable();
+        updateLizenzenStats();
+        renderLizenzenTrashList();
+        alertUser(`Endgültig gelöscht: ${ids.length}`, 'success');
+    } catch (err) {
+        console.error(err);
+        alertUser('Fehler beim endgültigen Löschen: ' + err.message, 'error');
+    }
 }
 
 async function addKategorie() {

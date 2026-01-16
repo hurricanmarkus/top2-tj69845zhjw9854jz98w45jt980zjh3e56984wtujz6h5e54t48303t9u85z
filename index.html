@@ -1641,16 +1641,19 @@
                         <input type="text" id="liz-filter-input" placeholder="🔍 Filter eingeben... (Enter)"
                             class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 text-sm">
 
+                        <button id="btn-add-liz-filter" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-bold transition text-sm">
+                            + Filter
+                        </button>
+
+                    </div>
+
+                    <div class="flex flex-wrap gap-2 items-center mt-2">
                         <select id="filter-liz-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Status</option>
                             <option value="aktiv" selected>✅ Aktiv</option>
                             <option value="deaktiviert">⏸️ Deaktiviert</option>
                             <option value="abgelaufen">❌ Abgelaufen</option>
                         </select>
-
-                        <button id="btn-add-liz-filter" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-bold transition text-sm">
-                            + Filter
-                        </button>
 
                         <button id="reset-filters-lizenzen" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
                             ✕ Reset
@@ -7280,6 +7283,33 @@
                         <div id="lizenzen-produkte-list" class="space-y-2 max-h-60 overflow-y-auto">
                             <p class="text-sm text-center text-gray-400 italic">Keine Produkte.</p>
                         </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 pt-6 border-t">
+                    <div class="flex flex-wrap justify-between items-center gap-3 mb-3">
+                        <h4 class="font-bold text-red-800">🗑️ Papierkorb</h4>
+                        <div class="flex gap-2">
+                            <button id="lizenzen-trash-select-all" class="px-3 py-1.5 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
+                                Alle auswählen
+                            </button>
+                            <button id="lizenzen-trash-deselect-all" class="px-3 py-1.5 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
+                                Alle abwählen
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2 mb-3">
+                        <button id="lizenzen-trash-restore-btn" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-bold transition text-sm">
+                            Wiederherstellen
+                        </button>
+                        <button id="lizenzen-trash-delete-btn" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-bold transition text-sm">
+                            Endgültig löschen
+                        </button>
+                    </div>
+
+                    <div id="lizenzen-trash-list" class="space-y-2 max-h-60 overflow-y-auto bg-white border-2 border-gray-200 rounded-lg p-2">
+                        <p class="text-sm text-center text-gray-400 italic">Papierkorb leer.</p>
                     </div>
                 </div>
 
