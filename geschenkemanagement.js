@@ -1009,6 +1009,17 @@ function updateGmImportButtonVisibility() {
     importBtn.disabled = !shouldShow;
     importBtn.title = shouldShow ? `Einmaliger CSV Import für "${THEMEN[currentThemaId]?.name}"` : '';
 
+    // Fallback: Falls der Button erst nach setupEventListeners() in den DOM kommt,
+    // hängen wir den Listener hier an, sobald er sichtbar sein soll.
+    if (shouldShow && !importBtn.dataset.listenerAttached) {
+        importBtn.addEventListener('click', () => {
+            console.log('🖱️ GM CSV Import: Click (Fallback Listener)');
+            openGmImportCsvModal();
+        });
+        importBtn.dataset.listenerAttached = 'true';
+        console.log('✅ GM CSV Import: Fallback Click-Listener an #btn-gm-import-csv gesetzt');
+    }
+
     const thema = currentThemaId ? THEMEN[currentThemaId] : null;
     console.log('📥 GM CSV Import: Button Visibility', {
         currentThemaId,
@@ -1023,6 +1034,221 @@ function updateGmImportButtonVisibility() {
 function getGmCsvImportFlagKey(themaId = null) {
     const id = themaId || currentThemaId || 'unknown';
     return `gm_${id}_imported`;
+}
+
+function resetGmImportCsvModalUi() {
+    const fileInput = document.getElementById('gm-import-csv-file');
+    if (fileInput) fileInput.value = '';
+
+    gmImportCsvAnalysis = null;
+
+    const analyzeBtn = document.getElementById('gm-import-analyze-btn');
+    if (analyzeBtn) analyzeBtn.disabled = true;
+
+    const startBtn = document.getElementById('gm-import-start-btn');
+    if (startBtn) startBtn.disabled = true;
+
+    const summary = document.getElementById('gm-import-summary');
+    if (summary) summary.classList.add('hidden');
+
+    const summaryText = document.getElementById('gm-import-summary-text');
+    if (summaryText) summaryText.textContent = '';
+
+    const mapping = document.getElementById('gm-import-mapping');
+    if (mapping) {
+        mapping.classList.add('hidden');
+        mapping.innerHTML = '';
+    }
+
+    const progress = document.getElementById('gm-import-progress');
+    if (progress) progress.classList.add('hidden');
+
+    const bar = document.getElementById('gm-import-progress-bar');
+    if (bar) {
+        bar.style.width = '0%';
+        bar.textContent = '0%';
+    }
+
+    const progressText = document.getElementById('gm-import-progress-text');
+    if (progressText) progressText.textContent = '';
+}
+
+function escapeGmImportHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function normalizeGmImportText(value) {
+    const v = String(value ?? '').trim();
+    if (!v || v === '-') return '';
+    return v;
+}
+
+function parseGmImportNumber(value) {
+    const v = normalizeGmImportText(value);
+    if (!v || v === '?') return 0;
+
+    const cleaned = v
+        .replace(/\s/g, '')
+        .replace(/\./g, '')
+        .replace(',', '.');
+
+    const num = parseFloat(cleaned);
+    return Number.isFinite(num) ? num : 0;
+}
+
+function parseGmImportSemicolonCsv(text) {
+    const input = String(text ?? '').replace(/^\uFEFF/, '');
+    const rows = [];
+    let row = [];
+    let field = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < input.length; i++) {
+        const ch = input[i];
+
+        if (ch === '"') {
+            if (inQuotes && input[i + 1] === '"') {
+                field += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+            continue;
+        }
+
+        if (ch === ';' && !inQuotes) {
+            row.push(field);
+            field = '';
+            continue;
+        }
+
+        if (ch === '\n' && !inQuotes) {
+            row.push(field);
+            field = '';
+            const hasContent = row.some(c => String(c || '').trim() !== '');
+            if (hasContent) rows.push(row);
+            row = [];
+            continue;
+        }
+
+        if (ch === '\r') continue;
+
+        field += ch;
+    }
+
+    row.push(field);
+    const hasContent = row.some(c => String(c || '').trim() !== '');
+    if (hasContent) rows.push(row);
+
+    return rows;
+}
+
+function splitGmImportNames(raw) {
+    const v = normalizeGmImportText(raw);
+    if (!v) return [];
+
+    const cleaned = v.replace(/\r?\n/g, ',');
+
+    return cleaned
+        .split(/\s*(?:,|\bund\b)\s*/i)
+        .map(s => s.trim())
+        .filter(s => s && s.toUpperCase() !== 'ALLE');
+}
+
+function extractGmImportBeteiligungNames(raw) {
+    const v = normalizeGmImportText(raw);
+    if (!v) return [];
+
+    let cleaned = v;
+    cleaned = cleaned.replace(/\([^)]*\)/g, '');
+    cleaned = cleaned.replace(/[0-9]/g, '');
+    cleaned = cleaned.replace(/[€%]/g, '');
+    cleaned = cleaned.replace(/[–—-]/g, ' ');
+    cleaned = cleaned.replace(/\r?\n/g, ',');
+    cleaned = cleaned.replace(/;/g, ',');
+    cleaned = cleaned.trim();
+
+    return cleaned
+        .split(/\s*(?:,|\bund\b)\s*/i)
+        .map(s => s.trim())
+        .filter(Boolean);
+}
+
+function mapGmImportStatusToKey(raw) {
+    const v = normalizeGmImportText(raw);
+    if (!v) return 'offen';
+
+    const lower = v.toLowerCase();
+    if (STATUS_CONFIG[lower]) return lower;
+
+    const byLabel = Object.entries(STATUS_CONFIG).find(([, cfg]) => (cfg.label || '').toLowerCase() === lower);
+    if (byLabel) return byLabel[0];
+
+    const map = {
+        gekauft: 'abgeschlossen',
+        abgeschlossen: 'abgeschlossen',
+        storniert: 'storniert',
+        offen: 'offen',
+        bestellt: 'bestellt',
+        'zu bestellen': 'zu_bestellen',
+        teillieferung: 'teillieferung'
+    };
+
+    return map[lower] || null;
+}
+
+function mapGmImportZahlungsartToKey(raw) {
+    const v = normalizeGmImportText(raw);
+    if (!v) return '';
+
+    if (ZAHLUNGSARTEN[v]) return v;
+
+    const lower = v.toLowerCase();
+    if (ZAHLUNGSARTEN[lower]) return lower;
+
+    const byLabel = Object.entries(ZAHLUNGSARTEN).find(([, cfg]) => (cfg.label || '').toLowerCase() === lower);
+    if (byLabel) return byLabel[0];
+
+    const normalized = lower.replace(/[^a-z0-9]/g, '');
+    const byNormalizedLabel = Object.entries(ZAHLUNGSARTEN).find(([, cfg]) => (cfg.label || '').toLowerCase().replace(/[^a-z0-9]/g, '') === normalized);
+    if (byNormalizedLabel) return byNormalizedLabel[0];
+
+    return null;
+}
+
+function buildGmImportKontaktNameIndex() {
+    const index = {};
+    Object.values(KONTAKTE).forEach(k => {
+        const name = String(k?.name || '').trim();
+        if (!name) return;
+        const key = name.toLowerCase();
+        if (!index[key]) index[key] = k.id;
+    });
+    return index;
+}
+
+function updateGmImportProgress(percent, text) {
+    const progress = document.getElementById('gm-import-progress');
+    if (progress) progress.classList.remove('hidden');
+
+    const bar = document.getElementById('gm-import-progress-bar');
+    if (bar) {
+        const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
+        bar.style.width = safePercent + '%';
+        bar.textContent = Math.round(safePercent) + '%';
+    }
+
+    const progressText = document.getElementById('gm-import-progress-text');
+    if (progressText) progressText.textContent = text || '';
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function analyzeGmImportCsvFile() {
