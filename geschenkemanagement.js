@@ -1331,7 +1331,10 @@ function openGmImportCsvModal() {
     }
 
     const modal = document.getElementById('gmImportCsvModal');
-    if (!modal) return;
+    if (!modal) {
+        console.error('❌ GM CSV Import: Modal-Element #gmImportCsvModal nicht gefunden');
+        return;
+    }
 
     resetGmImportCsvModalUi();
     modal.style.display = 'flex';
@@ -1344,11 +1347,33 @@ function closeGmImportCsvModal() {
     resetGmImportCsvModalUi();
 }
 
+function ensureGmImportDelegatedClickListener() {
+    const root = document.body;
+    if (!root) return;
+    if (root.dataset.gmImportDelegatedClickAttached === 'true') return;
+
+    root.addEventListener('click', (e) => {
+        const btn = e.target?.closest?.('#btn-gm-import-csv');
+        if (!btn) return;
+
+        console.log('🖱️ GM CSV Import: Delegated Click auf #btn-gm-import-csv');
+        openGmImportCsvModal();
+    });
+
+    root.dataset.gmImportDelegatedClickAttached = 'true';
+    console.log('✅ GM CSV Import: Delegated Click Listener aktiviert');
+}
+
 function setupGmImportCsvModalListeners() {
+    ensureGmImportDelegatedClickListener();
+
     const importBtn = document.getElementById('btn-gm-import-csv');
     if (importBtn && !importBtn.dataset.listenerAttached) {
         importBtn.addEventListener('click', openGmImportCsvModal);
         importBtn.dataset.listenerAttached = 'true';
+        console.log('✅ GM CSV Import: Direkt-Listener an #btn-gm-import-csv gesetzt');
+    } else if (!importBtn) {
+        console.log('ℹ️ GM CSV Import: #btn-gm-import-csv noch nicht im DOM (Delegation aktiv)');
     }
 
     const closeBtn = document.getElementById('closeGmImportCsvModal');
