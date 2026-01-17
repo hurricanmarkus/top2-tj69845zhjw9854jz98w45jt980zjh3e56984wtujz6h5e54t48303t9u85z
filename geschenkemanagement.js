@@ -146,7 +146,237 @@ let geschenkeSettings = {
     geschenkeStandorte: ['zu Hause', 'Anderer Standort'],
     customStatusOptionen: [],
     customZahlungsarten: [],
-    customGeschenkeStandorte: []
+    customGeschenkeStandorte: [],
+    themenOrder: [],
+    kontakteOrder: []
+};
+
+function arraysEqual(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b)) return false;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+}
+
+function normalizeThemenOrder() {
+    if (!geschenkeSettingsRef) return;
+
+    const currentIds = Object.keys(THEMEN);
+    if (currentIds.length === 0) return;
+
+    const existingOrder = Array.isArray(geschenkeSettings.themenOrder) ? geschenkeSettings.themenOrder : [];
+    const seen = new Set();
+
+    const normalized = [];
+    existingOrder.forEach(id => {
+        if (THEMEN[id] && !seen.has(id)) {
+            normalized.push(id);
+            seen.add(id);
+        }
+    });
+
+    currentIds.forEach(id => {
+        if (!seen.has(id)) {
+            normalized.push(id);
+            seen.add(id);
+        }
+    });
+
+    if (!arraysEqual(existingOrder, normalized)) {
+        geschenkeSettings.themenOrder = normalized;
+        setDoc(geschenkeSettingsRef, { themenOrder: normalized }, { merge: true })
+            .then(() => console.log('✅ themenOrder aktualisiert'))
+            .catch(e => console.error('❌ Fehler beim Speichern von themenOrder:', e));
+    }
+}
+
+function getSortedThemenArray() {
+    const themenArray = Object.values(THEMEN);
+    const order = Array.isArray(geschenkeSettings?.themenOrder) ? geschenkeSettings.themenOrder : [];
+    if (order.length === 0) return themenArray;
+
+    const indexMap = {};
+    order.forEach((id, idx) => {
+        indexMap[id] = idx;
+    });
+
+    return themenArray.sort((a, b) => {
+        const ai = indexMap[a.id];
+        const bi = indexMap[b.id];
+        const aHas = ai !== undefined;
+        const bHas = bi !== undefined;
+
+        if (aHas && bHas) return ai - bi;
+        if (aHas && !bHas) return -1;
+        if (!aHas && bHas) return 1;
+        return (a.name || '').localeCompare(b.name || '');
+    });
+}
+
+function moveThemaInOrder(id, direction) {
+    if (!geschenkeSettingsRef) return;
+    if (!id || !direction) return;
+
+    normalizeThemenOrder();
+
+    const order = Array.isArray(geschenkeSettings.themenOrder) ? [...geschenkeSettings.themenOrder] : [];
+    const index = order.indexOf(id);
+    if (index === -1) return;
+
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= order.length) return;
+
+    const temp = order[index];
+    order[index] = order[newIndex];
+    order[newIndex] = temp;
+
+    geschenkeSettings.themenOrder = order;
+
+    console.log('🔀 Thema verschoben:', { id, direction, order });
+
+    setDoc(geschenkeSettingsRef, { themenOrder: order }, { merge: true })
+        .then(() => {
+            console.log('✅ themenOrder gespeichert');
+            renderThemenVerwaltung();
+            renderThemenDropdown();
+        })
+        .catch(e => {
+            console.error('❌ Fehler beim Speichern von themenOrder:', e);
+            alertUser('Fehler beim Speichern der Themen-Reihenfolge: ' + e.message, 'error');
+        });
+}
+
+window.moveThemaUp = function(id) {
+    moveThemaInOrder(id, -1);
+};
+
+window.moveThemaDown = function(id) {
+    moveThemaInOrder(id, 1);
+};
+
+function normalizeKontakteOrder() {
+    if (!geschenkeSettingsRef) return;
+
+    const kontakteArray = Object.values(KONTAKTE).filter(k => !k.istEigenePerson);
+    if (kontakteArray.length === 0) return;
+
+    kontakteArray.sort((a, b) => {
+        if (a.archiviert && !b.archiviert) return 1;
+        if (!a.archiviert && b.archiviert) return -1;
+        return (a.name || '').localeCompare(b.name || '');
+    });
+
+    const currentIds = kontakteArray.map(k => k.id);
+    const existingOrder = Array.isArray(geschenkeSettings.kontakteOrder) ? geschenkeSettings.kontakteOrder : [];
+    const seen = new Set();
+    const normalized = [];
+
+    existingOrder.forEach(id => {
+        if (KONTAKTE[id] && !KONTAKTE[id].istEigenePerson && !seen.has(id)) {
+            normalized.push(id);
+            seen.add(id);
+        }
+    });
+
+    currentIds.forEach(id => {
+        if (!seen.has(id)) {
+            normalized.push(id);
+            seen.add(id);
+        }
+    });
+
+    if (!arraysEqual(existingOrder, normalized)) {
+        geschenkeSettings.kontakteOrder = normalized;
+        setDoc(geschenkeSettingsRef, { kontakteOrder: normalized }, { merge: true })
+            .then(() => console.log('✅ kontakteOrder aktualisiert'))
+            .catch(e => console.error('❌ Fehler beim Speichern von kontakteOrder:', e));
+    }
+}
+
+function getSortedKontakteArray() {
+    const kontakteArray = Object.values(KONTAKTE);
+    const order = Array.isArray(geschenkeSettings?.kontakteOrder) ? geschenkeSettings.kontakteOrder : [];
+
+    if (order.length === 0) {
+        return kontakteArray.sort((a, b) => {
+            if (a.istEigenePerson) return -1;
+            if (b.istEigenePerson) return 1;
+            if (a.archiviert && !b.archiviert) return 1;
+            if (!a.archiviert && b.archiviert) return -1;
+            return (a.name || '').localeCompare(b.name || '');
+        });
+    }
+
+    const indexMap = {};
+    order.forEach((id, idx) => {
+        indexMap[id] = idx;
+    });
+
+    return kontakteArray.sort((a, b) => {
+        if (a.istEigenePerson) return -1;
+        if (b.istEigenePerson) return 1;
+
+        const ai = indexMap[a.id];
+        const bi = indexMap[b.id];
+        const aHas = ai !== undefined;
+        const bHas = bi !== undefined;
+
+        if (aHas && bHas) return ai - bi;
+        if (aHas && !bHas) return -1;
+        if (!aHas && bHas) return 1;
+
+        if (a.archiviert && !b.archiviert) return 1;
+        if (!a.archiviert && b.archiviert) return -1;
+        return (a.name || '').localeCompare(b.name || '');
+    });
+}
+
+function moveKontaktInOrder(id, direction) {
+    if (!geschenkeSettingsRef) return;
+    if (!id || !direction) return;
+
+    const kontakt = KONTAKTE[id];
+    if (kontakt?.istEigenePerson) return;
+
+    normalizeKontakteOrder();
+
+    const order = Array.isArray(geschenkeSettings.kontakteOrder) ? [...geschenkeSettings.kontakteOrder] : [];
+    const index = order.indexOf(id);
+    if (index === -1) return;
+
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= order.length) return;
+
+    const temp = order[index];
+    order[index] = order[newIndex];
+    order[newIndex] = temp;
+
+    geschenkeSettings.kontakteOrder = order;
+
+    console.log('🔀 Kontakt verschoben:', { id, direction, order });
+
+    setDoc(geschenkeSettingsRef, { kontakteOrder: order }, { merge: true })
+        .then(() => {
+            console.log('✅ kontakteOrder gespeichert');
+            renderKontaktbuch();
+            if (currentThemaId) {
+                renderPersonenUebersicht();
+            }
+        })
+        .catch(e => {
+            console.error('❌ Fehler beim Speichern von kontakteOrder:', e);
+            alertUser('Fehler beim Speichern der Kontakt-Reihenfolge: ' + e.message, 'error');
+        });
+}
+
+window.moveKontaktUp = function(id) {
+    moveKontaktInOrder(id, -1);
+};
+
+window.moveKontaktDown = function(id) {
+    moveKontaktInOrder(id, 1);
 };
 
 // ========================================
@@ -371,6 +601,8 @@ function listenForKontakte() {
         }
         
         console.log("✅ Kontakte geladen:", Object.keys(KONTAKTE).length);
+
+        normalizeKontakteOrder();
         
         // UI aktualisieren wenn Kontaktbuch offen ist
         if (document.getElementById('gm-kontaktbuch-list')) {
@@ -443,13 +675,18 @@ function listenForThemen() {
         
         const newThemenCount = Object.keys(THEMEN).length;
         console.log("✅ Themen geladen:", newThemenCount);
+
+        // ✅ Sortierung / Order-Array synchron halten
+        normalizeThemenOrder();
         
         // Gespeichertes Thema wiederherstellen oder erstes Thema wählen
         const savedThemaId = getUserSetting('gm_current_thema');
         if (savedThemaId && THEMEN[savedThemaId]) {
             currentThemaId = savedThemaId;
         } else if (Object.keys(THEMEN).length > 0) {
-            currentThemaId = Object.keys(THEMEN)[0];
+            const order = Array.isArray(geschenkeSettings.themenOrder) ? geschenkeSettings.themenOrder : [];
+            const firstOrdered = order.find(id => THEMEN[id] && !THEMEN[id].archiviert);
+            currentThemaId = firstOrdered || Object.keys(THEMEN)[0];
         } else {
             currentThemaId = null;
         }
@@ -799,7 +1036,7 @@ function renderThemenDropdown() {
     const dropdown = document.getElementById('gm-thema-dropdown');
     if (!dropdown) return;
     
-    const activeThemen = Object.values(THEMEN).filter(t => !t.archiviert);
+    const activeThemen = getSortedThemenArray().filter(t => !t.archiviert);
     
     console.log("🎨 renderThemenDropdown - Aktive Themen:", activeThemen.length);
     activeThemen.forEach(t => {
@@ -954,7 +1191,33 @@ function renderPersonenUebersicht() {
     };
     
     // Personen-Daten sammeln
-    const personenDaten = thema.personen.map(personId => {
+    const personenIds = Array.isArray(thema.personen) ? [...thema.personen] : [];
+    const order = Array.isArray(geschenkeSettings?.kontakteOrder) ? geschenkeSettings.kontakteOrder : [];
+    const indexMap = {};
+    order.forEach((id, idx) => {
+        indexMap[id] = idx;
+    });
+
+    personenIds.sort((aId, bId) => {
+        const aPerson = KONTAKTE[aId];
+        const bPerson = KONTAKTE[bId];
+
+        if (aPerson?.istEigenePerson) return -1;
+        if (bPerson?.istEigenePerson) return 1;
+
+        const ai = indexMap[aId];
+        const bi = indexMap[bId];
+        const aHas = ai !== undefined;
+        const bHas = bi !== undefined;
+
+        if (aHas && bHas) return ai - bi;
+        if (aHas && !bHas) return -1;
+        if (!aHas && bHas) return 1;
+
+        return (aPerson?.name || '').localeCompare(bPerson?.name || '');
+    });
+
+    const personenDaten = personenIds.map(personId => {
         const person = KONTAKTE[personId];
         if (!person) return null;
         
@@ -1729,7 +1992,7 @@ function renderModalSelects(geschenk = null) {
     
     // Bezahlt von (Single Select)
     const selectedBezahltVon = geschenk?.bezahltVon;
-    const kontakteOptions = Object.values(KONTAKTE)
+    const kontakteOptions = getSortedKontakteArray()
         .filter(k => !k.archiviert || k.id === selectedBezahltVon)
         .map(k => `<option value="${k.id}">${k.name}${k.istEigenePerson ? ' (Ich)' : ''}${k.archiviert ? ' (Archiviert)' : ''}</option>`)
         .join('');
@@ -1748,6 +2011,10 @@ function renderModalSelects(geschenk = null) {
     const standortSelect = document.getElementById('gm-standort');
     if (standortSelect) {
         const standorte = [...geschenkeSettings.geschenkeStandorte, ...geschenkeSettings.customGeschenkeStandorte];
+        const selectedStandort = geschenk?.standort;
+        if (selectedStandort && !standorte.includes(selectedStandort)) {
+            standorte.unshift(selectedStandort);
+        }
         standortSelect.innerHTML = '<option value="">-- Auswählen --</option>' + 
             standorte.map(s => `<option value="${s}" ${geschenk?.standort === s ? 'selected' : ''}>${s}</option>`).join('');
     }
@@ -1758,13 +2025,8 @@ function renderPersonenCheckboxes(containerId, fieldName, selectedValues) {
     const container = document.getElementById(containerId);
     if (!container) return;
     
-    const kontakte = Object.values(KONTAKTE)
-        .filter(k => !k.archiviert || selectedValues.includes(k.id))
-        .sort((a, b) => {
-            if (a.istEigenePerson) return -1;
-            if (b.istEigenePerson) return 1;
-            return a.name.localeCompare(b.name);
-        });
+    const kontakte = getSortedKontakteArray()
+        .filter(k => !k.archiviert || selectedValues.includes(k.id));
     
     container.innerHTML = kontakte.map(k => {
         const isChecked = selectedValues.includes(k.id);
@@ -2011,12 +2273,20 @@ function renderOptionList(containerId, defaultOptions, customOptions, type) {
     const allOptions = [...Object.entries(defaultOptions).map(([k, v]) => ({ key: k, label: v.label, isDefault: true })),
                         ...customOptions.map(o => ({ key: o, label: o, isDefault: false }))];
     
-    container.innerHTML = allOptions.map(opt => `
+    container.innerHTML = allOptions.map(opt => {
+        const safeKey = encodeURIComponent(opt.key).replace(/'/g, '%27');
+        return `
         <div class="flex items-center justify-between p-2 bg-white rounded border text-sm">
             <span>${opt.label}</span>
-            ${!opt.isDefault ? `<button onclick="window.removeCustomOption('${type}', '${opt.key}')" class="text-red-500">✕</button>` : ''}
+            ${!opt.isDefault ? `
+                <div class="flex items-center gap-2">
+                    <button onclick="window.editCustomOption('${type}', '${safeKey}')" class="text-blue-500">✏️</button>
+                    <button onclick="window.removeCustomOption('${type}', '${safeKey}')" class="text-red-500">✕</button>
+                </div>
+            ` : ''}
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 function renderStandortList() {
@@ -2026,12 +2296,20 @@ function renderStandortList() {
     const allStandorte = [...geschenkeSettings.geschenkeStandorte.map(s => ({ name: s, isDefault: true })),
                           ...geschenkeSettings.customGeschenkeStandorte.map(s => ({ name: s, isDefault: false }))];
     
-    container.innerHTML = allStandorte.map(s => `
+    container.innerHTML = allStandorte.map(s => {
+        const safeName = encodeURIComponent(s.name).replace(/'/g, '%27');
+        return `
         <div class="flex items-center justify-between p-2 bg-white rounded border text-sm">
             <span>${s.name}</span>
-            ${!s.isDefault ? `<button onclick="window.removeCustomStandort('${s.name}')" class="text-red-500">✕</button>` : ''}
+            ${!s.isDefault ? `
+                <div class="flex items-center gap-2">
+                    <button onclick="window.editCustomStandort('${safeName}')" class="text-blue-500">✏️</button>
+                    <button onclick="window.removeCustomStandort('${safeName}')" class="text-red-500">✕</button>
+                </div>
+            ` : ''}
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 window.addCustomOption = async function(type) {
@@ -2066,10 +2344,55 @@ window.addCustomOption = async function(type) {
     
     try {
         geschenkeSettings[settingsKey].push(newValue);
-        await setDoc(geschenkeSettingsRef, geschenkeSettings);
+        await setDoc(geschenkeSettingsRef, geschenkeSettings, { merge: true });
         input.value = '';
         renderOptionenVerwaltung();
         alertUser('Option hinzugefügt!', 'success');
+    } catch (e) {
+        alertUser('Fehler: ' + e.message, 'error');
+    }
+};
+
+window.editCustomOption = async function(type, value) {
+    let settingsKey;
+
+    switch(type) {
+        case 'status':
+            settingsKey = 'customStatusOptionen';
+            break;
+        case 'zahlungsarten':
+            settingsKey = 'customZahlungsarten';
+            break;
+        default:
+            return;
+    }
+
+    let oldValue = value;
+    try {
+        oldValue = decodeURIComponent(value);
+    } catch (e) {
+        oldValue = value;
+    }
+
+    const newValueRaw = prompt('Neuer Wert:', oldValue);
+    if (!newValueRaw || newValueRaw.trim() === '') return;
+
+    const newValue = newValueRaw.trim();
+    if (newValue === oldValue) return;
+
+    if (geschenkeSettings[settingsKey].includes(newValue)) {
+        alertUser('Dieser Wert existiert bereits.', 'warning');
+        return;
+    }
+
+    const index = geschenkeSettings[settingsKey].indexOf(oldValue);
+    if (index === -1) return;
+
+    try {
+        geschenkeSettings[settingsKey][index] = newValue;
+        await setDoc(geschenkeSettingsRef, geschenkeSettings, { merge: true });
+        renderOptionenVerwaltung();
+        alertUser('Option aktualisiert!', 'success');
     } catch (e) {
         alertUser('Fehler: ' + e.message, 'error');
     }
@@ -2088,12 +2411,19 @@ window.removeCustomOption = async function(type, value) {
         default:
             return;
     }
+
+    let resolvedValue = value;
+    try {
+        resolvedValue = decodeURIComponent(value);
+    } catch (e) {
+        resolvedValue = value;
+    }
     
-    if (!confirm(`"${value}" wirklich entfernen?`)) return;
+    if (!confirm(`"${resolvedValue}" wirklich entfernen?`)) return;
     
     try {
-        geschenkeSettings[settingsKey] = geschenkeSettings[settingsKey].filter(o => o !== value);
-        await setDoc(geschenkeSettingsRef, geschenkeSettings);
+        geschenkeSettings[settingsKey] = geschenkeSettings[settingsKey].filter(o => o !== resolvedValue);
+        await setDoc(geschenkeSettingsRef, geschenkeSettings, { merge: true });
         renderOptionenVerwaltung();
         alertUser('Option entfernt!', 'success');
     } catch (e) {
@@ -2119,7 +2449,7 @@ window.addCustomStandort = async function() {
     
     try {
         geschenkeSettings.customGeschenkeStandorte.push(newStandort);
-        await setDoc(geschenkeSettingsRef, geschenkeSettings);
+        await setDoc(geschenkeSettingsRef, geschenkeSettings, { merge: true });
         input.value = '';
         renderOptionenVerwaltung();
         alertUser('Standort hinzugefügt!', 'success');
@@ -2128,12 +2458,52 @@ window.addCustomStandort = async function() {
     }
 };
 
+window.editCustomStandort = async function(standort) {
+    let oldStandort = standort;
+    try {
+        oldStandort = decodeURIComponent(standort);
+    } catch (e) {
+        oldStandort = standort;
+    }
+
+    const newStandortRaw = prompt('Neuer Standort:', oldStandort);
+    if (!newStandortRaw || newStandortRaw.trim() === '') return;
+
+    const newStandort = newStandortRaw.trim();
+    if (newStandort === oldStandort) return;
+
+    const allStandorte = [...geschenkeSettings.geschenkeStandorte, ...geschenkeSettings.customGeschenkeStandorte];
+    if (allStandorte.includes(newStandort)) {
+        alertUser('Dieser Standort existiert bereits.', 'warning');
+        return;
+    }
+
+    const index = geschenkeSettings.customGeschenkeStandorte.indexOf(oldStandort);
+    if (index === -1) return;
+
+    try {
+        geschenkeSettings.customGeschenkeStandorte[index] = newStandort;
+        await setDoc(geschenkeSettingsRef, geschenkeSettings, { merge: true });
+        renderOptionenVerwaltung();
+        alertUser('Standort aktualisiert!', 'success');
+    } catch (e) {
+        alertUser('Fehler: ' + e.message, 'error');
+    }
+};
+
 window.removeCustomStandort = async function(standort) {
-    if (!confirm(`"${standort}" wirklich entfernen?`)) return;
+    let resolvedStandort = standort;
+    try {
+        resolvedStandort = decodeURIComponent(standort);
+    } catch (e) {
+        resolvedStandort = standort;
+    }
+
+    if (!confirm(`"${resolvedStandort}" wirklich entfernen?`)) return;
     
     try {
-        geschenkeSettings.customGeschenkeStandorte = geschenkeSettings.customGeschenkeStandorte.filter(s => s !== standort);
-        await setDoc(geschenkeSettingsRef, geschenkeSettings);
+        geschenkeSettings.customGeschenkeStandorte = geschenkeSettings.customGeschenkeStandorte.filter(s => s !== resolvedStandort);
+        await setDoc(geschenkeSettingsRef, geschenkeSettings, { merge: true });
         renderOptionenVerwaltung();
         alertUser('Standort entfernt!', 'success');
     } catch (e) {
@@ -2366,15 +2736,15 @@ function renderKontaktbuch() {
     const container = document.getElementById('gm-kontaktbuch-list');
     if (!container) return;
     
-    const kontakteArray = Object.values(KONTAKTE).sort((a, b) => {
-        if (a.istEigenePerson) return -1;
-        if (b.istEigenePerson) return 1;
-        if (a.archiviert && !b.archiviert) return 1;
-        if (!a.archiviert && b.archiviert) return -1;
-        return a.name.localeCompare(b.name);
-    });
+    const kontakteArray = getSortedKontakteArray();
+    const reorderableIds = kontakteArray.filter(k => !k.istEigenePerson).map(k => k.id);
     
-    container.innerHTML = kontakteArray.map(k => `
+    container.innerHTML = kontakteArray.map(k => {
+        const reorderIndex = reorderableIds.indexOf(k.id);
+        const disableUp = reorderIndex <= 0;
+        const disableDown = reorderIndex === -1 || reorderIndex >= reorderableIds.length - 1;
+
+        return `
         <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg ${k.istEigenePerson ? 'border-2 border-pink-400' : ''} ${k.archiviert ? 'opacity-50' : ''}">
             <div class="flex items-center gap-3">
                 <div class="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
@@ -2386,6 +2756,8 @@ function renderKontaktbuch() {
             </div>
             ${!k.istEigenePerson ? `
                 <div class="flex gap-2">
+                    <button onclick="window.moveKontaktUp('${k.id}')" class="text-gray-600 hover:text-gray-800 p-1 ${disableUp ? 'opacity-30 cursor-not-allowed' : ''}" title="Nach oben" ${disableUp ? 'disabled' : ''}>⬆️</button>
+                    <button onclick="window.moveKontaktDown('${k.id}')" class="text-gray-600 hover:text-gray-800 p-1 ${disableDown ? 'opacity-30 cursor-not-allowed' : ''}" title="Nach unten" ${disableDown ? 'disabled' : ''}>⬇️</button>
                     <button onclick="window.editKontakt('${k.id}')" class="text-blue-500 hover:text-blue-700 p-1" title="Bearbeiten">
                         ✏️
                     </button>
@@ -2402,24 +2774,27 @@ function renderKontaktbuch() {
                 </div>
             ` : ''}
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 function renderThemenVerwaltung() {
     const container = document.getElementById('gm-themen-list');
     if (!container) return;
     
-    const themenArray = Object.values(THEMEN);
+    const themenArray = getSortedThemenArray();
     
     container.innerHTML = themenArray.length === 0 
         ? '<p class="text-gray-500 text-center py-4">Keine Themen vorhanden</p>'
-        : themenArray.map(t => `
+        : themenArray.map((t, index) => `
             <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg ${t.archiviert ? 'opacity-50' : ''}">
                 <div>
                     <span class="font-medium">${t.name}</span>
                     ${t.archiviert ? '<span class="text-xs bg-gray-300 text-gray-700 px-2 py-0.5 rounded-full ml-2">Archiviert</span>' : ''}
                 </div>
                 <div class="flex gap-2">
+                    <button onclick="window.moveThemaUp('${t.id}')" class="text-gray-600 hover:text-gray-800 p-1 ${index === 0 ? 'opacity-30 cursor-not-allowed' : ''}" title="Nach oben" ${index === 0 ? 'disabled' : ''}>⬆️</button>
+                    <button onclick="window.moveThemaDown('${t.id}')" class="text-gray-600 hover:text-gray-800 p-1 ${index === themenArray.length - 1 ? 'opacity-30 cursor-not-allowed' : ''}" title="Nach unten" ${index === themenArray.length - 1 ? 'disabled' : ''}>⬇️</button>
                     <button onclick="window.editThema('${t.id}')" class="text-blue-500 hover:text-blue-700 p-1" title="Bearbeiten">✏️</button>
                     <button onclick="window.toggleArchiveThema('${t.id}')" class="text-yellow-500 hover:text-yellow-700 p-1" title="${t.archiviert ? 'Wiederherstellen' : 'Archivieren'}">
                         ${t.archiviert ? '📤' : '📥'}
@@ -2864,7 +3239,7 @@ window.exportToPDF = function() {
 // ========================================
 
 window.openAddPersonToThemaModal = function() {
-    const verfuegbareKontakte = Object.values(KONTAKTE)
+    const verfuegbareKontakte = getSortedKontakteArray()
         .filter(k => !k.archiviert && !THEMEN[currentThemaId]?.personen?.includes(k.id));
     
     if (verfuegbareKontakte.length === 0) {
