@@ -2387,22 +2387,6 @@ export function setupEventListeners() {
         deletePushoverSenderGrantButton.dataset.listenerAttached = 'true';
     }
 
-    const nachrichtencenterTitle = document.getElementById('nachrichtencenterTitle');
-    if (nachrichtencenterTitle && !nachrichtencenterTitle.dataset.listenerAttached) {
-        nachrichtencenterTitle.addEventListener('change', () => {
-            saveUserSetting('nachrichtencenter_title', nachrichtencenterTitle.value || '');
-        });
-        nachrichtencenterTitle.dataset.listenerAttached = 'true';
-    }
-
-    const nachrichtencenterMessage = document.getElementById('nachrichtencenterMessage');
-    if (nachrichtencenterMessage && !nachrichtencenterMessage.dataset.listenerAttached) {
-        nachrichtencenterMessage.addEventListener('change', () => {
-            saveUserSetting('nachrichtencenter_message', nachrichtencenterMessage.value || '');
-        });
-        nachrichtencenterMessage.dataset.listenerAttached = 'true';
-    }
-
     const sendNachrichtencenterButton = document.getElementById('sendNachrichtencenterButton');
     if (sendNachrichtencenterButton) {
         sendNachrichtencenterButton.addEventListener('click', async (e) => {
@@ -2411,13 +2395,14 @@ export function setupEventListeners() {
             const recipientRefInput = document.getElementById('nachrichtencenterRecipientRef');
             const recipientKeyInput = document.getElementById('nachrichtencenterRecipientKey');
             const titleInput = document.getElementById('nachrichtencenterTitle');
+            const priorityInput = document.getElementById('nachrichtencenterPriority');
+            const soundInput = document.getElementById('nachrichtencenterSound');
+            const retryInput = document.getElementById('nachrichtencenterRetry');
+            const expireInput = document.getElementById('nachrichtencenterExpire');
             if (!messageInput || !titleInput) return;
 
             const message = messageInput.value;
             if (!message) return alertUser('Bitte Nachricht eingeben.', 'error');
-
-            saveUserSetting('nachrichtencenter_title', titleInput.value || '');
-            saveUserSetting('nachrichtencenter_message', messageInput.value || '');
 
             const rawRecipientRefs = recipientRefInput ? String(recipientRefInput.value || '') : '';
             let recipientRefs = [];
@@ -2435,9 +2420,23 @@ export function setupEventListeners() {
                 return alertUser('Bitte Empfänger wählen.', 'error');
             }
 
-            const payload = JSON.stringify(recipientRefs);
-            saveUserSetting('nachrichtencenter_recipient_refs', payload);
-            saveUserSetting('nachrichtencenter_recipient_ref', recipientRefs[0] || '');
+            const priority = priorityInput ? parseInt(priorityInput.value, 10) : 0;
+            const resolvedPriority = Number.isNaN(priority) ? 0 : priority;
+            const sound = soundInput ? String(soundInput.value || '') : '';
+
+            let retrySeconds = null;
+            let expireSeconds = null;
+            if (resolvedPriority === 2) {
+                const rawRetry = retryInput ? parseInt(retryInput.value, 10) : 30;
+                const rawExpire = expireInput ? parseInt(expireInput.value, 10) : 10800;
+                retrySeconds = Number.isNaN(rawRetry) ? 30 : rawRetry;
+                expireSeconds = Number.isNaN(rawExpire) ? 10800 : rawExpire;
+                retrySeconds = Math.min(10800, Math.max(30, retrySeconds));
+                expireSeconds = Math.min(10800, Math.max(30, expireSeconds));
+                if (expireSeconds < retrySeconds) {
+                    expireSeconds = retrySeconds;
+                }
+            }
 
             console.log('Nachrichtencenter: Sende Nachricht...');
             setButtonLoading(buttonEl, true);
@@ -2486,6 +2485,14 @@ export function setupEventListeners() {
                     formData.append('user', recipientKey);
                     formData.append('title', titleInput.value);
                     formData.append('message', message);
+                    formData.append('priority', String(resolvedPriority));
+                    if (sound) {
+                        formData.append('sound', sound);
+                    }
+                    if (resolvedPriority === 2 && retrySeconds !== null && expireSeconds !== null) {
+                        formData.append('retry', String(retrySeconds));
+                        formData.append('expire', String(expireSeconds));
+                    }
 
                     const response = await fetch('https://api.pushover.net/1/messages.json', { method: 'POST', body: formData });
                     const data = await response.json();
@@ -2499,16 +2506,24 @@ export function setupEventListeners() {
                 }
 
                 alertUser(`Nachricht gesendet! (${recipientRefs.length} Empfänger)`, 'success');
-                messageInput.value = '';
-                saveUserSetting('nachrichtencenter_message', '');
-            } catch (error) {
-                alertUser(`Fehler: ${error.message}`, 'error');
+                if (titleInput) titleInput.value = '';
+                if (recipientRefInput) recipientRefInput.value = '';
+                if (recipientKeyInput) recipientKeyInput.value = '';
+                const recipientDisplay = document.getElementById('nachrichtencenterRecipientDisplay');
+                if (recipientDisplay) {
+                    recipientDisplay.innerHTML = '<span class="text-gray-400 italic">Kein Empfänger ausgewählt</span>';
+                }
+                console.log('Nachrichtencenter: Formular zurückgesetzt');
+            } catch (e) {
+                console.error('Fehler beim Senden:', e);
+                alertUser('Fehler beim Senden: ' + e.message, 'error');
             } finally {
                 setButtonLoading(buttonEl, false);
             }
         });
     }
 
+    // ... rest of the code remains the same ...
     // --- User Settings View Button ---
     const userSettingsSaveKeyButton = document.getElementById('userSettingsSaveKeyButton');
     if (userSettingsSaveKeyButton) {

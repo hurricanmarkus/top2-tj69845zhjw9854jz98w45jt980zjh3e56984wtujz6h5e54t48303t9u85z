@@ -533,6 +533,7 @@ export function ensureModalListeners() {
           codeInput.value = ''; useCustomCheckbox.checked = false; customNameInput.value = ''; customNameInput.classList.add('hidden');
           alertUser('Sound erfolgreich gespeichert.', 'success');
           if (typeof renderSoundBook === 'function') renderSoundBook();
+          renderNachrichtencenterSoundOptions();
         } catch (err) {
           console.error('Fehler beim Speichern des Sounds:', err);
           alertUser('Fehler beim Speichern des Sounds. Siehe Konsole.', 'error');
@@ -554,6 +555,7 @@ export function ensureModalListeners() {
           await setDoc(notrufSettingsDocRef, notrufSettings);
           alertUser('Sound gelöscht', 'success');
           if (typeof renderSoundBook === 'function') renderSoundBook();
+          renderNachrichtencenterSoundOptions();
         } catch (err) {
           console.error('Fehler beim Löschen des Sounds:', err);
           alertUser('Fehler beim Löschen des Sounds.', 'error');
@@ -575,7 +577,7 @@ export function ensureModalListeners() {
               display.innerHTML = `<span class="sound-badge" data-sound-id="${sound.id}">${displayName}</span>`;
             } else {
               tempSelectedSoundId = null;
-              display.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
+              display.innerHTML = '<span class="text-gray-400 italic">Sound nicht gefunden</span>';
             }
           } else {
             tempSelectedSoundId = null;
@@ -654,9 +656,9 @@ export function ensureModalListeners() {
         const payload = stringifyNachrichtencenterRecipientRefs(selectedRefs);
         if (refInput) refInput.value = payload;
         if (keyInput) keyInput.value = '';
-        saveUserSetting('nachrichtencenter_recipient_refs', payload);
         await syncNachrichtencenterRecipientDisplayFromRef();
         if (modal) modal.style.display = 'none';
+        nachrichtencenterSelectedRefs.clear(); // Clear the selection
         return;
       }
 
@@ -855,181 +857,10 @@ function renderModeEditorList() {
 // Diese Version sucht robust den primären Button (inkl. notrufSaveModeButton)
 // und stellt beim Editieren sicher, dass der Button "Änderung übernehmen" (orange) anzeigt.
 
-function openModeConfigForm(modeId = null) {
+async function openModeConfigForm(modeId = null) {
   const formContainer = document.getElementById('modeConfigFormContainer');
   if (!formContainer) {
     console.error('openModeConfigForm: #modeConfigFormContainer nicht gefunden!');
-    return;
-  }
-
-  const editingModeIdInput = document.getElementById('editingModeId');
-  const titleInput = document.getElementById('notrufModeTitle');
-  const descInput = document.getElementById('notrufModeDescInput');
-  const pushoverTitleInput = document.getElementById('notrufTitle');
-  const messageInput = document.getElementById('notrufMessage');
-  const apiTokenDisplay = document.getElementById('notrufApiTokenDisplay');
-  const userKeyDisplay = document.getElementById('notrufUserKeyDisplay');
-  const soundDisplay = document.getElementById('notrufSoundDisplay');
-  const priorityButtons = document.querySelectorAll('#priority-buttons-container .priority-btn');
-  const retryCheckbox = document.getElementById('retryDeaktiviert');
-  const retrySecondsInput = document.getElementById('retrySecondsInput');
-
-  // Buttons (häufige IDs in deinem UI)
-  const updateBtnById = document.getElementById('notrufUpdateModeButton');
-  const saveBtnById   = document.getElementById('notrufSaveModeButton'); // <- wichtig in deiner App
-  const addBtnById    = document.getElementById('notrufAddModeButton');
-  const deleteBtn     = document.getElementById('notrufDeleteModeButton');
-  const cancelBtn     = document.getElementById('notrufCancelEditModeButton');
-
-  // --- Helper: finde den primären Button robust ---
-  function findPrimaryButton() {
-    if (updateBtnById) return updateBtnById;          // bevorzugter Update-Button
-    if (saveBtnById) return saveBtnById;              // dein Save-Button (wichtig)
-    if (addBtnById) return addBtnById;                // Fallback auf Add-Button
-    // Sonst: erstes sichtbares Button-Element im Formular mit Text
-    const allBtns = Array.from(formContainer.querySelectorAll('button'));
-    const visibleWithText = allBtns.find(b => (b.offsetParent !== null) && b.textContent.trim().length > 0);
-    if (visibleWithText) return visibleWithText;
-    return allBtns[0] || null;
-  }
-
-  const primaryBtn = findPrimaryButton();
-
-  // sichere Setter (kein Fehler, wenn primaryBtn null)
-  function setPrimaryToNewModeStyle() {
-    if (!primaryBtn) return;
-    primaryBtn.dataset.editMode = 'false';
-    primaryBtn.textContent = 'Modus speichern';
-    primaryBtn.classList.remove('bg-yellow-600','text-white','bg-green-600','text-white');
-    primaryBtn.classList.add('bg-indigo-600','text-white');
-  }
-  function setPrimaryToEditModeStyle() {
-    if (!primaryBtn) return;
-    primaryBtn.dataset.editMode = 'true';
-    primaryBtn.textContent = 'Änderung übernehmen';
-    primaryBtn.classList.remove('bg-indigo-600','text-white','bg-green-600','text-white');
-    primaryBtn.classList.add('bg-yellow-600','text-white');
-  }
-
-  // --- Reset Grundwerte ---
-  if (editingModeIdInput) editingModeIdInput.value = '';
-  if (titleInput) titleInput.value = '';
-  if (descInput) descInput.value = '';
-  if (pushoverTitleInput) pushoverTitleInput.value = '';
-  if (messageInput) messageInput.value = '';
-  tempSelectedApiTokenId = null;
-  tempSelectedSoundId = null;
-  if (apiTokenDisplay) apiTokenDisplay.innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
-  if (userKeyDisplay) userKeyDisplay.innerHTML = '';
-  if (soundDisplay) soundDisplay.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
-
-  if (priorityButtons && priorityButtons.length) {
-    priorityButtons.forEach(btn => btn.classList.remove('bg-indigo-600','text-white','bg-yellow-600','text-yellow-900'));
-    const btn0 = document.querySelector('.priority-btn[data-priority="0"]');
-    if (btn0) btn0.classList.add('bg-indigo-600','text-white');
-  }
-  if (retryCheckbox) retryCheckbox.checked = false;
-  if (retrySecondsInput) { retrySecondsInput.value = 30; retrySecondsInput.disabled = false; }
-
-  // Formular Standard-Style (Neu)
-  formContainer.classList.remove('bg-yellow-100','border-yellow-300','bg-indigo-50','border-indigo-200');
-  formContainer.classList.add('bg-white','border','border-gray-200','rounded-md','p-4');
-
-  // Standard: setze primären Button auf "Modus speichern"
-  setPrimaryToNewModeStyle();
-  if (updateBtnById) updateBtnById.classList.add('hidden');
-  if (deleteBtn) deleteBtn.classList.add('hidden');
-  if (cancelBtn) cancelBtn.classList.remove('hidden');
-
-  formContainer.classList.remove('hidden');
-  formContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-  if (!modeId) return;
-
-  // Edit-Modus (falls modeId angegeben)
-  const modeToEdit = (notrufSettings.modes || []).find(m => String(m.id) === String(modeId));
-  if (!modeToEdit) {
-    console.warn('openModeConfigForm: Modus mit ID nicht gefunden:', modeId);
-    formContainer.classList.remove('hidden');
-    return;
-  }
-
-  // Edit-UI: Werte reinladen, damit beim Speichern nichts "verschwindet"
-  if (editingModeIdInput) editingModeIdInput.value = String(modeToEdit.id);
-  if (titleInput) titleInput.value = modeToEdit.title || '';
-  if (descInput) descInput.value = modeToEdit.description || '';
-  const config = modeToEdit.config || {};
-  if (pushoverTitleInput) pushoverTitleInput.value = String(config.title || '');
-  if (messageInput) messageInput.value = String(config.message || '');
-
-  tempSelectedApiTokenId = typeof config.selectedApiTokenId !== 'undefined' ? config.selectedApiTokenId : null;
-  tempSelectedSoundId = typeof config.selectedSoundId !== 'undefined' ? config.selectedSoundId : null;
-
-  // Priorität
-  const prioVal = (typeof config.priority !== 'undefined' && config.priority !== null) ? String(config.priority) : '0';
-  if (priorityButtons && priorityButtons.length) {
-    priorityButtons.forEach(btn => btn.classList.remove('bg-indigo-600', 'text-white'));
-    const btn = document.querySelector(`.priority-btn[data-priority="${prioVal}"]`) || document.querySelector('.priority-btn[data-priority="0"]');
-    if (btn) btn.classList.add('bg-indigo-600', 'text-white');
-  }
-
-  // Retry
-  const retryVal = (typeof config.retry !== 'undefined' && config.retry !== null) ? parseInt(config.retry) : 30;
-  if (retryCheckbox) retryCheckbox.checked = (retryVal === 0);
-  if (retrySecondsInput) {
-    retrySecondsInput.disabled = (retryVal === 0);
-    if (retryVal !== 0) retrySecondsInput.value = Math.max(30, retryVal);
-  }
-
-  // API Token Anzeige
-  if (apiTokenDisplay) {
-    if (tempSelectedApiTokenId !== null && typeof tempSelectedApiTokenId !== 'undefined') {
-      const tok = (notrufSettings.apiTokens || []).find(t => String(t.id) === String(tempSelectedApiTokenId));
-      apiTokenDisplay.innerHTML = tok ? `<span class="api-token-badge" data-token-id="${tok.id}">${tok.name}</span>` : '<span class="text-gray-400 italic">Token nicht gefunden</span>';
-    } else {
-      apiTokenDisplay.innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
-    }
-  }
-
-  // Sound Anzeige
-  if (soundDisplay) {
-    if (tempSelectedSoundId !== null && typeof tempSelectedSoundId !== 'undefined') {
-      const snd = (notrufSettings.sounds || []).find(s => String(s.id) === String(tempSelectedSoundId));
-      if (snd) {
-        const label = snd.useCustomName && snd.customName ? snd.customName : snd.code;
-        soundDisplay.innerHTML = `<span class="sound-badge" data-sound-id="${snd.id}">${label}</span>`;
-      } else {
-        soundDisplay.innerHTML = '<span class="text-gray-400 italic">Sound nicht gefunden</span>';
-      }
-    } else {
-      soundDisplay.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
-    }
-  }
-
-  // Empfänger Anzeige
-  if (userKeyDisplay) {
-    userKeyDisplay.innerHTML = '';
-    (config.userKeys || []).forEach(u => {
-      const id = (u && typeof u === 'object') ? u.id : u;
-      const name = (u && typeof u === 'object') ? (u.name || `#${u.id}`) : ((notrufSettings.contacts || []).find(c => String(c.id) === String(u))?.name || `#${u}`);
-      if (typeof id === 'undefined' || id === null) return;
-      userKeyDisplay.innerHTML += `<span class="contact-badge" data-contact-id="${id}">${name}</span>`;
-    });
-  }
-
-  formContainer.classList.remove('bg-white','border-gray-200');
-  formContainer.classList.add('bg-yellow-100','border','border-yellow-300','rounded-lg','p-4');
-  setPrimaryToEditModeStyle();
-  if (deleteBtn) deleteBtn.classList.remove('hidden');
-  if (cancelBtn) cancelBtn.classList.remove('hidden');
-  return;
-}
-
-async function saveNotrufMode() {
-  console.log('saveNotrufMode startet');
-  const formContainer = document.getElementById('modeConfigFormContainer');
-  if (!formContainer) {
-    console.error('saveNotrufMode: #modeConfigFormContainer nicht gefunden!');
     return;
   }
 
@@ -1042,7 +873,7 @@ async function saveNotrufMode() {
   const retrySecondsInput = document.getElementById('retrySecondsInput');
 
   if (!formContainer || !titleInput || !pushoverTitleInput || !messageInput) {
-    console.error('saveNotrufMode: notwendige Form-Elemente fehlen!');
+    console.error('openModeConfigForm: notwendige Form-Elemente fehlen!');
     alertUser('Interner Fehler: Formular nicht vollständig. Öffne die Entwicklerkonsole.', 'error');
     return;
   }
@@ -1268,8 +1099,34 @@ function renderSoundBook() {
   if (defaultRadio) defaultRadio.checked = (currentlySelectedId === null);
 }
 
-// ---------- INITIALIZER ----------
-export function initializeNotrufSettingsView() {
+function renderNachrichtencenterSoundOptions() {
+  const select = document.getElementById('nachrichtencenterSound');
+  if (!select) return;
+
+  const currentValue = select.value;
+  const sounds = notrufSettings.sounds || [];
+  const options = ['<option value="">Standard (pushover)</option>'];
+
+  sounds.forEach(sound => {
+    const label = sound.useCustomName && sound.customName ? `${sound.customName} (${sound.code})` : sound.code;
+    options.push(`<option value="${sound.code}">${label}</option>`);
+  });
+
+  select.innerHTML = options.join('');
+  if (currentValue) {
+    select.value = currentValue;
+  }
+}
+
+function updateNachrichtencenterEmergencyVisibility() {
+  const priorityEl = document.getElementById('nachrichtencenterPriority');
+  const emergencyBox = document.getElementById('nachrichtencenterEmergencyOptions');
+  if (!priorityEl || !emergencyBox) return;
+  const isEmergency = String(priorityEl.value || '0') === '2';
+  emergencyBox.classList.toggle('hidden', !isEmergency);
+}
+
+function initializeNotrufSettingsView() {
   const notrufView = document.getElementById('notrufSettingsView');
   if (!notrufView) {
     console.error("initializeNotrufSettingsView: Element #notrufSettingsView nicht gefunden!");
@@ -1516,19 +1373,59 @@ export function initializeNotrufSettingsView() {
   ensureModalListeners();
 
   try {
+    console.log('Nachrichtencenter Init startet');
     const titleEl = document.getElementById('nachrichtencenterTitle');
     const messageEl = document.getElementById('nachrichtencenterMessage');
-    if (titleEl) titleEl.value = getUserSetting('nachrichtencenter_title', titleEl.value || '');
-    if (messageEl) messageEl.value = getUserSetting('nachrichtencenter_message', messageEl.value || '');
+    if (titleEl) titleEl.value = '';
+    if (messageEl) messageEl.value = '';
     const recipientRefEl = document.getElementById('nachrichtencenterRecipientRef');
     const recipientKeyEl = document.getElementById('nachrichtencenterRecipientKey');
-    if (recipientRefEl) {
-      const savedRefs = getUserSetting('nachrichtencenter_recipient_refs', '');
-      const legacySingle = getUserSetting('nachrichtencenter_recipient_ref', '');
-      const resolved = savedRefs || (legacySingle ? stringifyNachrichtencenterRecipientRefs([legacySingle]) : '');
-      if (resolved) recipientRefEl.value = resolved;
-    }
+    if (recipientRefEl) recipientRefEl.value = '';
     if (recipientKeyEl) recipientKeyEl.value = '';
+
+    nachrichtencenterSelectedRefs = new Set();
+    saveUserSetting('nachrichtencenter_title', '');
+    saveUserSetting('nachrichtencenter_message', '');
+    saveUserSetting('nachrichtencenter_recipient_refs', '');
+    saveUserSetting('nachrichtencenter_recipient_ref', '');
+
+    const priorityEl = document.getElementById('nachrichtencenterPriority');
+    const retryEl = document.getElementById('nachrichtencenterRetry');
+    const expireEl = document.getElementById('nachrichtencenterExpire');
+    if (priorityEl) priorityEl.value = '0';
+    if (retryEl) retryEl.value = 30;
+    if (expireEl) expireEl.value = 10800;
+    renderNachrichtencenterSoundOptions();
+    const soundEl = document.getElementById('nachrichtencenterSound');
+    if (soundEl) soundEl.value = '';
+
+    const expertToggle = document.getElementById('nachrichtencenterExpertToggle');
+    const expertPanel = document.getElementById('nachrichtencenterExpertPanel');
+    const expertIcon = document.getElementById('nachrichtencenterExpertToggleIcon');
+    const expertText = document.getElementById('nachrichtencenterExpertToggleText');
+    if (expertPanel && expertIcon && expertText) {
+      expertPanel.classList.add('hidden');
+      expertIcon.textContent = '▸';
+      expertText.textContent = 'Expertenmodus anzeigen';
+    }
+    if (expertToggle && !expertToggle.dataset.listenerAttached) {
+      expertToggle.addEventListener('click', () => {
+        const isHidden = expertPanel ? expertPanel.classList.contains('hidden') : true;
+        if (expertPanel) expertPanel.classList.toggle('hidden', !isHidden);
+        if (expertIcon) expertIcon.textContent = isHidden ? '▾' : '▸';
+        if (expertText) expertText.textContent = isHidden ? 'Expertenmodus verbergen' : 'Expertenmodus anzeigen';
+        console.log('Nachrichtencenter Expertenmodus:', isHidden ? 'geöffnet' : 'geschlossen');
+        updateNachrichtencenterEmergencyVisibility();
+      });
+      expertToggle.dataset.listenerAttached = 'true';
+    }
+    if (priorityEl && !priorityEl.dataset.listenerAttached) {
+      priorityEl.addEventListener('change', () => {
+        updateNachrichtencenterEmergencyVisibility();
+      });
+      priorityEl.dataset.listenerAttached = 'true';
+    }
+    updateNachrichtencenterEmergencyVisibility();
 
     startNachrichtencenterContactListeners();
     syncNachrichtencenterRecipientDisplayFromRef();
