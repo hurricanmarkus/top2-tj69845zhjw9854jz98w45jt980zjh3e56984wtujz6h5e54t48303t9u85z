@@ -794,12 +794,11 @@ function updateFlicEditorDetails(selectedModeId) {
                     <p class="text-xs text-gray-500">Retry (s)</p>
                     <p class="text-sm text-gray-700">${retry}</p>
                 </div>
-            </div>
         </div>
     `;
 }
 
-function updateFlicEditorBox(klickTyp) {
+ function updateFlicEditorBox(klickTyp) {
   const title = document.getElementById('flic-editor-title');
   const selector = document.getElementById('flic-editor-selector');
   const detailsDisplay = document.getElementById('flic-editor-details');
@@ -808,23 +807,18 @@ function updateFlicEditorBox(klickTyp) {
   title.textContent = `Modus für KLICK: ${klickTyp.toUpperCase()} ändern`;
   selector.value = assignments[klickTyp] ? assignments[klickTyp] : '';
   updateFlicEditorDetails(selector.value ? parseInt(selector.value) : null);
-}
+ }
 
-// Ersetze die vorhandene renderModeEditorList() in notfall.js mit diesem Block:
-
-// 1:1 ersetzen: renderModeEditorList - zeigt Liste und markiert editiertes Item orange
-function renderModeEditorList() {
+ function renderModeEditorList() {
   const listContainer = document.getElementById('existingModesList');
   if (!listContainer) return;
 
   const modes = notrufSettings.modes || [];
 
-  // Mach das List-Container scrollbar für mehr Einträge sichtbar
   listContainer.style.maxHeight = '60vh';
   listContainer.style.overflowY = 'auto';
   listContainer.style.paddingRight = '8px';
 
-  // Bestimme aktuell editierte ID (falls Formular diese enthält)
   const editingModeId = document.getElementById('editingModeId') ? document.getElementById('editingModeId').value : null;
 
   if (modes.length === 0) {
@@ -835,8 +829,9 @@ function renderModeEditorList() {
   listContainer.innerHTML = modes.map(mode => {
     const isEditing = editingModeId && String(editingModeId) === String(mode.id);
     const desc = mode.description ? `<p class="text-xs text-gray-500 truncate">${mode.description}</p>` : '';
-    // Orange-Highlight, wenn aktuell in Bearbeitung
-    const containerClasses = isEditing ? 'mode-list-item flex justify-between items-center p-2 gap-3 bg-yellow-100 border border-yellow-300 rounded-md mb-2 is-editing' : 'mode-list-item flex justify-between items-center p-2 gap-3 bg-gray-50 rounded-md border mb-2';
+    const containerClasses = isEditing
+      ? 'mode-list-item flex justify-between items-center p-2 gap-3 bg-yellow-100 border border-yellow-300 rounded-md mb-2 is-editing'
+      : 'mode-list-item flex justify-between items-center p-2 gap-3 bg-gray-50 rounded-md border mb-2';
 
     return `
       <div class="${containerClasses}" data-mode-id="${mode.id}">
@@ -851,18 +846,110 @@ function renderModeEditorList() {
       </div>
     `;
   }).join('');
-}
+ }
 
-// Ersetze die vorhandene openModeConfigForm(...) in notfall.js durch diesen Block.
-// Diese Version sucht robust den primären Button (inkl. notrufSaveModeButton)
-// und stellt beim Editieren sicher, dass der Button "Änderung übernehmen" (orange) anzeigt.
-
-async function openModeConfigForm(modeId = null) {
+ async function openModeConfigForm(modeId = null) {
+  console.log('openModeConfigForm startet', modeId);
   const formContainer = document.getElementById('modeConfigFormContainer');
-  if (!formContainer) {
-    console.error('openModeConfigForm: #modeConfigFormContainer nicht gefunden!');
+  if (!formContainer) return;
+
+  const editingModeIdInput = document.getElementById('editingModeId');
+  const titleInput = document.getElementById('notrufModeTitle');
+  const descInput = document.getElementById('notrufModeDescInput');
+  const pushoverTitleInput = document.getElementById('notrufTitle');
+  const messageInput = document.getElementById('notrufMessage');
+  const apiTokenDisplay = document.getElementById('notrufApiTokenDisplay');
+  const soundDisplay = document.getElementById('notrufSoundDisplay');
+  const userKeyDisplay = document.getElementById('notrufUserKeyDisplay');
+  const retryCheckbox = document.getElementById('retryDeaktiviert');
+  const retrySecondsInput = document.getElementById('retrySecondsInput');
+  const formTitle = document.getElementById('modeConfigFormTitle');
+  const saveBtn = document.getElementById('notrufSaveModeButton');
+  const priorityButtons = document.querySelectorAll('#priority-buttons-container .priority-btn');
+
+  if (!titleInput || !pushoverTitleInput || !messageInput) {
+    console.error('openModeConfigForm: Form-Felder fehlen');
     return;
   }
+
+  let mode = null;
+  if (modeId !== null && typeof modeId !== 'undefined' && String(modeId).trim() !== '') {
+    mode = (notrufSettings.modes || []).find(m => String(m.id) === String(modeId)) || null;
+  }
+
+  const config = mode && mode.config ? mode.config : {};
+
+  if (editingModeIdInput) editingModeIdInput.value = mode ? String(mode.id) : '';
+  titleInput.value = mode ? String(mode.title || '') : '';
+  if (descInput) descInput.value = mode ? String(mode.description || '') : '';
+  pushoverTitleInput.value = String(config.title || '');
+  messageInput.value = String(config.message || '');
+
+  const prio = typeof config.priority !== 'undefined' ? parseInt(config.priority, 10) : 0;
+  const resolvedPrio = Number.isNaN(prio) ? 0 : prio;
+  priorityButtons.forEach(btn => btn.classList.remove('bg-indigo-600', 'text-white'));
+  const matchBtn = Array.from(priorityButtons).find(b => String(b.dataset.priority) === String(resolvedPrio)) || Array.from(priorityButtons).find(b => String(b.dataset.priority) === '0');
+  if (matchBtn) matchBtn.classList.add('bg-indigo-600', 'text-white');
+
+  const retry = typeof config.retry !== 'undefined' ? parseInt(config.retry, 10) : 30;
+  const resolvedRetry = Number.isNaN(retry) ? 30 : retry;
+  if (retryCheckbox && retrySecondsInput) {
+    const disabled = resolvedRetry === 0;
+    retryCheckbox.checked = disabled;
+    retrySecondsInput.disabled = disabled;
+    retrySecondsInput.value = disabled ? 30 : Math.max(30, resolvedRetry);
+  }
+
+  tempSelectedApiTokenId = typeof config.selectedApiTokenId !== 'undefined' ? config.selectedApiTokenId : null;
+  if (apiTokenDisplay) {
+    if (tempSelectedApiTokenId !== null) {
+      const tok = (notrufSettings.apiTokens || []).find(t => String(t.id) === String(tempSelectedApiTokenId));
+      apiTokenDisplay.innerHTML = tok
+        ? `<span class="api-token-badge" data-token-id="${tok.id}">${tok.name}</span>`
+        : '<span class="text-gray-400 italic">Token nicht gefunden</span>';
+    } else {
+      apiTokenDisplay.innerHTML = '<span class="text-gray-400 italic">Kein Token ausgewählt</span>';
+    }
+  }
+
+  tempSelectedSoundId = typeof config.selectedSoundId !== 'undefined' ? config.selectedSoundId : null;
+  if (soundDisplay) {
+    if (tempSelectedSoundId !== null) {
+      const snd = (notrufSettings.sounds || []).find(s => String(s.id) === String(tempSelectedSoundId));
+      if (snd) {
+        const displayName = snd.useCustomName && snd.customName ? snd.customName : snd.code;
+        soundDisplay.innerHTML = `<span class="sound-badge" data-sound-id="${snd.id}">${displayName}</span>`;
+      } else {
+        soundDisplay.innerHTML = '<span class="text-gray-400 italic">Sound nicht gefunden</span>';
+      }
+    } else {
+      soundDisplay.innerHTML = '<span class="text-gray-400 italic">Standard (pushover)</span>';
+    }
+  }
+
+  if (userKeyDisplay) {
+    userKeyDisplay.innerHTML = '';
+    const keys = Array.isArray(config.userKeys) ? config.userKeys : [];
+    keys.forEach(u => {
+      const contactId = u && typeof u === 'object' ? u.id : u;
+      const label = u && typeof u === 'object' && u.name ? u.name : `#${contactId}`;
+      if (contactId !== null && typeof contactId !== 'undefined') {
+        userKeyDisplay.innerHTML += `<span class="contact-badge" data-contact-id="${contactId}">${label}</span>`;
+      }
+    });
+  }
+
+  if (formTitle) formTitle.textContent = mode ? 'Modus bearbeiten' : 'Modus Konfigurieren';
+  if (saveBtn) saveBtn.textContent = mode ? 'Änderung übernehmen' : 'Modus Speichern';
+
+  formContainer.classList.remove('hidden');
+  renderModeEditorList();
+ }
+
+ async function saveNotrufMode() {
+  console.log('saveNotrufMode startet');
+  const formContainer = document.getElementById('modeConfigFormContainer');
+  if (!formContainer) return;
 
   const editingModeIdInput = document.getElementById('editingModeId');
   const titleInput = document.getElementById('notrufModeTitle');
@@ -872,27 +959,20 @@ async function openModeConfigForm(modeId = null) {
   const retryCheckbox = document.getElementById('retryDeaktiviert');
   const retrySecondsInput = document.getElementById('retrySecondsInput');
 
-  if (!formContainer || !titleInput || !pushoverTitleInput || !messageInput) {
-    console.error('openModeConfigForm: notwendige Form-Elemente fehlen!');
-    alertUser('Interner Fehler: Formular nicht vollständig. Öffne die Entwicklerkonsole.', 'error');
-    return;
-  }
+  if (!titleInput || !pushoverTitleInput || !messageInput) return;
 
-  // Werte aus Formular lesen
-  const editingModeId = editingModeIdInput ? (editingModeIdInput.value || '').trim() : '';
+  const editingModeId = editingModeIdInput ? String(editingModeIdInput.value || '').trim() : '';
   const title = titleInput.value.trim();
   const description = descInput ? descInput.value.trim() : '';
   const pushoverTitle = pushoverTitleInput.value.trim();
   const message = messageInput.value.trim();
 
-  // Priorität
   let priority = 0;
   const activePrioBtn = document.querySelector('.priority-btn.bg-indigo-600') || document.querySelector('.priority-btn[data-priority="0"]');
   if (activePrioBtn && activePrioBtn.dataset && typeof activePrioBtn.dataset.priority !== 'undefined') {
-    priority = parseInt(activePrioBtn.dataset.priority) || 0;
+    priority = parseInt(activePrioBtn.dataset.priority, 10) || 0;
   }
 
-  // Retry
   let retry = 30;
   if (retryCheckbox && retryCheckbox.checked) {
     retry = 0;
@@ -901,34 +981,23 @@ async function openModeConfigForm(modeId = null) {
     retry = Number.isNaN(r) ? 30 : Math.max(30, r);
   }
 
-  // Ausgewähltes API-Token / Sound
   const selectedApiTokenId = typeof tempSelectedApiTokenId !== 'undefined' ? tempSelectedApiTokenId : null;
   const selectedSoundId = typeof tempSelectedSoundId !== 'undefined' ? tempSelectedSoundId : null;
 
-  // Empfänger / userKeys: aus den Badges im Formular (#notrufUserKeyDisplay)
   const userKeys = [];
   document.querySelectorAll('#notrufUserKeyDisplay .contact-badge').forEach(b => {
     const id = b.dataset && b.dataset.contactId ? parseInt(b.dataset.contactId, 10) : NaN;
     if (!Number.isNaN(id)) {
-      // KORREKTUR: Wir suchen den vollen Kontakt und speichern ID, Name UND Key
       const contact = (notrufSettings.contacts || []).find(c => c.id === id);
-      if (contact) {
-          userKeys.push({ 
-              id: contact.id, 
-              name: contact.name, 
-              key: contact.key // <--- WICHTIG FÜR API!
-          });
-      }
+      if (contact) userKeys.push({ id: contact.id, name: contact.name, key: contact.key });
     }
   });
 
-  // Validation
   if (!title) {
     alertUser('Bitte einen Titel für den Modus eingeben.', 'error');
     return;
   }
 
-  // Prepare config object
   const configObj = {
     title: pushoverTitle || '',
     message: message || '',
@@ -939,50 +1008,38 @@ async function openModeConfigForm(modeId = null) {
     userKeys: userKeys
   };
 
-  // Sicherstellen, dass notrufSettings.modes existiert
   if (!Array.isArray(notrufSettings.modes)) notrufSettings.modes = [];
 
-  // Add or update mode
   let savedModeId = null;
   if (editingModeId) {
-    // Update vorhandenen Modus
     const idx = notrufSettings.modes.findIndex(m => String(m.id) === String(editingModeId));
     if (idx !== -1) {
       const existing = notrufSettings.modes[idx] || {};
-      notrufSettings.modes[idx] = {
-        ...existing,
-        title: title,
-        description: description,
-        config: configObj
-      };
+      notrufSettings.modes[idx] = { ...existing, title, description, config: configObj };
       savedModeId = notrufSettings.modes[idx].id;
     } else {
       const newId = Date.now();
-      notrufSettings.modes.push({ id: newId, title: title, description: description, config: configObj });
+      notrufSettings.modes.push({ id: newId, title, description, config: configObj });
       savedModeId = newId;
     }
   } else {
-    // Neuer Modus
     const newId = Date.now();
-    notrufSettings.modes.push({ id: newId, title: title, description: description, config: configObj });
+    notrufSettings.modes.push({ id: newId, title, description, config: configObj });
     savedModeId = newId;
   }
 
-  // Firestore-Guard & Save
-  if (!canSaveToNotrufSettings()) {
-    return;
-  }
+  if (!canSaveToNotrufSettings()) return;
 
   try {
     await setDoc(notrufSettingsDocRef, notrufSettings);
     alertUser('Modus erfolgreich gespeichert.', 'success');
 
-    if (formContainer) formContainer.classList.add('hidden');
+    formContainer.classList.add('hidden');
     if (editingModeIdInput) editingModeIdInput.value = '';
 
-    if (typeof renderModeEditorList === 'function') renderModeEditorList();
-    if (typeof populateFlicAssignmentSelectors === 'function') populateFlicAssignmentSelectors();
-    if (typeof updateFlicColumnDisplays === 'function') updateFlicColumnDisplays();
+    renderModeEditorList();
+    populateFlicAssignmentSelectors();
+    updateFlicColumnDisplays();
 
     const editorSelector = document.getElementById('flic-editor-selector');
     if (editorSelector && savedModeId) {
@@ -999,20 +1056,22 @@ async function openModeConfigForm(modeId = null) {
       notrufSettings.modes = (notrufSettings.modes || []).filter(m => m.id !== savedModeId);
     }
   }
-}
+ }
 
-// ---------- RENDER / MODAL-BUCH Funktionen ----------
-function renderContactBook() {
+ function renderContactBook() {
   ensureModalListeners();
   const list = document.getElementById('contactBookList');
   if (!list) return;
+
   const contacts = notrufSettings.contacts || [];
   const currentFormUserKeys = [];
   document.querySelectorAll('#notrufUserKeyDisplay .contact-badge').forEach(b => currentFormUserKeys.push(parseInt(b.dataset.contactId)));
+
   if (contacts.length === 0) {
     list.innerHTML = '<p class="text-sm text-center text-gray-400">Keine Kontakte gefunden.</p>';
     return;
   }
+
   list.innerHTML = contacts.map(contact => {
     const isChecked = currentFormUserKeys.includes(contact.id) ? 'checked' : '';
     return `
@@ -1028,9 +1087,9 @@ function renderContactBook() {
       </div>
     `;
   }).join('');
-}
+ }
 
-function renderApiTokenBook() {
+ function renderApiTokenBook() {
   ensureModalListeners();
   const list = document.getElementById('apiTokenBookList');
   if (!list) return;
