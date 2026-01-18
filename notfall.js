@@ -1503,6 +1503,7 @@ export {
   updateFlicEditorDetails,
   updateFlicEditorBox,
   renderModeEditorList,
+  initializeNotrufSettingsView,
   openModeConfigForm,
   saveNotrufMode
 };
