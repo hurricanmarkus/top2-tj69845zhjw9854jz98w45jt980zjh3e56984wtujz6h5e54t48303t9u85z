@@ -871,9 +871,58 @@ function ensurePushmailCenterListeners() {
     }
 }
 
+function renderPushmailCenterProgramList() {
+    const list = document.getElementById('pushmailCenterProgramList');
+    if (!list) return;
+
+    console.log('PushmailCenter: Rendere Programmliste');
+
+    const programs = [
+        { title: 'Push-Benachrichtigung', permission: 'PUSHOVER', border: 'border-red-500', text: 'text-red-600' },
+        { title: 'Haupteingang öffnen', permission: 'ENTRANCE', border: 'border-indigo-500', text: 'text-indigo-600' },
+        { title: 'Checkliste', permission: 'CHECKLIST', border: 'border-green-500', text: 'text-green-600' },
+        { title: 'Termin finden', permission: 'TERMINPLANER', border: 'border-cyan-500', text: 'text-cyan-600' },
+        { title: 'Essensberechnung', permission: 'ESSENSBERECHNUNG', border: 'border-orange-500', text: 'text-orange-600' },
+        { title: 'Zahlungsverwaltung', permission: 'ZAHLUNGSVERWALTUNG', border: 'border-emerald-600', text: 'text-emerald-700' },
+        { title: 'Ticket-Support', permission: 'TICKET_SUPPORT', border: 'border-purple-600', text: 'text-purple-700' },
+        { title: 'Wertguthaben', permission: 'WERTGUTHABEN', border: 'border-emerald-600', text: 'text-emerald-700' },
+        { title: 'Lizenzen', permission: 'LIZENZEN', border: 'border-yellow-600', text: 'text-yellow-700' },
+        { title: 'Vertragsverwaltung', permission: 'VERTRAGSVERWALTUNG', border: 'border-indigo-600', text: 'text-indigo-700' },
+        { title: 'Rezepte', permission: 'REZEPTE', border: 'border-orange-500', text: 'text-orange-600' },
+        { title: 'Haushaltszahlungen', permission: 'HAUSHALTSZAHLUNGEN', border: 'border-cyan-600', text: 'text-cyan-700' },
+        { title: 'Geschenkemanagement', permission: 'GESCHENKEMANAGEMENT', border: 'border-pink-600', text: 'text-pink-700' },
+        { title: 'Genehmigungsprozess', adminPermission: 'canSeeApprovals', border: 'border-green-500', text: 'text-green-700' }
+    ];
+
+    const isSysAdmin = currentUser?.role === 'SYSTEMADMIN';
+    const userPermissions = currentUser?.permissions || [];
+    const adminPerms = currentUser?.adminPermissions || {};
+
+    const visiblePrograms = programs.filter(p => {
+        if (isSysAdmin) return true;
+        if (p.permission) return userPermissions.includes(p.permission);
+        if (p.adminPermission) return Boolean(adminPerms[p.adminPermission]);
+        return false;
+    });
+
+    if (visiblePrograms.length === 0) {
+        list.innerHTML = '<p class="text-sm text-center text-gray-400">Keine Programme verfügbar.</p>';
+        return;
+    }
+
+    list.innerHTML = visiblePrograms.map(p => {
+        return `
+            <div class="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200 border-l-4 ${p.border}">
+                <span class="font-semibold ${p.text}">${p.title}</span>
+            </div>
+        `;
+    }).join('');
+}
+
 function initializePushmailCenterView() {
     console.log('PushmailCenter: Initialisierung startet');
     ensurePushmailCenterListeners();
+    renderPushmailCenterProgramList();
     refreshPushmailCenterPushoverUI();
 }
 
