@@ -186,6 +186,10 @@ function startGlobalListeners() {
                 console.warn("Firebase Notruf Settings Document 'notruf' not found, creating default.");
                 notrufSettings = { modes: [], contacts: [], apiTokens: [], sounds: [], flicAssignments: { einfach: null, doppel: null, halten: null } };
             }
+
+            updatePushmailCenterAttentionState(false).catch((e) => {
+                console.warn('PushmailCenter: Attention-State konnte nicht aktualisiert werden (notrufSettings).', e);
+            });
         }, (error) => {
             console.error("Error listening to notruf settings:", error);
         });
@@ -215,6 +219,10 @@ function startUserDependentListeners() {
     pushoverSelectedRecipientId = null;
 
     stopAllUserDependentListeners(false);
+
+    updatePushmailCenterAttentionState(false).catch((e) => {
+        console.warn('PushmailCenter: Attention-State konnte nicht aktualisiert werden (User-Mode).', e);
+    });
 
     console.log("initializeFirebase: Starte user-abhängige Listener für Mode:", mode);
 
@@ -699,6 +707,61 @@ function maskPushmailSecret(value) {
     return `${start}...${end}`;
 }
 
+let lastPushmailCenterAttentionState = null;
+
+function setPushmailCenterAttentionUI(needsUserKey, needsApiTokens) {
+    const stateKey = `${needsUserKey ? '1' : '0'}-${needsApiTokens ? '1' : '0'}`;
+    if (stateKey !== lastPushmailCenterAttentionState) {
+        console.log('PushmailCenter: Attention-State', { needsUserKey, needsApiTokens });
+        lastPushmailCenterAttentionState = stateKey;
+    }
+
+    const bar = document.getElementById('pushmailCenterBar');
+    const userKeyCard = document.getElementById('pushmailReloadPushoverConfigButton')?.closest('.card');
+    const tokenCard = document.getElementById('pushmailOpenApiTokenBookButton')?.closest('.card');
+
+    const needsBarAttention = Boolean(needsUserKey || needsApiTokens);
+
+    if (bar) {
+        bar.classList.toggle('animate-pulse', needsBarAttention);
+        bar.classList.toggle('bg-fuchsia-100', needsBarAttention);
+        bar.classList.toggle('border-fuchsia-500', needsBarAttention);
+    }
+
+    if (userKeyCard) {
+        userKeyCard.classList.toggle('animate-pulse', Boolean(needsUserKey));
+        userKeyCard.classList.toggle('ring-2', Boolean(needsUserKey));
+        userKeyCard.classList.toggle('ring-blue-400', Boolean(needsUserKey));
+        userKeyCard.classList.toggle('ring-offset-2', Boolean(needsUserKey));
+    }
+
+    if (tokenCard) {
+        tokenCard.classList.toggle('animate-pulse', Boolean(needsApiTokens));
+        tokenCard.classList.toggle('ring-2', Boolean(needsApiTokens));
+        tokenCard.classList.toggle('ring-indigo-400', Boolean(needsApiTokens));
+        tokenCard.classList.toggle('ring-offset-2', Boolean(needsApiTokens));
+    }
+}
+
+async function updatePushmailCenterAttentionState(forceReload = false, cfgOverride = undefined) {
+    const isLoggedIn = Boolean(currentUser?.mode && currentUser.mode !== GUEST_MODE);
+    const hasDb = Boolean(pushoverProgramsCollectionRef);
+
+    if (!isLoggedIn || !hasDb) {
+        setPushmailCenterAttentionUI(false, false);
+        return;
+    }
+
+    const hasApiTokens = Array.isArray(notrufSettings?.apiTokens) && notrufSettings.apiTokens.length > 0;
+
+    const cfg = typeof cfgOverride !== 'undefined'
+        ? cfgOverride
+        : await loadPushmailPushoverProgramConfig(currentUser.mode, forceReload);
+    const hasUserKey = Boolean(String(cfg?.userKey || '').trim());
+
+    setPushmailCenterAttentionUI(!hasUserKey, !hasApiTokens);
+}
+
 function setPushmailPushoverStatus(msg, show = true) {
     const el = document.getElementById('pushmailPushoverStatus');
     if (!el) return;
@@ -758,11 +821,19 @@ const refreshPushmailCenterPushoverUI = async (forceReload = false) => {
         userKeyPreview.textContent = '—';
         if (userKeyInput) userKeyInput.value = '';
         setPushmailPushoverStatus('Bitte anmelden, um deine Pushover-Einstellungen zu laden.', true);
+
+        updatePushmailCenterAttentionState(false).catch((e) => {
+            console.warn('PushmailCenter: Attention-State konnte nicht aktualisiert werden (Guest).', e);
+        });
         return;
     }
 
     if (!hasDb) {
         setPushmailPushoverStatus('Bitte warten... (Firebase lädt noch)', true);
+
+        updatePushmailCenterAttentionState(false).catch((e) => {
+            console.warn('PushmailCenter: Attention-State konnte nicht aktualisiert werden (kein DB).', e);
+        });
         return;
     }
 
@@ -776,6 +847,10 @@ const refreshPushmailCenterPushoverUI = async (forceReload = false) => {
     } else {
         setPushmailPushoverStatus('Noch keine Einstellungen gespeichert. Bitte User-Key setzen.', true);
     }
+
+    updatePushmailCenterAttentionState(false, cfg).catch((e) => {
+        console.warn('PushmailCenter: Attention-State konnte nicht aktualisiert werden (UI Refresh).', e);
+    });
 };
 
 const savePushmailCenterUserKey = async () => {
@@ -1682,9 +1757,14 @@ export function setupEventListeners() {
 
         const apiTokenInput = document.getElementById('pushoverConfigApiToken');
         const userKeyInput = document.getElementById('pushoverConfigUserKey');
+
+        if (!apiTokenInput || !userKeyInput) {
+            showPushoverSettingsStatus('Zugangsdaten werden zentral im PUSHMAIL-Center verwaltet.', true);
+            return;
+        }
         const payload = {
-            apiToken: String(apiTokenInput?.value || '').trim(),
-            userKey: String(userKeyInput?.value || '').trim(),
+            apiToken: String(apiTokenInput.value || '').trim(),
+            userKey: String(userKeyInput.value || '').trim(),
             updatedAt: serverTimestamp()
         };
 
@@ -1866,13 +1946,19 @@ export function setupEventListeners() {
         const userKeyInput = document.getElementById('pushoverConfigUserKey');
 
         const cfg = await loadPushoverProgramConfig(recipientId);
-        if (cfg) {
-            if (apiTokenInput) apiTokenInput.value = cfg.apiToken || '';
-            if (userKeyInput) userKeyInput.value = cfg.userKey || '';
-            showPushoverSettingsStatus('Einstellungen geladen.', true);
+
+        const hasSetupInputs = Boolean(apiTokenInput && userKeyInput);
+        if (hasSetupInputs) {
+            if (cfg) {
+                apiTokenInput.value = cfg.apiToken || '';
+                userKeyInput.value = cfg.userKey || '';
+                showPushoverSettingsStatus('Einstellungen geladen.', true);
+            } else {
+                clearPushoverSettingsForm();
+                showPushoverSettingsStatus('Noch keine Einstellungen gespeichert. Bitte ausfüllen und speichern.', true);
+            }
         } else {
-            clearPushoverSettingsForm();
-            showPushoverSettingsStatus('Noch keine Einstellungen gespeichert. Bitte ausfüllen und speichern.', true);
+            showPushoverSettingsStatus('Zugangsdaten werden zentral im PUSHMAIL-Center verwaltet.', true);
         }
 
         setPushoverSetupOpen(false);

@@ -1,5 +1,5 @@
 // ---------- IMPORTS ----------
-import { notrufSettings, notrufSettingsDocRef, alertUser, setButtonLoading, db, appId, currentUser, auth } from './haupteingang.js';
+import { notrufSettings, notrufSettingsDocRef, alertUser, setButtonLoading, db, appId, currentUser, auth, GUEST_MODE } from './haupteingang.js';
 import { getUserSetting, saveUserSetting } from './log-InOut.js';
 import { setDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
@@ -26,6 +26,69 @@ function canUseNachrichtencenterContactBook() {
   if (!currentUser || !currentUser.mode) return false;
   if (!auth || !auth.currentUser) return false;
   return true;
+}
+
+function getNachrichtencenterSelfContactId() {
+  const userId = String(currentUser?.mode || '').trim();
+  if (!userId || userId === GUEST_MODE) return null;
+  return `self_${userId}`;
+}
+
+async function ensureNachrichtencenterSelfContact() {
+  if (!canUseNachrichtencenterContactBook()) return;
+  const userId = String(currentUser?.mode || '').trim();
+  if (!userId || userId === GUEST_MODE) return;
+
+  const col = getNachrichtencenterGlobalContactsRef();
+  if (!col) return;
+
+  const selfContactId = getNachrichtencenterSelfContactId();
+  if (!selfContactId) return;
+
+  let userKey = '';
+  try {
+    const cfgRef = doc(db, 'artifacts', appId, 'public', 'data', 'pushover_programs', userId);
+    const cfgSnap = await getDoc(cfgRef);
+    if (cfgSnap.exists()) {
+      const data = cfgSnap.data() || {};
+      userKey = String(data.userKey || '').trim();
+    }
+  } catch (e) {
+    console.warn('Nachrichtencenter: User-Key konnte nicht geladen werden:', e);
+  }
+
+  const name = String(currentUser.displayName || userId).trim();
+  const docRef = doc(col, selfContactId);
+
+  let isNew = true;
+  try {
+    const existing = await getDoc(docRef);
+    isNew = !existing.exists();
+  } catch (e) {
+    console.warn('Nachrichtencenter: Kontaktprüfung fehlgeschlagen:', e);
+  }
+
+  const payload = {
+    type: 'User',
+    name,
+    key: userKey,
+    isSelfContact: true,
+    createdByAppUserId: userId,
+    createdByName: name,
+    createdByAuthUid: auth?.currentUser?.uid || null,
+    updatedAt: serverTimestamp()
+  };
+
+  if (isNew) {
+    payload.createdAt = serverTimestamp();
+  }
+
+  try {
+    await setDoc(docRef, payload, { merge: true });
+    console.log('Nachrichtencenter: Eigener Kontakt synchronisiert:', selfContactId);
+  } catch (e) {
+    console.warn('Nachrichtencenter: Eigener Kontakt konnte nicht gespeichert werden:', e);
+  }
 }
 
 function canSaveToNotrufSettings() {
@@ -187,7 +250,8 @@ function renderNachrichtencenterContactLists() {
     container.innerHTML = contacts.map(c => {
       const refValue = `${scope === 'private' ? 'private:' : 'global:'}${c.id}`;
       const isChecked = selectedRefs.has(refValue) ? 'checked' : '';
-      const canEdit = String(c.createdByAppUserId || '') === String(currentUser?.mode || '');
+      const isSelfContact = Boolean(c.isSelfContact);
+      const canEdit = !isSelfContact && String(c.createdByAppUserId || '') === String(currentUser?.mode || '');
       const keyPreview = c.key ? `${String(c.key).substring(0, 4)}...${String(c.key).substring(Math.max(0, String(c.key).length - 4))}` : '—';
       const typeLabel = String(c.type || 'User') === 'Gruppe' ? 'Gruppe' : 'User';
       return `
@@ -285,6 +349,12 @@ async function saveNachrichtencenterContactFromForm() {
   const contactId = String(editingIdInput.value || '').trim();
   const isEdit = Boolean(contactId);
 
+  const selfContactId = getNachrichtencenterSelfContactId();
+  if (isEdit && selfContactId && contactId === selfContactId) {
+    alertUser('Dieser Eintrag wird automatisch verwaltet und kann nicht bearbeitet werden.', 'error');
+    return;
+  }
+
   try {
     if (nachrichtencenterActiveScope === 'global') {
       const col = getNachrichtencenterGlobalContactsRef();
@@ -317,6 +387,9 @@ async function saveNachrichtencenterContactFromForm() {
 }
 
 export function openNachrichtencenterContactBook() {
+  ensureNachrichtencenterSelfContact().catch((e) => {
+    console.warn('Nachrichtencenter: Eigener Kontakt konnte nicht synchronisiert werden:', e);
+  });
   startNachrichtencenterContactListeners();
   renderNachrichtencenterContactLists();
   resetNachrichtencenterContactForm();
@@ -328,6 +401,10 @@ export function openNachrichtencenterContactBook() {
 async function deleteNachrichtencenterContactByRef(refValue) {
   const contact = getNachrichtencenterContactByRefValue(refValue);
   if (!contact) return;
+  if (contact.isSelfContact) {
+    alertUser('Dieser Eintrag wird automatisch verwaltet und kann nicht gelöscht werden.', 'error');
+    return;
+  }
   if (String(contact.createdByAppUserId || '') !== String(currentUser?.mode || '')) {
     alertUser('Du darfst nur eigene Einträge löschen.', 'error');
     return;
@@ -615,6 +692,10 @@ export function ensureModalListeners() {
         const refValue = String(editNcBtn.dataset.contactRef || '');
         const contact = getNachrichtencenterContactByRefValue(refValue);
         if (!contact) return;
+        if (contact.isSelfContact) {
+          alertUser('Dieser Eintrag wird automatisch verwaltet und kann nicht bearbeitet werden.', 'error');
+          return;
+        }
         if (String(contact.createdByAppUserId || '') !== String(currentUser?.mode || '')) {
           alertUser('Du darfst nur eigene Einträge bearbeiten.', 'error');
           return;
@@ -635,6 +716,11 @@ export function ensureModalListeners() {
       if (deleteNcBtn) {
         const refValue = String(deleteNcBtn.dataset.contactRef || '');
         if (!refValue) return;
+        const contact = getNachrichtencenterContactByRefValue(refValue);
+        if (contact && contact.isSelfContact) {
+          alertUser('Dieser Eintrag wird automatisch verwaltet und kann nicht gelöscht werden.', 'error');
+          return;
+        }
         if (!confirm('Kontakt wirklich löschen?')) return;
         await deleteNachrichtencenterContactByRef(refValue);
         return;
