@@ -1917,8 +1917,8 @@ export function setupEventListeners() {
     const entranceCard = document.getElementById('entranceCard');
     if (entranceCard) entranceCard.addEventListener('click', () => navigate('entrance'));
 
-    const pushmailCenterCard = document.getElementById('pushmailCenterCard');
-    if (pushmailCenterCard) pushmailCenterCard.addEventListener('click', () => navigate('pushmailCenter'));
+    const pushmailCenterBar = document.getElementById('pushmailCenterBar');
+    if (pushmailCenterBar) pushmailCenterBar.addEventListener('click', () => navigate('pushmailCenter'));
 
     setPushoverViewMode('send');
     loadPushoverRecipientsForSender();
