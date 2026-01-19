@@ -159,6 +159,7 @@ export function renderRoleManagement() {
     const allRolePermissions = {
         'ENTRANCE': { label: 'Haupteingang öffnen', indent: false },
         'PUSHOVER': { label: 'Push-Nachricht senden', indent: false },
+        'PUSHMAIL_CENTER': { label: 'PUSHMAIL-Center', indent: false },
         'PUSHOVER_SETTINGS_GRANTS': { label: '-> Einstellungen-Button zum Berechtigungen anlegen', indent: true },
         'PUSHOVER_NOTRUF_SETTINGS': { label: '-> Notruf-Einstellungen', indent: true },
         'PUSHOVER_NOTRUF_SETTINGS_FLIC': { label: '-> -> Flic-Notruf-Button', indent: true },

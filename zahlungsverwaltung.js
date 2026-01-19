@@ -4684,11 +4684,8 @@ function openFuturePaymentsModal() {
 
 // --- NEU: Steuerung der Home-Screen Warnleuchten (Optimiert & Größer) ---
 function updateHomeAlerts() {
-    const globalBox = document.getElementById('global-app-alert-box');
     const cardStrip = document.getElementById('zv-card-alert-strip');
-    const globalText = globalBox ? globalBox.querySelector('span') : null;
-
-    if (!globalBox || !cardStrip) return;
+    if (!cardStrip) return;
 
     let alertCount = 0;
     let urgentCount = 0; // Rot (Deadline < 3 Tage oder überfällig)
@@ -4743,23 +4740,7 @@ function updateHomeAlerts() {
     // --- UI UPDATE ---
 
     if (hasAnyAlert) {
-        // 1. Globale Box oben (Sichtbar machen)
-        globalBox.classList.remove('hidden');
-        globalBox.classList.add('flex'); 
-        
-        // Farbe & Text je nach Dringlichkeit
-        // WICHTIG: Hier nutzen wir jetzt die größeren Klassen (px-4 py-2 text-sm)
-        if (urgentCount > 0) {
-            // ROT pulsierend für Kritisch
-            globalBox.className = "mr-auto bg-red-600 text-white px-4 py-2 rounded-xl animate-pulse font-bold text-sm cursor-pointer shadow-lg flex items-center gap-2 hover:bg-red-700 transition transform hover:scale-105 border-2 border-red-400";
-            if (globalText) globalText.textContent = `${urgentCount} Frist(en) kritisch!`;
-        } else {
-            // ORANGE für Warnungen
-            globalBox.className = "mr-auto bg-orange-500 text-white px-4 py-2 rounded-xl animate-pulse font-bold text-sm cursor-pointer shadow-lg flex items-center gap-2 hover:bg-orange-600 transition transform hover:scale-105 border-2 border-orange-300";
-            if (globalText) globalText.textContent = "Neue Nachrichten / Fristen";
-        }
-
-        // 2. Streifen auf der Karte (Hauptmenü)
+        // Streifen auf der Karte (Hauptmenü)
         cardStrip.classList.remove('hidden');
         if (urgentCount > 0) {
             cardStrip.classList.remove('bg-orange-500');
@@ -4771,8 +4752,6 @@ function updateHomeAlerts() {
 
     } else {
         // Keine Alerts -> Alles verstecken
-        globalBox.classList.add('hidden');
-        globalBox.classList.remove('flex');
         cardStrip.classList.add('hidden');
     }
 }

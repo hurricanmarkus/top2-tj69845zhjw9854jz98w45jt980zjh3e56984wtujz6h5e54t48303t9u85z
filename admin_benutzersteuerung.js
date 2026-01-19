@@ -404,6 +404,7 @@ export function renderUserManagement() {
     const allPermissions = {
         'ENTRANCE': 'Haupteingang öffnen',
         'PUSHOVER': 'Push-Nachricht senden',
+        'PUSHMAIL_CENTER': 'PUSHMAIL-Center',
         'PUSHOVER_SETTINGS_GRANTS': '-> Einstellungen-Button zum Berechtigungen anlegen',
         'PUSHOVER_NOTRUF_SETTINGS': '-> Notruf-Einstellungen',
         'PUSHOVER_NOTRUF_SETTINGS_FLIC': '-> -> Flic-Notruf-Button',

@@ -10,7 +10,7 @@ import { listenForRoleUpdates, listenForAdminRoleUpdates, renderRoleManagement }
 import { listenForApprovalRequests, stopApprovalRequestsListener, createApprovalRequest, renderApprovalProcess } from './admin_genehmigungsprozess.js';
 import { toggleAdminSection, rememberAdminScroll, restoreAdminScrollIfAny, renderMainFunctionsAdminArea } from './admin_adminfunktionenHome.js';
 import { initializeEssensberechnungView } from './essensberechnung.js';
-import { IFTTT_URL, initializeNotrufSettingsView } from './notfall.js';
+import { IFTTT_URL, initializeNotrufSettingsView, ensureModalListeners, renderApiTokenBook, openNachrichtencenterContactBook } from './notfall.js';
 import { PUSHOVER_TOKEN, RECIPIENT_KEYS } from './pushbenachrichtigung.js';
 import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, openTemplateModal, renderChecklistView, renderChecklistSettingsView, listenForTemplates, listenForStacks } from './checklist.js';
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
@@ -100,6 +100,7 @@ export const views = {
     home: { id: 'homeView' },
     entrance: { id: 'entranceView' },
     pushover: { id: 'pushoverView' },
+    pushmailCenter: { id: 'pushmailCenterView' },
     admin: { id: 'adminView' },
     userSettings: { id: 'userSettingsView' },
     checklist: { id: 'checklistView' },
@@ -690,6 +691,192 @@ export function setButtonLoading(button, isLoading) {
     if (spinner) spinner.style.display = isLoading ? 'inline-block' : 'none';
 }
 
+function maskPushmailSecret(value) {
+    const s = String(value || '').trim();
+    if (!s) return '—';
+    const start = s.substring(0, 4);
+    const end = s.substring(Math.max(0, s.length - 4));
+    return `${start}...${end}`;
+}
+
+function setPushmailPushoverStatus(msg, show = true) {
+    const el = document.getElementById('pushmailPushoverStatus');
+    if (!el) return;
+    if (!show) {
+        el.textContent = '';
+        el.classList.add('hidden');
+        return;
+    }
+    el.textContent = msg;
+    el.classList.remove('hidden');
+}
+
+const loadPushmailPushoverProgramConfig = async (recipientId, forceReload = false) => {
+    if (!recipientId) return null;
+
+    if (!forceReload && pushoverProgramConfigCache && Object.prototype.hasOwnProperty.call(pushoverProgramConfigCache, recipientId)) {
+        return pushoverProgramConfigCache[recipientId];
+    }
+
+    if (!pushoverProgramsCollectionRef) return null;
+
+    try {
+        console.log('PushmailCenter: Lade Pushover Konfiguration für Empfänger:', recipientId);
+        const docRef = doc(pushoverProgramsCollectionRef, recipientId);
+        const snap = await getDoc(docRef);
+        if (!snap.exists()) {
+            pushoverProgramConfigCache[recipientId] = null;
+            return null;
+        }
+        const cfg = snap.data() || {};
+        pushoverProgramConfigCache[recipientId] = cfg;
+        return cfg;
+    } catch (e) {
+        console.error('PushmailCenter: Fehler beim Laden der Konfiguration:', e);
+        return null;
+    }
+};
+
+const refreshPushmailCenterPushoverUI = async (forceReload = false) => {
+    const apiTokenPreview = document.getElementById('pushmailPushoverApiTokenPreview');
+    const userKeyPreview = document.getElementById('pushmailPushoverUserKeyPreview');
+    const userKeyInput = document.getElementById('pushmailPushoverUserKeyInput');
+    const saveBtn = document.getElementById('pushmailSavePushoverUserKeyButton');
+    const reloadBtn = document.getElementById('pushmailReloadPushoverConfigButton');
+
+    if (!apiTokenPreview || !userKeyPreview) return;
+
+    const isLoggedIn = Boolean(currentUser?.mode && currentUser.mode !== GUEST_MODE);
+    const hasDb = Boolean(pushoverProgramsCollectionRef);
+
+    if (userKeyInput) userKeyInput.disabled = !(isLoggedIn && hasDb);
+    if (saveBtn) saveBtn.disabled = !(isLoggedIn && hasDb);
+    if (reloadBtn) reloadBtn.disabled = !isLoggedIn;
+
+    if (!isLoggedIn) {
+        apiTokenPreview.textContent = '—';
+        userKeyPreview.textContent = '—';
+        if (userKeyInput) userKeyInput.value = '';
+        setPushmailPushoverStatus('Bitte anmelden, um deine Pushover-Einstellungen zu laden.', true);
+        return;
+    }
+
+    if (!hasDb) {
+        setPushmailPushoverStatus('Bitte warten... (Firebase lädt noch)', true);
+        return;
+    }
+
+    const recipientId = currentUser.mode;
+    const cfg = await loadPushmailPushoverProgramConfig(recipientId, forceReload);
+    apiTokenPreview.textContent = maskPushmailSecret(cfg?.apiToken);
+    userKeyPreview.textContent = maskPushmailSecret(cfg?.userKey);
+
+    if (cfg) {
+        setPushmailPushoverStatus('Einstellungen geladen.', true);
+    } else {
+        setPushmailPushoverStatus('Noch keine Einstellungen gespeichert. Bitte User-Key setzen.', true);
+    }
+};
+
+const savePushmailCenterUserKey = async () => {
+    const userKeyInput = document.getElementById('pushmailPushoverUserKeyInput');
+    const saveBtn = document.getElementById('pushmailSavePushoverUserKeyButton');
+    if (!userKeyInput || !saveBtn) return;
+
+    if (!currentUser?.mode || currentUser.mode === GUEST_MODE) {
+        alertUser('Bitte anmelden.', 'error');
+        return;
+    }
+
+    if (!pushoverProgramsCollectionRef) {
+        alertUser('Bitte warten... (Firebase lädt noch)', 'error');
+        return;
+    }
+
+    const recipientId = currentUser.mode;
+    const userKey = String(userKeyInput.value || '').trim();
+    if (!userKey) {
+        alertUser('Bitte einen User-Key eingeben.', 'error');
+        return;
+    }
+
+    console.log('PushmailCenter: Speichere User-Key für:', recipientId);
+    saveBtn.disabled = true;
+
+    try {
+        const payload = { userKey, updatedAt: serverTimestamp() };
+        await setDoc(doc(pushoverProgramsCollectionRef, recipientId), payload, { merge: true });
+
+        const prev = pushoverProgramConfigCache && pushoverProgramConfigCache[recipientId] ? pushoverProgramConfigCache[recipientId] : {};
+        pushoverProgramConfigCache[recipientId] = { ...prev, ...payload };
+
+        userKeyInput.value = '';
+        setPushmailPushoverStatus('User-Key gespeichert.', true);
+        await refreshPushmailCenterPushoverUI(true);
+    } catch (e) {
+        console.error('PushmailCenter: Fehler beim Speichern:', e);
+        alertUser('Fehler beim Speichern. Bitte später erneut versuchen.', 'error');
+    } finally {
+        saveBtn.disabled = false;
+    }
+};
+
+function ensurePushmailCenterListeners() {
+    const reloadBtn = document.getElementById('pushmailReloadPushoverConfigButton');
+    if (reloadBtn && !reloadBtn.dataset.listenerAttached) {
+        reloadBtn.addEventListener('click', async () => {
+            console.log('PushmailCenter: Aktualisieren geklickt');
+            await refreshPushmailCenterPushoverUI(true);
+        });
+        reloadBtn.dataset.listenerAttached = 'true';
+    }
+
+    const saveBtn = document.getElementById('pushmailSavePushoverUserKeyButton');
+    if (saveBtn && !saveBtn.dataset.listenerAttached) {
+        saveBtn.addEventListener('click', async () => {
+            await savePushmailCenterUserKey();
+        });
+        saveBtn.dataset.listenerAttached = 'true';
+    }
+
+    const contactBookBtn = document.getElementById('pushmailOpenNachrichtencenterContactBookButton');
+    if (contactBookBtn && !contactBookBtn.dataset.listenerAttached) {
+        contactBookBtn.addEventListener('click', () => {
+            if (!currentUser?.mode || currentUser.mode === GUEST_MODE) {
+                alertUser('Bitte anmelden.', 'error');
+                return;
+            }
+            if (!auth || !auth.currentUser) {
+                alertUser('Bitte kurz warten... (Login lädt noch)', 'error');
+                return;
+            }
+
+            try { ensureModalListeners(); } catch (e) { console.warn('PushmailCenter: ensureModalListeners fehlgeschlagen:', e); }
+            console.log('PushmailCenter: Öffne Nachrichtencenter Kontaktbuch');
+            openNachrichtencenterContactBook();
+        });
+        contactBookBtn.dataset.listenerAttached = 'true';
+    }
+
+    const tokenBookBtn = document.getElementById('pushmailOpenApiTokenBookButton');
+    if (tokenBookBtn && !tokenBookBtn.dataset.listenerAttached) {
+        tokenBookBtn.addEventListener('click', () => {
+            try { ensureModalListeners(); } catch (e) { console.warn('PushmailCenter: ensureModalListeners fehlgeschlagen:', e); }
+            console.log('PushmailCenter: Öffne API-Token Book');
+            if (typeof renderApiTokenBook === 'function') renderApiTokenBook();
+            const modal = document.getElementById('apiTokenBookModal');
+            if (modal) modal.style.display = 'flex';
+        });
+        tokenBookBtn.dataset.listenerAttached = 'true';
+    }
+}
+
+function initializePushmailCenterView() {
+    console.log('PushmailCenter: Initialisierung startet');
+    ensurePushmailCenterListeners();
+    refreshPushmailCenterPushoverUI();
+}
+
 export function navigate(targetViewName) {
     console.log(`Navigiere zu: ${targetViewName}`);
     const targetView = views[targetViewName];
@@ -711,6 +898,7 @@ export function navigate(targetViewName) {
     if (targetViewName !== 'terminplaner' && !isSystemAdmin) {
         if (targetViewName === 'entrance' && !userPermissions.includes('ENTRANCE')) return alertUser("Zugriff verweigert (Eingang).", 'error');
         if (targetViewName === 'pushover' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Push).", 'error');
+        if (targetViewName === 'pushmailCenter' && !userPermissions.includes('PUSHMAIL_CENTER')) return alertUser("Zugriff verweigert (PUSHMAIL-Center).", 'error');
         if (targetViewName === 'checklist' && !userPermissions.includes('CHECKLIST')) return alertUser("Zugriff verweigert (Checkliste).", 'error');
         if (targetViewName === 'checklistSettings' && !userPermissions.includes('CHECKLIST_SETTINGS')) return alertUser("Zugriff verweigert (Checklisten-Einstellungen).", 'error');
         if (targetViewName === 'essensberechnung' && !userPermissions.includes('ESSENSBERECHNUNG')) return alertUser("Zugriff verweigert (Essensberechnung).", 'error');
@@ -777,6 +965,10 @@ export function navigate(targetViewName) {
     }
 
     updateUIForMode();
+
+    if (targetViewName === 'pushmailCenter') {
+        initializePushmailCenterView();
+    }
 
     if (targetViewName === 'userSettings') {
         const userNameEl = document.getElementById('userSettingsName');
@@ -1681,10 +1873,6 @@ export function setupEventListeners() {
     // Central click handler for the main content area (für globale Elemente)
     document.querySelector('.main-content').addEventListener('click', function (e) {
 
-        // --- NEU: Klick auf Warn-Box -> zur Zahlungsverwaltung ---
-        if (e.target.closest('#global-app-alert-box')) { navigate('zahlungsverwaltung'); return; }
-        // ---------------------------------------------------------
-
         // --- Buttons on the home page ---
         if (e.target.closest('#mainSettingsButton')) { navigate('userSettings'); return; }
         if (e.target.closest('#mainAdminButton')) { navigate('admin'); return; }
@@ -1728,6 +1916,9 @@ export function setupEventListeners() {
     // --- Navigation Cards on Home View ---
     const entranceCard = document.getElementById('entranceCard');
     if (entranceCard) entranceCard.addEventListener('click', () => navigate('entrance'));
+
+    const pushmailCenterCard = document.getElementById('pushmailCenterCard');
+    if (pushmailCenterCard) pushmailCenterCard.addEventListener('click', () => navigate('pushmailCenter'));
 
     setPushoverViewMode('send');
     loadPushoverRecipientsForSender();

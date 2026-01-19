@@ -316,7 +316,7 @@ async function saveNachrichtencenterContactFromForm() {
   resetNachrichtencenterContactForm();
 }
 
-function openNachrichtencenterContactBook() {
+export function openNachrichtencenterContactBook() {
   startNachrichtencenterContactListeners();
   renderNachrichtencenterContactLists();
   resetNachrichtencenterContactForm();
