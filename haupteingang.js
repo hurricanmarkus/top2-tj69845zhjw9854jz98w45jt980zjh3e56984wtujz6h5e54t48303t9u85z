@@ -4,7 +4,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, getDocs, writeBatch, addDoc, query, where, serverTimestamp, orderBy, limit, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode, clearAllUserData, saveUserSetting } from './log-InOut.js';
+import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode, clearAllUserData, saveUserSetting, getUserSetting } from './log-InOut.js';
 import { renderModalUserButtons, listenForUserUpdates, toggleNewUserRoleField, addAdminUserManagementListeners, renderUserManagement } from './admin_benutzersteuerung.js';
 import { listenForRoleUpdates, listenForAdminRoleUpdates, renderRoleManagement } from './admin_rollenverwaltung.js';
 import { listenForApprovalRequests, stopApprovalRequestsListener, createApprovalRequest, renderApprovalProcess } from './admin_genehmigungsprozess.js';
@@ -723,9 +723,12 @@ function setPushmailCenterAttentionUI(needsUserKey, needsApiTokens) {
     const needsBarAttention = Boolean(needsUserKey || needsApiTokens);
 
     if (bar) {
+        bar.classList.toggle('pushmail-siren', needsBarAttention);
         bar.classList.toggle('animate-pulse', needsBarAttention);
-        bar.classList.toggle('bg-fuchsia-100', needsBarAttention);
-        bar.classList.toggle('border-fuchsia-500', needsBarAttention);
+        bar.classList.toggle('ring-2', needsBarAttention);
+        bar.classList.toggle('ring-fuchsia-400', needsBarAttention);
+        bar.classList.toggle('ring-offset-2', needsBarAttention);
+        bar.classList.remove('bg-fuchsia-100', 'border-fuchsia-500');
     }
 
     if (userKeyCard) {
@@ -896,12 +899,287 @@ const savePushmailCenterUserKey = async () => {
     }
 };
 
+function getPushmailCenterProgramDefinitions() {
+    return [
+        { id: 'PUSHOVER', title: 'Push-Benachrichtigung', permission: 'PUSHOVER', border: 'border-red-500', text: 'text-red-600' },
+        { id: 'ENTRANCE', title: 'Haupteingang öffnen', permission: 'ENTRANCE', border: 'border-indigo-500', text: 'text-indigo-600' },
+        { id: 'CHECKLIST', title: 'Checkliste', permission: 'CHECKLIST', border: 'border-green-500', text: 'text-green-600' },
+        { id: 'TERMINPLANER', title: 'Termin finden', permission: 'TERMINPLANER', border: 'border-cyan-500', text: 'text-cyan-600' },
+        { id: 'ESSENSBERECHNUNG', title: 'Essensberechnung', permission: 'ESSENSBERECHNUNG', border: 'border-orange-500', text: 'text-orange-600' },
+        { id: 'ZAHLUNGSVERWALTUNG', title: 'Zahlungsverwaltung', permission: 'ZAHLUNGSVERWALTUNG', border: 'border-emerald-600', text: 'text-emerald-700' },
+        { id: 'TICKET_SUPPORT', title: 'Ticket-Support', permission: 'TICKET_SUPPORT', border: 'border-purple-600', text: 'text-purple-700' },
+        { id: 'WERTGUTHABEN', title: 'Wertguthaben', permission: 'WERTGUTHABEN', border: 'border-emerald-600', text: 'text-emerald-700' },
+        { id: 'LIZENZEN', title: 'Lizenzen', permission: 'LIZENZEN', border: 'border-yellow-600', text: 'text-yellow-700' },
+        { id: 'VERTRAGSVERWALTUNG', title: 'Vertragsverwaltung', permission: 'VERTRAGSVERWALTUNG', border: 'border-indigo-600', text: 'text-indigo-700' },
+        { id: 'REZEPTE', title: 'Rezepte', permission: 'REZEPTE', border: 'border-orange-500', text: 'text-orange-600' },
+        { id: 'HAUSHALTSZAHLUNGEN', title: 'Haushaltszahlungen', permission: 'HAUSHALTSZAHLUNGEN', border: 'border-cyan-600', text: 'text-cyan-700' },
+        { id: 'GESCHENKEMANAGEMENT', title: 'Geschenkemanagement', permission: 'GESCHENKEMANAGEMENT', border: 'border-pink-600', text: 'text-pink-700' },
+        { id: 'APPROVALS', title: 'Genehmigungsprozess', adminPermission: 'canSeeApprovals', border: 'border-green-500', text: 'text-green-700' }
+    ];
+}
+
+function getVisiblePushmailCenterPrograms() {
+    const programs = getPushmailCenterProgramDefinitions();
+    const isSysAdmin = currentUser?.role === 'SYSTEMADMIN';
+    const userPermissions = currentUser?.permissions || [];
+    const adminPerms = currentUser?.adminPermissions || {};
+
+    return programs.filter(p => {
+        if (isSysAdmin) return true;
+        if (p.permission) return userPermissions.includes(p.permission);
+        if (p.adminPermission) return Boolean(adminPerms[p.adminPermission]);
+        return false;
+    });
+}
+
+const PUSHMAIL_AUTO_SETTINGS_KEY = 'pushmail_auto_notifications';
+
+function setPushmailAutoSettingsStatus(msg, show = true) {
+    const el = document.getElementById('pushmailAutoSettingsStatus');
+    if (!el) return;
+    if (!show) {
+        el.textContent = '';
+        el.classList.add('hidden');
+        return;
+    }
+    el.textContent = msg;
+    el.classList.remove('hidden');
+}
+
+function toPushmailAutoDomId(value) {
+    return String(value || '').replace(/[^a-z0-9_-]/gi, '_');
+}
+
+function getDefaultPushmailAutoSettings(programs) {
+    const programMap = {};
+    (programs || []).forEach(p => {
+        if (!p || !p.id) return;
+        programMap[String(p.id)] = {
+            state: 'active',
+            time: '08:00',
+            repeatMinutes: 0
+        };
+    });
+
+    return {
+        v: 1,
+        globalEnabled: true,
+        programs: programMap
+    };
+}
+
+function normalizePushmailAutoSettings(raw, programs) {
+    const defaults = getDefaultPushmailAutoSettings(programs);
+    const parsed = raw && typeof raw === 'object' ? raw : {};
+
+    const globalEnabled = parsed.globalEnabled === false ? false : true;
+    const incomingPrograms = parsed.programs && typeof parsed.programs === 'object' ? parsed.programs : {};
+
+    const normalizedPrograms = {};
+
+    (programs || []).forEach(p => {
+        const id = String(p.id);
+        const fallback = defaults.programs[id] || { state: 'active', time: '08:00', repeatMinutes: 0 };
+        const incoming = incomingPrograms[id] && typeof incomingPrograms[id] === 'object' ? incomingPrograms[id] : {};
+
+        const allowedStates = ['active', 'paused', 'disabled'];
+        const state = allowedStates.includes(String(incoming.state || '')) ? String(incoming.state) : fallback.state;
+
+        const time = String(incoming.time || fallback.time || '').trim();
+        const timeOk = /^\d{2}:\d{2}$/.test(time);
+
+        const repeatMinutesRaw = parseInt(String(incoming.repeatMinutes ?? fallback.repeatMinutes), 10);
+        const repeatMinutes = Number.isFinite(repeatMinutesRaw) && repeatMinutesRaw >= 0 ? repeatMinutesRaw : fallback.repeatMinutes;
+
+        normalizedPrograms[id] = {
+            state,
+            time: timeOk ? time : fallback.time,
+            repeatMinutes
+        };
+    });
+
+    return {
+        v: 1,
+        globalEnabled,
+        programs: normalizedPrograms
+    };
+}
+
+function renderPushmailAutoPrograms(programs) {
+    const container = document.getElementById('pushmailAutoProgramsContainer');
+    if (!container) return;
+
+    if (!Array.isArray(programs) || programs.length === 0) {
+        container.innerHTML = '<p class="text-sm text-center text-gray-400">Keine Programme verfügbar.</p>';
+        return;
+    }
+
+    const repeatOptions = [
+        { value: 0, label: 'Keine' },
+        { value: 5, label: '5 Minuten' },
+        { value: 10, label: '10 Minuten' },
+        { value: 15, label: '15 Minuten' },
+        { value: 30, label: '30 Minuten' },
+        { value: 60, label: '60 Minuten' }
+    ];
+
+    container.innerHTML = programs.map(p => {
+        const domId = toPushmailAutoDomId(p.id);
+        const repeatHtml = repeatOptions.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+
+        return `
+            <div class="p-3 rounded-lg bg-gray-50 border border-gray-200">
+                <div class="flex items-center justify-between gap-3">
+                    <span class="font-semibold ${p.text}">${p.title}</span>
+                    <select id="pushmailAutoState_${domId}" class="p-2 border rounded-lg bg-white text-sm">
+                        <option value="active">aktiv</option>
+                        <option value="paused">pausiert</option>
+                        <option value="disabled">deaktiviert</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
+                    <div>
+                        <div class="block text-xs font-semibold text-gray-700 mb-1">Uhrzeit</div>
+                        <input type="time" id="pushmailAutoTime_${domId}" class="w-full p-2 border rounded-lg bg-white text-sm">
+                    </div>
+                    <div>
+                        <div class="block text-xs font-semibold text-gray-700 mb-1">Wiederholung</div>
+                        <select id="pushmailAutoRepeat_${domId}" class="w-full p-2 border rounded-lg bg-white text-sm">
+                            ${repeatHtml}
+                        </select>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function applyPushmailAutoSettingsToUI(settings, programs) {
+    const globalToggle = document.getElementById('pushmailAutoGlobalEnabled');
+    if (globalToggle) globalToggle.checked = settings?.globalEnabled === true;
+
+    (programs || []).forEach(p => {
+        const domId = toPushmailAutoDomId(p.id);
+        const cfg = settings?.programs?.[String(p.id)] || {};
+
+        const stateEl = document.getElementById(`pushmailAutoState_${domId}`);
+        const timeEl = document.getElementById(`pushmailAutoTime_${domId}`);
+        const repeatEl = document.getElementById(`pushmailAutoRepeat_${domId}`);
+
+        if (stateEl) stateEl.value = String(cfg.state || 'active');
+        if (timeEl) timeEl.value = String(cfg.time || '08:00');
+        if (repeatEl) repeatEl.value = String(cfg.repeatMinutes ?? 0);
+    });
+}
+
+function readPushmailAutoSettingsFromUI(programs) {
+    const globalToggle = document.getElementById('pushmailAutoGlobalEnabled');
+    const globalEnabled = globalToggle?.checked === true;
+
+    const programMap = {};
+    (programs || []).forEach(p => {
+        const id = String(p.id);
+        const domId = toPushmailAutoDomId(id);
+
+        const stateEl = document.getElementById(`pushmailAutoState_${domId}`);
+        const timeEl = document.getElementById(`pushmailAutoTime_${domId}`);
+        const repeatEl = document.getElementById(`pushmailAutoRepeat_${domId}`);
+
+        const stateRaw = String(stateEl?.value || 'active');
+        const allowedStates = ['active', 'paused', 'disabled'];
+        const state = allowedStates.includes(stateRaw) ? stateRaw : 'active';
+
+        const time = String(timeEl?.value || '08:00').trim();
+        const timeOk = /^\d{2}:\d{2}$/.test(time);
+
+        const repeatMinutesRaw = parseInt(String(repeatEl?.value ?? 0), 10);
+        const repeatMinutes = Number.isFinite(repeatMinutesRaw) && repeatMinutesRaw >= 0 ? repeatMinutesRaw : 0;
+
+        programMap[id] = {
+            state,
+            time: timeOk ? time : '08:00',
+            repeatMinutes
+        };
+    });
+
+    return {
+        v: 1,
+        globalEnabled,
+        programs: programMap
+    };
+}
+
+function setPushmailAutoControlsDisabled(disabled) {
+    const globalToggle = document.getElementById('pushmailAutoGlobalEnabled');
+    const saveBtn = document.getElementById('pushmailAutoSaveButton');
+    const resetBtn = document.getElementById('pushmailAutoResetButton');
+    const container = document.getElementById('pushmailAutoProgramsContainer');
+
+    if (globalToggle) globalToggle.disabled = disabled;
+    if (saveBtn) saveBtn.disabled = disabled;
+    if (resetBtn) resetBtn.disabled = disabled;
+
+    if (container) {
+        container.querySelectorAll('select, input').forEach(el => {
+            el.disabled = disabled;
+        });
+    }
+}
+
+function resetPushmailAutoSettingsUI() {
+    const programs = getVisiblePushmailCenterPrograms();
+    const defaults = getDefaultPushmailAutoSettings(programs);
+    applyPushmailAutoSettingsToUI(defaults, programs);
+    console.log('PushmailCenter: Auto-Settings auf Standard gesetzt (noch nicht gespeichert)');
+    setPushmailAutoSettingsStatus('Standardwerte geladen. Bitte Speichern drücken.', true);
+}
+
+async function savePushmailAutoSettings() {
+    if (!currentUser?.mode || currentUser.mode === GUEST_MODE) {
+        alertUser('Bitte anmelden.', 'error');
+        return;
+    }
+
+    const programs = getVisiblePushmailCenterPrograms();
+    const raw = readPushmailAutoSettingsFromUI(programs);
+    const payload = normalizePushmailAutoSettings(raw, programs);
+
+    console.log('PushmailCenter: Speichere Auto-Settings', payload);
+    await saveUserSetting(PUSHMAIL_AUTO_SETTINGS_KEY, payload);
+    setPushmailAutoSettingsStatus('Einstellungen gespeichert.', true);
+}
+
+function initializePushmailAutoSettingsArea() {
+    const container = document.getElementById('pushmailAutoProgramsContainer');
+    if (!container) return;
+
+    const isLoggedIn = Boolean(currentUser?.mode && currentUser.mode !== GUEST_MODE);
+    const programs = getVisiblePushmailCenterPrograms();
+
+    renderPushmailAutoPrograms(programs);
+
+    const raw = isLoggedIn ? getUserSetting(PUSHMAIL_AUTO_SETTINGS_KEY, null) : null;
+    const normalized = normalizePushmailAutoSettings(raw, programs);
+    applyPushmailAutoSettingsToUI(normalized, programs);
+
+    setPushmailAutoControlsDisabled(!isLoggedIn);
+
+    if (isLoggedIn) {
+        setPushmailAutoSettingsStatus('Einstellungen geladen.', true);
+    } else {
+        setPushmailAutoSettingsStatus('Bitte anmelden, um Einstellungen zu speichern.', true);
+    }
+
+    console.log('PushmailCenter: Auto-Settings UI initialisiert');
+}
+
 function ensurePushmailCenterListeners() {
     const reloadBtn = document.getElementById('pushmailReloadPushoverConfigButton');
     if (reloadBtn && !reloadBtn.dataset.listenerAttached) {
         reloadBtn.addEventListener('click', async () => {
             console.log('PushmailCenter: Aktualisieren geklickt');
             await refreshPushmailCenterPushoverUI(true);
+            initializePushmailAutoSettingsArea();
         });
         reloadBtn.dataset.listenerAttached = 'true';
     }
@@ -944,6 +1222,30 @@ function ensurePushmailCenterListeners() {
         });
         tokenBookBtn.dataset.listenerAttached = 'true';
     }
+
+    const autoSaveBtn = document.getElementById('pushmailAutoSaveButton');
+    if (autoSaveBtn && !autoSaveBtn.dataset.listenerAttached) {
+        autoSaveBtn.addEventListener('click', async () => {
+            await savePushmailAutoSettings();
+        });
+        autoSaveBtn.dataset.listenerAttached = 'true';
+    }
+
+    const autoResetBtn = document.getElementById('pushmailAutoResetButton');
+    if (autoResetBtn && !autoResetBtn.dataset.listenerAttached) {
+        autoResetBtn.addEventListener('click', () => {
+            resetPushmailAutoSettingsUI();
+        });
+        autoResetBtn.dataset.listenerAttached = 'true';
+    }
+
+    const autoGlobalToggle = document.getElementById('pushmailAutoGlobalEnabled');
+    if (autoGlobalToggle && !autoGlobalToggle.dataset.listenerAttached) {
+        autoGlobalToggle.addEventListener('change', () => {
+            console.log('PushmailCenter: Auto-Settings Global geändert:', autoGlobalToggle.checked);
+        });
+        autoGlobalToggle.dataset.listenerAttached = 'true';
+    }
 }
 
 function renderPushmailCenterProgramList() {
@@ -952,33 +1254,7 @@ function renderPushmailCenterProgramList() {
 
     console.log('PushmailCenter: Rendere Programmliste');
 
-    const programs = [
-        { title: 'Push-Benachrichtigung', permission: 'PUSHOVER', border: 'border-red-500', text: 'text-red-600' },
-        { title: 'Haupteingang öffnen', permission: 'ENTRANCE', border: 'border-indigo-500', text: 'text-indigo-600' },
-        { title: 'Checkliste', permission: 'CHECKLIST', border: 'border-green-500', text: 'text-green-600' },
-        { title: 'Termin finden', permission: 'TERMINPLANER', border: 'border-cyan-500', text: 'text-cyan-600' },
-        { title: 'Essensberechnung', permission: 'ESSENSBERECHNUNG', border: 'border-orange-500', text: 'text-orange-600' },
-        { title: 'Zahlungsverwaltung', permission: 'ZAHLUNGSVERWALTUNG', border: 'border-emerald-600', text: 'text-emerald-700' },
-        { title: 'Ticket-Support', permission: 'TICKET_SUPPORT', border: 'border-purple-600', text: 'text-purple-700' },
-        { title: 'Wertguthaben', permission: 'WERTGUTHABEN', border: 'border-emerald-600', text: 'text-emerald-700' },
-        { title: 'Lizenzen', permission: 'LIZENZEN', border: 'border-yellow-600', text: 'text-yellow-700' },
-        { title: 'Vertragsverwaltung', permission: 'VERTRAGSVERWALTUNG', border: 'border-indigo-600', text: 'text-indigo-700' },
-        { title: 'Rezepte', permission: 'REZEPTE', border: 'border-orange-500', text: 'text-orange-600' },
-        { title: 'Haushaltszahlungen', permission: 'HAUSHALTSZAHLUNGEN', border: 'border-cyan-600', text: 'text-cyan-700' },
-        { title: 'Geschenkemanagement', permission: 'GESCHENKEMANAGEMENT', border: 'border-pink-600', text: 'text-pink-700' },
-        { title: 'Genehmigungsprozess', adminPermission: 'canSeeApprovals', border: 'border-green-500', text: 'text-green-700' }
-    ];
-
-    const isSysAdmin = currentUser?.role === 'SYSTEMADMIN';
-    const userPermissions = currentUser?.permissions || [];
-    const adminPerms = currentUser?.adminPermissions || {};
-
-    const visiblePrograms = programs.filter(p => {
-        if (isSysAdmin) return true;
-        if (p.permission) return userPermissions.includes(p.permission);
-        if (p.adminPermission) return Boolean(adminPerms[p.adminPermission]);
-        return false;
-    });
+    const visiblePrograms = getVisiblePushmailCenterPrograms();
 
     if (visiblePrograms.length === 0) {
         list.innerHTML = '<p class="text-sm text-center text-gray-400">Keine Programme verfügbar.</p>';
@@ -998,6 +1274,7 @@ function initializePushmailCenterView() {
     console.log('PushmailCenter: Initialisierung startet');
     ensurePushmailCenterListeners();
     renderPushmailCenterProgramList();
+    initializePushmailAutoSettingsArea();
     refreshPushmailCenterPushoverUI();
 }
 

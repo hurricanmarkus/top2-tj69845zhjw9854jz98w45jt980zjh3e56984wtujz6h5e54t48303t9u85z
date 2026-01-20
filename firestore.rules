@@ -424,18 +424,23 @@ service cloud.firestore {
     }
 
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/pushover_programs/{recipientId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if isSystemAdminClaim() || (
+        hasAppUserIdClaim() && (
+          appUserId() == recipientId ||
+          exists(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/public/data/pushover_grants_by_sender/$(appUserId())/recipients/$(recipientId))
+        )
+      );
+      allow write: if isSystemAdminClaim() || (hasAppUserIdClaim() && appUserId() == recipientId);
     }
 
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/pushover_grants_by_sender/{senderId}/recipients/{recipientId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if isSystemAdminClaim() || (hasAppUserIdClaim() && (appUserId() == senderId || appUserId() == recipientId));
+      allow write: if isSystemAdminClaim() || (hasAppUserIdClaim() && appUserId() == recipientId);
     }
 
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/pushover_grants_by_recipient/{recipientId}/senders/{senderId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if isSystemAdminClaim() || (hasAppUserIdClaim() && (appUserId() == recipientId || appUserId() == senderId));
+      allow write: if isSystemAdminClaim() || (hasAppUserIdClaim() && appUserId() == recipientId);
     }
 
     // ═══════════════════════════════════════════════════════════════

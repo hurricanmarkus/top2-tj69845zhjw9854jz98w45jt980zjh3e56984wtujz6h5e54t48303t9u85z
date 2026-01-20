@@ -150,6 +150,20 @@ body {
     /* Abgerundete Ecken */
 }
 
+@keyframes pushmail-siren {
+    0%, 49% {
+        background-color: #dc2626;
+    }
+
+    50%, 100% {
+        background-color: #f97316;
+    }
+}
+
+.pushmail-siren {
+    animation: pushmail-siren 0.8s infinite;
+}
+
 .btn-gray-acknowledged {
     background-color: #9ca3af;
     /* Tailwind gray-400 */
