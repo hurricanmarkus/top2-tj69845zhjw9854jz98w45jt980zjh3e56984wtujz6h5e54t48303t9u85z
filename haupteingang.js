@@ -2703,6 +2703,8 @@ export function setupEventListeners() {
             pinModal.style.display = 'none';
             adminPinInput.value = '';
             pinError.style.display = 'none';
+            const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+            if (forgotPasswordLink) forgotPasswordLink.style.display = 'none';
 
             // 7. Erfolgsmeldung
             alertUser(`Erfolgreich als ${userFromFirestore.name} angemeldet! Rolle: ${newClaimRole}`, "success");
@@ -2717,6 +2719,8 @@ export function setupEventListeners() {
 
             if (isInvalidPin) {
                 pinError.style.display = 'block';
+                const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+                if (forgotPasswordLink) forgotPasswordLink.style.display = 'block';
                 adminPinInput.value = '';
                 pinModal.style.display = 'flex';
                 return;
@@ -2744,6 +2748,157 @@ export function setupEventListeners() {
 
     if (submitAdminKeyButton) submitAdminKeyButton.addEventListener('click', handleLogin);
     if (adminPinInput) adminPinInput.addEventListener('keydown', (e) => e.key === 'Enter' && handleLogin());
+
+    // --- Passwort-Vergessen Funktionalität ---
+    const forgotPasswordLink = document.querySelector('#forgotPasswordLink a');
+    const passwordResetModal = document.getElementById('passwordResetModal');
+    const pushoverTokenInput = document.getElementById('pushoverTokenInput');
+    const verifyTokenButton = document.getElementById('verifyTokenButton');
+    const cancelPasswordResetButton = document.getElementById('cancelPasswordResetButton');
+    const tokenError = document.getElementById('tokenError');
+    const tokenSuccess = document.getElementById('tokenSuccess');
+
+    if (forgotPasswordLink) {
+        forgotPasswordLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (!selectedUserForLogin) {
+                alertUser('Kein Benutzer ausgewählt.', 'error');
+                return;
+            }
+            
+            // Schließe Login-Modal und öffne Reset-Modal
+            if (pinModal) pinModal.style.display = 'none';
+            if (passwordResetModal) passwordResetModal.style.display = 'flex';
+            if (pushoverTokenInput) pushoverTokenInput.value = '';
+            if (tokenError) tokenError.style.display = 'none';
+            if (tokenSuccess) tokenSuccess.style.display = 'none';
+        });
+    }
+
+    if (cancelPasswordResetButton) {
+        cancelPasswordResetButton.addEventListener('click', () => {
+            if (passwordResetModal) passwordResetModal.style.display = 'none';
+            if (pinModal) pinModal.style.display = 'flex';
+        });
+    }
+
+    if (verifyTokenButton) {
+        verifyTokenButton.addEventListener('click', async () => {
+            await handlePasswordReset();
+        });
+    }
+    
+    if (pushoverTokenInput) {
+        pushoverTokenInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') handlePasswordReset();
+        });
+    }
+
+    const handlePasswordReset = async () => {
+        if (!selectedUserForLogin || !pushoverTokenInput || !verifyTokenButton) return;
+        
+        const enteredToken = pushoverTokenInput.value.trim();
+        if (!enteredToken) {
+            alertUser('Bitte geben Sie Ihren Pushover User-Key ein.', 'error');
+            return;
+        }
+
+        try {
+            setButtonLoading(verifyTokenButton, true);
+            if (tokenError) tokenError.style.display = 'none';
+            if (tokenSuccess) tokenSuccess.style.display = 'none';
+
+            // User-Key aus Firestore laden
+            const userId = selectedUserForLogin;
+            const pushoverConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'pushover_programs', userId);
+            const pushoverConfigSnap = await getDoc(pushoverConfigRef);
+
+            if (!pushoverConfigSnap.exists()) {
+                if (tokenError) {
+                    tokenError.textContent = 'Kein Pushover User-Key für diesen Benutzer hinterlegt.';
+                    tokenError.style.display = 'block';
+                }
+                return;
+            }
+
+            const pushoverData = pushoverConfigSnap.data();
+            const storedUserKey = pushoverData.userKey;
+            const apiToken = pushoverData.apiToken;
+
+            if (!storedUserKey) {
+                if (tokenError) {
+                    tokenError.textContent = 'Kein Pushover User-Key für diesen Benutzer hinterlegt.';
+                    tokenError.style.display = 'block';
+                }
+                return;
+            }
+
+            // Token verifizieren
+            if (enteredToken !== storedUserKey) {
+                if (tokenError) {
+                    tokenError.textContent = 'Falscher Token!';
+                    tokenError.style.display = 'block';
+                }
+                return;
+            }
+
+            // Token korrekt - Passwort aus Firestore holen
+            const userDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'user-config', userId));
+            if (!userDoc.exists()) {
+                alertUser('Benutzerdaten nicht gefunden.', 'error');
+                return;
+            }
+
+            const userData = userDoc.data();
+            const userPassword = userData.key || 'Kein Passwort gesetzt';
+            const userName = userData.name || 'Unbekannt';
+
+            // Erfolgsmeldung anzeigen
+            if (tokenSuccess) tokenSuccess.style.display = 'block';
+
+            // Passwort per Pushover senden (Priorität 0)
+            if (!apiToken) {
+                alertUser('Kein API-Token konfiguriert. Pushover-Versand nicht möglich.', 'error');
+                return;
+            }
+
+            const response = await fetch('https://api.pushover.net/1/messages.json', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    token: apiToken,
+                    user: storedUserKey,
+                    title: 'Passwort-Wiederherstellung',
+                    message: `Hallo ${userName},\n\nDein Passwort lautet: ${userPassword}`,
+                    priority: '0'
+                })
+            });
+
+            if (!response.ok) {
+                console.error('Pushover-Fehler:', await response.text());
+                alertUser('Fehler beim Senden der Pushover-Nachricht.', 'error');
+                return;
+            }
+
+            // Erfolg!
+            alertUser('Passwort wurde erfolgreich per Pushover gesendet!', 'success');
+            
+            // Modals schließen
+            if (passwordResetModal) passwordResetModal.style.display = 'none';
+            if (pinModal) {
+                pinModal.style.display = 'flex';
+                if (pinError) pinError.style.display = 'none';
+                const forgotLink = document.getElementById('forgotPasswordLink');
+                if (forgotLink) forgotLink.style.display = 'none';
+            }
+
+        } catch (error) {
+            console.error('Fehler bei Passwort-Wiederherstellung:', error);
+            alertUser('Fehler bei der Verifizierung. Bitte erneut versuchen.', 'error');
+        } finally {
+            setButtonLoading(verifyTokenButton, false);
+        }
+    };
 
     // --- Admin Section Toggles ---
     if (adminRightsToggle) adminRightsToggle.addEventListener('click', () => toggleAdminSection('adminRights'));

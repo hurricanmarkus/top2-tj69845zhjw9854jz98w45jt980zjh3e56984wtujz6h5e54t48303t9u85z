@@ -4889,6 +4889,9 @@
                             class="w-full p-3 border-2 border-gray-300 rounded-lg text-center tracking-widest text-lg focus:ring-blue-500 focus:border-blue-500"
                             maxlength="20">
                         <div id="pinError" class="text-red-500 text-sm mt-2 hidden">Falscher Schlüssel!</div>
+                        <div id="forgotPasswordLink" class="text-center mt-2 hidden">
+                            <a href="#" class="text-blue-600 text-sm hover:underline">Passwort vergessen?</a>
+                        </div>
                         <div class="flex justify-between space-x-3 mt-6">
                             <button id="backToSelectionButton"
                                 class="py-2 px-3 bg-gray-400 text-white font-medium rounded-lg hover:bg-gray-500 transition">Zurück</button>
@@ -4917,6 +4920,28 @@
                 </div>
             </div>
 
+            <div id="passwordResetModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-30">
+                <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
+                    <h3 class="text-xl font-bold mb-4 text-gray-800">Passwort zurücksetzen</h3>
+                    <p class="text-sm text-gray-600 mb-4">
+                        Zur Verifizierung geben Sie bitte Ihren vollständigen Pushover User-Key ein.
+                    </p>
+                    <input type="text" id="pushoverTokenInput"
+                        class="w-full p-3 border-2 border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="z.B. uQiRzpo4DXghDmr9QzzfQu27cmVRsG">
+                    <div id="tokenError" class="text-red-500 text-sm mt-2 hidden">Falscher Token!</div>
+                    <div id="tokenSuccess" class="text-green-600 text-sm mt-2 hidden">Passwort wird per Pushover gesendet...</div>
+                    <div class="flex justify-between space-x-3 mt-6">
+                        <button id="cancelPasswordResetButton"
+                            class="py-2 px-3 bg-gray-400 text-white font-medium rounded-lg hover:bg-gray-500 transition">Abbrechen</button>
+                        <button id="verifyTokenButton"
+                            class="py-2 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition flex items-center justify-center">
+                            <span class="button-text">Verifizieren</span>
+                            <div class="loading-spinner"></div>
+                        </button>
+                    </div>
+                </div>
+            </div>
 
             <div id="logoutConfirmModal"
                 class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-20">
