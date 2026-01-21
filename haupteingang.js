@@ -877,7 +877,14 @@ const refreshPushmailCenterPushoverUI = async (forceReload = false) => {
 
     if (userKeyInput) userKeyInput.disabled = !(isLoggedIn && hasDb);
     if (saveBtn) saveBtn.disabled = !(isLoggedIn && hasDb);
-    if (reloadBtn) reloadBtn.disabled = !isLoggedIn;
+    if (reloadBtn) {
+        reloadBtn.disabled = !isLoggedIn;
+        if (!isLoggedIn) {
+            reloadBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        } else {
+            reloadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+    }
 
     if (!isLoggedIn) {
         apiTokenPreview.textContent = '—';
