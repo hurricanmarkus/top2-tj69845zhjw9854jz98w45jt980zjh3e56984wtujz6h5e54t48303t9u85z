@@ -30,9 +30,20 @@
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="app.webmanifest">
+    <link rel="manifest" href="manifest.json">
 
     <link rel="stylesheet" href="style.css">
+    
+    <script>
+        // Service Worker für PWA-Installation registrieren
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('Service Worker registriert:', reg.scope))
+                    .catch(err => console.error('Service Worker Fehler:', err));
+            });
+        }
+    </script>
 </head>
 
 <body>
