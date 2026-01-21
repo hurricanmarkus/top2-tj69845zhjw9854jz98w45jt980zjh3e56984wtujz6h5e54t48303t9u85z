@@ -443,6 +443,13 @@ service cloud.firestore {
       allow write: if isSystemAdminClaim() || (hasAppUserIdClaim() && appUserId() == recipientId);
     }
 
+    // Pushover User-Key Änderungsanfragen
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/pushover_userkey_change_requests/{requestId} {
+      allow read: if isSystemAdminClaim() || (hasAppRole('ADMIN') && adminHasPermission('canUseMainPushoverConfig'));
+      allow create: if hasAppUserIdClaim() && request.resource.data.userId == appUserId() && request.resource.data.status == 'pending';
+      allow delete: if isSystemAdminClaim() || (hasAppRole('ADMIN') && adminHasPermission('canUseMainPushoverConfig'));
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // PUSHMAIL-CENTER BENACHRICHTIGUNGEN (Notification System)
     // ═══════════════════════════════════════════════════════════════
