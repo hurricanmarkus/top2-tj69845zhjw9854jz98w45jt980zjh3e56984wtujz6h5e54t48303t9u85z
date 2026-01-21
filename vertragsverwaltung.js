@@ -12,7 +12,7 @@ import {
     appId
 } from './haupteingang.js';
 import { saveUserSetting, getUserSetting } from './log-InOut.js';
-import { createPendingNotification } from './pushmail-notifications.js';
+import { createPendingNotification, renderPendingNotifications } from './pushmail-notifications.js';
 
 import {
     collection,
@@ -1540,7 +1540,7 @@ export function listenForVertraege() {
 // BENACHRICHTIGUNGEN PRÜFEN
 // ========================================
 async function checkVertraegeForNotifications() {
-    if (!currentUser || !currentUser.uid) return;
+    if (!currentUser || !currentUser.mode) return;
     
     const vertraege = Object.values(VERTRAEGE);
     
@@ -1551,7 +1551,7 @@ async function checkVertraegeForNotifications() {
         if (vertrag.beginn) {
             const beginn = new Date(vertrag.beginn);
             await createPendingNotification(
-                currentUser.uid,
+                currentUser.mode,
                 'VERTRAGSVERWALTUNG',
                 'x_tage_vor_vertragsbeginn',
                 {
@@ -1568,7 +1568,7 @@ async function checkVertraegeForNotifications() {
         if (vertrag.ende) {
             const ende = new Date(vertrag.ende);
             await createPendingNotification(
-                currentUser.uid,
+                currentUser.mode,
                 'VERTRAGSVERWALTUNG',
                 'x_tage_vor_vertragsende',
                 {
@@ -1588,7 +1588,7 @@ async function checkVertraegeForNotifications() {
             kuendigungsDatum.setDate(kuendigungsDatum.getDate() - kuendigungsFrist);
             
             await createPendingNotification(
-                currentUser.uid,
+                currentUser.mode,
                 'VERTRAGSVERWALTUNG',
                 'x_tage_vor_kuendigung',
                 {
@@ -1604,7 +1604,7 @@ async function checkVertraegeForNotifications() {
         // X Tage vor Erinnerung
         if (vertrag.erinnerung) {
             await createPendingNotification(
-                currentUser.uid,
+                currentUser.mode,
                 'VERTRAGSVERWALTUNG',
                 'x_tage_vor_erinnerung',
                 {
@@ -1615,6 +1615,9 @@ async function checkVertraegeForNotifications() {
             );
         }
     }
+    
+    // Benachrichtigungen neu laden
+    await renderPendingNotifications();
 }
 
 // ========================================

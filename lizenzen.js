@@ -1,5 +1,5 @@
 import { alertUser, db, currentUser, USERS, appId } from './haupteingang.js';
-import { createPendingNotification } from './pushmail-notifications.js';
+import { createPendingNotification, renderPendingNotifications } from './pushmail-notifications.js';
 
 import {
     collection,
@@ -552,7 +552,7 @@ function listenForProdukte() {
 }
 
 async function checkLizenzenForNotifications() {
-    if (!currentUser || !currentUser.uid) return;
+    if (!currentUser || !currentUser.mode) return;
     
     const lizenzen = Object.values(LIZENZEN).filter(l => !l?.inTrash);
     
@@ -560,7 +560,7 @@ async function checkLizenzenForNotifications() {
         if (lizenz.ablaufdatum) {
             const ablaufdatum = new Date(lizenz.ablaufdatum);
             await createPendingNotification(
-                currentUser.uid,
+                currentUser.mode,
                 'LIZENZEN',
                 'x_tage_vor_ablauf',
                 {
@@ -573,6 +573,9 @@ async function checkLizenzenForNotifications() {
             );
         }
     }
+    
+    // Benachrichtigungen neu laden
+    await renderPendingNotifications();
 }
 
 function updateLizenzenStats() {

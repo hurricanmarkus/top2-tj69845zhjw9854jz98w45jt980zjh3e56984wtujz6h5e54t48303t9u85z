@@ -12,7 +12,7 @@ import {
     appId
 } from './haupteingang.js';
 import { saveUserSetting, getUserSetting } from './log-InOut.js';
-import { createPendingNotification } from './pushmail-notifications.js';
+import { createPendingNotification, renderPendingNotifications } from './pushmail-notifications.js';
 
 import {
     collection,
@@ -410,7 +410,7 @@ function updateStatistics() {
 // BENACHRICHTIGUNGEN PRÜFEN
 // ========================================
 async function checkWertguthabenForNotifications() {
-    if (!currentUser || !currentUser.uid) return;
+    if (!currentUser || !currentUser.mode) return;
     
     const eintraege = Object.values(WERTGUTHABEN);
     
@@ -424,7 +424,7 @@ async function checkWertguthabenForNotifications() {
         if (eintrag.einloesefrist) {
             const einloesefrist = new Date(eintrag.einloesefrist);
             await createPendingNotification(
-                currentUser.uid,
+                currentUser.mode,
                 'WERTGUTHABEN',
                 'x_tage_vor_einloesefrist',
                 {
@@ -441,7 +441,7 @@ async function checkWertguthabenForNotifications() {
         if (eintrag.typ === 'Aktionscode' && eintrag.ablaufDatumCode) {
             const ablaufDatumCode = new Date(eintrag.ablaufDatumCode);
             await createPendingNotification(
-                currentUser.uid,
+                currentUser.mode,
                 'WERTGUTHABEN',
                 'x_tage_vor_ablauf_code',
                 {
@@ -457,7 +457,7 @@ async function checkWertguthabenForNotifications() {
         if (eintrag.warnungVorAblauf && eintrag.einloesefrist) {
             const einloesefrist = new Date(eintrag.einloesefrist);
             await createPendingNotification(
-                currentUser.uid,
+                currentUser.mode,
                 'WERTGUTHABEN',
                 'x_tage_vor_warnung',
                 {
@@ -472,7 +472,7 @@ async function checkWertguthabenForNotifications() {
         if (eintrag.typ === 'Aktionscode' && eintrag.gueltigAb) {
             const gueltigAb = new Date(eintrag.gueltigAb);
             await createPendingNotification(
-                currentUser.uid,
+                currentUser.mode,
                 'WERTGUTHABEN',
                 'x_tage_vor_gueltig_ab',
                 {
@@ -488,7 +488,7 @@ async function checkWertguthabenForNotifications() {
         if (eintrag.typ === 'Aktionscode' && eintrag.gueltigBis) {
             const gueltigBis = new Date(eintrag.gueltigBis);
             await createPendingNotification(
-                currentUser.uid,
+                currentUser.mode,
                 'WERTGUTHABEN',
                 'x_tage_vor_gueltig_bis',
                 {
@@ -500,6 +500,9 @@ async function checkWertguthabenForNotifications() {
             );
         }
     }
+    
+    // Benachrichtigungen neu laden
+    await renderPendingNotifications();
 }
 
 // ========================================

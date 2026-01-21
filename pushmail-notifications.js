@@ -440,19 +440,34 @@ export async function createPendingNotification(userId, programId, notificationT
             return;
         }
 
+        // Duplikatsprüfung: Prüfen ob bereits eine unquittierte Benachrichtigung für diesen Eintrag existiert
+        const colRef = collection(db, 'artifacts', appId, 'users', userId, 'pushmail_pending_notifications');
+        const existingQuery = query(
+            colRef,
+            where('programId', '==', programId),
+            where('notificationType', '==', notificationType),
+            where('relatedDataId', '==', relatedData.id || null),
+            where('acknowledged', '==', false)
+        );
+        const existingSnapshot = await getDocs(existingQuery);
+        
+        if (!existingSnapshot.empty) {
+            console.log('Pushmail: Benachrichtigung existiert bereits:', programId, notificationType, relatedData.id);
+            return;
+        }
+
         // Platzhalter ersetzen
         const title = replacePlaceholders(notifSettings.customTitle, relatedData);
         const message = replacePlaceholders(notifSettings.customMessage, relatedData);
 
         // Zeitpunkt berechnen
         const scheduledFor = calculateScheduledTime(
-            notifSettings.time, 
-            notifSettings.daysBeforeX, 
+            notifSettings.time,
+            notifSettings.daysBeforeX,
             relatedData.targetDate
         );
 
         // Benachrichtigung speichern
-        const colRef = collection(db, 'artifacts', appId, 'users', userId, 'pushmail_pending_notifications');
         await addDoc(colRef, {
             programId,
             notificationType,

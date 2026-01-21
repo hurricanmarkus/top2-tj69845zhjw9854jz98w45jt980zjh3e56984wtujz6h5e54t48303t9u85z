@@ -1,7 +1,7 @@
 // // @ts-check 
 // Import aller benötigten Funktionen aus haupteingang.js
 import { alertUser, db, votesCollectionRef, currentUser, USERS, setButtonLoading, GUEST_MODE, navigate, cleanUrlParams } from './haupteingang.js';
-import { createPendingNotification } from './pushmail-notifications.js';
+import { createPendingNotification, renderPendingNotifications } from './pushmail-notifications.js';
 import {
     addDoc,
     serverTimestamp,
@@ -1374,7 +1374,7 @@ export function listenForMyVotes(userId) {
 
     // Benachrichtigungen prüfen
     async function checkTerminplanerForNotifications() {
-        if (!currentUser || !currentUser.uid) return;
+        if (!currentUser || !currentUser.mode) return;
         
         const umfragen = Array.from(myPollsMap.values());
         
@@ -1383,9 +1383,9 @@ export function listenForMyVotes(userId) {
             const ersteller = umfrage.createdBy || 'Unbekannt';
             
             // Umfrage zugewiesen (wenn ich im participantIds Array bin)
-            if (umfrage.participantIds && umfrage.participantIds.includes(currentUser.uid)) {
+            if (umfrage.participantIds && umfrage.participantIds.includes(currentUser.mode)) {
                 await createPendingNotification(
-                    currentUser.uid,
+                    currentUser.mode,
                     'TERMINPLANER',
                     'umfrage_zugewiesen',
                     {
@@ -1400,7 +1400,7 @@ export function listenForMyVotes(userId) {
             if (umfrage.deadline) {
                 const deadline = new Date(umfrage.deadline);
                 await createPendingNotification(
-                    currentUser.uid,
+                    currentUser.mode,
                     'TERMINPLANER',
                     'x_tage_vor_ablauf',
                     {
@@ -1416,7 +1416,7 @@ export function listenForMyVotes(userId) {
             if (umfrage.finalDate) {
                 const finalDate = new Date(umfrage.finalDate);
                 await createPendingNotification(
-                    currentUser.uid,
+                    currentUser.mode,
                     'TERMINPLANER',
                     'termin_feststeht',
                     {
@@ -1427,6 +1427,9 @@ export function listenForMyVotes(userId) {
                 );
             }
         }
+        
+        // Benachrichtigungen neu laden
+        await renderPendingNotifications();
     }
 
     // Listener 1: Umfragen, die mir ZUGEWIESEN sind (im participantIds Array)

@@ -10,7 +10,7 @@ import {
     USERS,
     navigate
 } from './haupteingang.js';
-import { createPendingNotification } from './pushmail-notifications.js';
+import { createPendingNotification, renderPendingNotifications } from './pushmail-notifications.js';
 
 import {
     collection,
@@ -883,7 +883,7 @@ function updateStats() {
 // BENACHRICHTIGUNGEN PRÜFEN
 // ========================================
 async function checkTicketsForNotifications() {
-    if (!currentUser || !currentUser.uid) return;
+    if (!currentUser || !currentUser.mode) return;
     
     const tickets = Object.values(TICKETS);
     
@@ -895,7 +895,7 @@ async function checkTicketsForNotifications() {
         // Ticket zugewiesen (wenn mir zugewiesen)
         if (ticket.assignedTo === currentUser.mode) {
             await createPendingNotification(
-                currentUser.uid,
+                currentUser.mode,
                 'TICKET_SUPPORT',
                 'ticket_zugewiesen',
                 {
@@ -911,7 +911,7 @@ async function checkTicketsForNotifications() {
         if (ticket.dueDate) {
             const dueDate = new Date(ticket.dueDate);
             await createPendingNotification(
-                currentUser.uid,
+                currentUser.mode,
                 'TICKET_SUPPORT',
                 'x_tage_vor_faelligkeit',
                 {
@@ -923,6 +923,9 @@ async function checkTicketsForNotifications() {
             );
         }
     }
+    
+    // Benachrichtigungen neu laden
+    await renderPendingNotifications();
 }
 
 // ========================================

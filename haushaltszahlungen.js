@@ -14,7 +14,7 @@ import {
     appId
 } from './haupteingang.js';
 import { saveUserSetting, getUserSetting } from './log-InOut.js';
-import { createPendingNotification } from './pushmail-notifications.js';
+import { createPendingNotification, renderPendingNotifications } from './pushmail-notifications.js';
 
 import {
     collection,
@@ -650,7 +650,7 @@ function berechneStatus(eintrag) {
 // BENACHRICHTIGUNGEN PRÜFEN
 // ========================================
 async function checkHaushaltszahlungenForNotifications() {
-    if (!currentUser || !currentUser.uid) return;
+    if (!currentUser || !currentUser.mode) return;
     
     const eintraege = Object.values(HAUSHALTSZAHLUNGEN);
     
@@ -660,7 +660,7 @@ async function checkHaushaltszahlungenForNotifications() {
         // Benachrichtigung bei Fehler-Status
         if (status === 'fehler') {
             await createPendingNotification(
-                currentUser.uid,
+                currentUser.mode,
                 'HAUSHALTSZAHLUNGEN',
                 'status_nicht_okay',
                 {
@@ -676,7 +676,7 @@ async function checkHaushaltszahlungenForNotifications() {
         if (eintrag.gueltigAb) {
             const gueltigAb = new Date(eintrag.gueltigAb);
             await createPendingNotification(
-                currentUser.uid,
+                currentUser.mode,
                 'HAUSHALTSZAHLUNGEN',
                 'x_tage_vor_gueltig_ab',
                 {
@@ -692,7 +692,7 @@ async function checkHaushaltszahlungenForNotifications() {
         if (eintrag.gueltigBis) {
             const gueltigBis = new Date(eintrag.gueltigBis);
             await createPendingNotification(
-                currentUser.uid,
+                currentUser.mode,
                 'HAUSHALTSZAHLUNGEN',
                 'x_tage_vor_gueltig_bis',
                 {
@@ -707,7 +707,7 @@ async function checkHaushaltszahlungenForNotifications() {
         // Benachrichtigung für Erinnerung
         if (eintrag.erinnerung) {
             await createPendingNotification(
-                currentUser.uid,
+                currentUser.mode,
                 'HAUSHALTSZAHLUNGEN',
                 'x_tage_vor_erinnerung',
                 {
@@ -718,6 +718,9 @@ async function checkHaushaltszahlungenForNotifications() {
             );
         }
     }
+    
+    // Benachrichtigungen neu laden
+    await renderPendingNotifications();
 }
 
 // ========================================
