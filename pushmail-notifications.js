@@ -508,10 +508,11 @@ export async function createPendingNotification(userId, programId, notificationT
             acknowledged: false,
             acknowledgedAt: null,
             relatedDataId: relatedData.id || null,
-            relatedDataPath: relatedData.path || null
+            relatedDataPath: relatedData.path || null,
+            pushOverEnabled: notifSettings.pushOverEnabled !== false
         });
 
-        console.log('Pushmail: Benachrichtigung erstellt:', programId, notificationType);
+        console.log('Pushmail: Benachrichtigung erstellt:', programId, notificationType, 'Pushover:', notifSettings.pushOverEnabled !== false);
     } catch (error) {
         console.error('Fehler beim Erstellen der Benachrichtigung:', error);
     }
@@ -862,8 +863,14 @@ export async function checkAndSendScheduledNotifications() {
 
             if (!nextSend || nextSend > now) continue;
 
-            // Pushover-Nachricht senden
-            const sent = await sendPushoverNotification(userId, notif.title, notif.message);
+            // Pushover-Nachricht nur senden wenn pushOverEnabled = true
+            let sent = true;
+            if (notif.pushOverEnabled !== false) {
+                sent = await sendPushoverNotification(userId, notif.title, notif.message);
+                console.log('Pushmail: Pushover-Versand für', notif.title, ':', sent ? 'Erfolg' : 'Fehlgeschlagen');
+            } else {
+                console.log('Pushmail: Pushover deaktiviert für', notif.title, '- Nur Overlay-Anzeige');
+            }
 
             if (sent) {
                 // Nächsten Sendezeitpunkt berechnen

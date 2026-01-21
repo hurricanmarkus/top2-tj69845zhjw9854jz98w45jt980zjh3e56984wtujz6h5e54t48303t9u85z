@@ -117,6 +117,18 @@ function renderNotificationsForProgram(programId, program, programSettings) {
                     </div>
                 </div>
 
+                <div class="mb-2 p-2 bg-white rounded border border-gray-300">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" 
+                               class="notification-pushover-checkbox h-4 w-4" 
+                               data-program="${programId}" 
+                               data-notification="${notifId}"
+                               ${notifSettings.pushOverEnabled !== false ? 'checked' : ''}>
+                        <span class="text-xs font-semibold text-gray-700">📱 Pushover</span>
+                        <span class="text-xs text-gray-500">(Wenn aktiv: Per Pushover senden, sonst nur Overlay)</span>
+                    </label>
+                </div>
+
                 <div class="flex gap-2">
                     <button class="text-xs text-blue-600 hover:underline customize-text-btn" 
                             data-program="${programId}" 
@@ -168,6 +180,16 @@ function attachNotificationSettingsListeners() {
             const programId = e.target.dataset.program;
             const notifId = e.target.dataset.notification;
             console.log('Pushmail: Status geändert:', programId, notifId, e.target.value);
+            autoSave();
+        });
+    });
+
+    // Pushover-Checkboxen
+    document.querySelectorAll('.notification-pushover-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            const programId = e.target.dataset.program;
+            const notifId = e.target.dataset.notification;
+            console.log('Pushmail: Pushover Toggle geändert:', programId, notifId, e.target.checked);
             autoSave();
         });
     });
@@ -241,6 +263,7 @@ async function savePushmailNotificationSettingsFromUI() {
             const timeInput = document.querySelector(`.notification-time-input[data-program="${programId}"][data-notification="${notifId}"]`);
             const repeatInput = document.querySelector(`.notification-repeat-input[data-program="${programId}"][data-notification="${notifId}"]`);
             const daysInput = document.querySelector(`.notification-days-input[data-program="${programId}"][data-notification="${notifId}"]`);
+            const pushoverCheckbox = document.querySelector(`.notification-pushover-checkbox[data-program="${programId}"][data-notification="${notifId}"]`);
 
             const notifDef = program.notifications[notifId];
 
@@ -250,7 +273,8 @@ async function savePushmailNotificationSettingsFromUI() {
                 repeatDays: parseInt(repeatInput?.value || 0),
                 daysBeforeX: daysInput ? parseInt(daysInput.value) : notifDef.defaultDaysBeforeX,
                 customTitle: notifDef.defaultTitle,
-                customMessage: notifDef.defaultMessage
+                customMessage: notifDef.defaultMessage,
+                pushOverEnabled: pushoverCheckbox?.checked !== false
             };
         });
     });
