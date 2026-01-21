@@ -708,36 +708,43 @@ async function checkHaushaltszahlungenForNotifications() {
         if (hatGueltigBis) {
             const gueltigBis = new Date(eintrag.gueltigBis);
             if (gueltigBis >= heute) {
-                await createPendingNotification(
-                    currentUser.mode,
-                    'HAUSHALTSZAHLUNGEN',
-                    'x_tage_vor_gueltig_bis',
-                    {
-                        id: eintrag.id,
-                        targetDate: gueltigBis,
-                        zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
-                        gueltigBis: gueltigBis.toLocaleDateString('de-DE'),
-                        daysLeft: calculateDaysLeft(gueltigBis)
-                    }
-                );
+                // Nur wenn DaysBefore > 0 sinnvoll: wir alarmieren 7 Tage vorher (Default) -> daysLeft muss <= 7 sein
+                const daysLeftBis = calculateDaysLeft(gueltigBis);
+                if (daysLeftBis <= 7) {
+                    await createPendingNotification(
+                        currentUser.mode,
+                        'HAUSHALTSZAHLUNGEN',
+                        'x_tage_vor_gueltig_bis',
+                        {
+                            id: eintrag.id,
+                            targetDate: gueltigBis,
+                            zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
+                            gueltigBis: gueltigBis.toLocaleDateString('de-DE'),
+                            daysLeft: daysLeftBis
+                        }
+                    );
+                }
             }
         }
 
-        // Erinnerung: nur wenn es eine Zukunft gibt (gueltigBis oder gueltigAb), sonst überspringen
+        // Erinnerung: nur wenn es eine Zukunft gibt (gueltigBis oder gueltigAb) und innerhalb 7 Tage
         if (eintrag.erinnerung) {
             const reminderDate = hatGueltigBis ? new Date(eintrag.gueltigBis) : (hatGueltigAb ? new Date(eintrag.gueltigAb) : null);
             if (reminderDate && reminderDate >= heute) {
-                await createPendingNotification(
-                    currentUser.mode,
-                    'HAUSHALTSZAHLUNGEN',
-                    'x_tage_vor_erinnerung',
-                    {
-                        id: eintrag.id,
-                        zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
-                        erinnerungsText: eintrag.erinnerung,
-                        daysLeft: calculateDaysLeft(reminderDate)
-                    }
-                );
+                const daysLeftRem = calculateDaysLeft(reminderDate);
+                if (daysLeftRem <= 7) {
+                    await createPendingNotification(
+                        currentUser.mode,
+                        'HAUSHALTSZAHLUNGEN',
+                        'x_tage_vor_erinnerung',
+                        {
+                            id: eintrag.id,
+                            zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
+                            erinnerungsText: eintrag.erinnerung,
+                            daysLeft: daysLeftRem
+                        }
+                    );
+                }
             }
         }
         }
