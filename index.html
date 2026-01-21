@@ -952,6 +952,17 @@
                         <p class="text-sm text-center text-gray-400">Lade Einstellungen...</p>
                     </div>
                 </div>
+
+                <div class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-red-600">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-lg font-bold text-gray-800">Ausstehende Benachrichtigungen</h3>
+                        <span id="pendingNotificationsCount" class="px-3 py-1 bg-red-600 text-white font-bold rounded-full text-sm">0</span>
+                    </div>
+                    
+                    <div id="pushmailPendingNotificationsList" class="space-y-2">
+                        <p class="text-sm text-gray-400 text-center py-4">Keine ausstehenden Benachrichtigungen</p>
+                    </div>
+                </div>
             </div>
 
             <div id="essensberechnungView" class="view">
@@ -5654,6 +5665,77 @@
                 class="py-2 px-4 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition shadow-md text-sm">
                 Jetzt Speichern
             </button>
+        </div>
+
+        <div id="pendingNotificationsModal"
+            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
+            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+                <div class="flex justify-between items-center mb-4 border-b pb-3">
+                    <h3 class="text-xl font-bold text-red-600">⚠️ Ausstehende Benachrichtigungen</h3>
+                    <button id="closePendingNotificationsModal"
+                        class="text-gray-400 hover:text-red-600 font-bold text-2xl">&times;</button>
+                </div>
+
+                <div class="text-sm text-gray-600 mb-4">
+                    Bitte quittieren Sie die folgenden Benachrichtigungen, um sie zu bestätigen.
+                </div>
+
+                <div id="pendingNotificationsList" class="flex-grow overflow-y-auto space-y-3 mb-4">
+                    <p class="text-sm text-gray-400 text-center">Keine ausstehenden Benachrichtigungen</p>
+                </div>
+
+                <div class="flex gap-3 border-t pt-3">
+                    <button id="acknowledgeSelectedBtn"
+                        class="flex-1 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition">
+                        Ausgewählte quittieren
+                    </button>
+                    <button id="acknowledgeAllBtn"
+                        class="flex-1 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition">
+                        Alle quittieren
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="customizeNotificationModal"
+            class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
+            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg">
+                <div class="flex justify-between items-center mb-4 border-b pb-3">
+                    <h3 class="text-xl font-bold text-gray-800">Benachrichtigungstext anpassen</h3>
+                    <button id="closeCustomizeNotificationModal"
+                        class="text-gray-400 hover:text-red-600 font-bold text-2xl">&times;</button>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label for="customNotificationTitle" class="block text-sm font-medium text-gray-700 mb-1">Titel</label>
+                        <input type="text" id="customNotificationTitle"
+                            class="w-full p-2 border rounded-lg"
+                            placeholder="Titel der Benachrichtigung">
+                    </div>
+
+                    <div>
+                        <label for="customNotificationMessage" class="block text-sm font-medium text-gray-700 mb-1">Nachricht</label>
+                        <textarea id="customNotificationMessage" rows="4"
+                            class="w-full p-2 border rounded-lg"
+                            placeholder="Nachrichtentext"></textarea>
+                        <p id="customNotificationPlaceholders" class="text-xs text-gray-500 mt-1">
+                            Verfügbare Platzhalter werden hier angezeigt
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 mt-6">
+                    <button id="saveCustomNotificationBtn"
+                        class="flex-1 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition">
+                        Speichern
+                    </button>
+                    <button id="cancelCustomNotificationBtn"
+                        class="flex-1 py-2 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition">
+                        Abbrechen
+                    </button>
+                </div>
+            </div>
         </div>
 
         <footer id="appFooter"

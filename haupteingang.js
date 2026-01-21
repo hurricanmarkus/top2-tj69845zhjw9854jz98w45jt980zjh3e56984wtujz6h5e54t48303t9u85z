@@ -18,6 +18,13 @@ import { renderUserKeyList } from './admin_benutzersteuerung.js';
 // NEU: Wir importieren die Start-Funktion aus deiner neuen Datei
 import { initializeTerminplanerView, listenForPublicVotes, joinVoteById, joinVoteByToken, joinVoteAsGuest } from './terminplaner.js';
 import { initializeZahlungsverwaltungView, initializeZahlungsverwaltungSettingsView } from './zahlungsverwaltung.js';
+import {
+    renderPendingNotifications,
+    initializePendingNotificationsModal,
+    checkAndShowPendingNotificationsModal,
+    startPushmailScheduler
+} from './pushmail-notifications.js';
+import { initializePushmailSettingsUI } from './pushmail-settings-ui.js';
 import { initializeTicketSupport, listenForTickets, stopTicketsListener } from './ticket-support.js';
 import { initializeWertguthaben, listenForWertguthaben, stopWertguthabenListener } from './wertguthaben.js';
 import { initializeLizenzen, listenForLizenzen, stopLizenzenListener } from './lizenzen.js';
@@ -493,6 +500,15 @@ async function initializeFirebase() {
                 initRezeptverwaltung();
 
                 startUserDependentListeners();
+                
+                // Pushmail-Benachrichtigungen initialisieren
+                initializePendingNotificationsModal();
+                startPushmailScheduler();
+                
+                // Ausstehende Benachrichtigungen prüfen und Modal anzeigen
+                setTimeout(() => {
+                    checkAndShowPendingNotificationsModal();
+                }, 2000);
 
             } else {
                 console.log("Firebase meldet KEINEN User, wechsle explizit zum Gastmodus.");
@@ -1324,6 +1340,8 @@ function initializePushmailCenterView() {
     renderPushmailCenterProgramList();
     initializePushmailAutoSettingsArea();
     refreshPushmailCenterPushoverUI();
+    renderPendingNotifications();
+    initializePushmailSettingsUI();
 }
 
 export function navigate(targetViewName) {
