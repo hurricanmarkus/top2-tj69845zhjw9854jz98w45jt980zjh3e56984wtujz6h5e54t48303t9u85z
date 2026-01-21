@@ -2823,7 +2823,6 @@ export function setupEventListeners() {
 
             const pushoverData = pushoverConfigSnap.data();
             const storedUserKey = pushoverData.userKey;
-            const apiToken = pushoverData.apiToken;
 
             if (!storedUserKey) {
                 if (tokenError) {
@@ -2842,6 +2841,14 @@ export function setupEventListeners() {
                 return;
             }
 
+            // API-Token aus notrufSettings holen (globale Konfiguration)
+            const hasApiTokens = Array.isArray(notrufSettings?.apiTokens) && notrufSettings.apiTokens.length > 0;
+            if (!hasApiTokens) {
+                alertUser('Kein API-Token konfiguriert. Bitte Admin kontaktieren.', 'error');
+                return;
+            }
+            const apiToken = notrufSettings.apiTokens[0].token;
+
             // Token korrekt - Passwort aus Firestore holen
             const userDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'user-config', userId));
             if (!userDoc.exists()) {
@@ -2855,12 +2862,6 @@ export function setupEventListeners() {
 
             // Erfolgsmeldung anzeigen
             if (tokenSuccess) tokenSuccess.style.display = 'block';
-
-            // Passwort per Pushover senden (Priorität 0)
-            if (!apiToken) {
-                alertUser('Kein API-Token konfiguriert. Pushover-Versand nicht möglich.', 'error');
-                return;
-            }
 
             const response = await fetch('https://api.pushover.net/1/messages.json', {
                 method: 'POST',
