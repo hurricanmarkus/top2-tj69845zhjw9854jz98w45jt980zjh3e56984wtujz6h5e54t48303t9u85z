@@ -1308,6 +1308,10 @@ function initializePushmailCenterView() {
     refreshPushmailCenterPushoverUI();
     renderPendingNotifications();
     initializePushmailSettingsUI();
+    // Automatisch Haushaltszahlungen-Checks triggern, damit Benachrichtigungen auch ohne Seitenbesuch entstehen
+    if (typeof checkHaushaltszahlungenForNotifications === 'function') {
+        checkHaushaltszahlungenForNotifications();
+    }
 }
 
 export function navigate(targetViewName) {

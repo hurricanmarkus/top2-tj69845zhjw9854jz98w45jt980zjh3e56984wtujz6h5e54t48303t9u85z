@@ -655,17 +655,20 @@ async function checkHaushaltszahlungenForNotifications() {
             console.log('🔔 Haushaltszahlungen: Kein Benutzer angemeldet');
             return;
         }
-        
+
         console.log('🔔 Haushaltszahlungen: Prüfe Benachrichtigungen für', Object.keys(HAUSHALTSZAHLUNGEN).length, 'Einträge');
-        
+
+        const heute = new Date();
+        heute.setHours(0, 0, 0, 0);
+
         const eintraege = Object.values(HAUSHALTSZAHLUNGEN);
         
         for (const eintrag of eintraege) {
         const { status, fehlerText } = berechneStatus(eintrag);
         
-        // Benachrichtigung bei Fehler-Status
-        if (status === 'fehler') {
-            console.log('🔔 Haushaltszahlungen: Fehler erkannt bei', eintrag.zweck, ':', fehlerText);
+        // Benachrichtigung bei Fehler-Status ODER ALARM-Status
+        if (status === 'fehler' || status === 'alarm') {
+            console.log('🔔 Haushaltszahlungen: Problem/Alarm erkannt bei', eintrag.zweck, ':', fehlerText);
             await createPendingNotification(
                 currentUser.mode,
                 'HAUSHALTSZAHLUNGEN',
@@ -678,54 +681,64 @@ async function checkHaushaltszahlungenForNotifications() {
                 }
             );
         }
-        
-        // Benachrichtigung X Tage vor Gültig AB
-        if (eintrag.gueltigAb) {
+
+        // Nur für aktive Einträge mit Startdatum
+        const hatGueltigAb = Boolean(eintrag.gueltigAb);
+        const hatGueltigBis = Boolean(eintrag.gueltigBis);
+
+        // Keine Datum-Reminder, wenn kein Datum vorhanden oder bereits vergangen
+        if (hatGueltigAb) {
             const gueltigAb = new Date(eintrag.gueltigAb);
-            await createPendingNotification(
-                currentUser.mode,
-                'HAUSHALTSZAHLUNGEN',
-                'x_tage_vor_gueltig_ab',
-                {
-                    id: eintrag.id,
-                    targetDate: gueltigAb,
-                    zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
-                    gueltigAb: gueltigAb.toLocaleDateString('de-DE'),
-                    daysLeft: calculateDaysLeft(gueltigAb)
-                }
-            );
+            if (gueltigAb >= heute) {
+                await createPendingNotification(
+                    currentUser.mode,
+                    'HAUSHALTSZAHLUNGEN',
+                    'x_tage_vor_gueltig_ab',
+                    {
+                        id: eintrag.id,
+                        targetDate: gueltigAb,
+                        zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
+                        gueltigAb: gueltigAb.toLocaleDateString('de-DE'),
+                        daysLeft: calculateDaysLeft(gueltigAb)
+                    }
+                );
+            }
         }
-        
-        // Benachrichtigung X Tage vor Gültig BIS
-        if (eintrag.gueltigBis) {
+
+        if (hatGueltigBis) {
             const gueltigBis = new Date(eintrag.gueltigBis);
-            await createPendingNotification(
-                currentUser.mode,
-                'HAUSHALTSZAHLUNGEN',
-                'x_tage_vor_gueltig_bis',
-                {
-                    id: eintrag.id,
-                    targetDate: gueltigBis,
-                    zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
-                    gueltigBis: gueltigBis.toLocaleDateString('de-DE'),
-                    daysLeft: calculateDaysLeft(gueltigBis)
-                }
-            );
+            if (gueltigBis >= heute) {
+                await createPendingNotification(
+                    currentUser.mode,
+                    'HAUSHALTSZAHLUNGEN',
+                    'x_tage_vor_gueltig_bis',
+                    {
+                        id: eintrag.id,
+                        targetDate: gueltigBis,
+                        zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
+                        gueltigBis: gueltigBis.toLocaleDateString('de-DE'),
+                        daysLeft: calculateDaysLeft(gueltigBis)
+                    }
+                );
+            }
         }
-        
-        // Benachrichtigung für Erinnerung
+
+        // Erinnerung: nur wenn es eine Zukunft gibt (gueltigBis oder gueltigAb), sonst überspringen
         if (eintrag.erinnerung) {
-            await createPendingNotification(
-                currentUser.mode,
-                'HAUSHALTSZAHLUNGEN',
-                'x_tage_vor_erinnerung',
-                {
-                    id: eintrag.id,
-                    zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
-                    erinnerungsText: eintrag.erinnerung,
-                    daysLeft: calculateDaysLeft(new Date(eintrag.gueltigBis || eintrag.gueltigAb || Date.now()))
-                }
-            );
+            const reminderDate = hatGueltigBis ? new Date(eintrag.gueltigBis) : (hatGueltigAb ? new Date(eintrag.gueltigAb) : null);
+            if (reminderDate && reminderDate >= heute) {
+                await createPendingNotification(
+                    currentUser.mode,
+                    'HAUSHALTSZAHLUNGEN',
+                    'x_tage_vor_erinnerung',
+                    {
+                        id: eintrag.id,
+                        zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
+                        erinnerungsText: eintrag.erinnerung,
+                        daysLeft: calculateDaysLeft(reminderDate)
+                    }
+                );
+            }
         }
         }
         
