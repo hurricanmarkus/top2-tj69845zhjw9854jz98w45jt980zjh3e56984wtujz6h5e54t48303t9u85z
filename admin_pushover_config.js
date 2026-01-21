@@ -2,7 +2,7 @@
 // ADMIN: PUSHOVER CONFIG (USER-KEY ÄNDERUNGSANFRAGEN)
 // ========================================
 
-import { db, appId, currentUser, alertUser } from './haupteingang.js';
+import { db, appId, currentUser, alertUser, USERS } from './haupteingang.js';
 import { collection, query, where, orderBy, getDocs, doc, deleteDoc, updateDoc, getDoc, deleteField } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
 let pushoverChangeRequestsUnsubscribe = null;
@@ -45,12 +45,13 @@ function renderPushoverChangeRequests(requests) {
 
     const html = requests.map(req => {
         const requestDate = req.requestedAt?.toDate ? req.requestedAt.toDate().toLocaleString('de-DE') : 'Unbekannt';
+        const userName = USERS && USERS[req.userId] ? USERS[req.userId].name : (req.userName || 'Unbekannter Benutzer');
         
         return `
             <div class="p-4 bg-white rounded-lg border border-gray-300 shadow-sm">
                 <div class="flex justify-between items-start mb-3">
                     <div>
-                        <h4 class="font-bold text-gray-800">${req.userName || req.userId}</h4>
+                        <h4 class="font-bold text-gray-800">${userName}</h4>
                         <p class="text-xs text-gray-500">User-ID: ${req.userId}</p>
                         <p class="text-xs text-gray-500">Angefragt am: ${requestDate}</p>
                     </div>

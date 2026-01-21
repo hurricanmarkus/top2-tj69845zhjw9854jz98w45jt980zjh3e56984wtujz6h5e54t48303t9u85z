@@ -879,6 +879,20 @@ const loadPushmailPushoverProgramConfig = async (recipientId, forceReload = fals
     }
 };
 
+const checkPendingUserKeyChangeRequest = async (userId) => {
+    if (!db || !userId) return false;
+    
+    try {
+        const requestsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'pushover_userkey_change_requests');
+        const q = query(requestsCollection, where('userId', '==', userId), where('status', '==', 'pending'));
+        const snapshot = await getDocs(q);
+        return !snapshot.empty;
+    } catch (error) {
+        console.error('Fehler beim Prüfen auf pending Anfragen:', error);
+        return false;
+    }
+};
+
 const refreshPushmailCenterPushoverUI = async (forceReload = false) => {
     const apiTokenPreview = document.getElementById('pushmailPushoverApiTokenPreview');
     const userKeyPreview = document.getElementById('pushmailPushoverUserKeyPreview');
@@ -926,6 +940,8 @@ const refreshPushmailCenterPushoverUI = async (forceReload = false) => {
 
     // UI-Zustand basierend auf User-Key Existenz
     const requestChangeBtn = document.getElementById('pushmailRequestUserKeyChangeButton');
+    const hasPendingRequest = await checkPendingUserKeyChangeRequest(recipientId);
+    
     if (hasUserKey) {
         // User-Key vorhanden: Input sperren, Save-Button ausblenden, Request-Button einblenden
         if (userKeyInput) {
@@ -933,7 +949,22 @@ const refreshPushmailCenterPushoverUI = async (forceReload = false) => {
             userKeyInput.placeholder = 'User-Key bereits gesetzt (gesperrt)';
         }
         if (saveBtn) saveBtn.classList.add('hidden');
-        if (requestChangeBtn) requestChangeBtn.classList.remove('hidden');
+        if (requestChangeBtn) {
+            requestChangeBtn.classList.remove('hidden');
+            
+            // Wenn bereits Anfrage läuft: Button deaktivieren und Text ändern
+            if (hasPendingRequest) {
+                requestChangeBtn.disabled = true;
+                requestChangeBtn.textContent = 'Anfrage läuft';
+                requestChangeBtn.classList.remove('bg-orange-600', 'hover:bg-orange-700');
+                requestChangeBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
+            } else {
+                requestChangeBtn.disabled = false;
+                requestChangeBtn.textContent = 'Änderung beantragen';
+                requestChangeBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+                requestChangeBtn.classList.add('bg-orange-600', 'hover:bg-orange-700');
+            }
+        }
     } else {
         // Kein User-Key: Input freigeben, Save-Button einblenden, Request-Button ausblenden
         if (userKeyInput) {
@@ -1036,6 +1067,9 @@ const requestPushmailUserKeyChange = async () => {
 
         alertUser('Änderungsanfrage erfolgreich gesendet. Ein Administrator wird deine Anfrage prüfen.', 'success');
         console.log('PushmailCenter: Änderungsanfrage erstellt für:', userId);
+        
+        // UI aktualisieren um Button-Status zu ändern
+        await refreshPushmailCenterPushoverUI(true);
     } catch (e) {
         console.error('PushmailCenter: Fehler beim Erstellen der Änderungsanfrage:', e);
         alertUser('Fehler beim Senden der Anfrage. Bitte später erneut versuchen.', 'error');
