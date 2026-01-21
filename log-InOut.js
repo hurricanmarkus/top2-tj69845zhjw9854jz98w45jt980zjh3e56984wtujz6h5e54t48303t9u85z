@@ -471,6 +471,12 @@ export function updateUIForMode() {
         }
     });
 
+    // Pushmail-Center Leiste ist für alle eingeloggten Benutzer sichtbar
+    const pushmailCenterBar = document.getElementById('pushmailCenterBar');
+    if (pushmailCenterBar && currentUser.mode !== GUEST_MODE) {
+        pushmailCenterBar.style.display = 'flex';
+    }
+
     const userPermissions = currentUser.permissions || [];
     const isAllowedBySysadmin = currentUser.role === 'SYSTEMADMIN';
 

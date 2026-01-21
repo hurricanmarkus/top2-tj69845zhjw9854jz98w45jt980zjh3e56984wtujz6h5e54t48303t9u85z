@@ -1344,10 +1344,9 @@ export function navigate(targetViewName) {
     const isSystemAdmin = currentUser.role === 'SYSTEMADMIN';
 
     // Wenn NICHT Systemadmin, dann prüfe die Rechte
-    if (targetViewName !== 'terminplaner' && !isSystemAdmin) {
+    if (targetViewName !== 'terminplaner' && targetViewName !== 'pushmailCenter' && !isSystemAdmin) {
         if (targetViewName === 'entrance' && !userPermissions.includes('ENTRANCE')) return alertUser("Zugriff verweigert (Eingang).", 'error');
         if (targetViewName === 'pushover' && !userPermissions.includes('PUSHOVER')) return alertUser("Zugriff verweigert (Push).", 'error');
-        if (targetViewName === 'pushmailCenter' && !userPermissions.includes('PUSHMAIL_CENTER')) return alertUser("Zugriff verweigert (PUSHMAIL-Center).", 'error');
         if (targetViewName === 'checklist' && !userPermissions.includes('CHECKLIST')) return alertUser("Zugriff verweigert (Checkliste).", 'error');
         if (targetViewName === 'checklistSettings' && !userPermissions.includes('CHECKLIST_SETTINGS')) return alertUser("Zugriff verweigert (Checklisten-Einstellungen).", 'error');
         if (targetViewName === 'essensberechnung' && !userPermissions.includes('ESSENSBERECHNUNG')) return alertUser("Zugriff verweigert (Essensberechnung).", 'error');
