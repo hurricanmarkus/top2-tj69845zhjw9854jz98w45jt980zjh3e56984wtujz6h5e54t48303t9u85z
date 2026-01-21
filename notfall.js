@@ -1,5 +1,5 @@
 // ---------- IMPORTS ----------
-import { notrufSettings, notrufSettingsDocRef, alertUser, setButtonLoading, db, appId, currentUser, auth, GUEST_MODE } from './haupteingang.js';
+import { notrufSettings, notrufSettingsDocRef, alertUser, setButtonLoading, db, appId, currentUser, auth, GUEST_MODE, USERS } from './haupteingang.js';
 import { getUserSetting, saveUserSetting } from './log-InOut.js';
 import { setDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
@@ -57,7 +57,8 @@ async function ensureNachrichtencenterSelfContact() {
     console.warn('Nachrichtencenter: User-Key konnte nicht geladen werden:', e);
   }
 
-  const name = String(currentUser.displayName || userId).trim();
+  const currentUserObj = USERS && typeof USERS === 'object' ? USERS[currentUser.mode] : null;
+  const name = String(currentUserObj?.realName || currentUser.displayName || userId).trim();
   const docRef = doc(col, selfContactId);
 
   let isNew = true;
