@@ -3,6 +3,9 @@
 // ========================================
 
 import { db, appId, currentUser, GUEST_MODE, alertUser } from './haupteingang.js';
+
+// PUSHOVER API TOKEN (fest codiert, für alle User gleich)
+const PUSHOVER_API_TOKEN = 'ag3nyu918ady5f8eqjuug13ttyaq9f';
 import { 
     collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, 
     query, where, serverTimestamp, writeBatch, orderBy, limit 
@@ -905,7 +908,7 @@ export async function checkAndSendScheduledNotifications() {
 
 async function sendPushoverNotification(userId, title, message) {
     try {
-        // User-Key und API-Token aus Pushmail-Center laden
+        // User-Key aus Pushmail-Center laden (API-Token ist fest codiert)
         const cfgRef = doc(db, 'artifacts', appId, 'public', 'data', 'pushover_programs', userId);
         const cfgSnap = await getDoc(cfgRef);
 
@@ -916,10 +919,10 @@ async function sendPushoverNotification(userId, title, message) {
 
         const data = cfgSnap.data();
         const userKey = data.userKey;
-        const apiToken = data.apiToken;
+        const apiToken = PUSHOVER_API_TOKEN;
 
-        if (!userKey || !apiToken) {
-            console.warn('Pushmail: User-Key oder API-Token fehlt');
+        if (!userKey) {
+            console.warn('Pushmail: User-Key fehlt');
             return false;
         }
 

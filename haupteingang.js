@@ -34,6 +34,8 @@ import { initializeHaushaltszahlungen, listenForHaushaltszahlungen, stopHaushalt
 import { initializeGeschenkemanagement, listenForGeschenke, stopGeschenkemanagementListeners } from './geschenkemanagement.js';
 // // ENDE-ZIKA //
 
+// PUSHOVER API TOKEN (fest codiert, für alle User gleich)
+const PUSHOVER_API_TOKEN = 'ag3nyu918ady5f8eqjuug13ttyaq9f';
 
 // BEGINN-ZIKA: LET-BEFEHLE IMMER NACH IMPORT-BEFEHLE //
 export let USERS = {};
@@ -930,11 +932,11 @@ const refreshPushmailCenterPushoverUI = async (forceReload = false) => {
 
     const recipientId = currentUser.mode;
     const cfg = await loadPushmailPushoverProgramConfig(recipientId, forceReload);
-    apiTokenPreview.textContent = maskPushmailSecret(cfg?.apiToken);
+    apiTokenPreview.textContent = maskPushmailSecret(PUSHOVER_API_TOKEN);
     userKeyPreview.textContent = maskPushmailSecret(cfg?.userKey);
 
     // Prüfen ob Daten vorhanden sind
-    const hasApiTokens = Array.isArray(notrufSettings?.apiTokens) && notrufSettings.apiTokens.length > 0;
+    const hasApiTokens = true; // API-Token ist fest codiert
     const hasUserKey = Boolean(String(cfg?.userKey || '').trim());
     const hasData = hasUserKey && hasApiTokens;
 
@@ -2841,13 +2843,8 @@ export function setupEventListeners() {
                 return;
             }
 
-            // API-Token aus notrufSettings holen (globale Konfiguration)
-            const hasApiTokens = Array.isArray(notrufSettings?.apiTokens) && notrufSettings.apiTokens.length > 0;
-            if (!hasApiTokens) {
-                alertUser('Kein API-Token konfiguriert. Bitte Admin kontaktieren.', 'error');
-                return;
-            }
-            const apiToken = notrufSettings.apiTokens[0].token;
+            // API-Token verwenden (fest codiert)
+            const apiToken = PUSHOVER_API_TOKEN;
 
             // Token korrekt - Passwort aus Firestore holen
             const userDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'user-config', userId));
