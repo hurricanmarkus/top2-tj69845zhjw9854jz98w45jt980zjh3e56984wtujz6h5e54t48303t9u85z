@@ -919,11 +919,19 @@ const refreshPushmailCenterPushoverUI = async (forceReload = false) => {
     apiTokenPreview.textContent = maskPushmailSecret(cfg?.apiToken);
     userKeyPreview.textContent = maskPushmailSecret(cfg?.userKey);
 
+    // Prüfen ob Daten vorhanden sind
+    const hasApiTokens = Array.isArray(notrufSettings?.apiTokens) && notrufSettings.apiTokens.length > 0;
+    const hasUserKey = Boolean(String(cfg?.userKey || '').trim());
+    const hasData = hasUserKey && hasApiTokens;
+
     if (cfg) {
         setPushmailPushoverStatus('Einstellungen geladen.', true);
     } else {
         setPushmailPushoverStatus('Noch keine Einstellungen gespeichert. Bitte User-Key setzen.', true);
     }
+
+    // Zustandslogik: LEER = ausgeklappt + blinkend, GEFÜLLT = eingeklappt
+    updatePushmailPushoverSettingsState(hasData);
 
     updatePushmailCenterAttentionState(false, cfg).catch((e) => {
         console.warn('PushmailCenter: Attention-State konnte nicht aktualisiert werden (UI Refresh).', e);
@@ -1298,6 +1306,55 @@ function ensurePushmailCenterListeners() {
             console.log('PushmailCenter: Auto-Settings Global geändert:', autoGlobalToggle.checked);
         });
         autoGlobalToggle.dataset.listenerAttached = 'true';
+    }
+
+    const settingsHeader = document.getElementById('pushmailPushoverSettingsHeader');
+    if (settingsHeader && !settingsHeader.dataset.listenerAttached) {
+        settingsHeader.addEventListener('click', () => {
+            togglePushmailPushoverSettings();
+        });
+        settingsHeader.dataset.listenerAttached = 'true';
+    }
+}
+
+function togglePushmailPushoverSettings() {
+    const content = document.getElementById('pushmailPushoverSettingsContent');
+    const chevron = document.getElementById('pushmailPushoverSettingsChevron');
+    
+    if (!content || !chevron) return;
+    
+    const isCollapsed = content.classList.contains('hidden');
+    
+    if (isCollapsed) {
+        content.classList.remove('hidden');
+        chevron.style.transform = 'rotate(0deg)';
+    } else {
+        content.classList.add('hidden');
+        chevron.style.transform = 'rotate(-90deg)';
+    }
+    
+    console.log('PushmailCenter: Pushover-Einstellungen', isCollapsed ? 'ausgeklappt' : 'eingeklappt');
+}
+
+function updatePushmailPushoverSettingsState(hasData) {
+    const content = document.getElementById('pushmailPushoverSettingsContent');
+    const chevron = document.getElementById('pushmailPushoverSettingsChevron');
+    const card = document.getElementById('pushmailPushoverSettingsCard');
+    
+    if (!content || !chevron || !card) return;
+    
+    if (hasData) {
+        // GEFÜLLT: Eingeklappt, kein Blinken
+        content.classList.add('hidden');
+        chevron.style.transform = 'rotate(-90deg)';
+        card.classList.remove('animate-pulse', 'ring-2', 'ring-red-500', 'ring-offset-2');
+        console.log('PushmailCenter: Pushover-Einstellungen GEFÜLLT → eingeklappt');
+    } else {
+        // LEER: Ausgeklappt + rot blinkend
+        content.classList.remove('hidden');
+        chevron.style.transform = 'rotate(0deg)';
+        card.classList.add('animate-pulse', 'ring-2', 'ring-red-500', 'ring-offset-2');
+        console.log('PushmailCenter: Pushover-Einstellungen LEER → ausgeklappt + blinkend');
     }
 }
 
