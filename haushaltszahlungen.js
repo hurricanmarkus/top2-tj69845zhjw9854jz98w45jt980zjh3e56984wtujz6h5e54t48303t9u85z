@@ -690,7 +690,8 @@ async function checkHaushaltszahlungenForNotifications() {
                     id: eintrag.id,
                     targetDate: gueltigAb,
                     zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
-                    gueltigAb: gueltigAb.toLocaleDateString('de-DE')
+                    gueltigAb: gueltigAb.toLocaleDateString('de-DE'),
+                    daysLeft: calculateDaysLeft(gueltigAb)
                 }
             );
         }
@@ -706,7 +707,8 @@ async function checkHaushaltszahlungenForNotifications() {
                     id: eintrag.id,
                     targetDate: gueltigBis,
                     zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
-                    gueltigBis: gueltigBis.toLocaleDateString('de-DE')
+                    gueltigBis: gueltigBis.toLocaleDateString('de-DE'),
+                    daysLeft: calculateDaysLeft(gueltigBis)
                 }
             );
         }
@@ -720,7 +722,8 @@ async function checkHaushaltszahlungenForNotifications() {
                 {
                     id: eintrag.id,
                     zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
-                    erinnerungsText: eintrag.erinnerung
+                    erinnerungsText: eintrag.erinnerung,
+                    daysLeft: calculateDaysLeft(new Date(eintrag.gueltigBis || eintrag.gueltigAb || Date.now()))
                 }
             );
         }
@@ -731,6 +734,16 @@ async function checkHaushaltszahlungenForNotifications() {
     } catch (error) {
         console.error('🔔 Haushaltszahlungen: Fehler beim Prüfen der Benachrichtigungen:', error);
     }
+}
+
+// Hilfsfunktion: Differenz in Tagen (>=0, gerundet)
+function calculateDaysLeft(dateObj) {
+    if (!dateObj) return null;
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const target = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+    const diffMs = target - startOfToday;
+    return Math.max(0, Math.round(diffMs / (1000 * 60 * 60 * 24)));
 }
 
 // ========================================

@@ -95,7 +95,7 @@ function renderNotificationsForProgram(programId, program, programSettings) {
                     ${hasDaysBeforeX ? `
                         <div>
                             <label class="text-xs text-gray-600 block mb-1">Tage vorher</label>
-                            <input type="number" value="${notifSettings.daysBeforeX || 0}" min="0" max="365"
+                            <input type="number" value="${notifSettings.daysBeforeX ?? 0}" min="0" max="365"
                                    class="w-full text-xs p-1 border rounded notification-days-input"
                                    data-program="${programId}" 
                                    data-notification="${notifId}">
@@ -139,11 +139,17 @@ function renderNotificationsForProgram(programId, program, programSettings) {
 // ========================================
 
 function attachNotificationSettingsListeners() {
+    // Auto-Speicher nach jeder Änderung, damit UI-Zustände nach Reload erhalten bleiben
+    const autoSave = async () => {
+        await savePushmailNotificationSettingsFromUI();
+    };
+
     // Global Toggle
     const globalToggle = document.getElementById('pushmailAutoGlobalEnabled');
     if (globalToggle) {
         globalToggle.addEventListener('change', () => {
             console.log('Pushmail: Global Toggle geändert:', globalToggle.checked);
+            autoSave();
         });
     }
 
@@ -152,6 +158,7 @@ function attachNotificationSettingsListeners() {
         toggle.addEventListener('change', (e) => {
             const programId = e.target.dataset.program;
             console.log('Pushmail: Programm Toggle geändert:', programId, e.target.checked);
+            autoSave();
         });
     });
 
@@ -161,6 +168,7 @@ function attachNotificationSettingsListeners() {
             const programId = e.target.dataset.program;
             const notifId = e.target.dataset.notification;
             console.log('Pushmail: Status geändert:', programId, notifId, e.target.value);
+            autoSave();
         });
     });
 
