@@ -1,6 +1,7 @@
 // // @ts-check 
 // Import aller benötigten Funktionen aus haupteingang.js
 import { alertUser, db, votesCollectionRef, currentUser, USERS, setButtonLoading, GUEST_MODE, navigate, cleanUrlParams } from './haupteingang.js';
+import { createPendingNotification } from './pushmail-notifications.js';
 import {
     addDoc,
     serverTimestamp,
@@ -1371,6 +1372,63 @@ export function listenForMyVotes(userId) {
         sortAndRenderAllVotes(allMyVotes);
     };
 
+    // Benachrichtigungen prüfen
+    async function checkTerminplanerForNotifications() {
+        if (!currentUser || !currentUser.uid) return;
+        
+        const umfragen = Array.from(myPollsMap.values());
+        
+        for (const umfrage of umfragen) {
+            const umfrageName = umfrage.title || 'Unbekannte Umfrage';
+            const ersteller = umfrage.createdBy || 'Unbekannt';
+            
+            // Umfrage zugewiesen (wenn ich im participantIds Array bin)
+            if (umfrage.participantIds && umfrage.participantIds.includes(currentUser.uid)) {
+                await createPendingNotification(
+                    currentUser.uid,
+                    'TERMINPLANER',
+                    'umfrage_zugewiesen',
+                    {
+                        id: umfrage.id,
+                        umfrageName,
+                        ersteller
+                    }
+                );
+            }
+            
+            // X Tage vor Ablauf
+            if (umfrage.deadline) {
+                const deadline = new Date(umfrage.deadline);
+                await createPendingNotification(
+                    currentUser.uid,
+                    'TERMINPLANER',
+                    'x_tage_vor_ablauf',
+                    {
+                        id: umfrage.id,
+                        targetDate: deadline,
+                        umfrageName,
+                        ablaufDatum: deadline.toLocaleDateString('de-DE')
+                    }
+                );
+            }
+            
+            // Termin feststeht (wenn finalDate gesetzt ist)
+            if (umfrage.finalDate) {
+                const finalDate = new Date(umfrage.finalDate);
+                await createPendingNotification(
+                    currentUser.uid,
+                    'TERMINPLANER',
+                    'termin_feststeht',
+                    {
+                        id: umfrage.id,
+                        umfrageName,
+                        termin: finalDate.toLocaleDateString('de-DE')
+                    }
+                );
+            }
+        }
+    }
+
     // Listener 1: Umfragen, die mir ZUGEWIESEN sind (im participantIds Array)
     const qAssigned = query(
         votesCollectionRef,
@@ -1388,6 +1446,7 @@ export function listenForMyVotes(userId) {
             }
         });
         combineAndRender();
+        checkTerminplanerForNotifications();
     }, (error) => {
         console.error("Fehler bei 'Mir zugewiesen'-Listener:", error);
     });

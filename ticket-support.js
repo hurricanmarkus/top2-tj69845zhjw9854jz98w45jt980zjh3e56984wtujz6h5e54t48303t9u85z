@@ -10,6 +10,7 @@ import {
     USERS,
     navigate
 } from './haupteingang.js';
+import { createPendingNotification } from './pushmail-notifications.js';
 
 import {
     collection,
@@ -237,6 +238,7 @@ export function listenForTickets() {
         console.log(`📊 ${Object.keys(TICKETS).length} Tickets geladen (nur eigene/zugewiesene)`);
         renderTickets();
         updateStats();
+        checkTicketsForNotifications();
     }, (error) => {
         console.error("❌ Fehler:", error);
     });
@@ -875,6 +877,52 @@ function updateStats() {
     document.getElementById('stat-paused').textContent = stats.paused;
     document.getElementById('stat-done').textContent = stats.done;
     document.getElementById('stat-assigned-to-me').textContent = stats.assignedToMe;
+}
+
+// ========================================
+// BENACHRICHTIGUNGEN PRÜFEN
+// ========================================
+async function checkTicketsForNotifications() {
+    if (!currentUser || !currentUser.uid) return;
+    
+    const tickets = Object.values(TICKETS);
+    
+    for (const ticket of tickets) {
+        const ticketTitel = ticket.title || 'Unbekanntes Ticket';
+        const ersteller = ticket.createdBy || 'Unbekannt';
+        const prioritaet = ticket.priority || 'normal';
+        
+        // Ticket zugewiesen (wenn mir zugewiesen)
+        if (ticket.assignedTo === currentUser.mode) {
+            await createPendingNotification(
+                currentUser.uid,
+                'TICKET_SUPPORT',
+                'ticket_zugewiesen',
+                {
+                    id: ticket.id,
+                    ticketTitel,
+                    ersteller,
+                    prioritaet
+                }
+            );
+        }
+        
+        // X Tage vor Fälligkeit
+        if (ticket.dueDate) {
+            const dueDate = new Date(ticket.dueDate);
+            await createPendingNotification(
+                currentUser.uid,
+                'TICKET_SUPPORT',
+                'x_tage_vor_faelligkeit',
+                {
+                    id: ticket.id,
+                    targetDate: dueDate,
+                    ticketTitel,
+                    faelligkeitsDatum: dueDate.toLocaleDateString('de-DE')
+                }
+            );
+        }
+    }
 }
 
 // ========================================
