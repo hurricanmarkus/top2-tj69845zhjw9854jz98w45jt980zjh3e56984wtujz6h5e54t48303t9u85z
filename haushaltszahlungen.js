@@ -652,6 +652,8 @@ function berechneStatus(eintrag) {
 async function checkHaushaltszahlungenForNotifications() {
     if (!currentUser || !currentUser.mode) return;
     
+    console.log('🔔 Haushaltszahlungen: Prüfe Benachrichtigungen für', Object.keys(HAUSHALTSZAHLUNGEN).length, 'Einträge');
+    
     const eintraege = Object.values(HAUSHALTSZAHLUNGEN);
     
     for (const eintrag of eintraege) {
@@ -659,6 +661,7 @@ async function checkHaushaltszahlungenForNotifications() {
         
         // Benachrichtigung bei Fehler-Status
         if (status === 'fehler') {
+            console.log('🔔 Haushaltszahlungen: Fehler erkannt bei', eintrag.zweck, ':', fehlerText);
             await createPendingNotification(
                 currentUser.mode,
                 'HAUSHALTSZAHLUNGEN',
