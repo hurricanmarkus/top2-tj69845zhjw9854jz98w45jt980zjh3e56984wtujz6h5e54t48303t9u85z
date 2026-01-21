@@ -324,7 +324,8 @@ export function getDefaultPushmailNotificationSettings() {
                 repeatDays: notif.defaultRepeatDays,
                 daysBeforeX: notif.defaultDaysBeforeX,
                 customTitle: notif.defaultTitle,
-                customMessage: notif.defaultMessage
+                customMessage: notif.defaultMessage,
+                pushOverEnabled: true
             };
         });
     });
@@ -403,7 +404,8 @@ function normalizePushmailSettings(raw) {
                 repeatDays: Number.isFinite(notifRaw.repeatDays) ? notifRaw.repeatDays : notifDefaults.repeatDays,
                 daysBeforeX: notifRaw.daysBeforeX !== undefined ? notifRaw.daysBeforeX : notifDefaults.daysBeforeX,
                 customTitle: notifRaw.customTitle || notifDefaults.customTitle,
-                customMessage: notifRaw.customMessage || notifDefaults.customMessage
+                customMessage: notifRaw.customMessage || notifDefaults.customMessage,
+                pushOverEnabled: notifRaw.pushOverEnabled !== false
             };
         });
     });
