@@ -456,6 +456,11 @@ service cloud.firestore {
     match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/pushmail_notifications/{notificationId} {
       allow read, write: if isAuthenticated();
     }
+    
+    // Quittierte Benachrichtigungen (Archiv, pro Benutzer)
+    match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/pushmail_acknowledged_notifications/{notificationId} {
+      allow read, write: if isAuthenticated();
+    }
 
     // ═══════════════════════════════════════════════════════════════
     // DEFAULT DENY (Alles andere verbieten)
