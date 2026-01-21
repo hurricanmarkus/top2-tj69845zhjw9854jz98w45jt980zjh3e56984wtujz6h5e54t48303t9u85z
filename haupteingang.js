@@ -868,7 +868,6 @@ const refreshPushmailCenterPushoverUI = async (forceReload = false) => {
     const userKeyPreview = document.getElementById('pushmailPushoverUserKeyPreview');
     const userKeyInput = document.getElementById('pushmailPushoverUserKeyInput');
     const saveBtn = document.getElementById('pushmailSavePushoverUserKeyButton');
-    const reloadBtn = document.getElementById('pushmailReloadPushoverConfigButton');
 
     if (!apiTokenPreview || !userKeyPreview) return;
 
@@ -877,14 +876,6 @@ const refreshPushmailCenterPushoverUI = async (forceReload = false) => {
 
     if (userKeyInput) userKeyInput.disabled = !(isLoggedIn && hasDb);
     if (saveBtn) saveBtn.disabled = !(isLoggedIn && hasDb);
-    if (reloadBtn) {
-        reloadBtn.disabled = !isLoggedIn;
-        if (!isLoggedIn) {
-            reloadBtn.classList.add('opacity-50', 'cursor-not-allowed');
-        } else {
-            reloadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-        }
-    }
 
     if (!isLoggedIn) {
         apiTokenPreview.textContent = '—';
@@ -1241,16 +1232,6 @@ function initializePushmailAutoSettingsArea() {
 }
 
 function ensurePushmailCenterListeners() {
-    const reloadBtn = document.getElementById('pushmailReloadPushoverConfigButton');
-    if (reloadBtn && !reloadBtn.dataset.listenerAttached) {
-        reloadBtn.addEventListener('click', async () => {
-            console.log('PushmailCenter: Aktualisieren geklickt');
-            await refreshPushmailCenterPushoverUI(true);
-            initializePushmailAutoSettingsArea();
-        });
-        reloadBtn.dataset.listenerAttached = 'true';
-    }
-
     const saveBtn = document.getElementById('pushmailSavePushoverUserKeyButton');
     if (saveBtn && !saveBtn.dataset.listenerAttached) {
         saveBtn.addEventListener('click', async () => {
