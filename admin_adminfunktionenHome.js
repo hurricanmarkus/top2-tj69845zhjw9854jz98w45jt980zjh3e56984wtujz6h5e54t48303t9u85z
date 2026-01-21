@@ -21,6 +21,7 @@ import { renderApprovalProcess } from './admin_genehmigungsprozess.js';
 import { renderProtocolHistory, logAdminAction } from './admin_protokollHistory.js';
 import { renderAdminRightsManagement } from './admin_rechteverwaltung.js'; // Pfad ggf. anpassen!
 import { renderPermanentDeleteModal } from './checklist.js';
+import { loadPushoverChangeRequests } from './admin_pushover_config.js';
 // --- (Der Rest deiner Importe bleibt, falls noch andere da waren) ---
 
 (function setupGlobalScrollRestore() {
@@ -160,6 +161,7 @@ export function renderMainFunctionsAdminArea() {
     const checklistTab = tabsContainer.querySelector('[data-target-card="card-main-checklist"]');
     let terminplanerTab = tabsContainer.querySelector('[data-target-card="card-main-terminplaner"]');
     let zahlungsTab = tabsContainer.querySelector('[data-target-card="card-main-zahlungsverwaltung"]');
+    let pushoverConfigTab = tabsContainer.querySelector('[data-target-card="card-main-pushover-config"]');
 
     // Sichtbarkeit basierend auf Rechten steuern
     if (pushTab) pushTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainPush) ? 'block' : 'none';
@@ -167,7 +169,8 @@ export function renderMainFunctionsAdminArea() {
     if (checklistTab) checklistTab.style.display = (isSysAdmin || effectiveAdminPerms.canUseMainChecklist) ? 'block' : 'none';
     
     const canSeeTerminplaner = isSysAdmin || effectiveAdminPerms.canUseMainTerminplaner;
-    const canSeeZahlungAdmin = isSysAdmin || effectiveAdminPerms.canUseMainZahlungsverwaltung; 
+    const canSeeZahlungAdmin = isSysAdmin || effectiveAdminPerms.canUseMainZahlungsverwaltung;
+    const canSeePushoverConfig = isSysAdmin || effectiveAdminPerms.canUseMainPushoverConfig; 
 
     // Terminplaner Tab erstellen falls nötig
     if (canSeeTerminplaner && !terminplanerTab) {
@@ -188,6 +191,16 @@ export function renderMainFunctionsAdminArea() {
         zahlungsTab = tabsContainer.querySelector('[data-target-card="card-main-zahlungsverwaltung"]');
     }
     if (zahlungsTab) zahlungsTab.style.display = canSeeZahlungAdmin ? 'block' : 'none';
+
+    // Pushover Config Tab erstellen falls nötig
+    if (canSeePushoverConfig && !pushoverConfigTab) {
+        tabsContainer.insertAdjacentHTML('beforeend', `
+            <button data-target-card="card-main-pushover-config"
+                    class="settings-tab-btn p-2 text-sm font-semibold rounded-md text-gray-600">Pushover Config</button>
+        `);
+        pushoverConfigTab = tabsContainer.querySelector('[data-target-card="card-main-pushover-config"]');
+    }
+    if (pushoverConfigTab) pushoverConfigTab.style.display = canSeePushoverConfig ? 'block' : 'none';
 
 
     // --- KARTEN INHALTE RENDERN ---
@@ -263,7 +276,32 @@ export function renderMainFunctionsAdminArea() {
         document.getElementById('btn-admin-zv-delete').addEventListener('click', () => executeAdminZVAction('delete'));
     }
 
-    // 2. Terminplaner Karte neu zeichnen
+    // 2. Pushover Config Karte erstellen
+    const existingPushoverConfigCard = document.getElementById('card-main-pushover-config');
+    if (existingPushoverConfigCard) existingPushoverConfigCard.remove();
+
+    if (contentArea && canSeePushoverConfig) {
+        const card = document.createElement('div');
+        card.id = 'card-main-pushover-config';
+        card.className = 'main-functions-card hidden';
+        
+        card.innerHTML = `
+            <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <h3 class="text-lg font-bold text-gray-800 mb-3">Pushover User-Key Änderungsanfragen</h3>
+                <p class="text-sm text-gray-600 mb-4">Benutzer können Änderungen ihres User-Keys beantragen. Hier kannst du diese Anfragen genehmigen oder ablehnen.</p>
+                
+                <div id="pushover-change-requests-list" class="space-y-3">
+                    <p class="text-center text-gray-400 italic">Lade Anfragen...</p>
+                </div>
+            </div>
+        `;
+        contentArea.appendChild(card);
+        
+        // Anfragen laden
+        loadPushoverChangeRequests();
+    }
+
+    // 3. Terminplaner Karte neu zeichnen
     const existingCard = document.getElementById('card-main-terminplaner');
     if (existingCard) existingCard.remove();
     

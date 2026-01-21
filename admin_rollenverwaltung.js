@@ -445,6 +445,7 @@ export function renderRoleManagement() {
                                             </div>
 
                                             <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainZahlungsverwaltung"> <span>-> Zahlungsverwaltung</span></label>
+                                            <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainPushoverConfig"> <span>-> Pushover Config</span></label>
                                             <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainHaushaltszahlungen"> <span>-> Haushaltszahlungen</span></label>
                                             <label class="flex items-center gap-2"><input type="checkbox" class="new-admin-perm-cb" data-perm="canUseMainGeschenkemanagement"> <span>-> Geschenkemanagement</span></label>
 

@@ -924,6 +924,26 @@ const refreshPushmailCenterPushoverUI = async (forceReload = false) => {
     const hasUserKey = Boolean(String(cfg?.userKey || '').trim());
     const hasData = hasUserKey && hasApiTokens;
 
+    // UI-Zustand basierend auf User-Key Existenz
+    const requestChangeBtn = document.getElementById('pushmailRequestUserKeyChangeButton');
+    if (hasUserKey) {
+        // User-Key vorhanden: Input sperren, Save-Button ausblenden, Request-Button einblenden
+        if (userKeyInput) {
+            userKeyInput.disabled = true;
+            userKeyInput.placeholder = 'User-Key bereits gesetzt (gesperrt)';
+        }
+        if (saveBtn) saveBtn.classList.add('hidden');
+        if (requestChangeBtn) requestChangeBtn.classList.remove('hidden');
+    } else {
+        // Kein User-Key: Input freigeben, Save-Button einblenden, Request-Button ausblenden
+        if (userKeyInput) {
+            userKeyInput.disabled = false;
+            userKeyInput.placeholder = 'User-Key eingeben (wird nicht angezeigt)';
+        }
+        if (saveBtn) saveBtn.classList.remove('hidden');
+        if (requestChangeBtn) requestChangeBtn.classList.add('hidden');
+    }
+
     if (cfg) {
         setPushmailPushoverStatus('Einstellungen geladen.', true);
     } else {
@@ -978,6 +998,49 @@ const savePushmailCenterUserKey = async () => {
         alertUser('Fehler beim Speichern. Bitte später erneut versuchen.', 'error');
     } finally {
         saveBtn.disabled = false;
+    }
+};
+
+const requestPushmailUserKeyChange = async () => {
+    if (!currentUser?.mode || currentUser.mode === GUEST_MODE) {
+        alertUser('Bitte anmelden.', 'error');
+        return;
+    }
+
+    if (!db) {
+        alertUser('Bitte warten... (Firebase lädt noch)', 'error');
+        return;
+    }
+
+    // Sicherheitsfrage
+    const confirmed = confirm('Sicher Änderung beantragen?\n\nDeine Anfrage wird an einen Administrator gesendet. Nach Genehmigung kannst du einen neuen User-Key setzen.');
+    if (!confirmed) {
+        console.log('PushmailCenter: Änderungsanfrage abgebrochen');
+        return;
+    }
+
+    const userId = currentUser.mode;
+    const requestBtn = document.getElementById('pushmailRequestUserKeyChangeButton');
+    if (requestBtn) requestBtn.disabled = true;
+
+    try {
+        const requestsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'pushover_userkey_change_requests');
+        
+        await addDoc(requestsCollection, {
+            userId,
+            userName: currentUser.name || userId,
+            requestedAt: serverTimestamp(),
+            status: 'pending',
+            requestedBy: userId
+        });
+
+        alertUser('Änderungsanfrage erfolgreich gesendet. Ein Administrator wird deine Anfrage prüfen.', 'success');
+        console.log('PushmailCenter: Änderungsanfrage erstellt für:', userId);
+    } catch (e) {
+        console.error('PushmailCenter: Fehler beim Erstellen der Änderungsanfrage:', e);
+        alertUser('Fehler beim Senden der Anfrage. Bitte später erneut versuchen.', 'error');
+    } finally {
+        if (requestBtn) requestBtn.disabled = false;
     }
 };
 
@@ -1314,6 +1377,14 @@ function ensurePushmailCenterListeners() {
             togglePushmailPushoverSettings();
         });
         settingsHeader.dataset.listenerAttached = 'true';
+    }
+
+    const requestChangeBtn = document.getElementById('pushmailRequestUserKeyChangeButton');
+    if (requestChangeBtn && !requestChangeBtn.dataset.listenerAttached) {
+        requestChangeBtn.addEventListener('click', async () => {
+            await requestPushmailUserKeyChange();
+        });
+        requestChangeBtn.dataset.listenerAttached = 'true';
     }
 }
 

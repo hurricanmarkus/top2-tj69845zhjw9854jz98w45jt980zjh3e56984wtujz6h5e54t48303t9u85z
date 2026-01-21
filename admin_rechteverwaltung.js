@@ -58,7 +58,7 @@ export function setupPermissionDependencies(container) {
     // HIER WIRD DIE FUNKTION JETZT AUFGERUFEN:
     // ---
 
-    // 1. Logik für ADMIN RECHTE (Hauptmenü -> Push, Eingang, Checkliste, TERMINPLANER, ZAHLUNGSVERWALTUNG)
+    // 1. Logik für ADMIN RECHTE (Hauptmenü -> Push, Eingang, Checkliste, TERMINPLANER, ZAHLUNGSVERWALTUNG, PUSHOVER CONFIG)
     setupToggleLogic(
         '[data-perm="canSeeMainFunctions"]', // Hauptschalter
         [ // Unter-Schalter
@@ -66,7 +66,8 @@ export function setupPermissionDependencies(container) {
             '[data-perm="canUseMainEntrance"]',
             '[data-perm="canUseMainChecklist"]',
             '[data-perm="canUseMainTerminplaner"]',
-            '[data-perm="canUseMainZahlungsverwaltung"]' // <-- NEU
+            '[data-perm="canUseMainZahlungsverwaltung"]',
+            '[data-perm="canUseMainPushoverConfig"]'
         ]
     );
 

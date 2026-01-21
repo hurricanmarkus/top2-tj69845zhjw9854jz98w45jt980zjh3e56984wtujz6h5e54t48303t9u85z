@@ -914,8 +914,12 @@
                             <div class="text-sm font-semibold text-blue-800">User-Key setzen / ändern</div>
                             <input type="password" id="pushmailPushoverUserKeyInput" class="w-full p-2 border rounded-lg"
                                 placeholder="User-Key eingeben (wird nicht angezeigt)">
-                            <button id="pushmailSavePushoverUserKeyButton"
-                                class="w-full py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition">User-Key speichern</button>
+                            <div class="flex gap-2">
+                                <button id="pushmailSavePushoverUserKeyButton"
+                                    class="flex-1 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition">User-Key speichern</button>
+                                <button id="pushmailRequestUserKeyChangeButton"
+                                    class="flex-1 py-2 bg-orange-600 text-white text-sm font-semibold rounded-lg hover:bg-orange-700 transition hidden">Änderung beantragen</button>
+                            </div>
                         </div>
 
                         <div class="border-t pt-3">
