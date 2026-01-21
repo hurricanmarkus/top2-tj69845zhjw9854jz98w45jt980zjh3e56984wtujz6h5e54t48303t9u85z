@@ -1,4 +1,4 @@
-// // @ts-check
+ttiert// // @ts-check
 // ========================================
 // HAUSHALTSZAHLUNGEN SYSTEM
 // Digitalisierung der Excel-Haushaltsberechnung

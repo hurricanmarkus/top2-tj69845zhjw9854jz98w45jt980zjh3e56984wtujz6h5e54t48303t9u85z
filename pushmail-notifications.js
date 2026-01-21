@@ -617,9 +617,11 @@ export async function renderPendingNotifications() {
     document.querySelectorAll('.acknowledge-notification-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             const notifId = e.target.dataset.notificationId;
+            setProcessingOverlay(true, 'Quittiere Benachrichtigung...');
             await acknowledgeNotification(userId, notifId);
             await renderPendingNotifications();
             alertUser('Benachrichtigung quittiert.', 'success');
+            setProcessingOverlay(false);
         });
     });
 }
@@ -747,7 +749,7 @@ export function initializePendingNotificationsModal() {
     const modal = document.getElementById('pendingNotificationsModal');
     const closeBtn = document.getElementById('closePendingNotificationsModal');
     const acknowledgeSelectedBtn = document.getElementById('acknowledgeSelectedBtn');
-    const acknowledgeAllBtn = document.getElementById('acknowledgeAllBtn');
+    const markAllBtn = document.getElementById('markAllNotificationsBtn');
 
     if (closeBtn) {
         closeBtn.addEventListener('click', () => {
@@ -781,21 +783,58 @@ export function initializePendingNotificationsModal() {
         });
     }
 
-    if (acknowledgeAllBtn) {
-        acknowledgeAllBtn.addEventListener('click', async () => {
+    // Alle markieren mit 3s Cooldown
+    if (markAllBtn) {
+        let markCooldown = false;
+        markAllBtn.addEventListener('click', () => {
+            if (markCooldown) return;
             const checkboxes = document.querySelectorAll('.acknowledge-checkbox');
-            const notificationIds = Array.from(checkboxes).map(cb => cb.dataset.notificationId);
-
-            if (notificationIds.length === 0) return;
-
-            const success = await acknowledgeMultipleNotifications(currentUser.mode, notificationIds);
-            if (success) {
-                alertUser('Alle Benachrichtigungen quittiert.', 'success');
-                modal.classList.add('hidden');
-                modal.classList.remove('flex');
-            }
+            checkboxes.forEach(cb => cb.checked = true);
+            markCooldown = true;
+            markAllBtn.disabled = true;
+            markAllBtn.classList.add('opacity-60', 'cursor-not-allowed');
+            setTimeout(() => {
+                markCooldown = false;
+                markAllBtn.disabled = false;
+                markAllBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+            }, 3000);
         });
     }
+}
+
+// ========================================
+// PROCESSING OVERLAY
+// ========================================
+function ensureProcessingOverlay() {
+    let overlay = document.getElementById('pushmailProcessingOverlay');
+    if (overlay) return overlay;
+
+    overlay = document.createElement('div');
+    overlay.id = 'pushmailProcessingOverlay';
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(0,0,0,0.4)';
+    overlay.style.display = 'none';
+    overlay.style.zIndex = '9999';
+    overlay.innerHTML = `
+        <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+            <div style="min-width:240px;padding:16px;border-radius:12px;background:#111827;color:white;box-shadow:0 10px 40px rgba(0,0,0,0.35);text-align:center;">
+                <div id="pushmailProcessingText" style="margin-bottom:12px;font-weight:700;">Verarbeite...</div>
+                <div style="width:100%;height:6px;border-radius:999px;background:rgba(255,255,255,0.15);overflow:hidden;">
+                    <div class="animate-pulse" style="width:50%;height:100%;background:#10b981;border-radius:999px;"></div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    return overlay;
+}
+
+function setProcessingOverlay(visible, text = 'Verarbeite...') {
+    const overlay = ensureProcessingOverlay();
+    const label = overlay.querySelector('#pushmailProcessingText');
+    if (label) label.textContent = text;
+    overlay.style.display = visible ? 'block' : 'none';
 }
 
 // ========================================
