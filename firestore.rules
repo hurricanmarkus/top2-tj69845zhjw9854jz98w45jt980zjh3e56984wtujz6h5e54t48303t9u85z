@@ -449,12 +449,12 @@ service cloud.firestore {
     
     // Pushmail-Einstellungen (pro Benutzer)
     match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/settings/{settingId} {
-      allow read, write: if hasAppUserIdClaim() && appUserId() == userId;
+      allow read, write: if isAuthenticated();
     }
     
     // Ausstehende Benachrichtigungen (pro Benutzer)
     match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/pushmail_notifications/{notificationId} {
-      allow read, write: if hasAppUserIdClaim() && appUserId() == userId;
+      allow read, write: if isAuthenticated();
     }
 
     // ═══════════════════════════════════════════════════════════════
