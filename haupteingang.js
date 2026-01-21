@@ -218,6 +218,10 @@ function startUserDependentListeners() {
     pushoverRecipientGrantCache = {};
     pushoverSelectedRecipientId = null;
 
+    lastPushmailCenterNeedsUserKey = false;
+    lastPushmailCenterNeedsApiTokens = false;
+    resetPushmailOpenAlerts();
+
     stopAllUserDependentListeners(false);
 
     updatePushmailCenterAttentionState(false).catch((e) => {
@@ -709,10 +713,61 @@ function maskPushmailSecret(value) {
 
 let lastPushmailCenterAttentionState = null;
 
-function setPushmailCenterAttentionUI(needsUserKey, needsApiTokens) {
-    const stateKey = `${needsUserKey ? '1' : '0'}-${needsApiTokens ? '1' : '0'}`;
+let pushmailOpenAlerts = {};
+let lastPushmailCenterNeedsUserKey = false;
+let lastPushmailCenterNeedsApiTokens = false;
+
+function getPushmailOpenAlertCount() {
+    return Object.values(pushmailOpenAlerts).reduce((sum, v) => sum + (Number(v) || 0), 0);
+}
+
+function getPushmailHasOpenAlerts() {
+    return Object.values(pushmailOpenAlerts).some(v => (Number(v) || 0) > 0);
+}
+
+function applyPushmailCenterAttentionUIFromCache() {
+    const isLoggedIn = Boolean(currentUser?.mode && currentUser.mode !== GUEST_MODE);
+    const hasDb = Boolean(pushoverProgramsCollectionRef);
+    if (!isLoggedIn || !hasDb) {
+        setPushmailCenterAttentionUI(false, false, false);
+        return;
+    }
+
+    const hasOpenAlerts = getPushmailHasOpenAlerts();
+    setPushmailCenterAttentionUI(lastPushmailCenterNeedsUserKey, lastPushmailCenterNeedsApiTokens, hasOpenAlerts);
+}
+
+function resetPushmailOpenAlerts() {
+    pushmailOpenAlerts = {};
+    applyPushmailCenterAttentionUIFromCache();
+}
+
+export function setPushmailOpenAlert(sourceKey, alertValue) {
+    if (!sourceKey) return;
+
+    const isLoggedIn = Boolean(currentUser?.mode && currentUser.mode !== GUEST_MODE);
+    if (!isLoggedIn) return;
+
+    const normalizedValue = typeof alertValue === 'number'
+        ? alertValue
+        : (Boolean(alertValue) ? 1 : 0);
+    const prevValue = Number(pushmailOpenAlerts[sourceKey] || 0);
+    if (prevValue === normalizedValue) return;
+
+    if (normalizedValue > 0) {
+        pushmailOpenAlerts[sourceKey] = normalizedValue;
+    } else {
+        delete pushmailOpenAlerts[sourceKey];
+    }
+
+    console.log('PushmailCenter: Open-Alerts', { sourceKey, value: normalizedValue, total: getPushmailOpenAlertCount() });
+    applyPushmailCenterAttentionUIFromCache();
+}
+
+function setPushmailCenterAttentionUI(needsUserKey, needsApiTokens, hasOpenAlerts) {
+    const stateKey = `${needsUserKey ? '1' : '0'}-${needsApiTokens ? '1' : '0'}-${hasOpenAlerts ? '1' : '0'}`;
     if (stateKey !== lastPushmailCenterAttentionState) {
-        console.log('PushmailCenter: Attention-State', { needsUserKey, needsApiTokens });
+        console.log('PushmailCenter: Attention-State', { needsUserKey, needsApiTokens, hasOpenAlerts });
         lastPushmailCenterAttentionState = stateKey;
     }
 
@@ -720,7 +775,7 @@ function setPushmailCenterAttentionUI(needsUserKey, needsApiTokens) {
     const userKeyCard = document.getElementById('pushmailReloadPushoverConfigButton')?.closest('.card');
     const tokenCard = document.getElementById('pushmailOpenApiTokenBookButton')?.closest('.card');
 
-    const needsBarAttention = Boolean(needsUserKey || needsApiTokens);
+    const needsBarAttention = Boolean(needsUserKey || needsApiTokens || hasOpenAlerts);
 
     if (bar) {
         bar.classList.toggle('pushmail-siren', needsBarAttention);
@@ -751,18 +806,23 @@ async function updatePushmailCenterAttentionState(forceReload = false, cfgOverri
     const hasDb = Boolean(pushoverProgramsCollectionRef);
 
     if (!isLoggedIn || !hasDb) {
-        setPushmailCenterAttentionUI(false, false);
+        lastPushmailCenterNeedsUserKey = false;
+        lastPushmailCenterNeedsApiTokens = false;
+        setPushmailCenterAttentionUI(false, false, false);
         return;
     }
 
     const hasApiTokens = Array.isArray(notrufSettings?.apiTokens) && notrufSettings.apiTokens.length > 0;
+    const hasOpenAlerts = getPushmailHasOpenAlerts();
 
     const cfg = typeof cfgOverride !== 'undefined'
         ? cfgOverride
         : await loadPushmailPushoverProgramConfig(currentUser.mode, forceReload);
     const hasUserKey = Boolean(String(cfg?.userKey || '').trim());
 
-    setPushmailCenterAttentionUI(!hasUserKey, !hasApiTokens);
+    lastPushmailCenterNeedsUserKey = !hasUserKey;
+    lastPushmailCenterNeedsApiTokens = !hasApiTokens;
+    setPushmailCenterAttentionUI(lastPushmailCenterNeedsUserKey, lastPushmailCenterNeedsApiTokens, hasOpenAlerts);
 }
 
 function setPushmailPushoverStatus(msg, show = true) {
