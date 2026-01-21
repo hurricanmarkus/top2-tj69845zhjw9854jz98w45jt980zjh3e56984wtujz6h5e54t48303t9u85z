@@ -453,7 +453,7 @@ service cloud.firestore {
     }
     
     // Ausstehende Benachrichtigungen (pro Benutzer)
-    match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/notifications/pending/{notificationId} {
+    match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/pushmail_notifications/{notificationId} {
       allow read, write: if hasAppUserIdClaim() && appUserId() == userId;
     }
 
