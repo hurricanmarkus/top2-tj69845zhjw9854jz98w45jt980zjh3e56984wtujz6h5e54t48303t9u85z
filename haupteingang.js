@@ -1088,22 +1088,12 @@ function renderPushmailAutoPrograms(programs) {
         return;
     }
 
-    const repeatOptions = [
-        { value: 0, label: 'Keine' },
-        { value: 5, label: '5 Minuten' },
-        { value: 10, label: '10 Minuten' },
-        { value: 15, label: '15 Minuten' },
-        { value: 30, label: '30 Minuten' },
-        { value: 60, label: '60 Minuten' }
-    ];
-
     container.innerHTML = programs.map(p => {
         const domId = toPushmailAutoDomId(p.id);
-        const repeatHtml = repeatOptions.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
 
         return `
-            <div class="p-3 rounded-lg bg-gray-50 border border-gray-200">
-                <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200 border-l-4 ${p.border}">
+                <div class="flex items-center gap-3">
                     <span class="font-semibold ${p.text}">${p.title}</span>
                     <select id="pushmailAutoState_${domId}" class="p-2 border rounded-lg bg-white text-sm">
                         <option value="active">aktiv</option>
@@ -1111,17 +1101,16 @@ function renderPushmailAutoPrograms(programs) {
                         <option value="disabled">deaktiviert</option>
                     </select>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
-                    <div>
-                        <div class="block text-xs font-semibold text-gray-700 mb-1">Uhrzeit</div>
-                        <input type="time" id="pushmailAutoTime_${domId}" class="w-full p-2 border rounded-lg bg-white text-sm">
-                    </div>
-                    <div>
-                        <div class="block text-xs font-semibold text-gray-700 mb-1">Wiederholung</div>
-                        <select id="pushmailAutoRepeat_${domId}" class="w-full p-2 border rounded-lg bg-white text-sm">
-                            ${repeatHtml}
-                        </select>
-                    </div>
+                <div class="flex items-center gap-2 text-sm text-gray-600">
+                    <input type="time" id="pushmailAutoTime_${domId}" class="p-1 border rounded bg-white text-sm w-20">
+                    <select id="pushmailAutoRepeat_${domId}" class="p-1 border rounded bg-white text-sm">
+                        <option value="0">Keine</option>
+                        <option value="5">5min</option>
+                        <option value="10">10min</option>
+                        <option value="15">15min</option>
+                        <option value="30">30min</option>
+                        <option value="60">60min</option>
+                    </select>
                 </div>
             </div>
         `;
@@ -1312,32 +1301,9 @@ function ensurePushmailCenterListeners() {
     }
 }
 
-function renderPushmailCenterProgramList() {
-    const list = document.getElementById('pushmailCenterProgramList');
-    if (!list) return;
-
-    console.log('PushmailCenter: Rendere Programmliste');
-
-    const visiblePrograms = getVisiblePushmailCenterPrograms();
-
-    if (visiblePrograms.length === 0) {
-        list.innerHTML = '<p class="text-sm text-center text-gray-400">Keine Programme verfügbar.</p>';
-        return;
-    }
-
-    list.innerHTML = visiblePrograms.map(p => {
-        return `
-            <div class="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200 border-l-4 ${p.border}">
-                <span class="font-semibold ${p.text}">${p.title}</span>
-            </div>
-        `;
-    }).join('');
-}
-
 function initializePushmailCenterView() {
     console.log('PushmailCenter: Initialisierung startet');
     ensurePushmailCenterListeners();
-    renderPushmailCenterProgramList();
     initializePushmailAutoSettingsArea();
     refreshPushmailCenterPushoverUI();
     renderPendingNotifications();
