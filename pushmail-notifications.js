@@ -18,6 +18,7 @@ export const NOTIFICATION_DEFINITIONS = {
         color: "cyan",
         borderClass: "border-cyan-500",
         textClass: "text-cyan-600",
+        requiredPermission: null,
         notifications: {
             umfrage_zugewiesen: {
                 label: "Umfrage zugewiesen",
@@ -67,6 +68,7 @@ export const NOTIFICATION_DEFINITIONS = {
         color: "emerald",
         borderClass: "border-emerald-600",
         textClass: "text-emerald-700",
+        requiredPermission: "ZAHLUNGSVERWALTUNG",
         notifications: {
             teilungsanfrage_eingehend: {
                 label: "Eingehende Teilungsanfrage",
@@ -96,6 +98,7 @@ export const NOTIFICATION_DEFINITIONS = {
         color: "purple",
         borderClass: "border-purple-600",
         textClass: "text-purple-700",
+        requiredPermission: "TICKET_SUPPORT",
         notifications: {
             ticket_zugewiesen: {
                 label: "Neues Ticket zugewiesen",
@@ -125,6 +128,7 @@ export const NOTIFICATION_DEFINITIONS = {
         color: "emerald",
         borderClass: "border-emerald-600",
         textClass: "text-emerald-700",
+        requiredPermission: "WERTGUTHABEN",
         notifications: {
             x_tage_vor_einloesefrist: {
                 label: "X Tage vor Einlösefrist",
@@ -186,6 +190,7 @@ export const NOTIFICATION_DEFINITIONS = {
         color: "yellow",
         borderClass: "border-yellow-600",
         textClass: "text-yellow-700",
+        requiredPermission: "LIZENZEN",
         notifications: {
             x_tage_vor_ablauf: {
                 label: "X Tage vor Ablauftag",
@@ -205,6 +210,7 @@ export const NOTIFICATION_DEFINITIONS = {
         color: "indigo",
         borderClass: "border-indigo-600",
         textClass: "text-indigo-700",
+        requiredPermission: "VERTRAGSVERWALTUNG",
         notifications: {
             x_tage_vor_vertragsbeginn: {
                 label: "X Tage vor Vertragsbeginn",
@@ -254,6 +260,7 @@ export const NOTIFICATION_DEFINITIONS = {
         color: "cyan",
         borderClass: "border-cyan-600",
         textClass: "text-cyan-700",
+        requiredPermission: "HAUSHALTSZAHLUNGEN",
         notifications: {
             status_nicht_okay: {
                 label: "Status nicht okay",

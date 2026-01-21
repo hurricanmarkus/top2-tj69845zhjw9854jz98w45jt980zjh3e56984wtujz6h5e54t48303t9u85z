@@ -32,12 +32,23 @@ export async function renderPushmailNotificationSettingsUI() {
         globalToggle.checked = settings.globalEnabled;
     }
 
+    // Berechtigungen des aktuellen Users
+    const userPermissions = currentUser.permissions || [];
+    const isSystemAdmin = currentUser.role === 'SYSTEMADMIN';
+
     // Programme rendern
     const html = Object.keys(NOTIFICATION_DEFINITIONS).map(programId => {
         const program = NOTIFICATION_DEFINITIONS[programId];
         const programSettings = settings.programs[programId];
 
         if (!programSettings) return '';
+
+        // BERECHTIGUNGSPRÜFUNG: Nur anzeigen wenn Berechtigung vorhanden
+        const requiredPerm = program.requiredPermission;
+        if (requiredPerm && !isSystemAdmin && !userPermissions.includes(requiredPerm)) {
+            console.log('Pushmail: Berechtigung fehlt für Programm:', programId, requiredPerm);
+            return '';
+        }
 
         return `
             <div class="card bg-white p-4 rounded-xl shadow-lg border-l-4 ${program.borderClass}">
