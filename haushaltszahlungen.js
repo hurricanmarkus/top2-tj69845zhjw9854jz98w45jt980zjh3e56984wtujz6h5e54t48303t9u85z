@@ -14,6 +14,7 @@ import {
     appId
 } from './haupteingang.js';
 import { saveUserSetting, getUserSetting } from './log-InOut.js';
+import { createPendingNotification } from './pushmail-notifications.js';
 
 import {
     collection,
@@ -572,6 +573,7 @@ export function listenForHaushaltszahlungen() {
         
         renderDashboard();
         renderHaushaltszahlungenTable();
+        checkHaushaltszahlungenForNotifications();
     }, (error) => {
         console.error("❌ FEHLER beim Laden der Haushaltszahlungen:", error);
         console.error("   Error Code:", error.code);
@@ -642,6 +644,80 @@ function berechneStatus(eintrag) {
         return { status: 'n-aktiv-vergangen', fehlerText: null };
     }
     return { status: 'aktiv', fehlerText: null };
+}
+
+// ========================================
+// BENACHRICHTIGUNGEN PRÜFEN
+// ========================================
+async function checkHaushaltszahlungenForNotifications() {
+    if (!currentUser || !currentUser.uid) return;
+    
+    const eintraege = Object.values(HAUSHALTSZAHLUNGEN);
+    
+    for (const eintrag of eintraege) {
+        const { status, fehlerText } = berechneStatus(eintrag);
+        
+        // Benachrichtigung bei Fehler-Status
+        if (status === 'fehler') {
+            await createPendingNotification(
+                currentUser.uid,
+                'HAUSHALTSZAHLUNGEN',
+                'status_nicht_okay',
+                {
+                    id: eintrag.id,
+                    problem: fehlerText || 'Unbekannter Fehler',
+                    details: `${eintrag.zweck || 'Unbekannt'} - ${eintrag.organisation || 'Unbekannt'}`,
+                    zahlungName: eintrag.zweck || 'Unbekannte Zahlung'
+                }
+            );
+        }
+        
+        // Benachrichtigung X Tage vor Gültig AB
+        if (eintrag.gueltigAb) {
+            const gueltigAb = new Date(eintrag.gueltigAb);
+            await createPendingNotification(
+                currentUser.uid,
+                'HAUSHALTSZAHLUNGEN',
+                'x_tage_vor_gueltig_ab',
+                {
+                    id: eintrag.id,
+                    targetDate: gueltigAb,
+                    zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
+                    gueltigAb: gueltigAb.toLocaleDateString('de-DE')
+                }
+            );
+        }
+        
+        // Benachrichtigung X Tage vor Gültig BIS
+        if (eintrag.gueltigBis) {
+            const gueltigBis = new Date(eintrag.gueltigBis);
+            await createPendingNotification(
+                currentUser.uid,
+                'HAUSHALTSZAHLUNGEN',
+                'x_tage_vor_gueltig_bis',
+                {
+                    id: eintrag.id,
+                    targetDate: gueltigBis,
+                    zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
+                    gueltigBis: gueltigBis.toLocaleDateString('de-DE')
+                }
+            );
+        }
+        
+        // Benachrichtigung für Erinnerung
+        if (eintrag.erinnerung) {
+            await createPendingNotification(
+                currentUser.uid,
+                'HAUSHALTSZAHLUNGEN',
+                'x_tage_vor_erinnerung',
+                {
+                    id: eintrag.id,
+                    zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
+                    erinnerungsText: eintrag.erinnerung
+                }
+            );
+        }
+    }
 }
 
 // ========================================

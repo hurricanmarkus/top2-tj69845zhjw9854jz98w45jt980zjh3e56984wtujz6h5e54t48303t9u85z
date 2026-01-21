@@ -12,6 +12,7 @@ import {
     appId
 } from './haupteingang.js';
 import { saveUserSetting, getUserSetting } from './log-InOut.js';
+import { createPendingNotification } from './pushmail-notifications.js';
 
 import {
     collection,
@@ -1529,9 +1530,91 @@ export function listenForVertraege() {
         renderVertraegeTable();
         updateStatistics();
         renderKuendigungsWarnungen();
+        checkVertraegeForNotifications();
     }, (error) => {
         console.error("Fehler beim Laden der Verträge:", error);
     });
+}
+
+// ========================================
+// BENACHRICHTIGUNGEN PRÜFEN
+// ========================================
+async function checkVertraegeForNotifications() {
+    if (!currentUser || !currentUser.uid) return;
+    
+    const vertraege = Object.values(VERTRAEGE);
+    
+    for (const vertrag of vertraege) {
+        const vertragsName = vertrag.name || 'Unbekannter Vertrag';
+        
+        // X Tage vor Vertragsbeginn
+        if (vertrag.beginn) {
+            const beginn = new Date(vertrag.beginn);
+            await createPendingNotification(
+                currentUser.uid,
+                'VERTRAGSVERWALTUNG',
+                'x_tage_vor_vertragsbeginn',
+                {
+                    id: vertrag.id,
+                    targetDate: beginn,
+                    vertragsName,
+                    beginn: beginn.toLocaleDateString('de-DE'),
+                    anbieter: vertrag.anbieter || 'Unbekannt'
+                }
+            );
+        }
+        
+        // X Tage vor Vertragsende
+        if (vertrag.ende) {
+            const ende = new Date(vertrag.ende);
+            await createPendingNotification(
+                currentUser.uid,
+                'VERTRAGSVERWALTUNG',
+                'x_tage_vor_vertragsende',
+                {
+                    id: vertrag.id,
+                    targetDate: ende,
+                    vertragsName,
+                    ende: ende.toLocaleDateString('de-DE')
+                }
+            );
+        }
+        
+        // X Tage vor Kündigungsdatum
+        if (vertrag.kuendigungsfrist && vertrag.ende) {
+            const ende = new Date(vertrag.ende);
+            const kuendigungsFrist = parseInt(vertrag.kuendigungsfrist) || 0;
+            const kuendigungsDatum = new Date(ende);
+            kuendigungsDatum.setDate(kuendigungsDatum.getDate() - kuendigungsFrist);
+            
+            await createPendingNotification(
+                currentUser.uid,
+                'VERTRAGSVERWALTUNG',
+                'x_tage_vor_kuendigung',
+                {
+                    id: vertrag.id,
+                    targetDate: kuendigungsDatum,
+                    vertragsName,
+                    kuendigungsDatum: kuendigungsDatum.toLocaleDateString('de-DE'),
+                    kuendigungsFrist: kuendigungsFrist
+                }
+            );
+        }
+        
+        // X Tage vor Erinnerung
+        if (vertrag.erinnerung) {
+            await createPendingNotification(
+                currentUser.uid,
+                'VERTRAGSVERWALTUNG',
+                'x_tage_vor_erinnerung',
+                {
+                    id: vertrag.id,
+                    vertragsName,
+                    erinnerungsText: vertrag.erinnerung
+                }
+            );
+        }
+    }
 }
 
 // ========================================

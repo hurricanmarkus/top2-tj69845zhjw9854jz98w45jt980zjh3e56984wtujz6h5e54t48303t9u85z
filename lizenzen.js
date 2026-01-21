@@ -1,4 +1,5 @@
 import { alertUser, db, currentUser, USERS, appId } from './haupteingang.js';
+import { createPendingNotification } from './pushmail-notifications.js';
 
 import {
     collection,
@@ -490,6 +491,7 @@ export function listenForLizenzen() {
             renderLizenzenTable();
             updateLizenzenStats();
             renderLizenzenTrashList();
+            checkLizenzenForNotifications();
         }, (error) => {
             console.error("Lizenzen: Fehler beim Laden:", error);
             alertUser("Fehler beim Laden der Lizenzen. Bitte Firestore-Regeln prüfen.", 'error');
@@ -546,6 +548,30 @@ function listenForProdukte() {
         });
     } catch (e) {
         console.error("Lizenzen: Fehler beim Setup Produkte-Listener:", e);
+    }
+}
+
+async function checkLizenzenForNotifications() {
+    if (!currentUser || !currentUser.uid) return;
+    
+    const lizenzen = Object.values(LIZENZEN).filter(l => !l?.inTrash);
+    
+    for (const lizenz of lizenzen) {
+        if (lizenz.ablaufdatum) {
+            const ablaufdatum = new Date(lizenz.ablaufdatum);
+            await createPendingNotification(
+                currentUser.uid,
+                'LIZENZEN',
+                'x_tage_vor_ablauf',
+                {
+                    id: lizenz.id,
+                    targetDate: ablaufdatum,
+                    lizenzName: lizenz.name || 'Unbekannte Lizenz',
+                    ablaufDatum: ablaufdatum.toLocaleDateString('de-DE'),
+                    anbieter: lizenz.anbieter || 'Unbekannt'
+                }
+            );
+        }
     }
 }
 

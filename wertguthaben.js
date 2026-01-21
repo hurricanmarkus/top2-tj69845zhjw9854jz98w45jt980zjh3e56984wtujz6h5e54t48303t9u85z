@@ -12,6 +12,7 @@ import {
     appId
 } from './haupteingang.js';
 import { saveUserSetting, getUserSetting } from './log-InOut.js';
+import { createPendingNotification } from './pushmail-notifications.js';
 
 import {
     collection,
@@ -287,6 +288,7 @@ export function listenForWertguthaben() {
             console.log(`✅ ${Object.keys(WERTGUTHABEN).length} Wertguthaben geladen (nur eigene)`);
             renderWertguthabenTable();
             updateStatistics();
+            checkWertguthabenForNotifications();
         }, (error) => {
             console.error("Fehler beim Laden der Wertguthaben:", error);
             alertUser("Fehler beim Laden der Wertguthaben. Bitte Firestore-Regeln prüfen.", 'error');
@@ -402,6 +404,102 @@ function updateStatistics() {
     document.getElementById('stat-guthaben').textContent = guthaben;
     document.getElementById('stat-wertguthaben').textContent = wertguthaben;
     document.getElementById('stat-total-wert').textContent = totalWert.toFixed(2) + '€';
+}
+
+// ========================================
+// BENACHRICHTIGUNGEN PRÜFEN
+// ========================================
+async function checkWertguthabenForNotifications() {
+    if (!currentUser || !currentUser.uid) return;
+    
+    const eintraege = Object.values(WERTGUTHABEN);
+    
+    for (const eintrag of eintraege) {
+        // Nur aktive Einträge prüfen
+        if (eintrag.status !== 'aktiv') continue;
+        
+        const gutscheinName = eintrag.name || 'Unbekannter Gutschein';
+        
+        // X Tage vor Einlösefrist
+        if (eintrag.einloesefrist) {
+            const einloesefrist = new Date(eintrag.einloesefrist);
+            await createPendingNotification(
+                currentUser.uid,
+                'WERTGUTHABEN',
+                'x_tage_vor_einloesefrist',
+                {
+                    id: eintrag.id,
+                    targetDate: einloesefrist,
+                    gutscheinName,
+                    ablaufDatum: einloesefrist.toLocaleDateString('de-DE'),
+                    wert: eintrag.wert || 0
+                }
+            );
+        }
+        
+        // X Tage vor Ablauf Code (nur für Aktionscode)
+        if (eintrag.typ === 'Aktionscode' && eintrag.ablaufDatumCode) {
+            const ablaufDatumCode = new Date(eintrag.ablaufDatumCode);
+            await createPendingNotification(
+                currentUser.uid,
+                'WERTGUTHABEN',
+                'x_tage_vor_ablauf_code',
+                {
+                    id: eintrag.id,
+                    targetDate: ablaufDatumCode,
+                    gutscheinName,
+                    ablaufDatum: ablaufDatumCode.toLocaleDateString('de-DE')
+                }
+            );
+        }
+        
+        // X Tage vor Warnung (basierend auf warnungVorAblauf Feld)
+        if (eintrag.warnungVorAblauf && eintrag.einloesefrist) {
+            const einloesefrist = new Date(eintrag.einloesefrist);
+            await createPendingNotification(
+                currentUser.uid,
+                'WERTGUTHABEN',
+                'x_tage_vor_warnung',
+                {
+                    id: eintrag.id,
+                    targetDate: einloesefrist,
+                    gutscheinName
+                }
+            );
+        }
+        
+        // X Tage vor Gültig ab (nur für Aktionscode)
+        if (eintrag.typ === 'Aktionscode' && eintrag.gueltigAb) {
+            const gueltigAb = new Date(eintrag.gueltigAb);
+            await createPendingNotification(
+                currentUser.uid,
+                'WERTGUTHABEN',
+                'x_tage_vor_gueltig_ab',
+                {
+                    id: eintrag.id,
+                    targetDate: gueltigAb,
+                    gutscheinName,
+                    gueltigAb: gueltigAb.toLocaleDateString('de-DE')
+                }
+            );
+        }
+        
+        // X Tage vor Gültig bis (nur für Aktionscode)
+        if (eintrag.typ === 'Aktionscode' && eintrag.gueltigBis) {
+            const gueltigBis = new Date(eintrag.gueltigBis);
+            await createPendingNotification(
+                currentUser.uid,
+                'WERTGUTHABEN',
+                'x_tage_vor_gueltig_bis',
+                {
+                    id: eintrag.id,
+                    targetDate: gueltigBis,
+                    gutscheinName,
+                    gueltigBis: gueltigBis.toLocaleDateString('de-DE')
+                }
+            );
+        }
+    }
 }
 
 // ========================================
