@@ -440,25 +440,50 @@ export async function createPendingNotification(userId, programId, notificationT
             return;
         }
 
-        // Duplikatsprüfung: Prüfen ob bereits eine unquittierte Benachrichtigung für diesen Eintrag existiert
+        const relatedDataId = relatedData.id || null;
+
+        // Duplikatsprüfung pending
         const colRef = collection(db, 'artifacts', appId, 'users', userId, 'pushmail_notifications');
         const existingQuery = query(
             colRef,
             where('programId', '==', programId),
             where('notificationType', '==', notificationType),
-            where('relatedDataId', '==', relatedData.id || null),
+            where('relatedDataId', '==', relatedDataId),
             where('acknowledged', '==', false)
         );
         const existingSnapshot = await getDocs(existingQuery);
-        
         if (!existingSnapshot.empty) {
-            console.log('Pushmail: Benachrichtigung existiert bereits:', programId, notificationType, relatedData.id);
+            console.log('Pushmail: Benachrichtigung existiert bereits (pending):', programId, notificationType, relatedDataId);
             return;
         }
 
-        // Platzhalter ersetzen
+        // Duplikatsprüfung archiviert: Nur erneut erstellen, wenn sich Title/Message geändert haben
+        const ackColRef = collection(db, 'artifacts', appId, 'users', userId, 'pushmail_acknowledged_notifications');
+        const ackQuery = query(
+            ackColRef,
+            where('programId', '==', programId),
+            where('notificationType', '==', notificationType),
+            where('relatedDataId', '==', relatedDataId),
+            where('acknowledged', '==', true),
+            limit(5)
+        );
+        const ackSnapshot = await getDocs(ackQuery);
+
+        // Platzhalter ersetzen (Title/Message) vor Vergleich
         const title = replacePlaceholders(notifSettings.customTitle, relatedData);
         const message = replacePlaceholders(notifSettings.customMessage, relatedData);
+
+        const alreadyAcknowledgedSameContent = ackSnapshot.docs.some(docSnap => {
+            const data = docSnap.data() || {};
+            return data.title === title && data.message === message;
+        });
+
+        if (alreadyAcknowledgedSameContent) {
+            console.log('Pushmail: Bereits quittiert, gleicher Inhalt – keine neue Benachrichtigung:', programId, notificationType, relatedDataId);
+            return;
+        }
+
+        // Platzhalter ersetzen (bereits oben berechnet)
 
         // Zeitpunkt berechnen
         const scheduledFor = calculateScheduledTime(

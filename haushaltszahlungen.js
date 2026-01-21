@@ -14,7 +14,7 @@ import {
     appId
 } from './haupteingang.js';
 import { saveUserSetting, getUserSetting } from './log-InOut.js';
-import { createPendingNotification, renderPendingNotifications } from './pushmail-notifications.js';
+import { createPendingNotification, renderPendingNotifications, loadPushmailNotificationSettings } from './pushmail-notifications.js';
 
 import {
     collection,
@@ -656,6 +656,13 @@ async function checkHaushaltszahlungenForNotifications() {
             return;
         }
 
+        // Nutzer-Einstellungen laden (Pushmail Center) für DaysBefore
+        const settings = await loadPushmailNotificationSettings(currentUser.mode);
+        const progSettings = settings.programs?.HAUSHALTSZAHLUNGEN || { enabled: true, notifications: {} };
+        const defGueltigAb = progSettings.notifications?.x_tage_vor_gueltig_ab?.daysBeforeX ?? 7;
+        const defGueltigBis = progSettings.notifications?.x_tage_vor_gueltig_bis?.daysBeforeX ?? 7;
+        const defErinnerung = progSettings.notifications?.x_tage_vor_erinnerung?.daysBeforeX ?? 7;
+
         console.log('🔔 Haushaltszahlungen: Prüfe Benachrichtigungen für', Object.keys(HAUSHALTSZAHLUNGEN).length, 'Einträge');
 
         const heute = new Date();
@@ -690,27 +697,29 @@ async function checkHaushaltszahlungenForNotifications() {
         if (hatGueltigAb) {
             const gueltigAb = new Date(eintrag.gueltigAb);
             if (gueltigAb >= heute) {
-                await createPendingNotification(
-                    currentUser.mode,
-                    'HAUSHALTSZAHLUNGEN',
-                    'x_tage_vor_gueltig_ab',
-                    {
-                        id: eintrag.id,
-                        targetDate: gueltigAb,
-                        zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
-                        gueltigAb: gueltigAb.toLocaleDateString('de-DE'),
-                        daysLeft: calculateDaysLeft(gueltigAb)
-                    }
-                );
+                const daysLeftAb = calculateDaysLeft(gueltigAb);
+                if (daysLeftAb <= defGueltigAb) {
+                    await createPendingNotification(
+                        currentUser.mode,
+                        'HAUSHALTSZAHLUNGEN',
+                        'x_tage_vor_gueltig_ab',
+                        {
+                            id: eintrag.id,
+                            targetDate: gueltigAb,
+                            zahlungName: eintrag.zweck || 'Unbekannte Zahlung',
+                            gueltigAb: gueltigAb.toLocaleDateString('de-DE'),
+                            daysLeft: daysLeftAb
+                        }
+                    );
+                }
             }
         }
 
         if (hatGueltigBis) {
             const gueltigBis = new Date(eintrag.gueltigBis);
             if (gueltigBis >= heute) {
-                // Nur wenn DaysBefore > 0 sinnvoll: wir alarmieren 7 Tage vorher (Default) -> daysLeft muss <= 7 sein
                 const daysLeftBis = calculateDaysLeft(gueltigBis);
-                if (daysLeftBis <= 7) {
+                if (daysLeftBis <= defGueltigBis) {
                     await createPendingNotification(
                         currentUser.mode,
                         'HAUSHALTSZAHLUNGEN',
@@ -732,7 +741,7 @@ async function checkHaushaltszahlungenForNotifications() {
             const reminderDate = hatGueltigBis ? new Date(eintrag.gueltigBis) : (hatGueltigAb ? new Date(eintrag.gueltigAb) : null);
             if (reminderDate && reminderDate >= heute) {
                 const daysLeftRem = calculateDaysLeft(reminderDate);
-                if (daysLeftRem <= 7) {
+                if (daysLeftRem <= defErinnerung) {
                     await createPendingNotification(
                         currentUser.mode,
                         'HAUSHALTSZAHLUNGEN',
