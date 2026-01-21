@@ -444,6 +444,20 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // PUSHMAIL-CENTER BENACHRICHTIGUNGEN (Notification System)
+    // ═══════════════════════════════════════════════════════════════
+    
+    // Pushmail-Einstellungen (pro Benutzer)
+    match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/settings/{settingId} {
+      allow read, write: if hasAppUserIdClaim() && appUserId() == userId;
+    }
+    
+    // Ausstehende Benachrichtigungen (pro Benutzer)
+    match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/notifications/pending/{notificationId} {
+      allow read, write: if hasAppUserIdClaim() && appUserId() == userId;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // DEFAULT DENY (Alles andere verbieten)
     // ═══════════════════════════════════════════════════════════════
     

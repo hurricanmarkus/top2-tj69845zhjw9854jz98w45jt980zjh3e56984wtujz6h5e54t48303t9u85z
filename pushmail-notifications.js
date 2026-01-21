@@ -340,7 +340,7 @@ export async function loadPushmailNotificationSettings(userId) {
     if (!userId || userId === GUEST_MODE) return getDefaultPushmailNotificationSettings();
     
     try {
-        const docRef = doc(db, 'artifacts', appId, 'users', userId, 'pushmail_settings');
+        const docRef = doc(db, 'artifacts', appId, 'users', userId, 'settings', 'pushmail_settings');
         const docSnap = await getDoc(docRef);
 
         if (!docSnap.exists()) {
@@ -361,7 +361,7 @@ export async function savePushmailNotificationSettings(userId, settings) {
     }
 
     try {
-        const docRef = doc(db, 'artifacts', appId, 'users', userId, 'pushmail_settings');
+        const docRef = doc(db, 'artifacts', appId, 'users', userId, 'settings', 'pushmail_settings');
         await setDoc(docRef, {
             ...settings,
             updatedAt: serverTimestamp()
@@ -441,7 +441,7 @@ export async function createPendingNotification(userId, programId, notificationT
         }
 
         // Duplikatsprüfung: Prüfen ob bereits eine unquittierte Benachrichtigung für diesen Eintrag existiert
-        const colRef = collection(db, 'artifacts', appId, 'users', userId, 'pushmail_pending_notifications');
+        const colRef = collection(db, 'artifacts', appId, 'users', userId, 'notifications', 'pending');
         const existingQuery = query(
             colRef,
             where('programId', '==', programId),
@@ -526,7 +526,7 @@ export async function loadPendingNotifications(userId) {
     if (!userId || userId === GUEST_MODE) return [];
 
     try {
-        const colRef = collection(db, 'artifacts', appId, 'users', userId, 'pushmail_pending_notifications');
+        const colRef = collection(db, 'artifacts', appId, 'users', userId, 'notifications', 'pending');
         const q = query(colRef, where('acknowledged', '==', false), orderBy('createdAt', 'desc'));
         const snapshot = await getDocs(q);
 
@@ -607,7 +607,7 @@ export async function acknowledgeNotification(userId, notificationId) {
     if (!userId || userId === GUEST_MODE) return false;
 
     try {
-        const docRef = doc(db, 'artifacts', appId, 'users', userId, 'pushmail_pending_notifications', notificationId);
+        const docRef = doc(db, 'artifacts', appId, 'users', userId, 'notifications', 'pending', notificationId);
         const docSnap = await getDoc(docRef);
 
         if (!docSnap.exists()) {
@@ -641,7 +641,7 @@ export async function acknowledgeMultipleNotifications(userId, notificationIds) 
         const batch = writeBatch(db);
 
         for (const notifId of notificationIds) {
-            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'pushmail_pending_notifications', notifId);
+            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'notifications', 'pending', notifId);
             const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {
@@ -783,7 +783,7 @@ export async function checkAndSendScheduledNotifications() {
 
     try {
         const now = new Date();
-        const colRef = collection(db, 'artifacts', appId, 'users', userId, 'pushmail_pending_notifications');
+        const colRef = collection(db, 'artifacts', appId, 'users', userId, 'notifications', 'pending');
         const q = query(colRef, 
             where('acknowledged', '==', false)
         );
