@@ -650,13 +650,17 @@ function berechneStatus(eintrag) {
 // BENACHRICHTIGUNGEN PRÜFEN
 // ========================================
 async function checkHaushaltszahlungenForNotifications() {
-    if (!currentUser || !currentUser.mode) return;
-    
-    console.log('🔔 Haushaltszahlungen: Prüfe Benachrichtigungen für', Object.keys(HAUSHALTSZAHLUNGEN).length, 'Einträge');
-    
-    const eintraege = Object.values(HAUSHALTSZAHLUNGEN);
-    
-    for (const eintrag of eintraege) {
+    try {
+        if (!currentUser || !currentUser.mode) {
+            console.log('🔔 Haushaltszahlungen: Kein Benutzer angemeldet');
+            return;
+        }
+        
+        console.log('🔔 Haushaltszahlungen: Prüfe Benachrichtigungen für', Object.keys(HAUSHALTSZAHLUNGEN).length, 'Einträge');
+        
+        const eintraege = Object.values(HAUSHALTSZAHLUNGEN);
+        
+        for (const eintrag of eintraege) {
         const { status, fehlerText } = berechneStatus(eintrag);
         
         // Benachrichtigung bei Fehler-Status
@@ -720,10 +724,13 @@ async function checkHaushaltszahlungenForNotifications() {
                 }
             );
         }
+        }
+        
+        // Benachrichtigungen neu laden
+        await renderPendingNotifications();
+    } catch (error) {
+        console.error('🔔 Haushaltszahlungen: Fehler beim Prüfen der Benachrichtigungen:', error);
     }
-    
-    // Benachrichtigungen neu laden
-    await renderPendingNotifications();
 }
 
 // ========================================
