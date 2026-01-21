@@ -480,6 +480,7 @@ async function initializeFirebase() {
                 window.getGuestPayments = httpsCallable(functions, 'getGuestPayments');
                 window.setUserKey = httpsCallable(functions, 'setUserKey');
                 window.migrateUserKeysToSecrets = httpsCallable(functions, 'migrateUserKeysToSecrets');
+                window.sendPasswordReset = httpsCallable(functions, 'sendPasswordReset');
 
                 window.firebaseFunctionsInitialised = true;
                 console.log("Firebase Functions initialisiert und global verfügbar gemacht.");
@@ -2810,75 +2811,27 @@ export function setupEventListeners() {
             if (tokenError) tokenError.style.display = 'none';
             if (tokenSuccess) tokenSuccess.style.display = 'none';
 
-            // User-Key aus Firestore laden
             const userId = selectedUserForLogin;
-            const pushoverConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'pushover_programs', userId);
-            const pushoverConfigSnap = await getDoc(pushoverConfigRef);
 
-            if (!pushoverConfigSnap.exists()) {
-                if (tokenError) {
-                    tokenError.textContent = 'Kein Pushover User-Key für diesen Benutzer hinterlegt.';
-                    tokenError.style.display = 'block';
-                }
-                return;
+            // Prüfen ob Cloud Function verfügbar ist
+            if (!window.sendPasswordReset) {
+                throw new Error('Cloud Function (sendPasswordReset) ist noch nicht initialisiert. Bitte warten.');
             }
 
-            const pushoverData = pushoverConfigSnap.data();
-            const storedUserKey = pushoverData.userKey;
+            // Cloud Function aufrufen
+            const result = await window.sendPasswordReset({
+                userId: userId,
+                pushoverToken: enteredToken
+            });
 
-            if (!storedUserKey) {
-                if (tokenError) {
-                    tokenError.textContent = 'Kein Pushover User-Key für diesen Benutzer hinterlegt.';
-                    tokenError.style.display = 'block';
-                }
-                return;
+            const responseData = result.data;
+
+            if (responseData.status !== 'success') {
+                throw new Error(responseData.message || 'Unbekannter Fehler');
             }
-
-            // Token verifizieren
-            if (enteredToken !== storedUserKey) {
-                if (tokenError) {
-                    tokenError.textContent = 'Falscher Token!';
-                    tokenError.style.display = 'block';
-                }
-                return;
-            }
-
-            // API-Token verwenden (fest codiert)
-            const apiToken = PUSHOVER_API_TOKEN;
-
-            // Token korrekt - Passwort aus Firestore holen
-            const userDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'user-config', userId));
-            if (!userDoc.exists()) {
-                alertUser('Benutzerdaten nicht gefunden.', 'error');
-                return;
-            }
-
-            const userData = userDoc.data();
-            const userPassword = userData.key || 'Kein Passwort gesetzt';
-            const userName = userData.name || 'Unbekannt';
 
             // Erfolgsmeldung anzeigen
             if (tokenSuccess) tokenSuccess.style.display = 'block';
-
-            const response = await fetch('https://api.pushover.net/1/messages.json', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({
-                    token: apiToken,
-                    user: storedUserKey,
-                    title: 'Passwort-Wiederherstellung',
-                    message: `Hallo ${userName},\n\nDein Passwort lautet: ${userPassword}`,
-                    priority: '0'
-                })
-            });
-
-            if (!response.ok) {
-                console.error('Pushover-Fehler:', await response.text());
-                alertUser('Fehler beim Senden der Pushover-Nachricht.', 'error');
-                return;
-            }
-
-            // Erfolg!
             alertUser('Passwort wurde erfolgreich per Pushover gesendet!', 'success');
             
             // Modals schließen
