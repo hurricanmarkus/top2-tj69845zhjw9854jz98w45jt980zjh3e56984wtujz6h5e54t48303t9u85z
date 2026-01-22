@@ -3685,7 +3685,7 @@ window.deleteThema = async function(id) {
                     </ul>
                 </div>
                 <div>
-                    <label class="block text-sm font-bold text-gray-700 mb-2">Gib exakt ein: <span class="text-red-600">UNWIDERRUFLICH LÖSCHEN</span></label>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Gib exakt ein: <span class="text-red-600 select-none" style="user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;">UNWIDERRUFLICH LÖSCHEN</span></label>
                     <input type="text" id="delete-thema-confirm-text" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-red-500" placeholder="UNWIDERRUFLICH LÖSCHEN">
                 </div>
                 <div class="text-center">
@@ -3728,14 +3728,15 @@ window.deleteThema = async function(id) {
         if (canDelete && textCorrect) {
             deleteBtn.disabled = false;
             deleteBtn.className = 'w-full py-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition cursor-pointer';
-            deleteBtn.innerHTML = '🗑️ JETZT UNWIDERRUFLICH LÖSCHEN';
+            deleteBtn.textContent = '🗑️ JETZT UNWIDERRUFLICH LÖSCHEN';
         } else {
             deleteBtn.disabled = true;
             deleteBtn.className = 'w-full py-3 bg-gray-300 text-gray-500 font-bold rounded-lg cursor-not-allowed transition';
             if (!canDelete) {
-                deleteBtn.innerHTML = `<span id="delete-countdown-text">Warte ${countdown} Sekunden...</span>`;
+                // WICHTIG: Nur textContent aktualisieren, nicht innerHTML (sonst wird countdownText-Element überschrieben)
+                countdownText.textContent = `Warte ${countdown} Sekunden...`;
             } else {
-                deleteBtn.innerHTML = 'Bitte Text korrekt eingeben';
+                deleteBtn.textContent = 'Bitte Text korrekt eingeben';
             }
         }
     };
