@@ -1468,16 +1468,13 @@ function initializeNotrufSettingsView() {
         const configForm = document.getElementById('modeConfigFormContainer');
         if (configForm && configForm.contains(e.target)) {
           if (e.target.closest('#notrufOpenContactBook')) {
-            renderContactBook();
-            const modal = document.getElementById('contactBookModal');
-            if (modal) modal.style.display = 'flex';
+            openNachrichtencenterContactBook();
             return;
           }
           if (e.target.closest('#notrufOpenApiTokenBook')) {
             renderApiTokenBook();
             const modal = document.getElementById('apiTokenBookModal');
             if (modal) modal.style.display = 'flex';
-            return;
           }
           if (e.target.closest('#notrufOpenSoundBook')) {
             renderSoundBook();
