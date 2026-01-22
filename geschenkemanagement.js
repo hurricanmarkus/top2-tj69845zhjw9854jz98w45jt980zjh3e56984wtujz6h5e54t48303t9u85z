@@ -1221,12 +1221,13 @@ function renderPersonenUebersicht() {
         const person = KONTAKTE[personId];
         if (!person) return null;
         
-        const geschenkeFuerPerson = alleGeschenke.filter(g => g.fuer && g.fuer.includes(personId));
+        // Geschenke für diese Person (stornierte ausschließen)
+        const geschenkeFuerPerson = alleGeschenke.filter(g => g.fuer && g.fuer.includes(personId) && g.status !== 'storniert');
         return {
             id: personId,
             name: person.name,
             total: geschenkeFuerPerson.length,
-            offen: geschenkeFuerPerson.filter(g => !['abgeschlossen', 'storniert', 'bestellt'].includes(g.status)).length,
+            offen: geschenkeFuerPerson.filter(g => !['abgeschlossen', 'bestellt'].includes(g.status)).length,
             bestellt: geschenkeFuerPerson.filter(g => ['bestellt', 'teillieferung'].includes(g.status)).length,
             fertig: geschenkeFuerPerson.filter(g => g.status === 'abgeschlossen').length
         };
@@ -1351,7 +1352,8 @@ window.openPersonModal = function(personId) {
     
     const thema = THEMEN[currentThemaId];
     const alleGeschenke = Object.values(GESCHENKE);
-    const personGeschenke = alleGeschenke.filter(g => g.fuer && g.fuer.includes(personId));
+    // Geschenke für diese Person (stornierte ausschließen)
+    const personGeschenke = alleGeschenke.filter(g => g.fuer && g.fuer.includes(personId) && g.status !== 'storniert');
     
     // Statistiken berechnen
     const stats = {
@@ -1372,7 +1374,7 @@ window.openPersonModal = function(personId) {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'personModal';
-        modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+        modal.className = 'fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4';
         document.body.appendChild(modal);
     }
     
@@ -1827,8 +1829,8 @@ function renderGeschenkRow(geschenk) {
             <td class="px-3 py-3 text-sm text-gray-600 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${beteiligtePersonen || '-'}</td>
             <td class="px-3 py-3 text-sm font-bold text-gray-900 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${geschenk.gesamtkosten ? formatCurrency(geschenk.gesamtkosten) : '-'}</td>
             <td class="px-3 py-3 text-sm font-bold text-green-700 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${geschenk.eigeneKosten ? formatCurrency(geschenk.eigeneKosten) : '-'}</td>
-            <td class="px-3 py-3 text-sm text-gray-600 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${geschenk.sollBezahlung || '-'}</td>
-            <td class="px-3 py-3 text-sm text-gray-600 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${geschenk.istBezahlung || '-'}</td>
+            <td class="px-3 py-3 text-sm text-gray-600 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${ZAHLUNGSARTEN[geschenk.sollBezahlung]?.label || geschenk.sollBezahlung || '-'}</td>
+            <td class="px-3 py-3 text-sm text-gray-600 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${ZAHLUNGSARTEN[geschenk.istBezahlung]?.label || geschenk.istBezahlung || '-'}</td>
             <td class="px-3 py-3 text-sm text-gray-600 cursor-pointer" onclick="window.openEditGeschenkModal('${geschenk.id}')">${geschenk.standort || '-'}</td>
         </tr>
     `;
@@ -1951,6 +1953,14 @@ window.openEditGeschenkModal = function(id) {
     renderModalSelects(geschenk);
     updateModalActionButtons(true, false);
     
+    // Bugfix: Eigene-Kosten-Berechnung NACH dem Rendern der Selects aufrufen
+    // damit die Beteiligten-Checkboxen bereits korrekt gesetzt sind
+    setTimeout(() => {
+        if (typeof window.updateEigeneKostenAuto === 'function') {
+            window.updateEigeneKostenAuto();
+        }
+    }, 100);
+    
     // ✅ PUNKT 5: Bei Leserechten - alle Felder deaktivieren
     setModalFieldsReadOnly(!canEdit);
     
@@ -1974,6 +1984,9 @@ function fillModalForm(geschenk) {
     document.getElementById('gm-gesamtkosten').value = geschenk.gesamtkosten || '';
     document.getElementById('gm-eigene-kosten').value = geschenk.eigeneKosten || '';
     document.getElementById('gm-notizen').value = geschenk.notizen || '';
+    
+    // Bugfix: Nach dem Befüllen, Eigene-Kosten-Auto NICHT sofort triggern
+    // Die Funktion wird später nach renderModalSelects() manuell aufgerufen
 }
 
 function renderModalSelects(geschenk = null) {
@@ -3649,9 +3662,98 @@ window.toggleArchiveThema = async function(id) {
 };
 
 window.deleteThema = async function(id) {
-    if (!confirm('Thema und alle zugehörigen Daten wirklich löschen?')) return;
+    const thema = THEMEN[id];
+    if (!thema) return;
     
-    try {
+    // Zeige Sicherheits-Modal
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+    modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="bg-gradient-to-r from-red-600 to-red-700 text-white p-4 rounded-t-2xl">
+                <h3 class="text-xl font-bold">⚠️ THEMA UNWIDERRUFLICH LÖSCHEN</h3>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="bg-red-50 border-2 border-red-300 rounded-lg p-4">
+                    <p class="text-sm font-bold text-red-800 mb-2">⚠️ ACHTUNG: Diese Aktion ist UNWIDERRUFLICH!</p>
+                    <p class="text-sm text-red-700">Das Thema "<strong>${thema.name}</strong>" wird dauerhaft gelöscht, einschließlich:</p>
+                    <ul class="text-sm text-red-700 list-disc list-inside mt-2 space-y-1">
+                        <li>Alle Geschenke</li>
+                        <li>Alle Budgets</li>
+                        <li>Alle Erinnerungen</li>
+                        <li>Alle zugehörigen Daten</li>
+                    </ul>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Gib exakt ein: <span class="text-red-600">UNWIDERRUFLICH LÖSCHEN</span></label>
+                    <input type="text" id="delete-thema-confirm-text" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-red-500" placeholder="UNWIDERRUFLICH LÖSCHEN">
+                </div>
+                <div class="text-center">
+                    <button id="delete-thema-btn" disabled class="w-full py-3 bg-gray-300 text-gray-500 font-bold rounded-lg cursor-not-allowed transition">
+                        <span id="delete-countdown-text">Warte 60 Sekunden...</span>
+                    </button>
+                </div>
+            </div>
+            <div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-3">
+                <button id="cancel-delete-thema-btn" class="px-6 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">Abbrechen</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    const confirmInput = modal.querySelector('#delete-thema-confirm-text');
+    const deleteBtn = modal.querySelector('#delete-thema-btn');
+    const cancelBtn = modal.querySelector('#cancel-delete-thema-btn');
+    const countdownText = modal.querySelector('#delete-countdown-text');
+    
+    let countdown = 60;
+    let canDelete = false;
+    
+    // Countdown
+    const interval = setInterval(() => {
+        countdown--;
+        if (countdown > 0) {
+            countdownText.textContent = `Warte ${countdown} Sekunden...`;
+        } else {
+            clearInterval(interval);
+            canDelete = true;
+            updateDeleteButton();
+        }
+    }, 1000);
+    
+    // Prüfe Texteingabe
+    const updateDeleteButton = () => {
+        const textCorrect = confirmInput.value === 'UNWIDERRUFLICH LÖSCHEN';
+        if (canDelete && textCorrect) {
+            deleteBtn.disabled = false;
+            deleteBtn.className = 'w-full py-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition cursor-pointer';
+            deleteBtn.innerHTML = '🗑️ JETZT UNWIDERRUFLICH LÖSCHEN';
+        } else {
+            deleteBtn.disabled = true;
+            deleteBtn.className = 'w-full py-3 bg-gray-300 text-gray-500 font-bold rounded-lg cursor-not-allowed transition';
+            if (!canDelete) {
+                deleteBtn.innerHTML = `<span id="delete-countdown-text">Warte ${countdown} Sekunden...</span>`;
+            } else {
+                deleteBtn.innerHTML = 'Bitte Text korrekt eingeben';
+            }
+        }
+    };
+    
+    confirmInput.addEventListener('input', updateDeleteButton);
+    
+    cancelBtn.addEventListener('click', () => {
+        clearInterval(interval);
+        modal.remove();
+    });
+    
+    deleteBtn.addEventListener('click', async () => {
+        if (!canDelete || confirmInput.value !== 'UNWIDERRUFLICH LÖSCHEN') return;
+        
+        clearInterval(interval);
+        modal.remove();
+        
+        try {
         console.log(`🗑️ Starte Löschvorgang für Thema ${id}...`);
         
         // ✅ SCHRITT 1: Geschenke löschen (Subcollection)
@@ -3716,10 +3818,11 @@ window.deleteThema = async function(id) {
         
         console.log(`✅ KOMPLETT: Thema ${id} und alle zugehörigen Daten wurden gelöscht!`);
         alertUser('Thema und alle zugehörigen Daten wurden gelöscht!', 'success');
-    } catch (e) {
-        console.error("❌ Fehler beim Löschen des Themas:", e);
-        alertUser('Fehler beim Löschen: ' + e.message, 'error');
-    }
+        } catch (e) {
+            console.error("❌ Fehler beim Löschen des Themas:", e);
+            alertUser('Fehler beim Löschen: ' + e.message, 'error');
+        }
+    });
 };
 
 window.createNewThema = async function() {
