@@ -1269,7 +1269,6 @@ export function renderAdminUserDetails(userId) {
 
                         ${generateCheckbox('canUseMainZahlungsverwaltung', '-> Zahlungsverwaltung', true)}
                         ${generateCheckbox('canUseMainPushoverConfig', '-> Pushover Config', true)}
-                        ${generateCheckbox('canUseMainHaushaltszahlungen', '-> Haushaltszahlungen', true)}
                         </div>
                     </div>
                 

@@ -739,9 +739,13 @@ export function ensureModalListeners() {
         const selectedNodes = modal ? modal.querySelectorAll('.nachrichtencenter-contact-checkbox:checked') : [];
         const selectedRefs = Array.from(selectedNodes || []).map(n => String(n.value || '')).filter(Boolean);
         
-        // NOTRUF-Kontext: Übernehme Auswahl in notrufUserKeyDisplay
+        // Kontextprüfung: NOTRUF vs Nachrichtencenter (prüft Sichtbarkeit, nicht nur Existenz)
         const notrufDisplay = document.getElementById('notrufUserKeyDisplay');
-        if (notrufDisplay) {
+        const notrufCard = document.getElementById('card-notruf-modes');
+        const isNotrufContext = notrufDisplay && notrufCard && !notrufCard.classList.contains('hidden');
+        
+        if (isNotrufContext) {
+          // NOTRUF-Kontext: Übernehme Auswahl in notrufUserKeyDisplay
           notrufDisplay.innerHTML = '';
           for (const refValue of selectedRefs) {
             const contact = getNachrichtencenterContactByRefValue(refValue);
