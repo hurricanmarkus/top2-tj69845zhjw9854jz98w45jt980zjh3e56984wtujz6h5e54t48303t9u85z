@@ -1461,7 +1461,7 @@ window.openPersonModal = function(personId) {
                                 const statusCfg = STATUS_CONFIG[g.status] || STATUS_CONFIG.offen;
                                 return `
                                     <div class="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition cursor-pointer"
-                                         onclick="window.openEditGeschenkModal('${g.id}')">
+                                         onclick="document.getElementById('personModal').style.display='none'; window.openEditGeschenkModal('${g.id}');">
                                         <div class="flex items-center justify-between mb-2">
                                             <span class="font-bold text-gray-800">${g.geschenk || 'Ohne Titel'}</span>
                                             <span class="px-2 py-1 rounded-full text-xs font-bold ${statusCfg.color}">
@@ -3671,7 +3671,7 @@ window.deleteThema = async function(id) {
     modal.innerHTML = `
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div class="bg-gradient-to-r from-red-600 to-red-700 text-white p-4 rounded-t-2xl">
-                <h3 class="text-xl font-bold">⚠️ THEMA UNWIDERRUFLICH LÖSCHEN</h3>
+                <h3 class="text-xl font-bold select-none" style="user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;">⚠️ THEMA UNWIDERRUFLICH LÖSCHEN</h3>
             </div>
             <div class="p-6 space-y-4">
                 <div class="bg-red-50 border-2 border-red-300 rounded-lg p-4">
