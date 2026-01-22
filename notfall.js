@@ -738,14 +738,29 @@ export function ensureModalListeners() {
         const modal = document.getElementById('nachrichtencenterContactBookModal');
         const selectedNodes = modal ? modal.querySelectorAll('.nachrichtencenter-contact-checkbox:checked') : [];
         const selectedRefs = Array.from(selectedNodes || []).map(n => String(n.value || '')).filter(Boolean);
-        const refInput = document.getElementById('nachrichtencenterRecipientRef');
-        const keyInput = document.getElementById('nachrichtencenterRecipientKey');
-        const payload = stringifyNachrichtencenterRecipientRefs(selectedRefs);
-        if (refInput) refInput.value = payload;
-        if (keyInput) keyInput.value = '';
-        await syncNachrichtencenterRecipientDisplayFromRef();
+        
+        // NOTRUF-Kontext: Übernehme Auswahl in notrufUserKeyDisplay
+        const notrufDisplay = document.getElementById('notrufUserKeyDisplay');
+        if (notrufDisplay) {
+          notrufDisplay.innerHTML = '';
+          for (const refValue of selectedRefs) {
+            const contact = getNachrichtencenterContactByRefValue(refValue);
+            if (contact) {
+              notrufDisplay.innerHTML += `<span class="contact-badge inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full" data-contact-ref="${refValue}">${contact.name || '—'}</span>`;
+            }
+          }
+        } else {
+          // Nachrichtencenter-Kontext: Übernehme Auswahl in nachrichtencenterRecipientRef
+          const refInput = document.getElementById('nachrichtencenterRecipientRef');
+          const keyInput = document.getElementById('nachrichtencenterRecipientKey');
+          const payload = stringifyNachrichtencenterRecipientRefs(selectedRefs);
+          if (refInput) refInput.value = payload;
+          if (keyInput) keyInput.value = '';
+          await syncNachrichtencenterRecipientDisplayFromRef();
+        }
+        
         if (modal) modal.style.display = 'none';
-        nachrichtencenterSelectedRefs.clear(); // Clear the selection
+        nachrichtencenterSelectedRefs.clear();
         return;
       }
 
@@ -829,14 +844,18 @@ function updateFlicEditorDetails(selectedModeId) {
     let soundLabel = 'Standard (pushover)';
     if (typeof config.selectedSoundId !== 'undefined' && config.selectedSoundId !== null) {
         const snd = (notrufSettings.sounds || []).find(s => String(s.id) === String(config.selectedSoundId));
-        if (snd) soundLabel = snd.useCustomName && snd.customName ? snd.customName : snd.code;
-        else soundLabel = 'Sound nicht gefunden';
+        if (snd) {
+          const displayName = snd.useCustomName && snd.customName ? snd.customName : snd.code;
+          soundLabel = displayName;
+        } else {
+          soundLabel = 'Sound nicht gefunden';
+        }
     }
 
-    // Empfänger
+    // Empfänger (neues Nachrichtencenter-Kontaktbuch Format)
     const recipients = (config.userKeys || []).map(u => {
-        if (u && typeof u === 'object') return u.name || `#${u.id}`;
-        return (notrufSettings.contacts || []).find(c => String(c.id) === String(u))?.name || `#${u}`;
+        if (u && typeof u === 'object' && u.name) return u.name;
+        return '—';
     }).filter(Boolean).join(', ') || 'Niemand';
 
     // Nachricht + Prio/Retry
@@ -1018,10 +1037,11 @@ function updateFlicEditorDetails(selectedModeId) {
     userKeyDisplay.innerHTML = '';
     const keys = Array.isArray(config.userKeys) ? config.userKeys : [];
     keys.forEach(u => {
-      const contactId = u && typeof u === 'object' ? u.id : u;
-      const label = u && typeof u === 'object' && u.name ? u.name : `#${contactId}`;
-      if (contactId !== null && typeof contactId !== 'undefined') {
-        userKeyDisplay.innerHTML += `<span class="contact-badge" data-contact-id="${contactId}">${label}</span>`;
+      // Neues Nachrichtencenter-Kontaktbuch Format: data-contact-ref
+      const refValue = u && typeof u === 'object' && u.ref ? u.ref : null;
+      const label = u && typeof u === 'object' && u.name ? u.name : '—';
+      if (refValue) {
+        userKeyDisplay.innerHTML += `<span class="contact-badge" data-contact-ref="${refValue}">${label}</span>`;
       }
     });
   }
@@ -1073,10 +1093,13 @@ function updateFlicEditorDetails(selectedModeId) {
 
   const userKeys = [];
   document.querySelectorAll('#notrufUserKeyDisplay .contact-badge').forEach(b => {
-    const id = b.dataset && b.dataset.contactId ? parseInt(b.dataset.contactId, 10) : NaN;
-    if (!Number.isNaN(id)) {
-      const contact = (notrufSettings.contacts || []).find(c => c.id === id);
-      if (contact) userKeys.push({ id: contact.id, name: contact.name, key: contact.key });
+    // Neues Nachrichtencenter-Kontaktbuch System: data-contact-ref statt data-contact-id
+    const refValue = b.dataset && b.dataset.contactRef ? String(b.dataset.contactRef) : '';
+    if (refValue) {
+      const contact = getNachrichtencenterContactByRefValue(refValue);
+      if (contact && contact.key) {
+        userKeys.push({ ref: refValue, name: contact.name, key: contact.key });
+      }
     }
   });
 
