@@ -895,7 +895,20 @@ function showPendingNotificationsModal(notifications) {
 
     if (!modal || !list) return;
 
-    list.innerHTML = notifications.map(notif => {
+    // Header mit Alle-auswählen + Alle-quittieren Button
+    const headerHtml = `
+        <div class="flex items-center justify-between mb-3 p-3 bg-gradient-to-r from-orange-50 to-red-50 rounded-lg border border-orange-200">
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="selectAllModalNotifications" class="h-5 w-5">
+                <span class="text-sm font-bold text-gray-700">Alle auswählen</span>
+            </label>
+            <button id="acknowledgeAllModalBtn" class="px-5 py-2 bg-red-600 text-white text-sm font-bold rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md" disabled>
+                🗑️ Alle quittieren (<span id="selectedModalCount">0</span>)
+            </button>
+        </div>
+    `;
+
+    const notificationsHtml = notifications.map(notif => {
         const program = NOTIFICATION_DEFINITIONS[notif.programId];
         if (!program) return '';
 
@@ -908,79 +921,153 @@ function showPendingNotificationsModal(notifications) {
             minute: '2-digit'
         });
 
+        // Wichtigste Infos hervorheben
+        const scheduledDate = notif.nextSendAt?.toDate ? notif.nextSendAt.toDate() : null;
+        const scheduledInfo = scheduledDate ? `📅 Geplant: ${scheduledDate.toLocaleString('de-DE')}` : '';
+
         return `
-            <div class="p-3 border-l-4 ${program.borderClass} bg-${program.color}-50 rounded">
-                <label class="flex items-start gap-3 cursor-pointer">
-                    <input type="checkbox" class="acknowledge-checkbox h-5 w-5 mt-1 flex-shrink-0" data-notification-id="${notif.id}">
+            <div class="notification-modal-card p-3 mb-2 border-l-4 ${program.borderClass} bg-${program.color}-50 rounded-lg hover:shadow-lg transition-shadow" data-notification-id="${notif.id}">
+                <div class="flex items-start gap-3">
+                    <input type="checkbox" class="modal-notification-checkbox h-5 w-5 mt-1" data-notification-id="${notif.id}">
                     <div class="flex-grow">
-                        <div class="font-bold text-gray-800">${notif.title}</div>
-                        <div class="text-sm text-gray-600 mt-1">${notif.message}</div>
-                        <div class="text-xs text-gray-400 mt-1">
-                            Programm: ${program.title} | Erstellt: ${formattedDate}
+                        <div class="flex items-start justify-between gap-2 mb-1">
+                            <div class="font-bold text-gray-900 text-base">${notif.title}</div>
+                            <span class="text-xs px-2 py-1 bg-white rounded-full font-semibold ${program.textClass} border ${program.borderClass} whitespace-nowrap">
+                                ${program.icon || '📌'} ${program.title}
+                            </span>
+                        </div>
+                        <div class="text-sm text-gray-700 mt-2 leading-relaxed">${notif.message}</div>
+                        <div class="text-xs text-gray-500 mt-2 flex flex-wrap gap-3">
+                            <span>🕐 Erstellt: ${formattedDate}</span>
+                            ${scheduledInfo ? `<span class="font-semibold text-orange-600">${scheduledInfo}</span>` : ''}
+                            ${notif.repeatDays > 0 ? `<span>🔁 Wiederholt alle ${notif.repeatDays} Tage</span>` : ''}
                         </div>
                     </div>
-                </label>
+                </div>
             </div>
         `;
     }).join('');
+
+    list.innerHTML = headerHtml + notificationsHtml;
+
+    // Event-Listener für Alle-auswählen mit Timer
+    setupModalCheckboxListeners();
 
     modal.classList.remove('hidden');
     modal.classList.add('flex');
 }
 
+function setupModalCheckboxListeners() {
+    const checkboxes = document.querySelectorAll('.modal-notification-checkbox');
+    const selectAllCheckbox = document.getElementById('selectAllModalNotifications');
+    const acknowledgeBtn = document.getElementById('acknowledgeAllModalBtn');
+    const selectedCountSpan = document.getElementById('selectedModalCount');
+
+    let selectAllClickCount = 0;
+    let selectAllTimer = null;
+
+    // Update Button-Status
+    const updateButtonState = () => {
+        const selected = Array.from(checkboxes).filter(cb => cb.checked);
+        if (selectedCountSpan) selectedCountSpan.textContent = selected.length;
+        if (acknowledgeBtn) acknowledgeBtn.disabled = selected.length === 0;
+    };
+
+    // Einzelne Checkboxen
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            updateButtonState();
+            // Alle auswählen Checkbox aktualisieren
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            if (selectAllCheckbox) selectAllCheckbox.checked = allChecked;
+        });
+    });
+
+    // Alle auswählen/abwählen mit 3-Sekunden-Timer
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                // ALLE AUSWÄHLEN - Mit Sicherheits-Timer
+                selectAllClickCount++;
+                
+                if (selectAllClickCount === 1) {
+                    // Erster Klick: Timer starten
+                    e.target.checked = false;
+                    e.target.nextElementSibling.innerHTML = '<span class="text-orange-600 font-bold">⏱️ Nochmal klicken in <span id="modalTimerCountdown">3</span>s</span>';
+                    
+                    let countdown = 3;
+                    selectAllTimer = setInterval(() => {
+                        countdown--;
+                        const countdownSpan = document.getElementById('modalTimerCountdown');
+                        if (countdownSpan) countdownSpan.textContent = countdown;
+                        
+                        if (countdown <= 0) {
+                            clearInterval(selectAllTimer);
+                            selectAllClickCount = 0;
+                            e.target.nextElementSibling.innerHTML = '<span class="text-sm font-bold text-gray-700">Alle auswählen</span>';
+                        }
+                    }, 1000);
+                } else if (selectAllClickCount === 2) {
+                    // Zweiter Klick: Alle auswählen
+                    clearInterval(selectAllTimer);
+                    selectAllClickCount = 0;
+                    e.target.nextElementSibling.innerHTML = '<span class="text-red-600 font-bold">Alle abwählen</span>';
+                    checkboxes.forEach(cb => cb.checked = true);
+                    updateButtonState();
+                }
+            } else {
+                // ALLE ABWÄHLEN - Sofort ohne Timer
+                e.target.nextElementSibling.innerHTML = '<span class="text-sm font-bold text-gray-700">Alle auswählen</span>';
+                checkboxes.forEach(cb => cb.checked = false);
+                updateButtonState();
+                selectAllClickCount = 0;
+                if (selectAllTimer) clearInterval(selectAllTimer);
+            }
+        });
+    }
+
+    // Alle-quittieren-Button
+    if (acknowledgeBtn) {
+        acknowledgeBtn.addEventListener('click', async () => {
+            const selected = Array.from(checkboxes).filter(cb => cb.checked);
+            if (selected.length === 0) return;
+
+            const confirm = window.confirm(`${selected.length} Benachrichtigung(en) quittieren?`);
+            if (!confirm) return;
+
+            setProcessingOverlay(true, `Quittiere ${selected.length} Benachrichtigung(en)...`);
+            
+            const notificationIds = selected.map(cb => cb.dataset.notificationId);
+            const success = await acknowledgeMultipleNotifications(currentUser.mode, notificationIds);
+            
+            if (success) {
+                alertUser(`${selected.length} Benachrichtigung(en) quittiert.`, 'success');
+                
+                // Prüfen ob noch Benachrichtigungen übrig sind
+                const remaining = await loadPendingNotifications(currentUser.mode);
+                if (remaining.length === 0) {
+                    const modal = document.getElementById('pendingNotificationsModal');
+                    modal.classList.add('hidden');
+                    modal.classList.remove('flex');
+                } else {
+                    // Modal neu laden mit verbleibenden Benachrichtigungen
+                    await checkAndShowPendingNotificationsModal();
+                }
+            }
+            
+            setProcessingOverlay(false);
+        });
+    }
+}
+
 export function initializePendingNotificationsModal() {
     const modal = document.getElementById('pendingNotificationsModal');
     const closeBtn = document.getElementById('closePendingNotificationsModal');
-    const acknowledgeSelectedBtn = document.getElementById('acknowledgeSelectedBtn');
-    const markAllBtn = document.getElementById('markAllNotificationsBtn');
 
     if (closeBtn) {
         closeBtn.addEventListener('click', () => {
             modal.classList.add('hidden');
             modal.classList.remove('flex');
-        });
-    }
-
-    if (acknowledgeSelectedBtn) {
-        acknowledgeSelectedBtn.addEventListener('click', async () => {
-            const checkboxes = document.querySelectorAll('.acknowledge-checkbox:checked');
-            const notificationIds = Array.from(checkboxes).map(cb => cb.dataset.notificationId);
-
-            if (notificationIds.length === 0) {
-                alertUser('Bitte wählen Sie mindestens eine Benachrichtigung aus.', 'error');
-                return;
-            }
-
-            const success = await acknowledgeMultipleNotifications(currentUser.mode, notificationIds);
-            if (success) {
-                alertUser(`${notificationIds.length} Benachrichtigung(en) quittiert.`, 'success');
-                await checkAndShowPendingNotificationsModal();
-                
-                // Modal schließen wenn keine Benachrichtigungen mehr
-                const remaining = await loadPendingNotifications(currentUser.mode);
-                if (remaining.length === 0) {
-                    modal.classList.add('hidden');
-                    modal.classList.remove('flex');
-                }
-            }
-        });
-    }
-
-    // Alle markieren mit 3s Cooldown
-    if (markAllBtn) {
-        let markCooldown = false;
-        markAllBtn.addEventListener('click', () => {
-            if (markCooldown) return;
-            const checkboxes = document.querySelectorAll('.acknowledge-checkbox');
-            checkboxes.forEach(cb => cb.checked = true);
-            markCooldown = true;
-            markAllBtn.disabled = true;
-            markAllBtn.classList.add('opacity-60', 'cursor-not-allowed');
-            setTimeout(() => {
-                markCooldown = false;
-                markAllBtn.disabled = false;
-                markAllBtn.classList.remove('opacity-60', 'cursor-not-allowed');
-            }, 3000);
         });
     }
 }
