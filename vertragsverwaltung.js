@@ -1542,7 +1542,7 @@ export function listenForVertraege() {
 async function checkVertraegeForNotifications() {
     if (!currentUser || !currentUser.mode) return;
     
-    const vertraege = Object.values(VERTRAEGE);
+    const vertraege = Object.values(VERTRAEGE).filter(v => !v?.inTrash);
     
     for (const vertrag of vertraege) {
         const vertragsName = vertrag.name || 'Unbekannter Vertrag';

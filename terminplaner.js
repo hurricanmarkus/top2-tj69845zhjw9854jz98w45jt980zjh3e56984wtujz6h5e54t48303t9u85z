@@ -1379,6 +1379,9 @@ export function listenForMyVotes(userId) {
         const umfragen = Array.from(myPollsMap.values());
         
         for (const umfrage of umfragen) {
+            // Archivierte oder gelöschte Umfragen überspringen
+            if (umfrage.archived || umfrage.deleted) continue;
+            
             const umfrageName = umfrage.title || 'Unbekannte Umfrage';
             const ersteller = umfrage.createdBy || 'Unbekannt';
             

@@ -544,8 +544,9 @@ async function saveSendung() {
             };
         }
 
-        // Pushmail-Benachrichtigungen erstellen
-        if (sendungData.erwarteteAnkunft && currentUser?.mode) {
+        // Pushmail-Benachrichtigungen erstellen (nur für aktive Sendungen)
+        const inaktiveStatus = ['zugestellt', 'storniert', 'verloren'];
+        if (sendungData.erwarteteAnkunft && currentUser?.mode && !inaktiveStatus.includes(sendungData.status)) {
             const targetDate = new Date(sendungData.erwarteteAnkunft);
             const sendungName = `${sendungData.anbieter || 'Sendung'} (${sendungData.sendungsnummer || 'keine Nr.'})`;
             

@@ -7566,11 +7566,12 @@ function openShareModal(id) {
             p.accessRights[targetUserId] = { status: 'pending', rights: rights, invitedAt: new Date().toISOString() };
             p.involvedUserIds = newInvolved;
 
-            // Pushmail-Benachrichtigung für eingeladenen User
-            await createPendingNotification(
-                targetUserId,
-                'ZAHLUNGSVERWALTUNG',
-                'teilungsanfrage_eingehend',
+            // Pushmail-Benachrichtigung für eingeladenen User (nur wenn Zahlung nicht gelöscht)
+            if (!p.deleted && !p.inTrash) {
+                await createPendingNotification(
+                    targetUserId,
+                    'ZAHLUNGSVERWALTUNG',
+                    'teilungsanfrage_eingehend',
                 {
                     id: id,
                     path: `/zahlungsverwaltung/payment/${id}`,
@@ -7578,7 +7579,8 @@ function openShareModal(id) {
                     betrag: parseFloat(p.amount || 0).toFixed(2),
                     grund: p.title || 'Keine Beschreibung'
                 }
-            );
+                );
+            }
 
             alertUser("Einladung gesendet!", "success");
             renderList();
@@ -7783,21 +7785,22 @@ async function respondToInvite(paymentId, response) {
             }]
         });
 
-        // Pushmail-Benachrichtigung für Ersteller (Absender der Einladung)
+        // Pushmail-Benachrichtigung für Ersteller (nur wenn Zahlung nicht gelöscht)
         const statusText = response === 'accepted' ? 'angenommen' : 'abgelehnt';
-        await createPendingNotification(
-            p.createdBy,
-            'ZAHLUNGSVERWALTUNG',
-            'teilungsanfrage_antwort',
-            {
-                id: paymentId,
-                path: `/zahlungsverwaltung/payment/${paymentId}`,
-                empfaenger: currentUser.displayName || currentUser.mode,
-                status: statusText,
-                betrag: parseFloat(p.amount || 0).toFixed(2),
-                grund: p.title || 'Keine Beschreibung'
-            }
-        );
+        if (!p.deleted && !p.inTrash) {
+            await createPendingNotification(
+                p.createdBy,
+                'ZAHLUNGSVERWALTUNG',
+                'teilungsanfrage_antwort',
+                {
+                    id: paymentId,
+                    path: `/zahlungsverwaltung/payment/${paymentId}`,
+                    empfaenger: currentUser.displayName || currentUser.mode,
+                    antwort: statusText,
+                    betrag: parseFloat(p.amount || 0).toFixed(2)
+                }
+            );
+        }
 
         alertUser(response === 'accepted' ? "Einladung angenommen!" : "Einladung abgelehnt.", "success");
     } catch (e) { console.error(e); alertUser("Fehler: " + e.message, "error"); }

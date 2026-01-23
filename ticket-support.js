@@ -888,6 +888,9 @@ async function checkTicketsForNotifications() {
     const tickets = Object.values(TICKETS);
     
     for (const ticket of tickets) {
+        // Erledigte Tickets überspringen
+        if (ticket.status === 'done') continue;
+        
         const ticketTitel = ticket.title || 'Unbekanntes Ticket';
         const ersteller = ticket.createdBy || 'Unbekannt';
         const prioritaet = ticket.priority || 'normal';
