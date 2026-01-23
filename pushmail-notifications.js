@@ -366,7 +366,8 @@ export function getDefaultPushmailNotificationSettings() {
                 customTitle: notif.defaultTitle,
                 customMessage: notif.defaultMessage,
                 overlayEnabled: true,
-                pushOverEnabled: true
+                pushOverEnabled: true,
+                sendImmediately: notif.defaultDaysBeforeX === null
             };
         });
     });
@@ -447,7 +448,8 @@ function normalizePushmailSettings(raw) {
                 customTitle: notifRaw.customTitle || notifDefaults.customTitle,
                 customMessage: notifRaw.customMessage || notifDefaults.customMessage,
                 overlayEnabled: notifRaw.overlayEnabled !== false,
-                pushOverEnabled: notifRaw.pushOverEnabled !== false
+                pushOverEnabled: notifRaw.pushOverEnabled !== false,
+                sendImmediately: notifRaw.sendImmediately === true
             };
         });
     });
@@ -513,6 +515,15 @@ export async function createPendingNotification(userId, programId, notificationT
         );
         const ackSnapshot = await getDocs(ackQuery);
 
+        // daysLeft berechnen (falls targetDate vorhanden)
+        if (relatedData.targetDate && !relatedData.daysLeft) {
+            const target = new Date(relatedData.targetDate);
+            const now = new Date();
+            const diffTime = target - now;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            relatedData.daysLeft = diffDays > 0 ? diffDays : 0;
+        }
+
         // Platzhalter ersetzen (Title/Message) vor Vergleich
         const title = replacePlaceholders(notifSettings.customTitle, relatedData);
         const message = replacePlaceholders(notifSettings.customMessage, relatedData);
@@ -521,12 +532,25 @@ export async function createPendingNotification(userId, programId, notificationT
         const scheduledFor = calculateScheduledTime(
             notifSettings.time,
             notifSettings.daysBeforeX,
-            relatedData.targetDate
+            relatedData.targetDate,
+            notifSettings.sendImmediately
         );
 
+        // Bei sendImmediately: Auch die "normale" Zeit berechnen für spätere Wiederholungen
+        let regularScheduledTime = null;
+        if (notifSettings.sendImmediately) {
+            regularScheduledTime = calculateScheduledTime(
+                notifSettings.time,
+                notifSettings.daysBeforeX,
+                relatedData.targetDate,
+                false  // Normale Berechnung ohne sofort
+            );
+        }
+
         // VALIDIERUNG: Benachrichtigung liegt in der Vergangenheit?
+        // Bei sendImmediately überspringen wir die Validierung
         const now = new Date();
-        if (scheduledFor < now) {
+        if (!notifSettings.sendImmediately && scheduledFor < now) {
             console.log('Pushmail: Benachrichtigung liegt in Vergangenheit - übersprungen:', programId, notificationType, scheduledFor);
             return;
         }
@@ -551,13 +575,15 @@ export async function createPendingNotification(userId, programId, notificationT
             scheduledFor,
             lastSentAt: null,
             nextSendAt: scheduledFor,
+            regularScheduledTime: regularScheduledTime,  // Für Wiederholungen nach sofortigem Senden
             repeatDays: notifSettings.repeatDays,
             acknowledged: false,
             acknowledgedAt: null,
             relatedDataId: relatedData.id || null,
             relatedDataPath: relatedData.path || null,
             overlayEnabled: notifSettings.overlayEnabled !== false,
-            pushOverEnabled: notifSettings.pushOverEnabled !== false
+            pushOverEnabled: notifSettings.pushOverEnabled !== false,
+            sendImmediately: notifSettings.sendImmediately === true
         });
 
         console.log('Pushmail: Benachrichtigung erstellt:', programId, notificationType, 'Pushover:', notifSettings.pushOverEnabled !== false);
@@ -577,9 +603,16 @@ function replacePlaceholders(text, data) {
     return result;
 }
 
-function calculateScheduledTime(timeString, daysBeforeX, targetDate) {
+function calculateScheduledTime(timeString, daysBeforeX, targetDate, sendImmediately) {
     const [hours, minutes] = timeString.split(':').map(Number);
     let scheduled;
+
+    if (sendImmediately) {
+        // Sofort senden: Jetzt + 1 Minute
+        scheduled = new Date();
+        scheduled.setMinutes(scheduled.getMinutes() + 1);
+        return scheduled;
+    }
 
     if (targetDate) {
         scheduled = new Date(targetDate);
@@ -587,10 +620,18 @@ function calculateScheduledTime(timeString, daysBeforeX, targetDate) {
             scheduled.setDate(scheduled.getDate() - daysBeforeX);
         }
     } else {
+        // Kein targetDate und nicht sofort: Heute zur angegebenen Zeit
         scheduled = new Date();
     }
 
     scheduled.setHours(hours, minutes, 0, 0);
+    
+    // Wenn in Vergangenheit, auf nächsten Tag verschieben
+    const now = new Date();
+    if (scheduled < now && !sendImmediately) {
+        scheduled.setDate(scheduled.getDate() + 1);
+    }
+    
     return scheduled;
 }
 

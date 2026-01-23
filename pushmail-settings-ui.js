@@ -142,22 +142,33 @@ function renderNotificationsForProgram(programId, program, programSettings) {
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-2 mb-2">
-                    <label class="flex items-center gap-2 cursor-pointer p-2 bg-blue-50 rounded border border-blue-200 hover:bg-blue-100 transition-colors">
+                <div class="space-y-2 mb-2">
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="flex items-center gap-2 cursor-pointer p-2 bg-blue-50 rounded border border-blue-200 hover:bg-blue-100 transition-colors">
+                            <input type="checkbox" 
+                                   class="notification-overlay-checkbox h-4 w-4 text-blue-600" 
+                                   data-program="${programId}" 
+                                   data-notification="${notifId}"
+                                   ${notifSettings.overlayEnabled !== false ? 'checked' : ''}>
+                            <span class="text-xs font-semibold text-blue-700">🔔 In App anzeigen</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer p-2 bg-purple-50 rounded border border-purple-200 hover:bg-purple-100 transition-colors">
+                            <input type="checkbox" 
+                                   class="notification-pushover-checkbox h-4 w-4 text-purple-600" 
+                                   data-program="${programId}" 
+                                   data-notification="${notifId}"
+                                   ${notifSettings.pushOverEnabled !== false ? 'checked' : ''}>
+                            <span class="text-xs font-semibold text-purple-700">📱 Per Pushover</span>
+                        </label>
+                    </div>
+                    <label class="flex items-center gap-2 cursor-pointer p-2 bg-orange-50 rounded border border-orange-200 hover:bg-orange-100 transition-colors">
                         <input type="checkbox" 
-                               class="notification-overlay-checkbox h-4 w-4 text-blue-600" 
+                               class="notification-immediate-checkbox h-4 w-4 text-orange-600" 
                                data-program="${programId}" 
                                data-notification="${notifId}"
-                               ${notifSettings.overlayEnabled !== false ? 'checked' : ''}>
-                        <span class="text-xs font-semibold text-blue-700">🔔 In App anzeigen</span>
-                    </label>
-                    <label class="flex items-center gap-2 cursor-pointer p-2 bg-purple-50 rounded border border-purple-200 hover:bg-purple-100 transition-colors">
-                        <input type="checkbox" 
-                               class="notification-pushover-checkbox h-4 w-4 text-purple-600" 
-                               data-program="${programId}" 
-                               data-notification="${notifId}"
-                               ${notifSettings.pushOverEnabled !== false ? 'checked' : ''}>
-                        <span class="text-xs font-semibold text-purple-700">📱 Per Pushover</span>
+                               ${notifSettings.sendImmediately === true ? 'checked' : ''}>
+                        <span class="text-xs font-semibold text-orange-700">⚡ Sofort senden</span>
+                        <span class="text-xs text-gray-500">(ignoriert Uhrzeit & Tage vorher)</span>
                     </label>
                 </div>
 
@@ -258,6 +269,16 @@ function attachNotificationSettingsListeners() {
         });
     });
 
+    // Sofort-senden-Checkboxen
+    document.querySelectorAll('.notification-immediate-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            const programId = e.target.dataset.program;
+            const notifId = e.target.dataset.notification;
+            console.log('Pushmail: Sofort-senden Toggle geändert:', programId, notifId, e.target.checked);
+            autoSave();
+        });
+    });
+
     // Text anpassen Buttons
     document.querySelectorAll('.customize-text-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -329,6 +350,7 @@ async function savePushmailNotificationSettingsFromUI() {
             const daysInput = document.querySelector(`.notification-days-input[data-program="${programId}"][data-notification="${notifId}"]`);
             const overlayCheckbox = document.querySelector(`.notification-overlay-checkbox[data-program="${programId}"][data-notification="${notifId}"]`);
             const pushoverCheckbox = document.querySelector(`.notification-pushover-checkbox[data-program="${programId}"][data-notification="${notifId}"]`);
+            const immediateCheckbox = document.querySelector(`.notification-immediate-checkbox[data-program="${programId}"][data-notification="${notifId}"]`);
 
             const notifDef = program.notifications[notifId];
 
@@ -340,7 +362,8 @@ async function savePushmailNotificationSettingsFromUI() {
                 customTitle: notifDef.defaultTitle,
                 customMessage: notifDef.defaultMessage,
                 overlayEnabled: overlayCheckbox?.checked !== false,
-                pushOverEnabled: pushoverCheckbox?.checked !== false
+                pushOverEnabled: pushoverCheckbox?.checked !== false,
+                sendImmediately: immediateCheckbox?.checked === true
             };
         });
     });
@@ -368,10 +391,17 @@ async function resetNotificationToDefault(programId, notifId) {
     const repeatInput = document.querySelector(`.notification-repeat-input[data-program="${programId}"][data-notification="${notifId}"]`);
     const daysInput = document.querySelector(`.notification-days-input[data-program="${programId}"][data-notification="${notifId}"]`);
 
+    const overlayCheckbox = document.querySelector(`.notification-overlay-checkbox[data-program="${programId}"][data-notification="${notifId}"]`);
+    const pushoverCheckbox = document.querySelector(`.notification-pushover-checkbox[data-program="${programId}"][data-notification="${notifId}"]`);
+    const immediateCheckbox = document.querySelector(`.notification-immediate-checkbox[data-program="${programId}"][data-notification="${notifId}"]`);
+
     if (stateSelect) stateSelect.value = 'active';
     if (timeInput) timeInput.value = notifDef.defaultTime;
     if (repeatInput) repeatInput.value = notifDef.defaultRepeatDays;
     if (daysInput) daysInput.value = notifDef.defaultDaysBeforeX || 0;
+    if (overlayCheckbox) overlayCheckbox.checked = true;
+    if (pushoverCheckbox) pushoverCheckbox.checked = true;
+    if (immediateCheckbox) immediateCheckbox.checked = notifDef.defaultDaysBeforeX === null;
 
     alertUser('Benachrichtigung auf Standard zurückgesetzt.', 'success');
 }
