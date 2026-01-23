@@ -254,6 +254,20 @@
                     </div>
                 </div>
 
+                <div id="sendungsverwaltungCard" data-permission="SENDUNGSVERWALTUNG"
+                    class="card bg-white p-4 rounded-xl shadow-lg flex items-center space-x-4 hover:shadow-xl transition duration-200 cursor-pointer w-full border-t-4 border-amber-500 hidden">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                        class="w-10 h-10 text-amber-500 flex-shrink-0">
+                        <path d="M3.375 4.5C2.339 4.5 1.5 5.34 1.5 6.375V13.5h12V6.375c0-1.036-.84-1.875-1.875-1.875h-8.25ZM13.5 15h-12v2.625c0 1.035.84 1.875 1.875 1.875h.375a3 3 0 1 1 6 0h3a.75.75 0 0 0 .75-.75V15Z" />
+                        <path d="M8.25 19.5a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0ZM15.75 6.75a.75.75 0 0 0-.75.75v11.25c0 .087.015.17.042.248a3 3 0 0 1 5.958.464c.853-.175 1.522-.935 1.464-1.883a18.659 18.659 0 0 0-3.732-10.104 1.837 1.837 0 0 0-1.47-.725H15.75Z" />
+                        <path d="M19.5 19.5a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0Z" />
+                    </svg>
+                    <div>
+                        <span class="text-xl font-bold text-amber-500 block">Sendungsverwaltung</span>
+                        <span class="text-sm text-gray-500">Pakete & Sendungen tracken & verwalten.</span>
+                    </div>
+                </div>
+
                 <div id="rezepteCard" data-permission="REZEPTE"
                     class="card bg-white p-4 rounded-xl shadow-lg flex items-center space-x-4 hover:shadow-xl transition duration-200 cursor-pointer w-full border-t-4 border-orange-500 hidden">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
@@ -2488,6 +2502,106 @@
                             🔄 Abtausch speichern
                         </button>
                     </div>
+                </div>
+            </div>
+
+            <!-- ========== SENDUNGSVERWALTUNG VIEW ========== -->
+            <div id="sendungsverwaltungView" class="view">
+                <div class="back-link-container w-full mb-3">
+                    <div class="flex justify-between items-center flex-wrap gap-2">
+                        <button class="back-link flex items-center text-gray-600 hover:text-amber-600 transition"
+                            data-target="home">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                stroke-linejoin="round" class="w-5 h-5 mr-1">
+                                <path d="m15 18-6-6 6-6" />
+                            </svg>
+                            <span class="text-sm font-semibold">zurück</span>
+                        </button>
+                        <button id="openSendungModalBtn"
+                            class="py-2 px-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 4v16m8-8H4" />
+                            </svg>
+                            Neue Sendung
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-4 rounded-xl shadow-md mb-3">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-xl font-bold">📦 Sendungsverwaltung</h2>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2 text-center">
+                        <div class="bg-white/20 px-2 py-2 rounded-lg">
+                            <div class="text-2xl font-bold" id="statsErwartet">0</div>
+                            <div class="text-xs">Erwartet</div>
+                        </div>
+                        <div class="bg-white/20 px-2 py-2 rounded-lg">
+                            <div class="text-2xl font-bold" id="statsUnterwegs">0</div>
+                            <div class="text-xs">Unterwegs</div>
+                        </div>
+                        <div class="bg-white/20 px-2 py-2 rounded-lg">
+                            <div class="text-2xl font-bold" id="statsVersand">0</div>
+                            <div class="text-xs">Zu versenden</div>
+                        </div>
+                        <div class="bg-white/20 px-2 py-2 rounded-lg">
+                            <div class="text-2xl font-bold" id="statsRuecksendung">0</div>
+                            <div class="text-xs">Rücksendungen</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3 space-y-2">
+                    <input type="text" id="sendungSearchInput"
+                        class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none"
+                        placeholder="🔍 Suche nach Beschreibung, Transportnummer, Produkt, Anbieter...">
+                    
+                    <div class="flex gap-2 overflow-x-auto pb-2">
+                        <select id="sendungTypFilter"
+                            class="p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm">
+                            <option value="">Alle Typen</option>
+                            <option value="empfang">📥 Empfang</option>
+                            <option value="versand">📤 Versand</option>
+                            <option value="ruecksendung">🔄 Rücksendung</option>
+                        </select>
+
+                        <select id="sendungStatusFilter"
+                            class="p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm">
+                            <option value="">Alle Status</option>
+                            <option value="erwartet">⏳ Erwartet</option>
+                            <option value="unterwegs">🚚 Unterwegs</option>
+                            <option value="zugestellt">✅ Zugestellt</option>
+                            <option value="problem">⚠️ Problem</option>
+                            <option value="storniert">❌ Storniert</option>
+                        </select>
+
+                        <select id="sendungPrioritaetFilter"
+                            class="p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm">
+                            <option value="">Alle Prioritäten</option>
+                            <option value="normal">Normal</option>
+                            <option value="hoch">⚡ Hoch</option>
+                            <option value="dringend">🚨 Dringend</option>
+                        </select>
+
+                        <select id="sendungZeitraumFilter"
+                            class="p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm">
+                            <option value="alle">Alle Zeiträume</option>
+                            <option value="diese_woche">Diese Woche</option>
+                            <option value="dieser_monat">Dieser Monat</option>
+                            <option value="letzter_monat">Letzter Monat</option>
+                        </select>
+
+                        <button id="sendungResetFiltersBtn"
+                            class="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-400 transition whitespace-nowrap">
+                            ↺ Filter zurücksetzen
+                        </button>
+                    </div>
+                </div>
+
+                <div id="sendungenContainer" class="space-y-3">
                 </div>
             </div>
 
@@ -7573,6 +7687,204 @@
 <script type="module" src="admin_rollenverwaltung.js"></script>
 <script type="module" src="checklist.js"></script>
 <script type="module" src="essensberechnung.js"></script>
+    <!-- ========== SENDUNG MODAL ========== -->
+    <div id="sendungModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[100]">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h3 id="sendungModalTitle" class="text-2xl font-bold text-amber-800">📦 Neue Sendung</h3>
+                <button id="closeSendungModal" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
+            </div>
+
+            <div class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Typ <span class="text-red-500">*</span></label>
+                        <select id="sendungTyp" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500 bg-white">
+                            <option value="empfang">📥 Empfang</option>
+                            <option value="versand">📤 Versand</option>
+                            <option value="ruecksendung">🔄 Rücksendung</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Status <span class="text-red-500">*</span></label>
+                        <select id="sendungStatus" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500 bg-white">
+                            <option value="erwartet">⏳ Erwartet</option>
+                            <option value="unterwegs">🚚 Unterwegs</option>
+                            <option value="zugestellt">✅ Zugestellt</option>
+                            <option value="problem">⚠️ Problem</option>
+                            <option value="storniert">❌ Storniert</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Beschreibung <span class="text-red-500">*</span></label>
+                    <input type="text" id="sendungBeschreibung" placeholder="z.B. Laptop von Amazon" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Anbieter <span class="text-red-500">*</span></label>
+                        <input type="text" id="sendungAnbieter" list="anbieterList" placeholder="DHL, Hermes, DPD..." class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                        <datalist id="anbieterList">
+                            <option value="DHL">
+                            <option value="Hermes">
+                            <option value="DPD">
+                            <option value="Post Österreich">
+                            <option value="UPS">
+                            <option value="FedEx">
+                            <option value="GLS">
+                            <option value="Amazon Logistics">
+                        </datalist>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Transportnummer <span class="text-red-500">*</span></label>
+                        <input type="text" id="sendungTransportnummer" placeholder="Trackingnummer" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Produkt</label>
+                        <input type="text" id="sendungProdukt" placeholder="Name des Produkts" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Priorität</label>
+                        <select id="sendungPrioritaet" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500 bg-white">
+                            <option value="normal">Normal</option>
+                            <option value="hoch">⚡ Hoch</option>
+                            <option value="dringend">🚨 Dringend</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Absender</label>
+                        <input type="text" id="sendungAbsender" placeholder="Von wem / welchem Shop" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Empfänger</label>
+                        <input type="text" id="sendungEmpfaenger" placeholder="An wen" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Deadline Erwartet</label>
+                        <input type="date" id="sendungDeadlineErwartet" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Deadline Versand</label>
+                        <input type="date" id="sendungDeadlineVersand" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Bestellnummer</label>
+                        <input type="text" id="sendungBestellnummer" placeholder="Order-ID" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Warenwert (€)</label>
+                        <input type="number" id="sendungWert" min="0" step="0.01" placeholder="0.00" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Versandkosten (€)</label>
+                        <input type="number" id="sendungVersandkosten" min="0" step="0.01" placeholder="0.00" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Lagerort</label>
+                        <input type="text" id="sendungLagerort" placeholder="Wo liegt es?" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Aufgeteilt in Lieferungen</label>
+                        <div class="flex gap-2">
+                            <input type="number" id="sendungAufgeteiltIndex" min="1" placeholder="Nr." class="w-1/2 p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                            <input type="number" id="sendungAufgeteiltAnzahl" min="1" placeholder="von" class="w-1/2 p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">z.B. Lieferung 1 von 3</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Tags</label>
+                        <input type="text" id="sendungTags" placeholder="geschenk, wichtig, ..." class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                        <p class="text-xs text-gray-500 mt-1">Mit Komma trennen</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Inhalt (Liste)</label>
+                    <textarea id="sendungInhalt" rows="3" placeholder="Artikel 1&#10;Artikel 2&#10;Artikel 3" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Notizen</label>
+                    <textarea id="sendungNotizen" rows="3" placeholder="Zusätzliche Informationen..." class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500"></textarea>
+                </div>
+
+                <div class="border-t pt-4">
+                    <h4 class="font-bold text-gray-700 mb-3">🔔 Erinnerungen</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="sendungErinnerungenAktiv" class="w-5 h-5 text-amber-500 border-gray-300 rounded focus:ring-amber-500">
+                            <label for="sendungErinnerungenAktiv" class="ml-2 text-sm font-bold text-gray-700">Erinnerungen aktivieren</label>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">Tage vorher erinnern</label>
+                            <select id="sendungErinnerungTageVorher" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500 bg-white" disabled>
+                                <option value="1">1 Tag vorher</option>
+                                <option value="3">3 Tage vorher</option>
+                                <option value="7">7 Tage vorher</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border-t pt-4" id="ruecksendungSection" style="display:none;">
+                    <h4 class="font-bold text-gray-700 mb-3">🔄 Rücksendung</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">Rücksendungsfrist</label>
+                            <input type="date" id="sendungRuecksendungFrist" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">Grund</label>
+                            <input type="text" id="sendungRuecksendungGrund" placeholder="Warum zurück?" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                        </div>
+                    </div>
+                    <div class="mt-3 flex items-center">
+                        <input type="checkbox" id="sendungRuecksendeEtikett" class="w-5 h-5 text-amber-500 border-gray-300 rounded focus:ring-amber-500">
+                        <label for="sendungRuecksendeEtikett" class="ml-2 text-sm font-bold text-gray-700">Rücksende-Etikett vorhanden</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6 pt-4 border-t">
+                <button id="cancelSendungBtn" class="px-6 py-2.5 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-bold transition">
+                    Abbrechen
+                </button>
+                <button id="deleteSendungBtn" style="display:none" class="px-6 py-2.5 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition">
+                    Löschen
+                </button>
+                <button id="saveSendungBtn" class="px-6 py-2.5 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 transition">
+                    Speichern
+                </button>
+            </div>
+        </div>
+    </div>
+
 <script type="module" src="notfall.js"></script>
 <script type="module" src="pushbenachrichtigung.js"></script>
 <script type="module" src="terminplaner.js"></script>

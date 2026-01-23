@@ -422,6 +422,7 @@ export function renderUserManagement() {
         'WERTGUTHABEN': 'Wertguthaben',
         'LIZENZEN': 'Lizenzen',
         'VERTRAGSVERWALTUNG': 'Vertragsverwaltung',
+        'SENDUNGSVERWALTUNG': 'Sendungsverwaltung',
         'REZEPTE': 'Rezepte'
     };
     // =================================================================

@@ -373,6 +373,24 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // SENDUNGSVERWALTUNG (Package & Shipment Management)
+    // ═══════════════════════════════════════════════════════════════
+    
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/sendungen/{sendungId} {
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();
+      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/sendungen_anbieter/{anbieterId} {
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();
+      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // GESCHENKEMANAGEMENT (Gift Management)
     // ═══════════════════════════════════════════════════════════════
 

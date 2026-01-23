@@ -32,6 +32,7 @@ import { initializeVertragsverwaltung, listenForVertraege, stopVertragsverwaltun
 import { initRezeptverwaltung } from './rezeptverwaltung.js';
 import { initializeHaushaltszahlungen, listenForHaushaltszahlungen, stopHaushaltszahlungenListeners } from './haushaltszahlungen.js';
 import { initializeGeschenkemanagement, listenForGeschenke, stopGeschenkemanagementListeners } from './geschenkemanagement.js';
+import { initializeSendungsverwaltungView, listenForSendungen, stopSendungsverwaltungListeners } from './sendungsverwaltung.js';
 // // ENDE-ZIKA //
 
 // PUSHOVER API TOKEN (fest codiert, für alle User gleich)
@@ -124,6 +125,7 @@ export const views = {
     wertguthabenSettings: { id: 'wertguthabenSettingsView' },
     lizenzen: { id: 'lizenzenView' },
     vertragsverwaltung: { id: 'vertragsverwaltungView' },
+    sendungsverwaltung: { id: 'sendungsverwaltungView' },
     rezepte: { id: 'rezepteView' },
     haushaltszahlungen: { id: 'haushaltszahlungenView' },
     geschenkemanagement: { id: 'geschenkemanagementView' }
@@ -158,6 +160,9 @@ export function stopAllUserDependentListeners(resetMode = false) {
     }
     if (typeof stopGeschenkemanagementListeners === 'function') {
         stopGeschenkemanagementListeners();
+    }
+    if (typeof stopSendungsverwaltungListeners === 'function') {
+        stopSendungsverwaltungListeners();
     }
 
     if (resetMode) {
@@ -289,6 +294,12 @@ function startUserDependentListeners() {
         listenForGeschenke();
     } else {
         console.error("Fehler: listenForGeschenke ist nicht importiert!");
+    }
+
+    if (typeof listenForSendungen === 'function') {
+        listenForSendungen();
+    } else {
+        console.error("Fehler: listenForSendungen ist nicht importiert!");
     }
 }
 
@@ -1539,6 +1550,11 @@ export function navigate(targetViewName) {
             return alertUser("Zugriff verweigert (Vertragsverwaltung).", 'error');
         }
 
+        // Zugriffsschutz für Sendungsverwaltung
+        if (targetViewName === 'sendungsverwaltung' && !userPermissions.includes('SENDUNGSVERWALTUNG')) {
+            return alertUser("Zugriff verweigert (Sendungsverwaltung).", 'error');
+        }
+
         // Zugriffsschutz für Rezepte
         if (targetViewName === 'rezepte' && !userPermissions.includes('REZEPTE')) {
             return alertUser("Zugriff verweigert (Rezepte).", 'error');
@@ -1619,6 +1635,10 @@ export function navigate(targetViewName) {
 
     if (targetViewName === 'vertragsverwaltung') {
         initializeVertragsverwaltung();
+    }
+
+    if (targetViewName === 'sendungsverwaltung') {
+        initializeSendungsverwaltungView();
     }
 
     if (targetViewName === 'rezepte') {
@@ -2558,6 +2578,9 @@ export function setupEventListeners() {
 
     const vertragsverwaltungCard = document.getElementById('vertragsverwaltungCard');
     if (vertragsverwaltungCard) vertragsverwaltungCard.addEventListener('click', () => navigate('vertragsverwaltung'));
+
+    const sendungsverwaltungCard = document.getElementById('sendungsverwaltungCard');
+    if (sendungsverwaltungCard) sendungsverwaltungCard.addEventListener('click', () => navigate('sendungsverwaltung'));
 
     const rezepteCard = document.getElementById('rezepteCard');
     if (rezepteCard) rezepteCard.addEventListener('click', () => navigate('rezepte'));
