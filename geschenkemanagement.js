@@ -2111,7 +2111,7 @@ window.updateEigeneKostenAuto = function() {
                             max="100" 
                             step="1"
                             oninput="window.updateKostenVorschlagBetrag()"
-                            class="w-12 px-2 py-1 border-2 border-yellow-400 rounded text-center font-bold bg-white">
+                            class="w-20 px-2 py-1 border-2 border-yellow-400 rounded text-center font-bold bg-white">
                         <span class="text-sm text-gray-700">% von</span>
                     </div>
                     <div class="flex items-center justify-between">
@@ -2150,7 +2150,7 @@ window.updateEigeneKostenAuto = function() {
                             max="100" 
                             step="1"
                             oninput="window.updateKostenVorschlagBetrag()"
-                            class="w-12 px-2 py-1 border-2 border-blue-400 rounded text-center font-bold bg-white">
+                            class="w-20 px-2 py-1 border-2 border-blue-400 rounded text-center font-bold bg-white">
                         <span class="text-sm text-gray-700">% von</span>
                     </div>
                     <div class="flex items-center justify-between">
@@ -4091,6 +4091,7 @@ window.sortGeschenkeBy = sortGeschenkeBy;
 function lockModalFields() {
     // Felder die IMMER editierbar bleiben
     const alwaysEditableIds = ['gm-status', 'gm-ist-bezahlung', 'gm-standort'];
+    // gm-eigene-kosten ist NICHT in der Liste → wird auch gesperrt!
     
     // Alle Input-Felder
     const inputs = document.querySelectorAll('#geschenkModal input[type="text"], #geschenkModal input[type="number"], #geschenkModal textarea');
