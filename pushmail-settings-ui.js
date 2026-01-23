@@ -36,8 +36,8 @@ export async function renderPushmailNotificationSettingsUI() {
     const userPermissions = currentUser.permissions || [];
     const isSystemAdmin = currentUser.role === 'SYSTEMADMIN';
 
-    // Programme rendern
-    const html = Object.keys(NOTIFICATION_DEFINITIONS).map(programId => {
+    // Programme rendern mit Accordion
+    const html = Object.keys(NOTIFICATION_DEFINITIONS).map((programId, index) => {
         const program = NOTIFICATION_DEFINITIONS[programId];
         const programSettings = settings.programs[programId];
 
@@ -50,20 +50,34 @@ export async function renderPushmailNotificationSettingsUI() {
             return '';
         }
 
+        const notifCount = Object.keys(program.notifications).length;
+        const isExpanded = index === 0; // Erstes Programm standardmäßig aufgeklappt
+
         return `
-            <div class="card bg-white p-4 rounded-xl shadow-lg border-l-4 ${program.borderClass}">
-                <div class="flex items-center justify-between mb-3">
-                    <h4 class="font-bold ${program.textClass}">${program.title}</h4>
-                    <label class="flex items-center gap-2">
-                        <input type="checkbox" class="program-toggle h-4 w-4" 
-                               data-program="${programId}" 
-                               ${programSettings.enabled ? 'checked' : ''}>
-                        <span class="text-sm text-gray-700">AN</span>
-                    </label>
+            <div class="card bg-white rounded-xl shadow-lg border-l-4 ${program.borderClass} mb-3">
+                <div class="accordion-header p-4 cursor-pointer hover:bg-gray-50 transition-colors" 
+                     data-program="${programId}">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3 flex-grow">
+                            <span class="accordion-icon text-xl transition-transform ${isExpanded ? 'rotate-90' : ''}">▶</span>
+                            <div>
+                                <h4 class="font-bold ${program.textClass} text-base">${program.title}</h4>
+                                <p class="text-xs text-gray-500">${notifCount} Benachrichtigungstyp${notifCount !== 1 ? 'en' : ''}</p>
+                            </div>
+                        </div>
+                        <label class="flex items-center gap-2" onclick="event.stopPropagation();">
+                            <input type="checkbox" class="program-toggle h-4 w-4" 
+                                   data-program="${programId}" 
+                                   ${programSettings.enabled ? 'checked' : ''}>
+                            <span class="text-sm font-semibold ${programSettings.enabled ? 'text-green-600' : 'text-gray-400'}">AN</span>
+                        </label>
+                    </div>
                 </div>
 
-                <div class="space-y-3 pl-4 border-l-2 border-gray-200">
-                    ${renderNotificationsForProgram(programId, program, programSettings)}
+                <div class="accordion-content ${isExpanded ? '' : 'hidden'}" data-program="${programId}">
+                    <div class="p-4 pt-0 space-y-3 border-t border-gray-100">
+                        ${renderNotificationsForProgram(programId, program, programSettings)}
+                    </div>
                 </div>
             </div>
         `;
@@ -128,15 +142,22 @@ function renderNotificationsForProgram(programId, program, programSettings) {
                     </div>
                 </div>
 
-                <div class="mb-2 p-2 bg-white rounded border border-gray-300">
-                    <label class="flex items-center gap-2 cursor-pointer">
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <label class="flex items-center gap-2 cursor-pointer p-2 bg-blue-50 rounded border border-blue-200 hover:bg-blue-100 transition-colors">
                         <input type="checkbox" 
-                               class="notification-pushover-checkbox h-4 w-4" 
+                               class="notification-overlay-checkbox h-4 w-4 text-blue-600" 
+                               data-program="${programId}" 
+                               data-notification="${notifId}"
+                               ${notifSettings.overlayEnabled !== false ? 'checked' : ''}>
+                        <span class="text-xs font-semibold text-blue-700">🔔 In App anzeigen</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer p-2 bg-purple-50 rounded border border-purple-200 hover:bg-purple-100 transition-colors">
+                        <input type="checkbox" 
+                               class="notification-pushover-checkbox h-4 w-4 text-purple-600" 
                                data-program="${programId}" 
                                data-notification="${notifId}"
                                ${notifSettings.pushOverEnabled !== false ? 'checked' : ''}>
-                        <span class="text-xs font-semibold text-gray-700">📱 Pushover</span>
-                        <span class="text-xs text-gray-500">(Wenn aktiv: Per Pushover senden, sonst nur Overlay)</span>
+                        <span class="text-xs font-semibold text-purple-700">📱 Per Pushover</span>
                     </label>
                 </div>
 
@@ -167,6 +188,20 @@ function attachNotificationSettingsListeners() {
         await savePushmailNotificationSettingsFromUI();
     };
 
+    // Accordion Toggle
+    document.querySelectorAll('.accordion-header').forEach(header => {
+        header.addEventListener('click', (e) => {
+            const programId = e.currentTarget.dataset.program;
+            const content = document.querySelector(`.accordion-content[data-program="${programId}"]`);
+            const icon = e.currentTarget.querySelector('.accordion-icon');
+            
+            if (content) {
+                content.classList.toggle('hidden');
+                icon.classList.toggle('rotate-90');
+            }
+        });
+    });
+
     // Global Toggle
     const globalToggle = document.getElementById('pushmailAutoGlobalEnabled');
     if (globalToggle) {
@@ -181,6 +216,14 @@ function attachNotificationSettingsListeners() {
         toggle.addEventListener('change', (e) => {
             const programId = e.target.dataset.program;
             console.log('Pushmail: Programm Toggle geändert:', programId, e.target.checked);
+            
+            // Toggle-Text aktualisieren
+            const label = e.target.nextElementSibling;
+            if (label) {
+                label.textContent = e.target.checked ? 'AN' : 'AUS';
+                label.className = e.target.checked ? 'text-sm font-semibold text-green-600' : 'text-sm font-semibold text-gray-400';
+            }
+            
             autoSave();
         });
     });
@@ -191,6 +234,16 @@ function attachNotificationSettingsListeners() {
             const programId = e.target.dataset.program;
             const notifId = e.target.dataset.notification;
             console.log('Pushmail: Status geändert:', programId, notifId, e.target.value);
+            autoSave();
+        });
+    });
+
+    // Overlay-Checkboxen
+    document.querySelectorAll('.notification-overlay-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            const programId = e.target.dataset.program;
+            const notifId = e.target.dataset.notification;
+            console.log('Pushmail: Overlay Toggle geändert:', programId, notifId, e.target.checked);
             autoSave();
         });
     });
@@ -274,6 +327,7 @@ async function savePushmailNotificationSettingsFromUI() {
             const timeInput = document.querySelector(`.notification-time-input[data-program="${programId}"][data-notification="${notifId}"]`);
             const repeatInput = document.querySelector(`.notification-repeat-input[data-program="${programId}"][data-notification="${notifId}"]`);
             const daysInput = document.querySelector(`.notification-days-input[data-program="${programId}"][data-notification="${notifId}"]`);
+            const overlayCheckbox = document.querySelector(`.notification-overlay-checkbox[data-program="${programId}"][data-notification="${notifId}"]`);
             const pushoverCheckbox = document.querySelector(`.notification-pushover-checkbox[data-program="${programId}"][data-notification="${notifId}"]`);
 
             const notifDef = program.notifications[notifId];
@@ -285,6 +339,7 @@ async function savePushmailNotificationSettingsFromUI() {
                 daysBeforeX: daysInput ? parseInt(daysInput.value) : notifDef.defaultDaysBeforeX,
                 customTitle: notifDef.defaultTitle,
                 customMessage: notifDef.defaultMessage,
+                overlayEnabled: overlayCheckbox?.checked !== false,
                 pushOverEnabled: pushoverCheckbox?.checked !== false
             };
         });

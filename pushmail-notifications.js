@@ -365,6 +365,7 @@ export function getDefaultPushmailNotificationSettings() {
                 daysBeforeX: notif.defaultDaysBeforeX,
                 customTitle: notif.defaultTitle,
                 customMessage: notif.defaultMessage,
+                overlayEnabled: true,
                 pushOverEnabled: true
             };
         });
@@ -445,6 +446,7 @@ function normalizePushmailSettings(raw) {
                 daysBeforeX: notifRaw.daysBeforeX !== undefined ? notifRaw.daysBeforeX : notifDefaults.daysBeforeX,
                 customTitle: notifRaw.customTitle || notifDefaults.customTitle,
                 customMessage: notifRaw.customMessage || notifDefaults.customMessage,
+                overlayEnabled: notifRaw.overlayEnabled !== false,
                 pushOverEnabled: notifRaw.pushOverEnabled !== false
             };
         });
@@ -515,6 +517,20 @@ export async function createPendingNotification(userId, programId, notificationT
         const title = replacePlaceholders(notifSettings.customTitle, relatedData);
         const message = replacePlaceholders(notifSettings.customMessage, relatedData);
 
+        // Zeitpunkt berechnen
+        const scheduledFor = calculateScheduledTime(
+            notifSettings.time,
+            notifSettings.daysBeforeX,
+            relatedData.targetDate
+        );
+
+        // VALIDIERUNG: Benachrichtigung liegt in der Vergangenheit?
+        const now = new Date();
+        if (scheduledFor < now) {
+            console.log('Pushmail: Benachrichtigung liegt in Vergangenheit - übersprungen:', programId, notificationType, scheduledFor);
+            return;
+        }
+
         const alreadyAcknowledgedSameContent = ackSnapshot.docs.some(docSnap => {
             const data = docSnap.data() || {};
             return data.title === title && data.message === message;
@@ -524,15 +540,6 @@ export async function createPendingNotification(userId, programId, notificationT
             console.log('Pushmail: Bereits quittiert, gleicher Inhalt – keine neue Benachrichtigung:', programId, notificationType, relatedDataId);
             return;
         }
-
-        // Platzhalter ersetzen (bereits oben berechnet)
-
-        // Zeitpunkt berechnen
-        const scheduledFor = calculateScheduledTime(
-            notifSettings.time,
-            notifSettings.daysBeforeX,
-            relatedData.targetDate
-        );
 
         // Benachrichtigung speichern
         await addDoc(colRef, {
@@ -549,6 +556,7 @@ export async function createPendingNotification(userId, programId, notificationT
             acknowledgedAt: null,
             relatedDataId: relatedData.id || null,
             relatedDataPath: relatedData.path || null,
+            overlayEnabled: notifSettings.overlayEnabled !== false,
             pushOverEnabled: notifSettings.pushOverEnabled !== false
         });
 
