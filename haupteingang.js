@@ -22,7 +22,9 @@ import {
     renderPendingNotifications,
     initializePendingNotificationsModal,
     checkAndShowPendingNotificationsModal,
-    startPushmailScheduler
+    startPushmailScheduler,
+    startPendingNotificationsListener,
+    stopPendingNotificationsListener
 } from './pushmail-notifications.js';
 import { initializePushmailSettingsUI } from './pushmail-settings-ui.js';
 import { initializeTicketSupport, listenForTickets, stopTicketsListener } from './ticket-support.js';
@@ -33,6 +35,7 @@ import { initRezeptverwaltung } from './rezeptverwaltung.js';
 import { initializeHaushaltszahlungen, listenForHaushaltszahlungen, stopHaushaltszahlungenListeners } from './haushaltszahlungen.js';
 import { initializeGeschenkemanagement, listenForGeschenke, stopGeschenkemanagementListeners } from './geschenkemanagement.js';
 import { initializeSendungsverwaltungView, listenForSendungen, stopSendungsverwaltungListeners } from './sendungsverwaltung.js';
+import { ensureNachrichtencenterSelfContact } from './notfall.js';
 // // ENDE-ZIKA //
 
 // PUSHOVER API TOKEN (fest codiert, für alle User gleich)
@@ -142,6 +145,9 @@ export let pushoverSelectedRecipientId = null;
 export function stopAllUserDependentListeners(resetMode = false) {
     if (typeof stopTicketsListener === 'function') {
         stopTicketsListener();
+    }
+    if (typeof stopPendingNotificationsListener === 'function') {
+        stopPendingNotificationsListener();
     }
     if (typeof stopWertguthabenListener === 'function') {
         stopWertguthabenListener();
@@ -518,6 +524,7 @@ async function initializeFirebase() {
                 // Pushmail-Benachrichtigungen initialisieren
                 initializePendingNotificationsModal();
                 startPushmailScheduler();
+                startPendingNotificationsListener(); // Echtzeit-Updates
                 
                 // Ausstehende Benachrichtigungen prüfen und Modal anzeigen
                 setTimeout(() => {
@@ -1043,6 +1050,16 @@ const savePushmailCenterUserKey = async () => {
         userKeyInput.value = '';
         setPushmailPushoverStatus('User-Key gespeichert.', true);
         await refreshPushmailCenterPushoverUI(true);
+        
+        // Globale Kontaktliste automatisch aktualisieren
+        if (typeof ensureNachrichtencenterSelfContact === 'function') {
+            try {
+                await ensureNachrichtencenterSelfContact();
+                console.log('Pushmail: Globaler Kontakt automatisch synchronisiert');
+            } catch (e) {
+                console.warn('Pushmail: Globaler Kontakt konnte nicht synchronisiert werden:', e);
+            }
+        }
     } catch (e) {
         console.error('PushmailCenter: Fehler beim Speichern:', e);
         alertUser('Fehler beim Speichern. Bitte später erneut versuchen.', 'error');

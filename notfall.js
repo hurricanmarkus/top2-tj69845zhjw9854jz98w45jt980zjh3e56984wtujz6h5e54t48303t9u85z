@@ -34,7 +34,7 @@ function getNachrichtencenterSelfContactId() {
   return `self_${userId}`;
 }
 
-async function ensureNachrichtencenterSelfContact() {
+export async function ensureNachrichtencenterSelfContact() {
   if (!canUseNachrichtencenterContactBook()) return;
   const userId = String(currentUser?.mode || '').trim();
   if (!userId || userId === GUEST_MODE) return;
