@@ -2530,77 +2530,114 @@
                     </div>
                 </div>
 
-                <div class="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-4 rounded-xl shadow-md mb-3">
-                    <div class="flex items-center justify-between mb-3">
-                        <h2 class="text-xl font-bold">📦 Sendungsverwaltung</h2>
-                    </div>
-                    <div class="grid grid-cols-4 gap-2 text-center">
-                        <div class="bg-white/20 px-2 py-2 rounded-lg">
-                            <div class="text-2xl font-bold" id="statsErwartet">0</div>
-                            <div class="text-xs">Erwartet</div>
+                <!-- Tabs Navigation -->
+                <div class="flex gap-2 mb-3 border-b-2 border-gray-200">
+                    <button id="tabEmpfang" class="sendung-tab px-4 py-2 font-bold text-blue-600 border-b-4 border-blue-600 transition" data-tab="empfang">
+                        📥 Empfang
+                    </button>
+                    <button id="tabVersand" class="sendung-tab px-4 py-2 font-bold text-gray-500 hover:text-orange-600 transition" data-tab="versand">
+                        📤 Versand
+                    </button>
+                    <button id="tabRuecksendung" class="sendung-tab px-4 py-2 font-bold text-gray-500 hover:text-purple-600 transition" data-tab="ruecksendung">
+                        🔄 Rücksendung
+                    </button>
+                </div>
+
+                <!-- Dashboard Empfang -->
+                <div id="dashboardEmpfang" class="sendung-dashboard bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4 rounded-xl shadow-md mb-3">
+                    <h2 class="text-xl font-bold mb-3">📥 Eingehende Pakete</h2>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="bg-white/20 px-3 py-2 rounded-lg">
+                            <div class="text-2xl font-bold" id="empfangErwartet">0</div>
+                            <div class="text-xs">⏳ Erwartet</div>
                         </div>
-                        <div class="bg-white/20 px-2 py-2 rounded-lg">
-                            <div class="text-2xl font-bold" id="statsUnterwegs">0</div>
-                            <div class="text-xs">Unterwegs</div>
+                        <div class="bg-white/20 px-3 py-2 rounded-lg">
+                            <div class="text-2xl font-bold" id="empfangUnterwegs">0</div>
+                            <div class="text-xs">🚚 Unterwegs</div>
                         </div>
-                        <div class="bg-white/20 px-2 py-2 rounded-lg">
-                            <div class="text-2xl font-bold" id="statsVersand">0</div>
-                            <div class="text-xs">Zu versenden</div>
-                        </div>
-                        <div class="bg-white/20 px-2 py-2 rounded-lg">
-                            <div class="text-2xl font-bold" id="statsRuecksendung">0</div>
-                            <div class="text-xs">Rücksendungen</div>
+                        <div class="bg-white/20 px-3 py-2 rounded-lg">
+                            <div class="text-2xl font-bold" id="empfangProblem">0</div>
+                            <div class="text-xs">⚠️ Problem</div>
                         </div>
                     </div>
                 </div>
 
+                <!-- Dashboard Versand -->
+                <div id="dashboardVersand" class="sendung-dashboard hidden bg-gradient-to-r from-orange-500 to-red-500 text-white p-4 rounded-xl shadow-md mb-3">
+                    <h2 class="text-xl font-bold mb-3">📤 Ausgehende Pakete</h2>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="bg-white/20 px-3 py-2 rounded-lg">
+                            <div class="text-2xl font-bold" id="versandVorbereitung">0</div>
+                            <div class="text-xs">📦 In Vorbereitung</div>
+                        </div>
+                        <div class="bg-white/20 px-3 py-2 rounded-lg">
+                            <div class="text-2xl font-bold" id="versandUnterwegs">0</div>
+                            <div class="text-xs">🚚 Unterwegs</div>
+                        </div>
+                        <div class="bg-white/20 px-3 py-2 rounded-lg">
+                            <div class="text-2xl font-bold" id="versandProblem">0</div>
+                            <div class="text-xs">⚠️ Problem</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dashboard Rücksendung -->
+                <div id="dashboardRuecksendung" class="sendung-dashboard hidden bg-gradient-to-r from-purple-500 to-purple-600 text-white p-4 rounded-xl shadow-md mb-3">
+                    <h2 class="text-xl font-bold mb-3">🔄 Rücksendungen</h2>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="bg-white/20 px-3 py-2 rounded-lg">
+                            <div class="text-2xl font-bold" id="ruecksendungOffen">0</div>
+                            <div class="text-xs">📋 Offen</div>
+                        </div>
+                        <div class="bg-white/20 px-3 py-2 rounded-lg">
+                            <div class="text-2xl font-bold" id="ruecksendungUnterwegs">0</div>
+                            <div class="text-xs">🚚 Unterwegs</div>
+                        </div>
+                        <div class="bg-white/20 px-3 py-2 rounded-lg">
+                            <div class="text-2xl font-bold" id="ruecksendungFrist">0</div>
+                            <div class="text-xs">⏰ Frist läuft ab</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Multi-Filter System -->
                 <div class="mb-3 space-y-2">
-                    <input type="text" id="sendungSearchInput"
-                        class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none"
-                        placeholder="🔍 Suche nach Beschreibung, Transportnummer, Produkt, Anbieter...">
-                    
-                    <div class="flex gap-2 overflow-x-auto pb-2">
-                        <select id="sendungTypFilter"
+                    <!-- Filter Hinzufügen -->
+                    <div class="flex gap-2 items-center flex-wrap">
+                        <input type="text" id="sendungSearchInput"
+                            class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm"
+                            placeholder="🔍 Suchbegriff eingeben...">
+                        
+                        <select id="sendungFilterCategory"
                             class="p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm">
-                            <option value="">Alle Typen</option>
-                            <option value="empfang">📥 Empfang</option>
-                            <option value="versand">📤 Versand</option>
-                            <option value="ruecksendung">🔄 Rücksendung</option>
+                            <option value="">Filter-Kategorie wählen</option>
+                            <option value="status">Status</option>
+                            <option value="anbieter">Anbieter</option>
+                            <option value="produkt">Produkt</option>
+                            <option value="absender">Absender</option>
+                            <option value="empfaenger">Empfänger</option>
+                            <option value="prioritaet">Priorität</option>
+                            <option value="tag">Tag</option>
+                            <option value="bestellnummer">Bestellnummer</option>
                         </select>
 
-                        <select id="sendungStatusFilter"
-                            class="p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm">
-                            <option value="">Alle Status</option>
-                            <option value="erwartet">⏳ Erwartet</option>
-                            <option value="unterwegs">🚚 Unterwegs</option>
-                            <option value="zugestellt">✅ Zugestellt</option>
-                            <option value="problem">⚠️ Problem</option>
-                            <option value="storniert">❌ Storniert</option>
-                        </select>
-
-                        <select id="sendungPrioritaetFilter"
-                            class="p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm">
-                            <option value="">Alle Prioritäten</option>
-                            <option value="normal">Normal</option>
-                            <option value="hoch">⚡ Hoch</option>
-                            <option value="dringend">🚨 Dringend</option>
-                        </select>
-
-                        <select id="sendungZeitraumFilter"
-                            class="p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm">
-                            <option value="alle">Alle Zeiträume</option>
-                            <option value="diese_woche">Diese Woche</option>
-                            <option value="dieser_monat">Dieser Monat</option>
-                            <option value="letzter_monat">Letzter Monat</option>
-                        </select>
+                        <button id="sendungAddFilterBtn"
+                            class="px-4 py-2 bg-amber-600 text-white text-sm font-bold rounded-lg hover:bg-amber-700 transition whitespace-nowrap">
+                            + Filter
+                        </button>
 
                         <button id="sendungResetFiltersBtn"
                             class="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-400 transition whitespace-nowrap">
-                            ↺ Filter zurücksetzen
+                            ↺ Zurücksetzen
                         </button>
+                    </div>
+
+                    <!-- Aktive Filter Badges -->
+                    <div id="sendungActiveFiltersContainer" class="flex flex-wrap gap-2 min-h-[2rem]">
                     </div>
                 </div>
 
+                <!-- Sendungen Liste -->
                 <div id="sendungenContainer" class="space-y-3">
                 </div>
             </div>
