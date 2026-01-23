@@ -51,7 +51,7 @@ export async function renderPushmailNotificationSettingsUI() {
         }
 
         const notifCount = Object.keys(program.notifications).length;
-        const isExpanded = index === 0; // Erstes Programm standardmäßig aufgeklappt
+        const isExpanded = false; // Alle Programme standardmäßig eingeklappt
 
         return `
             <div class="card bg-white rounded-xl shadow-lg border-l-4 ${program.borderClass} mb-3">
@@ -99,9 +99,8 @@ function renderNotificationsForProgram(programId, program, programSettings) {
         const hasDaysBeforeX = notifDef.defaultDaysBeforeX !== null && notifDef.defaultDaysBeforeX !== undefined;
 
         return `
-            <div class="notification-item p-3 bg-gray-50 rounded-lg border border-gray-200" 
-                 data-program="${programId}" 
-                 data-notification="${notifId}">
+            <div class="notification-item p-3 mb-3 bg-gray-50 rounded-lg border border-gray-200 shadow-sm" data-program="${programId}" data-notification="${notifId}">
+                <h5 class="font-semibold text-sm text-gray-800 mb-2 pb-2 border-b border-gray-300">${notifDef.label}</h5>
                 <div class="flex items-start justify-between mb-2">
                     <div class="flex-grow">
                         <div class="font-semibold text-gray-800 text-sm">${notifDef.label}</div>

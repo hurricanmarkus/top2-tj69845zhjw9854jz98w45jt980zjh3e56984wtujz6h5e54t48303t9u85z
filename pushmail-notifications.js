@@ -673,7 +673,20 @@ export async function renderPendingNotifications() {
         return;
     }
 
-    list.innerHTML = notifications.map(notif => {
+    // Header mit Auswahl-Controls
+    const headerHtml = `
+        <div class="flex items-center justify-between mb-3 p-2 bg-gray-100 rounded">
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="selectAllNotifications" class="h-4 w-4">
+                <span class="text-sm font-semibold">Alle auswählen</span>
+            </label>
+            <button id="acknowledgeSelectedBtn" class="px-4 py-2 bg-green-600 text-white text-sm font-bold rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                Ausgewählte quittieren (<span id="selectedCount">0</span>)
+            </button>
+        </div>
+    `;
+
+    const notificationsHtml = notifications.map(notif => {
         const program = NOTIFICATION_DEFINITIONS[notif.programId];
         if (!program) return '';
 
@@ -687,8 +700,9 @@ export async function renderPendingNotifications() {
         });
 
         return `
-            <div class="p-3 border-l-4 ${program.borderClass} bg-${program.color}-50 rounded animate-pulse">
-                <div class="flex items-start justify-between gap-3">
+            <div class="notification-card p-3 mb-2 border-l-4 ${program.borderClass} bg-${program.color}-50 rounded hover:shadow-md transition-shadow" data-notification-id="${notif.id}">
+                <div class="flex items-start gap-3">
+                    <input type="checkbox" class="notification-checkbox h-5 w-5 mt-1" data-notification-id="${notif.id}">
                     <div class="flex-grow">
                         <div class="font-bold text-gray-800">${notif.title}</div>
                         <div class="text-sm text-gray-600 mt-1">${notif.message}</div>
@@ -696,26 +710,103 @@ export async function renderPendingNotifications() {
                             ${program.title} | ${formattedDate}
                         </div>
                     </div>
-                    <button class="acknowledge-notification-btn px-3 py-1 bg-green-600 text-white text-xs font-bold rounded hover:bg-green-700 flex-shrink-0" 
-                            data-notification-id="${notif.id}">
-                        Quittieren
-                    </button>
                 </div>
             </div>
         `;
     }).join('');
 
-    // Event-Listener für Quittieren-Buttons
-    document.querySelectorAll('.acknowledge-notification-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const notifId = e.target.dataset.notificationId;
-            setProcessingOverlay(true, 'Quittiere Benachrichtigung...');
-            await acknowledgeNotification(userId, notifId);
-            await renderPendingNotifications();
-            alertUser('Benachrichtigung quittiert.', 'success');
-            setProcessingOverlay(false);
+    list.innerHTML = headerHtml + notificationsHtml;
+
+    // Event-Listener für Checkboxen
+    const checkboxes = document.querySelectorAll('.notification-checkbox');
+    const selectAllCheckbox = document.getElementById('selectAllNotifications');
+    const acknowledgeBtn = document.getElementById('acknowledgeSelectedBtn');
+    const selectedCountSpan = document.getElementById('selectedCount');
+
+    let selectAllClickCount = 0;
+    let selectAllTimer = null;
+
+    // Update Button-Status
+    const updateButtonState = () => {
+        const selected = Array.from(checkboxes).filter(cb => cb.checked);
+        selectedCountSpan.textContent = selected.length;
+        acknowledgeBtn.disabled = selected.length === 0;
+    };
+
+    // Einzelne Checkboxen
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            updateButtonState();
+            // Alle auswählen Checkbox aktualisieren
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            selectAllCheckbox.checked = allChecked;
         });
     });
+
+    // Alle auswählen/abwählen mit Timer
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                // ALLE AUSWÄHLEN - Mit Sicherheits-Timer
+                selectAllClickCount++;
+                
+                if (selectAllClickCount === 1) {
+                    // Erster Klick: Timer starten
+                    e.target.checked = false;
+                    e.target.nextElementSibling.innerHTML = '<span class="text-orange-600">Nochmal klicken in <span id="timerCountdown">3</span>s</span>';
+                    
+                    let countdown = 3;
+                    selectAllTimer = setInterval(() => {
+                        countdown--;
+                        const countdownSpan = document.getElementById('timerCountdown');
+                        if (countdownSpan) countdownSpan.textContent = countdown;
+                        
+                        if (countdown <= 0) {
+                            clearInterval(selectAllTimer);
+                            selectAllClickCount = 0;
+                            e.target.nextElementSibling.innerHTML = 'Alle auswählen';
+                        }
+                    }, 1000);
+                } else if (selectAllClickCount === 2) {
+                    // Zweiter Klick: Alle auswählen
+                    clearInterval(selectAllTimer);
+                    selectAllClickCount = 0;
+                    e.target.nextElementSibling.innerHTML = '<span class="text-red-600">Alle abwählen</span>';
+                    checkboxes.forEach(cb => cb.checked = true);
+                    updateButtonState();
+                }
+            } else {
+                // ALLE ABWÄHLEN - Sofort ohne Timer
+                e.target.nextElementSibling.innerHTML = 'Alle auswählen';
+                checkboxes.forEach(cb => cb.checked = false);
+                updateButtonState();
+                selectAllClickCount = 0;
+                if (selectAllTimer) clearInterval(selectAllTimer);
+            }
+        });
+    }
+
+    // Quittieren-Button
+    if (acknowledgeBtn) {
+        acknowledgeBtn.addEventListener('click', async () => {
+            const selected = Array.from(checkboxes).filter(cb => cb.checked);
+            if (selected.length === 0) return;
+
+            const confirm = window.confirm(`${selected.length} Benachrichtigung(en) quittieren?`);
+            if (!confirm) return;
+
+            setProcessingOverlay(true, `Quittiere ${selected.length} Benachrichtigung(en)...`);
+            
+            for (const checkbox of selected) {
+                const notifId = checkbox.dataset.notificationId;
+                await acknowledgeNotification(userId, notifId);
+            }
+            
+            await renderPendingNotifications();
+            alertUser(`${selected.length} Benachrichtigung(en) quittiert.`, 'success');
+            setProcessingOverlay(false);
+        });
+    }
 }
 
 // ========================================
