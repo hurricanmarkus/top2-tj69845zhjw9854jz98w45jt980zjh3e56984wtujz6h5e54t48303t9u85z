@@ -306,6 +306,36 @@ export const NOTIFICATION_DEFINITIONS = {
                 placeholders: ["zahlungName", "erinnerungsText", "daysLeft"]
             }
         }
+    },
+
+    SENDUNGSVERWALTUNG: {
+        title: "Sendungsverwaltung",
+        color: "blue",
+        borderClass: "border-blue-600",
+        textClass: "text-blue-700",
+        requiredPermission: "SENDUNGSVERWALTUNG",
+        notifications: {
+            x_tage_vor_ablauf_sendung: {
+                label: "X Tage vor Ablauf Sendung",
+                description: "Erinnerung vor Ablauf der Sendungsfrist",
+                defaultTitle: "Sendung läuft bald ab",
+                defaultMessage: "Die Sendung {sendungName} läuft in {daysLeft} Tagen ab",
+                defaultTime: "10:00",
+                defaultRepeatDays: 3,
+                defaultDaysBeforeX: 7,
+                placeholders: ["sendungName", "daysLeft", "ablaufDatum", "anbieter", "sendungsnummer"]
+            },
+            sendung_zugestellt: {
+                label: "Sendung zugestellt",
+                description: "Benachrichtigung wenn Sendung als zugestellt markiert wurde",
+                defaultTitle: "Sendung zugestellt",
+                defaultMessage: "Die Sendung {sendungName} wurde zugestellt",
+                defaultTime: "08:00",
+                defaultRepeatDays: 0,
+                defaultDaysBeforeX: null,
+                placeholders: ["sendungName", "anbieter", "sendungsnummer", "zustellDatum"]
+            }
+        }
     }
 };
 

@@ -524,14 +524,17 @@ async function saveSendung() {
     };
 
     try {
+        let sendungId;
         if (currentEditingSendungId) {
             const sendungRef = doc(sendungenCollectionRef, currentEditingSendungId);
             await updateDoc(sendungRef, sendungData);
+            sendungId = currentEditingSendungId;
             alertUser('Sendung erfolgreich aktualisiert!');
         } else {
             sendungData.createdBy = currentUser.mode;
             sendungData.createdAt = serverTimestamp();
-            await addDoc(sendungenCollectionRef, sendungData);
+            const docRef = await addDoc(sendungenCollectionRef, sendungData);
+            sendungId = docRef.id;
             alertUser('Sendung erfolgreich erstellt!');
             
             lastSendung = {
@@ -540,6 +543,28 @@ async function saveSendung() {
                 empfaenger: sendungData.empfaenger
             };
         }
+
+        // Pushmail-Benachrichtigungen erstellen
+        if (sendungData.erwarteteAnkunft && currentUser?.mode) {
+            const targetDate = new Date(sendungData.erwarteteAnkunft);
+            const sendungName = `${sendungData.anbieter || 'Sendung'} (${sendungData.sendungsnummer || 'keine Nr.'})`;
+            
+            await createPendingNotification(
+                currentUser.mode,
+                'SENDUNGSVERWALTUNG',
+                'x_tage_vor_ablauf_sendung',
+                {
+                    id: sendungId,
+                    path: `/sendungen/${sendungId}`,
+                    targetDate: targetDate,
+                    sendungName: sendungName,
+                    anbieter: sendungData.anbieter || 'Unbekannt',
+                    sendungsnummer: sendungData.sendungsnummer || 'Keine',
+                    ablaufDatum: targetDate.toLocaleDateString('de-DE')
+                }
+            );
+        }
+
         closeSendungModalUI();
     } catch (error) {
         console.error('[Sendungsverwaltung] Fehler beim Speichern:', error);

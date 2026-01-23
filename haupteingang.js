@@ -1029,7 +1029,12 @@ const savePushmailCenterUserKey = async () => {
     saveBtn.disabled = true;
 
     try {
-        const payload = { userKey, updatedAt: serverTimestamp() };
+        // API-Token ist fest codiert (gleich für alle User)
+        const payload = { 
+            userKey, 
+            apiToken: PUSHOVER_API_TOKEN,
+            updatedAt: serverTimestamp() 
+        };
         await setDoc(doc(pushoverProgramsCollectionRef, recipientId), payload, { merge: true });
 
         const prev = pushoverProgramConfigCache && pushoverProgramConfigCache[recipientId] ? pushoverProgramConfigCache[recipientId] : {};

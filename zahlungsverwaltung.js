@@ -2,6 +2,7 @@
 
 import { alertUser, db, currentUser, USERS, setButtonLoading, GUEST_MODE, navigate, appId } from './haupteingang.js';
 import { saveUserSetting, getUserSetting } from './log-InOut.js';
+import { createPendingNotification } from './pushmail-notifications.js';
 import {
 collection,
     addDoc,
@@ -7565,6 +7566,20 @@ function openShareModal(id) {
             p.accessRights[targetUserId] = { status: 'pending', rights: rights, invitedAt: new Date().toISOString() };
             p.involvedUserIds = newInvolved;
 
+            // Pushmail-Benachrichtigung für eingeladenen User
+            await createPendingNotification(
+                targetUserId,
+                'ZAHLUNGSVERWALTUNG',
+                'teilungsanfrage_eingehend',
+                {
+                    id: id,
+                    path: `/zahlungsverwaltung/payment/${id}`,
+                    absender: currentUser.displayName || currentUser.mode,
+                    betrag: parseFloat(p.amount || 0).toFixed(2),
+                    grund: p.title || 'Keine Beschreibung'
+                }
+            );
+
             alertUser("Einladung gesendet!", "success");
             renderList();
             fillSelect();
@@ -7767,6 +7782,22 @@ async function respondToInvite(paymentId, response) {
                 info: `Einladung ${response === 'accepted' ? 'angenommen' : 'abgelehnt'}.`
             }]
         });
+
+        // Pushmail-Benachrichtigung für Ersteller (Absender der Einladung)
+        const statusText = response === 'accepted' ? 'angenommen' : 'abgelehnt';
+        await createPendingNotification(
+            p.createdBy,
+            'ZAHLUNGSVERWALTUNG',
+            'teilungsanfrage_antwort',
+            {
+                id: paymentId,
+                path: `/zahlungsverwaltung/payment/${paymentId}`,
+                empfaenger: currentUser.displayName || currentUser.mode,
+                status: statusText,
+                betrag: parseFloat(p.amount || 0).toFixed(2),
+                grund: p.title || 'Keine Beschreibung'
+            }
+        );
 
         alertUser(response === 'accepted' ? "Einladung angenommen!" : "Einladung abgelehnt.", "success");
     } catch (e) { console.error(e); alertUser("Fehler: " + e.message, "error"); }
