@@ -1893,23 +1893,36 @@ function openCreateModal() {
     clearModalForm();
     renderModalSelects();
     updateModalActionButtons(false, true); // Keine Aktions-Buttons, aber "Vorlage laden" anzeigen
+    
+    // Bei NEUEM Eintrag: Alle Felder freigeben
+    unlockModalFields();
+    
     modal.style.display = 'flex';
 }
 
-// Aktions-Buttons im Modal ein-/ausblenden
+// Aktions-Buttons im Modal ein-/ausblenden (neue Dropdown-Struktur)
 function updateModalActionButtons(showActions, showVorlageButton = false) {
-    const actionsContainer = document.getElementById('gm-modal-actions');
-    const vorlageButton = document.getElementById('gm-btn-vorlage-laden');
+    // Neue Dropdown-Buttons
+    const dropdownVorlageLaden = document.getElementById('gm-dropdown-vorlage-laden');
+    const dropdownBearbeiten = document.getElementById('gm-dropdown-bearbeiten');
+    const dropdownKopieren = document.getElementById('gm-dropdown-kopieren');
+    const dropdownVorlage = document.getElementById('gm-dropdown-vorlage');
+    const dropdownToggleDelete = document.getElementById('gm-dropdown-toggle-delete');
+    const dropdownLoeschen = document.getElementById('gm-dropdown-loeschen');
     
-    // Bearbeitungs-Buttons (Kopieren, Vorlage speichern, Löschen)
-    if (actionsContainer) {
-        actionsContainer.style.display = showActions ? 'flex' : 'none';
+    // "Vorlage laden" nur bei NEUEM Eintrag
+    if (dropdownVorlageLaden) {
+        dropdownVorlageLaden.style.display = showVorlageButton ? 'block' : 'none';
     }
     
-    // "Vorlage laden" Button nur bei neuem Eintrag anzeigen
-    if (vorlageButton) {
-        vorlageButton.style.display = showVorlageButton ? 'inline-flex' : 'none';
-    }
+    // Bearbeiten, Kopieren, Vorlage, Weitere Optionen nur bei BESTEHENDEM Eintrag
+    if (dropdownBearbeiten) dropdownBearbeiten.style.display = showActions ? 'block' : 'none';
+    if (dropdownKopieren) dropdownKopieren.style.display = showActions ? 'block' : 'none';
+    if (dropdownVorlage) dropdownVorlage.style.display = showActions ? 'block' : 'none';
+    if (dropdownToggleDelete) dropdownToggleDelete.style.display = showActions ? 'block' : 'none';
+    
+    // Löschen immer versteckt (wird nur nach Klick auf "Weitere Optionen" angezeigt)
+    if (dropdownLoeschen) dropdownLoeschen.style.display = 'none';
 }
 
 window.openEditGeschenkModal = function(id) {
@@ -1952,6 +1965,9 @@ window.openEditGeschenkModal = function(id) {
     fillModalForm(geschenk);
     renderModalSelects(geschenk);
     updateModalActionButtons(true, false);
+    
+    // ✅ Felder standardmäßig sperren (außer Status, IST-Bezahlung, Standort)
+    lockModalFields();
     
     // Bugfix: Eigene-Kosten-Berechnung NACH dem Rendern der Selects aufrufen
     // damit die Beteiligten-Checkboxen bereits korrekt gesetzt sind
@@ -2070,14 +2086,44 @@ window.updateEigeneKostenAuto = function() {
     const beteiligteIds = Array.from(beteiligungCheckboxes).map(cb => cb.value);
     const gesamtkosten = parseFloat(gesamtkostenInput.value) || 0;
     
-    // Wenn nur ICH beteiligt bin (eigenePerson.id)
-    if (beteiligteIds.length === 1 && eigenePerson && beteiligteIds[0] === eigenePerson.id) {
-        eigeneKostenInput.value = gesamtkosten.toFixed(2);
-        eigeneKostenInput.readOnly = true;
-        eigeneKostenInput.style.backgroundColor = '#e0f2fe'; // Hellblau
-        eigeneKostenInput.style.borderColor = '#0ea5e9'; // Blau
-        if (hintElement) hintElement.textContent = '✨ Auto-berechnet';
-        if (vorschlagContainer) vorschlagContainer.style.display = 'none';
+    // Wenn nur ICH beteiligt bin (eigenePerson.id) - zeige Vorschlag mit 100%
+    if (beteiligteIds.length === 1 && eigenePerson && beteiligteIds[0] === eigenePerson.id && gesamtkosten > 0) {
+        const prozent = 100;
+        const vorschlagBetrag = gesamtkosten.toFixed(2);
+        
+        eigeneKostenInput.readOnly = false;
+        eigeneKostenInput.style.backgroundColor = '';
+        eigeneKostenInput.style.borderColor = '';
+        if (hintElement) hintElement.textContent = '';
+        
+        // Vorschlag anzeigen (100% da nur ICH beteiligt)
+        if (vorschlagContainer) {
+            vorschlagContainer.style.display = 'block';
+            vorschlagContainer.innerHTML = `
+                <div class="p-3 bg-yellow-50 border-2 border-yellow-300 rounded-lg">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-lg">💡</span>
+                        <span class="text-sm font-bold text-gray-700">Vorschlag</span>
+                        <input type="number" 
+                            id="kosten-prozent-input" 
+                            value="${prozent}" 
+                            min="0" 
+                            max="100" 
+                            step="1"
+                            oninput="window.updateKostenVorschlagBetrag()"
+                            class="w-12 px-2 py-1 border-2 border-yellow-400 rounded text-center font-bold bg-white">
+                        <span class="text-sm text-gray-700">% von</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600"><strong id="kosten-gesamtkosten-display">${gesamtkosten.toFixed(2)} €</strong> (Gesamtkosten) = <strong class="text-lg text-green-600" id="kosten-betrag-display">${vorschlagBetrag} €</strong></span>
+                        <button onclick="window.uebertrageKostenVorschlag()" 
+                            class="px-3 py-1 bg-green-500 text-white text-sm font-bold rounded hover:bg-green-600 transition">
+                            ✓ Übertragen
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
     } else if (beteiligteIds.length > 1 && gesamtkosten > 0) {
         // ✅ Mehrere Personen: Vorschlag berechnen
         const anzahlPersonen = beteiligteIds.length;
@@ -2089,25 +2135,31 @@ window.updateEigeneKostenAuto = function() {
         eigeneKostenInput.style.borderColor = '';
         if (hintElement) hintElement.textContent = '';
         
-        // Vorschlag anzeigen
+        // Vorschlag anzeigen (mehrere Personen beteiligt)
         if (vorschlagContainer) {
-            vorschlagContainer.style.display = 'flex';
+            vorschlagContainer.style.display = 'block';
             vorschlagContainer.innerHTML = `
-                <div class="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded-lg flex-wrap">
-                    <span class="text-sm text-gray-700">💡 Vorschlag:</span>
-                    <input type="number" 
-                        id="kosten-prozent-input" 
-                        value="${prozent}" 
-                        min="0" 
-                        max="100" 
-                        step="1"
-                        oninput="window.updateKostenVorschlagBetrag()"
-                        class="w-16 px-2 py-1 border border-blue-300 rounded text-center font-bold">
-                    <span class="text-sm text-gray-700">% von Gesamtkosten = <strong id="kosten-betrag-display">${vorschlagBetrag} €</strong></span>
-                    <button onclick="window.uebertrageKostenVorschlag()" 
-                        class="px-3 py-1 bg-blue-500 text-white text-sm font-bold rounded hover:bg-blue-600 transition">
-                        ✓ Übertragen
-                    </button>
+                <div class="p-3 bg-blue-50 border-2 border-blue-300 rounded-lg">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-lg">💡</span>
+                        <span class="text-sm font-bold text-gray-700">Vorschlag</span>
+                        <input type="number" 
+                            id="kosten-prozent-input" 
+                            value="${prozent}" 
+                            min="0" 
+                            max="100" 
+                            step="1"
+                            oninput="window.updateKostenVorschlagBetrag()"
+                            class="w-12 px-2 py-1 border-2 border-blue-400 rounded text-center font-bold bg-white">
+                        <span class="text-sm text-gray-700">% von</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600"><strong id="kosten-gesamtkosten-display">${gesamtkosten.toFixed(2)} €</strong> (Gesamtkosten) = <strong class="text-lg text-blue-600" id="kosten-betrag-display">${vorschlagBetrag} €</strong></span>
+                        <button onclick="window.uebertrageKostenVorschlag()" 
+                            class="px-3 py-1 bg-blue-500 text-white text-sm font-bold rounded hover:bg-blue-600 transition">
+                            ✓ Übertragen
+                        </button>
+                    </div>
                 </div>
             `;
         }
@@ -2124,6 +2176,7 @@ window.updateEigeneKostenAuto = function() {
 window.updateKostenVorschlagBetrag = function() {
     const prozentInput = document.getElementById('kosten-prozent-input');
     const betragDisplay = document.getElementById('kosten-betrag-display');
+    const gesamtkostenDisplay = document.getElementById('kosten-gesamtkosten-display');
     const gesamtkostenInput = document.getElementById('gm-gesamtkosten');
     
     if (!prozentInput || !betragDisplay || !gesamtkostenInput) return;
@@ -2133,6 +2186,7 @@ window.updateKostenVorschlagBetrag = function() {
     const betrag = (gesamtkosten * prozent / 100).toFixed(2);
     
     betragDisplay.textContent = `${betrag} €`;
+    if (gesamtkostenDisplay) gesamtkostenDisplay.textContent = `${gesamtkosten.toFixed(2)} €`;
 };
 
 // ✅ Übertrage Kostenvorschlag in das Eingabefeld
@@ -4028,3 +4082,136 @@ async function loadUiSettings() {
 }
 
 window.sortGeschenkeBy = sortGeschenkeBy;
+
+// ========================================
+// MODAL FELD-SPERRE & DROPDOWN FUNKTIONEN
+// ========================================
+
+// Felder sperren (außer Status, IST-Bezahlung, Standort)
+function lockModalFields() {
+    // Felder die IMMER editierbar bleiben
+    const alwaysEditableIds = ['gm-status', 'gm-ist-bezahlung', 'gm-standort'];
+    
+    // Alle Input-Felder
+    const inputs = document.querySelectorAll('#geschenkModal input[type="text"], #geschenkModal input[type="number"], #geschenkModal textarea');
+    inputs.forEach(input => {
+        if (!alwaysEditableIds.includes(input.id)) {
+            input.readOnly = true;
+            input.style.backgroundColor = '#f3f4f6'; // Grau
+            input.style.cursor = 'not-allowed';
+        }
+    });
+    
+    // Alle Select-Felder (außer Status, IST-Bezahlung, Standort)
+    const selects = document.querySelectorAll('#geschenkModal select');
+    selects.forEach(select => {
+        if (!alwaysEditableIds.includes(select.id)) {
+            select.disabled = true;
+            select.style.backgroundColor = '#f3f4f6';
+            select.style.cursor = 'not-allowed';
+        }
+    });
+    
+    // Alle Checkboxen (FÜR, VON, Beteiligung)
+    const checkboxContainers = ['gm-fuer-checkboxes', 'gm-von-checkboxes', 'gm-beteiligung-checkboxes'];
+    checkboxContainers.forEach(containerId => {
+        const container = document.getElementById(containerId);
+        if (container) {
+            const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.disabled = true;
+                cb.style.cursor = 'not-allowed';
+            });
+            container.style.opacity = '0.6';
+        }
+    });
+}
+
+// Alle Felder freigeben
+function unlockModalFields() {
+    // Alle Input-Felder
+    const inputs = document.querySelectorAll('#geschenkModal input[type="text"], #geschenkModal input[type="number"], #geschenkModal textarea');
+    inputs.forEach(input => {
+        input.readOnly = false;
+        input.style.backgroundColor = '';
+        input.style.cursor = '';
+    });
+    
+    // Alle Select-Felder
+    const selects = document.querySelectorAll('#geschenkModal select');
+    selects.forEach(select => {
+        select.disabled = false;
+        select.style.backgroundColor = '';
+        select.style.cursor = '';
+    });
+    
+    // Alle Checkboxen
+    const checkboxContainers = ['gm-fuer-checkboxes', 'gm-von-checkboxes', 'gm-beteiligung-checkboxes'];
+    checkboxContainers.forEach(containerId => {
+        const container = document.getElementById(containerId);
+        if (container) {
+            const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.disabled = false;
+                cb.style.cursor = '';
+            });
+            container.style.opacity = '';
+        }
+    });
+}
+
+// Bearbeiten-Modus aktivieren
+window.enableEditMode = function() {
+    unlockModalFields();
+    
+    // Dropdown schließen
+    const dropdown = document.getElementById('gm-weitere-optionen-dropdown');
+    if (dropdown) dropdown.classList.add('hidden');
+    
+    // Feedback
+    const title = document.getElementById('geschenkModalTitle');
+    if (title) {
+        title.innerHTML = `
+            <div class="flex items-center gap-2">
+                <span>Geschenk bearbeiten</span>
+                <span class="px-2 py-1 bg-green-500 text-white text-xs font-bold rounded">✏️ Bearbeitungsmodus aktiv</span>
+            </div>
+        `;
+    }
+};
+
+// Dropdown öffnen/schließen
+window.toggleWeitereOptionen = function() {
+    const dropdown = document.getElementById('gm-weitere-optionen-dropdown');
+    const arrow = document.getElementById('gm-dropdown-arrow');
+    
+    if (dropdown) {
+        if (dropdown.classList.contains('hidden')) {
+            dropdown.classList.remove('hidden');
+            if (arrow) arrow.textContent = '▲';
+        } else {
+            dropdown.classList.add('hidden');
+            if (arrow) arrow.textContent = '▼';
+            
+            // Löschen-Button wieder verstecken wenn Dropdown geschlossen wird
+            const deleteBtn = document.getElementById('gm-dropdown-loeschen');
+            if (deleteBtn) deleteBtn.style.display = 'none';
+        }
+    }
+};
+
+// Löschen-Option anzeigen
+window.toggleDeleteOption = function() {
+    const deleteBtn = document.getElementById('gm-dropdown-loeschen');
+    const toggleBtn = document.getElementById('gm-dropdown-toggle-delete');
+    
+    if (deleteBtn && toggleBtn) {
+        if (deleteBtn.style.display === 'none' || deleteBtn.style.display === '') {
+            deleteBtn.style.display = 'block';
+            toggleBtn.textContent = '🔒 Löschen ausblenden';
+        } else {
+            deleteBtn.style.display = 'none';
+            toggleBtn.textContent = '🔓 Weitere Optionen';
+        }
+    }
+};
