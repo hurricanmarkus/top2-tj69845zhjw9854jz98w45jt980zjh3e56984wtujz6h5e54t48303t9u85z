@@ -109,6 +109,10 @@ function switchTab(tabName) {
 }
 
 function addDefaultFilters() {
+    if (activeFilters.length > 0) {
+        return;
+    }
+    
     activeFilters.push({
         category: 'status',
         value: 'zugestellt',
