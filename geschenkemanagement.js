@@ -2083,6 +2083,13 @@ window.updateEigeneKostenAuto = function() {
     
     if (!beteiligungCheckboxes || !gesamtkostenInput || !eigeneKostenInput) return;
     
+    // ✅ WICHTIG: Wenn Felder gesperrt sind, Vorschlag NICHT anzeigen
+    const fieldsLocked = eigeneKostenInput.disabled === true;
+    if (fieldsLocked && vorschlagContainer) {
+        vorschlagContainer.style.display = 'none';
+        return; // Funktion beenden, keine Vorschlagsberechnung
+    }
+    
     const beteiligteIds = Array.from(beteiligungCheckboxes).map(cb => cb.value);
     const gesamtkosten = parseFloat(gesamtkostenInput.value) || 0;
     
@@ -2096,8 +2103,8 @@ window.updateEigeneKostenAuto = function() {
         eigeneKostenInput.style.borderColor = '';
         if (hintElement) hintElement.textContent = '';
         
-        // Vorschlag anzeigen (100% da nur ICH beteiligt)
-        if (vorschlagContainer) {
+        // Vorschlag anzeigen (100% da nur ICH beteiligt) - nur wenn NICHT gesperrt
+        if (vorschlagContainer && !fieldsLocked) {
             vorschlagContainer.style.display = 'block';
             vorschlagContainer.innerHTML = `
                 <div class="p-3 bg-yellow-50 border-2 border-yellow-300 rounded-lg">
@@ -2135,8 +2142,8 @@ window.updateEigeneKostenAuto = function() {
         eigeneKostenInput.style.borderColor = '';
         if (hintElement) hintElement.textContent = '';
         
-        // Vorschlag anzeigen (mehrere Personen beteiligt)
-        if (vorschlagContainer) {
+        // Vorschlag anzeigen (mehrere Personen beteiligt) - nur wenn NICHT gesperrt
+        if (vorschlagContainer && !fieldsLocked) {
             vorschlagContainer.style.display = 'block';
             vorschlagContainer.innerHTML = `
                 <div class="p-3 bg-blue-50 border-2 border-blue-300 rounded-lg">
