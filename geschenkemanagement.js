@@ -4093,11 +4093,21 @@ function lockModalFields() {
     const alwaysEditableIds = ['gm-status', 'gm-ist-bezahlung', 'gm-standort'];
     // gm-eigene-kosten ist NICHT in der Liste → wird auch gesperrt!
     
-    // Alle Input-Felder
-    const inputs = document.querySelectorAll('#geschenkModal input[type="text"], #geschenkModal input[type="number"], #geschenkModal textarea');
-    inputs.forEach(input => {
+    // Text-Felder und Textareas mit readOnly sperren
+    const textInputs = document.querySelectorAll('#geschenkModal input[type="text"], #geschenkModal textarea');
+    textInputs.forEach(input => {
         if (!alwaysEditableIds.includes(input.id)) {
             input.readOnly = true;
+            input.style.backgroundColor = '#f3f4f6'; // Grau
+            input.style.cursor = 'not-allowed';
+        }
+    });
+    
+    // Number-Felder mit disabled sperren (verhindert auch Spinner-Buttons)
+    const numberInputs = document.querySelectorAll('#geschenkModal input[type="number"]');
+    numberInputs.forEach(input => {
+        if (!alwaysEditableIds.includes(input.id)) {
+            input.disabled = true;
             input.style.backgroundColor = '#f3f4f6'; // Grau
             input.style.cursor = 'not-allowed';
         }
@@ -4130,10 +4140,18 @@ function lockModalFields() {
 
 // Alle Felder freigeben
 function unlockModalFields() {
-    // Alle Input-Felder
-    const inputs = document.querySelectorAll('#geschenkModal input[type="text"], #geschenkModal input[type="number"], #geschenkModal textarea');
-    inputs.forEach(input => {
+    // Text-Felder und Textareas
+    const textInputs = document.querySelectorAll('#geschenkModal input[type="text"], #geschenkModal textarea');
+    textInputs.forEach(input => {
         input.readOnly = false;
+        input.style.backgroundColor = '';
+        input.style.cursor = '';
+    });
+    
+    // Number-Felder
+    const numberInputs = document.querySelectorAll('#geschenkModal input[type="number"]');
+    numberInputs.forEach(input => {
+        input.disabled = false;
         input.style.backgroundColor = '';
         input.style.cursor = '';
     });
