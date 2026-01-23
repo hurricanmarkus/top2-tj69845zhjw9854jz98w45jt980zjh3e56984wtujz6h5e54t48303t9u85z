@@ -4136,6 +4136,12 @@ function lockModalFields() {
             container.style.opacity = '0.6';
         }
     });
+    
+    // Kostenvorschlag ausblenden (kann nicht bearbeitet werden im gesperrten Modus)
+    const vorschlagContainer = document.getElementById('gm-kosten-vorschlag');
+    if (vorschlagContainer) {
+        vorschlagContainer.style.display = 'none';
+    }
 }
 
 // Alle Felder freigeben
