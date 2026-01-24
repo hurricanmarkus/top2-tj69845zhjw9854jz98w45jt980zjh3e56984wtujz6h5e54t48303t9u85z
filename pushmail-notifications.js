@@ -54,6 +54,35 @@ function calculateScheduledTime(timeStr, daysBeforeX, targetDate, sendImmediatel
     return scheduledDate;
 }
 
+function createDataFingerprint(relatedData) {
+    if (!relatedData || typeof relatedData !== 'object') return '';
+    
+    const relevantFields = {
+        id: relatedData.id || '',
+        targetDate: relatedData.targetDate || '',
+        betrag: relatedData.betrag || '',
+        umfrageName: relatedData.umfrageName || '',
+        ticketTitle: relatedData.ticketTitle || '',
+        vertragsname: relatedData.vertragsname || '',
+        sendungName: relatedData.sendungName || '',
+        wertguthabenName: relatedData.wertguthabenName || '',
+        einloesefrist: relatedData.einloesefrist || '',
+        ablaufDatumCode: relatedData.ablaufDatumCode || '',
+        gueltigAb: relatedData.gueltigAb || '',
+        gueltigBis: relatedData.gueltigBis || '',
+        beginn: relatedData.beginn || '',
+        ende: relatedData.ende || '',
+        kuendigungsfrist: relatedData.kuendigungsfrist || '',
+        erinnerung: relatedData.erinnerung || '',
+        deadline: relatedData.deadline || '',
+        finalDate: relatedData.finalDate || '',
+        dueDate: relatedData.dueDate || '',
+        erwarteteAnkunft: relatedData.erwarteteAnkunft || ''
+    };
+    
+    return JSON.stringify(relevantFields);
+}
+
 // ========================================
 // BENACHRICHTIGUNGSDEFINITIONEN
 // ========================================
@@ -546,18 +575,6 @@ export async function createPendingNotification(userId, programId, notificationT
             return;
         }
 
-        // Duplikatsprüfung archiviert: Nur erneut erstellen, wenn sich Title/Message geändert haben
-        const ackColRef = collection(db, 'artifacts', appId, 'users', userId, 'pushmail_acknowledged_notifications');
-        const ackQuery = query(
-            ackColRef,
-            where('programId', '==', programId),
-            where('notificationType', '==', notificationType),
-            where('relatedDataId', '==', relatedDataId),
-            where('acknowledged', '==', true),
-            limit(5)
-        );
-        const ackSnapshot = await getDocs(ackQuery);
-
         // daysLeft berechnen (falls targetDate vorhanden)
         if (relatedData.targetDate && !relatedData.daysLeft) {
             const target = new Date(relatedData.targetDate);
@@ -567,9 +584,12 @@ export async function createPendingNotification(userId, programId, notificationT
             relatedData.daysLeft = diffDays > 0 ? diffDays : 0;
         }
 
-        // Platzhalter ersetzen (Title/Message) vor Vergleich
+        // Platzhalter ersetzen (Title/Message)
         const title = replacePlaceholders(notifSettings.customTitle, relatedData);
         const message = replacePlaceholders(notifSettings.customMessage, relatedData);
+
+        // Daten-Fingerprint erstellen für Änderungserkennung
+        const dataFingerprint = createDataFingerprint(relatedData);
 
         // Zeitpunkt berechnen
         const scheduledFor = calculateScheduledTime(
@@ -598,13 +618,25 @@ export async function createPendingNotification(userId, programId, notificationT
             return;
         }
 
-        const alreadyAcknowledgedSameContent = ackSnapshot.docs.some(docSnap => {
+        // Duplikatsprüfung archiviert: Nur erneut erstellen, wenn sich die Daten geändert haben
+        const ackColRef = collection(db, 'artifacts', appId, 'users', userId, 'pushmail_acknowledged_notifications');
+        const ackQuery = query(
+            ackColRef,
+            where('programId', '==', programId),
+            where('notificationType', '==', notificationType),
+            where('relatedDataId', '==', relatedDataId),
+            where('acknowledged', '==', true),
+            limit(5)
+        );
+        const ackSnapshot = await getDocs(ackQuery);
+
+        const alreadyAcknowledgedWithSameData = ackSnapshot.docs.some(docSnap => {
             const data = docSnap.data() || {};
-            return data.title === title && data.message === message;
+            return data.dataFingerprint === dataFingerprint;
         });
 
-        if (alreadyAcknowledgedSameContent) {
-            console.log('Pushmail: Bereits quittiert, gleicher Inhalt – keine neue Benachrichtigung:', programId, notificationType, relatedDataId);
+        if (alreadyAcknowledgedWithSameData) {
+            console.log('Pushmail: Bereits quittiert, keine Änderung erkannt – keine neue Benachrichtigung:', programId, notificationType, relatedDataId);
             return;
         }
 
@@ -624,6 +656,7 @@ export async function createPendingNotification(userId, programId, notificationT
             acknowledgedAt: null,
             relatedDataId: relatedData.id || null,
             relatedDataPath: relatedData.path || null,
+            dataFingerprint: dataFingerprint,  // Für Änderungserkennung
             overlayEnabled: notifSettings.overlayEnabled !== false,
             pushOverEnabled: notifSettings.pushOverEnabled !== false,
             sendImmediately: notifSettings.sendImmediately === true,
@@ -703,9 +736,27 @@ export function stopPendingNotificationsListener() {
 }
 
 function updatePendingNotificationsUI(notifications) {
+    const notifCount = notifications.length;
+    
     // Counter aktualisieren
     const count = document.getElementById('pendingNotificationsCount');
-    if (count) count.textContent = notifications.length;
+    if (count) count.textContent = notifCount;
+
+    // Badge auf Startseite aktualisieren
+    const badge = document.getElementById('pushmailNotificationBadge');
+    const badgeCount = document.getElementById('pushmailNotificationBadgeCount');
+    
+    if (badge && badgeCount) {
+        if (notifCount > 0) {
+            badge.classList.remove('hidden');
+            badgeCount.textContent = notifCount;
+            // Pulsieren und Ring für Aufmerksamkeit
+            badge.classList.add('animate-pulse', 'ring-4', 'ring-red-300');
+        } else {
+            badge.classList.add('hidden');
+            badge.classList.remove('animate-pulse', 'ring-4', 'ring-red-300');
+        }
+    }
 
     // PUSHMAIL-Center Liste aktualisieren
     const list = document.getElementById('pushmailPendingNotificationsList');
@@ -717,9 +768,9 @@ function updatePendingNotificationsUI(notifications) {
     const modal = document.getElementById('pendingNotificationsModal');
     if (modal && !modal.classList.contains('hidden')) {
         const modalList = document.getElementById('pendingNotificationsList');
-        if (modalList && notifications.length > 0) {
+        if (modalList && notifCount > 0) {
             renderNotificationsList(notifications, modalList, 'modal');
-        } else if (modalList && notifications.length === 0) {
+        } else if (modalList && notifCount === 0) {
             // Modal schließen wenn keine Benachrichtigungen mehr
             modal.classList.add('hidden');
             modal.classList.remove('flex');
@@ -1169,11 +1220,19 @@ function setupModalCheckboxListeners() {
 export function initializePendingNotificationsModal() {
     const modal = document.getElementById('pendingNotificationsModal');
     const closeBtn = document.getElementById('closePendingNotificationsModal');
+    const badge = document.getElementById('pushmailNotificationBadge');
 
     if (closeBtn) {
         closeBtn.addEventListener('click', () => {
             modal.classList.add('hidden');
             modal.classList.remove('flex');
+        });
+    }
+
+    // Badge klickbar machen - öffnet Modal
+    if (badge) {
+        badge.addEventListener('click', () => {
+            checkAndShowPendingNotificationsModal();
         });
     }
 }

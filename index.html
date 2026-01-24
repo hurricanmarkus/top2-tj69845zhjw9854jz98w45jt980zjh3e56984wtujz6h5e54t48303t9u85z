@@ -61,10 +61,17 @@
             <div id="homeView" class="view active">
 
                 <div id="homeActionButtons" class="flex justify-between mb-3 gap-2 items-center min-h-[40px]">
-                    <button id="pushmailCenterBar"
-                        class="hidden bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-lg shadow-lg hover:bg-gray-700 transition z-10">
-                        PUSHMAIL-Center
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button id="pushmailCenterBar"
+                            class="hidden bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-lg shadow-lg hover:bg-gray-700 transition z-10">
+                            PUSHMAIL-Center
+                        </button>
+                        <div id="pushmailNotificationBadge"
+                            class="hidden cursor-pointer bg-red-600 text-white text-xs font-bold rounded-full w-8 h-8 flex items-center justify-center shadow-lg hover:bg-red-700 transition animate-pulse ring-4 ring-red-300"
+                            title="Klicken um Benachrichtigungen anzuzeigen">
+                            <span id="pushmailNotificationBadgeCount">0</span>
+                        </div>
+                    </div>
                     <div class="flex gap-2">
                         <button id="mainSettingsButton"
                             class="bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-lg shadow-lg hover:bg-gray-700 transition hidden z-10">
