@@ -8,7 +8,7 @@ import { db, appId, currentUser, GUEST_MODE, alertUser } from './haupteingang.js
 const PUSHOVER_API_TOKEN = 'ag3nyu918ady5f8eqjuug13ttyaq9f';
 import { 
     collection, doc, onSnapshot, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, 
-    query, where, serverTimestamp, writeBatch, orderBy, limit 
+    query, where, serverTimestamp, writeBatch, orderBy, limit, Timestamp 
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ========================================
@@ -647,10 +647,10 @@ export async function createPendingNotification(userId, programId, notificationT
             title,
             message,
             createdAt: serverTimestamp(),
-            scheduledFor,
+            scheduledFor: Timestamp.fromDate(scheduledFor),  // Als Firestore Timestamp speichern!
             lastSentAt: null,
-            nextSendAt: scheduledFor,
-            regularScheduledTime: regularScheduledTime,  // Für Wiederholungen nach sofortigem Senden
+            nextSendAt: Timestamp.fromDate(scheduledFor),  // Als Firestore Timestamp speichern!
+            regularScheduledTime: regularScheduledTime ? Timestamp.fromDate(regularScheduledTime) : null,  // Als Firestore Timestamp speichern!
             repeatDays: notifSettings.repeatDays,
             acknowledged: false,
             acknowledgedAt: null,
