@@ -635,9 +635,6 @@ export function updateUIForMode() {
     const mainFunctionsSectionEl = document.getElementById('mainFunctionsSection');
     if (mainFunctionsSectionEl) mainFunctionsSectionEl.style.display = isSysAdmin || (isAdmin && effectiveAdminPerms.canSeeMainFunctions) ? 'block' : 'none';
 
-    const openRequestsSectionEl = document.getElementById('openRequestsSection');
-    if (openRequestsSectionEl) openRequestsSectionEl.style.display = isSysAdmin ? 'block' : 'none';
-
     const approvalProcessSectionEl = document.getElementById('approvalProcessSection');
     if (approvalProcessSectionEl) approvalProcessSectionEl.style.display = isSysAdmin || (isAdmin && effectiveAdminPerms.canSeeApprovals) ? 'block' : 'none';
 

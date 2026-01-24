@@ -7,8 +7,8 @@ import { collection, query, where, orderBy, getDocs, doc, deleteDoc, updateDoc, 
 
 let pushoverChangeRequestsUnsubscribe = null;
 
-export async function loadPushoverChangeRequests(targetContainerId = 'pushover-change-requests-list') {
-    const container = document.getElementById(targetContainerId);
+export async function loadPushoverChangeRequests() {
+    const container = document.getElementById('pushover-change-requests-list');
     if (!container) return;
 
     if (!db) {
@@ -32,15 +32,15 @@ export async function loadPushoverChangeRequests(targetContainerId = 'pushover-c
             requests.push({ id: doc.id, ...doc.data() });
         });
 
-        renderPushoverChangeRequests(requests, targetContainerId);
+        renderPushoverChangeRequests(requests);
     } catch (error) {
         console.error('Fehler beim Laden der Pushover-Änderungsanfragen:', error);
         container.innerHTML = '<p class="text-center text-red-500">Fehler beim Laden der Anfragen</p>';
     }
 }
 
-function renderPushoverChangeRequests(requests, targetContainerId) {
-    const container = document.getElementById(targetContainerId);
+function renderPushoverChangeRequests(requests) {
+    const container = document.getElementById('pushover-change-requests-list');
     if (!container) return;
 
     const html = requests.map(req => {
@@ -92,7 +92,7 @@ async function approvePushoverChangeRequest(requestId, userId) {
         await deleteDoc(requestDoc);
 
         alertUser('Änderungsanfrage genehmigt. Der User-Key wurde zurückgesetzt.', 'success');
-        await refreshVisiblePushoverChangeRequestLists();
+        loadPushoverChangeRequests();
     } catch (error) {
         console.error('Fehler beim Genehmigen der Anfrage:', error);
         alertUser('Fehler beim Genehmigen. Bitte erneut versuchen.', 'error');
@@ -109,21 +109,11 @@ async function rejectPushoverChangeRequest(requestId) {
         await deleteDoc(requestDoc);
 
         alertUser('Änderungsanfrage abgelehnt und gelöscht.', 'success');
-        await refreshVisiblePushoverChangeRequestLists();
+        loadPushoverChangeRequests();
     } catch (error) {
         console.error('Fehler beim Ablehnen der Anfrage:', error);
         alertUser('Fehler beim Ablehnen. Bitte erneut versuchen.', 'error');
     }
-}
-
-async function refreshVisiblePushoverChangeRequestLists() {
-    const targets = [
-        'pushover-change-requests-list',
-        'openRequestsPushoverChangeRequestsList'
-    ];
-
-    const visibleTargets = targets.filter(id => document.getElementById(id));
-    await Promise.all(visibleTargets.map(id => loadPushoverChangeRequests(id)));
 }
 
 // Global verfügbar machen

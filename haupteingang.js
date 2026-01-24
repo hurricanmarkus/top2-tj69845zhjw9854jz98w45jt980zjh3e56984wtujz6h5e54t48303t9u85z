@@ -68,7 +68,7 @@ export let tempSelectedSoundId = null;
 export let unsubscribeTemplateItems = null;
 export let adminSettings = {};
 export let selectedUserForLogin = null;
-export let adminSectionsState = { password: false, user: false, role: false, approval: false, protocol: false, adminRights: false, mainFunctions: false, openRequests: false };
+export let adminSectionsState = { password: false, user: false, role: false, approval: false, protocol: false, adminRights: false, mainFunctions: false };
 let localUpdateInProgress = false;
 export let roleManagementSectionsState = { userRolesOpen: false, adminRolesOpen: false };
 export let ADMIN_ROLES = {};
@@ -89,7 +89,7 @@ let editingPortionId = null;
 export let appHeader;
 export let userSelectionModal;
 export let pinModalTitle;
-export let roleSettingsToggle, passwordSettingsToggle, userManagementToggle, approvalProcessToggle, protocolHistoryToggle, mainFunctionsToggle, openRequestsToggle;
+export let roleSettingsToggle, passwordSettingsToggle, userManagementToggle, approvalProcessToggle, protocolHistoryToggle, mainFunctionsToggle;
 
 export const firebaseConfigFromUser = {
     apiKey: "AIzaSyCCQML1UOy7NB5ohbiPZmOE6dB6oIpzlQk",
@@ -403,7 +403,6 @@ window.onload = function () {
     approvalProcessToggle = document.getElementById('approvalProcessToggle');
     protocolHistoryToggle = document.getElementById('protocolHistoryToggle');
     mainFunctionsToggle = document.getElementById('mainFunctionsToggle');
-    openRequestsToggle = document.getElementById('openRequestsToggle');
 
     // Lokale Variablen (bleiben const, da nur hier genutzt oder nicht rot waren)
     const adminRightsArea = document.getElementById('adminRightsArea');
@@ -2225,13 +2224,22 @@ export function setupEventListeners() {
 
             pushoverRecipientGrantCache = {};
             const options = [];
+            const recipients = [];
             snaps.forEach(s => {
                 const data = s.data() || {};
                 const rid = data.recipientId || s.id;
                 const label = data.recipientName || USERS[rid]?.name || rid;
                 pushoverRecipientGrantCache[rid] = data;
-                options.push({ value: rid, label });
+                recipients.push({ rid, label });
             });
+
+            for (const r of recipients) {
+                const cfg = await loadPushoverProgramConfig(r.rid);
+                if (!cfg || !String(cfg.userKey || '').trim()) {
+                    continue;
+                }
+                options.push({ value: r.rid, label: r.label });
+            }
 
             if (!options.length) {
                 recipientSelect.innerHTML = '<option value="" disabled selected>Keine Berechtigung gefunden</option>';
@@ -2905,7 +2913,6 @@ export function setupEventListeners() {
     if (approvalProcessToggle) approvalProcessToggle.addEventListener('click', () => toggleAdminSection('approval'));
     if (protocolHistoryToggle) protocolHistoryToggle.addEventListener('click', () => toggleAdminSection('protocol'));
     if (mainFunctionsToggle) mainFunctionsToggle.addEventListener('click', () => toggleAdminSection('mainFunctions'));
-    if (openRequestsToggle) openRequestsToggle.addEventListener('click', () => toggleAdminSection('openRequests'));
 
     // --- Entrance View Buttons ---
     document.querySelectorAll('#entranceView .action-button').forEach(button => {

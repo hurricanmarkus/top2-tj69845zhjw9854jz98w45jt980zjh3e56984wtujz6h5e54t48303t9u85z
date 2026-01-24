@@ -577,7 +577,7 @@ export function renderUserManagement() {
 
         return `
         <div class="user-card p-3 border rounded-lg flex flex-col gap-3 ${!canEdit && !isSelf ? 'bg-gray-200 opacity-70' : lockedClasses}" data-userid="${userId}">
-            <div class="flex justify-between items-start"> 
+            <div class="user-card-header flex justify-between items-start cursor-pointer"> 
                 <div class="flex-grow"> 
                     <div class="flex items-center gap-2 flex-wrap"> 
                         <div data-userid="${userId}" class="name-display font-bold text-gray-800">${escapeHtml(user.name || 'Unbenannt')} ${currentUserLabel} ${realNameDisplay}</div> 
@@ -592,13 +592,20 @@ export function renderUserManagement() {
                     </div> 
                     <p class="text-xs ${roleColorClass}">${escapeHtml(roleName)}</p> 
                 </div> 
-                ${lockToggleHTML} 
+                <div class="flex items-start gap-2">
+                    ${lockToggleHTML}
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="user-card-chevron w-5 h-5 text-gray-400 mt-1 transform transition-transform">
+                        <path d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </div>
             </div>
-            ${permissionsHTML}
-            <div class="flex justify-end mt-2"> 
-                <button class="delete-user-button py-1 px-3 text-xs font-semibold bg-red-600 text-white rounded-lg ${!canDelete ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-700'}" data-userid="${userId}" ${!canDelete ? 'disabled' : ''}>Löschen</button> 
+            ${lockedWarningHTML}
+            <div class="user-card-body hidden">
+                ${permissionsHTML}
+                <div class="flex justify-end mt-2"> 
+                    <button class="delete-user-button py-1 px-3 text-xs font-semibold bg-red-600 text-white rounded-lg ${!canDelete ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-700'}" data-userid="${userId}" ${!canDelete ? 'disabled' : ''}>Löschen</button> 
+                </div>
             </div>
-            ${lockedWarningHTML} 
         </div>`;
     };
 
@@ -767,6 +774,18 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
         // Aktionen INNERHALB einer Benutzerkarte
         // =================================================================
         if (!userCard || !userId) return;
+
+        const header = e.target.closest('.user-card-header');
+        if (header) {
+            const isInteractive = Boolean(e.target.closest('button, input, select, textarea, label'));
+            if (!isInteractive) {
+                const body = userCard.querySelector('.user-card-body');
+                const chevron = userCard.querySelector('.user-card-chevron');
+                if (body) body.classList.toggle('hidden');
+                if (chevron) chevron.classList.toggle('rotate-180');
+                return;
+            }
+        }
 
         // Hole den originalen Benutzerstatus
         const originalUser = USERS[userId];

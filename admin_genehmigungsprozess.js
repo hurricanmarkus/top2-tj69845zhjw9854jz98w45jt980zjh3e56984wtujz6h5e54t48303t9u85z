@@ -109,9 +109,6 @@ export function listenForApprovalRequests() {
         if (adminSectionsState.approval) {
             renderApprovalProcess(snapshot);
         }
-        if (adminSectionsState.openRequests) {
-            renderApprovalProcess(snapshot, 'openRequestsApprovalArea');
-        }
         if (adminSectionsState.user) {
             renderUserManagement(); // Diese Funktion wird die Sperre jetzt anzeigen
         }
@@ -134,8 +131,8 @@ export function stopApprovalRequestsListener() {
 // =================================================================
 // BEGINN DER KORREKTUR (FUNKTION ERSETZEN)
 // =================================================================
-export async function renderApprovalProcess(snapshot = null, targetContainerId = 'approvalProcessArea') {
-    const approvalProcessArea = document.getElementById(targetContainerId);
+export async function renderApprovalProcess(snapshot = null) {
+    const approvalProcessArea = document.getElementById('approvalProcessArea');
     if (!approvalProcessArea) return; // Sicherheitsabbruch
 
     approvalProcessArea.innerHTML = '';

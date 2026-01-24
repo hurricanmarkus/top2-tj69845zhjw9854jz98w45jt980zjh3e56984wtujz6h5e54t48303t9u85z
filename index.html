@@ -510,21 +510,6 @@
                     </div>
                 </div>
 
-                <div id="openRequestsSection" class="hidden">
-                    <div id="openRequestsToggle"
-                        class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-orange-500 cursor-pointer hover:shadow-xl transition duration-200">
-                        <div class="flex justify-between items-center">
-                            <span class="text-xl font-bold text-gray-800">Offene Anfragen</span>
-                            <svg id="openRequestsToggleIcon" xmlns="http://www.w3.org/2000/svg" fill="none"
-                                viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"
-                                class="w-6 h-6 transform transition-transform">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                            </svg>
-                        </div>
-                    </div>
-                    <div id="openRequestsArea" class="bg-white rounded-xl shadow-lg mt-2 p-4 hidden flex-col gap-4"></div>
-                </div>
-
                 <div id="approvalProcessSection">
                     <div id="approvalProcessToggle"
                         class="card bg-white p-4 rounded-xl shadow-lg border-t-4 border-green-500 cursor-pointer hover:shadow-xl transition duration-200">
@@ -6116,7 +6101,10 @@
                     <p class="text-sm text-center text-gray-400">Keine Kontakte gefunden.</p>
                 </div>
 
-                <div class="p-4 border rounded-xl bg-green-50 space-y-2">
+                <button id="nachrichtencenterContactFormToggle"
+                    class="w-full py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 transition">+ Kontakt anlegen</button>
+
+                <div id="nachrichtencenterContactFormContainer" class="p-4 border rounded-xl bg-green-50 space-y-2 hidden">
                     <h4 id="nachrichtencenterContactsFormTitle" class="font-semibold text-green-800">Neuen Kontakt anlegen</h4>
                     <input type="hidden" id="nachrichtencenterEditingContactId">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
