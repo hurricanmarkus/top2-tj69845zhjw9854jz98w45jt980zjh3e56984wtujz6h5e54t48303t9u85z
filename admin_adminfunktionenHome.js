@@ -800,6 +800,7 @@ export function toggleAdminSection(section) {
     const approvalProcessArea = document.getElementById('approvalProcessArea');
     const protocolHistoryArea = document.getElementById('protocolHistoryArea');
     const mainFunctionsArea = document.getElementById('mainFunctionsArea');
+    const openRequestsArea = document.getElementById('openRequestsArea');
 
     const adminRightsToggleIcon = document.getElementById('adminRightsToggleIcon');
     const passwordToggleIcon = document.getElementById('passwordToggleIcon');
@@ -808,6 +809,7 @@ export function toggleAdminSection(section) {
     const approvalToggleIcon = document.getElementById('approvalToggleIcon');
     const protocolHistoryToggleIcon = document.getElementById('protocolHistoryToggleIcon');
     const mainFunctionsToggleIcon = document.getElementById('mainFunctionsToggleIcon');
+    const openRequestsToggleIcon = document.getElementById('openRequestsToggleIcon');
     
     // (Sicherheitsprüfungen, falls Elemente nicht gefunden werden)
     if (adminRightsArea) adminRightsArea.style.display = adminSectionsState.adminRights ? 'flex' : 'none';
@@ -817,6 +819,7 @@ export function toggleAdminSection(section) {
     if (approvalProcessArea) approvalProcessArea.style.display = adminSectionsState.approval ? 'flex' : 'none';
     if (protocolHistoryArea) protocolHistoryArea.style.display = adminSectionsState.protocol ? 'flex' : 'none';
     if (mainFunctionsArea) mainFunctionsArea.style.display = adminSectionsState.mainFunctions ? 'flex' : 'none';
+    if (openRequestsArea) openRequestsArea.style.display = adminSectionsState.openRequests ? 'flex' : 'none';
 
     if (adminRightsToggleIcon) adminRightsToggleIcon.classList.toggle('rotate-180', adminSectionsState.adminRights);
     if (passwordToggleIcon) passwordToggleIcon.classList.toggle('rotate-180', adminSectionsState.password);
@@ -825,6 +828,7 @@ export function toggleAdminSection(section) {
     if (approvalToggleIcon) approvalToggleIcon.classList.toggle('rotate-180', adminSectionsState.approval);
     if (protocolHistoryToggleIcon) protocolHistoryToggleIcon.classList.toggle('rotate-180', adminSectionsState.protocol);
     if (mainFunctionsToggleIcon) mainFunctionsToggleIcon.classList.toggle('rotate-180', adminSectionsState.mainFunctions);
+    if (openRequestsToggleIcon) openRequestsToggleIcon.classList.toggle('rotate-180', adminSectionsState.openRequests);
 
     if (adminSectionsState.adminRights) renderAdminRightsManagement();
     if (adminSectionsState.password) renderUserKeyList();
@@ -832,6 +836,10 @@ export function toggleAdminSection(section) {
     if (adminSectionsState.role) renderRoleManagement();
     if (adminSectionsState.approval) renderApprovalProcess();
     if (adminSectionsState.protocol) renderProtocolHistory();
+
+    if (adminSectionsState.openRequests) {
+        renderOpenRequestsArea();
+    }
     
     // --- Diese Logik ist NEU ---
     if (adminSectionsState.mainFunctions) {
@@ -844,6 +852,105 @@ export function toggleAdminSection(section) {
 // =================================================================
 // ENDE DER ÄNDERUNG
 // =================================================================
+
+
+// =================================================================
+// BEGINN DER ÄNDERUNG (Neue Funktionen)
+// Füge diese Funktionen ganz am Ende der Datei hinzu.
+// =================================================================
+
+function renderOpenRequestsArea() {
+    console.log('renderOpenRequestsArea: startet');
+
+    const area = document.getElementById('openRequestsArea');
+    if (!area) return;
+
+    area.innerHTML = `
+        <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <h3 class="text-lg font-bold text-gray-800 mb-2">Offene Anfragen (SYS-ADMIN)</h3>
+            <p class="text-sm text-gray-600 mb-4">Sammelansicht für alle offenen System-Anfragen.</p>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div class="bg-white p-3 rounded-lg border border-gray-200">
+                    <div class="font-bold text-gray-800 mb-2">Genehmigungsprozess</div>
+                    <div id="openRequestsApprovalArea" class="space-y-2"></div>
+                </div>
+
+                <div class="bg-white p-3 rounded-lg border border-gray-200">
+                    <div class="font-bold text-gray-800 mb-2">Pushover User-Key Änderungsanfragen</div>
+                    <div id="openRequestsPushoverChangeRequestsList" class="space-y-3">
+                        <p class="text-center text-gray-400 italic">Lade Anfragen...</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 rounded-lg border border-gray-200 lg:col-span-2">
+                    <div class="font-bold text-gray-800 mb-2">Zahlungsverwaltung: Papierkorb-Markierungen</div>
+                    <div id="openRequestsPaymentsArea" class="space-y-2">
+                        <p class="text-center text-gray-400 italic">Lade Markierungen...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    try {
+        renderApprovalProcess(null, 'openRequestsApprovalArea');
+    } catch (e) {
+        console.warn('renderOpenRequestsArea: renderApprovalProcess Fehler', e);
+    }
+
+    try {
+        loadPushoverChangeRequests('openRequestsPushoverChangeRequestsList');
+    } catch (e) {
+        console.warn('renderOpenRequestsArea: loadPushoverChangeRequests Fehler', e);
+    }
+
+    loadOpenRequestsPaymentsArea();
+}
+
+async function loadOpenRequestsPaymentsArea() {
+    const container = document.getElementById('openRequestsPaymentsArea');
+    if (!container) return;
+
+    try {
+        const paymentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'payments');
+        const q = query(
+            paymentsRef,
+            where('adminReviewStatus', '==', 'pending'),
+            limit(25)
+        );
+
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) {
+            container.innerHTML = '<p class="text-sm text-gray-400 italic">Keine markierten Zahlungsverwaltung-Anfragen.</p>';
+            return;
+        }
+
+        const items = [];
+        snapshot.forEach(d => items.push({ id: d.id, ...d.data() }));
+
+        const html = items.map(p => {
+            const createdBy = p.createdBy || '';
+            const name = USERS?.[createdBy]?.realName || USERS?.[createdBy]?.name || createdBy || 'Unbekannt';
+            const title = p.title || '(ohne Titel)';
+            const amount = (p.amount !== undefined && p.amount !== null) ? `${parseFloat(p.amount).toFixed(2)}€` : '';
+            return `
+                <div class="p-2 border rounded flex items-center justify-between gap-2">
+                    <div class="min-w-0">
+                        <div class="font-bold text-sm text-gray-800 truncate">${title}</div>
+                        <div class="text-xs text-gray-500">User: <span class="font-semibold">${name}</span> • ID: #${String(p.id).slice(-4).toUpperCase()} ${amount ? `• Betrag: ${amount}` : ''}</div>
+                    </div>
+                    <div class="text-xs text-gray-500">Bearbeitung im Tab „Adminfunktionen → Zahlungsverwaltung“</div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = html;
+    } catch (e) {
+        console.error('loadOpenRequestsPaymentsArea: Fehler', e);
+        container.innerHTML = `<p class="text-sm text-red-600">Fehler beim Laden: ${e?.message || e}</p>`;
+    }
+}
 
 
 // =================================================================

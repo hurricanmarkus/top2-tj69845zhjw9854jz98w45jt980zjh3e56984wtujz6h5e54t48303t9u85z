@@ -7,7 +7,7 @@ import { db, appId, currentUser, GUEST_MODE, alertUser } from './haupteingang.js
 // PUSHOVER API TOKEN (fest codiert, für alle User gleich)
 const PUSHOVER_API_TOKEN = 'ag3nyu918ady5f8eqjuug13ttyaq9f';
 import { 
-    collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, 
+    collection, doc, onSnapshot, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, 
     query, where, serverTimestamp, writeBatch, orderBy, limit 
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
@@ -449,7 +449,7 @@ function normalizePushmailSettings(raw) {
                 customMessage: notifRaw.customMessage || notifDefaults.customMessage,
                 overlayEnabled: notifRaw.overlayEnabled !== false,
                 pushOverEnabled: notifRaw.pushOverEnabled !== false,
-                sendImmediately: notifRaw.sendImmediately === true
+                sendImmediately: notifRaw.sendImmediately !== undefined ? notifRaw.sendImmediately === true : notifDefaults.sendImmediately
             };
         });
     });
@@ -481,8 +481,8 @@ export async function createPendingNotification(userId, programId, notificationT
 
         const notifSettings = settings.programs[programId]?.notifications[notificationType];
         
-        if (!notifSettings || notifSettings.state === 'disabled') {
-            console.log('Pushmail: Benachrichtigung deaktiviert:', programId, notificationType);
+        if (!notifSettings || notifSettings.state !== 'active') {
+            console.log('Pushmail: Benachrichtigung nicht aktiv:', programId, notificationType, notifSettings?.state);
             return;
         }
 
@@ -583,7 +583,8 @@ export async function createPendingNotification(userId, programId, notificationT
             relatedDataPath: relatedData.path || null,
             overlayEnabled: notifSettings.overlayEnabled !== false,
             pushOverEnabled: notifSettings.pushOverEnabled !== false,
-            sendImmediately: notifSettings.sendImmediately === true
+            sendImmediately: notifSettings.sendImmediately === true,
+            overlayLastShownAt: null
         });
 
         console.log('Pushmail: Benachrichtigung erstellt:', programId, notificationType, 'Pushover:', notifSettings.pushOverEnabled !== false);
@@ -1192,33 +1193,21 @@ export async function checkAndSendScheduledNotifications() {
 
             if (!nextSend || nextSend > now) continue;
 
-            // Pushover-Nachricht nur senden wenn pushOverEnabled = true
-            let sent = true;
-            if (notif.pushOverEnabled !== false) {
-                sent = await sendPushoverNotification(userId, notif.title, notif.message);
-                console.log('Pushmail: Pushover-Versand für', notif.title, ':', sent ? 'Erfolg' : 'Fehlgeschlagen');
-            } else {
-                console.log('Pushmail: Pushover deaktiviert für', notif.title, '- Nur Overlay-Anzeige');
+            if (notif.overlayEnabled === false) continue;
+
+            const overlayLastShown = notif.overlayLastShownAt?.toDate ? notif.overlayLastShownAt.toDate() : null;
+            if (overlayLastShown && overlayLastShown.getTime() >= nextSend.getTime()) continue;
+
+            const ageMs = now.getTime() - nextSend.getTime();
+            const maxAgeMs = (notif.sendImmediately === true) ? (60 * 60 * 1000) : (15 * 60 * 1000);
+            if (ageMs > maxAgeMs) {
+                console.log('Pushmail: Overlay übersprungen (zu alt):', notif.title, nextSend);
+                await updateDoc(docSnap.ref, { overlayLastShownAt: serverTimestamp() });
+                continue;
             }
 
-            if (sent) {
-                // Nächsten Sendezeitpunkt berechnen
-                if (notif.repeatDays > 0) {
-                    const nextSendDate = new Date(nextSend);
-                    nextSendDate.setDate(nextSendDate.getDate() + notif.repeatDays);
-
-                    await updateDoc(docSnap.ref, {
-                        lastSentAt: serverTimestamp(),
-                        nextSendAt: nextSendDate
-                    });
-                } else {
-                    // Einmalige Benachrichtigung
-                    await updateDoc(docSnap.ref, {
-                        lastSentAt: serverTimestamp(),
-                        nextSendAt: null
-                    });
-                }
-            }
+            alertUser(`${notif.title}: ${notif.message}`, 'info');
+            await updateDoc(docSnap.ref, { overlayLastShownAt: serverTimestamp() });
         }
     } catch (error) {
         console.error('Fehler beim Prüfen/Senden von Benachrichtigungen:', error);
@@ -1287,10 +1276,10 @@ export function startPushmailScheduler() {
     // Sofort einmal prüfen
     checkAndSendScheduledNotifications();
 
-    // Dann alle 5 Minuten
+    // Dann alle 30 Sekunden
     schedulerInterval = setInterval(() => {
         checkAndSendScheduledNotifications();
-    }, 5 * 60 * 1000);
+    }, 30 * 1000);
 }
 
 export function stopPushmailScheduler() {
@@ -1304,6 +1293,45 @@ export function stopPushmailScheduler() {
 // ========================================
 // HILFSFUNKTIONEN
 // ========================================
+
+function replacePlaceholders(text, data = {}) {
+    const raw = typeof text === 'string' ? text : String(text ?? '');
+    const safeData = (data && typeof data === 'object') ? data : {};
+
+    return raw.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
+        const value = safeData[key];
+        if (value === undefined || value === null || value === '') return '—';
+        return String(value);
+    });
+}
+
+function calculateScheduledTime(timeStr, daysBeforeX, targetDate, sendImmediately) {
+    const now = new Date();
+    if (sendImmediately === true) return now;
+
+    const time = (typeof timeStr === 'string' && /^\d{2}:\d{2}$/.test(timeStr)) ? timeStr : '08:00';
+    const [hhRaw, mmRaw] = time.split(':');
+    const hours = Math.min(23, Math.max(0, parseInt(hhRaw, 10)));
+    const minutes = Math.min(59, Math.max(0, parseInt(mmRaw, 10)));
+    const days = Number.isFinite(daysBeforeX) ? daysBeforeX : 0;
+
+    let scheduledDate;
+    if (targetDate) {
+        const base = new Date(targetDate);
+        scheduledDate = Number.isNaN(base.getTime()) ? new Date(now) : base;
+        scheduledDate.setDate(scheduledDate.getDate() - days);
+    } else {
+        scheduledDate = new Date(now);
+    }
+
+    scheduledDate.setHours(hours, minutes, 0, 0);
+
+    if (!targetDate && scheduledDate <= now) {
+        scheduledDate.setDate(scheduledDate.getDate() + 1);
+    }
+
+    return scheduledDate;
+}
 
 export function formatDate(timestamp) {
     if (!timestamp) return '';

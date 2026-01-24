@@ -68,7 +68,7 @@ export let tempSelectedSoundId = null;
 export let unsubscribeTemplateItems = null;
 export let adminSettings = {};
 export let selectedUserForLogin = null;
-export let adminSectionsState = { password: false, user: false, role: false, approval: false, protocol: false, adminRights: false, mainFunctions: false };
+export let adminSectionsState = { password: false, user: false, role: false, approval: false, protocol: false, adminRights: false, mainFunctions: false, openRequests: false };
 let localUpdateInProgress = false;
 export let roleManagementSectionsState = { userRolesOpen: false, adminRolesOpen: false };
 export let ADMIN_ROLES = {};
@@ -89,7 +89,7 @@ let editingPortionId = null;
 export let appHeader;
 export let userSelectionModal;
 export let pinModalTitle;
-export let roleSettingsToggle, passwordSettingsToggle, userManagementToggle, approvalProcessToggle, protocolHistoryToggle, mainFunctionsToggle;
+export let roleSettingsToggle, passwordSettingsToggle, userManagementToggle, approvalProcessToggle, protocolHistoryToggle, mainFunctionsToggle, openRequestsToggle;
 
 export const firebaseConfigFromUser = {
     apiKey: "AIzaSyCCQML1UOy7NB5ohbiPZmOE6dB6oIpzlQk",
@@ -403,6 +403,7 @@ window.onload = function () {
     approvalProcessToggle = document.getElementById('approvalProcessToggle');
     protocolHistoryToggle = document.getElementById('protocolHistoryToggle');
     mainFunctionsToggle = document.getElementById('mainFunctionsToggle');
+    openRequestsToggle = document.getElementById('openRequestsToggle');
 
     // Lokale Variablen (bleiben const, da nur hier genutzt oder nicht rot waren)
     const adminRightsArea = document.getElementById('adminRightsArea');
@@ -2904,6 +2905,7 @@ export function setupEventListeners() {
     if (approvalProcessToggle) approvalProcessToggle.addEventListener('click', () => toggleAdminSection('approval'));
     if (protocolHistoryToggle) protocolHistoryToggle.addEventListener('click', () => toggleAdminSection('protocol'));
     if (mainFunctionsToggle) mainFunctionsToggle.addEventListener('click', () => toggleAdminSection('mainFunctions'));
+    if (openRequestsToggle) openRequestsToggle.addEventListener('click', () => toggleAdminSection('openRequests'));
 
     // --- Entrance View Buttons ---
     document.querySelectorAll('#entranceView .action-button').forEach(button => {

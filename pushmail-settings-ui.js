@@ -326,6 +326,8 @@ async function savePushmailNotificationSettingsFromUI() {
         return;
     }
 
+    const existingSettings = await loadPushmailNotificationSettings(userId);
+
     const settings = {
         globalEnabled: document.getElementById('pushmailAutoGlobalEnabled')?.checked || false,
         programs: {}
@@ -353,13 +355,15 @@ async function savePushmailNotificationSettingsFromUI() {
 
             const notifDef = program.notifications[notifId];
 
+            const existingNotifSettings = existingSettings?.programs?.[programId]?.notifications?.[notifId] || {};
+
             settings.programs[programId].notifications[notifId] = {
                 state: stateSelect?.value || 'active',
                 time: timeInput?.value || notifDef.defaultTime,
                 repeatDays: parseInt(repeatInput?.value || 0),
                 daysBeforeX: daysInput ? parseInt(daysInput.value) : notifDef.defaultDaysBeforeX,
-                customTitle: notifDef.defaultTitle,
-                customMessage: notifDef.defaultMessage,
+                customTitle: existingNotifSettings.customTitle || notifDef.defaultTitle,
+                customMessage: existingNotifSettings.customMessage || notifDef.defaultMessage,
                 overlayEnabled: overlayCheckbox?.checked !== false,
                 pushOverEnabled: pushoverCheckbox?.checked !== false,
                 sendImmediately: immediateCheckbox?.checked === true
