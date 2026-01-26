@@ -68,7 +68,7 @@ function setupEventListeners() {
     });
     setupBtn('btn-show-history', showHistory);
 
-    ['search-notizen', 'filter-notizen-status', 'filter-notizen-kategorie', 'filter-notizen-shared'].forEach(id => {
+    ['search-notizen', 'filter-notizen-status', 'filter-notizen-kategorie', 'filter-notizen-subkategorie', 'filter-notizen-shared'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.addEventListener(id.includes('search') ? 'input' : 'change', applyFilters);
@@ -78,16 +78,21 @@ function setupEventListeners() {
     const resetBtn = document.getElementById('reset-filters-notizen');
     if (resetBtn) {
         resetBtn.addEventListener('click', () => {
-            ['search-notizen', 'filter-notizen-status', 'filter-notizen-kategorie', 'filter-notizen-shared'].forEach(id => {
+            ['search-notizen', 'filter-notizen-status', 'filter-notizen-kategorie', 'filter-notizen-subkategorie', 'filter-notizen-shared'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.value = '';
             });
+            const subkategorieFilter = document.getElementById('filter-notizen-subkategorie');
+            if (subkategorieFilter) subkategorieFilter.disabled = true;
             applyFilters();
         });
     }
 
     const kategorieSelect = document.getElementById('notiz-kategorie');
     if (kategorieSelect) kategorieSelect.addEventListener('change', updateSubkategorienDropdown);
+
+    const kategorieFilterSelect = document.getElementById('filter-notizen-kategorie');
+    if (kategorieFilterSelect) kategorieFilterSelect.addEventListener('change', updateSubkategorienFilter);
 
     // Event-Listener für dynamische Element-Buttons
     const addElementButtons = document.querySelectorAll('.notiz-add-element');
@@ -119,13 +124,42 @@ async function loadKategorien() {
     const colRef = collection(db, 'artifacts', appId, 'users', userId, 'notizen_kategorien');
     kategorienListener = onSnapshot(colRef, async (snapshot) => {
         allKategorien = [];
+        
+        // Eigene Kategorien
         for (const docSnap of snapshot.docs) {
-            const kategorie = { id: docSnap.id, ...docSnap.data(), subkategorien: [] };
+            const kategorie = { id: docSnap.id, ...docSnap.data(), subkategorien: [], ownerId: userId };
             const subColRef = collection(db, 'artifacts', appId, 'users', userId, 'notizen_kategorien', docSnap.id, 'subkategorien');
             const subSnap = await getDocs(subColRef);
             subSnap.forEach(subDoc => kategorie.subkategorien.push({ id: subDoc.id, ...subDoc.data() }));
             allKategorien.push(kategorie);
         }
+        
+        // Geteilte Kategorien von anderen Usern laden
+        try {
+            const usersRef = collection(db, 'artifacts', appId, 'users');
+            const usersSnap = await getDocs(usersRef);
+            
+            for (const userDoc of usersSnap.docs) {
+                if (userDoc.id === userId) continue; // Eigene überspringen
+                
+                const sharedKatRef = collection(db, 'artifacts', appId, 'users', userDoc.id, 'notizen_kategorien');
+                const sharedKatSnap = await getDocs(sharedKatRef);
+                
+                for (const katDoc of sharedKatSnap.docs) {
+                    const katData = katDoc.data();
+                    if (katData.sharedWith && katData.sharedWith[userId]) {
+                        const kategorie = { id: katDoc.id, ...katData, subkategorien: [], ownerId: userDoc.id };
+                        const subColRef = collection(db, 'artifacts', appId, 'users', userDoc.id, 'notizen_kategorien', katDoc.id, 'subkategorien');
+                        const subSnap = await getDocs(subColRef);
+                        subSnap.forEach(subDoc => kategorie.subkategorien.push({ id: subDoc.id, ...subDoc.data() }));
+                        allKategorien.push(kategorie);
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn('Fehler beim Laden geteilter Kategorien:', error);
+        }
+        
         renderKategorienListe();
         updateKategorienDropdowns();
     });
@@ -138,26 +172,45 @@ function renderKategorienListe() {
         container.innerHTML = '<p class="text-gray-400 text-center py-4">Noch keine Kategorien</p>';
         return;
     }
-    container.innerHTML = allKategorien.map(kat => `
-        <div class="border rounded-lg p-3">
+    const userId = currentUser.mode;
+    container.innerHTML = allKategorien.map(kat => {
+        const isOwner = kat.createdBy === userId;
+        const isShared = kat.sharedWith && Object.keys(kat.sharedWith).length > 0;
+        const sharedBy = !isOwner && kat.createdBy ? kat.createdBy : null;
+        return `
+        <div class="border rounded-lg p-3 ${isShared ? 'bg-purple-50' : ''}">
             <div class="flex justify-between items-center mb-2">
-                <span class="font-bold">📁 ${kat.name}</span>
-                <button onclick="window.deleteKategorie('${kat.id}')" class="text-red-500 text-sm">🗑️</button>
+                <div class="flex-1">
+                    <span class="font-bold">📁 ${kat.name}</span>
+                    ${sharedBy ? `<span class="text-xs text-purple-600 ml-2">(geteilt durch ${sharedBy})</span>` : ''}
+                    ${isShared && isOwner ? '<span class="text-xs text-purple-600 ml-2">👥</span>' : ''}
+                </div>
+                <div class="flex gap-1">
+                    ${isOwner ? `<button onclick="window.shareKategorie('${kat.id}')" class="text-blue-500 text-sm px-2" title="Teilen">👥</button>` : ''}
+                    ${isOwner ? `<button onclick="window.deleteKategorie('${kat.id}')" class="text-red-500 text-sm">🗑️</button>` : ''}
+                </div>
             </div>
             <div class="ml-4 space-y-1">
-                ${kat.subkategorien.map(sub => `
-                    <div class="flex justify-between text-sm">
-                        <span>📄 ${sub.name}</span>
-                        <button onclick="window.deleteSubkategorie('${kat.id}','${sub.id}')" class="text-red-500">✕</button>
+                ${kat.subkategorien.map(sub => {
+                    const subIsOwner = sub.createdBy === userId;
+                    const subSharedBy = !subIsOwner && sub.createdBy ? sub.createdBy : null;
+                    return `
+                    <div class="flex justify-between text-sm ${subSharedBy ? 'bg-purple-100 px-2 py-1 rounded' : ''}">
+                        <span>📄 ${sub.name} ${subSharedBy ? `<span class="text-xs text-purple-600">(geteilt durch ${subSharedBy})</span>` : ''}</span>
+                        ${subIsOwner ? `<button onclick="window.deleteSubkategorie('${kat.id}','${sub.id}')" class="text-red-500">✕</button>` : ''}
                     </div>
-                `).join('')}
+                `;
+                }).join('')}
+                ${isOwner || (kat.sharedWith && kat.sharedWith[userId] && kat.sharedWith[userId].role === 'write') ? `
                 <div class="flex gap-2 mt-2">
                     <input type="text" id="neue-subkat-${kat.id}" placeholder="Neue Subkategorie..." class="flex-1 p-1 border rounded text-sm">
                     <button onclick="window.createSubkategorie('${kat.id}')" class="px-2 py-1 bg-amber-500 text-white text-xs rounded">➕</button>
                 </div>
+                ` : ''}
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 async function createKategorie() {
@@ -168,13 +221,41 @@ async function createKategorie() {
     }
     try {
         const colRef = collection(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen_kategorien');
-        await addDoc(colRef, { name: input.value.trim(), createdAt: serverTimestamp(), createdBy: currentUser.mode });
+        await addDoc(colRef, { 
+            name: input.value.trim(), 
+            createdAt: serverTimestamp(), 
+            createdBy: currentUser.mode,
+            sharedWith: {}
+        });
         input.value = '';
         alertUser('Kategorie erstellt', 'success');
     } catch (error) {
         alertUser('Fehler', 'error');
     }
 }
+
+window.shareKategorie = async function(kategorieId) {
+    const kategorie = allKategorien.find(k => k.id === kategorieId);
+    if (!kategorie) return;
+    
+    const userInput = prompt('Benutzer-ID eingeben:');
+    if (!userInput || !userInput.trim()) return;
+    
+    const role = confirm('Schreibrechte erteilen? (Abbrechen = nur Lesen)') ? 'write' : 'read';
+    
+    try {
+        const userId = currentUser.mode;
+        const docRef = doc(db, 'artifacts', appId, 'users', userId, 'notizen_kategorien', kategorieId);
+        await updateDoc(docRef, {
+            [`sharedWith.${userInput.trim()}`]: { role, since: serverTimestamp(), status: 'active' }
+        });
+        alertUser('Kategorie geteilt', 'success');
+        loadKategorien();
+    } catch (error) {
+        console.error('Share error:', error);
+        alertUser('Fehler beim Teilen', 'error');
+    }
+};
 
 window.createSubkategorie = async function(kategorieId) {
     const input = document.getElementById(`neue-subkat-${kategorieId}`);
@@ -184,6 +265,8 @@ window.createSubkategorie = async function(kategorieId) {
         await addDoc(colRef, { name: input.value.trim(), createdAt: serverTimestamp(), createdBy: currentUser.mode });
         input.value = '';
         alertUser('Subkategorie erstellt', 'success');
+        // Kategorien neu laden um Subkategorien anzuzeigen
+        loadKategorien();
     } catch (error) {
         alertUser('Fehler', 'error');
     }
@@ -227,6 +310,8 @@ window.deleteSubkategorie = async function(kategorieId, subkategorieId) {
         const docRef = doc(db, 'artifacts', appId, 'users', userId, 'notizen_kategorien', kategorieId, 'subkategorien', subkategorieId);
         await deleteDoc(docRef);
         alertUser('Gelöscht', 'success');
+        // Kategorien neu laden um Subkategorien anzuzeigen
+        loadKategorien();
     } catch (error) {
         alertUser('Fehler', 'error');
     }
@@ -240,6 +325,7 @@ function updateKategorienDropdowns() {
         const v = filterSelect.value;
         filterSelect.innerHTML = '<option value="">Alle Kategorien</option>' + options;
         filterSelect.value = v;
+        if (v) updateSubkategorienFilter();
     }
     if (editorSelect) {
         const v = editorSelect.value;
@@ -269,6 +355,36 @@ function updateSubkategorienDropdown() {
     subSelect.innerHTML = '<option value="">Bitte wählen...</option>' + kategorie.subkategorien.map(sub => `<option value="${sub.id}">${sub.name}</option>`).join('');
 }
 
+function updateSubkategorienFilter() {
+    const kategorieFilterSelect = document.getElementById('filter-notizen-kategorie');
+    const subkategorieFilterSelect = document.getElementById('filter-notizen-subkategorie');
+    if (!kategorieFilterSelect || !subkategorieFilterSelect) return;
+    
+    const kategorieId = kategorieFilterSelect.value;
+    if (!kategorieId) {
+        subkategorieFilterSelect.disabled = true;
+        subkategorieFilterSelect.innerHTML = '<option value="">Alle Subkategorien</option>';
+        subkategorieFilterSelect.value = '';
+        applyFilters();
+        return;
+    }
+    
+    const kategorie = allKategorien.find(k => k.id === kategorieId);
+    if (!kategorie || !kategorie.subkategorien.length) {
+        subkategorieFilterSelect.disabled = true;
+        subkategorieFilterSelect.innerHTML = '<option value="">Keine Subkategorien</option>';
+        subkategorieFilterSelect.value = '';
+        applyFilters();
+        return;
+    }
+    
+    subkategorieFilterSelect.disabled = false;
+    subkategorieFilterSelect.innerHTML = '<option value="">Alle Subkategorien dieser Kategorie</option>' + 
+        kategorie.subkategorien.map(sub => `<option value="${sub.id}">${sub.name}</option>`).join('');
+    subkategorieFilterSelect.value = '';
+    applyFilters();
+}
+
 async function loadNotizen() {
     const userId = currentUser.mode;
     if (!userId || userId === GUEST_MODE) return;
@@ -285,12 +401,19 @@ function applyFilters() {
     const searchTerm = document.getElementById('search-notizen')?.value.toLowerCase() || '';
     const statusFilter = document.getElementById('filter-notizen-status')?.value || '';
     const kategorieFilter = document.getElementById('filter-notizen-kategorie')?.value || '';
+    const subkategorieFilter = document.getElementById('filter-notizen-subkategorie')?.value || '';
     const sharedFilter = document.getElementById('filter-notizen-shared')?.value || '';
     const userId = currentUser.mode;
 
     let filtered = allNotizen.filter(notiz => {
         if (statusFilter && notiz.status !== statusFilter) return false;
-        if (kategorieFilter && notiz.kategorieId !== kategorieFilter) return false;
+        
+        // Kategorie-Filter: Wenn Kategorie gewählt aber KEINE Subkategorie, zeige alle Notizen dieser Kategorie
+        if (kategorieFilter && !subkategorieFilter && notiz.kategorieId !== kategorieFilter) return false;
+        
+        // Subkategorie-Filter: Wenn Subkategorie gewählt, zeige nur Notizen dieser Subkategorie
+        if (subkategorieFilter && notiz.subkategorieId !== subkategorieFilter) return false;
+        
         if (sharedFilter === 'own' && notiz.owner !== userId) return false;
         if (sharedFilter === 'shared' && (!notiz.sharedWith || Object.keys(notiz.sharedWith).length === 0)) return false;
         if (searchTerm) {
@@ -420,6 +543,47 @@ async function loadNotizData(notizId) {
         document.getElementById('notiz-meta-created').textContent = new Date(notiz.createdAt.toDate()).toLocaleString('de-DE');
         document.getElementById('notiz-meta-edited').textContent = notiz.lastEditedAt ? new Date(notiz.lastEditedAt.toDate()).toLocaleString('de-DE') + ' von ' + (notiz.lastEditedBy || '?') : 'Noch nicht bearbeitet';
     }
+    
+    // Felder sperren beim Bearbeiten (außer Status und Checkboxen)
+    lockEditFields();
+}
+
+function lockEditFields() {
+    // Betreff, Kategorie, Subkategorie, Erinnerung, Frist sperren
+    const fieldsToLock = ['notiz-betreff', 'notiz-kategorie', 'notiz-subkategorie', 'notiz-erinnerung', 'notiz-frist'];
+    fieldsToLock.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = true;
+    });
+    
+    // Alle Element-Buttons (hinzufügen) verstecken
+    document.querySelectorAll('.notiz-add-element').forEach(btn => btn.style.display = 'none');
+    
+    // Alle Elemente sperren AUSSER Checkboxen
+    const container = document.getElementById('notiz-hauptteil-container');
+    if (container) {
+        container.querySelectorAll('[data-element-type]').forEach(el => {
+            const type = el.dataset.elementType;
+            if (type !== 'checkbox') {
+                // Alle Inputs/Textareas/Selects in diesem Element sperren
+                el.querySelectorAll('input:not([type="checkbox"]), textarea, select').forEach(input => input.disabled = true);
+            }
+            // Verschiebe- und Lösch-Buttons verstecken
+            el.querySelectorAll('.move-up, .move-down, .delete-element, .add-table-row').forEach(btn => btn.style.display = 'none');
+        });
+    }
+}
+
+function unlockEditFields() {
+    // Alle Felder entsperren
+    const fieldsToUnlock = ['notiz-betreff', 'notiz-kategorie', 'notiz-subkategorie', 'notiz-erinnerung', 'notiz-frist'];
+    fieldsToUnlock.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = false;
+    });
+    
+    // Element-Buttons wieder anzeigen
+    document.querySelectorAll('.notiz-add-element').forEach(btn => btn.style.display = '');
 }
 
 function resetEditorForm() {
@@ -435,6 +599,9 @@ function resetEditorForm() {
     document.getElementById('notiz-shared-users-list').innerHTML = '<p class="text-gray-400 text-sm">Privat</p>';
     document.getElementById('notiz-metadata').classList.add('hidden');
     hideCheckoutWarning();
+    
+    // Alle Felder entsperren (neue Notiz)
+    unlockEditFields();
 }
 
 async function saveNotiz() {
@@ -541,25 +708,46 @@ function addElement(type) {
     let content = '';
     switch (type) {
         case 'text':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📝 Text</span><div class="flex gap-1"><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><textarea class="w-full p-2 border rounded" rows="3"></textarea>`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📝 Text</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><textarea class="w-full p-2 border rounded" rows="3"></textarea>`;
             break;
         case 'checkbox':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">☑️ Checkbox</span><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div><div class="flex gap-2"><input type="checkbox" class="w-5 h-5"><input type="text" placeholder="Label..." class="flex-1 p-2 border rounded"></div>`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">☑️ Checkbox</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><div class="flex gap-2"><input type="checkbox" class="w-5 h-5"><input type="text" placeholder="Label..." class="flex-1 p-2 border rounded"></div>`;
             break;
         case 'line':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">➖ Linie</span><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div><hr class="border-t-2">`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">➖ Linie</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><hr class="border-t-2">`;
             break;
         case 'table':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📊 Tabelle</span><div class="flex gap-1"><button class="add-table-row text-xs px-2 py-1 bg-blue-500 text-white rounded">+ Zeile</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><table class="w-full border"><thead><tr><th><input type="text" placeholder="Spalte 1" class="w-full p-1 border"></th><th><input type="text" placeholder="Spalte 2" class="w-full p-1 border"></th></tr></thead><tbody><tr><td><input type="text" class="w-full p-1 border"></td><td><input type="text" class="w-full p-1 border"></td></tr></tbody></table>`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📊 Tabelle</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="add-table-row text-xs px-2 py-1 bg-blue-500 text-white rounded">+ Zeile</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><table class="w-full border"><thead><tr><th><input type="text" placeholder="Spalte 1" class="w-full p-1 border"></th><th><input type="text" placeholder="Spalte 2" class="w-full p-1 border"></th></tr></thead><tbody><tr><td><input type="text" class="w-full p-1 border"></td><td><input type="text" class="w-full p-1 border"></td></tr></tbody></table>`;
             break;
         case 'link':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">🔗 Link</span><div class="flex gap-1"><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="url" name="url" placeholder="https://..." class="w-full p-2 border rounded mb-2"><input type="text" name="label" placeholder="Anzeigetext" class="w-full p-2 border rounded">`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">🔗 Link</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="url" name="url" placeholder="https://..." class="w-full p-2 border rounded mb-2"><input type="text" name="label" placeholder="Anzeigetext" class="w-full p-2 border rounded">`;
             break;
         case 'password':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">🔐 Passwort</span><div class="flex gap-1"><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="toggle-pw text-xs px-2 py-1 bg-blue-500 text-white rounded">👁️</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="password" class="w-full p-2 border rounded">`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">🔐 Passwort</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="toggle-pw text-xs px-2 py-1 bg-blue-500 text-white rounded">👁️</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="password" class="w-full p-2 border rounded">`;
             break;
         case 'infobox':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">💡 Infobox</span><div class="flex gap-1"><select class="text-xs border rounded px-1"><option value="blue">Blau</option><option value="green">Grün</option><option value="yellow">Gelb</option><option value="red">Rot</option></select><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><textarea class="w-full p-2 border rounded bg-blue-50" rows="2"></textarea>`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">💡 Infobox</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><select class="text-xs border rounded px-1">
+                <option value="blue">Blau</option>
+                <option value="indigo">Indigo</option>
+                <option value="purple">Lila</option>
+                <option value="pink">Pink</option>
+                <option value="red">Rot</option>
+                <option value="orange">Orange</option>
+                <option value="amber">Bernstein</option>
+                <option value="yellow">Gelb</option>
+                <option value="lime">Limette</option>
+                <option value="green">Grün</option>
+                <option value="emerald">Smaragd</option>
+                <option value="teal">Türkis</option>
+                <option value="cyan">Cyan</option>
+                <option value="sky">Himmelblau</option>
+                <option value="slate">Schiefer</option>
+                <option value="gray">Grau</option>
+                <option value="zinc">Zink</option>
+                <option value="neutral">Neutral</option>
+                <option value="stone">Stein</option>
+                <option value="rose">Rose</option>
+            </select><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><textarea class="w-full p-2 border rounded bg-blue-50" rows="2"></textarea>`;
             break;
     }
     elementDiv.innerHTML = content;
@@ -567,6 +755,27 @@ function addElement(type) {
         elementDiv.remove();
         if (container.children.length === 0) container.innerHTML = '<p class="text-gray-400 text-center text-sm">Füge Elemente hinzu...</p>';
     });
+    
+    // Move Up/Down Funktionalität
+    const moveUpBtn = elementDiv.querySelector('.move-up');
+    if (moveUpBtn) {
+        moveUpBtn.addEventListener('click', () => {
+            const prev = elementDiv.previousElementSibling;
+            if (prev && prev.dataset.elementType) {
+                container.insertBefore(elementDiv, prev);
+            }
+        });
+    }
+    const moveDownBtn = elementDiv.querySelector('.move-down');
+    if (moveDownBtn) {
+        moveDownBtn.addEventListener('click', () => {
+            const next = elementDiv.nextElementSibling;
+            if (next && next.dataset.elementType) {
+                container.insertBefore(next, elementDiv);
+            }
+        });
+    }
+    
     const copyBtn = elementDiv.querySelector('.copy-btn');
     if (copyBtn) {
         copyBtn.addEventListener('click', () => {

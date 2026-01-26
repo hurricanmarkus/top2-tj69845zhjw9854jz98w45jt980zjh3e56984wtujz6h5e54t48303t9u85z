@@ -380,6 +380,46 @@ export const NOTIFICATION_DEFINITIONS = {
         }
     },
 
+    NOTIZEN: {
+        title: "Notizen",
+        color: "amber",
+        borderClass: "border-amber-600",
+        textClass: "text-amber-700",
+        requiredPermission: "NOTIZEN",
+        notifications: {
+            erinnerung: {
+                label: "Erinnerung",
+                description: "Benachrichtigung zum Erinnerungs-Zeitpunkt",
+                defaultTitle: "Notiz-Erinnerung: {notizBetreff}",
+                defaultMessage: "Erinnerung für Notiz '{notizBetreff}' in Kategorie {kategorie}",
+                defaultTime: "09:00",
+                defaultRepeatDays: 0,
+                defaultDaysBeforeX: null,
+                placeholders: ["notizBetreff", "kategorie", "subkategorie", "status"]
+            },
+            x_tage_vor_frist: {
+                label: "X Tage vor Frist",
+                description: "Erinnerung vor Ablauf der Deadline",
+                defaultTitle: "Notiz-Deadline: {notizBetreff}",
+                defaultMessage: "Die Notiz '{notizBetreff}' hat eine Deadline in {daysLeft} Tagen",
+                defaultTime: "10:00",
+                defaultRepeatDays: 0,
+                defaultDaysBeforeX: 3,
+                placeholders: ["notizBetreff", "kategorie", "daysLeft", "frist"]
+            },
+            frist_erreicht: {
+                label: "Frist erreicht",
+                description: "Benachrichtigung wenn Deadline erreicht ist",
+                defaultTitle: "Notiz-Frist ABGELAUFEN: {notizBetreff}",
+                defaultMessage: "Die Deadline für '{notizBetreff}' ist heute erreicht!",
+                defaultTime: "08:00",
+                defaultRepeatDays: 1,
+                defaultDaysBeforeX: null,
+                placeholders: ["notizBetreff", "kategorie", "status"]
+            }
+        }
+    },
+
     SENDUNGSVERWALTUNG: {
         title: "Sendungsverwaltung",
         color: "blue",

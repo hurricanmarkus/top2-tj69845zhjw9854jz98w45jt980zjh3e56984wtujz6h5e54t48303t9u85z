@@ -3246,11 +3246,11 @@
             <div id="notizenView" class="view">
                 <div class="back-link-container w-full mb-3">
                     <div class="flex justify-between items-center flex-wrap gap-2">
-                        <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition" data-target="home">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 mr-2">
-                                <path fill-rule="evenodd" d="M11.03 3.97a.75.75 0 0 1 0 1.06l-6.22 6.22H21a.75.75 0 0 1 0 1.5H4.81l6.22 6.22a.75.75 0 1 1-1.06 1.06l-7.5-7.5a.75.75 0 0 1 0-1.06l7.5-7.5a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd" />
+                        <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition flex-shrink-0" data-target="home">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mr-1">
+                                <path d="m15 18-6-6 6-6" />
                             </svg>
-                            Zurück zur Startseite
+                            <span class="text-base font-semibold">zurück</span>
                         </button>
                         <div class="flex gap-2">
                             <button id="btn-notizen-einladungen" class="relative p-2 text-gray-500 hover:text-gray-800 transition rounded-full hover:bg-gray-200" title="Einladungen">
@@ -3309,6 +3309,10 @@
                             <option value="">Alle Kategorien</option>
                         </select>
 
+                        <select id="filter-notizen-subkategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm" disabled>
+                            <option value="">Alle Subkategorien</option>
+                        </select>
+
                         <select id="filter-notizen-shared" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Notizen</option>
                             <option value="own">Nur meine</option>
@@ -3321,13 +3325,8 @@
                     </div>
                 </div>
 
-                <div class="mb-3 flex justify-between items-center">
-                    <button id="btn-neue-notiz" class="px-4 py-2 bg-amber-500 text-white font-bold rounded-lg hover:bg-amber-600 transition shadow-md">
-                        ➕ Neue Notiz
-                    </button>
-                    <div class="text-sm text-gray-600">
-                        <span id="notizen-filtered-count">0</span> Notizen angezeigt
-                    </div>
+                <div class="mb-3 text-right text-sm text-gray-600">
+                    <span id="notizen-filtered-count">0</span> Notizen angezeigt
                 </div>
 
                 <div id="notizen-list-container" class="space-y-2">
