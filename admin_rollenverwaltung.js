@@ -182,7 +182,7 @@ export function renderRoleManagement() {
         'HAUSHALTSZAHLUNGEN': { label: 'Haushaltszahlungen', indent: false },
         'HAUSHALTSZAHLUNGEN_CREATE': { label: '-> Neue Zahlung anlegen', indent: true },
         'NOTIZEN': { label: 'Notizen', indent: false },
-        'NOTIZEN_CREATE': { label: '-> Neue Notiz anlegen', indent: true },
+        'NOTIZEN_CREATE': { label: '-> Neue Notizen anlegen', indent: true },
         'GESCHENKEMANAGEMENT': { label: 'Geschenkemanagement', indent: false },
         'GESCHENKEMANAGEMENT_CREATE': { label: '-> Neues Geschenk anlegen', indent: true }
     };

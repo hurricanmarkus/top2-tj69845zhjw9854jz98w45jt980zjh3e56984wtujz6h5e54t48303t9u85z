@@ -5,6 +5,8 @@ import { collection, doc, onSnapshot, getDoc, getDocs, setDoc, updateDoc, delete
 let kategorienListener = null, notizenListener = null, einladungenListener = null;
 let allKategorien = [], allNotizen = [], allEinladungen = [];
 let currentEditingNotizId = null, checkoutHeartbeat = null;
+let shareUsersCache = [];
+let currentSharingKategorieId = null;
 
 export function initializeNotizen() {
     console.log('Notizen: Init...');
@@ -49,6 +51,9 @@ function setupEventListeners() {
     setupBtn('btn-notiz-cancel', closeNotizEditor);
     setupBtn('btn-notiz-delete', deleteNotiz);
     setupBtn('btn-notiz-share', openShareModal);
+    setupBtn('close-kategorie-share', closeKategorieShareModal);
+    setupBtn('btn-kategorie-share-cancel', closeKategorieShareModal);
+    setupBtn('btn-kategorie-share-send', saveKategorieShareSelection);
     setupBtn('close-notiz-share', () => {
         const modal = document.getElementById('notizShareModal');
         if (modal) modal.classList.add('hidden');
@@ -103,6 +108,146 @@ function setupEventListeners() {
         });
     });
     console.log(`Notizen: ${addElementButtons.length} Element-Buttons gefunden`);
+}
+
+function openKategorieShareModal(kategorieId) {
+    currentSharingKategorieId = kategorieId;
+    const modal = document.getElementById('kategorieShareModal');
+    if (!modal) {
+        alertUser('Teilen-Modal fehlt', 'error');
+        return;
+    }
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    console.log('Notizen: Kategorie-Share geöffnet für', kategorieId);
+    loadUserListForKategorieShare();
+}
+
+function closeKategorieShareModal() {
+    const modal = document.getElementById('kategorieShareModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+    currentSharingKategorieId = null;
+}
+
+async function loadUserListForKategorieShare() {
+    const list = document.getElementById('kategorie-share-user-list');
+    const searchInput = document.getElementById('kategorie-share-user-search');
+    const selectedCount = document.getElementById('kategorie-share-selected-count');
+    if (!list || !searchInput || !selectedCount) return;
+
+    const kategorie = allKategorien.find(k => k.id === currentSharingKategorieId);
+    const alreadyShared = kategorie?.sharedWith || {};
+
+    try {
+        const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'user-config');
+        const snapshot = await getDocs(colRef);
+        const users = snapshot.docs
+            .filter(docSnap => docSnap.id !== currentUser.mode)
+            .map(docSnap => {
+                const data = docSnap.data() || {};
+                const displayName = data.realName || data.name || docSnap.id;
+                return { id: docSnap.id, displayName };
+            })
+            .sort((a, b) => (a.displayName || '').localeCompare((b.displayName || ''), 'de'));
+
+        if (users.length === 0) {
+            list.innerHTML = '<div class="p-3 text-sm text-gray-400 text-center">Keine Benutzer gefunden</div>';
+            selectedCount.textContent = '0 ausgewählt';
+            return;
+        }
+
+        list.innerHTML = users.map(u => {
+            const displayText = u.displayName && u.displayName !== u.id ? `${u.displayName}` : u.id;
+            const subText = u.displayName && u.displayName !== u.id ? u.id : '';
+            const searchText = `${u.displayName} ${u.id}`.toLowerCase();
+            const sharedRole = alreadyShared[u.id]?.role;
+            const checkedAttr = sharedRole ? 'checked' : '';
+            const roleValue = sharedRole || 'read';
+            return `
+                <div class="kategorie-share-user-row flex items-center justify-between gap-2 p-2 border-b last:border-b-0" data-search="${searchText}">
+                    <label class="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
+                        <input type="checkbox" class="kategorie-share-user-checkbox" data-userid="${u.id}" ${checkedAttr}>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold truncate">${displayText}</div>
+                            ${subText ? `<div class="text-xs text-gray-500 truncate">${subText}</div>` : ''}
+                        </div>
+                    </label>
+                    <select class="kategorie-share-user-role text-xs border rounded px-2 py-1" data-userid="${u.id}">
+                        <option value="read" ${roleValue === 'read' ? 'selected' : ''}>👁️ Lesen</option>
+                        <option value="write" ${roleValue === 'write' ? 'selected' : ''}>✏️ Schreiben</option>
+                    </select>
+                </div>
+            `;
+        }).join('');
+
+        const updateSelectedCount = () => {
+            const checked = list.querySelectorAll('.kategorie-share-user-checkbox:checked').length;
+            selectedCount.textContent = `${checked} ausgewählt`;
+        };
+
+        const applyFilter = () => {
+            const term = (searchInput.value || '').trim().toLowerCase();
+            list.querySelectorAll('.kategorie-share-user-row').forEach(row => {
+                const hay = row.dataset.search || '';
+                row.style.display = !term || hay.includes(term) ? '' : 'none';
+            });
+        };
+
+        searchInput.value = '';
+        searchInput.oninput = () => applyFilter();
+
+        list.onchange = (e) => {
+            if (e.target && e.target.classList && e.target.classList.contains('kategorie-share-user-checkbox')) {
+                updateSelectedCount();
+            }
+        };
+
+        applyFilter();
+        updateSelectedCount();
+    } catch (error) {
+        console.error('Notizen: Fehler beim Laden der Userliste (Kategorie teilen):', error);
+    }
+}
+
+async function saveKategorieShareSelection() {
+    const list = document.getElementById('kategorie-share-user-list');
+    if (!list || !currentSharingKategorieId) {
+        alertUser('Fehler', 'error');
+        return;
+    }
+
+    const selected = Array.from(list.querySelectorAll('.kategorie-share-user-checkbox:checked')).map(cb => {
+        const userId = cb.dataset.userid;
+        const roleEl = list.querySelector(`.kategorie-share-user-role[data-userid="${userId}"]`);
+        const role = roleEl ? roleEl.value : 'read';
+        return { userId, role };
+    }).filter(x => x.userId);
+
+    if (selected.length === 0) {
+        alertUser('Benutzer auswählen', 'error');
+        return;
+    }
+
+    try {
+        const userId = currentUser.mode;
+        const docRef = doc(db, 'artifacts', appId, 'users', userId, 'notizen_kategorien', currentSharingKategorieId);
+
+        const updatePayload = {};
+        selected.forEach(({ userId: targetUserId, role }) => {
+            updatePayload[`sharedWith.${targetUserId}`] = { role, since: serverTimestamp(), status: 'active' };
+        });
+
+        await updateDoc(docRef, updatePayload);
+        alertUser('Kategorie geteilt', 'success');
+        closeKategorieShareModal();
+        loadKategorien();
+    } catch (error) {
+        console.error('Notizen: Share error (Kategorie):', error);
+        alertUser('Fehler beim Teilen', 'error');
+    }
 }
 
 function openSettings() {
@@ -237,24 +382,7 @@ async function createKategorie() {
 window.shareKategorie = async function(kategorieId) {
     const kategorie = allKategorien.find(k => k.id === kategorieId);
     if (!kategorie) return;
-    
-    const userInput = prompt('Benutzer-ID eingeben:');
-    if (!userInput || !userInput.trim()) return;
-    
-    const role = confirm('Schreibrechte erteilen? (Abbrechen = nur Lesen)') ? 'write' : 'read';
-    
-    try {
-        const userId = currentUser.mode;
-        const docRef = doc(db, 'artifacts', appId, 'users', userId, 'notizen_kategorien', kategorieId);
-        await updateDoc(docRef, {
-            [`sharedWith.${userInput.trim()}`]: { role, since: serverTimestamp(), status: 'active' }
-        });
-        alertUser('Kategorie geteilt', 'success');
-        loadKategorien();
-    } catch (error) {
-        console.error('Share error:', error);
-        alertUser('Fehler beim Teilen', 'error');
-    }
+    openKategorieShareModal(kategorieId);
 };
 
 window.createSubkategorie = async function(kategorieId) {
@@ -567,6 +695,9 @@ function lockEditFields() {
             if (type !== 'checkbox') {
                 // Alle Inputs/Textareas/Selects in diesem Element sperren
                 el.querySelectorAll('input:not([type="checkbox"]), textarea, select').forEach(input => input.disabled = true);
+            } else {
+                // Bei Checkbox-Elementen darf nur die Checkbox selbst editierbar sein
+                el.querySelectorAll('input:not([type="checkbox"])').forEach(input => input.disabled = true);
             }
             // Verschiebe- und Lösch-Buttons verstecken
             el.querySelectorAll('.move-up, .move-down, .delete-element, .add-table-row').forEach(btn => btn.style.display = 'none');
@@ -648,17 +779,18 @@ function collectElements() {
     container.querySelectorAll('[data-element-type]').forEach((el, index) => {
         const type = el.dataset.elementType;
         const element = { type, order: index };
+        element.subtitle = el.querySelector('.element-subtitle')?.value || '';
         switch (type) {
             case 'text': element.content = el.querySelector('textarea')?.value || ''; break;
             case 'checkbox':
-                element.label = el.querySelector('input[type="text"]')?.value || '';
+                element.label = el.querySelector('.checkbox-label-input')?.value || '';
                 element.checked = el.querySelector('input[type="checkbox"]')?.checked || false;
                 break;
             case 'link':
                 element.url = el.querySelector('input[name="url"]')?.value || '';
                 element.label = el.querySelector('input[name="label"]')?.value || '';
                 break;
-            case 'password': element.content = el.querySelector('input')?.value || ''; break;
+            case 'password': element.content = el.querySelector('.password-input')?.value || ''; break;
             case 'infobox':
                 element.content = el.querySelector('textarea')?.value || '';
                 element.color = el.querySelector('select')?.value || 'blue';
@@ -708,22 +840,22 @@ function addElement(type) {
     let content = '';
     switch (type) {
         case 'text':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📝 Text</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><textarea class="w-full p-2 border rounded" rows="3"></textarea>`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📝 Text</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><textarea class="w-full p-2 border rounded" rows="3"></textarea>`;
             break;
         case 'checkbox':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">☑️ Checkbox</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><div class="flex gap-2"><input type="checkbox" class="w-5 h-5"><input type="text" placeholder="Label..." class="flex-1 p-2 border rounded"></div>`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">☑️ Checkbox</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><div class="flex gap-2"><input type="checkbox" class="w-5 h-5"><input type="text" placeholder="Label..." class="checkbox-label-input flex-1 p-2 border rounded"></div>`;
             break;
         case 'line':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">➖ Linie</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><hr class="border-t-2">`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">➖ Linie</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><hr class="border-t-2">`;
             break;
         case 'table':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📊 Tabelle</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="add-table-row text-xs px-2 py-1 bg-blue-500 text-white rounded">+ Zeile</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><table class="w-full border"><thead><tr><th><input type="text" placeholder="Spalte 1" class="w-full p-1 border"></th><th><input type="text" placeholder="Spalte 2" class="w-full p-1 border"></th></tr></thead><tbody><tr><td><input type="text" class="w-full p-1 border"></td><td><input type="text" class="w-full p-1 border"></td></tr></tbody></table>`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📊 Tabelle</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="add-table-row text-xs px-2 py-1 bg-blue-500 text-white rounded">+ Zeile</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><table class="w-full border"><thead><tr><th><input type="text" placeholder="Spalte 1" class="w-full p-1 border"></th><th><input type="text" placeholder="Spalte 2" class="w-full p-1 border"></th></tr></thead><tbody><tr><td><input type="text" class="w-full p-1 border"></td><td><input type="text" class="w-full p-1 border"></td></tr></tbody></table>`;
             break;
         case 'link':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">🔗 Link</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="url" name="url" placeholder="https://..." class="w-full p-2 border rounded mb-2"><input type="text" name="label" placeholder="Anzeigetext" class="w-full p-2 border rounded">`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">🔗 Link</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><input type="url" name="url" placeholder="https://..." class="w-full p-2 border rounded mb-2"><input type="text" name="label" placeholder="Anzeigetext" class="w-full p-2 border rounded">`;
             break;
         case 'password':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">🔐 Passwort</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="toggle-pw text-xs px-2 py-1 bg-blue-500 text-white rounded">👁️</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="password" class="w-full p-2 border rounded">`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">🔐 Passwort</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="toggle-pw text-xs px-2 py-1 bg-blue-500 text-white rounded">👁️</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><input type="password" class="password-input w-full p-2 border rounded">`;
             break;
         case 'infobox':
             content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">💡 Infobox</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><select class="text-xs border rounded px-1">
@@ -747,7 +879,7 @@ function addElement(type) {
                 <option value="neutral">Neutral</option>
                 <option value="stone">Stein</option>
                 <option value="rose">Rose</option>
-            </select><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><textarea class="w-full p-2 border rounded bg-blue-50" rows="2"></textarea>`;
+            </select><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><textarea class="w-full p-2 border rounded bg-blue-50" rows="2"></textarea>`;
             break;
     }
     elementDiv.innerHTML = content;
@@ -781,7 +913,7 @@ function addElement(type) {
         copyBtn.addEventListener('click', () => {
             let textToCopy = '';
             if (type === 'text' || type === 'infobox') textToCopy = elementDiv.querySelector('textarea')?.value || '';
-            else if (type === 'password') textToCopy = elementDiv.querySelector('input')?.value || '';
+            else if (type === 'password') textToCopy = elementDiv.querySelector('.password-input')?.value || '';
             else if (type === 'link') textToCopy = elementDiv.querySelector('input[name="url"]')?.value || '';
             navigator.clipboard.writeText(textToCopy).then(() => alertUser('Kopiert!', 'success'));
         });
@@ -789,7 +921,7 @@ function addElement(type) {
     const togglePw = elementDiv.querySelector('.toggle-pw');
     if (togglePw) {
         togglePw.addEventListener('click', () => {
-            const input = elementDiv.querySelector('input');
+            const input = elementDiv.querySelector('.password-input');
             input.type = input.type === 'password' ? 'text' : 'password';
         });
     }
@@ -817,17 +949,19 @@ function renderElement(element) {
     addElement(element.type);
     const container = document.getElementById('notiz-hauptteil-container');
     const lastEl = container.lastElementChild;
+    const subtitleEl = lastEl.querySelector('.element-subtitle');
+    if (subtitleEl) subtitleEl.value = element.subtitle || '';
     switch (element.type) {
         case 'text': lastEl.querySelector('textarea').value = element.content || ''; break;
         case 'checkbox':
             lastEl.querySelector('input[type="checkbox"]').checked = element.checked || false;
-            lastEl.querySelector('input[type="text"]').value = element.label || '';
+            lastEl.querySelector('.checkbox-label-input').value = element.label || '';
             break;
         case 'link':
             lastEl.querySelector('input[name="url"]').value = element.url || '';
             lastEl.querySelector('input[name="label"]').value = element.label || '';
             break;
-        case 'password': lastEl.querySelector('input').value = element.content || ''; break;
+        case 'password': lastEl.querySelector('.password-input').value = element.content || ''; break;
         case 'infobox':
             lastEl.querySelector('textarea').value = element.content || '';
             lastEl.querySelector('select').value = element.color || 'blue';
@@ -867,30 +1001,122 @@ function openShareModal() {
 }
 
 async function loadUserList() {
-    const select = document.getElementById('share-user-select');
-    if (!select) return;
+    const list = document.getElementById('share-user-list');
+    const searchInput = document.getElementById('share-user-search');
+    const selectedCount = document.getElementById('share-selected-count');
+    if (!list || !searchInput || !selectedCount) return;
     try {
+        console.log('Notizen: Lade Userliste für Einladungen...');
         const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'user-config');
         const snapshot = await getDocs(colRef);
-        const options = snapshot.docs.filter(doc => doc.id !== currentUser.mode).map(doc => `<option value="${doc.id}">${doc.id}</option>`).join('');
-        select.innerHTML = '<option value="">Bitte wählen...</option>' + options;
+        shareUsersCache = snapshot.docs
+            .filter(docSnap => docSnap.id !== currentUser.mode)
+            .map(docSnap => {
+                const data = docSnap.data() || {};
+                const displayName = data.realName || data.name || docSnap.id;
+                return { id: docSnap.id, displayName };
+            })
+            .sort((a, b) => (a.displayName || '').localeCompare((b.displayName || ''), 'de'));
+
+        console.log('Notizen: Userliste geladen:', shareUsersCache.length);
+
+        if (shareUsersCache.length === 0) {
+            list.innerHTML = '<div class="p-3 text-sm text-gray-400 text-center">Keine Benutzer gefunden</div>';
+            selectedCount.textContent = '0 ausgewählt';
+            return;
+        }
+
+        list.innerHTML = shareUsersCache.map(u => {
+            const displayText = u.displayName && u.displayName !== u.id ? `${u.displayName}` : u.id;
+            const subText = u.displayName && u.displayName !== u.id ? u.id : '';
+            const searchText = `${u.displayName} ${u.id}`.toLowerCase();
+            return `
+                <div class="share-user-row flex items-center justify-between gap-2 p-2 border-b last:border-b-0" data-search="${searchText}">
+                    <label class="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
+                        <input type="checkbox" class="share-user-checkbox" data-userid="${u.id}">
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold truncate">${displayText}</div>
+                            ${subText ? `<div class="text-xs text-gray-500 truncate">${subText}</div>` : ''}
+                        </div>
+                    </label>
+                    <select class="share-user-role text-xs border rounded px-2 py-1" data-userid="${u.id}">
+                        <option value="read">👁️ Lesen</option>
+                        <option value="write">✏️ Schreiben</option>
+                    </select>
+                </div>
+            `;
+        }).join('');
+
+        const updateSelectedCount = () => {
+            const checked = list.querySelectorAll('.share-user-checkbox:checked').length;
+            selectedCount.textContent = `${checked} ausgewählt`;
+        };
+
+        const applyFilter = () => {
+            const term = (searchInput.value || '').trim().toLowerCase();
+            list.querySelectorAll('.share-user-row').forEach(row => {
+                const hay = row.dataset.search || '';
+                row.style.display = !term || hay.includes(term) ? '' : 'none';
+            });
+        };
+
+        searchInput.value = '';
+        searchInput.oninput = () => applyFilter();
+
+        list.onchange = (e) => {
+            if (e.target && e.target.classList && e.target.classList.contains('share-user-checkbox')) {
+                updateSelectedCount();
+            }
+        };
+
+        applyFilter();
+        updateSelectedCount();
     } catch (error) {
         console.error('Fehler:', error);
     }
 }
 
 async function sendShareInvitation() {
-    const userId = document.getElementById('share-user-select').value;
-    const role = document.getElementById('share-role-select').value;
-    if (!userId || !currentEditingNotizId) {
+    const list = document.getElementById('share-user-list');
+    if (!list || !currentEditingNotizId) {
+        alertUser('Fehler', 'error');
+        return;
+    }
+
+    const selected = Array.from(list.querySelectorAll('.share-user-checkbox:checked')).map(cb => {
+        const userId = cb.dataset.userid;
+        const roleEl = list.querySelector(`.share-user-role[data-userid="${userId}"]`);
+        const role = roleEl ? roleEl.value : 'read';
+        return { userId, role };
+    }).filter(x => x.userId);
+
+    if (selected.length === 0) {
         alertUser('Benutzer auswählen', 'error');
         return;
     }
+
     try {
+        console.log('Notizen: Sende Einladungen an:', selected);
         const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
-        await addDoc(colRef, { notizId: currentEditingNotizId, fromUserId: currentUser.mode, toUserId: userId, role, status: 'pending', createdAt: serverTimestamp() });
-        alertUser('Einladung gesendet', 'success');
-        document.getElementById('notizShareModal').classList.add('hidden');
+        const batch = writeBatch(db);
+
+        selected.forEach(({ userId, role }) => {
+            const newRef = doc(colRef);
+            batch.set(newRef, {
+                notizId: currentEditingNotizId,
+                fromUserId: currentUser.mode,
+                toUserId: userId,
+                role,
+                status: 'pending',
+                createdAt: serverTimestamp()
+            });
+        });
+
+        await batch.commit();
+
+        alertUser('Einladungen gesendet', 'success');
+        const modal = document.getElementById('notizShareModal');
+        if (modal) modal.classList.add('hidden');
     } catch (error) {
         alertUser('Fehler', 'error');
     }

@@ -423,7 +423,9 @@ export function renderUserManagement() {
         'LIZENZEN': 'Lizenzen',
         'VERTRAGSVERWALTUNG': 'Vertragsverwaltung',
         'SENDUNGSVERWALTUNG': 'Sendungsverwaltung',
-        'REZEPTE': 'Rezepte'
+        'REZEPTE': 'Rezepte',
+        'NOTIZEN': 'Notizen',
+        'NOTIZEN_CREATE': '-> Neue Notizen anlegen'
     };
     // =================================================================
     // ENDE DER ÄNDERUNG
@@ -516,6 +518,7 @@ export function renderUserManagement() {
                         permKey.startsWith('CHECKLIST_') ||
                         permKey.startsWith('TERMINPLANER_') ||
                         permKey.startsWith('ZAHLUNGSVERWALTUNG_') ||
+                        permKey.startsWith('NOTIZEN_') ||
                         permKey.startsWith('TICKET_SUPPORT_') ||
                         permKey.startsWith('WERTGUTHABEN_') ||
                         (permKey.startsWith('PUSHOVER_') && permKey !== 'PUSHOVER');
