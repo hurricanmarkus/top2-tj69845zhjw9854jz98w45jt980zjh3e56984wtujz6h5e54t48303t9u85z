@@ -1597,6 +1597,16 @@ export function navigate(targetViewName) {
         if (targetViewName === 'haushaltszahlungen' && !userPermissions.includes('HAUSHALTSZAHLUNGEN')) {
             return alertUser("Zugriff verweigert (Haushaltszahlungen).", 'error');
         }
+
+        // Zugriffsschutz für Notizen
+        if (targetViewName === 'notizen' && !userPermissions.includes('NOTIZEN')) {
+            return alertUser("Zugriff verweigert (Notizen).", 'error');
+        }
+
+        // Zugriffsschutz für Geschenkemanagement
+        if (targetViewName === 'geschenkemanagement' && !userPermissions.includes('GESCHENKEMANAGEMENT')) {
+            return alertUser("Zugriff verweigert (Geschenkemanagement).", 'error');
+        }
     }
 
     // Scroll zum Anfang
@@ -1680,6 +1690,10 @@ export function navigate(targetViewName) {
 
     if (targetViewName === 'haushaltszahlungen') {
         initializeHaushaltszahlungen();
+    }
+
+    if (targetViewName === 'notizen') {
+        initializeNotizen();
     }
 
     if (targetViewName === 'geschenkemanagement') {

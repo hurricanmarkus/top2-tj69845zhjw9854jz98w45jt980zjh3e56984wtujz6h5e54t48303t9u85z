@@ -31,6 +31,8 @@ function setupEventListeners() {
         if (btn) {
             btn.replaceWith(btn.cloneNode(true));
             document.getElementById(id).addEventListener('click', fn);
+        } else {
+            console.warn(`Button ${id} nicht gefunden`);
         }
     };
 
@@ -38,44 +40,75 @@ function setupEventListeners() {
     setupBtn('btn-notizen-einladungen', openEinladungen);
     setupBtn('btn-neue-notiz', () => openNotizEditor());
     setupBtn('btn-kategorie-erstellen', createKategorie);
-    setupBtn('close-notizen-settings', () => document.getElementById('notizenSettingsModal').classList.add('hidden'));
+    setupBtn('close-notizen-settings', () => {
+        const modal = document.getElementById('notizenSettingsModal');
+        if (modal) modal.classList.add('hidden');
+    });
     setupBtn('close-notiz-editor', closeNotizEditor);
     setupBtn('btn-notiz-save', saveNotiz);
     setupBtn('btn-notiz-cancel', closeNotizEditor);
     setupBtn('btn-notiz-delete', deleteNotiz);
     setupBtn('btn-notiz-share', openShareModal);
-    setupBtn('close-notiz-share', () => document.getElementById('notizShareModal').classList.add('hidden'));
+    setupBtn('close-notiz-share', () => {
+        const modal = document.getElementById('notizShareModal');
+        if (modal) modal.classList.add('hidden');
+    });
     setupBtn('btn-share-send', sendShareInvitation);
-    setupBtn('btn-share-cancel', () => document.getElementById('notizShareModal').classList.add('hidden'));
-    setupBtn('close-notizen-einladungen', () => document.getElementById('notizenEinladungenModal').classList.add('hidden'));
-    setupBtn('close-notiz-history', () => document.getElementById('notizHistoryModal').classList.add('hidden'));
+    setupBtn('btn-share-cancel', () => {
+        const modal = document.getElementById('notizShareModal');
+        if (modal) modal.classList.add('hidden');
+    });
+    setupBtn('close-notizen-einladungen', () => {
+        const modal = document.getElementById('notizenEinladungenModal');
+        if (modal) modal.classList.add('hidden');
+    });
+    setupBtn('close-notiz-history', () => {
+        const modal = document.getElementById('notizHistoryModal');
+        if (modal) modal.classList.add('hidden');
+    });
     setupBtn('btn-show-history', showHistory);
 
     ['search-notizen', 'filter-notizen-status', 'filter-notizen-kategorie', 'filter-notizen-shared'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.addEventListener(id.includes('search') ? 'input' : 'change', applyFilters);
+        if (el) {
+            el.addEventListener(id.includes('search') ? 'input' : 'change', applyFilters);
+        }
     });
 
     const resetBtn = document.getElementById('reset-filters-notizen');
-    if (resetBtn) resetBtn.addEventListener('click', () => {
-        ['search-notizen', 'filter-notizen-status', 'filter-notizen-kategorie', 'filter-notizen-shared'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.value = '';
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            ['search-notizen', 'filter-notizen-status', 'filter-notizen-kategorie', 'filter-notizen-shared'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            applyFilters();
         });
-        applyFilters();
-    });
+    }
 
     const kategorieSelect = document.getElementById('notiz-kategorie');
     if (kategorieSelect) kategorieSelect.addEventListener('change', updateSubkategorienDropdown);
 
-    document.querySelectorAll('.notiz-add-element').forEach(btn => {
-        btn.addEventListener('click', (e) => addElement(e.currentTarget.dataset.type));
+    // Event-Listener für dynamische Element-Buttons
+    const addElementButtons = document.querySelectorAll('.notiz-add-element');
+    addElementButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const type = e.currentTarget.dataset.type;
+            if (type) addElement(type);
+        });
     });
+    console.log(`Notizen: ${addElementButtons.length} Element-Buttons gefunden`);
 }
 
 function openSettings() {
-    document.getElementById('notizenSettingsModal').classList.remove('hidden');
-    document.getElementById('notizenSettingsModal').classList.add('flex');
+    const modal = document.getElementById('notizenSettingsModal');
+    if (!modal) {
+        console.error('Notizen: Settings-Modal nicht gefunden!');
+        return;
+    }
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    console.log('Notizen: Settings-Modal geöffnet');
 }
 
 async function loadKategorien() {
@@ -322,16 +355,26 @@ window.openNotizById = function(notizId) { openNotizEditor(notizId); };
 async function openNotizEditor(notizId = null) {
     currentEditingNotizId = notizId;
     const modal = document.getElementById('notizEditorModal');
+    if (!modal) {
+        console.error('Notizen: Editor-Modal nicht gefunden!');
+        alertUser('Editor-Modal fehlt', 'error');
+        return;
+    }
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+    console.log('Notizen: Editor-Modal geöffnet für', notizId || 'neue Notiz');
+    
+    const titleEl = document.getElementById('notiz-editor-title');
+    const deleteBtn = document.getElementById('btn-notiz-delete');
+    
     if (notizId) {
-        document.getElementById('notiz-editor-title').textContent = '📝 Bearbeiten';
-        document.getElementById('btn-notiz-delete').classList.remove('hidden');
+        if (titleEl) titleEl.textContent = '📝 Bearbeiten';
+        if (deleteBtn) deleteBtn.classList.remove('hidden');
         await loadNotizData(notizId);
         await checkoutNotiz(notizId);
     } else {
-        document.getElementById('notiz-editor-title').textContent = '📝 Neue Notiz';
-        document.getElementById('btn-notiz-delete').classList.add('hidden');
+        if (titleEl) titleEl.textContent = '📝 Neue Notiz';
+        if (deleteBtn) deleteBtn.classList.add('hidden');
         resetEditorForm();
     }
 }
@@ -603,8 +646,14 @@ function openShareModal() {
         alertUser('Erst speichern', 'error');
         return;
     }
-    document.getElementById('notizShareModal').classList.remove('hidden');
-    document.getElementById('notizShareModal').classList.add('flex');
+    const modal = document.getElementById('notizShareModal');
+    if (!modal) {
+        console.error('Notizen: Share-Modal nicht gefunden!');
+        return;
+    }
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    console.log('Notizen: Share-Modal geöffnet');
     loadUserList();
 }
 
@@ -694,8 +743,14 @@ function updateEinladungenBadge() {
 }
 
 function openEinladungen() {
-    document.getElementById('notizenEinladungenModal').classList.remove('hidden');
-    document.getElementById('notizenEinladungenModal').classList.add('flex');
+    const modal = document.getElementById('notizenEinladungenModal');
+    if (!modal) {
+        console.error('Notizen: Einladungen-Modal nicht gefunden!');
+        return;
+    }
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    console.log('Notizen: Einladungen-Modal geöffnet');
     renderEinladungen();
 }
 
