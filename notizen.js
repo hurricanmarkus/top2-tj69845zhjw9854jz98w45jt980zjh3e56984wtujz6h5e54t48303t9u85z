@@ -4,7 +4,7 @@ import { collection, collectionGroup, doc, onSnapshot, getDoc, getDocs, setDoc, 
 
 let kategorienListener = null, notizenListener = null, sharedNotizenListener = null, einladungenListener = null;
 let allKategorien = [], allNotizen = [], allEinladungen = [], allGesendetEinladungen = [];
-let ownNotizen = [], sharedNotizen = [];
+let ownNotizen = [], sharedNotizen = [], sharedKategorieNotizen = [];
 let gesendetEinladungenListener = null;
 let currentEditingNotizId = null, currentEditingOwnerId = null, currentEditingSharedRole = null, checkoutHeartbeat = null;
 let shareUsersCache = [];
@@ -274,7 +274,7 @@ function extractOwnerIdFromDocRef(docRef) {
 }
 
 function recomputeAllNotizen() {
-    allNotizen = [...ownNotizen, ...sharedNotizen];
+    allNotizen = [...ownNotizen, ...sharedNotizen, ...sharedKategorieNotizen];
     applyFilters();
     updateStats();
 }
@@ -721,6 +721,9 @@ async function loadKategorien() {
         
         renderKategorienListe();
         updateKategorienDropdowns();
+        
+        // Notizen aus geteilten Kategorien nachladen
+        loadNotizenFromSharedKategorien();
     });
 }
 
@@ -1116,6 +1119,46 @@ async function loadNotizen() {
     } catch (error) {
         console.warn('Notizen: Shared-Notizen Listener konnte nicht gestartet werden:', error);
     }
+    
+    // Notizen aus geteilten Kategorien laden
+    loadNotizenFromSharedKategorien();
+}
+
+async function loadNotizenFromSharedKategorien() {
+    const userId = currentUser.mode;
+    if (!userId || userId === GUEST_MODE) return;
+    
+    // Geteilte Kategorien aus allKategorien filtern
+    const sharedKats = allKategorien.filter(k => k.ownerId && k.ownerId !== userId);
+    
+    if (sharedKats.length === 0) {
+        sharedKategorieNotizen = [];
+        recomputeAllNotizen();
+        return;
+    }
+    
+    const notizenFromKats = [];
+    for (const kat of sharedKats) {
+        try {
+            const notizenCol = collection(db, 'artifacts', appId, 'users', kat.ownerId, 'notizen');
+            const q = query(notizenCol, where('kategorieId', '==', kat.id));
+            const snap = await getDocs(q);
+            snap.forEach(docSnap => {
+                const data = docSnap.data() || {};
+                notizenFromKats.push({
+                    id: docSnap.id,
+                    ...data,
+                    ownerId: kat.ownerId,
+                    fromSharedKategorie: true
+                });
+            });
+        } catch (error) {
+            console.warn('Notizen: Fehler beim Laden von Notizen aus Kategorie', kat.id, error);
+        }
+    }
+    
+    sharedKategorieNotizen = notizenFromKats;
+    recomputeAllNotizen();
 }
 
 function applyFilters() {
@@ -2714,8 +2757,8 @@ async function loadEinladungen() {
         updateEinladungenBadge();
     });
     
-    // Gesendete Einladungen (pending)
-    const qSent = query(colRef, where('fromUserId', '==', userId), where('status', '==', 'pending'));
+    // Gesendete Einladungen (pending + accepted)
+    const qSent = query(colRef, where('fromUserId', '==', userId), where('status', 'in', ['pending', 'accepted']));
     gesendetEinladungenListener = onSnapshot(qSent, (snapshot) => {
         allGesendetEinladungen = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     });
@@ -2788,15 +2831,21 @@ function renderEinladungen() {
         html += allGesendetEinladungen.map(einl => {
             const isKategorie = einl.type === 'kategorie';
             const typeLabel = isKategorie ? 'Kategorie' : 'Notiz';
+            const isAccepted = einl.status === 'accepted';
+            const statusLabel = isAccepted 
+                ? '<span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Angenommen</span>'
+                : '<span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Ausstehend</span>';
+            const bgClass = isAccepted ? 'bg-green-50' : 'bg-blue-50';
+            const buttonLabel = isAccepted ? '✕ Teilen beenden' : '✕ Abbrechen';
             return `
-                <div class="bg-blue-50 p-4 rounded-lg shadow border mb-2">
+                <div class="${bgClass} p-4 rounded-lg shadow border mb-2">
                     <div class="flex justify-between items-center mb-2">
                         <div>${typeLabel} an <span class="font-bold">${getDisplayNameById(einl.toUserId)}</span></div>
-                        <span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Ausstehend</span>
+                        ${statusLabel}
                     </div>
                     <div class="text-sm text-gray-600 mb-3">Berechtigung: ${einl.role === 'read' ? '👁️ Lesen' : '✏️ Schreiben'}</div>
                     <div class="flex gap-2 flex-wrap">
-                        <button onclick="window.cancelEinladung('${einl.id}')" class="px-3 py-1 bg-red-500 text-white rounded">✕ Abbrechen</button>
+                        <button onclick="window.cancelEinladung('${einl.id}')" class="px-3 py-1 bg-red-500 text-white rounded">${buttonLabel}</button>
                     </div>
                 </div>
             `;
@@ -2829,7 +2878,15 @@ window.acceptEinladung = async function(einladungId) {
             });
         }
         alertUser('Angenommen', 'success');
+        
+        // Modal schließen und UI aktualisieren
+        const modal = document.getElementById('notizenEinladungenModal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
         loadKategorien();
+        loadNotizen();
     } catch (error) {
         console.error('Notizen: Accept Fehler:', error);
         alertUser('Fehler', 'error');
@@ -2889,7 +2946,9 @@ window.revokeEinladung = async function(einladungId) {
 window.cancelEinladung = async function(einladungId) {
     const einladung = allGesendetEinladungen.find(e => e.id === einladungId);
     if (!einladung) return;
-    if (!confirm('Einladung wirklich abbrechen?')) return;
+    const isAccepted = einladung.status === 'accepted';
+    const confirmMsg = isAccepted ? 'Teilen wirklich beenden?' : 'Einladung wirklich abbrechen?';
+    if (!confirm(confirmMsg)) return;
     try {
         const einlRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen', einladungId);
         await updateDoc(einlRef, { status: 'cancelled', updatedAt: serverTimestamp() });
@@ -2904,7 +2963,7 @@ window.cancelEinladung = async function(einladungId) {
             const notizRef = doc(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen', einladung.notizId);
             await updateDoc(notizRef, updatePayload);
         }
-        alertUser('Einladung abgebrochen', 'success');
+        alertUser(isAccepted ? 'Teilen beendet' : 'Einladung abgebrochen', 'success');
         renderEinladungen();
     } catch (error) {
         console.error('Notizen: Cancel Fehler:', error);
