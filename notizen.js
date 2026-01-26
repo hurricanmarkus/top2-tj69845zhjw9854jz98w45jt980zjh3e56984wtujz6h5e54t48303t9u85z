@@ -459,20 +459,13 @@ function enableNotizEditMode() {
     if (dropdown) dropdown.classList.add('hidden');
     if (arrow) arrow.textContent = '▼';
 
-    const fieldsToUnlock = ['notiz-betreff', 'notiz-kategorie', 'notiz-subkategorie', 'notiz-erinnerung', 'notiz-frist'];
-    fieldsToUnlock.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.disabled = false;
-    });
+    // Zentrale Funktion aufrufen, die alle Element-Einstellungen wiederherstellt
+    unlockEditFields();
 
-    document.querySelectorAll('.notiz-add-element').forEach(btn => btn.style.display = '');
-
+    // Liste-Elemente neu initialisieren
     const container = document.getElementById('notiz-hauptteil-container');
     if (container) {
         container.querySelectorAll('[data-element-type]').forEach(el => {
-            el.querySelectorAll('input, textarea, select').forEach(input => input.disabled = false);
-            el.querySelectorAll('.move-up, .move-down, .delete-element, .add-table-row, .list-indent, .list-outdent').forEach(btn => btn.style.display = '');
-
             if (el.dataset.elementType === 'list') {
                 setupListElement(el);
             }
