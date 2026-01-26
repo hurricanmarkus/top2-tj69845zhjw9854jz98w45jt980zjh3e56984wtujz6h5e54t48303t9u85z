@@ -10,6 +10,9 @@ let currentSharingKategorieId = null;
 let userConfigLoaded = false;
 let userDisplayNameCache = {};
 let notizIsEditMode = false;
+let selectedNotizElementId = null;
+let notizRowIdCounter = 0;
+let notizElementIdCounter = 0;
 
 export function initializeNotizen() {
     console.log('Notizen: Init...');
@@ -35,6 +38,175 @@ async function ensureUserConfigLoaded() {
     } catch (error) {
         console.warn('Notizen: Konnte user-config nicht laden:', error);
     }
+}
+
+function setupListElement(elementDiv) {
+    const textarea = elementDiv.querySelector('.list-textarea') || elementDiv.querySelector('textarea');
+    const preview = elementDiv.querySelector('.list-preview');
+    const l1Style = elementDiv.querySelector('.list-style-l1');
+    const l1Symbol = elementDiv.querySelector('.list-symbol-l1');
+    const l2Style = elementDiv.querySelector('.list-style-l2');
+    const l2Symbol = elementDiv.querySelector('.list-symbol-l2');
+    if (!textarea || !preview || !l1Style || !l1Symbol || !l2Style || !l2Symbol) return;
+
+    const applySymbolVisibility = () => {
+        l1Symbol.style.display = l1Style.value === 'number' ? 'none' : '';
+        l2Symbol.style.display = l2Style.value === 'number' ? 'none' : '';
+    };
+
+    applySymbolVisibility();
+    updateListPreview(elementDiv);
+
+    const onAnyChange = () => {
+        applySymbolVisibility();
+        updateListPreview(elementDiv);
+    };
+
+    textarea.oninput = () => onAnyChange();
+    l1Style.onchange = () => onAnyChange();
+    l1Symbol.onchange = () => onAnyChange();
+    l2Style.onchange = () => onAnyChange();
+    l2Symbol.onchange = () => onAnyChange();
+
+    textarea.onkeydown = (e) => {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            if (e.shiftKey) {
+                adjustTextareaIndent(textarea, -1);
+            } else {
+                adjustTextareaIndent(textarea, 1);
+            }
+            onAnyChange();
+        }
+    };
+
+    const indentBtn = elementDiv.querySelector('.list-indent');
+    const outdentBtn = elementDiv.querySelector('.list-outdent');
+    if (indentBtn) {
+        indentBtn.onclick = () => {
+            adjustTextareaIndent(textarea, 1);
+            onAnyChange();
+        };
+    }
+    if (outdentBtn) {
+        outdentBtn.onclick = () => {
+            adjustTextareaIndent(textarea, -1);
+            onAnyChange();
+        };
+    }
+}
+
+function adjustTextareaIndent(textarea, direction) {
+    const value = textarea.value || '';
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || 0;
+
+    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+    let lineEnd = value.indexOf('\n', end);
+    if (lineEnd === -1) lineEnd = value.length;
+
+    const block = value.slice(lineStart, lineEnd);
+    const lines = block.split('\n');
+    let deltaStart = 0;
+    let deltaEnd = 0;
+
+    const newLines = lines.map((line, idx) => {
+        if (direction > 0) {
+            if (line.trim().length === 0) return line;
+            if (idx === 0 && start === lineStart) deltaStart += 1;
+            deltaEnd += 1;
+            return '\t' + line;
+        }
+        if (direction < 0) {
+            if (line.startsWith('\t')) {
+                if (idx === 0 && start > lineStart) deltaStart -= 1;
+                deltaEnd -= 1;
+                return line.slice(1);
+            }
+            if (line.startsWith('    ')) {
+                if (idx === 0 && start > lineStart) deltaStart -= 4;
+                deltaEnd -= 4;
+                return line.slice(4);
+            }
+            return line;
+        }
+        return line;
+    });
+
+    const newBlock = newLines.join('\n');
+    textarea.value = value.slice(0, lineStart) + newBlock + value.slice(lineEnd);
+
+    const newStart = Math.max(0, start + deltaStart);
+    const newEnd = Math.max(0, end + deltaEnd);
+    textarea.setSelectionRange(newStart, newEnd);
+}
+
+function updateListPreview(elementDiv) {
+    const textarea = elementDiv.querySelector('.list-textarea') || elementDiv.querySelector('textarea');
+    const preview = elementDiv.querySelector('.list-preview');
+    const l1Style = elementDiv.querySelector('.list-style-l1');
+    const l1Symbol = elementDiv.querySelector('.list-symbol-l1');
+    const l2Style = elementDiv.querySelector('.list-style-l2');
+    const l2Symbol = elementDiv.querySelector('.list-symbol-l2');
+    if (!textarea || !preview || !l1Style || !l1Symbol || !l2Style || !l2Symbol) return;
+
+    const items = parseListItems(textarea.value || '');
+    if (items.length === 0) {
+        preview.innerHTML = '<div class="text-xs text-gray-400">Vorschau...</div>';
+        return;
+    }
+
+    let n1 = 0;
+    let n2 = 0;
+    const html = items.map(it => {
+        if (it.level === 1) {
+            n1 += 1;
+            n2 = 0;
+        } else {
+            n2 += 1;
+        }
+        const style = it.level === 1 ? l1Style.value : l2Style.value;
+        const symbol = it.level === 1 ? l1Symbol.value : l2Symbol.value;
+        const prefix = style === 'number' ? `${it.level === 1 ? n1 : n2}.` : symbol;
+        const ml = it.level === 2 ? 'ml-6' : '';
+        return `
+            <div class="flex gap-2 ${ml}">
+                <div class="w-8 text-right font-bold">${escapeHtml(prefix)}</div>
+                <div class="flex-1">${escapeHtml(it.text)}</div>
+            </div>
+        `;
+    }).join('');
+
+    preview.innerHTML = html;
+}
+
+function parseListItems(text) {
+    const lines = String(text || '').split('\n');
+    const items = [];
+    lines.forEach(line => {
+        const raw = String(line || '').replace(/\r/g, '');
+        if (!raw.trim()) return;
+        let level = 1;
+        let t = raw;
+        if (t.startsWith('\t')) {
+            level = 2;
+            t = t.replace(/^\t+/, '');
+        } else if (t.startsWith('    ')) {
+            level = 2;
+            t = t.replace(/^\s{4}/, '');
+        }
+        items.push({ level, text: t.trim() });
+    });
+    return items;
+}
+
+function escapeHtml(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
 function getDisplayNameById(userId) {
@@ -133,7 +305,7 @@ function setupEventListeners() {
     addElementButtons.forEach(btn => {
         btn.addEventListener('click', (e) => {
             const type = e.currentTarget.dataset.type;
-            if (type) addElement(type);
+            if (type) handleAddElementClick(type);
         });
     });
     console.log(`Notizen: ${addElementButtons.length} Element-Buttons gefunden`);
@@ -212,7 +384,11 @@ function enableNotizEditMode() {
     if (container) {
         container.querySelectorAll('[data-element-type]').forEach(el => {
             el.querySelectorAll('input, textarea, select').forEach(input => input.disabled = false);
-            el.querySelectorAll('.move-up, .move-down, .delete-element, .add-table-row').forEach(btn => btn.style.display = '');
+            el.querySelectorAll('.move-up, .move-down, .delete-element, .add-table-row, .list-indent, .list-outdent').forEach(btn => btn.style.display = '');
+        });
+
+        container.querySelectorAll('.notiz-row').forEach(rowEl => {
+            updateNotizRowLayout(rowEl);
         });
     }
 }
@@ -874,6 +1050,7 @@ window.openNotizById = function(notizId) { openNotizEditor(notizId); };
 
 async function openNotizEditor(notizId = null) {
     currentEditingNotizId = notizId;
+    selectedNotizElementId = null;
     const modal = document.getElementById('notizEditorModal');
     if (!modal) {
         console.error('Notizen: Editor-Modal nicht gefunden!');
@@ -941,11 +1118,7 @@ async function loadNotizData(notizId) {
     }
     const container = document.getElementById('notiz-hauptteil-container');
     container.innerHTML = '';
-    if (notiz.elements && notiz.elements.length > 0) {
-        notiz.elements.forEach(el => renderElement(el));
-    } else {
-        container.innerHTML = '<p class="text-gray-400 text-center text-sm col-span-full">Füge Elemente hinzu...</p>';
-    }
+    renderElements(notiz.elements);
     renderSharedUsers(notiz.sharedWith);
     if (notiz.checkedOutBy && notiz.checkedOutBy !== currentUser.mode) {
         showCheckoutWarning(notiz.checkedOutBy);
@@ -987,7 +1160,7 @@ function lockEditFields() {
                 el.querySelectorAll('input:not([type="checkbox"])').forEach(input => input.disabled = true);
             }
             // Verschiebe- und Lösch-Buttons verstecken
-            el.querySelectorAll('.move-up, .move-down, .delete-element, .add-table-row').forEach(btn => btn.style.display = 'none');
+            el.querySelectorAll('.move-up, .move-down, .move-left, .move-right, .delete-element, .add-table-row, .list-indent, .list-outdent').forEach(btn => btn.style.display = 'none');
         });
     }
 }
@@ -1013,7 +1186,7 @@ function resetEditorForm() {
     document.getElementById('notiz-erinnerung').value = '';
     document.getElementById('notiz-frist').value = '';
     const container = document.getElementById('notiz-hauptteil-container');
-    container.innerHTML = '<p class="text-gray-400 text-center text-sm col-span-full">Füge Elemente hinzu...</p>';
+    container.innerHTML = '<p class="notiz-placeholder text-gray-400 text-center text-sm col-span-full">Füge Elemente hinzu...</p>';
     document.getElementById('notiz-shared-users-list').innerHTML = '<p class="text-gray-400 text-sm">Privat</p>';
     document.getElementById('notiz-metadata').classList.add('hidden');
     hideCheckoutWarning();
@@ -1063,37 +1236,98 @@ async function saveNotiz() {
 function collectElements() {
     const container = document.getElementById('notiz-hauptteil-container');
     const elements = [];
-    container.querySelectorAll('[data-element-type]').forEach((el, index) => {
-        const type = el.dataset.elementType;
-        const element = { type, order: index };
-        element.subtitle = el.querySelector('.element-subtitle')?.value || '';
-        switch (type) {
-            case 'text': element.content = el.querySelector('textarea')?.value || ''; break;
-            case 'list': element.content = el.querySelector('textarea')?.value || ''; break;
-            case 'checkbox':
-                element.label = el.querySelector('.checkbox-label-input')?.value || '';
-                element.checked = el.querySelector('input[type="checkbox"]')?.checked || false;
-                break;
-            case 'link':
-                element.url = el.querySelector('input[name="url"]')?.value || '';
-                element.label = el.querySelector('input[name="label"]')?.value || '';
-                break;
-            case 'password': element.content = el.querySelector('.password-input')?.value || ''; break;
-            case 'infobox':
-                element.content = el.querySelector('textarea')?.value || '';
-                element.color = el.querySelector('select')?.value || 'blue';
-                break;
-            case 'table':
-                const rows = [];
-                el.querySelectorAll('tbody tr').forEach(tr => {
-                    const cells = Array.from(tr.querySelectorAll('input')).map(inp => inp.value);
-                    rows.push(cells);
-                });
-                element.rows = rows;
-                element.headers = Array.from(el.querySelectorAll('thead input')).map(inp => inp.value);
-                break;
-        }
-        elements.push(element);
+
+    const rowEls = Array.from(container.querySelectorAll('.notiz-row'));
+    if (rowEls.length === 0) {
+        container.querySelectorAll('[data-element-type]').forEach((el, index) => {
+            const type = el.dataset.elementType;
+            const element = { type, order: index, row: index, col: 0 };
+            element.subtitle = el.querySelector('.element-subtitle')?.value || '';
+            switch (type) {
+                case 'text': element.content = el.querySelector('textarea')?.value || ''; break;
+                case 'list':
+                    const listTa = el.querySelector('.list-textarea') || el.querySelector('textarea');
+                    element.content = listTa?.value || '';
+                    element.listStyleL1 = el.querySelector('.list-style-l1')?.value || 'symbol';
+                    element.listSymbolL1 = el.querySelector('.list-symbol-l1')?.value || '•';
+                    element.listStyleL2 = el.querySelector('.list-style-l2')?.value || 'symbol';
+                    element.listSymbolL2 = el.querySelector('.list-symbol-l2')?.value || '•';
+                    break;
+                case 'checkbox':
+                    element.label = el.querySelector('.checkbox-label-input')?.value || '';
+                    element.checked = el.querySelector('input[type="checkbox"]')?.checked || false;
+                    break;
+                case 'link':
+                    element.url = el.querySelector('input[name="url"]')?.value || '';
+                    element.label = el.querySelector('input[name="label"]')?.value || '';
+                    break;
+                case 'password': element.content = el.querySelector('.password-input')?.value || ''; break;
+                case 'infobox':
+                    element.content = el.querySelector('textarea')?.value || '';
+                    element.color = el.querySelector('select')?.value || 'blue';
+                    break;
+                case 'table':
+                    const rows = [];
+                    el.querySelectorAll('tbody tr').forEach(tr => {
+                        const cells = Array.from(tr.querySelectorAll('input')).map(inp => inp.value);
+                        rows.push(cells);
+                    });
+                    element.rows = rows;
+                    element.headers = Array.from(el.querySelectorAll('thead input')).map(inp => inp.value);
+                    break;
+            }
+            elements.push(element);
+        });
+        return elements;
+    }
+
+    let order = 0;
+    rowEls.forEach((rowEl, rowIndex) => {
+        const cols = Array.from(rowEl.children).filter(c => c && c.dataset && c.dataset.elementType);
+        cols.forEach((el, colIndex) => {
+            const type = el.dataset.elementType;
+            const element = { type, order, row: rowIndex, col: colIndex };
+            order += 1;
+            element.subtitle = el.querySelector('.element-subtitle')?.value || '';
+            switch (type) {
+                case 'text':
+                    element.content = el.querySelector('textarea')?.value || '';
+                    break;
+                case 'list':
+                    const listTa = el.querySelector('.list-textarea') || el.querySelector('textarea');
+                    element.content = listTa?.value || '';
+                    element.listStyleL1 = el.querySelector('.list-style-l1')?.value || 'symbol';
+                    element.listSymbolL1 = el.querySelector('.list-symbol-l1')?.value || '•';
+                    element.listStyleL2 = el.querySelector('.list-style-l2')?.value || 'symbol';
+                    element.listSymbolL2 = el.querySelector('.list-symbol-l2')?.value || '•';
+                    break;
+                case 'checkbox':
+                    element.label = el.querySelector('.checkbox-label-input')?.value || '';
+                    element.checked = el.querySelector('input[type="checkbox"]')?.checked || false;
+                    break;
+                case 'link':
+                    element.url = el.querySelector('input[name="url"]')?.value || '';
+                    element.label = el.querySelector('input[name="label"]')?.value || '';
+                    break;
+                case 'password':
+                    element.content = el.querySelector('.password-input')?.value || '';
+                    break;
+                case 'infobox':
+                    element.content = el.querySelector('textarea')?.value || '';
+                    element.color = el.querySelector('select')?.value || 'blue';
+                    break;
+                case 'table':
+                    const rows = [];
+                    el.querySelectorAll('tbody tr').forEach(tr => {
+                        const cells = Array.from(tr.querySelectorAll('input')).map(inp => inp.value);
+                        rows.push(cells);
+                    });
+                    element.rows = rows;
+                    element.headers = Array.from(el.querySelectorAll('thead input')).map(inp => inp.value);
+                    break;
+            }
+            elements.push(element);
+        });
     });
     return elements;
 }
@@ -1134,39 +1368,166 @@ async function closeNotizEditor() {
 }
 
 function addElement(type) {
+    addElementWithOptions(type);
+}
+
+function createNotizRow() {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'notiz-row grid grid-cols-1 md:grid-cols-2 gap-2 col-span-full md:col-span-2';
+    rowEl.dataset.rowId = `row_${Date.now()}_${notizRowIdCounter++}`;
+    return rowEl;
+}
+
+function ensureNotizPlaceholder() {
     const container = document.getElementById('notiz-hauptteil-container');
-    if (container.querySelector('.text-gray-400')) container.innerHTML = '';
+    if (!container) return;
+    const hasAny = container.querySelector('[data-element-type]');
+    if (!hasAny) {
+        container.innerHTML = '<p class="notiz-placeholder text-gray-400 text-center text-sm col-span-full">Füge Elemente hinzu...</p>';
+    }
+}
+
+function updateNotizRowLayout(rowEl) {
+    const children = Array.from(rowEl.children).filter(c => c && c.dataset && c.dataset.elementType);
+    if (children.length === 1) {
+        children[0].classList.add('md:col-span-2');
+    } else {
+        children.forEach(c => c.classList.remove('md:col-span-2'));
+    }
+
+    const showSwap = children.length === 2;
+    children.forEach(el => {
+        const leftBtn = el.querySelector('.move-left');
+        const rightBtn = el.querySelector('.move-right');
+        if (leftBtn) leftBtn.style.display = showSwap ? '' : 'none';
+        if (rightBtn) rightBtn.style.display = showSwap ? '' : 'none';
+    });
+}
+
+function getSelectedNotizElementDiv() {
+    if (!selectedNotizElementId) return null;
+    return document.querySelector(`[data-element-id="${selectedNotizElementId}"]`);
+}
+
+function addElementWithOptions(type, options = {}) {
+    const container = document.getElementById('notiz-hauptteil-container');
+    if (!container) return;
+    if (container.querySelector('.notiz-placeholder')) container.innerHTML = '';
+
+    const rowEl = options.rowEl || createNotizRow();
+    const insertRowAfter = options.insertRowAfter || null;
+    const insertElementBefore = options.insertElementBefore || null;
+    const selectAfter = options.selectAfter !== false;
+
+    if (!options.rowEl) {
+        if (insertRowAfter && insertRowAfter.parentElement === container) {
+            if (insertRowAfter.nextSibling) container.insertBefore(rowEl, insertRowAfter.nextSibling);
+            else container.appendChild(rowEl);
+        } else {
+            container.appendChild(rowEl);
+        }
+    }
+
+    const fullSpan = typeof options.fullSpan === 'boolean' ? options.fullSpan : true;
+
     const elementDiv = document.createElement('div');
     elementDiv.className = 'border border-gray-300 rounded p-3 bg-white relative';
     elementDiv.dataset.elementType = type;
+    elementDiv.dataset.elementId = `el_${Date.now()}_${notizElementIdCounter++}`;
+
+    if (fullSpan || type === 'line') {
+        elementDiv.classList.add('md:col-span-2');
+    }
     if (type === 'line') {
         elementDiv.classList.add('md:col-span-2');
     }
     let content = '';
     switch (type) {
         case 'text':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📝 Text</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><textarea class="w-full p-2 border rounded" rows="3"></textarea>`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📝 Text</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="move-left text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">◀</button><button class="move-right text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">▶</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><textarea class="w-full p-2 border rounded" rows="3"></textarea>`;
             break;
         case 'list':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📌 Aufzählung</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><textarea class="w-full p-2 border rounded" rows="4" placeholder="Jede Zeile ein Punkt..."></textarea>`;
+            content = `
+                <div class="flex justify-between mb-2">
+                    <span class="font-bold text-sm">📌 Aufzählung</span>
+                    <div class="flex gap-1">
+                        <button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button>
+                        <button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button>
+                        <button class="move-left text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">◀</button>
+                        <button class="move-right text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">▶</button>
+                        <button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button>
+                        <button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button>
+                    </div>
+                </div>
+                <input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+                    <div class="border rounded p-2 bg-gray-50">
+                        <div class="text-xs font-bold text-gray-700 mb-1">Ebene 1</div>
+                        <div class="flex gap-2 items-center">
+                            <select class="list-style-l1 text-xs border rounded px-2 py-1">
+                                <option value="symbol">🔹 Symbole</option>
+                                <option value="number">1. Nummern</option>
+                            </select>
+                            <select class="list-symbol-l1 text-xs border rounded px-2 py-1">
+                                <option value="•">•</option>
+                                <option value="➡️">➡️</option>
+                                <option value="👉">👉</option>
+                                <option value="⭐">⭐</option>
+                                <option value="✅">✅</option>
+                                <option value="🔸">🔸</option>
+                                <option value="📌">📌</option>
+                                <option value="❗">❗</option>
+                                <option value="✳️">✳️</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="border rounded p-2 bg-gray-50">
+                        <div class="text-xs font-bold text-gray-700 mb-1">Ebene 2 (eingerückt)</div>
+                        <div class="flex gap-2 items-center">
+                            <select class="list-style-l2 text-xs border rounded px-2 py-1">
+                                <option value="symbol">🔹 Symbole</option>
+                                <option value="number">1. Nummern</option>
+                            </select>
+                            <select class="list-symbol-l2 text-xs border rounded px-2 py-1">
+                                <option value="•">•</option>
+                                <option value="➡️">➡️</option>
+                                <option value="👉">👉</option>
+                                <option value="⭐">⭐</option>
+                                <option value="✅">✅</option>
+                                <option value="🔸">🔸</option>
+                                <option value="📌">📌</option>
+                                <option value="❗">❗</option>
+                                <option value="✳️">✳️</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex gap-2 mb-2">
+                    <button type="button" class="list-indent text-xs px-2 py-1 bg-gray-200 rounded">↳ Einrücken</button>
+                    <button type="button" class="list-outdent text-xs px-2 py-1 bg-gray-200 rounded">↰ Ausrücken</button>
+                    <div class="text-xs text-gray-500 flex-1 flex items-center">TAB = Einrücken, Shift+TAB = Ausrücken</div>
+                </div>
+                <textarea class="list-textarea w-full p-2 border rounded" rows="5" placeholder="Jede Zeile ein Punkt...\nFür Ebene 2: Einrücken oder TAB am Anfang"></textarea>
+                <div class="list-preview mt-2 border rounded bg-white p-2 text-sm"></div>
+            `;
             break;
         case 'checkbox':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">☑️ Checkbox</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><div class="flex gap-2"><input type="checkbox" class="w-5 h-5"><input type="text" placeholder="Label..." class="checkbox-label-input flex-1 p-2 border rounded"></div>`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">☑️ Checkbox</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="move-left text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">◀</button><button class="move-right text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">▶</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><div class="flex gap-2"><input type="checkbox" class="w-5 h-5"><input type="text" placeholder="Label..." class="checkbox-label-input flex-1 p-2 border rounded"></div>`;
             break;
         case 'line':
             content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">➖ Linie</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><hr class="border-t-2">`;
             break;
         case 'table':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📊 Tabelle</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="add-table-row text-xs px-2 py-1 bg-blue-500 text-white rounded">+ Zeile</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><table class="w-full border"><thead><tr><th><input type="text" placeholder="Spalte 1" class="w-full p-1 border"></th><th><input type="text" placeholder="Spalte 2" class="w-full p-1 border"></th></tr></thead><tbody><tr><td><input type="text" class="w-full p-1 border"></td><td><input type="text" class="w-full p-1 border"></td></tr></tbody></table>`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📊 Tabelle</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="move-left text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">◀</button><button class="move-right text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">▶</button><button class="add-table-row text-xs px-2 py-1 bg-blue-500 text-white rounded">+ Zeile</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><table class="w-full border"><thead><tr><th><input type="text" placeholder="Spalte 1" class="w-full p-1 border"></th><th><input type="text" placeholder="Spalte 2" class="w-full p-1 border"></th></tr></thead><tbody><tr><td><input type="text" class="w-full p-1 border"></td><td><input type="text" class="w-full p-1 border"></td></tr></tbody></table>`;
             break;
         case 'link':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">🔗 Link</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><input type="url" name="url" placeholder="https://..." class="w-full p-2 border rounded mb-2"><input type="text" name="label" placeholder="Anzeigetext" class="w-full p-2 border rounded">`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">🔗 Link</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="move-left text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">◀</button><button class="move-right text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">▶</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><input type="url" name="url" placeholder="https://..." class="w-full p-2 border rounded mb-2"><input type="text" name="label" placeholder="Anzeigetext" class="w-full p-2 border rounded">`;
             break;
         case 'password':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">🔐 Passwort</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="toggle-pw text-xs px-2 py-1 bg-blue-500 text-white rounded">👁️</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><input type="password" class="password-input w-full p-2 border rounded">`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">🔐 Passwort</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="move-left text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">◀</button><button class="move-right text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">▶</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="toggle-pw text-xs px-2 py-1 bg-blue-500 text-white rounded">👁️</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><input type="password" class="password-input w-full p-2 border rounded">`;
             break;
         case 'infobox':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">💡 Infobox</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><select class="text-xs border rounded px-1">
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">💡 Infobox</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="move-left text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">◀</button><button class="move-right text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">▶</button><select class="text-xs border rounded px-1">
                 <option value="blue">Blau</option>
                 <option value="indigo">Indigo</option>
                 <option value="purple">Lila</option>
@@ -1191,27 +1552,65 @@ function addElement(type) {
             break;
     }
     elementDiv.innerHTML = content;
+
+    elementDiv.addEventListener('click', (e) => {
+        if (e.target && e.target.closest && e.target.closest('input, textarea, select, button')) return;
+        selectNotizElement(elementDiv);
+    });
+    elementDiv.querySelectorAll('input, textarea, select').forEach(inp => {
+        inp.addEventListener('focus', () => selectNotizElement(elementDiv));
+    });
+
     elementDiv.querySelector('.delete-element')?.addEventListener('click', () => {
         elementDiv.remove();
-        if (container.children.length === 0) container.innerHTML = '<p class="text-gray-400 text-center text-sm col-span-full">Füge Elemente hinzu...</p>';
+        const remaining = Array.from(rowEl.children).filter(c => c && c.dataset && c.dataset.elementType);
+        if (remaining.length === 0) {
+            rowEl.remove();
+        } else {
+            updateNotizRowLayout(rowEl);
+        }
+        ensureNotizPlaceholder();
     });
     
     // Move Up/Down Funktionalität
     const moveUpBtn = elementDiv.querySelector('.move-up');
     if (moveUpBtn) {
         moveUpBtn.addEventListener('click', () => {
-            const prev = elementDiv.previousElementSibling;
-            if (prev && prev.dataset.elementType) {
-                container.insertBefore(elementDiv, prev);
+            const prevRow = rowEl.previousElementSibling;
+            if (prevRow && prevRow.classList && prevRow.classList.contains('notiz-row')) {
+                container.insertBefore(rowEl, prevRow);
             }
         });
     }
     const moveDownBtn = elementDiv.querySelector('.move-down');
     if (moveDownBtn) {
         moveDownBtn.addEventListener('click', () => {
-            const next = elementDiv.nextElementSibling;
-            if (next && next.dataset.elementType) {
-                container.insertBefore(next, elementDiv);
+            const nextRow = rowEl.nextElementSibling;
+            if (nextRow && nextRow.classList && nextRow.classList.contains('notiz-row')) {
+                container.insertBefore(nextRow, rowEl);
+            }
+        });
+    }
+
+    const moveLeftBtn = elementDiv.querySelector('.move-left');
+    if (moveLeftBtn) {
+        moveLeftBtn.addEventListener('click', () => {
+            const children = Array.from(rowEl.children).filter(c => c && c.dataset && c.dataset.elementType);
+            if (children.length !== 2) return;
+            if (children[1] === elementDiv) {
+                rowEl.insertBefore(children[1], children[0]);
+                updateNotizRowLayout(rowEl);
+            }
+        });
+    }
+    const moveRightBtn = elementDiv.querySelector('.move-right');
+    if (moveRightBtn) {
+        moveRightBtn.addEventListener('click', () => {
+            const children = Array.from(rowEl.children).filter(c => c && c.dataset && c.dataset.elementType);
+            if (children.length !== 2) return;
+            if (children[0] === elementDiv) {
+                rowEl.insertBefore(children[1], children[0]);
+                updateNotizRowLayout(rowEl);
             }
         });
     }
@@ -1223,6 +1622,7 @@ function addElement(type) {
             if (type === 'text' || type === 'infobox') textToCopy = elementDiv.querySelector('textarea')?.value || '';
             else if (type === 'password') textToCopy = elementDiv.querySelector('.password-input')?.value || '';
             else if (type === 'link') textToCopy = elementDiv.querySelector('input[name="url"]')?.value || '';
+            else if (type === 'list') textToCopy = (elementDiv.querySelector('.list-textarea') || elementDiv.querySelector('textarea'))?.value || '';
             navigator.clipboard.writeText(textToCopy).then(() => alertUser('Kopiert!', 'success'));
         });
     }
@@ -1250,38 +1650,205 @@ function addElement(type) {
             textarea.className = textarea.className.replace(/bg-\w+-\d+/, `bg-${e.target.value}-50`);
         });
     }
-    container.appendChild(elementDiv);
+
+    if (type === 'list') {
+        setupListElement(elementDiv);
+    }
+
+    if (insertElementBefore && insertElementBefore.parentElement === rowEl) {
+        rowEl.insertBefore(elementDiv, insertElementBefore);
+    } else {
+        rowEl.appendChild(elementDiv);
+    }
+
+    updateNotizRowLayout(rowEl);
+    if (selectAfter) selectNotizElement(elementDiv);
 }
 
-function renderElement(element) {
-    addElement(element.type);
+function selectNotizElement(elementDiv) {
     const container = document.getElementById('notiz-hauptteil-container');
-    const lastEl = container.lastElementChild;
-    const subtitleEl = lastEl.querySelector('.element-subtitle');
+    if (!container || !elementDiv) return;
+    container.querySelectorAll('[data-element-id]').forEach(el => {
+        el.classList.remove('ring-2', 'ring-amber-400');
+    });
+    selectedNotizElementId = elementDiv.dataset.elementId;
+    elementDiv.classList.add('ring-2', 'ring-amber-400');
+}
+
+function handleAddElementClick(type) {
+    if (!notizIsEditMode) {
+        alertUser('Bitte erst Bearbeiten aktivieren', 'error');
+        return;
+    }
+    const selected = getSelectedNotizElementDiv();
+    if (!selected) {
+        console.log('Notizen: Element hinzufügen (kein ausgewähltes Element):', type);
+        addElementWithOptions(type, { fullSpan: true });
+        return;
+    }
+    showElementPlacementModal(type, selected);
+}
+
+function showElementPlacementModal(type, selectedEl) {
+    const existing = document.getElementById('notizElementPlacementModal');
+    if (existing) existing.remove();
+
+    const rowEl = selectedEl.closest('.notiz-row');
+    const rowChildren = rowEl ? Array.from(rowEl.children).filter(c => c && c.dataset && c.dataset.elementType) : [];
+    const canSideBySide = rowEl && rowChildren.length < 2 && type !== 'line';
+
+    const overlay = document.createElement('div');
+    overlay.id = 'notizElementPlacementModal';
+    overlay.className = 'fixed inset-0 bg-black/40 flex items-center justify-center z-[9999] p-4';
+    overlay.innerHTML = `
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-4">
+            <div class="font-bold text-lg mb-2">📍 Element platzieren</div>
+            <div class="text-sm text-gray-600 mb-3">Wo soll das neue Element eingefügt werden?</div>
+            <div class="grid grid-cols-1 gap-2">
+                <button data-action="below" class="w-full px-3 py-2 bg-gray-800 text-white font-bold rounded hover:bg-gray-900 transition text-sm text-left">⬇️ Unter die markierte Zeile</button>
+                <button data-action="left" class="w-full px-3 py-2 bg-gray-200 text-gray-800 font-bold rounded hover:bg-gray-300 transition text-sm text-left" ${canSideBySide ? '' : 'disabled style="opacity:0.5;cursor:not-allowed;"'}>⬅️ Links daneben</button>
+                <button data-action="right" class="w-full px-3 py-2 bg-gray-200 text-gray-800 font-bold rounded hover:bg-gray-300 transition text-sm text-left" ${canSideBySide ? '' : 'disabled style="opacity:0.5;cursor:not-allowed;"'}>➡️ Rechts daneben</button>
+                <button data-action="cancel" class="w-full px-3 py-2 bg-white text-gray-700 font-bold rounded border hover:bg-gray-50 transition text-sm text-left">Abbrechen</button>
+            </div>
+        </div>
+    `;
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.remove();
+    });
+
+    overlay.querySelectorAll('button[data-action]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const action = btn.dataset.action;
+            overlay.remove();
+            if (action === 'cancel') return;
+            if (!rowEl) {
+                addElementWithOptions(type, { fullSpan: true });
+                return;
+            }
+            if (action === 'below') {
+                console.log('Notizen: Element hinzufügen unterhalb:', type);
+                addElementWithOptions(type, { fullSpan: true, insertRowAfter: rowEl });
+                return;
+            }
+            if (!canSideBySide) return;
+
+            const existingChild = rowChildren[0] || null;
+            if (existingChild) {
+                existingChild.classList.remove('md:col-span-2');
+            }
+
+            if (action === 'left') {
+                console.log('Notizen: Element hinzufügen links:', type);
+                addElementWithOptions(type, { rowEl, fullSpan: false, insertElementBefore: existingChild });
+                return;
+            }
+            if (action === 'right') {
+                console.log('Notizen: Element hinzufügen rechts:', type);
+                addElementWithOptions(type, { rowEl, fullSpan: false });
+                return;
+            }
+        });
+    });
+
+    document.body.appendChild(overlay);
+}
+
+function renderElements(elements) {
+    const container = document.getElementById('notiz-hauptteil-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    selectedNotizElementId = null;
+
+    if (!elements || elements.length === 0) {
+        container.innerHTML = '<p class="notiz-placeholder text-gray-400 text-center text-sm col-span-full">Füge Elemente hinzu...</p>';
+        return;
+    }
+
+    const hasRow = elements.some(e => typeof e.row === 'number');
+    const grouped = {};
+    if (hasRow) {
+        elements.forEach((e, idx) => {
+            const r = typeof e.row === 'number' ? e.row : idx;
+            grouped[r] = grouped[r] || [];
+            grouped[r].push(e);
+        });
+    } else {
+        elements.forEach((e, idx) => {
+            grouped[idx] = [e];
+        });
+    }
+
+    const rows = Object.keys(grouped).map(k => parseInt(k, 10)).sort((a, b) => a - b);
+    rows.forEach(r => {
+        const rowEl = createNotizRow();
+        container.appendChild(rowEl);
+
+        const rowItems = grouped[r]
+            .slice()
+            .sort((a, b) => {
+                const ac = typeof a.col === 'number' ? a.col : 0;
+                const bc = typeof b.col === 'number' ? b.col : 0;
+                if (ac !== bc) return ac - bc;
+                return (a.order || 0) - (b.order || 0);
+            });
+
+        rowItems.forEach(el => {
+            renderElementIntoRow(el, rowEl, rowItems.length);
+        });
+
+        updateNotizRowLayout(rowEl);
+    });
+}
+
+function renderElementIntoRow(element, rowEl, rowItemCount) {
+    const fullSpan = element.type === 'line' ? true : rowItemCount === 1;
+    addElementWithOptions(element.type, { rowEl, fullSpan, selectAfter: false });
+
+    const elDiv = rowEl.lastElementChild;
+    const subtitleEl = elDiv.querySelector('.element-subtitle');
     if (subtitleEl) subtitleEl.value = element.subtitle || '';
+
     switch (element.type) {
-        case 'text': lastEl.querySelector('textarea').value = element.content || ''; break;
-        case 'list': lastEl.querySelector('textarea').value = element.content || ''; break;
+        case 'text':
+            elDiv.querySelector('textarea').value = element.content || '';
+            break;
+        case 'list':
+            (elDiv.querySelector('.list-textarea') || elDiv.querySelector('textarea')).value = element.content || '';
+            const l1Style = elDiv.querySelector('.list-style-l1');
+            const l1Symbol = elDiv.querySelector('.list-symbol-l1');
+            const l2Style = elDiv.querySelector('.list-style-l2');
+            const l2Symbol = elDiv.querySelector('.list-symbol-l2');
+            if (l1Style) l1Style.value = element.listStyleL1 || 'symbol';
+            if (l1Symbol) l1Symbol.value = element.listSymbolL1 || '•';
+            if (l2Style) l2Style.value = element.listStyleL2 || 'symbol';
+            if (l2Symbol) l2Symbol.value = element.listSymbolL2 || '•';
+            setupListElement(elDiv);
+            updateListPreview(elDiv);
+            break;
         case 'checkbox':
-            lastEl.querySelector('input[type="checkbox"]').checked = element.checked || false;
-            lastEl.querySelector('.checkbox-label-input').value = element.label || '';
+            elDiv.querySelector('input[type="checkbox"]').checked = element.checked || false;
+            elDiv.querySelector('.checkbox-label-input').value = element.label || '';
             break;
         case 'link':
-            lastEl.querySelector('input[name="url"]').value = element.url || '';
-            lastEl.querySelector('input[name="label"]').value = element.label || '';
+            elDiv.querySelector('input[name="url"]').value = element.url || '';
+            elDiv.querySelector('input[name="label"]').value = element.label || '';
             break;
-        case 'password': lastEl.querySelector('.password-input').value = element.content || ''; break;
+        case 'password':
+            elDiv.querySelector('.password-input').value = element.content || '';
+            break;
         case 'infobox':
-            lastEl.querySelector('textarea').value = element.content || '';
-            lastEl.querySelector('select').value = element.color || 'blue';
+            elDiv.querySelector('textarea').value = element.content || '';
+            elDiv.querySelector('select').value = element.color || 'blue';
             break;
         case 'table':
             if (element.headers) {
-                const headers = lastEl.querySelectorAll('thead input');
+                const headers = elDiv.querySelectorAll('thead input');
                 element.headers.forEach((h, i) => { if (headers[i]) headers[i].value = h; });
             }
             if (element.rows) {
-                const tbody = lastEl.querySelector('tbody');
+                const tbody = elDiv.querySelector('tbody');
                 tbody.innerHTML = '';
                 element.rows.forEach(row => {
                     const tr = document.createElement('tr');
@@ -1291,6 +1858,15 @@ function renderElement(element) {
             }
             break;
     }
+}
+
+function renderElement(element) {
+    const container = document.getElementById('notiz-hauptteil-container');
+    if (!container) return;
+    const rowEl = createNotizRow();
+    container.appendChild(rowEl);
+    renderElementIntoRow(element, rowEl, 1);
+    updateNotizRowLayout(rowEl);
 }
 
 function openShareModal() {
