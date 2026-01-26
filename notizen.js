@@ -1405,20 +1405,71 @@ function lockEditFields() {
     if (container) {
         container.querySelectorAll('[data-element-type]').forEach(el => {
             const type = el.dataset.elementType;
+            
+            // Element-Titel-Zeile mit Buttons ausblenden (erste div mit flex justify-between)
+            const titleRow = el.querySelector('.flex.justify-between');
+            if (titleRow) titleRow.style.display = 'none';
+            
+            // Unterüberschrift schön gestalten oder ausblenden
+            const subtitleEl = el.querySelector('.element-subtitle');
+            if (subtitleEl) {
+                const subtitleValue = subtitleEl.value.trim();
+                if (subtitleValue) {
+                    // Unterüberschrift vorhanden: als schöne Überschrift darstellen
+                    subtitleEl.disabled = true;
+                    subtitleEl.classList.remove('border', 'rounded', 'p-2', 'text-sm', 'mb-2');
+                    subtitleEl.classList.add('text-lg', 'font-semibold', 'text-gray-800', 'mb-3', 'mt-1', 'border-0', 'bg-transparent', 'p-0');
+                    subtitleEl.style.pointerEvents = 'none';
+                } else {
+                    // Unterüberschrift leer: komplett ausblenden
+                    subtitleEl.style.display = 'none';
+                }
+            }
+            
             if (type !== 'checkbox') {
                 // Alle Inputs/Textareas/Selects in diesem Element sperren
-                el.querySelectorAll('input:not([type="checkbox"]), textarea, select').forEach(input => input.disabled = true);
+                el.querySelectorAll('input:not([type="checkbox"]), textarea, select').forEach(input => {
+                    if (!input.classList.contains('element-subtitle')) {
+                        input.disabled = true;
+                    }
+                });
             } else {
                 // Bei Checkbox-Elementen darf nur die Checkbox selbst editierbar sein
-                el.querySelectorAll('input:not([type="checkbox"])').forEach(input => input.disabled = true);
+                el.querySelectorAll('input:not([type="checkbox"])').forEach(input => {
+                    if (!input.classList.contains('element-subtitle')) {
+                        input.disabled = true;
+                    }
+                });
             }
 
             if (type === 'list') {
+                // Textarea ausblenden
                 const ta = el.querySelector('.list-textarea') || el.querySelector('textarea');
                 if (ta) ta.style.display = 'none';
+                
+                // Style-Einstellungen (Ebene 1 & 2) ausblenden
+                const styleContainers = el.querySelectorAll('.grid.grid-cols-1.md\\:grid-cols-2');
+                styleContainers.forEach(container => container.style.display = 'none');
+                
+                // Einrücken/Ausrücken Buttons und Hinweis ausblenden
+                const indentRow = el.querySelector('.flex.gap-2.mb-2');
+                if (indentRow && indentRow.querySelector('.list-indent')) {
+                    indentRow.style.display = 'none';
+                }
             }
-            // Verschiebe- und Lösch-Buttons verstecken
-            el.querySelectorAll('.move-up, .move-down, .move-left, .move-right, .delete-element, .add-table-row, .list-indent, .list-outdent').forEach(btn => btn.style.display = 'none');
+            
+            if (type === 'infobox') {
+                // Farb-Select ausblenden (wurde schon durch Titel-Zeile versteckt, aber sicher ist sicher)
+                const colorSelect = el.querySelector('select');
+                if (colorSelect) colorSelect.style.display = 'none';
+            }
+            
+            if (type === 'password') {
+                // Toggle-Button ausblenden (wurde schon durch Titel-Zeile versteckt)
+            }
+            
+            // Verschiebe- und Lösch-Buttons verstecken (falls noch nicht durch Titel-Zeile)
+            el.querySelectorAll('.move-up, .move-down, .move-left, .move-right, .delete-element, .add-table-row, .list-indent, .list-outdent, .copy-btn, .toggle-pw').forEach(btn => btn.style.display = 'none');
         });
     }
 }
@@ -1433,6 +1484,56 @@ function unlockEditFields() {
     
     // Element-Buttons wieder anzeigen
     document.querySelectorAll('.notiz-add-element').forEach(btn => btn.style.display = '');
+    
+    // Alle Element-Inhalte wieder entsperren und anzeigen
+    const container = document.getElementById('notiz-hauptteil-container');
+    if (container) {
+        container.querySelectorAll('[data-element-type]').forEach(el => {
+            const type = el.dataset.elementType;
+            
+            // Element-Titel-Zeile wieder anzeigen
+            const titleRow = el.querySelector('.flex.justify-between');
+            if (titleRow) titleRow.style.display = '';
+            
+            // Unterüberschrift zurücksetzen
+            const subtitleEl = el.querySelector('.element-subtitle');
+            if (subtitleEl) {
+                subtitleEl.style.display = '';
+                subtitleEl.disabled = false;
+                subtitleEl.style.pointerEvents = '';
+                subtitleEl.classList.remove('text-lg', 'font-semibold', 'text-gray-800', 'mb-3', 'mt-1', 'border-0', 'bg-transparent', 'p-0');
+                subtitleEl.classList.add('border', 'rounded', 'p-2', 'text-sm', 'mb-2');
+            }
+            
+            // Alle Inputs/Textareas/Selects entsperren
+            el.querySelectorAll('input, textarea, select').forEach(input => input.disabled = false);
+            
+            if (type === 'list') {
+                // Textarea wieder anzeigen
+                const ta = el.querySelector('.list-textarea') || el.querySelector('textarea');
+                if (ta) ta.style.display = '';
+                
+                // Style-Einstellungen wieder anzeigen
+                const styleContainers = el.querySelectorAll('.grid.grid-cols-1.md\\:grid-cols-2');
+                styleContainers.forEach(container => container.style.display = '');
+                
+                // Einrücken/Ausrücken Buttons wieder anzeigen
+                const indentRow = el.querySelector('.flex.gap-2.mb-2');
+                if (indentRow && indentRow.querySelector('.list-indent')) {
+                    indentRow.style.display = '';
+                }
+            }
+            
+            if (type === 'infobox') {
+                // Farb-Select wieder anzeigen
+                const colorSelect = el.querySelector('select');
+                if (colorSelect) colorSelect.style.display = '';
+            }
+            
+            // Alle Buttons wieder anzeigen
+            el.querySelectorAll('.move-up, .move-down, .move-left, .move-right, .delete-element, .add-table-row, .list-indent, .list-outdent, .copy-btn, .toggle-pw').forEach(btn => btn.style.display = '');
+        });
+    }
 }
 
 function resetEditorForm() {
