@@ -1466,11 +1466,18 @@ function lockEditFields() {
             }
             
             if (type === 'password') {
-                // Toggle-Button ausblenden (wurde schon durch Titel-Zeile versteckt)
+                // Passwort-Buttons (Kopieren & Ansehen) NICHT ausblenden - werden auch in Leseansicht gebraucht
+                // Nur die Move-Buttons ausblenden
+                el.querySelectorAll('.move-up, .move-down, .move-left, .move-right, .delete-element').forEach(btn => btn.style.display = 'none');
             }
             
-            // Verschiebe- und Lösch-Buttons verstecken (falls noch nicht durch Titel-Zeile)
-            el.querySelectorAll('.move-up, .move-down, .move-left, .move-right, .delete-element, .add-table-row, .list-indent, .list-outdent, .copy-btn, .toggle-pw, .add-checkbox-item, .delete-checkbox-item').forEach(btn => btn.style.display = 'none');
+            // Verschiebe- und Lösch-Buttons verstecken (außer bei Passwort-Elementen)
+            if (type !== 'password') {
+                el.querySelectorAll('.move-up, .move-down, .move-left, .move-right, .delete-element, .add-table-row, .list-indent, .list-outdent, .add-checkbox-item, .delete-checkbox-item').forEach(btn => btn.style.display = 'none');
+            } else {
+                // Bei Passwort nur strukturelle Buttons ausblenden, nicht die funktionalen
+                el.querySelectorAll('.add-table-row, .list-indent, .list-outdent, .add-checkbox-item, .delete-checkbox-item').forEach(btn => btn.style.display = 'none');
+            }
         });
     }
 }
@@ -1646,7 +1653,7 @@ function collectElements() {
                 case 'table':
                     const rows = [];
                     el.querySelectorAll('tbody tr').forEach(tr => {
-                        const cells = Array.from(tr.querySelectorAll('input')).map(inp => inp.value);
+                        const cells = Array.from(tr.querySelectorAll('td input')).map(inp => inp.value);
                         rows.push(cells);
                     });
                     element.rows = rows;
@@ -1700,12 +1707,12 @@ function collectElements() {
                     element.color = el.querySelector('select')?.value || 'blue';
                     break;
                 case 'table':
-                    const rows = [];
+                    const tableRows = [];
                     el.querySelectorAll('tbody tr').forEach(tr => {
-                        const cells = Array.from(tr.querySelectorAll('input')).map(inp => inp.value);
-                        rows.push(cells);
+                        const cells = Array.from(tr.querySelectorAll('td input')).map(inp => inp.value);
+                        tableRows.push(cells);
                     });
-                    element.rows = rows;
+                    element.rows = tableRows;
                     element.headers = Array.from(el.querySelectorAll('thead input')).map(inp => inp.value);
                     break;
             }
