@@ -539,6 +539,7 @@ service cloud.firestore {
           (get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen/$(notizId)).data.sharedWith != null && 
            appUserId() in get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen/$(notizId)).data.sharedWith)
         );
+        allow delete: if hasAppUserIdClaim() && appUserId() == userId;
       }
     }
 

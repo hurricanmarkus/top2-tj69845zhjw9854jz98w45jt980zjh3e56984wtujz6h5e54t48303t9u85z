@@ -7,13 +7,39 @@ let allKategorien = [], allNotizen = [], allEinladungen = [];
 let currentEditingNotizId = null, checkoutHeartbeat = null;
 let shareUsersCache = [];
 let currentSharingKategorieId = null;
+let userConfigLoaded = false;
+let userDisplayNameCache = {};
+let notizIsEditMode = false;
 
 export function initializeNotizen() {
     console.log('Notizen: Init...');
     setupEventListeners();
+    ensureUserConfigLoaded();
     loadKategorien();
     loadNotizen();
     loadEinladungen();
+}
+
+async function ensureUserConfigLoaded() {
+    if (userConfigLoaded) return;
+    try {
+        const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'user-config');
+        const snapshot = await getDocs(colRef);
+        userDisplayNameCache = {};
+        snapshot.docs.forEach(docSnap => {
+            const data = docSnap.data() || {};
+            const displayName = data.realName || data.name || '';
+            userDisplayNameCache[docSnap.id] = displayName;
+        });
+        userConfigLoaded = true;
+    } catch (error) {
+        console.warn('Notizen: Konnte user-config nicht laden:', error);
+    }
+}
+
+function getDisplayNameById(userId) {
+    const name = userDisplayNameCache[userId];
+    return name && String(name).trim() ? name : 'Unbekannt';
 }
 
 export function listenForNotizen() {
@@ -51,6 +77,9 @@ function setupEventListeners() {
     setupBtn('btn-notiz-cancel', closeNotizEditor);
     setupBtn('btn-notiz-delete', deleteNotiz);
     setupBtn('btn-notiz-share', openShareModal);
+    setupBtn('btn-notiz-weitere-optionen', toggleNotizWeitereOptionen);
+    setupBtn('notiz-dropdown-bearbeiten', enableNotizEditMode);
+    setupBtn('notiz-dropdown-toggle-delete', toggleNotizDeleteOption);
     setupBtn('close-kategorie-share', closeKategorieShareModal);
     setupBtn('btn-kategorie-share-cancel', closeKategorieShareModal);
     setupBtn('btn-kategorie-share-send', saveKategorieShareSelection);
@@ -108,6 +137,84 @@ function setupEventListeners() {
         });
     });
     console.log(`Notizen: ${addElementButtons.length} Element-Buttons gefunden`);
+
+    const infoCb = document.getElementById('notiz-status-info');
+    if (infoCb) {
+        infoCb.addEventListener('change', () => {
+            applyInfoStatusUI();
+        });
+    }
+}
+
+function applyInfoStatusUI() {
+    const infoCb = document.getElementById('notiz-status-info');
+    const statusSelect = document.getElementById('notiz-status');
+    if (!infoCb || !statusSelect) return;
+
+    if (infoCb.checked) {
+        statusSelect.value = 'info';
+        statusSelect.disabled = true;
+    } else {
+        statusSelect.disabled = false;
+        if (!statusSelect.value || statusSelect.value === 'info') statusSelect.value = 'offen';
+    }
+}
+
+function toggleNotizWeitereOptionen() {
+    const dropdown = document.getElementById('notiz-weitere-optionen-dropdown');
+    const arrow = document.getElementById('notiz-dropdown-arrow');
+    if (!dropdown) return;
+
+    if (dropdown.classList.contains('hidden')) {
+        dropdown.classList.remove('hidden');
+        if (arrow) arrow.textContent = '▲';
+    } else {
+        dropdown.classList.add('hidden');
+        if (arrow) arrow.textContent = '▼';
+        const deleteBtn = document.getElementById('btn-notiz-delete');
+        const toggleBtn = document.getElementById('notiz-dropdown-toggle-delete');
+        if (deleteBtn) deleteBtn.style.display = 'none';
+        if (toggleBtn) toggleBtn.textContent = '🔓 Weitere Optionen';
+    }
+}
+
+function toggleNotizDeleteOption() {
+    const deleteBtn = document.getElementById('btn-notiz-delete');
+    const toggleBtn = document.getElementById('notiz-dropdown-toggle-delete');
+    if (!deleteBtn || !toggleBtn) return;
+
+    if (deleteBtn.style.display === 'none' || deleteBtn.style.display === '') {
+        deleteBtn.style.display = 'block';
+        toggleBtn.textContent = '🔒 Löschen ausblenden';
+    } else {
+        deleteBtn.style.display = 'none';
+        toggleBtn.textContent = '🔓 Weitere Optionen';
+    }
+}
+
+function enableNotizEditMode() {
+    console.log('Notizen: Edit-Mode aktiviert');
+    notizIsEditMode = true;
+    const dropdown = document.getElementById('notiz-weitere-optionen-dropdown');
+    const arrow = document.getElementById('notiz-dropdown-arrow');
+    if (dropdown) dropdown.classList.add('hidden');
+    if (arrow) arrow.textContent = '▼';
+
+    const fieldsToUnlock = ['notiz-betreff', 'notiz-kategorie', 'notiz-subkategorie', 'notiz-erinnerung', 'notiz-frist'];
+    fieldsToUnlock.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = false;
+    });
+
+    document.querySelectorAll('.notiz-add-element').forEach(btn => btn.style.display = '');
+
+    const container = document.getElementById('notiz-hauptteil-container');
+    if (container) {
+        container.querySelectorAll('[data-element-type]').forEach(el => {
+            el.querySelectorAll('input, textarea, select').forEach(input => input.disabled = false);
+            el.querySelectorAll('.move-up, .move-down, .delete-element, .add-table-row').forEach(btn => btn.style.display = '');
+        });
+    }
 }
 
 function openKategorieShareModal(kategorieId) {
@@ -148,7 +255,7 @@ async function loadUserListForKategorieShare() {
             .filter(docSnap => docSnap.id !== currentUser.mode)
             .map(docSnap => {
                 const data = docSnap.data() || {};
-                const displayName = data.realName || data.name || docSnap.id;
+                const displayName = data.realName || data.name || 'Unbekannt';
                 return { id: docSnap.id, displayName };
             })
             .sort((a, b) => (a.displayName || '').localeCompare((b.displayName || ''), 'de'));
@@ -160,8 +267,7 @@ async function loadUserListForKategorieShare() {
         }
 
         list.innerHTML = users.map(u => {
-            const displayText = u.displayName && u.displayName !== u.id ? `${u.displayName}` : u.id;
-            const subText = u.displayName && u.displayName !== u.id ? u.id : '';
+            const displayText = u.displayName || u.id;
             const searchText = `${u.displayName} ${u.id}`.toLowerCase();
             const sharedRole = alreadyShared[u.id]?.role;
             const checkedAttr = sharedRole ? 'checked' : '';
@@ -172,7 +278,6 @@ async function loadUserListForKategorieShare() {
                         <input type="checkbox" class="kategorie-share-user-checkbox" data-userid="${u.id}" ${checkedAttr}>
                         <div class="min-w-0">
                             <div class="text-sm font-semibold truncate">${displayText}</div>
-                            ${subText ? `<div class="text-xs text-gray-500 truncate">${subText}</div>` : ''}
                         </div>
                     </label>
                     <select class="kategorie-share-user-role text-xs border rounded px-2 py-1" data-userid="${u.id}">
@@ -268,6 +373,7 @@ async function loadKategorien() {
 
     const colRef = collection(db, 'artifacts', appId, 'users', userId, 'notizen_kategorien');
     kategorienListener = onSnapshot(colRef, async (snapshot) => {
+        await ensureUserConfigLoaded();
         allKategorien = [];
         
         // Eigene Kategorien
@@ -327,7 +433,7 @@ function renderKategorienListe() {
             <div class="flex justify-between items-center mb-2">
                 <div class="flex-1">
                     <span class="font-bold">📁 ${kat.name}</span>
-                    ${sharedBy ? `<span class="text-xs text-purple-600 ml-2">(geteilt durch ${sharedBy})</span>` : ''}
+                    ${sharedBy ? `<span class="text-xs text-purple-600 ml-2">(geteilt durch ${getDisplayNameById(sharedBy)})</span>` : ''}
                     ${isShared && isOwner ? '<span class="text-xs text-purple-600 ml-2">👥</span>' : ''}
                 </div>
                 <div class="flex gap-1">
@@ -341,7 +447,7 @@ function renderKategorienListe() {
                     const subSharedBy = !subIsOwner && sub.createdBy ? sub.createdBy : null;
                     return `
                     <div class="flex justify-between text-sm ${subSharedBy ? 'bg-purple-100 px-2 py-1 rounded' : ''}">
-                        <span>📄 ${sub.name} ${subSharedBy ? `<span class="text-xs text-purple-600">(geteilt durch ${subSharedBy})</span>` : ''}</span>
+                        <span>📄 ${sub.name} ${subSharedBy ? `<span class="text-xs text-purple-600">(geteilt durch ${getDisplayNameById(subSharedBy)})</span>` : ''}</span>
                         ${subIsOwner ? `<button onclick="window.deleteSubkategorie('${kat.id}','${sub.id}')" class="text-red-500">✕</button>` : ''}
                     </div>
                 `;
@@ -356,6 +462,115 @@ function renderKategorienListe() {
         </div>
     `;
     }).join('');
+}
+
+function showTextConfirmModal({ title, warningHtml, confirmPhrase, countdownSeconds = 0, onConfirm }) {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black/70 backdrop-blur-sm z-[90] flex items-center justify-center p-4';
+
+    modal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="bg-gradient-to-r from-red-600 to-red-700 text-white p-4 rounded-t-2xl">
+                <h3 class="text-xl font-bold select-none" style="user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;">${title}</h3>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="bg-red-50 border-2 border-red-300 rounded-lg p-4">${warningHtml}</div>
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Gib exakt ein: <span class="text-red-600 select-none" style="user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;">${confirmPhrase}</span></label>
+                    <input type="text" class="confirm-text w-full p-3 border-2 border-gray-300 rounded-lg focus:border-red-500" placeholder="${confirmPhrase}">
+                </div>
+                <div class="text-center">
+                    <button class="confirm-btn w-full py-3 bg-gray-300 text-gray-500 font-bold rounded-lg cursor-not-allowed transition" disabled>
+                        <span class="confirm-btn-text"></span>
+                    </button>
+                </div>
+            </div>
+            <div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-3">
+                <button class="cancel-btn px-6 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">Abbrechen</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const confirmInput = modal.querySelector('.confirm-text');
+    const deleteBtn = modal.querySelector('.confirm-btn');
+    const cancelBtn = modal.querySelector('.cancel-btn');
+    const btnText = modal.querySelector('.confirm-btn-text');
+
+    let countdown = countdownSeconds;
+    let canDelete = countdownSeconds === 0;
+    let interval = null;
+
+    const updateDeleteButton = () => {
+        const textCorrect = (confirmInput?.value || '') === confirmPhrase;
+        if (canDelete && textCorrect) {
+            deleteBtn.disabled = false;
+            deleteBtn.className = 'w-full py-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition cursor-pointer';
+            if (btnText) {
+                btnText.textContent = confirmPhrase === 'UNWIDERRUFLICH LÖSCHEN' ? '🗑️ JETZT UNWIDERRUFLICH LÖSCHEN' : '🗑️ JETZT LÖSCHEN';
+            }
+        } else {
+            deleteBtn.disabled = true;
+            deleteBtn.className = 'w-full py-3 bg-gray-300 text-gray-500 font-bold rounded-lg cursor-not-allowed transition';
+            if (!canDelete) {
+                if (btnText) btnText.textContent = `Warte ${countdown} Sekunden...`;
+            } else {
+                if (btnText) btnText.textContent = 'Bitte Text korrekt eingeben';
+            }
+        }
+    };
+
+    if (countdownSeconds > 0) {
+        if (btnText) btnText.textContent = `Warte ${countdown} Sekunden...`;
+        interval = setInterval(() => {
+            countdown--;
+            if (countdown > 0) {
+                if (btnText) btnText.textContent = `Warte ${countdown} Sekunden...`;
+            } else {
+                clearInterval(interval);
+                interval = null;
+                canDelete = true;
+                updateDeleteButton();
+            }
+        }, 1000);
+    } else {
+        if (btnText) btnText.textContent = '';
+        updateDeleteButton();
+    }
+
+    confirmInput?.addEventListener('input', updateDeleteButton);
+
+    cancelBtn?.addEventListener('click', () => {
+        if (interval) clearInterval(interval);
+        modal.remove();
+    });
+
+    deleteBtn?.addEventListener('click', async () => {
+        const textCorrect = (confirmInput?.value || '') === confirmPhrase;
+        if (!canDelete || !textCorrect) return;
+        if (interval) clearInterval(interval);
+        modal.remove();
+        await onConfirm();
+    });
+}
+
+async function deleteDocsInBatches(docRefs) {
+    const refs = [...docRefs];
+    while (refs.length > 0) {
+        const batch = writeBatch(db);
+        refs.splice(0, 400).forEach(ref => batch.delete(ref));
+        await batch.commit();
+    }
+}
+
+async function deleteNotizWithHistory(ownerUserId, notizId) {
+    const histColRef = collection(db, 'artifacts', appId, 'users', ownerUserId, 'notizen', notizId, 'history');
+    const histSnap = await getDocs(histColRef);
+    await deleteDocsInBatches(histSnap.docs.map(d => d.ref));
+
+    const notizRef = doc(db, 'artifacts', appId, 'users', ownerUserId, 'notizen', notizId);
+    await deleteDoc(notizRef);
 }
 
 async function createKategorie() {
@@ -401,48 +616,94 @@ window.createSubkategorie = async function(kategorieId) {
 };
 
 window.deleteKategorie = async function(kategorieId) {
-    if (!confirm('Löschen?')) return;
     const userId = currentUser.mode;
-    try {
-        const notizenRef = collection(db, 'artifacts', appId, 'users', userId, 'notizen');
-        const q = query(notizenRef, where('kategorieId', '==', kategorieId));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-            alertUser('Kategorie enthält Notizen!', 'error');
-            return;
+    const kat = allKategorien.find(k => k.id === kategorieId);
+    const title = kat?.name ? `⚠️ KATEGORIE UNWIDERRUFLICH LÖSCHEN` : '⚠️ KATEGORIE UNWIDERRUFLICH LÖSCHEN';
+    const name = kat?.name || '';
+
+    showTextConfirmModal({
+        title,
+        warningHtml: `
+            <p class="text-sm font-bold text-red-800 mb-2">⚠️ ACHTUNG: Diese Aktion ist UNWIDERRUFLICH!</p>
+            <p class="text-sm text-red-700">Die Kategorie <strong>${name}</strong> wird dauerhaft gelöscht, einschließlich:</p>
+            <ul class="text-sm text-red-700 list-disc list-inside mt-2 space-y-1">
+                <li>Alle Notizen in dieser Kategorie</li>
+                <li>Alle Subkategorien</li>
+                <li>Alle zugehörigen Daten</li>
+            </ul>
+        `,
+        confirmPhrase: 'UNWIDERRUFLICH LÖSCHEN',
+        countdownSeconds: 60,
+        onConfirm: async () => {
+            try {
+                console.log('Notizen: Starte Kategorie-Löschung (Cascade):', kategorieId);
+
+                const notizenRef = collection(db, 'artifacts', appId, 'users', userId, 'notizen');
+                const qNotizen = query(notizenRef, where('kategorieId', '==', kategorieId));
+                const notesSnap = await getDocs(qNotizen);
+
+                for (const d of notesSnap.docs) {
+                    await deleteNotizWithHistory(userId, d.id);
+                }
+
+                const subColRef = collection(db, 'artifacts', appId, 'users', userId, 'notizen_kategorien', kategorieId, 'subkategorien');
+                const subSnap = await getDocs(subColRef);
+                await deleteDocsInBatches(subSnap.docs.map(d => d.ref));
+
+                const katRef = doc(db, 'artifacts', appId, 'users', userId, 'notizen_kategorien', kategorieId);
+                await deleteDoc(katRef);
+
+                alertUser('Kategorie gelöscht', 'success');
+                loadKategorien();
+            } catch (error) {
+                console.error('Notizen: Fehler beim Löschen der Kategorie:', error);
+                alertUser('Fehler', 'error');
+            }
         }
-        const subColRef = collection(db, 'artifacts', appId, 'users', userId, 'notizen_kategorien', kategorieId, 'subkategorien');
-        const subSnap = await getDocs(subColRef);
-        const batch = writeBatch(db);
-        subSnap.forEach(doc => batch.delete(doc.ref));
-        const katRef = doc(db, 'artifacts', appId, 'users', userId, 'notizen_kategorien', kategorieId);
-        batch.delete(katRef);
-        await batch.commit();
-        alertUser('Gelöscht', 'success');
-    } catch (error) {
-        alertUser('Fehler', 'error');
-    }
+    });
 };
 
 window.deleteSubkategorie = async function(kategorieId, subkategorieId) {
-    if (!confirm('Löschen?')) return;
     const userId = currentUser.mode;
-    try {
-        const notizenRef = collection(db, 'artifacts', appId, 'users', userId, 'notizen');
-        const q = query(notizenRef, where('subkategorieId', '==', subkategorieId));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-            alertUser('Subkategorie enthält Notizen!', 'error');
-            return;
+    const kat = allKategorien.find(k => k.id === kategorieId);
+    const sub = kat?.subkategorien?.find(s => s.id === subkategorieId);
+    const name = sub?.name || '';
+
+    showTextConfirmModal({
+        title: '⚠️ SUBKATEGORIE UNWIDERRUFLICH LÖSCHEN',
+        warningHtml: `
+            <p class="text-sm font-bold text-red-800 mb-2">⚠️ ACHTUNG: Diese Aktion ist UNWIDERRUFLICH!</p>
+            <p class="text-sm text-red-700">Die Subkategorie <strong>${name}</strong> wird dauerhaft gelöscht, einschließlich:</p>
+            <ul class="text-sm text-red-700 list-disc list-inside mt-2 space-y-1">
+                <li>Alle Notizen in dieser Subkategorie</li>
+                <li>Alle zugehörigen Daten</li>
+            </ul>
+        `,
+        confirmPhrase: 'UNWIDERRUFLICH LÖSCHEN',
+        countdownSeconds: 60,
+        onConfirm: async () => {
+            try {
+                console.log('Notizen: Starte Subkategorie-Löschung (Cascade):', kategorieId, subkategorieId);
+
+                const notizenRef = collection(db, 'artifacts', appId, 'users', userId, 'notizen');
+                const qNotizen = query(notizenRef, where('subkategorieId', '==', subkategorieId));
+                const notesSnap = await getDocs(qNotizen);
+
+                for (const d of notesSnap.docs) {
+                    await deleteNotizWithHistory(userId, d.id);
+                }
+
+                const docRef = doc(db, 'artifacts', appId, 'users', userId, 'notizen_kategorien', kategorieId, 'subkategorien', subkategorieId);
+                await deleteDoc(docRef);
+
+                alertUser('Subkategorie gelöscht', 'success');
+                loadKategorien();
+            } catch (error) {
+                console.error('Notizen: Fehler beim Löschen der Subkategorie:', error);
+                alertUser('Fehler', 'error');
+            }
         }
-        const docRef = doc(db, 'artifacts', appId, 'users', userId, 'notizen_kategorien', kategorieId, 'subkategorien', subkategorieId);
-        await deleteDoc(docRef);
-        alertUser('Gelöscht', 'success');
-        // Kategorien neu laden um Subkategorien anzuzeigen
-        loadKategorien();
-    } catch (error) {
-        alertUser('Fehler', 'error');
-    }
+    });
 };
 
 function updateKategorienDropdowns() {
@@ -534,7 +795,13 @@ function applyFilters() {
     const userId = currentUser.mode;
 
     let filtered = allNotizen.filter(notiz => {
-        if (statusFilter && notiz.status !== statusFilter) return false;
+        if (statusFilter) {
+            if (statusFilter === 'offen') {
+                if (notiz.status !== 'offen' && notiz.status !== 'info') return false;
+            } else {
+                if (notiz.status !== statusFilter) return false;
+            }
+        }
         
         // Kategorie-Filter: Wenn Kategorie gewählt aber KEINE Subkategorie, zeige alle Notizen dieser Kategorie
         if (kategorieFilter && !subkategorieFilter && notiz.kategorieId !== kategorieFilter) return false;
@@ -568,16 +835,18 @@ function renderNotizenListe(notizen) {
         const kategorieName = kategorie?.name || 'Unbekannt';
         const isShared = notiz.sharedWith && Object.keys(notiz.sharedWith).length > 0;
         const isCheckedOut = notiz.checkedOutBy && notiz.checkedOutBy !== currentUser.mode;
-        const statusColors = { 'offen': 'bg-blue-100 text-blue-800', 'in_bearbeitung': 'bg-yellow-100 text-yellow-800', 'erledigt': 'bg-green-100 text-green-800' };
-        const statusIcons = { 'offen': '🔵', 'in_bearbeitung': '🟡', 'erledigt': '🟢' };
+        const statusColors = { 'offen': 'bg-blue-100 text-blue-800', 'in_bearbeitung': 'bg-yellow-100 text-yellow-800', 'erledigt': 'bg-green-100 text-green-800', 'info': 'bg-blue-100 text-blue-800' };
+        const statusIcons = { 'offen': '🔵', 'in_bearbeitung': '🟡', 'erledigt': '🟢', 'info': 'ℹ️' };
+        const statusLabels = { 'offen': 'Offen', 'in_bearbeitung': 'In Bearbeitung', 'erledigt': 'Erledigt', 'info': 'INFO' };
+        const borderClass = notiz.status === 'offen' ? 'border-blue-500' : notiz.status === 'in_bearbeitung' ? 'border-yellow-500' : notiz.status === 'info' ? 'border-blue-500' : 'border-green-500';
         return `
-            <div class="bg-white p-4 rounded-lg shadow hover:shadow-md transition border-l-4 ${notiz.status === 'offen' ? 'border-blue-500' : notiz.status === 'in_bearbeitung' ? 'border-yellow-500' : 'border-green-500'}">
+            <div class="bg-white p-4 rounded-lg shadow hover:shadow-md transition border-l-4 ${borderClass}">
                 <div class="flex justify-between items-start mb-2">
                     <h3 class="font-bold text-lg">${notiz.betreff || 'Ohne Titel'}</h3>
                     <div class="flex gap-2">
                         ${isShared ? '<span class="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">👥</span>' : ''}
                         ${isCheckedOut ? '<span class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">🔒</span>' : ''}
-                        <span class="text-xs px-2 py-1 rounded ${statusColors[notiz.status] || 'bg-gray-100'}">${statusIcons[notiz.status] || ''} ${notiz.status}</span>
+                        <span class="text-xs px-2 py-1 rounded ${statusColors[notiz.status] || 'bg-gray-100'}">${statusIcons[notiz.status] || ''} ${statusLabels[notiz.status] || notiz.status}</span>
                     </div>
                 </div>
                 <div class="text-sm text-gray-600 mb-3">
@@ -591,7 +860,7 @@ function renderNotizenListe(notizen) {
 
 function updateStats() {
     const total = allNotizen.length;
-    const offen = allNotizen.filter(n => n.status === 'offen').length;
+    const offen = allNotizen.filter(n => n.status === 'offen' || n.status === 'info').length;
     const bearbeitung = allNotizen.filter(n => n.status === 'in_bearbeitung').length;
     const shared = allNotizen.filter(n => n.sharedWith && Object.keys(n.sharedWith).length > 0).length;
     const setCount = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -617,20 +886,34 @@ async function openNotizEditor(notizId = null) {
     
     const titleEl = document.getElementById('notiz-editor-title');
     const deleteBtn = document.getElementById('btn-notiz-delete');
-    
+    const optionsBtn = document.getElementById('btn-notiz-weitere-optionen');
+    const optionsDropdown = document.getElementById('notiz-weitere-optionen-dropdown');
+    const optionsToggleDelete = document.getElementById('notiz-dropdown-toggle-delete');
+    const infoCb = document.getElementById('notiz-status-info');
+
     if (notizId) {
-        if (titleEl) titleEl.textContent = '📝 Bearbeiten';
-        if (deleteBtn) deleteBtn.classList.remove('hidden');
+        notizIsEditMode = false;
+        if (titleEl) titleEl.textContent = '📝 Notiz ansehen';
+        if (optionsBtn) optionsBtn.classList.remove('hidden');
+        if (optionsDropdown) optionsDropdown.classList.add('hidden');
+        if (optionsToggleDelete) optionsToggleDelete.textContent = '🔓 Weitere Optionen';
+        if (deleteBtn) deleteBtn.style.display = 'none';
         await loadNotizData(notizId);
         await checkoutNotiz(notizId);
     } else {
         if (titleEl) titleEl.textContent = '📝 Neue Notiz';
-        if (deleteBtn) deleteBtn.classList.add('hidden');
+        notizIsEditMode = true;
+        if (optionsBtn) optionsBtn.classList.add('hidden');
+        if (optionsDropdown) optionsDropdown.classList.add('hidden');
+        if (deleteBtn) deleteBtn.style.display = 'none';
         resetEditorForm();
+        if (infoCb) infoCb.checked = false;
+        applyInfoStatusUI();
     }
 }
 
 async function loadNotizData(notizId) {
+    await ensureUserConfigLoaded();
     const docRef = doc(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen', notizId);
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) {
@@ -643,7 +926,11 @@ async function loadNotizData(notizId) {
     document.getElementById('notiz-kategorie').value = notiz.kategorieId || '';
     updateSubkategorienDropdown();
     document.getElementById('notiz-subkategorie').value = notiz.subkategorieId || '';
-    document.getElementById('notiz-status').value = notiz.status || 'offen';
+    const infoCb = document.getElementById('notiz-status-info');
+    if (infoCb) infoCb.checked = (notiz.status === 'info');
+    const statusSelect = document.getElementById('notiz-status');
+    if (statusSelect) statusSelect.value = notiz.status || 'offen';
+    applyInfoStatusUI();
     if (notiz.erinnerung) {
         const date = notiz.erinnerung.toDate ? notiz.erinnerung.toDate() : new Date(notiz.erinnerung);
         document.getElementById('notiz-erinnerung').value = date.toISOString().slice(0, 16);
@@ -657,7 +944,7 @@ async function loadNotizData(notizId) {
     if (notiz.elements && notiz.elements.length > 0) {
         notiz.elements.forEach(el => renderElement(el));
     } else {
-        container.innerHTML = '<p class="text-gray-400 text-center text-sm">Füge Elemente hinzu...</p>';
+        container.innerHTML = '<p class="text-gray-400 text-center text-sm col-span-full">Füge Elemente hinzu...</p>';
     }
     renderSharedUsers(notiz.sharedWith);
     if (notiz.checkedOutBy && notiz.checkedOutBy !== currentUser.mode) {
@@ -669,7 +956,7 @@ async function loadNotizData(notizId) {
     if (metaDiv && notiz.createdAt) {
         metaDiv.classList.remove('hidden');
         document.getElementById('notiz-meta-created').textContent = new Date(notiz.createdAt.toDate()).toLocaleString('de-DE');
-        document.getElementById('notiz-meta-edited').textContent = notiz.lastEditedAt ? new Date(notiz.lastEditedAt.toDate()).toLocaleString('de-DE') + ' von ' + (notiz.lastEditedBy || '?') : 'Noch nicht bearbeitet';
+        document.getElementById('notiz-meta-edited').textContent = notiz.lastEditedAt ? new Date(notiz.lastEditedAt.toDate()).toLocaleString('de-DE') + ' von ' + getDisplayNameById(notiz.lastEditedBy) : 'Noch nicht bearbeitet';
     }
     
     // Felder sperren beim Bearbeiten (außer Status und Checkboxen)
@@ -726,7 +1013,7 @@ function resetEditorForm() {
     document.getElementById('notiz-erinnerung').value = '';
     document.getElementById('notiz-frist').value = '';
     const container = document.getElementById('notiz-hauptteil-container');
-    container.innerHTML = '<p class="text-gray-400 text-center text-sm">Füge Elemente hinzu...</p>';
+    container.innerHTML = '<p class="text-gray-400 text-center text-sm col-span-full">Füge Elemente hinzu...</p>';
     document.getElementById('notiz-shared-users-list').innerHTML = '<p class="text-gray-400 text-sm">Privat</p>';
     document.getElementById('notiz-metadata').classList.add('hidden');
     hideCheckoutWarning();
@@ -782,6 +1069,7 @@ function collectElements() {
         element.subtitle = el.querySelector('.element-subtitle')?.value || '';
         switch (type) {
             case 'text': element.content = el.querySelector('textarea')?.value || ''; break;
+            case 'list': element.content = el.querySelector('textarea')?.value || ''; break;
             case 'checkbox':
                 element.label = el.querySelector('.checkbox-label-input')?.value || '';
                 element.checked = el.querySelector('input[type="checkbox"]')?.checked || false;
@@ -811,16 +1099,30 @@ function collectElements() {
 }
 
 async function deleteNotiz() {
-    if (!currentEditingNotizId || !confirm('Löschen?')) return;
-    try {
-        await releaseCheckout(currentEditingNotizId);
-        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen', currentEditingNotizId);
-        await deleteDoc(docRef);
-        alertUser('Gelöscht', 'success');
-        closeNotizEditor();
-    } catch (error) {
-        alertUser('Fehler', 'error');
-    }
+    if (!currentEditingNotizId) return;
+    const notizId = currentEditingNotizId;
+    const notiz = allNotizen.find(n => n.id === notizId);
+    const betreff = notiz?.betreff || '';
+    showTextConfirmModal({
+        title: '⚠️ NOTIZ LÖSCHEN',
+        warningHtml: `
+            <p class="text-sm font-bold text-red-800 mb-2">⚠️ ACHTUNG: Diese Aktion ist UNWIDERRUFLICH!</p>
+            <p class="text-sm text-red-700">Die Notiz <strong>${betreff}</strong> wird dauerhaft gelöscht.</p>
+        `,
+        confirmPhrase: 'LÖSCHEN',
+        countdownSeconds: 0,
+        onConfirm: async () => {
+            try {
+                await releaseCheckout(notizId);
+                await deleteNotizWithHistory(currentUser.mode, notizId);
+                alertUser('Gelöscht', 'success');
+                closeNotizEditor();
+            } catch (error) {
+                console.error('Notizen: Fehler beim Löschen der Notiz:', error);
+                alertUser('Fehler', 'error');
+            }
+        }
+    });
 }
 
 async function closeNotizEditor() {
@@ -837,10 +1139,16 @@ function addElement(type) {
     const elementDiv = document.createElement('div');
     elementDiv.className = 'border border-gray-300 rounded p-3 bg-white relative';
     elementDiv.dataset.elementType = type;
+    if (type === 'line') {
+        elementDiv.classList.add('md:col-span-2');
+    }
     let content = '';
     switch (type) {
         case 'text':
             content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📝 Text</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><textarea class="w-full p-2 border rounded" rows="3"></textarea>`;
+            break;
+        case 'list':
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📌 Aufzählung</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><textarea class="w-full p-2 border rounded" rows="4" placeholder="Jede Zeile ein Punkt..."></textarea>`;
             break;
         case 'checkbox':
             content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">☑️ Checkbox</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><div class="flex gap-2"><input type="checkbox" class="w-5 h-5"><input type="text" placeholder="Label..." class="checkbox-label-input flex-1 p-2 border rounded"></div>`;
@@ -885,7 +1193,7 @@ function addElement(type) {
     elementDiv.innerHTML = content;
     elementDiv.querySelector('.delete-element')?.addEventListener('click', () => {
         elementDiv.remove();
-        if (container.children.length === 0) container.innerHTML = '<p class="text-gray-400 text-center text-sm">Füge Elemente hinzu...</p>';
+        if (container.children.length === 0) container.innerHTML = '<p class="text-gray-400 text-center text-sm col-span-full">Füge Elemente hinzu...</p>';
     });
     
     // Move Up/Down Funktionalität
@@ -953,6 +1261,7 @@ function renderElement(element) {
     if (subtitleEl) subtitleEl.value = element.subtitle || '';
     switch (element.type) {
         case 'text': lastEl.querySelector('textarea').value = element.content || ''; break;
+        case 'list': lastEl.querySelector('textarea').value = element.content || ''; break;
         case 'checkbox':
             lastEl.querySelector('input[type="checkbox"]').checked = element.checked || false;
             lastEl.querySelector('.checkbox-label-input').value = element.label || '';
@@ -1013,7 +1322,7 @@ async function loadUserList() {
             .filter(docSnap => docSnap.id !== currentUser.mode)
             .map(docSnap => {
                 const data = docSnap.data() || {};
-                const displayName = data.realName || data.name || docSnap.id;
+                const displayName = data.realName || data.name || 'Unbekannt';
                 return { id: docSnap.id, displayName };
             })
             .sort((a, b) => (a.displayName || '').localeCompare((b.displayName || ''), 'de'));
@@ -1027,8 +1336,7 @@ async function loadUserList() {
         }
 
         list.innerHTML = shareUsersCache.map(u => {
-            const displayText = u.displayName && u.displayName !== u.id ? `${u.displayName}` : u.id;
-            const subText = u.displayName && u.displayName !== u.id ? u.id : '';
+            const displayText = u.displayName || u.id;
             const searchText = `${u.displayName} ${u.id}`.toLowerCase();
             return `
                 <div class="share-user-row flex items-center justify-between gap-2 p-2 border-b last:border-b-0" data-search="${searchText}">
@@ -1036,7 +1344,6 @@ async function loadUserList() {
                         <input type="checkbox" class="share-user-checkbox" data-userid="${u.id}">
                         <div class="min-w-0">
                             <div class="text-sm font-semibold truncate">${displayText}</div>
-                            ${subText ? `<div class="text-xs text-gray-500 truncate">${subText}</div>` : ''}
                         </div>
                     </label>
                     <select class="share-user-role text-xs border rounded px-2 py-1" data-userid="${u.id}">
@@ -1131,7 +1438,7 @@ function renderSharedUsers(sharedWith) {
     }
     container.innerHTML = Object.entries(sharedWith).map(([userId, data]) => `
         <div class="flex justify-between text-sm bg-gray-50 p-2 rounded">
-            <span>${userId} (${data.role === 'read' ? '👁️ Lesen' : '✏️ Schreiben'})</span>
+            <span>${getDisplayNameById(userId)} (${data.role === 'read' ? '👁️ Lesen' : '✏️ Schreiben'})</span>
             <button onclick="window.removeSharedUser('${userId}')" class="text-red-500 text-xs">Entfernen</button>
         </div>
     `).join('');
@@ -1145,7 +1452,7 @@ window.removeSharedUser = async function(userId) {
         const data = docSnap.data();
         delete data.sharedWith[userId];
         await updateDoc(docRef, { sharedWith: data.sharedWith });
-        await addHistory(currentEditingNotizId, `Berechtigung entzogen: ${userId}`, {});
+        await addHistory(currentEditingNotizId, `Berechtigung entzogen: ${getDisplayNameById(userId)}`, {});
         alertUser('Entzogen', 'success');
         renderSharedUsers(data.sharedWith);
     } catch (error) {
@@ -1177,7 +1484,7 @@ function updateEinladungenBadge() {
     }
 }
 
-function openEinladungen() {
+async function openEinladungen() {
     const modal = document.getElementById('notizenEinladungenModal');
     if (!modal) {
         console.error('Notizen: Einladungen-Modal nicht gefunden!');
@@ -1186,6 +1493,7 @@ function openEinladungen() {
     modal.classList.remove('hidden');
     modal.classList.add('flex');
     console.log('Notizen: Einladungen-Modal geöffnet');
+    await ensureUserConfigLoaded();
     renderEinladungen();
 }
 
@@ -1198,7 +1506,7 @@ function renderEinladungen() {
     }
     container.innerHTML = allEinladungen.map(einl => `
         <div class="bg-white p-4 rounded-lg shadow border">
-            <div class="mb-2"><span class="font-bold">${einl.fromUserId}</span> teilt eine Notiz</div>
+            <div class="mb-2"><span class="font-bold">${getDisplayNameById(einl.fromUserId)}</span> teilt eine Notiz</div>
             <div class="text-sm text-gray-600 mb-3">Berechtigung: ${einl.role === 'read' ? '👁️ Lesen' : '✏️ Schreiben'}</div>
             <div class="flex gap-2">
                 <button onclick="window.acceptEinladung('${einl.id}')" class="px-3 py-1 bg-green-500 text-white rounded">✓ Annehmen</button>
@@ -1282,7 +1590,7 @@ function showCheckoutWarning(userId) {
     const indicator = document.getElementById('notiz-checkout-indicator');
     const userSpan = document.getElementById('notiz-checkout-user');
     if (indicator && userSpan) {
-        userSpan.textContent = userId;
+        userSpan.textContent = getDisplayNameById(userId);
         indicator.classList.remove('hidden');
     }
     document.getElementById('btn-notiz-save').disabled = true;
@@ -1307,6 +1615,7 @@ async function addHistory(notizId, action, changes) {
 
 async function showHistory() {
     if (!currentEditingNotizId) return;
+    await ensureUserConfigLoaded();
     const modal = document.getElementById('notizHistoryModal');
     modal.classList.remove('hidden');
     modal.classList.add('flex');
@@ -1329,7 +1638,7 @@ async function showHistory() {
                         <span class="font-bold text-sm">${data.action}</span>
                         <span class="text-xs text-gray-500">${timestamp.toLocaleString('de-DE')}</span>
                     </div>
-                    <div class="text-xs text-gray-600">von ${data.userId}</div>
+                    <div class="text-xs text-gray-600">von ${getDisplayNameById(data.userId)}</div>
                 </div>
             `;
         }).join('');
