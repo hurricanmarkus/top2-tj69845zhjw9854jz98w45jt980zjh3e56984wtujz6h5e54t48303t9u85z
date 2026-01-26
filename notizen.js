@@ -2389,10 +2389,16 @@ function openShareModal() {
     modal.classList.remove('hidden');
     modal.classList.add('flex');
     console.log('Notizen: Share-Modal geöffnet');
-    loadUserList();
+    if (document.getElementById('share-user-select')) {
+        loadUserSelect();
+    } else {
+        loadUserList();
+    }
 }
 
 async function loadUserList() {
+    // Legacy checkbox list UI
+
     const list = document.getElementById('share-user-list');
     const searchInput = document.getElementById('share-user-search');
     const selectedCount = document.getElementById('share-selected-count');
@@ -2467,8 +2473,9 @@ async function loadUserList() {
 }
 
 async function sendShareInvitation() {
+    const selectEl = document.getElementById('share-user-select');
     const list = document.getElementById('share-user-list');
-    if (!list || !currentEditingNotizId) {
+    if (!currentEditingNotizId) {
         alertUser('Fehler', 'error');
         return;
     }
@@ -2478,12 +2485,22 @@ async function sendShareInvitation() {
         return;
     }
 
-    const selected = Array.from(list.querySelectorAll('.share-user-checkbox:checked')).map(cb => {
-        const userId = cb.dataset.userid;
-        const roleEl = list.querySelector(`.share-user-role[data-userid="${userId}"]`);
-        const role = roleEl ? roleEl.value : 'read';
-        return { userId, role };
-    }).filter(x => x.userId);
+    let selected = [];
+    if (list) {
+        selected = Array.from(list.querySelectorAll('.share-user-checkbox:checked')).map(cb => {
+            const userId = cb.dataset.userid;
+            const roleEl = list.querySelector(`.share-user-role[data-userid="${userId}"]`);
+            const role = roleEl ? roleEl.value : 'read';
+            return { userId, role };
+        }).filter(x => x.userId);
+    } else if (selectEl) {
+        const userId = selectEl.value;
+        if (userId) {
+            const roleEl = document.getElementById('share-role-select');
+            const role = roleEl ? roleEl.value : 'read';
+            selected = [{ userId, role }];
+        }
+    }
 
     if (selected.length === 0) {
         alertUser('Benutzer auswählen', 'error');
@@ -2547,6 +2564,33 @@ async function sendShareInvitation() {
     } catch (error) {
         console.error('Notizen: Fehler beim Senden der Einladungen:', error);
         alertUser('Fehler', 'error');
+    }
+}
+
+// Neue vereinfachte Single-Select UI (share-user-select)
+async function loadUserSelect() {
+    const selectEl = document.getElementById('share-user-select');
+    if (!selectEl) return;
+    try {
+        selectEl.innerHTML = '<option value="">Bitte wählen...</option>';
+        const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'user-config');
+        const snapshot = await getDocs(colRef);
+        const users = snapshot.docs
+            .filter(docSnap => docSnap.id !== currentUser.mode)
+            .map(docSnap => {
+                const data = docSnap.data() || {};
+                const displayName = data.realName || data.name || 'Unbekannt';
+                return { id: docSnap.id, displayName };
+            })
+            .sort((a, b) => (a.displayName || '').localeCompare((b.displayName || ''), 'de'));
+        users.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.id;
+            opt.textContent = `${u.displayName} (${u.id})`;
+            selectEl.appendChild(opt);
+        });
+    } catch (error) {
+        console.error('Notizen: Fehler beim Laden der Userliste (Select Share):', error);
     }
 }
 
