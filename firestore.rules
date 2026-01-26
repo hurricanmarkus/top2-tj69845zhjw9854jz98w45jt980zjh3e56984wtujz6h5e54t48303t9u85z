@@ -493,16 +493,55 @@ service cloud.firestore {
 
     // Notizen-Kategorien (user-spezifisch)
     match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/notizen_kategorien/{kategorieId} {
-      allow read: if hasAppUserIdClaim() && appUserId() == userId;
+      allow read: if hasAppUserIdClaim() && (
+        appUserId() == userId ||
+        (
+          resource.data.sharedWith != null &&
+          appUserId() in resource.data.sharedWith &&
+          resource.data.sharedWith[appUserId()].status == 'active'
+        )
+      );
       allow create: if hasAppUserIdClaim() && appUserId() == userId && request.resource.data.createdBy == userId;
-      allow update: if hasAppUserIdClaim() && appUserId() == userId;
+      allow update: if hasAppUserIdClaim() && (
+        appUserId() == userId ||
+        (
+          resource.data.sharedWith != null &&
+          appUserId() in resource.data.sharedWith &&
+          resource.data.sharedWith[appUserId()].status == 'active' &&
+          resource.data.sharedWith[appUserId()].role == 'write'
+        )
+      );
       allow delete: if hasAppUserIdClaim() && appUserId() == userId;
 
       // Subkategorien als Sub-Collection
       match /subkategorien/{subkategorieId} {
-        allow read: if hasAppUserIdClaim() && appUserId() == userId;
-        allow create: if hasAppUserIdClaim() && appUserId() == userId && request.resource.data.createdBy == userId;
-        allow update: if hasAppUserIdClaim() && appUserId() == userId;
+        allow read: if hasAppUserIdClaim() && (
+          appUserId() == userId ||
+          (
+            get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen_kategorien/$(kategorieId)).data.sharedWith != null &&
+            appUserId() in get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen_kategorien/$(kategorieId)).data.sharedWith &&
+            get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen_kategorien/$(kategorieId)).data.sharedWith[appUserId()].status == 'active'
+          )
+        );
+        allow create: if hasAppUserIdClaim() && (
+          (appUserId() == userId && request.resource.data.createdBy == userId) ||
+          (
+            get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen_kategorien/$(kategorieId)).data.sharedWith != null &&
+            appUserId() in get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen_kategorien/$(kategorieId)).data.sharedWith &&
+            get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen_kategorien/$(kategorieId)).data.sharedWith[appUserId()].status == 'active' &&
+            get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen_kategorien/$(kategorieId)).data.sharedWith[appUserId()].role == 'write' &&
+            request.resource.data.createdBy == appUserId()
+          )
+        );
+        allow update: if hasAppUserIdClaim() && (
+          appUserId() == userId ||
+          (
+            get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen_kategorien/$(kategorieId)).data.sharedWith != null &&
+            appUserId() in get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen_kategorien/$(kategorieId)).data.sharedWith &&
+            get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen_kategorien/$(kategorieId)).data.sharedWith[appUserId()].status == 'active' &&
+            get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen_kategorien/$(kategorieId)).data.sharedWith[appUserId()].role == 'write'
+          )
+        );
         allow delete: if hasAppUserIdClaim() && appUserId() == userId;
       }
     }

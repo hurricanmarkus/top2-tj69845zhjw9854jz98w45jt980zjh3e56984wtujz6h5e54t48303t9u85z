@@ -55,6 +55,16 @@ function setupListElement(elementDiv) {
     const l2Symbol = elementDiv.querySelector('.list-symbol-l2');
     if (!textarea || !preview || !l1Style || !l1Symbol || !l2Style || !l2Symbol) return;
 
+    const setMode = (mode) => {
+        if (mode === 'edit') {
+            textarea.style.display = '';
+            preview.style.display = 'none';
+        } else {
+            textarea.style.display = 'none';
+            preview.style.display = '';
+        }
+    };
+
     const applySymbolVisibility = () => {
         l1Symbol.style.display = l1Style.value === 'number' ? 'none' : '';
         l2Symbol.style.display = l2Style.value === 'number' ? 'none' : '';
@@ -90,16 +100,34 @@ function setupListElement(elementDiv) {
     const outdentBtn = elementDiv.querySelector('.list-outdent');
     if (indentBtn) {
         indentBtn.onclick = () => {
+            setMode('edit');
             adjustTextareaIndent(textarea, 1);
             onAnyChange();
+            textarea.focus();
         };
     }
     if (outdentBtn) {
         outdentBtn.onclick = () => {
+            setMode('edit');
             adjustTextareaIndent(textarea, -1);
             onAnyChange();
+            textarea.focus();
         };
     }
+
+    preview.onclick = () => {
+        if (textarea.disabled) return;
+        setMode('edit');
+        textarea.focus();
+    };
+
+    textarea.onblur = () => {
+        if (textarea.disabled) return;
+        onAnyChange();
+        setMode('preview');
+    };
+
+    setMode('preview');
 }
 
 function adjustTextareaIndent(textarea, direction) {
@@ -444,6 +472,10 @@ function enableNotizEditMode() {
         container.querySelectorAll('[data-element-type]').forEach(el => {
             el.querySelectorAll('input, textarea, select').forEach(input => input.disabled = false);
             el.querySelectorAll('.move-up, .move-down, .delete-element, .add-table-row, .list-indent, .list-outdent').forEach(btn => btn.style.display = '');
+
+            if (el.dataset.elementType === 'list') {
+                setupListElement(el);
+            }
         });
 
         container.querySelectorAll('.notiz-row').forEach(rowEl => {
@@ -620,27 +652,24 @@ async function loadKategorien() {
             allKategorien.push(kategorie);
         }
         
-        // Geteilte Kategorien von anderen Usern laden
+        // Geteilte Kategorien laden (ohne /users-Scan -> permissions safe)
         try {
-            const usersRef = collection(db, 'artifacts', appId, 'users');
-            const usersSnap = await getDocs(usersRef);
-            
-            for (const userDoc of usersSnap.docs) {
-                if (userDoc.id === userId) continue; // Eigene überspringen
-                
-                const sharedKatRef = collection(db, 'artifacts', appId, 'users', userDoc.id, 'notizen_kategorien');
-                const sharedKatSnap = await getDocs(sharedKatRef);
-                
-                for (const katDoc of sharedKatSnap.docs) {
-                    const katData = katDoc.data();
-                    if (katData.sharedWith && katData.sharedWith[userId]) {
-                        const kategorie = { id: katDoc.id, ...katData, subkategorien: [], ownerId: userDoc.id };
-                        const subColRef = collection(db, 'artifacts', appId, 'users', userDoc.id, 'notizen_kategorien', katDoc.id, 'subkategorien');
-                        const subSnap = await getDocs(subColRef);
-                        subSnap.forEach(subDoc => kategorie.subkategorien.push({ id: subDoc.id, ...subDoc.data() }));
-                        allKategorien.push(kategorie);
-                    }
-                }
+            const qShared = query(
+                collectionGroup(db, 'notizen_kategorien'),
+                where(`sharedWith.${userId}.status`, '==', 'active')
+            );
+            const sharedSnap = await getDocs(qShared);
+
+            for (const katDoc of sharedSnap.docs) {
+                const ownerId = extractOwnerIdFromDocRef(katDoc.ref);
+                if (!ownerId || ownerId === userId) continue;
+
+                const katData = katDoc.data() || {};
+                const kategorie = { id: katDoc.id, ...katData, subkategorien: [], ownerId };
+                const subColRef = collection(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', katDoc.id, 'subkategorien');
+                const subSnap = await getDocs(subColRef);
+                subSnap.forEach(subDoc => kategorie.subkategorien.push({ id: subDoc.id, ...subDoc.data() }));
+                allKategorien.push(kategorie);
             }
         } catch (error) {
             console.warn('Fehler beim Laden geteilter Kategorien:', error);
@@ -1205,7 +1234,7 @@ function renderNotizenListe(notizen) {
         const statusLabels = { 'offen': 'Offen', 'in_bearbeitung': 'In Bearbeitung', 'erledigt': 'Erledigt', 'info': 'INFO' };
         const borderClass = notiz.status === 'offen' ? 'border-blue-500' : notiz.status === 'in_bearbeitung' ? 'border-yellow-500' : notiz.status === 'info' ? 'border-blue-500' : 'border-green-500';
         return `
-            <div class="bg-white p-4 rounded-lg shadow hover:shadow-md transition border-l-4 ${borderClass}">
+            <div onclick="window.openNotizById('${notiz.id}','${ownerId}')" class="bg-white p-4 rounded-lg shadow hover:shadow-md transition border-l-4 ${borderClass} cursor-pointer">
                 <div class="flex justify-between items-start mb-2">
                     <h3 class="font-bold text-lg">${notiz.betreff || 'Ohne Titel'}</h3>
                     <div class="flex gap-2">
@@ -1218,7 +1247,6 @@ function renderNotizenListe(notizen) {
                     <span class="mr-3">📁 ${kategorieName}</span>
                     ${isIncomingShared ? `<span class="text-xs text-purple-600">(geteilt von ${escapeHtml(getDisplayNameById(ownerId))})</span>` : ''}
                 </div>
-                <button onclick="window.openNotizById('${notiz.id}','${ownerId}')" class="px-3 py-1 bg-amber-500 text-white text-sm rounded hover:bg-amber-600">📝 Öffnen</button>
             </div>
         `;
     }).join('');
@@ -1383,6 +1411,11 @@ function lockEditFields() {
             } else {
                 // Bei Checkbox-Elementen darf nur die Checkbox selbst editierbar sein
                 el.querySelectorAll('input:not([type="checkbox"])').forEach(input => input.disabled = true);
+            }
+
+            if (type === 'list') {
+                const ta = el.querySelector('.list-textarea') || el.querySelector('textarea');
+                if (ta) ta.style.display = 'none';
             }
             // Verschiebe- und Lösch-Buttons verstecken
             el.querySelectorAll('.move-up, .move-down, .move-left, .move-right, .delete-element, .add-table-row, .list-indent, .list-outdent').forEach(btn => btn.style.display = 'none');
@@ -2443,12 +2476,16 @@ window.revokeEinladung = async function(einladungId) {
     if (!einladung) return;
     if (!confirm('Ablehnung zurückrufen? Danach kann erneut eingeladen werden.')) return;
     try {
+        console.log('Notizen: Revoke startet', { einladungId, notizId: einladung.notizId, from: einladung.fromUserId, to: einladung.toUserId });
         const einlRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen', einladungId);
         await updateDoc(einlRef, { status: 'revoked', respondedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        console.log('Notizen: Revoke -> Einladung aktualisiert');
+
         const notizRef = doc(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen', einladung.notizId);
         const updatePayload = {};
         updatePayload[`sharedWith.${currentUser.mode}`] = deleteField();
         await updateDoc(notizRef, updatePayload);
+        console.log('Notizen: Revoke -> sharedWith entfernt');
         alertUser('Zurückgerufen', 'success');
     } catch (error) {
         console.error('Notizen: Revoke Fehler:', error);
