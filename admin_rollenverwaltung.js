@@ -216,6 +216,7 @@ export function renderRoleManagement() {
             const isTerminplanerEnabled = role.permissions?.includes('TERMINPLANER'); 
             const isZahlungsverwaltungEnabled = role.permissions?.includes('ZAHLUNGSVERWALTUNG');
             const isHaushaltszahlungenEnabled = role.permissions?.includes('HAUSHALTSZAHLUNGEN');
+            const isNotizenEnabled = role.permissions?.includes('NOTIZEN');
             const isGeschenkemanagementEnabled = role.permissions?.includes('GESCHENKEMANAGEMENT');
             
             permissionsCheckboxesHTML = Object.keys(allRolePermissions).map(permKey => {
