@@ -1457,12 +1457,20 @@ function lockEditFields() {
                 if (colorSelect) colorSelect.style.display = 'none';
             }
             
+            if (type === 'link') {
+                // Edit-Container ausblenden, Display-Container anzeigen
+                const editContainer = el.querySelector('.link-edit-container');
+                const displayContainer = el.querySelector('.link-display-container');
+                if (editContainer) editContainer.style.display = 'none';
+                if (displayContainer) displayContainer.style.display = 'block';
+            }
+            
             if (type === 'password') {
                 // Toggle-Button ausblenden (wurde schon durch Titel-Zeile versteckt)
             }
             
             // Verschiebe- und Lösch-Buttons verstecken (falls noch nicht durch Titel-Zeile)
-            el.querySelectorAll('.move-up, .move-down, .move-left, .move-right, .delete-element, .add-table-row, .list-indent, .list-outdent, .copy-btn, .toggle-pw').forEach(btn => btn.style.display = 'none');
+            el.querySelectorAll('.move-up, .move-down, .move-left, .move-right, .delete-element, .add-table-row, .list-indent, .list-outdent, .copy-btn, .toggle-pw, .add-checkbox-item, .delete-checkbox-item').forEach(btn => btn.style.display = 'none');
         });
     }
 }
@@ -1523,8 +1531,16 @@ function unlockEditFields() {
                 if (colorSelect) colorSelect.style.display = '';
             }
             
+            if (type === 'link') {
+                // Edit-Container anzeigen, Display-Container verstecken
+                const editContainer = el.querySelector('.link-edit-container');
+                const displayContainer = el.querySelector('.link-display-container');
+                if (editContainer) editContainer.style.display = '';
+                if (displayContainer) displayContainer.style.display = 'none';
+            }
+            
             // Alle Buttons wieder anzeigen
-            el.querySelectorAll('.move-up, .move-down, .move-left, .move-right, .delete-element, .add-table-row, .list-indent, .list-outdent, .copy-btn, .toggle-pw').forEach(btn => btn.style.display = '');
+            el.querySelectorAll('.move-up, .move-down, .move-left, .move-right, .delete-element, .add-table-row, .list-indent, .list-outdent, .copy-btn, .toggle-pw, .add-checkbox-item, .delete-checkbox-item').forEach(btn => btn.style.display = '');
         });
     }
 }
@@ -1609,8 +1625,14 @@ function collectElements() {
                     element.listSymbolL2 = el.querySelector('.list-symbol-l2')?.value || '•';
                     break;
                 case 'checkbox':
-                    element.label = el.querySelector('.checkbox-label-input')?.value || '';
-                    element.checked = el.querySelector('input[type="checkbox"]')?.checked || false;
+                    const items = [];
+                    el.querySelectorAll('.checkbox-item').forEach(item => {
+                        items.push({
+                            checked: item.querySelector('input[type="checkbox"]')?.checked || false,
+                            label: item.querySelector('.checkbox-label-input')?.value || ''
+                        });
+                    });
+                    element.items = items;
                     break;
                 case 'link':
                     element.url = el.querySelector('input[name="url"]')?.value || '';
@@ -1657,8 +1679,14 @@ function collectElements() {
                     element.listSymbolL2 = el.querySelector('.list-symbol-l2')?.value || '•';
                     break;
                 case 'checkbox':
-                    element.label = el.querySelector('.checkbox-label-input')?.value || '';
-                    element.checked = el.querySelector('input[type="checkbox"]')?.checked || false;
+                    const checkboxItems = [];
+                    el.querySelectorAll('.checkbox-item').forEach(item => {
+                        checkboxItems.push({
+                            checked: item.querySelector('input[type="checkbox"]')?.checked || false,
+                            label: item.querySelector('.checkbox-label-input')?.value || ''
+                        });
+                    });
+                    element.items = checkboxItems;
                     break;
                 case 'link':
                     element.url = el.querySelector('input[name="url"]')?.value || '';
@@ -1873,16 +1901,16 @@ function addElementWithOptions(type, options = {}) {
             `;
             break;
         case 'checkbox':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">☑️ Checkbox</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="move-left text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">◀</button><button class="move-right text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">▶</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><div class="flex gap-2"><input type="checkbox" class="w-5 h-5"><input type="text" placeholder="Label..." class="checkbox-label-input flex-1 p-2 border rounded"></div>`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">☑️ Checkliste</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="move-left text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">◀</button><button class="move-right text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">▶</button><button class="add-checkbox-item text-xs px-2 py-1 bg-blue-500 text-white rounded">+ Eintrag</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><div class="checkbox-items-container"><div class="checkbox-item flex gap-2 mb-1"><input type="checkbox" class="w-5 h-5"><input type="text" placeholder="Eintrag..." class="checkbox-label-input flex-1 p-2 border rounded"><button class="delete-checkbox-item text-xs px-1 py-0 bg-red-500 text-white rounded">✕</button></div></div>`;
             break;
         case 'line':
             content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">➖ Linie</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><hr class="border-t-2">`;
             break;
         case 'table':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📊 Tabelle</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="move-left text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">◀</button><button class="move-right text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">▶</button><button class="add-table-row text-xs px-2 py-1 bg-blue-500 text-white rounded">+ Zeile</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><table class="w-full border"><thead><tr><th><input type="text" placeholder="Spalte 1" class="w-full p-1 border"></th><th><input type="text" placeholder="Spalte 2" class="w-full p-1 border"></th></tr></thead><tbody><tr><td><input type="text" class="w-full p-1 border"></td><td><input type="text" class="w-full p-1 border"></td></tr></tbody></table>`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">📊 Tabelle</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="move-left text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">◀</button><button class="move-right text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">▶</button><button class="add-table-row text-xs px-2 py-1 bg-blue-500 text-white rounded">+ Zeile</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><table class="w-full border"><thead><tr><th><input type="text" placeholder="Spalte 1" class="w-full p-1 border"></th><th><input type="text" placeholder="Spalte 2" class="w-full p-1 border"></th></tr></thead><tbody><tr><td><input type="text" class="w-full p-1 border"></td><td><input type="text" class="w-full p-1 border"></td><td class="border p-1"><button class="delete-table-row text-xs px-1 py-0 bg-red-500 text-white rounded">✕</button></td></tr></tbody></table>`;
             break;
         case 'link':
-            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">🔗 Link</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="move-left text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">◀</button><button class="move-right text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">▶</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><input type="url" name="url" placeholder="https://..." class="w-full p-2 border rounded mb-2"><input type="text" name="label" placeholder="Anzeigetext" class="w-full p-2 border rounded">`;
+            content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">🔗 Link</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="move-left text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">◀</button><button class="move-right text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">▶</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><div class="link-edit-container"><input type="url" name="url" placeholder="https://..." class="w-full p-2 border rounded mb-2 link-url-input"><input type="text" name="label" placeholder="Anzeigetext" class="w-full p-2 border rounded link-label-input"></div><div class="link-display-container" style="display:none;"><a href="#" target="_blank" rel="noopener noreferrer" class="link-display text-blue-600 hover:text-blue-800 underline text-lg"></a></div>`;
             break;
         case 'password':
             content = `<div class="flex justify-between mb-2"><span class="font-bold text-sm">🔐 Passwort</span><div class="flex gap-1"><button class="move-up text-xs px-2 py-1 bg-gray-300 rounded">▲</button><button class="move-down text-xs px-2 py-1 bg-gray-300 rounded">▼</button><button class="move-left text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">◀</button><button class="move-right text-xs px-2 py-1 bg-gray-300 rounded" style="display:none;">▶</button><button class="copy-btn text-xs px-2 py-1 bg-gray-200 rounded">📋</button><button class="toggle-pw text-xs px-2 py-1 bg-blue-500 text-white rounded">👁️</button><button class="delete-element text-xs px-2 py-1 bg-red-500 text-white rounded">✕</button></div></div><input type="text" placeholder="Unterüberschrift..." class="element-subtitle w-full p-2 border rounded mb-2 text-sm"><input type="password" class="password-input w-full p-2 border rounded">`;
@@ -1982,10 +2010,29 @@ function addElementWithOptions(type, options = {}) {
             let textToCopy = '';
             if (type === 'text' || type === 'infobox') textToCopy = elementDiv.querySelector('textarea')?.value || '';
             else if (type === 'password') textToCopy = elementDiv.querySelector('.password-input')?.value || '';
-            else if (type === 'link') textToCopy = elementDiv.querySelector('input[name="url"]')?.value || '';
+            else if (type === 'link') textToCopy = elementDiv.querySelector('.link-url-input')?.value || '';
             else if (type === 'list') textToCopy = (elementDiv.querySelector('.list-textarea') || elementDiv.querySelector('textarea'))?.value || '';
             navigator.clipboard.writeText(textToCopy).then(() => alertUser('Kopiert!', 'success'));
         });
+    }
+    
+    if (type === 'link') {
+        const urlInput = elementDiv.querySelector('.link-url-input');
+        const labelInput = elementDiv.querySelector('.link-label-input');
+        const linkDisplay = elementDiv.querySelector('.link-display');
+        
+        const updateLinkDisplay = () => {
+            if (linkDisplay && urlInput) {
+                const url = urlInput.value.trim();
+                const label = labelInput?.value.trim() || url;
+                linkDisplay.href = url || '#';
+                linkDisplay.textContent = label || 'Link';
+            }
+        };
+        
+        if (urlInput) urlInput.addEventListener('input', updateLinkDisplay);
+        if (labelInput) labelInput.addEventListener('input', updateLinkDisplay);
+        updateLinkDisplay();
     }
     const togglePw = elementDiv.querySelector('.toggle-pw');
     if (togglePw) {
@@ -2000,8 +2047,22 @@ function addElementWithOptions(type, options = {}) {
             const tbody = elementDiv.querySelector('tbody');
             const colCount = elementDiv.querySelectorAll('thead th').length;
             const tr = document.createElement('tr');
-            for (let i = 0; i < colCount; i++) tr.innerHTML += '<td><input type="text" class="w-full p-1 border"></td>';
+            for (let i = 0; i < colCount; i++) {
+                tr.innerHTML += '<td><input type="text" class="w-full p-1 border"></td>';
+            }
+            tr.innerHTML += '<td class="border p-1"><button class="delete-table-row text-xs px-1 py-0 bg-red-500 text-white rounded">✕</button></td>';
+            tr.querySelector('.delete-table-row')?.addEventListener('click', function() {
+                this.closest('tr').remove();
+            });
             tbody.appendChild(tr);
+        });
+    }
+    
+    if (type === 'table') {
+        elementDiv.querySelectorAll('.delete-table-row').forEach(btn => {
+            btn.addEventListener('click', function() {
+                this.closest('tr').remove();
+            });
         });
     }
     const colorSelect = elementDiv.querySelector('select');
@@ -2014,6 +2075,27 @@ function addElementWithOptions(type, options = {}) {
 
     if (type === 'list') {
         setupListElement(elementDiv);
+    }
+
+    if (type === 'checkbox') {
+        const addItemBtn = elementDiv.querySelector('.add-checkbox-item');
+        if (addItemBtn) {
+            addItemBtn.addEventListener('click', () => {
+                const container = elementDiv.querySelector('.checkbox-items-container');
+                const newItem = document.createElement('div');
+                newItem.className = 'checkbox-item flex gap-2 mb-1';
+                newItem.innerHTML = '<input type="checkbox" class="w-5 h-5"><input type="text" placeholder="Eintrag..." class="checkbox-label-input flex-1 p-2 border rounded"><button class="delete-checkbox-item text-xs px-1 py-0 bg-red-500 text-white rounded">✕</button>';
+                newItem.querySelector('.delete-checkbox-item')?.addEventListener('click', function() {
+                    this.closest('.checkbox-item').remove();
+                });
+                container.appendChild(newItem);
+            });
+        }
+        elementDiv.querySelectorAll('.delete-checkbox-item').forEach(btn => {
+            btn.addEventListener('click', function() {
+                this.closest('.checkbox-item').remove();
+            });
+        });
     }
 
     if (insertElementBefore && insertElementBefore.parentElement === rowEl) {
@@ -2189,12 +2271,32 @@ function renderElementIntoRow(element, rowEl, rowItemCount) {
             updateListPreview(elDiv);
             break;
         case 'checkbox':
-            elDiv.querySelector('input[type="checkbox"]').checked = element.checked || false;
-            elDiv.querySelector('.checkbox-label-input').value = element.label || '';
+            const container = elDiv.querySelector('.checkbox-items-container');
+            if (container && element.items && element.items.length > 0) {
+                container.innerHTML = '';
+                element.items.forEach(item => {
+                    const newItem = document.createElement('div');
+                    newItem.className = 'checkbox-item flex gap-2 mb-1';
+                    newItem.innerHTML = '<input type="checkbox" class="w-5 h-5"><input type="text" placeholder="Eintrag..." class="checkbox-label-input flex-1 p-2 border rounded"><button class="delete-checkbox-item text-xs px-1 py-0 bg-red-500 text-white rounded">✕</button>';
+                    newItem.querySelector('input[type="checkbox"]').checked = item.checked || false;
+                    newItem.querySelector('.checkbox-label-input').value = item.label || '';
+                    newItem.querySelector('.delete-checkbox-item')?.addEventListener('click', function() {
+                        this.closest('.checkbox-item').remove();
+                    });
+                    container.appendChild(newItem);
+                });
+            }
             break;
         case 'link':
-            elDiv.querySelector('input[name="url"]').value = element.url || '';
-            elDiv.querySelector('input[name="label"]').value = element.label || '';
+            const urlInput = elDiv.querySelector('.link-url-input');
+            const labelInput = elDiv.querySelector('.link-label-input');
+            const linkDisplay = elDiv.querySelector('.link-display');
+            if (urlInput) urlInput.value = element.url || '';
+            if (labelInput) labelInput.value = element.label || '';
+            if (linkDisplay) {
+                linkDisplay.href = element.url || '#';
+                linkDisplay.textContent = element.label || element.url || 'Link';
+            }
             break;
         case 'password':
             elDiv.querySelector('.password-input').value = element.content || '';
