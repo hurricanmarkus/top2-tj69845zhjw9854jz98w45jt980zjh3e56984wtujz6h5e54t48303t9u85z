@@ -949,6 +949,15 @@ window.deleteKategorie = async function(kategorieId) {
             try {
                 console.log('Notizen: Starte Kategorie-Löschung (Cascade):', kategorieId);
 
+                // Zugehörige Einladungen löschen
+                const einladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
+                const qEinladungen = query(einladungenRef, where('kategorieId', '==', kategorieId), where('fromUserId', '==', userId));
+                const einladungenSnap = await getDocs(qEinladungen);
+                for (const einlDoc of einladungenSnap.docs) {
+                    await deleteDoc(einlDoc.ref);
+                }
+                console.log('Notizen: Einladungen gelöscht:', einladungenSnap.size);
+
                 const notizenRef = collection(db, 'artifacts', appId, 'users', userId, 'notizen');
                 const qNotizen = query(notizenRef, where('kategorieId', '==', kategorieId));
                 const notesSnap = await getDocs(qNotizen);

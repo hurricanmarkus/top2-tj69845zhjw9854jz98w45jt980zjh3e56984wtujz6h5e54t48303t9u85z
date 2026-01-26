@@ -644,17 +644,26 @@ service cloud.firestore {
       // Erstellen: Als fromUserId
       allow create: if hasAppUserIdClaim() && request.resource.data.fromUserId == appUserId() && request.resource.data.status == 'pending';
       
-      // Update: Empfänger kann annehmen/ablehnen
-      allow update: if hasAppUserIdClaim() && appUserId() == resource.data.toUserId && (
-        (
-          resource.data.status == 'pending' &&
-          (request.resource.data.status == 'accepted' || request.resource.data.status == 'rejected')
-        ) ||
-        (
-          resource.data.status == 'rejected' &&
-          request.resource.data.status == 'revoked'
+      // Update: Empfänger kann annehmen/ablehnen, Sender kann abbrechen
+      allow update: if hasAppUserIdClaim() && (
+        // Empfänger: annehmen/ablehnen/revoken
+        (appUserId() == resource.data.toUserId && (
+          (
+            resource.data.status == 'pending' &&
+            (request.resource.data.status == 'accepted' || request.resource.data.status == 'rejected')
+          ) ||
+          (
+            resource.data.status == 'rejected' &&
+            request.resource.data.status == 'revoked'
+          )
+        ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'respondedAt', 'updatedAt'])) ||
+        // Sender: abbrechen (pending oder accepted -> cancelled)
+        (appUserId() == resource.data.fromUserId && 
+          (resource.data.status == 'pending' || resource.data.status == 'accepted') &&
+          request.resource.data.status == 'cancelled' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
         )
-      ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'respondedAt', 'updatedAt']);
+      );
       
       // Löschen: Sender oder SYSTEMADMIN
       allow delete: if isSystemAdminClaim() || (hasAppUserIdClaim() && appUserId() == resource.data.fromUserId);
