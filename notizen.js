@@ -585,11 +585,11 @@ async function saveKategorieShareSelection() {
     }
 
     const selected = Array.from(list.querySelectorAll('.kategorie-share-user-checkbox:checked')).map(cb => {
-        const userId = cb.dataset.userid;
-        const roleEl = list.querySelector(`.kategorie-share-user-role[data-userid="${userId}"]`);
+        const odUserId = cb.dataset.userid;
+        const roleEl = list.querySelector(`.kategorie-share-user-role[data-userid="${odUserId}"]`);
         const role = roleEl ? roleEl.value : 'read';
-        return { userId, role };
-    }).filter(x => x.userId);
+        return { odUserId, role };
+    }).filter(x => x.odUserId);
 
     if (selected.length === 0) {
         alertUser('Benutzer auswählen', 'error');
@@ -597,16 +597,57 @@ async function saveKategorieShareSelection() {
     }
 
     try {
-        const userId = currentUser.mode;
-        const docRef = doc(db, 'artifacts', appId, 'users', userId, 'notizen_kategorien', currentSharingKategorieId);
+        const ownerId = currentUser.mode;
+        const docRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', currentSharingKategorieId);
+        const katSnap = await getDoc(docRef);
+        const katData = katSnap.exists() ? (katSnap.data() || {}) : {};
+        const existingShared = katData.sharedWith || {};
+
+        const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
+        const batch = writeBatch(db);
 
         const updatePayload = {};
-        selected.forEach(({ userId: targetUserId, role }) => {
-            updatePayload[`sharedWith.${targetUserId}`] = { role, since: serverTimestamp(), status: 'active' };
-        });
+        let createdCount = 0;
+        let skippedCount = 0;
 
-        await updateDoc(docRef, updatePayload);
-        alertUser('Kategorie geteilt', 'success');
+        for (const { odUserId, role } of selected) {
+            const existing = existingShared[odUserId];
+            const existingStatus = existing?.status;
+            if (existingStatus === 'pending' || existingStatus === 'rejected' || existingStatus === 'active') {
+                skippedCount += 1;
+                continue;
+            }
+
+            const invRef = doc(colRef);
+            batch.set(invRef, {
+                kategorieId: currentSharingKategorieId,
+                type: 'kategorie',
+                fromUserId: ownerId,
+                toUserId: odUserId,
+                role,
+                status: 'pending',
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            });
+
+            updatePayload[`sharedWith.${odUserId}`] = {
+                role,
+                since: serverTimestamp(),
+                status: 'pending',
+                sharedBy: ownerId
+            };
+            createdCount += 1;
+        }
+
+        if (createdCount === 0) {
+            alertUser('Keine Einladungen gesendet (bereits pending/rejected/aktiv)', 'error');
+            return;
+        }
+
+        batch.update(docRef, updatePayload);
+        await batch.commit();
+
+        alertUser(`Einladungen gesendet: ${createdCount}${skippedCount ? ` (übersprungen: ${skippedCount})` : ''}`, 'success');
         closeKategorieShareModal();
         loadKategorien();
     } catch (error) {
@@ -2695,9 +2736,11 @@ function renderEinladungen() {
     }
     container.innerHTML = allEinladungen.map(einl => {
         const isRejected = einl.status === 'rejected';
+        const isKategorie = einl.type === 'kategorie';
+        const typeLabel = isKategorie ? 'eine Kategorie' : 'eine Notiz';
         const statusLabel = isRejected ? '<span class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">Abgelehnt</span>' : '<span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Ausstehend</span>';
         const actions = isRejected
-            ? `<button onclick="window.revokeEinladung('${einl.id}')" class="px-3 py-1 bg-blue-500 text-white rounded">↩ Ablehnung zurückrufen</button>`
+            ? `<button onclick="window.revokeEinladung('${einl.id}')" class="px-3 py-1 bg-blue-500 text-white rounded">↩ Ablehnung zurückholen</button>`
             : `
                 <button onclick="window.acceptEinladung('${einl.id}')" class="px-3 py-1 bg-green-500 text-white rounded">✓ Annehmen</button>
                 <button onclick="window.rejectEinladung('${einl.id}')" class="px-3 py-1 bg-red-500 text-white rounded">✕ Ablehnen</button>
@@ -2705,7 +2748,7 @@ function renderEinladungen() {
         return `
             <div class="bg-white p-4 rounded-lg shadow border">
                 <div class="flex justify-between items-center mb-2">
-                    <div><span class="font-bold">${getDisplayNameById(einl.fromUserId)}</span> teilt eine Notiz</div>
+                    <div><span class="font-bold">${getDisplayNameById(einl.fromUserId)}</span> teilt ${typeLabel}</div>
                     ${statusLabel}
                 </div>
                 <div class="text-sm text-gray-600 mb-3">Berechtigung: ${einl.role === 'read' ? '👁️ Lesen' : '✏️ Schreiben'}</div>
@@ -2723,11 +2766,20 @@ window.acceptEinladung = async function(einladungId) {
     try {
         const einlRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen', einladungId);
         await updateDoc(einlRef, { status: 'accepted', respondedAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        const notizRef = doc(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen', einladung.notizId);
-        await updateDoc(notizRef, {
-            [`sharedWith.${currentUser.mode}.status`]: 'active'
-        });
+        
+        if (einladung.type === 'kategorie' && einladung.kategorieId) {
+            const katRef = doc(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen_kategorien', einladung.kategorieId);
+            await updateDoc(katRef, {
+                [`sharedWith.${currentUser.mode}.status`]: 'active'
+            });
+        } else if (einladung.notizId) {
+            const notizRef = doc(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen', einladung.notizId);
+            await updateDoc(notizRef, {
+                [`sharedWith.${currentUser.mode}.status`]: 'active'
+            });
+        }
         alertUser('Angenommen', 'success');
+        loadKategorien();
     } catch (error) {
         console.error('Notizen: Accept Fehler:', error);
         alertUser('Fehler', 'error');
@@ -2740,10 +2792,18 @@ window.rejectEinladung = async function(einladungId) {
     try {
         const einlRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen', einladungId);
         await updateDoc(einlRef, { status: 'rejected', respondedAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        const notizRef = doc(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen', einladung.notizId);
-        await updateDoc(notizRef, {
-            [`sharedWith.${currentUser.mode}.status`]: 'rejected'
-        });
+        
+        if (einladung.type === 'kategorie' && einladung.kategorieId) {
+            const katRef = doc(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen_kategorien', einladung.kategorieId);
+            await updateDoc(katRef, {
+                [`sharedWith.${currentUser.mode}.status`]: 'rejected'
+            });
+        } else if (einladung.notizId) {
+            const notizRef = doc(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen', einladung.notizId);
+            await updateDoc(notizRef, {
+                [`sharedWith.${currentUser.mode}.status`]: 'rejected'
+            });
+        }
         alertUser('Abgelehnt', 'success');
     } catch (error) {
         console.error('Notizen: Reject Fehler:', error);
@@ -2756,16 +2816,19 @@ window.revokeEinladung = async function(einladungId) {
     if (!einladung) return;
     if (!confirm('Ablehnung zurückrufen? Danach kann erneut eingeladen werden.')) return;
     try {
-        console.log('Notizen: Revoke startet', { einladungId, notizId: einladung.notizId, from: einladung.fromUserId, to: einladung.toUserId });
         const einlRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen', einladungId);
         await updateDoc(einlRef, { status: 'revoked', respondedAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        console.log('Notizen: Revoke -> Einladung aktualisiert');
 
-        const notizRef = doc(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen', einladung.notizId);
         const updatePayload = {};
         updatePayload[`sharedWith.${currentUser.mode}`] = deleteField();
-        await updateDoc(notizRef, updatePayload);
-        console.log('Notizen: Revoke -> sharedWith entfernt');
+        
+        if (einladung.type === 'kategorie' && einladung.kategorieId) {
+            const katRef = doc(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen_kategorien', einladung.kategorieId);
+            await updateDoc(katRef, updatePayload);
+        } else if (einladung.notizId) {
+            const notizRef = doc(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen', einladung.notizId);
+            await updateDoc(notizRef, updatePayload);
+        }
         alertUser('Zurückgerufen', 'success');
     } catch (error) {
         console.error('Notizen: Revoke Fehler:', error);
