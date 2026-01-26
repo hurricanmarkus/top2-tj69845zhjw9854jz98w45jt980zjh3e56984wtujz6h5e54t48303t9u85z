@@ -33,6 +33,7 @@ import { initializeLizenzen, listenForLizenzen, stopLizenzenListener } from './l
 import { initializeVertragsverwaltung, listenForVertraege, stopVertragsverwaltungListeners } from './vertragsverwaltung.js';
 import { initRezeptverwaltung } from './rezeptverwaltung.js';
 import { initializeHaushaltszahlungen, listenForHaushaltszahlungen, stopHaushaltszahlungenListeners } from './haushaltszahlungen.js';
+import { initializeNotizen, listenForNotizen, stopNotizenListeners } from './notizen.js';
 import { initializeGeschenkemanagement, listenForGeschenke, stopGeschenkemanagementListeners } from './geschenkemanagement.js';
 import { initializeSendungsverwaltungView, listenForSendungen, stopSendungsverwaltungListeners } from './sendungsverwaltung.js';
 import { ensureNachrichtencenterSelfContact } from './notfall.js';
@@ -130,8 +131,9 @@ export const views = {
     vertragsverwaltung: { id: 'vertragsverwaltungView' },
     sendungsverwaltung: { id: 'sendungsverwaltungView' },
     rezepte: { id: 'rezepteView' },
-    haushaltszahlungen: { id: 'haushaltszahlungenView' },
-    geschenkemanagement: { id: 'geschenkemanagementView' }
+    haushaltszahlungen: { id: 'haushaltszahlungenView', init: initializeHaushaltszahlungen, listen: listenForHaushaltszahlungen },
+    notizen: { id: 'notizenView', init: initializeNotizen, listen: listenForNotizen },
+    geschenkemanagement: { id: 'geschenkemanagementView', init: initializeGeschenkemanagement, listen: listenForGeschenke }
 };
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
 
@@ -163,6 +165,9 @@ export function stopAllUserDependentListeners(resetMode = false) {
     }
     if (typeof stopHaushaltszahlungenListeners === 'function') {
         stopHaushaltszahlungenListeners();
+    }
+    if (typeof stopNotizenListeners === 'function') {
+        stopNotizenListeners();
     }
     if (typeof stopGeschenkemanagementListeners === 'function') {
         stopGeschenkemanagementListeners();
@@ -294,6 +299,12 @@ function startUserDependentListeners() {
         listenForVertraege();
     } else {
         console.error("Fehler: listenForVertraege ist nicht importiert!");
+    }
+
+    if (typeof listenForNotizen === 'function') {
+        listenForNotizen();
+    } else {
+        console.error("Fehler: listenForNotizen ist nicht importiert!");
     }
 
     if (typeof listenForGeschenke === 'function') {
@@ -2621,6 +2632,9 @@ export function setupEventListeners() {
 
     const haushaltszahlungenCard = document.getElementById('haushaltszahlungenCard');
     if (haushaltszahlungenCard) haushaltszahlungenCard.addEventListener('click', () => navigate('haushaltszahlungen'));
+
+    const notizenCard = document.getElementById('notizenCard');
+    if (notizenCard) notizenCard.addEventListener('click', () => navigate('notizen'));
 
     const geschenkemanagementCard = document.getElementById('geschenkemanagementCard');
     if (geschenkemanagementCard) geschenkemanagementCard.addEventListener('click', () => navigate('geschenkemanagement'));

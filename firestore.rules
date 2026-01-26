@@ -488,6 +488,82 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // NOTIZEN-PROGRAMM (Notes Management with Sharing)
+    // ═══════════════════════════════════════════════════════════════
+
+    // Notizen-Kategorien (user-spezifisch)
+    match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/notizen_kategorien/{kategorieId} {
+      allow read: if hasAppUserIdClaim() && appUserId() == userId;
+      allow create: if hasAppUserIdClaim() && appUserId() == userId && request.resource.data.createdBy == userId;
+      allow update: if hasAppUserIdClaim() && appUserId() == userId;
+      allow delete: if hasAppUserIdClaim() && appUserId() == userId;
+
+      // Subkategorien als Sub-Collection
+      match /subkategorien/{subkategorieId} {
+        allow read: if hasAppUserIdClaim() && appUserId() == userId;
+        allow create: if hasAppUserIdClaim() && appUserId() == userId && request.resource.data.createdBy == userId;
+        allow update: if hasAppUserIdClaim() && appUserId() == userId;
+        allow delete: if hasAppUserIdClaim() && appUserId() == userId;
+      }
+    }
+
+    // Notizen (user-spezifisch mit Sharing-Logik)
+    match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/notizen/{notizId} {
+      // Lesen: Owner oder User mit read/write permission in sharedWith
+      allow read: if hasAppUserIdClaim() && (
+        appUserId() == userId || 
+        (resource.data.sharedWith != null && appUserId() in resource.data.sharedWith)
+      );
+      
+      // Erstellen: Nur Owner
+      allow create: if hasAppUserIdClaim() && appUserId() == userId && request.resource.data.owner == userId;
+      
+      // Update: Owner oder User mit write permission
+      allow update: if hasAppUserIdClaim() && (
+        appUserId() == userId || 
+        (resource.data.sharedWith != null && appUserId() in resource.data.sharedWith && resource.data.sharedWith[appUserId()].role == 'write')
+      );
+      
+      // Löschen: Nur Owner
+      allow delete: if hasAppUserIdClaim() && appUserId() == userId;
+
+      // History als Sub-Collection
+      match /history/{historyId} {
+        allow read: if hasAppUserIdClaim() && (
+          appUserId() == userId || 
+          (get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen/$(notizId)).data.sharedWith != null && 
+           appUserId() in get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen/$(notizId)).data.sharedWith)
+        );
+        allow create: if hasAppUserIdClaim() && (
+          appUserId() == userId || 
+          (get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen/$(notizId)).data.sharedWith != null && 
+           appUserId() in get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen/$(notizId)).data.sharedWith)
+        );
+      }
+    }
+
+    // Notizen-Einladungen (public für alle User sichtbar)
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/notizen_einladungen/{einladungId} {
+      // Lesen: Sender oder Empfänger
+      allow read: if hasAppUserIdClaim() && (
+        appUserId() == resource.data.fromUserId || 
+        appUserId() == resource.data.toUserId
+      );
+      
+      // Erstellen: Als fromUserId
+      allow create: if hasAppUserIdClaim() && request.resource.data.fromUserId == appUserId() && request.resource.data.status == 'pending';
+      
+      // Update: Empfänger kann annehmen/ablehnen
+      allow update: if hasAppUserIdClaim() && appUserId() == resource.data.toUserId && (
+        request.resource.data.status == 'accepted' || 
+        request.resource.data.status == 'rejected'
+      );
+      
+      // Löschen: Sender oder SYSTEMADMIN
+      allow delete: if isSystemAdminClaim() || (hasAppUserIdClaim() && appUserId() == resource.data.fromUserId);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // DEFAULT DENY (Alles andere verbieten)
     // ═══════════════════════════════════════════════════════════════
     
