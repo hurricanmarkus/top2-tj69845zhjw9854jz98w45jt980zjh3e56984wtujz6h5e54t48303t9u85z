@@ -509,6 +509,24 @@ service cloud.firestore {
           appUserId() in resource.data.sharedWith &&
           resource.data.sharedWith[appUserId()].status == 'active' &&
           resource.data.sharedWith[appUserId()].role == 'write'
+        ) ||
+        (
+          // Shared User darf nur seinen eigenen sharedWith-Eintrag ändern (status ändern oder entfernen)
+          resource.data.sharedWith != null &&
+          appUserId() in resource.data.sharedWith &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sharedWith']) &&
+          request.resource.data.sharedWith.diff(resource.data.sharedWith).affectedKeys().hasOnly([appUserId()]) &&
+          (
+            // Entfernen (Teilen beenden)
+            !(appUserId() in request.resource.data.sharedWith) ||
+            (
+              // Nur status-Änderung erlaubt, andere Felder müssen gleich bleiben
+              request.resource.data.sharedWith[appUserId()].role == resource.data.sharedWith[appUserId()].role &&
+              request.resource.data.sharedWith[appUserId()].since == resource.data.sharedWith[appUserId()].since &&
+              request.resource.data.sharedWith[appUserId()].sharedBy == resource.data.sharedWith[appUserId()].sharedBy &&
+              request.resource.data.sharedWith[appUserId()].status in ['pending', 'active', 'rejected']
+            )
+          )
         )
       );
       allow delete: if hasAppUserIdClaim() && appUserId() == userId;

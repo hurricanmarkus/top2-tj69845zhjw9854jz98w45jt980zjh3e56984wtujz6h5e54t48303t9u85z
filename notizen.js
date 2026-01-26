@@ -3,8 +3,9 @@ import { db, appId, currentUser, GUEST_MODE, alertUser } from './haupteingang.js
 import { collection, collectionGroup, doc, onSnapshot, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, query, where, serverTimestamp, writeBatch, orderBy, limit as firestoreLimit, Timestamp, deleteField } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 let kategorienListener = null, notizenListener = null, sharedNotizenListener = null, einladungenListener = null;
-let allKategorien = [], allNotizen = [], allEinladungen = [];
+let allKategorien = [], allNotizen = [], allEinladungen = [], allGesendetEinladungen = [];
 let ownNotizen = [], sharedNotizen = [];
+let gesendetEinladungenListener = null;
 let currentEditingNotizId = null, currentEditingOwnerId = null, currentEditingSharedRole = null, checkoutHeartbeat = null;
 let shareUsersCache = [];
 let currentSharingKategorieId = null;
@@ -405,9 +406,18 @@ function applyInfoStatusUI() {
     if (!infoCb || !statusSelect) return;
 
     if (infoCb.checked) {
+        let infoOpt = statusSelect.querySelector('option[value="info"]');
+        if (!infoOpt) {
+            infoOpt = document.createElement('option');
+            infoOpt.value = 'info';
+            infoOpt.textContent = 'ℹ️ Info';
+            statusSelect.appendChild(infoOpt);
+        }
         statusSelect.value = 'info';
         statusSelect.disabled = true;
     } else {
+        const infoOpt = statusSelect.querySelector('option[value="info"]');
+        if (infoOpt) infoOpt.remove();
         statusSelect.disabled = false;
         if (!statusSelect.value || statusSelect.value === 'info') statusSelect.value = 'offen';
     }
@@ -2693,11 +2703,21 @@ async function loadEinladungen() {
     const userId = currentUser.mode;
     if (!userId || userId === GUEST_MODE) return;
     if (einladungenListener) einladungenListener();
+    if (gesendetEinladungenListener) gesendetEinladungenListener();
+    
     const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
-    const q = query(colRef, where('toUserId', '==', userId), where('status', 'in', ['pending', 'rejected']));
-    einladungenListener = onSnapshot(q, (snapshot) => {
+    
+    // Empfangene Einladungen
+    const qReceived = query(colRef, where('toUserId', '==', userId), where('status', 'in', ['pending', 'rejected']));
+    einladungenListener = onSnapshot(qReceived, (snapshot) => {
         allEinladungen = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         updateEinladungenBadge();
+    });
+    
+    // Gesendete Einladungen (pending)
+    const qSent = query(colRef, where('fromUserId', '==', userId), where('status', '==', 'pending'));
+    gesendetEinladungenListener = onSnapshot(qSent, (snapshot) => {
+        allGesendetEinladungen = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     });
 }
 
@@ -2730,34 +2750,64 @@ async function openEinladungen() {
 function renderEinladungen() {
     const container = document.getElementById('notizen-einladungen-liste');
     if (!container) return;
-    if (allEinladungen.length === 0) {
-        container.innerHTML = '<p class="text-gray-400 text-center py-4">Keine Einladungen</p>';
-        return;
-    }
-    container.innerHTML = allEinladungen.map(einl => {
-        const isRejected = einl.status === 'rejected';
-        const isKategorie = einl.type === 'kategorie';
-        const typeLabel = isKategorie ? 'eine Kategorie' : 'eine Notiz';
-        const statusLabel = isRejected ? '<span class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">Abgelehnt</span>' : '<span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Ausstehend</span>';
-        const actions = isRejected
-            ? `<button onclick="window.revokeEinladung('${einl.id}')" class="px-3 py-1 bg-blue-500 text-white rounded">↩ Ablehnung zurückholen</button>`
-            : `
-                <button onclick="window.acceptEinladung('${einl.id}')" class="px-3 py-1 bg-green-500 text-white rounded">✓ Annehmen</button>
-                <button onclick="window.rejectEinladung('${einl.id}')" class="px-3 py-1 bg-red-500 text-white rounded">✕ Ablehnen</button>
+    
+    let html = '';
+    
+    // Empfangene Einladungen
+    if (allEinladungen.length > 0) {
+        html += '<h3 class="text-sm font-bold text-gray-600 mb-2">📥 Empfangene Einladungen</h3>';
+        html += allEinladungen.map(einl => {
+            const isRejected = einl.status === 'rejected';
+            const isKategorie = einl.type === 'kategorie';
+            const typeLabel = isKategorie ? 'eine Kategorie' : 'eine Notiz';
+            const statusLabel = isRejected ? '<span class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">Abgelehnt</span>' : '<span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Ausstehend</span>';
+            const actions = isRejected
+                ? `<button onclick="window.revokeEinladung('${einl.id}')" class="px-3 py-1 bg-blue-500 text-white rounded">↩ Zurückrufen</button>`
+                : `
+                    <button onclick="window.acceptEinladung('${einl.id}')" class="px-3 py-1 bg-green-500 text-white rounded">✓ Annehmen</button>
+                    <button onclick="window.rejectEinladung('${einl.id}')" class="px-3 py-1 bg-red-500 text-white rounded">✕ Ablehnen</button>
+                `;
+            return `
+                <div class="bg-white p-4 rounded-lg shadow border mb-2">
+                    <div class="flex justify-between items-center mb-2">
+                        <div><span class="font-bold">${getDisplayNameById(einl.fromUserId)}</span> teilt ${typeLabel}</div>
+                        ${statusLabel}
+                    </div>
+                    <div class="text-sm text-gray-600 mb-3">Berechtigung: ${einl.role === 'read' ? '👁️ Lesen' : '✏️ Schreiben'}</div>
+                    <div class="flex gap-2 flex-wrap">
+                        ${actions}
+                    </div>
+                </div>
             `;
-        return `
-            <div class="bg-white p-4 rounded-lg shadow border">
-                <div class="flex justify-between items-center mb-2">
-                    <div><span class="font-bold">${getDisplayNameById(einl.fromUserId)}</span> teilt ${typeLabel}</div>
-                    ${statusLabel}
+        }).join('');
+    }
+    
+    // Gesendete Einladungen
+    if (allGesendetEinladungen.length > 0) {
+        html += '<h3 class="text-sm font-bold text-gray-600 mb-2 mt-4">📤 Gesendete Einladungen</h3>';
+        html += allGesendetEinladungen.map(einl => {
+            const isKategorie = einl.type === 'kategorie';
+            const typeLabel = isKategorie ? 'Kategorie' : 'Notiz';
+            return `
+                <div class="bg-blue-50 p-4 rounded-lg shadow border mb-2">
+                    <div class="flex justify-between items-center mb-2">
+                        <div>${typeLabel} an <span class="font-bold">${getDisplayNameById(einl.toUserId)}</span></div>
+                        <span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Ausstehend</span>
+                    </div>
+                    <div class="text-sm text-gray-600 mb-3">Berechtigung: ${einl.role === 'read' ? '👁️ Lesen' : '✏️ Schreiben'}</div>
+                    <div class="flex gap-2 flex-wrap">
+                        <button onclick="window.cancelEinladung('${einl.id}')" class="px-3 py-1 bg-red-500 text-white rounded">✕ Abbrechen</button>
+                    </div>
                 </div>
-                <div class="text-sm text-gray-600 mb-3">Berechtigung: ${einl.role === 'read' ? '👁️ Lesen' : '✏️ Schreiben'}</div>
-                <div class="flex gap-2 flex-wrap">
-                    ${actions}
-                </div>
-            </div>
-        `;
-    }).join('');
+            `;
+        }).join('');
+    }
+    
+    if (!html) {
+        html = '<p class="text-gray-400 text-center py-4">Keine Einladungen</p>';
+    }
+    
+    container.innerHTML = html;
 }
 
 window.acceptEinladung = async function(einladungId) {
@@ -2832,6 +2882,32 @@ window.revokeEinladung = async function(einladungId) {
         alertUser('Zurückgerufen', 'success');
     } catch (error) {
         console.error('Notizen: Revoke Fehler:', error);
+        alertUser('Fehler', 'error');
+    }
+};
+
+window.cancelEinladung = async function(einladungId) {
+    const einladung = allGesendetEinladungen.find(e => e.id === einladungId);
+    if (!einladung) return;
+    if (!confirm('Einladung wirklich abbrechen?')) return;
+    try {
+        const einlRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen', einladungId);
+        await updateDoc(einlRef, { status: 'cancelled', updatedAt: serverTimestamp() });
+
+        const updatePayload = {};
+        updatePayload[`sharedWith.${einladung.toUserId}`] = deleteField();
+        
+        if (einladung.type === 'kategorie' && einladung.kategorieId) {
+            const katRef = doc(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen_kategorien', einladung.kategorieId);
+            await updateDoc(katRef, updatePayload);
+        } else if (einladung.notizId) {
+            const notizRef = doc(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen', einladung.notizId);
+            await updateDoc(notizRef, updatePayload);
+        }
+        alertUser('Einladung abgebrochen', 'success');
+        renderEinladungen();
+    } catch (error) {
+        console.error('Notizen: Cancel Fehler:', error);
         alertUser('Fehler', 'error');
     }
 };
