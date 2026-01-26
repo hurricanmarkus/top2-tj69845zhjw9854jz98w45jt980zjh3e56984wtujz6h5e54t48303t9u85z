@@ -1,10 +1,11 @@
 // NOTIZEN-PROGRAMM - Strukturierte Notizen mit Kategorien, Sharing & Live-Sync
 import { db, appId, currentUser, GUEST_MODE, alertUser } from './haupteingang.js';
-import { collection, doc, onSnapshot, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, query, where, serverTimestamp, writeBatch, orderBy, limit as firestoreLimit, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { collection, collectionGroup, doc, onSnapshot, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, query, where, serverTimestamp, writeBatch, orderBy, limit as firestoreLimit, Timestamp, deleteField } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-let kategorienListener = null, notizenListener = null, einladungenListener = null;
+let kategorienListener = null, notizenListener = null, sharedNotizenListener = null, einladungenListener = null;
 let allKategorien = [], allNotizen = [], allEinladungen = [];
-let currentEditingNotizId = null, checkoutHeartbeat = null;
+let ownNotizen = [], sharedNotizen = [];
+let currentEditingNotizId = null, currentEditingOwnerId = null, currentEditingSharedRole = null, checkoutHeartbeat = null;
 let shareUsersCache = [];
 let currentSharingKategorieId = null;
 let userConfigLoaded = false;
@@ -13,6 +14,7 @@ let notizIsEditMode = false;
 let selectedNotizElementId = null;
 let notizRowIdCounter = 0;
 let notizElementIdCounter = 0;
+let activeNotizFilters = [];
 
 export function initializeNotizen() {
     console.log('Notizen: Init...');
@@ -21,6 +23,10 @@ export function initializeNotizen() {
     loadKategorien();
     loadNotizen();
     loadEinladungen();
+
+    // Default: NICHT Status Erledigt
+    activeNotizFilters = [];
+    addNotizSearchTag('status', 'erledigt', true);
 }
 
 async function ensureUserConfigLoaded() {
@@ -221,8 +227,27 @@ export function listenForNotizen() {
 export function stopNotizenListeners() {
     if (kategorienListener) kategorienListener();
     if (notizenListener) notizenListener();
+    if (sharedNotizenListener) sharedNotizenListener();
     if (einladungenListener) einladungenListener();
     stopCheckoutHeartbeat();
+}
+
+function extractOwnerIdFromDocRef(docRef) {
+    try {
+        const path = String(docRef?.path || '');
+        const parts = path.split('/');
+        const usersIdx = parts.indexOf('users');
+        if (usersIdx >= 0 && parts.length > usersIdx + 1) return parts[usersIdx + 1];
+    } catch (e) {
+        // ignore
+    }
+    return null;
+}
+
+function recomputeAllNotizen() {
+    allNotizen = [...ownNotizen, ...sharedNotizen];
+    applyFilters();
+    updateStats();
 }
 
 function setupEventListeners() {
@@ -281,6 +306,23 @@ function setupEventListeners() {
         }
     });
 
+    const filterInput = document.getElementById('notiz-filter-input');
+    if (filterInput && !filterInput.dataset.listenerAttached) {
+        filterInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addNotizFilterFromUi();
+            }
+        });
+        filterInput.dataset.listenerAttached = 'true';
+    }
+
+    const addFilterBtn = document.getElementById('btn-add-notiz-filter');
+    if (addFilterBtn && !addFilterBtn.dataset.listenerAttached) {
+        addFilterBtn.addEventListener('click', addNotizFilterFromUi);
+        addFilterBtn.dataset.listenerAttached = 'true';
+    }
+
     const resetBtn = document.getElementById('reset-filters-notizen');
     if (resetBtn) {
         resetBtn.addEventListener('click', () => {
@@ -290,6 +332,17 @@ function setupEventListeners() {
             });
             const subkategorieFilter = document.getElementById('filter-notizen-subkategorie');
             if (subkategorieFilter) subkategorieFilter.disabled = true;
+
+            const ft = document.getElementById('notiz-filter-type');
+            const fe = document.getElementById('notiz-filter-exclude');
+            const fi = document.getElementById('notiz-filter-input');
+            if (ft) ft.value = 'all';
+            if (fe) fe.checked = false;
+            if (fi) fi.value = '';
+
+            activeNotizFilters = [];
+            addNotizSearchTag('status', 'erledigt', true);
+
             applyFilters();
         });
     }
@@ -366,6 +419,12 @@ function toggleNotizDeleteOption() {
 
 function enableNotizEditMode() {
     console.log('Notizen: Edit-Mode aktiviert');
+    if (currentEditingNotizId && currentEditingOwnerId && currentEditingOwnerId !== currentUser.mode) {
+        if (currentEditingSharedRole !== 'write') {
+            alertUser('Keine Schreib-Berechtigung', 'error');
+            return;
+        }
+    }
     notizIsEditMode = true;
     const dropdown = document.getElementById('notiz-weitere-optionen-dropdown');
     const arrow = document.getElementById('notiz-dropdown-arrow');
@@ -954,12 +1013,36 @@ async function loadNotizen() {
     const userId = currentUser.mode;
     if (!userId || userId === GUEST_MODE) return;
     if (notizenListener) notizenListener();
+    if (sharedNotizenListener) sharedNotizenListener();
     const colRef = collection(db, 'artifacts', appId, 'users', userId, 'notizen');
     notizenListener = onSnapshot(colRef, (snapshot) => {
-        allNotizen = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        applyFilters();
-        updateStats();
+        ownNotizen = snapshot.docs.map(docSnap => {
+            const data = docSnap.data() || {};
+            const ownerId = data.owner || userId;
+            return { id: docSnap.id, ...data, ownerId };
+        });
+        recomputeAllNotizen();
     });
+
+    try {
+        const qShared = query(
+            collectionGroup(db, 'notizen'),
+            where(`sharedWith.${userId}.status`, '==', 'active')
+        );
+        sharedNotizenListener = onSnapshot(qShared, (snapshot) => {
+            sharedNotizen = snapshot.docs.map(docSnap => {
+                const data = docSnap.data() || {};
+                const extractedOwnerId = extractOwnerIdFromDocRef(docSnap.ref);
+                const ownerId = data.owner || extractedOwnerId || null;
+                return { id: docSnap.id, ...data, ownerId };
+            }).filter(n => n.ownerId && n.ownerId !== userId);
+            recomputeAllNotizen();
+        }, (error) => {
+            console.warn('Notizen: Fehler beim Laden geteilter Notizen:', error);
+        });
+    } catch (error) {
+        console.warn('Notizen: Shared-Notizen Listener konnte nicht gestartet werden:', error);
+    }
 }
 
 function applyFilters() {
@@ -985,8 +1068,9 @@ function applyFilters() {
         // Subkategorie-Filter: Wenn Subkategorie gewählt, zeige nur Notizen dieser Subkategorie
         if (subkategorieFilter && notiz.subkategorieId !== subkategorieFilter) return false;
         
-        if (sharedFilter === 'own' && notiz.owner !== userId) return false;
-        if (sharedFilter === 'shared' && (!notiz.sharedWith || Object.keys(notiz.sharedWith).length === 0)) return false;
+        const ownerId = notiz.ownerId || notiz.owner || notiz.createdBy || '';
+        if (sharedFilter === 'own' && ownerId !== userId) return false;
+        if (sharedFilter === 'shared' && ownerId === userId) return false;
         if (searchTerm) {
             const searchable = `${notiz.betreff} ${notiz.status}`.toLowerCase();
             if (!searchable.includes(searchTerm)) return false;
@@ -994,7 +1078,110 @@ function applyFilters() {
         return true;
     });
 
+    if (activeNotizFilters.length > 0) {
+        filtered = filtered.filter((n) => {
+            return activeNotizFilters.every((filter) => {
+                const matches = doesNotizMatchSearchFilter(n, filter);
+                return filter.exclude ? !matches : matches;
+            });
+        });
+    }
+
     renderNotizenListe(filtered);
+}
+
+function addNotizFilterFromUi() {
+    const typeEl = document.getElementById('notiz-filter-type');
+    const excludeEl = document.getElementById('notiz-filter-exclude');
+    const inputEl = document.getElementById('notiz-filter-input');
+
+    const type = String(typeEl?.value || 'all');
+    const exclude = !!excludeEl?.checked;
+    const term = String(inputEl?.value || '').trim();
+    if (!term) return;
+
+    addNotizSearchTag(type, term, exclude);
+
+    if (inputEl) {
+        inputEl.value = '';
+        inputEl.focus();
+    }
+}
+
+function addNotizSearchTag(type, term, exclude) {
+    const normalizedTerm = String(term || '').trim().toLowerCase();
+    if (!normalizedTerm) return;
+
+    const duplicate = activeNotizFilters.some(f => f.type === type && f.term === normalizedTerm && !!f.exclude === !!exclude);
+    if (duplicate) return;
+
+    const typeLabels = {
+        all: 'Alles',
+        status: 'Status',
+        kategorie: 'Kategorie',
+        subkategorie: 'Subkategorie',
+        shared: 'Geteilt'
+    };
+
+    const label = type === 'all'
+        ? `${exclude ? 'NICHT ' : ''}Alles: "${term}"`
+        : `${exclude ? 'NICHT ' : ''}${typeLabels[type] || type}: ${term}`;
+
+    console.log('Notizen: Filter-Tag hinzugefügt:', label);
+    activeNotizFilters.push({ type, term: normalizedTerm, exclude: !!exclude, label });
+    renderNotizSearchTags();
+    applyFilters();
+}
+
+function renderNotizSearchTags() {
+    const container = document.getElementById('active-notiz-search-tags');
+    if (!container) return;
+    container.innerHTML = '';
+
+    activeNotizFilters.forEach((filter, index) => {
+        const tag = document.createElement('div');
+        tag.className = 'flex items-center bg-amber-100 text-amber-800 text-xs font-bold px-2 py-1 rounded-full border border-amber-200';
+        tag.innerHTML = `
+            <span>${escapeHtml(filter.label)}</span>
+            <button class="ml-1 text-amber-600 hover:text-amber-900 focus:outline-none" onclick="window.removeNotizSearchTagGlobal(${index})">&times;</button>
+        `;
+        container.appendChild(tag);
+    });
+}
+
+window.removeNotizSearchTagGlobal = (index) => {
+    activeNotizFilters.splice(index, 1);
+    renderNotizSearchTags();
+    applyFilters();
+};
+
+function doesNotizMatchSearchFilter(notiz, filter) {
+    const term = String(filter?.term || '').toLowerCase().trim();
+    if (!term) return true;
+
+    const contains = (val) => String(val || '').toLowerCase().includes(term);
+
+    const kategorie = allKategorien.find(k => k.id === notiz.kategorieId);
+    const kategorieName = kategorie?.name || '';
+    const sub = kategorie?.subkategorien?.find(s => s.id === notiz.subkategorieId);
+    const subName = sub?.name || '';
+
+    if (filter.type === 'status') return contains(notiz.status);
+    if (filter.type === 'kategorie') return contains(kategorieName);
+    if (filter.type === 'subkategorie') return contains(subName);
+    if (filter.type === 'shared') {
+        const isShared = notiz.sharedWith && Object.keys(notiz.sharedWith).length > 0;
+        if (term === 'ja' || term === 'true' || term === '1') return isShared;
+        if (term === 'nein' || term === 'false' || term === '0') return !isShared;
+        return contains(isShared ? 'ja' : 'nein');
+    }
+
+    return [
+        notiz.betreff,
+        notiz.status,
+        kategorieName,
+        subName
+    ].some(contains);
 }
 
 function renderNotizenListe(notizen) {
@@ -1007,9 +1194,11 @@ function renderNotizenListe(notizen) {
         return;
     }
     container.innerHTML = notizen.map(notiz => {
-        const kategorie = allKategorien.find(k => k.id === notiz.kategorieId);
+        const ownerId = notiz.ownerId || notiz.owner || notiz.createdBy || '';
+        const kategorie = allKategorien.find(k => k.id === notiz.kategorieId && (!k.ownerId || k.ownerId === ownerId || k.createdBy === ownerId));
         const kategorieName = kategorie?.name || 'Unbekannt';
-        const isShared = notiz.sharedWith && Object.keys(notiz.sharedWith).length > 0;
+        const isIncomingShared = ownerId && ownerId !== currentUser.mode;
+        const isShared = !!isIncomingShared || (notiz.sharedWith && Object.keys(notiz.sharedWith).length > 0);
         const isCheckedOut = notiz.checkedOutBy && notiz.checkedOutBy !== currentUser.mode;
         const statusColors = { 'offen': 'bg-blue-100 text-blue-800', 'in_bearbeitung': 'bg-yellow-100 text-yellow-800', 'erledigt': 'bg-green-100 text-green-800', 'info': 'bg-blue-100 text-blue-800' };
         const statusIcons = { 'offen': '🔵', 'in_bearbeitung': '🟡', 'erledigt': '🟢', 'info': 'ℹ️' };
@@ -1027,8 +1216,9 @@ function renderNotizenListe(notizen) {
                 </div>
                 <div class="text-sm text-gray-600 mb-3">
                     <span class="mr-3">📁 ${kategorieName}</span>
+                    ${isIncomingShared ? `<span class="text-xs text-purple-600">(geteilt von ${escapeHtml(getDisplayNameById(ownerId))})</span>` : ''}
                 </div>
-                <button onclick="window.openNotizById('${notiz.id}')" class="px-3 py-1 bg-amber-500 text-white text-sm rounded hover:bg-amber-600">📝 Öffnen</button>
+                <button onclick="window.openNotizById('${notiz.id}','${ownerId}')" class="px-3 py-1 bg-amber-500 text-white text-sm rounded hover:bg-amber-600">📝 Öffnen</button>
             </div>
         `;
     }).join('');
@@ -1046,10 +1236,12 @@ function updateStats() {
     setCount('notizen-count-shared', shared);
 }
 
-window.openNotizById = function(notizId) { openNotizEditor(notizId); };
+window.openNotizById = function(notizId, ownerId = null) { openNotizEditor(notizId, ownerId); };
 
-async function openNotizEditor(notizId = null) {
+async function openNotizEditor(notizId = null, ownerId = null) {
     currentEditingNotizId = notizId;
+    currentEditingOwnerId = ownerId || (notizId ? null : currentUser.mode);
+    currentEditingSharedRole = null;
     selectedNotizElementId = null;
     const modal = document.getElementById('notizEditorModal');
     if (!modal) {
@@ -1075,8 +1267,10 @@ async function openNotizEditor(notizId = null) {
         if (optionsDropdown) optionsDropdown.classList.add('hidden');
         if (optionsToggleDelete) optionsToggleDelete.textContent = '🔓 Weitere Optionen';
         if (deleteBtn) deleteBtn.style.display = 'none';
-        await loadNotizData(notizId);
-        await checkoutNotiz(notizId);
+        await loadNotizData(notizId, ownerId);
+        if (currentEditingOwnerId === currentUser.mode) {
+            await checkoutNotiz(notizId);
+        }
     } else {
         if (titleEl) titleEl.textContent = '📝 Neue Notiz';
         notizIsEditMode = true;
@@ -1089,9 +1283,11 @@ async function openNotizEditor(notizId = null) {
     }
 }
 
-async function loadNotizData(notizId) {
+async function loadNotizData(notizId, ownerId = null) {
     await ensureUserConfigLoaded();
-    const docRef = doc(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen', notizId);
+    const effectiveOwnerId = ownerId || currentEditingOwnerId || currentUser.mode;
+    currentEditingOwnerId = effectiveOwnerId;
+    const docRef = doc(db, 'artifacts', appId, 'users', effectiveOwnerId, 'notizen', notizId);
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) {
         alertUser('Nicht gefunden', 'error');
@@ -1099,14 +1295,34 @@ async function loadNotizData(notizId) {
         return;
     }
     const notiz = docSnap.data();
+
+    if (effectiveOwnerId !== currentUser.mode) {
+        currentEditingSharedRole = notiz?.sharedWith?.[currentUser.mode]?.role || 'read';
+    } else {
+        currentEditingSharedRole = null;
+    }
+
+    const isOwner = effectiveOwnerId === currentUser.mode;
+    const shareBtn = document.getElementById('btn-notiz-share');
+    const optionsBtn = document.getElementById('btn-notiz-weitere-optionen');
+    const saveBtn = document.getElementById('btn-notiz-save');
+    const statusSelectEl = document.getElementById('notiz-status');
+    const infoCbEl = document.getElementById('notiz-status-info');
+
+    if (shareBtn) shareBtn.style.display = isOwner ? '' : 'none';
+    if (optionsBtn) optionsBtn.style.display = isOwner || currentEditingSharedRole === 'write' ? '' : 'none';
+    if (saveBtn) saveBtn.disabled = !isOwner && currentEditingSharedRole !== 'write';
+    if (!isOwner && currentEditingSharedRole !== 'write') {
+        if (statusSelectEl) statusSelectEl.disabled = true;
+        if (infoCbEl) infoCbEl.disabled = true;
+    }
+
     document.getElementById('notiz-betreff').value = notiz.betreff || '';
     document.getElementById('notiz-kategorie').value = notiz.kategorieId || '';
     updateSubkategorienDropdown();
     document.getElementById('notiz-subkategorie').value = notiz.subkategorieId || '';
-    const infoCb = document.getElementById('notiz-status-info');
-    if (infoCb) infoCb.checked = (notiz.status === 'info');
-    const statusSelect = document.getElementById('notiz-status');
-    if (statusSelect) statusSelect.value = notiz.status || 'offen';
+    if (infoCbEl) infoCbEl.checked = (notiz.status === 'info');
+    if (statusSelectEl) statusSelectEl.value = notiz.status || 'offen';
     applyInfoStatusUI();
     if (notiz.erinnerung) {
         const date = notiz.erinnerung.toDate ? notiz.erinnerung.toDate() : new Date(notiz.erinnerung);
@@ -1134,6 +1350,15 @@ async function loadNotizData(notizId) {
     
     // Felder sperren beim Bearbeiten (außer Status und Checkboxen)
     lockEditFields();
+
+    if (!isOwner && currentEditingSharedRole !== 'write') {
+        // Read-only: auch Checkboxen und Hauptteil sperren
+        const containerEl = document.getElementById('notiz-hauptteil-container');
+        if (containerEl) {
+            containerEl.querySelectorAll('input, textarea, select').forEach(el => el.disabled = true);
+            containerEl.querySelectorAll('button').forEach(btn => btn.style.display = 'none');
+        }
+    }
 }
 
 function lockEditFields() {
@@ -1216,10 +1441,13 @@ async function saveNotiz() {
     };
     try {
         if (currentEditingNotizId) {
-            const docRef = doc(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen', currentEditingNotizId);
+            const ownerId = currentEditingOwnerId || currentUser.mode;
+            const docRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen', currentEditingNotizId);
             await updateDoc(docRef, notizData);
             await addHistory(currentEditingNotizId, 'Bearbeitet', notizData);
-            await releaseCheckout(currentEditingNotizId);
+            if (ownerId === currentUser.mode) {
+                await releaseCheckout(currentEditingNotizId);
+            }
             alertUser('Gespeichert', 'success');
         } else {
             const colRef = collection(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen');
@@ -1334,6 +1562,10 @@ function collectElements() {
 
 async function deleteNotiz() {
     if (!currentEditingNotizId) return;
+    if (currentEditingOwnerId && currentEditingOwnerId !== currentUser.mode) {
+        alertUser('Nur der Owner kann löschen', 'error');
+        return;
+    }
     const notizId = currentEditingNotizId;
     const notiz = allNotizen.find(n => n.id === notizId);
     const betreff = notiz?.betreff || '';
@@ -1360,9 +1592,11 @@ async function deleteNotiz() {
 }
 
 async function closeNotizEditor() {
-    if (currentEditingNotizId) await releaseCheckout(currentEditingNotizId);
+    if (currentEditingNotizId && currentEditingOwnerId === currentUser.mode) await releaseCheckout(currentEditingNotizId);
     stopCheckoutHeartbeat();
     currentEditingNotizId = null;
+    currentEditingOwnerId = null;
+    currentEditingSharedRole = null;
     document.getElementById('notizEditorModal').classList.add('hidden');
     document.getElementById('notizEditorModal').classList.remove('flex');
 }
@@ -1874,6 +2108,10 @@ function openShareModal() {
         alertUser('Erst speichern', 'error');
         return;
     }
+    if (currentEditingOwnerId && currentEditingOwnerId !== currentUser.mode) {
+        alertUser('Nur der Owner kann weitere Personen hinzufügen', 'error');
+        return;
+    }
     const modal = document.getElementById('notizShareModal');
     if (!modal) {
         console.error('Notizen: Share-Modal nicht gefunden!');
@@ -1966,6 +2204,11 @@ async function sendShareInvitation() {
         return;
     }
 
+    if (currentEditingOwnerId && currentEditingOwnerId !== currentUser.mode) {
+        alertUser('Nur der Owner kann einladen', 'error');
+        return;
+    }
+
     const selected = Array.from(list.querySelectorAll('.share-user-checkbox:checked')).map(cb => {
         const userId = cb.dataset.userid;
         const roleEl = list.querySelector(`.share-user-role[data-userid="${userId}"]`);
@@ -1980,27 +2223,60 @@ async function sendShareInvitation() {
 
     try {
         console.log('Notizen: Sende Einladungen an:', selected);
+        const ownerId = currentUser.mode;
+        const notizRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen', currentEditingNotizId);
+        const notizSnap = await getDoc(notizRef);
+        const notizData = notizSnap.exists() ? (notizSnap.data() || {}) : {};
+        const sharedWith = notizData.sharedWith || {};
+
         const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
         const batch = writeBatch(db);
 
-        selected.forEach(({ userId, role }) => {
-            const newRef = doc(colRef);
-            batch.set(newRef, {
+        const updatePayload = {};
+        let createdCount = 0;
+        let skippedCount = 0;
+
+        for (const { userId, role } of selected) {
+            const existing = sharedWith[userId];
+            const existingStatus = existing?.status;
+            if (existingStatus === 'pending' || existingStatus === 'rejected' || existingStatus === 'active') {
+                skippedCount += 1;
+                continue;
+            }
+
+            const invRef = doc(colRef);
+            batch.set(invRef, {
                 notizId: currentEditingNotizId,
-                fromUserId: currentUser.mode,
+                fromUserId: ownerId,
                 toUserId: userId,
                 role,
                 status: 'pending',
-                createdAt: serverTimestamp()
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
             });
-        });
 
+            updatePayload[`sharedWith.${userId}`] = {
+                role,
+                since: serverTimestamp(),
+                status: 'pending',
+                sharedBy: ownerId
+            };
+            createdCount += 1;
+        }
+
+        if (createdCount === 0) {
+            alertUser('Keine Einladungen gesendet (bereits pending/rejected/aktiv)', 'error');
+            return;
+        }
+
+        batch.update(notizRef, updatePayload);
         await batch.commit();
 
-        alertUser('Einladungen gesendet', 'success');
+        alertUser(`Einladungen gesendet: ${createdCount}${skippedCount ? ` (übersprungen: ${skippedCount})` : ''}`, 'success');
         const modal = document.getElementById('notizShareModal');
         if (modal) modal.classList.add('hidden');
     } catch (error) {
+        console.error('Notizen: Fehler beim Senden der Einladungen:', error);
         alertUser('Fehler', 'error');
     }
 }
@@ -2012,25 +2288,48 @@ function renderSharedUsers(sharedWith) {
         container.innerHTML = '<p class="text-gray-400 text-sm">Privat</p>';
         return;
     }
-    container.innerHTML = Object.entries(sharedWith).map(([userId, data]) => `
-        <div class="flex justify-between text-sm bg-gray-50 p-2 rounded">
-            <span>${getDisplayNameById(userId)} (${data.role === 'read' ? '👁️ Lesen' : '✏️ Schreiben'})</span>
-            <button onclick="window.removeSharedUser('${userId}')" class="text-red-500 text-xs">Entfernen</button>
-        </div>
-    `).join('');
+
+    const isOwner = !currentEditingOwnerId || currentEditingOwnerId === currentUser.mode;
+    container.innerHTML = Object.entries(sharedWith).map(([userId, data]) => {
+        const canRemove = isOwner || userId === currentUser.mode;
+        const btnLabel = isOwner ? 'Entfernen' : 'Teilen beenden';
+        return `
+            <div class="flex justify-between text-sm bg-gray-50 p-2 rounded">
+                <span>${getDisplayNameById(userId)} (${data.role === 'read' ? '👁️ Lesen' : '✏️ Schreiben'})</span>
+                ${canRemove ? `<button onclick="window.removeSharedUser('${userId}')" class="text-red-500 text-xs">${btnLabel}</button>` : ''}
+            </div>
+        `;
+    }).join('');
 }
 
 window.removeSharedUser = async function(userId) {
-    if (!currentEditingNotizId || !confirm('Entziehen?')) return;
+    if (!currentEditingNotizId) return;
+
+    const isOwner = !currentEditingOwnerId || currentEditingOwnerId === currentUser.mode;
+    if (!isOwner && userId !== currentUser.mode) {
+        alertUser('Keine Berechtigung', 'error');
+        return;
+    }
+
+    const confirmText = isOwner ? 'Entziehen?' : 'Teilen wirklich beenden?';
+    if (!confirm(confirmText)) return;
     try {
-        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen', currentEditingNotizId);
-        const docSnap = await getDoc(docRef);
-        const data = docSnap.data();
-        delete data.sharedWith[userId];
-        await updateDoc(docRef, { sharedWith: data.sharedWith });
-        await addHistory(currentEditingNotizId, `Berechtigung entzogen: ${getDisplayNameById(userId)}`, {});
-        alertUser('Entzogen', 'success');
-        renderSharedUsers(data.sharedWith);
+        const ownerId = currentEditingOwnerId || currentUser.mode;
+        const docRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen', currentEditingNotizId);
+
+        const updatePayload = {};
+        updatePayload[`sharedWith.${userId}`] = deleteField();
+        await updateDoc(docRef, updatePayload);
+
+        const actionText = isOwner
+            ? `Berechtigung entzogen: ${getDisplayNameById(userId)}`
+            : `Teilen beendet: ${getDisplayNameById(userId)}`;
+        await addHistory(currentEditingNotizId, actionText, {});
+
+        alertUser(isOwner ? 'Entzogen' : 'Beendet', 'success');
+        if (!isOwner) {
+            closeNotizEditor();
+        }
     } catch (error) {
         alertUser('Fehler', 'error');
     }
@@ -2041,7 +2340,7 @@ async function loadEinladungen() {
     if (!userId || userId === GUEST_MODE) return;
     if (einladungenListener) einladungenListener();
     const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
-    const q = query(colRef, where('toUserId', '==', userId), where('status', '==', 'pending'));
+    const q = query(colRef, where('toUserId', '==', userId), where('status', 'in', ['pending', 'rejected']));
     einladungenListener = onSnapshot(q, (snapshot) => {
         allEinladungen = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         updateEinladungenBadge();
@@ -2051,9 +2350,10 @@ async function loadEinladungen() {
 function updateEinladungenBadge() {
     const badge = document.getElementById('notizen-einladungen-badge');
     if (badge) {
-        if (allEinladungen.length > 0) {
+        const pendingCount = allEinladungen.filter(e => e.status === 'pending').length;
+        if (pendingCount > 0) {
             badge.classList.remove('hidden');
-            badge.textContent = allEinladungen.length;
+            badge.textContent = pendingCount;
         } else {
             badge.classList.add('hidden');
         }
@@ -2080,16 +2380,28 @@ function renderEinladungen() {
         container.innerHTML = '<p class="text-gray-400 text-center py-4">Keine Einladungen</p>';
         return;
     }
-    container.innerHTML = allEinladungen.map(einl => `
-        <div class="bg-white p-4 rounded-lg shadow border">
-            <div class="mb-2"><span class="font-bold">${getDisplayNameById(einl.fromUserId)}</span> teilt eine Notiz</div>
-            <div class="text-sm text-gray-600 mb-3">Berechtigung: ${einl.role === 'read' ? '👁️ Lesen' : '✏️ Schreiben'}</div>
-            <div class="flex gap-2">
+    container.innerHTML = allEinladungen.map(einl => {
+        const isRejected = einl.status === 'rejected';
+        const statusLabel = isRejected ? '<span class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">Abgelehnt</span>' : '<span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Ausstehend</span>';
+        const actions = isRejected
+            ? `<button onclick="window.revokeEinladung('${einl.id}')" class="px-3 py-1 bg-blue-500 text-white rounded">↩ Ablehnung zurückrufen</button>`
+            : `
                 <button onclick="window.acceptEinladung('${einl.id}')" class="px-3 py-1 bg-green-500 text-white rounded">✓ Annehmen</button>
                 <button onclick="window.rejectEinladung('${einl.id}')" class="px-3 py-1 bg-red-500 text-white rounded">✕ Ablehnen</button>
+            `;
+        return `
+            <div class="bg-white p-4 rounded-lg shadow border">
+                <div class="flex justify-between items-center mb-2">
+                    <div><span class="font-bold">${getDisplayNameById(einl.fromUserId)}</span> teilt eine Notiz</div>
+                    ${statusLabel}
+                </div>
+                <div class="text-sm text-gray-600 mb-3">Berechtigung: ${einl.role === 'read' ? '👁️ Lesen' : '✏️ Schreiben'}</div>
+                <div class="flex gap-2 flex-wrap">
+                    ${actions}
+                </div>
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 window.acceptEinladung = async function(einladungId) {
@@ -2097,21 +2409,49 @@ window.acceptEinladung = async function(einladungId) {
     if (!einladung) return;
     try {
         const einlRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen', einladungId);
-        await updateDoc(einlRef, { status: 'accepted', respondedAt: serverTimestamp() });
+        await updateDoc(einlRef, { status: 'accepted', respondedAt: serverTimestamp(), updatedAt: serverTimestamp() });
         const notizRef = doc(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen', einladung.notizId);
-        await updateDoc(notizRef, { [`sharedWith.${currentUser.mode}`]: { role: einladung.role, since: serverTimestamp(), status: 'active' } });
+        await updateDoc(notizRef, {
+            [`sharedWith.${currentUser.mode}.status`]: 'active'
+        });
         alertUser('Angenommen', 'success');
     } catch (error) {
+        console.error('Notizen: Accept Fehler:', error);
         alertUser('Fehler', 'error');
     }
 };
 
 window.rejectEinladung = async function(einladungId) {
+    const einladung = allEinladungen.find(e => e.id === einladungId);
+    if (!einladung) return;
     try {
         const einlRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen', einladungId);
-        await updateDoc(einlRef, { status: 'rejected', respondedAt: serverTimestamp() });
+        await updateDoc(einlRef, { status: 'rejected', respondedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        const notizRef = doc(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen', einladung.notizId);
+        await updateDoc(notizRef, {
+            [`sharedWith.${currentUser.mode}.status`]: 'rejected'
+        });
         alertUser('Abgelehnt', 'success');
     } catch (error) {
+        console.error('Notizen: Reject Fehler:', error);
+        alertUser('Fehler', 'error');
+    }
+};
+
+window.revokeEinladung = async function(einladungId) {
+    const einladung = allEinladungen.find(e => e.id === einladungId);
+    if (!einladung) return;
+    if (!confirm('Ablehnung zurückrufen? Danach kann erneut eingeladen werden.')) return;
+    try {
+        const einlRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen', einladungId);
+        await updateDoc(einlRef, { status: 'revoked', respondedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        const notizRef = doc(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen', einladung.notizId);
+        const updatePayload = {};
+        updatePayload[`sharedWith.${currentUser.mode}`] = deleteField();
+        await updateDoc(notizRef, updatePayload);
+        alertUser('Zurückgerufen', 'success');
+    } catch (error) {
+        console.error('Notizen: Revoke Fehler:', error);
         alertUser('Fehler', 'error');
     }
 };
@@ -2182,7 +2522,8 @@ function hideCheckoutWarning() {
 
 async function addHistory(notizId, action, changes) {
     try {
-        const colRef = collection(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen', notizId, 'history');
+        const ownerId = currentEditingOwnerId || currentUser.mode;
+        const colRef = collection(db, 'artifacts', appId, 'users', ownerId, 'notizen', notizId, 'history');
         await addDoc(colRef, { timestamp: serverTimestamp(), userId: currentUser.mode, action, changes: JSON.stringify(changes) });
     } catch (error) {
         console.error('History Fehler:', error);
@@ -2198,7 +2539,8 @@ async function showHistory() {
     const container = document.getElementById('notiz-history-liste');
     container.innerHTML = '<p class="text-gray-400 text-center py-4">Lade...</p>';
     try {
-        const colRef = collection(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen', currentEditingNotizId, 'history');
+        const ownerId = currentEditingOwnerId || currentUser.mode;
+        const colRef = collection(db, 'artifacts', appId, 'users', ownerId, 'notizen', currentEditingNotizId, 'history');
         const q = query(colRef, orderBy('timestamp', 'desc'), firestoreLimit(50));
         const snapshot = await getDocs(q);
         if (snapshot.empty) {

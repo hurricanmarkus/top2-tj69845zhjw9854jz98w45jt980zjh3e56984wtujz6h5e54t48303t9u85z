@@ -3298,6 +3298,30 @@
                 </div>
 
                 <div class="bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
+                    <div id="active-notiz-search-tags" class="flex flex-wrap gap-2 mb-2"></div>
+
+                    <div class="flex flex-wrap gap-2 items-center mb-2">
+                        <select id="notiz-filter-type" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                            <option value="all">Alles</option>
+                            <option value="status">Status</option>
+                            <option value="kategorie">Kategorie</option>
+                            <option value="subkategorie">Subkategorie</option>
+                            <option value="shared">Geteilt</option>
+                        </select>
+
+                        <label class="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg text-sm font-semibold text-gray-700">
+                            <input type="checkbox" id="notiz-filter-exclude" class="w-4 h-4">
+                            NICHT
+                        </label>
+
+                        <input type="text" id="notiz-filter-input" placeholder="🔍 Filter eingeben... (Enter)"
+                            class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 text-sm">
+
+                        <button id="btn-add-notiz-filter" class="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-bold transition text-sm">
+                            + Filter
+                        </button>
+                    </div>
+
                     <div class="flex flex-wrap gap-2">
                         <input type="text" id="search-notizen" placeholder="🔍 Suchen... (Betreff, Kategorie, Inhalt)" 
                             class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 text-sm">
@@ -7215,7 +7239,7 @@
                             </div>
                         </div>
                         <div id="notiz-hauptteil-container" class="grid grid-cols-1 md:grid-cols-2 gap-2 border-2 border-gray-200 rounded-lg p-4 min-h-[200px] bg-gray-50">
-                            <p class="text-gray-400 text-center text-sm col-span-full">Füge Elemente hinzu...</p>
+                            <p class="notiz-placeholder text-gray-400 text-center text-sm col-span-full">Füge Elemente hinzu...</p>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

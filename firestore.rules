@@ -512,7 +512,11 @@ service cloud.firestore {
       // Lesen: Owner oder User mit read/write permission in sharedWith
       allow read: if hasAppUserIdClaim() && (
         appUserId() == userId || 
-        (resource.data.sharedWith != null && appUserId() in resource.data.sharedWith)
+        (
+          resource.data.sharedWith != null &&
+          appUserId() in resource.data.sharedWith &&
+          resource.data.sharedWith[appUserId()].status == 'active'
+        )
       );
       
       // Erstellen: Nur Owner
@@ -521,7 +525,30 @@ service cloud.firestore {
       // Update: Owner oder User mit write permission
       allow update: if hasAppUserIdClaim() && (
         appUserId() == userId || 
-        (resource.data.sharedWith != null && appUserId() in resource.data.sharedWith && resource.data.sharedWith[appUserId()].role == 'write')
+        (
+          resource.data.sharedWith != null &&
+          appUserId() in resource.data.sharedWith &&
+          resource.data.sharedWith[appUserId()].status == 'active' &&
+          resource.data.sharedWith[appUserId()].role == 'write'
+        ) ||
+        (
+          // Shared User darf nur seinen eigenen sharedWith-Eintrag ändern (status ändern oder entfernen)
+          resource.data.sharedWith != null &&
+          appUserId() in resource.data.sharedWith &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sharedWith']) &&
+          request.resource.data.sharedWith.diff(resource.data.sharedWith).affectedKeys().hasOnly([appUserId()]) &&
+          (
+            // Entfernen (Teilen beenden)
+            !(appUserId() in request.resource.data.sharedWith) ||
+            (
+              // Nur status-Änderung erlaubt, andere Felder müssen gleich bleiben
+              request.resource.data.sharedWith[appUserId()].role == resource.data.sharedWith[appUserId()].role &&
+              request.resource.data.sharedWith[appUserId()].since == resource.data.sharedWith[appUserId()].since &&
+              request.resource.data.sharedWith[appUserId()].sharedBy == resource.data.sharedWith[appUserId()].sharedBy &&
+              request.resource.data.sharedWith[appUserId()].status in ['pending', 'active', 'rejected']
+            )
+          )
+        )
       );
       
       // Löschen: Nur Owner
@@ -531,13 +558,19 @@ service cloud.firestore {
       match /history/{historyId} {
         allow read: if hasAppUserIdClaim() && (
           appUserId() == userId || 
-          (get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen/$(notizId)).data.sharedWith != null && 
-           appUserId() in get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen/$(notizId)).data.sharedWith)
+          (
+            get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen/$(notizId)).data.sharedWith != null && 
+            appUserId() in get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen/$(notizId)).data.sharedWith &&
+            get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen/$(notizId)).data.sharedWith[appUserId()].status == 'active'
+          )
         );
         allow create: if hasAppUserIdClaim() && (
           appUserId() == userId || 
-          (get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen/$(notizId)).data.sharedWith != null && 
-           appUserId() in get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen/$(notizId)).data.sharedWith)
+          (
+            get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen/$(notizId)).data.sharedWith != null && 
+            appUserId() in get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen/$(notizId)).data.sharedWith &&
+            get(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/users/$(userId)/notizen/$(notizId)).data.sharedWith[appUserId()].status == 'active'
+          )
         );
         allow delete: if hasAppUserIdClaim() && appUserId() == userId;
       }
@@ -556,9 +589,15 @@ service cloud.firestore {
       
       // Update: Empfänger kann annehmen/ablehnen
       allow update: if hasAppUserIdClaim() && appUserId() == resource.data.toUserId && (
-        request.resource.data.status == 'accepted' || 
-        request.resource.data.status == 'rejected'
-      );
+        (
+          resource.data.status == 'pending' &&
+          (request.resource.data.status == 'accepted' || request.resource.data.status == 'rejected')
+        ) ||
+        (
+          resource.data.status == 'rejected' &&
+          request.resource.data.status == 'revoked'
+        )
+      ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'respondedAt', 'updatedAt']);
       
       // Löschen: Sender oder SYSTEMADMIN
       allow delete: if isSystemAdminClaim() || (hasAppUserIdClaim() && appUserId() == resource.data.fromUserId);
