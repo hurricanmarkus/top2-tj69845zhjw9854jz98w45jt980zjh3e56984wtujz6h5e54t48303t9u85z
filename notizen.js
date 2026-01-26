@@ -1401,7 +1401,16 @@ function lockEditFields() {
             
             // Element-Titel-Zeile mit Buttons ausblenden (erste div mit flex justify-between)
             const titleRow = el.querySelector('.flex.justify-between');
-            if (titleRow) titleRow.style.display = 'none';
+            if (titleRow) {
+                if (type === 'password') {
+                    // Bei Passwort: Zeile sichtbar lassen, aber Text "Passwort" ausblenden
+                    const titleSpan = titleRow.querySelector('span');
+                    if (titleSpan) titleSpan.style.display = 'none';
+                    titleRow.style.display = ''; // Sicherstellen, dass die Zeile sichtbar ist
+                } else {
+                    titleRow.style.display = 'none';
+                }
+            }
             
             // Unterüberschrift schön gestalten oder ausblenden
             const subtitleEl = el.querySelector('.element-subtitle');
@@ -1501,7 +1510,12 @@ function unlockEditFields() {
             
             // Element-Titel-Zeile wieder anzeigen
             const titleRow = el.querySelector('.flex.justify-between');
-            if (titleRow) titleRow.style.display = '';
+            if (titleRow) {
+                titleRow.style.display = '';
+                // Bei Passwort den Titel-Span wieder anzeigen
+                const titleSpan = titleRow.querySelector('span');
+                if (titleSpan) titleSpan.style.display = '';
+            }
             
             // Unterüberschrift zurücksetzen
             const subtitleEl = el.querySelector('.element-subtitle');
@@ -1651,12 +1665,12 @@ function collectElements() {
                     element.color = el.querySelector('select')?.value || 'blue';
                     break;
                 case 'table':
-                    const rows = [];
+                    const tableRows = [];
                     el.querySelectorAll('tbody tr').forEach(tr => {
                         const cells = Array.from(tr.querySelectorAll('td input')).map(inp => inp.value);
-                        rows.push(cells);
+                        tableRows.push({ cells }); // Objekt statt Array!
                     });
-                    element.rows = rows;
+                    element.rows = tableRows;
                     element.headers = Array.from(el.querySelectorAll('thead input')).map(inp => inp.value);
                     break;
             }
@@ -1710,7 +1724,7 @@ function collectElements() {
                     const tableRows = [];
                     el.querySelectorAll('tbody tr').forEach(tr => {
                         const cells = Array.from(tr.querySelectorAll('td input')).map(inp => inp.value);
-                        tableRows.push(cells);
+                        tableRows.push({ cells }); // Objekt statt Array!
                     });
                     element.rows = tableRows;
                     element.headers = Array.from(el.querySelectorAll('thead input')).map(inp => inp.value);
@@ -2322,7 +2336,23 @@ function renderElementIntoRow(element, rowEl, rowItemCount) {
                 tbody.innerHTML = '';
                 element.rows.forEach(row => {
                     const tr = document.createElement('tr');
-                    row.forEach(cell => tr.innerHTML += `<td><input type="text" class="w-full p-1 border" value="${cell}"></td>`);
+                    let cells = [];
+                    if (Array.isArray(row)) {
+                        // Alte Struktur: Array von Strings
+                        cells = row;
+                    } else if (row && row.cells) {
+                        // Neue Struktur: Objekt mit cells-Array
+                        cells = row.cells;
+                    }
+                    
+                    cells.forEach(cell => tr.innerHTML += `<td><input type="text" class="w-full p-1 border" value="${cell}"></td>`);
+                    
+                    // Lösch-Button Zeile wieder hinzufügen
+                    tr.innerHTML += '<td class="border p-1"><button class="delete-table-row text-xs px-1 py-0 bg-red-500 text-white rounded">✕</button></td>';
+                    tr.querySelector('.delete-table-row')?.addEventListener('click', function() {
+                        this.closest('tr').remove();
+                    });
+                    
                     tbody.appendChild(tr);
                 });
             }
