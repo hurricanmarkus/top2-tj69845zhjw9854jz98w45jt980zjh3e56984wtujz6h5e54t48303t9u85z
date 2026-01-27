@@ -2908,11 +2908,72 @@ window.removeSharedUser = async function(userId) {
     if (!confirm(confirmText)) return;
     try {
         const ownerId = currentEditingOwnerId || currentUser.mode;
-        const docRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen', currentEditingNotizId);
+        const notizRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen', currentEditingNotizId);
+        
+        // Notiz-Daten laden um viaKategorie zu prüfen
+        const notizSnap = await getDoc(notizRef);
+        const notizData = notizSnap.exists() ? notizSnap.data() : {};
+        const sharedEntry = notizData.sharedWith?.[userId];
+        const viaKategorie = sharedEntry?.viaKategorie;
 
+        // 1. sharedWith aus Notiz entfernen
         const updatePayload = {};
         updatePayload[`sharedWith.${userId}`] = deleteField();
-        await updateDoc(docRef, updatePayload);
+        await updateDoc(notizRef, updatePayload);
+
+        // 2. Wenn via Kategorie geteilt: auch Kategorie-sharedWith entfernen
+        if (viaKategorie && isOwner) {
+            try {
+                const katRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', viaKategorie);
+                const katUpdatePayload = {};
+                katUpdatePayload[`sharedWith.${userId}`] = deleteField();
+                await updateDoc(katRef, katUpdatePayload);
+                console.log('Notizen: sharedWith aus Kategorie entfernt:', viaKategorie);
+                
+                // Auch alle anderen Notizen dieser Kategorie bereinigen
+                const notizenCol = collection(db, 'artifacts', appId, 'users', ownerId, 'notizen');
+                const qNotizen = query(notizenCol, where('kategorieId', '==', viaKategorie));
+                const notizenSnap = await getDocs(qNotizen);
+                for (const nDoc of notizenSnap.docs) {
+                    const nData = nDoc.data();
+                    if (nData.sharedWith?.[userId]?.viaKategorie === viaKategorie) {
+                        await updateDoc(nDoc.ref, { [`sharedWith.${userId}`]: deleteField() });
+                    }
+                }
+                console.log('Notizen: sharedWith aus', notizenSnap.size, 'Notizen der Kategorie entfernt');
+            } catch (katError) {
+                console.warn('Notizen: Fehler beim Entfernen aus Kategorie:', katError);
+            }
+        }
+
+        // 3. Zugehörige Einladung auf "cancelled" setzen
+        try {
+            const einladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
+            // Suche Einladung für diese Notiz oder Kategorie
+            let qEinl;
+            if (viaKategorie) {
+                qEinl = query(einladungenRef, 
+                    where('kategorieId', '==', viaKategorie),
+                    where('fromUserId', '==', ownerId),
+                    where('toUserId', '==', userId),
+                    where('status', 'in', ['pending', 'accepted'])
+                );
+            } else {
+                qEinl = query(einladungenRef, 
+                    where('notizId', '==', currentEditingNotizId),
+                    where('fromUserId', '==', ownerId),
+                    where('toUserId', '==', userId),
+                    where('status', 'in', ['pending', 'accepted'])
+                );
+            }
+            const einlSnap = await getDocs(qEinl);
+            for (const einlDoc of einlSnap.docs) {
+                await updateDoc(einlDoc.ref, { status: 'cancelled', updatedAt: serverTimestamp() });
+            }
+            console.log('Notizen:', einlSnap.size, 'Einladungen auf cancelled gesetzt');
+        } catch (einlError) {
+            console.warn('Notizen: Fehler beim Canceln der Einladung:', einlError);
+        }
 
         const actionText = isOwner
             ? `Berechtigung entzogen: ${getDisplayNameById(userId)}`
@@ -2924,6 +2985,7 @@ window.removeSharedUser = async function(userId) {
             closeNotizEditor();
         }
     } catch (error) {
+        console.error('Notizen: Fehler beim Entfernen:', error);
         alertUser('Fehler', 'error');
     }
 };
