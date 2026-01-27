@@ -7,6 +7,7 @@ let allKategorien = [], allNotizen = [], allEinladungen = [], allGesendetEinladu
 let ownNotizen = [], sharedNotizen = [], sharedKategorieNotizen = [];
 let gesendetEinladungenListener = null;
 let currentEditingNotizId = null, currentEditingOwnerId = null, currentEditingSharedRole = null, checkoutHeartbeat = null;
+let currentEditingNotizListener = null;
 let shareUsersCache = [];
 let currentSharingKategorieId = null;
 let userConfigLoaded = false;
@@ -1493,6 +1494,13 @@ async function loadNotizData(notizId, ownerId = null) {
     const effectiveOwnerId = ownerId || currentEditingOwnerId || currentUser.mode;
     currentEditingOwnerId = effectiveOwnerId;
     const docRef = doc(db, 'artifacts', appId, 'users', effectiveOwnerId, 'notizen', notizId);
+    
+    // Stoppe vorherigen Listener falls vorhanden
+    if (currentEditingNotizListener) {
+        currentEditingNotizListener();
+        currentEditingNotizListener = null;
+    }
+    
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) {
         alertUser('Nicht gefunden', 'error');
@@ -1500,6 +1508,50 @@ async function loadNotizData(notizId, ownerId = null) {
         return;
     }
     const notiz = docSnap.data();
+    
+    // Live-Listener für diese Notiz starten (sharedWith, checkedOutBy, etc.)
+    currentEditingNotizListener = onSnapshot(docRef, (snap) => {
+        if (!snap.exists()) {
+            // Notiz wurde gelöscht
+            alertUser('Notiz wurde gelöscht', 'error');
+            closeNotizEditor();
+            return;
+        }
+        const liveData = snap.data();
+        
+        // Update sharedWith Liste
+        renderSharedUsers(liveData.sharedWith);
+        
+        // Update Checkout-Warnung
+        if (liveData.checkedOutBy && liveData.checkedOutBy !== currentUser.mode) {
+            showCheckoutWarning(liveData.checkedOutBy);
+        } else if (!liveData.checkedOutBy) {
+            hideCheckoutWarning();
+        }
+        
+        // Update Rolle für User B
+        if (effectiveOwnerId !== currentUser.mode) {
+            const newRole = liveData.sharedWith?.[currentUser.mode]?.role;
+            if (!liveData.sharedWith?.[currentUser.mode]) {
+                // User B wurde entfernt - Editor schließen
+                alertUser('Zugriff wurde entzogen', 'error');
+                closeNotizEditor();
+                loadNotizenFromSharedKategorien();
+            } else if (newRole !== currentEditingSharedRole) {
+                currentEditingSharedRole = newRole;
+                // UI aktualisieren für neue Rolle
+                const optionsBtn = document.getElementById('btn-notiz-weitere-optionen');
+                const saveBtn = document.getElementById('btn-notiz-save');
+                if (newRole === 'write') {
+                    if (optionsBtn) optionsBtn.style.display = '';
+                    if (saveBtn) { saveBtn.style.display = ''; saveBtn.disabled = false; }
+                } else {
+                    if (optionsBtn) optionsBtn.style.display = 'none';
+                    if (saveBtn) saveBtn.style.display = 'none';
+                }
+            }
+        }
+    });
 
     if (effectiveOwnerId !== currentUser.mode) {
         currentEditingSharedRole = notiz?.sharedWith?.[currentUser.mode]?.role || 'read';
@@ -1973,6 +2025,11 @@ async function deleteNotiz() {
 }
 
 async function closeNotizEditor() {
+    // Live-Listener stoppen
+    if (currentEditingNotizListener) {
+        currentEditingNotizListener();
+        currentEditingNotizListener = null;
+    }
     if (currentEditingNotizId && currentEditingOwnerId === currentUser.mode) await releaseCheckout(currentEditingNotizId);
     stopCheckoutHeartbeat();
     currentEditingNotizId = null;
@@ -2858,11 +2915,20 @@ async function loadEinladungen() {
     
     const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
     
-    // Empfangene Einladungen
-    const qReceived = query(colRef, where('toUserId', '==', userId), where('status', 'in', ['pending', 'rejected']));
+    // Empfangene Einladungen (auch accepted für Live-Updates bei Rechteentzug)
+    const qReceived = query(colRef, where('toUserId', '==', userId), where('status', 'in', ['pending', 'rejected', 'accepted', 'cancelled', 'left']));
     einladungenListener = onSnapshot(qReceived, (snapshot) => {
+        const prevAccepted = allEinladungen.filter(e => e.status === 'accepted').length;
         allEinladungen = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const newAccepted = allEinladungen.filter(e => e.status === 'accepted').length;
         updateEinladungenBadge();
+        
+        // Bei Änderungen an akzeptierten Einladungen: Kategorien & Notizen neu laden (Live-Update)
+        if (prevAccepted !== newAccepted) {
+            console.log('Notizen: Einladungs-Status geändert, lade Kategorien & Notizen neu');
+            loadKategorien();
+            loadNotizenFromSharedKategorien();
+        }
     });
     
     // Gesendete Einladungen (pending + accepted)
@@ -3086,8 +3152,23 @@ window.cancelEinladung = async function(einladungId) {
         updatePayload[`sharedWith.${einladung.toUserId}`] = deleteField();
         
         if (einladung.type === 'kategorie' && einladung.kategorieId) {
+            // Kategorie-sharedWith entfernen
             const katRef = doc(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen_kategorien', einladung.kategorieId);
             await updateDoc(katRef, updatePayload);
+            
+            // WICHTIG: Auch alle Notizen in dieser Kategorie aktualisieren
+            const notizenRef = collection(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen');
+            const qNotizen = query(notizenRef, where('kategorieId', '==', einladung.kategorieId));
+            const notizenSnap = await getDocs(qNotizen);
+            
+            for (const notizDoc of notizenSnap.docs) {
+                const notizData = notizDoc.data();
+                // Nur wenn User in sharedWith steht und viaKategorie passt
+                if (notizData.sharedWith?.[einladung.toUserId]?.viaKategorie === einladung.kategorieId) {
+                    await updateDoc(notizDoc.ref, updatePayload);
+                }
+            }
+            console.log('Notizen: sharedWith aus', notizenSnap.size, 'Notizen entfernt');
         } else if (einladung.notizId) {
             const notizRef = doc(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen', einladung.notizId);
             await updateDoc(notizRef, updatePayload);
