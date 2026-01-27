@@ -736,6 +736,7 @@ async function loadKategorien() {
         }
         
         // Geteilte Kategorien laden (über akzeptierte Einladungen)
+        const loadedSharedKatIds = new Set(); // Duplikate vermeiden
         try {
             const einladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
             const qAccepted = query(einladungenRef, where('toUserId', '==', userId), where('status', '==', 'accepted'), where('type', '==', 'kategorie'));
@@ -748,7 +749,10 @@ async function loadKategorien() {
                 if (!ownerId || !kategorieId || ownerId === userId) continue;
                 
                 // Duplikate vermeiden (gleiche kategorieId + ownerId)
+                const uniqueKey = `${ownerId}_${kategorieId}`;
+                if (loadedSharedKatIds.has(uniqueKey)) continue;
                 if (allKategorien.some(k => k.id === kategorieId && k.ownerId === ownerId)) continue;
+                loadedSharedKatIds.add(uniqueKey);
                 
                 try {
                     const katRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', kategorieId);
@@ -1618,13 +1622,30 @@ async function loadNotizData(notizId, ownerId = null) {
     // Felder sperren beim Bearbeiten (außer Status und Checkboxen)
     lockEditFields();
 
+    // User B (nur Leserechte): ALLE Felder komplett deaktivieren
     if (!isOwner && currentEditingSharedRole !== 'write') {
-        // Read-only: auch Checkboxen und Hauptteil sperren
+        // Status-Dropdown und INFO-Checkbox deaktivieren
+        const statusEl = document.getElementById('notiz-status');
+        const infoCbEl2 = document.getElementById('notiz-status-info');
+        if (statusEl) statusEl.disabled = true;
+        if (infoCbEl2) infoCbEl2.disabled = true;
+        
+        // Alle Basis-Felder deaktivieren
+        ['notiz-betreff', 'notiz-kategorie', 'notiz-subkategorie', 'notiz-erinnerung', 'notiz-frist'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = true;
+        });
+        
+        // Hauptteil komplett sperren (alle Inputs, Textareas, Selects, Checkboxen)
         const containerEl = document.getElementById('notiz-hauptteil-container');
         if (containerEl) {
             containerEl.querySelectorAll('input, textarea, select').forEach(el => el.disabled = true);
             containerEl.querySelectorAll('button').forEach(btn => btn.style.display = 'none');
         }
+        
+        // Teilen-Button verstecken
+        const shareBtn2 = document.getElementById('btn-notiz-share');
+        if (shareBtn2) shareBtn2.style.display = 'none';
     }
 }
 

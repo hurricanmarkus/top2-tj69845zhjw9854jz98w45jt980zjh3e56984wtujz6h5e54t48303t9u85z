@@ -140,12 +140,6 @@
         </div>
 
         <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl border-t">
-            <!-- Gesperrt-Banner (prominent unter den Buttons) -->
-            <div id="notiz-checkout-banner" class="hidden mb-3 p-3 bg-red-100 border-2 border-red-400 rounded-lg text-center">
-                <span class="text-red-700 font-bold text-sm">
-                    🔒 Diese Notiz wird gerade von <span id="notiz-checkout-user-banner" class="font-black"></span> bearbeitet
-                </span>
-            </div>
             <div class="flex justify-between items-center">
                 <button id="btn-notiz-delete" class="px-4 py-2 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 hidden">
                     🗑️ Löschen
@@ -158,6 +152,12 @@
                         💾 Speichern
                     </button>
                 </div>
+            </div>
+            <!-- Gesperrt-Banner (prominent UNTER den Buttons) -->
+            <div id="notiz-checkout-banner" class="hidden mt-4 p-4 bg-red-500 border-2 border-red-700 rounded-lg text-center animate-pulse">
+                <span class="text-white font-bold text-base">
+                    🔒 Diese Notiz wird gerade von <span id="notiz-checkout-user-banner" class="font-black underline"></span> bearbeitet
+                </span>
             </div>
         </div>
     </div>
