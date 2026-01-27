@@ -2910,67 +2910,87 @@ window.removeSharedUser = async function(userId) {
         const ownerId = currentEditingOwnerId || currentUser.mode;
         const notizRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen', currentEditingNotizId);
         
-        // Notiz-Daten laden um viaKategorie zu prüfen
+        // Notiz-Daten laden um viaKategorie und kategorieId zu prüfen
         const notizSnap = await getDoc(notizRef);
         const notizData = notizSnap.exists() ? notizSnap.data() : {};
         const sharedEntry = notizData.sharedWith?.[userId];
         const viaKategorie = sharedEntry?.viaKategorie;
+        const kategorieId = notizData.kategorieId; // Die Kategorie dieser Notiz
 
         // 1. sharedWith aus Notiz entfernen
         const updatePayload = {};
         updatePayload[`sharedWith.${userId}`] = deleteField();
         await updateDoc(notizRef, updatePayload);
 
-        // 2. Wenn via Kategorie geteilt: auch Kategorie-sharedWith entfernen
-        if (viaKategorie && isOwner) {
+        // 2. Kategorie-sharedWith entfernen (immer prüfen, nicht nur wenn viaKategorie)
+        const katIdToClean = viaKategorie || kategorieId;
+        if (katIdToClean && isOwner) {
             try {
-                const katRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', viaKategorie);
-                const katUpdatePayload = {};
-                katUpdatePayload[`sharedWith.${userId}`] = deleteField();
-                await updateDoc(katRef, katUpdatePayload);
-                console.log('Notizen: sharedWith aus Kategorie entfernt:', viaKategorie);
+                const katRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', katIdToClean);
+                const katSnap = await getDoc(katRef);
+                if (katSnap.exists()) {
+                    const katData = katSnap.data() || {};
+                    // Nur entfernen wenn User in Kategorie-sharedWith steht
+                    if (katData.sharedWith?.[userId]) {
+                        const katUpdatePayload = {};
+                        katUpdatePayload[`sharedWith.${userId}`] = deleteField();
+                        await updateDoc(katRef, katUpdatePayload);
+                        console.log('Notizen: sharedWith aus Kategorie entfernt:', katIdToClean);
+                    }
+                }
                 
                 // Auch alle anderen Notizen dieser Kategorie bereinigen
                 const notizenCol = collection(db, 'artifacts', appId, 'users', ownerId, 'notizen');
-                const qNotizen = query(notizenCol, where('kategorieId', '==', viaKategorie));
+                const qNotizen = query(notizenCol, where('kategorieId', '==', katIdToClean));
                 const notizenSnap = await getDocs(qNotizen);
+                let cleanedCount = 0;
                 for (const nDoc of notizenSnap.docs) {
                     const nData = nDoc.data();
-                    if (nData.sharedWith?.[userId]?.viaKategorie === viaKategorie) {
+                    if (nData.sharedWith?.[userId]) {
                         await updateDoc(nDoc.ref, { [`sharedWith.${userId}`]: deleteField() });
+                        cleanedCount++;
                     }
                 }
-                console.log('Notizen: sharedWith aus', notizenSnap.size, 'Notizen der Kategorie entfernt');
+                console.log('Notizen: sharedWith aus', cleanedCount, 'Notizen der Kategorie entfernt');
             } catch (katError) {
                 console.warn('Notizen: Fehler beim Entfernen aus Kategorie:', katError);
             }
         }
 
-        // 3. Zugehörige Einladung auf "cancelled" setzen
+        // 3. ALLE zugehörigen Einladungen auf "cancelled" setzen (Kategorie UND Notiz)
         try {
             const einladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
-            // Suche Einladung für diese Notiz oder Kategorie
-            let qEinl;
-            if (viaKategorie) {
-                qEinl = query(einladungenRef, 
-                    where('kategorieId', '==', viaKategorie),
+            let cancelledCount = 0;
+            
+            // Kategorie-Einladungen canceln
+            if (katIdToClean) {
+                const qKatEinl = query(einladungenRef, 
+                    where('kategorieId', '==', katIdToClean),
                     where('fromUserId', '==', ownerId),
                     where('toUserId', '==', userId),
                     where('status', 'in', ['pending', 'accepted'])
                 );
-            } else {
-                qEinl = query(einladungenRef, 
-                    where('notizId', '==', currentEditingNotizId),
-                    where('fromUserId', '==', ownerId),
-                    where('toUserId', '==', userId),
-                    where('status', 'in', ['pending', 'accepted'])
-                );
+                const katEinlSnap = await getDocs(qKatEinl);
+                for (const einlDoc of katEinlSnap.docs) {
+                    await updateDoc(einlDoc.ref, { status: 'cancelled', updatedAt: serverTimestamp() });
+                    cancelledCount++;
+                }
             }
-            const einlSnap = await getDocs(qEinl);
-            for (const einlDoc of einlSnap.docs) {
+            
+            // Notiz-Einladungen canceln
+            const qNotizEinl = query(einladungenRef, 
+                where('notizId', '==', currentEditingNotizId),
+                where('fromUserId', '==', ownerId),
+                where('toUserId', '==', userId),
+                where('status', 'in', ['pending', 'accepted'])
+            );
+            const notizEinlSnap = await getDocs(qNotizEinl);
+            for (const einlDoc of notizEinlSnap.docs) {
                 await updateDoc(einlDoc.ref, { status: 'cancelled', updatedAt: serverTimestamp() });
+                cancelledCount++;
             }
-            console.log('Notizen:', einlSnap.size, 'Einladungen auf cancelled gesetzt');
+            
+            console.log('Notizen:', cancelledCount, 'Einladungen auf cancelled gesetzt');
         } catch (einlError) {
             console.warn('Notizen: Fehler beim Canceln der Einladung:', einlError);
         }
@@ -2981,6 +3001,10 @@ window.removeSharedUser = async function(userId) {
         await addHistory(currentEditingNotizId, actionText, {});
 
         alertUser(isOwner ? 'Entzogen' : 'Beendet', 'success');
+        
+        // Kategorien neu laden damit Einstellungen-Ansicht aktualisiert wird
+        loadKategorien();
+        
         if (!isOwner) {
             closeNotizEditor();
         }
