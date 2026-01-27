@@ -696,24 +696,32 @@ async function loadKategorien() {
             allKategorien.push(kategorie);
         }
         
-        // Geteilte Kategorien laden (ohne /users-Scan -> permissions safe)
+        // Geteilte Kategorien laden (über akzeptierte Einladungen)
         try {
-            const qShared = query(
-                collectionGroup(db, 'notizen_kategorien'),
-                where(`sharedWith.${userId}.status`, '==', 'active')
-            );
-            const sharedSnap = await getDocs(qShared);
-
-            for (const katDoc of sharedSnap.docs) {
-                const ownerId = extractOwnerIdFromDocRef(katDoc.ref);
-                if (!ownerId || ownerId === userId) continue;
-
-                const katData = katDoc.data() || {};
-                const kategorie = { id: katDoc.id, ...katData, subkategorien: [], ownerId };
-                const subColRef = collection(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', katDoc.id, 'subkategorien');
-                const subSnap = await getDocs(subColRef);
-                subSnap.forEach(subDoc => kategorie.subkategorien.push({ id: subDoc.id, ...subDoc.data() }));
-                allKategorien.push(kategorie);
+            const einladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
+            const qAccepted = query(einladungenRef, where('toUserId', '==', userId), where('status', '==', 'accepted'), where('type', '==', 'kategorie'));
+            const acceptedSnap = await getDocs(qAccepted);
+            
+            for (const einlDoc of acceptedSnap.docs) {
+                const einlData = einlDoc.data();
+                const ownerId = einlData.fromUserId;
+                const kategorieId = einlData.kategorieId;
+                if (!ownerId || !kategorieId || ownerId === userId) continue;
+                
+                try {
+                    const katRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', kategorieId);
+                    const katSnap = await getDoc(katRef);
+                    if (!katSnap.exists()) continue;
+                    
+                    const katData = katSnap.data() || {};
+                    const kategorie = { id: katSnap.id, ...katData, subkategorien: [], ownerId };
+                    const subColRef = collection(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', kategorieId, 'subkategorien');
+                    const subSnap = await getDocs(subColRef);
+                    subSnap.forEach(subDoc => kategorie.subkategorien.push({ id: subDoc.id, ...subDoc.data() }));
+                    allKategorien.push(kategorie);
+                } catch (katError) {
+                    console.warn('Fehler beim Laden geteilter Kategorie:', kategorieId, katError);
+                }
             }
         } catch (error) {
             console.warn('Fehler beim Laden geteilter Kategorien:', error);
@@ -750,6 +758,7 @@ function renderKategorienListe() {
                 <div class="flex gap-1">
                     ${isOwner ? `<button onclick="window.shareKategorie('${kat.id}')" class="text-blue-500 text-sm px-2" title="Teilen">👥</button>` : ''}
                     ${isOwner ? `<button onclick="window.deleteKategorie('${kat.id}')" class="text-red-500 text-sm">🗑️</button>` : ''}
+                    ${!isOwner && kat.ownerId ? `<button onclick="window.leaveSharedKategorie('${kat.id}', '${kat.ownerId}')" class="text-red-500 text-sm px-2" title="Teilen beenden">🚪</button>` : ''}
                 </div>
             </div>
             <div class="ml-4 space-y-1">
@@ -1024,6 +1033,24 @@ window.deleteSubkategorie = async function(kategorieId, subkategorieId) {
             }
         }
     });
+};
+
+window.leaveSharedKategorie = async function(kategorieId, ownerId) {
+    if (!confirm('Teilen wirklich beenden? Du verlierst den Zugriff auf diese Kategorie.')) return;
+    try {
+        const userId = currentUser.mode;
+        const katRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', kategorieId);
+        
+        const updatePayload = {};
+        updatePayload[`sharedWith.${userId}`] = deleteField();
+        await updateDoc(katRef, updatePayload);
+        
+        alertUser('Teilen beendet', 'success');
+        loadKategorien();
+    } catch (error) {
+        console.error('Notizen: Fehler beim Beenden des Teilens:', error);
+        alertUser('Fehler', 'error');
+    }
 };
 
 function updateKategorienDropdowns() {
