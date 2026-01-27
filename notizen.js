@@ -1516,8 +1516,18 @@ async function loadNotizData(notizId, ownerId = null) {
 
     if (shareBtn) shareBtn.style.display = isOwner ? '' : 'none';
     if (optionsBtn) optionsBtn.style.display = isOwner || currentEditingSharedRole === 'write' ? '' : 'none';
-    if (saveBtn) saveBtn.disabled = !isOwner && currentEditingSharedRole !== 'write';
-    if (!isOwner && currentEditingSharedRole !== 'write') {
+    
+    // User B (nur Leserechte): Speicher-Button komplett verstecken, Status deaktivieren
+    const isReadOnly = !isOwner && currentEditingSharedRole !== 'write';
+    if (saveBtn) {
+        if (isReadOnly) {
+            saveBtn.style.display = 'none';
+        } else {
+            saveBtn.style.display = '';
+            saveBtn.disabled = false;
+        }
+    }
+    if (isReadOnly) {
         if (statusSelectEl) statusSelectEl.disabled = true;
         if (infoCbEl) infoCbEl.disabled = true;
     }
@@ -1573,6 +1583,10 @@ function lockEditFields() {
         const el = document.getElementById(id);
         if (el) el.disabled = true;
     });
+    
+    // INFO-Checkbox in Leseansicht deaktivieren (nur im Bearbeitungsmodus wählbar)
+    const infoCb = document.getElementById('notiz-status-info');
+    if (infoCb) infoCb.disabled = true;
     
     // Alle Element-Buttons (hinzufügen) verstecken
     document.querySelectorAll('.notiz-add-element').forEach(btn => btn.style.display = 'none');
@@ -1685,6 +1699,10 @@ function unlockEditFields() {
         const el = document.getElementById(id);
         if (el) el.disabled = false;
     });
+    
+    // INFO-Checkbox im Bearbeitungsmodus aktivieren
+    const infoCb = document.getElementById('notiz-status-info');
+    if (infoCb) infoCb.disabled = false;
     
     // Element-Buttons wieder anzeigen
     document.querySelectorAll('.notiz-add-element').forEach(btn => btn.style.display = '');
@@ -3129,20 +3147,38 @@ function stopCheckoutHeartbeat() {
 }
 
 function showCheckoutWarning(userId) {
+    const displayName = getDisplayNameById(userId);
+    
+    // Header-Indikator (klein)
     const indicator = document.getElementById('notiz-checkout-indicator');
     const userSpan = document.getElementById('notiz-checkout-user');
     if (indicator && userSpan) {
-        userSpan.textContent = getDisplayNameById(userId);
+        userSpan.textContent = displayName;
         indicator.classList.remove('hidden');
     }
-    document.getElementById('btn-notiz-save').disabled = true;
+    
+    // Prominentes Banner unter den Buttons
+    const banner = document.getElementById('notiz-checkout-banner');
+    const bannerUser = document.getElementById('notiz-checkout-user-banner');
+    if (banner && bannerUser) {
+        bannerUser.textContent = displayName;
+        banner.classList.remove('hidden');
+    }
+    
+    const saveBtn = document.getElementById('btn-notiz-save');
+    if (saveBtn) saveBtn.disabled = true;
     document.querySelectorAll('#notiz-hauptteil-container input, #notiz-hauptteil-container textarea, #notiz-hauptteil-container select').forEach(el => el.disabled = true);
 }
 
 function hideCheckoutWarning() {
     const indicator = document.getElementById('notiz-checkout-indicator');
     if (indicator) indicator.classList.add('hidden');
-    document.getElementById('btn-notiz-save').disabled = false;
+    
+    const banner = document.getElementById('notiz-checkout-banner');
+    if (banner) banner.classList.add('hidden');
+    
+    const saveBtn = document.getElementById('btn-notiz-save');
+    if (saveBtn) saveBtn.disabled = false;
     document.querySelectorAll('#notiz-hauptteil-container input, #notiz-hauptteil-container textarea, #notiz-hauptteil-container select').forEach(el => el.disabled = false);
 }
 
