@@ -2924,18 +2924,23 @@ window.removeSharedUser = async function(userId) {
 
         // 2. Kategorie-sharedWith entfernen (immer prüfen, nicht nur wenn viaKategorie)
         const katIdToClean = viaKategorie || kategorieId;
+        console.log('Notizen: removeSharedUser - viaKategorie:', viaKategorie, 'kategorieId:', kategorieId, 'katIdToClean:', katIdToClean);
         if (katIdToClean && isOwner) {
             try {
                 const katRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', katIdToClean);
                 const katSnap = await getDoc(katRef);
+                console.log('Notizen: Kategorie existiert:', katSnap.exists());
                 if (katSnap.exists()) {
                     const katData = katSnap.data() || {};
-                    // Nur entfernen wenn User in Kategorie-sharedWith steht
+                    console.log('Notizen: Kategorie sharedWith:', JSON.stringify(katData.sharedWith));
+                    // Entferne User aus sharedWith (prüfe ob vorhanden)
                     if (katData.sharedWith?.[userId]) {
                         const katUpdatePayload = {};
                         katUpdatePayload[`sharedWith.${userId}`] = deleteField();
                         await updateDoc(katRef, katUpdatePayload);
-                        console.log('Notizen: sharedWith aus Kategorie entfernt:', katIdToClean);
+                        console.log('Notizen: sharedWith aus Kategorie entfernt:', katIdToClean, 'für User:', userId);
+                    } else {
+                        console.log('Notizen: User', userId, 'nicht in Kategorie-sharedWith gefunden');
                     }
                 }
                 
