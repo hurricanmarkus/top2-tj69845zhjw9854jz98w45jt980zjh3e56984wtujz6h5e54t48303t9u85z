@@ -656,6 +656,36 @@ async function saveKategorieShareSelection() {
 
         batch.update(docRef, updatePayload);
         await batch.commit();
+        
+        // Alle Notizen in dieser Kategorie mit pending-Status für die User teilen
+        // (User A ist Owner und darf das)
+        try {
+            const notizenRef = collection(db, 'artifacts', appId, 'users', ownerId, 'notizen');
+            const qNotizen = query(notizenRef, where('kategorieId', '==', currentSharingKategorieId));
+            const notizenSnap = await getDocs(qNotizen);
+            
+            for (const notizDoc of notizenSnap.docs) {
+                const notizUpdatePayload = {};
+                for (const { odUserId, role } of selected) {
+                    const existing = existingShared[odUserId];
+                    if (existing?.status === 'pending' || existing?.status === 'rejected' || existing?.status === 'active') continue;
+                    
+                    notizUpdatePayload[`sharedWith.${odUserId}`] = {
+                        role,
+                        status: 'pending',
+                        since: serverTimestamp(),
+                        sharedBy: ownerId,
+                        viaKategorie: currentSharingKategorieId
+                    };
+                }
+                if (Object.keys(notizUpdatePayload).length > 0) {
+                    await updateDoc(notizDoc.ref, notizUpdatePayload);
+                }
+            }
+            console.log('Notizen: Notizen in Kategorie mit pending geteilt:', notizenSnap.size);
+        } catch (notizError) {
+            console.warn('Notizen: Fehler beim Teilen der Notizen:', notizError);
+        }
 
         alertUser(`Einladungen gesendet: ${createdCount}${skippedCount ? ` (übersprungen: ${skippedCount})` : ''}`, 'success');
         closeKategorieShareModal();

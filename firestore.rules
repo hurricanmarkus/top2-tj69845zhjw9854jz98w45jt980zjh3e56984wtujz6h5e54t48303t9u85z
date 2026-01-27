@@ -566,13 +566,13 @@ service cloud.firestore {
 
     // Notizen (user-spezifisch mit Sharing-Logik)
     match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/notizen/{notizId} {
-      // Lesen: Owner oder User mit read/write permission in sharedWith
+      // Lesen: Owner oder User mit read/write permission in sharedWith (pending oder active)
       allow read: if hasAppUserIdClaim() && (
         appUserId() == userId || 
         (
           resource.data.sharedWith != null &&
           appUserId() in resource.data.sharedWith &&
-          resource.data.sharedWith[appUserId()].status == 'active'
+          (resource.data.sharedWith[appUserId()].status == 'active' || resource.data.sharedWith[appUserId()].status == 'pending')
         )
       );
       
@@ -592,18 +592,14 @@ service cloud.firestore {
           // Shared User darf nur seinen eigenen sharedWith-Eintrag ändern (status ändern oder entfernen)
           resource.data.sharedWith != null &&
           appUserId() in resource.data.sharedWith &&
+          (resource.data.sharedWith[appUserId()].status == 'pending' || resource.data.sharedWith[appUserId()].status == 'active') &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sharedWith']) &&
           request.resource.data.sharedWith.diff(resource.data.sharedWith).affectedKeys().hasOnly([appUserId()]) &&
           (
             // Entfernen (Teilen beenden)
             !(appUserId() in request.resource.data.sharedWith) ||
-            (
-              // Nur status-Änderung erlaubt, andere Felder müssen gleich bleiben
-              request.resource.data.sharedWith[appUserId()].role == resource.data.sharedWith[appUserId()].role &&
-              request.resource.data.sharedWith[appUserId()].since == resource.data.sharedWith[appUserId()].since &&
-              request.resource.data.sharedWith[appUserId()].sharedBy == resource.data.sharedWith[appUserId()].sharedBy &&
-              request.resource.data.sharedWith[appUserId()].status in ['pending', 'active', 'rejected']
-            )
+            // Status-Änderung erlaubt (pending -> active, etc.)
+            request.resource.data.sharedWith[appUserId()].status in ['pending', 'active', 'rejected']
           )
         )
       );
