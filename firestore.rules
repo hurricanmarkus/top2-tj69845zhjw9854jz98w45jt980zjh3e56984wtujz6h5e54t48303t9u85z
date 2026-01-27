@@ -644,9 +644,9 @@ service cloud.firestore {
       // Erstellen: Als fromUserId
       allow create: if hasAppUserIdClaim() && request.resource.data.fromUserId == appUserId() && request.resource.data.status == 'pending';
       
-      // Update: Empfänger kann annehmen/ablehnen, Sender kann abbrechen
+      // Update: Empfänger kann annehmen/ablehnen/verlassen, Sender kann abbrechen
       allow update: if hasAppUserIdClaim() && (
-        // Empfänger: annehmen/ablehnen/revoken
+        // Empfänger: annehmen/ablehnen/revoken/verlassen
         (appUserId() == resource.data.toUserId && (
           (
             resource.data.status == 'pending' &&
@@ -655,6 +655,10 @@ service cloud.firestore {
           (
             resource.data.status == 'rejected' &&
             request.resource.data.status == 'revoked'
+          ) ||
+          (
+            resource.data.status == 'accepted' &&
+            request.resource.data.status == 'left'
           )
         ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'respondedAt', 'updatedAt'])) ||
         // Sender: abbrechen (pending oder accepted -> cancelled)

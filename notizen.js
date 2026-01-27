@@ -708,6 +708,9 @@ async function loadKategorien() {
                 const kategorieId = einlData.kategorieId;
                 if (!ownerId || !kategorieId || ownerId === userId) continue;
                 
+                // Duplikate vermeiden (gleiche kategorieId + ownerId)
+                if (allKategorien.some(k => k.id === kategorieId && k.ownerId === ownerId)) continue;
+                
                 try {
                     const katRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', kategorieId);
                     const katSnap = await getDoc(katRef);
@@ -1039,8 +1042,17 @@ window.leaveSharedKategorie = async function(kategorieId, ownerId) {
     if (!confirm('Teilen wirklich beenden? Du verlierst den Zugriff auf diese Kategorie.')) return;
     try {
         const userId = currentUser.mode;
-        const katRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', kategorieId);
         
+        // Einladung auf 'left' setzen (damit User A es sieht)
+        const einladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
+        const qEinl = query(einladungenRef, where('kategorieId', '==', kategorieId), where('toUserId', '==', userId), where('status', '==', 'accepted'));
+        const einlSnap = await getDocs(qEinl);
+        for (const einlDoc of einlSnap.docs) {
+            await updateDoc(einlDoc.ref, { status: 'left', updatedAt: serverTimestamp() });
+        }
+        
+        // sharedWith entfernen
+        const katRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', kategorieId);
         const updatePayload = {};
         updatePayload[`sharedWith.${userId}`] = deleteField();
         await updateDoc(katRef, updatePayload);
@@ -2907,6 +2919,27 @@ window.acceptEinladung = async function(einladungId) {
             await updateDoc(katRef, {
                 [`sharedWith.${currentUser.mode}.status`]: 'active'
             });
+            
+            // Alle Notizen in dieser Kategorie mit User teilen (damit Firestore Rules funktionieren)
+            try {
+                const notizenRef = collection(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen');
+                const qNotizen = query(notizenRef, where('kategorieId', '==', einladung.kategorieId));
+                const notizenSnap = await getDocs(qNotizen);
+                for (const notizDoc of notizenSnap.docs) {
+                    await updateDoc(notizDoc.ref, {
+                        [`sharedWith.${currentUser.mode}`]: {
+                            role: einladung.role || 'read',
+                            status: 'active',
+                            since: serverTimestamp(),
+                            sharedBy: einladung.fromUserId,
+                            viaKategorie: einladung.kategorieId
+                        }
+                    });
+                }
+                console.log('Notizen: Notizen in Kategorie geteilt:', notizenSnap.size);
+            } catch (notizError) {
+                console.warn('Notizen: Fehler beim Teilen der Notizen in Kategorie:', notizError);
+            }
         } else if (einladung.notizId) {
             const notizRef = doc(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen', einladung.notizId);
             await updateDoc(notizRef, {
