@@ -540,21 +540,30 @@ async function loadUserListForKategorieShare() {
         list.innerHTML = users.map(u => {
             const displayText = u.displayName || u.id;
             const searchText = `${u.displayName} ${u.id}`.toLowerCase();
-            const sharedRole = alreadyShared[u.id]?.role;
+            const sharedData = alreadyShared[u.id];
+            const sharedRole = sharedData?.role;
+            const sharedStatus = sharedData?.status;
+            const isActiveShare = sharedStatus === 'active' || sharedStatus === 'pending';
             const checkedAttr = sharedRole ? 'checked' : '';
             const roleValue = sharedRole || 'read';
+            const statusBadge = sharedStatus === 'active' ? '<span class="text-xs text-green-600 ml-1">✓ aktiv</span>' : 
+                               sharedStatus === 'pending' ? '<span class="text-xs text-yellow-600 ml-1">⏳ ausstehend</span>' : '';
             return `
-                <div class="kategorie-share-user-row flex items-center justify-between gap-2 p-2 border-b last:border-b-0" data-search="${searchText}">
+                <div class="kategorie-share-user-row flex items-center justify-between gap-2 p-2 border-b last:border-b-0 ${isActiveShare ? 'bg-green-50' : ''}" data-search="${searchText}">
                     <label class="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
-                        <input type="checkbox" class="kategorie-share-user-checkbox" data-userid="${u.id}" ${checkedAttr}>
+                        <input type="checkbox" class="kategorie-share-user-checkbox" data-userid="${u.id}" ${checkedAttr} ${isActiveShare ? 'disabled' : ''}>
                         <div class="min-w-0">
-                            <div class="text-sm font-semibold truncate">${displayText}</div>
+                            <div class="text-sm font-semibold truncate">${displayText}${statusBadge}</div>
                         </div>
                     </label>
-                    <select class="kategorie-share-user-role text-xs border rounded px-2 py-1" data-userid="${u.id}">
-                        <option value="read" ${roleValue === 'read' ? 'selected' : ''}>👁️ Lesen</option>
-                        <option value="write" ${roleValue === 'write' ? 'selected' : ''}>✏️ Schreiben</option>
-                    </select>
+                    ${isActiveShare ? `
+                        <button onclick="window.revokeKategorieShare('${currentSharingKategorieId}', '${u.id}')" class="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600" title="Freigabe entziehen">✕ Entziehen</button>
+                    ` : `
+                        <select class="kategorie-share-user-role text-xs border rounded px-2 py-1" data-userid="${u.id}">
+                            <option value="read" ${roleValue === 'read' ? 'selected' : ''}>👁️ Lesen</option>
+                            <option value="write" ${roleValue === 'write' ? 'selected' : ''}>✏️ Schreiben</option>
+                        </select>
+                    `}
                 </div>
             `;
         }).join('');
@@ -1122,16 +1131,75 @@ window.leaveSharedKategorie = async function(kategorieId, ownerId) {
             await updateDoc(einlDoc.ref, { status: 'left', updatedAt: serverTimestamp() });
         }
         
-        // sharedWith entfernen
+        // sharedWith von Kategorie entfernen
         const katRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', kategorieId);
         const updatePayload = {};
         updatePayload[`sharedWith.${userId}`] = deleteField();
         await updateDoc(katRef, updatePayload);
         
+        // sharedWith von allen Notizen in dieser Kategorie entfernen
+        try {
+            const notizenRef = collection(db, 'artifacts', appId, 'users', ownerId, 'notizen');
+            const qNotizen = query(notizenRef, where('kategorieId', '==', kategorieId));
+            const notizenSnap = await getDocs(qNotizen);
+            for (const notizDoc of notizenSnap.docs) {
+                const notizUpdatePayload = {};
+                notizUpdatePayload[`sharedWith.${userId}`] = deleteField();
+                await updateDoc(notizDoc.ref, notizUpdatePayload);
+            }
+            console.log('Notizen: sharedWith von', notizenSnap.size, 'Notizen entfernt (User verlässt Kategorie)');
+        } catch (notizError) {
+            console.warn('Notizen: Fehler beim Entfernen der Notiz-Freigaben:', notizError);
+        }
+        
         alertUser('Teilen beendet', 'success');
         loadKategorien();
     } catch (error) {
         console.error('Notizen: Fehler beim Beenden des Teilens:', error);
+        alertUser('Fehler', 'error');
+    }
+};
+
+window.revokeKategorieShare = async function(kategorieId, targetUserId) {
+    const targetName = getDisplayNameById(targetUserId) || targetUserId;
+    if (!confirm(`Freigabe für "${targetName}" wirklich entziehen?`)) return;
+    try {
+        const ownerId = currentUser.mode;
+        
+        // Einladung auf 'cancelled' setzen
+        const einladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
+        const qEinl = query(einladungenRef, where('kategorieId', '==', kategorieId), where('fromUserId', '==', ownerId), where('toUserId', '==', targetUserId), where('status', 'in', ['pending', 'accepted']));
+        const einlSnap = await getDocs(qEinl);
+        for (const einlDoc of einlSnap.docs) {
+            await updateDoc(einlDoc.ref, { status: 'cancelled', updatedAt: serverTimestamp() });
+        }
+        
+        // sharedWith von Kategorie entfernen
+        const katRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', kategorieId);
+        const updatePayload = {};
+        updatePayload[`sharedWith.${targetUserId}`] = deleteField();
+        await updateDoc(katRef, updatePayload);
+        
+        // sharedWith von allen Notizen in dieser Kategorie entfernen
+        try {
+            const notizenRef = collection(db, 'artifacts', appId, 'users', ownerId, 'notizen');
+            const qNotizen = query(notizenRef, where('kategorieId', '==', kategorieId));
+            const notizenSnap = await getDocs(qNotizen);
+            for (const notizDoc of notizenSnap.docs) {
+                const notizUpdatePayload = {};
+                notizUpdatePayload[`sharedWith.${targetUserId}`] = deleteField();
+                await updateDoc(notizDoc.ref, notizUpdatePayload);
+            }
+            console.log('Notizen: sharedWith von', notizenSnap.size, 'Notizen entfernt (Owner entzieht Freigabe)');
+        } catch (notizError) {
+            console.warn('Notizen: Fehler beim Entfernen der Notiz-Freigaben:', notizError);
+        }
+        
+        alertUser('Freigabe entzogen', 'success');
+        closeKategorieShareModal();
+        loadKategorien();
+    } catch (error) {
+        console.error('Notizen: Fehler beim Entziehen der Freigabe:', error);
         alertUser('Fehler', 'error');
     }
 };
