@@ -1,6 +1,6 @@
 // NOTIZEN-PROGRAMM - Strukturierte Notizen mit Kategorien, Sharing & Live-Sync
 import { db, appId, currentUser, GUEST_MODE, alertUser } from './haupteingang.js';
-import { collection, collectionGroup, doc, onSnapshot, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, query, where, serverTimestamp, writeBatch, orderBy, limit as firestoreLimit, Timestamp, deleteField } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { collection, doc, onSnapshot, getDoc, getDocs, updateDoc, deleteDoc, addDoc, query, where, serverTimestamp, writeBatch, orderBy, limit as firestoreLimit, Timestamp, deleteField } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 let kategorienListener = null, notizenListener = null, sharedNotizenListener = null, einladungenListener = null;
 let allKategorien = [], allNotizen = [], allEinladungen = [], allGesendetEinladungen = [];
@@ -262,17 +262,6 @@ export function stopNotizenListeners() {
     stopCheckoutHeartbeat();
 }
 
-function extractOwnerIdFromDocRef(docRef) {
-    try {
-        const path = String(docRef?.path || '');
-        const parts = path.split('/');
-        const usersIdx = parts.indexOf('users');
-        if (usersIdx >= 0 && parts.length > usersIdx + 1) return parts[usersIdx + 1];
-    } catch (e) {
-        // ignore
-    }
-    return null;
-}
 
 function recomputeAllNotizen() {
     allNotizen = [...ownNotizen, ...sharedNotizen, ...sharedKategorieNotizen];
@@ -992,7 +981,7 @@ async function createKategorie() {
         });
         input.value = '';
         alertUser('Kategorie erstellt', 'success');
-    } catch (error) {
+    } catch {
         alertUser('Fehler', 'error');
     }
 }
@@ -1013,7 +1002,7 @@ window.createSubkategorie = async function(kategorieId) {
         alertUser('Subkategorie erstellt', 'success');
         // Kategorien neu laden um Subkategorien anzuzeigen
         loadKategorien();
-    } catch (error) {
+    } catch {
         alertUser('Fehler', 'error');
     }
 };
@@ -1137,17 +1126,28 @@ window.leaveSharedKategorie = async function(kategorieId, ownerId) {
         updatePayload[`sharedWith.${userId}`] = deleteField();
         await updateDoc(katRef, updatePayload);
         
-        // sharedWith von allen Notizen in dieser Kategorie entfernen
+        // sharedWith von allen Notizen in dieser Kategorie entfernen (nur eigener Eintrag)
+        // Gemäß Firestore Rules darf User nur seinen eigenen sharedWith-Eintrag entfernen
         try {
             const notizenRef = collection(db, 'artifacts', appId, 'users', ownerId, 'notizen');
             const qNotizen = query(notizenRef, where('kategorieId', '==', kategorieId));
             const notizenSnap = await getDocs(qNotizen);
+            let removedCount = 0;
             for (const notizDoc of notizenSnap.docs) {
-                const notizUpdatePayload = {};
-                notizUpdatePayload[`sharedWith.${userId}`] = deleteField();
-                await updateDoc(notizDoc.ref, notizUpdatePayload);
+                const notizData = notizDoc.data();
+                // Nur entfernen wenn eigener Eintrag existiert
+                if (notizData.sharedWith && notizData.sharedWith[userId]) {
+                    try {
+                        const notizUpdatePayload = {};
+                        notizUpdatePayload[`sharedWith.${userId}`] = deleteField();
+                        await updateDoc(notizDoc.ref, notizUpdatePayload);
+                        removedCount++;
+                    } catch (singleError) {
+                        console.warn('Notizen: Fehler bei Notiz-sharedWith-Entfernung:', notizDoc.id, singleError);
+                    }
+                }
             }
-            console.log('Notizen: sharedWith von', notizenSnap.size, 'Notizen entfernt (User verlässt Kategorie)');
+            console.log('Notizen: sharedWith von', removedCount, 'Notizen entfernt (User verlässt Kategorie)');
         } catch (notizError) {
             console.warn('Notizen: Fehler beim Entfernen der Notiz-Freigaben:', notizError);
         }
@@ -2006,7 +2006,7 @@ async function saveNotiz() {
             alertUser('Erstellt', 'success');
         }
         closeNotizEditor();
-    } catch (error) {
+    } catch {
         alertUser('Fehler', 'error');
     }
 }
@@ -2023,7 +2023,7 @@ function collectElements() {
             element.subtitle = el.querySelector('.element-subtitle')?.value || '';
             switch (type) {
                 case 'text': element.content = el.querySelector('textarea')?.value || ''; break;
-                case 'list':
+                case 'list': {
                     const listTa = el.querySelector('.list-textarea') || el.querySelector('textarea');
                     element.content = listTa?.value || '';
                     element.listStyleL1 = el.querySelector('.list-style-l1')?.value || 'symbol';
@@ -2031,7 +2031,8 @@ function collectElements() {
                     element.listStyleL2 = el.querySelector('.list-style-l2')?.value || 'symbol';
                     element.listSymbolL2 = el.querySelector('.list-symbol-l2')?.value || '•';
                     break;
-                case 'checkbox':
+                }
+                case 'checkbox': {
                     const items = [];
                     el.querySelectorAll('.checkbox-item').forEach(item => {
                         items.push({
@@ -2041,6 +2042,7 @@ function collectElements() {
                     });
                     element.items = items;
                     break;
+                }
                 case 'link':
                     element.url = el.querySelector('input[name="url"]')?.value || '';
                     element.label = el.querySelector('input[name="label"]')?.value || '';
@@ -2050,7 +2052,7 @@ function collectElements() {
                     element.content = el.querySelector('textarea')?.value || '';
                     element.color = el.querySelector('select')?.value || 'blue';
                     break;
-                case 'table':
+                case 'table': {
                     const tableRows = [];
                     el.querySelectorAll('tbody tr').forEach(tr => {
                         const cells = Array.from(tr.querySelectorAll('td input')).map(inp => inp.value);
@@ -2059,6 +2061,7 @@ function collectElements() {
                     element.rows = tableRows;
                     element.headers = Array.from(el.querySelectorAll('thead input')).map(inp => inp.value);
                     break;
+                }
             }
             elements.push(element);
         });
@@ -2077,7 +2080,7 @@ function collectElements() {
                 case 'text':
                     element.content = el.querySelector('textarea')?.value || '';
                     break;
-                case 'list':
+                case 'list': {
                     const listTa = el.querySelector('.list-textarea') || el.querySelector('textarea');
                     element.content = listTa?.value || '';
                     element.listStyleL1 = el.querySelector('.list-style-l1')?.value || 'symbol';
@@ -2085,7 +2088,8 @@ function collectElements() {
                     element.listStyleL2 = el.querySelector('.list-style-l2')?.value || 'symbol';
                     element.listSymbolL2 = el.querySelector('.list-symbol-l2')?.value || '•';
                     break;
-                case 'checkbox':
+                }
+                case 'checkbox': {
                     const checkboxItems = [];
                     el.querySelectorAll('.checkbox-item').forEach(item => {
                         checkboxItems.push({
@@ -2095,6 +2099,7 @@ function collectElements() {
                     });
                     element.items = checkboxItems;
                     break;
+                }
                 case 'link':
                     element.url = el.querySelector('input[name="url"]')?.value || '';
                     element.label = el.querySelector('input[name="label"]')?.value || '';
@@ -2106,7 +2111,7 @@ function collectElements() {
                     element.content = el.querySelector('textarea')?.value || '';
                     element.color = el.querySelector('select')?.value || 'blue';
                     break;
-                case 'table':
+                case 'table': {
                     const tableRows = [];
                     el.querySelectorAll('tbody tr').forEach(tr => {
                         const cells = Array.from(tr.querySelectorAll('td input')).map(inp => inp.value);
@@ -2115,6 +2120,7 @@ function collectElements() {
                     element.rows = tableRows;
                     element.headers = Array.from(el.querySelectorAll('thead input')).map(inp => inp.value);
                     break;
+                }
             }
             elements.push(element);
         });
@@ -2166,10 +2172,6 @@ async function closeNotizEditor() {
     currentEditingSharedRole = null;
     document.getElementById('notizEditorModal').classList.add('hidden');
     document.getElementById('notizEditorModal').classList.remove('flex');
-}
-
-function addElement(type) {
-    addElementWithOptions(type);
 }
 
 function createNotizRow() {
@@ -2669,7 +2671,7 @@ function renderElementIntoRow(element, rowEl, rowItemCount) {
         case 'text':
             elDiv.querySelector('textarea').value = element.content || '';
             break;
-        case 'list':
+        case 'list': {
             (elDiv.querySelector('.list-textarea') || elDiv.querySelector('textarea')).value = element.content || '';
             const l1Style = elDiv.querySelector('.list-style-l1');
             const l1Symbol = elDiv.querySelector('.list-symbol-l1');
@@ -2682,7 +2684,8 @@ function renderElementIntoRow(element, rowEl, rowItemCount) {
             setupListElement(elDiv);
             updateListPreview(elDiv);
             break;
-        case 'checkbox':
+        }
+        case 'checkbox': {
             const container = elDiv.querySelector('.checkbox-items-container');
             if (container && element.items && element.items.length > 0) {
                 container.innerHTML = '';
@@ -2699,7 +2702,8 @@ function renderElementIntoRow(element, rowEl, rowItemCount) {
                 });
             }
             break;
-        case 'link':
+        }
+        case 'link': {
             const urlInput = elDiv.querySelector('.link-url-input');
             const labelInput = elDiv.querySelector('.link-label-input');
             const linkDisplay = elDiv.querySelector('.link-display');
@@ -2710,6 +2714,7 @@ function renderElementIntoRow(element, rowEl, rowItemCount) {
                 linkDisplay.textContent = element.label || element.url || 'Link';
             }
             break;
+        }
         case 'password':
             elDiv.querySelector('.password-input').value = element.content || '';
             break;
@@ -2749,15 +2754,6 @@ function renderElementIntoRow(element, rowEl, rowItemCount) {
             }
             break;
     }
-}
-
-function renderElement(element) {
-    const container = document.getElementById('notiz-hauptteil-container');
-    if (!container) return;
-    const rowEl = createNotizRow();
-    container.appendChild(rowEl);
-    renderElementIntoRow(element, rowEl, 1);
-    updateNotizRowLayout(rowEl);
 }
 
 function openShareModal() {
@@ -3267,25 +3263,30 @@ window.acceptEinladung = async function(einladungId) {
                 [`sharedWith.${currentUser.mode}.status`]: 'active'
             });
             
-            // Alle Notizen in dieser Kategorie mit User teilen (damit Firestore Rules funktionieren)
+            // Alle Notizen in dieser Kategorie: Status von pending auf active setzen
+            // (Die Notizen wurden bereits beim Teilen mit pending-Status versehen)
             try {
                 const notizenRef = collection(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen');
                 const qNotizen = query(notizenRef, where('kategorieId', '==', einladung.kategorieId));
                 const notizenSnap = await getDocs(qNotizen);
+                let updatedCount = 0;
                 for (const notizDoc of notizenSnap.docs) {
-                    await updateDoc(notizDoc.ref, {
-                        [`sharedWith.${currentUser.mode}`]: {
-                            role: einladung.role || 'read',
-                            status: 'active',
-                            since: serverTimestamp(),
-                            sharedBy: einladung.fromUserId,
-                            viaKategorie: einladung.kategorieId
+                    const notizData = notizDoc.data();
+                    // Nur aktualisieren wenn bereits ein pending-Eintrag existiert
+                    if (notizData.sharedWith && notizData.sharedWith[currentUser.mode]) {
+                        try {
+                            await updateDoc(notizDoc.ref, {
+                                [`sharedWith.${currentUser.mode}.status`]: 'active'
+                            });
+                            updatedCount++;
+                        } catch (singleError) {
+                            console.warn('Notizen: Fehler bei Notiz-Update:', notizDoc.id, singleError);
                         }
-                    });
+                    }
                 }
-                console.log('Notizen: Notizen in Kategorie geteilt:', notizenSnap.size);
+                console.log('Notizen: Notizen-Status auf active gesetzt:', updatedCount, 'von', notizenSnap.size);
             } catch (notizError) {
-                console.warn('Notizen: Fehler beim Teilen der Notizen in Kategorie:', notizError);
+                console.warn('Notizen: Fehler beim Aktualisieren der Notizen in Kategorie:', notizError);
             }
         } else if (einladung.notizId) {
             const notizRef = doc(db, 'artifacts', appId, 'users', einladung.fromUserId, 'notizen', einladung.notizId);
@@ -3524,7 +3525,7 @@ async function showHistory() {
                 </div>
             `;
         }).join('');
-    } catch (error) {
+    } catch {
         container.innerHTML = '<p class="text-red-500 text-center py-4">Fehler</p>';
     }
 }
