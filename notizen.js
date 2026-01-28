@@ -935,6 +935,14 @@ async function deleteNotizWithHistory(ownerUserId, notizId) {
     const histSnap = await getDocs(histColRef);
     await deleteDocsInBatches(histSnap.docs.map(d => d.ref));
 
+    const einladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
+    const qEinladungen = query(einladungenRef, where('notizId', '==', notizId), where('fromUserId', '==', ownerUserId));
+    const einladungenSnap = await getDocs(qEinladungen);
+    for (const einlDoc of einladungenSnap.docs) {
+        await deleteDoc(einlDoc.ref);
+    }
+    console.log('Notizen: Notiz-Einladungen gelöscht:', einladungenSnap.size);
+
     const notizRef = doc(db, 'artifacts', appId, 'users', ownerUserId, 'notizen', notizId);
     await deleteDoc(notizRef);
 }
