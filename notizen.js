@@ -613,19 +613,39 @@ async function saveKategorieShareSelection() {
         const existingShared = katData.sharedWith || {};
 
         const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
+        
+        // WICHTIG: Prüfe auf bestehende Einladungen in der Collection (verhindert Duplikate)
+        const qExistingInvites = query(colRef, 
+            where('kategorieId', '==', currentSharingKategorieId), 
+            where('fromUserId', '==', ownerId)
+        );
+        const existingInvitesSnap = await getDocs(qExistingInvites);
+        const existingInvitesByUser = new Map();
+        existingInvitesSnap.docs.forEach(invDoc => {
+            const data = invDoc.data();
+            existingInvitesByUser.set(data.toUserId, { id: invDoc.id, ...data });
+        });
 
         const updatePayload = {};
         let createdCount = 0;
         let skippedCount = 0;
 
-        // Zähle und prüfe
+        // Zähle und prüfe - sowohl sharedWith ALS AUCH bestehende Einladungen
         for (const { odUserId, role } of selected) {
-            const existing = existingShared[odUserId];
-            const existingStatus = existing?.status;
-            if (existingStatus === 'pending' || existingStatus === 'rejected' || existingStatus === 'active') {
+            const existingShare = existingShared[odUserId];
+            const existingInvite = existingInvitesByUser.get(odUserId);
+            
+            // Überspringe wenn bereits geteilt oder Einladung existiert
+            if (existingShare?.status === 'pending' || existingShare?.status === 'rejected' || existingShare?.status === 'active') {
                 skippedCount += 1;
                 continue;
             }
+            if (existingInvite && ['pending', 'accepted', 'rejected'].includes(existingInvite.status)) {
+                console.log('Notizen: Einladung existiert bereits für User:', odUserId, existingInvite.status);
+                skippedCount += 1;
+                continue;
+            }
+            
             updatePayload[`sharedWith.${odUserId}`] = {
                 role,
                 since: serverTimestamp(),
@@ -636,7 +656,7 @@ async function saveKategorieShareSelection() {
         }
 
         if (createdCount === 0) {
-            alertUser('Keine Einladungen gesendet (bereits pending/rejected/aktiv)', 'error');
+            alertUser('Keine Einladungen gesendet (bereits vorhanden)', 'error');
             return;
         }
 
@@ -647,10 +667,15 @@ async function saveKategorieShareSelection() {
         const notizIds = notizenSnap.docs.map(d => d.id);
         
         // Erstelle Einladungen mit Notiz-IDs (für späteres Laden durch User B)
+        // WICHTIG: Nur wenn keine bestehende Einladung existiert
         const batch = writeBatch(db);
         for (const { odUserId, role } of selected) {
-            const existing = existingShared[odUserId];
-            if (existing?.status === 'pending' || existing?.status === 'rejected' || existing?.status === 'active') continue;
+            const existingShare = existingShared[odUserId];
+            const existingInvite = existingInvitesByUser.get(odUserId);
+            
+            // Überspringe wenn bereits geteilt oder Einladung existiert
+            if (existingShare?.status === 'pending' || existingShare?.status === 'rejected' || existingShare?.status === 'active') continue;
+            if (existingInvite && ['pending', 'accepted', 'rejected'].includes(existingInvite.status)) continue;
             
             const invRef = doc(colRef);
             batch.set(invRef, {
@@ -3598,3 +3623,75 @@ async function showHistory() {
         container.innerHTML = '<p class="text-red-500 text-center py-4">Fehler</p>';
     }
 }
+
+// Debug-Funktion: Duplikat-Einladungen bereinigen (über Konsole aufrufbar)
+window.cleanupDuplicateInvitations = async function() {
+    const userId = currentUser.mode;
+    if (!userId || userId === GUEST_MODE) {
+        console.error('Nicht eingeloggt');
+        return;
+    }
+    
+    console.log('=== Starte Duplikat-Bereinigung für Einladungen ===');
+    
+    const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
+    
+    // Alle gesendeten Einladungen laden
+    const qSent = query(colRef, where('fromUserId', '==', userId));
+    const sentSnap = await getDocs(qSent);
+    
+    // Gruppiere nach kategorieId + toUserId
+    const groupedByKey = new Map();
+    sentSnap.docs.forEach(invDoc => {
+        const data = invDoc.data();
+        const key = `${data.kategorieId || 'null'}_${data.notizId || 'null'}_${data.toUserId}`;
+        if (!groupedByKey.has(key)) {
+            groupedByKey.set(key, []);
+        }
+        groupedByKey.get(key).push({ id: invDoc.id, ref: invDoc.ref, ...data });
+    });
+    
+    let deletedCount = 0;
+    
+    // Für jede Gruppe: behalte die neueste, lösche den Rest
+    for (const [key, invites] of groupedByKey) {
+        if (invites.length <= 1) continue;
+        
+        console.log(`Gruppe "${key}": ${invites.length} Einladungen gefunden`);
+        
+        // Sortiere nach createdAt (neueste zuerst)
+        invites.sort((a, b) => {
+            const aTime = a.createdAt?.toDate?.() || new Date(0);
+            const bTime = b.createdAt?.toDate?.() || new Date(0);
+            return bTime - aTime;
+        });
+        
+        // Behalte die erste (neueste mit bestem Status), lösche den Rest
+        // Priorisiere: accepted > pending > andere
+        const statusPriority = { 'accepted': 0, 'pending': 1, 'rejected': 2, 'left': 3, 'cancelled': 4 };
+        invites.sort((a, b) => (statusPriority[a.status] || 99) - (statusPriority[b.status] || 99));
+        
+        const keep = invites[0];
+        console.log(`  Behalte: ${keep.id} (Status: ${keep.status})`);
+        
+        for (let i = 1; i < invites.length; i++) {
+            const toDelete = invites[i];
+            console.log(`  Lösche: ${toDelete.id} (Status: ${toDelete.status})`);
+            try {
+                await deleteDoc(toDelete.ref);
+                deletedCount++;
+            } catch (err) {
+                console.warn(`  Fehler beim Löschen von ${toDelete.id}:`, err.message);
+            }
+        }
+    }
+    
+    console.log(`=== Bereinigung abgeschlossen: ${deletedCount} Duplikate gelöscht ===`);
+    
+    // UI aktualisieren
+    if (deletedCount > 0) {
+        alertUser(`${deletedCount} Duplikate bereinigt`, 'success');
+    } else {
+        alertUser('Keine Duplikate gefunden', 'success');
+    }
+};
