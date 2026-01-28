@@ -3190,10 +3190,11 @@ function renderEinladungen() {
     
     let html = '';
     
-    // Empfangene Einladungen
-    if (allEinladungen.length > 0) {
+    // Empfangene Einladungen - nur pending und rejected anzeigen (accepted sind bereits in Kategorien-Liste)
+    const pendingOrRejected = allEinladungen.filter(e => e.status === 'pending' || e.status === 'rejected');
+    if (pendingOrRejected.length > 0) {
         html += '<h3 class="text-sm font-bold text-gray-600 mb-2">📥 Empfangene Einladungen</h3>';
-        html += allEinladungen.map(einl => {
+        html += pendingOrRejected.map(einl => {
             const isRejected = einl.status === 'rejected';
             const isKategorie = einl.type === 'kategorie';
             const typeLabel = isKategorie ? 'eine Kategorie' : 'eine Notiz';
