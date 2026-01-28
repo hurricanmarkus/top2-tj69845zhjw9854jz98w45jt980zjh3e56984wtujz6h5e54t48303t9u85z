@@ -736,23 +736,31 @@ async function loadKategorien() {
         }
         
         // Geteilte Kategorien laden (über akzeptierte Einladungen)
-        const loadedSharedKatIds = new Set(); // Duplikate vermeiden
+        // Bug-Fix: Robuste Deduplizierung - erst alle Einladungen sammeln, dann deduplizieren
+        const sharedKatMap = new Map(); // Map<uniqueKey, {ownerId, kategorieId}>
         try {
             const einladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
             const qAccepted = query(einladungenRef, where('toUserId', '==', userId), where('status', '==', 'accepted'), where('type', '==', 'kategorie'));
             const acceptedSnap = await getDocs(qAccepted);
             
+            // Sammle alle einzigartigen Kategorie-Referenzen
             for (const einlDoc of acceptedSnap.docs) {
                 const einlData = einlDoc.data();
                 const ownerId = einlData.fromUserId;
                 const kategorieId = einlData.kategorieId;
                 if (!ownerId || !kategorieId || ownerId === userId) continue;
                 
-                // Duplikate vermeiden (gleiche kategorieId + ownerId)
                 const uniqueKey = `${ownerId}_${kategorieId}`;
-                if (loadedSharedKatIds.has(uniqueKey)) continue;
+                // Nur hinzufügen wenn nicht bereits vorhanden
+                if (!sharedKatMap.has(uniqueKey)) {
+                    sharedKatMap.set(uniqueKey, { ownerId, kategorieId });
+                }
+            }
+            
+            // Lade jede einzigartige Kategorie nur einmal
+            for (const [, { ownerId, kategorieId }] of sharedKatMap) {
+                // Prüfe nochmal ob nicht schon in allKategorien (eigene Kategorien)
                 if (allKategorien.some(k => k.id === kategorieId && k.ownerId === ownerId)) continue;
-                loadedSharedKatIds.add(uniqueKey);
                 
                 try {
                     const katRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', kategorieId);
@@ -760,7 +768,7 @@ async function loadKategorien() {
                     if (!katSnap.exists()) continue;
                     
                     const katData = katSnap.data() || {};
-                    const kategorie = { id: katSnap.id, ...katData, subkategorien: [], ownerId };
+                    const kategorie = { id: katSnap.id, ...katData, subkategorien: [], ownerId, isSharedToMe: true };
                     const subColRef = collection(db, 'artifacts', appId, 'users', ownerId, 'notizen_kategorien', kategorieId, 'subkategorien');
                     const subSnap = await getDocs(subColRef);
                     subSnap.forEach(subDoc => kategorie.subkategorien.push({ id: subDoc.id, ...subDoc.data() }));
@@ -773,11 +781,14 @@ async function loadKategorien() {
             console.warn('Fehler beim Laden geteilter Kategorien:', error);
         }
         
-        // Finale Deduplizierung: Entferne Kategorien mit gleicher id+ownerId
+        // Finale Deduplizierung: Entferne Kategorien mit gleicher id+ownerId (Sicherheitsnetz)
         const seenKatKeys = new Set();
         allKategorien = allKategorien.filter(k => {
-            const key = `${k.ownerId}_${k.id}`;
-            if (seenKatKeys.has(key)) return false;
+            const key = `${k.ownerId || 'unknown'}_${k.id}`;
+            if (seenKatKeys.has(key)) {
+                console.warn('Notizen: Duplikat-Kategorie entfernt:', key);
+                return false;
+            }
             seenKatKeys.add(key);
             return true;
         });
@@ -1903,8 +1914,26 @@ async function saveNotiz() {
             }
             alertUser('Gespeichert', 'success');
         } else {
+            // Bug-Fix: Prüfen ob die Kategorie geteilt ist und sharedWith-Einträge übernehmen
+            let inheritedSharedWith = {};
+            const kategorie = allKategorien.find(k => k.id === kategorieId);
+            if (kategorie && kategorie.sharedWith) {
+                // Nur aktive sharedWith-Einträge übernehmen (nicht pending/rejected)
+                for (const [sharedUserId, shareData] of Object.entries(kategorie.sharedWith)) {
+                    if (shareData && shareData.status === 'active') {
+                        inheritedSharedWith[sharedUserId] = {
+                            role: shareData.role || 'read',
+                            status: 'active',
+                            since: serverTimestamp(),
+                            sharedBy: currentUser.mode,
+                            viaKategorie: kategorieId
+                        };
+                    }
+                }
+            }
+            
             const colRef = collection(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen');
-            const newDoc = await addDoc(colRef, { ...notizData, createdAt: serverTimestamp(), createdBy: currentUser.mode, owner: currentUser.mode, sharedWith: {}, checkedOutBy: null, checkedOutAt: null });
+            const newDoc = await addDoc(colRef, { ...notizData, createdAt: serverTimestamp(), createdBy: currentUser.mode, owner: currentUser.mode, sharedWith: inheritedSharedWith, checkedOutBy: null, checkedOutAt: null });
             await addHistory(newDoc.id, 'Erstellt', notizData);
             alertUser('Erstellt', 'success');
         }
