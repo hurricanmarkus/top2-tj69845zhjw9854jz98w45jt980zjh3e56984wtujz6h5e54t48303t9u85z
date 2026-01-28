@@ -3461,34 +3461,64 @@ window.cancelEinladung = async function(einladungId) {
     const confirmMsg = isAccepted ? 'Teilen wirklich beenden?' : 'Einladung wirklich abbrechen?';
     if (!confirm(confirmMsg)) return;
     try {
-        const einlRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen', einladungId);
-        await updateDoc(einlRef, { status: 'cancelled', updatedAt: serverTimestamp() });
-
-        const updatePayload = {};
-        updatePayload[`sharedWith.${einladung.toUserId}`] = deleteField();
+        // WICHTIG: Alle Einladungen für gleiche Kategorie+User auf cancelled setzen (inkl. Duplikate)
+        const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
         
         if (einladung.type === 'kategorie' && einladung.kategorieId) {
+            // Finde ALLE Einladungen für diese Kategorie + User
+            const qAllInvites = query(colRef, 
+                where('kategorieId', '==', einladung.kategorieId),
+                where('fromUserId', '==', currentUser.mode),
+                where('toUserId', '==', einladung.toUserId)
+            );
+            const allInvitesSnap = await getDocs(qAllInvites);
+            
+            // Alle auf cancelled setzen (oder löschen wenn bereits cancelled/left)
+            for (const invDoc of allInvitesSnap.docs) {
+                const invData = invDoc.data();
+                if (invData.status === 'pending' || invData.status === 'accepted') {
+                    await updateDoc(invDoc.ref, { status: 'cancelled', updatedAt: serverTimestamp() });
+                } else if (invData.status !== 'cancelled') {
+                    // Alte Duplikate mit anderem Status löschen
+                    try {
+                        await deleteDoc(invDoc.ref);
+                    } catch {
+                        // Ignore delete errors
+                    }
+                }
+            }
+            console.log('Notizen: Alle Einladungen gecancelt:', allInvitesSnap.size);
+            
             // Kategorie-sharedWith entfernen
+            const updatePayload = {};
+            updatePayload[`sharedWith.${einladung.toUserId}`] = deleteField();
+            
             const katRef = doc(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen_kategorien', einladung.kategorieId);
             await updateDoc(katRef, updatePayload);
             
-            // WICHTIG: Auch alle Notizen in dieser Kategorie aktualisieren
+            // Auch alle Notizen in dieser Kategorie aktualisieren
             const notizenRef = collection(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen');
             const qNotizen = query(notizenRef, where('kategorieId', '==', einladung.kategorieId));
             const notizenSnap = await getDocs(qNotizen);
             
             for (const notizDoc of notizenSnap.docs) {
                 const notizData = notizDoc.data();
-                // Nur wenn User in sharedWith steht und viaKategorie passt
-                if (notizData.sharedWith?.[einladung.toUserId]?.viaKategorie === einladung.kategorieId) {
+                if (notizData.sharedWith?.[einladung.toUserId]) {
                     await updateDoc(notizDoc.ref, updatePayload);
                 }
             }
             console.log('Notizen: sharedWith aus', notizenSnap.size, 'Notizen entfernt');
         } else if (einladung.notizId) {
+            // Einzelne Notiz-Einladung
+            const einlRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen', einladungId);
+            await updateDoc(einlRef, { status: 'cancelled', updatedAt: serverTimestamp() });
+            
+            const updatePayload = {};
+            updatePayload[`sharedWith.${einladung.toUserId}`] = deleteField();
             const notizRef = doc(db, 'artifacts', appId, 'users', currentUser.mode, 'notizen', einladung.notizId);
             await updateDoc(notizRef, updatePayload);
         }
+        
         alertUser(isAccepted ? 'Teilen beendet' : 'Einladung abgebrochen', 'success');
         renderEinladungen();
     } catch (error) {
