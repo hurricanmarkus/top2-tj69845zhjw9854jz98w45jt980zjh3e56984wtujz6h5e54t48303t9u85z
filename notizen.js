@@ -1299,10 +1299,12 @@ async function loadNotizenFromSharedKategorien() {
     const userId = currentUser.mode;
     if (!userId || userId === GUEST_MODE) return;
     
-    // Geteilte Kategorien aus allKategorien filtern
-    const sharedKats = allKategorien.filter(k => k.ownerId && k.ownerId !== userId);
+    // Akzeptierte Kategorie-Einladungen finden
+    const acceptedKatEinladungen = allEinladungen.filter(e => 
+        e.status === 'accepted' && e.type === 'kategorie' && e.kategorieId
+    );
     
-    if (sharedKats.length === 0) {
+    if (acceptedKatEinladungen.length === 0) {
         sharedKategorieNotizen = [];
         recomputeAllNotizen();
         return;
@@ -1311,13 +1313,42 @@ async function loadNotizenFromSharedKategorien() {
     const notizenFromKats = [];
     const loadedNotizKeys = new Set();
     
-    // Lade ALLE Notizen aus geteilten Kategorien dynamisch (nicht nur notizIds aus Einladung)
-    for (const kat of sharedKats) {
-        const ownerId = kat.ownerId;
-        const kategorieId = kat.id;
+    // Lade Notizen aus akzeptierten Einladungen - einzeln per getDoc (wegen Firestore Rules)
+    // Die Query auf alle Notizen scheitert, weil Firestore Rules pro Dokument prüfen
+    for (const einladung of acceptedKatEinladungen) {
+        const ownerId = einladung.fromUserId;
+        const kategorieId = einladung.kategorieId;
+        const notizIds = einladung.notizIds || [];
         
         if (!ownerId || !kategorieId) continue;
         
+        // Methode 1: Bekannte Notiz-IDs aus der Einladung laden
+        for (const notizId of notizIds) {
+            const uniqueKey = `${ownerId}_${notizId}`;
+            if (loadedNotizKeys.has(uniqueKey)) continue;
+            
+            try {
+                const notizRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen', notizId);
+                const notizSnap = await getDoc(notizRef);
+                
+                if (notizSnap.exists()) {
+                    loadedNotizKeys.add(uniqueKey);
+                    const data = notizSnap.data() || {};
+                    notizenFromKats.push({
+                        id: notizSnap.id,
+                        ...data,
+                        ownerId: ownerId,
+                        fromSharedKategorie: true
+                    });
+                }
+            } catch (notizError) {
+                // Einzelne Notiz nicht ladbar (möglicherweise gelöscht oder keine Berechtigung)
+                console.warn('Notizen: Einzelne Notiz nicht ladbar:', notizId, notizError.code || notizError.message);
+            }
+        }
+        
+        // Methode 2: Versuche auch neue Notizen zu finden (die nach der Einladung erstellt wurden)
+        // Diese haben sharedWith mit viaKategorie gesetzt
         try {
             const notizenRef = collection(db, 'artifacts', appId, 'users', ownerId, 'notizen');
             const qNotizen = query(notizenRef, where('kategorieId', '==', kategorieId));
@@ -1326,18 +1357,23 @@ async function loadNotizenFromSharedKategorien() {
             for (const notizDoc of notizenSnap.docs) {
                 const uniqueKey = `${ownerId}_${notizDoc.id}`;
                 if (loadedNotizKeys.has(uniqueKey)) continue;
-                loadedNotizKeys.add(uniqueKey);
                 
                 const data = notizDoc.data() || {};
-                notizenFromKats.push({
-                    id: notizDoc.id,
-                    ...data,
-                    ownerId: ownerId,
-                    fromSharedKategorie: true
-                });
+                // Prüfe ob wir Zugriff haben (sharedWith enthält uns)
+                if (data.sharedWith && data.sharedWith[userId] && 
+                    (data.sharedWith[userId].status === 'active' || data.sharedWith[userId].status === 'pending')) {
+                    loadedNotizKeys.add(uniqueKey);
+                    notizenFromKats.push({
+                        id: notizDoc.id,
+                        ...data,
+                        ownerId: ownerId,
+                        fromSharedKategorie: true
+                    });
+                }
             }
-        } catch (katError) {
-            console.warn('Notizen: Fehler beim Laden Notizen aus Kategorie', kategorieId, katError);
+        } catch {
+            // Query kann fehlschlagen wenn keine Berechtigung - das ist OK, wir haben die Notizen per getDoc geladen
+            console.log('Notizen: Kategorie-Query nicht möglich (normal bei Firestore Rules):', kategorieId);
         }
     }
     
@@ -3147,10 +3183,43 @@ async function loadEinladungen() {
         }
     });
     
-    // Gesendete Einladungen (pending + accepted)
-    const qSent = query(colRef, where('fromUserId', '==', userId), where('status', 'in', ['pending', 'accepted']));
-    gesendetEinladungenListener = onSnapshot(qSent, (snapshot) => {
+    // Gesendete Einladungen (alle Status für Owner-seitige Cleanup)
+    const qSent = query(colRef, where('fromUserId', '==', userId), where('status', 'in', ['pending', 'accepted', 'left', 'cancelled', 'rejected']));
+    gesendetEinladungenListener = onSnapshot(qSent, async (snapshot) => {
+        const prevEinladungen = [...allGesendetEinladungen];
         allGesendetEinladungen = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // Prüfe ob Einladungen auf 'left' gewechselt haben - dann sharedWith entfernen (Owner-Cleanup)
+        for (const einl of allGesendetEinladungen) {
+            if (einl.status !== 'left') continue;
+            
+            const prev = prevEinladungen.find(p => p.id === einl.id);
+            if (prev && prev.status === 'left') continue; // Bereits verarbeitet
+            
+            // User hat die geteilte Kategorie verlassen - sharedWith entfernen
+            console.log('Notizen: User hat Kategorie verlassen, entferne sharedWith:', einl.toUserId, einl.kategorieId);
+            
+            if (einl.type === 'kategorie' && einl.kategorieId) {
+                try {
+                    // sharedWith von allen Notizen in dieser Kategorie entfernen
+                    const notizenRef = collection(db, 'artifacts', appId, 'users', userId, 'notizen');
+                    const qNotizen = query(notizenRef, where('kategorieId', '==', einl.kategorieId));
+                    const notizenSnap = await getDocs(qNotizen);
+                    
+                    for (const notizDoc of notizenSnap.docs) {
+                        const notizData = notizDoc.data();
+                        if (notizData.sharedWith && notizData.sharedWith[einl.toUserId]) {
+                            const updatePayload = {};
+                            updatePayload[`sharedWith.${einl.toUserId}`] = deleteField();
+                            await updateDoc(notizDoc.ref, updatePayload);
+                        }
+                    }
+                    console.log('Notizen: Owner-Cleanup abgeschlossen für', einl.toUserId);
+                } catch (cleanupError) {
+                    console.warn('Notizen: Fehler beim Owner-Cleanup:', cleanupError);
+                }
+            }
+        }
     });
 }
 
