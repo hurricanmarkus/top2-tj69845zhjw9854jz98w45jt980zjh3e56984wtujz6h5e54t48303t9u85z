@@ -773,6 +773,15 @@ async function loadKategorien() {
             console.warn('Fehler beim Laden geteilter Kategorien:', error);
         }
         
+        // Finale Deduplizierung: Entferne Kategorien mit gleicher id+ownerId
+        const seenKatKeys = new Set();
+        allKategorien = allKategorien.filter(k => {
+            const key = `${k.ownerId}_${k.id}`;
+            if (seenKatKeys.has(key)) return false;
+            seenKatKeys.add(key);
+            return true;
+        });
+        
         renderKategorienListe();
         updateKategorienDropdowns();
         
@@ -1221,41 +1230,35 @@ async function loadNotizenFromSharedKategorien() {
     }
     
     const notizenFromKats = [];
+    const loadedNotizKeys = new Set();
     
-    // Lade akzeptierte Kategorie-Einladungen mit notizIds
-    const einladungenRef = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
-    const qEinl = query(einladungenRef, 
-        where('toUserId', '==', userId), 
-        where('status', '==', 'accepted'),
-        where('type', '==', 'kategorie')
-    );
-    const einlSnap = await getDocs(qEinl);
-    
-    for (const einlDoc of einlSnap.docs) {
-        const einlData = einlDoc.data();
-        const ownerId = einlData.fromUserId;
-        const kategorieId = einlData.kategorieId;
-        const notizIds = einlData.notizIds || [];
+    // Lade ALLE Notizen aus geteilten Kategorien dynamisch (nicht nur notizIds aus Einladung)
+    for (const kat of sharedKats) {
+        const ownerId = kat.ownerId;
+        const kategorieId = kat.id;
         
-        if (!ownerId || notizIds.length === 0) continue;
+        if (!ownerId || !kategorieId) continue;
         
-        // Lade jede Notiz einzeln über getDoc (User hat Leserechte über sharedWith)
-        for (const notizId of notizIds) {
-            try {
-                const notizRef = doc(db, 'artifacts', appId, 'users', ownerId, 'notizen', notizId);
-                const notizSnap = await getDoc(notizRef);
-                if (notizSnap.exists()) {
-                    const data = notizSnap.data() || {};
-                    notizenFromKats.push({
-                        id: notizSnap.id,
-                        ...data,
-                        ownerId: ownerId,
-                        fromSharedKategorie: true
-                    });
-                }
-            } catch (notizError) {
-                console.warn('Notizen: Fehler beim Laden Notiz', notizId, notizError);
+        try {
+            const notizenRef = collection(db, 'artifacts', appId, 'users', ownerId, 'notizen');
+            const qNotizen = query(notizenRef, where('kategorieId', '==', kategorieId));
+            const notizenSnap = await getDocs(qNotizen);
+            
+            for (const notizDoc of notizenSnap.docs) {
+                const uniqueKey = `${ownerId}_${notizDoc.id}`;
+                if (loadedNotizKeys.has(uniqueKey)) continue;
+                loadedNotizKeys.add(uniqueKey);
+                
+                const data = notizDoc.data() || {};
+                notizenFromKats.push({
+                    id: notizDoc.id,
+                    ...data,
+                    ownerId: ownerId,
+                    fromSharedKategorie: true
+                });
             }
+        } catch (katError) {
+            console.warn('Notizen: Fehler beim Laden Notizen aus Kategorie', kategorieId, katError);
         }
     }
     
