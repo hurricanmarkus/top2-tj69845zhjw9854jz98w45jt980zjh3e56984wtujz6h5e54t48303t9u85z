@@ -832,7 +832,7 @@ export function toggleAdminSection(section) {
     if (adminSectionsState.role) renderRoleManagement();
     if (adminSectionsState.approval) renderApprovalProcess();
     if (adminSectionsState.protocol) renderProtocolHistory();
-
+    
     // --- Diese Logik ist NEU ---
     if (adminSectionsState.mainFunctions) {
         renderMainFunctionsAdminArea();

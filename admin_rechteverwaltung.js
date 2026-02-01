@@ -121,13 +121,6 @@ export function setupPermissionDependencies(container) {
             '[data-perm="ZAHLUNGSVERWALTUNG_CREATE"]'
         ]
     );
-
-    setupToggleLogic(
-        '[data-perm="NOTIZEN"]',
-        [
-            '[data-perm="NOTIZEN_CREATE"]'
-        ]
-    );
 }
 
 

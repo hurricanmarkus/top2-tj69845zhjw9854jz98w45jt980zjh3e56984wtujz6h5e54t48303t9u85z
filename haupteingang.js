@@ -33,7 +33,6 @@ import { initializeLizenzen, listenForLizenzen, stopLizenzenListener } from './l
 import { initializeVertragsverwaltung, listenForVertraege, stopVertragsverwaltungListeners } from './vertragsverwaltung.js';
 import { initRezeptverwaltung } from './rezeptverwaltung.js';
 import { initializeHaushaltszahlungen, listenForHaushaltszahlungen, stopHaushaltszahlungenListeners } from './haushaltszahlungen.js';
-import { initializeNotizen, listenForNotizen, stopNotizenListeners } from './notizen.js';
 import { initializeGeschenkemanagement, listenForGeschenke, stopGeschenkemanagementListeners } from './geschenkemanagement.js';
 import { initializeSendungsverwaltungView, listenForSendungen, stopSendungsverwaltungListeners } from './sendungsverwaltung.js';
 import { ensureNachrichtencenterSelfContact } from './notfall.js';
@@ -131,9 +130,8 @@ export const views = {
     vertragsverwaltung: { id: 'vertragsverwaltungView' },
     sendungsverwaltung: { id: 'sendungsverwaltungView' },
     rezepte: { id: 'rezepteView' },
-    haushaltszahlungen: { id: 'haushaltszahlungenView', init: initializeHaushaltszahlungen, listen: listenForHaushaltszahlungen },
-    notizen: { id: 'notizenView', init: initializeNotizen, listen: listenForNotizen },
-    geschenkemanagement: { id: 'geschenkemanagementView', init: initializeGeschenkemanagement, listen: listenForGeschenke }
+    haushaltszahlungen: { id: 'haushaltszahlungenView' },
+    geschenkemanagement: { id: 'geschenkemanagementView' }
 };
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
 
@@ -165,9 +163,6 @@ export function stopAllUserDependentListeners(resetMode = false) {
     }
     if (typeof stopHaushaltszahlungenListeners === 'function') {
         stopHaushaltszahlungenListeners();
-    }
-    if (typeof stopNotizenListeners === 'function') {
-        stopNotizenListeners();
     }
     if (typeof stopGeschenkemanagementListeners === 'function') {
         stopGeschenkemanagementListeners();
@@ -299,12 +294,6 @@ function startUserDependentListeners() {
         listenForVertraege();
     } else {
         console.error("Fehler: listenForVertraege ist nicht importiert!");
-    }
-
-    if (typeof listenForNotizen === 'function') {
-        listenForNotizen();
-    } else {
-        console.error("Fehler: listenForNotizen ist nicht importiert!");
     }
 
     if (typeof listenForGeschenke === 'function') {
@@ -1597,16 +1586,6 @@ export function navigate(targetViewName) {
         if (targetViewName === 'haushaltszahlungen' && !userPermissions.includes('HAUSHALTSZAHLUNGEN')) {
             return alertUser("Zugriff verweigert (Haushaltszahlungen).", 'error');
         }
-
-        // Zugriffsschutz für Notizen
-        if (targetViewName === 'notizen' && !userPermissions.includes('NOTIZEN')) {
-            return alertUser("Zugriff verweigert (Notizen).", 'error');
-        }
-
-        // Zugriffsschutz für Geschenkemanagement
-        if (targetViewName === 'geschenkemanagement' && !userPermissions.includes('GESCHENKEMANAGEMENT')) {
-            return alertUser("Zugriff verweigert (Geschenkemanagement).", 'error');
-        }
     }
 
     // Scroll zum Anfang
@@ -1690,10 +1669,6 @@ export function navigate(targetViewName) {
 
     if (targetViewName === 'haushaltszahlungen') {
         initializeHaushaltszahlungen();
-    }
-
-    if (targetViewName === 'notizen') {
-        initializeNotizen();
     }
 
     if (targetViewName === 'geschenkemanagement') {
@@ -2249,22 +2224,13 @@ export function setupEventListeners() {
 
             pushoverRecipientGrantCache = {};
             const options = [];
-            const recipients = [];
             snaps.forEach(s => {
                 const data = s.data() || {};
                 const rid = data.recipientId || s.id;
                 const label = data.recipientName || USERS[rid]?.name || rid;
                 pushoverRecipientGrantCache[rid] = data;
-                recipients.push({ rid, label });
+                options.push({ value: rid, label });
             });
-
-            for (const r of recipients) {
-                const cfg = await loadPushoverProgramConfig(r.rid);
-                if (!cfg || !String(cfg.userKey || '').trim()) {
-                    continue;
-                }
-                options.push({ value: r.rid, label: r.label });
-            }
 
             if (!options.length) {
                 recipientSelect.innerHTML = '<option value="" disabled selected>Keine Berechtigung gefunden</option>';
@@ -2646,9 +2612,6 @@ export function setupEventListeners() {
 
     const haushaltszahlungenCard = document.getElementById('haushaltszahlungenCard');
     if (haushaltszahlungenCard) haushaltszahlungenCard.addEventListener('click', () => navigate('haushaltszahlungen'));
-
-    const notizenCard = document.getElementById('notizenCard');
-    if (notizenCard) notizenCard.addEventListener('click', () => navigate('notizen'));
 
     const geschenkemanagementCard = document.getElementById('geschenkemanagementCard');
     if (geschenkemanagementCard) geschenkemanagementCard.addEventListener('click', () => navigate('geschenkemanagement'));

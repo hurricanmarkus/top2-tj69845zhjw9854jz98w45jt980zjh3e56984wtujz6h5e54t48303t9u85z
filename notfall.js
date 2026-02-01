@@ -61,19 +61,6 @@ export async function ensureNachrichtencenterSelfContact() {
   const name = String(currentUserObj?.realName || currentUser.displayName || userId).trim();
   const docRef = doc(col, selfContactId);
 
-  if (!userKey) {
-    try {
-      const existing = await getDoc(docRef);
-      if (existing.exists()) {
-        await deleteDoc(docRef);
-        console.log('Nachrichtencenter: Eigener Kontakt entfernt (kein User-Key gesetzt):', selfContactId);
-      }
-    } catch (e) {
-      console.warn('Nachrichtencenter: Eigener Kontakt konnte nicht entfernt werden:', e);
-    }
-    return;
-  }
-
   let isNew = true;
   try {
     const existing = await getDoc(docRef);
@@ -256,9 +243,7 @@ function renderNachrichtencenterContactLists() {
   const selectedRefs = new Set([ ...Array.from(nachrichtencenterSelectedRefs || []), ...selectedFromInput ]);
 
   const renderList = (scope, container, contactsMap) => {
-    const contacts = Object.values(contactsMap || {})
-      .filter(c => String(c?.key || '').trim().length > 0)
-      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'de'));
+    const contacts = Object.values(contactsMap || {}).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'de'));
     if (contacts.length === 0) {
       container.innerHTML = '<p class="text-sm text-center text-gray-400">Keine Kontakte gefunden.</p>';
       return;
@@ -400,10 +385,6 @@ async function saveNachrichtencenterContactFromForm() {
   }
 
   resetNachrichtencenterContactForm();
-  const formContainer = document.getElementById('nachrichtencenterContactFormContainer');
-  if (formContainer) formContainer.classList.add('hidden');
-  const toggleBtn = document.getElementById('nachrichtencenterContactFormToggle');
-  if (toggleBtn) toggleBtn.textContent = '+ Kontakt anlegen';
 }
 
 export function openNachrichtencenterContactBook() {
@@ -413,10 +394,6 @@ export function openNachrichtencenterContactBook() {
   startNachrichtencenterContactListeners();
   renderNachrichtencenterContactLists();
   resetNachrichtencenterContactForm();
-  const formContainer = document.getElementById('nachrichtencenterContactFormContainer');
-  if (formContainer) formContainer.classList.add('hidden');
-  const toggleBtn = document.getElementById('nachrichtencenterContactFormToggle');
-  if (toggleBtn) toggleBtn.textContent = '+ Kontakt anlegen';
   setNachrichtencenterContactsScope(nachrichtencenterActiveScope);
   const modal = document.getElementById('nachrichtencenterContactBookModal');
   if (modal) modal.style.display = 'flex';
@@ -699,15 +676,6 @@ export function ensureModalListeners() {
         if (modal) modal.style.display = 'none';
         return;
       }
-      if (e.target.closest('#nachrichtencenterContactFormToggle')) {
-        const formContainer = document.getElementById('nachrichtencenterContactFormContainer');
-        const toggleBtn = document.getElementById('nachrichtencenterContactFormToggle');
-        if (formContainer) {
-          const isHidden = formContainer.classList.toggle('hidden');
-          if (toggleBtn) toggleBtn.textContent = isHidden ? '+ Kontakt anlegen' : 'Schließen';
-        }
-        return;
-      }
       if (e.target.closest('#nachrichtencenterContactsTabGlobal')) {
         setNachrichtencenterContactsScope('global');
         return;
@@ -743,11 +711,6 @@ export function ensureModalListeners() {
         if (typeInput) typeInput.value = String(contact.type || 'User') === 'Gruppe' ? 'Gruppe' : 'User';
         if (nameInput) nameInput.value = String(contact.name || '');
         if (keyInput) keyInput.value = String(contact.key || '');
-
-        const formContainer = document.getElementById('nachrichtencenterContactFormContainer');
-        if (formContainer) formContainer.classList.remove('hidden');
-        const toggleBtn = document.getElementById('nachrichtencenterContactFormToggle');
-        if (toggleBtn) toggleBtn.textContent = 'Schließen';
         return;
       }
       const deleteNcBtn = e.target.closest('.nachrichtencenter-delete-contact-btn');

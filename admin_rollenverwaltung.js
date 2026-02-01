@@ -181,8 +181,6 @@ export function renderRoleManagement() {
         'REZEPTE': { label: 'Rezepte', indent: false },
         'HAUSHALTSZAHLUNGEN': { label: 'Haushaltszahlungen', indent: false },
         'HAUSHALTSZAHLUNGEN_CREATE': { label: '-> Neue Zahlung anlegen', indent: true },
-        'NOTIZEN': { label: 'Notizen', indent: false },
-        'NOTIZEN_CREATE': { label: '-> Neue Notizen anlegen', indent: true },
         'GESCHENKEMANAGEMENT': { label: 'Geschenkemanagement', indent: false },
         'GESCHENKEMANAGEMENT_CREATE': { label: '-> Neues Geschenk anlegen', indent: true }
     };
@@ -216,7 +214,6 @@ export function renderRoleManagement() {
             const isTerminplanerEnabled = role.permissions?.includes('TERMINPLANER'); 
             const isZahlungsverwaltungEnabled = role.permissions?.includes('ZAHLUNGSVERWALTUNG');
             const isHaushaltszahlungenEnabled = role.permissions?.includes('HAUSHALTSZAHLUNGEN');
-            const isNotizenEnabled = role.permissions?.includes('NOTIZEN');
             const isGeschenkemanagementEnabled = role.permissions?.includes('GESCHENKEMANAGEMENT');
             
             permissionsCheckboxesHTML = Object.keys(allRolePermissions).map(permKey => {
@@ -240,9 +237,6 @@ export function renderRoleManagement() {
                     isDisabled = true;
                 }
                 if (permKey.startsWith('HAUSHALTSZAHLUNGEN_') && !isHaushaltszahlungenEnabled) {
-                    isDisabled = true;
-                }
-                if (permKey.startsWith('NOTIZEN_') && !isNotizenEnabled) {
                     isDisabled = true;
                 }
                 if (permKey.startsWith('GESCHENKEMANAGEMENT_') && !isGeschenkemanagementEnabled) {
@@ -303,7 +297,6 @@ export function renderRoleManagement() {
         setupPair('TERMINPLANER', ['TERMINPLANER_CREATE']);
         setupPair('ZAHLUNGSVERWALTUNG', ['ZAHLUNGSVERWALTUNG_CREATE']);
         setupPair('HAUSHALTSZAHLUNGEN', ['HAUSHALTSZAHLUNGEN_CREATE']);
-        setupPair('NOTIZEN', ['NOTIZEN_CREATE']);
         setupPair('GESCHENKEMANAGEMENT', ['GESCHENKEMANAGEMENT_CREATE']);
     };
 
