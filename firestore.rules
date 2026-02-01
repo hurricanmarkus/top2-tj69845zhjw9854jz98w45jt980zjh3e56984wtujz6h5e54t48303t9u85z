@@ -4,7 +4,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ═══════════════════════════════════════════════════════════════
-    // HELPER FUNCTIONS (Hilfsfunktionen)  
+    // HELPER FUNCTIONS (Hilfsfunktionen)
     // ═══════════════════════════════════════════════════════════════
     
     function isAuthenticated() {
