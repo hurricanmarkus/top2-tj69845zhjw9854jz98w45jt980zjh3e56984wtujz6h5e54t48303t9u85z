@@ -8,8 +8,27 @@ import { db, appId, currentUser, GUEST_MODE, alertUser } from './haupteingang.js
 const PUSHOVER_API_TOKEN = 'ag3nyu918ady5f8eqjuug13ttyaq9f';
 import { 
     collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, 
-    query, where, serverTimestamp, writeBatch, orderBy, limit 
+    query, where, serverTimestamp, writeBatch, orderBy, limit, onSnapshot 
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+// ========================================
+// HILFSFUNKTIONEN
+// ========================================
+
+/**
+ * Ersetzt Platzhalter in einem Text durch die entsprechenden Werte aus den Daten
+ * @param {string} text - Der Text mit Platzhaltern wie {key}
+ * @param {Object} data - Ein Objekt mit den Ersetzungswerten
+ * @returns {string} Der Text mit ersetzten Platzhaltern
+ */
+function replacePlaceholders(text, data) {
+    if (!text || !data) return text || '';
+    let result = text;
+    Object.keys(data).forEach(key => {
+        result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), data[key] || '');
+    });
+    return result;
+}
 
 // ========================================
 // BENACHRICHTIGUNGSDEFINITIONEN
