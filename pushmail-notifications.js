@@ -30,6 +30,35 @@ function replacePlaceholders(text, data) {
     return result;
 }
 
+/**
+ * Berechnet den geplanten Zeitpunkt für eine Benachrichtigung
+ * @param {string} timeString - Uhrzeit im Format "HH:MM"
+ * @param {number|null} daysBeforeX - Tage vor dem Zieldatum (null wenn nicht relevant)
+ * @param {Date|string|null} targetDate - Das Zieldatum
+ * @param {boolean} sendImmediately - Wenn true, wird sofort gesendet
+ * @returns {Date} Der berechnete Zeitpunkt
+ */
+function calculateScheduledTime(timeString, daysBeforeX, targetDate, sendImmediately = false) {
+    if (sendImmediately) {
+        return new Date();
+    }
+    
+    const [hours, minutes] = (timeString || '08:00').split(':').map(Number);
+    let scheduled;
+    
+    if (targetDate) {
+        scheduled = new Date(targetDate);
+        if (daysBeforeX !== null && daysBeforeX !== undefined) {
+            scheduled.setDate(scheduled.getDate() - daysBeforeX);
+        }
+    } else {
+        scheduled = new Date();
+    }
+    
+    scheduled.setHours(hours, minutes, 0, 0);
+    return scheduled;
+}
+
 // ========================================
 // BENACHRICHTIGUNGSDEFINITIONEN
 // ========================================
