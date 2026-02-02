@@ -8121,6 +8121,9 @@
                     <button id="add-element-link" class="px-3 py-2 bg-white border-2 border-gray-300 rounded-lg hover:border-amber-500 hover:bg-amber-50 transition text-sm font-semibold flex items-center gap-1">
                         🔗 Link
                     </button>
+                    <button id="add-element-divider" class="px-3 py-2 bg-white border-2 border-gray-300 rounded-lg hover:border-amber-500 hover:bg-amber-50 transition text-sm font-semibold flex items-center gap-1">
+                        ➖ Trennlinie
+                    </button>
                 </div>
 
                 <!-- Elemente-Container -->
@@ -8174,10 +8177,32 @@
         </div>
         
         <div class="flex-1 overflow-y-auto p-6">
-            <!-- Metadaten -->
-            <div class="flex items-center gap-3 mb-4 text-sm">
-                <span id="viewer-notiz-kategorie" class="px-2 py-1 bg-gray-100 text-gray-700 rounded-full font-semibold">Ohne Kategorie</span>
-                <span id="viewer-notiz-datum" class="text-gray-400">--.--.----</span>
+            <!-- Metadaten-Bereich -->
+            <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="text-gray-500 font-medium">Kategorie:</span>
+                        <span id="viewer-notiz-kategorie" class="ml-2 px-2 py-1 bg-gray-100 text-gray-700 rounded-full font-semibold">Ohne Kategorie</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-500 font-medium">Erstellt:</span>
+                        <span id="viewer-notiz-datum" class="ml-2 text-gray-700">--.--.----</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-500 font-medium">Gültig ab:</span>
+                        <span id="viewer-notiz-gueltig-ab" class="ml-2 text-gray-700">--.--.----</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-500 font-medium">Gültig bis:</span>
+                        <span id="viewer-notiz-gueltig-bis" class="ml-2 text-gray-700">Unbegrenzt</span>
+                    </div>
+                </div>
+                
+                <!-- Freigaben -->
+                <div id="viewer-notiz-freigaben" class="mt-3 pt-3 border-t border-gray-200 hidden">
+                    <span class="text-gray-500 font-medium text-sm">👥 Freigaben:</span>
+                    <div id="viewer-notiz-freigaben-list" class="mt-2 flex flex-wrap gap-2"></div>
+                </div>
             </div>
 
             <!-- Inhalt -->
@@ -8209,12 +8234,12 @@
                             </svg>
                         </button>
                         
-                        <!-- Weitere Optionen Submenu -->
-                        <div id="viewer-weitere-menu" class="hidden absolute left-full top-0 ml-1 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden min-w-[180px]">
-                            <button onclick="window.deleteCurrentNotiz()" class="w-full px-4 py-3 text-left hover:bg-red-50 flex items-center gap-2 text-red-600 font-semibold">
-                                🗑️ Notiz löschen
-                            </button>
-                        </div>
+                    </div>
+                    <!-- Weitere Optionen Submenu (unter dem Button) -->
+                    <div id="viewer-weitere-menu" class="hidden mt-1 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
+                        <button onclick="window.deleteCurrentNotiz()" class="w-full px-4 py-3 text-left hover:bg-red-50 flex items-center gap-2 text-red-600 font-semibold">
+                            🗑️ Notiz löschen
+                        </button>
                     </div>
                 </div>
             </div>

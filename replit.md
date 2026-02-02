@@ -17,15 +17,21 @@ Eine Progressive Web App (PWA) für das Smart Home Management, entwickelt mit na
   - **Status-System**: 3 Zustände - Offen (gelb), Abgeschlossen (grün), [INFO] (blau) mit visuellen Badges
   - **Multi-Filter-System**: Wie im Geschenkemanagement mit NICHT-Operator und Kategorie-Auswahl
   - **Standard-Filter**: Abgeschlossene Notizen werden automatisch ausgeblendet
-  - **Viewer-Ansicht**: Schreibgeschützte Anzeige mit "Erweitert"-Menü (Bearbeiten, Weitere Optionen → Löschen)
+  - **Viewer-Ansicht**: Vollständige Metadaten (Kategorie, Gültig ab/bis, Freigaben mit Rechten, Status)
+  - **Erweitert-Menü**: Bearbeiten + Weitere Optionen → Löschen (jetzt korrekt als Untermenü)
   - **Status-Dropdown** im Editor zum Setzen des Notiz-Status
+  - **Kategorie ist Pflichtfeld** beim Speichern
+  - **Gültig-bis Feld**: Automatisch deaktiviert wenn "unbegrenzt" aktiv
+  - **Unterüberschrift**: Jedes Element kann eine optionale Unterüberschrift haben
+  - **Trennlinie**: Neues Element-Typ für horizontale Trennlinien
+  - **Hintergrundfarben**: 25 Farben (inkl. transparent) für jedes Element wählbar
 - **Admin-Bereich korrigiert**:
   - Einrückung für NOTIZEN_CREATE, GESCHENKEMANAGEMENT_CREATE, HAUSHALTSZAHLUNGEN_CREATE (pl-6 Klasse)
   - Checkbox-Abhängigkeiten: Unterpunkte nur aktivierbar wenn Hauptpunkt aktiv
 - **Vorherige Notizen-Funktionen**:
   - Kategorien und Unterkategorien (Einstellungen)
   - Freigabe-System für Kategorien und einzelne Notizen (Lese-/Schreibrechte pro Benutzer)
-  - Verschiedene Element-Typen: Textbereich, Checkpunkte, Aufzählungen, Passwortfelder, Tabellen, Links
+  - Verschiedene Element-Typen: Textbereich, Checkpunkte, Aufzählungen, Passwortfelder, Tabellen, Links, Trennlinie
   - Elemente können verschoben, bearbeitet und gelöscht werden (max. 2 nebeneinander)
   - Gültigkeitszeitraum pro Notiz (von/bis oder unbegrenzt)
   - Erinnerungen über Pushmail-Center-Integration

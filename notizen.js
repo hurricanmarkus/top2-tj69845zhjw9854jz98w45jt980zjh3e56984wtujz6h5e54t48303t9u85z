@@ -81,8 +81,37 @@ export const ELEMENT_TYPES = {
     list_numbers: { label: 'Aufzählung (Zahlen)', icon: '1.', description: 'Nummerierte Liste' },
     password: { label: 'Passwortfeld', icon: '🔒', description: 'Verstecktes Passwort' },
     table: { label: 'Tabelle', icon: '📊', description: 'Einfache Tabelle' },
-    link: { label: 'Link', icon: '🔗', description: 'URL mit Anzeigetext' }
+    link: { label: 'Link', icon: '🔗', description: 'URL mit Anzeigetext' },
+    divider: { label: 'Trennlinie', icon: '➖', description: 'Horizontale Trennlinie' }
 };
+
+export const ELEMENT_COLORS = [
+    { id: 'transparent', label: 'Transparent', class: 'bg-transparent' },
+    { id: 'white', label: 'Weiß', class: 'bg-white' },
+    { id: 'gray-50', label: 'Hellgrau', class: 'bg-gray-50' },
+    { id: 'gray-100', label: 'Grau', class: 'bg-gray-100' },
+    { id: 'gray-200', label: 'Dunkelgrau', class: 'bg-gray-200' },
+    { id: 'red-50', label: 'Hellrot', class: 'bg-red-50' },
+    { id: 'red-100', label: 'Rot', class: 'bg-red-100' },
+    { id: 'orange-50', label: 'Hellorange', class: 'bg-orange-50' },
+    { id: 'orange-100', label: 'Orange', class: 'bg-orange-100' },
+    { id: 'amber-50', label: 'Hellamber', class: 'bg-amber-50' },
+    { id: 'amber-100', label: 'Amber', class: 'bg-amber-100' },
+    { id: 'yellow-50', label: 'Hellgelb', class: 'bg-yellow-50' },
+    { id: 'yellow-100', label: 'Gelb', class: 'bg-yellow-100' },
+    { id: 'green-50', label: 'Hellgrün', class: 'bg-green-50' },
+    { id: 'green-100', label: 'Grün', class: 'bg-green-100' },
+    { id: 'teal-50', label: 'Hellteal', class: 'bg-teal-50' },
+    { id: 'teal-100', label: 'Teal', class: 'bg-teal-100' },
+    { id: 'blue-50', label: 'Hellblau', class: 'bg-blue-50' },
+    { id: 'blue-100', label: 'Blau', class: 'bg-blue-100' },
+    { id: 'indigo-50', label: 'Hellindigo', class: 'bg-indigo-50' },
+    { id: 'indigo-100', label: 'Indigo', class: 'bg-indigo-100' },
+    { id: 'purple-50', label: 'Helllila', class: 'bg-purple-50' },
+    { id: 'purple-100', label: 'Lila', class: 'bg-purple-100' },
+    { id: 'pink-50', label: 'Hellpink', class: 'bg-pink-50' },
+    { id: 'pink-100', label: 'Pink', class: 'bg-pink-100' }
+];
 
 // ========================================
 // INITIALISIERUNG
@@ -780,6 +809,39 @@ export function openNotizViewer(notizId) {
     const datumEl = document.getElementById('viewer-notiz-datum');
     if (datumEl) datumEl.textContent = formattedDate;
 
+    // Gültig ab/bis
+    const gueltigAbEl = document.getElementById('viewer-notiz-gueltig-ab');
+    const gueltigBisEl = document.getElementById('viewer-notiz-gueltig-bis');
+    
+    if (gueltigAbEl) {
+        const gueltigAbDate = notiz.gueltigAb?.toDate ? notiz.gueltigAb.toDate() : null;
+        gueltigAbEl.textContent = gueltigAbDate ? gueltigAbDate.toLocaleDateString('de-DE') : 'Sofort';
+    }
+    
+    if (gueltigBisEl) {
+        const gueltigBisDate = notiz.gueltigBis?.toDate ? notiz.gueltigBis.toDate() : null;
+        gueltigBisEl.textContent = gueltigBisDate ? gueltigBisDate.toLocaleDateString('de-DE') : 'Unbegrenzt';
+    }
+
+    // Freigaben anzeigen
+    const freigabenContainer = document.getElementById('viewer-notiz-freigaben');
+    const freigabenList = document.getElementById('viewer-notiz-freigaben-list');
+    
+    if (freigabenContainer && freigabenList) {
+        const sharedWith = notiz.sharedWith || [];
+        if (sharedWith.length > 0) {
+            freigabenContainer.classList.remove('hidden');
+            freigabenList.innerHTML = sharedWith.map(share => {
+                const user = USERS[share.userId];
+                const userName = user?.name || share.userId;
+                const permLabel = share.permission === 'write' ? '✏️ Schreiben' : '👁️ Lesen';
+                return `<span class="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">${userName} (${permLabel})</span>`;
+            }).join('');
+        } else {
+            freigabenContainer.classList.add('hidden');
+        }
+    }
+
     // Elemente rendern (schreibgeschützt)
     const contentContainer = document.getElementById('viewer-notiz-content');
     if (contentContainer) {
@@ -803,6 +865,7 @@ function renderNotizElementsReadOnly(elemente) {
 
     return elemente.map(element => {
         const typeConfig = ELEMENT_TYPES[element.type] || { label: 'Unbekannt', icon: '?' };
+        const bgColorClass = ELEMENT_COLORS.find(c => c.id === element.bgColor)?.class || 'bg-gray-50';
         let contentHtml = '';
 
         switch (element.type) {
@@ -876,21 +939,23 @@ function renderNotizElementsReadOnly(elemente) {
                 contentHtml = `
                     <a href="${escapeHtml(element.url || '#')}" target="_blank" rel="noopener noreferrer" 
                        class="text-blue-600 hover:text-blue-800 underline flex items-center gap-2">
-                        🔗 ${escapeHtml(element.label || element.url || 'Link')}
+                        🔗 ${escapeHtml(element.text || element.url || 'Link')}
                     </a>
                 `;
                 break;
+                
+            case 'divider':
+                return `<hr class="border-t-2 border-gray-300 my-4">`;
                 
             default:
                 contentHtml = '<p class="text-gray-400 italic">Unbekannter Elementtyp</p>';
         }
 
+        const subtitleHtml = element.subtitle ? `<p class="text-sm font-semibold text-gray-600 mb-2">${escapeHtml(element.subtitle)}</p>` : '';
+
         return `
-            <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <div class="flex items-center gap-2 mb-2 text-sm text-gray-500">
-                    <span>${typeConfig.icon}</span>
-                    <span>${typeConfig.label}</span>
-                </div>
+            <div class="${bgColorClass} p-4 rounded-lg border border-gray-200">
+                ${subtitleHtml}
                 ${contentHtml}
             </div>
         `;
@@ -969,9 +1034,9 @@ export function openNotizEditor(notizId = null) {
         if (!notiz?.status) statusSelect.value = 'offen';
     }
     
-    // Kategorien in Select laden
+    // Kategorien in Select laden (Pflichtfeld)
     if (kategorieSelect) {
-        kategorieSelect.innerHTML = '<option value="">Keine Kategorie</option>';
+        kategorieSelect.innerHTML = '<option value="">-- Kategorie wählen (Pflicht) --</option>';
         Object.values(KATEGORIEN).forEach(kat => {
             const option = document.createElement('option');
             option.value = kat.id;
@@ -989,9 +1054,13 @@ export function openNotizEditor(notizId = null) {
     if (gueltigBisInput && notiz?.gueltigBis) {
         const bis = notiz.gueltigBis.toDate ? notiz.gueltigBis.toDate() : new Date(notiz.gueltigBis);
         gueltigBisInput.value = bis.toISOString().split('T')[0];
+        gueltigBisInput.disabled = false;
         if (gueltigBisUnbegrenzt) gueltigBisUnbegrenzt.checked = false;
     } else {
-        if (gueltigBisInput) gueltigBisInput.value = '';
+        if (gueltigBisInput) {
+            gueltigBisInput.value = '';
+            gueltigBisInput.disabled = true;
+        }
         if (gueltigBisUnbegrenzt) gueltigBisUnbegrenzt.checked = true;
     }
 
@@ -1153,16 +1222,28 @@ function renderElementEditor(element, index) {
                 </div>
             `;
             break;
+            
+        case 'divider':
+            contentHtml = `<hr class="border-t-2 border-gray-300 my-2">`;
+            break;
     }
 
+    const bgColorClass = ELEMENT_COLORS.find(c => c.id === element.bgColor)?.class || 'bg-transparent';
+    const colorOptions = ELEMENT_COLORS.map(c => 
+        `<option value="${c.id}" ${element.bgColor === c.id ? 'selected' : ''}>${c.label}</option>`
+    ).join('');
+
     return `
-        <div class="element-wrapper bg-gray-50 rounded-lg border-2 border-gray-200 p-3" data-index="${index}">
+        <div class="element-wrapper ${bgColorClass} rounded-lg border-2 border-gray-200 p-3" data-index="${index}">
             <div class="flex items-center justify-between mb-2">
                 <div class="flex items-center gap-2">
                     <span class="cursor-move text-gray-400 hover:text-gray-600" title="Verschieben">⋮⋮</span>
                     <span class="font-semibold text-gray-700">${typeConfig.icon} ${typeConfig.label}</span>
                 </div>
                 <div class="flex items-center gap-1">
+                    <select class="element-bg-color text-xs p-1 border rounded bg-white" data-index="${index}" title="Hintergrundfarbe">
+                        ${colorOptions}
+                    </select>
                     <label class="flex items-center gap-1 text-xs text-gray-500">
                         <input type="checkbox" class="element-half-width" data-index="${index}" ${element.halfWidth ? 'checked' : ''}>
                         Halbe Breite
@@ -1172,12 +1253,33 @@ function renderElementEditor(element, index) {
                     <button class="delete-element p-1 text-red-400 hover:text-red-600" data-index="${index}" title="Löschen">🗑️</button>
                 </div>
             </div>
+            ${element.type !== 'divider' ? `
+                <input type="text" class="element-subtitle w-full p-2 mb-2 text-sm border border-gray-300 rounded-lg focus:border-amber-500" 
+                    data-index="${index}" value="${element.subtitle || ''}" placeholder="Unterüberschrift (optional)">
+            ` : ''}
             ${contentHtml}
         </div>
     `;
 }
 
 function setupElementEventListeners() {
+    // Unterüberschrift
+    document.querySelectorAll('.element-subtitle').forEach(el => {
+        el.addEventListener('input', (e) => {
+            const index = parseInt(e.target.dataset.index);
+            currentNotizElements[index].subtitle = e.target.value;
+        });
+    });
+
+    // Hintergrundfarbe
+    document.querySelectorAll('.element-bg-color').forEach(el => {
+        el.addEventListener('change', (e) => {
+            const index = parseInt(e.target.dataset.index);
+            currentNotizElements[index].bgColor = e.target.value;
+            renderNotizElements();
+        });
+    });
+
     // Text-Änderungen
     document.querySelectorAll('.element-content').forEach(el => {
         el.addEventListener('input', (e) => {
@@ -1375,7 +1477,7 @@ function setupElementEventListeners() {
 }
 
 function addElement(type) {
-    const newElement = { type, id: `el_${Date.now()}` };
+    const newElement = { type, id: `el_${Date.now()}`, subtitle: '', bgColor: 'transparent' };
     
     switch (type) {
         case 'text':
@@ -1398,6 +1500,8 @@ function addElement(type) {
             newElement.url = '';
             newElement.text = '';
             break;
+        case 'divider':
+            break;
     }
     
     currentNotizElements.push(newElement);
@@ -1412,6 +1516,11 @@ async function saveCurrentNotiz() {
     const gueltigAbInput = document.getElementById('notiz-gueltig-ab');
     const gueltigBisInput = document.getElementById('notiz-gueltig-bis');
     const gueltigBisUnbegrenzt = document.getElementById('notiz-gueltig-bis-unbegrenzt');
+
+    if (!kategorieSelect?.value) {
+        alertUser('Bitte wähle eine Kategorie aus!', 'warning');
+        return;
+    }
 
     const data = {
         titel: titelInput?.value?.trim() || 'Ohne Titel',
