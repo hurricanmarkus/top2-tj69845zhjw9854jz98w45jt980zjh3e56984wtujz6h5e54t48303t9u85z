@@ -237,6 +237,11 @@ async function loadSharedNotizen() {
     }
 }
 
+let unsubscribeInvitesOwner = null;
+let unsubscribeInvitesTarget = null;
+let INVITES_OWNER = {};
+let INVITES_TARGET = {};
+
 async function loadNotizenInvites() {
     const userId = getCurrentUserId();
     if (!userId) return;
@@ -244,24 +249,39 @@ async function loadNotizenInvites() {
     try {
         invitesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_invites');
         
-        // Lade alle Einladungen, bei denen der User Sender oder Empfänger ist
-        const invitesQuery = query(invitesCollection);
-        
-        unsubscribeInvites = onSnapshot(invitesQuery, (snapshot) => {
-            INVITES = {};
+        // Query 1: Einladungen wo User der Owner ist (gesendete)
+        const ownerQuery = query(invitesCollection, where('ownerId', '==', userId));
+        unsubscribeInvitesOwner = onSnapshot(ownerQuery, (snapshot) => {
+            INVITES_OWNER = {};
             snapshot.forEach(docSnap => {
-                const invite = { id: docSnap.id, ...docSnap.data() };
-                // Nur relevante Einladungen speichern
-                if (invite.ownerId === userId || invite.targetUserId === userId) {
-                    INVITES[docSnap.id] = invite;
-                }
+                INVITES_OWNER[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
             });
-            updateInvitationBadge();
-            console.log('📝 Notizen: Einladungen geladen:', Object.keys(INVITES).length);
+            mergeInvites();
+        }, (error) => {
+            console.error('📝 Notizen: Fehler bei Owner-Einladungen:', error);
         });
+        
+        // Query 2: Einladungen wo User der Empfänger ist (empfangene)
+        const targetQuery = query(invitesCollection, where('targetUserId', '==', userId));
+        unsubscribeInvitesTarget = onSnapshot(targetQuery, (snapshot) => {
+            INVITES_TARGET = {};
+            snapshot.forEach(docSnap => {
+                INVITES_TARGET[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
+            });
+            mergeInvites();
+        }, (error) => {
+            console.error('📝 Notizen: Fehler bei Target-Einladungen:', error);
+        });
+        
     } catch (error) {
         console.error('📝 Notizen: Fehler beim Laden der Einladungen:', error);
     }
+}
+
+function mergeInvites() {
+    INVITES = { ...INVITES_OWNER, ...INVITES_TARGET };
+    updateInvitationBadge();
+    console.log('📝 Notizen: Einladungen geladen:', Object.keys(INVITES).length, '(Owner:', Object.keys(INVITES_OWNER).length, ', Target:', Object.keys(INVITES_TARGET).length, ')');
 }
 
 function updateInvitationBadge() {
