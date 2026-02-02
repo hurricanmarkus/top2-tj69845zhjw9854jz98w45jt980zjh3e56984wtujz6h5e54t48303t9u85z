@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web"]
+modules = ["nodejs-20", "web", "python-3.11"]
 [agent]
 expertMode = true
 
@@ -15,15 +15,15 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Start application"
+args = "Frontend Vorschau"
 
 [[workflows.workflow]]
-name = "Start application"
+name = "Frontend Vorschau"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "node server.js"
+args = "python3 -m http.server 5000 --bind 0.0.0.0"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
@@ -34,5 +34,6 @@ localPort = 5000
 externalPort = 80
 
 [deployment]
-deploymentTarget = "autoscale"
+deploymentTarget = "static"
 run = ["node", "server.js"]
+publicDir = "."

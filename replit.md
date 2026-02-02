@@ -1,49 +1,29 @@
 # TOP 2 Smart Home App
 
-## Overview
-A Progressive Web App (PWA) for smart home management built with vanilla JavaScript and Firebase. The application is in German and provides features for household management, payments, contracts, recipes, and more.
+## Übersicht
+Eine Progressive Web App (PWA) für das Smart Home Management, entwickelt mit nativem JavaScript und Firebase. Die Anwendung ist auf Deutsch und bietet Funktionen für Haushaltsverwaltung, Zahlungen, Verträge, Rezepte und mehr.
 
-## Project Structure
-- `index.html` - Main HTML file containing all views
-- `style.css` - Custom styles
-- `server.js` - Simple Node.js static file server
-- `sw.js` - Service worker for PWA functionality
-- `manifest.json` - PWA manifest configuration
-- `firebase.json` - Firebase configuration
-- `firestore.rules` - Firestore security rules
-
-### JavaScript Modules
-- `haupteingang.js` - Main entrance/home functionality
-- `zahlungsverwaltung.js` - Payment management
-- `haushaltszahlungen.js` - Household payments
-- `geschenkemanagement.js` - Gift management
-- `terminplaner.js` - Calendar/scheduler
-- `vertragsverwaltung.js` - Contract management
-- `rezeptverwaltung.js` - Recipe management
-- `checklist.js` - Checklists
-- `notfall.js` - Emergency features
-- `lizenzen.js` - Licenses
-- `wertguthaben.js` - Value credits
-- `ticket-support.js` - Support tickets
-- `sendungsverwaltung.js` - Shipment management
-- `essensberechnung.js` - Food calculations
-- `log-InOut.js` - Authentication
-- `admin_*.js` - Admin functionality modules
-- `pushmail-*.js` - Push notification system
+## Projektstruktur
+- `index.html` - Hauptdatei mit allen Ansichten.
+- `style.css` - Benutzerdefinierte Stile.
+- `sw.js` - Service Worker für PWA-Funktionalität.
+- `manifest.json` - PWA-Konfiguration.
+- `firebase.json` - Firebase-Konfiguration.
+- `firestore.rules` - Firestore Sicherheitsregeln.
 
 ## Tech Stack
-- Frontend: Vanilla JavaScript, TailwindCSS (CDN)
-- Backend: Firebase (Firestore, Authentication)
-- Server: Node.js static file server
+- **Frontend**: Vanilla JavaScript, TailwindCSS (CDN).
+- **Backend**: Google Cloud Functions & Firebase (Firestore, Authentication).
+- **Vorschau**: Statischer Python HTTP-Server.
 
-## Running the Application
-The app runs on port 5000 with a simple Node.js static file server:
+## Ausführung
+Die App wird über einen statischen Python-Server bereitgestellt:
 ```bash
-node server.js
+python3 -m http.server 5000 --bind 0.0.0.0
 ```
 
-## Firebase Integration
-This app uses Firebase for:
-- Authentication (anonymous auth)
-- Firestore database
-- The Firebase configuration is embedded in the JavaScript files
+## Firebase & Cloud Functions
+Diese App kommuniziert direkt vom Browser aus mit:
+- **Firebase Auth**: Für die Benutzeranmeldung.
+- **Firestore**: Als Echtzeit-Datenbank.
+- **Cloud Functions**: Über HTTPS-Calls oder Firebase SDKs für Backend-Logik.
