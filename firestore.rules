@@ -510,6 +510,23 @@ service cloud.firestore {
       allow create: if hasAppUserIdClaim() && request.resource.data.ownerId == appUserId();
       allow update, delete: if hasAppUserIdClaim() && resource.data.ownerId == appUserId();
     }
+    
+    // Notizen-Einladungen (öffentlich, für Einladungs-Workflow)
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/notizen_invites/{inviteId} {
+      allow read: if hasAppUserIdClaim() && (
+        resource.data.ownerId == appUserId() ||
+        resource.data.targetUserId == appUserId()
+      );
+      allow create: if hasAppUserIdClaim() && request.resource.data.ownerId == appUserId();
+      allow update: if hasAppUserIdClaim() && (
+        resource.data.ownerId == appUserId() ||
+        resource.data.targetUserId == appUserId()
+      );
+      allow delete: if hasAppUserIdClaim() && (
+        resource.data.ownerId == appUserId() ||
+        resource.data.targetUserId == appUserId()
+      );
+    }
 
     // ═══════════════════════════════════════════════════════════════
     // DEFAULT DENY (Alles andere verbieten)

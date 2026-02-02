@@ -1551,11 +1551,22 @@ window.deleteCurrentNotiz = async function() {
 
 export function openNotizEditor(notizId = null) {
     currentEditingNotizId = notizId;
+    console.log('📝 Notizen: openNotizEditor aufgerufen, notizId:', notizId, '-> currentEditingNotizId:', currentEditingNotizId);
     
     const modal = document.getElementById('notizEditorModal');
     if (!modal) return;
 
     const notiz = notizId ? NOTIZEN[notizId] : null;
+    
+    // Freigeben-Button nur bei bestehenden Notizen anzeigen
+    const shareBtn = modal.querySelector('button[onclick="window.shareEditingNotiz()"]');
+    if (shareBtn) {
+        if (notizId) {
+            shareBtn.classList.remove('hidden');
+        } else {
+            shareBtn.classList.add('hidden');
+        }
+    }
     
     // Formular zurücksetzen
     const titelInput = document.getElementById('notiz-titel');
