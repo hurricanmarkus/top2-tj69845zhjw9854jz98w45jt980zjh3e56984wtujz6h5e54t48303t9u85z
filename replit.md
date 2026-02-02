@@ -13,13 +13,21 @@ Eine Progressive Web App (PWA) für das Smart Home Management, entwickelt mit na
 - `notizen.js` - Notizen-Modul mit Kategorien, Freigaben und verschiedenen Elementtypen.
 
 ## Letzte Änderungen (02.02.2026)
-- **Notizen-Modul hinzugefügt**: Vollständiges Notizen-System mit:
+- **Notizen-System erweitert**:
+  - **Status-System**: 3 Zustände - Offen (gelb), Abgeschlossen (grün), [INFO] (blau) mit visuellen Badges
+  - **Multi-Filter-System**: Wie im Geschenkemanagement mit NICHT-Operator und Kategorie-Auswahl
+  - **Standard-Filter**: Abgeschlossene Notizen werden automatisch ausgeblendet
+  - **Viewer-Ansicht**: Schreibgeschützte Anzeige mit "Erweitert"-Menü (Bearbeiten, Weitere Optionen → Löschen)
+  - **Status-Dropdown** im Editor zum Setzen des Notiz-Status
+- **Admin-Bereich korrigiert**:
+  - Einrückung für NOTIZEN_CREATE, GESCHENKEMANAGEMENT_CREATE, HAUSHALTSZAHLUNGEN_CREATE (pl-6 Klasse)
+  - Checkbox-Abhängigkeiten: Unterpunkte nur aktivierbar wenn Hauptpunkt aktiv
+- **Vorherige Notizen-Funktionen**:
   - Kategorien und Unterkategorien (Einstellungen)
   - Freigabe-System für Kategorien und einzelne Notizen (Lese-/Schreibrechte pro Benutzer)
-  - Verschiedene Element-Typen: Textbereich, Checkpunkte (To-Do-Listen), Aufzählungen (Punkte/Zahlen), Passwortfelder (mit Kopier-Button), Tabellen, Links
+  - Verschiedene Element-Typen: Textbereich, Checkpunkte, Aufzählungen, Passwortfelder, Tabellen, Links
   - Elemente können verschoben, bearbeitet und gelöscht werden (max. 2 nebeneinander)
   - Gültigkeitszeitraum pro Notiz (von/bis oder unbegrenzt)
-  - Filter- und Suchfunktion wie im Geschenkemanagement
   - Erinnerungen über Pushmail-Center-Integration
 
 ## Tech Stack

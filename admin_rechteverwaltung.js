@@ -121,6 +121,30 @@ export function setupPermissionDependencies(container) {
             '[data-perm="ZAHLUNGSVERWALTUNG_CREATE"]'
         ]
     );
+
+    // 6. Logik für HAUSHALTSZAHLUNGEN (Hauptansicht -> Erstellen)
+    setupToggleLogic(
+        '[data-perm="HAUSHALTSZAHLUNGEN"]',
+        [
+            '[data-perm="HAUSHALTSZAHLUNGEN_CREATE"]'
+        ]
+    );
+
+    // 7. Logik für GESCHENKEMANAGEMENT (Hauptansicht -> Erstellen)
+    setupToggleLogic(
+        '[data-perm="GESCHENKEMANAGEMENT"]',
+        [
+            '[data-perm="GESCHENKEMANAGEMENT_CREATE"]'
+        ]
+    );
+
+    // 8. Logik für NOTIZEN (Hauptansicht -> Erstellen)
+    setupToggleLogic(
+        '[data-perm="NOTIZEN"]',
+        [
+            '[data-perm="NOTIZEN_CREATE"]'
+        ]
+    );
 }
 
 

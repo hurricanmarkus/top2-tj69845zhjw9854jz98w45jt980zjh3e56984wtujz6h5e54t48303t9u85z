@@ -1661,20 +1661,36 @@
                     </div>
                 </div>
 
-                <!-- Such- und Filterleiste -->
+                <!-- Such- und Filterleiste (Multi-Filter wie Geschenkemanagement) -->
                 <div class="bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
-                    <div class="flex flex-wrap gap-2">
-                        <input type="text" id="search-notizen" placeholder="🔍 Suchen... (Titel, Inhalt)" 
-                            class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 text-sm">
+                    <div class="flex flex-wrap gap-2 mb-2">
+                        <input type="text" id="search-notizen" placeholder="🔍 Suchbegriff eingeben..." 
+                            class="flex-1 min-w-[180px] p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 text-sm">
                         
-                        <select id="filter-notizen-kategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1 min-w-[150px]">
-                            <option value="">Alle Kategorien</option>
+                        <select id="filter-notizen-category" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm min-w-[120px]">
+                            <option value="all">Alles</option>
+                            <option value="status">Status</option>
+                            <option value="kategorie">Kategorie</option>
+                            <option value="titel">Titel</option>
+                            <option value="inhalt">Inhalt</option>
                         </select>
                         
-                        <button id="reset-filters-notizen" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
-                            ✕ Filter zurücksetzen
+                        <label class="flex items-center gap-1 px-2 py-1 bg-red-50 border-2 border-red-200 rounded-lg text-sm cursor-pointer hover:bg-red-100">
+                            <input type="checkbox" id="filter-notizen-negate" class="w-4 h-4 accent-red-500">
+                            <span class="text-red-700 font-semibold">NICHT</span>
+                        </label>
+                        
+                        <button onclick="window.addNotizFilter()" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-bold transition text-sm">
+                            + Filter
+                        </button>
+                        
+                        <button onclick="window.resetNotizFilters()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
+                            ✕ Alle Filter
                         </button>
                     </div>
+                    
+                    <!-- Aktive Filter Chips -->
+                    <div id="active-filters-notizen" class="flex flex-wrap gap-2"></div>
                 </div>
 
                 <!-- Notizen Container -->
@@ -8034,7 +8050,15 @@
                             class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
                     </div>
                     
-                    <div class="grid grid-cols-2 gap-4">
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Status</label>
+                            <select id="notiz-status" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                                <option value="offen">⭕ Offen</option>
+                                <option value="abgeschlossen">✅ Abgeschlossen</option>
+                                <option value="info">ℹ️ [INFO]</option>
+                            </select>
+                        </div>
                         <div>
                             <label class="block text-sm font-bold text-gray-700 mb-1">Kategorie</label>
                             <select id="notiz-kategorie" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
@@ -8129,6 +8153,70 @@
                 <button id="save-notiz-btn" class="px-6 py-2 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 transition">
                     💾 Speichern
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Notiz Viewer Modal (Schreibgeschützte Ansicht) -->
+<div id="notizViewerModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-hidden flex flex-col">
+        <div class="sticky top-0 bg-gradient-to-r from-amber-500 to-orange-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <h3 id="viewer-notiz-titel" class="text-xl font-bold">Notiz</h3>
+                <span id="viewer-notiz-status" class="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-semibold">⭕ Offen</span>
+            </div>
+            <button onclick="window.closeNotizViewer()" class="text-white/80 hover:text-white transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-6">
+            <!-- Metadaten -->
+            <div class="flex items-center gap-3 mb-4 text-sm">
+                <span id="viewer-notiz-kategorie" class="px-2 py-1 bg-gray-100 text-gray-700 rounded-full font-semibold">Ohne Kategorie</span>
+                <span id="viewer-notiz-datum" class="text-gray-400">--.--.----</span>
+            </div>
+
+            <!-- Inhalt -->
+            <div id="viewer-notiz-content" class="space-y-4">
+                <p class="text-gray-400 italic text-center py-8">Inhalt wird geladen...</p>
+            </div>
+        </div>
+
+        <!-- Footer mit Erweitert-Button -->
+        <div class="sticky bottom-0 bg-gray-100 p-4 border-t">
+            <div class="relative">
+                <button onclick="window.toggleErweitertMenu()" class="px-4 py-2 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition flex items-center gap-2">
+                    ⚙️ Erweitert
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                
+                <!-- Erweitert Dropdown -->
+                <div id="viewer-erweitert-menu" class="hidden absolute bottom-full left-0 mb-2 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden min-w-[200px]">
+                    <button onclick="window.editCurrentNotiz()" class="w-full px-4 py-3 text-left hover:bg-amber-50 flex items-center gap-2 text-gray-700 font-semibold">
+                        ✏️ Bearbeiten
+                    </button>
+                    <div class="relative">
+                        <button onclick="window.toggleWeitereMenu()" class="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center justify-between text-gray-700 font-semibold border-t">
+                            <span>📋 Weitere Optionen</span>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                        </button>
+                        
+                        <!-- Weitere Optionen Submenu -->
+                        <div id="viewer-weitere-menu" class="hidden absolute left-full top-0 ml-1 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden min-w-[180px]">
+                            <button onclick="window.deleteCurrentNotiz()" class="w-full px-4 py-3 text-left hover:bg-red-50 flex items-center gap-2 text-red-600 font-semibold">
+                                🗑️ Notiz löschen
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

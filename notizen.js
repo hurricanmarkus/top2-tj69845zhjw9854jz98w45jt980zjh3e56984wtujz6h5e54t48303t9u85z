@@ -54,10 +54,21 @@ let currentKategorieId = null;
 let currentUnterkategorieId = null;
 let searchTerm = '';
 let activeFilters = [];
+let defaultFiltersApplied = false;
 
 let unsubscribeNotizen = null;
 let unsubscribeKategorien = null;
 let unsubscribeFreigaben = null;
+
+// ========================================
+// STATUS KONFIGURATION
+// ========================================
+
+export const NOTIZ_STATUS = {
+    offen: { label: 'Offen', color: 'bg-yellow-100 text-yellow-800', icon: '⭕' },
+    abgeschlossen: { label: 'Abgeschlossen', color: 'bg-green-100 text-green-800', icon: '✅' },
+    info: { label: '[INFO]', color: 'bg-blue-100 text-blue-800', icon: 'ℹ️' }
+};
 
 // ========================================
 // ELEMENT-TYPEN KONFIGURATION
@@ -89,6 +100,18 @@ export function initializeNotizen() {
     notizenCollection = collection(db, 'artifacts', appId, 'users', userId, 'notizen');
     kategorienCollection = collection(db, 'artifacts', appId, 'users', userId, 'notizen_kategorien');
     freigabenCollection = collection(db, 'artifacts', appId, 'users', userId, 'notizen_freigaben');
+
+    // Standard-Filter setzen: Abgeschlossene ausblenden
+    if (!defaultFiltersApplied) {
+        activeFilters = [{ 
+            category: 'status', 
+            value: 'abgeschlossen', 
+            negate: true, 
+            label: 'Status',
+            id: Date.now() 
+        }];
+        defaultFiltersApplied = true;
+    }
 
     startNotizenListeners();
     setupNotizenEventListeners();
@@ -451,21 +474,62 @@ function renderNotizenList() {
     const container = document.getElementById('notizen-list');
     if (!container) return;
 
+    // Aktive Filter rendern
+    renderActiveFiltersNotizen();
+
     let notizenArray = Object.values(NOTIZEN);
 
-    // Filter anwenden
+    // Kategoriefilter anwenden
     if (currentKategorieId) {
         notizenArray = notizenArray.filter(n => n.kategorieId === currentKategorieId);
     }
     if (currentUnterkategorieId) {
         notizenArray = notizenArray.filter(n => n.unterkategorieId === currentUnterkategorieId);
     }
+    
+    // Suchbegriff anwenden
     if (searchTerm) {
         const term = searchTerm.toLowerCase();
         notizenArray = notizenArray.filter(n => 
             n.titel?.toLowerCase().includes(term) ||
             JSON.stringify(n.elemente || []).toLowerCase().includes(term)
         );
+    }
+
+    // Multi-Filter anwenden
+    if (activeFilters.length > 0) {
+        const groupedFilters = {};
+        activeFilters.forEach(filter => {
+            if (!groupedFilters[filter.category]) {
+                groupedFilters[filter.category] = { normal: [], negated: [] };
+            }
+            if (filter.negate) {
+                groupedFilters[filter.category].negated.push(filter);
+            } else {
+                groupedFilters[filter.category].normal.push(filter);
+            }
+        });
+
+        notizenArray = notizenArray.filter(notiz => {
+            return Object.entries(groupedFilters).every(([category, filters]) => {
+                // Negierte Filter: KEINE der Bedingungen darf zutreffen
+                if (filters.negated.length > 0) {
+                    const negatedMatch = filters.negated.some(filter => {
+                        return matchNotizFilter(notiz, category, filter.value);
+                    });
+                    if (negatedMatch) return false;
+                }
+                
+                // Normale Filter: mindestens eine muss zutreffen (OR)
+                if (filters.normal.length > 0) {
+                    return filters.normal.some(filter => {
+                        return matchNotizFilter(notiz, category, filter.value);
+                    });
+                }
+                
+                return true;
+            });
+        });
     }
 
     if (notizenArray.length === 0) {
@@ -481,14 +545,115 @@ function renderNotizenList() {
 
     container.innerHTML = notizenArray.map(notiz => renderNotizCard(notiz)).join('');
 
-    // Event-Listener für Karten
+    // Event-Listener für Karten - öffnet schreibgeschützte Ansicht
     container.querySelectorAll('.notiz-card').forEach(card => {
         card.addEventListener('click', () => {
             const notizId = card.dataset.notizId;
-            openNotizEditor(notizId);
+            openNotizViewer(notizId);
         });
     });
 }
+
+function matchNotizFilter(notiz, category, value) {
+    const val = value.toLowerCase();
+    switch(category) {
+        case 'status':
+            const statusKey = notiz.status || 'offen';
+            const statusLabel = NOTIZ_STATUS[statusKey]?.label?.toLowerCase() || statusKey;
+            return statusKey.toLowerCase().includes(val) || statusLabel.includes(val);
+        case 'kategorie':
+            const kat = KATEGORIEN[notiz.kategorieId];
+            return kat?.name?.toLowerCase().includes(val) || false;
+        case 'titel':
+            return notiz.titel?.toLowerCase().includes(val) || false;
+        case 'inhalt':
+            return JSON.stringify(notiz.elemente || []).toLowerCase().includes(val);
+        case 'all':
+            return notiz.titel?.toLowerCase().includes(val) || 
+                   JSON.stringify(notiz.elemente || []).toLowerCase().includes(val);
+        default:
+            return true;
+    }
+}
+
+function renderActiveFiltersNotizen() {
+    const container = document.getElementById('active-filters-notizen');
+    if (!container) return;
+    
+    if (activeFilters.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    container.innerHTML = activeFilters.map(filter => `
+        <div class="flex items-center gap-2 px-3 py-1.5 ${filter.negate ? 'bg-red-100 text-red-800 border-red-300' : 'bg-amber-100 text-amber-800 border-amber-300'} rounded-full text-sm font-medium border">
+            ${filter.negate ? '<span class="font-bold text-red-600">NICHT</span>' : ''}
+            <span class="font-bold">${filter.label || filter.category}:</span>
+            <span>${NOTIZ_STATUS[filter.value]?.label || filter.value}</span>
+            <button onclick="window.removeNotizFilterById(${filter.id})" class="ml-1 ${filter.negate ? 'hover:bg-red-200' : 'hover:bg-amber-200'} rounded-full p-0.5 transition" title="Filter entfernen">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+    `).join('');
+}
+
+window.removeNotizFilterById = function(filterId) {
+    activeFilters = activeFilters.filter(f => f.id !== filterId);
+    renderNotizenList();
+};
+
+window.addNotizFilter = function() {
+    const searchInput = document.getElementById('search-notizen');
+    const categorySelect = document.getElementById('filter-notizen-category');
+    const negateCheckbox = document.getElementById('filter-notizen-negate');
+    
+    const value = searchInput?.value?.trim();
+    const category = categorySelect?.value || 'all';
+    const negate = negateCheckbox?.checked || false;
+    
+    if (!value) {
+        alertUser('Bitte einen Suchbegriff eingeben!', 'warning');
+        return;
+    }
+    
+    const categoryLabels = {
+        'status': 'Status',
+        'kategorie': 'Kategorie',
+        'titel': 'Titel',
+        'inhalt': 'Inhalt',
+        'all': 'Alles'
+    };
+    
+    activeFilters.push({ 
+        category, 
+        value, 
+        negate, 
+        label: categoryLabels[category] || category,
+        id: Date.now() 
+    });
+    
+    if (searchInput) searchInput.value = '';
+    if (negateCheckbox) negateCheckbox.checked = false;
+    
+    renderNotizenList();
+};
+
+window.resetNotizFilters = function() {
+    activeFilters = [];
+    searchTerm = '';
+    currentKategorieId = null;
+    currentUnterkategorieId = null;
+    
+    const searchInput = document.getElementById('search-notizen');
+    const kategorieFilter = document.getElementById('filter-notizen-kategorie');
+    
+    if (searchInput) searchInput.value = '';
+    if (kategorieFilter) kategorieFilter.value = '';
+    
+    renderNotizenList();
+};
 
 function renderNotizCard(notiz) {
     const kategorie = KATEGORIEN[notiz.kategorieId];
@@ -507,6 +672,10 @@ function renderNotizCard(notiz) {
     const elementCount = (notiz.elemente || []).length;
     const hasReminders = notiz.erinnerungen && notiz.erinnerungen.length > 0;
     const isShared = notiz.sharedWith && notiz.sharedWith.length > 0;
+    
+    // Status
+    const statusKey = notiz.status || 'offen';
+    const statusConfig = NOTIZ_STATUS[statusKey] || NOTIZ_STATUS.offen;
 
     // Vorschau der ersten Elemente
     let preview = '';
@@ -525,7 +694,10 @@ function renderNotizCard(notiz) {
         <div class="notiz-card bg-white p-4 rounded-xl shadow-lg border-l-4 border-${kategorieColor}-500 hover:shadow-xl transition cursor-pointer" data-notiz-id="${notiz.id}">
             <div class="flex justify-between items-start mb-2">
                 <h3 class="font-bold text-gray-800 text-lg">${notiz.titel || 'Ohne Titel'}</h3>
-                <div class="flex gap-1">
+                <div class="flex items-center gap-2">
+                    <span class="px-2 py-1 ${statusConfig.color} rounded-full text-xs font-semibold">
+                        ${statusConfig.icon} ${statusConfig.label}
+                    </span>
                     ${hasReminders ? '<span class="text-orange-500" title="Hat Erinnerungen">🔔</span>' : ''}
                     ${isShared ? '<span class="text-blue-500" title="Geteilt">👥</span>' : ''}
                 </div>
@@ -553,6 +725,222 @@ function renderNotizCard(notiz) {
 
 let currentEditingNotizId = null;
 let currentNotizElements = [];
+let currentViewingNotizId = null;
+
+// ========================================
+// NOTIZ VIEWER (Schreibgeschützte Ansicht)
+// ========================================
+
+export function openNotizViewer(notizId) {
+    if (!notizId || !NOTIZEN[notizId]) return;
+    
+    currentViewingNotizId = notizId;
+    const notiz = NOTIZEN[notizId];
+    
+    const modal = document.getElementById('notizViewerModal');
+    if (!modal) {
+        console.error('Notiz Viewer Modal nicht gefunden');
+        return;
+    }
+
+    const kategorie = KATEGORIEN[notiz.kategorieId];
+    const kategorieLabel = kategorie ? kategorie.name : 'Ohne Kategorie';
+    const kategorieColor = kategorie?.color || 'gray';
+    
+    let unterkategorieLabel = '';
+    if (kategorie && notiz.unterkategorieId) {
+        const uk = (kategorie.unterkategorien || []).find(u => u.id === notiz.unterkategorieId);
+        if (uk) unterkategorieLabel = ` / ${uk.name}`;
+    }
+    
+    const statusKey = notiz.status || 'offen';
+    const statusConfig = NOTIZ_STATUS[statusKey] || NOTIZ_STATUS.offen;
+    
+    const createdDate = notiz.createdAt?.toDate ? notiz.createdAt.toDate() : new Date();
+    const formattedDate = createdDate.toLocaleDateString('de-DE', { 
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' 
+    });
+
+    // Header
+    const titleEl = document.getElementById('viewer-notiz-titel');
+    if (titleEl) titleEl.textContent = notiz.titel || 'Ohne Titel';
+    
+    const statusEl = document.getElementById('viewer-notiz-status');
+    if (statusEl) {
+        statusEl.className = `px-3 py-1 ${statusConfig.color} rounded-full text-sm font-semibold`;
+        statusEl.textContent = `${statusConfig.icon} ${statusConfig.label}`;
+    }
+    
+    const kategorieEl = document.getElementById('viewer-notiz-kategorie');
+    if (kategorieEl) {
+        kategorieEl.className = `px-2 py-1 bg-${kategorieColor}-100 text-${kategorieColor}-700 rounded-full text-xs font-semibold`;
+        kategorieEl.textContent = kategorieLabel + unterkategorieLabel;
+    }
+    
+    const datumEl = document.getElementById('viewer-notiz-datum');
+    if (datumEl) datumEl.textContent = formattedDate;
+
+    // Elemente rendern (schreibgeschützt)
+    const contentContainer = document.getElementById('viewer-notiz-content');
+    if (contentContainer) {
+        contentContainer.innerHTML = renderNotizElementsReadOnly(notiz.elemente || []);
+    }
+
+    // Erweitert-Menü zurücksetzen
+    const erweiterMenu = document.getElementById('viewer-erweitert-menu');
+    const weitereMenu = document.getElementById('viewer-weitere-menu');
+    if (erweiterMenu) erweiterMenu.classList.add('hidden');
+    if (weitereMenu) weitereMenu.classList.add('hidden');
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function renderNotizElementsReadOnly(elemente) {
+    if (!elemente || elemente.length === 0) {
+        return '<p class="text-gray-400 italic text-center py-4">Keine Inhalte</p>';
+    }
+
+    return elemente.map(element => {
+        const typeConfig = ELEMENT_TYPES[element.type] || { label: 'Unbekannt', icon: '?' };
+        let contentHtml = '';
+
+        switch (element.type) {
+            case 'text':
+                contentHtml = `<div class="whitespace-pre-wrap text-gray-700">${escapeHtml(element.content || '')}</div>`;
+                break;
+                
+            case 'checkbox':
+                const items = element.items || [];
+                contentHtml = `
+                    <div class="space-y-2">
+                        ${items.map(item => `
+                            <div class="flex items-center gap-2">
+                                <span class="${item.checked ? 'text-green-600' : 'text-gray-400'}">${item.checked ? '☑' : '☐'}</span>
+                                <span class="${item.checked ? 'line-through text-gray-400' : 'text-gray-700'}">${escapeHtml(item.text || '')}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                break;
+                
+            case 'list_bullets':
+                const bulletItems = element.items || [];
+                contentHtml = `
+                    <ul class="list-disc list-inside space-y-1 text-gray-700">
+                        ${bulletItems.map(item => `<li>${escapeHtml(item)}</li>`).join('')}
+                    </ul>
+                `;
+                break;
+                
+            case 'list_numbers':
+                const numItems = element.items || [];
+                contentHtml = `
+                    <ol class="list-decimal list-inside space-y-1 text-gray-700">
+                        ${numItems.map(item => `<li>${escapeHtml(item)}</li>`).join('')}
+                    </ol>
+                `;
+                break;
+                
+            case 'password':
+                contentHtml = `
+                    <div class="flex items-center gap-2">
+                        <span class="password-hidden font-mono bg-gray-100 px-3 py-2 rounded">••••••••</span>
+                        <button class="copy-password-btn text-amber-600 hover:text-amber-800 text-sm" data-password="${escapeHtml(element.content || '')}">📋 Kopieren</button>
+                    </div>
+                `;
+                break;
+                
+            case 'table':
+                const rows = element.rows || [];
+                if (rows.length === 0) {
+                    contentHtml = '<p class="text-gray-400 italic">Leere Tabelle</p>';
+                } else {
+                    contentHtml = `
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full border border-gray-300 rounded-lg">
+                                <tbody>
+                                    ${rows.map((row, i) => `
+                                        <tr class="${i === 0 ? 'bg-gray-50 font-semibold' : ''}">
+                                            ${(row || []).map(cell => `<td class="border border-gray-300 px-3 py-2">${escapeHtml(cell || '')}</td>`).join('')}
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                }
+                break;
+                
+            case 'link':
+                contentHtml = `
+                    <a href="${escapeHtml(element.url || '#')}" target="_blank" rel="noopener noreferrer" 
+                       class="text-blue-600 hover:text-blue-800 underline flex items-center gap-2">
+                        🔗 ${escapeHtml(element.label || element.url || 'Link')}
+                    </a>
+                `;
+                break;
+                
+            default:
+                contentHtml = '<p class="text-gray-400 italic">Unbekannter Elementtyp</p>';
+        }
+
+        return `
+            <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <div class="flex items-center gap-2 mb-2 text-sm text-gray-500">
+                    <span>${typeConfig.icon}</span>
+                    <span>${typeConfig.label}</span>
+                </div>
+                ${contentHtml}
+            </div>
+        `;
+    }).join('');
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function closeNotizViewer() {
+    const modal = document.getElementById('notizViewerModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+    currentViewingNotizId = null;
+}
+
+window.closeNotizViewer = closeNotizViewer;
+
+window.toggleErweitertMenu = function() {
+    const menu = document.getElementById('viewer-erweitert-menu');
+    if (menu) menu.classList.toggle('hidden');
+};
+
+window.toggleWeitereMenu = function() {
+    const menu = document.getElementById('viewer-weitere-menu');
+    if (menu) menu.classList.toggle('hidden');
+};
+
+window.editCurrentNotiz = function() {
+    if (currentViewingNotizId) {
+        closeNotizViewer();
+        openNotizEditor(currentViewingNotizId);
+    }
+};
+
+window.deleteCurrentNotiz = async function() {
+    if (currentViewingNotizId && confirm('Notiz wirklich löschen?')) {
+        await deleteNotiz(currentViewingNotizId);
+        closeNotizViewer();
+    }
+};
+
+// ========================================
+// NOTIZ EDITOR
+// ========================================
 
 export function openNotizEditor(notizId = null) {
     currentEditingNotizId = notizId;
@@ -566,11 +954,20 @@ export function openNotizEditor(notizId = null) {
     const titelInput = document.getElementById('notiz-titel');
     const kategorieSelect = document.getElementById('notiz-kategorie');
     const unterkategorieSelect = document.getElementById('notiz-unterkategorie');
+    const statusSelect = document.getElementById('notiz-status');
     const gueltigAbInput = document.getElementById('notiz-gueltig-ab');
     const gueltigBisInput = document.getElementById('notiz-gueltig-bis');
     const gueltigBisUnbegrenzt = document.getElementById('notiz-gueltig-bis-unbegrenzt');
 
     if (titelInput) titelInput.value = notiz?.titel || '';
+    
+    // Status laden
+    if (statusSelect) {
+        statusSelect.innerHTML = Object.entries(NOTIZ_STATUS).map(([key, config]) => 
+            `<option value="${key}" ${notiz?.status === key ? 'selected' : ''}>${config.icon} ${config.label}</option>`
+        ).join('');
+        if (!notiz?.status) statusSelect.value = 'offen';
+    }
     
     // Kategorien in Select laden
     if (kategorieSelect) {
@@ -1011,6 +1408,7 @@ async function saveCurrentNotiz() {
     const titelInput = document.getElementById('notiz-titel');
     const kategorieSelect = document.getElementById('notiz-kategorie');
     const unterkategorieSelect = document.getElementById('notiz-unterkategorie');
+    const statusSelect = document.getElementById('notiz-status');
     const gueltigAbInput = document.getElementById('notiz-gueltig-ab');
     const gueltigBisInput = document.getElementById('notiz-gueltig-bis');
     const gueltigBisUnbegrenzt = document.getElementById('notiz-gueltig-bis-unbegrenzt');
@@ -1019,6 +1417,7 @@ async function saveCurrentNotiz() {
         titel: titelInput?.value?.trim() || 'Ohne Titel',
         kategorieId: kategorieSelect?.value || null,
         unterkategorieId: unterkategorieSelect?.value || null,
+        status: statusSelect?.value || 'offen',
         gueltigAb: gueltigAbInput?.value ? Timestamp.fromDate(new Date(gueltigAbInput.value)) : Timestamp.now(),
         gueltigBis: (!gueltigBisUnbegrenzt?.checked && gueltigBisInput?.value) 
             ? Timestamp.fromDate(new Date(gueltigBisInput.value)) 

@@ -524,6 +524,9 @@ export function renderUserManagement() {
                         permKey.startsWith('ZAHLUNGSVERWALTUNG_') ||
                         permKey.startsWith('TICKET_SUPPORT_') ||
                         permKey.startsWith('WERTGUTHABEN_') ||
+                        permKey.startsWith('HAUSHALTSZAHLUNGEN_') ||
+                        permKey.startsWith('GESCHENKEMANAGEMENT_') ||
+                        permKey.startsWith('NOTIZEN_') ||
                         (permKey.startsWith('PUSHOVER_') && permKey !== 'PUSHOVER');
                     marginLeft = isSubPermission ? 'pl-6' : '';
                 }
