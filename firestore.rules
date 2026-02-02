@@ -488,6 +488,30 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // NOTIZEN-SYSTEM (Notes Management)
+    // ═══════════════════════════════════════════════════════════════
+    
+    // Notizen (pro Benutzer)
+    match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/notizen/{notizId} {
+      allow read, write: if hasAppUserIdClaim() && appUserId() == userId;
+    }
+    
+    // Notizen-Kategorien (pro Benutzer)
+    match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/notizen_kategorien/{kategorieId} {
+      allow read, write: if hasAppUserIdClaim() && appUserId() == userId;
+    }
+    
+    // Notizen-Freigaben (öffentlich, für Sharing zwischen Benutzern)
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/notizen_freigaben/{freigabeId} {
+      allow read: if hasAppUserIdClaim() && (
+        resource.data.ownerId == appUserId() ||
+        resource.data.sharedWith.hasAny([appUserId()])
+      );
+      allow create: if hasAppUserIdClaim() && request.resource.data.ownerId == appUserId();
+      allow update, delete: if hasAppUserIdClaim() && resource.data.ownerId == appUserId();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // DEFAULT DENY (Alles andere verbieten)
     // ═══════════════════════════════════════════════════════════════
     

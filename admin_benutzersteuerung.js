@@ -423,7 +423,13 @@ export function renderUserManagement() {
         'LIZENZEN': 'Lizenzen',
         'VERTRAGSVERWALTUNG': 'Vertragsverwaltung',
         'SENDUNGSVERWALTUNG': 'Sendungsverwaltung',
-        'REZEPTE': 'Rezepte'
+        'REZEPTE': 'Rezepte',
+        'HAUSHALTSZAHLUNGEN': 'Haushaltszahlungen',
+        'HAUSHALTSZAHLUNGEN_CREATE': '-> Neue Zahlung anlegen',
+        'GESCHENKEMANAGEMENT': 'Geschenkemanagement',
+        'GESCHENKEMANAGEMENT_CREATE': '-> Neues Geschenk anlegen',
+        'NOTIZEN': 'Notizen',
+        'NOTIZEN_CREATE': '-> Eintrag/Kategorie hinzufügen'
     };
     // =================================================================
     // ENDE DER ÄNDERUNG

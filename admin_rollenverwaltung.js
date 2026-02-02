@@ -182,7 +182,9 @@ export function renderRoleManagement() {
         'HAUSHALTSZAHLUNGEN': { label: 'Haushaltszahlungen', indent: false },
         'HAUSHALTSZAHLUNGEN_CREATE': { label: '-> Neue Zahlung anlegen', indent: true },
         'GESCHENKEMANAGEMENT': { label: 'Geschenkemanagement', indent: false },
-        'GESCHENKEMANAGEMENT_CREATE': { label: '-> Neues Geschenk anlegen', indent: true }
+        'GESCHENKEMANAGEMENT_CREATE': { label: '-> Neues Geschenk anlegen', indent: true },
+        'NOTIZEN': { label: 'Notizen', indent: false },
+        'NOTIZEN_CREATE': { label: '-> Eintrag/Kategorie hinzufügen', indent: true }
     };
     
     const newRolePermsContainer = document.getElementById('newRolePermissions');
@@ -215,6 +217,7 @@ export function renderRoleManagement() {
             const isZahlungsverwaltungEnabled = role.permissions?.includes('ZAHLUNGSVERWALTUNG');
             const isHaushaltszahlungenEnabled = role.permissions?.includes('HAUSHALTSZAHLUNGEN');
             const isGeschenkemanagementEnabled = role.permissions?.includes('GESCHENKEMANAGEMENT');
+            const isNotizenEnabled = role.permissions?.includes('NOTIZEN');
             
             permissionsCheckboxesHTML = Object.keys(allRolePermissions).map(permKey => {
                 const perm = allRolePermissions[permKey];
@@ -240,6 +243,9 @@ export function renderRoleManagement() {
                     isDisabled = true;
                 }
                 if (permKey.startsWith('GESCHENKEMANAGEMENT_') && !isGeschenkemanagementEnabled) {
+                    isDisabled = true;
+                }
+                if (permKey.startsWith('NOTIZEN_') && !isNotizenEnabled) {
                     isDisabled = true;
                 }
                 
@@ -298,6 +304,7 @@ export function renderRoleManagement() {
         setupPair('ZAHLUNGSVERWALTUNG', ['ZAHLUNGSVERWALTUNG_CREATE']);
         setupPair('HAUSHALTSZAHLUNGEN', ['HAUSHALTSZAHLUNGEN_CREATE']);
         setupPair('GESCHENKEMANAGEMENT', ['GESCHENKEMANAGEMENT_CREATE']);
+        setupPair('NOTIZEN', ['NOTIZEN_CREATE']);
     };
 
     userRolesList.querySelectorAll('.p-3.border').forEach(card => setupCheckboxDependencies(card));
