@@ -389,57 +389,27 @@ export async function acceptInvitation(inviteId) {
             respondedAt: serverTimestamp()
         });
 
-        // Freigabe zur Ressource hinzufügen UND in notizen_freigaben speichern
-        const shareEntry = {
-            userId: userId,
-            permission: invite.permissions?.write ? 'write' : 'read'
-        };
-        
+        // Freigabe NUR in notizen_freigaben speichern (public collection, keine Owner-Collection!)
+        // Die Owner-Collection kann nur vom Owner selbst geändert werden
         if (invite.type === 'notiz') {
-            // Notiz in der Owner-Collection aktualisieren
-            const notizRef = doc(db, 'artifacts', appId, 'users', invite.ownerId, 'notizen', invite.resourceId);
-            const notizDoc = await getDoc(notizRef);
-            if (notizDoc.exists()) {
-                const notizData = notizDoc.data();
-                const sharedWith = notizData.sharedWith || [];
-                if (!sharedWith.some(s => (typeof s === 'string' ? s : s.userId) === userId)) {
-                    sharedWith.push(shareEntry);
-                    await updateDoc(notizRef, { sharedWith });
-                }
-            }
-            
-            // In notizen_freigaben speichern (für Empfänger-Abfrage)
             const freigabeRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_freigaben', `notiz_${invite.resourceId}_${userId}`);
             await setDoc(freigabeRef, {
                 type: 'notiz',
                 resourceId: invite.resourceId,
                 ownerId: invite.ownerId,
                 ownerName: invite.ownerName,
-                sharedWith: [userId],
+                targetUserId: userId,
                 permissions: invite.permissions,
                 createdAt: serverTimestamp()
             });
         } else if (invite.type === 'kategorie') {
-            // Kategorie in der Owner-Collection aktualisieren
-            const katRef = doc(db, 'artifacts', appId, 'users', invite.ownerId, 'notizen_kategorien', invite.resourceId);
-            const katDoc = await getDoc(katRef);
-            if (katDoc.exists()) {
-                const katData = katDoc.data();
-                const sharedWith = katData.sharedWith || [];
-                if (!sharedWith.some(s => (typeof s === 'string' ? s : s.userId) === userId)) {
-                    sharedWith.push(shareEntry);
-                    await updateDoc(katRef, { sharedWith });
-                }
-            }
-            
-            // In notizen_freigaben speichern (für Empfänger-Abfrage)
             const freigabeRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_freigaben', `kat_${invite.resourceId}_${userId}`);
             await setDoc(freigabeRef, {
                 type: 'kategorie',
                 resourceId: invite.resourceId,
                 ownerId: invite.ownerId,
                 ownerName: invite.ownerName,
-                sharedWith: [userId],
+                targetUserId: userId,
                 permissions: invite.permissions,
                 createdAt: serverTimestamp()
             });
