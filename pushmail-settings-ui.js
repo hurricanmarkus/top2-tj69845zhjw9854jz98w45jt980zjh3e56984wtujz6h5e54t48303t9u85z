@@ -378,7 +378,7 @@ async function savePushmailNotificationSettingsFromUI() {
 // ========================================
 
 async function resetNotificationToDefault(programId, notifId) {
-    const userId = currentUser.mode;
+    const userId = currentUser.uid || currentUser.mode;
     if (!userId || userId === GUEST_MODE) return;
 
     const notifDef = NOTIFICATION_DEFINITIONS[programId]?.notifications[notifId];
@@ -406,7 +406,7 @@ async function resetNotificationToDefault(programId, notifId) {
 }
 
 async function resetAllNotificationSettings() {
-    const userId = currentUser.mode;
+    const userId = currentUser.uid || currentUser.mode;
     if (!userId || userId === GUEST_MODE) return;
 
     const confirmed = confirm('Möchten Sie wirklich alle Benachrichtigungseinstellungen auf die Standardwerte zurücksetzen?');

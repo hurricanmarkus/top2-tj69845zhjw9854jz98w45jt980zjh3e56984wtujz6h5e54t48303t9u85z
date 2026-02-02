@@ -597,10 +597,11 @@ export async function createPendingNotification(userId, programId, notificationT
 let pendingNotificationsUnsubscribe = null;
 
 export async function loadPendingNotifications(userId) {
-    if (!userId || userId === GUEST_MODE) return [];
+    const uid = userId || currentUser.uid || currentUser.mode;
+    if (!uid || uid === GUEST_MODE) return [];
 
     try {
-        const colRef = collection(db, 'artifacts', appId, 'users', userId, 'pushmail_notifications');
+        const colRef = collection(db, 'artifacts', appId, 'users', uid, 'pushmail_notifications');
         const q = query(colRef, where('acknowledged', '==', false), orderBy('createdAt', 'desc'));
         const snapshot = await getDocs(q);
 
@@ -619,7 +620,7 @@ export async function loadPendingNotifications(userId) {
 // ========================================
 
 export function startPendingNotificationsListener() {
-    const userId = currentUser.mode;
+    const userId = currentUser.uid || currentUser.mode;
     if (!userId || userId === GUEST_MODE) return;
 
     // Alten Listener stoppen falls vorhanden
@@ -657,6 +658,9 @@ export function stopPendingNotificationsListener() {
 }
 
 function updatePendingNotificationsUI(notifications) {
+    const userId = currentUser.uid || currentUser.mode;
+    if (!userId || userId === GUEST_MODE) return;
+
     // Counter aktualisieren
     const count = document.getElementById('pendingNotificationsCount');
     if (count) count.textContent = notifications.length;
@@ -837,7 +841,6 @@ function setupCenterCheckboxListeners() {
         });
     }
 
-    // Quittieren-Button
     if (acknowledgeBtn) {
         acknowledgeBtn.addEventListener('click', async () => {
             const selected = Array.from(checkboxes).filter(cb => cb.checked);
@@ -846,15 +849,13 @@ function setupCenterCheckboxListeners() {
             const confirm = window.confirm(`${selected.length} Benachrichtigung(en) quittieren?`);
             if (!confirm) return;
 
-            setProcessingOverlay(true, `Quittiere ${selected.length} Benachrichtigung(en)...`);
             const notificationIds = selected.map(cb => cb.dataset.notificationId);
-            const success = await acknowledgeMultipleNotifications(currentUser.mode, notificationIds);
+            const userId = currentUser.uid || currentUser.mode;
+            const success = await acknowledgeMultipleNotifications(userId, notificationIds);
             
             if (success) {
                 alertUser(`${selected.length} Benachrichtigung(en) quittiert.`, 'success');
             }
-            
-            setProcessingOverlay(false);
         });
     }
 }
@@ -862,7 +863,7 @@ function setupCenterCheckboxListeners() {
 export async function renderPendingNotifications() {
     // Legacy-Funktion für Abwärtskompatibilität - nutzt jetzt den Listener
     // Einmalige Aktualisierung beim ersten Aufruf
-    const userId = currentUser.mode;
+    const userId = currentUser.uid || currentUser.mode;
     if (!userId || userId === GUEST_MODE) return;
 
     const notifications = await loadPendingNotifications(userId);
@@ -939,7 +940,7 @@ export async function acknowledgeMultipleNotifications(userId, notificationIds) 
 // ========================================
 
 export async function checkAndShowPendingNotificationsModal() {
-    const userId = currentUser.mode;
+    const userId = currentUser.uid || currentUser.mode;
     if (!userId || userId === GUEST_MODE) return;
 
     const notifications = await loadPendingNotifications(userId);
