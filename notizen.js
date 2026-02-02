@@ -44,11 +44,13 @@ function getCurrentUserId() {
 let notizenCollection = null;
 let kategorienCollection = null;
 let freigabenCollection = null;
+let invitesCollection = null;
 
 let NOTIZEN = {};
 let KATEGORIEN = {};
 let UNTERKATEGORIEN = {};
 let FREIGABEN = {};
+let INVITES = {};
 
 let currentKategorieId = null;
 let currentUnterkategorieId = null;
@@ -59,6 +61,7 @@ let defaultFiltersApplied = false;
 let unsubscribeNotizen = null;
 let unsubscribeKategorien = null;
 let unsubscribeFreigaben = null;
+let unsubscribeInvites = null;
 
 // ========================================
 // STATUS KONFIGURATION
@@ -161,10 +164,15 @@ export function stopNotizenListeners() {
         unsubscribeFreigaben();
         unsubscribeFreigaben = null;
     }
+    if (unsubscribeInvites) {
+        unsubscribeInvites();
+        unsubscribeInvites = null;
+    }
 
     NOTIZEN = {};
     KATEGORIEN = {};
     FREIGABEN = {};
+    INVITES = {};
 }
 
 function startNotizenListeners() {
@@ -200,6 +208,9 @@ function startNotizenListeners() {
 
     // Freigaben-Listener (für geteilte Notizen anderer Benutzer)
     loadSharedNotizen();
+    
+    // Einladungen-Listener
+    loadNotizenInvites();
 }
 
 async function loadSharedNotizen() {
@@ -225,6 +236,458 @@ async function loadSharedNotizen() {
         console.error('📝 Notizen: Fehler beim Laden der Freigaben:', error);
     }
 }
+
+async function loadNotizenInvites() {
+    const userId = getCurrentUserId();
+    if (!userId) return;
+
+    try {
+        invitesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_invites');
+        
+        // Lade alle Einladungen, bei denen der User Sender oder Empfänger ist
+        const invitesQuery = query(invitesCollection);
+        
+        unsubscribeInvites = onSnapshot(invitesQuery, (snapshot) => {
+            INVITES = {};
+            snapshot.forEach(docSnap => {
+                const invite = { id: docSnap.id, ...docSnap.data() };
+                // Nur relevante Einladungen speichern
+                if (invite.ownerId === userId || invite.targetUserId === userId) {
+                    INVITES[docSnap.id] = invite;
+                }
+            });
+            updateInvitationBadge();
+            console.log('📝 Notizen: Einladungen geladen:', Object.keys(INVITES).length);
+        });
+    } catch (error) {
+        console.error('📝 Notizen: Fehler beim Laden der Einladungen:', error);
+    }
+}
+
+function updateInvitationBadge() {
+    const userId = getCurrentUserId();
+    const pendingReceived = Object.values(INVITES).filter(inv => 
+        inv.targetUserId === userId && inv.status === 'pending'
+    ).length;
+    
+    // Update badge in invitations button if exists
+    const badge = document.getElementById('invitations-badge');
+    if (badge) {
+        badge.textContent = pendingReceived;
+        badge.classList.toggle('hidden', pendingReceived === 0);
+    }
+}
+
+// ========================================
+// EINLADUNGSSYSTEM
+// ========================================
+
+export async function createInvitation(type, resourceId, targetUserId, permissions) {
+    const userId = getCurrentUserId();
+    if (!userId) return null;
+
+    const inviteId = `${type}_${resourceId}_${targetUserId}`;
+    const targetUser = USERS[targetUserId];
+    const currentUserData = USERS[userId];
+
+    try {
+        // Prüfen ob bereits eine Einladung existiert
+        const existingInvite = INVITES[inviteId];
+        if (existingInvite) {
+            if (existingInvite.status === 'pending') {
+                alertUser('Es existiert bereits eine ausstehende Einladung für diesen Benutzer.', 'warning');
+                return null;
+            }
+            if (existingInvite.status === 'declined') {
+                alertUser('Dieser Benutzer hat die Einladung abgelehnt. Er muss die Ablehnung erst zurückziehen, bevor Sie erneut einladen können.', 'warning');
+                return null;
+            }
+            if (existingInvite.status === 'accepted') {
+                alertUser('Dieser Benutzer hat die Einladung bereits angenommen.', 'info');
+                return null;
+            }
+        }
+
+        const resourceName = type === 'kategorie' 
+            ? KATEGORIEN[resourceId]?.name || 'Unbekannte Kategorie'
+            : NOTIZEN[resourceId]?.titel || 'Unbekannte Notiz';
+
+        const inviteRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_invites', inviteId);
+        await setDoc(inviteRef, {
+            type,
+            resourceId,
+            resourceName,
+            ownerId: userId,
+            ownerName: currentUserData?.name || currentUserData?.fullName || userId,
+            targetUserId,
+            targetUserName: targetUser?.name || targetUser?.fullName || targetUserId,
+            permissions,
+            status: 'pending',
+            createdAt: serverTimestamp(),
+            respondedAt: null
+        });
+
+        alertUser(`Einladung an ${targetUser?.name || targetUserId} gesendet.`, 'success');
+        
+        // Benachrichtigung an Empfänger senden
+        try {
+            await createPendingNotification({
+                userId: targetUserId,
+                type: 'NOTIZEN',
+                title: 'Neue Einladung',
+                message: `${currentUserData?.name || 'Jemand'} möchte "${resourceName}" mit dir teilen.`,
+                link: 'notizen',
+                priority: 'normal'
+            });
+        } catch (notifError) {
+            console.warn('📝 Notizen: Benachrichtigung konnte nicht gesendet werden:', notifError);
+        }
+        
+        return inviteId;
+    } catch (error) {
+        console.error('📝 Notizen: Fehler beim Erstellen der Einladung:', error);
+        alertUser('Fehler beim Senden der Einladung.', 'error');
+        return null;
+    }
+}
+
+export async function acceptInvitation(inviteId) {
+    const userId = getCurrentUserId();
+    if (!userId) return false;
+
+    const invite = INVITES[inviteId];
+    if (!invite || invite.targetUserId !== userId) {
+        alertUser('Einladung nicht gefunden.', 'error');
+        return false;
+    }
+
+    try {
+        // Einladung als akzeptiert markieren
+        const inviteRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_invites', inviteId);
+        await updateDoc(inviteRef, {
+            status: 'accepted',
+            respondedAt: serverTimestamp()
+        });
+
+        // Freigabe zur Ressource hinzufügen UND in notizen_freigaben speichern
+        const shareEntry = {
+            userId: userId,
+            permission: invite.permissions?.write ? 'write' : 'read'
+        };
+        
+        if (invite.type === 'notiz') {
+            // Notiz in der Owner-Collection aktualisieren
+            const notizRef = doc(db, 'artifacts', appId, 'users', invite.ownerId, 'notizen', invite.resourceId);
+            const notizDoc = await getDoc(notizRef);
+            if (notizDoc.exists()) {
+                const notizData = notizDoc.data();
+                const sharedWith = notizData.sharedWith || [];
+                if (!sharedWith.some(s => (typeof s === 'string' ? s : s.userId) === userId)) {
+                    sharedWith.push(shareEntry);
+                    await updateDoc(notizRef, { sharedWith });
+                }
+            }
+            
+            // In notizen_freigaben speichern (für Empfänger-Abfrage)
+            const freigabeRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_freigaben', `notiz_${invite.resourceId}_${userId}`);
+            await setDoc(freigabeRef, {
+                type: 'notiz',
+                resourceId: invite.resourceId,
+                ownerId: invite.ownerId,
+                ownerName: invite.ownerName,
+                sharedWith: [userId],
+                permissions: invite.permissions,
+                createdAt: serverTimestamp()
+            });
+        } else if (invite.type === 'kategorie') {
+            // Kategorie in der Owner-Collection aktualisieren
+            const katRef = doc(db, 'artifacts', appId, 'users', invite.ownerId, 'notizen_kategorien', invite.resourceId);
+            const katDoc = await getDoc(katRef);
+            if (katDoc.exists()) {
+                const katData = katDoc.data();
+                const sharedWith = katData.sharedWith || [];
+                if (!sharedWith.some(s => (typeof s === 'string' ? s : s.userId) === userId)) {
+                    sharedWith.push(shareEntry);
+                    await updateDoc(katRef, { sharedWith });
+                }
+            }
+            
+            // In notizen_freigaben speichern (für Empfänger-Abfrage)
+            const freigabeRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_freigaben', `kat_${invite.resourceId}_${userId}`);
+            await setDoc(freigabeRef, {
+                type: 'kategorie',
+                resourceId: invite.resourceId,
+                ownerId: invite.ownerId,
+                ownerName: invite.ownerName,
+                sharedWith: [userId],
+                permissions: invite.permissions,
+                createdAt: serverTimestamp()
+            });
+        }
+        
+        // Benachrichtigung an Owner senden
+        try {
+            await createPendingNotification({
+                userId: invite.ownerId,
+                type: 'NOTIZEN',
+                title: 'Einladung angenommen',
+                message: `${USERS[userId]?.name || 'Jemand'} hat deine Einladung für "${invite.resourceName}" angenommen.`,
+                link: 'notizen',
+                priority: 'normal'
+            });
+        } catch (notifError) {
+            console.warn('📝 Notizen: Benachrichtigung konnte nicht gesendet werden:', notifError);
+        }
+
+        alertUser('Einladung angenommen!', 'success');
+        renderInvitationsModal();
+        return true;
+    } catch (error) {
+        console.error('📝 Notizen: Fehler beim Annehmen der Einladung:', error);
+        alertUser('Fehler beim Annehmen der Einladung.', 'error');
+        return false;
+    }
+}
+
+export async function declineInvitation(inviteId) {
+    const userId = getCurrentUserId();
+    if (!userId) return false;
+
+    const invite = INVITES[inviteId];
+    if (!invite || invite.targetUserId !== userId) {
+        alertUser('Einladung nicht gefunden.', 'error');
+        return false;
+    }
+
+    try {
+        const inviteRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_invites', inviteId);
+        await updateDoc(inviteRef, {
+            status: 'declined',
+            respondedAt: serverTimestamp()
+        });
+        
+        // Benachrichtigung an Owner senden
+        try {
+            await createPendingNotification({
+                userId: invite.ownerId,
+                type: 'NOTIZEN',
+                title: 'Einladung abgelehnt',
+                message: `${USERS[userId]?.name || 'Jemand'} hat deine Einladung für "${invite.resourceName}" abgelehnt.`,
+                link: 'notizen',
+                priority: 'normal'
+            });
+        } catch (notifError) {
+            console.warn('📝 Notizen: Benachrichtigung konnte nicht gesendet werden:', notifError);
+        }
+
+        alertUser('Einladung abgelehnt.', 'info');
+        renderInvitationsModal();
+        return true;
+    } catch (error) {
+        console.error('📝 Notizen: Fehler beim Ablehnen der Einladung:', error);
+        alertUser('Fehler beim Ablehnen der Einladung.', 'error');
+        return false;
+    }
+}
+
+// Ablehnung zurückziehen (für Empfänger)
+export async function recallDecline(inviteId) {
+    const userId = getCurrentUserId();
+    if (!userId) return false;
+
+    const invite = INVITES[inviteId];
+    if (!invite || invite.targetUserId !== userId || invite.status !== 'declined') {
+        alertUser('Ablehnung kann nicht zurückgezogen werden.', 'error');
+        return false;
+    }
+
+    try {
+        // Einladung löschen, damit Owner erneut einladen kann
+        const inviteRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_invites', inviteId);
+        await deleteDoc(inviteRef);
+
+        alertUser('Ablehnung zurückgezogen. Der Absender kann Sie nun erneut einladen.', 'success');
+        renderInvitationsModal();
+        return true;
+    } catch (error) {
+        console.error('📝 Notizen: Fehler beim Zurückziehen der Ablehnung:', error);
+        alertUser('Fehler beim Zurückziehen.', 'error');
+        return false;
+    }
+}
+
+export async function recallInvitation(inviteId) {
+    const userId = getCurrentUserId();
+    if (!userId) return false;
+
+    const invite = INVITES[inviteId];
+    if (!invite || invite.ownerId !== userId) {
+        alertUser('Einladung nicht gefunden.', 'error');
+        return false;
+    }
+
+    try {
+        const inviteRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_invites', inviteId);
+        await updateDoc(inviteRef, {
+            status: 'recalled',
+            respondedAt: serverTimestamp()
+        });
+
+        alertUser('Einladung zurückgezogen.', 'success');
+        renderInvitationsModal();
+        return true;
+    } catch (error) {
+        console.error('📝 Notizen: Fehler beim Zurückziehen der Einladung:', error);
+        alertUser('Fehler beim Zurückziehen der Einladung.', 'error');
+        return false;
+    }
+}
+
+function openInvitationsModal() {
+    const modal = document.getElementById('invitationsModal');
+    if (!modal) return;
+
+    renderInvitationsModal();
+    
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closeInvitationsModal() {
+    const modal = document.getElementById('invitationsModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+}
+
+function renderInvitationsModal() {
+    const userId = getCurrentUserId();
+    if (!userId) return;
+
+    const receivedList = document.getElementById('received-invitations-list');
+    const sentList = document.getElementById('sent-invitations-list');
+    const receivedCount = document.getElementById('received-invites-count');
+    const sentCount = document.getElementById('sent-invites-count');
+
+    // Empfangene Einladungen (pending + declined für Rückruf)
+    const receivedInvitesPending = Object.values(INVITES).filter(inv => 
+        inv.targetUserId === userId && inv.status === 'pending'
+    );
+    const receivedInvitesDeclined = Object.values(INVITES).filter(inv => 
+        inv.targetUserId === userId && inv.status === 'declined'
+    );
+    const receivedInvites = [...receivedInvitesPending, ...receivedInvitesDeclined];
+
+    // Gesendete Einladungen (alle aktiven Status)
+    const sentInvitesPending = Object.values(INVITES).filter(inv => 
+        inv.ownerId === userId && inv.status === 'pending'
+    );
+    const sentInvitesDeclined = Object.values(INVITES).filter(inv => 
+        inv.ownerId === userId && inv.status === 'declined'
+    );
+    const sentInvites = [...sentInvitesPending, ...sentInvitesDeclined];
+
+    if (receivedCount) receivedCount.textContent = receivedInvites.length;
+    if (sentCount) sentCount.textContent = sentInvites.length;
+
+    if (receivedList) {
+        if (receivedInvites.length === 0) {
+            receivedList.innerHTML = '<div class="text-center py-4 text-gray-400 text-sm">Keine Einladungen</div>';
+        } else {
+            receivedList.innerHTML = receivedInvites.map(inv => {
+                const isDeclined = inv.status === 'declined';
+                const bgClass = isDeclined ? 'bg-red-50 border-red-200' : 'bg-purple-50 border-purple-200';
+                const statusBadge = isDeclined ? '<span class="ml-2 px-2 py-0.5 bg-red-200 text-red-700 text-xs rounded">Abgelehnt</span>' : '';
+                
+                let actionButtons = '';
+                if (isDeclined) {
+                    actionButtons = `
+                        <button onclick="window.recallDecline('${inv.id}')" 
+                            class="px-3 py-1 bg-orange-500 text-white text-sm font-bold rounded hover:bg-orange-600 transition">
+                            ↩️ Ablehnung zurückziehen
+                        </button>
+                    `;
+                } else {
+                    actionButtons = `
+                        <button onclick="window.acceptInvitation('${inv.id}')" 
+                            class="px-3 py-1 bg-green-500 text-white text-sm font-bold rounded hover:bg-green-600 transition">
+                            ✓ Annehmen
+                        </button>
+                        <button onclick="window.declineInvitation('${inv.id}')" 
+                            class="px-3 py-1 bg-red-500 text-white text-sm font-bold rounded hover:bg-red-600 transition">
+                            ✕ Ablehnen
+                        </button>
+                    `;
+                }
+                
+                return `
+                <div class="${bgClass} p-3 rounded-lg border">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-semibold text-gray-800">${inv.resourceName || 'Unbekannt'}${statusBadge}</p>
+                            <p class="text-sm text-gray-600">
+                                ${inv.type === 'kategorie' ? '📁 Kategorie' : '📝 Notiz'} von 
+                                <span class="font-medium">${inv.ownerName || inv.ownerId}</span>
+                            </p>
+                            <p class="text-xs text-gray-500 mt-1">
+                                Berechtigung: ${inv.permissions?.write ? '✏️ Schreiben' : '👁️ Lesen'}
+                            </p>
+                        </div>
+                        <div class="flex gap-2">
+                            ${actionButtons}
+                        </div>
+                    </div>
+                </div>
+            `;
+            }).join('');
+        }
+    }
+
+    if (sentList) {
+        if (sentInvites.length === 0) {
+            sentList.innerHTML = '<div class="text-center py-4 text-gray-400 text-sm">Keine gesendeten Einladungen</div>';
+        } else {
+            sentList.innerHTML = sentInvites.map(inv => {
+                const isDeclined = inv.status === 'declined';
+                const bgClass = isDeclined ? 'bg-red-50 border-red-200' : 'bg-indigo-50 border-indigo-200';
+                const statusBadge = isDeclined ? '<span class="ml-2 px-2 py-0.5 bg-red-200 text-red-700 text-xs rounded">Abgelehnt</span>' : '<span class="ml-2 px-2 py-0.5 bg-yellow-200 text-yellow-700 text-xs rounded">Ausstehend</span>';
+                
+                const actionBtn = isDeclined 
+                    ? `<span class="text-xs text-gray-500 italic">Empfänger muss Ablehnung zurückziehen</span>`
+                    : `<button onclick="window.recallInvitation('${inv.id}')" 
+                        class="px-3 py-1 bg-gray-500 text-white text-sm font-bold rounded hover:bg-gray-600 transition">
+                        ↩️ Zurückziehen
+                    </button>`;
+                
+                return `
+                <div class="${bgClass} p-3 rounded-lg border">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-semibold text-gray-800">${inv.resourceName || 'Unbekannt'}${statusBadge}</p>
+                            <p class="text-sm text-gray-600">
+                                ${inv.type === 'kategorie' ? '📁 Kategorie' : '📝 Notiz'} an 
+                                <span class="font-medium">${inv.targetUserName || inv.targetUserId}</span>
+                            </p>
+                            <p class="text-xs text-gray-500 mt-1">
+                                Berechtigung: ${inv.permissions?.write ? '✏️ Schreiben' : '👁️ Lesen'}
+                            </p>
+                        </div>
+                        ${actionBtn}
+                    </div>
+                </div>
+            `;
+            }).join('');
+        }
+    }
+}
+
+// Global functions for onclick handlers
+window.acceptInvitation = acceptInvitation;
+window.declineInvitation = declineInvitation;
+window.recallInvitation = recallInvitation;
+window.recallDecline = recallDecline;
+window.openInvitationsModal = openInvitationsModal;
 
 // ========================================
 // KATEGORIEN CRUD
@@ -446,12 +909,23 @@ function renderKategorienFilter() {
     const select = document.getElementById('filter-notizen-kategorie');
     if (!select) return;
 
+    const userId = getCurrentUserId();
+
     select.innerHTML = '<option value="">Alle Kategorien</option>';
     
     Object.values(KATEGORIEN).forEach(kat => {
         const option = document.createElement('option');
         option.value = kat.id;
-        option.textContent = kat.name;
+        
+        // Prüfen ob geteilt (createdBy !== currentUser)
+        let displayName = kat.name;
+        if (kat.createdBy && kat.createdBy !== userId) {
+            const ownerUser = USERS[kat.createdBy];
+            const ownerName = ownerUser?.name || ownerUser?.fullName || kat.createdBy;
+            displayName = `${kat.name} (geteilt von ${ownerName})`;
+        }
+        
+        option.textContent = displayName;
         select.appendChild(option);
 
         // Unterkategorien als Gruppe
@@ -688,6 +1162,7 @@ function renderNotizCard(notiz) {
     const kategorie = KATEGORIEN[notiz.kategorieId];
     const kategorieLabel = kategorie ? kategorie.name : 'Ohne Kategorie';
     const kategorieColor = kategorie?.color || 'gray';
+    const userId = getCurrentUserId();
     
     let unterkategorieLabel = '';
     if (kategorie && notiz.unterkategorieId) {
@@ -701,6 +1176,15 @@ function renderNotizCard(notiz) {
     const elementCount = (notiz.elemente || []).length;
     const hasReminders = notiz.erinnerungen && notiz.erinnerungen.length > 0;
     const isShared = notiz.sharedWith && notiz.sharedWith.length > 0;
+    
+    // Prüfen ob von anderem Benutzer geteilt
+    const isFromOther = notiz.createdBy && notiz.createdBy !== userId;
+    let sharedFromLabel = '';
+    if (isFromOther) {
+        const ownerUser = USERS[notiz.createdBy];
+        const ownerName = ownerUser?.name || ownerUser?.fullName || notiz.createdBy;
+        sharedFromLabel = ` (geteilt von ${ownerName})`;
+    }
     
     // Status
     const statusKey = notiz.status || 'offen';
@@ -719,10 +1203,12 @@ function renderNotizCard(notiz) {
         }
     }
 
+    const displayTitel = (notiz.titel || 'Ohne Titel') + sharedFromLabel;
+
     return `
         <div class="notiz-card bg-white p-4 rounded-xl shadow-lg border-l-4 border-${kategorieColor}-500 hover:shadow-xl transition cursor-pointer" data-notiz-id="${notiz.id}">
             <div class="flex justify-between items-start mb-2">
-                <h3 class="font-bold text-gray-800 text-lg">${notiz.titel || 'Ohne Titel'}</h3>
+                <h3 class="font-bold text-gray-800 text-lg">${displayTitel}</h3>
                 <div class="flex items-center gap-2">
                     <span class="px-2 py-1 ${statusConfig.color} rounded-full text-xs font-semibold">
                         ${statusConfig.icon} ${statusConfig.label}
@@ -832,13 +1318,51 @@ export function openNotizViewer(notizId) {
         if (sharedWith.length > 0) {
             freigabenContainer.classList.remove('hidden');
             freigabenList.innerHTML = sharedWith.map(share => {
-                const user = USERS[share.userId];
-                const userName = user?.name || share.userId;
-                const permLabel = share.permission === 'write' ? '✏️ Schreiben' : '👁️ Lesen';
+                const userId = typeof share === 'string' ? share : share.userId;
+                const user = USERS[userId];
+                const userName = user?.name || user?.realName || user?.fullName || userId;
+                const permLabel = (typeof share === 'object' && share.permission === 'write') ? '✏️ Schreiben' : '👁️ Lesen';
                 return `<span class="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">${userName} (${permLabel})</span>`;
             }).join('');
         } else {
             freigabenContainer.classList.add('hidden');
+        }
+    }
+
+    // Berechtigungsbasierte Buttons anpassen
+    const currentUserId = getCurrentUserId();
+    const isOwner = notiz.createdBy === currentUserId;
+    const hasWriteAccess = isOwner || (notiz.sharedWith || []).some(share => {
+        const shareUserId = typeof share === 'string' ? share : share.userId;
+        const canWrite = typeof share === 'object' && share.permission === 'write';
+        return shareUserId === currentUserId && canWrite;
+    });
+
+    const editButton = document.querySelector('#viewer-erweitert-menu button[onclick="window.editCurrentNotiz()"]');
+    if (editButton) {
+        if (hasWriteAccess) {
+            editButton.classList.remove('hidden');
+        } else {
+            editButton.classList.add('hidden');
+        }
+    }
+
+    const deleteButton = document.querySelector('#viewer-weitere-menu button[onclick="window.deleteCurrentNotiz()"]');
+    if (deleteButton) {
+        if (isOwner) {
+            deleteButton.classList.remove('hidden');
+        } else {
+            deleteButton.classList.add('hidden');
+        }
+    }
+
+    // Share-Button nur für Owner anzeigen
+    const shareButton = document.getElementById('viewer-share-notiz-btn');
+    if (shareButton) {
+        if (isOwner) {
+            shareButton.classList.remove('hidden');
+        } else {
+            shareButton.classList.add('hidden');
         }
     }
 
@@ -1670,7 +2194,7 @@ function setupNotizenEventListeners() {
         saveShareBtn.addEventListener('click', saveShares);
     }
 
-    // Share Notiz Button
+    // Share Notiz Button (im Editor)
     const shareNotizBtn = document.getElementById('share-notiz-btn');
     if (shareNotizBtn) {
         shareNotizBtn.addEventListener('click', () => {
@@ -1678,6 +2202,22 @@ function setupNotizenEventListeners() {
                 openShareDialog('notiz', currentEditingNotizId);
             }
         });
+    }
+
+    // Share Notiz Button (im Viewer)
+    const viewerShareBtn = document.getElementById('viewer-share-notiz-btn');
+    if (viewerShareBtn) {
+        viewerShareBtn.addEventListener('click', () => {
+            if (currentViewingNotizId) {
+                openShareDialog('notiz', currentViewingNotizId);
+            }
+        });
+    }
+
+    // Einladungen Modal schließen
+    const closeInvitationsBtn = document.getElementById('close-invitations-modal');
+    if (closeInvitationsBtn) {
+        closeInvitationsBtn.addEventListener('click', closeInvitationsModal);
     }
 
     // Delete Notiz Button
@@ -1885,20 +2425,31 @@ async function saveShares() {
 
     const checkboxes = document.querySelectorAll('.share-user-checkbox:checked');
     
+    if (checkboxes.length === 0) {
+        alertUser('Bitte wähle mindestens einen Benutzer aus.', 'warning');
+        return;
+    }
+
+    let invitesSent = 0;
+    
     for (const checkbox of checkboxes) {
         const userId = checkbox.dataset.userId;
         const permRadio = document.querySelector(`input[name="perm-${userId}"]:checked`);
         const canWrite = permRadio?.value === 'write';
 
-        if (type === 'kategorie') {
-            await shareKategorie(resourceId, userId, { read: true, write: canWrite });
-        } else {
-            await shareNotiz(resourceId, userId, { read: true, write: canWrite });
+        const permissions = { read: true, write: canWrite };
+        
+        // Erstelle Einladung statt direkte Freigabe
+        const result = await createInvitation(type, resourceId, userId, permissions);
+        if (result) {
+            invitesSent++;
         }
     }
 
     closeShareDialog();
-    alertUser('Freigaben gespeichert.', 'success');
+    if (invitesSent > 0) {
+        alertUser(`${invitesSent} Einladung(en) gesendet.`, 'success');
+    }
 }
 
 // Export für Initialisierung

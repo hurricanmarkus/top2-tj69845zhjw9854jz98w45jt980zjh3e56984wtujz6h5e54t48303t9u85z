@@ -13,6 +13,18 @@ Eine Progressive Web App (PWA) für das Smart Home Management, entwickelt mit na
 - `notizen.js` - Notizen-Modul mit Kategorien, Freigaben und verschiedenen Elementtypen.
 
 ## Letzte Änderungen (02.02.2026)
+- **Vollständiges Einladungs-/Freigabesystem implementiert**:
+  - **Einladungs-Workflow**: Person A lädt ein → Person B erhält Benachrichtigung → Annehmen/Ablehnen
+  - **notizen_invites Collection**: Firestore-basiert mit Status (pending, accepted, declined, recalled)
+  - **Ablehnung blockiert erneutes Senden**: Erst nach Rückzug der Ablehnung möglich
+  - **Empfänger kann Ablehnung zurückziehen**: recallDecline Funktion
+  - **Benachrichtigungen**: Pushmail bei Einladung, Annahme und Ablehnung
+  - **Einladungsverwaltung Modal**: Empfangene (Annehmen/Ablehnen) + Gesendete (Zurückziehen)
+  - **notizen_freigaben**: Bei Annahme wird Freigabe-Dokument erstellt für Empfänger-Queries
+  - **Namen korrekt angezeigt**: USERS-Lookup mit mode/id, name/realName/fullName Fallbacks
+  - **Geteilte Kategorien**: Label "(geteilt von XXX)" bei fremden Kategorien/Notizen
+  - **Berechtigungsbasierte Buttons**: Bearbeiten nur bei Schreibrechten, Löschen nur für Owner
+  - **Freigeben-Button im Viewer repariert**: Verwendet jetzt currentViewingNotizId
 - **Notizen-System erweitert**:
   - **Status-System**: 3 Zustände - Offen (gelb), Abgeschlossen (grün), [INFO] (blau) mit visuellen Badges
   - **Multi-Filter-System**: Wie im Geschenkemanagement mit NICHT-Operator und Kategorie-Auswahl

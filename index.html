@@ -1617,6 +1617,16 @@
                         </button>
 
                         <div class="flex gap-2">
+                            <button id="btn-notizen-invitations"
+                                class="relative p-2 text-purple-500 hover:text-purple-700 transition rounded-full hover:bg-purple-100"
+                                title="Einladungen verwalten"
+                                onclick="window.openInvitationsModal()">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6">
+                                    <path d="M3 4a2 2 0 0 0-2 2v1.161l8.441 4.221a1.25 1.25 0 0 0 1.118 0L19 7.162V6a2 2 0 0 0-2-2H3Z" />
+                                    <path d="m19 8.839-7.77 3.885a2.75 2.75 0 0 1-2.46 0L1 8.839V14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.839Z" />
+                                </svg>
+                                <span id="invitations-badge" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">0</span>
+                            </button>
                             <button id="btn-notizen-settings"
                                 class="p-2 text-gray-500 hover:text-gray-800 transition rounded-full hover:bg-gray-200"
                                 title="Kategorien verwalten">
@@ -8226,6 +8236,9 @@
                     <button onclick="window.editCurrentNotiz()" class="w-full px-4 py-3 text-left hover:bg-amber-50 flex items-center gap-2 text-gray-700 font-semibold">
                         ✏️ Bearbeiten
                     </button>
+                    <button id="viewer-share-notiz-btn" class="w-full px-4 py-3 text-left hover:bg-blue-50 flex items-center gap-2 text-blue-600 font-semibold border-t">
+                        👥 Freigeben
+                    </button>
                     <div class="relative">
                         <button onclick="window.toggleWeitereMenu()" class="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center justify-between text-gray-700 font-semibold border-t">
                             <span>📋 Weitere Optionen</span>
@@ -8317,6 +8330,44 @@
                 <button id="save-share-btn" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition">
                     Freigeben
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Einladungen Modal -->
+<div id="invitationsModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div class="bg-gradient-to-r from-purple-500 to-indigo-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+            <h3 class="text-xl font-bold">📬 Einladungen verwalten</h3>
+            <button id="close-invitations-modal" class="text-white/80 hover:text-white transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-6">
+            <!-- Empfangene Einladungen -->
+            <div class="mb-6">
+                <h4 class="font-bold text-gray-700 mb-3 flex items-center gap-2">
+                    📥 Empfangene Einladungen
+                    <span id="received-invites-count" class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full text-xs">0</span>
+                </h4>
+                <div id="received-invitations-list" class="space-y-2">
+                    <div class="text-center py-4 text-gray-400 text-sm">Keine offenen Einladungen</div>
+                </div>
+            </div>
+
+            <!-- Gesendete Einladungen -->
+            <div>
+                <h4 class="font-bold text-gray-700 mb-3 flex items-center gap-2">
+                    📤 Gesendete Einladungen
+                    <span id="sent-invites-count" class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-xs">0</span>
+                </h4>
+                <div id="sent-invitations-list" class="space-y-2">
+                    <div class="text-center py-4 text-gray-400 text-sm">Keine gesendeten Einladungen</div>
+                </div>
             </div>
         </div>
     </div>
