@@ -1,7 +1,7 @@
 # TOP 2 Smart Home App
 
 ## Übersicht
-Eine Progressive Web App (PWA) für das Smart Home Management, entwickelt mit nativem JavaScript und Firebase. Die Anwendung ist auf Deutsch und bietet Funktionen für Haushaltsverwaltung, Zahlungen, Verträge, Rezepte und mehr.
+Eine Progressive Web App (PWA) für das Smart Home Management, entwickelt mit nativem JavaScript und Firebase. Die Anwendung ist auf Deutsch und bietet Funktionen für Haushaltsverwaltung, Zahlungen, Verträge, Rezepte, Notizen und mehr.
 
 ## Projektstruktur
 - `index.html` - Hauptdatei mit allen Ansichten.
@@ -10,6 +10,17 @@ Eine Progressive Web App (PWA) für das Smart Home Management, entwickelt mit na
 - `manifest.json` - PWA-Konfiguration.
 - `firebase.json` - Firebase-Konfiguration.
 - `firestore.rules` - Firestore Sicherheitsregeln.
+- `notizen.js` - Notizen-Modul mit Kategorien, Freigaben und verschiedenen Elementtypen.
+
+## Letzte Änderungen (02.02.2026)
+- **Notizen-Modul hinzugefügt**: Vollständiges Notizen-System mit:
+  - Kategorien und Unterkategorien (Einstellungen)
+  - Freigabe-System für Kategorien und einzelne Notizen (Lese-/Schreibrechte pro Benutzer)
+  - Verschiedene Element-Typen: Textbereich, Checkpunkte (To-Do-Listen), Aufzählungen (Punkte/Zahlen), Passwortfelder (mit Kopier-Button), Tabellen, Links
+  - Elemente können verschoben, bearbeitet und gelöscht werden (max. 2 nebeneinander)
+  - Gültigkeitszeitraum pro Notiz (von/bis oder unbegrenzt)
+  - Filter- und Suchfunktion wie im Geschenkemanagement
+  - Erinnerungen über Pushmail-Center-Integration
 
 ## Tech Stack
 - **Frontend**: Vanilla JavaScript, TailwindCSS (CDN).

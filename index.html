@@ -216,6 +216,23 @@
                     </div>
                 </div>
 
+                <!-- Notizen Card -->
+                <div id="notizenCard" data-permission="NOTIZEN"
+                    class="card bg-white p-4 rounded-xl shadow-lg flex items-center space-x-4 hover:shadow-xl transition duration-200 cursor-pointer w-full border-t-4 border-amber-500 hidden">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                        class="w-10 h-10 text-amber-500 flex-shrink-0">
+                        <path fill-rule="evenodd"
+                            d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0 0 16.5 9h-1.875a1.875 1.875 0 0 1-1.875-1.875V5.25A3.75 3.75 0 0 0 9 1.5H5.625ZM7.5 15a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5h-7.5A.75.75 0 0 1 7.5 15Zm.75 2.25a.75.75 0 0 0 0 1.5H12a.75.75 0 0 0 0-1.5H8.25Z"
+                            clip-rule="evenodd" />
+                        <path
+                            d="M12.971 1.816A5.23 5.23 0 0 1 14.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 0 1 3.434 1.279 9.768 9.768 0 0 0-6.963-6.963Z" />
+                    </svg>
+                    <div>
+                        <span class="text-xl font-bold text-amber-500 block">Notizen</span>
+                        <span class="text-sm text-gray-500">Notizen & Listen verwalten.</span>
+                    </div>
+                </div>
+
                 <div id="wertguthabenCard" data-permission="WERTGUTHABEN"
                     class="card bg-white p-4 rounded-xl shadow-lg flex items-center space-x-4 hover:shadow-xl transition duration-200 cursor-pointer w-full border-t-4 border-emerald-600 hidden">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
@@ -1582,6 +1599,87 @@
                 <!-- Tickets Container -->
                 <div id="tickets-list" class="space-y-3">
                     <p class="text-center text-gray-400 italic py-8">Keine Tickets vorhanden.</p>
+                </div>
+            </div>
+
+            <!-- ========== NOTIZEN VIEW ========== -->
+            <div id="notizenView" class="view">
+                <div class="back-link-container w-full mb-3">
+                    <div class="flex justify-between items-center">
+                        <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition"
+                            data-target="home">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                stroke-linejoin="round" class="w-6 h-6 mr-1">
+                                <path d="m15 18-6-6 6-6" />
+                            </svg>
+                            <span class="text-base font-semibold">zurück</span>
+                        </button>
+
+                        <div class="flex gap-2">
+                            <button id="btn-notizen-settings"
+                                class="p-2 text-gray-500 hover:text-gray-800 transition rounded-full hover:bg-gray-200"
+                                title="Kategorien verwalten">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6">
+                                    <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 0 1 1.262.125l1.669 1.669a1 1 0 0 1 .125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 0 1 .804.98v2.361a1 1 0 0 1-.804.98l-1.473.295a6.95 6.95 0 0 1-.587 1.416l.834 1.25a1 1 0 0 1-.125 1.262l-1.669 1.669a1 1 0 0 1-1.262.125l-1.25-.834a6.953 6.953 0 0 1-1.416.587l-.294 1.473a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.295-1.473a6.957 6.957 0 0 1-1.416-.587l-1.25.834a1 1 0 0 1-1.262-.125l-1.669-1.669a1 1 0 0 1-.125-1.262l.834-1.25a6.957 6.957 0 0 1-.587-1.416l-1.473-.294A1 1 0 0 1 1 11.18V8.82a1 1 0 0 1 .804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 0 1 .125-1.262l1.669-1.669a1 1 0 0 1 1.262-.125l1.25.834c.445-.245.919-.443 1.416-.587l.294-1.473ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                            <button id="btn-create-notiz" 
+                                class="py-2 px-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2 text-sm">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                                    <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                                </svg>
+                                Neu
+                            </button>
+                        </div>
+                    </div>
+                    <div class="border-t border-gray-300 mt-2"></div>
+                </div>
+
+                <!-- Header mit Statistiken -->
+                <div class="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-4 rounded-xl shadow-md mb-3">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-xl font-bold">📝 Notizen</h2>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2 text-center">
+                        <div class="bg-white/20 px-2 py-2 rounded-lg">
+                            <p class="text-xl font-bold" id="stat-notizen-total">0</p>
+                            <p class="text-[10px] font-semibold leading-tight">📄 Gesamt</p>
+                        </div>
+                        <div class="bg-white/20 px-2 py-2 rounded-lg">
+                            <p class="text-xl font-bold" id="stat-notizen-aktiv">0</p>
+                            <p class="text-[10px] font-semibold leading-tight">✅ Aktiv</p>
+                        </div>
+                        <div class="bg-white/20 px-2 py-2 rounded-lg">
+                            <p class="text-xl font-bold" id="stat-notizen-erinnerung">0</p>
+                            <p class="text-[10px] font-semibold leading-tight">🔔 Erinnerung</p>
+                        </div>
+                        <div class="bg-white/20 px-2 py-2 rounded-lg">
+                            <p class="text-xl font-bold" id="stat-notizen-geteilt">0</p>
+                            <p class="text-[10px] font-semibold leading-tight">👥 Geteilt</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Such- und Filterleiste -->
+                <div class="bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
+                    <div class="flex flex-wrap gap-2">
+                        <input type="text" id="search-notizen" placeholder="🔍 Suchen... (Titel, Inhalt)" 
+                            class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 text-sm">
+                        
+                        <select id="filter-notizen-kategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1 min-w-[150px]">
+                            <option value="">Alle Kategorien</option>
+                        </select>
+                        
+                        <button id="reset-filters-notizen" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
+                            ✕ Filter zurücksetzen
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Notizen Container -->
+                <div id="notizen-list" class="space-y-3">
+                    <p class="text-center text-gray-400 italic py-8">Keine Notizen vorhanden.</p>
                 </div>
             </div>
 
@@ -7911,12 +8009,213 @@
         </div>
     </div>
 
+<!-- ========== NOTIZEN MODALS ========== -->
+
+<!-- Notiz Editor Modal -->
+<div id="notizEditorModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-hidden flex flex-col">
+        <div class="sticky top-0 bg-gradient-to-r from-amber-500 to-orange-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+            <h3 id="notizEditorTitle" class="text-xl font-bold">Notiz bearbeiten</h3>
+            <button id="close-notiz-editor" class="text-white/80 hover:text-white transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-6 space-y-6">
+            <!-- Teil 1: Überschrift & Kategorie -->
+            <div class="bg-gray-50 p-4 rounded-lg border">
+                <h4 class="font-bold text-gray-700 mb-3">Überschrift & Kategorie</h4>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">Titel *</label>
+                        <input type="text" id="notiz-titel" placeholder="Titel der Notiz..." 
+                            class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Kategorie</label>
+                            <select id="notiz-kategorie" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                                <option value="">Keine Kategorie</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Unterkategorie</label>
+                            <select id="notiz-unterkategorie" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                                <option value="">Keine Unterkategorie</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Gültig ab</label>
+                            <input type="date" id="notiz-gueltig-ab" 
+                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Gültig bis</label>
+                            <div class="flex items-center gap-2">
+                                <input type="date" id="notiz-gueltig-bis" 
+                                    class="flex-1 p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                                <label class="flex items-center gap-1 text-sm whitespace-nowrap">
+                                    <input type="checkbox" id="notiz-gueltig-bis-unbegrenzt" checked class="w-4 h-4">
+                                    unbegrenzt
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Teil 2: Hauptteil mit Elementen -->
+            <div class="bg-gray-50 p-4 rounded-lg border">
+                <h4 class="font-bold text-gray-700 mb-3">Inhalt</h4>
+                
+                <!-- Element-Buttons -->
+                <div class="flex flex-wrap gap-2 mb-4">
+                    <button id="add-element-text" class="px-3 py-2 bg-white border-2 border-gray-300 rounded-lg hover:border-amber-500 hover:bg-amber-50 transition text-sm font-semibold flex items-center gap-1">
+                        📝 Text
+                    </button>
+                    <button id="add-element-checkbox" class="px-3 py-2 bg-white border-2 border-gray-300 rounded-lg hover:border-amber-500 hover:bg-amber-50 transition text-sm font-semibold flex items-center gap-1">
+                        ☑️ Checkpunkte
+                    </button>
+                    <button id="add-element-list_bullets" class="px-3 py-2 bg-white border-2 border-gray-300 rounded-lg hover:border-amber-500 hover:bg-amber-50 transition text-sm font-semibold flex items-center gap-1">
+                        • Liste
+                    </button>
+                    <button id="add-element-list_numbers" class="px-3 py-2 bg-white border-2 border-gray-300 rounded-lg hover:border-amber-500 hover:bg-amber-50 transition text-sm font-semibold flex items-center gap-1">
+                        1. Nummeriert
+                    </button>
+                    <button id="add-element-password" class="px-3 py-2 bg-white border-2 border-gray-300 rounded-lg hover:border-amber-500 hover:bg-amber-50 transition text-sm font-semibold flex items-center gap-1">
+                        🔒 Passwort
+                    </button>
+                    <button id="add-element-table" class="px-3 py-2 bg-white border-2 border-gray-300 rounded-lg hover:border-amber-500 hover:bg-amber-50 transition text-sm font-semibold flex items-center gap-1">
+                        📊 Tabelle
+                    </button>
+                    <button id="add-element-link" class="px-3 py-2 bg-white border-2 border-gray-300 rounded-lg hover:border-amber-500 hover:bg-amber-50 transition text-sm font-semibold flex items-center gap-1">
+                        🔗 Link
+                    </button>
+                </div>
+
+                <!-- Elemente-Container -->
+                <div id="notiz-elemente-container" class="min-h-[200px]">
+                    <div class="text-center py-8 text-gray-400 border-2 border-dashed border-gray-300 rounded-lg">
+                        <p class="text-2xl mb-2">📝</p>
+                        <p>Füge Elemente hinzu mit den Buttons oben</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Teil 3: Erinnerungen -->
+            <div class="bg-gray-50 p-4 rounded-lg border">
+                <h4 class="font-bold text-gray-700 mb-3">🔔 Erinnerungen (über Pushmail-Center)</h4>
+                <div id="notiz-erinnerungen-container" class="space-y-2">
+                    <p class="text-sm text-gray-500">Erinnerungen werden über das Pushmail-Center verwaltet.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer mit Buttons -->
+        <div class="sticky bottom-0 bg-gray-100 p-4 border-t flex justify-between items-center">
+            <button id="delete-notiz-btn" class="px-4 py-2 bg-red-100 text-red-700 font-bold rounded-lg hover:bg-red-200 transition hidden">
+                🗑️ Löschen
+            </button>
+            <div class="flex gap-2 ml-auto">
+                <button id="share-notiz-btn" class="px-4 py-2 bg-blue-100 text-blue-700 font-bold rounded-lg hover:bg-blue-200 transition">
+                    👥 Freigeben
+                </button>
+                <button id="save-notiz-btn" class="px-6 py-2 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 transition">
+                    💾 Speichern
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Notizen Einstellungen Modal (Kategorien) -->
+<div id="notizenSettingsModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div class="sticky top-0 bg-gradient-to-r from-amber-500 to-orange-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+            <h3 class="text-xl font-bold">Kategorien verwalten</h3>
+            <button id="close-notizen-settings" class="text-white/80 hover:text-white transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-6">
+            <!-- Neue Kategorie erstellen -->
+            <div class="bg-gray-50 p-4 rounded-lg mb-4">
+                <h4 class="font-bold text-gray-700 mb-2">Neue Kategorie erstellen</h4>
+                <div class="flex gap-2">
+                    <input type="text" id="neue-kategorie-name" placeholder="Kategoriename..." 
+                        class="flex-1 p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                    <select id="neue-kategorie-farbe" class="p-3 border-2 border-gray-300 rounded-lg">
+                        <option value="amber">🟠 Orange</option>
+                        <option value="blue">🔵 Blau</option>
+                        <option value="green">🟢 Grün</option>
+                        <option value="red">🔴 Rot</option>
+                        <option value="purple">🟣 Lila</option>
+                        <option value="pink">🩷 Pink</option>
+                        <option value="gray">⚪ Grau</option>
+                    </select>
+                    <button id="btn-create-kategorie" class="px-4 py-2 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 transition">
+                        + Erstellen
+                    </button>
+                </div>
+            </div>
+
+            <!-- Kategorien-Liste -->
+            <div id="kategorien-settings-list" class="space-y-3">
+                <div class="text-center py-8 text-gray-400">
+                    <p>Keine Kategorien vorhanden.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Freigabe-Dialog Modal -->
+<div id="shareModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div class="bg-gradient-to-r from-blue-500 to-indigo-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+            <h3 id="share-modal-title" class="text-xl font-bold">Freigeben</h3>
+            <button id="close-share-modal" class="text-white/80 hover:text-white transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        
+        <div class="p-6">
+            <p class="text-sm text-gray-600 mb-4">Wähle Benutzer aus, mit denen du teilen möchtest:</p>
+            
+            <div id="share-user-list" class="max-h-60 overflow-y-auto space-y-2 mb-4">
+                <!-- Wird dynamisch befüllt -->
+            </div>
+
+            <div class="flex justify-end gap-2 pt-4 border-t">
+                <button id="cancel-share-btn" class="px-4 py-2 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition">
+                    Abbrechen
+                </button>
+                <button id="save-share-btn" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition">
+                    Freigeben
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script type="module" src="notfall.js"></script>
 <script type="module" src="pushbenachrichtigung.js"></script>
 <script type="module" src="terminplaner.js"></script>
 <script type="module" src="ticket-support.js"></script>
 <script type="module" src="wertguthaben.js"></script>
 <script type="module" src="zahlungsverwaltung.js"></script>
+<script type="module" src="notizen.js"></script>
 </body>
 
 </html>

@@ -34,6 +34,7 @@ import { initializeVertragsverwaltung, listenForVertraege, stopVertragsverwaltun
 import { initRezeptverwaltung } from './rezeptverwaltung.js';
 import { initializeHaushaltszahlungen, listenForHaushaltszahlungen, stopHaushaltszahlungenListeners } from './haushaltszahlungen.js';
 import { initializeGeschenkemanagement, listenForGeschenke, stopGeschenkemanagementListeners } from './geschenkemanagement.js';
+import { initializeNotizen, stopNotizenListeners } from './notizen.js';
 import { initializeSendungsverwaltungView, listenForSendungen, stopSendungsverwaltungListeners } from './sendungsverwaltung.js';
 import { ensureNachrichtencenterSelfContact } from './notfall.js';
 // // ENDE-ZIKA //
@@ -131,7 +132,8 @@ export const views = {
     sendungsverwaltung: { id: 'sendungsverwaltungView' },
     rezepte: { id: 'rezepteView' },
     haushaltszahlungen: { id: 'haushaltszahlungenView' },
-    geschenkemanagement: { id: 'geschenkemanagementView' }
+    geschenkemanagement: { id: 'geschenkemanagementView' },
+    notizen: { id: 'notizenView' }
 };
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
 
@@ -1586,6 +1588,11 @@ export function navigate(targetViewName) {
         if (targetViewName === 'haushaltszahlungen' && !userPermissions.includes('HAUSHALTSZAHLUNGEN')) {
             return alertUser("Zugriff verweigert (Haushaltszahlungen).", 'error');
         }
+
+        // Zugriffsschutz für Notizen
+        if (targetViewName === 'notizen' && !userPermissions.includes('NOTIZEN')) {
+            return alertUser("Zugriff verweigert (Notizen).", 'error');
+        }
     }
 
     // Scroll zum Anfang
@@ -1673,6 +1680,10 @@ export function navigate(targetViewName) {
 
     if (targetViewName === 'geschenkemanagement') {
         initializeGeschenkemanagement();
+    }
+
+    if (targetViewName === 'notizen') {
+        initializeNotizen();
     }
 }
 
@@ -2591,6 +2602,9 @@ export function setupEventListeners() {
 
     const ticketSupportCard = document.getElementById('ticketSupportCard');
     if (ticketSupportCard) ticketSupportCard.addEventListener('click', () => navigate('ticketSupport'));
+
+    const notizenCard = document.getElementById('notizenCard');
+    if (notizenCard) notizenCard.addEventListener('click', () => navigate('notizen'));
 
     const wertguthabenCard = document.getElementById('wertguthabenCard');
     if (wertguthabenCard) wertguthabenCard.addEventListener('click', () => navigate('wertguthaben'));
