@@ -1515,8 +1515,9 @@ window.toggleWeitereMenu = function() {
 
 window.editCurrentNotiz = function() {
     if (currentViewingNotizId) {
+        const notizIdToEdit = currentViewingNotizId; // ID speichern BEVOR closeNotizViewer sie löscht
         closeNotizViewer();
-        openNotizEditor(currentViewingNotizId);
+        openNotizEditor(notizIdToEdit);
     }
 };
 
