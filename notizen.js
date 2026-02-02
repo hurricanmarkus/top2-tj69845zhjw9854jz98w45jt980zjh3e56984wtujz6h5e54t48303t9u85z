@@ -1520,6 +1520,24 @@ window.editCurrentNotiz = function() {
     }
 };
 
+window.shareCurrentNotiz = function() {
+    console.log('📝 Notizen: shareCurrentNotiz aufgerufen, currentViewingNotizId:', currentViewingNotizId);
+    if (currentViewingNotizId) {
+        openShareDialog('notiz', currentViewingNotizId);
+    } else {
+        alertUser('Notiz konnte nicht ermittelt werden.', 'error');
+    }
+};
+
+window.shareEditingNotiz = function() {
+    console.log('📝 Notizen: shareEditingNotiz aufgerufen, currentEditingNotizId:', currentEditingNotizId);
+    if (currentEditingNotizId) {
+        openShareDialog('notiz', currentEditingNotizId);
+    } else {
+        alertUser('Bitte speichere die Notiz zuerst, bevor du sie freigibst.', 'warning');
+    }
+};
+
 window.deleteCurrentNotiz = async function() {
     if (currentViewingNotizId && confirm('Notiz wirklich löschen?')) {
         await deleteNotiz(currentViewingNotizId);
@@ -2198,20 +2216,30 @@ function setupNotizenEventListeners() {
     const shareNotizBtn = document.getElementById('share-notiz-btn');
     if (shareNotizBtn) {
         shareNotizBtn.addEventListener('click', () => {
+            console.log('📝 Notizen: Share-Button geklickt, currentEditingNotizId:', currentEditingNotizId);
             if (currentEditingNotizId) {
                 openShareDialog('notiz', currentEditingNotizId);
+            } else {
+                alertUser('Bitte speichere die Notiz zuerst, bevor du sie freigibst.', 'warning');
             }
         });
+    } else {
+        console.warn('📝 Notizen: share-notiz-btn nicht gefunden bei Initialisierung');
     }
 
     // Share Notiz Button (im Viewer)
     const viewerShareBtn = document.getElementById('viewer-share-notiz-btn');
     if (viewerShareBtn) {
         viewerShareBtn.addEventListener('click', () => {
+            console.log('📝 Notizen: Viewer-Share-Button geklickt, currentViewingNotizId:', currentViewingNotizId);
             if (currentViewingNotizId) {
                 openShareDialog('notiz', currentViewingNotizId);
+            } else {
+                alertUser('Notiz konnte nicht ermittelt werden.', 'error');
             }
         });
+    } else {
+        console.warn('📝 Notizen: viewer-share-notiz-btn nicht gefunden bei Initialisierung');
     }
 
     // Einladungen Modal schließen
@@ -2375,7 +2403,10 @@ function renderKategorienSettings() {
 
 function openShareDialog(type, resourceId) {
     const modal = document.getElementById('shareModal');
-    if (!modal) return;
+    if (!modal) {
+        console.error('📝 Notizen: shareModal nicht gefunden');
+        return;
+    }
 
     const title = document.getElementById('share-modal-title');
     if (title) {
@@ -2385,27 +2416,41 @@ function openShareDialog(type, resourceId) {
     modal.dataset.type = type;
     modal.dataset.resourceId = resourceId;
 
-    // Benutzer-Liste laden
+    // Aktuellen Benutzer ermitteln
+    const currentUserId = getCurrentUserId();
+
+    // Benutzer-Liste laden (mit Object.entries um Key=userId zu bekommen)
     const userList = document.getElementById('share-user-list');
     if (userList) {
-        userList.innerHTML = Object.values(USERS).map(user => `
-            <label class="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                <input type="checkbox" class="share-user-checkbox h-5 w-5" data-user-id="${user.mode}">
-                <span class="font-semibold">${user.fullName || user.mode}</span>
-                <div class="ml-auto flex gap-2">
-                    <label class="flex items-center gap-1 text-sm">
-                        <input type="radio" name="perm-${user.mode}" value="read" checked> Lesen
-                    </label>
-                    <label class="flex items-center gap-1 text-sm">
-                        <input type="radio" name="perm-${user.mode}" value="write"> Schreiben
-                    </label>
-                </div>
-            </label>
-        `).join('');
+        const userEntries = Object.entries(USERS)
+            .filter(([userId, user]) => userId !== currentUserId && user?.isActive !== false);
+        
+        if (userEntries.length === 0) {
+            userList.innerHTML = '<div class="text-center py-4 text-gray-500">Keine anderen Benutzer verfügbar</div>';
+        } else {
+            userList.innerHTML = userEntries.map(([userId, user]) => {
+                const userName = user?.name || user?.realName || user?.fullName || userId;
+                return `
+                <label class="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer border-b">
+                    <input type="checkbox" class="share-user-checkbox h-5 w-5" data-user-id="${userId}">
+                    <span class="font-semibold">${userName}</span>
+                    <div class="ml-auto flex gap-4">
+                        <label class="flex items-center gap-1 text-sm cursor-pointer">
+                            <input type="radio" name="perm-${userId}" value="read" checked class="h-4 w-4"> Lesen
+                        </label>
+                        <label class="flex items-center gap-1 text-sm cursor-pointer">
+                            <input type="radio" name="perm-${userId}" value="write" class="h-4 w-4"> Schreiben
+                        </label>
+                    </div>
+                </label>
+            `;
+            }).join('');
+        }
     }
 
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+    console.log('📝 Notizen: Share-Dialog geöffnet für', type, resourceId);
 }
 
 function closeShareDialog() {
