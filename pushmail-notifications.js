@@ -4,11 +4,12 @@
 
 import { db, appId, currentUser, GUEST_MODE, alertUser } from './haupteingang.js';
 
-// PUSHOVER API TOKEN (fest codiert, für alle User gleich)
+// PUSHOVER API TOKEN
 const PUSHOVER_API_TOKEN = 'ag3nyu918ady5f8eqjuug13ttyaq9f';
 import { 
     collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, 
-    query, where, serverTimestamp, writeBatch, orderBy, limit, onSnapshot 
+    query, where, serverTimestamp, writeBatch, orderBy, limit, onSnapshot,
+    Timestamp 
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ========================================
@@ -17,26 +18,20 @@ import {
 
 /**
  * Ersetzt Platzhalter in einem Text durch die entsprechenden Werte aus den Daten
- * @param {string} text - Der Text mit Platzhaltern wie {key}
- * @param {Object} data - Ein Objekt mit den Ersetzungswerten
- * @returns {string} Der Text mit ersetzten Platzhaltern
  */
 function replacePlaceholders(text, data) {
     if (!text || !data) return text || '';
     let result = text;
     Object.keys(data).forEach(key => {
-        result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), data[key] || '');
+        const val = data[key];
+        const stringVal = (val instanceof Date) ? val.toLocaleDateString('de-DE') : (val || '');
+        result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), stringVal);
     });
     return result;
 }
 
 /**
  * Berechnet den geplanten Zeitpunkt für eine Benachrichtigung
- * @param {string} timeString - Uhrzeit im Format "HH:MM"
- * @param {number|null} daysBeforeX - Tage vor dem Zieldatum (null wenn nicht relevant)
- * @param {Date|string|null} targetDate - Das Zieldatum
- * @param {boolean} sendImmediately - Wenn true, wird sofort gesendet
- * @returns {Date} Der berechnete Zeitpunkt
  */
 function calculateScheduledTime(timeString, daysBeforeX, targetDate, sendImmediately = false) {
     if (sendImmediately) {
@@ -49,7 +44,7 @@ function calculateScheduledTime(timeString, daysBeforeX, targetDate, sendImmedia
     if (targetDate) {
         scheduled = new Date(targetDate);
         if (daysBeforeX !== null && daysBeforeX !== undefined) {
-            scheduled.setDate(scheduled.getDate() - daysBeforeX);
+            scheduled.setDate(scheduled.getDate() - parseInt(daysBeforeX));
         }
     } else {
         scheduled = new Date();
@@ -516,28 +511,45 @@ export async function createPendingNotification(userId, programId, notificationT
         const settings = await loadPushmailNotificationSettings(userId);
         
         // Prüfen ob global aktiviert
-        if (!settings.globalEnabled) {
-            console.log('Pushmail: Global deaktiviert');
-            return;
-        }
+        if (!settings.globalEnabled) return;
 
         // Prüfen ob Programm aktiviert
-        if (!settings.programs[programId]?.enabled) {
-            console.log('Pushmail: Programm deaktiviert:', programId);
-            return;
-        }
+        if (!settings.programs[programId]?.enabled) return;
 
         const notifSettings = settings.programs[programId]?.notifications[notificationType];
         
-        if (!notifSettings || notifSettings.state === 'disabled') {
-            console.log('Pushmail: Benachrichtigung deaktiviert:', programId, notificationType);
-            return;
-        }
+        if (!notifSettings || notifSettings.state === 'disabled') return;
 
         const relatedDataId = relatedData.id || null;
 
-        // Duplikatsprüfung pending
+        // Zieldatum bestimmen
+        const targetDate = relatedData.targetDate instanceof Date ? relatedData.targetDate : 
+                          (relatedData.targetDate ? new Date(relatedData.targetDate) : null);
+
+        // daysLeft berechnen
+        if (targetDate && !relatedData.daysLeft) {
+            const now = new Date();
+            const diffTime = targetDate - now;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            relatedData.daysLeft = diffDays > 0 ? diffDays : 0;
+        }
+
+        // Geplante Zeit berechnen
+        const scheduledTime = calculateScheduledTime(
+            notifSettings.time,
+            notifSettings.daysBeforeX,
+            targetDate,
+            notifSettings.sendImmediately
+        );
+
+        // Text vorbereiten
+        const finalTitle = replacePlaceholders(notifSettings.customTitle, relatedData);
+        const finalMessage = replacePlaceholders(notifSettings.customMessage, relatedData);
+
+        // In Firestore speichern
         const colRef = collection(db, 'artifacts', appId, 'users', userId, 'pushmail_notifications');
+        
+        // Duplikatsprüfung: Wenn gleiche Nachricht für gleiche ID bereits geplant ist, überspringen
         const existingQuery = query(
             colRef,
             where('programId', '==', programId),
@@ -546,95 +558,33 @@ export async function createPendingNotification(userId, programId, notificationT
             where('acknowledged', '==', false)
         );
         const existingSnapshot = await getDocs(existingQuery);
-        if (!existingSnapshot.empty) {
-            console.log('Pushmail: Benachrichtigung existiert bereits (pending):', programId, notificationType, relatedDataId);
-            return;
-        }
-
-        // Duplikatsprüfung archiviert: Nur erneut erstellen, wenn sich Title/Message geändert haben
-        const ackColRef = collection(db, 'artifacts', appId, 'users', userId, 'pushmail_acknowledged_notifications');
-        const ackQuery = query(
-            ackColRef,
-            where('programId', '==', programId),
-            where('notificationType', '==', notificationType),
-            where('relatedDataId', '==', relatedDataId),
-            where('acknowledged', '==', true),
-            limit(5)
-        );
-        const ackSnapshot = await getDocs(ackQuery);
-
-        // daysLeft berechnen (falls targetDate vorhanden)
-        if (relatedData.targetDate && !relatedData.daysLeft) {
-            const target = new Date(relatedData.targetDate);
-            const now = new Date();
-            const diffTime = target - now;
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            relatedData.daysLeft = diffDays > 0 ? diffDays : 0;
-        }
-
-        // Platzhalter ersetzen (Title/Message) vor Vergleich
-        const title = replacePlaceholders(notifSettings.customTitle, relatedData);
-        const message = replacePlaceholders(notifSettings.customMessage, relatedData);
-
-        // Zeitpunkt berechnen
-        const scheduledFor = calculateScheduledTime(
-            notifSettings.time,
-            notifSettings.daysBeforeX,
-            relatedData.targetDate,
-            notifSettings.sendImmediately
-        );
-
-        // Bei sendImmediately: Auch die "normale" Zeit berechnen für spätere Wiederholungen
-        let regularScheduledTime = null;
-        if (notifSettings.sendImmediately) {
-            regularScheduledTime = calculateScheduledTime(
-                notifSettings.time,
-                notifSettings.daysBeforeX,
-                relatedData.targetDate,
-                false  // Normale Berechnung ohne sofort
-            );
-        }
-
-        // VALIDIERUNG: Benachrichtigung liegt in der Vergangenheit?
-        // Bei sendImmediately überspringen wir die Validierung
-        const now = new Date();
-        if (!notifSettings.sendImmediately && scheduledFor < now) {
-            console.log('Pushmail: Benachrichtigung liegt in Vergangenheit - übersprungen:', programId, notificationType, scheduledFor);
-            return;
-        }
-
-        const alreadyAcknowledgedSameContent = ackSnapshot.docs.some(docSnap => {
-            const data = docSnap.data() || {};
-            return data.title === title && data.message === message;
+        
+        // Duplikate nur ignorieren wenn exakt gleicher Inhalt
+        const isDuplicate = existingSnapshot.docs.some(doc => {
+            const data = doc.data();
+            return data.title === finalTitle && data.message === finalMessage;
         });
+        if (isDuplicate) return;
 
-        if (alreadyAcknowledgedSameContent) {
-            console.log('Pushmail: Bereits quittiert, gleicher Inhalt – keine neue Benachrichtigung:', programId, notificationType, relatedDataId);
-            return;
-        }
-
-        // Benachrichtigung speichern
         await addDoc(colRef, {
             programId,
             notificationType,
-            title,
-            message,
+            title: finalTitle,
+            message: finalMessage,
             createdAt: serverTimestamp(),
-            scheduledFor,
+            scheduledFor: Timestamp.fromDate(scheduledTime),
+            nextSendAt: Timestamp.fromDate(scheduledTime),
             lastSentAt: null,
-            nextSendAt: scheduledFor,
-            regularScheduledTime: regularScheduledTime,  // Für Wiederholungen nach sofortigem Senden
-            repeatDays: notifSettings.repeatDays,
+            repeatDays: notifSettings.repeatDays || 0,
             acknowledged: false,
             acknowledgedAt: null,
-            relatedDataId: relatedData.id || null,
+            relatedDataId: relatedDataId,
             relatedDataPath: relatedData.path || null,
             overlayEnabled: notifSettings.overlayEnabled !== false,
-            pushOverEnabled: notifSettings.pushOverEnabled !== false,
-            sendImmediately: notifSettings.sendImmediately === true
+            pushOverEnabled: notifSettings.pushOverEnabled !== false
         });
 
-        console.log('Pushmail: Benachrichtigung erstellt:', programId, notificationType, 'Pushover:', notifSettings.pushOverEnabled !== false);
+        console.log(`Pushmail: Benachrichtigung erstellt für ${programId}/${notificationType}`);
     } catch (error) {
         console.error('Fehler beim Erstellen der Benachrichtigung:', error);
     }

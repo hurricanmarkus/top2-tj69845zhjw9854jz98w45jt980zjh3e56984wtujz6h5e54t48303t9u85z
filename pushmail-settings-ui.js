@@ -18,7 +18,7 @@ export async function renderPushmailNotificationSettingsUI() {
     const container = document.getElementById('pushmailAutoProgramsContainer');
     if (!container) return;
 
-    const userId = currentUser.mode;
+    const userId = currentUser.uid || currentUser.mode;
     if (!userId || userId === GUEST_MODE) {
         container.innerHTML = '<p class="text-sm text-center text-gray-400">Bitte anmelden, um Einstellungen zu verwalten.</p>';
         return;
@@ -320,7 +320,7 @@ function attachNotificationSettingsListeners() {
 // ========================================
 
 async function savePushmailNotificationSettingsFromUI() {
-    const userId = currentUser.mode;
+    const userId = currentUser.uid || currentUser.mode;
     if (!userId || userId === GUEST_MODE) {
         alertUser('Bitte anmelden, um Einstellungen zu speichern.', 'error');
         return;
