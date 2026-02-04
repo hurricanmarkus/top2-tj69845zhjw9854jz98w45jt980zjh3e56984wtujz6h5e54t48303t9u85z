@@ -720,19 +720,34 @@ window.addNotizFilter = function() {
     renderNotizenList();
 };
 
-window.resetNotizFilters = function() {
-    activeFilters = [];
+function resetNotizFiltersToDefault() {
     searchTerm = '';
     currentKategorieId = null;
     currentUnterkategorieId = null;
     
+    activeFilters = [{ 
+        category: 'status', 
+        value: 'abgeschlossen', 
+        negate: true, 
+        label: 'Status',
+        id: Date.now() 
+    }];
+    defaultFiltersApplied = true;
+    
     const searchInput = document.getElementById('search-notizen');
     const kategorieFilter = document.getElementById('filter-notizen-kategorie');
+    const negateCheckbox = document.getElementById('filter-notizen-negate');
     
     if (searchInput) searchInput.value = '';
     if (kategorieFilter) kategorieFilter.value = '';
+    if (negateCheckbox) negateCheckbox.checked = true;
     
+    renderActiveFiltersNotizen();
     renderNotizenList();
+}
+
+window.resetNotizFilters = function() {
+    resetNotizFiltersToDefault();
 };
 
 function renderNotizCard(notiz) {
@@ -1750,29 +1765,7 @@ function setupNotizenEventListeners() {
     const resetFilters = document.getElementById('reset-filters-notizen');
     if (resetFilters) {
         resetFilters.addEventListener('click', () => {
-            searchTerm = '';
-            currentKategorieId = null;
-            currentUnterkategorieId = null;
-            
-            // Standardfilter wieder setzen: Abgeschlossene ausblenden
-            activeFilters = [{ 
-                category: 'status', 
-                value: 'abgeschlossen', 
-                negate: true, 
-                label: 'Status',
-                id: Date.now() 
-            }];
-            
-            const searchInput = document.getElementById('search-notizen');
-            const kategorieFilter = document.getElementById('filter-notizen-kategorie');
-            const negateCheckbox = document.getElementById('filter-notizen-negate');
-            
-            if (searchInput) searchInput.value = '';
-            if (kategorieFilter) kategorieFilter.value = '';
-            if (negateCheckbox) negateCheckbox.checked = true;
-            
-            renderActiveFiltersNotizen();
-            renderNotizenList();
+            resetNotizFiltersToDefault();
         });
     }
 
