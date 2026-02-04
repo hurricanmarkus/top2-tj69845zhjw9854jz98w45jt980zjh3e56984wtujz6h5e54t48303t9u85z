@@ -488,37 +488,22 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // NOTIZEN SYSTEM (Notizen & Kategorien)
+    // NOTIZEN SYSTEM (Notizen & Kategorien) - Benutzerspezifisch
     // ═══════════════════════════════════════════════════════════════
 
-    // Notizen - nur eigene lesen/schreiben
-    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/notizen/{notizId} {
-      allow read: if hasAppUserIdClaim() && (
-        resource.data.createdBy == appUserId() ||
-        appUserId() in resource.data.sharedWith
-      );
-      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
-      allow update, delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    // Notizen - nur eigene lesen/schreiben (unter users/{userId})
+    match /artifacts/{appId}/users/{userId}/notizen/{notizId} {
+      allow read, write: if hasAppUserIdClaim() && appUserId() == userId;
     }
 
     // Notizen Kategorien - nur eigene lesen/schreiben
-    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/notizen_kategorien/{kategorieId} {
-      allow read: if hasAppUserIdClaim() && (
-        resource.data.createdBy == appUserId() ||
-        appUserId() in resource.data.sharedWith
-      );
-      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
-      allow update, delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    match /artifacts/{appId}/users/{userId}/notizen_kategorien/{kategorieId} {
+      allow read, write: if hasAppUserIdClaim() && appUserId() == userId;
     }
 
-    // Notizen Freigaben - für Sharing-Funktionalität
-    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/notizen_freigaben/{freigabeId} {
-      allow read: if hasAppUserIdClaim() && (
-        resource.data.ownerId == appUserId() ||
-        resource.data.targetUserId == appUserId()
-      );
-      allow create: if hasAppUserIdClaim() && request.resource.data.ownerId == appUserId();
-      allow update, delete: if hasAppUserIdClaim() && resource.data.ownerId == appUserId();
+    // Notizen Freigaben - nur eigene lesen/schreiben
+    match /artifacts/{appId}/users/{userId}/notizen_freigaben/{freigabeId} {
+      allow read, write: if hasAppUserIdClaim() && appUserId() == userId;
     }
 
     // ═══════════════════════════════════════════════════════════════

@@ -1722,7 +1722,7 @@ function setupNotizenEventListeners() {
         });
     }
 
-    // Filter zurücksetzen
+    // Filter zurücksetzen (mit Standardfilter)
     const resetFilters = document.getElementById('reset-filters-notizen');
     if (resetFilters) {
         resetFilters.addEventListener('click', () => {
@@ -1730,12 +1730,24 @@ function setupNotizenEventListeners() {
             currentKategorieId = null;
             currentUnterkategorieId = null;
             
+            // Standardfilter wieder setzen: Abgeschlossene ausblenden
+            activeFilters = [{ 
+                category: 'status', 
+                value: 'abgeschlossen', 
+                negate: true, 
+                label: 'Status',
+                id: Date.now() 
+            }];
+            
             const searchInput = document.getElementById('search-notizen');
             const kategorieFilter = document.getElementById('filter-notizen-kategorie');
+            const negateCheckbox = document.getElementById('filter-notizen-negate');
             
             if (searchInput) searchInput.value = '';
             if (kategorieFilter) kategorieFilter.value = '';
+            if (negateCheckbox) negateCheckbox.checked = true;
             
+            renderActiveFiltersNotizen();
             renderNotizenList();
         });
     }
