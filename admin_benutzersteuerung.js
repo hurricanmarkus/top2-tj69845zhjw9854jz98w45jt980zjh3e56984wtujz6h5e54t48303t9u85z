@@ -1,7 +1,7 @@
 // // @ts-check
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 // TEST 2
 import { onSnapshot, doc, updateDoc, setDoc, deleteDoc, getDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { db, auth, usersCollectionRef, setButtonLoading, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES, ADMIN_STORAGE_KEY, PENDING_REQUESTS, appId } from './haupteingang.js';
+import { db, auth, usersCollectionRef, setButtonLoading, adminSectionsState, rolesCollectionRef, ROLES, roleChangeRequestsCollectionRef, currentUser, alertUser, USERS, initialAuthCheckDone, modalUserButtons, ADMIN_ROLES, ADMIN_STORAGE_KEY, PENDING_REQUESTS, appId, escapeHtml, PERMISSIONS_CONFIG } from './haupteingang.js';
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js'; // NEU: renderProtocolHistory importiert
 import { setupPermissionDependencies, renderAdminRightsManagement } from './admin_rechteverwaltung.js'; // Oder der richtige Dateiname
 // NEU: renderAdminVotesTable importiert
@@ -10,9 +10,6 @@ import { checkCurrentUserValidity, updateUIForMode, switchToGuestMode } from './
 import { createApprovalRequest } from './admin_genehmigungsprozess.js';
 import { renderRoleManagement } from './admin_rollenverwaltung.js'; // NEU: renderRoleManagement importiert
 // ENDE-ZIKA //
-
-
-const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
 // ERSETZE die Funktion "listenForUserUpdates" in admin_benutzersteuerung.js:
 
@@ -398,36 +395,7 @@ export function renderUserManagement() {
     if (newUserRoleSelect) { newUserRoleSelect.innerHTML = roleOptionsHTML; newUserRoleSelect.value = 'ANGEMELDET'; }
 
     // =================================================================
-    // BEGINN DER ÄNDERUNG (Neue Berechtigungen)
-    // =================================================================
-    // Verfügbare Berechtigungen
-    const allPermissions = {
-        'ENTRANCE': 'Haupteingang öffnen',
-        'PUSHOVER': 'Push-Nachricht senden',
-        'PUSHMAIL_CENTER': 'PUSHMAIL-Center',
-        'PUSHOVER_SETTINGS_GRANTS': '-> Einstellungen-Button zum Berechtigungen anlegen',
-        'PUSHOVER_NOTRUF_SETTINGS': '-> Notruf-Einstellungen',
-        'PUSHOVER_NOTRUF_SETTINGS_FLIC': '-> -> Flic-Notruf-Button',
-        'PUSHOVER_NOTRUF_SETTINGS_NACHRICHTENCENTER': '-> -> Nachrichtencenter',
-        'PUSHOVER_NOTRUF_SETTINGS_ALARM_PROGRAMME': '-> -> Alarm-Programme',
-        'CHECKLIST': 'Aktuelle Checkliste',
-        'CHECKLIST_SWITCH': '-> Listen umschalten',
-        'CHECKLIST_SETTINGS': '-> Checkliste-Einstellungen',
-        'ESSENSBERECHNUNG': 'Essensberechnung',
-        'TERMINPLANER': 'Termin finden',
-        'TERMINPLANER_CREATE': '-> Neuen Termin anlegen',
-        'ZAHLUNGSVERWALTUNG': 'Zahlungsverwaltung',
-        'ZAHLUNGSVERWALTUNG_CREATE': '-> Neue Zahlung anlegen',
-        'TICKET_SUPPORT': 'Ticket Support',
-        'WERTGUTHABEN': 'Wertguthaben',
-        'LIZENZEN': 'Lizenzen',
-        'VERTRAGSVERWALTUNG': 'Vertragsverwaltung',
-        'SENDUNGSVERWALTUNG': 'Sendungsverwaltung',
-        'REZEPTE': 'Rezepte'
-    };
-    // =================================================================
-    // ENDE DER ÄNDERUNG
-    // =================================================================
+    // Berechtigungen aus zentraler Konfiguration (PERMISSIONS_CONFIG aus haupteingang.js)
 
     // Optionen für Angezeigten Status (OHNE SYSTEMADMIN)
     const displayRoleOptions = Object.values(ROLES)
@@ -506,25 +474,19 @@ export function renderUserManagement() {
             const finalDisplayRoleOptionsWithSelection = displayRoleOptions.replace(`value="${selectedDisplayRole}"`, `value="${selectedDisplayRole}" selected`);
 
             // Diese Schleife erstellt jetzt automatisch die neuen Checkboxen
-            // basierend auf der von uns geänderten 'allPermissions'-Liste.
-            const allPermissionsHTML = Object.keys(allPermissions).map(permKey => {
+            // basierend auf der zentralen PERMISSIONS_CONFIG aus haupteingang.js.
+            const allPermissionsHTML = Object.keys(PERMISSIONS_CONFIG).map(permKey => {
+                const perm = PERMISSIONS_CONFIG[permKey];
                 let marginLeft = '';
                 if (permKey.startsWith('PUSHOVER_NOTRUF_SETTINGS_')) {
                     marginLeft = 'pl-12';
                 } else {
-                    const isSubPermission =
-                        permKey.startsWith('CHECKLIST_') ||
-                        permKey.startsWith('TERMINPLANER_') ||
-                        permKey.startsWith('ZAHLUNGSVERWALTUNG_') ||
-                        permKey.startsWith('TICKET_SUPPORT_') ||
-                        permKey.startsWith('WERTGUTHABEN_') ||
-                        (permKey.startsWith('PUSHOVER_') && permKey !== 'PUSHOVER');
-                    marginLeft = isSubPermission ? 'pl-6' : '';
+                    marginLeft = perm.indent ? 'pl-6' : '';
                 }
 
                 return `<label class="flex items-center ${marginLeft}">
                            <input type="checkbox" class="custom-perm-checkbox h-4 w-4" data-perm="${permKey}" ${(user.customPermissions || []).includes(permKey) ? 'checked' : ''} ${!canChangePerms ? 'disabled' : ''}>
-                           <span class="ml-2 text-sm">${escapeHtml(allPermissions[permKey])}</span>
+                           <span class="ml-2 text-sm">${escapeHtml(perm.label)}</span>
                         </label>`;
             }).join('');
 
@@ -617,7 +579,7 @@ export function renderUserManagement() {
     }
 
     // --- Event Listener hinzufügen ---
-    addAdminUserManagementListeners(userManagementArea, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions);
+    addAdminUserManagementListeners(userManagementArea, isAdmin, isSysAdminEditing, permSet, displayRoleOptions);
     restoreAdminScrollIfAny();
 }
 
@@ -628,7 +590,7 @@ export function renderUserManagement() {
 // ... (Rest der Datei, bis zur Funktion addAdminUserManagementListeners) ...
 
 
-export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing, permSet, allPermissions, displayRoleOptions) {
+export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing, permSet, displayRoleOptions) {
     if (!area) return;
 
     // --- Nur EINEN primären Listener hinzufügen ---

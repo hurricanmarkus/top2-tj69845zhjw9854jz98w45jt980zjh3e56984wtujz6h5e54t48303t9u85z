@@ -1,4 +1,4 @@
-import { alertUser, db, currentUser, USERS, appId } from './haupteingang.js';
+import { alertUser, db, currentUser, USERS, appId, escapeHtml } from './haupteingang.js';
 import { createPendingNotification, renderPendingNotifications } from './pushmail-notifications.js';
 
 import {
@@ -12,8 +12,6 @@ import {
     updateDoc,
     deleteDoc
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
 let lizenzenRef = null;
 let kategorienRef = null;

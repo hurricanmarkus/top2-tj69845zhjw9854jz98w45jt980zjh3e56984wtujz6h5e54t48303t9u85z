@@ -2,10 +2,7 @@
 // PUSHMAIL-CENTER BENACHRICHTIGUNGSSYSTEM
 // ========================================
 
-import { db, appId, currentUser, GUEST_MODE, alertUser } from './haupteingang.js';
-
-// PUSHOVER API TOKEN (fest codiert, für alle User gleich)
-const PUSHOVER_API_TOKEN = 'ag3nyu918ady5f8eqjuug13ttyaq9f';
+import { db, appId, currentUser, GUEST_MODE, alertUser, PUSHOVER_API_TOKEN } from './haupteingang.js';
 import { 
     collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, 
     query, where, serverTimestamp, writeBatch, orderBy, limit, onSnapshot 

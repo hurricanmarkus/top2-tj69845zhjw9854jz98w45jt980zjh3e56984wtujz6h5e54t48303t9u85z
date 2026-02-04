@@ -2,7 +2,7 @@
 // BEGINN-ZIKA: IMPORT-BEFEHLE IMMER ABSOLUTE POS1 //
 // KORREKTUR: Fehlende Firebase-Funktionen für Lösch-Logik importiert
 import { doc, updateDoc, setDoc, deleteDoc, onSnapshot, writeBatch, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { initialAuthCheckDone, adminSectionsState, rolesCollectionRef, ADMIN_ROLES, ROLES, adminRolesCollectionRef, currentUser, db, roleManagementSectionsState, alertUser, USERS, usersCollectionRef } from './haupteingang.js'; // USERS importiert
+import { initialAuthCheckDone, adminSectionsState, rolesCollectionRef, ADMIN_ROLES, ROLES, adminRolesCollectionRef, currentUser, db, roleManagementSectionsState, alertUser, USERS, usersCollectionRef, PERMISSIONS_CONFIG } from './haupteingang.js'; // USERS importiert
 import { checkCurrentUserValidity } from './log-InOut.js';
 import { logAdminAction } from './admin_protokollHistory.js';
 import { setupPermissionDependencies, renderAdminRightsManagement } from './admin_rechteverwaltung.js';
@@ -156,38 +156,10 @@ export function renderRoleManagement() {
         </div>`;
     roleManagementArea.appendChild(userRolesContainer);
 
-    const allRolePermissions = {
-        'ENTRANCE': { label: 'Haupteingang öffnen', indent: false },
-        'PUSHOVER': { label: 'Push-Nachricht senden', indent: false },
-        'PUSHMAIL_CENTER': { label: 'PUSHMAIL-Center', indent: false },
-        'PUSHOVER_SETTINGS_GRANTS': { label: '-> Einstellungen-Button zum Berechtigungen anlegen', indent: true },
-        'PUSHOVER_NOTRUF_SETTINGS': { label: '-> Notruf-Einstellungen', indent: true },
-        'PUSHOVER_NOTRUF_SETTINGS_FLIC': { label: '-> -> Flic-Notruf-Button', indent: true },
-        'PUSHOVER_NOTRUF_SETTINGS_NACHRICHTENCENTER': { label: '-> -> Nachrichtencenter', indent: true },
-        'PUSHOVER_NOTRUF_SETTINGS_ALARM_PROGRAMME': { label: '-> -> Alarm-Programme', indent: true },
-        'CHECKLIST': { label: 'Aktuelle Checkliste', indent: false },
-        'CHECKLIST_SWITCH': { label: '-> Listen umschalten', indent: true },
-        'CHECKLIST_SETTINGS': { label: '-> Checkliste-Einstellungen', indent: true },
-        'ESSENSBERECHNUNG': { label: 'Essensberechnung', indent: false },
-        'TERMINPLANER': { label: 'Termin finden', indent: false }, 
-        'TERMINPLANER_CREATE': { label: '-> Neuen Termin anlegen', indent: true },
-        'ZAHLUNGSVERWALTUNG': { label: 'Zahlungsverwaltung', indent: false },
-        'ZAHLUNGSVERWALTUNG_CREATE': { label: '-> Neue Zahlung anlegen', indent: true },
-        'TICKET_SUPPORT': { label: 'Ticket Support', indent: false },
-        'WERTGUTHABEN': { label: 'Wertguthaben', indent: false },
-        'LIZENZEN': { label: 'Lizenzen', indent: false },
-        'VERTRAGSVERWALTUNG': { label: 'Vertragsverwaltung', indent: false },
-        'SENDUNGSVERWALTUNG': { label: 'Sendungsverwaltung', indent: false },
-        'REZEPTE': { label: 'Rezepte', indent: false },
-        'HAUSHALTSZAHLUNGEN': { label: 'Haushaltszahlungen', indent: false },
-        'HAUSHALTSZAHLUNGEN_CREATE': { label: '-> Neue Zahlung anlegen', indent: true },
-        'GESCHENKEMANAGEMENT': { label: 'Geschenkemanagement', indent: false },
-        'GESCHENKEMANAGEMENT_CREATE': { label: '-> Neues Geschenk anlegen', indent: true }
-    };
-    
+    // Berechtigungen aus zentraler Konfiguration (PERMISSIONS_CONFIG aus haupteingang.js)
     const newRolePermsContainer = document.getElementById('newRolePermissions');
-    Object.keys(allRolePermissions).forEach(permKey => {
-        const perm = allRolePermissions[permKey];
+    Object.keys(PERMISSIONS_CONFIG).forEach(permKey => {
+        const perm = PERMISSIONS_CONFIG[permKey];
         const marginLeft = permKey.startsWith('PUSHOVER_NOTRUF_SETTINGS_') ? 'pl-12' : (perm.indent ? 'pl-6' : '');
         const isDisabled = perm.indent ? 'disabled' : ''; 
         
@@ -216,8 +188,8 @@ export function renderRoleManagement() {
             const isHaushaltszahlungenEnabled = role.permissions?.includes('HAUSHALTSZAHLUNGEN');
             const isGeschenkemanagementEnabled = role.permissions?.includes('GESCHENKEMANAGEMENT');
             
-            permissionsCheckboxesHTML = Object.keys(allRolePermissions).map(permKey => {
-                const perm = allRolePermissions[permKey];
+            permissionsCheckboxesHTML = Object.keys(PERMISSIONS_CONFIG).map(permKey => {
+                const perm = PERMISSIONS_CONFIG[permKey];
                 const isChecked = role.permissions?.includes(permKey) ? 'checked' : '';
                 
                 let isDisabled = !canEditThisRole;

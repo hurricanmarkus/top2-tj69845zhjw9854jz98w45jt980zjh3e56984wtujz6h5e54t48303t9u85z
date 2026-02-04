@@ -22,7 +22,8 @@ import {
     checklistStacksCollectionRef,
     checklistTemplatesCollectionRef,
     CHECKLIST_STACKS,
-    COLOR_PALETTE
+    COLOR_PALETTE,
+    escapeHtml
 } from './haupteingang.js';
 
 export {
@@ -37,8 +38,6 @@ export {
 import { logAdminAction } from './admin_protokollHistory.js';
 
 // ENDE-ZIKA //
-  const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
-
 
 const safeWindow = (name, fallback) => {
   if (typeof window[name] === 'undefined') window[name] = fallback;
@@ -498,10 +497,6 @@ export function renderChecklistItems(listId) {
   const percent = total > 0 ? Math.round((doneCount / total) * 100) : 0;
   if (statsEl) statsEl.innerHTML = `${doneCount} von ${total} erledigt - Noch ${openCount} offen (${percent}%)`;
 
-  // Helper für HTML-Escaping
-  function escapeHtml(s = '') {
-    return String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
-  }
 
   // HELPER: Robustes Datum formatieren
   function formatActionTime(timestamp) {
@@ -706,8 +701,6 @@ export function renderChecklistSettingsItems(listId) {
 
   // Sortierung: Wichtig zuerst, dann nach Erstellung
   items.sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0));
-
-  const escapeHtml = (s) => String(s || '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
   container.innerHTML = items.map((item, idx) => {
     const impClass = item.important ? 'bg-yellow-50 border-l-4 border-yellow-400' : 'bg-white';
@@ -1483,8 +1476,6 @@ function renderChecklistSettingsView(editListId = null) {
   const listToEditId = editListId || view.dataset.editingListId || (hasLists ? Object.keys(CHECKLISTS)[0] : null);
   view.dataset.editingListId = listToEditId || '';
 
-  const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
-
   view.innerHTML = `
     <div class="back-link-container w-full mb-2"></div>
     <h2 class="text-2xl font-bold text-gray-800 mb-4">Checklisten‑Einstellungen</h2>
@@ -1949,8 +1940,6 @@ function renderChecklistSettingsView(editListId = null) {
   }
   
   view.dataset.editingListId = listToEditId || '';
-
-  const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
   // HTML Aufbau
   view.innerHTML = `
@@ -2736,8 +2725,6 @@ function renderTemplateItemsEditor() {
         return;
     }
 
-    const escapeHtml = (s) => String(s || '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
-
     items.forEach(item => {
         const isImportantClass = item.important ? 'bg-yellow-50 border-l-4 border-yellow-400' : 'bg-white';
         let detailsHTML = '';
@@ -2786,8 +2773,6 @@ function openTemplateModal(targetListId) {
       btnDiv.innerHTML = `<button id="template-select-all-btn" class="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded transition">Alle auswählen</button>`;
       itemsContainer.parentNode.insertBefore(btnDiv, itemsContainer);
   }
-
-  const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
   const updateTemplateDropdown = () => {
     const type = modal.querySelector('input[name="template-type"]:checked')?.value || 'Container';

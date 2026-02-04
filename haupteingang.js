@@ -11,7 +11,7 @@ import { listenForApprovalRequests, stopApprovalRequestsListener, createApproval
 import { toggleAdminSection, rememberAdminScroll, restoreAdminScrollIfAny, renderMainFunctionsAdminArea } from './admin_adminfunktionenHome.js';
 import { initializeEssensberechnungView } from './essensberechnung.js';
 import { IFTTT_URL, initializeNotrufSettingsView, ensureModalListeners, renderApiTokenBook, openNachrichtencenterContactBook } from './notfall.js';
-import { PUSHOVER_TOKEN, RECIPIENT_KEYS } from './pushbenachrichtigung.js';
+import { PUSHOVER_TOKEN } from './pushbenachrichtigung.js';
 import { listenForChecklistGroups, listenForChecklistItems, listenForChecklists, listenForChecklistCategories, openTemplateModal, renderChecklistView, renderChecklistSettingsView, listenForTemplates, listenForStacks } from './checklist.js';
 import { logAdminAction, renderProtocolHistory } from './admin_protokollHistory.js';
 import { renderUserKeyList } from './admin_benutzersteuerung.js';
@@ -39,7 +39,40 @@ import { ensureNachrichtencenterSelfContact } from './notfall.js';
 // // ENDE-ZIKA //
 
 // PUSHOVER API TOKEN (fest codiert, für alle User gleich)
-const PUSHOVER_API_TOKEN = 'ag3nyu918ady5f8eqjuug13ttyaq9f';
+export const PUSHOVER_API_TOKEN = 'ag3nyu918ady5f8eqjuug13ttyaq9f';
+
+// Zentrale escapeHtml Funktion (für alle Module)
+export const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+
+// Zentrale Berechtigungen-Konfiguration (für admin_benutzersteuerung.js und admin_rollenverwaltung.js)
+export const PERMISSIONS_CONFIG = {
+    'ENTRANCE': { label: 'Haupteingang öffnen', indent: false },
+    'PUSHOVER': { label: 'Push-Nachricht senden', indent: false },
+    'PUSHMAIL_CENTER': { label: 'PUSHMAIL-Center', indent: false },
+    'PUSHOVER_SETTINGS_GRANTS': { label: '-> Einstellungen-Button zum Berechtigungen anlegen', indent: true },
+    'PUSHOVER_NOTRUF_SETTINGS': { label: '-> Notruf-Einstellungen', indent: true },
+    'PUSHOVER_NOTRUF_SETTINGS_FLIC': { label: '-> -> Flic-Notruf-Button', indent: true },
+    'PUSHOVER_NOTRUF_SETTINGS_NACHRICHTENCENTER': { label: '-> -> Nachrichtencenter', indent: true },
+    'PUSHOVER_NOTRUF_SETTINGS_ALARM_PROGRAMME': { label: '-> -> Alarm-Programme', indent: true },
+    'CHECKLIST': { label: 'Aktuelle Checkliste', indent: false },
+    'CHECKLIST_SWITCH': { label: '-> Listen umschalten', indent: true },
+    'CHECKLIST_SETTINGS': { label: '-> Checkliste-Einstellungen', indent: true },
+    'ESSENSBERECHNUNG': { label: 'Essensberechnung', indent: false },
+    'TERMINPLANER': { label: 'Termin finden', indent: false },
+    'TERMINPLANER_CREATE': { label: '-> Neuen Termin anlegen', indent: true },
+    'ZAHLUNGSVERWALTUNG': { label: 'Zahlungsverwaltung', indent: false },
+    'ZAHLUNGSVERWALTUNG_CREATE': { label: '-> Neue Zahlung anlegen', indent: true },
+    'TICKET_SUPPORT': { label: 'Ticket Support', indent: false },
+    'WERTGUTHABEN': { label: 'Wertguthaben', indent: false },
+    'LIZENZEN': { label: 'Lizenzen', indent: false },
+    'VERTRAGSVERWALTUNG': { label: 'Vertragsverwaltung', indent: false },
+    'SENDUNGSVERWALTUNG': { label: 'Sendungsverwaltung', indent: false },
+    'REZEPTE': { label: 'Rezepte', indent: false },
+    'HAUSHALTSZAHLUNGEN': { label: 'Haushaltszahlungen', indent: false },
+    'HAUSHALTSZAHLUNGEN_CREATE': { label: '-> Neue Zahlung anlegen', indent: true },
+    'GESCHENKEMANAGEMENT': { label: 'Geschenkemanagement', indent: false },
+    'GESCHENKEMANAGEMENT_CREATE': { label: '-> Neues Geschenk anlegen', indent: true }
+};
 
 // BEGINN-ZIKA: LET-BEFEHLE IMMER NACH IMPORT-BEFEHLE //
 export let USERS = {};
