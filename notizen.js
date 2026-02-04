@@ -439,6 +439,26 @@ export async function removeShare(freigabeId) {
 // UI RENDERING
 // ========================================
 
+function updateUnterkategorienDropdown(kategorieId, selectedUnterkategorieId = null) {
+    const select = document.getElementById('notiz-unterkategorie');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">-- Keine --</option>';
+    
+    if (!kategorieId) return;
+    
+    const kategorie = KATEGORIEN[kategorieId];
+    if (!kategorie || !kategorie.unterkategorien) return;
+    
+    kategorie.unterkategorien.forEach(uk => {
+        const option = document.createElement('option');
+        option.value = uk.id;
+        option.textContent = uk.name;
+        if (selectedUnterkategorieId === uk.id) option.selected = true;
+        select.appendChild(option);
+    });
+}
+
 function renderKategorienFilter() {
     const select = document.getElementById('filter-notizen-kategorie');
     if (!select) return;
@@ -1114,13 +1134,12 @@ export function openNotizEditor(notizId = null) {
 
     if (titelInput) titelInput.value = notiz?.titel || '';
     
-    // Status laden
-    if (statusSelect) {
-        statusSelect.innerHTML = Object.entries(NOTIZ_STATUS).map(([key, config]) => 
-            `<option value="${key}" ${notiz?.status === key ? 'selected' : ''}>${config.icon} ${config.label}</option>`
-        ).join('');
-        if (!notiz?.status) statusSelect.value = 'offen';
-    }
+    // Status als Radio-Buttons setzen
+    const statusValue = notiz?.status || 'offen';
+    const statusRadios = document.querySelectorAll('input[name="notiz-status"]');
+    statusRadios.forEach(radio => {
+        radio.checked = radio.value === statusValue;
+    });
     
     // Kategorien in Select laden (Pflichtfeld)
     if (kategorieSelect) {
@@ -1132,7 +1151,13 @@ export function openNotizEditor(notizId = null) {
             if (notiz?.kategorieId === kat.id) option.selected = true;
             kategorieSelect.appendChild(option);
         });
+        
+        // Event-Listener für Kategorie-Änderung (Unterkategorien aktualisieren)
+        kategorieSelect.onchange = () => updateUnterkategorienDropdown(kategorieSelect.value, null);
     }
+    
+    // Unterkategorien laden
+    updateUnterkategorienDropdown(notiz?.kategorieId, notiz?.unterkategorieId);
 
     // Gültigkeitsdaten
     if (gueltigAbInput) {
@@ -1317,8 +1342,9 @@ function renderElementEditor(element, index) {
     }
 
     const bgColorClass = ELEMENT_COLORS.find(c => c.id === element.bgColor)?.class || 'bg-transparent';
-    const colorOptions = ELEMENT_COLORS.map(c => 
-        `<option value="${c.id}" ${element.bgColor === c.id ? 'selected' : ''}>${c.label}</option>`
+    const currentColor = ELEMENT_COLORS.find(c => c.id === element.bgColor) || ELEMENT_COLORS[0];
+    const colorPalette = ELEMENT_COLORS.map(c => 
+        `<button type="button" class="color-option w-6 h-6 rounded-full border-2 ${c.id === element.bgColor ? 'border-amber-500 ring-2 ring-amber-300' : 'border-gray-300 hover:border-gray-400'} ${c.class === 'bg-transparent' ? 'bg-white bg-[linear-gradient(45deg,#ccc_25%,transparent_25%,transparent_75%,#ccc_75%,#ccc),linear-gradient(45deg,#ccc_25%,transparent_25%,transparent_75%,#ccc_75%,#ccc)] bg-[length:8px_8px] bg-[position:0_0,4px_4px]' : c.class}" data-index="${index}" data-color="${c.id}" title="${c.label}"></button>`
     ).join('');
 
     return `
@@ -1329,9 +1355,12 @@ function renderElementEditor(element, index) {
                     <span class="font-semibold text-gray-700">${typeConfig.icon} ${typeConfig.label}</span>
                 </div>
                 <div class="flex items-center gap-1">
-                    <select class="element-bg-color text-xs p-1 border rounded bg-white" data-index="${index}" title="Hintergrundfarbe">
-                        ${colorOptions}
-                    </select>
+                    <div class="relative">
+                        <button type="button" class="color-picker-toggle w-6 h-6 rounded-full border-2 border-gray-300 hover:border-amber-500 ${currentColor.class === 'bg-transparent' ? 'bg-white bg-[linear-gradient(45deg,#ccc_25%,transparent_25%,transparent_75%,#ccc_75%,#ccc),linear-gradient(45deg,#ccc_25%,transparent_25%,transparent_75%,#ccc_75%,#ccc)] bg-[length:8px_8px] bg-[position:0_0,4px_4px]' : currentColor.class}" data-index="${index}" title="Farbe wählen"></button>
+                        <div class="color-picker-popup hidden absolute right-0 top-8 z-50 bg-white p-2 rounded-lg shadow-xl border border-gray-200 grid grid-cols-5 gap-1" data-index="${index}">
+                            ${colorPalette}
+                        </div>
+                    </div>
                     <label class="flex items-center gap-1 text-xs text-gray-500">
                         <input type="checkbox" class="element-half-width" data-index="${index}" ${element.halfWidth ? 'checked' : ''}>
                         Halbe Breite
@@ -1359,14 +1388,35 @@ function setupElementEventListeners() {
         });
     });
 
-    // Hintergrundfarbe
-    document.querySelectorAll('.element-bg-color').forEach(el => {
-        el.addEventListener('change', (e) => {
+    // Farbpicker Toggle (Popup öffnen/schließen)
+    document.querySelectorAll('.color-picker-toggle').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const index = e.target.dataset.index;
+            const popup = document.querySelector(`.color-picker-popup[data-index="${index}"]`);
+            // Alle anderen Popups schließen
+            document.querySelectorAll('.color-picker-popup').forEach(p => {
+                if (p !== popup) p.classList.add('hidden');
+            });
+            popup?.classList.toggle('hidden');
+        });
+    });
+
+    // Farbauswahl im Popup
+    document.querySelectorAll('.color-option').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
             const index = parseInt(e.target.dataset.index);
-            currentNotizElements[index].bgColor = e.target.value;
+            const color = e.target.dataset.color;
+            currentNotizElements[index].bgColor = color;
             renderNotizElements();
         });
     });
+
+    // Popup schließen bei Klick außerhalb
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.color-picker-popup').forEach(p => p.classList.add('hidden'));
+    }, { once: true });
 
     // Text-Änderungen
     document.querySelectorAll('.element-content').forEach(el => {
@@ -1600,7 +1650,7 @@ async function saveCurrentNotiz() {
     const titelInput = document.getElementById('notiz-titel');
     const kategorieSelect = document.getElementById('notiz-kategorie');
     const unterkategorieSelect = document.getElementById('notiz-unterkategorie');
-    const statusSelect = document.getElementById('notiz-status');
+    const statusRadio = document.querySelector('input[name="notiz-status"]:checked');
     const gueltigAbInput = document.getElementById('notiz-gueltig-ab');
     const gueltigBisInput = document.getElementById('notiz-gueltig-bis');
     const gueltigBisUnbegrenzt = document.getElementById('notiz-gueltig-bis-unbegrenzt');
@@ -1614,7 +1664,7 @@ async function saveCurrentNotiz() {
         titel: titelInput?.value?.trim() || 'Ohne Titel',
         kategorieId: kategorieSelect?.value || null,
         unterkategorieId: unterkategorieSelect?.value || null,
-        status: statusSelect?.value || 'offen',
+        status: statusRadio?.value || 'offen',
         gueltigAb: gueltigAbInput?.value ? Timestamp.fromDate(new Date(gueltigAbInput.value)) : Timestamp.now(),
         gueltigBis: (!gueltigBisUnbegrenzt?.checked && gueltigBisInput?.value) 
             ? Timestamp.fromDate(new Date(gueltigBisInput.value)) 

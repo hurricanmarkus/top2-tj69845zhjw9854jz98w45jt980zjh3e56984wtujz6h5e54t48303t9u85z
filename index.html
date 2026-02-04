@@ -1612,13 +1612,21 @@
                             </svg>
                             <span class="text-base font-semibold">zurück</span>
                         </button>
-                        <button id="btn-create-notiz" 
-                            class="py-2 px-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2 text-sm">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
-                                <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-                            </svg>
-                            Neue Notiz
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <button id="btn-notizen-settings" 
+                                class="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition" title="Kategorien verwalten">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                                    <path fill-rule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.493 7.493 0 0 0-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 0 0-2.282.819l-.922 1.597a1.875 1.875 0 0 0 .432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 0 0 0 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 0 0-.432 2.385l.922 1.597a1.875 1.875 0 0 0 2.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 0 0 2.28-.819l.923-1.597a1.875 1.875 0 0 0-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 0 0 0-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 0 0-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 0 0-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 0 0-1.85-1.567h-1.843ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                            <button id="btn-create-notiz" 
+                                class="py-2 px-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2 text-sm">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                                    <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                                </svg>
+                                Neue Notiz
+                            </button>
+                        </div>
                     </div>
                     <div class="border-t border-gray-300 mt-2"></div>
                 </div>
@@ -1627,9 +1635,6 @@
                 <div class="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-4 rounded-xl shadow-md mb-3">
                     <div class="flex items-center justify-between mb-3">
                         <h2 class="text-xl font-bold">📝 Notizen</h2>
-                        <button id="btn-manage-kategorien" class="px-3 py-1 bg-white/20 rounded-lg text-sm font-semibold hover:bg-white/30 transition">
-                            📁 Kategorien
-                        </button>
                     </div>
                     <div class="grid grid-cols-4 gap-2 text-center">
                         <div class="bg-white/20 px-2 py-2 rounded-lg">
@@ -1653,7 +1658,11 @@
 
                 <!-- Such- und Filterleiste -->
                 <div class="bg-white p-4 rounded-xl shadow-md mb-4 space-y-3">
-                    <div class="flex gap-2">
+                    <div class="flex gap-2 items-center">
+                        <label id="negate-box" class="flex items-center gap-1 px-3 py-2 bg-gray-100 border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
+                            <input type="checkbox" id="filter-notizen-negate" class="h-4 w-4 accent-red-500">
+                            <span class="text-red-600 font-bold text-sm">NICHT</span>
+                        </label>
                         <input type="text" id="search-notizen" 
                             class="flex-1 p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500" 
                             placeholder="🔍 Suche in Notizen...">
@@ -1664,10 +1673,6 @@
                             <option value="status">Status</option>
                             <option value="kategorie">Kategorie</option>
                         </select>
-                        <label class="flex items-center gap-1 text-sm">
-                            <input type="checkbox" id="filter-notizen-negate" class="h-4 w-4">
-                            <span class="text-red-600 font-bold">NICHT</span>
-                        </label>
                         <button onclick="window.addNotizFilter()" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-bold">
                             + Filter
                         </button>
@@ -8118,12 +8123,29 @@
                     </select>
                 </div>
                 <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">Status</label>
-                    <select id="notiz-status" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500 bg-white">
-                        <option value="offen">⭕ Offen</option>
-                        <option value="abgeschlossen">✅ Abgeschlossen</option>
-                        <option value="info">ℹ️ [INFO]</option>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Unterkategorie</label>
+                    <select id="notiz-unterkategorie" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500 bg-white">
+                        <option value="">-- Keine --</option>
                     </select>
+                </div>
+            </div>
+            
+            <!-- Status -->
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Status</label>
+                <div class="flex gap-3">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="notiz-status" value="offen" class="h-4 w-4 accent-amber-500" checked>
+                        <span class="text-sm">⭕ Offen</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="notiz-status" value="abgeschlossen" class="h-4 w-4 accent-green-500">
+                        <span class="text-sm">✅ Abgeschlossen</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="notiz-status" value="info" class="h-4 w-4 accent-blue-500">
+                        <span class="text-sm">ℹ️ Info</span>
+                    </label>
                 </div>
             </div>
             
