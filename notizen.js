@@ -57,6 +57,7 @@ let defaultFiltersApplied = false;
 let unsubscribeNotizen = null;
 let unsubscribeKategorien = null;
 let unsubscribeFreigaben = null;
+let eventListenersInitialized = false;
 
 // ========================================
 // STATUS KONFIGURATION
@@ -1688,6 +1689,10 @@ async function saveCurrentNotiz() {
 // ========================================
 
 function setupNotizenEventListeners() {
+    // Verhindere doppelte Event-Listener
+    if (eventListenersInitialized) return;
+    eventListenersInitialized = true;
+    
     // Neue Notiz Button
     const btnCreate = document.getElementById('btn-create-notiz');
     if (btnCreate) {
