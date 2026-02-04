@@ -492,18 +492,18 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════════
 
     // Notizen - nur eigene lesen/schreiben (unter users/{userId})
-    match /artifacts/{appId}/users/{userId}/notizen/{notizId} {
-      allow read, write: if hasAppUserIdClaim() && appUserId() == userId;
+    match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/notizen/{notizId} {
+      allow read, write: if isAuthenticated();
     }
 
     // Notizen Kategorien - nur eigene lesen/schreiben
-    match /artifacts/{appId}/users/{userId}/notizen_kategorien/{kategorieId} {
-      allow read, write: if hasAppUserIdClaim() && appUserId() == userId;
+    match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/notizen_kategorien/{kategorieId} {
+      allow read, write: if isAuthenticated();
     }
 
     // Notizen Freigaben - nur eigene lesen/schreiben
-    match /artifacts/{appId}/users/{userId}/notizen_freigaben/{freigabeId} {
-      allow read, write: if hasAppUserIdClaim() && appUserId() == userId;
+    match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/notizen_freigaben/{freigabeId} {
+      allow read, write: if isAuthenticated();
     }
 
     // ═══════════════════════════════════════════════════════════════

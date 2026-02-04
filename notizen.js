@@ -184,6 +184,7 @@ export function stopNotizenListeners() {
     NOTIZEN = {};
     KATEGORIEN = {};
     FREIGABEN = {};
+    eventListenersInitialized = false;
 }
 
 function startNotizenListeners() {
