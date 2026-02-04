@@ -501,16 +501,6 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // Notizen Freigaben - nur eigene lesen/schreiben
-    match /artifacts/20LVob88b3ovXRUyX3ra/users/{userId}/notizen_freigaben/{freigabeId} {
-      allow read, write: if isAuthenticated();
-    }
-
-    // Notizen Freigaben (public/data) - für Freigabe-Logik in notizen.js
-    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/notizen_freigaben/{freigabeId} {
-      allow read, write: if isAuthenticated();
-    }
-
     // ═══════════════════════════════════════════════════════════════
     // DEFAULT DENY (Alles andere verbieten)
     // ═══════════════════════════════════════════════════════════════

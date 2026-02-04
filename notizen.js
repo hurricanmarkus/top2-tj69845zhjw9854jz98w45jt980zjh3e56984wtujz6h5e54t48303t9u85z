@@ -1,16 +1,13 @@
 // ========================================
 // NOTIZEN SYSTEM
-// Professionelle Notizen-App mit Kategorien, Freigaben und verschiedenen Elementtypen
+// Professionelle Notizen-App mit Kategorien und verschiedenen Elementtypen
 // ========================================
 
 import {
     alertUser,
     db,
     currentUser,
-    USERS,
-    navigate,
-    appId,
-    auth
+    appId
 } from './haupteingang.js';
 
 import {
@@ -23,11 +20,6 @@ import {
     doc,
     updateDoc,
     deleteDoc,
-    getDoc,
-    setDoc,
-    getDocs,
-    where,
-    writeBatch,
     Timestamp
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
@@ -41,12 +33,10 @@ function getCurrentUserId() {
 
 let notizenCollection = null;
 let kategorienCollection = null;
-let freigabenCollection = null;
 
 let NOTIZEN = {};
 let KATEGORIEN = {};
 let UNTERKATEGORIEN = {};
-let FREIGABEN = {};
 
 let currentKategorieId = null;
 let currentUnterkategorieId = null;
@@ -56,7 +46,6 @@ let defaultFiltersApplied = false;
 
 let unsubscribeNotizen = null;
 let unsubscribeKategorien = null;
-let unsubscribeFreigaben = null;
 let eventListenersInitialized = false;
 
 // ========================================
@@ -127,7 +116,6 @@ export function initializeNotizen() {
 
     notizenCollection = collection(db, 'artifacts', appId, 'users', userId, 'notizen');
     kategorienCollection = collection(db, 'artifacts', appId, 'users', userId, 'notizen_kategorien');
-    freigabenCollection = collection(db, 'artifacts', appId, 'users', userId, 'notizen_freigaben');
 
     // Standard-Filter setzen: Abgeschlossene ausblenden
     if (!defaultFiltersApplied) {
@@ -177,13 +165,8 @@ export function stopNotizenListeners() {
         unsubscribeKategorien();
         unsubscribeKategorien = null;
     }
-    if (unsubscribeFreigaben) {
-        unsubscribeFreigaben();
-        unsubscribeFreigaben = null;
-    }
     NOTIZEN = {};
     KATEGORIEN = {};
-    FREIGABEN = {};
     eventListenersInitialized = false;
 }
 
@@ -218,32 +201,6 @@ function startNotizenListeners() {
         console.error('📝 Notizen: Fehler beim Laden der Notizen:', error);
     });
 
-    // Freigaben-Listener (für geteilte Notizen anderer Benutzer)
-    loadSharedNotizen();
-}
-
-async function loadSharedNotizen() {
-    const userId = getCurrentUserId();
-    if (!userId) return;
-
-    try {
-        // Lade Freigaben, bei denen der aktuelle User als Empfänger eingetragen ist
-        const sharedQuery = query(
-            collection(db, 'artifacts', appId, 'public', 'data', 'notizen_freigaben'),
-            where('sharedWith', 'array-contains', userId)
-        );
-        
-        unsubscribeFreigaben = onSnapshot(sharedQuery, async (snapshot) => {
-            FREIGABEN = {};
-            for (const docSnap of snapshot.docs) {
-                const freigabe = { id: docSnap.id, ...docSnap.data() };
-                FREIGABEN[docSnap.id] = freigabe;
-            }
-            renderNotizenList();
-        });
-    } catch (error) {
-        console.error('📝 Notizen: Fehler beim Laden der Freigaben:', error);
-    }
 }
 
 // ========================================
@@ -352,7 +309,6 @@ export async function createNotiz(data) {
             erinnerungen: data.erinnerungen || [],
             createdAt: serverTimestamp(),
             createdBy: userId,
-            sharedWith: [],
             isArchived: false
         };
 
@@ -395,70 +351,6 @@ export async function deleteNotiz(notizId) {
 }
 
 // ========================================
-// FREIGABEN
-// ========================================
-
-export async function shareKategorie(kategorieId, targetUserId, permissions = { read: true, write: false }) {
-    const userId = getCurrentUserId();
-    if (!userId) return false;
-
-    try {
-        const freigabeRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_freigaben', `kat_${kategorieId}_${targetUserId}`);
-        await setDoc(freigabeRef, {
-            type: 'kategorie',
-            resourceId: kategorieId,
-            ownerId: userId,
-            sharedWith: [targetUserId],
-            permissions,
-            createdAt: serverTimestamp()
-        });
-        
-        alertUser('Kategorie freigegeben.', 'success');
-        return true;
-    } catch (error) {
-        console.error('📝 Notizen: Fehler beim Freigeben der Kategorie:', error);
-        alertUser('Fehler beim Freigeben.', 'error');
-        return false;
-    }
-}
-
-export async function shareNotiz(notizId, targetUserId, permissions = { read: true, write: false }) {
-    const userId = getCurrentUserId();
-    if (!userId) return false;
-
-    try {
-        const freigabeRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_freigaben', `notiz_${notizId}_${targetUserId}`);
-        await setDoc(freigabeRef, {
-            type: 'notiz',
-            resourceId: notizId,
-            ownerId: userId,
-            sharedWith: [targetUserId],
-            permissions,
-            createdAt: serverTimestamp()
-        });
-        
-        alertUser('Notiz freigegeben.', 'success');
-        return true;
-    } catch (error) {
-        console.error('📝 Notizen: Fehler beim Freigeben der Notiz:', error);
-        alertUser('Fehler beim Freigeben.', 'error');
-        return false;
-    }
-}
-
-export async function removeShare(freigabeId) {
-    try {
-        const freigabeRef = doc(db, 'artifacts', appId, 'public', 'data', 'notizen_freigaben', freigabeId);
-        await deleteDoc(freigabeRef);
-        alertUser('Freigabe entfernt.', 'success');
-        return true;
-    } catch (error) {
-        console.error('📝 Notizen: Fehler beim Entfernen der Freigabe:', error);
-        return false;
-    }
-}
-
-// ========================================
 // UI RENDERING
 // ========================================
 
@@ -486,23 +378,12 @@ function renderKategorienFilter() {
     const select = document.getElementById('filter-notizen-kategorie');
     if (!select) return;
 
-    const userId = getCurrentUserId();
-
     select.innerHTML = '<option value="">Alle Kategorien</option>';
     
     Object.values(KATEGORIEN).forEach(kat => {
         const option = document.createElement('option');
         option.value = kat.id;
-        
-        // Prüfen ob geteilt (createdBy !== currentUser)
-        let displayName = kat.name;
-        if (kat.createdBy && kat.createdBy !== userId) {
-            const ownerUser = USERS[kat.createdBy];
-            const ownerName = ownerUser?.name || ownerUser?.fullName || kat.createdBy;
-            displayName = `${kat.name} (geteilt von ${ownerName})`;
-        }
-        
-        option.textContent = displayName;
+        option.textContent = kat.name;
         select.appendChild(option);
 
         // Unterkategorien als Gruppe
@@ -535,19 +416,13 @@ function updateNotizenStats() {
         n.erinnerungen && n.erinnerungen.length > 0
     ).length;
 
-    const geteilt = Object.values(NOTIZEN).filter(n => 
-        n.sharedWith && n.sharedWith.length > 0
-    ).length;
-
     const statTotal = document.getElementById('stat-notizen-total');
     const statAktiv = document.getElementById('stat-notizen-aktiv');
     const statErinnerung = document.getElementById('stat-notizen-erinnerung');
-    const statGeteilt = document.getElementById('stat-notizen-geteilt');
 
     if (statTotal) statTotal.textContent = total;
     if (statAktiv) statAktiv.textContent = aktiv;
     if (statErinnerung) statErinnerung.textContent = mitErinnerung;
-    if (statGeteilt) statGeteilt.textContent = geteilt;
 }
 
 function renderNotizenList() {
@@ -767,16 +642,6 @@ function renderNotizCard(notiz) {
 
     const elementCount = (notiz.elemente || []).length;
     const hasReminders = notiz.erinnerungen && notiz.erinnerungen.length > 0;
-    const isShared = notiz.sharedWith && notiz.sharedWith.length > 0;
-    
-    // Prüfen ob von anderem Benutzer geteilt
-    const isFromOther = notiz.createdBy && notiz.createdBy !== userId;
-    let sharedFromLabel = '';
-    if (isFromOther) {
-        const ownerUser = USERS[notiz.createdBy];
-        const ownerName = ownerUser?.name || ownerUser?.fullName || notiz.createdBy;
-        sharedFromLabel = ` (geteilt von ${ownerName})`;
-    }
     
     // Status
     const statusKey = notiz.status || 'offen';
@@ -795,7 +660,7 @@ function renderNotizCard(notiz) {
         }
     }
 
-    const displayTitel = (notiz.titel || 'Ohne Titel') + sharedFromLabel;
+    const displayTitel = notiz.titel || 'Ohne Titel';
 
     return `
         <div class="notiz-card bg-white p-4 rounded-xl shadow-lg border-l-4 border-${kategorieColor}-500 hover:shadow-xl transition cursor-pointer" data-notiz-id="${notiz.id}">
@@ -806,7 +671,6 @@ function renderNotizCard(notiz) {
                         ${statusConfig.icon} ${statusConfig.label}
                     </span>
                     ${hasReminders ? '<span class="text-orange-500" title="Hat Erinnerungen">🔔</span>' : ''}
-                    ${isShared ? '<span class="text-blue-500" title="Geteilt">👥</span>' : ''}
                 </div>
             </div>
             
@@ -901,34 +765,10 @@ export function openNotizViewer(notizId) {
         gueltigBisEl.textContent = gueltigBisDate ? gueltigBisDate.toLocaleDateString('de-DE') : 'Unbegrenzt';
     }
 
-    // Freigaben anzeigen
-    const freigabenContainer = document.getElementById('viewer-notiz-freigaben');
-    const freigabenList = document.getElementById('viewer-notiz-freigaben-list');
-    
-    if (freigabenContainer && freigabenList) {
-        const sharedWith = notiz.sharedWith || [];
-        if (sharedWith.length > 0) {
-            freigabenContainer.classList.remove('hidden');
-            freigabenList.innerHTML = sharedWith.map(share => {
-                const userId = typeof share === 'string' ? share : share.userId;
-                const user = USERS[userId];
-                const userName = user?.name || user?.realName || user?.fullName || userId;
-                const permLabel = (typeof share === 'object' && share.permission === 'write') ? '✏️ Schreiben' : '👁️ Lesen';
-                return `<span class="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">${userName} (${permLabel})</span>`;
-            }).join('');
-        } else {
-            freigabenContainer.classList.add('hidden');
-        }
-    }
-
     // Berechtigungsbasierte Buttons anpassen
     const currentUserId = getCurrentUserId();
     const isOwner = notiz.createdBy === currentUserId;
-    const hasWriteAccess = isOwner || (notiz.sharedWith || []).some(share => {
-        const shareUserId = typeof share === 'string' ? share : share.userId;
-        const canWrite = typeof share === 'object' && share.permission === 'write';
-        return shareUserId === currentUserId && canWrite;
-    });
+    const hasWriteAccess = isOwner;
 
     const editButton = document.querySelector('#viewer-erweitert-menu button[onclick="window.editCurrentNotiz()"]');
     if (editButton) {
@@ -939,22 +779,12 @@ export function openNotizViewer(notizId) {
         }
     }
 
-    const deleteButton = document.querySelector('#viewer-weitere-menu button[onclick="window.deleteCurrentNotiz()"]');
+    const deleteButton = document.getElementById('viewer-delete-notiz-btn');
     if (deleteButton) {
         if (isOwner) {
             deleteButton.classList.remove('hidden');
         } else {
             deleteButton.classList.add('hidden');
-        }
-    }
-
-    // Share-Button nur für Owner anzeigen
-    const shareButton = document.getElementById('viewer-share-notiz-btn');
-    if (shareButton) {
-        if (isOwner) {
-            shareButton.classList.remove('hidden');
-        } else {
-            shareButton.classList.add('hidden');
         }
     }
 
@@ -966,9 +796,9 @@ export function openNotizViewer(notizId) {
 
     // Erweitert-Menü zurücksetzen
     const erweiterMenu = document.getElementById('viewer-erweitert-menu');
-    const weitereMenu = document.getElementById('viewer-weitere-menu');
+    const weitereOptionenMenu = document.getElementById('viewer-weitere-optionen-menu');
     if (erweiterMenu) erweiterMenu.classList.add('hidden');
-    if (weitereMenu) weitereMenu.classList.add('hidden');
+    if (weitereOptionenMenu) weitereOptionenMenu.classList.add('hidden');
 
     modal.classList.remove('hidden');
     modal.classList.add('flex');
@@ -1097,11 +927,13 @@ window.closeNotizViewer = closeNotizViewer;
 
 window.toggleErweitertMenu = function() {
     const menu = document.getElementById('viewer-erweitert-menu');
+    const weitereOptionenMenu = document.getElementById('viewer-weitere-optionen-menu');
     if (menu) menu.classList.toggle('hidden');
+    if (weitereOptionenMenu) weitereOptionenMenu.classList.add('hidden');
 };
 
-window.toggleWeitereMenu = function() {
-    const menu = document.getElementById('viewer-weitere-menu');
+window.toggleWeitereOptionenMenu = function() {
+    const menu = document.getElementById('viewer-weitere-optionen-menu');
     if (menu) menu.classList.toggle('hidden');
 };
 
@@ -1110,24 +942,6 @@ window.editCurrentNotiz = function() {
         const notizIdToEdit = currentViewingNotizId; // ID speichern BEVOR closeNotizViewer sie löscht
         closeNotizViewer();
         openNotizEditor(notizIdToEdit);
-    }
-};
-
-window.shareCurrentNotiz = function() {
-    console.log('📝 Notizen: shareCurrentNotiz aufgerufen, currentViewingNotizId:', currentViewingNotizId);
-    if (currentViewingNotizId) {
-        openShareDialog('notiz', currentViewingNotizId);
-    } else {
-        alertUser('Notiz konnte nicht ermittelt werden.', 'error');
-    }
-};
-
-window.shareEditingNotiz = function() {
-    console.log('📝 Notizen: shareEditingNotiz aufgerufen, currentEditingNotizId:', currentEditingNotizId);
-    if (currentEditingNotizId) {
-        openShareDialog('notiz', currentEditingNotizId);
-    } else {
-        alertUser('Bitte speichere die Notiz zuerst, bevor du sie freigibst.', 'warning');
     }
 };
 
@@ -1150,16 +964,6 @@ export function openNotizEditor(notizId = null) {
     if (!modal) return;
 
     const notiz = notizId ? NOTIZEN[notizId] : null;
-    
-    // Freigeben-Button nur bei bestehenden Notizen anzeigen
-    const shareBtn = modal.querySelector('button[onclick="window.shareEditingNotiz()"]');
-    if (shareBtn) {
-        if (notizId) {
-            shareBtn.classList.remove('hidden');
-        } else {
-            shareBtn.classList.add('hidden');
-        }
-    }
     
     // Formular zurücksetzen
     const titelInput = document.getElementById('notiz-titel');
@@ -1807,52 +1611,6 @@ function setupNotizenEventListeners() {
         });
     }
 
-    // Share Modal schließen
-    const closeShareBtn = document.getElementById('close-share-modal');
-    if (closeShareBtn) {
-        closeShareBtn.addEventListener('click', closeShareDialog);
-    }
-    const cancelShareBtn = document.getElementById('cancel-share-btn');
-    if (cancelShareBtn) {
-        cancelShareBtn.addEventListener('click', closeShareDialog);
-    }
-
-    // Share speichern
-    const saveShareBtn = document.getElementById('save-share-btn');
-    if (saveShareBtn) {
-        saveShareBtn.addEventListener('click', saveShares);
-    }
-
-    // Share Notiz Button (im Editor)
-    const shareNotizBtn = document.getElementById('share-notiz-btn');
-    if (shareNotizBtn) {
-        shareNotizBtn.addEventListener('click', () => {
-            console.log('📝 Notizen: Share-Button geklickt, currentEditingNotizId:', currentEditingNotizId);
-            if (currentEditingNotizId) {
-                openShareDialog('notiz', currentEditingNotizId);
-            } else {
-                alertUser('Bitte speichere die Notiz zuerst, bevor du sie freigibst.', 'warning');
-            }
-        });
-    } else {
-        console.warn('📝 Notizen: share-notiz-btn nicht gefunden bei Initialisierung');
-    }
-
-    // Share Notiz Button (im Viewer)
-    const viewerShareBtn = document.getElementById('viewer-share-notiz-btn');
-    if (viewerShareBtn) {
-        viewerShareBtn.addEventListener('click', () => {
-            console.log('📝 Notizen: Viewer-Share-Button geklickt, currentViewingNotizId:', currentViewingNotizId);
-            if (currentViewingNotizId) {
-                openShareDialog('notiz', currentViewingNotizId);
-            } else {
-                alertUser('Notiz konnte nicht ermittelt werden.', 'error');
-            }
-        });
-    } else {
-        console.warn('📝 Notizen: viewer-share-notiz-btn nicht gefunden bei Initialisierung');
-    }
-
     // Delete Notiz Button
     const deleteNotizBtn = document.getElementById('delete-notiz-btn');
     if (deleteNotizBtn) {
@@ -1940,7 +1698,6 @@ function renderKategorienSettings() {
             <div class="flex justify-between items-center mb-2">
                 <h4 class="font-bold text-gray-800">${kat.name}</h4>
                 <div class="flex gap-2">
-                    <button class="share-kategorie text-blue-500 hover:text-blue-700" data-id="${kat.id}" title="Freigeben">👥</button>
                     <button class="edit-kategorie text-amber-500 hover:text-amber-700" data-id="${kat.id}" title="Bearbeiten">✏️</button>
                     <button class="delete-kategorie text-red-500 hover:text-red-700" data-id="${kat.id}" title="Löschen">🗑️</button>
                 </div>
@@ -1994,119 +1751,7 @@ function renderKategorienSettings() {
         });
     });
 
-    container.querySelectorAll('.share-kategorie').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const id = e.target.dataset.id;
-            openShareDialog('kategorie', id);
-        });
-    });
-}
-
-// ========================================
-// FREIGABE-DIALOG
-// ========================================
-
-function openShareDialog(type, resourceId) {
-    const modal = document.getElementById('shareModal');
-    if (!modal) {
-        console.error('📝 Notizen: shareModal nicht gefunden');
-        return;
-    }
-
-    const title = document.getElementById('share-modal-title');
-    if (title) {
-        title.textContent = type === 'kategorie' ? 'Kategorie freigeben' : 'Notiz freigeben';
-    }
-
-    modal.dataset.type = type;
-    modal.dataset.resourceId = resourceId;
-
-    // Aktuellen Benutzer ermitteln
-    const currentUserId = getCurrentUserId();
-
-    // Benutzer-Liste laden (mit Object.entries um Key=userId zu bekommen)
-    const userList = document.getElementById('share-user-list');
-    if (userList) {
-        const userEntries = Object.entries(USERS)
-            .filter(([userId, user]) => userId !== currentUserId && user?.isActive !== false);
-        
-        if (userEntries.length === 0) {
-            userList.innerHTML = '<div class="text-center py-4 text-gray-500">Keine anderen Benutzer verfügbar</div>';
-        } else {
-            userList.innerHTML = userEntries.map(([userId, user]) => {
-                const userName = user?.name || user?.realName || user?.fullName || userId;
-                return `
-                <label class="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer border-b">
-                    <input type="checkbox" class="share-user-checkbox h-5 w-5" data-user-id="${userId}">
-                    <span class="font-semibold">${userName}</span>
-                    <div class="ml-auto flex gap-4">
-                        <label class="flex items-center gap-1 text-sm cursor-pointer">
-                            <input type="radio" name="perm-${userId}" value="read" checked class="h-4 w-4"> Lesen
-                        </label>
-                        <label class="flex items-center gap-1 text-sm cursor-pointer">
-                            <input type="radio" name="perm-${userId}" value="write" class="h-4 w-4"> Schreiben
-                        </label>
-                    </div>
-                </label>
-            `;
-            }).join('');
-        }
-    }
-
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-    console.log('📝 Notizen: Share-Dialog geöffnet für', type, resourceId);
-}
-
-function closeShareDialog() {
-    const modal = document.getElementById('shareModal');
-    if (modal) {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-    }
-}
-
-async function saveShares() {
-    const modal = document.getElementById('shareModal');
-    if (!modal) return;
-
-    const type = modal.dataset.type;
-    const resourceId = modal.dataset.resourceId;
-
-    const checkboxes = document.querySelectorAll('.share-user-checkbox:checked');
-    
-    if (checkboxes.length === 0) {
-        alertUser('Bitte wähle mindestens einen Benutzer aus.', 'warning');
-        return;
-    }
-
-    let sharesCreated = 0;
-    
-    for (const checkbox of checkboxes) {
-        const userId = checkbox.dataset.userId;
-        const permRadio = document.querySelector(`input[name="perm-${userId}"]:checked`);
-        const canWrite = permRadio?.value === 'write';
-
-        const permissions = { read: true, write: canWrite };
-        
-        // Direkte Freigabe erstellen (ohne Einladungssystem)
-        let result = false;
-        if (type === 'notiz') {
-            result = await shareNotiz(resourceId, userId, permissions);
-        } else if (type === 'kategorie') {
-            result = await shareKategorie(resourceId, userId, permissions);
-        }
-        
-        if (result) {
-            sharesCreated++;
-        }
-    }
-
-    closeShareDialog();
-    if (sharesCreated > 0) {
-        alertUser(`${sharesCreated} Freigabe(n) erstellt.`, 'success');
-    }
 }
 
 // Export für Initialisierung
-export { closeNotizEditor, closeNotizenSettings, closeShareDialog, saveShares };
+export { closeNotizEditor, closeNotizenSettings };

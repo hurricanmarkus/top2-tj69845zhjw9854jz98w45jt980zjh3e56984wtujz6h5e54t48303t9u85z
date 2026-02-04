@@ -1636,7 +1636,7 @@
                     <div class="flex items-center justify-between mb-3">
                         <h2 class="text-xl font-bold">📝 Notizen</h2>
                     </div>
-                    <div class="grid grid-cols-4 gap-2 text-center">
+                    <div class="grid grid-cols-3 gap-2 text-center">
                         <div class="bg-white/20 px-2 py-2 rounded-lg">
                             <p class="text-xl font-bold" id="stat-notizen-total">0</p>
                             <p class="text-[10px] font-semibold leading-tight">📝 Gesamt</p>
@@ -1648,10 +1648,6 @@
                         <div class="bg-white/20 px-2 py-2 rounded-lg">
                             <p class="text-xl font-bold" id="stat-notizen-erinnerung">0</p>
                             <p class="text-[10px] font-semibold leading-tight">🔔 Erinnerung</p>
-                        </div>
-                        <div class="bg-white/20 px-2 py-2 rounded-lg">
-                            <p class="text-xl font-bold" id="stat-notizen-geteilt">0</p>
-                            <p class="text-[10px] font-semibold leading-tight">👥 Geteilt</p>
                         </div>
                     </div>
                 </div>
@@ -8057,12 +8053,6 @@
                 <div><span class="font-semibold">Gültig bis:</span> <span id="viewer-notiz-gueltig-bis">-</span></div>
             </div>
             
-            <!-- Freigaben -->
-            <div id="viewer-notiz-freigaben" class="hidden">
-                <p class="text-sm font-semibold text-gray-600 mb-2">👥 Geteilt mit:</p>
-                <div id="viewer-notiz-freigaben-list" class="flex flex-wrap gap-2"></div>
-            </div>
-            
             <!-- Inhalt -->
             <div id="viewer-notiz-content" class="space-y-3">
                 <!-- Elemente werden hier gerendert -->
@@ -8075,17 +8065,15 @@
                 <button onclick="window.toggleErweitertMenu()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition">
                     ⚙️ Erweitert
                 </button>
-                <div id="viewer-erweitert-menu" class="hidden absolute bottom-full left-0 mb-2 bg-white border rounded-lg shadow-lg p-2 space-y-1 min-w-[180px]">
+                <div id="viewer-erweitert-menu" class="hidden absolute bottom-full left-0 mb-2 bg-white border rounded-lg shadow-lg p-2 space-y-1 min-w-[200px]">
                     <button onclick="window.editCurrentNotiz()" class="w-full text-left px-3 py-2 hover:bg-amber-50 rounded font-semibold text-amber-700">✏️ Bearbeiten</button>
-                    <button id="viewer-share-notiz-btn" onclick="window.shareCurrentNotiz()" class="w-full text-left px-3 py-2 hover:bg-blue-50 rounded font-semibold text-blue-700">👥 Freigeben</button>
-                </div>
-            </div>
-            <div class="relative">
-                <button onclick="window.toggleWeitereMenu()" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg font-semibold hover:bg-red-200 transition">
-                    ⋮ Weitere
-                </button>
-                <div id="viewer-weitere-menu" class="hidden absolute bottom-full right-0 mb-2 bg-white border rounded-lg shadow-lg p-2 space-y-1 min-w-[150px]">
-                    <button onclick="window.deleteCurrentNotiz()" class="w-full text-left px-3 py-2 hover:bg-red-50 rounded font-semibold text-red-700">🗑️ Löschen</button>
+                    <button onclick="window.toggleWeitereOptionenMenu()" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded font-semibold text-gray-700 flex items-center justify-between">
+                        ⋮ Weitere Optionen
+                        <span class="text-xs">▶</span>
+                    </button>
+                    <div id="viewer-weitere-optionen-menu" class="hidden space-y-1 border-l border-gray-200 ml-3 pl-2">
+                        <button id="viewer-delete-notiz-btn" onclick="window.deleteCurrentNotiz()" class="w-full text-left px-3 py-2 hover:bg-red-50 rounded font-semibold text-red-700">🗑️ Notiz löschen</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -8098,9 +8086,6 @@
         <div class="sticky top-0 bg-gradient-to-r from-amber-500 to-orange-500 p-4 flex justify-between items-center z-10 rounded-t-2xl">
             <h2 class="text-xl font-bold text-white">📝 Notiz bearbeiten</h2>
             <div class="flex gap-2">
-                <button onclick="window.shareEditingNotiz()" class="hidden px-3 py-1 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition text-sm">
-                    👥 Freigeben
-                </button>
                 <button id="close-notiz-editor" class="p-2 hover:bg-white/20 rounded-lg text-white">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
