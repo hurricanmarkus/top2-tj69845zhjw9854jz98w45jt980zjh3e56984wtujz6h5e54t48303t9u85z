@@ -137,6 +137,14 @@ export function setupPermissionDependencies(container) {
             '[data-perm="GESCHENKEMANAGEMENT_CREATE"]'
         ]
     );
+
+    // 8. NEU: Logik für NOTIZEN (Hauptansicht -> Anlegen)
+    setupToggleLogic(
+        '[data-perm="NOTIZEN"]',
+        [
+            '[data-perm="NOTIZEN_CREATE"]'
+        ]
+    );
 }
 
 

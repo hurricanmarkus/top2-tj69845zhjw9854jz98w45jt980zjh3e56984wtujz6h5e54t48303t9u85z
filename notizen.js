@@ -10,7 +10,8 @@ import {
     USERS,
     navigate,
     appId,
-    auth
+    auth,
+    userPermissions
 } from './haupteingang.js';
 
 import {
@@ -146,7 +147,24 @@ export function initializeNotizen() {
     startNotizenListeners();
     setupNotizenEventListeners();
     
+    // Buttons ausblenden wenn keine NOTIZEN_CREATE Berechtigung
+    updateCreateButtonsVisibility();
+    
     console.log('📝 Notizen: Initialisierung abgeschlossen');
+}
+
+function updateCreateButtonsVisibility() {
+    const canCreate = userPermissions?.includes('NOTIZEN_CREATE');
+    
+    const btnCreateNotiz = document.getElementById('btn-create-notiz');
+    const btnSettings = document.getElementById('btn-notizen-settings');
+    
+    if (btnCreateNotiz) {
+        btnCreateNotiz.style.display = canCreate ? '' : 'none';
+    }
+    if (btnSettings) {
+        btnSettings.style.display = canCreate ? '' : 'none';
+    }
 }
 
 export function stopNotizenListeners() {

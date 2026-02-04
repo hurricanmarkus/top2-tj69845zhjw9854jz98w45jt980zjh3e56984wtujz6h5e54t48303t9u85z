@@ -65,6 +65,7 @@ export const PERMISSIONS_CONFIG = {
     'ZAHLUNGSVERWALTUNG_CREATE': { label: '-> Neue Zahlung anlegen', indent: true },
     'TICKET_SUPPORT': { label: 'Ticket Support', indent: false },
     'NOTIZEN': { label: 'Notizen', indent: false },
+    'NOTIZEN_CREATE': { label: '-> Notiz/Kategorie anlegen', indent: true },
     'WERTGUTHABEN': { label: 'Wertguthaben', indent: false },
     'LIZENZEN': { label: 'Lizenzen', indent: false },
     'VERTRAGSVERWALTUNG': { label: 'Vertragsverwaltung', indent: false },
