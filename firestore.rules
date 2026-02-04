@@ -488,6 +488,40 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // NOTIZEN SYSTEM (Notizen & Kategorien)
+    // ═══════════════════════════════════════════════════════════════
+
+    // Notizen - nur eigene lesen/schreiben
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/notizen/{notizId} {
+      allow read: if hasAppUserIdClaim() && (
+        resource.data.createdBy == appUserId() ||
+        appUserId() in resource.data.sharedWith
+      );
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update, delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    }
+
+    // Notizen Kategorien - nur eigene lesen/schreiben
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/notizen_kategorien/{kategorieId} {
+      allow read: if hasAppUserIdClaim() && (
+        resource.data.createdBy == appUserId() ||
+        appUserId() in resource.data.sharedWith
+      );
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update, delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    }
+
+    // Notizen Freigaben - für Sharing-Funktionalität
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/notizen_freigaben/{freigabeId} {
+      allow read: if hasAppUserIdClaim() && (
+        resource.data.ownerId == appUserId() ||
+        resource.data.targetUserId == appUserId()
+      );
+      allow create: if hasAppUserIdClaim() && request.resource.data.ownerId == appUserId();
+      allow update, delete: if hasAppUserIdClaim() && resource.data.ownerId == appUserId();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // DEFAULT DENY (Alles andere verbieten)
     // ═══════════════════════════════════════════════════════════════
     

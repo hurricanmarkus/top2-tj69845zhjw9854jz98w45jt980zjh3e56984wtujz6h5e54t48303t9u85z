@@ -36,6 +36,7 @@ import { initializeHaushaltszahlungen, listenForHaushaltszahlungen, stopHaushalt
 import { initializeGeschenkemanagement, listenForGeschenke, stopGeschenkemanagementListeners } from './geschenkemanagement.js';
 import { initializeSendungsverwaltungView, listenForSendungen, stopSendungsverwaltungListeners } from './sendungsverwaltung.js';
 import { ensureNachrichtencenterSelfContact } from './notfall.js';
+import { initializeNotizen, stopNotizenListeners } from './notizen.js';
 // // ENDE-ZIKA //
 
 // PUSHOVER API TOKEN (fest codiert, für alle User gleich)
@@ -63,6 +64,7 @@ export const PERMISSIONS_CONFIG = {
     'ZAHLUNGSVERWALTUNG': { label: 'Zahlungsverwaltung', indent: false },
     'ZAHLUNGSVERWALTUNG_CREATE': { label: '-> Neue Zahlung anlegen', indent: true },
     'TICKET_SUPPORT': { label: 'Ticket Support', indent: false },
+    'NOTIZEN': { label: 'Notizen', indent: false },
     'WERTGUTHABEN': { label: 'Wertguthaben', indent: false },
     'LIZENZEN': { label: 'Lizenzen', indent: false },
     'VERTRAGSVERWALTUNG': { label: 'Vertragsverwaltung', indent: false },
@@ -157,6 +159,7 @@ export const views = {
     zahlungsverwaltung: { id: 'zahlungsverwaltungView' },
     zahlungsverwaltungSettings: { id: 'zahlungsverwaltungSettingsView' },
     ticketSupport: { id: 'ticketSupportView' },
+    notizen: { id: 'notizenView' },
     wertguthaben: { id: 'wertguthabenView' },
     wertguthabenSettings: { id: 'wertguthabenSettingsView' },
     lizenzen: { id: 'lizenzenView' },
@@ -202,6 +205,9 @@ export function stopAllUserDependentListeners(resetMode = false) {
     }
     if (typeof stopSendungsverwaltungListeners === 'function') {
         stopSendungsverwaltungListeners();
+    }
+    if (typeof stopNotizenListeners === 'function') {
+        stopNotizenListeners();
     }
 
     if (resetMode) {
@@ -1590,6 +1596,11 @@ export function navigate(targetViewName) {
             return alertUser("Zugriff verweigert (Ticket Support).", 'error');
         }
 
+        // Zugriffsschutz für Notizen
+        if (targetViewName === 'notizen' && !userPermissions.includes('NOTIZEN')) {
+            return alertUser("Zugriff verweigert (Notizen).", 'error');
+        }
+
         // Zugriffsschutz für Wertguthaben
         if ((targetViewName === 'wertguthaben' || targetViewName === 'wertguthabenSettings') && !userPermissions.includes('WERTGUTHABEN')) {
             return alertUser("Zugriff verweigert (Wertguthaben).", 'error');
@@ -1678,6 +1689,10 @@ export function navigate(targetViewName) {
 
     if (targetViewName === 'ticketSupport') {
         initializeTicketSupport();
+    }
+
+    if (targetViewName === 'notizen') {
+        initializeNotizen();
     }
 
     if (targetViewName === 'wertguthaben') {
@@ -2624,6 +2639,9 @@ export function setupEventListeners() {
 
     const ticketSupportCard = document.getElementById('ticketSupportCard');
     if (ticketSupportCard) ticketSupportCard.addEventListener('click', () => navigate('ticketSupport'));
+
+    const notizenCard = document.getElementById('notizenCard');
+    if (notizenCard) notizenCard.addEventListener('click', () => navigate('notizen'));
 
     const wertguthabenCard = document.getElementById('wertguthabenCard');
     if (wertguthabenCard) wertguthabenCard.addEventListener('click', () => navigate('wertguthaben'));
