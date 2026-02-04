@@ -10,8 +10,7 @@ import {
     USERS,
     navigate,
     appId,
-    auth,
-    userPermissions
+    auth
 } from './haupteingang.js';
 
 import {
@@ -154,7 +153,8 @@ export function initializeNotizen() {
 }
 
 function updateCreateButtonsVisibility() {
-    const canCreate = userPermissions?.includes('NOTIZEN_CREATE');
+    const permissions = currentUser?.permissions || [];
+    const canCreate = permissions.includes('NOTIZEN_CREATE') || currentUser?.role === 'SYSTEMADMIN';
     
     const btnCreateNotiz = document.getElementById('btn-create-notiz');
     const btnSettings = document.getElementById('btn-notizen-settings');
