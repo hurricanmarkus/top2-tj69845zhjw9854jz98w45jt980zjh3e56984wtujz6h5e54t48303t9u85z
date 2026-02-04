@@ -615,7 +615,7 @@ function resetNotizFiltersToDefault() {
     
     if (searchInput) searchInput.value = '';
     if (kategorieFilter) kategorieFilter.value = '';
-    if (negateCheckbox) negateCheckbox.checked = true;
+    if (negateCheckbox) negateCheckbox.checked = false;
     
     renderActiveFiltersNotizen();
     renderNotizenList();
@@ -983,7 +983,7 @@ export function openNotizEditor(notizId = null) {
     
     // Kategorien in Select laden (Pflichtfeld)
     if (kategorieSelect) {
-        kategorieSelect.innerHTML = '<option value="">-- Kategorie wählen (Pflicht) --</option>';
+        kategorieSelect.innerHTML = '<option value="">-- Kategorie wählen --</option>';
         Object.values(KATEGORIEN).forEach(kat => {
             const option = document.createElement('option');
             option.value = kat.id;
