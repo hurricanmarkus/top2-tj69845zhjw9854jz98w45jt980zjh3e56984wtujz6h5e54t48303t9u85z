@@ -1,5 +1,5 @@
 // ========================================
-// NOTIZEN SYSTEM
+// NOTIZEN SYSTEM 
 // Professionelle Notizen-App mit Kategorien und verschiedenen Elementtypen
 // ========================================
 
