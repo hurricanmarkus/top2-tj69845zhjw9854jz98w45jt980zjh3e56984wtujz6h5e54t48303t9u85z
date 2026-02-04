@@ -1794,12 +1794,6 @@ function setupNotizenEventListeners() {
         console.warn('📝 Notizen: viewer-share-notiz-btn nicht gefunden bei Initialisierung');
     }
 
-    // Einladungen Modal schließen
-    const closeInvitationsBtn = document.getElementById('close-invitations-modal');
-    if (closeInvitationsBtn) {
-        closeInvitationsBtn.addEventListener('click', closeInvitationsModal);
-    }
-
     // Delete Notiz Button
     const deleteNotizBtn = document.getElementById('delete-notiz-btn');
     if (deleteNotizBtn) {
@@ -2027,7 +2021,7 @@ async function saveShares() {
         return;
     }
 
-    let invitesSent = 0;
+    let sharesCreated = 0;
     
     for (const checkbox of checkboxes) {
         const userId = checkbox.dataset.userId;
@@ -2036,16 +2030,22 @@ async function saveShares() {
 
         const permissions = { read: true, write: canWrite };
         
-        // Erstelle Einladung statt direkte Freigabe
-        const result = await createInvitation(type, resourceId, userId, permissions);
+        // Direkte Freigabe erstellen (ohne Einladungssystem)
+        let result = false;
+        if (type === 'notiz') {
+            result = await shareNotiz(resourceId, userId, permissions);
+        } else if (type === 'kategorie') {
+            result = await shareKategorie(resourceId, userId, permissions);
+        }
+        
         if (result) {
-            invitesSent++;
+            sharesCreated++;
         }
     }
 
     closeShareDialog();
-    if (invitesSent > 0) {
-        alertUser(`${invitesSent} Einladung(en) gesendet.`, 'success');
+    if (sharesCreated > 0) {
+        alertUser(`${sharesCreated} Freigabe(n) erstellt.`, 'success');
     }
 }
 
