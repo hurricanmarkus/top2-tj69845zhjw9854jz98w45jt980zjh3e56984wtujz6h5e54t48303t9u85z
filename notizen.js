@@ -2518,6 +2518,7 @@ function openNotizenShareModalForNotiz(notizId) {
 function openNotizenShareModalForKategorie(kategorieId) {
     const kategorie = KATEGORIEN[kategorieId];
     if (!kategorie) return;
+    closeNotizenSettings();
     openNotizenShareModal({
         type: SHARE_SOURCE_TYPES.kategorie,
         resourceId: kategorie.id,

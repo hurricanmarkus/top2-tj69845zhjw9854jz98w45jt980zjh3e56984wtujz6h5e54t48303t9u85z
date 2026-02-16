@@ -372,6 +372,14 @@ service cloud.firestore {
       allow delete: if isAuthenticated();
     }
 
+    // Einladungen für Notizen
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/notizen_einladungen/{einladungId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // SENDUNGSVERWALTUNG (Package & Shipment Management)
     // ═══════════════════════════════════════════════════════════════
