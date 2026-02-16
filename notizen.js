@@ -7,7 +7,8 @@ import {
     alertUser,
     db,
     currentUser,
-    appId
+    appId,
+    USERS
 } from './haupteingang.js';
 
 import {
@@ -15,12 +16,17 @@ import {
     addDoc,
     serverTimestamp,
     query,
+    where,
     orderBy,
     onSnapshot,
     doc,
+    getDoc,
+    setDoc,
     updateDoc,
     deleteDoc,
-    Timestamp
+    Timestamp,
+    runTransaction,
+    arrayUnion
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ========================================
@@ -37,16 +43,39 @@ let kategorienCollection = null;
 let NOTIZEN = {};
 let KATEGORIEN = {};
 let UNTERKATEGORIEN = {};
+let SHARED_NOTIZEN = {};
+let SHARED_KATEGORIEN = {};
+let NOTIZEN_EINLADUNGEN = {};
+let NOTIZEN_EINLADUNGEN_OUTGOING = {};
 
 let currentKategorieId = null;
 let currentUnterkategorieId = null;
+let currentKategorieFilter = null;
 let searchTerm = '';
 let activeFilters = [];
 let defaultFiltersApplied = false;
 
 let unsubscribeNotizen = null;
 let unsubscribeKategorien = null;
+let unsubscribeNotizenEinladungen = null;
+let unsubscribeNotizenEinladungenOutgoing = null;
 let eventListenersInitialized = false;
+
+let sharedNotizenListeners = new Map();
+let sharedKategorienListeners = new Map();
+let sharedKategorieNotizenListeners = new Map();
+let activeAcceptedInvites = new Map();
+let sharedInviteNotizIndex = new Map();
+let sharedInviteKategorieIndex = new Map();
+let currentShareContext = null;
+
+const NOTIZ_LOCK_CONFIG = {
+    ttlMs: 5 * 60 * 1000,
+    heartbeatMs: 30 * 1000
+};
+
+let currentEditLockContext = null;
+let lockHeartbeatTimer = null;
 
 // ========================================
 // STATUS KONFIGURATION
@@ -56,6 +85,46 @@ export const NOTIZ_STATUS = {
     offen: { label: 'Offen', color: 'bg-yellow-100 text-yellow-800', icon: '⭕' },
     abgeschlossen: { label: 'Abgeschlossen', color: 'bg-green-100 text-green-800', icon: '✅' },
     info: { label: '[INFO]', color: 'bg-blue-100 text-blue-800', icon: 'ℹ️' }
+};
+
+// ========================================
+// SHARING: EINLADUNGEN & RECHTE
+// ========================================
+
+const NOTIZEN_INVITE_STATUS = {
+    pending: 'pending',
+    accepted: 'accepted',
+    rejected: 'rejected',
+    revoked: 'revoked',
+    removed: 'removed'
+};
+
+const NOTIZEN_SHARE_PERMISSION = {
+    read: 'read',
+    write: 'write'
+};
+
+const SHARE_PERMISSION_PRIORITY = {
+    read: 1,
+    write: 2
+};
+
+const SHARE_SOURCE_TYPES = {
+    notiz: 'notiz',
+    kategorie: 'kategorie'
+};
+
+const NOTIZEN_INVITE_STATUS_LABELS = {
+    pending: 'Wartet',
+    accepted: 'Angenommen',
+    rejected: 'Abgelehnt',
+    revoked: 'Widerrufen',
+    removed: 'Entfernt'
+};
+
+const NOTIZEN_INVITE_PERMISSION_LABELS = {
+    read: 'Nur lesen',
+    write: 'Bearbeiten'
 };
 
 // ========================================
@@ -165,6 +234,15 @@ export function stopNotizenListeners() {
         unsubscribeKategorien();
         unsubscribeKategorien = null;
     }
+    if (unsubscribeNotizenEinladungen) {
+        unsubscribeNotizenEinladungen();
+        unsubscribeNotizenEinladungen = null;
+    }
+    if (unsubscribeNotizenEinladungenOutgoing) {
+        unsubscribeNotizenEinladungenOutgoing();
+        unsubscribeNotizenEinladungenOutgoing = null;
+    }
+    resetSharedCaches();
     NOTIZEN = {};
     KATEGORIEN = {};
     eventListenersInitialized = false;
@@ -201,6 +279,1132 @@ function startNotizenListeners() {
         console.error('📝 Notizen: Fehler beim Laden der Notizen:', error);
     });
 
+    startNotizenEinladungenListener(userId);
+    startNotizenEinladungenOutgoingListener(userId);
+
+}
+
+// ========================================
+// SHARING: HELPER & CACHES
+// ========================================
+
+function getNotizShareKey(ownerId, notizId) {
+    if (!ownerId || !notizId) return null;
+    return `${ownerId}:${notizId}`;
+}
+
+function getKategorieShareKey(ownerId, kategorieId) {
+    if (!ownerId || !kategorieId) return null;
+    return `${ownerId}:${kategorieId}`;
+}
+
+function normalizeSharePermission(permission) {
+    return permission === NOTIZEN_SHARE_PERMISSION.write
+        ? NOTIZEN_SHARE_PERMISSION.write
+        : NOTIZEN_SHARE_PERMISSION.read;
+}
+
+function mergeSharePermission(basePermission, incomingPermission) {
+    const base = normalizeSharePermission(basePermission);
+    const incoming = normalizeSharePermission(incomingPermission);
+    return SHARE_PERMISSION_PRIORITY[incoming] >= SHARE_PERMISSION_PRIORITY[base] ? incoming : base;
+}
+
+function buildShareMeta({ ownerId, ownerName, permission, sourceType, inviteId }) {
+    const normalizedPermission = normalizeSharePermission(permission);
+    const sources = {};
+
+    if (sourceType) {
+        sources[sourceType] = {
+            permission: normalizedPermission,
+            inviteId: inviteId || null
+        };
+    }
+
+    return {
+        isShared: true,
+        ownerId: ownerId || null,
+        ownerName: ownerName || null,
+        permission: normalizedPermission,
+        sources
+    };
+}
+
+function mergeShareMeta(existingMeta, incomingMeta) {
+    if (!existingMeta && !incomingMeta) return null;
+
+    const mergedSources = { ...(existingMeta?.sources || {}) };
+
+    if (incomingMeta?.sources) {
+        Object.entries(incomingMeta.sources).forEach(([sourceType, info]) => {
+            if (!sourceType) return;
+            mergedSources[sourceType] = { ...info };
+        });
+    }
+
+    const ownerId = existingMeta?.ownerId || incomingMeta?.ownerId || null;
+    const ownerName = existingMeta?.ownerName || incomingMeta?.ownerName || null;
+    const basePermission = normalizeSharePermission(existingMeta?.permission || incomingMeta?.permission);
+    const sourcePermissions = Object.values(mergedSources)
+        .map(source => normalizeSharePermission(source.permission));
+
+    let effectivePermission = basePermission;
+    if (sourcePermissions.length > 0) {
+        effectivePermission = sourcePermissions.reduce(
+            (acc, perm) => mergeSharePermission(acc, perm),
+            NOTIZEN_SHARE_PERMISSION.read
+        );
+    }
+
+    return {
+        isShared: true,
+        ownerId,
+        ownerName,
+        permission: effectivePermission,
+        sources: mergedSources
+    };
+}
+
+function upsertSharedNotiz(ownerId, notizId, notizData, shareMeta) {
+    if (!ownerId || !notizId) return;
+    const key = getNotizShareKey(ownerId, notizId);
+    if (!key) return;
+
+    const existing = SHARED_NOTIZEN[key] || {};
+    const mergedMeta = mergeShareMeta(existing?.__shareMeta, shareMeta);
+
+    SHARED_NOTIZEN[key] = {
+        ...existing,
+        id: notizId,
+        ...(notizData || {}),
+        __shareMeta: mergedMeta
+    };
+}
+
+function removeSharedNotiz(ownerId, notizId) {
+    const key = getNotizShareKey(ownerId, notizId);
+    if (key && SHARED_NOTIZEN[key]) {
+        delete SHARED_NOTIZEN[key];
+    }
+}
+
+function upsertSharedKategorie(ownerId, kategorieId, kategorieData, shareMeta) {
+    if (!ownerId || !kategorieId) return;
+    const key = getKategorieShareKey(ownerId, kategorieId);
+    if (!key) return;
+
+    const existing = SHARED_KATEGORIEN[key] || {};
+    const mergedMeta = mergeShareMeta(existing?.__shareMeta, shareMeta);
+
+    SHARED_KATEGORIEN[key] = {
+        ...existing,
+        id: kategorieId,
+        ...(kategorieData || {}),
+        __shareMeta: mergedMeta
+    };
+}
+
+function removeSharedKategorie(ownerId, kategorieId) {
+    const key = getKategorieShareKey(ownerId, kategorieId);
+    if (key && SHARED_KATEGORIEN[key]) {
+        delete SHARED_KATEGORIEN[key];
+    }
+}
+
+function clearListenerMap(listenerMap, label) {
+    if (!listenerMap || listenerMap.size === 0) return;
+
+    listenerMap.forEach((unsubscribe) => {
+        try {
+            if (typeof unsubscribe === 'function') {
+                unsubscribe();
+            }
+        } catch (error) {
+            console.error(`📝 Notizen: Fehler beim Stoppen von ${label}-Listenern:`, error);
+        }
+    });
+
+    listenerMap.clear();
+}
+
+function resetSharedCaches() {
+    SHARED_NOTIZEN = {};
+    SHARED_KATEGORIEN = {};
+    NOTIZEN_EINLADUNGEN = {};
+    NOTIZEN_EINLADUNGEN_OUTGOING = {};
+    clearListenerMap(sharedNotizenListeners, 'Shared-Notizen');
+    clearListenerMap(sharedKategorienListeners, 'Shared-Kategorien');
+    clearListenerMap(sharedKategorieNotizenListeners, 'Shared-Kategorie-Notizen');
+    activeAcceptedInvites.clear();
+    sharedInviteNotizIndex.clear();
+    sharedInviteKategorieIndex.clear();
+}
+
+function isInviteAccepted(invite) {
+    return invite?.status === NOTIZEN_INVITE_STATUS.accepted;
+}
+
+function isInvitePending(invite) {
+    return invite?.status === NOTIZEN_INVITE_STATUS.pending;
+}
+
+function isNotizShared(notiz) {
+    return Boolean(notiz?.__shareMeta?.isShared);
+}
+
+function getNotizOwnerId(notiz) {
+    return notiz?.__shareMeta?.ownerId || notiz?.createdBy || null;
+}
+
+function isNotizOwner(notiz) {
+    const currentUserId = getCurrentUserId();
+    return Boolean(currentUserId && getNotizOwnerId(notiz) === currentUserId);
+}
+
+function getNotizEffectivePermission(notiz) {
+    if (!notiz) return NOTIZEN_SHARE_PERMISSION.read;
+    if (isNotizOwner(notiz)) return NOTIZEN_SHARE_PERMISSION.write;
+    return normalizeSharePermission(notiz?.__shareMeta?.permission);
+}
+
+function canCurrentUserWriteNotiz(notiz) {
+    return getNotizEffectivePermission(notiz) === NOTIZEN_SHARE_PERMISSION.write;
+}
+
+function getCurrentUserDisplayName() {
+    return currentUser?.displayName || currentUser?.name || currentUser?.realName || getCurrentUserId() || 'Unbekannt';
+}
+
+function getUserDisplayNameById(userId) {
+    if (!userId) return 'Unbekannt';
+    const user = USERS ? USERS[userId] : null;
+    return user?.realName || user?.name || user?.displayName || userId;
+}
+
+function getNotizOwnerLabel(notiz) {
+    const metaOwnerName = notiz?.__shareMeta?.ownerName;
+    if (metaOwnerName) return metaOwnerName;
+    const ownerId = getNotizOwnerId(notiz);
+    return getUserDisplayNameById(ownerId);
+}
+
+function getInviteOwnerLabel(invite) {
+    return invite?.ownerName || getUserDisplayNameById(invite?.ownerId);
+}
+
+function getInviteTargetLabel(invite) {
+    return invite?.targetUserName || getUserDisplayNameById(invite?.targetUserId);
+}
+
+function getInviteResourceLabel(invite) {
+    if (!invite) return 'Unbekannte Ressource';
+    if (invite.resourceTitleSnapshot) return invite.resourceTitleSnapshot;
+    if (invite.type === SHARE_SOURCE_TYPES.notiz) {
+        const ownNotiz = NOTIZEN[invite.resourceId];
+        if (ownNotiz?.titel) return ownNotiz.titel;
+        const sharedKey = getNotizShareKey(invite.ownerId, invite.resourceId);
+        return SHARED_NOTIZEN[sharedKey]?.titel || 'Unbekannte Notiz';
+    }
+    if (invite.type === SHARE_SOURCE_TYPES.kategorie) {
+        const ownKategorie = KATEGORIEN[invite.resourceId];
+        if (ownKategorie?.name) return ownKategorie.name;
+        const sharedKey = getKategorieShareKey(invite.ownerId, invite.resourceId);
+        return SHARED_KATEGORIEN[sharedKey]?.name || 'Unbekannte Kategorie';
+    }
+    return 'Unbekannte Ressource';
+}
+
+function getInvitePermissionLabel(permission) {
+    const normalized = normalizeSharePermission(permission);
+    return NOTIZEN_INVITE_PERMISSION_LABELS[normalized] || normalized;
+}
+
+function getInviteStatusLabel(status) {
+    return NOTIZEN_INVITE_STATUS_LABELS[status] || status || 'Unbekannt';
+}
+
+function getInviteTypeLabel(invite) {
+    if (!invite) return 'Ressource';
+    return invite.type === SHARE_SOURCE_TYPES.kategorie ? 'Kategorie' : 'Notiz';
+}
+
+function getNotizShareInfoText(notiz) {
+    if (!isNotizShared(notiz)) return '';
+    const ownerId = getNotizOwnerId(notiz);
+    const currentUserId = getCurrentUserId();
+    const ownerName = notiz?.__shareMeta?.ownerName || getUserDisplayNameById(ownerId);
+    const permissionLabel = getInvitePermissionLabel(getNotizEffectivePermission(notiz));
+
+    if (ownerId && currentUserId && ownerId !== currentUserId) {
+        return `Geteilt von ${ownerName} · ${permissionLabel}`;
+    }
+
+    return `Geteilt · ${permissionLabel}`;
+}
+
+function getNotizShareInfoHtml(notiz) {
+    const shareText = getNotizShareInfoText(notiz);
+    if (!shareText) return '';
+    return `<div class="text-xs text-gray-500 mt-1">${escapeHtml(shareText)}</div>`;
+}
+
+function buildNotizHistoryEntry(action, info = '') {
+    return {
+        date: new Date(),
+        action,
+        user: getCurrentUserDisplayName(),
+        userId: getCurrentUserId(),
+        info
+    };
+}
+
+function sanitizeNotizUpdates(notiz, updates) {
+    if (!notiz || !updates) return updates || {};
+    if (isNotizOwner(notiz)) return { ...updates };
+    return {
+        ...updates,
+        kategorieId: notiz.kategorieId || null,
+        unterkategorieId: notiz.unterkategorieId || null,
+        createdBy: notiz.createdBy || null,
+        createdAt: notiz.createdAt || null
+    };
+}
+
+function getNotizDocRefForOwner(ownerId, notizId) {
+    if (!ownerId || !notizId) return null;
+    return doc(db, 'artifacts', appId, 'users', ownerId, 'notizen', notizId);
+}
+
+function getNotizDocRef(notiz) {
+    if (!notiz?.id) return null;
+    const ownerId = getNotizOwnerId(notiz) || getCurrentUserId();
+    if (!ownerId) return null;
+    const currentUserId = getCurrentUserId();
+    if (currentUserId && ownerId === currentUserId && notizenCollection) {
+        return doc(notizenCollection, notiz.id);
+    }
+    return getNotizDocRefForOwner(ownerId, notiz.id);
+}
+
+function getLockExpiryMs(lock) {
+    if (!lock?.expiresAt) return 0;
+    if (typeof lock.expiresAt?.toMillis === 'function') return lock.expiresAt.toMillis();
+    const parsed = new Date(lock.expiresAt).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function isLockActive(lock) {
+    if (!lock?.lockedByUserId) return false;
+    return Date.now() < getLockExpiryMs(lock);
+}
+
+function isLockOwnedByCurrentUser(lock) {
+    const currentUserId = getCurrentUserId();
+    return Boolean(currentUserId && lock?.lockedByUserId === currentUserId);
+}
+
+function buildNotizLockPayload() {
+    const nowMs = Date.now();
+    return {
+        lockedByUserId: getCurrentUserId(),
+        lockedByName: getCurrentUserDisplayName(),
+        lockedAt: Timestamp.fromMillis(nowMs),
+        expiresAt: Timestamp.fromMillis(nowMs + NOTIZ_LOCK_CONFIG.ttlMs)
+    };
+}
+
+function getLockOwnerLabel(lock) {
+    return lock?.lockedByName || lock?.lockedByUserId || 'einem anderen Nutzer';
+}
+
+function setNotizLockBanner(message = '') {
+    const banner = document.getElementById('notiz-editor-lock-banner');
+    if (!banner) return;
+    if (!message) {
+        banner.textContent = '';
+        banner.classList.add('hidden');
+        return;
+    }
+    banner.textContent = message;
+    banner.classList.remove('hidden');
+}
+
+function toggleReadOnlyElement(el, isReadOnly) {
+    if (!el) return;
+    if (isReadOnly) {
+        if (el.dataset.prevDisabled === undefined) {
+            el.dataset.prevDisabled = el.disabled ? '1' : '0';
+        }
+        el.disabled = true;
+        return;
+    }
+    if (el.dataset.prevDisabled !== undefined) {
+        el.disabled = el.dataset.prevDisabled === '1';
+        delete el.dataset.prevDisabled;
+    }
+}
+
+function setNotizEditorReadOnly(isReadOnly, message = '') {
+    const body = document.getElementById('notiz-editor-body');
+    const saveBtn = document.getElementById('save-notiz-btn');
+    const deleteBtn = document.getElementById('delete-notiz-btn');
+
+    if (body) {
+        if (isReadOnly) {
+            body.dataset.lockReadonly = '1';
+            body.classList.add('opacity-60');
+            body.querySelectorAll('input, textarea, select, button').forEach(el => {
+                toggleReadOnlyElement(el, true);
+            });
+        } else if (body.dataset.lockReadonly === '1') {
+            body.classList.remove('opacity-60');
+            body.querySelectorAll('input, textarea, select, button').forEach(el => {
+                toggleReadOnlyElement(el, false);
+            });
+            delete body.dataset.lockReadonly;
+        }
+    }
+
+    if (saveBtn) {
+        if (isReadOnly) {
+            toggleReadOnlyElement(saveBtn, true);
+            saveBtn.classList.add('opacity-60', 'cursor-not-allowed');
+        } else {
+            toggleReadOnlyElement(saveBtn, false);
+            saveBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+        }
+    }
+
+    if (deleteBtn) {
+        if (isReadOnly) {
+            toggleReadOnlyElement(deleteBtn, true);
+            deleteBtn.classList.add('opacity-60', 'cursor-not-allowed');
+        } else {
+            toggleReadOnlyElement(deleteBtn, false);
+            deleteBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+        }
+    }
+
+    setNotizLockBanner(message);
+}
+
+function buildNotizLockContext(notiz, docRef) {
+    if (!notiz || !docRef) return null;
+    return {
+        notizId: notiz.id,
+        ownerId: getNotizOwnerId(notiz),
+        docRef
+    };
+}
+
+function clearNotizLockHeartbeat() {
+    if (lockHeartbeatTimer) {
+        clearInterval(lockHeartbeatTimer);
+        lockHeartbeatTimer = null;
+    }
+}
+
+async function acquireNotizLock(notiz) {
+    const docRef = getNotizDocRef(notiz);
+    if (!docRef) return { acquired: false, lock: null, error: 'doc-missing' };
+
+    let result = { acquired: false, lock: null, error: null };
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const snap = await transaction.get(docRef);
+            if (!snap.exists()) {
+                result = { acquired: false, lock: null, error: 'not-found' };
+                return;
+            }
+
+            const data = snap.data() || {};
+            const existingLock = data.editLock || null;
+
+            if (isLockActive(existingLock) && !isLockOwnedByCurrentUser(existingLock)) {
+                result = { acquired: false, lock: existingLock, error: null };
+                return;
+            }
+
+            const newLock = buildNotizLockPayload();
+            transaction.update(docRef, { editLock: newLock });
+            result = { acquired: true, lock: newLock, error: null };
+        });
+    } catch (error) {
+        console.error('📝 Notizen: Fehler beim Sperren der Notiz:', error);
+        result = { acquired: false, lock: null, error };
+    }
+
+    return result;
+}
+
+async function refreshNotizLock(context) {
+    if (!context?.docRef) return false;
+
+    let lockValid = false;
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const snap = await transaction.get(context.docRef);
+            if (!snap.exists()) {
+                lockValid = false;
+                return;
+            }
+
+            const data = snap.data() || {};
+            const existingLock = data.editLock || null;
+            if (!isLockOwnedByCurrentUser(existingLock) || !isLockActive(existingLock)) {
+                lockValid = false;
+                return;
+            }
+
+            const refreshedLock = buildNotizLockPayload();
+            transaction.update(context.docRef, { editLock: refreshedLock });
+            lockValid = true;
+        });
+    } catch (error) {
+        console.error('📝 Notizen: Fehler beim Lock-Heartbeat:', error);
+        lockValid = false;
+    }
+
+    return lockValid;
+}
+
+function startNotizLockHeartbeat(context) {
+    if (!context) return;
+    clearNotizLockHeartbeat();
+    const activeContext = context;
+
+    lockHeartbeatTimer = setInterval(async () => {
+        if (currentEditLockContext !== activeContext) {
+            clearNotizLockHeartbeat();
+            return;
+        }
+
+        const lockValid = await refreshNotizLock(activeContext);
+        if (!lockValid) {
+            clearNotizLockHeartbeat();
+            currentEditLockContext = null;
+            setNotizEditorReadOnly(true, '🔒 Die Sperre ist abgelaufen. Bearbeitung deaktiviert.');
+        }
+    }, NOTIZ_LOCK_CONFIG.heartbeatMs);
+}
+
+async function releaseNotizLock(context) {
+    if (!context?.docRef) return;
+    try {
+        await runTransaction(db, async (transaction) => {
+            const snap = await transaction.get(context.docRef);
+            if (!snap.exists()) return;
+            const data = snap.data() || {};
+            const existingLock = data.editLock || null;
+            if (!isLockOwnedByCurrentUser(existingLock)) return;
+            transaction.update(context.docRef, { editLock: null });
+        });
+    } catch (error) {
+        console.error('📝 Notizen: Fehler beim Freigeben der Sperre:', error);
+    }
+}
+
+async function releaseCurrentNotizLock() {
+    const context = currentEditLockContext;
+    currentEditLockContext = null;
+    clearNotizLockHeartbeat();
+    if (context) {
+        await releaseNotizLock(context);
+    }
+}
+
+async function ensureNotizEditorLock(notiz) {
+    if (!notiz) {
+        setNotizEditorReadOnly(false, '');
+        return true;
+    }
+
+    setNotizEditorReadOnly(true, '🔒 Sperre wird geprüft...');
+    const result = await acquireNotizLock(notiz);
+
+    if (result.acquired) {
+        const docRef = getNotizDocRef(notiz);
+        currentEditLockContext = buildNotizLockContext(notiz, docRef);
+        startNotizLockHeartbeat(currentEditLockContext);
+        setNotizEditorReadOnly(false, '');
+        return true;
+    }
+
+    if (result.lock && isLockActive(result.lock)) {
+        setNotizEditorReadOnly(true, `🔒 Diese Notiz wird gerade von ${getLockOwnerLabel(result.lock)} bearbeitet.`);
+        return false;
+    }
+
+    setNotizEditorReadOnly(true, '🔒 Notiz ist aktuell gesperrt.');
+    return false;
+}
+
+function removeShareSource(existingMeta, sourceType, inviteId) {
+    if (!existingMeta?.sources || !sourceType) return existingMeta || null;
+
+    const sources = { ...existingMeta.sources };
+    const source = sources[sourceType];
+
+    if (source && (!inviteId || source.inviteId === inviteId)) {
+        delete sources[sourceType];
+    }
+
+    const remainingSources = Object.keys(sources);
+    if (remainingSources.length === 0) return null;
+
+    const permissions = remainingSources.map(key => normalizeSharePermission(sources[key]?.permission));
+    const effectivePermission = permissions.reduce(
+        (acc, permission) => mergeSharePermission(acc, permission),
+        NOTIZEN_SHARE_PERMISSION.read
+    );
+
+    return {
+        isShared: true,
+        ownerId: existingMeta.ownerId || null,
+        ownerName: existingMeta.ownerName || null,
+        permission: effectivePermission,
+        sources
+    };
+}
+
+function parseShareKey(key) {
+    if (!key) return null;
+    const parts = String(key).split(':');
+    if (parts.length < 2) return null;
+    const ownerId = parts.shift();
+    const resourceId = parts.join(':');
+    if (!ownerId || !resourceId) return null;
+    return { ownerId, resourceId };
+}
+
+function applyShareMetaToNotizKey(notizKey, shareMeta) {
+    if (!notizKey || !shareMeta) return;
+    const existing = SHARED_NOTIZEN[notizKey];
+    if (!existing) return;
+    const mergedMeta = mergeShareMeta(existing.__shareMeta, shareMeta);
+    SHARED_NOTIZEN[notizKey] = {
+        ...existing,
+        __shareMeta: mergedMeta
+    };
+}
+
+function applyShareMetaToKategorieKey(kategorieKey, shareMeta) {
+    if (!kategorieKey || !shareMeta) return;
+    const existing = SHARED_KATEGORIEN[kategorieKey];
+    if (!existing) return;
+    const mergedMeta = mergeShareMeta(existing.__shareMeta, shareMeta);
+    SHARED_KATEGORIEN[kategorieKey] = {
+        ...existing,
+        __shareMeta: mergedMeta
+    };
+}
+
+function removeShareSourceFromNotiz(ownerId, notizId, sourceType, inviteId) {
+    const key = getNotizShareKey(ownerId, notizId);
+    if (!key || !SHARED_NOTIZEN[key]) return;
+    const updatedMeta = removeShareSource(SHARED_NOTIZEN[key].__shareMeta, sourceType, inviteId);
+    if (!updatedMeta) {
+        delete SHARED_NOTIZEN[key];
+        return;
+    }
+    SHARED_NOTIZEN[key] = {
+        ...SHARED_NOTIZEN[key],
+        __shareMeta: updatedMeta
+    };
+}
+
+function removeShareSourceFromNotizByKey(notizKey, sourceType, inviteId) {
+    const parsed = parseShareKey(notizKey);
+    if (!parsed) return;
+    removeShareSourceFromNotiz(parsed.ownerId, parsed.resourceId, sourceType, inviteId);
+}
+
+function removeShareSourceFromKategorie(ownerId, kategorieId, sourceType, inviteId) {
+    const key = getKategorieShareKey(ownerId, kategorieId);
+    if (!key || !SHARED_KATEGORIEN[key]) return;
+    const updatedMeta = removeShareSource(SHARED_KATEGORIEN[key].__shareMeta, sourceType, inviteId);
+    if (!updatedMeta) {
+        delete SHARED_KATEGORIEN[key];
+        return;
+    }
+    SHARED_KATEGORIEN[key] = {
+        ...SHARED_KATEGORIEN[key],
+        __shareMeta: updatedMeta
+    };
+}
+
+function removeShareSourceFromKategorieByKey(kategorieKey, sourceType, inviteId) {
+    const parsed = parseShareKey(kategorieKey);
+    if (!parsed) return;
+    removeShareSourceFromKategorie(parsed.ownerId, parsed.resourceId, sourceType, inviteId);
+}
+
+function getCombinedNotizenArray() {
+    return [...Object.values(NOTIZEN), ...Object.values(SHARED_NOTIZEN)];
+}
+
+function getNotizLookupKey(notiz) {
+    if (!notiz) return null;
+    const ownerId = getNotizOwnerId(notiz);
+    const currentUserId = getCurrentUserId();
+    if (ownerId && currentUserId && ownerId !== currentUserId) {
+        return getNotizShareKey(ownerId, notiz.id);
+    }
+    return notiz.id;
+}
+
+function getNotizByLookupKey(notizKey) {
+    if (!notizKey) return null;
+    return NOTIZEN[notizKey] || SHARED_NOTIZEN[notizKey] || null;
+}
+
+function getSharedKategorieOwnerId(kategorie) {
+    return kategorie?.__shareMeta?.ownerId || kategorie?.createdBy || null;
+}
+
+function getKategorieForNotiz(notiz) {
+    if (!notiz?.kategorieId) return null;
+    const ownerId = getNotizOwnerId(notiz);
+    const currentUserId = getCurrentUserId();
+    if (ownerId && currentUserId && ownerId !== currentUserId) {
+        const sharedKey = getKategorieShareKey(ownerId, notiz.kategorieId);
+        return SHARED_KATEGORIEN[sharedKey] || null;
+    }
+    return KATEGORIEN[notiz.kategorieId] || null;
+}
+
+function parseKategorieFilterValue(value) {
+    if (!value) return null;
+    const parts = String(value).split(':');
+    if (parts[0] === 'own') {
+        return {
+            rawValue: value,
+            scope: 'own',
+            ownerId: null,
+            kategorieId: parts[1] || null,
+            unterkategorieId: parts[2] || null
+        };
+    }
+    if (parts[0] === 'shared') {
+        return {
+            rawValue: value,
+            scope: 'shared',
+            ownerId: parts[1] || null,
+            kategorieId: parts[2] || null,
+            unterkategorieId: parts[3] || null
+        };
+    }
+    if (parts.length === 2) {
+        return {
+            rawValue: value,
+            scope: 'own',
+            ownerId: null,
+            kategorieId: parts[0] || null,
+            unterkategorieId: parts[1] || null
+        };
+    }
+    return {
+        rawValue: value,
+        scope: 'own',
+        ownerId: null,
+        kategorieId: value,
+        unterkategorieId: null
+    };
+}
+
+function setKategorieFilterFromValue(value) {
+    if (!value) {
+        currentKategorieFilter = null;
+        currentKategorieId = null;
+        currentUnterkategorieId = null;
+        return;
+    }
+    const parsed = parseKategorieFilterValue(value);
+    currentKategorieFilter = parsed;
+    currentKategorieId = parsed?.kategorieId || null;
+    currentUnterkategorieId = parsed?.unterkategorieId || null;
+}
+
+function getActiveKategorieFilter() {
+    if (currentKategorieFilter) return currentKategorieFilter;
+    if (!currentKategorieId) return null;
+    return {
+        rawValue: currentKategorieId,
+        scope: 'own',
+        ownerId: null,
+        kategorieId: currentKategorieId,
+        unterkategorieId: currentUnterkategorieId || null
+    };
+}
+
+function doesNotizMatchKategorieFilter(notiz, filter) {
+    if (!filter) return true;
+    const ownerId = getNotizOwnerId(notiz);
+    const currentUserId = getCurrentUserId();
+
+    if (filter.scope === 'shared') {
+        if (!ownerId || ownerId !== filter.ownerId) return false;
+    } else if (filter.scope === 'own') {
+        if (ownerId && currentUserId && ownerId !== currentUserId) return false;
+    }
+
+    if (filter.kategorieId && notiz.kategorieId !== filter.kategorieId) return false;
+    if (filter.unterkategorieId && notiz.unterkategorieId !== filter.unterkategorieId) return false;
+    return true;
+}
+
+function getNotizCreatedAtDate(notiz) {
+    if (!notiz) return new Date(0);
+    if (notiz.createdAt?.toDate) return notiz.createdAt.toDate();
+    if (notiz.createdAt) return new Date(notiz.createdAt);
+    return new Date(0);
+}
+
+function refreshNotizenView() {
+    renderNotizenList();
+    updateNotizenStats();
+    renderKategorienFilter();
+}
+
+// ========================================
+// SHARING: EINLADUNGEN & LISTENER
+// ========================================
+
+function startNotizenEinladungenListener(userId) {
+    if (!userId) return;
+
+    if (unsubscribeNotizenEinladungen) {
+        unsubscribeNotizenEinladungen();
+        unsubscribeNotizenEinladungen = null;
+    }
+
+    const invitesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
+    const invitesQuery = query(invitesCollection, where('targetUserId', '==', userId));
+
+    unsubscribeNotizenEinladungen = onSnapshot(invitesQuery, (snapshot) => {
+        handleNotizenEinladungenSnapshot(snapshot, userId);
+    }, (error) => {
+        console.error('📝 Notizen: Fehler beim Laden der Einladungen:', error);
+    });
+}
+
+function startNotizenEinladungenOutgoingListener(userId) {
+    if (!userId) return;
+
+    if (unsubscribeNotizenEinladungenOutgoing) {
+        unsubscribeNotizenEinladungenOutgoing();
+        unsubscribeNotizenEinladungenOutgoing = null;
+    }
+
+    const invitesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
+    const invitesQuery = query(invitesCollection, where('ownerId', '==', userId));
+
+    unsubscribeNotizenEinladungenOutgoing = onSnapshot(invitesQuery, (snapshot) => {
+        handleNotizenEinladungenOutgoingSnapshot(snapshot, userId);
+    }, (error) => {
+        console.error('📝 Notizen: Fehler beim Laden gesendeter Einladungen:', error);
+    });
+}
+
+function handleNotizenEinladungenSnapshot(snapshot, userId) {
+    const invites = [];
+    const inviteMap = {};
+
+    snapshot.forEach(docSnap => {
+        const invite = normalizeInviteSnapshot(docSnap);
+        if (!invite) return;
+        if (userId && invite.targetUserId && invite.targetUserId !== userId) return;
+
+        inviteMap[invite.id] = invite;
+        invites.push(invite);
+    });
+
+    NOTIZEN_EINLADUNGEN = inviteMap;
+    const acceptedInvites = invites.filter(isInviteAccepted);
+    syncAcceptedInvites(acceptedInvites);
+    updateNotizenEinladungenBadge();
+    refreshNotizenEinladungenModalIfOpen();
+}
+
+function handleNotizenEinladungenOutgoingSnapshot(snapshot, userId) {
+    const inviteMap = {};
+
+    snapshot.forEach(docSnap => {
+        const invite = normalizeInviteSnapshot(docSnap);
+        if (!invite) return;
+        if (userId && invite.ownerId && invite.ownerId !== userId) return;
+        inviteMap[invite.id] = invite;
+    });
+
+    NOTIZEN_EINLADUNGEN_OUTGOING = inviteMap;
+    updateNotizenEinladungenBadge();
+    refreshNotizenEinladungenModalIfOpen();
+}
+
+function updateNotizenEinladungenBadge() {
+    const badge = document.getElementById('notizen-einladungen-badge');
+    if (!badge) return;
+    const pendingCount = Object.values(NOTIZEN_EINLADUNGEN).filter(isInvitePending).length;
+    if (pendingCount > 0) {
+        badge.textContent = pendingCount;
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+}
+
+function normalizeInviteSnapshot(docSnap) {
+    if (!docSnap) return null;
+    const data = docSnap.data ? docSnap.data() : null;
+    if (!data) return null;
+    return {
+        id: docSnap.id,
+        ...data
+    };
+}
+
+function isValidInvite(invite) {
+    if (!invite?.id || !invite?.ownerId || !invite?.resourceId || !invite?.type) return false;
+    return invite.type === SHARE_SOURCE_TYPES.notiz || invite.type === SHARE_SOURCE_TYPES.kategorie;
+}
+
+function normalizeInvite(invite) {
+    return {
+        ...invite,
+        permission: normalizeSharePermission(invite.permission)
+    };
+}
+
+function getActiveInvite(inviteId) {
+    return activeAcceptedInvites.get(inviteId) || null;
+}
+
+function buildInviteShareMeta(invite, sourceType) {
+    const ownerName = invite?.ownerName || getUserDisplayNameById(invite?.ownerId);
+    return buildShareMeta({
+        ownerId: invite.ownerId,
+        ownerName,
+        permission: invite.permission,
+        sourceType,
+        inviteId: invite.id
+    });
+}
+
+function syncAcceptedInvites(acceptedInvites) {
+    const nextAccepted = new Map();
+
+    acceptedInvites.forEach(invite => {
+        if (!isValidInvite(invite)) {
+            console.warn('📝 Notizen: Ungültige Einladung übersprungen:', invite);
+            return;
+        }
+        const normalized = normalizeInvite(invite);
+        nextAccepted.set(normalized.id, normalized);
+    });
+
+    activeAcceptedInvites.forEach((previousInvite, inviteId) => {
+        if (!nextAccepted.has(inviteId)) {
+            cleanupInviteShareData(inviteId, previousInvite);
+            stopInviteListeners(inviteId);
+            activeAcceptedInvites.delete(inviteId);
+        }
+    });
+
+    nextAccepted.forEach((invite, inviteId) => {
+        const previousInvite = activeAcceptedInvites.get(inviteId);
+        const identityChanged = previousInvite && (
+            previousInvite.type !== invite.type ||
+            previousInvite.ownerId !== invite.ownerId ||
+            previousInvite.resourceId !== invite.resourceId
+        );
+
+        if (identityChanged) {
+            cleanupInviteShareData(inviteId, previousInvite);
+            stopInviteListeners(inviteId);
+        }
+
+        activeAcceptedInvites.set(inviteId, invite);
+        ensureInviteListeners(invite);
+        updateInviteShareMeta(invite);
+    });
+
+    refreshNotizenView();
+}
+
+function ensureInviteListeners(invite) {
+    if (invite.type === SHARE_SOURCE_TYPES.notiz) {
+        ensureNotizInviteListener(invite);
+        return;
+    }
+    if (invite.type === SHARE_SOURCE_TYPES.kategorie) {
+        ensureKategorieInviteListeners(invite);
+    }
+}
+
+function ensureNotizInviteListener(invite) {
+    const inviteId = invite.id;
+    if (sharedNotizenListeners.has(inviteId)) return;
+
+    const notizRef = doc(db, 'artifacts', appId, 'users', invite.ownerId, 'notizen', invite.resourceId);
+    const unsubscribe = onSnapshot(notizRef, (docSnap) => {
+        const activeInvite = getActiveInvite(inviteId);
+        if (!activeInvite) return;
+
+        const shareMeta = buildInviteShareMeta(activeInvite, SHARE_SOURCE_TYPES.notiz);
+        const notizKey = getNotizShareKey(activeInvite.ownerId, activeInvite.resourceId);
+
+        if (docSnap.exists()) {
+            upsertSharedNotiz(activeInvite.ownerId, activeInvite.resourceId, docSnap.data(), shareMeta);
+            if (notizKey) {
+                sharedInviteNotizIndex.set(inviteId, new Set([notizKey]));
+            }
+        } else {
+            removeShareSourceFromNotiz(activeInvite.ownerId, activeInvite.resourceId, SHARE_SOURCE_TYPES.notiz, inviteId);
+            if (notizKey) {
+                sharedInviteNotizIndex.set(inviteId, new Set());
+            }
+        }
+
+        refreshNotizenView();
+    }, (error) => {
+        console.error('📝 Notizen: Fehler beim Laden geteilter Notiz:', error);
+    });
+
+    sharedNotizenListeners.set(inviteId, unsubscribe);
+}
+
+function ensureKategorieInviteListeners(invite) {
+    const inviteId = invite.id;
+
+    if (!sharedKategorienListeners.has(inviteId)) {
+        const kategorieRef = doc(db, 'artifacts', appId, 'users', invite.ownerId, 'notizen_kategorien', invite.resourceId);
+        const unsubscribeKategorie = onSnapshot(kategorieRef, (docSnap) => {
+            const activeInvite = getActiveInvite(inviteId);
+            if (!activeInvite) return;
+
+            const shareMeta = buildInviteShareMeta(activeInvite, SHARE_SOURCE_TYPES.kategorie);
+            const kategorieKey = getKategorieShareKey(activeInvite.ownerId, activeInvite.resourceId);
+
+            if (docSnap.exists()) {
+                upsertSharedKategorie(activeInvite.ownerId, activeInvite.resourceId, docSnap.data(), shareMeta);
+                if (kategorieKey) {
+                    sharedInviteKategorieIndex.set(inviteId, kategorieKey);
+                }
+            } else {
+                removeShareSourceFromKategorie(activeInvite.ownerId, activeInvite.resourceId, SHARE_SOURCE_TYPES.kategorie, inviteId);
+                if (kategorieKey) {
+                    sharedInviteKategorieIndex.delete(inviteId);
+                }
+            }
+
+            refreshNotizenView();
+        }, (error) => {
+            console.error('📝 Notizen: Fehler beim Laden geteilter Kategorie:', error);
+        });
+
+        sharedKategorienListeners.set(inviteId, unsubscribeKategorie);
+    }
+
+    if (!sharedKategorieNotizenListeners.has(inviteId)) {
+        const notizenRef = collection(db, 'artifacts', appId, 'users', invite.ownerId, 'notizen');
+        const notizenQuery = query(notizenRef, where('kategorieId', '==', invite.resourceId));
+        const unsubscribeNotizen = onSnapshot(notizenQuery, (snapshot) => {
+            handleKategorieNotizenSnapshot(inviteId, snapshot);
+        }, (error) => {
+            console.error('📝 Notizen: Fehler beim Laden geteilter Kategorienotizen:', error);
+        });
+
+        sharedKategorieNotizenListeners.set(inviteId, unsubscribeNotizen);
+    }
+}
+
+function handleKategorieNotizenSnapshot(inviteId, snapshot) {
+    const activeInvite = getActiveInvite(inviteId);
+    if (!activeInvite) return;
+
+    const shareMeta = buildInviteShareMeta(activeInvite, SHARE_SOURCE_TYPES.kategorie);
+    const nextKeys = new Set();
+
+    snapshot.forEach(docSnap => {
+        const notizKey = getNotizShareKey(activeInvite.ownerId, docSnap.id);
+        if (!notizKey) return;
+        nextKeys.add(notizKey);
+        upsertSharedNotiz(activeInvite.ownerId, docSnap.id, docSnap.data(), shareMeta);
+    });
+
+    const previousKeys = sharedInviteNotizIndex.get(inviteId) || new Set();
+    previousKeys.forEach(key => {
+        if (!nextKeys.has(key)) {
+            removeShareSourceFromNotizByKey(key, SHARE_SOURCE_TYPES.kategorie, inviteId);
+        }
+    });
+
+    sharedInviteNotizIndex.set(inviteId, nextKeys);
+    refreshNotizenView();
+}
+
+function updateInviteShareMeta(invite) {
+    const shareMeta = buildInviteShareMeta(invite, invite.type);
+
+    if (invite.type === SHARE_SOURCE_TYPES.notiz) {
+        const notizKey = getNotizShareKey(invite.ownerId, invite.resourceId);
+        if (notizKey) {
+            applyShareMetaToNotizKey(notizKey, shareMeta);
+        }
+        return;
+    }
+
+    const kategorieKey = getKategorieShareKey(invite.ownerId, invite.resourceId);
+    if (kategorieKey) {
+        applyShareMetaToKategorieKey(kategorieKey, shareMeta);
+    }
+
+    const notizKeys = sharedInviteNotizIndex.get(invite.id);
+    if (notizKeys) {
+        notizKeys.forEach(notizKey => applyShareMetaToNotizKey(notizKey, shareMeta));
+    }
+}
+
+function stopInviteListeners(inviteId) {
+    stopListenerForKey(sharedNotizenListeners, inviteId, 'Shared-Notiz');
+    stopListenerForKey(sharedKategorienListeners, inviteId, 'Shared-Kategorie');
+    stopListenerForKey(sharedKategorieNotizenListeners, inviteId, 'Shared-Kategorie-Notizen');
+}
+
+function stopListenerForKey(listenerMap, key, label) {
+    if (!listenerMap || !listenerMap.has(key)) return;
+    const unsubscribe = listenerMap.get(key);
+    try {
+        if (typeof unsubscribe === 'function') {
+            unsubscribe();
+        }
+    } catch (error) {
+        console.error(`📝 Notizen: Fehler beim Stoppen von ${label}-Listenern:`, error);
+    }
+    listenerMap.delete(key);
+}
+
+function cleanupInviteShareData(inviteId, invite) {
+    if (!invite) return;
+
+    if (invite.type === SHARE_SOURCE_TYPES.notiz) {
+        removeShareSourceFromNotiz(invite.ownerId, invite.resourceId, SHARE_SOURCE_TYPES.notiz, inviteId);
+        sharedInviteNotizIndex.delete(inviteId);
+        return;
+    }
+
+    if (invite.type === SHARE_SOURCE_TYPES.kategorie) {
+        removeShareSourceFromKategorie(invite.ownerId, invite.resourceId, SHARE_SOURCE_TYPES.kategorie, inviteId);
+
+        const notizKeys = sharedInviteNotizIndex.get(inviteId) || new Set();
+        notizKeys.forEach(notizKey => {
+            removeShareSourceFromNotizByKey(notizKey, SHARE_SOURCE_TYPES.kategorie, inviteId);
+        });
+        sharedInviteNotizIndex.delete(inviteId);
+        sharedInviteKategorieIndex.delete(inviteId);
+    }
 }
 
 // ========================================
@@ -309,7 +1513,8 @@ export async function createNotiz(data) {
             erinnerungen: data.erinnerungen || [],
             createdAt: serverTimestamp(),
             createdBy: userId,
-            isArchived: false
+            isArchived: false,
+            history: [buildNotizHistoryEntry('created')]
         };
 
         const docRef = await addDoc(notizenCollection, notizData);
@@ -324,11 +1529,29 @@ export async function createNotiz(data) {
 
 export async function updateNotiz(notizId, updates) {
     try {
-        const docRef = doc(notizenCollection, notizId);
+        const notiz = getNotizByLookupKey(notizId);
+        if (!notiz) {
+            alertUser('Notiz nicht gefunden.', 'error');
+            return false;
+        }
+        if (!canCurrentUserWriteNotiz(notiz)) {
+            alertUser('Keine Berechtigung zum Bearbeiten dieser Notiz.', 'warning');
+            return false;
+        }
+
+        const docRef = getNotizDocRef(notiz);
+        if (!docRef) {
+            alertUser('Notiz konnte nicht gespeichert werden.', 'error');
+            return false;
+        }
+
+        const safeUpdates = sanitizeNotizUpdates(notiz, updates);
         await updateDoc(docRef, {
-            ...updates,
-            updatedAt: serverTimestamp()
+            ...safeUpdates,
+            updatedAt: serverTimestamp(),
+            history: arrayUnion(buildNotizHistoryEntry('updated'))
         });
+        alertUser('Notiz aktualisiert.', 'success');
         return true;
     } catch (error) {
         console.error('📝 Notizen: Fehler beim Aktualisieren der Notiz:', error);
@@ -339,7 +1562,20 @@ export async function updateNotiz(notizId, updates) {
 
 export async function deleteNotiz(notizId) {
     try {
-        const docRef = doc(notizenCollection, notizId);
+        const notiz = getNotizByLookupKey(notizId);
+        if (!notiz) {
+            alertUser('Notiz nicht gefunden.', 'error');
+            return false;
+        }
+        if (!isNotizOwner(notiz)) {
+            alertUser('Nur der Besitzer darf diese Notiz löschen.', 'warning');
+            return false;
+        }
+        const docRef = getNotizDocRef(notiz);
+        if (!docRef) {
+            alertUser('Notiz konnte nicht gelöscht werden.', 'error');
+            return false;
+        }
         await deleteDoc(docRef);
         alertUser('Notiz gelöscht.', 'success');
         return true;
@@ -379,31 +1615,62 @@ function renderKategorienFilter() {
     if (!select) return;
 
     select.innerHTML = '<option value="">Alle Kategorien</option>';
-    
-    Object.values(KATEGORIEN).forEach(kat => {
-        const option = document.createElement('option');
-        option.value = kat.id;
-        option.textContent = kat.name;
-        select.appendChild(option);
 
-        // Unterkategorien als Gruppe
+    const ownCategories = Object.values(KATEGORIEN).sort((a, b) =>
+        (a?.name || '').localeCompare(b?.name || '', 'de')
+    );
+    const sharedCategories = Object.values(SHARED_KATEGORIEN).sort((a, b) =>
+        (a?.name || '').localeCompare(b?.name || '', 'de')
+    );
+
+    const appendKategorieOptions = (group, kat, baseValue, labelPrefix = '') => {
+        if (!kat?.id) return;
+        const option = document.createElement('option');
+        option.value = baseValue;
+        option.textContent = `${labelPrefix}${kat.name || 'Ohne Namen'}`;
+        group.appendChild(option);
+
         if (kat.unterkategorien && kat.unterkategorien.length > 0) {
             kat.unterkategorien.forEach(uk => {
                 const subOption = document.createElement('option');
-                subOption.value = `${kat.id}:${uk.id}`;
+                subOption.value = `${baseValue}:${uk.id}`;
                 subOption.textContent = `  └ ${uk.name}`;
-                select.appendChild(subOption);
+                group.appendChild(subOption);
             });
         }
-    });
+    };
+
+    if (ownCategories.length > 0) {
+        const ownGroup = document.createElement('optgroup');
+        ownGroup.label = 'Eigene Kategorien';
+        ownCategories.forEach(kat => {
+            appendKategorieOptions(ownGroup, kat, `own:${kat.id}`);
+        });
+        select.appendChild(ownGroup);
+    }
+
+    if (sharedCategories.length > 0) {
+        const sharedGroup = document.createElement('optgroup');
+        sharedGroup.label = 'Geteilte Kategorien';
+        sharedCategories.forEach(kat => {
+            const ownerId = getSharedKategorieOwnerId(kat);
+            if (!ownerId) return;
+            appendKategorieOptions(sharedGroup, kat, `shared:${ownerId}:${kat.id}`, '🔗 ');
+        });
+        select.appendChild(sharedGroup);
+    }
+
+    const selectedValue = currentKategorieFilter?.rawValue || '';
+    select.value = selectedValue || '';
 }
 
 function updateNotizenStats() {
-    const total = Object.keys(NOTIZEN).length;
+    const combinedNotizen = getCombinedNotizenArray();
+    const total = combinedNotizen.length;
     const heute = new Date();
     heute.setHours(0, 0, 0, 0);
     
-    const aktiv = Object.values(NOTIZEN).filter(n => {
+    const aktiv = combinedNotizen.filter(n => {
         if (n.isArchived) return false;
         if (n.gueltigBis) {
             const bis = n.gueltigBis.toDate ? n.gueltigBis.toDate() : new Date(n.gueltigBis);
@@ -412,7 +1679,7 @@ function updateNotizenStats() {
         return true;
     }).length;
 
-    const mitErinnerung = Object.values(NOTIZEN).filter(n => 
+    const mitErinnerung = combinedNotizen.filter(n => 
         n.erinnerungen && n.erinnerungen.length > 0
     ).length;
 
@@ -432,14 +1699,12 @@ function renderNotizenList() {
     // Aktive Filter rendern
     renderActiveFiltersNotizen();
 
-    let notizenArray = Object.values(NOTIZEN);
+    let notizenArray = getCombinedNotizenArray();
+    const kategorieFilter = getActiveKategorieFilter();
 
     // Kategoriefilter anwenden
-    if (currentKategorieId) {
-        notizenArray = notizenArray.filter(n => n.kategorieId === currentKategorieId);
-    }
-    if (currentUnterkategorieId) {
-        notizenArray = notizenArray.filter(n => n.unterkategorieId === currentUnterkategorieId);
+    if (kategorieFilter) {
+        notizenArray = notizenArray.filter(notiz => doesNotizMatchKategorieFilter(notiz, kategorieFilter));
     }
     
     // Suchbegriff anwenden
@@ -487,6 +1752,8 @@ function renderNotizenList() {
         });
     }
 
+    notizenArray.sort((a, b) => getNotizCreatedAtDate(b) - getNotizCreatedAtDate(a));
+
     if (notizenArray.length === 0) {
         container.innerHTML = `
             <div class="text-center py-12 text-gray-400">
@@ -517,7 +1784,7 @@ function matchNotizFilter(notiz, category, value) {
             const statusLabel = NOTIZ_STATUS[statusKey]?.label?.toLowerCase() || statusKey;
             return statusKey.toLowerCase().includes(val) || statusLabel.includes(val);
         case 'kategorie':
-            const kat = KATEGORIEN[notiz.kategorieId];
+            const kat = getKategorieForNotiz(notiz);
             return kat?.name?.toLowerCase().includes(val) || false;
         case 'titel':
             return notiz.titel?.toLowerCase().includes(val) || false;
@@ -599,6 +1866,7 @@ function resetNotizFiltersToDefault() {
     searchTerm = '';
     currentKategorieId = null;
     currentUnterkategorieId = null;
+    currentKategorieFilter = null;
     
     activeFilters = [{ 
         category: 'status', 
@@ -626,10 +1894,11 @@ window.resetNotizFilters = function() {
 };
 
 function renderNotizCard(notiz) {
-    const kategorie = KATEGORIEN[notiz.kategorieId];
+    const kategorie = getKategorieForNotiz(notiz);
     const kategorieLabel = kategorie ? kategorie.name : 'Ohne Kategorie';
     const kategorieColor = kategorie?.color || 'gray';
-    const userId = getCurrentUserId();
+    const isShared = isNotizShared(notiz);
+    const notizKey = getNotizLookupKey(notiz) || notiz.id;
     
     let unterkategorieLabel = '';
     if (kategorie && notiz.unterkategorieId) {
@@ -663,13 +1932,14 @@ function renderNotizCard(notiz) {
     const displayTitel = notiz.titel || 'Ohne Titel';
 
     return `
-        <div class="notiz-card bg-white p-4 rounded-xl shadow-lg border-l-4 border-${kategorieColor}-500 hover:shadow-xl transition cursor-pointer" data-notiz-id="${notiz.id}">
+        <div class="notiz-card bg-white p-4 rounded-xl shadow-lg border-l-4 border-${kategorieColor}-500 hover:shadow-xl transition cursor-pointer" data-notiz-id="${notizKey}">
             <div class="flex justify-between items-start mb-2">
                 <h3 class="font-bold text-gray-800 text-lg">${displayTitel}</h3>
                 <div class="flex items-center gap-2">
                     <span class="px-2 py-1 ${statusConfig.color} rounded-full text-xs font-semibold">
                         ${statusConfig.icon} ${statusConfig.label}
                     </span>
+                    ${isShared ? '<span class="text-gray-500" title="Geteilt">🔗</span>' : ''}
                     ${hasReminders ? '<span class="text-orange-500" title="Hat Erinnerungen">🔔</span>' : ''}
                 </div>
             </div>
@@ -682,6 +1952,7 @@ function renderNotizCard(notiz) {
             </div>
 
             ${preview ? `<p class="text-sm text-gray-600 mb-2 line-clamp-2">${preview}</p>` : ''}
+            ${getNotizShareInfoHtml(notiz)}
 
             <div class="flex items-center gap-3 text-xs text-gray-400">
                 <span>📄 ${elementCount} Element${elementCount !== 1 ? 'e' : ''}</span>
@@ -703,10 +1974,12 @@ let currentViewingNotizId = null;
 // ========================================
 
 export function openNotizViewer(notizId) {
-    if (!notizId || !NOTIZEN[notizId]) return;
-    
+    if (!notizId) return;
+
+    const notiz = getNotizByLookupKey(notizId);
+    if (!notiz) return;
+
     currentViewingNotizId = notizId;
-    const notiz = NOTIZEN[notizId];
     
     const modal = document.getElementById('notizViewerModal');
     if (!modal) {
@@ -714,7 +1987,7 @@ export function openNotizViewer(notizId) {
         return;
     }
 
-    const kategorie = KATEGORIEN[notiz.kategorieId];
+    const kategorie = getKategorieForNotiz(notiz);
     const kategorieLabel = kategorie ? kategorie.name : 'Ohne Kategorie';
     const kategorieColor = kategorie?.color || 'gray';
     
@@ -766,9 +2039,8 @@ export function openNotizViewer(notizId) {
     }
 
     // Berechtigungsbasierte Buttons anpassen
-    const currentUserId = getCurrentUserId();
-    const isOwner = notiz.createdBy === currentUserId;
-    const hasWriteAccess = isOwner;
+    const isOwner = isNotizOwner(notiz);
+    const hasWriteAccess = canCurrentUserWriteNotiz(notiz);
 
     const editButton = document.querySelector('#viewer-erweitert-menu button[onclick="window.editCurrentNotiz()"]');
     if (editButton) {
@@ -785,6 +2057,27 @@ export function openNotizViewer(notizId) {
             deleteButton.classList.remove('hidden');
         } else {
             deleteButton.classList.add('hidden');
+        }
+    }
+
+    const shareButton = document.getElementById('viewer-share-notiz-btn');
+    if (shareButton) {
+        if (isOwner) {
+            shareButton.classList.remove('hidden');
+        } else {
+            shareButton.classList.add('hidden');
+        }
+    }
+
+    const shareInfoEl = document.getElementById('viewer-notiz-share-info');
+    if (shareInfoEl) {
+        const shareInfoText = getNotizShareInfoText(notiz);
+        if (shareInfoText) {
+            shareInfoEl.textContent = shareInfoText;
+            shareInfoEl.classList.remove('hidden');
+        } else {
+            shareInfoEl.textContent = '';
+            shareInfoEl.classList.add('hidden');
         }
     }
 
@@ -953,17 +2246,456 @@ window.deleteCurrentNotiz = async function() {
 };
 
 // ========================================
+// SHARING UI: EINLADUNGEN & SHARE MODAL
+// ========================================
+
+function getNotizenEinladungenCollectionRef() {
+    return collection(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen');
+}
+
+function getNotizenEinladungenDocRef(inviteId) {
+    if (!inviteId) return null;
+    return doc(db, 'artifacts', appId, 'public', 'data', 'notizen_einladungen', inviteId);
+}
+
+function buildNotizenInviteId(type, resourceId, targetUserId) {
+    const safe = (value) => String(value || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `${type}_${safe(resourceId)}_${safe(targetUserId)}`;
+}
+
+function getNotizenShareTypeLabel(type) {
+    return type === SHARE_SOURCE_TYPES.kategorie ? 'Kategorie' : 'Notiz';
+}
+
+function getInviteSortDate(invite) {
+    if (!invite) return new Date(0);
+    if (invite.createdAt?.toDate) return invite.createdAt.toDate();
+    if (invite.createdAt) return new Date(invite.createdAt);
+    return new Date(0);
+}
+
+function sortInvitesByDate(a, b) {
+    return getInviteSortDate(b) - getInviteSortDate(a);
+}
+
+function renderNotizenEinladungenEmpty(message) {
+    return `<p class="text-gray-400 text-sm italic">${escapeHtml(message || '')}</p>`;
+}
+
+function renderNotizenInviteInboxItem(invite) {
+    const resource = escapeHtml(getInviteResourceLabel(invite));
+    const owner = escapeHtml(getInviteOwnerLabel(invite));
+    const permission = getInvitePermissionLabel(invite.permission);
+    const typeLabel = getInviteTypeLabel(invite);
+
+    return `
+        <div class="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <div class="flex justify-between items-start gap-3">
+                <div>
+                    <p class="font-semibold text-gray-800">${resource}</p>
+                    <p class="text-xs text-gray-600">${typeLabel} · ${permission}</p>
+                    <p class="text-xs text-gray-500">Von: ${owner}</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="window.notizenAcceptInvite('${invite.id}')" class="px-3 py-1 bg-green-500 text-white rounded-lg hover:bg-green-600 text-xs">✓ Annehmen</button>
+                    <button onclick="window.notizenRejectInvite('${invite.id}')" class="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 text-xs">✗ Ablehnen</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderNotizenInviteActiveItem(invite) {
+    const resource = escapeHtml(getInviteResourceLabel(invite));
+    const owner = escapeHtml(getInviteOwnerLabel(invite));
+    const permission = getInvitePermissionLabel(invite.permission);
+    const typeLabel = getInviteTypeLabel(invite);
+
+    return `
+        <div class="p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div class="flex justify-between items-start gap-3">
+                <div>
+                    <p class="font-semibold text-gray-800">${resource}</p>
+                    <p class="text-xs text-gray-600">${typeLabel} · ${permission}</p>
+                    <p class="text-xs text-gray-500">Von: ${owner}</p>
+                </div>
+                <button onclick="window.notizenRemoveInviteAccess('${invite.id}')" class="px-3 py-1 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-xs">Zugriff entfernen</button>
+            </div>
+        </div>
+    `;
+}
+
+function renderNotizenInviteRejectedItem(invite) {
+    const resource = escapeHtml(getInviteResourceLabel(invite));
+    const owner = escapeHtml(getInviteOwnerLabel(invite));
+    const permission = getInvitePermissionLabel(invite.permission);
+    const typeLabel = getInviteTypeLabel(invite);
+
+    return `
+        <div class="p-3 bg-red-50 border border-red-200 rounded-lg opacity-80">
+            <div class="flex justify-between items-start gap-3">
+                <div>
+                    <p class="font-semibold text-gray-700">${resource}</p>
+                    <p class="text-xs text-gray-600">${typeLabel} · ${permission}</p>
+                    <p class="text-xs text-gray-500">Von: ${owner}</p>
+                </div>
+                <button onclick="window.notizenRevokeInviteRejection('${invite.id}')" class="px-3 py-1 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-xs">↩ Zurückziehen</button>
+            </div>
+        </div>
+    `;
+}
+
+function renderNotizenInviteOutgoingItem(invite) {
+    const resource = escapeHtml(getInviteResourceLabel(invite));
+    const target = escapeHtml(getInviteTargetLabel(invite));
+    const permission = getInvitePermissionLabel(invite.permission);
+    const typeLabel = getInviteTypeLabel(invite);
+    const statusLabel = getInviteStatusLabel(invite.status);
+    const statusClass = invite.status === NOTIZEN_INVITE_STATUS.accepted
+        ? 'text-green-600'
+        : invite.status === NOTIZEN_INVITE_STATUS.pending
+            ? 'text-amber-600'
+            : invite.status === NOTIZEN_INVITE_STATUS.rejected
+                ? 'text-red-600'
+                : 'text-gray-500';
+    const canRemove = invite.status !== NOTIZEN_INVITE_STATUS.rejected;
+
+    return `
+        <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div class="flex justify-between items-start gap-3">
+                <div>
+                    <p class="font-semibold text-gray-800">${resource}</p>
+                    <p class="text-xs text-gray-600">${typeLabel} · ${permission}</p>
+                    <p class="text-xs ${statusClass}">Status: ${statusLabel}</p>
+                    <p class="text-xs text-gray-500">An: ${target}</p>
+                    ${invite.status === NOTIZEN_INVITE_STATUS.rejected ? '<p class="text-xs text-red-600">Ablehnung blockiert neue Einladungen.</p>' : ''}
+                </div>
+                ${canRemove ? `<button onclick="window.notizenRemoveOutgoingInvite('${invite.id}')" class="px-3 py-1 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-xs">Entziehen</button>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+function renderNotizenEinladungenModal() {
+    const inboxEl = document.getElementById('notizen-einladungen-inbox');
+    const activeEl = document.getElementById('notizen-einladungen-aktiv');
+    const rejectedEl = document.getElementById('notizen-einladungen-abgelehnt');
+    const outgoingEl = document.getElementById('notizen-einladungen-postausgang');
+    if (!inboxEl || !activeEl || !rejectedEl || !outgoingEl) return;
+
+    const incomingInvites = Object.values(NOTIZEN_EINLADUNGEN).sort(sortInvitesByDate);
+    const outgoingInvites = Object.values(NOTIZEN_EINLADUNGEN_OUTGOING).sort(sortInvitesByDate);
+
+    const pendingInvites = incomingInvites.filter(invite => invite.status === NOTIZEN_INVITE_STATUS.pending);
+    const acceptedInvites = incomingInvites.filter(invite => invite.status === NOTIZEN_INVITE_STATUS.accepted);
+    const rejectedInvites = incomingInvites.filter(invite => invite.status === NOTIZEN_INVITE_STATUS.rejected);
+    const outgoingFiltered = outgoingInvites.filter(invite => ![NOTIZEN_INVITE_STATUS.removed, NOTIZEN_INVITE_STATUS.revoked].includes(invite.status));
+
+    inboxEl.innerHTML = pendingInvites.length
+        ? pendingInvites.map(renderNotizenInviteInboxItem).join('')
+        : renderNotizenEinladungenEmpty('Keine Einladungen vorhanden.');
+    activeEl.innerHTML = acceptedInvites.length
+        ? acceptedInvites.map(renderNotizenInviteActiveItem).join('')
+        : renderNotizenEinladungenEmpty('Keine aktiven Freigaben.');
+    rejectedEl.innerHTML = rejectedInvites.length
+        ? rejectedInvites.map(renderNotizenInviteRejectedItem).join('')
+        : renderNotizenEinladungenEmpty('Keine abgelehnten Einladungen.');
+    outgoingEl.innerHTML = outgoingFiltered.length
+        ? outgoingFiltered.map(renderNotizenInviteOutgoingItem).join('')
+        : renderNotizenEinladungenEmpty('Keine gesendeten Einladungen.');
+}
+
+function refreshNotizenEinladungenModalIfOpen() {
+    const modal = document.getElementById('notizenEinladungenModal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    renderNotizenEinladungenModal();
+}
+
+function openNotizenEinladungenModal() {
+    const modal = document.getElementById('notizenEinladungenModal');
+    if (!modal) return;
+    renderNotizenEinladungenModal();
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closeNotizenEinladungenModal() {
+    const modal = document.getElementById('notizenEinladungenModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+}
+
+async function updateNotizenInviteStatus(inviteId, status, extraData = {}) {
+    const docRef = getNotizenEinladungenDocRef(inviteId);
+    if (!docRef) return false;
+    try {
+        await updateDoc(docRef, {
+            status,
+            ...extraData
+        });
+        refreshNotizenEinladungenModalIfOpen();
+        return true;
+    } catch (error) {
+        console.error('📝 Notizen: Fehler beim Aktualisieren der Einladung:', error);
+        alertUser('Fehler beim Aktualisieren der Einladung.', 'error');
+        return false;
+    }
+}
+
+async function acceptNotizenInvite(inviteId) {
+    const invite = NOTIZEN_EINLADUNGEN[inviteId];
+    if (!invite || invite.status !== NOTIZEN_INVITE_STATUS.pending) return;
+    const success = await updateNotizenInviteStatus(inviteId, NOTIZEN_INVITE_STATUS.accepted, {
+        respondedAt: serverTimestamp()
+    });
+    if (success) alertUser('Einladung angenommen.', 'success');
+}
+
+async function rejectNotizenInvite(inviteId) {
+    const invite = NOTIZEN_EINLADUNGEN[inviteId];
+    if (!invite || invite.status !== NOTIZEN_INVITE_STATUS.pending) return;
+    const success = await updateNotizenInviteStatus(inviteId, NOTIZEN_INVITE_STATUS.rejected, {
+        respondedAt: serverTimestamp()
+    });
+    if (success) alertUser('Einladung abgelehnt.', 'success');
+}
+
+async function revokeNotizenInviteRejection(inviteId) {
+    if (!confirm('Ablehnung zurückziehen? Danach kann wieder eingeladen werden.')) return;
+    const invite = NOTIZEN_EINLADUNGEN[inviteId];
+    if (!invite || invite.status !== NOTIZEN_INVITE_STATUS.rejected) return;
+    const success = await updateNotizenInviteStatus(inviteId, NOTIZEN_INVITE_STATUS.revoked, {
+        revokedAt: serverTimestamp()
+    });
+    if (success) alertUser('Ablehnung zurückgezogen.', 'success');
+}
+
+async function removeNotizenInviteAccess(inviteId) {
+    if (!confirm('Zugriff auf diese Freigabe wirklich entfernen?')) return;
+    const invite = NOTIZEN_EINLADUNGEN[inviteId];
+    if (!invite || invite.status !== NOTIZEN_INVITE_STATUS.accepted) return;
+    const success = await updateNotizenInviteStatus(inviteId, NOTIZEN_INVITE_STATUS.removed, {
+        removedAt: serverTimestamp()
+    });
+    if (success) alertUser('Zugriff entfernt.', 'success');
+}
+
+async function removeNotizenOutgoingInvite(inviteId) {
+    if (!confirm('Einladung wirklich entziehen?')) return;
+    const invite = NOTIZEN_EINLADUNGEN_OUTGOING[inviteId];
+    if (!invite) return;
+    if (invite.status === NOTIZEN_INVITE_STATUS.rejected) {
+        alertUser('Der Empfänger muss die Ablehnung zuerst zurückziehen.', 'error');
+        return;
+    }
+    const success = await updateNotizenInviteStatus(inviteId, NOTIZEN_INVITE_STATUS.removed, {
+        removedAt: serverTimestamp()
+    });
+    if (success) alertUser('Einladung entzogen.', 'success');
+}
+
+function openNotizenShareModalForNotiz(notizId) {
+    const notiz = typeof notizId === 'string' ? getNotizByLookupKey(notizId) : notizId;
+    if (!notiz) {
+        alertUser('Notiz nicht gefunden.', 'error');
+        return;
+    }
+    if (!isNotizOwner(notiz)) {
+        alertUser('Nur der Besitzer kann teilen.', 'warning');
+        return;
+    }
+    openNotizenShareModal({
+        type: SHARE_SOURCE_TYPES.notiz,
+        resourceId: notiz.id,
+        resourceTitle: notiz.titel || 'Ohne Titel',
+        ownerId: getNotizOwnerId(notiz),
+        ownerName: getNotizOwnerLabel(notiz)
+    });
+}
+
+function openNotizenShareModalForKategorie(kategorieId) {
+    const kategorie = KATEGORIEN[kategorieId];
+    if (!kategorie) return;
+    openNotizenShareModal({
+        type: SHARE_SOURCE_TYPES.kategorie,
+        resourceId: kategorie.id,
+        resourceTitle: kategorie.name || 'Ohne Kategorie',
+        ownerId: getCurrentUserId(),
+        ownerName: getCurrentUserDisplayName()
+    });
+}
+
+function openNotizenShareModal(context) {
+    if (!context?.resourceId || !context?.type) return;
+    const modal = document.getElementById('notizenShareModal');
+    if (!modal) return;
+    currentShareContext = context;
+
+    const typeLabel = getNotizenShareTypeLabel(context.type);
+    const titleEl = document.getElementById('notizen-share-title');
+    const resourceEl = document.getElementById('notizen-share-resource');
+    const ownerEl = document.getElementById('notizen-share-owner');
+    if (titleEl) titleEl.textContent = `🔗 Teilen (${typeLabel})`;
+    if (resourceEl) resourceEl.textContent = `${typeLabel}: ${context.resourceTitle || 'Unbekannt'}`;
+    if (ownerEl) {
+        ownerEl.textContent = `Besitzer: ${context.ownerName || getCurrentUserDisplayName()}`;
+        ownerEl.classList.remove('hidden');
+    }
+
+    populateNotizenShareUserSelect();
+    const permissionSelect = document.getElementById('notizen-share-permission');
+    if (permissionSelect) permissionSelect.value = normalizeSharePermission(context.permission || NOTIZEN_SHARE_PERMISSION.read);
+    setNotizenShareFeedback('');
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closeNotizenShareModal() {
+    const modal = document.getElementById('notizenShareModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+    currentShareContext = null;
+    setNotizenShareFeedback('');
+}
+
+function populateNotizenShareUserSelect() {
+    const select = document.getElementById('notizen-share-target-user');
+    if (!select) return;
+    const currentUserId = getCurrentUserId();
+    select.innerHTML = '<option value="">-- Benutzer auswählen --</option>';
+
+    const users = USERS ? Object.entries(USERS) : [];
+    users
+        .map(([userId, user]) => ({
+            id: user?.id || userId,
+            name: user?.realName || user?.name || user?.displayName || userId,
+            isActive: user?.isActive
+        }))
+        .filter(user => user?.id && user.id !== currentUserId && user.isActive !== false)
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'de'))
+        .forEach(user => {
+            const option = document.createElement('option');
+            option.value = user.id;
+            option.textContent = user.name;
+            select.appendChild(option);
+        });
+}
+
+function setNotizenShareFeedback(message, type = 'info') {
+    const feedback = document.getElementById('notizen-share-feedback');
+    if (!feedback) return;
+    if (!message) {
+        feedback.textContent = '';
+        feedback.className = 'hidden text-sm';
+        return;
+    }
+    const typeClass = type === 'success'
+        ? 'text-green-700 bg-green-50 border-green-200'
+        : type === 'error'
+            ? 'text-red-700 bg-red-50 border-red-200'
+            : 'text-gray-600 bg-gray-50 border-gray-200';
+    feedback.textContent = message;
+    feedback.className = `text-sm border px-3 py-2 rounded ${typeClass}`;
+}
+
+async function sendNotizenShareInvite() {
+    if (!currentShareContext) return;
+    const targetSelect = document.getElementById('notizen-share-target-user');
+    const permissionSelect = document.getElementById('notizen-share-permission');
+    const targetUserId = targetSelect?.value || '';
+    const permission = normalizeSharePermission(permissionSelect?.value);
+
+    if (!targetUserId) {
+        setNotizenShareFeedback('Bitte einen Empfänger auswählen.', 'error');
+        return;
+    }
+
+    const ownerId = currentShareContext.ownerId || getCurrentUserId();
+    if (targetUserId === ownerId) {
+        setNotizenShareFeedback('Du kannst dich nicht selbst einladen.', 'error');
+        return;
+    }
+
+    const inviteId = buildNotizenInviteId(currentShareContext.type, currentShareContext.resourceId, targetUserId);
+    const docRef = getNotizenEinladungenDocRef(inviteId);
+    if (!docRef) return;
+
+    try {
+        const existingSnap = await getDoc(docRef);
+        if (existingSnap.exists()) {
+            const existing = existingSnap.data() || {};
+            if (existing.status === NOTIZEN_INVITE_STATUS.rejected) {
+                setNotizenShareFeedback('Der Empfänger hat abgelehnt. Erst Ablehnung zurückziehen lassen.', 'error');
+                return;
+            }
+            if ([NOTIZEN_INVITE_STATUS.pending, NOTIZEN_INVITE_STATUS.accepted].includes(existing.status)) {
+                setNotizenShareFeedback('Es besteht bereits eine Einladung oder Freigabe.', 'error');
+                return;
+            }
+        }
+
+        const targetUserName = getUserDisplayNameById(targetUserId);
+        const inviteData = {
+            type: currentShareContext.type,
+            resourceId: currentShareContext.resourceId,
+            resourceTitleSnapshot: currentShareContext.resourceTitle || null,
+            ownerId,
+            ownerName: currentShareContext.ownerName || getCurrentUserDisplayName(),
+            targetUserId,
+            targetUserName,
+            permission,
+            status: NOTIZEN_INVITE_STATUS.pending,
+            createdAt: serverTimestamp(),
+            respondedAt: null,
+            revokedAt: null,
+            removedAt: null
+        };
+
+        await setDoc(docRef, inviteData, { merge: true });
+        alertUser('Einladung gesendet.', 'success');
+        closeNotizenShareModal();
+    } catch (error) {
+        console.error('📝 Notizen: Fehler beim Senden der Einladung:', error);
+        setNotizenShareFeedback('Fehler beim Senden der Einladung.', 'error');
+    }
+}
+
+window.notizenAcceptInvite = acceptNotizenInvite;
+window.notizenRejectInvite = rejectNotizenInvite;
+window.notizenRevokeInviteRejection = revokeNotizenInviteRejection;
+window.notizenRemoveInviteAccess = removeNotizenInviteAccess;
+window.notizenRemoveOutgoingInvite = removeNotizenOutgoingInvite;
+
+// ========================================
 // NOTIZ EDITOR
 // ========================================
 
-export function openNotizEditor(notizId = null) {
+export async function openNotizEditor(notizId = null) {
+    await releaseCurrentNotizLock();
+    setNotizEditorReadOnly(false, '');
+    const notiz = notizId ? getNotizByLookupKey(notizId) : null;
+    if (notiz && !canCurrentUserWriteNotiz(notiz)) {
+        alertUser('Keine Bearbeitungsrechte für diese Notiz.', 'warning');
+        return;
+    }
+
     currentEditingNotizId = notizId;
     console.log('📝 Notizen: openNotizEditor aufgerufen, notizId:', notizId, '-> currentEditingNotizId:', currentEditingNotizId);
     
     const modal = document.getElementById('notizEditorModal');
     if (!modal) return;
 
-    const notiz = notizId ? NOTIZEN[notizId] : null;
+    const isOwner = notiz ? isNotizOwner(notiz) : true;
+    const lockKategorie = Boolean(notiz && !isOwner);
+    const sharedKategorie = lockKategorie ? getKategorieForNotiz(notiz) : null;
+    const sharedUnterkategorie = lockKategorie && sharedKategorie?.unterkategorien
+        ? sharedKategorie.unterkategorien.find(uk => uk.id === notiz?.unterkategorieId)
+        : null;
     
     // Formular zurücksetzen
     const titelInput = document.getElementById('notiz-titel');
@@ -984,20 +2716,44 @@ export function openNotizEditor(notizId = null) {
     // Kategorien in Select laden (Pflichtfeld)
     if (kategorieSelect) {
         kategorieSelect.innerHTML = '<option value="">-- Kategorie wählen --</option>';
-        Object.values(KATEGORIEN).forEach(kat => {
+        if (lockKategorie) {
             const option = document.createElement('option');
-            option.value = kat.id;
-            option.textContent = kat.name;
-            if (notiz?.kategorieId === kat.id) option.selected = true;
+            option.value = notiz?.kategorieId || '';
+            option.textContent = `🔗 ${sharedKategorie?.name || 'Geteilte Kategorie'}`;
+            option.selected = true;
             kategorieSelect.appendChild(option);
-        });
-        
+        } else {
+            Object.values(KATEGORIEN).forEach(kat => {
+                const option = document.createElement('option');
+                option.value = kat.id;
+                option.textContent = kat.name;
+                if (notiz?.kategorieId === kat.id) option.selected = true;
+                kategorieSelect.appendChild(option);
+            });
+        }
+
         // Event-Listener für Kategorie-Änderung (Unterkategorien aktualisieren)
-        kategorieSelect.onchange = () => updateUnterkategorienDropdown(kategorieSelect.value, null);
+        kategorieSelect.onchange = lockKategorie ? null : () => updateUnterkategorienDropdown(kategorieSelect.value, null);
+        kategorieSelect.disabled = lockKategorie;
     }
     
     // Unterkategorien laden
-    updateUnterkategorienDropdown(notiz?.kategorieId, notiz?.unterkategorieId);
+    if (lockKategorie) {
+        if (unterkategorieSelect) {
+            unterkategorieSelect.innerHTML = '<option value="">-- Keine --</option>';
+            if (notiz?.unterkategorieId) {
+                const option = document.createElement('option');
+                option.value = notiz.unterkategorieId;
+                option.textContent = sharedUnterkategorie?.name || 'Unterkategorie';
+                option.selected = true;
+                unterkategorieSelect.appendChild(option);
+            }
+            unterkategorieSelect.disabled = true;
+        }
+    } else {
+        updateUnterkategorienDropdown(notiz?.kategorieId, notiz?.unterkategorieId);
+        if (unterkategorieSelect) unterkategorieSelect.disabled = false;
+    }
 
     // Gültigkeitsdaten
     if (gueltigAbInput) {
@@ -1023,6 +2779,8 @@ export function openNotizEditor(notizId = null) {
 
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+
+    await ensureNotizEditorLock(notiz);
 }
 
 function closeNotizEditor() {
@@ -1031,6 +2789,8 @@ function closeNotizEditor() {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
     }
+    setNotizEditorReadOnly(false, '');
+    releaseCurrentNotizLock();
     currentEditingNotizId = null;
     currentNotizElements = [];
 }
@@ -1493,6 +3253,15 @@ async function saveCurrentNotiz() {
 
     let success;
     if (currentEditingNotizId) {
+        const currentNotiz = getNotizByLookupKey(currentEditingNotizId);
+        if (!currentNotiz) {
+            alertUser('Notiz nicht gefunden.', 'error');
+            return;
+        }
+        if (!canCurrentUserWriteNotiz(currentNotiz)) {
+            alertUser('Keine Berechtigung zum Bearbeiten dieser Notiz.', 'warning');
+            return;
+        }
         success = await updateNotiz(currentEditingNotizId, data);
     } else {
         const newId = await createNotiz(data);
@@ -1553,14 +3322,7 @@ function setupNotizenEventListeners() {
     if (kategorieFilter) {
         kategorieFilter.addEventListener('change', (e) => {
             const value = e.target.value;
-            if (value.includes(':')) {
-                const [katId, ukId] = value.split(':');
-                currentKategorieId = katId;
-                currentUnterkategorieId = ukId;
-            } else {
-                currentKategorieId = value || null;
-                currentUnterkategorieId = null;
-            }
+            setKategorieFilterFromValue(value);
             renderNotizenList();
         });
     }
@@ -1583,6 +3345,50 @@ function setupNotizenEventListeners() {
     const btnSettings = document.getElementById('btn-notizen-settings');
     if (btnSettings) {
         btnSettings.addEventListener('click', openNotizenSettings);
+    }
+
+    // Einladungen öffnen
+    const btnEinladungen = document.getElementById('btn-notizen-einladungen');
+    if (btnEinladungen) {
+        btnEinladungen.addEventListener('click', openNotizenEinladungenModal);
+    }
+
+    // Einladungen schließen
+    const closeEinladungenBtn = document.getElementById('close-notizen-einladungen');
+    if (closeEinladungenBtn) {
+        closeEinladungenBtn.addEventListener('click', closeNotizenEinladungenModal);
+    }
+    const closeEinladungenFooter = document.getElementById('close-notizen-einladungen-footer');
+    if (closeEinladungenFooter) {
+        closeEinladungenFooter.addEventListener('click', closeNotizenEinladungenModal);
+    }
+
+    // Share-Modal schließen/öffnen
+    const closeShareBtn = document.getElementById('close-notizen-share');
+    if (closeShareBtn) {
+        closeShareBtn.addEventListener('click', closeNotizenShareModal);
+    }
+    const cancelShareBtn = document.getElementById('notizen-share-cancel');
+    if (cancelShareBtn) {
+        cancelShareBtn.addEventListener('click', closeNotizenShareModal);
+    }
+    const sendShareBtn = document.getElementById('notizen-share-send');
+    if (sendShareBtn) {
+        sendShareBtn.addEventListener('click', sendNotizenShareInvite);
+    }
+
+    // Share aus Viewer
+    const viewerShareBtn = document.getElementById('viewer-share-notiz-btn');
+    if (viewerShareBtn) {
+        viewerShareBtn.addEventListener('click', () => {
+            if (currentViewingNotizId) {
+                openNotizenShareModalForNotiz(currentViewingNotizId);
+            }
+            const erweiterMenu = document.getElementById('viewer-erweitert-menu');
+            const weitereOptionenMenu = document.getElementById('viewer-weitere-optionen-menu');
+            if (erweiterMenu) erweiterMenu.classList.add('hidden');
+            if (weitereOptionenMenu) weitereOptionenMenu.classList.add('hidden');
+        });
     }
 
     // Einstellungen Modal schließen
@@ -1698,6 +3504,7 @@ function renderKategorienSettings() {
             <div class="flex justify-between items-center mb-2">
                 <h4 class="font-bold text-gray-800">${kat.name}</h4>
                 <div class="flex gap-2">
+                    <button class="share-kategorie text-amber-500 hover:text-amber-700" data-id="${kat.id}" title="Teilen">🔗</button>
                     <button class="edit-kategorie text-amber-500 hover:text-amber-700" data-id="${kat.id}" title="Bearbeiten">✏️</button>
                     <button class="delete-kategorie text-red-500 hover:text-red-700" data-id="${kat.id}" title="Löschen">🗑️</button>
                 </div>
@@ -1725,6 +3532,15 @@ function renderKategorienSettings() {
             if (confirm('Kategorie wirklich löschen?')) {
                 await deleteKategorie(id);
                 renderKategorienSettings();
+            }
+        });
+    });
+
+    container.querySelectorAll('.share-kategorie').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const id = e.target.dataset.id;
+            if (id) {
+                openNotizenShareModalForKategorie(id);
             }
         });
     });

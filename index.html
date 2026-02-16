@@ -1619,6 +1619,13 @@
                                     <path fill-rule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.493 7.493 0 0 0-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 0 0-2.282.819l-.922 1.597a1.875 1.875 0 0 0 .432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 0 0 0 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 0 0-.432 2.385l.922 1.597a1.875 1.875 0 0 0 2.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 0 0 2.28-.819l.923-1.597a1.875 1.875 0 0 0-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 0 0 0-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 0 0-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 0 0-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 0 0-1.85-1.567h-1.843ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z" clip-rule="evenodd" />
                                 </svg>
                             </button>
+                            <button id="btn-notizen-einladungen" class="relative p-2 text-gray-500 hover:text-amber-600 transition rounded-lg hover:bg-amber-50" title="Einladungen">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                                    <path d="M3 4a2 2 0 0 0-2 2v1.161l8.441 4.221a1.25 1.25 0 0 0 1.118 0L19 7.162V6a2 2 0 0 0-2-2H3Z" />
+                                    <path d="m19 8.839-7.77 3.885a2.75 2.75 0 0 1-2.46 0L1 8.839V14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.839Z" />
+                                </svg>
+                                <span id="notizen-einladungen-badge" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">0</span>
+                            </button>
                             <button id="btn-create-notiz" 
                                 class="py-2 px-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2 text-sm">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
@@ -8038,6 +8045,7 @@
                     <span id="viewer-notiz-kategorie" class="px-2 py-1 rounded-full text-xs font-semibold">Kategorie</span>
                     <span id="viewer-notiz-datum" class="text-xs text-gray-500"></span>
                 </div>
+                <div id="viewer-notiz-share-info" class="mt-2 text-xs text-gray-500 hidden"></div>
             </div>
             <button onclick="window.closeNotizViewer()" class="p-2 hover:bg-gray-100 rounded-lg">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -8067,6 +8075,7 @@
                 </button>
                 <div id="viewer-erweitert-menu" class="hidden absolute bottom-full left-0 mb-2 bg-white border rounded-lg shadow-lg p-2 space-y-1 min-w-[200px]">
                     <button onclick="window.editCurrentNotiz()" class="w-full text-left px-3 py-2 hover:bg-amber-50 rounded font-semibold text-amber-700">✏️ Bearbeiten</button>
+                    <button id="viewer-share-notiz-btn" class="w-full text-left px-3 py-2 hover:bg-amber-50 rounded font-semibold text-amber-700">🔗 Teilen</button>
                     <button onclick="window.toggleWeitereOptionenMenu()" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded font-semibold text-gray-700 flex items-center justify-between">
                         ⋮ Weitere Optionen
                         <span class="text-xs">▶</span>
@@ -8076,6 +8085,98 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Notizen Einladungen Modal -->
+<div id="notizenEinladungenModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">
+        <div class="sticky top-0 bg-gradient-to-r from-amber-500 to-orange-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+            <h3 class="text-xl font-bold">📬 Notizen-Einladungen</h3>
+            <button id="close-notizen-einladungen" class="text-white/80 hover:text-white transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <div class="p-6 space-y-6">
+            <div>
+                <h4 class="text-sm font-bold text-gray-700 mb-2">📥 Posteingang</h4>
+                <div id="notizen-einladungen-inbox" class="space-y-2">
+                    <p class="text-gray-400 text-sm italic">Keine Einladungen vorhanden.</p>
+                </div>
+            </div>
+            <div>
+                <h4 class="text-sm font-bold text-gray-700 mb-2">✅ Aktiv</h4>
+                <div id="notizen-einladungen-aktiv" class="space-y-2">
+                    <p class="text-gray-400 text-sm italic">Keine aktiven Freigaben.</p>
+                </div>
+            </div>
+            <div>
+                <h4 class="text-sm font-bold text-gray-700 mb-2">🚫 Abgelehnt</h4>
+                <p class="text-xs text-gray-500 mb-2">Solange eine Ablehnung besteht, kann keine neue Einladung gesendet werden.</p>
+                <div id="notizen-einladungen-abgelehnt" class="space-y-2">
+                    <p class="text-gray-400 text-sm italic">Keine abgelehnten Einladungen.</p>
+                </div>
+            </div>
+            <div>
+                <h4 class="text-sm font-bold text-gray-700 mb-2">📤 Postausgang</h4>
+                <div id="notizen-einladungen-postausgang" class="space-y-2">
+                    <p class="text-gray-400 text-sm italic">Keine gesendeten Einladungen.</p>
+                </div>
+            </div>
+        </div>
+        <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-end">
+            <button id="close-notizen-einladungen-footer" class="px-6 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400 transition">
+                Schließen
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Notizen Share Modal -->
+<div id="notizenShareModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto">
+        <div class="sticky top-0 bg-gradient-to-r from-amber-500 to-orange-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+            <h3 id="notizen-share-title" class="text-xl font-bold">🔗 Teilen</h3>
+            <button id="close-notizen-share" class="text-white/80 hover:text-white transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <div class="p-6 space-y-4">
+            <div class="bg-amber-50 border border-amber-200 p-3 rounded-lg">
+                <p class="text-xs text-amber-700 font-bold uppercase">Ressource</p>
+                <p id="notizen-share-resource" class="text-gray-700 font-semibold">-</p>
+                <p id="notizen-share-owner" class="text-xs text-gray-500 hidden"></p>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Empfänger</label>
+                <select id="notizen-share-target-user" class="w-full p-3 border-2 border-gray-300 rounded-lg bg-white">
+                    <option value="">-- Benutzer auswählen --</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Berechtigung</label>
+                <select id="notizen-share-permission" class="w-full p-3 border-2 border-gray-300 rounded-lg bg-white">
+                    <option value="read">👀 Nur lesen</option>
+                    <option value="write">✏️ Bearbeiten</option>
+                </select>
+            </div>
+            <div class="text-xs text-gray-500 leading-relaxed">
+                <p>Hinweis: Bearbeiten erlaubt nur Notiz-Inhalte. Kategorien, Unterkategorien und Eigentümer-Daten bleiben geschützt.</p>
+            </div>
+            <div id="notizen-share-feedback" class="hidden text-sm"></div>
+        </div>
+        <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-between items-center">
+            <button id="notizen-share-cancel" class="px-4 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition">
+                Abbrechen
+            </button>
+            <button id="notizen-share-send" class="px-6 py-2 bg-amber-500 text-white font-bold rounded-lg hover:bg-amber-600 transition">
+                Einladung senden
+            </button>
         </div>
     </div>
 </div>
@@ -8094,7 +8195,8 @@
             </div>
         </div>
         
-        <div class="p-4 space-y-4">
+        <div id="notiz-editor-body" class="p-4 space-y-4">
+            <div id="notiz-editor-lock-banner" class="hidden bg-amber-50 text-amber-800 border border-amber-200 px-3 py-2 rounded-lg text-sm font-semibold"></div>
             <!-- Basis-Infos -->
             <div class="grid grid-cols-10 gap-4">
                 <div class="col-span-7">
