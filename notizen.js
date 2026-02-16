@@ -11,6 +11,8 @@ import {
     USERS
 } from './haupteingang.js';
 
+import { saveUserSetting, getUserSetting } from './log-InOut.js';
+
 import {
     collection,
     addDoc,
@@ -35,6 +37,21 @@ import {
 
 function getCurrentUserId() {
     return currentUser?.mode || null;
+}
+
+function updateNotizenViewModeButton() {
+    const btn = document.getElementById('btn-notizen-view-mode');
+    if (btn) {
+        btn.textContent = isNotizenListView ? '🔲' : '📋';
+    }
+}
+
+function applyNotizenViewMode(container) {
+    if (!container) return;
+    container.className = isNotizenListView
+        ? 'space-y-3'
+        : 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3';
+    updateNotizenViewModeButton();
 }
 
 let notizenCollection = null;
@@ -68,6 +85,8 @@ let activeAcceptedInvites = new Map();
 let sharedInviteNotizIndex = new Map();
 let sharedInviteKategorieIndex = new Map();
 let currentShareContext = null;
+
+let isNotizenListView = true;
 
 const NOTIZ_LOCK_CONFIG = {
     ttlMs: 5 * 60 * 1000,
@@ -197,6 +216,10 @@ export function initializeNotizen() {
         }];
         defaultFiltersApplied = true;
     }
+
+    const savedViewMode = getUserSetting('notizen_view_mode', 'list');
+    isNotizenListView = savedViewMode !== 'card';
+    updateNotizenViewModeButton();
     
     // Aktive Filter sofort anzeigen
     renderActiveFiltersNotizen();
@@ -1696,6 +1719,8 @@ function renderNotizenList() {
     const container = document.getElementById('notizen-list');
     if (!container) return;
 
+    applyNotizenViewMode(container);
+
     // Aktive Filter rendern
     renderActiveFiltersNotizen();
 
@@ -1755,8 +1780,9 @@ function renderNotizenList() {
     notizenArray.sort((a, b) => getNotizCreatedAtDate(b) - getNotizCreatedAtDate(a));
 
     if (notizenArray.length === 0) {
+        const emptyClass = isNotizenListView ? '' : 'col-span-full';
         container.innerHTML = `
-            <div class="text-center py-12 text-gray-400">
+            <div class="${emptyClass} text-center py-12 text-gray-400">
                 <p class="text-4xl mb-3">📝</p>
                 <p class="text-lg font-semibold">Keine Notizen gefunden</p>
                 <p class="text-sm">Erstelle eine neue Notiz mit dem Button oben.</p>
@@ -1931,8 +1957,10 @@ function renderNotizCard(notiz) {
 
     const displayTitel = notiz.titel || 'Ohne Titel';
 
+    const cardClass = `notiz-card bg-white p-4 rounded-xl shadow-lg border-l-4 border-${kategorieColor}-500 hover:shadow-xl transition cursor-pointer${isNotizenListView ? '' : ' h-full'}`;
+
     return `
-        <div class="notiz-card bg-white p-4 rounded-xl shadow-lg border-l-4 border-${kategorieColor}-500 hover:shadow-xl transition cursor-pointer" data-notiz-id="${notizKey}">
+        <div class="${cardClass}" data-notiz-id="${notizKey}">
             <div class="flex justify-between items-start mb-2">
                 <h3 class="font-bold text-gray-800 text-lg">${displayTitel}</h3>
                 <div class="flex items-center gap-2">
@@ -3372,6 +3400,16 @@ function setupNotizenEventListeners() {
     const btnSettings = document.getElementById('btn-notizen-settings');
     if (btnSettings) {
         btnSettings.addEventListener('click', openNotizenSettings);
+    }
+
+    const btnViewMode = document.getElementById('btn-notizen-view-mode');
+    if (btnViewMode) {
+        btnViewMode.addEventListener('click', () => {
+            isNotizenListView = !isNotizenListView;
+            saveUserSetting('notizen_view_mode', isNotizenListView ? 'list' : 'card');
+            updateNotizenViewModeButton();
+            renderNotizenList();
+        });
     }
 
     // Einladungen öffnen

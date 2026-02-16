@@ -539,7 +539,7 @@ export function renderUserManagement() {
 
         return `
         <div class="user-card p-3 border rounded-lg flex flex-col gap-3 ${!canEdit && !isSelf ? 'bg-gray-200 opacity-70' : lockedClasses}" data-userid="${userId}">
-            <div class="flex justify-between items-start"> 
+            <div class="user-card-header flex justify-between items-start gap-3 cursor-pointer"> 
                 <div class="flex-grow"> 
                     <div class="flex items-center gap-2 flex-wrap"> 
                         <div data-userid="${userId}" class="name-display font-bold text-gray-800">${escapeHtml(user.name || 'Unbenannt')} ${currentUserLabel} ${realNameDisplay}</div> 
@@ -554,13 +554,22 @@ export function renderUserManagement() {
                     </div> 
                     <p class="text-xs ${roleColorClass}">${escapeHtml(roleName)}</p> 
                 </div> 
-                ${lockToggleHTML} 
+                <div class="flex items-start gap-2"> 
+                    <div data-no-toggle="true">${lockToggleHTML}</div>
+                    <button class="user-card-toggle-btn p-1 text-gray-400 hover:text-gray-600" title="Verwaltung ein-/ausklappen">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="user-card-toggle-icon w-5 h-5 transition-transform">
+                            <path fill-rule="evenodd" d="m19.5 8.25-7.5 7.5-7.5-7.5" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
             </div>
-            ${permissionsHTML}
-            <div class="flex justify-end mt-2"> 
-                <button class="delete-user-button py-1 px-3 text-xs font-semibold bg-red-600 text-white rounded-lg ${!canDelete ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-700'}" data-userid="${userId}" ${!canDelete ? 'disabled' : ''}>Löschen</button> 
+            <div class="user-card-details hidden">
+                ${permissionsHTML}
+                <div class="flex justify-end mt-2"> 
+                    <button class="delete-user-button py-1 px-3 text-xs font-semibold bg-red-600 text-white rounded-lg ${!canDelete ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-700'}" data-userid="${userId}" ${!canDelete ? 'disabled' : ''}>Löschen</button> 
+                </div>
+                ${lockedWarningHTML} 
             </div>
-            ${lockedWarningHTML} 
         </div>`;
     };
 
@@ -598,6 +607,14 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
         return;
     }
     area.dataset.userManagementListenerAttached = 'true';
+
+    const ensurePermissionDependencies = (container) => {
+        if (!container || container.dataset.permissionDepsInitialized === 'true') return;
+        if (typeof setupPermissionDependencies === 'function') {
+            setupPermissionDependencies(container);
+            container.dataset.permissionDepsInitialized = 'true';
+        }
+    };
     console.log("addAdminUserManagementListeners: Hänge primären Listener an userManagementArea an.");
 
     // --- CLICK Listener ---
@@ -723,6 +740,33 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 }
             }
             return; // Klick behandelt
+        }
+
+        const toggleButton = e.target.closest('.user-card-toggle-btn');
+        const header = e.target.closest('.user-card-header');
+        if ((toggleButton || header) && userCard) {
+            const isBlocked = !toggleButton && (
+                e.target.closest('[data-no-toggle="true"]') ||
+                e.target.closest('.rename-user-btn') ||
+                e.target.closest('.save-name-btn') ||
+                e.target.closest('.name-edit-container') ||
+                e.target.closest('input, select, textarea, button')
+            );
+
+            if (!isBlocked) {
+                const details = userCard.querySelector('.user-card-details');
+                if (details) {
+                    details.classList.toggle('hidden');
+                    const icon = userCard.querySelector('.user-card-toggle-icon');
+                    if (icon) {
+                        icon.classList.toggle('rotate-180', !details.classList.contains('hidden'));
+                    }
+                    if (!details.classList.contains('hidden')) {
+                        ensurePermissionDependencies(details.querySelector('.individual-perms-area'));
+                    }
+                }
+                return;
+            }
         }
 
         // =================================================================
@@ -1057,16 +1101,18 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
                 // 1. Rollenansicht umschalten
                 if (target.classList.contains('perm-type-toggle')) {
-                    container.querySelector('.role-selection-area')?.classList.toggle('hidden', target.value !== 'role');
+                    const selectedType = target.value;
+                    const roleArea = container.querySelector('.role-selection-area');
                     const individualArea = container.querySelector('.individual-perms-area');
-                    individualArea?.classList.toggle('hidden', target.value !== 'individual');
-
-                    if (target.value === 'individual' && individualArea && typeof setupPermissionDependencies === 'function') {
-                        setupPermissionDependencies(individualArea);
+                    if (roleArea) roleArea.classList.toggle('hidden', selectedType !== 'role');
+                    if (individualArea) {
+                        individualArea.classList.toggle('hidden', selectedType !== 'individual');
+                        if (selectedType === 'individual') {
+                            ensurePermissionDependencies(individualArea);
+                        }
                     }
                 }
 
-                // 2. Speicher-Button zeigen
                 const saveBtnContainer = container.querySelector('.save-perms-container');
                 if (saveBtnContainer) {
                     saveBtnContainer.classList.remove('hidden');
@@ -1075,9 +1121,8 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
                 // 3. Wenn eine Checkbox geändert wird, Abhängigkeiten prüfen
                 if (target.classList.contains('custom-perm-checkbox') && target.closest('.individual-perms-area')) {
                     const individualPermsArea = container.querySelector('.individual-perms-area');
-                    if (individualPermsArea && typeof setupPermissionDependencies === 'function') {
-                        // KORREKTUR: Hier nutzen wir jetzt die richtige Variable 'individualPermsArea'
-                        setupPermissionDependencies(individualPermsArea);
+                    if (individualPermsArea) {
+                        ensurePermissionDependencies(individualPermsArea);
                     }
                 }
                 return;
@@ -1088,9 +1133,7 @@ export function addAdminUserManagementListeners(area, isAdmin, isSysAdminEditing
 
     // Initial für alle 'individual' Karten die Abhängigkeiten aktivieren
     area.querySelectorAll('.individual-perms-area').forEach(individualArea => {
-        if (!individualArea.classList.contains('hidden') && typeof setupPermissionDependencies === 'function') {
-            setupPermissionDependencies(individualArea);
-        }
+        ensurePermissionDependencies(individualArea);
     });
 }
 
