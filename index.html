@@ -8070,18 +8070,20 @@
         <!-- Aktionen -->
         <div class="sticky bottom-0 bg-white border-t border-gray-200 p-4 flex justify-between">
             <div class="relative">
-                <button onclick="window.toggleErweitertMenu()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition">
+                <button id="viewer-erweitert-btn" onclick="window.toggleErweitertMenu()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition">
                     ⚙️ Erweitert
                 </button>
                 <div id="viewer-erweitert-menu" class="hidden absolute bottom-full left-0 mb-2 bg-white border rounded-lg shadow-lg p-2 space-y-1 min-w-[200px]">
                     <button onclick="window.editCurrentNotiz()" class="w-full text-left px-3 py-2 hover:bg-amber-50 rounded font-semibold text-amber-700">✏️ Bearbeiten</button>
                     <button id="viewer-share-notiz-btn" class="w-full text-left px-3 py-2 hover:bg-amber-50 rounded font-semibold text-amber-700">🔗 Teilen</button>
-                    <button onclick="window.toggleWeitereOptionenMenu()" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded font-semibold text-gray-700 flex items-center justify-between">
-                        ⋮ Weitere Optionen
-                        <span class="text-xs">▶</span>
-                    </button>
-                    <div id="viewer-weitere-optionen-menu" class="hidden space-y-1 border-l border-gray-200 ml-3 pl-2">
-                        <button id="viewer-delete-notiz-btn" onclick="window.deleteCurrentNotiz()" class="w-full text-left px-3 py-2 hover:bg-red-50 rounded font-semibold text-red-700">🗑️ Notiz löschen</button>
+                    <div class="relative">
+                        <button id="viewer-weitere-optionen-btn" onclick="window.toggleWeitereOptionenMenu()" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded font-semibold text-gray-700 flex items-center justify-between">
+                            ⋮ Weitere Optionen
+                            <span class="text-xs">▶</span>
+                        </button>
+                        <div id="viewer-weitere-optionen-menu" class="hidden absolute left-full top-0 ml-2 bg-white border rounded-lg shadow-lg p-2 space-y-1 min-w-[200px] z-10">
+                            <button id="viewer-delete-notiz-btn" onclick="window.deleteCurrentNotiz()" class="w-full text-left px-3 py-2 hover:bg-red-50 rounded font-semibold text-red-700">🗑️ Notiz löschen</button>
+                        </div>
                     </div>
                 </div>
             </div>

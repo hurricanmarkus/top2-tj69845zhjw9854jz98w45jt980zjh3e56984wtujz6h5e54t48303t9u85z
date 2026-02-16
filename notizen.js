@@ -2069,6 +2069,32 @@ export function openNotizViewer(notizId) {
         }
     }
 
+    const erweitertButton = document.getElementById('viewer-erweitert-btn');
+    const weitereOptionenButton = document.getElementById('viewer-weitere-optionen-btn');
+    const weitereOptionenMenu = document.getElementById('viewer-weitere-optionen-menu');
+    const showErweitert = hasWriteAccess || isOwner;
+    const showWeitereOptionen = isOwner;
+
+    if (erweitertButton) {
+        if (showErweitert) {
+            erweitertButton.classList.remove('hidden');
+        } else {
+            erweitertButton.classList.add('hidden');
+        }
+    }
+
+    if (weitereOptionenButton) {
+        if (showWeitereOptionen) {
+            weitereOptionenButton.classList.remove('hidden');
+        } else {
+            weitereOptionenButton.classList.add('hidden');
+        }
+    }
+
+    if (!showWeitereOptionen && weitereOptionenMenu) {
+        weitereOptionenMenu.classList.add('hidden');
+    }
+
     const shareInfoEl = document.getElementById('viewer-notiz-share-info');
     if (shareInfoEl) {
         const shareInfoText = getNotizShareInfoText(notiz);
@@ -2088,10 +2114,10 @@ export function openNotizViewer(notizId) {
     }
 
     // Erweitert-Menü zurücksetzen
-    const erweiterMenu = document.getElementById('viewer-erweitert-menu');
-    const weitereOptionenMenu = document.getElementById('viewer-weitere-optionen-menu');
-    if (erweiterMenu) erweiterMenu.classList.add('hidden');
-    if (weitereOptionenMenu) weitereOptionenMenu.classList.add('hidden');
+    const erweiterMenuEl = document.getElementById('viewer-erweitert-menu');
+    const weitereOptionenMenuEl = document.getElementById('viewer-weitere-optionen-menu');
+    if (erweiterMenuEl) erweiterMenuEl.classList.add('hidden');
+    if (weitereOptionenMenuEl) weitereOptionenMenuEl.classList.add('hidden');
 
     modal.classList.remove('hidden');
     modal.classList.add('flex');
