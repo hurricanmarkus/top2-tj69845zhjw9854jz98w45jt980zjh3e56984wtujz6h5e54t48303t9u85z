@@ -67,6 +67,9 @@ export function initializeSendungsverwaltungView() {
     setupEventListeners();
     setupTabs();
     addDefaultFilters();
+    // Listener erst starten, nachdem sendungenCollectionRef gesetzt wurde.
+    // Sonst werden neue Einträge zwar gespeichert, aber nicht in SENDUNGEN geladen.
+    listenForSendungen();
     applyFiltersAndRender();
 }
 
