@@ -1565,6 +1565,10 @@
                             <input type="checkbox" id="ts-filter-negate" class="h-4 w-4 accent-red-500">
                             <span class="text-red-600 font-bold text-sm">NICHT</span>
                         </label>
+                        <select id="ts-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
+                        </select>
                         <div class="relative flex-1 min-w-[200px]">
                             <input type="text" id="ts-search-input"
                                 class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-purple-500"
@@ -1575,23 +1579,8 @@
                         </div>
                         <button id="ts-add-filter-btn" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-bold text-sm">+ Filter</button>
                         <button id="ts-reset-filters-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold text-sm">↺ Reset</button>
-                        <select id="ts-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
-                            <option value="and" selected>AND</option>
-                            <option value="or">OR</option>
-                        </select>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        <select id="ts-filter-category" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="all">Kategorie: Alles</option>
-                            <option value="ticketId">Ticket-ID</option>
-                            <option value="subject">Betreff</option>
-                            <option value="category">Kategorie</option>
-                            <option value="status">Status</option>
-                            <option value="priority">Priorität</option>
-                            <option value="creator">Ersteller</option>
-                            <option value="assignee">Zugewiesen an</option>
-                            <option value="dueDate">Fälligkeitsdatum</option>
-                        </select>
+                    <div class="grid grid-cols-1 gap-2">
                         <select id="ts-filter-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Status</option>
                             <option value="open">📝 Offen</option>
@@ -1716,6 +1705,10 @@
                             <input type="checkbox" id="filter-notizen-negate" class="h-4 w-4 accent-red-500">
                             <span class="text-red-600 font-bold text-sm">NICHT</span>
                         </label>
+                        <select id="notizen-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
+                        </select>
                         <div class="relative flex-1">
                             <input type="text" id="search-notizen" 
                                 class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500" 
@@ -1724,20 +1717,9 @@
                                 <ul id="notizen-search-suggestions-list" class="text-sm"></ul>
                             </div>
                         </div>
-                        <select id="filter-notizen-category" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="all">Alles</option>
-                            <option value="titel">Titel</option>
-                            <option value="inhalt">Inhalt</option>
-                            <option value="status">Status</option>
-                            <option value="kategorie">Kategorie</option>
-                        </select>
                         <button id="btn-add-notizen-filter" onclick="window.addNotizFilter()" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-bold">
                             + Filter
                         </button>
-                        <select id="notizen-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
-                            <option value="and" selected>AND</option>
-                            <option value="or">OR</option>
-                        </select>
                     </div>
                     <div class="flex gap-2 flex-wrap">
                         <select id="filter-notizen-kategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1">
@@ -1833,6 +1815,10 @@
                             <input type="checkbox" id="wg-filter-negate" class="h-4 w-4 accent-red-500">
                             <span class="text-red-600 font-bold text-sm">NICHT</span>
                         </label>
+                        <select id="wg-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
+                        </select>
                         <div class="relative flex-1 min-w-[200px]">
                             <input type="text" id="search-wertguthaben" placeholder="🔍 Suchen... (Name, Code, Unternehmen)" 
                                 class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-sm">
@@ -1844,23 +1830,8 @@
                         <button id="reset-filters-wertguthaben" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
                             ↺ Reset
                         </button>
-                        <select id="wg-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
-                            <option value="and" selected>AND</option>
-                            <option value="or">OR</option>
-                        </select>
                     </div>
                     <div class="flex flex-wrap gap-2">
-                        <select id="wg-filter-category" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="all">Kategorie: Alles</option>
-                            <option value="name">Name</option>
-                            <option value="code">Code</option>
-                            <option value="unternehmen">Unternehmen</option>
-                            <option value="eigentuemer">Eigentümer</option>
-                            <option value="typ">Typ</option>
-                            <option value="status">Status</option>
-                            <option value="betrag">Wert/Betrag</option>
-                        </select>
-                        
                         <select id="filter-wg-typ" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Typen</option>
                             <option value="gutschein">🎁 Gutschein</option>
@@ -1983,15 +1954,9 @@
                     <div id="active-liz-search-tags" class="flex flex-wrap gap-2 mb-2"></div>
 
                     <div class="flex flex-wrap gap-2 items-center">
-                        <select id="liz-filter-type" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="all">Alles</option>
-                            <option value="produkt">Produkt</option>
-                            <option value="kategorie">Kategorie</option>
-                            <option value="titel">Titel</option>
-                            <option value="version">Version</option>
-                            <option value="aktiviertAuf">Aktiviert auf</option>
-                            <option value="shop">Shop</option>
-                            <option value="code">Code</option>
+                        <select id="liz-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
                         </select>
 
                         <label class="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg text-sm font-semibold text-gray-700">
@@ -2014,10 +1979,6 @@
                     </div>
 
                     <div class="flex flex-wrap gap-2 items-center mt-2">
-                        <select id="liz-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
-                            <option value="and" selected>AND</option>
-                            <option value="or">OR</option>
-                        </select>
                         <select id="filter-liz-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Status</option>
                             <option value="aktiv" selected>✅ Aktiv</option>
@@ -2153,6 +2114,10 @@
                             <input type="checkbox" id="vv-filter-negate" class="h-4 w-4 accent-red-500">
                             <span class="text-red-600 font-bold text-sm">NICHT</span>
                         </label>
+                        <select id="vv-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
+                        </select>
                         <div class="relative flex-1 min-w-[180px]">
                             <input type="text" id="vv-search-vertraege" placeholder="🔍 Suchen... (Name, Anbieter)"
                                 class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm">
@@ -2162,23 +2127,8 @@
                         </div>
                         <button id="vv-add-filter-btn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold transition text-sm">+ Filter</button>
                         <button id="vv-reset-filters-vertraege" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">↺ Reset</button>
-                        <select id="vv-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
-                            <option value="and" selected>AND</option>
-                            <option value="or">OR</option>
-                        </select>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        <select id="vv-filter-category-tag" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="all">Kategorie: Alles</option>
-                            <option value="name">Name</option>
-                            <option value="anbieter">Anbieter</option>
-                            <option value="kategorie">Kategorie</option>
-                            <option value="unterkategorie">Unterkategorie</option>
-                            <option value="rhythmus">Zahlungsrhythmus</option>
-                            <option value="absicht">Kündigungsabsicht</option>
-                            <option value="status">Vertragsstatus</option>
-                            <option value="betrag">Betrag</option>
-                        </select>
+                    <div class="grid grid-cols-1 gap-2">
                         <select id="vv-filter-zahlungsrhythmus" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Rhythmen</option>
                             <option value="taeglich">Täglich</option>
@@ -2890,6 +2840,10 @@
                             <input type="checkbox" id="sendungFilterNegate" class="h-4 w-4 accent-red-500">
                             <span class="text-red-600 font-bold text-sm">NICHT</span>
                         </label>
+                        <select id="sendungFilterJoinMode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
+                        </select>
                         <div class="relative flex-1 min-w-[200px]">
                             <input type="text" id="sendungSearchInput"
                                 class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm"
@@ -2898,19 +2852,6 @@
                                 <ul id="sendungSearchSuggestionsList" class="text-sm"></ul>
                             </div>
                         </div>
-                        
-                        <select id="sendungFilterCategory"
-                            class="p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm">
-                            <option value="">Filter-Kategorie wählen</option>
-                            <option value="status">Status</option>
-                            <option value="anbieter">Anbieter</option>
-                            <option value="produkt">Produkt</option>
-                            <option value="absender">Absender</option>
-                            <option value="empfaenger">Empfänger</option>
-                            <option value="prioritaet">Priorität</option>
-                            <option value="tag">Tag</option>
-                            <option value="bestellnummer">Bestellnummer</option>
-                        </select>
 
                         <button id="sendungAddFilterBtn"
                             class="px-4 py-2 bg-amber-600 text-white text-sm font-bold rounded-lg hover:bg-amber-700 transition whitespace-nowrap">
@@ -2921,11 +2862,6 @@
                             class="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-400 transition whitespace-nowrap">
                             ↺ Zurücksetzen
                         </button>
-
-                        <select id="sendungFilterJoinMode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
-                            <option value="and" selected>AND</option>
-                            <option value="or">OR</option>
-                        </select>
                     </div>
 
                     <!-- Aktive Filter Badges -->
@@ -2990,6 +2926,10 @@
                             <input type="checkbox" id="rz-filter-negate" class="h-4 w-4 accent-red-500">
                             <span class="text-red-600 font-bold text-sm">NICHT</span>
                         </label>
+                        <select id="rz-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
+                        </select>
                         <div class="relative flex-1 min-w-[220px]">
                         <input type="text" id="rz-search-input" placeholder="Rezept suchen (Titel, Zutat, ID, Nummer...)" 
                             class="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none transition">
@@ -3002,24 +2942,9 @@
                         </div>
                         <button id="rz-add-filter-btn" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-bold text-sm">+ Filter</button>
                         <button id="rz-reset-all-filters" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold text-sm">↺ Reset</button>
-                        <select id="rz-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
-                            <option value="and" selected>AND</option>
-                            <option value="or">OR</option>
-                        </select>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-                        <select id="rz-filter-category-tag" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="all">Kategorie: Alles</option>
-                            <option value="titel">Titel</option>
-                            <option value="rezeptId">Rezept-ID</option>
-                            <option value="kategorie">Kategorie</option>
-                            <option value="arbeitszeit">Arbeitszeit</option>
-                            <option value="bewertung">Bewertung</option>
-                            <option value="typ">Typ</option>
-                            <option value="mappenNr">Mappen-Nr.</option>
-                            <option value="zutaten">Zutaten</option>
-                        </select>
+                    <div class="grid grid-cols-1 gap-2 mb-3">
                         <div id="rz-active-filters" class="flex flex-wrap gap-2"></div>
                     </div>
                     
@@ -3455,6 +3380,10 @@
                             <input type="checkbox" id="hz-filter-negate" class="h-4 w-4 accent-red-500">
                             <span class="text-red-600 font-bold text-sm">NICHT</span>
                         </label>
+                        <select id="hz-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
+                        </select>
                         <div class="relative flex-1 min-w-[200px]">
                             <input type="text" id="search-haushaltszahlungen" placeholder="🔍 Suchen... (Zweck, Organisation)" 
                                 class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 text-sm">
@@ -3466,24 +3395,8 @@
                         <button id="reset-filters-haushaltszahlungen" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
                             ↺ Reset
                         </button>
-                        <select id="hz-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
-                            <option value="and" selected>AND</option>
-                            <option value="or">OR</option>
-                        </select>
                     </div>
                     <div class="flex flex-wrap gap-2">
-                        <select id="hz-filter-category-tag" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="all">Kategorie: Alles</option>
-                            <option value="zweck">Zweck</option>
-                            <option value="organisation">Organisation</option>
-                            <option value="status">Status</option>
-                            <option value="typ">Typ</option>
-                            <option value="intervall">Intervall</option>
-                            <option value="betrag">Betrag</option>
-                            <option value="kundennummer">Kundennummer</option>
-                            <option value="vertragsnummer">Vertragsnummer</option>
-                        </select>
-                        
                         <select id="filter-hz-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Status</option>
                             <option value="aktiv" selected>✓ Aktiv</option>

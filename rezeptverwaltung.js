@@ -994,7 +994,6 @@ function changePortionen(delta) {
 // ========================================
 function addRezeptFilterFromUi(options = {}) {
     const searchInput = document.getElementById('rz-search-input');
-    const categorySelect = document.getElementById('rz-filter-category-tag');
     const negateCheckbox = document.getElementById('rz-filter-negate');
 
     const rawValue = String((options.rawValue ?? searchInput?.value) || '').trim();
@@ -1003,7 +1002,7 @@ function addRezeptFilterFromUi(options = {}) {
         return;
     }
 
-    const category = String(options.category || categorySelect?.value || 'all');
+    const category = String(options.category || 'all');
     const negate = !!negateCheckbox?.checked;
     const value = rawValue.toLowerCase();
 
@@ -1031,7 +1030,6 @@ function addRezeptFilterFromUi(options = {}) {
 
     if (searchInput) searchInput.value = '';
     if (negateCheckbox) negateCheckbox.checked = false;
-    if (categorySelect) categorySelect.value = category;
     hideRezeptSearchSuggestions();
 
     renderRezeptSearchTags();
@@ -1250,12 +1248,10 @@ function resetRezeptFilter() {
     rezeptSearchJoinMode = 'and';
 
     const searchInput = document.getElementById('rz-search-input');
-    const categoryTag = document.getElementById('rz-filter-category-tag');
     const negate = document.getElementById('rz-filter-negate');
     const joinMode = document.getElementById('rz-search-join-mode');
 
     if (searchInput) searchInput.value = '';
-    if (categoryTag) categoryTag.value = 'all';
     if (negate) negate.checked = false;
     if (joinMode) joinMode.value = 'and';
     hideRezeptSearchSuggestions();

@@ -137,7 +137,6 @@ function updateTicketSearchSuggestions(term) {
 
 function addTicketFilterFromUi(options = {}) {
     const searchInput = document.getElementById('ts-search-input');
-    const categorySelect = document.getElementById('ts-filter-category');
     const negateCheckbox = document.getElementById('ts-filter-negate');
 
     const rawValue = String((options.rawValue ?? searchInput?.value) || '').trim();
@@ -146,7 +145,7 @@ function addTicketFilterFromUi(options = {}) {
         return;
     }
 
-    const category = String(options.category || categorySelect?.value || 'all');
+    const category = String(options.category || 'all');
     const negate = !!negateCheckbox?.checked;
     const value = rawValue.toLowerCase();
 
@@ -154,6 +153,7 @@ function addTicketFilterFromUi(options = {}) {
     if (duplicate) {
         if (searchInput) searchInput.value = '';
         if (negateCheckbox) negateCheckbox.checked = false;
+        hideTicketSearchSuggestions();
         return;
     }
 
@@ -168,7 +168,6 @@ function addTicketFilterFromUi(options = {}) {
 
     if (searchInput) searchInput.value = '';
     if (negateCheckbox) negateCheckbox.checked = false;
-    if (categorySelect) categorySelect.value = category;
     hideTicketSearchSuggestions();
 
     renderTicketSearchTags();
@@ -180,6 +179,7 @@ function removeTicketFilterById(filterId) {
     activeTicketFilters = activeTicketFilters.filter((f) => f.id !== filterId);
     renderTicketSearchTags();
     renderTickets();
+    hideTicketSearchSuggestions();
 }
 
 function renderTicketSearchTags() {
@@ -214,7 +214,6 @@ function resetTicketFiltersToDefault() {
 
     const searchInput = document.getElementById('ts-search-input');
     const negate = document.getElementById('ts-filter-negate');
-    const category = document.getElementById('ts-filter-category');
     const joinMode = document.getElementById('ts-search-join-mode');
     const status = document.getElementById('ts-filter-status');
     const priority = document.getElementById('ts-filter-priority');
@@ -222,7 +221,6 @@ function resetTicketFiltersToDefault() {
 
     if (searchInput) searchInput.value = '';
     if (negate) negate.checked = false;
-    if (category) category.value = 'all';
     if (joinMode) joinMode.value = 'and';
     if (status) status.value = '';
     if (priority) priority.value = '';
@@ -230,6 +228,7 @@ function resetTicketFiltersToDefault() {
 
     renderTicketSearchTags();
     renderTickets();
+    hideTicketSearchSuggestions();
 }
 
 function doesTicketMatchSearchFilter(ticket, filter) {

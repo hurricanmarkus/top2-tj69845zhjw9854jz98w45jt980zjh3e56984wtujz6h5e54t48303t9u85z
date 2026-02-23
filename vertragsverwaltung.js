@@ -1526,7 +1526,6 @@ function setupEventListeners() {
 
 function addVertragsFilterFromUi(options = {}) {
     const searchInput = document.getElementById('vv-search-vertraege');
-    const categorySelect = document.getElementById('vv-filter-category-tag');
     const negateCheckbox = document.getElementById('vv-filter-negate');
 
     const rawValue = String((options.rawValue ?? searchInput?.value) || '').trim();
@@ -1535,7 +1534,7 @@ function addVertragsFilterFromUi(options = {}) {
         return;
     }
 
-    const category = String(options.category || categorySelect?.value || 'all');
+    const category = String(options.category || 'all');
     const negate = !!negateCheckbox?.checked;
     const value = rawValue.toLowerCase();
 
@@ -1563,7 +1562,6 @@ function addVertragsFilterFromUi(options = {}) {
 
     if (searchInput) searchInput.value = '';
     if (negateCheckbox) negateCheckbox.checked = false;
-    if (categorySelect) categorySelect.value = category;
     hideVertragsSearchSuggestions();
 
     renderVertragsSearchTags();
@@ -1664,7 +1662,6 @@ function resetVertragsFiltersToDefault() {
     currentFilter = { rhythmus: '', absicht: '', kategorie: '', unterkategorie: '', status: 'aktiv' };
 
     const searchInput = document.getElementById('vv-search-vertraege');
-    const category = document.getElementById('vv-filter-category-tag');
     const negate = document.getElementById('vv-filter-negate');
     const joinMode = document.getElementById('vv-search-join-mode');
     const filterRhythmus = document.getElementById('vv-filter-zahlungsrhythmus');
@@ -1674,7 +1671,6 @@ function resetVertragsFiltersToDefault() {
     const filterStatus = document.getElementById('vv-filter-vertragsstatus');
 
     if (searchInput) searchInput.value = '';
-    if (category) category.value = 'all';
     if (negate) negate.checked = false;
     if (joinMode) joinMode.value = 'and';
     if (filterRhythmus) filterRhythmus.value = '';

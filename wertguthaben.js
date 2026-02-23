@@ -297,7 +297,6 @@ function setupEventListeners() {
 
 function addWertguthabenFilterFromUi(options = {}) {
     const searchInput = document.getElementById('search-wertguthaben');
-    const categorySelect = document.getElementById('wg-filter-category');
     const negateCheckbox = document.getElementById('wg-filter-negate');
 
     const rawValue = String((options.rawValue ?? searchInput?.value) || '').trim();
@@ -306,7 +305,7 @@ function addWertguthabenFilterFromUi(options = {}) {
         return;
     }
 
-    const category = String(options.category || categorySelect?.value || 'all');
+    const category = String(options.category || 'all');
     const negate = !!negateCheckbox?.checked;
     const value = rawValue.toLowerCase();
 
@@ -329,7 +328,6 @@ function addWertguthabenFilterFromUi(options = {}) {
 
     if (searchInput) searchInput.value = '';
     if (negateCheckbox) negateCheckbox.checked = false;
-    if (categorySelect) categorySelect.value = category;
     hideWertguthabenSearchSuggestions();
 
     renderWertguthabenSearchTags();
@@ -430,7 +428,6 @@ function resetWertguthabenFiltersToDefault() {
     currentFilter = { typ: '', eigentuemer: '', status: 'aktiv' };
 
     const searchInput = document.getElementById('search-wertguthaben');
-    const category = document.getElementById('wg-filter-category');
     const negate = document.getElementById('wg-filter-negate');
     const joinMode = document.getElementById('wg-search-join-mode');
     const filterTyp = document.getElementById('filter-wg-typ');
@@ -438,7 +435,6 @@ function resetWertguthabenFiltersToDefault() {
     const filterStatus = document.getElementById('filter-wg-status');
 
     if (searchInput) searchInput.value = '';
-    if (category) category.value = 'all';
     if (negate) negate.checked = false;
     if (joinMode) joinMode.value = 'and';
     if (filterTyp) filterTyp.value = '';

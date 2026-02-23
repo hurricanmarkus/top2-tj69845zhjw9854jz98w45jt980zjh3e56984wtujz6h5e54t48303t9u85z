@@ -1919,7 +1919,6 @@ window.removeNotizFilterById = function(filterId) {
 
 window.addNotizFilter = function(options = {}) {
     const searchInput = document.getElementById('search-notizen');
-    const categorySelect = document.getElementById('filter-notizen-category');
     const negateCheckbox = document.getElementById('filter-notizen-negate');
 
     const rawValue = String((options.rawValue ?? searchInput?.value) || '').trim();
@@ -1928,7 +1927,7 @@ window.addNotizFilter = function(options = {}) {
         return;
     }
 
-    const category = String(options.category || categorySelect?.value || 'all');
+    const category = String(options.category || 'all');
     const negate = !!negateCheckbox?.checked;
     const value = rawValue.toLowerCase();
 
@@ -1942,6 +1941,7 @@ window.addNotizFilter = function(options = {}) {
     if (duplicate) {
         if (searchInput) searchInput.value = '';
         if (negateCheckbox) negateCheckbox.checked = false;
+        hideNotizenSearchSuggestions();
         return;
     }
     
@@ -1957,7 +1957,6 @@ window.addNotizFilter = function(options = {}) {
     
     if (searchInput) searchInput.value = '';
     if (negateCheckbox) negateCheckbox.checked = false;
-    if (categorySelect) categorySelect.value = category;
     hideNotizenSearchSuggestions();
     
     renderNotizenList();
@@ -1974,13 +1973,11 @@ function resetNotizFiltersToDefault() {
     
     const searchInput = document.getElementById('search-notizen');
     const kategorieFilter = document.getElementById('filter-notizen-kategorie');
-    const categoryTag = document.getElementById('filter-notizen-category');
     const negateCheckbox = document.getElementById('filter-notizen-negate');
     const joinMode = document.getElementById('notizen-search-join-mode');
     
     if (searchInput) searchInput.value = '';
     if (kategorieFilter) kategorieFilter.value = '';
-    if (categoryTag) categoryTag.value = 'all';
     if (negateCheckbox) negateCheckbox.checked = false;
     if (joinMode) joinMode.value = 'and';
     hideNotizenSearchSuggestions();

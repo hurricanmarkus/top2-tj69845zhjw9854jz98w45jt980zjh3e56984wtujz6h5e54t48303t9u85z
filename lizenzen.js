@@ -262,13 +262,11 @@ function setupEventListeners() {
             lizenzSearchJoinMode = 'and';
 
             const fs = document.getElementById('filter-liz-status');
-            const ft = document.getElementById('liz-filter-type');
             const fe = document.getElementById('liz-filter-exclude');
             const fi = document.getElementById('liz-filter-input');
             const jm = document.getElementById('liz-search-join-mode');
 
             if (fs) fs.value = 'aktiv';
-            if (ft) ft.value = 'all';
             if (fe) fe.checked = false;
             if (fi) fi.value = '';
             if (jm) jm.value = 'and';
@@ -307,11 +305,10 @@ function setupEventListeners() {
 }
 
 function addLizenzFilterFromUi(options = {}) {
-    const typeEl = document.getElementById('liz-filter-type');
     const excludeEl = document.getElementById('liz-filter-exclude');
     const inputEl = document.getElementById('liz-filter-input');
 
-    const type = String(options.type || typeEl?.value || 'all');
+    const type = String(options.type || 'all');
     const exclude = !!excludeEl?.checked;
     const term = String((options.rawTerm ?? inputEl?.value) || '').trim();
     if (!term) return;
@@ -322,7 +319,6 @@ function addLizenzFilterFromUi(options = {}) {
         inputEl.value = '';
         inputEl.focus();
     }
-    if (typeEl) typeEl.value = type;
     hideLizenzSearchSuggestions();
 }
 

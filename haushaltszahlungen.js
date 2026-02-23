@@ -529,7 +529,6 @@ function setupEventListeners() {
 
 function addHaushaltszahlungFilterFromUi(options = {}) {
     const searchInput = document.getElementById('search-haushaltszahlungen');
-    const categorySelect = document.getElementById('hz-filter-category-tag');
     const negateCheckbox = document.getElementById('hz-filter-negate');
 
     const rawValue = String((options.rawValue ?? searchInput?.value) || '').trim();
@@ -538,7 +537,7 @@ function addHaushaltszahlungFilterFromUi(options = {}) {
         return;
     }
 
-    const category = String(options.category || categorySelect?.value || 'all');
+    const category = String(options.category || 'all');
     const negate = !!negateCheckbox?.checked;
     const value = rawValue.toLowerCase();
 
@@ -566,7 +565,6 @@ function addHaushaltszahlungFilterFromUi(options = {}) {
 
     if (searchInput) searchInput.value = '';
     if (negateCheckbox) negateCheckbox.checked = false;
-    if (categorySelect) categorySelect.value = category;
     hideHaushaltszahlungenSearchSuggestions();
 
     renderHaushaltszahlungSearchTags();
@@ -667,14 +665,12 @@ function resetHaushaltszahlungenFiltersToDefault() {
     currentFilter = { status: 'aktiv', typ: '', person: '', intervalle: [] };
 
     const searchInput = document.getElementById('search-haushaltszahlungen');
-    const category = document.getElementById('hz-filter-category-tag');
     const negate = document.getElementById('hz-filter-negate');
     const joinMode = document.getElementById('hz-search-join-mode');
     const filterStatus = document.getElementById('filter-hz-status');
     const filterTyp = document.getElementById('filter-hz-typ');
 
     if (searchInput) searchInput.value = '';
-    if (category) category.value = 'all';
     if (negate) negate.checked = false;
     if (joinMode) joinMode.value = 'and';
     if (filterStatus) filterStatus.value = 'aktiv';

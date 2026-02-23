@@ -41,6 +41,7 @@ let sendungViewMode = 'list';
 let unsubscribeSendungSettings = null;
 
 const SENDUNG_FILTER_LABELS = {
+    all: 'Alles',
     status: 'Status',
     anbieter: 'Anbieter',
     produkt: 'Produkt',
@@ -52,6 +53,7 @@ const SENDUNG_FILTER_LABELS = {
 };
 
 const SENDUNG_SUGGESTION_ICONS = {
+    all: '🔍',
     status: '📊',
     anbieter: '🏢',
     produkt: '📦',
@@ -403,16 +405,15 @@ function listenForSendungSettingsSync() {
 
 function addFilter(options = {}) {
     const searchInput = document.getElementById('sendungSearchInput');
-    const categorySelect = document.getElementById('sendungFilterCategory');
     const negateCheckbox = document.getElementById('sendungFilterNegate');
     
     const rawValue = String((options.rawValue ?? searchInput?.value) || '').trim();
-    const category = String(options.category || categorySelect?.value || '');
+    const category = String(options.category || 'all');
     const negate = !!negateCheckbox?.checked;
     const value = rawValue.toLowerCase();
     
-    if (!rawValue || !category) {
-        alertUser('Bitte Suchbegriff und Kategorie eingeben!', 'warning');
+    if (!rawValue) {
+        alertUser('Bitte Suchbegriff eingeben!', 'warning');
         return;
     }
 
@@ -429,29 +430,17 @@ function addFilter(options = {}) {
         return;
     }
     
-    const categoryLabels = {
-        'status': 'Status',
-        'anbieter': 'Anbieter',
-        'produkt': 'Produkt',
-        'absender': 'Absender',
-        'empfaenger': 'Empfänger',
-        'prioritaet': 'Priorität',
-        'tag': 'Tag',
-        'bestellnummer': 'Bestellnummer'
-    };
-    
     activeFilters.push({
         category,
         value,
         rawValue,
         negate,
         isDefault: false,
-        label: categoryLabels[category] || category,
+        label: SENDUNG_FILTER_LABELS[category] || category,
         id: Date.now() + Math.floor(Math.random() * 1000)
     });
     
     if (searchInput) searchInput.value = '';
-    if (categorySelect) categorySelect.value = category;
     if (negateCheckbox) negateCheckbox.checked = false;
     hideSendungSearchSuggestions();
     
@@ -471,12 +460,10 @@ function resetFilters() {
     addDefaultFilters();
     
     const searchInput = document.getElementById('sendungSearchInput');
-    const categorySelect = document.getElementById('sendungFilterCategory');
     const negateCheckbox = document.getElementById('sendungFilterNegate');
     const joinMode = document.getElementById('sendungFilterJoinMode');
     
     if (searchInput) searchInput.value = '';
-    if (categorySelect) categorySelect.value = '';
     if (negateCheckbox) negateCheckbox.checked = false;
     if (joinMode) joinMode.value = 'and';
     hideSendungSearchSuggestions();
@@ -524,12 +511,36 @@ function updateSendungSearchSuggestions(term) {
         list.appendChild(li);
     });
 
+    const fallback = document.createElement('li');
+    fallback.className = 'px-3 py-2 hover:bg-amber-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2';
+    fallback.innerHTML = `
+        <span class="text-lg">${SENDUNG_SUGGESTION_ICONS.all}</span>
+        <div class="flex-grow leading-tight">
+            <span class="font-bold text-gray-800 block">Alles: ${term}</span>
+            <span class="text-xs text-gray-500">Volltextsuche</span>
+        </div>
+    `;
+    fallback.onclick = () => addFilter({ category: 'all', rawValue: term });
+    list.appendChild(fallback);
+
     box.classList.toggle('hidden', !hasHits);
 }
 
 function doesSendungMatchSearchFilter(sendung, filter) {
     const searchValue = String(filter?.value || '').toLowerCase();
     const category = String(filter?.category || '');
+
+    if (category === 'all') {
+        const tags = (sendung.tags || []).map((tag) => String(tag || '').toLowerCase());
+        return String(sendung.status || '').toLowerCase().includes(searchValue) ||
+            String(sendung.anbieter || '').toLowerCase().includes(searchValue) ||
+            String(sendung.produkt || '').toLowerCase().includes(searchValue) ||
+            String(sendung.absender || '').toLowerCase().includes(searchValue) ||
+            String(sendung.empfaenger || '').toLowerCase().includes(searchValue) ||
+            String(sendung.prioritaet || '').toLowerCase().includes(searchValue) ||
+            String(sendung.bestellnummer || '').toLowerCase().includes(searchValue) ||
+            tags.some((tag) => tag.includes(searchValue));
+    }
 
     if (category === 'status') {
         return String(sendung.status || '').toLowerCase().includes(searchValue);
