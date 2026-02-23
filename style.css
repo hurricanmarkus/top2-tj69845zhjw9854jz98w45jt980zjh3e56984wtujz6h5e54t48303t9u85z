@@ -242,6 +242,42 @@ option {
 }
 
 /* ========================================
+   FILTER & KATEGORIEN: Zweibox-Layout
+   ======================================== */
+.filterbox-panel {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-left: 4px solid #64748b;
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+}
+
+.kategorienbox-panel {
+    background: #fffbeb;
+    border: 1px dashed #f59e0b;
+    border-left: 4px solid #f59e0b;
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+}
+
+.filter-box-title,
+.kategorien-box-title {
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+}
+
+.filter-box-title {
+    color: #475569;
+}
+
+.kategorien-box-title {
+    color: #b45309;
+}
+
+/* ========================================
    HAUSHALTSZAHLUNGEN: Scrollbar immer sichtbar
    ======================================== */
 

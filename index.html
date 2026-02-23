@@ -1559,50 +1559,57 @@
                 </div>
 
                 <!-- Such- und Filterleiste -->
-                <div id="ts-filter-controls-wrapper" class="hidden bg-white p-4 rounded-xl shadow-md mb-4 space-y-3">
-                    <div class="flex flex-wrap gap-2 items-center">
-                        <label class="flex items-center gap-1 px-3 py-2 bg-gray-100 border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
-                            <input type="checkbox" id="ts-filter-negate" class="h-4 w-4 accent-red-500">
-                            <span class="text-red-600 font-bold text-sm">NICHT</span>
-                        </label>
-                        <select id="ts-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
-                            <option value="and" selected>AND</option>
-                            <option value="or">OR</option>
-                        </select>
-                        <div class="relative flex-1 min-w-[200px]">
-                            <input type="text" id="ts-search-input"
-                                class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-purple-500"
-                                placeholder="🔍 Suchbegriff eingeben...">
-                            <div id="ts-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-purple-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
-                                <ul id="ts-search-suggestions-list" class="text-sm"></ul>
+                <div id="ts-filter-controls-wrapper" class="hidden mb-4 space-y-3">
+                    <div class="filterbox-panel">
+                        <div class="filter-box-title">Filterbox</div>
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <label class="flex items-center gap-1 px-3 py-2 bg-gray-100 border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
+                                <input type="checkbox" id="ts-filter-negate" class="h-4 w-4 accent-red-500">
+                                <span class="text-red-600 font-bold text-sm">NICHT</span>
+                            </label>
+                            <select id="ts-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                                <option value="and" selected>AND</option>
+                                <option value="or">OR</option>
+                            </select>
+                            <div class="relative flex-1 min-w-[200px]">
+                                <input type="text" id="ts-search-input"
+                                    class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-purple-500"
+                                    placeholder="🔍 Suchbegriff eingeben...">
+                                <div id="ts-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-purple-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
+                                    <ul id="ts-search-suggestions-list" class="text-sm"></ul>
+                                </div>
                             </div>
+                            <button id="ts-add-filter-btn" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-bold text-sm">+ Filter</button>
+                            <button id="ts-reset-filters-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold text-sm">↺ Reset</button>
                         </div>
-                        <button id="ts-add-filter-btn" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-bold text-sm">+ Filter</button>
-                        <button id="ts-reset-filters-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold text-sm">↺ Reset</button>
+                        <div id="ts-active-filters" class="flex flex-wrap gap-2 mt-2"></div>
                     </div>
-                    <div class="grid grid-cols-1 gap-2">
-                        <select id="ts-filter-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle Status</option>
-                            <option value="open">📝 Offen</option>
-                            <option value="in_progress">⚙️ In Arbeit</option>
-                            <option value="paused">⏸️ Pausiert</option>
-                            <option value="done">✅ Erledigt</option>
-                            <option value="reopened">🔄 Wiedergeöffnet</option>
-                        </select>
+
+                    <div class="kategorienbox-panel">
+                        <div class="kategorien-box-title">Kategorien-Box</div>
+                        <div class="grid grid-cols-1 gap-2">
+                            <select id="ts-filter-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                                <option value="">Alle Status</option>
+                                <option value="open">📝 Offen</option>
+                                <option value="in_progress">⚙️ In Arbeit</option>
+                                <option value="paused">⏸️ Pausiert</option>
+                                <option value="done">✅ Erledigt</option>
+                                <option value="reopened">🔄 Wiedergeöffnet</option>
+                            </select>
+                        </div>
+                        <div class="flex gap-2 flex-wrap">
+                            <select id="ts-filter-priority" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                                <option value="">Alle Prioritäten</option>
+                                <option value="urgent">🔴 Dringend</option>
+                                <option value="high">🟠 Hoch</option>
+                                <option value="normal">🟡 Normal</option>
+                                <option value="low">🟢 Niedrig</option>
+                            </select>
+                            <select id="ts-filter-person" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1 min-w-[180px]">
+                                <option value="">Alle Personen</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="flex gap-2 flex-wrap">
-                        <select id="ts-filter-priority" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle Prioritäten</option>
-                            <option value="urgent">🔴 Dringend</option>
-                            <option value="high">🟠 Hoch</option>
-                            <option value="normal">🟡 Normal</option>
-                            <option value="low">🟢 Niedrig</option>
-                        </select>
-                        <select id="ts-filter-person" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1 min-w-[180px]">
-                            <option value="">Alle Personen</option>
-                        </select>
-                    </div>
-                    <div id="ts-active-filters" class="flex flex-wrap gap-2"></div>
                 </div>
 
                 <!-- Tabs (Reihenfolge: Alle Tickets, Mir zugewiesen, Meine Tickets) -->
@@ -1699,38 +1706,45 @@
                 </div>
 
                 <!-- Such- und Filterleiste -->
-                <div id="notizen-filter-controls-wrapper" class="hidden bg-white p-4 rounded-xl shadow-md mb-4 space-y-3">
-                    <div class="flex gap-2 items-center">
-                        <label id="negate-box" class="flex items-center gap-1 px-3 py-2 bg-gray-100 border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
-                            <input type="checkbox" id="filter-notizen-negate" class="h-4 w-4 accent-red-500">
-                            <span class="text-red-600 font-bold text-sm">NICHT</span>
-                        </label>
-                        <select id="notizen-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
-                            <option value="and" selected>AND</option>
-                            <option value="or">OR</option>
-                        </select>
-                        <div class="relative flex-1">
-                            <input type="text" id="search-notizen" 
-                                class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500" 
-                                placeholder="🔍 Suche in Notizen...">
-                            <div id="notizen-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-amber-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
-                                <ul id="notizen-search-suggestions-list" class="text-sm"></ul>
+                <div id="notizen-filter-controls-wrapper" class="hidden mb-4 space-y-3">
+                    <div class="filterbox-panel">
+                        <div class="filter-box-title">Filterbox</div>
+                        <div class="flex gap-2 items-center flex-wrap">
+                            <label id="negate-box" class="flex items-center gap-1 px-3 py-2 bg-gray-100 border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
+                                <input type="checkbox" id="filter-notizen-negate" class="h-4 w-4 accent-red-500">
+                                <span class="text-red-600 font-bold text-sm">NICHT</span>
+                            </label>
+                            <select id="notizen-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                                <option value="and" selected>AND</option>
+                                <option value="or">OR</option>
+                            </select>
+                            <div class="relative flex-1 min-w-[200px]">
+                                <input type="text" id="search-notizen" 
+                                    class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500" 
+                                    placeholder="🔍 Suche in Notizen...">
+                                <div id="notizen-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-amber-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
+                                    <ul id="notizen-search-suggestions-list" class="text-sm"></ul>
+                                </div>
                             </div>
+                            <button id="btn-add-notizen-filter" onclick="window.addNotizFilter()" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-bold">
+                                + Filter
+                            </button>
+                            <button id="reset-filters-notizen" onclick="window.resetNotizFilters()" class="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold text-sm">
+                                ↺ Zurücksetzen
+                            </button>
                         </div>
-                        <button id="btn-add-notizen-filter" onclick="window.addNotizFilter()" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-bold">
-                            + Filter
-                        </button>
+                        <!-- Aktive Filter -->
+                        <div id="active-filters-notizen" class="flex flex-wrap gap-2 mt-2"></div>
                     </div>
-                    <div class="flex gap-2 flex-wrap">
-                        <select id="filter-notizen-kategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1">
-                            <option value="">Alle Kategorien</option>
-                        </select>
-                        <button id="reset-filters-notizen" onclick="window.resetNotizFilters()" class="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold text-sm">
-                            ↺ Zurücksetzen
-                        </button>
+
+                    <div class="kategorienbox-panel">
+                        <div class="kategorien-box-title">Kategorien-Box</div>
+                        <div class="flex gap-2 flex-wrap">
+                            <select id="filter-notizen-kategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1">
+                                <option value="">Alle Kategorien</option>
+                            </select>
+                        </div>
                     </div>
-                    <!-- Aktive Filter -->
-                    <div id="active-filters-notizen" class="flex flex-wrap gap-2"></div>
                 </div>
 
                 <!-- Notizen Container -->
@@ -1809,54 +1823,60 @@
                 </div>
 
                 <!-- Such- und Filterleiste -->
-                <div id="wg-filter-controls-wrapper" class="hidden bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
-                    <div class="flex flex-wrap gap-2 items-center mb-2">
-                        <label class="flex items-center gap-1 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
-                            <input type="checkbox" id="wg-filter-negate" class="h-4 w-4 accent-red-500">
-                            <span class="text-red-600 font-bold text-sm">NICHT</span>
-                        </label>
-                        <select id="wg-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
-                            <option value="and" selected>AND</option>
-                            <option value="or">OR</option>
-                        </select>
-                        <div class="relative flex-1 min-w-[200px]">
-                            <input type="text" id="search-wertguthaben" placeholder="🔍 Suchen... (Name, Code, Unternehmen)" 
-                                class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-sm">
-                            <div id="wg-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-emerald-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
-                                <ul id="wg-search-suggestions-list" class="text-sm"></ul>
+                <div id="wg-filter-controls-wrapper" class="hidden mb-3 space-y-3">
+                    <div class="filterbox-panel">
+                        <div class="filter-box-title">Filterbox</div>
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <label class="flex items-center gap-1 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
+                                <input type="checkbox" id="wg-filter-negate" class="h-4 w-4 accent-red-500">
+                                <span class="text-red-600 font-bold text-sm">NICHT</span>
+                            </label>
+                            <select id="wg-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                                <option value="and" selected>AND</option>
+                                <option value="or">OR</option>
+                            </select>
+                            <div class="relative flex-1 min-w-[200px]">
+                                <input type="text" id="search-wertguthaben" placeholder="🔍 Suchen... (Name, Code, Unternehmen)" 
+                                    class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-sm">
+                                <div id="wg-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-emerald-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
+                                    <ul id="wg-search-suggestions-list" class="text-sm"></ul>
+                                </div>
                             </div>
+                            <button id="wg-add-filter-btn" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-bold transition text-sm">+ Filter</button>
+                            <button id="reset-filters-wertguthaben" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
+                                ↺ Reset
+                            </button>
                         </div>
-                        <button id="wg-add-filter-btn" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-bold transition text-sm">+ Filter</button>
-                        <button id="reset-filters-wertguthaben" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
-                            ↺ Reset
-                        </button>
+                        <div id="wg-active-filters" class="flex flex-wrap gap-2 mt-2"></div>
                     </div>
-                    <div class="flex flex-wrap gap-2">
-                        <select id="filter-wg-typ" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle Typen</option>
-                            <option value="gutschein">🎁 Gutschein</option>
-                            <option value="guthaben">💳 Guthaben</option>
-                            <option value="wertguthaben">🏦 Wertguthaben</option>
-                            <option value="wertguthaben_gesetzlich">⚖️ Wertguthaben (gesetzlich)</option>
-                            <option value="aktionscode">🏷️ Aktionscode</option>
-                        </select>
-                        
-                        <select id="filter-wg-eigentuemer" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1 min-w-[150px]">
-                            <option value="">Alle Eigentümer</option>
-                        </select>
 
-                        <select id="filter-wg-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle Status</option>
-                            <option value="aktiv" selected>✅ Aktiv</option>
-                            <option value="eingeloest">🎯 Eingelöst</option>
-                            <option value="abgelaufen">⏰ Abgelaufen</option>
-                            <option value="storniert">❌ Storniert</option>
-                            <option value="verschenkt">🎁 Verschenkt</option>
-                            <option value="verloren">❓ Verloren</option>
-                        </select>
-                        
+                    <div class="kategorienbox-panel">
+                        <div class="kategorien-box-title">Kategorien-Box</div>
+                        <div class="flex flex-wrap gap-2">
+                            <select id="filter-wg-typ" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                                <option value="">Alle Typen</option>
+                                <option value="gutschein">🎁 Gutschein</option>
+                                <option value="guthaben">💳 Guthaben</option>
+                                <option value="wertguthaben">🏦 Wertguthaben</option>
+                                <option value="wertguthaben_gesetzlich">⚖️ Wertguthaben (gesetzlich)</option>
+                                <option value="aktionscode">🏷️ Aktionscode</option>
+                            </select>
+                            
+                            <select id="filter-wg-eigentuemer" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1 min-w-[150px]">
+                                <option value="">Alle Eigentümer</option>
+                            </select>
+
+                            <select id="filter-wg-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                                <option value="">Alle Status</option>
+                                <option value="aktiv" selected>✅ Aktiv</option>
+                                <option value="eingeloest">🎯 Eingelöst</option>
+                                <option value="abgelaufen">⏰ Abgelaufen</option>
+                                <option value="storniert">❌ Storniert</option>
+                                <option value="verschenkt">🎁 Verschenkt</option>
+                                <option value="verloren">❓ Verloren</option>
+                            </select>
+                        </div>
                     </div>
-                    <div id="wg-active-filters" class="flex flex-wrap gap-2 mt-2"></div>
                 </div>
 
                 <!-- Wertguthaben-Tabelle -->
@@ -1950,45 +1970,50 @@
                     </button>
                 </div>
 
-                <div id="liz-filter-controls-wrapper" class="hidden bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
-                    <div id="active-liz-search-tags" class="flex flex-wrap gap-2 mb-2"></div>
+                <div id="liz-filter-controls-wrapper" class="hidden mb-3 space-y-3">
+                    <div class="filterbox-panel">
+                        <div class="filter-box-title">Filterbox</div>
+                        <div id="active-liz-search-tags" class="flex flex-wrap gap-2 mb-2"></div>
 
-                    <div class="flex flex-wrap gap-2 items-center">
-                        <select id="liz-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
-                            <option value="and" selected>AND</option>
-                            <option value="or">OR</option>
-                        </select>
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <select id="liz-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                                <option value="and" selected>AND</option>
+                                <option value="or">OR</option>
+                            </select>
 
-                        <label class="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg text-sm font-semibold text-gray-700">
-                            <input type="checkbox" id="liz-filter-exclude" class="w-4 h-4">
-                            NICHT
-                        </label>
+                            <label class="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg text-sm font-semibold text-gray-700">
+                                <input type="checkbox" id="liz-filter-exclude" class="w-4 h-4">
+                                NICHT
+                            </label>
 
-                        <div class="relative flex-1 min-w-[200px]">
-                            <input type="text" id="liz-filter-input" placeholder="🔍 Filter eingeben... (Enter)"
-                                class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 text-sm">
-                            <div id="liz-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-orange-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
-                                <ul id="liz-search-suggestions-list" class="text-sm"></ul>
+                            <div class="relative flex-1 min-w-[200px]">
+                                <input type="text" id="liz-filter-input" placeholder="🔍 Filter eingeben... (Enter)"
+                                    class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 text-sm">
+                                <div id="liz-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-orange-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
+                                    <ul id="liz-search-suggestions-list" class="text-sm"></ul>
+                                </div>
                             </div>
+
+                            <button id="btn-add-liz-filter" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-bold transition text-sm">
+                                + Filter
+                            </button>
+
+                            <button id="reset-filters-lizenzen" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
+                                ↺ Reset
+                            </button>
                         </div>
-
-                        <button id="btn-add-liz-filter" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-bold transition text-sm">
-                            + Filter
-                        </button>
-
                     </div>
 
-                    <div class="flex flex-wrap gap-2 items-center mt-2">
-                        <select id="filter-liz-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle Status</option>
-                            <option value="aktiv" selected>✅ Aktiv</option>
-                            <option value="deaktiviert">⏸️ Deaktiviert</option>
-                            <option value="abgelaufen">❌ Abgelaufen</option>
-                        </select>
-
-                        <button id="reset-filters-lizenzen" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
-                            ↺ Reset
-                        </button>
+                    <div class="kategorienbox-panel">
+                        <div class="kategorien-box-title">Kategorien-Box</div>
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <select id="filter-liz-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                                <option value="">Alle Status</option>
+                                <option value="aktiv" selected>✅ Aktiv</option>
+                                <option value="deaktiviert">⏸️ Deaktiviert</option>
+                                <option value="abgelaufen">❌ Abgelaufen</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -2108,64 +2133,71 @@
                 </div>
 
                 <!-- Such- und Filterleiste -->
-                <div id="vv-filter-controls-wrapper" class="hidden bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200 space-y-2">
-                    <div class="flex flex-wrap gap-2 items-center">
-                        <label class="flex items-center gap-1 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
-                            <input type="checkbox" id="vv-filter-negate" class="h-4 w-4 accent-red-500">
-                            <span class="text-red-600 font-bold text-sm">NICHT</span>
-                        </label>
-                        <select id="vv-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
-                            <option value="and" selected>AND</option>
-                            <option value="or">OR</option>
-                        </select>
-                        <div class="relative flex-1 min-w-[180px]">
-                            <input type="text" id="vv-search-vertraege" placeholder="🔍 Suchen... (Name, Anbieter)"
-                                class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm">
-                            <div id="vv-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-indigo-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
-                                <ul id="vv-search-suggestions-list" class="text-sm"></ul>
+                <div id="vv-filter-controls-wrapper" class="hidden mb-3 space-y-3">
+                    <div class="filterbox-panel">
+                        <div class="filter-box-title">Filterbox</div>
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <label class="flex items-center gap-1 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
+                                <input type="checkbox" id="vv-filter-negate" class="h-4 w-4 accent-red-500">
+                                <span class="text-red-600 font-bold text-sm">NICHT</span>
+                            </label>
+                            <select id="vv-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                                <option value="and" selected>AND</option>
+                                <option value="or">OR</option>
+                            </select>
+                            <div class="relative flex-1 min-w-[180px]">
+                                <input type="text" id="vv-search-vertraege" placeholder="🔍 Suchen... (Name, Anbieter)"
+                                    class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm">
+                                <div id="vv-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-indigo-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
+                                    <ul id="vv-search-suggestions-list" class="text-sm"></ul>
+                                </div>
                             </div>
+                            <button id="vv-add-filter-btn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold transition text-sm">+ Filter</button>
+                            <button id="vv-reset-filters-vertraege" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">↺ Reset</button>
                         </div>
-                        <button id="vv-add-filter-btn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold transition text-sm">+ Filter</button>
-                        <button id="vv-reset-filters-vertraege" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">↺ Reset</button>
+                        <div id="vv-active-search-tags" class="flex flex-wrap gap-2 mt-2"></div>
                     </div>
-                    <div class="grid grid-cols-1 gap-2">
-                        <select id="vv-filter-zahlungsrhythmus" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle Rhythmen</option>
-                            <option value="taeglich">Täglich</option>
-                            <option value="woechentlich">Wöchentlich</option>
-                            <option value="monatlich">Monatlich</option>
-                            <option value="quartalsweise">Quartalsweise</option>
-                            <option value="halbjaehrlich">Halbjährlich</option>
-                            <option value="jaehrlich">Jährlich</option>
-                        </select>
+
+                    <div class="kategorienbox-panel">
+                        <div class="kategorien-box-title">Kategorien-Box</div>
+                        <div class="grid grid-cols-1 gap-2">
+                            <select id="vv-filter-zahlungsrhythmus" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                                <option value="">Alle Rhythmen</option>
+                                <option value="taeglich">Täglich</option>
+                                <option value="woechentlich">Wöchentlich</option>
+                                <option value="monatlich">Monatlich</option>
+                                <option value="quartalsweise">Quartalsweise</option>
+                                <option value="halbjaehrlich">Halbjährlich</option>
+                                <option value="jaehrlich">Jährlich</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <select id="vv-filter-kategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                                <option value="">Alle Kategorien</option>
+                                <!-- Wird dynamisch gefüllt -->
+                            </select>
+
+                            <select id="vv-filter-unterkategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                                <option value="">Alle Unterkategorien</option>
+                                <!-- Wird dynamisch gefüllt -->
+                            </select>
+
+                            <select id="vv-filter-kuendigungsabsicht" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                                <option value="">Alle Absichten</option>
+                                <option value="behalten">Behalten</option>
+                                <option value="ueberlege">Überlege zu kündigen</option>
+                                <option value="kuendigen">Will kündigen</option>
+                                <option value="dringend">Dringend kündigen</option>
+                            </select>
+
+                            <select id="vv-filter-vertragsstatus" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                                <option value="aktiv" selected>Nur Aktive</option>
+                                <option value="">Alle Status</option>
+                                <option value="zukuenftig">Zukünftig</option>
+                                <option value="abgelaufen">Abgelaufen</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="flex flex-wrap gap-2">
-                        <select id="vv-filter-kategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle Kategorien</option>
-                            <!-- Wird dynamisch gefüllt -->
-                        </select>
-
-                        <select id="vv-filter-unterkategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle Unterkategorien</option>
-                            <!-- Wird dynamisch gefüllt -->
-                        </select>
-
-                        <select id="vv-filter-kuendigungsabsicht" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle Absichten</option>
-                            <option value="behalten">Behalten</option>
-                            <option value="ueberlege">Überlege zu kündigen</option>
-                            <option value="kuendigen">Will kündigen</option>
-                            <option value="dringend">Dringend kündigen</option>
-                        </select>
-
-                        <select id="vv-filter-vertragsstatus" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="aktiv" selected>Nur Aktive</option>
-                            <option value="">Alle Status</option>
-                            <option value="zukuenftig">Zukünftig</option>
-                            <option value="abgelaufen">Abgelaufen</option>
-                        </select>
-                    </div>
-                    <div id="vv-active-search-tags" class="flex flex-wrap gap-2"></div>
                 </div>
 
                 <!-- Verträge-Tabelle -->
@@ -2833,39 +2865,47 @@
                 </div>
 
                 <!-- Multi-Filter System -->
-                <div id="sendungFilterControlsWrapper" class="hidden mb-3 space-y-2">
-                    <!-- Filter Hinzufügen -->
-                    <div class="flex gap-2 items-center flex-wrap">
-                        <label class="flex items-center gap-1 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
-                            <input type="checkbox" id="sendungFilterNegate" class="h-4 w-4 accent-red-500">
-                            <span class="text-red-600 font-bold text-sm">NICHT</span>
-                        </label>
-                        <select id="sendungFilterJoinMode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
-                            <option value="and" selected>AND</option>
-                            <option value="or">OR</option>
-                        </select>
-                        <div class="relative flex-1 min-w-[200px]">
-                            <input type="text" id="sendungSearchInput"
-                                class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm"
-                                placeholder="🔍 Suchbegriff eingeben...">
-                            <div id="sendungSearchSuggestionsBox" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-amber-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
-                                <ul id="sendungSearchSuggestionsList" class="text-sm"></ul>
+                <div id="sendungFilterControlsWrapper" class="hidden mb-3 space-y-3">
+                    <div class="filterbox-panel">
+                        <div class="filter-box-title">Filterbox</div>
+                        <!-- Filter Hinzufügen -->
+                        <div class="flex gap-2 items-center flex-wrap">
+                            <label class="flex items-center gap-1 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
+                                <input type="checkbox" id="sendungFilterNegate" class="h-4 w-4 accent-red-500">
+                                <span class="text-red-600 font-bold text-sm">NICHT</span>
+                            </label>
+                            <select id="sendungFilterJoinMode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                                <option value="and" selected>AND</option>
+                                <option value="or">OR</option>
+                            </select>
+                            <div class="relative flex-1 min-w-[200px]">
+                                <input type="text" id="sendungSearchInput"
+                                    class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm"
+                                    placeholder="🔍 Suchbegriff eingeben...">
+                                <div id="sendungSearchSuggestionsBox" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-amber-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
+                                    <ul id="sendungSearchSuggestionsList" class="text-sm"></ul>
+                                </div>
                             </div>
+
+                            <button id="sendungAddFilterBtn"
+                                class="px-4 py-2 bg-amber-600 text-white text-sm font-bold rounded-lg hover:bg-amber-700 transition whitespace-nowrap">
+                                + Filter
+                            </button>
+
+                            <button id="sendungResetFiltersBtn"
+                                class="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-400 transition whitespace-nowrap">
+                                ↺ Zurücksetzen
+                            </button>
                         </div>
 
-                        <button id="sendungAddFilterBtn"
-                            class="px-4 py-2 bg-amber-600 text-white text-sm font-bold rounded-lg hover:bg-amber-700 transition whitespace-nowrap">
-                            + Filter
-                        </button>
-
-                        <button id="sendungResetFiltersBtn"
-                            class="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-400 transition whitespace-nowrap">
-                            ↺ Zurücksetzen
-                        </button>
+                        <!-- Aktive Filter Badges -->
+                        <div id="sendungActiveFiltersContainer" class="flex flex-wrap gap-2 min-h-[2rem] mt-2">
+                        </div>
                     </div>
 
-                    <!-- Aktive Filter Badges -->
-                    <div id="sendungActiveFiltersContainer" class="flex flex-wrap gap-2 min-h-[2rem]">
+                    <div class="kategorienbox-panel">
+                        <div class="kategorien-box-title">Kategorien-Box</div>
+                        <p class="text-xs text-amber-700 mb-2">Kategorisierung erfolgt über + Filter und Suchvorschläge.</p>
                     </div>
                 </div>
 
@@ -2919,7 +2959,9 @@
                 </div>
 
                 <!-- Suchleiste & Filter -->
-                <div id="rz-filter-controls-wrapper" class="hidden bg-white rounded-xl shadow-lg p-4 mb-4">
+                <div id="rz-filter-controls-wrapper" class="hidden mb-4 space-y-3">
+                    <div class="filterbox-panel">
+                        <div class="filter-box-title">Filterbox</div>
                     <!-- Hauptsuche -->
                     <div class="flex flex-wrap gap-2 items-center mb-3">
                         <label class="flex items-center gap-1 px-3 py-2 bg-gray-100 border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
@@ -2947,6 +2989,10 @@
                     <div class="grid grid-cols-1 gap-2 mb-3">
                         <div id="rz-active-filters" class="flex flex-wrap gap-2"></div>
                     </div>
+                    </div>
+
+                    <div class="kategorienbox-panel">
+                        <div class="kategorien-box-title">Kategorien-Box</div>
                     
                     <!-- Filter-Toggle -->
                     <button id="rz-toggle-advanced-filter" class="w-full flex items-center justify-between py-2 px-3 bg-gray-100 rounded-lg hover:bg-gray-200 transition mb-3">
@@ -3023,6 +3069,7 @@
                         <button id="rz-reset-advanced-filter" class="w-full py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition text-sm">
                             Filter zurücksetzen
                         </button>
+                    </div>
                     </div>
                 </div>
 
@@ -3374,7 +3421,9 @@
                 </div>
 
                 <!-- Such- und Filterleiste -->
-                <div id="hz-filter-controls-wrapper" class="hidden bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
+                <div id="hz-filter-controls-wrapper" class="hidden mb-3 space-y-3">
+                    <div class="filterbox-panel">
+                        <div class="filter-box-title">Filterbox</div>
                     <div class="flex flex-wrap gap-2 items-center mb-2">
                         <label class="flex items-center gap-1 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
                             <input type="checkbox" id="hz-filter-negate" class="h-4 w-4 accent-red-500">
@@ -3396,6 +3445,10 @@
                             ↺ Reset
                         </button>
                     </div>
+                    </div>
+
+                    <div class="kategorienbox-panel">
+                        <div class="kategorien-box-title">Kategorien-Box</div>
                     <div class="flex flex-wrap gap-2">
                         <select id="filter-hz-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Status</option>
@@ -3478,6 +3531,7 @@
                         
                     </div>
                     <div id="hz-active-search-tags" class="flex flex-wrap gap-2 mt-2"></div>
+                    </div>
                 </div>
 
                 <!-- Einträge-Tabelle -->
@@ -3603,64 +3657,70 @@
                 </div>
 
                 <!-- Such- und Filterleiste -->
-                <div id="gm-filter-controls-wrapper" class="hidden bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
-                    <div class="flex flex-wrap gap-2 mb-2 items-center">
-                        <label class="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition text-sm">
-                            <input type="checkbox" id="gm-filter-negate" class="w-4 h-4 text-pink-600 rounded">
-                            <span class="font-bold text-gray-700">NICHT</span>
-                        </label>
-                        
-                        <div class="flex-1 min-w-[200px] relative">
-                            <input type="text" id="gm-search-input" placeholder="🔍 Suchbegriff eingeben..." 
-                                class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:ring-2 focus:ring-pink-200 text-sm">
+                <div id="gm-filter-controls-wrapper" class="hidden mb-3 space-y-3">
+                    <div class="filterbox-panel">
+                        <div class="filter-box-title">Filterbox</div>
+                        <div class="flex flex-wrap gap-2 mb-2 items-center">
+                            <label class="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition text-sm">
+                                <input type="checkbox" id="gm-filter-negate" class="w-4 h-4 text-pink-600 rounded">
+                                <span class="font-bold text-gray-700">NICHT</span>
+                            </label>
                             
-                            <!-- Smart-Suggest Box (wie Zahlungsverwaltung) -->
-                            <div id="gm-search-suggestions-box" class="hidden absolute z-30 bg-white border-2 border-pink-400 rounded-lg shadow-xl mt-1 w-full max-h-80 overflow-y-auto">
-                                <ul id="gm-search-suggestions-list" class="text-sm"></ul>
+                            <div class="flex-1 min-w-[200px] relative">
+                                <input type="text" id="gm-search-input" placeholder="🔍 Suchbegriff eingeben..." 
+                                    class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:ring-2 focus:ring-pink-200 text-sm">
+                                
+                                <!-- Smart-Suggest Box (wie Zahlungsverwaltung) -->
+                                <div id="gm-search-suggestions-box" class="hidden absolute z-30 bg-white border-2 border-pink-400 rounded-lg shadow-xl mt-1 w-full max-h-80 overflow-y-auto">
+                                    <ul id="gm-search-suggestions-list" class="text-sm"></ul>
+                                </div>
                             </div>
+                            
+                            <button id="gm-add-filter-btn" class="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 font-bold transition text-sm">
+                                ➕ Filter hinzufügen
+                            </button>
+                            
+                            <button id="gm-reset-all-filters" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
+                                ↺ Reset
+                            </button>
+
+                            <select id="gm-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                                <option value="and" selected>AND</option>
+                                <option value="or">OR</option>
+                            </select>
+                            
+                            <button id="btn-export-selected" onclick="window.exportSelectedToExcel()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold transition text-sm opacity-50 cursor-not-allowed ml-auto" disabled title="Wähle Einträge zum Exportieren aus">
+                                📊 Auswahl exportieren
+                            </button>
                         </div>
-                        
-                        <button id="gm-add-filter-btn" class="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 font-bold transition text-sm">
-                            ➕ Filter hinzufügen
-                        </button>
-                        
-                        <button id="gm-reset-all-filters" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
-                            ↺ Reset
-                        </button>
 
-                        <select id="gm-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
-                            <option value="and" selected>AND</option>
-                            <option value="or">OR</option>
-                        </select>
-                        
-                        <button id="btn-export-selected" onclick="window.exportSelectedToExcel()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold transition text-sm opacity-50 cursor-not-allowed ml-auto" disabled title="Wähle Einträge zum Exportieren aus">
-                            📊 Auswahl exportieren
-                        </button>
+                        <div id="gm-active-filters" class="flex flex-wrap gap-2 empty:hidden">
+                        </div>
                     </div>
 
-                    <div class="flex flex-wrap gap-2 mb-3">
-                        <select id="gm-filter-category" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm min-w-[220px]">
-                            <option value="all">Kategorie: Alles</option>
-                            <option value="status">Status</option>
-                            <option value="fuer">Für</option>
-                            <option value="von">Von</option>
-                            <option value="geschenk">Geschenk</option>
-                            <option value="shop">Shop</option>
-                            <option value="bezahltVon">Bezahlt von</option>
-                            <option value="beteiligung">Beteiligung</option>
-                            <option value="gesamtkosten">Gesamtkosten</option>
-                            <option value="eigeneKosten">Eigene Kosten</option>
-                            <option value="bestellnummer">Bestellnummer</option>
-                            <option value="rechnungsnummer">Rechnungsnummer</option>
-                            <option value="notizen">Notizen</option>
-                            <option value="sollkonto">Sollkonto</option>
-                            <option value="istkonto">Istkonto</option>
-                            <option value="kontodifferenz">Kontodifferenz</option>
-                            <option value="standort">Standort</option>
-                        </select>
-                    </div>
-                    
-                    <div id="gm-active-filters" class="flex flex-wrap gap-2 empty:hidden">
+                    <div class="kategorienbox-panel">
+                        <div class="kategorien-box-title">Kategorien-Box</div>
+                        <div class="flex flex-wrap gap-2">
+                            <select id="gm-filter-category" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm min-w-[220px]">
+                                <option value="all">Kategorie: Alles</option>
+                                <option value="status">Status</option>
+                                <option value="fuer">Für</option>
+                                <option value="von">Von</option>
+                                <option value="geschenk">Geschenk</option>
+                                <option value="shop">Shop</option>
+                                <option value="bezahltVon">Bezahlt von</option>
+                                <option value="beteiligung">Beteiligung</option>
+                                <option value="gesamtkosten">Gesamtkosten</option>
+                                <option value="eigeneKosten">Eigene Kosten</option>
+                                <option value="bestellnummer">Bestellnummer</option>
+                                <option value="rechnungsnummer">Rechnungsnummer</option>
+                                <option value="notizen">Notizen</option>
+                                <option value="sollkonto">Sollkonto</option>
+                                <option value="istkonto">Istkonto</option>
+                                <option value="kontodifferenz">Kontodifferenz</option>
+                                <option value="standort">Standort</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -5565,11 +5625,9 @@
                 </div>
 
                 <div id="dashboard-controls-wrapper"
-                    class="hidden mb-3 bg-gray-50/50 p-2 rounded-xl border border-dashed border-gray-300">
-                    <div id="category-dashboard-container" class="flex gap-2 overflow-x-auto mb-3 pb-1 no-scrollbar">
-                    </div>
-
-                    <div class="flex flex-col gap-2">
+                    class="hidden mb-3 space-y-3">
+                    <div class="filterbox-panel">
+                        <div class="filter-box-title">Filterbox</div>
                         <div class="flex flex-wrap gap-2 relative z-20 items-center">
                             <button id="btn-toggle-selection-mode"
                                 class="p-2 bg-gray-100 text-gray-600 border border-gray-300 rounded-lg shadow-sm hover:bg-gray-200 shrink-0 text-sm"
@@ -5624,6 +5682,13 @@
                                 </button>
                             </div>
                         </div>
+                    </div>
+
+                    <div class="kategorienbox-panel">
+                        <div class="kategorien-box-title">Kategorien-Box</div>
+                        <div id="category-dashboard-container" class="flex gap-2 overflow-x-auto mb-3 pb-1 no-scrollbar">
+                        </div>
+
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
                             <select id="payment-search-type"
                                 class="p-1 border rounded bg-white shadow-sm text-xs font-semibold h-9">
