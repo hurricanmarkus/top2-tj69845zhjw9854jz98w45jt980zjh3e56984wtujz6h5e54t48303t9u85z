@@ -1548,18 +1548,46 @@
                     </div>
                 </div>
 
+                <div class="flex justify-center mb-2">
+                    <button id="ts-toggle-filter-controls"
+                        class="text-gray-500 hover:text-purple-700 transition flex items-center gap-1 text-xs font-bold py-1 px-4 rounded-full hover:bg-purple-50">
+                        <span>Filter & Kategorien</span>
+                        <svg id="ts-toggle-filter-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 transform transition-transform">
+                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+
                 <!-- Such- und Filterleiste -->
-                <div class="bg-white p-4 rounded-xl shadow-md mb-4 space-y-3">
-                    <div class="flex gap-2">
-                        <input type="text" id="search-tickets" 
-                            class="flex-1 p-2.5 border-2 border-gray-300 rounded-lg focus:border-purple-500" 
-                            placeholder="🔍 Suche nach ID, Betreff, Person...">
-                        <button id="btn-clear-search" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold">
-                            ✕
-                        </button>
+                <div id="ts-filter-controls-wrapper" class="hidden bg-white p-4 rounded-xl shadow-md mb-4 space-y-3">
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <label class="flex items-center gap-1 px-3 py-2 bg-gray-100 border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
+                            <input type="checkbox" id="ts-filter-negate" class="h-4 w-4 accent-red-500">
+                            <span class="text-red-600 font-bold text-sm">NICHT</span>
+                        </label>
+                        <input type="text" id="ts-search-input"
+                            class="flex-1 min-w-[200px] p-2.5 border-2 border-gray-300 rounded-lg focus:border-purple-500"
+                            placeholder="🔍 Suchbegriff eingeben...">
+                        <button id="ts-add-filter-btn" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-bold text-sm">+ Filter</button>
+                        <button id="ts-reset-filters-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold text-sm">↺ Reset</button>
+                        <select id="ts-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
+                        </select>
                     </div>
-                    <div class="flex gap-2 flex-wrap">
-                        <select id="filter-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <select id="ts-filter-category" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                            <option value="all">Kategorie: Alles</option>
+                            <option value="ticketId">Ticket-ID</option>
+                            <option value="subject">Betreff</option>
+                            <option value="category">Kategorie</option>
+                            <option value="status">Status</option>
+                            <option value="priority">Priorität</option>
+                            <option value="creator">Ersteller</option>
+                            <option value="assignee">Zugewiesen an</option>
+                            <option value="dueDate">Fälligkeitsdatum</option>
+                        </select>
+                        <select id="ts-filter-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Status</option>
                             <option value="open">📝 Offen</option>
                             <option value="in_progress">⚙️ In Arbeit</option>
@@ -1567,17 +1595,20 @@
                             <option value="done">✅ Erledigt</option>
                             <option value="reopened">🔄 Wiedergeöffnet</option>
                         </select>
-                        <select id="filter-priority" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                    </div>
+                    <div class="flex gap-2 flex-wrap">
+                        <select id="ts-filter-priority" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Prioritäten</option>
                             <option value="urgent">🔴 Dringend</option>
                             <option value="high">🟠 Hoch</option>
                             <option value="normal">🟡 Normal</option>
                             <option value="low">🟢 Niedrig</option>
                         </select>
-                        <select id="filter-person" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1">
+                        <select id="ts-filter-person" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1 min-w-[180px]">
                             <option value="">Alle Personen</option>
                         </select>
                     </div>
+                    <div id="ts-active-filters" class="flex flex-wrap gap-2"></div>
                 </div>
 
                 <!-- Tabs (Reihenfolge: Alle Tickets, Mir zugewiesen, Meine Tickets) -->
@@ -1663,8 +1694,18 @@
                     </div>
                 </div>
 
+                <div class="flex justify-center mb-2">
+                    <button id="notizen-toggle-filter-controls"
+                        class="text-gray-500 hover:text-amber-700 transition flex items-center gap-1 text-xs font-bold py-1 px-4 rounded-full hover:bg-amber-50">
+                        <span>Filter & Kategorien</span>
+                        <svg id="notizen-toggle-filter-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 transform transition-transform">
+                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+
                 <!-- Such- und Filterleiste -->
-                <div class="bg-white p-4 rounded-xl shadow-md mb-4 space-y-3">
+                <div id="notizen-filter-controls-wrapper" class="hidden bg-white p-4 rounded-xl shadow-md mb-4 space-y-3">
                     <div class="flex gap-2 items-center">
                         <label id="negate-box" class="flex items-center gap-1 px-3 py-2 bg-gray-100 border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
                             <input type="checkbox" id="filter-notizen-negate" class="h-4 w-4 accent-red-500">
@@ -1680,15 +1721,19 @@
                             <option value="status">Status</option>
                             <option value="kategorie">Kategorie</option>
                         </select>
-                        <button onclick="window.addNotizFilter()" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-bold">
+                        <button id="btn-add-notizen-filter" onclick="window.addNotizFilter()" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-bold">
                             + Filter
                         </button>
+                        <select id="notizen-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
+                        </select>
                     </div>
                     <div class="flex gap-2 flex-wrap">
                         <select id="filter-notizen-kategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1">
                             <option value="">Alle Kategorien</option>
                         </select>
-                        <button onclick="window.resetNotizFilters()" class="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold text-sm">
+                        <button id="reset-filters-notizen" onclick="window.resetNotizFilters()" class="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold text-sm">
                             ↺ Zurücksetzen
                         </button>
                     </div>
@@ -1761,11 +1806,45 @@
                     </div>
                 </div>
 
+                <div class="flex justify-center mb-2">
+                    <button id="wg-toggle-filter-controls"
+                        class="text-gray-500 hover:text-emerald-700 transition flex items-center gap-1 text-xs font-bold py-1 px-4 rounded-full hover:bg-emerald-50">
+                        <span>Filter & Kategorien</span>
+                        <svg id="wg-toggle-filter-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 transform transition-transform">
+                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+
                 <!-- Such- und Filterleiste -->
-                <div class="bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
-                    <div class="flex flex-wrap gap-2">
+                <div id="wg-filter-controls-wrapper" class="hidden bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
+                    <div class="flex flex-wrap gap-2 items-center mb-2">
+                        <label class="flex items-center gap-1 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
+                            <input type="checkbox" id="wg-filter-negate" class="h-4 w-4 accent-red-500">
+                            <span class="text-red-600 font-bold text-sm">NICHT</span>
+                        </label>
                         <input type="text" id="search-wertguthaben" placeholder="🔍 Suchen... (Name, Code, Unternehmen)" 
                             class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-sm">
+                        <button id="wg-add-filter-btn" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-bold transition text-sm">+ Filter</button>
+                        <button id="reset-filters-wertguthaben" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
+                            ↺ Reset
+                        </button>
+                        <select id="wg-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
+                        </select>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <select id="wg-filter-category" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                            <option value="all">Kategorie: Alles</option>
+                            <option value="name">Name</option>
+                            <option value="code">Code</option>
+                            <option value="unternehmen">Unternehmen</option>
+                            <option value="eigentuemer">Eigentümer</option>
+                            <option value="typ">Typ</option>
+                            <option value="status">Status</option>
+                            <option value="betrag">Wert/Betrag</option>
+                        </select>
                         
                         <select id="filter-wg-typ" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Typen</option>
@@ -1790,10 +1869,8 @@
                             <option value="verloren">❓ Verloren</option>
                         </select>
                         
-                        <button id="reset-filters-wertguthaben" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
-                            ✕ Filter zurücksetzen
-                        </button>
                     </div>
+                    <div id="wg-active-filters" class="flex flex-wrap gap-2 mt-2"></div>
                 </div>
 
                 <!-- Wertguthaben-Tabelle -->
@@ -1877,7 +1954,17 @@
                     </div>
                 </div>
 
-                <div class="bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
+                <div class="flex justify-center mb-2">
+                    <button id="liz-toggle-filter-controls"
+                        class="text-gray-500 hover:text-orange-700 transition flex items-center gap-1 text-xs font-bold py-1 px-4 rounded-full hover:bg-orange-50">
+                        <span>Filter & Kategorien</span>
+                        <svg id="liz-toggle-filter-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 transform transition-transform">
+                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div id="liz-filter-controls-wrapper" class="hidden bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
                     <div id="active-liz-search-tags" class="flex flex-wrap gap-2 mb-2"></div>
 
                     <div class="flex flex-wrap gap-2 items-center">
@@ -1907,6 +1994,10 @@
                     </div>
 
                     <div class="flex flex-wrap gap-2 items-center mt-2">
+                        <select id="liz-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
+                        </select>
                         <select id="filter-liz-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Status</option>
                             <option value="aktiv" selected>✅ Aktiv</option>
@@ -1915,7 +2006,7 @@
                         </select>
 
                         <button id="reset-filters-lizenzen" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
-                            ✕ Reset
+                            ↺ Reset
                         </button>
                     </div>
                 </div>
@@ -2025,23 +2116,45 @@
                     <!-- Wird dynamisch gefüllt -->
                 </div>
 
+                <div class="flex justify-center mb-2">
+                    <button id="vv-toggle-filter-controls"
+                        class="text-gray-500 hover:text-indigo-700 transition flex items-center gap-1 text-xs font-bold py-1 px-4 rounded-full hover:bg-indigo-50">
+                        <span>Filter & Kategorien</span>
+                        <svg id="vv-toggle-filter-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 transform transition-transform">
+                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+
                 <!-- Such- und Filterleiste -->
-                <div class="bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
-                    <div class="flex flex-wrap gap-2">
-                        <input type="text" id="search-vertraege" placeholder="🔍 Suchen... (Name, Anbieter)" 
-                            class="flex-1 min-w-[150px] p-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm">
-                        
-                        <select id="filter-kategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle Kategorien</option>
-                            <!-- Wird dynamisch gefüllt -->
+                <div id="vv-filter-controls-wrapper" class="hidden bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200 space-y-2">
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <label class="flex items-center gap-1 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
+                            <input type="checkbox" id="vv-filter-negate" class="h-4 w-4 accent-red-500">
+                            <span class="text-red-600 font-bold text-sm">NICHT</span>
+                        </label>
+                        <input type="text" id="vv-search-vertraege" placeholder="🔍 Suchen... (Name, Anbieter)"
+                            class="flex-1 min-w-[180px] p-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm">
+                        <button id="vv-add-filter-btn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold transition text-sm">+ Filter</button>
+                        <button id="vv-reset-filters-vertraege" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">↺ Reset</button>
+                        <select id="vv-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
                         </select>
-                        
-                        <select id="filter-unterkategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
-                            <option value="">Alle Unterkategorien</option>
-                            <!-- Wird dynamisch gefüllt -->
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <select id="vv-filter-category-tag" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                            <option value="all">Kategorie: Alles</option>
+                            <option value="name">Name</option>
+                            <option value="anbieter">Anbieter</option>
+                            <option value="kategorie">Kategorie</option>
+                            <option value="unterkategorie">Unterkategorie</option>
+                            <option value="rhythmus">Zahlungsrhythmus</option>
+                            <option value="absicht">Kündigungsabsicht</option>
+                            <option value="status">Vertragsstatus</option>
+                            <option value="betrag">Betrag</option>
                         </select>
-                        
-                        <select id="filter-zahlungsrhythmus" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                        <select id="vv-filter-zahlungsrhythmus" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Rhythmen</option>
                             <option value="taeglich">Täglich</option>
                             <option value="woechentlich">Wöchentlich</option>
@@ -2050,26 +2163,34 @@
                             <option value="halbjaehrlich">Halbjährlich</option>
                             <option value="jaehrlich">Jährlich</option>
                         </select>
-                        
-                        <select id="filter-kuendigungsabsicht" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <select id="vv-filter-kategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                            <option value="">Alle Kategorien</option>
+                            <!-- Wird dynamisch gefüllt -->
+                        </select>
+
+                        <select id="vv-filter-unterkategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                            <option value="">Alle Unterkategorien</option>
+                            <!-- Wird dynamisch gefüllt -->
+                        </select>
+
+                        <select id="vv-filter-kuendigungsabsicht" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Absichten</option>
                             <option value="behalten">Behalten</option>
                             <option value="ueberlege">Überlege zu kündigen</option>
                             <option value="kuendigen">Will kündigen</option>
                             <option value="dringend">Dringend kündigen</option>
                         </select>
-                        
-                        <select id="filter-vertragsstatus" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+
+                        <select id="vv-filter-vertragsstatus" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="aktiv" selected>Nur Aktive</option>
                             <option value="">Alle Status</option>
                             <option value="zukuenftig">Zukünftig</option>
                             <option value="abgelaufen">Abgelaufen</option>
                         </select>
-                        
-                        <button id="reset-filters-vertraege" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
-                            ✕ Reset
-                        </button>
                     </div>
+                    <div id="vv-active-search-tags" class="flex flex-wrap gap-2"></div>
                 </div>
 
                 <!-- Verträge-Tabelle -->
@@ -2726,10 +2847,24 @@
                     </button>
                 </div>
 
+                <div class="flex justify-center mb-2">
+                    <button id="sendungToggleFilterControls"
+                        class="text-gray-500 hover:text-amber-700 transition flex items-center gap-1 text-xs font-bold py-1 px-4 rounded-full hover:bg-amber-50">
+                        <span>Filter & Kategorien</span>
+                        <svg id="sendungToggleFilterIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 transform transition-transform">
+                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+
                 <!-- Multi-Filter System -->
-                <div class="mb-3 space-y-2">
+                <div id="sendungFilterControlsWrapper" class="hidden mb-3 space-y-2">
                     <!-- Filter Hinzufügen -->
                     <div class="flex gap-2 items-center flex-wrap">
+                        <label class="flex items-center gap-1 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
+                            <input type="checkbox" id="sendungFilterNegate" class="h-4 w-4 accent-red-500">
+                            <span class="text-red-600 font-bold text-sm">NICHT</span>
+                        </label>
                         <input type="text" id="sendungSearchInput"
                             class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm"
                             placeholder="🔍 Suchbegriff eingeben...">
@@ -2756,6 +2891,11 @@
                             class="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-400 transition whitespace-nowrap">
                             ↺ Zurücksetzen
                         </button>
+
+                        <select id="sendungFilterJoinMode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
+                        </select>
                     </div>
 
                     <!-- Aktive Filter Badges -->
@@ -2802,36 +2942,73 @@
                     </div>
                 </div>
 
+                <div class="flex justify-center mb-2">
+                    <button id="rz-toggle-filter-controls"
+                        class="text-gray-500 hover:text-orange-700 transition flex items-center gap-1 text-xs font-bold py-1 px-4 rounded-full hover:bg-orange-50">
+                        <span>Filter & Kategorien</span>
+                        <svg id="rz-toggle-filter-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 transform transition-transform">
+                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+
                 <!-- Suchleiste & Filter -->
-                <div class="bg-white rounded-xl shadow-lg p-4 mb-4">
+                <div id="rz-filter-controls-wrapper" class="hidden bg-white rounded-xl shadow-lg p-4 mb-4">
                     <!-- Hauptsuche -->
-                    <div class="relative mb-3">
-                        <input type="text" id="rezept-suche" placeholder="Rezept suchen (Titel, Zutat, ID, Nummer...)" 
+                    <div class="flex flex-wrap gap-2 items-center mb-3">
+                        <label class="flex items-center gap-1 px-3 py-2 bg-gray-100 border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
+                            <input type="checkbox" id="rz-filter-negate" class="h-4 w-4 accent-red-500">
+                            <span class="text-red-600 font-bold text-sm">NICHT</span>
+                        </label>
+                        <div class="relative flex-1 min-w-[220px]">
+                        <input type="text" id="rz-search-input" placeholder="Rezept suchen (Titel, Zutat, ID, Nummer...)" 
                             class="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none transition">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
+                        </div>
+                        <button id="rz-add-filter-btn" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-bold text-sm">+ Filter</button>
+                        <button id="rz-reset-all-filters" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold text-sm">↺ Reset</button>
+                        <select id="rz-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+                        <select id="rz-filter-category-tag" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                            <option value="all">Kategorie: Alles</option>
+                            <option value="titel">Titel</option>
+                            <option value="rezeptId">Rezept-ID</option>
+                            <option value="kategorie">Kategorie</option>
+                            <option value="arbeitszeit">Arbeitszeit</option>
+                            <option value="bewertung">Bewertung</option>
+                            <option value="typ">Typ</option>
+                            <option value="mappenNr">Mappen-Nr.</option>
+                            <option value="zutaten">Zutaten</option>
+                        </select>
+                        <div id="rz-active-filters" class="flex flex-wrap gap-2"></div>
                     </div>
                     
                     <!-- Filter-Toggle -->
-                    <button id="toggle-rezept-filter" class="w-full flex items-center justify-between py-2 px-3 bg-gray-100 rounded-lg hover:bg-gray-200 transition mb-3">
+                    <button id="rz-toggle-advanced-filter" class="w-full flex items-center justify-between py-2 px-3 bg-gray-100 rounded-lg hover:bg-gray-200 transition mb-3">
                         <span class="text-sm font-semibold text-gray-700 flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                             </svg>
                             Erweiterte Filter
                         </span>
-                        <svg id="filter-toggle-icon" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-gray-500 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg id="rz-advanced-filter-toggle-icon" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-gray-500 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                         </svg>
                     </button>
                     
                     <!-- Erweiterte Filter (versteckt) -->
-                    <div id="rezept-filter-panel" class="hidden space-y-3">
+                    <div id="rz-advanced-filter-panel" class="hidden space-y-3">
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="block text-xs font-semibold text-gray-600 mb-1">Kategorie</label>
-                                <select id="filter-kategorie" class="w-full p-2 border rounded-lg text-sm">
+                                <select id="rz-filter-kategorie" class="w-full p-2 border rounded-lg text-sm">
                                     <option value="">Alle Kategorien</option>
                                     <option value="vorspeise">🥗 Vorspeise</option>
                                     <option value="hauptgericht">🍽️ Hauptgericht</option>
@@ -2846,7 +3023,7 @@
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold text-gray-600 mb-1">Arbeitszeit</label>
-                                <select id="filter-arbeitszeit" class="w-full p-2 border rounded-lg text-sm">
+                                <select id="rz-filter-arbeitszeit" class="w-full p-2 border rounded-lg text-sm">
                                     <option value="">Beliebig</option>
                                     <option value="15">⚡ Bis 15 Min</option>
                                     <option value="30">🕐 Bis 30 Min</option>
@@ -2859,7 +3036,7 @@
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="block text-xs font-semibold text-gray-600 mb-1">Bewertung</label>
-                                <select id="filter-bewertung" class="w-full p-2 border rounded-lg text-sm">
+                                <select id="rz-filter-bewertung" class="w-full p-2 border rounded-lg text-sm">
                                     <option value="">Alle</option>
                                     <option value="5">⭐⭐⭐⭐⭐ (5)</option>
                                     <option value="4">⭐⭐⭐⭐ (4+)</option>
@@ -2868,7 +3045,7 @@
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold text-gray-600 mb-1">Rezept-Typ</label>
-                                <select id="filter-typ" class="w-full p-2 border rounded-lg text-sm">
+                                <select id="rz-filter-typ" class="w-full p-2 border rounded-lg text-sm">
                                     <option value="">Alle Typen</option>
                                     <option value="manuell">📝 Manuell eingegeben</option>
                                     <option value="dokument">📄 Dokument/Foto</option>
@@ -2878,14 +3055,14 @@
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="block text-xs font-semibold text-gray-600 mb-1">Rezept-ID</label>
-                                <input type="text" id="filter-id" placeholder="z.B. RZ001" class="w-full p-2 border rounded-lg text-sm">
+                                <input type="text" id="rz-filter-id" placeholder="z.B. RZ001" class="w-full p-2 border rounded-lg text-sm">
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold text-gray-600 mb-1">Mappen-Nr.</label>
-                                <input type="text" id="filter-mappennr" placeholder="z.B. 42" class="w-full p-2 border rounded-lg text-sm">
+                                <input type="text" id="rz-filter-mappennr" placeholder="z.B. 42" class="w-full p-2 border rounded-lg text-sm">
                             </div>
                         </div>
-                        <button id="reset-rezept-filter" class="w-full py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition text-sm">
+                        <button id="rz-reset-advanced-filter" class="w-full py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition text-sm">
                             Filter zurücksetzen
                         </button>
                     </div>
@@ -3228,11 +3405,46 @@
                     </div>
                 </div>
 
+                <div class="flex justify-center mb-2">
+                    <button id="hz-toggle-filter-controls"
+                        class="text-gray-500 hover:text-cyan-700 transition flex items-center gap-1 text-xs font-bold py-1 px-4 rounded-full hover:bg-cyan-50">
+                        <span>Filter & Kategorien</span>
+                        <svg id="hz-toggle-filter-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 transform transition-transform">
+                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+
                 <!-- Such- und Filterleiste -->
-                <div class="bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
-                    <div class="flex flex-wrap gap-2">
+                <div id="hz-filter-controls-wrapper" class="hidden bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
+                    <div class="flex flex-wrap gap-2 items-center mb-2">
+                        <label class="flex items-center gap-1 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-red-50 hover:border-red-300 transition select-none">
+                            <input type="checkbox" id="hz-filter-negate" class="h-4 w-4 accent-red-500">
+                            <span class="text-red-600 font-bold text-sm">NICHT</span>
+                        </label>
                         <input type="text" id="search-haushaltszahlungen" placeholder="🔍 Suchen... (Zweck, Organisation)" 
                             class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 text-sm">
+                        <button id="hz-add-filter-btn" class="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 font-bold transition text-sm">+ Filter</button>
+                        <button id="reset-filters-haushaltszahlungen" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
+                            ↺ Reset
+                        </button>
+                        <select id="hz-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
+                        </select>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <select id="hz-filter-category-tag" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                            <option value="all">Kategorie: Alles</option>
+                            <option value="zweck">Zweck</option>
+                            <option value="organisation">Organisation</option>
+                            <option value="status">Status</option>
+                            <option value="typ">Typ</option>
+                            <option value="intervall">Intervall</option>
+                            <option value="betrag">Betrag</option>
+                            <option value="kundennummer">Kundennummer</option>
+                            <option value="vertragsnummer">Vertragsnummer</option>
+                        </select>
                         
                         <select id="filter-hz-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="">Alle Status</option>
@@ -3313,10 +3525,8 @@
                             </div>
                         </div>
                         
-                        <button id="reset-filters-haushaltszahlungen" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
-                            ✕ Reset
-                        </button>
                     </div>
+                    <div id="hz-active-search-tags" class="flex flex-wrap gap-2 mt-2"></div>
                 </div>
 
                 <!-- Einträge-Tabelle -->
@@ -3431,16 +3641,26 @@
                     </div>
                 </div>
 
+                <div class="flex justify-center mb-2">
+                    <button id="gm-toggle-filter-controls"
+                        class="text-gray-500 hover:text-pink-700 transition flex items-center gap-1 text-xs font-bold py-1 px-4 rounded-full hover:bg-pink-50">
+                        <span>Filter & Kategorien</span>
+                        <svg id="gm-toggle-filter-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 transform transition-transform">
+                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+
                 <!-- Such- und Filterleiste -->
-                <div class="bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
-                    <div class="flex flex-wrap gap-2 mb-3">
+                <div id="gm-filter-controls-wrapper" class="hidden bg-gray-50 p-3 rounded-lg mb-3 border border-gray-200">
+                    <div class="flex flex-wrap gap-2 mb-2 items-center">
                         <label class="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition text-sm">
-                            <input type="checkbox" id="filter-negate-checkbox" class="w-4 h-4 text-pink-600 rounded">
+                            <input type="checkbox" id="gm-filter-negate" class="w-4 h-4 text-pink-600 rounded">
                             <span class="font-bold text-gray-700">NICHT</span>
                         </label>
                         
                         <div class="flex-1 min-w-[200px] relative">
-                            <input type="text" id="search-geschenke" placeholder="🔍 Suchbegriff eingeben..." 
+                            <input type="text" id="gm-search-input" placeholder="🔍 Suchbegriff eingeben..." 
                                 class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:ring-2 focus:ring-pink-200 text-sm">
                             
                             <!-- Smart-Suggest Box (wie Zahlungsverwaltung) -->
@@ -3449,20 +3669,47 @@
                             </div>
                         </div>
                         
-                        <button id="btn-add-geschenke-filter" class="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 font-bold transition text-sm">
+                        <button id="gm-add-filter-btn" class="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 font-bold transition text-sm">
                             ➕ Filter hinzufügen
                         </button>
                         
-                        <button id="reset-filters-geschenke" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
-                            ✕ Alle Filter löschen
+                        <button id="gm-reset-all-filters" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
+                            ↺ Reset
                         </button>
+
+                        <select id="gm-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                            <option value="and" selected>AND</option>
+                            <option value="or">OR</option>
+                        </select>
                         
                         <button id="btn-export-selected" onclick="window.exportSelectedToExcel()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold transition text-sm opacity-50 cursor-not-allowed ml-auto" disabled title="Wähle Einträge zum Exportieren aus">
                             📊 Auswahl exportieren
                         </button>
                     </div>
+
+                    <div class="flex flex-wrap gap-2 mb-3">
+                        <select id="gm-filter-category" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm min-w-[220px]">
+                            <option value="all">Kategorie: Alles</option>
+                            <option value="status">Status</option>
+                            <option value="fuer">Für</option>
+                            <option value="von">Von</option>
+                            <option value="geschenk">Geschenk</option>
+                            <option value="shop">Shop</option>
+                            <option value="bezahltVon">Bezahlt von</option>
+                            <option value="beteiligung">Beteiligung</option>
+                            <option value="gesamtkosten">Gesamtkosten</option>
+                            <option value="eigeneKosten">Eigene Kosten</option>
+                            <option value="bestellnummer">Bestellnummer</option>
+                            <option value="rechnungsnummer">Rechnungsnummer</option>
+                            <option value="notizen">Notizen</option>
+                            <option value="sollkonto">Sollkonto</option>
+                            <option value="istkonto">Istkonto</option>
+                            <option value="kontodifferenz">Kontodifferenz</option>
+                            <option value="standort">Standort</option>
+                        </select>
+                    </div>
                     
-                    <div id="active-filters-container" class="flex flex-wrap gap-2 empty:hidden">
+                    <div id="gm-active-filters" class="flex flex-wrap gap-2 empty:hidden">
                     </div>
                 </div>
 
@@ -5372,7 +5619,7 @@
                     </div>
 
                     <div class="flex flex-col gap-2">
-                        <div class="flex gap-2 relative z-20 items-center">
+                        <div class="flex flex-wrap gap-2 relative z-20 items-center">
                             <button id="btn-toggle-selection-mode"
                                 class="p-2 bg-gray-100 text-gray-600 border border-gray-300 rounded-lg shadow-sm hover:bg-gray-200 shrink-0 text-sm"
                                 title="Mehrfachauswahl">
@@ -5397,6 +5644,27 @@
                                 </div>
                             </div>
 
+                            <label class="inline-flex items-center gap-1 px-2 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-red-700 shrink-0">
+                                <input type="checkbox" id="payment-search-negate" class="w-4 h-4 accent-red-600">
+                                NICHT
+                            </label>
+
+                            <button id="btn-payment-add-filter"
+                                class="px-3 py-2 bg-indigo-600 text-white border border-indigo-700 rounded-lg shadow-sm font-bold hover:bg-indigo-700 whitespace-nowrap shrink-0 text-sm">
+                                + Filter
+                            </button>
+
+                            <button id="btn-payment-reset-filters"
+                                class="px-3 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-lg shadow-sm font-bold hover:bg-gray-200 whitespace-nowrap shrink-0 text-sm">
+                                ↺ Reset
+                            </button>
+
+                            <select id="payment-search-join-mode"
+                                class="p-2 border rounded bg-white shadow-sm text-xs font-semibold h-9 shrink-0">
+                                <option value="and" selected>AND</option>
+                                <option value="or">OR</option>
+                            </select>
+
                             <div class="pl-1 border-l border-gray-300 ml-1">
                                 <button id="btn-toggle-view-mode"
                                     class="p-2 bg-white text-indigo-600 border border-indigo-200 rounded-lg shadow-sm hover:bg-indigo-50 shrink-0 text-sm"
@@ -5405,7 +5673,17 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="grid grid-cols-3 gap-2">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <select id="payment-search-type"
+                                class="p-1 border rounded bg-white shadow-sm text-xs font-semibold h-9">
+                                <option value="all" selected>Suche: Alles</option>
+                                <option value="debtor">Suche: Von</option>
+                                <option value="creditor">Suche: An</option>
+                                <option value="content">Suche: Inhalt</option>
+                                <option value="numbers">Suche: Nummer/ID</option>
+                                <option value="date">Suche: Datum</option>
+                                <option value="amount">Suche: Betrag</option>
+                            </select>
                             <select id="payment-filter-status"
                                 class="p-1 border rounded bg-white shadow-sm text-xs font-semibold h-9">
                             </select>

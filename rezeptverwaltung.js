@@ -27,6 +27,8 @@ let rezepteCollection = null;
 let unsubscribeRezepte = null;
 let REZEPTE = {};
 let rezeptIdCounter = 0;
+let activeRezeptFilters = [];
+let rezeptSearchJoinMode = 'and';
 
 // Temporäre Daten für Modal
 let tempZutaten = [];
@@ -198,41 +200,83 @@ function setupEventListeners() {
         });
     });
     
-    // Filter Toggle
-    const toggleFilter = document.getElementById('toggle-rezept-filter');
-    if (toggleFilter) {
-        toggleFilter.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log("Filter Toggle geklickt");
-            const panel = document.getElementById('rezept-filter-panel');
-            const icon = document.getElementById('filter-toggle-icon');
-            if (panel) {
-                panel.classList.toggle('hidden');
-                console.log("Panel hidden:", panel.classList.contains('hidden'));
-            }
-            if (icon) {
-                icon.classList.toggle('rotate-180');
+    // Filterbereich Toggle
+    const filterToggleBtn = document.getElementById('rz-toggle-filter-controls');
+    if (filterToggleBtn && !filterToggleBtn.dataset.listenerAttached) {
+        filterToggleBtn.addEventListener('click', () => {
+            const wrapper = document.getElementById('rz-filter-controls-wrapper');
+            const icon = document.getElementById('rz-toggle-filter-icon');
+            if (!wrapper || !icon) return;
+            wrapper.classList.toggle('hidden');
+            icon.classList.toggle('rotate-180');
+        });
+        filterToggleBtn.dataset.listenerAttached = 'true';
+    }
+
+    // Suche & Tag-Filter (harmonisiert)
+    const searchInput = document.getElementById('rz-search-input');
+    if (searchInput && !searchInput.dataset.listenerAttached) {
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addRezeptFilterFromUi();
             }
         });
-        console.log("Event Listener für toggle-rezept-filter hinzugefügt");
-    } else {
-        console.warn("toggle-rezept-filter nicht gefunden!");
+        searchInput.dataset.listenerAttached = 'true';
     }
-    
-    // Suche & Filter
-    const sucheInput = document.getElementById('rezept-suche');
-    if (sucheInput) sucheInput.addEventListener('input', filterRezepte);
-    
-    ['filter-kategorie', 'filter-arbeitszeit', 'filter-bewertung', 'filter-typ', 'filter-id', 'filter-mappennr'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.addEventListener('change', filterRezepte);
-        if (el && el.tagName === 'INPUT') el.addEventListener('input', filterRezepte);
-    });
-    
-    // Filter zurücksetzen
-    const resetFilter = document.getElementById('reset-rezept-filter');
-    if (resetFilter) resetFilter.addEventListener('click', resetRezeptFilter);
+
+    const addFilterBtn = document.getElementById('rz-add-filter-btn');
+    if (addFilterBtn && !addFilterBtn.dataset.listenerAttached) {
+        addFilterBtn.addEventListener('click', addRezeptFilterFromUi);
+        addFilterBtn.dataset.listenerAttached = 'true';
+    }
+
+    const joinModeSelect = document.getElementById('rz-search-join-mode');
+    if (joinModeSelect && !joinModeSelect.dataset.listenerAttached) {
+        joinModeSelect.addEventListener('change', (e) => {
+            rezeptSearchJoinMode = e.target.value === 'or' ? 'or' : 'and';
+            filterRezepte();
+        });
+        joinModeSelect.dataset.listenerAttached = 'true';
+    }
+
+    const toggleAdvancedFilter = document.getElementById('rz-toggle-advanced-filter');
+    if (toggleAdvancedFilter && !toggleAdvancedFilter.dataset.listenerAttached) {
+        toggleAdvancedFilter.addEventListener('click', () => {
+            const panel = document.getElementById('rz-advanced-filter-panel');
+            const icon = document.getElementById('rz-advanced-filter-toggle-icon');
+            if (!panel || !icon) return;
+            panel.classList.toggle('hidden');
+            icon.classList.toggle('rotate-180');
+        });
+        toggleAdvancedFilter.dataset.listenerAttached = 'true';
+    }
+
+    ['rz-filter-kategorie', 'rz-filter-arbeitszeit', 'rz-filter-bewertung', 'rz-filter-typ', 'rz-filter-id', 'rz-filter-mappennr']
+        .forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el || el.dataset.listenerAttached) return;
+            el.addEventListener('change', filterRezepte);
+            if (el.tagName === 'INPUT') {
+                el.addEventListener('input', filterRezepte);
+            }
+            el.dataset.listenerAttached = 'true';
+        });
+
+    const resetAllFiltersBtn = document.getElementById('rz-reset-all-filters');
+    if (resetAllFiltersBtn && !resetAllFiltersBtn.dataset.listenerAttached) {
+        resetAllFiltersBtn.addEventListener('click', resetRezeptFilter);
+        resetAllFiltersBtn.dataset.listenerAttached = 'true';
+    }
+
+    const resetAdvancedFilterBtn = document.getElementById('rz-reset-advanced-filter');
+    if (resetAdvancedFilterBtn && !resetAdvancedFilterBtn.dataset.listenerAttached) {
+        resetAdvancedFilterBtn.addEventListener('click', () => {
+            resetRezeptAdvancedFilters();
+            filterRezepte();
+        });
+        resetAdvancedFilterBtn.dataset.listenerAttached = 'true';
+    }
     
     // Portionen +/-
     const portionenMinus = document.getElementById('portionen-minus');
@@ -716,6 +760,8 @@ function renderRezepteListe() {
             </div>
         `;
     }).join('');
+
+    filterRezepte();
 }
 
 // ========================================
@@ -901,29 +947,165 @@ function changePortionen(delta) {
 // ========================================
 // FILTER & SUCHE
 // ========================================
+function addRezeptFilterFromUi() {
+    const searchInput = document.getElementById('rz-search-input');
+    const categorySelect = document.getElementById('rz-filter-category-tag');
+    const negateCheckbox = document.getElementById('rz-filter-negate');
+
+    const rawValue = String(searchInput?.value || '').trim();
+    if (!rawValue) {
+        alertUser('Bitte einen Suchbegriff eingeben.', 'warning');
+        return;
+    }
+
+    const category = String(categorySelect?.value || 'all');
+    const negate = !!negateCheckbox?.checked;
+    const value = rawValue.toLowerCase();
+
+    const duplicate = activeRezeptFilters.some((filter) => (
+        filter.category === category &&
+        filter.value === value &&
+        !!filter.negate === negate
+    ));
+
+    if (duplicate) {
+        if (searchInput) searchInput.value = '';
+        if (negateCheckbox) negateCheckbox.checked = false;
+        return;
+    }
+
+    const labels = {
+        all: 'Alles',
+        titel: 'Titel',
+        rezeptId: 'Rezept-ID',
+        kategorie: 'Kategorie',
+        arbeitszeit: 'Arbeitszeit',
+        bewertung: 'Bewertung',
+        typ: 'Typ',
+        mappenNr: 'Mappen-Nr.',
+        zutaten: 'Zutaten'
+    };
+
+    activeRezeptFilters.push({
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        category,
+        value,
+        rawValue,
+        negate,
+        label: labels[category] || category
+    });
+
+    if (searchInput) searchInput.value = '';
+    if (negateCheckbox) negateCheckbox.checked = false;
+
+    renderRezeptSearchTags();
+    filterRezepte();
+}
+
+function removeRezeptFilterById(filterId) {
+    activeRezeptFilters = activeRezeptFilters.filter((filter) => filter.id !== filterId);
+    renderRezeptSearchTags();
+    filterRezepte();
+}
+
+function renderRezeptSearchTags() {
+    const container = document.getElementById('rz-active-filters');
+    if (!container) return;
+
+    if (activeRezeptFilters.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = activeRezeptFilters.map((filter) => `
+        <div class="flex items-center gap-2 px-3 py-1.5 ${filter.negate ? 'bg-red-100 text-red-800 border-red-300' : 'bg-orange-100 text-orange-800 border-orange-300'} rounded-full text-sm font-medium border">
+            ${filter.negate ? '<span class="font-bold text-red-600">NICHT</span>' : ''}
+            <span class="font-bold">${filter.label}:</span>
+            <span>${filter.rawValue}</span>
+            <button onclick="window.removeRezeptFilterById(${filter.id})" class="ml-1 ${filter.negate ? 'hover:bg-red-200' : 'hover:bg-orange-200'} rounded-full p-0.5 transition" title="Filter entfernen">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+    `).join('');
+}
+
+function resetRezeptAdvancedFilters() {
+    const kategorie = document.getElementById('rz-filter-kategorie');
+    const arbeitszeit = document.getElementById('rz-filter-arbeitszeit');
+    const bewertung = document.getElementById('rz-filter-bewertung');
+    const typ = document.getElementById('rz-filter-typ');
+    const filterId = document.getElementById('rz-filter-id');
+    const filterMappenNr = document.getElementById('rz-filter-mappennr');
+
+    if (kategorie) kategorie.value = '';
+    if (arbeitszeit) arbeitszeit.value = '';
+    if (bewertung) bewertung.value = '';
+    if (typ) typ.value = '';
+    if (filterId) filterId.value = '';
+    if (filterMappenNr) filterMappenNr.value = '';
+}
+
+function doesRezeptMatchSearchFilter(rezept, filter) {
+    const value = filter.value;
+    const titel = String(rezept.titel || '').toLowerCase();
+    const rezeptId = String(rezept.rezeptId || '').toLowerCase();
+    const kategorieKey = String(rezept.kategorie || '').toLowerCase();
+    const kategorieLabel = String(KATEGORIE_CONFIG[rezept.kategorie]?.label || '').toLowerCase();
+    const arbeitszeit = String(rezept.arbeitszeit || '').toLowerCase();
+    const bewertung = String(rezept.bewertung || '').toLowerCase();
+    const typ = String(rezept.typ || '').toLowerCase();
+    const mappenNr = String(rezept.mappenNr || '').toLowerCase();
+    const zutaten = (rezept.zutaten || []).map((zutat) => String(zutat?.name || '').toLowerCase());
+
+    switch (filter.category) {
+        case 'titel':
+            return titel.includes(value);
+        case 'rezeptId':
+            return rezeptId.includes(value);
+        case 'kategorie':
+            return kategorieKey.includes(value) || kategorieLabel.includes(value);
+        case 'arbeitszeit':
+            return arbeitszeit.includes(value);
+        case 'bewertung':
+            return bewertung.includes(value);
+        case 'typ':
+            return typ.includes(value);
+        case 'mappenNr':
+            return mappenNr.includes(value);
+        case 'zutaten':
+            return zutaten.some((name) => name.includes(value));
+        case 'all':
+        default:
+            return titel.includes(value) ||
+                rezeptId.includes(value) ||
+                kategorieKey.includes(value) ||
+                kategorieLabel.includes(value) ||
+                arbeitszeit.includes(value) ||
+                bewertung.includes(value) ||
+                typ.includes(value) ||
+                mappenNr.includes(value) ||
+                zutaten.some((name) => name.includes(value));
+    }
+}
+
 function filterRezepte() {
-    const suchbegriff = document.getElementById('rezept-suche').value.toLowerCase();
-    const kategorie = document.getElementById('filter-kategorie').value;
-    const arbeitszeit = parseInt(document.getElementById('filter-arbeitszeit').value) || 0;
-    const bewertung = parseInt(document.getElementById('filter-bewertung').value) || 0;
-    const typ = document.getElementById('filter-typ').value;
-    const filterId = document.getElementById('filter-id').value.toLowerCase();
-    const filterMappenNr = document.getElementById('filter-mappennr').value;
+    const kategorie = document.getElementById('rz-filter-kategorie')?.value || '';
+    const arbeitszeit = parseInt(document.getElementById('rz-filter-arbeitszeit')?.value || '') || 0;
+    const bewertung = parseInt(document.getElementById('rz-filter-bewertung')?.value || '') || 0;
+    const typ = document.getElementById('rz-filter-typ')?.value || '';
+    const filterId = String(document.getElementById('rz-filter-id')?.value || '').toLowerCase();
+    const filterMappenNr = String(document.getElementById('rz-filter-mappennr')?.value || '');
     
     const container = document.getElementById('rezepte-liste');
-    const items = container.querySelectorAll('[data-rezept-id], .bg-white');
+    if (!container) return;
     
     Object.values(REZEPTE).forEach(rezept => {
         const card = container.querySelector(`[onclick*="${rezept.id}"]`);
         if (!card) return;
         
         let visible = true;
-        
-        // Textsuche
-        if (suchbegriff) {
-            const searchText = `${rezept.titel} ${rezept.rezeptId} ${rezept.mappenNr} ${(rezept.zutaten || []).map(z => z.name).join(' ')}`.toLowerCase();
-            if (!searchText.includes(suchbegriff)) visible = false;
-        }
         
         // Kategorie
         if (kategorie && rezept.kategorie !== kategorie) visible = false;
@@ -949,19 +1131,41 @@ function filterRezepte() {
         
         // Mappen-Nr
         if (filterMappenNr && String(rezept.mappenNr) !== filterMappenNr) visible = false;
+
+        // Tag-Filter (AND/OR + NICHT)
+        if (visible && activeRezeptFilters.length > 0) {
+            const evaluate = (filter) => {
+                const matches = doesRezeptMatchSearchFilter(rezept, filter);
+                return filter.negate ? !matches : matches;
+            };
+
+            const tagMatches = rezeptSearchJoinMode === 'or'
+                ? activeRezeptFilters.some(evaluate)
+                : activeRezeptFilters.every(evaluate);
+
+            if (!tagMatches) visible = false;
+        }
         
         card.style.display = visible ? '' : 'none';
     });
 }
 
 function resetRezeptFilter() {
-    document.getElementById('rezept-suche').value = '';
-    document.getElementById('filter-kategorie').value = '';
-    document.getElementById('filter-arbeitszeit').value = '';
-    document.getElementById('filter-bewertung').value = '';
-    document.getElementById('filter-typ').value = '';
-    document.getElementById('filter-id').value = '';
-    document.getElementById('filter-mappennr').value = '';
+    activeRezeptFilters = [];
+    rezeptSearchJoinMode = 'and';
+
+    const searchInput = document.getElementById('rz-search-input');
+    const categoryTag = document.getElementById('rz-filter-category-tag');
+    const negate = document.getElementById('rz-filter-negate');
+    const joinMode = document.getElementById('rz-search-join-mode');
+
+    if (searchInput) searchInput.value = '';
+    if (categoryTag) categoryTag.value = 'all';
+    if (negate) negate.checked = false;
+    if (joinMode) joinMode.value = 'and';
+
+    resetRezeptAdvancedFilters();
+    renderRezeptSearchTags();
     filterRezepte();
 }
 
@@ -987,6 +1191,7 @@ window.addSchritt = addSchritt;
 window.removeSchritt = removeSchritt;
 window.updateSchritt = updateSchritt;
 window.removeDokument = removeDokument;
+window.removeRezeptFilterById = removeRezeptFilterById;
 
 // ========================================
 // HINWEIS: Initialisierung erfolgt durch haupteingang.js

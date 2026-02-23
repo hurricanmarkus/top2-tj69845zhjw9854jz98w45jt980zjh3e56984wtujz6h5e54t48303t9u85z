@@ -44,7 +44,8 @@ let THEMEN = {};
 let EINLADUNGEN = {}; // Einladungen für den aktuellen Benutzer
 let currentThemaId = null; // Aktuell ausgewähltes Thema
 let currentFilter = { status: 'aktiv', typ: '', person: '', intervalle: [] }; // Standard: Nur aktive Einträge anzeigen
-let searchTerm = '';
+let activeHaushaltszahlungFilters = [];
+let haushaltszahlungSearchJoinMode = 'and';
 let simulationsDatum = null; // Für Datums-Simulation (wie W7 in Excel)
 
 let unsubscribeHaushaltszahlungen = null;
@@ -333,14 +334,44 @@ function setupEventListeners() {
         saveBtn.dataset.listenerAttached = 'true';
     }
 
-    // Suche & Filter
+    // Filterbereich Toggle
+    const filterToggleBtn = document.getElementById('hz-toggle-filter-controls');
+    if (filterToggleBtn && !filterToggleBtn.dataset.listenerAttached) {
+        filterToggleBtn.addEventListener('click', () => {
+            const wrapper = document.getElementById('hz-filter-controls-wrapper');
+            const icon = document.getElementById('hz-toggle-filter-icon');
+            if (!wrapper || !icon) return;
+            wrapper.classList.toggle('hidden');
+            icon.classList.toggle('rotate-180');
+        });
+        filterToggleBtn.dataset.listenerAttached = 'true';
+    }
+
+    // Suche & Tag-Filter (harmonisiert)
     const searchInput = document.getElementById('search-haushaltszahlungen');
     if (searchInput && !searchInput.dataset.listenerAttached) {
-        searchInput.addEventListener('input', (e) => {
-            searchTerm = e.target.value.toLowerCase();
-            renderHaushaltszahlungenTable();
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addHaushaltszahlungFilterFromUi();
+            }
         });
         searchInput.dataset.listenerAttached = 'true';
+    }
+
+    const addFilterBtn = document.getElementById('hz-add-filter-btn');
+    if (addFilterBtn && !addFilterBtn.dataset.listenerAttached) {
+        addFilterBtn.addEventListener('click', addHaushaltszahlungFilterFromUi);
+        addFilterBtn.dataset.listenerAttached = 'true';
+    }
+
+    const joinModeSelect = document.getElementById('hz-search-join-mode');
+    if (joinModeSelect && !joinModeSelect.dataset.listenerAttached) {
+        joinModeSelect.addEventListener('change', (e) => {
+            haushaltszahlungSearchJoinMode = e.target.value === 'or' ? 'or' : 'and';
+            renderHaushaltszahlungenTable();
+        });
+        joinModeSelect.dataset.listenerAttached = 'true';
     }
 
     const filterStatus = document.getElementById('filter-hz-status');
@@ -397,17 +428,7 @@ function setupEventListeners() {
 
     const resetFilters = document.getElementById('reset-filters-haushaltszahlungen');
     if (resetFilters && !resetFilters.dataset.listenerAttached) {
-        resetFilters.addEventListener('click', () => {
-            currentFilter = { status: 'aktiv', typ: '', person: '', intervalle: [] }; // Zurück auf Standard: Aktiv
-            searchTerm = '';
-            document.getElementById('search-haushaltszahlungen').value = '';
-            document.getElementById('filter-hz-status').value = 'aktiv'; // Standard: Aktiv
-            document.getElementById('filter-hz-typ').value = '';
-            // Intervall-Checkboxen zurücksetzen
-            document.querySelectorAll('.hz-intervall-filter-cb').forEach(cb => cb.checked = false);
-            updateIntervallFilterLabel();
-            renderHaushaltszahlungenTable();
-        });
+        resetFilters.addEventListener('click', resetHaushaltszahlungenFiltersToDefault);
         resetFilters.dataset.listenerAttached = 'true';
     }
 
@@ -458,6 +479,173 @@ function setupEventListeners() {
     if (saveSettingsBtn && !saveSettingsBtn.dataset.listenerAttached) {
         saveSettingsBtn.addEventListener('click', saveSettings);
         saveSettingsBtn.dataset.listenerAttached = 'true';
+    }
+}
+
+function addHaushaltszahlungFilterFromUi() {
+    const searchInput = document.getElementById('search-haushaltszahlungen');
+    const categorySelect = document.getElementById('hz-filter-category-tag');
+    const negateCheckbox = document.getElementById('hz-filter-negate');
+
+    const rawValue = String(searchInput?.value || '').trim();
+    if (!rawValue) {
+        alertUser('Bitte einen Suchbegriff eingeben.', 'warning');
+        return;
+    }
+
+    const category = String(categorySelect?.value || 'all');
+    const negate = !!negateCheckbox?.checked;
+    const value = rawValue.toLowerCase();
+
+    const duplicate = activeHaushaltszahlungFilters.some((filter) => (
+        filter.category === category &&
+        filter.value === value &&
+        !!filter.negate === negate
+    ));
+
+    if (duplicate) {
+        if (searchInput) searchInput.value = '';
+        if (negateCheckbox) negateCheckbox.checked = false;
+        return;
+    }
+
+    const labels = {
+        all: 'Alles',
+        zweck: 'Zweck',
+        organisation: 'Organisation',
+        status: 'Status',
+        typ: 'Typ',
+        intervall: 'Intervall',
+        betrag: 'Betrag',
+        kundennummer: 'Kundennummer',
+        vertragsnummer: 'Vertragsnummer'
+    };
+
+    activeHaushaltszahlungFilters.push({
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        category,
+        value,
+        rawValue,
+        negate,
+        label: labels[category] || category
+    });
+
+    if (searchInput) searchInput.value = '';
+    if (negateCheckbox) negateCheckbox.checked = false;
+
+    renderHaushaltszahlungSearchTags();
+    renderHaushaltszahlungenTable();
+}
+
+function removeHaushaltszahlungFilterById(filterId) {
+    activeHaushaltszahlungFilters = activeHaushaltszahlungFilters.filter((filter) => filter.id !== filterId);
+    renderHaushaltszahlungSearchTags();
+    renderHaushaltszahlungenTable();
+}
+
+function renderHaushaltszahlungSearchTags() {
+    const container = document.getElementById('hz-active-search-tags');
+    if (!container) return;
+
+    if (activeHaushaltszahlungFilters.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = activeHaushaltszahlungFilters.map((filter) => `
+        <div class="flex items-center gap-2 px-3 py-1.5 ${filter.negate ? 'bg-red-100 text-red-800 border-red-300' : 'bg-cyan-100 text-cyan-800 border-cyan-300'} rounded-full text-sm font-medium border">
+            ${filter.negate ? '<span class="font-bold text-red-600">NICHT</span>' : ''}
+            <span class="font-bold">${filter.label}:</span>
+            <span>${filter.rawValue}</span>
+            <button onclick="window.removeHaushaltszahlungFilterById(${filter.id})" class="ml-1 ${filter.negate ? 'hover:bg-red-200' : 'hover:bg-cyan-200'} rounded-full p-0.5 transition" title="Filter entfernen">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+    `).join('');
+}
+
+function resetHaushaltszahlungenFiltersToDefault() {
+    activeHaushaltszahlungFilters = [];
+    haushaltszahlungSearchJoinMode = 'and';
+    currentFilter = { status: 'aktiv', typ: '', person: '', intervalle: [] };
+
+    const searchInput = document.getElementById('search-haushaltszahlungen');
+    const category = document.getElementById('hz-filter-category-tag');
+    const negate = document.getElementById('hz-filter-negate');
+    const joinMode = document.getElementById('hz-search-join-mode');
+    const filterStatus = document.getElementById('filter-hz-status');
+    const filterTyp = document.getElementById('filter-hz-typ');
+
+    if (searchInput) searchInput.value = '';
+    if (category) category.value = 'all';
+    if (negate) negate.checked = false;
+    if (joinMode) joinMode.value = 'and';
+    if (filterStatus) filterStatus.value = 'aktiv';
+    if (filterTyp) filterTyp.value = '';
+
+    // Intervall-Checkboxen zurücksetzen
+    document.querySelectorAll('.hz-intervall-filter-cb').forEach((cb) => {
+        cb.checked = false;
+    });
+    updateIntervallFilter();
+    updateIntervallFilterLabel();
+
+    renderHaushaltszahlungSearchTags();
+    renderHaushaltszahlungenTable();
+}
+
+function doesHaushaltszahlungMatchSearchFilter(eintrag, filter) {
+    const value = filter.value;
+    const zweck = String(eintrag.zweck || '').toLowerCase();
+    const organisation = String(eintrag.organisation || '').toLowerCase();
+    const statusKey = String(berechneStatus(eintrag).status || '').toLowerCase();
+    const statusLabel = String(STATUS_CONFIG[statusKey]?.label || '').toLowerCase();
+    const typKey = String(berechneTyp(eintrag) || '').toLowerCase();
+    const typLabel = String(TYP_CONFIG[typKey]?.label || '').toLowerCase();
+    const kundennummer = String(eintrag.kundennummer || '').toLowerCase();
+    const vertragsnummer = String(eintrag.vertragsnummer || '').toLowerCase();
+    const intervalle = Array.isArray(eintrag.intervall) ? eintrag.intervall : [];
+    const intervalValues = intervalle.flatMap((intervall) => {
+        const key = String(intervall || '').toLowerCase();
+        const label = String(INTERVALL_CONFIG[intervall]?.label || '').toLowerCase();
+        const short = String(INTERVALL_CONFIG[intervall]?.short || '').toLowerCase();
+        return [key, label, short];
+    });
+    const betrag = Number(eintrag.betrag || 0);
+    const amountValues = [betrag.toFixed(2), `${betrag.toFixed(2)} €`, String(eintrag.betrag || '')]
+        .map((entry) => entry.toLowerCase());
+
+    switch (filter.category) {
+        case 'zweck':
+            return zweck.includes(value);
+        case 'organisation':
+            return organisation.includes(value);
+        case 'status':
+            return statusKey.includes(value) || statusLabel.includes(value);
+        case 'typ':
+            return typKey.includes(value) || typLabel.includes(value);
+        case 'intervall':
+            return intervalValues.some((entry) => entry.includes(value));
+        case 'betrag':
+            return amountValues.some((entry) => entry.includes(value));
+        case 'kundennummer':
+            return kundennummer.includes(value);
+        case 'vertragsnummer':
+            return vertragsnummer.includes(value);
+        case 'all':
+        default:
+            return zweck.includes(value) ||
+                organisation.includes(value) ||
+                statusKey.includes(value) ||
+                statusLabel.includes(value) ||
+                typKey.includes(value) ||
+                typLabel.includes(value) ||
+                intervalValues.some((entry) => entry.includes(value)) ||
+                amountValues.some((entry) => entry.includes(value)) ||
+                kundennummer.includes(value) ||
+                vertragsnummer.includes(value);
     }
 }
 
@@ -1469,15 +1657,6 @@ function renderHaushaltszahlungenTable() {
     let eintraege = Object.values(HAUSHALTSZAHLUNGEN);
     console.log(`Alle Eintraege vor Filter: ${eintraege.length}`);
 
-    // Filter anwenden
-    if (searchTerm) {
-        eintraege = eintraege.filter(e => 
-            (e.zweck && e.zweck.toLowerCase().includes(searchTerm)) ||
-            (e.organisation && e.organisation.toLowerCase().includes(searchTerm))
-        );
-        console.log(`Nach Suchfilter: ${eintraege.length}`);
-    }
-
     if (currentFilter.status) {
         const beforeFilter = eintraege.length;
         eintraege = eintraege.filter(e => berechneStatus(e).status === currentFilter.status);
@@ -1497,6 +1676,21 @@ function renderHaushaltszahlungenTable() {
             return currentFilter.intervalle.some(filterIntervall => e.intervall.includes(filterIntervall));
         });
         console.log(`Nach Intervall-Filter: ${eintraege.length}`);
+    }
+
+    // Tag-Filter (AND/OR + NICHT)
+    if (activeHaushaltszahlungFilters.length > 0) {
+        eintraege = eintraege.filter((eintrag) => {
+            const evaluate = (filter) => {
+                const matches = doesHaushaltszahlungMatchSearchFilter(eintrag, filter);
+                return filter.negate ? !matches : matches;
+            };
+
+            return haushaltszahlungSearchJoinMode === 'or'
+                ? activeHaushaltszahlungFilters.some(evaluate)
+                : activeHaushaltszahlungFilters.every(evaluate);
+        });
+        console.log(`Nach Tag-Filter: ${eintraege.length}`);
     }
 
     if (eintraege.length === 0) {
@@ -2885,6 +3079,8 @@ window.editHaushaltszahlung = function(id) {
         openEditModal(eintrag);
     }
 };
+
+window.removeHaushaltszahlungFilterById = removeHaushaltszahlungFilterById;
 
 window.deleteHaushaltszahlung = deleteHaushaltszahlung;
 

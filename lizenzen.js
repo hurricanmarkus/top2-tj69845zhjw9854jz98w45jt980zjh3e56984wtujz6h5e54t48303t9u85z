@@ -22,8 +22,8 @@ let KATEGORIEN = [];
 let PRODUKTE = [];
 
 let currentFilter = { status: 'aktiv' };
-let searchTerm = '';
 let activeLizenzFilters = [];
+let lizenzSearchJoinMode = 'and';
 
 let lizenzModalMode = 'create';
 
@@ -164,6 +164,18 @@ function setupEventListeners() {
         volAktiv.dataset.listenerAttached = 'true';
     }
 
+    const filterToggleBtn = document.getElementById('liz-toggle-filter-controls');
+    if (filterToggleBtn && !filterToggleBtn.dataset.listenerAttached) {
+        filterToggleBtn.addEventListener('click', () => {
+            const wrapper = document.getElementById('liz-filter-controls-wrapper');
+            const icon = document.getElementById('liz-toggle-filter-icon');
+            if (!wrapper || !icon) return;
+            wrapper.classList.toggle('hidden');
+            icon.classList.toggle('rotate-180');
+        });
+        filterToggleBtn.dataset.listenerAttached = 'true';
+    }
+
     const filterInput = document.getElementById('liz-filter-input');
     if (filterInput && !filterInput.dataset.listenerAttached) {
         filterInput.addEventListener('keydown', (e) => {
@@ -181,6 +193,15 @@ function setupEventListeners() {
         addFilterBtn.dataset.listenerAttached = 'true';
     }
 
+    const joinModeSelect = document.getElementById('liz-search-join-mode');
+    if (joinModeSelect && !joinModeSelect.dataset.listenerAttached) {
+        joinModeSelect.addEventListener('change', (e) => {
+            lizenzSearchJoinMode = e.target.value === 'or' ? 'or' : 'and';
+            renderLizenzenTable();
+        });
+        joinModeSelect.dataset.listenerAttached = 'true';
+    }
+
     const filterStatus = document.getElementById('filter-liz-status');
     if (filterStatus && !filterStatus.dataset.listenerAttached) {
         filterStatus.addEventListener('change', (e) => {
@@ -195,16 +216,19 @@ function setupEventListeners() {
         resetFilters.addEventListener('click', () => {
             currentFilter = { status: 'aktiv' };
             activeLizenzFilters = [];
+            lizenzSearchJoinMode = 'and';
 
             const fs = document.getElementById('filter-liz-status');
             const ft = document.getElementById('liz-filter-type');
             const fe = document.getElementById('liz-filter-exclude');
             const fi = document.getElementById('liz-filter-input');
+            const jm = document.getElementById('liz-search-join-mode');
 
             if (fs) fs.value = 'aktiv';
             if (ft) ft.value = 'all';
             if (fe) fe.checked = false;
             if (fi) fi.value = '';
+            if (jm) jm.value = 'and';
 
             renderLizenzSearchTags();
 
@@ -620,10 +644,14 @@ function renderLizenzenTable() {
 
     if (activeLizenzFilters.length > 0) {
         list = list.filter((l) => {
-            return activeLizenzFilters.every((filter) => {
+            const evaluate = (filter) => {
                 const matches = doesLizenzMatchSearchFilter(l, filter);
                 return filter.exclude ? !matches : matches;
-            });
+            };
+
+            return lizenzSearchJoinMode === 'or'
+                ? activeLizenzFilters.some(evaluate)
+                : activeLizenzFilters.every(evaluate);
         });
     }
 

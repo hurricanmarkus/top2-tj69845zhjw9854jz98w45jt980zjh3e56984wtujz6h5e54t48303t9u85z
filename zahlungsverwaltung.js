@@ -48,6 +48,7 @@ let currentPositions = [];
 let currentSplitOffsets = {};
 let currentSplitAdjustments = {};
 let activeSearchFilters = [];
+let paymentSearchJoinMode = 'and';
 let isListView = false; // Wird in initializeZahlungsverwaltungView gesetzt
 let isTrashAdvancedMode = false;
 let selectedTrashIds = new Set();
@@ -209,6 +210,12 @@ function setupEventListeners() {
                 updateSearchSuggestions(val);
             }
         });
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addSearchTagFromControls();
+            }
+        });
         searchInput.addEventListener('focus', (e) => {
             if (e.target.value.trim()) updateSearchSuggestions(e.target.value);
         });
@@ -218,6 +225,13 @@ function setupEventListeners() {
             }
         });
     }
+
+    document.getElementById('btn-payment-add-filter')?.addEventListener('click', addSearchTagFromControls);
+    document.getElementById('btn-payment-reset-filters')?.addEventListener('click', resetPaymentFilterControls);
+    document.getElementById('payment-search-join-mode')?.addEventListener('change', (e) => {
+        paymentSearchJoinMode = e.target.value === 'or' ? 'or' : 'and';
+        applyFilters();
+    });
 
     document.getElementById('payment-filter-status')?.addEventListener('change', applyFilters);
     document.getElementById('payment-filter-category')?.addEventListener('change', applyFilters);
@@ -3566,17 +3580,77 @@ function fillFilterDropdowns() {
 
 // --- INTELLIGENTE SUCHE & TAGS ---
 
-function addSearchTag(type, term, label) {
-    // Duplikat-Check
-    if (activeSearchFilters.some(f => f.type === type && f.term === term)) return;
+const PAYMENT_SEARCH_TYPE_LABELS = {
+    all: 'Alles',
+    debtor: 'Von',
+    creditor: 'An',
+    content: 'Inhalt',
+    numbers: 'Nummer/ID',
+    date: 'Datum',
+    category_id: 'Kategorie',
+    amount: 'Betrag'
+};
 
-    activeSearchFilters.push({ type, term, label });
+function addSearchTagFromControls() {
+    const input = document.getElementById('payment-search-input');
+    const typeSelect = document.getElementById('payment-search-type');
+    const term = input?.value?.trim();
+    const type = typeSelect?.value || 'all';
+
+    if (!term) return;
+
+    const labelPrefix = PAYMENT_SEARCH_TYPE_LABELS[type] || type;
+    addSearchTag(type, term, `${labelPrefix}: ${term}`);
+}
+
+function resetPaymentFilterControls() {
+    activeSearchFilters = [];
+    paymentSearchJoinMode = 'and';
+
+    const searchInput = document.getElementById('payment-search-input');
+    const searchType = document.getElementById('payment-search-type');
+    const searchNegate = document.getElementById('payment-search-negate');
+    const searchJoinMode = document.getElementById('payment-search-join-mode');
+    const statusSelect = document.getElementById('payment-filter-status');
+    const categorySelect = document.getElementById('payment-filter-category');
+    const directionSelect = document.getElementById('payment-filter-direction');
+
+    if (searchInput) searchInput.value = '';
+    if (searchType) searchType.value = 'all';
+    if (searchNegate) searchNegate.checked = false;
+    if (searchJoinMode) searchJoinMode.value = 'and';
+    if (statusSelect) statusSelect.value = 'open';
+    if (categorySelect) categorySelect.value = 'all';
+    if (directionSelect) directionSelect.value = 'all';
+
+    document.getElementById('search-suggestions-box')?.classList.add('hidden');
+
+    renderSearchTags();
+    applyFilters();
+}
+
+function addSearchTag(type, term, label) {
+    const normalizedTerm = String(term || '').trim().toLowerCase();
+    const negateCheckbox = document.getElementById('payment-search-negate');
+    const negate = negateCheckbox?.checked || false;
+
+    if (!normalizedTerm) return;
+
+    // Duplikat-Check
+    if (activeSearchFilters.some(f => f.type === type && f.term === normalizedTerm && !!f.negate === !!negate)) return;
+
+    const labelText = label || `${PAYMENT_SEARCH_TYPE_LABELS[type] || type}: ${term}`;
+
+    activeSearchFilters.push({ type, term: normalizedTerm, label: labelText, negate: !!negate });
     renderSearchTags();
     
     // Input leeren und Fokus halten
     const input = document.getElementById('payment-search-input');
-    input.value = '';
-    input.focus();
+    if (input) {
+        input.value = '';
+        input.focus();
+    }
+    if (negateCheckbox) negateCheckbox.checked = false;
     document.getElementById('search-suggestions-box').classList.add('hidden');
     
     applyFilters(); // Sofort filtern
@@ -3595,10 +3669,13 @@ function renderSearchTags() {
 
     activeSearchFilters.forEach((filter, index) => {
         const tag = document.createElement('div');
-        tag.className = "flex items-center bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-1 rounded-full border border-indigo-200";
+        tag.className = filter.negate
+            ? "flex items-center bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded-full border border-red-200"
+            : "flex items-center bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-1 rounded-full border border-indigo-200";
         tag.innerHTML = `
+            ${filter.negate ? '<span class="mr-1 text-red-600">NICHT</span>' : ''}
             <span>${filter.label}</span>
-            <button class="ml-1 text-indigo-500 hover:text-indigo-900 focus:outline-none" onclick="window.removeSearchTagGlobal(${index})">&times;</button>
+            <button class="ml-1 ${filter.negate ? 'text-red-500 hover:text-red-900' : 'text-indigo-500 hover:text-indigo-900'} focus:outline-none" onclick="window.removeSearchTagGlobal(${index})">&times;</button>
         `;
         container.appendChild(tag);
     });
@@ -3704,10 +3781,12 @@ function applyFilters() {
     const statusSelect = document.getElementById('payment-filter-status');
     const categorySelect = document.getElementById('payment-filter-category');
     const dirSelect = document.getElementById('payment-filter-direction');
+    const joinModeSelect = document.getElementById('payment-search-join-mode');
 
     const statusFilter = statusSelect?.value || 'open'; 
     const categoryFilter = categorySelect?.value || 'all';
     const dirFilter = dirSelect?.value || 'all';
+    paymentSearchJoinMode = joinModeSelect?.value === 'or' ? 'or' : 'and';
 
     // 1. Prüfen ob wir aktive Tags haben
     const hasTags = activeSearchFilters.length > 0;
@@ -3749,50 +3828,67 @@ function applyFilters() {
             }
         }
 
-        // --- SMART SEARCH TAGS (UND-Verknüpfung) ---
+        // --- SMART SEARCH TAGS (AND/OR, inkl. NICHT) ---
         if (hasTags) {
-            return activeSearchFilters.every(filter => {
+            const evaluateTag = (filter) => {
                 const term = filter.term; 
                 const type = filter.type;
 
                 const contains = (val) => val && val.toLowerCase().includes(term);
+                let matches = true;
 
                 if (type === 'all') {
-                    return contains(p.title) || contains(p.notes) || 
-                           contains(p.debtorName) || contains(p.creditorName) ||
-                           contains(p.invoiceNr) || contains(p.orderNr) ||
-                           contains(p.id) ||
-                           (p.positions && p.positions.some(pos => contains(pos.name)));
+                    matches = contains(p.title) || contains(p.notes) || 
+                              contains(p.debtorName) || contains(p.creditorName) ||
+                              contains(p.invoiceNr) || contains(p.orderNr) ||
+                              contains(p.id) ||
+                              (p.positions && p.positions.some(pos => contains(pos.name)));
+                    return filter.negate ? !matches : matches;
                 }
-                if (type === 'debtor') return contains(p.debtorName);
-                if (type === 'creditor') return contains(p.creditorName);
+                if (type === 'debtor') {
+                    matches = contains(p.debtorName);
+                    return filter.negate ? !matches : matches;
+                }
+                if (type === 'creditor') {
+                    matches = contains(p.creditorName);
+                    return filter.negate ? !matches : matches;
+                }
                 
                 if (type === 'content') {
-                    return contains(p.title) || contains(p.notes) || 
-                           (p.positions && p.positions.some(pos => contains(pos.name)));
+                    matches = contains(p.title) || contains(p.notes) || 
+                              (p.positions && p.positions.some(pos => contains(pos.name)));
+                    return filter.negate ? !matches : matches;
                 }
                 
                 if (type === 'numbers' || type === 'id') {
-                    return contains(p.id) || contains(p.invoiceNr) || contains(p.orderNr) || contains(p.splitGroupId);
+                    matches = contains(p.id) || contains(p.invoiceNr) || contains(p.orderNr) || contains(p.splitGroupId);
+                    return filter.negate ? !matches : matches;
                 }
                 
                 if (type === 'date') {
-                    return contains(p.startDate) || contains(p.deadline);
+                    matches = contains(p.startDate) || contains(p.deadline);
+                    return filter.negate ? !matches : matches;
                 }
 
                 if (type === 'category_id') {
                     const pCat = p.categoryId || 'cat_misc';
-                    return pCat.toLowerCase() === term;
+                    matches = pCat.toLowerCase() === term;
+                    return filter.negate ? !matches : matches;
                 }
 
                 if (type === 'amount') {
                     const rem = parseFloat(p.remainingAmount).toFixed(2);
                     const tot = parseFloat(p.amount).toFixed(2);
-                    return rem.includes(term) || tot.includes(term);
+                    matches = rem.includes(term) || tot.includes(term);
+                    return filter.negate ? !matches : matches;
                 }
 
-                return true;
-            });
+                return filter.negate ? !matches : matches;
+            };
+
+            return paymentSearchJoinMode === 'or'
+                ? activeSearchFilters.some(evaluateTag)
+                : activeSearchFilters.every(evaluateTag);
         }
 
         return true;

@@ -34,7 +34,8 @@ let wertguthabenCollection = null;
 let WERTGUTHABEN = {};
 let unsubscribeWertguthaben = null;
 let currentFilter = { typ: '', eigentuemer: '', status: 'aktiv' };
-let searchTerm = '';
+let activeWertguthabenFilters = [];
+let wertguthabenSearchJoinMode = 'and';
 let wertguthabenSettings = {
     defaultWarnings: {
         gutschein: 14,
@@ -176,14 +177,44 @@ function setupEventListeners() {
         }
     });
 
-    // Suche & Filter
+    // Filterbereich Toggle
+    const filterToggleBtn = document.getElementById('wg-toggle-filter-controls');
+    if (filterToggleBtn && !filterToggleBtn.dataset.listenerAttached) {
+        filterToggleBtn.addEventListener('click', () => {
+            const wrapper = document.getElementById('wg-filter-controls-wrapper');
+            const icon = document.getElementById('wg-toggle-filter-icon');
+            if (!wrapper || !icon) return;
+            wrapper.classList.toggle('hidden');
+            icon.classList.toggle('rotate-180');
+        });
+        filterToggleBtn.dataset.listenerAttached = 'true';
+    }
+
+    // Suche & Filter (harmonisiert)
     const searchInput = document.getElementById('search-wertguthaben');
     if (searchInput && !searchInput.dataset.listenerAttached) {
-        searchInput.addEventListener('input', (e) => {
-            searchTerm = e.target.value.toLowerCase();
-            renderWertguthabenTable();
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addWertguthabenFilterFromUi();
+            }
         });
         searchInput.dataset.listenerAttached = 'true';
+    }
+
+    const addFilterBtn = document.getElementById('wg-add-filter-btn');
+    if (addFilterBtn && !addFilterBtn.dataset.listenerAttached) {
+        addFilterBtn.addEventListener('click', addWertguthabenFilterFromUi);
+        addFilterBtn.dataset.listenerAttached = 'true';
+    }
+
+    const joinModeSelect = document.getElementById('wg-search-join-mode');
+    if (joinModeSelect && !joinModeSelect.dataset.listenerAttached) {
+        joinModeSelect.addEventListener('change', (e) => {
+            wertguthabenSearchJoinMode = e.target.value === 'or' ? 'or' : 'and';
+            renderWertguthabenTable();
+        });
+        joinModeSelect.dataset.listenerAttached = 'true';
     }
 
     const filterTyp = document.getElementById('filter-wg-typ');
@@ -215,16 +246,161 @@ function setupEventListeners() {
 
     const resetFilters = document.getElementById('reset-filters-wertguthaben');
     if (resetFilters && !resetFilters.dataset.listenerAttached) {
-        resetFilters.addEventListener('click', () => {
-            currentFilter = { typ: '', eigentuemer: '', status: 'aktiv' };
-            searchTerm = '';
-            document.getElementById('search-wertguthaben').value = '';
-            document.getElementById('filter-wg-typ').value = '';
-            document.getElementById('filter-wg-eigentuemer').value = '';
-            document.getElementById('filter-wg-status').value = 'aktiv';
-            renderWertguthabenTable();
-        });
+        resetFilters.addEventListener('click', resetWertguthabenFiltersToDefault);
         resetFilters.dataset.listenerAttached = 'true';
+    }
+}
+
+function addWertguthabenFilterFromUi() {
+    const searchInput = document.getElementById('search-wertguthaben');
+    const categorySelect = document.getElementById('wg-filter-category');
+    const negateCheckbox = document.getElementById('wg-filter-negate');
+
+    const rawValue = String(searchInput?.value || '').trim();
+    if (!rawValue) {
+        alertUser('Bitte einen Suchbegriff eingeben.', 'warning');
+        return;
+    }
+
+    const category = String(categorySelect?.value || 'all');
+    const negate = !!negateCheckbox?.checked;
+    const value = rawValue.toLowerCase();
+
+    const duplicate = activeWertguthabenFilters.some((f) => f.category === category && f.value === value && !!f.negate === negate);
+    if (duplicate) {
+        if (searchInput) searchInput.value = '';
+        if (negateCheckbox) negateCheckbox.checked = false;
+        return;
+    }
+
+    const labels = {
+        all: 'Alles',
+        name: 'Name',
+        code: 'Code',
+        unternehmen: 'Unternehmen',
+        eigentuemer: 'Eigentümer',
+        typ: 'Typ',
+        status: 'Status',
+        betrag: 'Wert/Betrag'
+    };
+
+    activeWertguthabenFilters.push({
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        category,
+        value,
+        rawValue,
+        negate,
+        label: labels[category] || category
+    });
+
+    if (searchInput) searchInput.value = '';
+    if (negateCheckbox) negateCheckbox.checked = false;
+
+    renderWertguthabenSearchTags();
+    renderWertguthabenTable();
+}
+
+function removeWertguthabenFilterById(filterId) {
+    activeWertguthabenFilters = activeWertguthabenFilters.filter((f) => f.id !== filterId);
+    renderWertguthabenSearchTags();
+    renderWertguthabenTable();
+}
+
+function renderWertguthabenSearchTags() {
+    const container = document.getElementById('wg-active-filters');
+    if (!container) return;
+
+    if (activeWertguthabenFilters.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = activeWertguthabenFilters.map((filter) => `
+        <div class="flex items-center gap-2 px-3 py-1.5 ${filter.negate ? 'bg-red-100 text-red-800 border-red-300' : 'bg-emerald-100 text-emerald-800 border-emerald-300'} rounded-full text-sm font-medium border">
+            ${filter.negate ? '<span class="font-bold text-red-600">NICHT</span>' : ''}
+            <span class="font-bold">${filter.label}:</span>
+            <span>${filter.rawValue}</span>
+            <button onclick="window.removeWertguthabenFilterById(${filter.id})" class="ml-1 ${filter.negate ? 'hover:bg-red-200' : 'hover:bg-emerald-200'} rounded-full p-0.5 transition" title="Filter entfernen">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+    `).join('');
+}
+
+function resetWertguthabenFiltersToDefault() {
+    activeWertguthabenFilters = [];
+    wertguthabenSearchJoinMode = 'and';
+    currentFilter = { typ: '', eigentuemer: '', status: 'aktiv' };
+
+    const searchInput = document.getElementById('search-wertguthaben');
+    const category = document.getElementById('wg-filter-category');
+    const negate = document.getElementById('wg-filter-negate');
+    const joinMode = document.getElementById('wg-search-join-mode');
+    const filterTyp = document.getElementById('filter-wg-typ');
+    const filterEigentuemer = document.getElementById('filter-wg-eigentuemer');
+    const filterStatus = document.getElementById('filter-wg-status');
+
+    if (searchInput) searchInput.value = '';
+    if (category) category.value = 'all';
+    if (negate) negate.checked = false;
+    if (joinMode) joinMode.value = 'and';
+    if (filterTyp) filterTyp.value = '';
+    if (filterEigentuemer) filterEigentuemer.value = '';
+    if (filterStatus) filterStatus.value = 'aktiv';
+
+    renderWertguthabenSearchTags();
+    renderWertguthabenTable();
+}
+
+function doesWertguthabenMatchSearchFilter(wertguthabenEintrag, filter) {
+    const value = filter.value;
+    const name = (wertguthabenEintrag.name || '').toLowerCase();
+    const code = (wertguthabenEintrag.code || '').toLowerCase();
+    const unternehmen = (wertguthabenEintrag.unternehmen || '').toLowerCase();
+    const eigentuemerId = String(wertguthabenEintrag.eigentuemer || '').toLowerCase();
+    const eigentuemerName = (USERS[wertguthabenEintrag.eigentuemer]?.name || wertguthabenEintrag.eigentuemer || '').toLowerCase();
+    const typ = String(wertguthabenEintrag.typ || '').toLowerCase();
+    const typLabel = (TYP_CONFIG[wertguthabenEintrag.typ]?.label || '').toLowerCase();
+    const statusKey = String(wertguthabenEintrag.status || 'aktiv').toLowerCase();
+    const statusLabel = (STATUS_CONFIG[wertguthabenEintrag.status || 'aktiv']?.label || '').toLowerCase();
+    const wert = Number(wertguthabenEintrag.wert || 0);
+    const restwert = wertguthabenEintrag.restwert !== undefined ? Number(wertguthabenEintrag.restwert || 0) : wert;
+    const amountValues = [
+        wert.toFixed(2),
+        restwert.toFixed(2),
+        `${wert.toFixed(2)} €`,
+        `${restwert.toFixed(2)} €`
+    ].map((entry) => entry.toLowerCase());
+
+    switch (filter.category) {
+        case 'name':
+            return name.includes(value);
+        case 'code':
+            return code.includes(value);
+        case 'unternehmen':
+            return unternehmen.includes(value);
+        case 'eigentuemer':
+            return eigentuemerName.includes(value) || eigentuemerId.includes(value);
+        case 'typ':
+            return typ.includes(value) || typLabel.includes(value);
+        case 'status':
+            return statusKey.includes(value) || statusLabel.includes(value);
+        case 'betrag':
+            return amountValues.some((entry) => entry.includes(value));
+        case 'all':
+        default:
+            return name.includes(value) ||
+                code.includes(value) ||
+                unternehmen.includes(value) ||
+                eigentuemerName.includes(value) ||
+                eigentuemerId.includes(value) ||
+                typ.includes(value) ||
+                typLabel.includes(value) ||
+                statusKey.includes(value) ||
+                statusLabel.includes(value) ||
+                amountValues.some((entry) => entry.includes(value));
     }
 }
 
@@ -318,18 +494,17 @@ function renderWertguthabenTable() {
         wertguthaben = wertguthaben.filter(w => (w.status || 'aktiv') === currentFilter.status);
     }
 
-    // Suche anwenden
-    if (searchTerm) {
-        wertguthaben = wertguthaben.filter(w => {
-            const name = (w.name || '').toLowerCase();
-            const code = (w.code || '').toLowerCase();
-            const unternehmen = (w.unternehmen || '').toLowerCase();
-            const eigentuemerName = (USERS[w.eigentuemer]?.name || w.eigentuemer || '').toLowerCase();
-            
-            return name.includes(searchTerm) || 
-                   code.includes(searchTerm) || 
-                   unternehmen.includes(searchTerm) ||
-                   eigentuemerName.includes(searchTerm);
+    // Tag-Filter (AND/OR + NICHT)
+    if (activeWertguthabenFilters.length > 0) {
+        wertguthaben = wertguthaben.filter((eintrag) => {
+            const evaluate = (filter) => {
+                const matches = doesWertguthabenMatchSearchFilter(eintrag, filter);
+                return filter.negate ? !matches : matches;
+            };
+
+            return wertguthabenSearchJoinMode === 'or'
+                ? activeWertguthabenFilters.some(evaluate)
+                : activeWertguthabenFilters.every(evaluate);
         });
     }
 
@@ -1657,6 +1832,8 @@ window.deleteTransaktion = async function(wertguthabenId, transaktionId) {
         alertUser('Fehler beim Löschen: ' + error.message, 'error');
     }
 };
+
+window.removeWertguthabenFilterById = removeWertguthabenFilterById;
 
 
 // Einstellungen werden in initializeWertguthaben() geladen (NACH loadUserSettings)

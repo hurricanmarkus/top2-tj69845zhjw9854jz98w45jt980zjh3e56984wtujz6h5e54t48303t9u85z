@@ -36,10 +36,11 @@ let unsubscribeTickets = null;
 let ticketIdCounter = 1;
 
 // Filter-Status
-let searchTerm = '';
 let filterStatus = '';
 let filterPriority = '';
 let filterPerson = '';
+let activeTicketFilters = [];
+let ticketSearchJoinMode = 'and';
 
 // Konfiguration
 const CATEGORIES = {
@@ -50,6 +51,152 @@ const CATEGORIES = {
     erledigungen: { icon: '📋', label: 'Erledigungen', color: 'purple' },
     sonstiges: { icon: '📌', label: 'Sonstiges', color: 'gray' }
 };
+
+function addTicketFilterFromUi() {
+    const searchInput = document.getElementById('ts-search-input');
+    const categorySelect = document.getElementById('ts-filter-category');
+    const negateCheckbox = document.getElementById('ts-filter-negate');
+
+    const rawValue = String(searchInput?.value || '').trim();
+    if (!rawValue) {
+        alertUser('Bitte einen Suchbegriff eingeben.', 'warning');
+        return;
+    }
+
+    const category = String(categorySelect?.value || 'all');
+    const negate = !!negateCheckbox?.checked;
+    const value = rawValue.toLowerCase();
+
+    const duplicate = activeTicketFilters.some((f) => f.category === category && f.value === value && !!f.negate === negate);
+    if (duplicate) {
+        if (searchInput) searchInput.value = '';
+        if (negateCheckbox) negateCheckbox.checked = false;
+        return;
+    }
+
+    const labels = {
+        all: 'Alles',
+        ticketId: 'Ticket-ID',
+        subject: 'Betreff',
+        category: 'Kategorie',
+        status: 'Status',
+        priority: 'Priorität',
+        creator: 'Ersteller',
+        assignee: 'Zugewiesen',
+        dueDate: 'Fälligkeit'
+    };
+
+    activeTicketFilters.push({
+        id: Date.now(),
+        category,
+        value,
+        rawValue,
+        negate,
+        label: labels[category] || category
+    });
+
+    if (searchInput) searchInput.value = '';
+    if (negateCheckbox) negateCheckbox.checked = false;
+
+    renderTicketSearchTags();
+    renderTickets();
+}
+
+function removeTicketFilterById(filterId) {
+    activeTicketFilters = activeTicketFilters.filter((f) => f.id !== filterId);
+    renderTicketSearchTags();
+    renderTickets();
+}
+
+function renderTicketSearchTags() {
+    const container = document.getElementById('ts-active-filters');
+    if (!container) return;
+
+    if (activeTicketFilters.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = activeTicketFilters.map((filter) => `
+        <div class="flex items-center gap-2 px-3 py-1.5 ${filter.negate ? 'bg-red-100 text-red-800 border-red-300' : 'bg-purple-100 text-purple-800 border-purple-300'} rounded-full text-sm font-medium border">
+            ${filter.negate ? '<span class="font-bold text-red-600">NICHT</span>' : ''}
+            <span class="font-bold">${filter.label}:</span>
+            <span>${filter.rawValue}</span>
+            <button onclick="window.removeTicketFilterById(${filter.id})" class="ml-1 ${filter.negate ? 'hover:bg-red-200' : 'hover:bg-purple-200'} rounded-full p-0.5 transition" title="Filter entfernen">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+    `).join('');
+}
+
+function resetTicketFiltersToDefault() {
+    activeTicketFilters = [];
+    ticketSearchJoinMode = 'and';
+    filterStatus = '';
+    filterPriority = '';
+    filterPerson = '';
+
+    const searchInput = document.getElementById('ts-search-input');
+    const negate = document.getElementById('ts-filter-negate');
+    const category = document.getElementById('ts-filter-category');
+    const joinMode = document.getElementById('ts-search-join-mode');
+    const status = document.getElementById('ts-filter-status');
+    const priority = document.getElementById('ts-filter-priority');
+    const person = document.getElementById('ts-filter-person');
+
+    if (searchInput) searchInput.value = '';
+    if (negate) negate.checked = false;
+    if (category) category.value = 'all';
+    if (joinMode) joinMode.value = 'and';
+    if (status) status.value = '';
+    if (priority) priority.value = '';
+    if (person) person.value = '';
+
+    renderTicketSearchTags();
+    renderTickets();
+}
+
+function doesTicketMatchSearchFilter(ticket, filter) {
+    const value = filter.value;
+    const ticketId = `#TK-${String(ticket.ticketNumber || 0).padStart(4, '0')}`.toLowerCase();
+    const subject = (ticket.subject || '').toLowerCase();
+    const description = (ticket.description || '').toLowerCase();
+    const creatorName = (USERS && USERS[ticket.createdBy]?.name || '').toLowerCase();
+    const assigneeName = (USERS && USERS[ticket.assignedTo]?.name || '').toLowerCase();
+    const dueDate = String(ticket.dueDate || '').toLowerCase();
+    const dueDateLocalized = ticket.dueDate ? new Date(ticket.dueDate).toLocaleDateString('de-DE').toLowerCase() : '';
+
+    switch (filter.category) {
+        case 'ticketId': return ticketId.includes(value);
+        case 'subject': return subject.includes(value) || description.includes(value);
+        case 'category': {
+            const categoryLabel = (CATEGORIES[ticket.category]?.label || '').toLowerCase();
+            return String(ticket.category || '').toLowerCase().includes(value) || categoryLabel.includes(value);
+        }
+        case 'status': {
+            const statusLabel = (STATUS[ticket.status]?.label || '').toLowerCase();
+            return String(ticket.status || '').toLowerCase().includes(value) || statusLabel.includes(value);
+        }
+        case 'priority': {
+            const priorityLabel = (PRIORITIES[ticket.priority]?.label || '').toLowerCase();
+            return String(ticket.priority || '').toLowerCase().includes(value) || priorityLabel.includes(value);
+        }
+        case 'creator': return creatorName.includes(value) || String(ticket.createdBy || '').toLowerCase().includes(value);
+        case 'assignee': return assigneeName.includes(value) || String(ticket.assignedTo || '').toLowerCase().includes(value);
+        case 'dueDate': return dueDate.includes(value) || dueDateLocalized.includes(value);
+        case 'all':
+        default:
+            return ticketId.includes(value) ||
+                subject.includes(value) ||
+                description.includes(value) ||
+                creatorName.includes(value) ||
+                assigneeName.includes(value) ||
+                dueDate.includes(value) ||
+                dueDateLocalized.includes(value);
+    }
+}
 
 const PRIORITIES = {
     low: { icon: '🟢', label: 'Niedrig', color: 'bg-green-100 text-green-800 border-green-300' },
@@ -133,38 +280,63 @@ function setupEventListeners() {
         closeDetails.dataset.listenerAttached = 'true';
     }
 
-    // Suche & Filter
-    const searchInput = document.getElementById('search-tickets');
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            searchTerm = e.target.value.toLowerCase();
-            renderTickets();
+    // Filterbereich Toggle
+    const filterToggleBtn = document.getElementById('ts-toggle-filter-controls');
+    if (filterToggleBtn && !filterToggleBtn.dataset.listenerAttached) {
+        filterToggleBtn.addEventListener('click', () => {
+            const wrapper = document.getElementById('ts-filter-controls-wrapper');
+            const icon = document.getElementById('ts-toggle-filter-icon');
+            if (!wrapper || !icon) return;
+            wrapper.classList.toggle('hidden');
+            icon.classList.toggle('rotate-180');
         });
+        filterToggleBtn.dataset.listenerAttached = 'true';
     }
 
-    document.getElementById('btn-clear-search')?.addEventListener('click', () => {
-        searchTerm = '';
-        filterStatus = '';
-        filterPriority = '';
-        filterPerson = '';
-        document.getElementById('search-tickets').value = '';
-        document.getElementById('filter-status').value = '';
-        document.getElementById('filter-priority').value = '';
-        document.getElementById('filter-person').value = '';
-        renderTickets();
-    });
+    // Suche & Filter (harmonisiert)
+    const searchInput = document.getElementById('ts-search-input');
+    if (searchInput && !searchInput.dataset.listenerAttached) {
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addTicketFilterFromUi();
+            }
+        });
+        searchInput.dataset.listenerAttached = 'true';
+    }
 
-    document.getElementById('filter-status')?.addEventListener('change', (e) => {
+    const addFilterBtn = document.getElementById('ts-add-filter-btn');
+    if (addFilterBtn && !addFilterBtn.dataset.listenerAttached) {
+        addFilterBtn.addEventListener('click', addTicketFilterFromUi);
+        addFilterBtn.dataset.listenerAttached = 'true';
+    }
+
+    const resetFiltersBtn = document.getElementById('ts-reset-filters-btn');
+    if (resetFiltersBtn && !resetFiltersBtn.dataset.listenerAttached) {
+        resetFiltersBtn.addEventListener('click', resetTicketFiltersToDefault);
+        resetFiltersBtn.dataset.listenerAttached = 'true';
+    }
+
+    const joinModeSelect = document.getElementById('ts-search-join-mode');
+    if (joinModeSelect && !joinModeSelect.dataset.listenerAttached) {
+        joinModeSelect.addEventListener('change', (e) => {
+            ticketSearchJoinMode = e.target.value === 'or' ? 'or' : 'and';
+            renderTickets();
+        });
+        joinModeSelect.dataset.listenerAttached = 'true';
+    }
+
+    document.getElementById('ts-filter-status')?.addEventListener('change', (e) => {
         filterStatus = e.target.value;
         renderTickets();
     });
 
-    document.getElementById('filter-priority')?.addEventListener('change', (e) => {
+    document.getElementById('ts-filter-priority')?.addEventListener('change', (e) => {
         filterPriority = e.target.value;
         renderTickets();
     });
 
-    document.getElementById('filter-person')?.addEventListener('change', (e) => {
+    document.getElementById('ts-filter-person')?.addEventListener('change', (e) => {
         filterPerson = e.target.value;
         renderTickets();
     });
@@ -285,18 +457,17 @@ function renderTickets() {
         tickets = tickets.filter(t => t.assignedTo === currentUser.mode);
     }
 
-    // Such-Filter
-    if (searchTerm) {
-        tickets = tickets.filter(t => {
-            const ticketId = `#TK-${String(t.ticketNumber || 0).padStart(4, '0')}`.toLowerCase();
-            const subject = (t.subject || '').toLowerCase();
-            const creatorName = (USERS && USERS[t.createdBy]?.name || '').toLowerCase();
-            const assigneeName = (USERS && USERS[t.assignedTo]?.name || '').toLowerCase();
-            
-            return ticketId.includes(searchTerm) || 
-                   subject.includes(searchTerm) || 
-                   creatorName.includes(searchTerm) || 
-                   assigneeName.includes(searchTerm);
+    // Tag-Filter (AND/OR + NICHT)
+    if (activeTicketFilters.length > 0) {
+        tickets = tickets.filter((ticket) => {
+            const evaluate = (filter) => {
+                const matches = doesTicketMatchSearchFilter(ticket, filter);
+                return filter.negate ? !matches : matches;
+            };
+
+            return ticketSearchJoinMode === 'or'
+                ? activeTicketFilters.some(evaluate)
+                : activeTicketFilters.every(evaluate);
         });
     }
 
@@ -950,8 +1121,10 @@ function populateUserDropdown() {
     });
 }
 
+window.removeTicketFilterById = removeTicketFilterById;
+
 function populateFilterDropdowns() {
-    const dropdown = document.getElementById('filter-person');
+    const dropdown = document.getElementById('ts-filter-person');
     if (!dropdown) return;
 
     dropdown.innerHTML = '<option value="">Alle Personen</option>';

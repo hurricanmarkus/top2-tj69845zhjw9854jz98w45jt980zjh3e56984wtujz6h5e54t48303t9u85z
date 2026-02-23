@@ -42,7 +42,8 @@ let VERTRAEGE_EINLADUNGEN = {};
 let VERTRAEGE_KATEGORIEN = {};
 let currentThemaId = null;
 let currentFilter = { rhythmus: '', absicht: '', kategorie: '', unterkategorie: '', status: 'aktiv' };
-let searchTerm = '';
+let activeVertragsFilters = [];
+let vertragsSearchJoinMode = 'and';
 let unsubscribeVertraege = null;
 let unsubscribeThemen = null;
 let unsubscribeKategorien = null;
@@ -459,7 +460,7 @@ function loadVertraegeKategorien() {
 function renderKategorienDropdowns() {
     // Kategorien für Modal-Dropdown
     const kategorieSelect = document.getElementById('vertragKategorie');
-    const filterKategorie = document.getElementById('filter-kategorie');
+    const filterKategorie = document.getElementById('vv-filter-kategorie') || document.getElementById('filter-kategorie');
     const unterkategorieParent = document.getElementById('vv-unterkategorie-parent');
     
     const kategorien = Object.values(VERTRAEGE_KATEGORIEN).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -476,7 +477,7 @@ function renderKategorienDropdowns() {
 
 function renderUnterkategorienDropdown(kategorieId) {
     const unterkategorieSelect = document.getElementById('vertragUnterkategorie');
-    const filterUnterkategorie = document.getElementById('filter-unterkategorie');
+    const filterUnterkategorie = document.getElementById('vv-filter-unterkategorie') || document.getElementById('filter-unterkategorie');
     
     if (!kategorieId) {
         if (unterkategorieSelect) unterkategorieSelect.innerHTML = '<option value="">Keine Unterkategorie</option>';
@@ -1269,18 +1270,47 @@ function setupEventListeners() {
         }
     });
 
-    // Suche
-    const searchInput = document.getElementById('search-vertraege');
+    // Filterbereich Toggle
+    const filterToggleBtn = document.getElementById('vv-toggle-filter-controls');
+    if (filterToggleBtn && !filterToggleBtn.dataset.listenerAttached) {
+        filterToggleBtn.addEventListener('click', () => {
+            const wrapper = document.getElementById('vv-filter-controls-wrapper');
+            const icon = document.getElementById('vv-toggle-filter-icon');
+            if (!wrapper || !icon) return;
+            wrapper.classList.toggle('hidden');
+            icon.classList.toggle('rotate-180');
+        });
+        filterToggleBtn.dataset.listenerAttached = 'true';
+    }
+
+    // Suche & Tag-Filter (harmonisiert)
+    const searchInput = document.getElementById('vv-search-vertraege');
     if (searchInput && !searchInput.dataset.listenerAttached) {
-        searchInput.addEventListener('input', (e) => {
-            searchTerm = e.target.value.toLowerCase();
-            renderVertraegeTable();
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addVertragsFilterFromUi();
+            }
         });
         searchInput.dataset.listenerAttached = 'true';
     }
 
-    // Filter
-    const filterRhythmus = document.getElementById('filter-zahlungsrhythmus');
+    const addFilterBtn = document.getElementById('vv-add-filter-btn');
+    if (addFilterBtn && !addFilterBtn.dataset.listenerAttached) {
+        addFilterBtn.addEventListener('click', addVertragsFilterFromUi);
+        addFilterBtn.dataset.listenerAttached = 'true';
+    }
+
+    const joinModeSelect = document.getElementById('vv-search-join-mode');
+    if (joinModeSelect && !joinModeSelect.dataset.listenerAttached) {
+        joinModeSelect.addEventListener('change', (e) => {
+            vertragsSearchJoinMode = e.target.value === 'or' ? 'or' : 'and';
+            renderVertraegeTable();
+        });
+        joinModeSelect.dataset.listenerAttached = 'true';
+    }
+
+    const filterRhythmus = document.getElementById('vv-filter-zahlungsrhythmus');
     if (filterRhythmus && !filterRhythmus.dataset.listenerAttached) {
         filterRhythmus.addEventListener('change', (e) => {
             currentFilter.rhythmus = e.target.value;
@@ -1289,7 +1319,7 @@ function setupEventListeners() {
         filterRhythmus.dataset.listenerAttached = 'true';
     }
 
-    const filterAbsicht = document.getElementById('filter-kuendigungsabsicht');
+    const filterAbsicht = document.getElementById('vv-filter-kuendigungsabsicht');
     if (filterAbsicht && !filterAbsicht.dataset.listenerAttached) {
         filterAbsicht.addEventListener('change', (e) => {
             currentFilter.absicht = e.target.value;
@@ -1298,37 +1328,28 @@ function setupEventListeners() {
         filterAbsicht.dataset.listenerAttached = 'true';
     }
 
-    const resetFilters = document.getElementById('reset-filters-vertraege');
+    const resetFilters = document.getElementById('vv-reset-filters-vertraege');
     if (resetFilters && !resetFilters.dataset.listenerAttached) {
-        resetFilters.addEventListener('click', () => {
-            currentFilter = { rhythmus: '', absicht: '', kategorie: '', unterkategorie: '', status: 'aktiv' };
-            searchTerm = '';
-            document.getElementById('search-vertraege').value = '';
-            document.getElementById('filter-zahlungsrhythmus').value = '';
-            document.getElementById('filter-kuendigungsabsicht').value = '';
-            document.getElementById('filter-kategorie').value = '';
-            document.getElementById('filter-unterkategorie').value = '';
-            document.getElementById('filter-vertragsstatus').value = 'aktiv';
-            renderVertraegeTable();
-        });
+        resetFilters.addEventListener('click', resetVertragsFiltersToDefault);
         resetFilters.dataset.listenerAttached = 'true';
     }
 
     // Kategorie-Filter
-    const filterKategorie = document.getElementById('filter-kategorie');
+    const filterKategorie = document.getElementById('vv-filter-kategorie');
     if (filterKategorie && !filterKategorie.dataset.listenerAttached) {
         filterKategorie.addEventListener('change', (e) => {
             currentFilter.kategorie = e.target.value;
             currentFilter.unterkategorie = '';
             renderUnterkategorienDropdown(e.target.value);
-            document.getElementById('filter-unterkategorie').value = '';
+            const unterkategorie = document.getElementById('vv-filter-unterkategorie');
+            if (unterkategorie) unterkategorie.value = '';
             renderVertraegeTable();
         });
         filterKategorie.dataset.listenerAttached = 'true';
     }
 
     // Unterkategorie-Filter
-    const filterUnterkategorie = document.getElementById('filter-unterkategorie');
+    const filterUnterkategorie = document.getElementById('vv-filter-unterkategorie');
     if (filterUnterkategorie && !filterUnterkategorie.dataset.listenerAttached) {
         filterUnterkategorie.addEventListener('change', (e) => {
             currentFilter.unterkategorie = e.target.value;
@@ -1338,7 +1359,7 @@ function setupEventListeners() {
     }
 
     // Vertragsstatus-Filter
-    const filterStatus = document.getElementById('filter-vertragsstatus');
+    const filterStatus = document.getElementById('vv-filter-vertragsstatus');
     if (filterStatus && !filterStatus.dataset.listenerAttached) {
         filterStatus.addEventListener('change', (e) => {
             currentFilter.status = e.target.value;
@@ -1455,6 +1476,170 @@ function setupEventListeners() {
             }
         });
         abtauschUnbegrenzt.dataset.listenerAttached = 'true';
+    }
+}
+
+function addVertragsFilterFromUi() {
+    const searchInput = document.getElementById('vv-search-vertraege');
+    const categorySelect = document.getElementById('vv-filter-category-tag');
+    const negateCheckbox = document.getElementById('vv-filter-negate');
+
+    const rawValue = String(searchInput?.value || '').trim();
+    if (!rawValue) {
+        alertUser('Bitte einen Suchbegriff eingeben.', 'warning');
+        return;
+    }
+
+    const category = String(categorySelect?.value || 'all');
+    const negate = !!negateCheckbox?.checked;
+    const value = rawValue.toLowerCase();
+
+    const duplicate = activeVertragsFilters.some((filter) => (
+        filter.category === category &&
+        filter.value === value &&
+        !!filter.negate === negate
+    ));
+
+    if (duplicate) {
+        if (searchInput) searchInput.value = '';
+        if (negateCheckbox) negateCheckbox.checked = false;
+        return;
+    }
+
+    const labels = {
+        all: 'Alles',
+        name: 'Name',
+        anbieter: 'Anbieter',
+        kategorie: 'Kategorie',
+        unterkategorie: 'Unterkategorie',
+        rhythmus: 'Zahlungsrhythmus',
+        absicht: 'Kündigungsabsicht',
+        status: 'Vertragsstatus',
+        betrag: 'Betrag'
+    };
+
+    activeVertragsFilters.push({
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        category,
+        value,
+        rawValue,
+        negate,
+        label: labels[category] || category
+    });
+
+    if (searchInput) searchInput.value = '';
+    if (negateCheckbox) negateCheckbox.checked = false;
+
+    renderVertragsSearchTags();
+    renderVertraegeTable();
+}
+
+function removeVertragsFilterById(filterId) {
+    activeVertragsFilters = activeVertragsFilters.filter((filter) => filter.id !== filterId);
+    renderVertragsSearchTags();
+    renderVertraegeTable();
+}
+
+function renderVertragsSearchTags() {
+    const container = document.getElementById('vv-active-search-tags');
+    if (!container) return;
+
+    if (activeVertragsFilters.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = activeVertragsFilters.map((filter) => `
+        <div class="flex items-center gap-2 px-3 py-1.5 ${filter.negate ? 'bg-red-100 text-red-800 border-red-300' : 'bg-indigo-100 text-indigo-800 border-indigo-300'} rounded-full text-sm font-medium border">
+            ${filter.negate ? '<span class="font-bold text-red-600">NICHT</span>' : ''}
+            <span class="font-bold">${filter.label}:</span>
+            <span>${filter.rawValue}</span>
+            <button onclick="window.removeVertragsFilterById(${filter.id})" class="ml-1 ${filter.negate ? 'hover:bg-red-200' : 'hover:bg-indigo-200'} rounded-full p-0.5 transition" title="Filter entfernen">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+    `).join('');
+}
+
+function resetVertragsFiltersToDefault() {
+    activeVertragsFilters = [];
+    vertragsSearchJoinMode = 'and';
+    currentFilter = { rhythmus: '', absicht: '', kategorie: '', unterkategorie: '', status: 'aktiv' };
+
+    const searchInput = document.getElementById('vv-search-vertraege');
+    const category = document.getElementById('vv-filter-category-tag');
+    const negate = document.getElementById('vv-filter-negate');
+    const joinMode = document.getElementById('vv-search-join-mode');
+    const filterRhythmus = document.getElementById('vv-filter-zahlungsrhythmus');
+    const filterAbsicht = document.getElementById('vv-filter-kuendigungsabsicht');
+    const filterKategorie = document.getElementById('vv-filter-kategorie');
+    const filterUnterkategorie = document.getElementById('vv-filter-unterkategorie');
+    const filterStatus = document.getElementById('vv-filter-vertragsstatus');
+
+    if (searchInput) searchInput.value = '';
+    if (category) category.value = 'all';
+    if (negate) negate.checked = false;
+    if (joinMode) joinMode.value = 'and';
+    if (filterRhythmus) filterRhythmus.value = '';
+    if (filterAbsicht) filterAbsicht.value = '';
+    if (filterKategorie) filterKategorie.value = '';
+    if (filterUnterkategorie) filterUnterkategorie.value = '';
+    if (filterStatus) filterStatus.value = 'aktiv';
+
+    renderUnterkategorienDropdown('');
+    renderVertragsSearchTags();
+    renderVertraegeTable();
+}
+
+function doesVertragMatchSearchFilter(vertrag, filter) {
+    const value = filter.value;
+    const name = (vertrag.name || '').toLowerCase();
+    const anbieter = (vertrag.anbieter || '').toLowerCase();
+    const kategorieId = String(vertrag.kategorie || '').toLowerCase();
+    const kategorieName = (VERTRAEGE_KATEGORIEN[vertrag.kategorie]?.name || '').toLowerCase();
+    const unterkategorie = String(vertrag.unterkategorie || '').toLowerCase();
+    const rhythmusKey = String(vertrag.rhythmus || '').toLowerCase();
+    const rhythmusLabel = (RHYTHMUS_CONFIG[vertrag.rhythmus]?.label || '').toLowerCase();
+    const absichtKey = String(vertrag.kuendigungsabsicht || '').toLowerCase();
+    const absichtLabel = (ABSICHT_CONFIG[vertrag.kuendigungsabsicht]?.label || '').toLowerCase();
+    const statusKey = String(berechneVertragsstatus(vertrag) || '').toLowerCase();
+    const statusLabel = (VERTRAGSSTATUS_CONFIG[statusKey]?.label || '').toLowerCase();
+    const betrag = Number(vertrag.betrag || 0);
+    const betragValues = [betrag.toFixed(2), `${betrag.toFixed(2)} €`].map((entry) => entry.toLowerCase());
+
+    switch (filter.category) {
+        case 'name':
+            return name.includes(value);
+        case 'anbieter':
+            return anbieter.includes(value);
+        case 'kategorie':
+            return kategorieName.includes(value) || kategorieId.includes(value);
+        case 'unterkategorie':
+            return unterkategorie.includes(value);
+        case 'rhythmus':
+            return rhythmusKey.includes(value) || rhythmusLabel.includes(value);
+        case 'absicht':
+            return absichtKey.includes(value) || absichtLabel.includes(value);
+        case 'status':
+            return statusKey.includes(value) || statusLabel.includes(value);
+        case 'betrag':
+            return betragValues.some((entry) => entry.includes(value));
+        case 'all':
+        default:
+            return name.includes(value) ||
+                anbieter.includes(value) ||
+                kategorieName.includes(value) ||
+                kategorieId.includes(value) ||
+                unterkategorie.includes(value) ||
+                rhythmusKey.includes(value) ||
+                rhythmusLabel.includes(value) ||
+                absichtKey.includes(value) ||
+                absichtLabel.includes(value) ||
+                statusKey.includes(value) ||
+                statusLabel.includes(value) ||
+                betragValues.some((entry) => entry.includes(value));
     }
 }
 
@@ -1844,14 +2029,28 @@ function renderVertraegeTable() {
     if (currentFilter.status) {
         vertraege = vertraege.filter(v => berechneVertragsstatus(v) === currentFilter.status);
     }
-    
-    // Suche anwenden
-    if (searchTerm) {
-        vertraege = vertraege.filter(v => 
-            (v.name || '').toLowerCase().includes(searchTerm) ||
-            (v.anbieter || '').toLowerCase().includes(searchTerm)
-        );
+
+    // Tag-Filter (AND/OR + NICHT)
+    if (activeVertragsFilters.length > 0) {
+        vertraege = vertraege.filter((vertrag) => {
+            const evaluate = (filter) => {
+                const matches = doesVertragMatchSearchFilter(vertrag, filter);
+                return filter.negate ? !matches : matches;
+            };
+
+            return vertragsSearchJoinMode === 'or'
+                ? activeVertragsFilters.some(evaluate)
+                : activeVertragsFilters.every(evaluate);
+        });
     }
+
+    const hasNonDefaultDropdownFilters = !!(
+        currentFilter.rhythmus ||
+        currentFilter.absicht ||
+        currentFilter.kategorie ||
+        currentFilter.unterkategorie ||
+        currentFilter.status !== 'aktiv'
+    );
     
     // Nach Priorität und dann nach Name sortieren
     vertraege.sort((a, b) => {
@@ -1865,7 +2064,7 @@ function renderVertraegeTable() {
         tbody.innerHTML = `
             <tr>
                 <td colspan="8" class="px-4 py-8 text-center text-gray-400 italic">
-                    ${searchTerm || currentFilter.rhythmus || currentFilter.absicht || currentFilter.kategorie || currentFilter.status
+                    ${activeVertragsFilters.length > 0 || hasNonDefaultDropdownFilters
                         ? 'Keine Verträge gefunden.' 
                         : 'Keine Verträge vorhanden. Erstelle deinen ersten Vertrag!'}
                 </td>
@@ -2545,6 +2744,7 @@ window.deleteVertragsThema = deleteVertragsThema;
 window.leaveThema = leaveThema;
 window.leaveThemaFromList = leaveThemaFromList;
 window.openVertraegeSettingsModal = openVertraegeSettingsModal;
+window.removeVertragsFilterById = removeVertragsFilterById;
 
 // Einladungen-Funktionen
 window.acceptVertragsEinladung = acceptVertragsEinladung;

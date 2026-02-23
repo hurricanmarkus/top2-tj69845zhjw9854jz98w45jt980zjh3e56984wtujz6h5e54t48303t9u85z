@@ -31,6 +31,7 @@ import {
 let sendungenCollectionRef = null;
 let SENDUNGEN = {};
 let activeFilters = [];
+let sendungSearchJoinMode = 'and';
 let currentTab = 'empfang';
 let unsubscribeSendungen = null;
 let currentEditingSendungId = null;
@@ -132,6 +133,7 @@ function addDefaultFilters() {
         category: 'status',
         value: 'zugestellt',
         negate: true,
+        isDefault: true,
         label: 'Status',
         id: Date.now()
     });
@@ -139,6 +141,7 @@ function addDefaultFilters() {
         category: 'status',
         value: 'storniert',
         negate: true,
+        isDefault: true,
         label: 'Status',
         id: Date.now() + 1
     });
@@ -155,8 +158,10 @@ function setupEventListeners() {
     const duplicateSendungBtn = document.getElementById('duplicateSendungBtn');
     const sendungToggleDetailsBtn = document.getElementById('sendungToggleDetailsBtn');
     const sendungToggleViewBtn = document.getElementById('sendungToggleViewBtn');
+    const sendungToggleFilterControls = document.getElementById('sendungToggleFilterControls');
     const addFilterBtn = document.getElementById('sendungAddFilterBtn');
     const sendungResetFiltersBtn = document.getElementById('sendungResetFiltersBtn');
+    const sendungFilterJoinMode = document.getElementById('sendungFilterJoinMode');
     const sendungTyp = document.getElementById('sendungTyp');
     const sendungErinnerungenAktiv = document.getElementById('sendungErinnerungenAktiv');
 
@@ -196,6 +201,16 @@ function setupEventListeners() {
         sendungToggleViewBtn.onclick = () => toggleSendungViewMode();
     }
 
+    if (sendungToggleFilterControls) {
+        sendungToggleFilterControls.onclick = () => {
+            const wrapper = document.getElementById('sendungFilterControlsWrapper');
+            const icon = document.getElementById('sendungToggleFilterIcon');
+            if (!wrapper || !icon) return;
+            wrapper.classList.toggle('hidden');
+            icon.classList.toggle('rotate-180');
+        };
+    }
+
     if (addFilterBtn) {
         addFilterBtn.onclick = () => addFilter();
     }
@@ -204,10 +219,18 @@ function setupEventListeners() {
         sendungResetFiltersBtn.onclick = () => resetFilters();
     }
 
+    if (sendungFilterJoinMode) {
+        sendungFilterJoinMode.onchange = (e) => {
+            sendungSearchJoinMode = e.target.value === 'or' ? 'or' : 'and';
+            applyFiltersAndRender();
+        };
+    }
+
     const searchInput = document.getElementById('sendungSearchInput');
     if (searchInput) {
-        searchInput.addEventListener('keypress', (e) => {
+        searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
+                e.preventDefault();
                 addFilter();
             }
         });
@@ -338,12 +361,27 @@ function listenForSendungSettingsSync() {
 function addFilter() {
     const searchInput = document.getElementById('sendungSearchInput');
     const categorySelect = document.getElementById('sendungFilterCategory');
+    const negateCheckbox = document.getElementById('sendungFilterNegate');
     
-    const value = searchInput?.value?.trim();
+    const rawValue = String(searchInput?.value || '').trim();
     const category = categorySelect?.value;
+    const negate = !!negateCheckbox?.checked;
+    const value = rawValue.toLowerCase();
     
-    if (!value || !category) {
+    if (!rawValue || !category) {
         alertUser('Bitte Suchbegriff und Kategorie eingeben!', 'warning');
+        return;
+    }
+
+    const duplicate = activeFilters.some((filter) => (
+        !filter.isDefault &&
+        filter.category === category &&
+        String(filter.value || '').toLowerCase() === value &&
+        !!filter.negate === negate
+    ));
+    if (duplicate) {
+        if (searchInput) searchInput.value = '';
+        if (negateCheckbox) negateCheckbox.checked = false;
         return;
     }
     
@@ -361,13 +399,16 @@ function addFilter() {
     activeFilters.push({
         category,
         value,
-        negate: false,
+        rawValue,
+        negate,
+        isDefault: false,
         label: categoryLabels[category] || category,
-        id: Date.now()
+        id: Date.now() + Math.floor(Math.random() * 1000)
     });
     
-    searchInput.value = '';
-    categorySelect.value = '';
+    if (searchInput) searchInput.value = '';
+    if (categorySelect) categorySelect.value = '';
+    if (negateCheckbox) negateCheckbox.checked = false;
     
     renderActiveFilters();
     applyFiltersAndRender();
@@ -381,13 +422,18 @@ function removeFilter(filterId) {
 
 function resetFilters() {
     activeFilters = [];
+    sendungSearchJoinMode = 'and';
     addDefaultFilters();
     
     const searchInput = document.getElementById('sendungSearchInput');
     const categorySelect = document.getElementById('sendungFilterCategory');
+    const negateCheckbox = document.getElementById('sendungFilterNegate');
+    const joinMode = document.getElementById('sendungFilterJoinMode');
     
     if (searchInput) searchInput.value = '';
     if (categorySelect) categorySelect.value = '';
+    if (negateCheckbox) negateCheckbox.checked = false;
+    if (joinMode) joinMode.value = 'and';
     
     applyFiltersAndRender();
 }
@@ -409,7 +455,7 @@ function renderActiveFilters() {
         } rounded-full text-sm font-medium border">
             ${filter.negate ? '<span class="font-bold text-red-600">NICHT</span>' : ''}
             <span class="font-bold">${filter.label}:</span>
-            <span>${filter.value}</span>
+            <span>${filter.rawValue || filter.value}</span>
             <button onclick="window.removeSendungFilter(${filter.id})" class="ml-1 ${
                 filter.negate ? 'hover:bg-red-200' : 'hover:bg-amber-200'
             } rounded-full p-0.5 transition" title="Filter entfernen">
@@ -857,38 +903,49 @@ function applyFiltersAndRender() {
     let filtered = Object.values(SENDUNGEN);
     
     filtered = filtered.filter(s => s.typ === currentTab);
-    
-    activeFilters.forEach(filter => {
-        const { category, value, negate } = filter;
-        const searchValue = value.toLowerCase();
-        
-        filtered = filtered.filter(s => {
-            let fieldValue = '';
-            
+
+    if (activeFilters.length > 0) {
+        const evaluateFilter = (sendung, filter) => {
+            const searchValue = String(filter.value || '').toLowerCase();
+            const category = String(filter.category || '');
+            let matches = false;
+
             if (category === 'status') {
-                fieldValue = (s.status || '').toLowerCase();
+                matches = String(sendung.status || '').toLowerCase().includes(searchValue);
             } else if (category === 'anbieter') {
-                fieldValue = (s.anbieter || '').toLowerCase();
+                matches = String(sendung.anbieter || '').toLowerCase().includes(searchValue);
             } else if (category === 'produkt') {
-                fieldValue = (s.produkt || '').toLowerCase();
+                matches = String(sendung.produkt || '').toLowerCase().includes(searchValue);
             } else if (category === 'absender') {
-                fieldValue = (s.absender || '').toLowerCase();
+                matches = String(sendung.absender || '').toLowerCase().includes(searchValue);
             } else if (category === 'empfaenger') {
-                fieldValue = (s.empfaenger || '').toLowerCase();
+                matches = String(sendung.empfaenger || '').toLowerCase().includes(searchValue);
             } else if (category === 'prioritaet') {
-                fieldValue = (s.prioritaet || '').toLowerCase();
+                matches = String(sendung.prioritaet || '').toLowerCase().includes(searchValue);
             } else if (category === 'tag') {
-                const tags = (s.tags || []).map(t => t.toLowerCase());
-                const matches = tags.some(t => t.includes(searchValue));
-                return negate ? !matches : matches;
+                const tags = (sendung.tags || []).map((tag) => String(tag || '').toLowerCase());
+                matches = tags.some((tag) => tag.includes(searchValue));
             } else if (category === 'bestellnummer') {
-                fieldValue = (s.bestellnummer || '').toLowerCase();
+                matches = String(sendung.bestellnummer || '').toLowerCase().includes(searchValue);
             }
-            
-            const matches = fieldValue.includes(searchValue);
-            return negate ? !matches : matches;
+
+            return filter.negate ? !matches : matches;
+        };
+
+        const defaultFilters = activeFilters.filter((filter) => !!filter.isDefault);
+        const userFilters = activeFilters.filter((filter) => !filter.isDefault);
+
+        filtered = filtered.filter((sendung) => {
+            const defaultsMatch = defaultFilters.every((filter) => evaluateFilter(sendung, filter));
+            if (!defaultsMatch) return false;
+
+            if (userFilters.length === 0) return true;
+
+            return sendungSearchJoinMode === 'or'
+                ? userFilters.some((filter) => evaluateFilter(sendung, filter))
+                : userFilters.every((filter) => evaluateFilter(sendung, filter));
         });
-    });
+    }
 
     renderSendungen(filtered);
     updateStatistics(filtered);

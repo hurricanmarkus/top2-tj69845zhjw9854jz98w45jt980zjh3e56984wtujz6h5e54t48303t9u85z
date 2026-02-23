@@ -68,8 +68,8 @@ let NOTIZEN_EINLADUNGEN_OUTGOING = {};
 let currentKategorieId = null;
 let currentUnterkategorieId = null;
 let currentKategorieFilter = null;
-let searchTerm = '';
 let activeFilters = [];
+let notizenSearchJoinMode = 'and';
 let defaultFiltersApplied = false;
 
 let unsubscribeNotizen = null;
@@ -193,6 +193,18 @@ export const ELEMENT_COLORS = [
 // INITIALISIERUNG
 // ========================================
 
+function buildDefaultNotizFilters() {
+    return [{
+        category: 'status',
+        value: 'abgeschlossen',
+        rawValue: 'abgeschlossen',
+        negate: true,
+        label: 'Status',
+        isDefault: true,
+        id: Date.now() + Math.floor(Math.random() * 1000)
+    }];
+}
+
 export function initializeNotizen() {
     console.log('📝 Notizen: Initialisierung startet...');
     
@@ -207,19 +219,20 @@ export function initializeNotizen() {
 
     // Standard-Filter setzen: Abgeschlossene ausblenden
     if (!defaultFiltersApplied) {
-        activeFilters = [{ 
-            category: 'status', 
-            value: 'abgeschlossen', 
-            negate: true, 
-            label: 'Status',
-            id: Date.now() 
-        }];
+        activeFilters = buildDefaultNotizFilters();
         defaultFiltersApplied = true;
+    } else if (!Array.isArray(activeFilters) || activeFilters.length === 0) {
+        activeFilters = buildDefaultNotizFilters();
     }
 
     const savedViewMode = getUserSetting('notizen_view_mode', 'list');
     isNotizenListView = savedViewMode !== 'card';
     updateNotizenViewModeButton();
+
+    const joinMode = document.getElementById('notizen-search-join-mode');
+    if (joinMode) {
+        joinMode.value = notizenSearchJoinMode;
+    }
     
     // Aktive Filter sofort anzeigen
     renderActiveFiltersNotizen();
@@ -1732,49 +1745,28 @@ function renderNotizenList() {
         notizenArray = notizenArray.filter(notiz => doesNotizMatchKategorieFilter(notiz, kategorieFilter));
     }
     
-    // Suchbegriff anwenden
-    if (searchTerm) {
-        const term = searchTerm.toLowerCase();
-        notizenArray = notizenArray.filter(n => 
-            n.titel?.toLowerCase().includes(term) ||
-            JSON.stringify(n.elemente || []).toLowerCase().includes(term)
+    const defaultFilters = activeFilters.filter((filter) => filter.isDefault);
+    const userFilters = activeFilters.filter((filter) => !filter.isDefault);
+
+    const evaluateFilter = (notiz, filter) => {
+        const matches = matchNotizFilter(notiz, filter.category, filter.value);
+        return filter.negate ? !matches : matches;
+    };
+
+    // Default-Filter immer per AND
+    if (defaultFilters.length > 0) {
+        notizenArray = notizenArray.filter((notiz) =>
+            defaultFilters.every((filter) => evaluateFilter(notiz, filter))
         );
     }
 
-    // Multi-Filter anwenden
-    if (activeFilters.length > 0) {
-        const groupedFilters = {};
-        activeFilters.forEach(filter => {
-            if (!groupedFilters[filter.category]) {
-                groupedFilters[filter.category] = { normal: [], negated: [] };
-            }
-            if (filter.negate) {
-                groupedFilters[filter.category].negated.push(filter);
-            } else {
-                groupedFilters[filter.category].normal.push(filter);
-            }
-        });
-
-        notizenArray = notizenArray.filter(notiz => {
-            return Object.entries(groupedFilters).every(([category, filters]) => {
-                // Negierte Filter: KEINE der Bedingungen darf zutreffen
-                if (filters.negated.length > 0) {
-                    const negatedMatch = filters.negated.some(filter => {
-                        return matchNotizFilter(notiz, category, filter.value);
-                    });
-                    if (negatedMatch) return false;
-                }
-                
-                // Normale Filter: mindestens eine muss zutreffen (OR)
-                if (filters.normal.length > 0) {
-                    return filters.normal.some(filter => {
-                        return matchNotizFilter(notiz, category, filter.value);
-                    });
-                }
-                
-                return true;
-            });
-        });
+    // User-Filter per Join-Mode
+    if (userFilters.length > 0) {
+        notizenArray = notizenArray.filter((notiz) => (
+            notizenSearchJoinMode === 'or'
+                ? userFilters.some((filter) => evaluateFilter(notiz, filter))
+                : userFilters.every((filter) => evaluateFilter(notiz, filter))
+        ));
     }
 
     notizenArray.sort((a, b) => getNotizCreatedAtDate(b) - getNotizCreatedAtDate(a));
@@ -1837,7 +1829,7 @@ function renderActiveFiltersNotizen() {
         <div class="flex items-center gap-2 px-3 py-1.5 ${filter.negate ? 'bg-red-100 text-red-800 border-red-300' : 'bg-amber-100 text-amber-800 border-amber-300'} rounded-full text-sm font-medium border">
             ${filter.negate ? '<span class="font-bold text-red-600">NICHT</span>' : ''}
             <span class="font-bold">${filter.label || filter.category}:</span>
-            <span>${NOTIZ_STATUS[filter.value]?.label || filter.value}</span>
+            <span>${filter.category === 'status' ? (NOTIZ_STATUS[filter.value]?.label || filter.rawValue || filter.value) : (filter.rawValue || filter.value)}</span>
             <button onclick="window.removeNotizFilterById(${filter.id})" class="ml-1 ${filter.negate ? 'hover:bg-red-200' : 'hover:bg-amber-200'} rounded-full p-0.5 transition" title="Filter entfernen">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -1856,13 +1848,27 @@ window.addNotizFilter = function() {
     const searchInput = document.getElementById('search-notizen');
     const categorySelect = document.getElementById('filter-notizen-category');
     const negateCheckbox = document.getElementById('filter-notizen-negate');
-    
-    const value = searchInput?.value?.trim();
-    const category = categorySelect?.value || 'all';
-    const negate = negateCheckbox?.checked || false;
-    
-    if (!value) {
+
+    const rawValue = String(searchInput?.value || '').trim();
+    if (!rawValue) {
         alertUser('Bitte einen Suchbegriff eingeben!', 'warning');
+        return;
+    }
+
+    const category = String(categorySelect?.value || 'all');
+    const negate = !!negateCheckbox?.checked;
+    const value = rawValue.toLowerCase();
+
+    const duplicate = activeFilters.some((filter) => (
+        !filter.isDefault &&
+        filter.category === category &&
+        filter.value === value &&
+        !!filter.negate === negate
+    ));
+
+    if (duplicate) {
+        if (searchInput) searchInput.value = '';
+        if (negateCheckbox) negateCheckbox.checked = false;
         return;
     }
     
@@ -1877,9 +1883,11 @@ window.addNotizFilter = function() {
     activeFilters.push({ 
         category, 
         value, 
+        rawValue,
         negate, 
         label: categoryLabels[category] || category,
-        id: Date.now() 
+        isDefault: false,
+        id: Date.now() + Math.floor(Math.random() * 1000)
     });
     
     if (searchInput) searchInput.value = '';
@@ -1889,27 +1897,25 @@ window.addNotizFilter = function() {
 };
 
 function resetNotizFiltersToDefault() {
-    searchTerm = '';
     currentKategorieId = null;
     currentUnterkategorieId = null;
     currentKategorieFilter = null;
+    notizenSearchJoinMode = 'and';
     
-    activeFilters = [{ 
-        category: 'status', 
-        value: 'abgeschlossen', 
-        negate: true, 
-        label: 'Status',
-        id: Date.now() 
-    }];
+    activeFilters = buildDefaultNotizFilters();
     defaultFiltersApplied = true;
     
     const searchInput = document.getElementById('search-notizen');
     const kategorieFilter = document.getElementById('filter-notizen-kategorie');
+    const categoryTag = document.getElementById('filter-notizen-category');
     const negateCheckbox = document.getElementById('filter-notizen-negate');
+    const joinMode = document.getElementById('notizen-search-join-mode');
     
     if (searchInput) searchInput.value = '';
     if (kategorieFilter) kategorieFilter.value = '';
+    if (categoryTag) categoryTag.value = 'all';
     if (negateCheckbox) negateCheckbox.checked = false;
+    if (joinMode) joinMode.value = 'and';
     
     renderActiveFiltersNotizen();
     renderNotizenList();
@@ -3363,11 +3369,32 @@ function setupNotizenEventListeners() {
         }
     });
 
+    const toggleFilterControls = document.getElementById('notizen-toggle-filter-controls');
+    if (toggleFilterControls) {
+        toggleFilterControls.addEventListener('click', () => {
+            const wrapper = document.getElementById('notizen-filter-controls-wrapper');
+            const icon = document.getElementById('notizen-toggle-filter-icon');
+            if (!wrapper || !icon) return;
+            wrapper.classList.toggle('hidden');
+            icon.classList.toggle('rotate-180');
+        });
+    }
+
     // Suche
     const searchInput = document.getElementById('search-notizen');
     if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            searchTerm = e.target.value;
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                window.addNotizFilter();
+            }
+        });
+    }
+
+    const joinMode = document.getElementById('notizen-search-join-mode');
+    if (joinMode) {
+        joinMode.addEventListener('change', (e) => {
+            notizenSearchJoinMode = e.target.value === 'or' ? 'or' : 'and';
             renderNotizenList();
         });
     }
