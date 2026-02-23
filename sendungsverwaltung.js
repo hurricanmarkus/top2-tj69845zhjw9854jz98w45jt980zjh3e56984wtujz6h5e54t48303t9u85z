@@ -1279,22 +1279,30 @@ function getDeadlineText(sendung) {
 }
 
 function getTrackingUrl(anbieter, transportnummer) {
-    if (!anbieter || !transportnummer) {
+    const trackingNumber = String(transportnummer || '').trim();
+    if (!trackingNumber) {
         return null;
     }
 
+    const normalizedAnbieter = String(anbieter || '').trim().toLowerCase();
+    const encodedTrackingNumber = encodeURIComponent(trackingNumber);
+
     const trackingUrls = {
-        'DHL': `https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=${transportnummer}`,
-        'Hermes': `https://www.hermesworld.com/de/sendungsverfolgung/tracking/?TrackID=${transportnummer}`,
-        'DPD': `https://tracking.dpd.de/parcelstatus?query=${transportnummer}`,
-        'Post Österreich': `https://www.post.at/sv/sendungsdetails?snr=${transportnummer}`,
-        'UPS': `https://www.ups.com/track?tracknum=${transportnummer}`,
-        'FedEx': `https://www.fedex.com/fedextrack/?trknbr=${transportnummer}`,
-        'GLS': `https://gls-group.eu/DE/de/paketverfolgung?match=${transportnummer}`,
-        'Amazon Logistics': null
+        dhl: `https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=${encodedTrackingNumber}`,
+        hermes: `https://www.hermesworld.com/de/sendungsverfolgung/tracking/?TrackID=${encodedTrackingNumber}`,
+        dpd: `https://tracking.dpd.de/parcelstatus?query=${encodedTrackingNumber}`,
+        'post österreich': `https://www.post.at/sv/sendungsdetails?snr=${encodedTrackingNumber}`,
+        ups: `https://www.ups.com/track?tracknum=${encodedTrackingNumber}`,
+        fedex: `https://www.fedex.com/fedextrack/?trknbr=${encodedTrackingNumber}`,
+        gls: `https://gls-group.eu/DE/de/paketverfolgung?match=${encodedTrackingNumber}`,
+        'amazon logistics': null
     };
 
-    return trackingUrls[anbieter] || null;
+    if (Object.prototype.hasOwnProperty.call(trackingUrls, normalizedAnbieter)) {
+        return trackingUrls[normalizedAnbieter];
+    }
+
+    return `https://www.aftership.com/de/track/${encodedTrackingNumber}`;
 }
 
 function copyToClipboard(text) {

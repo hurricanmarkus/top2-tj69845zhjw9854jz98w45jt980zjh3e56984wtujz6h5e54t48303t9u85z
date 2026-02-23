@@ -2598,16 +2598,15 @@ const GESCHENKE_FILTER_LABELS = {
 
 function addGeschenkFilterFromUi() {
     const searchInput = document.getElementById('gm-search-input');
-    const categorySelect = document.getElementById('gm-filter-category');
     const negateCheckbox = document.getElementById('gm-filter-negate');
 
     const rawValue = String(searchInput?.value || '').trim();
     if (!rawValue) {
-        alertUser('Bitte Suchbegriff und Kategorie eingeben!', 'warning');
+        alertUser('Bitte Suchbegriff eingeben!', 'warning');
         return;
     }
 
-    const category = String(categorySelect?.value || 'all');
+    const category = 'all';
     const negate = !!negateCheckbox?.checked;
     const value = rawValue.toLowerCase();
 
@@ -2662,12 +2661,10 @@ function resetFilters() {
     geschenkeSearchJoinMode = 'and';
 
     const searchInput = document.getElementById('gm-search-input');
-    const categorySelect = document.getElementById('gm-filter-category');
     const negateCheckbox = document.getElementById('gm-filter-negate');
     const joinMode = document.getElementById('gm-search-join-mode');
     
     if (searchInput) searchInput.value = '';
-    if (categorySelect) categorySelect.value = 'all';
     if (negateCheckbox) negateCheckbox.checked = false;
     if (joinMode) joinMode.value = 'and';
 
