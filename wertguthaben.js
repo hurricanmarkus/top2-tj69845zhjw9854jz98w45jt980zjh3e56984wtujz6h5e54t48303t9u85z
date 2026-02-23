@@ -24,7 +24,8 @@ import {
     doc,
     updateDoc,
     deleteDoc,
-    getDoc
+    getDoc,
+    getDocs
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // ========================================
@@ -1559,19 +1560,16 @@ async function loadTransaktionen(wertguthabenId) {
     try {
         const transaktionenRef = collection(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen');
         const q = query(transaktionenRef, orderBy('datum', 'desc'));
-        
-        return new Promise((resolve) => {
-            onSnapshot(q, (snapshot) => {
-                const transaktionen = [];
-                snapshot.forEach((doc) => {
-                    transaktionen.push({
-                        id: doc.id,
-                        ...doc.data()
-                    });
-                });
-                resolve(transaktionen);
+
+        const snapshot = await getDocs(q);
+        const transaktionen = [];
+        snapshot.forEach((docSnap) => {
+            transaktionen.push({
+                id: docSnap.id,
+                ...docSnap.data()
             });
         });
+        return transaktionen;
     } catch (error) {
         console.error('Fehler beim Laden der Transaktionen:', error);
         return [];
