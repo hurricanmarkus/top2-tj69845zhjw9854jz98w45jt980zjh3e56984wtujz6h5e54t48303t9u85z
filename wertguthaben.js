@@ -409,15 +409,10 @@ function renderWertguthabenSearchTags() {
     }
 
     container.innerHTML = activeWertguthabenFilters.map((filter) => `
-        <div class="flex items-center gap-2 px-3 py-1.5 ${filter.negate ? 'bg-red-100 text-red-800 border-red-300' : 'bg-emerald-100 text-emerald-800 border-emerald-300'} rounded-full text-sm font-medium border">
-            ${filter.negate ? '<span class="font-bold text-red-600">NICHT</span>' : ''}
-            <span class="font-bold">${filter.label}:</span>
-            <span>${filter.rawValue}</span>
-            <button onclick="window.removeWertguthabenFilterById(${filter.id})" class="ml-1 ${filter.negate ? 'hover:bg-red-200' : 'hover:bg-emerald-200'} rounded-full p-0.5 transition" title="Filter entfernen">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-            </button>
+        <div class="flex items-center ${filter.negate ? 'bg-red-100 text-red-800 border-red-200' : 'bg-indigo-100 text-indigo-800 border-indigo-200'} text-xs font-bold px-2 py-1 rounded-full border">
+            ${filter.negate ? '<span class="mr-1 text-red-600">NICHT</span>' : ''}
+            <span>${filter.label}: ${filter.rawValue}</span>
+            <button onclick="window.removeWertguthabenFilterById(${filter.id})" class="ml-1 ${filter.negate ? 'text-red-500 hover:text-red-900' : 'text-indigo-500 hover:text-indigo-900'} focus:outline-none" title="Filter entfernen">&times;</button>
         </div>
     `).join('');
 }
@@ -448,6 +443,7 @@ function resetWertguthabenFiltersToDefault() {
 
 function doesWertguthabenMatchSearchFilter(wertguthabenEintrag, filter) {
     const value = filter.value;
+    const normalizedValue = String(value || '').replace(',', '.');
     const name = (wertguthabenEintrag.name || '').toLowerCase();
     const code = (wertguthabenEintrag.code || '').toLowerCase();
     const unternehmen = (wertguthabenEintrag.unternehmen || '').toLowerCase();
@@ -464,7 +460,7 @@ function doesWertguthabenMatchSearchFilter(wertguthabenEintrag, filter) {
         restwert.toFixed(2),
         `${wert.toFixed(2)} €`,
         `${restwert.toFixed(2)} €`
-    ].map((entry) => entry.toLowerCase());
+    ].map((entry) => entry.toLowerCase().replace(',', '.'));
 
     switch (filter.category) {
         case 'name':
@@ -480,7 +476,7 @@ function doesWertguthabenMatchSearchFilter(wertguthabenEintrag, filter) {
         case 'status':
             return statusKey.includes(value) || statusLabel.includes(value);
         case 'betrag':
-            return amountValues.some((entry) => entry.includes(value));
+            return amountValues.some((entry) => entry.includes(normalizedValue));
         case 'all':
         default:
             return name.includes(value) ||
@@ -492,7 +488,7 @@ function doesWertguthabenMatchSearchFilter(wertguthabenEintrag, filter) {
                 typLabel.includes(value) ||
                 statusKey.includes(value) ||
                 statusLabel.includes(value) ||
-                amountValues.some((entry) => entry.includes(value));
+                amountValues.some((entry) => entry.includes(normalizedValue));
     }
 }
 

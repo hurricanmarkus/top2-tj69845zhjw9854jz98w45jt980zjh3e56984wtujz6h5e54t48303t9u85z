@@ -3693,6 +3693,7 @@ function updateSearchSuggestions(term) {
     }
 
     const lowerTerm = term.toLowerCase().trim();
+    const normalizedLowerTerm = lowerTerm.replace(',', '.');
     list.innerHTML = '';
     let hasHits = false;
 
@@ -3762,9 +3763,9 @@ function updateSearchSuggestions(term) {
 
     // 6. Betrag
     const hasAmount = allPayments.some(p => {
-        const remStr = parseFloat(p.remainingAmount).toFixed(2);
-        const totStr = parseFloat(p.amount).toFixed(2);
-        return remStr.includes(lowerTerm) || totStr.includes(lowerTerm);
+        const remStr = parseFloat(p.remainingAmount).toFixed(2).replace(',', '.');
+        const totStr = parseFloat(p.amount).toFixed(2).replace(',', '.');
+        return remStr.includes(normalizedLowerTerm) || totStr.includes(normalizedLowerTerm);
     });
     if (hasAmount) addSuggestion(`Betrag: ${term}`, "💶", "amount", "Offen oder Gesamt");
 
@@ -3877,9 +3878,10 @@ function applyFilters() {
                 }
 
                 if (type === 'amount') {
-                    const rem = parseFloat(p.remainingAmount).toFixed(2);
-                    const tot = parseFloat(p.amount).toFixed(2);
-                    matches = rem.includes(term) || tot.includes(term);
+                    const normalizedAmountTerm = String(term || '').replace(',', '.');
+                    const rem = parseFloat(p.remainingAmount).toFixed(2).replace(',', '.');
+                    const tot = parseFloat(p.amount).toFixed(2).replace(',', '.');
+                    matches = rem.includes(normalizedAmountTerm) || tot.includes(normalizedAmountTerm);
                     return filter.negate ? !matches : matches;
                 }
 

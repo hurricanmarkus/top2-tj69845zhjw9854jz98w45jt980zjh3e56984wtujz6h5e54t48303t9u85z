@@ -1898,16 +1898,11 @@ function renderActiveFiltersNotizen() {
         return;
     }
     
-    container.innerHTML = activeFilters.map(filter => `
-        <div class="flex items-center gap-2 px-3 py-1.5 ${filter.negate ? 'bg-red-100 text-red-800 border-red-300' : 'bg-amber-100 text-amber-800 border-amber-300'} rounded-full text-sm font-medium border">
-            ${filter.negate ? '<span class="font-bold text-red-600">NICHT</span>' : ''}
-            <span class="font-bold">${filter.label || filter.category}:</span>
-            <span>${filter.category === 'status' ? (NOTIZ_STATUS[filter.value]?.label || filter.rawValue || filter.value) : (filter.rawValue || filter.value)}</span>
-            <button onclick="window.removeNotizFilterById(${filter.id})" class="ml-1 ${filter.negate ? 'hover:bg-red-200' : 'hover:bg-amber-200'} rounded-full p-0.5 transition" title="Filter entfernen">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-            </button>
+    container.innerHTML = activeFilters.map((filter) => `
+        <div class="flex items-center ${filter.negate ? 'bg-red-100 text-red-800 border-red-200' : 'bg-indigo-100 text-indigo-800 border-indigo-200'} text-xs font-bold px-2 py-1 rounded-full border">
+            ${filter.negate ? '<span class="mr-1 text-red-600">NICHT</span>' : ''}
+            <span>${filter.label || filter.category}: ${filter.category === 'status' ? (NOTIZ_STATUS[filter.value]?.label || filter.rawValue || filter.value) : (filter.rawValue || filter.value)}</span>
+            <button onclick="window.removeNotizFilterById(${filter.id})" class="ml-1 ${filter.negate ? 'text-red-500 hover:text-red-900' : 'text-indigo-500 hover:text-indigo-900'} focus:outline-none" title="Filter entfernen">&times;</button>
         </div>
     `).join('');
 }

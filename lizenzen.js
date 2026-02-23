@@ -389,8 +389,8 @@ function addLizenzSearchTag(type, term, exclude) {
     if (duplicate) return;
 
     const label = type === 'all'
-        ? `${exclude ? 'NICHT ' : ''}Alles: "${term}"`
-        : `${exclude ? 'NICHT ' : ''}${LIZENZ_FILTER_LABELS[type] || type}: ${term}`;
+        ? `Alles: "${term}"`
+        : `${LIZENZ_FILTER_LABELS[type] || type}: ${term}`;
 
     console.log('🔑 Lizenzen: Filter-Tag hinzugefügt:', label);
     activeLizenzFilters.push({ type, term: normalizedTerm, exclude: !!exclude, label });
@@ -405,10 +405,13 @@ function renderLizenzSearchTags() {
 
     activeLizenzFilters.forEach((filter, index) => {
         const tag = document.createElement('div');
-        tag.className = 'flex items-center bg-orange-100 text-orange-800 text-xs font-bold px-2 py-1 rounded-full border border-orange-200';
+        tag.className = filter.exclude
+            ? 'flex items-center bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded-full border border-red-200'
+            : 'flex items-center bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-1 rounded-full border border-indigo-200';
         tag.innerHTML = `
+            ${filter.exclude ? '<span class="mr-1 text-red-600">NICHT</span>' : ''}
             <span>${escapeHtml(filter.label)}</span>
-            <button class="ml-1 text-orange-600 hover:text-orange-900 focus:outline-none" onclick="window.removeLizenzSearchTagGlobal(${index})">&times;</button>
+            <button class="ml-1 ${filter.exclude ? 'text-red-500 hover:text-red-900' : 'text-indigo-500 hover:text-indigo-900'} focus:outline-none" onclick="window.removeLizenzSearchTagGlobal(${index})">&times;</button>
         `;
         container.appendChild(tag);
     });
