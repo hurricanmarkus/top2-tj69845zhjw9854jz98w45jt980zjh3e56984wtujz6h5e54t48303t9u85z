@@ -1565,9 +1565,14 @@
                             <input type="checkbox" id="ts-filter-negate" class="h-4 w-4 accent-red-500">
                             <span class="text-red-600 font-bold text-sm">NICHT</span>
                         </label>
-                        <input type="text" id="ts-search-input"
-                            class="flex-1 min-w-[200px] p-2.5 border-2 border-gray-300 rounded-lg focus:border-purple-500"
-                            placeholder="🔍 Suchbegriff eingeben...">
+                        <div class="relative flex-1 min-w-[200px]">
+                            <input type="text" id="ts-search-input"
+                                class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-purple-500"
+                                placeholder="🔍 Suchbegriff eingeben...">
+                            <div id="ts-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-purple-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
+                                <ul id="ts-search-suggestions-list" class="text-sm"></ul>
+                            </div>
+                        </div>
                         <button id="ts-add-filter-btn" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-bold text-sm">+ Filter</button>
                         <button id="ts-reset-filters-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold text-sm">↺ Reset</button>
                         <select id="ts-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
@@ -1711,9 +1716,14 @@
                             <input type="checkbox" id="filter-notizen-negate" class="h-4 w-4 accent-red-500">
                             <span class="text-red-600 font-bold text-sm">NICHT</span>
                         </label>
-                        <input type="text" id="search-notizen" 
-                            class="flex-1 p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500" 
-                            placeholder="🔍 Suche in Notizen...">
+                        <div class="relative flex-1">
+                            <input type="text" id="search-notizen" 
+                                class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500" 
+                                placeholder="🔍 Suche in Notizen...">
+                            <div id="notizen-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-amber-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
+                                <ul id="notizen-search-suggestions-list" class="text-sm"></ul>
+                            </div>
+                        </div>
                         <select id="filter-notizen-category" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
                             <option value="all">Alles</option>
                             <option value="titel">Titel</option>
@@ -1823,8 +1833,13 @@
                             <input type="checkbox" id="wg-filter-negate" class="h-4 w-4 accent-red-500">
                             <span class="text-red-600 font-bold text-sm">NICHT</span>
                         </label>
-                        <input type="text" id="search-wertguthaben" placeholder="🔍 Suchen... (Name, Code, Unternehmen)" 
-                            class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-sm">
+                        <div class="relative flex-1 min-w-[200px]">
+                            <input type="text" id="search-wertguthaben" placeholder="🔍 Suchen... (Name, Code, Unternehmen)" 
+                                class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-sm">
+                            <div id="wg-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-emerald-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
+                                <ul id="wg-search-suggestions-list" class="text-sm"></ul>
+                            </div>
+                        </div>
                         <button id="wg-add-filter-btn" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-bold transition text-sm">+ Filter</button>
                         <button id="reset-filters-wertguthaben" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
                             ↺ Reset
@@ -1984,8 +1999,13 @@
                             NICHT
                         </label>
 
-                        <input type="text" id="liz-filter-input" placeholder="🔍 Filter eingeben... (Enter)"
-                            class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 text-sm">
+                        <div class="relative flex-1 min-w-[200px]">
+                            <input type="text" id="liz-filter-input" placeholder="🔍 Filter eingeben... (Enter)"
+                                class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 text-sm">
+                            <div id="liz-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-orange-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
+                                <ul id="liz-search-suggestions-list" class="text-sm"></ul>
+                            </div>
+                        </div>
 
                         <button id="btn-add-liz-filter" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-bold transition text-sm">
                             + Filter
@@ -2133,8 +2153,13 @@
                             <input type="checkbox" id="vv-filter-negate" class="h-4 w-4 accent-red-500">
                             <span class="text-red-600 font-bold text-sm">NICHT</span>
                         </label>
-                        <input type="text" id="vv-search-vertraege" placeholder="🔍 Suchen... (Name, Anbieter)"
-                            class="flex-1 min-w-[180px] p-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm">
+                        <div class="relative flex-1 min-w-[180px]">
+                            <input type="text" id="vv-search-vertraege" placeholder="🔍 Suchen... (Name, Anbieter)"
+                                class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm">
+                            <div id="vv-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-indigo-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
+                                <ul id="vv-search-suggestions-list" class="text-sm"></ul>
+                            </div>
+                        </div>
                         <button id="vv-add-filter-btn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold transition text-sm">+ Filter</button>
                         <button id="vv-reset-filters-vertraege" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">↺ Reset</button>
                         <select id="vv-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
@@ -2865,9 +2890,14 @@
                             <input type="checkbox" id="sendungFilterNegate" class="h-4 w-4 accent-red-500">
                             <span class="text-red-600 font-bold text-sm">NICHT</span>
                         </label>
-                        <input type="text" id="sendungSearchInput"
-                            class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm"
-                            placeholder="🔍 Suchbegriff eingeben...">
+                        <div class="relative flex-1 min-w-[200px]">
+                            <input type="text" id="sendungSearchInput"
+                                class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm"
+                                placeholder="🔍 Suchbegriff eingeben...">
+                            <div id="sendungSearchSuggestionsBox" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-amber-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
+                                <ul id="sendungSearchSuggestionsList" class="text-sm"></ul>
+                            </div>
+                        </div>
                         
                         <select id="sendungFilterCategory"
                             class="p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:outline-none text-sm">
@@ -2966,6 +2996,9 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
+                        <div id="rz-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-orange-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
+                            <ul id="rz-search-suggestions-list" class="text-sm"></ul>
+                        </div>
                         </div>
                         <button id="rz-add-filter-btn" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-bold text-sm">+ Filter</button>
                         <button id="rz-reset-all-filters" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold text-sm">↺ Reset</button>
@@ -3422,8 +3455,13 @@
                             <input type="checkbox" id="hz-filter-negate" class="h-4 w-4 accent-red-500">
                             <span class="text-red-600 font-bold text-sm">NICHT</span>
                         </label>
-                        <input type="text" id="search-haushaltszahlungen" placeholder="🔍 Suchen... (Zweck, Organisation)" 
-                            class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 text-sm">
+                        <div class="relative flex-1 min-w-[200px]">
+                            <input type="text" id="search-haushaltszahlungen" placeholder="🔍 Suchen... (Zweck, Organisation)" 
+                                class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 text-sm">
+                            <div id="hz-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-cyan-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
+                                <ul id="hz-search-suggestions-list" class="text-sm"></ul>
+                            </div>
+                        </div>
                         <button id="hz-add-filter-btn" class="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 font-bold transition text-sm">+ Filter</button>
                         <button id="reset-filters-haushaltszahlungen" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">
                             ↺ Reset

@@ -36,6 +36,29 @@ let unsubscribeWertguthaben = null;
 let currentFilter = { typ: '', eigentuemer: '', status: 'aktiv' };
 let activeWertguthabenFilters = [];
 let wertguthabenSearchJoinMode = 'and';
+
+const WG_FILTER_LABELS = {
+    all: 'Alles',
+    name: 'Name',
+    code: 'Code',
+    unternehmen: 'Unternehmen',
+    eigentuemer: 'Eigentümer',
+    typ: 'Typ',
+    status: 'Status',
+    betrag: 'Wert/Betrag'
+};
+
+const WG_SUGGESTION_ICONS = {
+    all: '🔍',
+    name: '🧾',
+    code: '#️⃣',
+    unternehmen: '🏢',
+    eigentuemer: '👤',
+    typ: '🏷️',
+    status: '📊',
+    betrag: '💶'
+};
+
 let wertguthabenSettings = {
     defaultWarnings: {
         gutschein: 14,
@@ -193,13 +216,34 @@ function setupEventListeners() {
     // Suche & Filter (harmonisiert)
     const searchInput = document.getElementById('search-wertguthaben');
     if (searchInput && !searchInput.dataset.listenerAttached) {
+        searchInput.addEventListener('input', (e) => {
+            const term = String(e.target.value || '');
+            if (!term.trim()) {
+                hideWertguthabenSearchSuggestions();
+                return;
+            }
+            updateWertguthabenSearchSuggestions(term);
+        });
         searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 addWertguthabenFilterFromUi();
             }
         });
+        searchInput.addEventListener('focus', (e) => {
+            const term = String(e.target.value || '').trim();
+            if (term) updateWertguthabenSearchSuggestions(term);
+        });
         searchInput.dataset.listenerAttached = 'true';
+    }
+
+    if (!document.body.dataset.wgSuggestionsListenerAttached) {
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#search-wertguthaben') && !e.target.closest('#wg-search-suggestions-box')) {
+                hideWertguthabenSearchSuggestions();
+            }
+        });
+        document.body.dataset.wgSuggestionsListenerAttached = 'true';
     }
 
     const addFilterBtn = document.getElementById('wg-add-filter-btn');
@@ -251,18 +295,18 @@ function setupEventListeners() {
     }
 }
 
-function addWertguthabenFilterFromUi() {
+function addWertguthabenFilterFromUi(options = {}) {
     const searchInput = document.getElementById('search-wertguthaben');
     const categorySelect = document.getElementById('wg-filter-category');
     const negateCheckbox = document.getElementById('wg-filter-negate');
 
-    const rawValue = String(searchInput?.value || '').trim();
+    const rawValue = String((options.rawValue ?? searchInput?.value) || '').trim();
     if (!rawValue) {
         alertUser('Bitte einen Suchbegriff eingeben.', 'warning');
         return;
     }
 
-    const category = String(categorySelect?.value || 'all');
+    const category = String(options.category || categorySelect?.value || 'all');
     const negate = !!negateCheckbox?.checked;
     const value = rawValue.toLowerCase();
 
@@ -270,19 +314,9 @@ function addWertguthabenFilterFromUi() {
     if (duplicate) {
         if (searchInput) searchInput.value = '';
         if (negateCheckbox) negateCheckbox.checked = false;
+        hideWertguthabenSearchSuggestions();
         return;
     }
-
-    const labels = {
-        all: 'Alles',
-        name: 'Name',
-        code: 'Code',
-        unternehmen: 'Unternehmen',
-        eigentuemer: 'Eigentümer',
-        typ: 'Typ',
-        status: 'Status',
-        betrag: 'Wert/Betrag'
-    };
 
     activeWertguthabenFilters.push({
         id: Date.now() + Math.floor(Math.random() * 1000),
@@ -290,14 +324,75 @@ function addWertguthabenFilterFromUi() {
         value,
         rawValue,
         negate,
-        label: labels[category] || category
+        label: WG_FILTER_LABELS[category] || category
     });
 
     if (searchInput) searchInput.value = '';
     if (negateCheckbox) negateCheckbox.checked = false;
+    if (categorySelect) categorySelect.value = category;
+    hideWertguthabenSearchSuggestions();
 
     renderWertguthabenSearchTags();
     renderWertguthabenTable();
+}
+
+function hideWertguthabenSearchSuggestions() {
+    document.getElementById('wg-search-suggestions-box')?.classList.add('hidden');
+}
+
+function updateWertguthabenSearchSuggestions(term) {
+    const box = document.getElementById('wg-search-suggestions-box');
+    const list = document.getElementById('wg-search-suggestions-list');
+    if (!box || !list) return;
+
+    if (!term || !term.trim()) {
+        list.innerHTML = '';
+        box.classList.add('hidden');
+        return;
+    }
+
+    const lowerTerm = term.toLowerCase().trim();
+    const data = Object.values(WERTGUTHABEN);
+    list.innerHTML = '';
+
+    const categories = ['name', 'code', 'unternehmen', 'eigentuemer', 'typ', 'status', 'betrag'];
+    let hasHits = false;
+
+    categories.forEach((category) => {
+        const hasCategoryHit = data.some((entry) =>
+            doesWertguthabenMatchSearchFilter(entry, { category, value: lowerTerm })
+        );
+        if (!hasCategoryHit) return;
+
+        hasHits = true;
+        const li = document.createElement('li');
+        li.className = 'px-3 py-2 hover:bg-emerald-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2';
+        li.innerHTML = `
+            <span class="text-lg">${WG_SUGGESTION_ICONS[category] || '🔎'}</span>
+            <div class="flex-grow leading-tight">
+                <span class="font-bold text-gray-800 block">${WG_FILTER_LABELS[category] || category}: ${term}</span>
+                <span class="text-xs text-gray-500">Filter in ${WG_FILTER_LABELS[category] || category}</span>
+            </div>
+        `;
+        li.onclick = () => addWertguthabenFilterFromUi({ category, rawValue: term });
+        list.appendChild(li);
+    });
+
+    const fallback = document.createElement('li');
+    fallback.className = 'px-3 py-2 hover:bg-emerald-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2';
+    fallback.innerHTML = `
+        <span class="text-lg">${WG_SUGGESTION_ICONS.all}</span>
+        <div class="flex-grow leading-tight">
+            <span class="font-bold text-gray-800 block">Alles: ${term}</span>
+            <span class="text-xs text-gray-500">Volltextsuche</span>
+        </div>
+    `;
+    fallback.onclick = () => addWertguthabenFilterFromUi({ category: 'all', rawValue: term });
+    list.appendChild(fallback);
+
+    box.classList.toggle('hidden', !hasHits && !term.trim());
+    if (!box.classList.contains('hidden')) return;
+    box.classList.remove('hidden');
 }
 
 function removeWertguthabenFilterById(filterId) {
@@ -349,6 +444,7 @@ function resetWertguthabenFiltersToDefault() {
     if (filterTyp) filterTyp.value = '';
     if (filterEigentuemer) filterEigentuemer.value = '';
     if (filterStatus) filterStatus.value = 'aktiv';
+    hideWertguthabenSearchSuggestions();
 
     renderWertguthabenSearchTags();
     renderWertguthabenTable();

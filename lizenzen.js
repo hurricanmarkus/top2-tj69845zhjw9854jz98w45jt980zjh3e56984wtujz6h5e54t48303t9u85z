@@ -25,6 +25,28 @@ let currentFilter = { status: 'aktiv' };
 let activeLizenzFilters = [];
 let lizenzSearchJoinMode = 'and';
 
+const LIZENZ_FILTER_LABELS = {
+    all: 'Alles',
+    produkt: 'Produkt',
+    kategorie: 'Kategorie',
+    titel: 'Titel',
+    version: 'Version',
+    aktiviertAuf: 'Aktiviert auf',
+    shop: 'Shop',
+    code: 'Code'
+};
+
+const LIZENZ_SUGGESTION_ICONS = {
+    all: '🔍',
+    produkt: '📦',
+    kategorie: '🏷️',
+    titel: '📝',
+    version: '🔢',
+    aktiviertAuf: '💻',
+    shop: '🏪',
+    code: '#️⃣'
+};
+
 let lizenzModalMode = 'create';
 
 let unsubscribeLizenzen = null;
@@ -178,13 +200,34 @@ function setupEventListeners() {
 
     const filterInput = document.getElementById('liz-filter-input');
     if (filterInput && !filterInput.dataset.listenerAttached) {
+        filterInput.addEventListener('input', (e) => {
+            const term = String(e.target.value || '');
+            if (!term.trim()) {
+                hideLizenzSearchSuggestions();
+                return;
+            }
+            updateLizenzSearchSuggestions(term);
+        });
         filterInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 addLizenzFilterFromUi();
             }
         });
+        filterInput.addEventListener('focus', (e) => {
+            const term = String(e.target.value || '').trim();
+            if (term) updateLizenzSearchSuggestions(term);
+        });
         filterInput.dataset.listenerAttached = 'true';
+    }
+
+    if (!document.body.dataset.lizSuggestionsListenerAttached) {
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#liz-filter-input') && !e.target.closest('#liz-search-suggestions-box')) {
+                hideLizenzSearchSuggestions();
+            }
+        });
+        document.body.dataset.lizSuggestionsListenerAttached = 'true';
     }
 
     const addFilterBtn = document.getElementById('btn-add-liz-filter');
@@ -229,6 +272,7 @@ function setupEventListeners() {
             if (fe) fe.checked = false;
             if (fi) fi.value = '';
             if (jm) jm.value = 'and';
+            hideLizenzSearchSuggestions();
 
             renderLizenzSearchTags();
 
@@ -262,14 +306,14 @@ function setupEventListeners() {
     }
 }
 
-function addLizenzFilterFromUi() {
+function addLizenzFilterFromUi(options = {}) {
     const typeEl = document.getElementById('liz-filter-type');
     const excludeEl = document.getElementById('liz-filter-exclude');
     const inputEl = document.getElementById('liz-filter-input');
 
-    const type = String(typeEl?.value || 'all');
+    const type = String(options.type || typeEl?.value || 'all');
     const exclude = !!excludeEl?.checked;
-    const term = String(inputEl?.value || '').trim();
+    const term = String((options.rawTerm ?? inputEl?.value) || '').trim();
     if (!term) return;
 
     addLizenzSearchTag(type, term, exclude);
@@ -278,6 +322,67 @@ function addLizenzFilterFromUi() {
         inputEl.value = '';
         inputEl.focus();
     }
+    if (typeEl) typeEl.value = type;
+    hideLizenzSearchSuggestions();
+}
+
+function hideLizenzSearchSuggestions() {
+    document.getElementById('liz-search-suggestions-box')?.classList.add('hidden');
+}
+
+function updateLizenzSearchSuggestions(term) {
+    const box = document.getElementById('liz-search-suggestions-box');
+    const list = document.getElementById('liz-search-suggestions-list');
+    if (!box || !list) return;
+
+    if (!term || !term.trim()) {
+        list.innerHTML = '';
+        box.classList.add('hidden');
+        return;
+    }
+
+    const lowerTerm = term.toLowerCase().trim();
+    const lizenzen = Object.values(LIZENZEN);
+    list.innerHTML = '';
+
+    const categories = ['produkt', 'kategorie', 'titel', 'version', 'aktiviertAuf', 'shop', 'code'];
+    let hasHits = false;
+
+    categories.forEach((type) => {
+        const hasCategoryHit = lizenzen.some((lizenz) =>
+            doesLizenzMatchSearchFilter(lizenz, { type, term: lowerTerm })
+        );
+        if (!hasCategoryHit) return;
+
+        hasHits = true;
+        const li = document.createElement('li');
+        li.className = 'px-3 py-2 hover:bg-orange-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2';
+        li.innerHTML = `
+            <span class="text-lg">${LIZENZ_SUGGESTION_ICONS[type] || '🔎'}</span>
+            <div class="flex-grow leading-tight">
+                <span class="font-bold text-gray-800 block">${LIZENZ_FILTER_LABELS[type] || type}: ${term}</span>
+                <span class="text-xs text-gray-500">Filter in ${LIZENZ_FILTER_LABELS[type] || type}</span>
+            </div>
+        `;
+        li.onclick = () => addLizenzFilterFromUi({ type, rawTerm: term });
+        list.appendChild(li);
+    });
+
+    const fallback = document.createElement('li');
+    fallback.className = 'px-3 py-2 hover:bg-orange-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2';
+    fallback.innerHTML = `
+        <span class="text-lg">${LIZENZ_SUGGESTION_ICONS.all}</span>
+        <div class="flex-grow leading-tight">
+            <span class="font-bold text-gray-800 block">Alles: ${term}</span>
+            <span class="text-xs text-gray-500">Volltextsuche</span>
+        </div>
+    `;
+    fallback.onclick = () => addLizenzFilterFromUi({ type: 'all', rawTerm: term });
+    list.appendChild(fallback);
+
+    box.classList.toggle('hidden', !hasHits && !term.trim());
+    if (!box.classList.contains('hidden')) return;
+    box.classList.remove('hidden');
 }
 
 function addLizenzSearchTag(type, term, exclude) {
@@ -287,20 +392,9 @@ function addLizenzSearchTag(type, term, exclude) {
     const duplicate = activeLizenzFilters.some(f => f.type === type && f.term === normalizedTerm && !!f.exclude === !!exclude);
     if (duplicate) return;
 
-    const typeLabels = {
-        all: 'Alles',
-        produkt: 'Produkt',
-        kategorie: 'Kategorie',
-        titel: 'Titel',
-        version: 'Version',
-        aktiviertAuf: 'Aktiviert auf',
-        shop: 'Shop',
-        code: 'Code'
-    };
-
     const label = type === 'all'
         ? `${exclude ? 'NICHT ' : ''}Alles: "${term}"`
-        : `${exclude ? 'NICHT ' : ''}${typeLabels[type] || type}: ${term}`;
+        : `${exclude ? 'NICHT ' : ''}${LIZENZ_FILTER_LABELS[type] || type}: ${term}`;
 
     console.log('🔑 Lizenzen: Filter-Tag hinzugefügt:', label);
     activeLizenzFilters.push({ type, term: normalizedTerm, exclude: !!exclude, label });

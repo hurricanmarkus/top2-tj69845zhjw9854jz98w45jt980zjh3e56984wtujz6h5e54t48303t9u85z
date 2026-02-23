@@ -39,6 +39,63 @@ function getCurrentUserId() {
     return currentUser?.mode || null;
 }
 
+function hideNotizenSearchSuggestions() {
+    document.getElementById('notizen-search-suggestions-box')?.classList.add('hidden');
+}
+
+function updateNotizenSearchSuggestions(term) {
+    const box = document.getElementById('notizen-search-suggestions-box');
+    const list = document.getElementById('notizen-search-suggestions-list');
+    if (!box || !list) return;
+
+    if (!term || !term.trim()) {
+        list.innerHTML = '';
+        box.classList.add('hidden');
+        return;
+    }
+
+    const lowerTerm = term.toLowerCase().trim();
+    const notizen = getCombinedNotizenArray();
+    list.innerHTML = '';
+
+    const categories = ['titel', 'inhalt', 'status', 'kategorie'];
+    let hasHits = false;
+
+    categories.forEach((category) => {
+        const hasCategoryHit = notizen.some((notiz) => matchNotizFilter(notiz, category, lowerTerm));
+        if (!hasCategoryHit) return;
+
+        hasHits = true;
+        const li = document.createElement('li');
+        li.className = 'px-3 py-2 hover:bg-amber-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2';
+        li.innerHTML = `
+            <span class="text-lg">${NOTIZEN_SUGGESTION_ICONS[category] || '🔎'}</span>
+            <div class="flex-grow leading-tight">
+                <span class="font-bold text-gray-800 block">${NOTIZEN_FILTER_LABELS[category] || category}: ${term}</span>
+                <span class="text-xs text-gray-500">Filter in ${NOTIZEN_FILTER_LABELS[category] || category}</span>
+            </div>
+        `;
+        li.onclick = () => window.addNotizFilter({ category, rawValue: term });
+        list.appendChild(li);
+    });
+
+    const fallback = document.createElement('li');
+    fallback.className = 'px-3 py-2 hover:bg-amber-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2';
+    fallback.innerHTML = `
+        <span class="text-lg">${NOTIZEN_SUGGESTION_ICONS.all}</span>
+        <div class="flex-grow leading-tight">
+            <span class="font-bold text-gray-800 block">Alles: ${term}</span>
+            <span class="text-xs text-gray-500">Volltextsuche</span>
+        </div>
+    `;
+    fallback.onclick = () => window.addNotizFilter({ category: 'all', rawValue: term });
+    list.appendChild(fallback);
+
+    box.classList.toggle('hidden', !hasHits && !term.trim());
+    if (!box.classList.contains('hidden')) return;
+    box.classList.remove('hidden');
+}
+
 function updateNotizenViewModeButton() {
     const btn = document.getElementById('btn-notizen-view-mode');
     if (btn) {
@@ -71,6 +128,22 @@ let currentKategorieFilter = null;
 let activeFilters = [];
 let notizenSearchJoinMode = 'and';
 let defaultFiltersApplied = false;
+
+const NOTIZEN_FILTER_LABELS = {
+    status: 'Status',
+    kategorie: 'Kategorie',
+    titel: 'Titel',
+    inhalt: 'Inhalt',
+    all: 'Alles'
+};
+
+const NOTIZEN_SUGGESTION_ICONS = {
+    status: '📊',
+    kategorie: '🏷️',
+    titel: '📝',
+    inhalt: '📄',
+    all: '🔍'
+};
 
 let unsubscribeNotizen = null;
 let unsubscribeKategorien = null;
@@ -1844,18 +1917,18 @@ window.removeNotizFilterById = function(filterId) {
     renderNotizenList();
 };
 
-window.addNotizFilter = function() {
+window.addNotizFilter = function(options = {}) {
     const searchInput = document.getElementById('search-notizen');
     const categorySelect = document.getElementById('filter-notizen-category');
     const negateCheckbox = document.getElementById('filter-notizen-negate');
 
-    const rawValue = String(searchInput?.value || '').trim();
+    const rawValue = String((options.rawValue ?? searchInput?.value) || '').trim();
     if (!rawValue) {
         alertUser('Bitte einen Suchbegriff eingeben!', 'warning');
         return;
     }
 
-    const category = String(categorySelect?.value || 'all');
+    const category = String(options.category || categorySelect?.value || 'all');
     const negate = !!negateCheckbox?.checked;
     const value = rawValue.toLowerCase();
 
@@ -1872,26 +1945,20 @@ window.addNotizFilter = function() {
         return;
     }
     
-    const categoryLabels = {
-        'status': 'Status',
-        'kategorie': 'Kategorie',
-        'titel': 'Titel',
-        'inhalt': 'Inhalt',
-        'all': 'Alles'
-    };
-    
     activeFilters.push({ 
         category, 
         value, 
         rawValue,
         negate, 
-        label: categoryLabels[category] || category,
+        label: NOTIZEN_FILTER_LABELS[category] || category,
         isDefault: false,
         id: Date.now() + Math.floor(Math.random() * 1000)
     });
     
     if (searchInput) searchInput.value = '';
     if (negateCheckbox) negateCheckbox.checked = false;
+    if (categorySelect) categorySelect.value = category;
+    hideNotizenSearchSuggestions();
     
     renderNotizenList();
 };
@@ -1916,6 +1983,7 @@ function resetNotizFiltersToDefault() {
     if (categoryTag) categoryTag.value = 'all';
     if (negateCheckbox) negateCheckbox.checked = false;
     if (joinMode) joinMode.value = 'and';
+    hideNotizenSearchSuggestions();
     
     renderActiveFiltersNotizen();
     renderNotizenList();
@@ -3383,12 +3451,33 @@ function setupNotizenEventListeners() {
     // Suche
     const searchInput = document.getElementById('search-notizen');
     if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const term = String(e.target.value || '');
+            if (!term.trim()) {
+                hideNotizenSearchSuggestions();
+                return;
+            }
+            updateNotizenSearchSuggestions(term);
+        });
         searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 window.addNotizFilter();
             }
         });
+        searchInput.addEventListener('focus', (e) => {
+            const term = String(e.target.value || '').trim();
+            if (term) updateNotizenSearchSuggestions(term);
+        });
+    }
+
+    if (!document.body.dataset.notizenSuggestionsListenerAttached) {
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#search-notizen') && !e.target.closest('#notizen-search-suggestions-box')) {
+                hideNotizenSearchSuggestions();
+            }
+        });
+        document.body.dataset.notizenSuggestionsListenerAttached = 'true';
     }
 
     const joinMode = document.getElementById('notizen-search-join-mode');

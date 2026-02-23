@@ -52,18 +52,101 @@ const CATEGORIES = {
     sonstiges: { icon: '📌', label: 'Sonstiges', color: 'gray' }
 };
 
-function addTicketFilterFromUi() {
+const TICKET_FILTER_LABELS = {
+    all: 'Alles',
+    ticketId: 'Ticket-ID',
+    subject: 'Betreff',
+    category: 'Kategorie',
+    status: 'Status',
+    priority: 'Priorität',
+    creator: 'Ersteller',
+    assignee: 'Zugewiesen',
+    dueDate: 'Fälligkeit'
+};
+
+const TICKET_SUGGESTION_ICONS = {
+    all: '🔍',
+    ticketId: '#️⃣',
+    subject: '📝',
+    category: '🏷️',
+    status: '📊',
+    priority: '🚩',
+    creator: '👤',
+    assignee: '👥',
+    dueDate: '📅'
+};
+
+function hideTicketSearchSuggestions() {
+    document.getElementById('ts-search-suggestions-box')?.classList.add('hidden');
+}
+
+function updateTicketSearchSuggestions(term) {
+    const box = document.getElementById('ts-search-suggestions-box');
+    const list = document.getElementById('ts-search-suggestions-list');
+    if (!box || !list) return;
+
+    if (!term || !term.trim()) {
+        box.classList.add('hidden');
+        list.innerHTML = '';
+        return;
+    }
+
+    const lowerTerm = term.toLowerCase().trim();
+    const tickets = Object.values(TICKETS);
+    list.innerHTML = '';
+
+    const categories = ['ticketId', 'subject', 'category', 'status', 'priority', 'creator', 'assignee', 'dueDate'];
+    let hasHits = false;
+
+    categories.forEach((category) => {
+        const hasCategoryHit = tickets.some((ticket) =>
+            doesTicketMatchSearchFilter(ticket, { category, value: lowerTerm })
+        );
+        if (!hasCategoryHit) return;
+
+        hasHits = true;
+        const li = document.createElement('li');
+        li.className = 'px-3 py-2 hover:bg-purple-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2';
+        li.innerHTML = `
+            <span class="text-lg">${TICKET_SUGGESTION_ICONS[category] || '🔎'}</span>
+            <div class="flex-grow leading-tight">
+                <span class="font-bold text-gray-800 block">${TICKET_FILTER_LABELS[category] || category}: ${term}</span>
+                <span class="text-xs text-gray-500">Filter in ${TICKET_FILTER_LABELS[category] || category}</span>
+            </div>
+        `;
+        li.onclick = () => addTicketFilterFromUi({ category, rawValue: term });
+        list.appendChild(li);
+    });
+
+    const fallback = document.createElement('li');
+    fallback.className = 'px-3 py-2 hover:bg-purple-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2';
+    fallback.innerHTML = `
+        <span class="text-lg">${TICKET_SUGGESTION_ICONS.all}</span>
+        <div class="flex-grow leading-tight">
+            <span class="font-bold text-gray-800 block">Alles: ${term}</span>
+            <span class="text-xs text-gray-500">Volltextsuche</span>
+        </div>
+    `;
+    fallback.onclick = () => addTicketFilterFromUi({ category: 'all', rawValue: term });
+    list.appendChild(fallback);
+
+    box.classList.toggle('hidden', !hasHits && !term.trim());
+    if (!box.classList.contains('hidden')) return;
+    box.classList.remove('hidden');
+}
+
+function addTicketFilterFromUi(options = {}) {
     const searchInput = document.getElementById('ts-search-input');
     const categorySelect = document.getElementById('ts-filter-category');
     const negateCheckbox = document.getElementById('ts-filter-negate');
 
-    const rawValue = String(searchInput?.value || '').trim();
+    const rawValue = String((options.rawValue ?? searchInput?.value) || '').trim();
     if (!rawValue) {
         alertUser('Bitte einen Suchbegriff eingeben.', 'warning');
         return;
     }
 
-    const category = String(categorySelect?.value || 'all');
+    const category = String(options.category || categorySelect?.value || 'all');
     const negate = !!negateCheckbox?.checked;
     const value = rawValue.toLowerCase();
 
@@ -74,32 +157,23 @@ function addTicketFilterFromUi() {
         return;
     }
 
-    const labels = {
-        all: 'Alles',
-        ticketId: 'Ticket-ID',
-        subject: 'Betreff',
-        category: 'Kategorie',
-        status: 'Status',
-        priority: 'Priorität',
-        creator: 'Ersteller',
-        assignee: 'Zugewiesen',
-        dueDate: 'Fälligkeit'
-    };
-
     activeTicketFilters.push({
         id: Date.now(),
         category,
         value,
         rawValue,
         negate,
-        label: labels[category] || category
+        label: TICKET_FILTER_LABELS[category] || category
     });
 
     if (searchInput) searchInput.value = '';
     if (negateCheckbox) negateCheckbox.checked = false;
+    if (categorySelect) categorySelect.value = category;
+    hideTicketSearchSuggestions();
 
     renderTicketSearchTags();
     renderTickets();
+    hideTicketSearchSuggestions();
 }
 
 function removeTicketFilterById(filterId) {
@@ -296,13 +370,34 @@ function setupEventListeners() {
     // Suche & Filter (harmonisiert)
     const searchInput = document.getElementById('ts-search-input');
     if (searchInput && !searchInput.dataset.listenerAttached) {
+        searchInput.addEventListener('input', (e) => {
+            const term = String(e.target.value || '');
+            if (!term.trim()) {
+                hideTicketSearchSuggestions();
+                return;
+            }
+            updateTicketSearchSuggestions(term);
+        });
         searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 addTicketFilterFromUi();
             }
         });
+        searchInput.addEventListener('focus', (e) => {
+            const term = String(e.target.value || '').trim();
+            if (term) updateTicketSearchSuggestions(term);
+        });
         searchInput.dataset.listenerAttached = 'true';
+    }
+
+    if (!document.body.dataset.tsSuggestionsListenerAttached) {
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#ts-search-input') && !e.target.closest('#ts-search-suggestions-box')) {
+                hideTicketSearchSuggestions();
+            }
+        });
+        document.body.dataset.tsSuggestionsListenerAttached = 'true';
     }
 
     const addFilterBtn = document.getElementById('ts-add-filter-btn');

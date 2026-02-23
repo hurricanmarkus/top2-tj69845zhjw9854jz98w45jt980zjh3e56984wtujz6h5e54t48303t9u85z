@@ -40,6 +40,28 @@ let sendungShowDetails = false;
 let sendungViewMode = 'list';
 let unsubscribeSendungSettings = null;
 
+const SENDUNG_FILTER_LABELS = {
+    status: 'Status',
+    anbieter: 'Anbieter',
+    produkt: 'Produkt',
+    absender: 'Absender',
+    empfaenger: 'Empfänger',
+    prioritaet: 'Priorität',
+    tag: 'Tag',
+    bestellnummer: 'Bestellnummer'
+};
+
+const SENDUNG_SUGGESTION_ICONS = {
+    status: '📊',
+    anbieter: '🏢',
+    produkt: '📦',
+    absender: '📤',
+    empfaenger: '📥',
+    prioritaet: '🚩',
+    tag: '🏷️',
+    bestellnummer: '#️⃣'
+};
+
 const SENDUNG_SETTING_KEYS = {
     showDetails: 'sv_dashboard_show_details',
     viewMode: 'sv_dashboard_view_mode'
@@ -228,12 +250,33 @@ function setupEventListeners() {
 
     const searchInput = document.getElementById('sendungSearchInput');
     if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const term = String(e.target.value || '');
+            if (!term.trim()) {
+                hideSendungSearchSuggestions();
+                return;
+            }
+            updateSendungSearchSuggestions(term);
+        });
         searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 addFilter();
             }
         });
+        searchInput.addEventListener('focus', (e) => {
+            const term = String(e.target.value || '').trim();
+            if (term) updateSendungSearchSuggestions(term);
+        });
+    }
+
+    if (!document.body.dataset.sendungSuggestionsListenerAttached) {
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#sendungSearchInput') && !e.target.closest('#sendungSearchSuggestionsBox')) {
+                hideSendungSearchSuggestions();
+            }
+        });
+        document.body.dataset.sendungSuggestionsListenerAttached = 'true';
     }
 
     if (sendungTyp) {
@@ -358,13 +401,13 @@ function listenForSendungSettingsSync() {
     });
 }
 
-function addFilter() {
+function addFilter(options = {}) {
     const searchInput = document.getElementById('sendungSearchInput');
     const categorySelect = document.getElementById('sendungFilterCategory');
     const negateCheckbox = document.getElementById('sendungFilterNegate');
     
-    const rawValue = String(searchInput?.value || '').trim();
-    const category = categorySelect?.value;
+    const rawValue = String((options.rawValue ?? searchInput?.value) || '').trim();
+    const category = String(options.category || categorySelect?.value || '');
     const negate = !!negateCheckbox?.checked;
     const value = rawValue.toLowerCase();
     
@@ -382,6 +425,7 @@ function addFilter() {
     if (duplicate) {
         if (searchInput) searchInput.value = '';
         if (negateCheckbox) negateCheckbox.checked = false;
+        hideSendungSearchSuggestions();
         return;
     }
     
@@ -407,8 +451,9 @@ function addFilter() {
     });
     
     if (searchInput) searchInput.value = '';
-    if (categorySelect) categorySelect.value = '';
+    if (categorySelect) categorySelect.value = category;
     if (negateCheckbox) negateCheckbox.checked = false;
+    hideSendungSearchSuggestions();
     
     renderActiveFilters();
     applyFiltersAndRender();
@@ -434,8 +479,85 @@ function resetFilters() {
     if (categorySelect) categorySelect.value = '';
     if (negateCheckbox) negateCheckbox.checked = false;
     if (joinMode) joinMode.value = 'and';
+    hideSendungSearchSuggestions();
     
     applyFiltersAndRender();
+}
+
+function hideSendungSearchSuggestions() {
+    document.getElementById('sendungSearchSuggestionsBox')?.classList.add('hidden');
+}
+
+function updateSendungSearchSuggestions(term) {
+    const box = document.getElementById('sendungSearchSuggestionsBox');
+    const list = document.getElementById('sendungSearchSuggestionsList');
+    if (!box || !list) return;
+
+    if (!term || !term.trim()) {
+        list.innerHTML = '';
+        box.classList.add('hidden');
+        return;
+    }
+
+    const lowerTerm = term.toLowerCase().trim();
+    const sendungen = Object.values(SENDUNGEN).filter((sendung) => sendung.typ === currentTab);
+    list.innerHTML = '';
+
+    const categories = ['status', 'anbieter', 'produkt', 'absender', 'empfaenger', 'prioritaet', 'tag', 'bestellnummer'];
+    let hasHits = false;
+
+    categories.forEach((category) => {
+        const hasCategoryHit = sendungen.some((sendung) => doesSendungMatchSearchFilter(sendung, { category, value: lowerTerm }));
+        if (!hasCategoryHit) return;
+
+        hasHits = true;
+        const li = document.createElement('li');
+        li.className = 'px-3 py-2 hover:bg-amber-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2';
+        li.innerHTML = `
+            <span class="text-lg">${SENDUNG_SUGGESTION_ICONS[category] || '🔎'}</span>
+            <div class="flex-grow leading-tight">
+                <span class="font-bold text-gray-800 block">${SENDUNG_FILTER_LABELS[category] || category}: ${term}</span>
+                <span class="text-xs text-gray-500">Filter in ${SENDUNG_FILTER_LABELS[category] || category}</span>
+            </div>
+        `;
+        li.onclick = () => addFilter({ category, rawValue: term });
+        list.appendChild(li);
+    });
+
+    box.classList.toggle('hidden', !hasHits);
+}
+
+function doesSendungMatchSearchFilter(sendung, filter) {
+    const searchValue = String(filter?.value || '').toLowerCase();
+    const category = String(filter?.category || '');
+
+    if (category === 'status') {
+        return String(sendung.status || '').toLowerCase().includes(searchValue);
+    }
+    if (category === 'anbieter') {
+        return String(sendung.anbieter || '').toLowerCase().includes(searchValue);
+    }
+    if (category === 'produkt') {
+        return String(sendung.produkt || '').toLowerCase().includes(searchValue);
+    }
+    if (category === 'absender') {
+        return String(sendung.absender || '').toLowerCase().includes(searchValue);
+    }
+    if (category === 'empfaenger') {
+        return String(sendung.empfaenger || '').toLowerCase().includes(searchValue);
+    }
+    if (category === 'prioritaet') {
+        return String(sendung.prioritaet || '').toLowerCase().includes(searchValue);
+    }
+    if (category === 'tag') {
+        const tags = (sendung.tags || []).map((tag) => String(tag || '').toLowerCase());
+        return tags.some((tag) => tag.includes(searchValue));
+    }
+    if (category === 'bestellnummer') {
+        return String(sendung.bestellnummer || '').toLowerCase().includes(searchValue);
+    }
+
+    return false;
 }
 
 function renderActiveFilters() {
@@ -906,29 +1028,7 @@ function applyFiltersAndRender() {
 
     if (activeFilters.length > 0) {
         const evaluateFilter = (sendung, filter) => {
-            const searchValue = String(filter.value || '').toLowerCase();
-            const category = String(filter.category || '');
-            let matches = false;
-
-            if (category === 'status') {
-                matches = String(sendung.status || '').toLowerCase().includes(searchValue);
-            } else if (category === 'anbieter') {
-                matches = String(sendung.anbieter || '').toLowerCase().includes(searchValue);
-            } else if (category === 'produkt') {
-                matches = String(sendung.produkt || '').toLowerCase().includes(searchValue);
-            } else if (category === 'absender') {
-                matches = String(sendung.absender || '').toLowerCase().includes(searchValue);
-            } else if (category === 'empfaenger') {
-                matches = String(sendung.empfaenger || '').toLowerCase().includes(searchValue);
-            } else if (category === 'prioritaet') {
-                matches = String(sendung.prioritaet || '').toLowerCase().includes(searchValue);
-            } else if (category === 'tag') {
-                const tags = (sendung.tags || []).map((tag) => String(tag || '').toLowerCase());
-                matches = tags.some((tag) => tag.includes(searchValue));
-            } else if (category === 'bestellnummer') {
-                matches = String(sendung.bestellnummer || '').toLowerCase().includes(searchValue);
-            }
-
+            const matches = doesSendungMatchSearchFilter(sendung, filter);
             return filter.negate ? !matches : matches;
         };
 

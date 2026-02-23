@@ -30,6 +30,30 @@ let rezeptIdCounter = 0;
 let activeRezeptFilters = [];
 let rezeptSearchJoinMode = 'and';
 
+const REZEPT_FILTER_LABELS = {
+    all: 'Alles',
+    titel: 'Titel',
+    rezeptId: 'Rezept-ID',
+    kategorie: 'Kategorie',
+    arbeitszeit: 'Arbeitszeit',
+    bewertung: 'Bewertung',
+    typ: 'Typ',
+    mappenNr: 'Mappen-Nr.',
+    zutaten: 'Zutaten'
+};
+
+const REZEPT_SUGGESTION_ICONS = {
+    all: '🔍',
+    titel: '📝',
+    rezeptId: '#️⃣',
+    kategorie: '🏷️',
+    arbeitszeit: '⏱️',
+    bewertung: '⭐',
+    typ: '📄',
+    mappenNr: '🗂️',
+    zutaten: '🥬'
+};
+
 // Temporäre Daten für Modal
 let tempZutaten = [];
 let tempSchritte = [];
@@ -216,13 +240,34 @@ function setupEventListeners() {
     // Suche & Tag-Filter (harmonisiert)
     const searchInput = document.getElementById('rz-search-input');
     if (searchInput && !searchInput.dataset.listenerAttached) {
+        searchInput.addEventListener('input', (e) => {
+            const term = String(e.target.value || '');
+            if (!term.trim()) {
+                hideRezeptSearchSuggestions();
+                return;
+            }
+            updateRezeptSearchSuggestions(term);
+        });
         searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 addRezeptFilterFromUi();
             }
         });
+        searchInput.addEventListener('focus', (e) => {
+            const term = String(e.target.value || '').trim();
+            if (term) updateRezeptSearchSuggestions(term);
+        });
         searchInput.dataset.listenerAttached = 'true';
+    }
+
+    if (!document.body.dataset.rzSuggestionsListenerAttached) {
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#rz-search-input') && !e.target.closest('#rz-search-suggestions-box')) {
+                hideRezeptSearchSuggestions();
+            }
+        });
+        document.body.dataset.rzSuggestionsListenerAttached = 'true';
     }
 
     const addFilterBtn = document.getElementById('rz-add-filter-btn');
@@ -947,18 +992,18 @@ function changePortionen(delta) {
 // ========================================
 // FILTER & SUCHE
 // ========================================
-function addRezeptFilterFromUi() {
+function addRezeptFilterFromUi(options = {}) {
     const searchInput = document.getElementById('rz-search-input');
     const categorySelect = document.getElementById('rz-filter-category-tag');
     const negateCheckbox = document.getElementById('rz-filter-negate');
 
-    const rawValue = String(searchInput?.value || '').trim();
+    const rawValue = String((options.rawValue ?? searchInput?.value) || '').trim();
     if (!rawValue) {
         alertUser('Bitte einen Suchbegriff eingeben.', 'warning');
         return;
     }
 
-    const category = String(categorySelect?.value || 'all');
+    const category = String(options.category || categorySelect?.value || 'all');
     const negate = !!negateCheckbox?.checked;
     const value = rawValue.toLowerCase();
 
@@ -971,20 +1016,9 @@ function addRezeptFilterFromUi() {
     if (duplicate) {
         if (searchInput) searchInput.value = '';
         if (negateCheckbox) negateCheckbox.checked = false;
+        hideRezeptSearchSuggestions();
         return;
     }
-
-    const labels = {
-        all: 'Alles',
-        titel: 'Titel',
-        rezeptId: 'Rezept-ID',
-        kategorie: 'Kategorie',
-        arbeitszeit: 'Arbeitszeit',
-        bewertung: 'Bewertung',
-        typ: 'Typ',
-        mappenNr: 'Mappen-Nr.',
-        zutaten: 'Zutaten'
-    };
 
     activeRezeptFilters.push({
         id: Date.now() + Math.floor(Math.random() * 1000),
@@ -992,14 +1026,75 @@ function addRezeptFilterFromUi() {
         value,
         rawValue,
         negate,
-        label: labels[category] || category
+        label: REZEPT_FILTER_LABELS[category] || category
     });
 
     if (searchInput) searchInput.value = '';
     if (negateCheckbox) negateCheckbox.checked = false;
+    if (categorySelect) categorySelect.value = category;
+    hideRezeptSearchSuggestions();
 
     renderRezeptSearchTags();
     filterRezepte();
+}
+
+function hideRezeptSearchSuggestions() {
+    document.getElementById('rz-search-suggestions-box')?.classList.add('hidden');
+}
+
+function updateRezeptSearchSuggestions(term) {
+    const box = document.getElementById('rz-search-suggestions-box');
+    const list = document.getElementById('rz-search-suggestions-list');
+    if (!box || !list) return;
+
+    if (!term || !term.trim()) {
+        list.innerHTML = '';
+        box.classList.add('hidden');
+        return;
+    }
+
+    const lowerTerm = term.toLowerCase().trim();
+    const rezepte = Object.values(REZEPTE);
+    list.innerHTML = '';
+
+    const categories = ['titel', 'rezeptId', 'kategorie', 'arbeitszeit', 'bewertung', 'typ', 'mappenNr', 'zutaten'];
+    let hasHits = false;
+
+    categories.forEach((category) => {
+        const hasCategoryHit = rezepte.some((rezept) =>
+            doesRezeptMatchSearchFilter(rezept, { category, value: lowerTerm })
+        );
+        if (!hasCategoryHit) return;
+
+        hasHits = true;
+        const li = document.createElement('li');
+        li.className = 'px-3 py-2 hover:bg-orange-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2';
+        li.innerHTML = `
+            <span class="text-lg">${REZEPT_SUGGESTION_ICONS[category] || '🔎'}</span>
+            <div class="flex-grow leading-tight">
+                <span class="font-bold text-gray-800 block">${REZEPT_FILTER_LABELS[category] || category}: ${term}</span>
+                <span class="text-xs text-gray-500">Filter in ${REZEPT_FILTER_LABELS[category] || category}</span>
+            </div>
+        `;
+        li.onclick = () => addRezeptFilterFromUi({ category, rawValue: term });
+        list.appendChild(li);
+    });
+
+    const fallback = document.createElement('li');
+    fallback.className = 'px-3 py-2 hover:bg-orange-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2';
+    fallback.innerHTML = `
+        <span class="text-lg">${REZEPT_SUGGESTION_ICONS.all}</span>
+        <div class="flex-grow leading-tight">
+            <span class="font-bold text-gray-800 block">Alles: ${term}</span>
+            <span class="text-xs text-gray-500">Volltextsuche</span>
+        </div>
+    `;
+    fallback.onclick = () => addRezeptFilterFromUi({ category: 'all', rawValue: term });
+    list.appendChild(fallback);
+
+    box.classList.toggle('hidden', !hasHits && !term.trim());
+    if (!box.classList.contains('hidden')) return;
+    box.classList.remove('hidden');
 }
 
 function removeRezeptFilterById(filterId) {
@@ -1163,6 +1258,7 @@ function resetRezeptFilter() {
     if (categoryTag) categoryTag.value = 'all';
     if (negate) negate.checked = false;
     if (joinMode) joinMode.value = 'and';
+    hideRezeptSearchSuggestions();
 
     resetRezeptAdvancedFilters();
     renderRezeptSearchTags();

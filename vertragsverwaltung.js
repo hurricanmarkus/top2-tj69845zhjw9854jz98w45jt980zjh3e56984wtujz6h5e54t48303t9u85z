@@ -44,6 +44,30 @@ let currentThemaId = null;
 let currentFilter = { rhythmus: '', absicht: '', kategorie: '', unterkategorie: '', status: 'aktiv' };
 let activeVertragsFilters = [];
 let vertragsSearchJoinMode = 'and';
+
+const VERTRAGS_FILTER_LABELS = {
+    all: 'Alles',
+    name: 'Name',
+    anbieter: 'Anbieter',
+    kategorie: 'Kategorie',
+    unterkategorie: 'Unterkategorie',
+    rhythmus: 'Zahlungsrhythmus',
+    absicht: 'Kündigungsabsicht',
+    status: 'Vertragsstatus',
+    betrag: 'Betrag'
+};
+
+const VERTRAGS_SUGGESTION_ICONS = {
+    all: '🔍',
+    name: '📝',
+    anbieter: '🏢',
+    kategorie: '🏷️',
+    unterkategorie: '📂',
+    rhythmus: '🔁',
+    absicht: '⚠️',
+    status: '📊',
+    betrag: '💶'
+};
 let unsubscribeVertraege = null;
 let unsubscribeThemen = null;
 let unsubscribeKategorien = null;
@@ -1286,13 +1310,34 @@ function setupEventListeners() {
     // Suche & Tag-Filter (harmonisiert)
     const searchInput = document.getElementById('vv-search-vertraege');
     if (searchInput && !searchInput.dataset.listenerAttached) {
+        searchInput.addEventListener('input', (e) => {
+            const term = String(e.target.value || '');
+            if (!term.trim()) {
+                hideVertragsSearchSuggestions();
+                return;
+            }
+            updateVertragsSearchSuggestions(term);
+        });
         searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 addVertragsFilterFromUi();
             }
         });
+        searchInput.addEventListener('focus', (e) => {
+            const term = String(e.target.value || '').trim();
+            if (term) updateVertragsSearchSuggestions(term);
+        });
         searchInput.dataset.listenerAttached = 'true';
+    }
+
+    if (!document.body.dataset.vvSuggestionsListenerAttached) {
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#vv-search-vertraege') && !e.target.closest('#vv-search-suggestions-box')) {
+                hideVertragsSearchSuggestions();
+            }
+        });
+        document.body.dataset.vvSuggestionsListenerAttached = 'true';
     }
 
     const addFilterBtn = document.getElementById('vv-add-filter-btn');
@@ -1479,18 +1524,18 @@ function setupEventListeners() {
     }
 }
 
-function addVertragsFilterFromUi() {
+function addVertragsFilterFromUi(options = {}) {
     const searchInput = document.getElementById('vv-search-vertraege');
     const categorySelect = document.getElementById('vv-filter-category-tag');
     const negateCheckbox = document.getElementById('vv-filter-negate');
 
-    const rawValue = String(searchInput?.value || '').trim();
+    const rawValue = String((options.rawValue ?? searchInput?.value) || '').trim();
     if (!rawValue) {
         alertUser('Bitte einen Suchbegriff eingeben.', 'warning');
         return;
     }
 
-    const category = String(categorySelect?.value || 'all');
+    const category = String(options.category || categorySelect?.value || 'all');
     const negate = !!negateCheckbox?.checked;
     const value = rawValue.toLowerCase();
 
@@ -1503,20 +1548,9 @@ function addVertragsFilterFromUi() {
     if (duplicate) {
         if (searchInput) searchInput.value = '';
         if (negateCheckbox) negateCheckbox.checked = false;
+        hideVertragsSearchSuggestions();
         return;
     }
-
-    const labels = {
-        all: 'Alles',
-        name: 'Name',
-        anbieter: 'Anbieter',
-        kategorie: 'Kategorie',
-        unterkategorie: 'Unterkategorie',
-        rhythmus: 'Zahlungsrhythmus',
-        absicht: 'Kündigungsabsicht',
-        status: 'Vertragsstatus',
-        betrag: 'Betrag'
-    };
 
     activeVertragsFilters.push({
         id: Date.now() + Math.floor(Math.random() * 1000),
@@ -1524,14 +1558,75 @@ function addVertragsFilterFromUi() {
         value,
         rawValue,
         negate,
-        label: labels[category] || category
+        label: VERTRAGS_FILTER_LABELS[category] || category
     });
 
     if (searchInput) searchInput.value = '';
     if (negateCheckbox) negateCheckbox.checked = false;
+    if (categorySelect) categorySelect.value = category;
+    hideVertragsSearchSuggestions();
 
     renderVertragsSearchTags();
     renderVertraegeTable();
+}
+
+function hideVertragsSearchSuggestions() {
+    document.getElementById('vv-search-suggestions-box')?.classList.add('hidden');
+}
+
+function updateVertragsSearchSuggestions(term) {
+    const box = document.getElementById('vv-search-suggestions-box');
+    const list = document.getElementById('vv-search-suggestions-list');
+    if (!box || !list) return;
+
+    if (!term || !term.trim()) {
+        list.innerHTML = '';
+        box.classList.add('hidden');
+        return;
+    }
+
+    const lowerTerm = term.toLowerCase().trim();
+    const vertraege = Object.values(VERTRAEGE).filter((vertrag) => !vertrag?.inTrash);
+    list.innerHTML = '';
+
+    const categories = ['name', 'anbieter', 'kategorie', 'unterkategorie', 'rhythmus', 'absicht', 'status', 'betrag'];
+    let hasHits = false;
+
+    categories.forEach((category) => {
+        const hasCategoryHit = vertraege.some((vertrag) =>
+            doesVertragMatchSearchFilter(vertrag, { category, value: lowerTerm })
+        );
+        if (!hasCategoryHit) return;
+
+        hasHits = true;
+        const li = document.createElement('li');
+        li.className = 'px-3 py-2 hover:bg-indigo-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2';
+        li.innerHTML = `
+            <span class="text-lg">${VERTRAGS_SUGGESTION_ICONS[category] || '🔎'}</span>
+            <div class="flex-grow leading-tight">
+                <span class="font-bold text-gray-800 block">${VERTRAGS_FILTER_LABELS[category] || category}: ${term}</span>
+                <span class="text-xs text-gray-500">Filter in ${VERTRAGS_FILTER_LABELS[category] || category}</span>
+            </div>
+        `;
+        li.onclick = () => addVertragsFilterFromUi({ category, rawValue: term });
+        list.appendChild(li);
+    });
+
+    const fallback = document.createElement('li');
+    fallback.className = 'px-3 py-2 hover:bg-indigo-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-center gap-2';
+    fallback.innerHTML = `
+        <span class="text-lg">${VERTRAGS_SUGGESTION_ICONS.all}</span>
+        <div class="flex-grow leading-tight">
+            <span class="font-bold text-gray-800 block">Alles: ${term}</span>
+            <span class="text-xs text-gray-500">Volltextsuche</span>
+        </div>
+    `;
+    fallback.onclick = () => addVertragsFilterFromUi({ category: 'all', rawValue: term });
+    list.appendChild(fallback);
+
+    box.classList.toggle('hidden', !hasHits && !term.trim());
+    if (!box.classList.contains('hidden')) return;
+    box.classList.remove('hidden');
 }
 
 function removeVertragsFilterById(filterId) {
@@ -1587,6 +1682,7 @@ function resetVertragsFiltersToDefault() {
     if (filterKategorie) filterKategorie.value = '';
     if (filterUnterkategorie) filterUnterkategorie.value = '';
     if (filterStatus) filterStatus.value = 'aktiv';
+    hideVertragsSearchSuggestions();
 
     renderUnterkategorienDropdown('');
     renderVertragsSearchTags();
