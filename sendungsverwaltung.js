@@ -7,9 +7,10 @@ import {
     db,
     currentUser,
     navigate,
-    appId
+    appId,
+    usersCollectionRef
 } from './haupteingang.js';
-import { saveUserSetting, getUserSetting } from './log-InOut.js';
+import { saveUserSetting, getUserSetting, userSettings } from './log-InOut.js';
 import { createPendingNotification, renderPendingNotifications } from './pushmail-notifications.js';
 
 import {
@@ -33,7 +34,15 @@ let activeFilters = [];
 let currentTab = 'empfang';
 let unsubscribeSendungen = null;
 let currentEditingSendungId = null;
-let lastSendung = {};
+let isSendungModalReadMode = false;
+let sendungShowDetails = false;
+let sendungViewMode = 'list';
+let unsubscribeSendungSettings = null;
+
+const SENDUNG_SETTING_KEYS = {
+    showDetails: 'sv_dashboard_show_details',
+    viewMode: 'sv_dashboard_view_mode'
+};
 
 const STATUS_CONFIG = {
     erwartet: { label: 'Erwartet', icon: '⏳', color: 'bg-blue-100 text-blue-800' },
@@ -66,7 +75,10 @@ export function initializeSendungsverwaltungView() {
 
     setupEventListeners();
     setupTabs();
+    loadSendungDisplaySettings();
+    applySendungDisplaySettingsUI();
     addDefaultFilters();
+    listenForSendungSettingsSync();
     // Listener erst starten, nachdem sendungenCollectionRef gesetzt wurde.
     // Sonst werden neue Einträge zwar gespeichert, aber nicht in SENDUNGEN geladen.
     listenForSendungen();
@@ -139,6 +151,10 @@ function setupEventListeners() {
     const cancelSendungBtn = document.getElementById('cancelSendungBtn');
     const saveSendungBtn = document.getElementById('saveSendungBtn');
     const deleteSendungBtn = document.getElementById('deleteSendungBtn');
+    const editSendungBtn = document.getElementById('editSendungBtn');
+    const duplicateSendungBtn = document.getElementById('duplicateSendungBtn');
+    const sendungToggleDetailsBtn = document.getElementById('sendungToggleDetailsBtn');
+    const sendungToggleViewBtn = document.getElementById('sendungToggleViewBtn');
     const addFilterBtn = document.getElementById('sendungAddFilterBtn');
     const sendungResetFiltersBtn = document.getElementById('sendungResetFiltersBtn');
     const sendungTyp = document.getElementById('sendungTyp');
@@ -162,6 +178,22 @@ function setupEventListeners() {
 
     if (deleteSendungBtn) {
         deleteSendungBtn.onclick = () => deleteSendung();
+    }
+
+    if (editSendungBtn) {
+        editSendungBtn.onclick = () => enableSendungEditMode();
+    }
+
+    if (duplicateSendungBtn) {
+        duplicateSendungBtn.onclick = () => duplicateCurrentSendungToNew();
+    }
+
+    if (sendungToggleDetailsBtn) {
+        sendungToggleDetailsBtn.onclick = () => toggleSendungDetailsVisibility();
+    }
+
+    if (sendungToggleViewBtn) {
+        sendungToggleViewBtn.onclick = () => toggleSendungViewMode();
     }
 
     if (addFilterBtn) {
@@ -198,6 +230,109 @@ function setupEventListeners() {
             }
         };
     }
+}
+
+function normalizeSendungViewMode(mode) {
+    return mode === 'grid' ? 'grid' : 'list';
+}
+
+function loadSendungDisplaySettings() {
+    const rawShowDetails = getUserSetting(SENDUNG_SETTING_KEYS.showDetails, false);
+    const rawViewMode = getUserSetting(SENDUNG_SETTING_KEYS.viewMode, 'list');
+
+    sendungShowDetails = rawShowDetails === true || rawShowDetails === 'true';
+    sendungViewMode = normalizeSendungViewMode(rawViewMode);
+}
+
+function applySendungContainerLayout() {
+    const container = document.getElementById('sendungenContainer');
+    if (!container) return;
+
+    container.classList.remove('space-y-3', 'grid', 'gap-3', 'md:grid-cols-2', 'xl:grid-cols-3');
+
+    if (sendungViewMode === 'grid') {
+        container.classList.add('grid', 'gap-3', 'md:grid-cols-2', 'xl:grid-cols-3');
+    } else {
+        container.classList.add('space-y-3');
+    }
+}
+
+function applySendungDisplaySettingsUI() {
+    const sendungToggleDetailsBtn = document.getElementById('sendungToggleDetailsBtn');
+    if (sendungToggleDetailsBtn) {
+        sendungToggleDetailsBtn.textContent = sendungShowDetails
+            ? '🔍 Details ausblenden'
+            : '🔍 Details anzeigen';
+        sendungToggleDetailsBtn.classList.toggle('bg-amber-600', sendungShowDetails);
+        sendungToggleDetailsBtn.classList.toggle('text-white', sendungShowDetails);
+        sendungToggleDetailsBtn.classList.toggle('bg-gray-200', !sendungShowDetails);
+        sendungToggleDetailsBtn.classList.toggle('text-gray-800', !sendungShowDetails);
+    }
+
+    const sendungToggleViewBtn = document.getElementById('sendungToggleViewBtn');
+    if (sendungToggleViewBtn) {
+        sendungToggleViewBtn.textContent = sendungViewMode === 'grid'
+            ? '🔲 Ansicht: Kacheln'
+            : '📋 Ansicht: Liste';
+        sendungToggleViewBtn.classList.toggle('bg-blue-600', sendungViewMode === 'grid');
+        sendungToggleViewBtn.classList.toggle('text-white', sendungViewMode === 'grid');
+        sendungToggleViewBtn.classList.toggle('bg-gray-200', sendungViewMode !== 'grid');
+        sendungToggleViewBtn.classList.toggle('text-gray-800', sendungViewMode !== 'grid');
+    }
+
+    applySendungContainerLayout();
+}
+
+async function toggleSendungDetailsVisibility() {
+    sendungShowDetails = !sendungShowDetails;
+    userSettings[SENDUNG_SETTING_KEYS.showDetails] = sendungShowDetails;
+    applySendungDisplaySettingsUI();
+    applyFiltersAndRender();
+    await saveUserSetting(SENDUNG_SETTING_KEYS.showDetails, sendungShowDetails);
+}
+
+async function toggleSendungViewMode() {
+    sendungViewMode = sendungViewMode === 'grid' ? 'list' : 'grid';
+    userSettings[SENDUNG_SETTING_KEYS.viewMode] = sendungViewMode;
+    applySendungDisplaySettingsUI();
+    applyFiltersAndRender();
+    await saveUserSetting(SENDUNG_SETTING_KEYS.viewMode, sendungViewMode);
+}
+
+function listenForSendungSettingsSync() {
+    if (!usersCollectionRef || !currentUser?.mode) {
+        return;
+    }
+
+    if (unsubscribeSendungSettings) {
+        unsubscribeSendungSettings();
+    }
+
+    const userDocRef = doc(usersCollectionRef, currentUser.mode);
+
+    unsubscribeSendungSettings = onSnapshot(userDocRef, (userDocSnap) => {
+        if (!userDocSnap.exists()) {
+            return;
+        }
+
+        const remoteSettings = userDocSnap.data()?.userSettings || {};
+        const remoteShowDetails = remoteSettings[SENDUNG_SETTING_KEYS.showDetails] === true || remoteSettings[SENDUNG_SETTING_KEYS.showDetails] === 'true';
+        const remoteViewMode = normalizeSendungViewMode(remoteSettings[SENDUNG_SETTING_KEYS.viewMode] || 'list');
+
+        userSettings[SENDUNG_SETTING_KEYS.showDetails] = remoteShowDetails;
+        userSettings[SENDUNG_SETTING_KEYS.viewMode] = remoteViewMode;
+
+        if (remoteShowDetails === sendungShowDetails && remoteViewMode === sendungViewMode) {
+            return;
+        }
+
+        sendungShowDetails = remoteShowDetails;
+        sendungViewMode = remoteViewMode;
+        applySendungDisplaySettingsUI();
+        applyFiltersAndRender();
+    }, (error) => {
+        console.error('[Sendungsverwaltung] Listener-Fehler (Settings):', error);
+    });
 }
 
 function addFilter() {
@@ -288,24 +423,35 @@ function renderActiveFilters() {
 
 window.removeSendungFilter = removeFilter;
 
-function openSendungModal(sendungId = null) {
+function openSendungModal(sendungId = null, copiedData = null) {
     currentEditingSendungId = sendungId;
     const modal = document.getElementById('sendungModal');
     const modalTitle = document.getElementById('sendungModalTitle');
     const deleteSendungBtn = document.getElementById('deleteSendungBtn');
+    const editSendungBtn = document.getElementById('editSendungBtn');
+    const duplicateSendungBtn = document.getElementById('duplicateSendungBtn');
 
     if (!modal) return;
 
     if (sendungId && SENDUNGEN[sendungId]) {
-        modalTitle.textContent = '📦 Sendung bearbeiten';
+        modalTitle.textContent = '📦 Sendung ansehen';
         deleteSendungBtn.style.display = 'inline-block';
+        if (editSendungBtn) editSendungBtn.style.display = 'inline-block';
+        if (duplicateSendungBtn) duplicateSendungBtn.style.display = 'inline-block';
         fillModalWithSendungData(SENDUNGEN[sendungId]);
-        lastSendung = {...SENDUNGEN[sendungId]};
+        setSendungModalReadMode(true);
     } else {
         modalTitle.textContent = '📦 Neue Sendung';
         deleteSendungBtn.style.display = 'none';
+        if (editSendungBtn) editSendungBtn.style.display = 'none';
+        if (duplicateSendungBtn) duplicateSendungBtn.style.display = 'none';
         clearModalFields();
         prefillIntelligentForm();
+        if (copiedData) {
+            fillModalWithSendungData(copiedData);
+            modalTitle.textContent = '📦 Neue Sendung (Kopie)';
+        }
+        setSendungModalReadMode(false);
     }
 
     modal.classList.remove('hidden');
@@ -316,21 +462,6 @@ function prefillIntelligentForm() {
     const typSelect = document.getElementById('sendungTyp');
     if (typSelect) {
         typSelect.value = currentTab;
-    }
-    
-    if (lastSendung.anbieter) {
-        const anbieterInput = document.getElementById('sendungAnbieter');
-        if (anbieterInput) anbieterInput.value = lastSendung.anbieter;
-    }
-    
-    if (lastSendung.absender && currentTab === 'empfang') {
-        const absenderInput = document.getElementById('sendungAbsender');
-        if (absenderInput) absenderInput.value = lastSendung.absender;
-    }
-    
-    if (lastSendung.empfaenger && (currentTab === 'versand' || currentTab === 'ruecksendung')) {
-        const empfaengerInput = document.getElementById('sendungEmpfaenger');
-        if (empfaengerInput) empfaengerInput.value = lastSendung.empfaenger;
     }
     
     const statusSelect = document.getElementById('sendungStatus');
@@ -352,12 +483,65 @@ function prefillIntelligentForm() {
 
 function closeSendungModalUI() {
     const modal = document.getElementById('sendungModal');
+    const editSendungBtn = document.getElementById('editSendungBtn');
+    const duplicateSendungBtn = document.getElementById('duplicateSendungBtn');
     if (modal) {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
     }
+    if (editSendungBtn) {
+        editSendungBtn.style.display = 'none';
+    }
+    if (duplicateSendungBtn) {
+        duplicateSendungBtn.style.display = 'none';
+    }
+    setSendungModalReadMode(false);
     currentEditingSendungId = null;
     clearModalFields();
+}
+
+function setSendungModalReadMode(readMode) {
+    const modal = document.getElementById('sendungModal');
+    if (!modal) return;
+
+    const formFields = modal.querySelectorAll('input, textarea, select');
+    formFields.forEach(field => {
+        if (field.id === 'sendungStatus') {
+            field.disabled = false;
+            return;
+        }
+        field.disabled = readMode;
+    });
+
+    if (!readMode) {
+        const erinnerungenAktiv = document.getElementById('sendungErinnerungenAktiv');
+        const tageVorherSelect = document.getElementById('sendungErinnerungTageVorher');
+        if (tageVorherSelect) {
+            tageVorherSelect.disabled = !(erinnerungenAktiv?.checked);
+        }
+    }
+
+    const saveSendungBtn = document.getElementById('saveSendungBtn');
+    if (saveSendungBtn) {
+        saveSendungBtn.textContent = readMode ? 'Status speichern' : 'Speichern';
+    }
+
+    isSendungModalReadMode = readMode;
+}
+
+function enableSendungEditMode() {
+    if (!currentEditingSendungId || !SENDUNGEN[currentEditingSendungId]) {
+        alertUser('Keine Sendung zum Bearbeiten geöffnet.', 'warning');
+        return;
+    }
+
+    const modalTitle = document.getElementById('sendungModalTitle');
+    const editSendungBtn = document.getElementById('editSendungBtn');
+
+    setSendungModalReadMode(false);
+    if (modalTitle) modalTitle.textContent = '📦 Sendung bearbeiten';
+    if (editSendungBtn) editSendungBtn.style.display = 'none';
+    alertUser('Bearbeitungsmodus aktiviert.');
 }
 
 function clearModalFields() {
@@ -479,13 +663,42 @@ function fillModalWithSendungData(sendung) {
     }
 }
 
+function duplicateCurrentSendungToNew() {
+    if (!currentEditingSendungId || !SENDUNGEN[currentEditingSendungId]) {
+        alertUser('Keine Sendung zum Kopieren gefunden.', 'warning');
+        return;
+    }
+
+    const sourceSendung = { ...SENDUNGEN[currentEditingSendungId] };
+    openSendungModal(null, sourceSendung);
+    alertUser('Kopie geöffnet. Bitte prüfen und speichern.');
+}
+
 async function saveSendung() {
+    const status = document.getElementById('sendungStatus')?.value || 'erwartet';
+
+    if (currentEditingSendungId && isSendungModalReadMode) {
+        try {
+            const sendungRef = doc(sendungenCollectionRef, currentEditingSendungId);
+            await updateDoc(sendungRef, {
+                status,
+                updatedAt: serverTimestamp()
+            });
+            alertUser('Status erfolgreich aktualisiert!');
+            closeSendungModalUI();
+        } catch (error) {
+            console.error('[Sendungsverwaltung] Fehler beim Status-Update:', error);
+            alertUser('Fehler beim Speichern des Status: ' + error.message);
+        }
+        return;
+    }
+
     const beschreibung = document.getElementById('sendungBeschreibung')?.value.trim();
     const anbieter = document.getElementById('sendungAnbieter')?.value.trim();
     const transportnummer = document.getElementById('sendungTransportnummer')?.value.trim();
 
-    if (!beschreibung || !anbieter || !transportnummer) {
-        alertUser('Bitte fülle alle Pflichtfelder aus (Beschreibung, Anbieter, Transportnummer).');
+    if (!beschreibung) {
+        alertUser('Bitte fülle das Pflichtfeld Beschreibung aus.');
         return;
     }
     
@@ -499,7 +712,7 @@ async function saveSendung() {
 
     const sendungData = {
         typ: typ,
-        status: document.getElementById('sendungStatus')?.value || 'erwartet',
+        status,
         beschreibung: beschreibung,
         anbieter: anbieter,
         transportnummer: transportnummer,
@@ -539,12 +752,6 @@ async function saveSendung() {
             const docRef = await addDoc(sendungenCollectionRef, sendungData);
             sendungId = docRef.id;
             alertUser('Sendung erfolgreich erstellt!');
-            
-            lastSendung = {
-                anbieter: sendungData.anbieter,
-                absender: sendungData.absender,
-                empfaenger: sendungData.empfaenger
-            };
         }
 
         // Pushmail-Benachrichtigungen erstellen (nur für aktive Sendungen)
@@ -579,7 +786,13 @@ async function saveSendung() {
 async function deleteSendung() {
     if (!currentEditingSendungId) return;
 
-    if (!confirm('Möchtest du diese Sendung wirklich löschen?')) return;
+    const confirmationText = prompt('Zum endgültigen Löschen bitte "LÖSCHEN" eingeben:');
+    if (confirmationText === null) return;
+
+    if (confirmationText.trim() !== 'LÖSCHEN') {
+        alertUser('Löschen abgebrochen: Eingabe war nicht "LÖSCHEN".', 'warning');
+        return;
+    }
 
     try {
         const sendungRef = doc(sendungenCollectionRef, currentEditingSendungId);
@@ -631,6 +844,12 @@ export function stopSendungsverwaltungListeners() {
         unsubscribeSendungen();
         unsubscribeSendungen = null;
     }
+
+    if (unsubscribeSendungSettings) {
+        unsubscribeSendungSettings();
+        unsubscribeSendungSettings = null;
+    }
+
     SENDUNGEN = {};
 }
 
@@ -728,9 +947,11 @@ function renderSendungen(sendungen) {
     const container = document.getElementById('sendungenContainer');
     if (!container) return;
 
+    applySendungContainerLayout();
+
     if (sendungen.length === 0) {
         container.innerHTML = `
-            <div class="bg-gray-100 p-8 rounded-xl text-center">
+            <div class="bg-gray-100 p-8 rounded-xl text-center col-span-full">
                 <p class="text-gray-500 text-lg">📦 Keine Sendungen gefunden.</p>
                 <p class="text-gray-400 text-sm mt-2">Erstelle deine erste Sendung!</p>
             </div>
@@ -770,6 +991,34 @@ function createSendungCard(sendung) {
 
     const deadlineText = getDeadlineText(sendung);
     const trackingUrl = getTrackingUrl(sendung.anbieter, sendung.transportnummer);
+    const cardLayoutClass = sendungViewMode === 'grid' ? 'h-full' : '';
+
+    if (!sendungShowDetails) {
+        return `
+            <div id="sendung-${sendung.id}" class="card bg-white p-4 rounded-xl shadow-lg hover:shadow-xl transition cursor-pointer border-l-4 ${getBorderColor(sendung.typ)} ${cardLayoutClass}">
+                <h3 class="text-lg font-bold ${typInfo.color} break-words mb-3">${sendung.beschreibung}</h3>
+                <div class="space-y-2 text-sm">
+                    <div>
+                        ${trackingUrl
+                            ? `<a id="tracking-link-${sendung.id}" href="${trackingUrl}" target="_blank" class="text-blue-600 hover:text-blue-800 font-semibold">🔗 Tracking öffnen</a>`
+                            : '<span class="text-gray-400">🔗 Kein Tracking-Link verfügbar</span>'}
+                    </div>
+                    <p class="font-semibold text-orange-600">${deadlineText ? `⏰ ${deadlineText}` : '⏰ Keine Deadline gesetzt'}</p>
+                </div>
+            </div>
+        `;
+    }
+
+    const transportnummerDisplay = sendung.transportnummer
+        ? `
+                    <span class="text-gray-500">•</span>
+                    <code class="bg-gray-100 px-2 py-0.5 rounded break-all">${sendung.transportnummer}</code>
+                    <button id="copy-tracking-${sendung.id}" class="text-amber-600 hover:text-amber-800 ml-1" title="Kopieren">
+                        📋
+                    </button>
+                    ${trackingUrl ? `<a id="tracking-link-${sendung.id}" href="${trackingUrl}" target="_blank" class="text-blue-600 hover:text-blue-800 ml-1" title="Tracking öffnen">🔗</a>` : ''}
+                `
+        : '<span class="text-xs text-gray-500">(Keine Transportnummer)</span>';
 
     const prioritaetBadge = sendung.prioritaet !== 'normal' 
         ? `<span class="text-xs px-2 py-1 rounded-full ${prioritaetInfo.badge}">${prioritaetInfo.icon} ${prioritaetInfo.label}</span>`
@@ -793,7 +1042,7 @@ function createSendungCard(sendung) {
         : '';
 
     return `
-        <div id="sendung-${sendung.id}" class="card bg-white p-4 rounded-xl shadow-lg hover:shadow-xl transition cursor-pointer border-l-4 ${getBorderColor(sendung.typ)}">
+        <div id="sendung-${sendung.id}" class="card bg-white p-4 rounded-xl shadow-lg hover:shadow-xl transition cursor-pointer border-l-4 ${getBorderColor(sendung.typ)} ${cardLayoutClass}">
             <div class="flex justify-between items-start mb-2 flex-wrap gap-2">
                 <div class="flex-1 min-w-[200px]">
                     <div class="flex items-center gap-2 mb-1 flex-wrap">
@@ -807,13 +1056,8 @@ function createSendungCard(sendung) {
 
             <div class="ml-8 space-y-1 text-sm text-gray-700">
                 <div class="flex items-center gap-2 flex-wrap">
-                    <span class="font-semibold">🚚 ${sendung.anbieter}</span>
-                    <span class="text-gray-500">•</span>
-                    <code class="bg-gray-100 px-2 py-0.5 rounded break-all">${sendung.transportnummer}</code>
-                    <button id="copy-tracking-${sendung.id}" class="text-amber-600 hover:text-amber-800 ml-1" title="Kopieren">
-                        📋
-                    </button>
-                    ${trackingUrl ? `<a id="tracking-link-${sendung.id}" href="${trackingUrl}" target="_blank" class="text-blue-600 hover:text-blue-800 ml-1" title="Tracking öffnen">🔗</a>` : ''}
+                    <span class="font-semibold">🚚 ${sendung.anbieter || 'Kein Anbieter'}</span>
+                    ${transportnummerDisplay}
                 </div>
                 ${sendung.absender ? `<p class="break-words">📤 Von: ${sendung.absender}</p>` : ''}
                 ${sendung.empfaenger ? `<p class="break-words">📥 An: ${sendung.empfaenger}</p>` : ''}
@@ -867,6 +1111,10 @@ function getDeadlineText(sendung) {
 }
 
 function getTrackingUrl(anbieter, transportnummer) {
+    if (!anbieter || !transportnummer) {
+        return null;
+    }
+
     const trackingUrls = {
         'DHL': `https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=${transportnummer}`,
         'Hermes': `https://www.hermesworld.com/de/sendungsverfolgung/tracking/?TrackID=${transportnummer}`,
@@ -882,6 +1130,11 @@ function getTrackingUrl(anbieter, transportnummer) {
 }
 
 function copyToClipboard(text) {
+    if (!text) {
+        alertUser('Keine Transportnummer vorhanden.', 'warning');
+        return;
+    }
+
     if (navigator.clipboard) {
         navigator.clipboard.writeText(text).then(() => {
             alertUser('📋 Transportnummer kopiert!');

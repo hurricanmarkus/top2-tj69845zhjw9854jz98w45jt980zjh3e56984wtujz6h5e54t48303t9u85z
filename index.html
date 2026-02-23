@@ -2717,6 +2717,15 @@
                     </div>
                 </div>
 
+                <div class="mb-3 flex flex-wrap gap-2">
+                    <button id="sendungToggleDetailsBtn" class="px-4 py-2 rounded-lg font-bold text-sm transition bg-gray-200 text-gray-800 hover:bg-gray-300">
+                        🔍 Details anzeigen
+                    </button>
+                    <button id="sendungToggleViewBtn" class="px-4 py-2 rounded-lg font-bold text-sm transition bg-gray-200 text-gray-800 hover:bg-gray-300">
+                        📋 Ansicht: Liste
+                    </button>
+                </div>
+
                 <!-- Multi-Filter System -->
                 <div class="mb-3 space-y-2">
                     <!-- Filter Hinzufügen -->
@@ -7868,7 +7877,7 @@
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Anbieter <span class="text-red-500">*</span></label>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Anbieter</label>
                         <input type="text" id="sendungAnbieter" list="anbieterList" placeholder="DHL, Hermes, DPD..." class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
                         <datalist id="anbieterList">
                             <option value="DHL">
@@ -7883,7 +7892,7 @@
                     </div>
 
                     <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Transportnummer <span class="text-red-500">*</span></label>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Transportnummer</label>
                         <input type="text" id="sendungTransportnummer" placeholder="Trackingnummer" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
                     </div>
                 </div>
@@ -8017,6 +8026,12 @@
             <div class="flex justify-end gap-3 mt-6 pt-4 border-t">
                 <button id="cancelSendungBtn" class="px-6 py-2.5 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-bold transition">
                     Abbrechen
+                </button>
+                <button id="editSendungBtn" style="display:none" class="px-6 py-2.5 bg-orange-500 text-white font-bold rounded-lg hover:bg-orange-600 transition">
+                    Bearbeiten
+                </button>
+                <button id="duplicateSendungBtn" style="display:none" class="px-6 py-2.5 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 transition">
+                    Kopieren
                 </button>
                 <button id="deleteSendungBtn" style="display:none" class="px-6 py-2.5 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition">
                     Löschen
