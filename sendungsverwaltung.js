@@ -69,6 +69,57 @@ const SENDUNG_SETTING_KEYS = {
     viewMode: 'sv_dashboard_view_mode'
 };
 
+const TRACKING_PROVIDER_CONFIG = {
+    dhl: {
+        label: 'DHL',
+        logo: 'https://www.google.com/s2/favicons?domain=dhl.de&sz=64',
+        buildUrl: (encodedTrackingNumber) => `https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=${encodedTrackingNumber}`
+    },
+    hermes: {
+        label: 'Hermes',
+        logo: 'https://www.google.com/s2/favicons?domain=hermesworld.com&sz=64',
+        buildUrl: (encodedTrackingNumber) => `https://www.hermesworld.com/de/sendungsverfolgung/tracking/?TrackID=${encodedTrackingNumber}`
+    },
+    dpd: {
+        label: 'DPD',
+        logo: 'https://www.google.com/s2/favicons?domain=dpd.de&sz=64',
+        buildUrl: (encodedTrackingNumber) => `https://tracking.dpd.de/parcelstatus?query=${encodedTrackingNumber}`
+    },
+    'post österreich': {
+        label: 'Post Österreich',
+        logo: 'https://www.google.com/s2/favicons?domain=post.at&sz=64',
+        buildUrl: (encodedTrackingNumber) => `https://www.post.at/sv/sendungsdetails?snr=${encodedTrackingNumber}`
+    },
+    ups: {
+        label: 'UPS',
+        logo: 'https://www.google.com/s2/favicons?domain=ups.com&sz=64',
+        buildUrl: (encodedTrackingNumber) => `https://www.ups.com/track?tracknum=${encodedTrackingNumber}`
+    },
+    fedex: {
+        label: 'FedEx',
+        logo: 'https://www.google.com/s2/favicons?domain=fedex.com&sz=64',
+        buildUrl: (encodedTrackingNumber) => `https://www.fedex.com/fedextrack/?trknbr=${encodedTrackingNumber}`
+    },
+    gls: {
+        label: 'GLS',
+        logo: 'https://www.google.com/s2/favicons?domain=gls-group.eu&sz=64',
+        buildUrl: (encodedTrackingNumber) => `https://gls-group.eu/DE/de/paketverfolgung?match=${encodedTrackingNumber}`
+    }
+};
+
+const TRACKING_FALLBACKS = {
+    seventeenTrack: {
+        label: '17TRACK.net',
+        logo: 'https://www.google.com/s2/favicons?domain=17track.net&sz=64',
+        buildUrl: (encodedTrackingNumber) => `https://t.17track.net/de#nums=${encodedTrackingNumber}`
+    },
+    afterShip: {
+        label: 'AfterShip',
+        logo: 'https://www.google.com/s2/favicons?domain=aftership.com&sz=64',
+        buildUrl: (encodedTrackingNumber) => `https://www.aftership.com/de/track/${encodedTrackingNumber}`
+    }
+};
+
 const STATUS_CONFIG = {
     erwartet: { label: 'Erwartet', icon: '⏳', color: 'bg-blue-100 text-blue-800' },
     unterwegs: { label: 'Unterwegs', icon: '🚚', color: 'bg-yellow-100 text-yellow-800' },
@@ -202,6 +253,111 @@ function extractFirstName(value = '') {
 
 function getCurrentUserFirstName() {
     return extractFirstName(currentUser?.displayName || currentUser?.mode || '');
+}
+
+function normalizeTrackingProviderKey(anbieter = '') {
+    const normalized = String(anbieter || '').trim().toLowerCase();
+    if (!normalized) return '';
+
+    if (normalized.includes('dhl')) return 'dhl';
+    if (normalized.includes('hermes')) return 'hermes';
+    if (normalized.includes('dpd')) return 'dpd';
+    if (normalized.includes('ups')) return 'ups';
+    if (normalized.includes('fedex')) return 'fedex';
+    if (normalized.includes('gls')) return 'gls';
+
+    if (normalized.includes('post') && (
+        normalized.includes('österreich') ||
+        normalized.includes('oesterreich') ||
+        normalized.includes('austria')
+    )) {
+        return 'post österreich';
+    }
+
+    return normalized;
+}
+
+function getTrackingOptionsForEntry(anbieter, transportnummer) {
+    const trackingNumber = String(transportnummer || '').trim();
+    if (!trackingNumber) return [];
+
+    const encodedTrackingNumber = encodeURIComponent(trackingNumber);
+    const providerKey = normalizeTrackingProviderKey(anbieter);
+    const providerConfig = TRACKING_PROVIDER_CONFIG[providerKey];
+    const options = [];
+
+    if (providerConfig?.buildUrl) {
+        options.push({
+            label: providerConfig.label,
+            url: providerConfig.buildUrl(encodedTrackingNumber),
+            logo: providerConfig.logo
+        });
+    }
+
+    options.push({
+        label: TRACKING_FALLBACKS.seventeenTrack.label,
+        url: TRACKING_FALLBACKS.seventeenTrack.buildUrl(encodedTrackingNumber),
+        logo: TRACKING_FALLBACKS.seventeenTrack.logo
+    });
+
+    options.push({
+        label: TRACKING_FALLBACKS.afterShip.label,
+        url: TRACKING_FALLBACKS.afterShip.buildUrl(encodedTrackingNumber),
+        logo: TRACKING_FALLBACKS.afterShip.logo
+    });
+
+    return options;
+}
+
+function closeTrackingOptionsModal() {
+    const modal = document.getElementById('sendungTrackingOptionsModal');
+    const list = document.getElementById('sendungTrackingOptionsList');
+    if (!modal) return;
+
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    if (list) {
+        list.innerHTML = '';
+    }
+}
+
+function openTrackingOptionsModal(anbieter, transportnummer) {
+    const trackingNumber = String(transportnummer || '').trim();
+    if (!trackingNumber) {
+        alertUser('Keine Transportnummer vorhanden.', 'warning');
+        return;
+    }
+
+    const modal = document.getElementById('sendungTrackingOptionsModal');
+    const list = document.getElementById('sendungTrackingOptionsList');
+    const title = document.getElementById('sendungTrackingOptionsTitle');
+    if (!modal || !list || !title) return;
+
+    const options = getTrackingOptionsForEntry(anbieter, trackingNumber);
+    if (options.length === 0) {
+        alertUser('Keine Tracking-Links verfügbar.', 'warning');
+        return;
+    }
+
+    title.textContent = `Tracking wählen (${trackingNumber})`;
+    list.innerHTML = options.map((option) => `
+        <a
+            href="${option.url}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="w-full inline-flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-gray-200 bg-white hover:bg-amber-50 hover:border-amber-300 transition"
+        >
+            <img src="${option.logo}" alt="${option.label} Logo" class="w-7 h-7 rounded" loading="lazy">
+            <span class="text-sm md:text-base font-semibold text-gray-800">${option.label}</span>
+        </a>
+    `).join('');
+
+    list.querySelectorAll('a').forEach((link) => {
+        link.onclick = () => closeTrackingOptionsModal();
+    });
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
 }
 
 function getLieferzielHistoryOptions() {
@@ -687,6 +843,11 @@ function applyPaketeReadMode(readMode) {
         copyButtons.forEach((button) => {
             button.disabled = false;
         });
+
+        const trackingButtons = container.querySelectorAll('.sendung-open-tracking-options-btn');
+        trackingButtons.forEach((button) => {
+            button.disabled = false;
+        });
     }
 }
 
@@ -702,12 +863,11 @@ function renderPaketeEditor() {
         }).join('');
 
         const transportRows = normalizeTransportEntries(paket.transportEntries).map((entry, entryIndex) => {
-            const trackingUrl = getTrackingUrl(entry.anbieter, entry.transportnummer);
             const readModeActions = `
                 <div class="sendung-readmode-only hidden flex gap-1">
                     <button type="button" class="sendung-copy-transportnummer-btn w-9 h-10 shrink-0 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" title="Nummer kopieren">📋</button>
-                    ${trackingUrl
-                        ? `<a href="${trackingUrl}" target="_blank" rel="noopener noreferrer" class="sendung-open-tracking-btn inline-flex items-center justify-center w-9 h-10 shrink-0 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition" title="Tracking öffnen">🔗</a>`
+                    ${entry.transportnummer
+                        ? `<button type="button" class="sendung-open-tracking-options-btn inline-flex items-center justify-center w-9 h-10 shrink-0 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" title="Tracking öffnen">🔗</button>`
                         : '<button type="button" class="w-9 h-10 shrink-0 rounded-lg bg-gray-100 text-gray-400 cursor-not-allowed" disabled title="Kein Tracking-Link">🔗</button>'}
                 </div>
             `;
@@ -839,6 +999,16 @@ function renderPaketeEditor() {
         };
     });
 
+    container.querySelectorAll('.sendung-open-tracking-options-btn').forEach((button) => {
+        button.onclick = () => {
+            const paketIndex = Number.parseInt(button.dataset.paketIndex || '-1', 10);
+            const entryIndex = Number.parseInt(button.dataset.entryIndex || '-1', 10);
+            const paket = currentSendungPakete[paketIndex];
+            const entry = normalizeTransportEntries(paket?.transportEntries)[entryIndex] || { ...EMPTY_TRANSPORT_ENTRY };
+            openTrackingOptionsModal(entry.anbieter, entry.transportnummer);
+        };
+    });
+
     applyPaketeReadMode(isSendungModalReadMode);
 }
 
@@ -959,6 +1129,8 @@ function setupEventListeners() {
     const sendungEmpfaenger = document.getElementById('sendungEmpfaenger');
     const sendungStatus = document.getElementById('sendungStatus');
     const sendungResetAutoStatusBtn = document.getElementById('sendungResetAutoStatusBtn');
+    const closeTrackingOptionsBtn = document.getElementById('closeSendungTrackingOptionsModal');
+    const trackingOptionsModal = document.getElementById('sendungTrackingOptionsModal');
 
     if (openSendungModalBtn) {
         openSendungModalBtn.onclick = () => openSendungModal();
@@ -1019,6 +1191,18 @@ function setupEventListeners() {
     if (sendungResetAutoStatusBtn) {
         sendungResetAutoStatusBtn.onclick = () => {
             syncOverallStatusWithPakete(true);
+        };
+    }
+
+    if (closeTrackingOptionsBtn) {
+        closeTrackingOptionsBtn.onclick = () => closeTrackingOptionsModal();
+    }
+
+    if (trackingOptionsModal) {
+        trackingOptionsModal.onclick = (event) => {
+            if (event.target === trackingOptionsModal) {
+                closeTrackingOptionsModal();
+            }
         };
     }
 
@@ -1475,6 +1659,7 @@ function closeSendungModalUI() {
     const modal = document.getElementById('sendungModal');
     const editSendungBtn = document.getElementById('editSendungBtn');
     const duplicateSendungBtn = document.getElementById('duplicateSendungBtn');
+    closeTrackingOptionsModal();
     if (modal) {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
@@ -1994,6 +2179,9 @@ function renderSendungen(sendungen) {
         trackingLinks.forEach((trackingLink) => {
             trackingLink.onclick = (e) => {
                 e.stopPropagation();
+                const index = Number.parseInt(trackingLink.dataset.openTrackingOptionsIndex || '-1', 10);
+                const entry = transportEntries[index];
+                openTrackingOptionsModal(entry?.anbieter || '', entry?.transportnummer || '');
             };
         });
     });
@@ -2011,7 +2199,6 @@ function createSendungCard(sendung) {
 
     const transportEntriesDisplay = transportEntries.length > 0
         ? `<div class="space-y-1">${transportEntries.map((entry, index) => {
-            const trackingUrl = getTrackingUrl(entry.anbieter, entry.transportnummer);
             const paketStatusInfo = STATUS_CONFIG[normalizeStatus(entry.paketStatus)] || STATUS_CONFIG.erwartet;
 
             return `
@@ -2029,8 +2216,8 @@ function createSendungCard(sendung) {
                     ${entry.transportnummer
                         ? `<button type="button" data-copy-transport-index="${index}" class="text-amber-600 hover:text-amber-800 shrink-0" title="Kopieren">📋</button>`
                         : ''}
-                    ${trackingUrl
-                        ? `<a data-tracking-link="true" href="${trackingUrl}" target="_blank" class="text-blue-600 hover:text-blue-800 shrink-0" title="Tracking öffnen">🔗</a>`
+                    ${entry.transportnummer
+                        ? `<button type="button" data-tracking-link="true" data-open-tracking-options-index="${index}" class="text-blue-600 hover:text-blue-800 shrink-0" title="Tracking öffnen">🔗</button>`
                         : ''}
                 </div>
             `;
@@ -2149,25 +2336,12 @@ function getTrackingUrl(anbieter, transportnummer) {
         return null;
     }
 
-    const normalizedAnbieter = String(anbieter || '').trim().toLowerCase();
-    const encodedTrackingNumber = encodeURIComponent(trackingNumber);
-
-    const trackingUrls = {
-        dhl: `https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=${encodedTrackingNumber}`,
-        hermes: `https://www.hermesworld.com/de/sendungsverfolgung/tracking/?TrackID=${encodedTrackingNumber}`,
-        dpd: `https://tracking.dpd.de/parcelstatus?query=${encodedTrackingNumber}`,
-        'post österreich': `https://www.post.at/sv/sendungsdetails?snr=${encodedTrackingNumber}`,
-        ups: `https://www.ups.com/track?tracknum=${encodedTrackingNumber}`,
-        fedex: `https://www.fedex.com/fedextrack/?trknbr=${encodedTrackingNumber}`,
-        gls: `https://gls-group.eu/DE/de/paketverfolgung?match=${encodedTrackingNumber}`,
-        'amazon logistics': null
-    };
-
-    if (Object.prototype.hasOwnProperty.call(trackingUrls, normalizedAnbieter)) {
-        return trackingUrls[normalizedAnbieter];
+    const options = getTrackingOptionsForEntry(anbieter, trackingNumber);
+    if (options.length === 0) {
+        return null;
     }
 
-    return `https://www.aftership.com/de/track/${encodedTrackingNumber}`;
+    return options[0].url;
 }
 
 function copyToClipboard(text) {
