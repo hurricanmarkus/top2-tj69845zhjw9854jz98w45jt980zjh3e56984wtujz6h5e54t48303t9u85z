@@ -381,12 +381,49 @@ function computeAbweichungstypFromSollIst(mengeSoll, mengeIst) {
     return 'ok';
 }
 
+function hasOpenWarenuebernahmeProblems(warenuebernahme = {}) {
+    const wa = normalizeWarenuebernahme(warenuebernahme);
+    if (!Array.isArray(wa.problemartikel) || wa.problemartikel.length === 0) return false;
+
+    const resolvedByPot = new Map();
+    wa.problemaufloesungen.forEach((resolution) => {
+        const potEntryId = String(resolution?.problemPotEntryId || '').trim();
+        const mengeRaw = Number.parseInt(resolution?.menge, 10);
+        const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
+        if (!potEntryId || menge <= 0) return;
+        resolvedByPot.set(potEntryId, (resolvedByPot.get(potEntryId) || 0) + menge);
+    });
+
+    return wa.problemartikel.some((problem) => {
+        const potEntryId = String(problem?.potEntryId || '').trim();
+        const mengeRaw = Number.parseInt(problem?.mengeProblem, 10);
+        const mengeProblem = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
+        if (mengeProblem <= 0) return false;
+        if (!potEntryId) return true;
+        return (resolvedByPot.get(potEntryId) || 0) < mengeProblem;
+    });
+}
+
 function applyWarenuebernahmeStatusToPaket(paket = {}) {
     const normalizedWarenuebernahme = normalizeWarenuebernahme(paket?.warenuebernahme || {});
     if (!normalizedWarenuebernahme.aktiv) {
         return normalizeStatus(paket?.status);
     }
-    return normalizedWarenuebernahme.status === 'problem' ? 'problem' : 'zugestellt';
+
+    const waStatus = String(normalizedWarenuebernahme.status || 'offen');
+    const hasOpenProblems = hasOpenWarenuebernahmeProblems(normalizedWarenuebernahme);
+    if (waStatus === 'abgeschlossen' && !hasOpenProblems) {
+        return 'zugestellt';
+    }
+    if (waStatus === 'in_pruefung' || waStatus === 'problem' || hasOpenProblems) {
+        return 'problem';
+    }
+
+    const manualStatus = normalizeStatus(paket?.status);
+    if (['erwartet', 'unterwegs', 'storniert'].includes(manualStatus)) {
+        return manualStatus;
+    }
+    return 'erwartet';
 }
 
 function getEffectiveInhaltItems(items = currentInhaltItems) {
@@ -620,9 +657,7 @@ function normalizePaket(paket = {}, index = 0) {
     return {
         paketId: String(paket?.paketId || '').trim() || createPaketId(),
         paketLabel: String(paket?.paketLabel || '').trim() || `Paket ${index + 1}`,
-        status: normalizedWarenuebernahme.aktiv
-            ? (normalizedWarenuebernahme.status === 'problem' ? 'problem' : 'zugestellt')
-            : normalizedStatus,
+        status: applyWarenuebernahmeStatusToPaket({ status: normalizedStatus, warenuebernahme: normalizedWarenuebernahme }),
         lieferziel: String(paket?.lieferziel || '').trim(),
         deadlineErwartet: String(paket?.deadlineErwartet || '').trim(),
         deadlineVersand: String(paket?.deadlineVersand || '').trim(),
@@ -2495,6 +2530,14 @@ function updatePaketField(paketIndex, field, value) {
     if (field === 'status') {
         const normalizedWarenuebernahme = normalizeWarenuebernahme(paket.warenuebernahme || {});
         if (normalizedWarenuebernahme.aktiv) {
+            if (isSendungModalReadMode) {
+                const allowedManualStatuses = ['erwartet', 'unterwegs', 'storniert'];
+                if (!allowedManualStatuses.includes(paket.status)) {
+                    paket.status = applyWarenuebernahmeStatusToPaket(paket);
+                    syncOverallStatusWithPakete();
+                    return;
+                }
+            }
             paket.status = applyWarenuebernahmeStatusToPaket(paket);
         }
         syncOverallStatusWithPakete();
@@ -2586,10 +2629,8 @@ function applyPaketeReadMode(readMode) {
     if (readMode) {
         const paketStatusSelects = container.querySelectorAll('.sendung-paket-status-select');
         paketStatusSelects.forEach((select) => {
-            const statusLocked = select.dataset.warenuebernahmeLocked === 'true';
-            select.disabled = statusLocked;
-            select.classList.toggle('opacity-50', statusLocked);
-            select.classList.toggle('cursor-not-allowed', statusLocked);
+            select.disabled = false;
+            select.classList.remove('opacity-50', 'cursor-not-allowed');
         });
 
         const copyButtons = container.querySelectorAll('.sendung-copy-transportnummer-btn');
@@ -2632,11 +2673,14 @@ function renderPaketeEditor() {
         const warenuebernahmeMeta = getWarenuebernahmeStatusMeta(paket);
         const zuordnungSummary = getPaketZuordnungSummary(paket);
         const statusLocked = normalizeWarenuebernahme(paket.warenuebernahme || {}).aktiv;
+        const statusReadModeRestricted = isSendungModalReadMode && statusLocked;
 
         const statusOptions = STATUS_VALUES.map((statusValue) => {
             const config = STATUS_CONFIG[statusValue] || { label: statusValue, icon: '' };
             const selected = paket.status === statusValue ? 'selected' : '';
-            return `<option value="${statusValue}" ${selected}>${config.icon} ${config.label}</option>`;
+            const blockedInReadMode = statusReadModeRestricted && (statusValue === 'zugestellt' || statusValue === 'problem');
+            const disabled = blockedInReadMode ? 'disabled' : '';
+            return `<option value="${statusValue}" ${selected} ${disabled}>${config.icon} ${config.label}</option>`;
         }).join('');
 
         const transportRows = normalizeTransportEntries(paket.transportEntries).map((entry, entryIndex) => {
