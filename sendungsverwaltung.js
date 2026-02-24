@@ -1260,12 +1260,16 @@ function renderInhaltZuordnungModal() {
     const rows = document.getElementById('sendungInhaltZuordnungRows');
     const hint = document.getElementById('sendungInhaltZuordnungHint');
     const title = document.getElementById('sendungInhaltZuordnungTitle');
-    if (!paket || !rows || !hint || !title) return;
+    const applyBtn = document.getElementById('applySendungInhaltZuordnungBtn');
+    if (!paket || !rows || !hint || !title || !applyBtn) return;
 
     ensureInhaltZuordnungConsistency();
 
+    const isReadOnlyView = isSendungModalReadMode;
     const inhaltItems = getEffectiveInhaltItems();
-    title.textContent = `Artikel zuordnen – ${paket.paketLabel || `Paket ${paketIndex + 1}`}`;
+    title.textContent = `${isReadOnlyView ? 'Artikel-Zuordnung' : 'Artikel zuordnen'} – ${paket.paketLabel || `Paket ${paketIndex + 1}`}`;
+    applyBtn.classList.toggle('hidden', isReadOnlyView);
+    applyBtn.disabled = isReadOnlyView;
 
     if (inhaltItems.length === 0) {
         rows.innerHTML = '<div class="text-sm text-gray-500 italic">Keine Artikel in der Inhalt-Liste vorhanden.</div>';
@@ -1279,32 +1283,37 @@ function renderInhaltZuordnungModal() {
             if (index === paketIndex) return sum;
             return sum + getPaketZuordnungMengeForItem(candidate, item.inhaltId);
         }, 0);
+        const assignedAll = thisAssigned + assignedOther;
         const maxForThis = Math.max(0, item.menge - assignedOther);
+        const initialCounter = Math.max(0, Math.min(maxForThis, thisAssigned));
 
         return `
-            <div class="rounded-lg border border-gray-200 bg-white p-3 space-y-2 sendung-zuordnung-row" data-inhalt-id="${item.inhaltId}" data-max-for-this="${maxForThis}" data-counter="0">
+            <div class="rounded-lg border border-gray-200 bg-white p-3 space-y-2 sendung-zuordnung-row" data-inhalt-id="${item.inhaltId}" data-max-for-this="${maxForThis}" data-counter="${initialCounter}" data-initial-counter="${initialCounter}">
                 <div class="flex items-center justify-between gap-3 flex-wrap">
                     <div class="font-semibold text-sm text-gray-800">${item.bezeichnung}</div>
                     <div class="text-xs text-gray-600">Gesamt: <span class="font-bold">${item.menge}</span> • Andere Pakete: <span class="font-bold">${assignedOther}</span></div>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 justify-start">
-                    <button type="button" class="sendung-zuordnung-minus-btn w-9 h-9 rounded-full bg-gray-100 text-gray-700 font-bold text-lg leading-none hover:bg-gray-200 transition">-</button>
-                    ${maxForThis > 10
+                    ${isReadOnlyView
+                        ? ''
+                        : `<button type="button" class="sendung-zuordnung-minus-btn w-9 h-9 rounded-full bg-gray-100 text-gray-700 font-bold text-lg leading-none hover:bg-gray-200 transition">-</button>`}
+                    ${!isReadOnlyView && maxForThis > 10
                         ? `<div class="flex items-center gap-1">
                             <input type="number" min="1" step="1" class="sendung-zuordnung-quick-add-input w-20 p-1.5 border border-gray-300 rounded text-xs" placeholder="Anzahl">
                             <button type="button" class="sendung-zuordnung-quick-add-btn px-2.5 py-1.5 rounded bg-indigo-500 text-white text-xs font-bold hover:bg-indigo-600 transition">+ Buchen</button>
                         </div>`
                         : ''}
-                    <button type="button" class="sendung-zuordnung-plus-btn w-9 h-9 rounded-full bg-indigo-600 text-white font-bold text-lg leading-none hover:bg-indigo-700 transition">+</button>
+                    ${isReadOnlyView
+                        ? ''
+                        : '<button type="button" class="sendung-zuordnung-plus-btn w-9 h-9 rounded-full bg-indigo-600 text-white font-bold text-lg leading-none hover:bg-indigo-700 transition">+</button>'}
                     <div class="px-3 py-1.5 rounded-lg bg-indigo-100 text-indigo-800 font-bold text-sm min-w-[4rem] text-center">
-                        <span class="sendung-zuordnung-counter-value">0</span>
+                        <span class="sendung-zuordnung-counter-value">${initialCounter}</span>
                     </div>
                 </div>
                 <div class="text-xs text-gray-600 flex flex-wrap gap-3">
                     <span>Max möglich: <span class="font-bold text-indigo-700">${maxForThis}</span></span>
-                    <span>Gezählt: <span class="font-bold text-indigo-700 sendung-zuordnung-counter-value">0</span></span>
-                    <span>Noch frei: <span class="font-bold text-indigo-700 sendung-zuordnung-remaining-value">${maxForThis}</span></span>
-                    ${thisAssigned > 0 ? `<span>Bisher gespeichert: <span class="font-bold text-gray-700">${thisAssigned}</span></span>` : ''}
+                    <span>Zugeordnet: <span class="font-bold text-indigo-700 sendung-zuordnung-counter-value">${initialCounter}</span></span>
+                    <span>Im Pot frei: <span class="font-bold text-indigo-700 sendung-zuordnung-remaining-value">${Math.max(0, maxForThis - initialCounter)}</span></span>
                 </div>
             </div>
         `;
@@ -1312,6 +1321,8 @@ function renderInhaltZuordnungModal() {
 
     rows.querySelectorAll('.sendung-zuordnung-row').forEach((row) => {
         const maxForThis = Number.parseInt(row.dataset.maxForThis || '0', 10);
+        const initialCounterRaw = Number.parseInt(row.dataset.initialCounter || '0', 10);
+        const initialCounter = Number.isFinite(initialCounterRaw) ? initialCounterRaw : 0;
 
         const renderCounter = (nextValue) => {
             const safeValue = Number.isFinite(nextValue) ? Math.max(0, Math.min(maxForThis, nextValue)) : 0;
@@ -1327,7 +1338,11 @@ function renderInhaltZuordnungModal() {
             }
         };
 
-        renderCounter(0);
+        renderCounter(initialCounter);
+
+        if (isReadOnlyView) {
+            return;
+        }
 
         const minusBtn = row.querySelector('.sendung-zuordnung-minus-btn');
         const plusBtn = row.querySelector('.sendung-zuordnung-plus-btn');
@@ -1367,15 +1382,13 @@ function renderInhaltZuordnungModal() {
     });
 
     const totalOffen = currentOffenerInhaltPot.reduce((sum, entry) => sum + (entry.mengeOffen || 0), 0);
-    hint.textContent = `Aktueller Zuordnungs-Pot: ${totalOffen} Stück`;
+    hint.textContent = isReadOnlyView
+        ? `Zugeordnete Mengen pro Artikel (offener Pot gesamt: ${totalOffen} Stück)`
+        : `Aktueller Zuordnungs-Pot: ${totalOffen} Stück`;
 }
 
 function openInhaltZuordnungModal(paketIndex) {
     if (!isEmpfangContextActive()) return;
-    if (isSendungModalReadMode) {
-        alertUser('Artikelzuordnung ist nur im Bearbeitungsmodus möglich.', 'warning');
-        return;
-    }
 
     const paket = currentSendungPakete[paketIndex];
     const modal = document.getElementById('sendungInhaltZuordnungModal');
@@ -1388,6 +1401,11 @@ function openInhaltZuordnungModal(paketIndex) {
 }
 
 function applyInhaltZuordnungModal() {
+    if (isSendungModalReadMode) {
+        closeInhaltZuordnungModal();
+        return;
+    }
+
     const paketIndex = currentZuordnungPaketIndex;
     const paket = currentSendungPakete[paketIndex];
     const rows = document.querySelectorAll('#sendungInhaltZuordnungRows .sendung-zuordnung-row');
@@ -2646,6 +2664,11 @@ function applyPaketeReadMode(readMode) {
             select.classList.toggle('cursor-not-allowed', !manualAllowed);
         });
 
+        const zuordnungButtons = container.querySelectorAll('.sendung-open-zuordnung-btn');
+        zuordnungButtons.forEach((button) => {
+            button.disabled = false;
+        });
+
         const copyButtons = container.querySelectorAll('.sendung-copy-transportnummer-btn');
         copyButtons.forEach((button) => {
             button.disabled = false;
@@ -2752,7 +2775,7 @@ function renderPaketeEditor() {
                         <span class="px-2 py-1 rounded-full ${warenuebernahmeMeta.color} font-semibold">Warenübernahme: ${warenuebernahmeMeta.label}</span>
                     </div>
                     <div class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
-                        <button type="button" class="sendung-open-zuordnung-btn sendung-editmode-only px-3 py-2 rounded-lg bg-indigo-500 text-white text-xs font-bold hover:bg-indigo-600 transition" data-paket-index="${paketIndex}">Artikel zuordnen</button>
+                        <button type="button" class="sendung-open-zuordnung-btn px-3 py-2 rounded-lg bg-indigo-500 text-white text-xs font-bold hover:bg-indigo-600 transition" data-paket-index="${paketIndex}">${isSendungModalReadMode ? 'Zuordnung anzeigen' : 'Artikel zuordnen'}</button>
                         <label class="sendung-editmode-only flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-gray-200 bg-white">
                             <input type="checkbox" class="sendung-paket-warenuebernahme-toggle" data-paket-index="${paketIndex}" ${normalizeWarenuebernahme(paket.warenuebernahme || {}).aktiv ? 'checked' : ''}>
                             <span class="font-semibold text-gray-700">Warenübernahme aktiv</span>
