@@ -1159,25 +1159,91 @@ function renderInhaltZuordnungModal() {
             return sum + getPaketZuordnungMengeForItem(candidate, item.inhaltId);
         }, 0);
         const maxForThis = Math.max(0, item.menge - assignedOther);
-        const offen = Math.max(0, item.menge - assignedOther - thisAssigned);
 
         return `
-            <div class="rounded-lg border border-gray-200 bg-white p-3 space-y-2 sendung-zuordnung-row" data-inhalt-id="${item.inhaltId}" data-menge-total="${item.menge}" data-assigned-other="${assignedOther}">
+            <div class="rounded-lg border border-gray-200 bg-white p-3 space-y-2 sendung-zuordnung-row" data-inhalt-id="${item.inhaltId}" data-max-for-this="${maxForThis}" data-counter="0">
                 <div class="flex items-center justify-between gap-3 flex-wrap">
                     <div class="font-semibold text-sm text-gray-800">${item.bezeichnung}</div>
                     <div class="text-xs text-gray-600">Gesamt: <span class="font-bold">${item.menge}</span> • Andere Pakete: <span class="font-bold">${assignedOther}</span></div>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
-                    <label class="text-xs text-gray-600">
-                        Diesem Paket
-                        <input type="number" min="0" max="${maxForThis}" step="1" value="${thisAssigned}" class="sendung-zuordnung-menge-input mt-1 w-full p-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 text-sm" data-inhalt-id="${item.inhaltId}">
-                    </label>
-                    <div class="text-xs text-gray-600">Max möglich: <span class="font-bold text-indigo-700">${maxForThis}</span></div>
-                    <div class="text-xs text-gray-600">Offener Pot danach: <span class="font-bold text-indigo-700">${offen}</span></div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" class="sendung-zuordnung-minus-btn w-9 h-9 rounded-full bg-gray-100 text-gray-700 font-bold text-lg leading-none hover:bg-gray-200 transition">-</button>
+                    <div class="px-3 py-1.5 rounded-lg bg-indigo-100 text-indigo-800 font-bold text-sm min-w-[4rem] text-center">
+                        <span class="sendung-zuordnung-counter-value">0</span>
+                    </div>
+                    <button type="button" class="sendung-zuordnung-plus-btn w-9 h-9 rounded-full bg-indigo-600 text-white font-bold text-lg leading-none hover:bg-indigo-700 transition">+</button>
+                    ${maxForThis > 10
+                        ? `<div class="flex items-center gap-1 ml-auto">
+                            <input type="number" min="1" step="1" class="sendung-zuordnung-quick-add-input w-20 p-1.5 border border-gray-300 rounded text-xs" placeholder="Anzahl">
+                            <button type="button" class="sendung-zuordnung-quick-add-btn px-2.5 py-1.5 rounded bg-indigo-500 text-white text-xs font-bold hover:bg-indigo-600 transition">+ Buchen</button>
+                        </div>`
+                        : ''}
+                </div>
+                <div class="text-xs text-gray-600 flex flex-wrap gap-3">
+                    <span>Max möglich: <span class="font-bold text-indigo-700">${maxForThis}</span></span>
+                    <span>Gezählt: <span class="font-bold text-indigo-700 sendung-zuordnung-counter-value">0</span></span>
+                    <span>Noch frei: <span class="font-bold text-indigo-700 sendung-zuordnung-remaining-value">${maxForThis}</span></span>
+                    ${thisAssigned > 0 ? `<span>Bisher gespeichert: <span class="font-bold text-gray-700">${thisAssigned}</span></span>` : ''}
                 </div>
             </div>
         `;
     }).join('');
+
+    rows.querySelectorAll('.sendung-zuordnung-row').forEach((row) => {
+        const maxForThis = Number.parseInt(row.dataset.maxForThis || '0', 10);
+
+        const renderCounter = (nextValue) => {
+            const safeValue = Number.isFinite(nextValue) ? Math.max(0, Math.min(maxForThis, nextValue)) : 0;
+            row.dataset.counter = String(safeValue);
+
+            row.querySelectorAll('.sendung-zuordnung-counter-value').forEach((element) => {
+                element.textContent = String(safeValue);
+            });
+
+            const remainingElement = row.querySelector('.sendung-zuordnung-remaining-value');
+            if (remainingElement) {
+                remainingElement.textContent = String(Math.max(0, maxForThis - safeValue));
+            }
+        };
+
+        renderCounter(0);
+
+        const minusBtn = row.querySelector('.sendung-zuordnung-minus-btn');
+        const plusBtn = row.querySelector('.sendung-zuordnung-plus-btn');
+        const quickAddInput = row.querySelector('.sendung-zuordnung-quick-add-input');
+        const quickAddBtn = row.querySelector('.sendung-zuordnung-quick-add-btn');
+
+        if (minusBtn) {
+            minusBtn.onclick = () => {
+                const currentValue = Number.parseInt(row.dataset.counter || '0', 10);
+                renderCounter((Number.isFinite(currentValue) ? currentValue : 0) - 1);
+            };
+        }
+
+        if (plusBtn) {
+            plusBtn.onclick = () => {
+                const currentValue = Number.parseInt(row.dataset.counter || '0', 10);
+                renderCounter((Number.isFinite(currentValue) ? currentValue : 0) + 1);
+            };
+        }
+
+        if (quickAddBtn && quickAddInput) {
+            quickAddBtn.onclick = () => {
+                const currentValue = Number.parseInt(row.dataset.counter || '0', 10);
+                const addRaw = Number.parseInt(quickAddInput.value || '0', 10);
+                const addValue = Number.isFinite(addRaw) && addRaw > 0 ? addRaw : 0;
+                renderCounter((Number.isFinite(currentValue) ? currentValue : 0) + addValue);
+                quickAddInput.value = '';
+                quickAddInput.focus();
+            };
+
+            quickAddInput.onkeydown = (event) => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                quickAddBtn.click();
+            };
+        }
+    });
 
     const totalOffen = currentOffenerInhaltPot.reduce((sum, entry) => sum + (entry.mengeOffen || 0), 0);
     hint.textContent = `Aktueller Zuordnungs-Pot: ${totalOffen} Stück`;
@@ -1210,15 +1276,10 @@ function applyInhaltZuordnungModal() {
     rows.forEach((row) => {
         const inhaltId = String(row.dataset.inhaltId || '').trim();
         if (!inhaltId) return;
-        const total = Number.parseInt(row.dataset.mengeTotal || '0', 10);
-        const assignedOther = Number.parseInt(row.dataset.assignedOther || '0', 10);
-        const maxForThis = Math.max(0, total - assignedOther);
-        const input = row.querySelector('.sendung-zuordnung-menge-input');
-        const rawValue = Number.parseInt(input?.value || '0', 10);
-        const mengeSoll = Number.isFinite(rawValue) ? Math.max(0, Math.min(maxForThis, rawValue)) : 0;
-        if (input) {
-            input.value = String(mengeSoll);
-        }
+        const maxForThisRaw = Number.parseInt(row.dataset.maxForThis || '0', 10);
+        const maxForThis = Number.isFinite(maxForThisRaw) && maxForThisRaw >= 0 ? maxForThisRaw : 0;
+        const rawCounter = Number.parseInt(row.dataset.counter || '0', 10);
+        const mengeSoll = Number.isFinite(rawCounter) ? Math.max(0, Math.min(maxForThis, rawCounter)) : 0;
         if (mengeSoll > 0) {
             entries.push({ inhaltId, mengeSoll });
         }
@@ -1269,26 +1330,40 @@ function renderWarenuebernahmeModal() {
         rows.innerHTML = zuordnung.map((entry) => {
             const inhalt = inhaltById.get(entry.inhaltId);
             const existing = positionById.get(entry.inhaltId);
-            const mengeIst = Number.isFinite(existing?.mengeIst) ? existing.mengeIst : entry.mengeSoll;
-            const autoTyp = computeAbweichungstypFromSollIst(entry.mengeSoll, mengeIst);
+            const autoTyp = computeAbweichungstypFromSollIst(entry.mengeSoll, 0);
             const selectedTyp = existing?.abweichungstyp || autoTyp;
             const kommentar = existing?.kommentar || '';
 
             return `
-                <div class="sendung-wa-row rounded-lg border border-gray-200 bg-white p-3 space-y-2" data-inhalt-id="${entry.inhaltId}" data-menge-soll="${entry.mengeSoll}">
+                <div class="sendung-wa-row rounded-lg border border-gray-200 bg-white p-3 space-y-2" data-inhalt-id="${entry.inhaltId}" data-menge-soll="${entry.mengeSoll}" data-counter="0">
                     <div class="flex items-center justify-between gap-2 flex-wrap">
                         <div class="font-semibold text-sm text-gray-800">${inhalt?.bezeichnung || 'Artikel'}</div>
                         <span class="text-xs px-2 py-1 rounded bg-amber-100 text-amber-800 font-bold">Soll: ${entry.mengeSoll}</span>
                     </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" class="sendung-wa-minus-btn w-9 h-9 rounded-full bg-gray-100 text-gray-700 font-bold text-lg leading-none hover:bg-gray-200 transition">-</button>
+                        <div class="px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-sm min-w-[4rem] text-center">
+                            <span class="sendung-wa-counter-value">0</span>
+                        </div>
+                        <button type="button" class="sendung-wa-plus-btn w-9 h-9 rounded-full bg-emerald-600 text-white font-bold text-lg leading-none hover:bg-emerald-700 transition">+</button>
+                        ${entry.mengeSoll > 10
+                            ? `<div class="flex items-center gap-1 ml-auto">
+                                <input type="number" min="1" step="1" class="sendung-wa-quick-add-input w-20 p-1.5 border border-gray-300 rounded text-xs" placeholder="Anzahl">
+                                <button type="button" class="sendung-wa-quick-add-btn px-2.5 py-1.5 rounded bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 transition">+ Buchen</button>
+                            </div>`
+                            : ''}
+                    </div>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-                        <label class="text-xs text-gray-600">Ist-Menge
-                            <input type="number" min="0" step="1" class="sendung-wa-ist-input mt-1 w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 text-sm" value="${mengeIst}">
-                        </label>
                         <label class="text-xs text-gray-600">Abweichung
                             <select class="sendung-wa-typ-select mt-1 w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 text-sm bg-white">
                                 ${Object.entries(WARENUEBERNAHME_ABWEICHUNG_OPTIONS).map(([key, label]) => `<option value="${key}" ${selectedTyp === key ? 'selected' : ''}>${label}</option>`).join('')}
                             </select>
                         </label>
+                        <div class="text-xs text-gray-600">
+                            <div>Gezählt: <span class="font-bold text-emerald-700 sendung-wa-counter-value">0</span></div>
+                            <div>Rest zu Soll: <span class="font-bold text-emerald-700 sendung-wa-remaining-value">${entry.mengeSoll}</span></div>
+                            <div>Auto: <span class="font-bold text-amber-700 sendung-wa-auto-typ">${WARENUEBERNAHME_ABWEICHUNG_OPTIONS[autoTyp] || autoTyp}</span></div>
+                        </div>
                         <label class="text-xs text-gray-600">Kommentar
                             <input type="text" class="sendung-wa-kommentar-input mt-1 w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 text-sm" value="${kommentar}" placeholder="Optional">
                         </label>
@@ -1296,6 +1371,80 @@ function renderWarenuebernahmeModal() {
                 </div>
             `;
         }).join('');
+
+        rows.querySelectorAll('.sendung-wa-row').forEach((row) => {
+            const mengeSoll = Number.parseInt(row.dataset.mengeSoll || '0', 10);
+            const typSelect = row.querySelector('.sendung-wa-typ-select');
+            if (typSelect) {
+                typSelect.dataset.manualOverride = 'false';
+                typSelect.onchange = () => {
+                    typSelect.dataset.manualOverride = 'true';
+                };
+            }
+
+            const renderCounter = (nextValue) => {
+                const safeValue = Number.isFinite(nextValue) ? Math.max(0, nextValue) : 0;
+                row.dataset.counter = String(safeValue);
+
+                row.querySelectorAll('.sendung-wa-counter-value').forEach((element) => {
+                    element.textContent = String(safeValue);
+                });
+
+                const remainingElement = row.querySelector('.sendung-wa-remaining-value');
+                if (remainingElement) {
+                    remainingElement.textContent = String(Math.abs(mengeSoll - safeValue));
+                }
+
+                const autoTyp = computeAbweichungstypFromSollIst(mengeSoll, safeValue);
+                const autoTypLabel = WARENUEBERNAHME_ABWEICHUNG_OPTIONS[autoTyp] || autoTyp;
+                const autoTypElement = row.querySelector('.sendung-wa-auto-typ');
+                if (autoTypElement) {
+                    autoTypElement.textContent = autoTypLabel;
+                }
+
+                if (typSelect && typSelect.dataset.manualOverride !== 'true') {
+                    typSelect.value = autoTyp;
+                }
+            };
+
+            renderCounter(0);
+
+            const minusBtn = row.querySelector('.sendung-wa-minus-btn');
+            const plusBtn = row.querySelector('.sendung-wa-plus-btn');
+            const quickAddInput = row.querySelector('.sendung-wa-quick-add-input');
+            const quickAddBtn = row.querySelector('.sendung-wa-quick-add-btn');
+
+            if (minusBtn) {
+                minusBtn.onclick = () => {
+                    const currentValue = Number.parseInt(row.dataset.counter || '0', 10);
+                    renderCounter((Number.isFinite(currentValue) ? currentValue : 0) - 1);
+                };
+            }
+
+            if (plusBtn) {
+                plusBtn.onclick = () => {
+                    const currentValue = Number.parseInt(row.dataset.counter || '0', 10);
+                    renderCounter((Number.isFinite(currentValue) ? currentValue : 0) + 1);
+                };
+            }
+
+            if (quickAddBtn && quickAddInput) {
+                quickAddBtn.onclick = () => {
+                    const currentValue = Number.parseInt(row.dataset.counter || '0', 10);
+                    const addRaw = Number.parseInt(quickAddInput.value || '0', 10);
+                    const addValue = Number.isFinite(addRaw) && addRaw > 0 ? addRaw : 0;
+                    renderCounter((Number.isFinite(currentValue) ? currentValue : 0) + addValue);
+                    quickAddInput.value = '';
+                    quickAddInput.focus();
+                };
+
+                quickAddInput.onkeydown = (event) => {
+                    if (event.key !== 'Enter') return;
+                    event.preventDefault();
+                    quickAddBtn.click();
+                };
+            }
+        });
     }
 
     const problemBadges = warenuebernahme.problemartikel.length > 0
@@ -1345,11 +1494,10 @@ function collectWarenuebernahmeFromModal(markCompleted = false) {
         const mengeSoll = Number.parseInt(row.dataset.mengeSoll || '0', 10);
         if (!inhaltId || !Number.isFinite(mengeSoll) || mengeSoll <= 0) return;
 
-        const istInput = row.querySelector('.sendung-wa-ist-input');
         const typSelect = row.querySelector('.sendung-wa-typ-select');
         const kommentarInput = row.querySelector('.sendung-wa-kommentar-input');
 
-        const mengeIstRaw = Number.parseInt(istInput?.value || '0', 10);
+        const mengeIstRaw = Number.parseInt(row.dataset.counter || '0', 10);
         const mengeIst = Number.isFinite(mengeIstRaw) && mengeIstRaw >= 0 ? mengeIstRaw : 0;
         const selectedTypRaw = String(typSelect?.value || 'ok').trim().toLowerCase();
         const selectedTyp = Object.prototype.hasOwnProperty.call(WARENUEBERNAHME_ABWEICHUNG_OPTIONS, selectedTypRaw)
@@ -1765,13 +1913,18 @@ function renderPaketeEditor() {
             <div class="rounded-lg border border-amber-200 bg-white p-3">
                 <div class="flex items-center justify-between gap-2 flex-wrap">
                     <h5 class="font-bold text-amber-800">📦 Paket ${paketIndex + 1}</h5>
-                    <div class="flex items-center gap-2">
-                        <select class="sendung-paket-status-select p-2 border-2 border-gray-300 rounded-lg bg-white text-sm" data-paket-index="${paketIndex}" data-warenuebernahme-locked="${statusLocked ? 'true' : 'false'}">
-                            ${statusOptions}
-                        </select>
-                        ${paketIndex === 0
-                            ? ''
-                            : `<button type="button" class="sendung-remove-paket-btn px-2.5 py-1.5 rounded-lg bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition" data-paket-index="${paketIndex}" title="Paket entfernen">- Paket</button>`}
+                    <div class="flex flex-col items-end gap-1">
+                        <div class="flex items-center gap-2">
+                            <select class="sendung-paket-status-select p-2 border-2 border-gray-300 rounded-lg bg-white text-sm" data-paket-index="${paketIndex}" data-warenuebernahme-locked="${statusLocked ? 'true' : 'false'}">
+                                ${statusOptions}
+                            </select>
+                            ${paketIndex === 0
+                                ? ''
+                                : `<button type="button" class="sendung-remove-paket-btn sendung-editmode-only px-2.5 py-1.5 rounded-lg bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition" data-paket-index="${paketIndex}" title="Paket entfernen">- Paket</button>`}
+                        </div>
+                        ${(isEmpfang && statusLocked)
+                            ? `<button type="button" class="sendung-open-warenuebernahme-btn sendung-readmode-only hidden px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition" data-paket-index="${paketIndex}">Warenübernahme öffnen</button>`
+                            : ''}
                     </div>
                 </div>
 
@@ -1787,9 +1940,7 @@ function renderPaketeEditor() {
                             <input type="checkbox" class="sendung-paket-warenuebernahme-toggle" data-paket-index="${paketIndex}" ${normalizeWarenuebernahme(paket.warenuebernahme || {}).aktiv ? 'checked' : ''}>
                             <span class="font-semibold text-gray-700">Warenübernahme aktiv</span>
                         </label>
-                        ${statusLocked
-                            ? `<button type="button" class="sendung-open-warenuebernahme-btn sendung-readmode-only hidden px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition" data-paket-index="${paketIndex}">Warenübernahme öffnen</button>`
-                            : ''}
+                        <div class="sendung-editmode-only"></div>
                     </div>`
                     : ''}
 
