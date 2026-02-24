@@ -227,6 +227,23 @@ function collectTransportEntries() {
     }));
 }
 
+function getSendungTransportEntries(sendung) {
+    const entries = Array.isArray(sendung?.transportEntries)
+        ? sendung.transportEntries.map(normalizeTransportEntry).filter((entry) => entry.anbieter || entry.transportnummer)
+        : [];
+
+    if (entries.length > 0) {
+        return entries;
+    }
+
+    const legacyEntry = normalizeTransportEntry({
+        anbieter: sendung?.anbieter,
+        transportnummer: sendung?.transportnummer
+    });
+
+    return (legacyEntry.anbieter || legacyEntry.transportnummer) ? [legacyEntry] : [];
+}
+
 export function initializeSendungsverwaltungView() {
     if (!currentUser || !currentUser.mode) {
         console.log('[Sendungsverwaltung] User nicht geladen');
@@ -1282,24 +1299,28 @@ function renderSendungen(sendungen) {
 
     sendungen.forEach(sendung => {
         const card = document.getElementById(`sendung-${sendung.id}`);
-        if (card) {
-            card.onclick = () => openSendungModal(sendung.id);
-        }
+        if (!card) return;
 
-        const copyBtn = document.getElementById(`copy-tracking-${sendung.id}`);
-        if (copyBtn) {
+        card.onclick = () => openSendungModal(sendung.id);
+
+        const transportEntries = getSendungTransportEntries(sendung);
+
+        const copyButtons = card.querySelectorAll('[data-copy-transport-index]');
+        copyButtons.forEach((copyBtn) => {
             copyBtn.onclick = (e) => {
                 e.stopPropagation();
-                copyToClipboard(sendung.transportnummer);
+                const index = Number.parseInt(copyBtn.dataset.copyTransportIndex || '-1', 10);
+                const entry = transportEntries[index];
+                copyToClipboard(entry?.transportnummer || '');
             };
-        }
+        });
 
-        const trackingLink = document.getElementById(`tracking-link-${sendung.id}`);
-        if (trackingLink) {
+        const trackingLinks = card.querySelectorAll('[data-tracking-link]');
+        trackingLinks.forEach((trackingLink) => {
             trackingLink.onclick = (e) => {
                 e.stopPropagation();
             };
-        }
+        });
     });
 }
 
@@ -1307,37 +1328,52 @@ function createSendungCard(sendung) {
     const statusInfo = STATUS_CONFIG[sendung.status] || STATUS_CONFIG.erwartet;
     const typInfo = TYP_CONFIG[sendung.typ] || TYP_CONFIG.empfang;
     const prioritaetInfo = PRIORITAET_CONFIG[sendung.prioritaet] || PRIORITAET_CONFIG.normal;
+    const transportEntries = getSendungTransportEntries(sendung);
 
     const deadlineText = getDeadlineText(sendung);
-    const trackingUrl = getTrackingUrl(sendung.anbieter, sendung.transportnummer);
     const cardLayoutClass = sendungViewMode === 'grid' ? 'h-full' : '';
+
+    const transportEntriesDisplay = transportEntries.length > 0
+        ? transportEntries.map((entry, index) => {
+            const trackingUrl = getTrackingUrl(entry.anbieter, entry.transportnummer);
+            const transportnummerDisplay = entry.transportnummer
+                ? `
+                    <span class="text-gray-500">•</span>
+                    <code class="bg-gray-100 px-2 py-0.5 rounded break-all">${entry.transportnummer}</code>
+                    <button type="button" data-copy-transport-index="${index}" class="text-amber-600 hover:text-amber-800 ml-1" title="Kopieren">
+                        📋
+                    </button>
+                    ${trackingUrl ? `<a data-tracking-link="true" href="${trackingUrl}" target="_blank" class="text-blue-600 hover:text-blue-800 ml-1" title="Tracking öffnen">🔗</a>` : ''}
+                `
+                : '<span class="text-xs text-gray-500">(Keine Transportnummer)</span>';
+
+            return `
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-semibold">🚚 ${entry.anbieter || 'Kein Anbieter'}</span>
+                    ${transportnummerDisplay}
+                </div>
+            `;
+        }).join('')
+        : `
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-semibold">🚚 Kein Anbieter</span>
+                <span class="text-xs text-gray-500">(Keine Transportnummer)</span>
+            </div>
+        `;
 
     if (!sendungShowDetails) {
         return `
             <div id="sendung-${sendung.id}" class="card bg-white p-4 rounded-xl shadow-lg hover:shadow-xl transition cursor-pointer border-l-4 ${getBorderColor(sendung.typ)} ${cardLayoutClass}">
                 <h3 class="text-lg font-bold ${typInfo.color} break-words mb-3">${sendung.beschreibung}</h3>
                 <div class="space-y-2 text-sm">
-                    <div>
-                        ${trackingUrl
-                            ? `<a id="tracking-link-${sendung.id}" href="${trackingUrl}" target="_blank" class="text-blue-600 hover:text-blue-800 font-semibold">🔗 Tracking öffnen</a>`
-                            : '<span class="text-gray-400">🔗 Kein Tracking-Link verfügbar</span>'}
+                    <div class="space-y-1">
+                        ${transportEntriesDisplay}
                     </div>
                     <p class="font-semibold text-orange-600">${deadlineText ? `⏰ ${deadlineText}` : '⏰ Keine Deadline gesetzt'}</p>
                 </div>
             </div>
         `;
     }
-
-    const transportnummerDisplay = sendung.transportnummer
-        ? `
-                    <span class="text-gray-500">•</span>
-                    <code class="bg-gray-100 px-2 py-0.5 rounded break-all">${sendung.transportnummer}</code>
-                    <button id="copy-tracking-${sendung.id}" class="text-amber-600 hover:text-amber-800 ml-1" title="Kopieren">
-                        📋
-                    </button>
-                    ${trackingUrl ? `<a id="tracking-link-${sendung.id}" href="${trackingUrl}" target="_blank" class="text-blue-600 hover:text-blue-800 ml-1" title="Tracking öffnen">🔗</a>` : ''}
-                `
-        : '<span class="text-xs text-gray-500">(Keine Transportnummer)</span>';
 
     const prioritaetBadge = sendung.prioritaet !== 'normal' 
         ? `<span class="text-xs px-2 py-1 rounded-full ${prioritaetInfo.badge}">${prioritaetInfo.icon} ${prioritaetInfo.label}</span>`
@@ -1374,10 +1410,7 @@ function createSendungCard(sendung) {
             </div>
 
             <div class="ml-8 space-y-1 text-sm text-gray-700">
-                <div class="flex items-center gap-2 flex-wrap">
-                    <span class="font-semibold">🚚 ${sendung.anbieter || 'Kein Anbieter'}</span>
-                    ${transportnummerDisplay}
-                </div>
+                ${transportEntriesDisplay}
                 ${sendung.absender ? `<p class="break-words">📤 Von: ${sendung.absender}</p>` : ''}
                 ${sendung.empfaenger ? `<p class="break-words">📥 An: ${sendung.empfaenger}</p>` : ''}
                 ${deadlineText ? `<p class="font-semibold text-orange-600">⏰ ${deadlineText}</p>` : ''}
