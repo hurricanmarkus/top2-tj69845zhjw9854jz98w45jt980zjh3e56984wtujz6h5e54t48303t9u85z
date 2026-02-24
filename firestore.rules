@@ -35,6 +35,14 @@ service cloud.firestore {
       return hasAppUserIdClaim() && appUserId() == userId;
     }
 
+    function sendungDocPath(sendungId) {
+      return /databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/public/data/sendungen/$(sendungId);
+    }
+
+    function isSendungOwner(sendungId) {
+      return hasAppUserIdClaim() && exists(sendungDocPath(sendungId)) && get(sendungDocPath(sendungId)).data.createdBy == appUserId();
+    }
+
     function isUserConfigKeyUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['key']);
     }
@@ -389,6 +397,19 @@ service cloud.firestore {
       allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
       allow update: if hasAppUserIdClaim() && resource.data.createdBy == appUserId() && request.resource.data.createdBy == appUserId();
       allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+
+      // Audit-Log der Warenübernahme (Empfang)
+      // Nur Besitzer der Sendung dürfen lesen/erstellen. Einträge sind unveränderlich.
+      match /warenuebernahme_audit/{auditId} {
+        allow read: if isSendungOwner(sendungId);
+        allow create: if isSendungOwner(sendungId)
+          && request.resource.data.action is string
+          && request.resource.data.paketId is string
+          && request.resource.data.uebernahmeId is string
+          && request.resource.data.clientTimestamp is string
+          && request.resource.data.payloadDelta is map;
+        allow update, delete: if false;
+      }
     }
 
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/sendungen_anbieter/{anbieterId} {

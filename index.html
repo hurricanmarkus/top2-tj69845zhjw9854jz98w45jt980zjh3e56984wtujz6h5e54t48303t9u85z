@@ -8311,7 +8311,10 @@
                     <h3 id="sendungWarenuebernahmeTitle" class="text-base md:text-lg font-bold text-emerald-800">Warenübernahme</h3>
                     <p id="sendungWarenuebernahmeSubtitle" class="text-xs text-gray-600">Status: Offen</p>
                 </div>
-                <button id="closeSendungWarenuebernahmeModal" type="button" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
+                <div class="flex items-center gap-2">
+                    <button id="resetSendungWarenuebernahmeBtn" type="button" class="px-3 py-1.5 rounded-lg bg-red-100 text-red-700 text-xs font-bold hover:bg-red-200 transition">Warenübernahme zurücksetzen</button>
+                    <button id="closeSendungWarenuebernahmeModal" type="button" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
+                </div>
             </div>
 
             <div class="px-4 py-3 border-b border-gray-100 bg-red-50">
@@ -8322,8 +8325,7 @@
             <div id="sendungWarenuebernahmeRows" class="p-4 space-y-3 overflow-y-auto"></div>
 
             <div class="p-4 border-t border-gray-200 bg-white flex flex-wrap justify-end gap-2">
-                <button type="button" id="saveSendungWarenuebernahmeBtn" class="px-4 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 transition">Zwischenstand speichern</button>
-                <button type="button" id="completeSendungWarenuebernahmeBtn" class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition">Warenübernahme abschließen</button>
+                <button type="button" id="saveSendungWarenuebernahmeBtn" class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition">Buchen</button>
             </div>
         </div>
     </div>

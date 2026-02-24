@@ -150,12 +150,16 @@ const EMPTY_TRANSPORT_ENTRY = Object.freeze({
 const WARENUEBERNAHME_STATUS_VALUES = ['offen', 'in_pruefung', 'abgeschlossen', 'problem'];
 const WARENUEBERNAHME_ABWEICHUNG_OPTIONS = {
     ok: 'OK',
+    nicht_geprueft: 'Nicht geprüft',
     fehlt: 'Fehlt',
     zuviel: 'Zuviel',
     defekt: 'Defekt',
     vertauscht: 'Vertauscht',
     unbekannt: 'Unbekannt'
 };
+const WARENUEBERNAHME_PROBLEM_TYPEN = ['fehlt', 'zuviel', 'defekt', 'vertauscht', 'unbekannt'];
+const WARENUEBERNAHME_RESET_REQUIRED_CLICKS = 5;
+const WARENUEBERNAHME_RESET_WINDOW_MS = 5000;
 
 let currentSendungPakete = [];
 let statusOverrideActive = false;
@@ -166,6 +170,7 @@ let currentWarenuebernahmeProblemPot = [];
 let currentZuordnungPaketIndex = null;
 let currentWarenuebernahmePaketIndex = null;
 let registeredEmpfaengerVornamen = [];
+let warenuebernahmeResetClickTimestamps = [];
 
 function normalizeStatus(status) {
     const normalized = String(status || '').trim().toLowerCase();
@@ -238,9 +243,24 @@ function normalizeInhaltZuordnungEntry(entry = {}) {
     };
 }
 
+function normalizeProblemVerteilung(raw = {}) {
+    const source = (raw && typeof raw === 'object') ? raw : {};
+    const normalized = {};
+
+    WARENUEBERNAHME_PROBLEM_TYPEN.forEach((typ) => {
+        const mengeRaw = Number.parseInt(source[typ], 10);
+        if (Number.isFinite(mengeRaw) && mengeRaw > 0) {
+            normalized[typ] = mengeRaw;
+        }
+    });
+
+    return normalized;
+}
+
 function normalizeWarenuebernahmePosition(position = {}) {
     const mengeSollRaw = Number.parseInt(position?.mengeSoll, 10);
     const mengeIstRaw = Number.parseInt(position?.mengeIst, 10);
+    const problemVerteilung = normalizeProblemVerteilung(position?.problemVerteilung || {});
     const rawTyp = String(position?.abweichungstyp || 'ok').trim().toLowerCase();
     const abweichungstyp = Object.prototype.hasOwnProperty.call(WARENUEBERNAHME_ABWEICHUNG_OPTIONS, rawTyp)
         ? rawTyp
@@ -251,6 +271,7 @@ function normalizeWarenuebernahmePosition(position = {}) {
         mengeSoll: Number.isFinite(mengeSollRaw) && mengeSollRaw > 0 ? mengeSollRaw : 0,
         mengeIst: Number.isFinite(mengeIstRaw) && mengeIstRaw >= 0 ? mengeIstRaw : 0,
         abweichungstyp,
+        problemVerteilung,
         kommentar: String(position?.kommentar || '').trim(),
         bestaetigtAt: position?.bestaetigtAt || null
     };
@@ -1166,18 +1187,18 @@ function renderInhaltZuordnungModal() {
                     <div class="font-semibold text-sm text-gray-800">${item.bezeichnung}</div>
                     <div class="text-xs text-gray-600">Gesamt: <span class="font-bold">${item.menge}</span> • Andere Pakete: <span class="font-bold">${assignedOther}</span></div>
                 </div>
-                <div class="flex flex-wrap items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2 justify-start">
                     <button type="button" class="sendung-zuordnung-minus-btn w-9 h-9 rounded-full bg-gray-100 text-gray-700 font-bold text-lg leading-none hover:bg-gray-200 transition">-</button>
-                    <div class="px-3 py-1.5 rounded-lg bg-indigo-100 text-indigo-800 font-bold text-sm min-w-[4rem] text-center">
-                        <span class="sendung-zuordnung-counter-value">0</span>
-                    </div>
-                    <button type="button" class="sendung-zuordnung-plus-btn w-9 h-9 rounded-full bg-indigo-600 text-white font-bold text-lg leading-none hover:bg-indigo-700 transition">+</button>
                     ${maxForThis > 10
-                        ? `<div class="flex items-center gap-1 ml-auto">
+                        ? `<div class="flex items-center gap-1">
                             <input type="number" min="1" step="1" class="sendung-zuordnung-quick-add-input w-20 p-1.5 border border-gray-300 rounded text-xs" placeholder="Anzahl">
                             <button type="button" class="sendung-zuordnung-quick-add-btn px-2.5 py-1.5 rounded bg-indigo-500 text-white text-xs font-bold hover:bg-indigo-600 transition">+ Buchen</button>
                         </div>`
                         : ''}
+                    <button type="button" class="sendung-zuordnung-plus-btn w-9 h-9 rounded-full bg-indigo-600 text-white font-bold text-lg leading-none hover:bg-indigo-700 transition">+</button>
+                    <div class="px-3 py-1.5 rounded-lg bg-indigo-100 text-indigo-800 font-bold text-sm min-w-[4rem] text-center">
+                        <span class="sendung-zuordnung-counter-value">0</span>
+                    </div>
                 </div>
                 <div class="text-xs text-gray-600 flex flex-wrap gap-3">
                     <span>Max möglich: <span class="font-bold text-indigo-700">${maxForThis}</span></span>
@@ -1296,6 +1317,7 @@ function closeWarenuebernahmeModal() {
     const modal = document.getElementById('sendungWarenuebernahmeModal');
     const rows = document.getElementById('sendungWarenuebernahmeRows');
     currentWarenuebernahmePaketIndex = null;
+    resetWarenuebernahmeResetSequence();
     if (!modal) return;
     modal.classList.add('hidden');
     modal.classList.remove('flex');
@@ -1316,6 +1338,16 @@ function renderWarenuebernahmeModal() {
     const positionById = new Map(
         warenuebernahme.positionen.map((position) => [position.inhaltId, position])
     );
+    const problemByInhaltTyp = new Map();
+    warenuebernahme.problemartikel.forEach((problem) => {
+        const inhaltId = String(problem?.inhaltId || '').trim();
+        const typ = String(problem?.typ || '').trim().toLowerCase();
+        const mengeRaw = Number.parseInt(problem?.mengeProblem, 10);
+        if (!inhaltId || !WARENUEBERNAHME_PROBLEM_TYPEN.includes(typ)) return;
+        if (!Number.isFinite(mengeRaw) || mengeRaw <= 0) return;
+        const key = `${inhaltId}__${typ}`;
+        problemByInhaltTyp.set(key, (problemByInhaltTyp.get(key) || 0) + mengeRaw);
+    });
 
     const zuordnung = Array.isArray(paket.inhaltZuordnung)
         ? paket.inhaltZuordnung.map(normalizeInhaltZuordnungEntry).filter((entry) => entry.inhaltId && entry.mengeSoll > 0)
@@ -1330,131 +1362,320 @@ function renderWarenuebernahmeModal() {
         rows.innerHTML = zuordnung.map((entry) => {
             const inhalt = inhaltById.get(entry.inhaltId);
             const existing = positionById.get(entry.inhaltId);
-            const autoTyp = computeAbweichungstypFromSollIst(entry.mengeSoll, 0);
-            const selectedTyp = existing?.abweichungstyp || autoTyp;
+            const existingProblemVerteilung = normalizeProblemVerteilung(existing?.problemVerteilung || {});
+            const geliefertInitial = Number.isFinite(existing?.mengeIst) && existing.mengeIst >= 0 ? existing.mengeIst : 0;
+            const problemInitialMap = {};
+            let problemInitialTotal = 0;
+
+            WARENUEBERNAHME_PROBLEM_TYPEN.forEach((typ) => {
+                const fallbackMenge = problemByInhaltTyp.get(`${entry.inhaltId}__${typ}`) || 0;
+                const initial = Math.max(0, existingProblemVerteilung[typ] || fallbackMenge);
+                if (initial > 0) {
+                    problemInitialMap[typ] = initial;
+                    problemInitialTotal += initial;
+                }
+            });
+
+            const ungeprueftInitial = Math.max(0, entry.mengeSoll - geliefertInitial - problemInitialTotal);
+            const geprueftInitial = geliefertInitial + problemInitialTotal;
             const kommentar = existing?.kommentar || '';
 
+            const problemControls = WARENUEBERNAHME_PROBLEM_TYPEN.map((typ) => {
+                const initial = problemInitialMap[typ] || 0;
+                return `
+                    <div class="sendung-wa-problem-counter rounded-lg border border-gray-200 bg-white p-2" data-problem-typ="${typ}" data-counter="${initial}">
+                        <div class="text-xs font-semibold text-gray-700 mb-1">${WARENUEBERNAHME_ABWEICHUNG_OPTIONS[typ] || typ}</div>
+                        <div class="flex flex-wrap items-center gap-2 justify-start">
+                            <button type="button" class="sendung-wa-problem-minus-btn w-7 h-7 rounded-full bg-gray-100 text-gray-700 font-bold leading-none hover:bg-gray-200 transition">-</button>
+                            ${entry.mengeSoll > 10
+                                ? `<div class="flex items-center gap-1">
+                                    <input type="number" min="1" step="1" class="sendung-wa-problem-quick-add-input w-16 p-1 border border-gray-300 rounded text-xs" placeholder="Anzahl">
+                                    <button type="button" class="sendung-wa-problem-quick-add-btn px-2 py-1 rounded bg-emerald-500 text-white text-[11px] font-bold hover:bg-emerald-600 transition">+ Buchen</button>
+                                </div>`
+                                : ''}
+                            <button type="button" class="sendung-wa-problem-plus-btn w-7 h-7 rounded-full bg-emerald-600 text-white font-bold leading-none hover:bg-emerald-700 transition">+</button>
+                            <div class="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-bold min-w-[2.75rem] text-center">
+                                <span class="sendung-wa-problem-counter-value">${initial}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
             return `
-                <div class="sendung-wa-row rounded-lg border border-gray-200 bg-white p-3 space-y-2" data-inhalt-id="${entry.inhaltId}" data-menge-soll="${entry.mengeSoll}" data-counter="0">
+                <div class="sendung-wa-row rounded-lg border border-gray-200 bg-white p-3 space-y-3" data-inhalt-id="${entry.inhaltId}" data-menge-soll="${entry.mengeSoll}" data-counter="${geliefertInitial}" data-unchecked="${ungeprueftInitial}">
                     <div class="flex items-center justify-between gap-2 flex-wrap">
-                        <div class="font-semibold text-sm text-gray-800">${inhalt?.bezeichnung || 'Artikel'}</div>
+                        <div class="font-semibold text-sm text-gray-800 sendung-wa-item-label">${inhalt?.bezeichnung || 'Artikel'}</div>
                         <span class="text-xs px-2 py-1 rounded bg-amber-100 text-amber-800 font-bold">Soll: ${entry.mengeSoll}</span>
                     </div>
-                    <div class="flex flex-wrap items-center gap-2">
-                        <button type="button" class="sendung-wa-minus-btn w-9 h-9 rounded-full bg-gray-100 text-gray-700 font-bold text-lg leading-none hover:bg-gray-200 transition">-</button>
-                        <div class="px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-sm min-w-[4rem] text-center">
-                            <span class="sendung-wa-counter-value">0</span>
-                        </div>
-                        <button type="button" class="sendung-wa-plus-btn w-9 h-9 rounded-full bg-emerald-600 text-white font-bold text-lg leading-none hover:bg-emerald-700 transition">+</button>
+                    <div class="flex flex-wrap items-center gap-2 justify-start">
+                        <button type="button" class="sendung-wa-main-minus-btn w-9 h-9 rounded-full bg-gray-100 text-gray-700 font-bold text-lg leading-none hover:bg-gray-200 transition">-</button>
                         ${entry.mengeSoll > 10
-                            ? `<div class="flex items-center gap-1 ml-auto">
-                                <input type="number" min="1" step="1" class="sendung-wa-quick-add-input w-20 p-1.5 border border-gray-300 rounded text-xs" placeholder="Anzahl">
-                                <button type="button" class="sendung-wa-quick-add-btn px-2.5 py-1.5 rounded bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 transition">+ Buchen</button>
+                            ? `<div class="flex items-center gap-1">
+                                <input type="number" min="1" step="1" class="sendung-wa-main-quick-add-input w-20 p-1.5 border border-gray-300 rounded text-xs" placeholder="Anzahl">
+                                <button type="button" class="sendung-wa-main-quick-add-btn px-2.5 py-1.5 rounded bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 transition">+ Buchen</button>
                             </div>`
                             : ''}
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-                        <label class="text-xs text-gray-600">Abweichung
-                            <select class="sendung-wa-typ-select mt-1 w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 text-sm bg-white">
-                                ${Object.entries(WARENUEBERNAHME_ABWEICHUNG_OPTIONS).map(([key, label]) => `<option value="${key}" ${selectedTyp === key ? 'selected' : ''}>${label}</option>`).join('')}
-                            </select>
-                        </label>
-                        <div class="text-xs text-gray-600">
-                            <div>Gezählt: <span class="font-bold text-emerald-700 sendung-wa-counter-value">0</span></div>
-                            <div>Rest zu Soll: <span class="font-bold text-emerald-700 sendung-wa-remaining-value">${entry.mengeSoll}</span></div>
-                            <div>Auto: <span class="font-bold text-amber-700 sendung-wa-auto-typ">${WARENUEBERNAHME_ABWEICHUNG_OPTIONS[autoTyp] || autoTyp}</span></div>
+                        <button type="button" class="sendung-wa-main-plus-btn w-9 h-9 rounded-full bg-emerald-600 text-white font-bold text-lg leading-none hover:bg-emerald-700 transition">+</button>
+                        <div class="px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-sm min-w-[4rem] text-center">
+                            <span class="sendung-wa-main-counter-value">${geliefertInitial}</span>
                         </div>
-                        <label class="text-xs text-gray-600">Kommentar
-                            <input type="text" class="sendung-wa-kommentar-input mt-1 w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 text-sm" value="${kommentar}" placeholder="Optional">
-                        </label>
+                    </div>
+                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-2 space-y-2">
+                        <div class="text-xs font-bold text-gray-700">Abweichungen getrennt buchen</div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            ${problemControls}
+                        </div>
+                    </div>
+                    <div class="text-xs text-gray-600 flex flex-wrap gap-3">
+                        <span>Geliefert: <span class="font-bold text-emerald-700 sendung-wa-main-counter-value">${geliefertInitial}</span></span>
+                        <span>Abweichung gesamt: <span class="font-bold text-red-700 sendung-wa-problem-total">${problemInitialTotal}</span></span>
+                        <span>Geprüft: <span class="font-bold text-emerald-700 sendung-wa-checked-total">${geprueftInitial}</span> / ${entry.mengeSoll}</span>
+                        <span>Nicht geprüft: <span class="font-bold text-amber-700 sendung-wa-unchecked">${ungeprueftInitial}</span></span>
+                        <span class="font-bold ${ungeprueftInitial > 0 ? 'text-amber-700' : (problemInitialTotal > 0 ? 'text-red-700' : 'text-emerald-700')} sendung-wa-check-status">${ungeprueftInitial > 0 ? 'In Prüfung' : (problemInitialTotal > 0 ? 'Abweichung erfasst' : 'Vollständig geprüft')}</span>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-600">Kommentar</label>
+                        <input type="text" class="sendung-wa-kommentar-input mt-1 w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 text-sm" value="${kommentar}" placeholder="Optional">
                     </div>
                 </div>
             `;
         }).join('');
 
-        rows.querySelectorAll('.sendung-wa-row').forEach((row) => {
-            const mengeSoll = Number.parseInt(row.dataset.mengeSoll || '0', 10);
-            const typSelect = row.querySelector('.sendung-wa-typ-select');
-            if (typSelect) {
-                typSelect.dataset.manualOverride = 'false';
-                typSelect.onchange = () => {
-                    typSelect.dataset.manualOverride = 'true';
-                };
-            }
-
-            const renderCounter = (nextValue) => {
-                const safeValue = Number.isFinite(nextValue) ? Math.max(0, nextValue) : 0;
-                row.dataset.counter = String(safeValue);
-
-                row.querySelectorAll('.sendung-wa-counter-value').forEach((element) => {
-                    element.textContent = String(safeValue);
+        const renderProblemListFromRows = () => {
+            const badges = [];
+            rows.querySelectorAll('.sendung-wa-row').forEach((row) => {
+                const itemLabel = row.querySelector('.sendung-wa-item-label')?.textContent?.trim() || 'Artikel';
+                row.querySelectorAll('.sendung-wa-problem-counter').forEach((problemRow) => {
+                    const typ = String(problemRow.dataset.problemTyp || '').trim().toLowerCase();
+                    const mengeRaw = Number.parseInt(problemRow.dataset.counter || '0', 10);
+                    const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
+                    if (!menge || !WARENUEBERNAHME_PROBLEM_TYPEN.includes(typ)) return;
+                    const label = WARENUEBERNAHME_ABWEICHUNG_OPTIONS[typ] || typ;
+                    badges.push(`<span class="px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">${menge}x ${itemLabel} (${label})</span>`);
                 });
 
-                const remainingElement = row.querySelector('.sendung-wa-remaining-value');
-                if (remainingElement) {
-                    remainingElement.textContent = String(Math.abs(mengeSoll - safeValue));
+                const ungeprueftRaw = Number.parseInt(row.dataset.unchecked || '0', 10);
+                const ungeprueft = Number.isFinite(ungeprueftRaw) && ungeprueftRaw > 0 ? ungeprueftRaw : 0;
+                if (ungeprueft > 0) {
+                    badges.push(`<span class="px-2 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold">${ungeprueft}x ${itemLabel} (${WARENUEBERNAHME_ABWEICHUNG_OPTIONS.nicht_geprueft})</span>`);
                 }
+            });
 
-                const autoTyp = computeAbweichungstypFromSollIst(mengeSoll, safeValue);
-                const autoTypLabel = WARENUEBERNAHME_ABWEICHUNG_OPTIONS[autoTyp] || autoTyp;
-                const autoTypElement = row.querySelector('.sendung-wa-auto-typ');
-                if (autoTypElement) {
-                    autoTypElement.textContent = autoTypLabel;
-                }
+            problemList.innerHTML = badges.length > 0
+                ? badges.join(' ')
+                : '<span class="text-xs text-gray-500">Noch keine Problempositionen.</span>';
+        };
 
-                if (typSelect && typSelect.dataset.manualOverride !== 'true') {
-                    typSelect.value = autoTyp;
-                }
+        rows.querySelectorAll('.sendung-wa-row').forEach((row) => {
+            const mengeSoll = Number.parseInt(row.dataset.mengeSoll || '0', 10);
+            const updateMainCounter = (nextValue) => {
+                const safeValue = Number.isFinite(nextValue) ? Math.max(0, nextValue) : 0;
+                row.dataset.counter = String(safeValue);
+                row.querySelectorAll('.sendung-wa-main-counter-value').forEach((element) => {
+                    element.textContent = String(safeValue);
+                });
             };
 
-            renderCounter(0);
+            const updateProblemCounter = (problemRow, nextValue) => {
+                const safeValue = Number.isFinite(nextValue) ? Math.max(0, nextValue) : 0;
+                problemRow.dataset.counter = String(safeValue);
+                problemRow.querySelectorAll('.sendung-wa-problem-counter-value').forEach((element) => {
+                    element.textContent = String(safeValue);
+                });
+            };
 
-            const minusBtn = row.querySelector('.sendung-wa-minus-btn');
-            const plusBtn = row.querySelector('.sendung-wa-plus-btn');
-            const quickAddInput = row.querySelector('.sendung-wa-quick-add-input');
-            const quickAddBtn = row.querySelector('.sendung-wa-quick-add-btn');
+            const updateRowSummary = () => {
+                const geliefertRaw = Number.parseInt(row.dataset.counter || '0', 10);
+                const geliefert = Number.isFinite(geliefertRaw) && geliefertRaw > 0 ? geliefertRaw : 0;
 
-            if (minusBtn) {
-                minusBtn.onclick = () => {
+                let problemTotal = 0;
+                row.querySelectorAll('.sendung-wa-problem-counter').forEach((problemRow) => {
+                    const mengeRaw = Number.parseInt(problemRow.dataset.counter || '0', 10);
+                    const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
+                    problemTotal += menge;
+                });
+
+                const geprueftTotal = geliefert + problemTotal;
+                const ungeprueft = Math.max(0, mengeSoll - geprueftTotal);
+                row.dataset.unchecked = String(ungeprueft);
+
+                const problemTotalElement = row.querySelector('.sendung-wa-problem-total');
+                if (problemTotalElement) {
+                    problemTotalElement.textContent = String(problemTotal);
+                }
+
+                const checkedTotalElement = row.querySelector('.sendung-wa-checked-total');
+                if (checkedTotalElement) {
+                    checkedTotalElement.textContent = String(geprueftTotal);
+                }
+
+                const uncheckedElement = row.querySelector('.sendung-wa-unchecked');
+                if (uncheckedElement) {
+                    uncheckedElement.textContent = String(ungeprueft);
+                }
+
+                const statusElement = row.querySelector('.sendung-wa-check-status');
+                if (statusElement) {
+                    statusElement.classList.remove('text-amber-700', 'text-red-700', 'text-emerald-700');
+                    if (ungeprueft > 0) {
+                        statusElement.textContent = 'In Prüfung';
+                        statusElement.classList.add('text-amber-700');
+                    } else if (problemTotal > 0) {
+                        statusElement.textContent = 'Abweichung erfasst';
+                        statusElement.classList.add('text-red-700');
+                    } else {
+                        statusElement.textContent = 'Vollständig geprüft';
+                        statusElement.classList.add('text-emerald-700');
+                    }
+                }
+
+                renderProblemListFromRows();
+            };
+
+            const mainMinusBtn = row.querySelector('.sendung-wa-main-minus-btn');
+            const mainPlusBtn = row.querySelector('.sendung-wa-main-plus-btn');
+            const mainQuickAddInput = row.querySelector('.sendung-wa-main-quick-add-input');
+            const mainQuickAddBtn = row.querySelector('.sendung-wa-main-quick-add-btn');
+
+            if (mainMinusBtn) {
+                mainMinusBtn.onclick = () => {
                     const currentValue = Number.parseInt(row.dataset.counter || '0', 10);
-                    renderCounter((Number.isFinite(currentValue) ? currentValue : 0) - 1);
+                    updateMainCounter((Number.isFinite(currentValue) ? currentValue : 0) - 1);
+                    updateRowSummary();
                 };
             }
 
-            if (plusBtn) {
-                plusBtn.onclick = () => {
+            if (mainPlusBtn) {
+                mainPlusBtn.onclick = () => {
                     const currentValue = Number.parseInt(row.dataset.counter || '0', 10);
-                    renderCounter((Number.isFinite(currentValue) ? currentValue : 0) + 1);
+                    updateMainCounter((Number.isFinite(currentValue) ? currentValue : 0) + 1);
+                    updateRowSummary();
                 };
             }
 
-            if (quickAddBtn && quickAddInput) {
-                quickAddBtn.onclick = () => {
+            if (mainQuickAddBtn && mainQuickAddInput) {
+                mainQuickAddBtn.onclick = () => {
                     const currentValue = Number.parseInt(row.dataset.counter || '0', 10);
-                    const addRaw = Number.parseInt(quickAddInput.value || '0', 10);
+                    const addRaw = Number.parseInt(mainQuickAddInput.value || '0', 10);
                     const addValue = Number.isFinite(addRaw) && addRaw > 0 ? addRaw : 0;
-                    renderCounter((Number.isFinite(currentValue) ? currentValue : 0) + addValue);
-                    quickAddInput.value = '';
-                    quickAddInput.focus();
+                    updateMainCounter((Number.isFinite(currentValue) ? currentValue : 0) + addValue);
+                    mainQuickAddInput.value = '';
+                    mainQuickAddInput.focus();
+                    updateRowSummary();
                 };
 
-                quickAddInput.onkeydown = (event) => {
+                mainQuickAddInput.onkeydown = (event) => {
                     if (event.key !== 'Enter') return;
                     event.preventDefault();
-                    quickAddBtn.click();
+                    mainQuickAddBtn.click();
                 };
             }
+
+            row.querySelectorAll('.sendung-wa-problem-counter').forEach((problemRow) => {
+                const minusBtn = problemRow.querySelector('.sendung-wa-problem-minus-btn');
+                const plusBtn = problemRow.querySelector('.sendung-wa-problem-plus-btn');
+                const quickAddInput = problemRow.querySelector('.sendung-wa-problem-quick-add-input');
+                const quickAddBtn = problemRow.querySelector('.sendung-wa-problem-quick-add-btn');
+
+                if (minusBtn) {
+                    minusBtn.onclick = () => {
+                        const currentValue = Number.parseInt(problemRow.dataset.counter || '0', 10);
+                        updateProblemCounter(problemRow, (Number.isFinite(currentValue) ? currentValue : 0) - 1);
+                        updateRowSummary();
+                    };
+                }
+
+                if (plusBtn) {
+                    plusBtn.onclick = () => {
+                        const currentValue = Number.parseInt(problemRow.dataset.counter || '0', 10);
+                        updateProblemCounter(problemRow, (Number.isFinite(currentValue) ? currentValue : 0) + 1);
+                        updateRowSummary();
+                    };
+                }
+
+                if (quickAddBtn && quickAddInput) {
+                    quickAddBtn.onclick = () => {
+                        const currentValue = Number.parseInt(problemRow.dataset.counter || '0', 10);
+                        const addRaw = Number.parseInt(quickAddInput.value || '0', 10);
+                        const addValue = Number.isFinite(addRaw) && addRaw > 0 ? addRaw : 0;
+                        updateProblemCounter(problemRow, (Number.isFinite(currentValue) ? currentValue : 0) + addValue);
+                        quickAddInput.value = '';
+                        quickAddInput.focus();
+                        updateRowSummary();
+                    };
+
+                    quickAddInput.onkeydown = (event) => {
+                        if (event.key !== 'Enter') return;
+                        event.preventDefault();
+                        quickAddBtn.click();
+                    };
+                }
+            });
+
+            updateMainCounter(Number.parseInt(row.dataset.counter || '0', 10));
+            updateRowSummary();
         });
+
+        renderProblemListFromRows();
+
+        return;
     }
 
-    const problemBadges = warenuebernahme.problemartikel.length > 0
-        ? warenuebernahme.problemartikel.map((problem) => {
-            const inhalt = inhaltById.get(problem.inhaltId);
-            const label = WARENUEBERNAHME_ABWEICHUNG_OPTIONS[problem.typ] || problem.typ;
-            return `<span class="px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">${problem.mengeProblem || 1}x ${inhalt?.bezeichnung || problem.bezeichnung || 'Artikel'} (${label})</span>`;
-        }).join(' ')
-        : '<span class="text-xs text-gray-500">Noch keine Problempositionen.</span>';
-    problemList.innerHTML = problemBadges;
+    problemList.innerHTML = '<span class="text-xs text-gray-500">Noch keine Problempositionen.</span>';
+}
+
+function resetWarenuebernahmeResetSequence() {
+    warenuebernahmeResetClickTimestamps = [];
+}
+
+function registerWarenuebernahmeResetClick() {
+    const now = Date.now();
+    warenuebernahmeResetClickTimestamps = [
+        ...warenuebernahmeResetClickTimestamps.filter((timestamp) => now - timestamp <= WARENUEBERNAHME_RESET_WINDOW_MS),
+        now
+    ];
+    return warenuebernahmeResetClickTimestamps.length;
+}
+
+function resetCurrentWarenuebernahmeToStandardwerte() {
+    const paket = currentSendungPakete[currentWarenuebernahmePaketIndex];
+    if (!paket) return;
+
+    const bestehend = normalizeWarenuebernahme(paket.warenuebernahme || {});
+    paket.warenuebernahme = normalizeWarenuebernahme({
+        ...bestehend,
+        aktiv: true,
+        status: 'offen',
+        completedAt: null,
+        positionen: [],
+        problemartikel: [],
+        updatedAt: nowIso(),
+        updatedBy: currentUser?.mode || '',
+        startedAt: bestehend.startedAt || nowIso()
+    });
+
+    paket.status = applyWarenuebernahmeStatusToPaket(paket);
+    ensureInhaltZuordnungConsistency();
+    renderPaketeEditor();
+    syncOverallStatusWithPakete();
+    renderWarenuebernahmeModal();
+}
+
+function handleWarenuebernahmeResetRequest() {
+    const paket = currentSendungPakete[currentWarenuebernahmePaketIndex];
+    if (!paket) return;
+
+    const count = registerWarenuebernahmeResetClick();
+    const remaining = WARENUEBERNAHME_RESET_REQUIRED_CLICKS - count;
+    if (remaining > 0) {
+        alertUser(`Zum Zurücksetzen noch ${remaining}x innerhalb von 5 Sekunden drücken.`, 'warning');
+        return;
+    }
+
+    resetWarenuebernahmeResetSequence();
+    resetCurrentWarenuebernahmeToStandardwerte();
+    alertUser('Warenübernahme wurde auf Standardwerte zurückgesetzt.');
 }
 
 function openWarenuebernahmeModal(paketIndex) {
@@ -1475,12 +1696,13 @@ function openWarenuebernahmeModal(paketIndex) {
     }
 
     currentWarenuebernahmePaketIndex = paketIndex;
+    resetWarenuebernahmeResetSequence();
     renderWarenuebernahmeModal();
     modal.classList.remove('hidden');
     modal.classList.add('flex');
 }
 
-function collectWarenuebernahmeFromModal(markCompleted = false) {
+function collectWarenuebernahmeFromModal() {
     const paket = currentSendungPakete[currentWarenuebernahmePaketIndex];
     if (!paket) return null;
 
@@ -1488,65 +1710,83 @@ function collectWarenuebernahmeFromModal(markCompleted = false) {
     const rows = document.querySelectorAll('#sendungWarenuebernahmeRows .sendung-wa-row');
     const positionen = [];
     const problemartikel = [];
+    let hasUnchecked = false;
 
     rows.forEach((row) => {
         const inhaltId = String(row.dataset.inhaltId || '').trim();
         const mengeSoll = Number.parseInt(row.dataset.mengeSoll || '0', 10);
         if (!inhaltId || !Number.isFinite(mengeSoll) || mengeSoll <= 0) return;
 
-        const typSelect = row.querySelector('.sendung-wa-typ-select');
         const kommentarInput = row.querySelector('.sendung-wa-kommentar-input');
+        const kommentar = String(kommentarInput?.value || '').trim();
 
         const mengeIstRaw = Number.parseInt(row.dataset.counter || '0', 10);
         const mengeIst = Number.isFinite(mengeIstRaw) && mengeIstRaw >= 0 ? mengeIstRaw : 0;
-        const selectedTypRaw = String(typSelect?.value || 'ok').trim().toLowerCase();
-        const selectedTyp = Object.prototype.hasOwnProperty.call(WARENUEBERNAHME_ABWEICHUNG_OPTIONS, selectedTypRaw)
-            ? selectedTypRaw
-            : 'ok';
-        const autoTyp = computeAbweichungstypFromSollIst(mengeSoll, mengeIst);
-        const finalTyp = selectedTyp === 'ok' && autoTyp !== 'ok' ? autoTyp : selectedTyp;
-        const kommentar = String(kommentarInput?.value || '').trim();
+        const problemVerteilung = {};
+        let problemTotal = 0;
 
-        positionen.push({
-            inhaltId,
-            mengeSoll,
-            mengeIst,
-            abweichungstyp: finalTyp,
-            kommentar,
-            bestaetigtAt: nowIso()
-        });
+        row.querySelectorAll('.sendung-wa-problem-counter').forEach((problemRow) => {
+            const typ = String(problemRow.dataset.problemTyp || '').trim().toLowerCase();
+            if (!WARENUEBERNAHME_PROBLEM_TYPEN.includes(typ)) return;
 
-        if (finalTyp !== 'ok' || mengeIst !== mengeSoll) {
+            const mengeRaw = Number.parseInt(problemRow.dataset.counter || '0', 10);
+            const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
+            if (menge <= 0) return;
+
+            problemVerteilung[typ] = menge;
+            problemTotal += menge;
+
             problemartikel.push({
                 potEntryId: createPotEntryId(),
                 inhaltId,
                 paketId: paket.paketId,
                 mengeSoll,
                 mengeIst,
-                mengeProblem: Math.max(1, Math.abs(mengeSoll - mengeIst)),
-                typ: finalTyp,
+                mengeProblem: menge,
+                typ,
                 kommentar,
                 sourceUebernahmeId: existing.uebernahmeId,
                 createdAt: nowIso(),
                 createdBy: currentUser?.mode || ''
             });
+        });
+
+        const ungeprueft = Math.max(0, mengeSoll - mengeIst - problemTotal);
+        if (ungeprueft > 0) {
+            hasUnchecked = true;
         }
+
+        const dominantProblemTyp = Object.entries(problemVerteilung)
+            .sort((left, right) => right[1] - left[1])[0]?.[0] || null;
+        const finalTyp = ungeprueft > 0
+            ? 'nicht_geprueft'
+            : (dominantProblemTyp || (mengeIst > mengeSoll ? 'zuviel' : 'ok'));
+
+        positionen.push({
+            inhaltId,
+            mengeSoll,
+            mengeIst,
+            abweichungstyp: finalTyp,
+            problemVerteilung,
+            kommentar,
+            bestaetigtAt: ungeprueft > 0 ? null : nowIso()
+        });
     });
 
     let status = 'offen';
     if (positionen.length > 0) {
-        if (problemartikel.length > 0) {
-            status = 'problem';
-        } else {
-            status = markCompleted ? 'abgeschlossen' : 'in_pruefung';
-        }
+        status = hasUnchecked
+            ? 'in_pruefung'
+            : (problemartikel.length > 0 ? 'problem' : 'abgeschlossen');
     }
+
+    const istFinalisiert = status === 'abgeschlossen' || status === 'problem';
 
     return normalizeWarenuebernahme({
         ...existing,
         aktiv: true,
         startedAt: existing.startedAt || nowIso(),
-        completedAt: markCompleted ? nowIso() : existing.completedAt,
+        completedAt: istFinalisiert ? (existing.completedAt || nowIso()) : null,
         status,
         positionen,
         problemartikel,
@@ -1585,12 +1825,12 @@ async function writeWarenuebernahmeAudit(sendungId, paket, action, payloadDelta 
     }
 }
 
-async function saveWarenuebernahmeFromModal(markCompleted = false) {
+async function saveWarenuebernahmeFromModal() {
     const paketIndex = currentWarenuebernahmePaketIndex;
     const paket = currentSendungPakete[paketIndex];
     if (!paket) return;
 
-    const aktualisiert = collectWarenuebernahmeFromModal(markCompleted);
+    const aktualisiert = collectWarenuebernahmeFromModal();
     if (!aktualisiert) return;
 
     paket.warenuebernahme = aktualisiert;
@@ -1637,7 +1877,7 @@ async function saveWarenuebernahmeFromModal(markCompleted = false) {
         await writeWarenuebernahmeAudit(
             currentEditingSendungId,
             pakete[paketIndex],
-            markCompleted ? 'abschliessen' : 'zwischenstand_speichern',
+            'buchen',
             {
                 status: aktualisiert.status,
                 totalProblem: aktualisiert.zusammenfassung.totalProblem,
@@ -1647,7 +1887,7 @@ async function saveWarenuebernahmeFromModal(markCompleted = false) {
         );
 
         closeWarenuebernahmeModal();
-        alertUser(markCompleted ? 'Warenübernahme abgeschlossen und synchronisiert.' : 'Warenübernahme-Zwischenstand synchronisiert.');
+        alertUser('Warenübernahme gebucht und synchronisiert.');
     } catch (error) {
         console.error('[Sendungsverwaltung] Fehler beim Speichern der Warenübernahme:', error);
         alertUser('Fehler beim Speichern der Warenübernahme: ' + error.message);
@@ -2217,8 +2457,8 @@ function setupEventListeners() {
     const applyInhaltZuordnungBtn = document.getElementById('applySendungInhaltZuordnungBtn');
     const inhaltZuordnungModal = document.getElementById('sendungInhaltZuordnungModal');
     const closeWarenuebernahmeBtn = document.getElementById('closeSendungWarenuebernahmeModal');
+    const resetWarenuebernahmeBtn = document.getElementById('resetSendungWarenuebernahmeBtn');
     const saveWarenuebernahmeBtn = document.getElementById('saveSendungWarenuebernahmeBtn');
-    const completeWarenuebernahmeBtn = document.getElementById('completeSendungWarenuebernahmeBtn');
     const warenuebernahmeModal = document.getElementById('sendungWarenuebernahmeModal');
 
     if (openSendungModalBtn) {
@@ -2315,12 +2555,12 @@ function setupEventListeners() {
         closeWarenuebernahmeBtn.onclick = () => closeWarenuebernahmeModal();
     }
 
-    if (saveWarenuebernahmeBtn) {
-        saveWarenuebernahmeBtn.onclick = () => saveWarenuebernahmeFromModal(false);
+    if (resetWarenuebernahmeBtn) {
+        resetWarenuebernahmeBtn.onclick = () => handleWarenuebernahmeResetRequest();
     }
 
-    if (completeWarenuebernahmeBtn) {
-        completeWarenuebernahmeBtn.onclick = () => saveWarenuebernahmeFromModal(true);
+    if (saveWarenuebernahmeBtn) {
+        saveWarenuebernahmeBtn.onclick = () => saveWarenuebernahmeFromModal();
     }
 
     if (warenuebernahmeModal) {
