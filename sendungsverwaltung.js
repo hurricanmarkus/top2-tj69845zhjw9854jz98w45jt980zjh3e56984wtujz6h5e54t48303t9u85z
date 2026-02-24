@@ -100,6 +100,7 @@ let currentSendungPakete = [];
 let statusOverrideActive = false;
 let isInternalStatusUpdate = false;
 let currentInhaltItems = [];
+let registeredEmpfaengerVornamen = [];
 
 function normalizeStatus(status) {
     const normalized = String(status || '').trim().toLowerCase();
@@ -193,6 +194,157 @@ function getSendungTransportEntries(sendung = {}) {
     });
 
     return (legacyEntry.anbieter || legacyEntry.transportnummer) ? [legacyEntry] : [];
+}
+
+function extractFirstName(value = '') {
+    return String(value || '').trim().split(/\s+/).filter(Boolean)[0] || '';
+}
+
+function getCurrentUserFirstName() {
+    return extractFirstName(currentUser?.displayName || currentUser?.mode || '');
+}
+
+function getLieferzielHistoryOptions() {
+    const values = [];
+
+    Object.values(SENDUNGEN).forEach((sendung) => {
+        getSendungPakete(sendung).forEach((paket) => {
+            const lieferziel = String(paket?.lieferziel || '').trim();
+            if (lieferziel) values.push(lieferziel);
+        });
+    });
+
+    currentSendungPakete.forEach((paket) => {
+        const lieferziel = String(paket?.lieferziel || '').trim();
+        if (lieferziel) values.push(lieferziel);
+    });
+
+    const unique = new Map();
+    values.forEach((value) => {
+        const key = value.toLowerCase();
+        if (!unique.has(key)) {
+            unique.set(key, value);
+        }
+    });
+
+    return Array.from(unique.values())
+        .sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' }));
+}
+
+function hideAllLieferzielSuggestionBoxes() {
+    const container = getPaketeContainer();
+    if (!container) return;
+    container.querySelectorAll('.sendung-lieferziel-suggestions').forEach((box) => {
+        box.classList.add('hidden');
+    });
+}
+
+function renderLieferzielSuggestionsForInput(input) {
+    const wrapper = input?.closest('.sendung-lieferziel-wrapper');
+    const box = wrapper?.querySelector('.sendung-lieferziel-suggestions');
+    const paketIndex = Number.parseInt(input?.dataset?.paketIndex || '-1', 10);
+    if (!wrapper || !box || Number.isNaN(paketIndex) || paketIndex < 0) return;
+
+    const term = String(input.value || '').trim().toLowerCase();
+    const suggestions = getLieferzielHistoryOptions().filter((value) => value.toLowerCase().includes(term));
+
+    box.innerHTML = '';
+    if (suggestions.length === 0) {
+        box.classList.add('hidden');
+        return;
+    }
+
+    suggestions.slice(0, 8).forEach((value) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'block w-full text-left px-3 py-2 text-sm hover:bg-amber-50 border-b border-gray-100 last:border-b-0';
+        button.textContent = value;
+        button.onmousedown = (event) => {
+            event.preventDefault();
+            input.value = value;
+            updatePaketField(paketIndex, 'lieferziel', value);
+            box.classList.add('hidden');
+        };
+        box.appendChild(button);
+    });
+
+    box.classList.remove('hidden');
+}
+
+function hideEmpfaengerSuggestions() {
+    document.getElementById('sendungEmpfaengerSuggestions')?.classList.add('hidden');
+}
+
+function renderEmpfaengerSuggestions(term = '') {
+    const input = document.getElementById('sendungEmpfaenger');
+    const box = document.getElementById('sendungEmpfaengerSuggestions');
+    if (!input || !box) return;
+
+    const normalizedTerm = String(term || '').trim().toLowerCase();
+    const suggestions = registeredEmpfaengerVornamen
+        .filter((name) => name.toLowerCase().includes(normalizedTerm));
+
+    box.innerHTML = '';
+    if (suggestions.length === 0) {
+        box.classList.add('hidden');
+        return;
+    }
+
+    suggestions.slice(0, 12).forEach((name) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'block w-full text-left px-3 py-2 text-sm hover:bg-amber-50 border-b border-gray-100 last:border-b-0';
+        button.textContent = name;
+        button.onmousedown = (event) => {
+            event.preventDefault();
+            input.value = name;
+            box.classList.add('hidden');
+        };
+        box.appendChild(button);
+    });
+
+    box.classList.remove('hidden');
+}
+
+async function loadRegisteredEmpfaengerVornamen() {
+    if (!usersCollectionRef) return;
+
+    try {
+        const snapshot = await getDocs(usersCollectionRef);
+        const uniqueNames = new Map();
+
+        snapshot.forEach((userDoc) => {
+            const data = userDoc.data() || {};
+            const candidates = [
+                data.vorname,
+                data.realName,
+                data.name,
+                data.displayName,
+                data.nickname,
+                userDoc.id
+            ];
+
+            for (const candidate of candidates) {
+                const firstName = extractFirstName(candidate);
+                if (!firstName) continue;
+                const key = firstName.toLowerCase();
+                if (!uniqueNames.has(key)) {
+                    uniqueNames.set(key, firstName);
+                }
+                break;
+            }
+        });
+
+        const ownFirstName = getCurrentUserFirstName();
+        if (ownFirstName) {
+            uniqueNames.set(ownFirstName.toLowerCase(), ownFirstName);
+        }
+
+        registeredEmpfaengerVornamen = Array.from(uniqueNames.values())
+            .sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' }));
+    } catch (error) {
+        console.warn('[Sendungsverwaltung] Empfänger-Vornamen konnten nicht geladen werden:', error);
+    }
 }
 
 function computeAutoStatusFromPakete(pakete = []) {
@@ -555,10 +707,13 @@ function renderPaketeEditor() {
             `;
 
             return `
-            <div class="flex flex-col md:flex-row gap-2 items-start">
+            <div class="grid grid-cols-1 md:grid-cols-[1fr_0.6fr_1.4fr] gap-2 items-start">
                 ${entryIndex === 0
-                    ? `<input type="text" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-lieferziel-input" data-paket-index="${paketIndex}" value="${paket.lieferziel || ''}" placeholder="Lieferziel (z.B. Zuhause, Büro)">`
-                    : '<div class="hidden md:block w-full"></div>'}
+                    ? `<div class="sendung-lieferziel-wrapper relative w-full">
+                        <input type="text" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-lieferziel-input" data-paket-index="${paketIndex}" value="${paket.lieferziel || ''}" placeholder="Lieferziel (z.B. Zuhause, Büro)" autocomplete="off">
+                        <div class="sendung-lieferziel-suggestions hidden absolute z-20 mt-1 w-full max-h-40 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg"></div>
+                    </div>`
+                    : '<div class="hidden md:block"></div>'}
                 <input type="text" list="anbieterList" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-anbieter-input" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" value="${entry.anbieter}" placeholder="Transporteur (z.B. DHL)">
                 <div class="flex gap-2 w-full">
                     <input type="text" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-transportnummer-input" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" value="${entry.transportnummer}" placeholder="Transportnummer / Sendungsnummer">
@@ -637,7 +792,17 @@ function renderPaketeEditor() {
     });
 
     container.querySelectorAll('.sendung-paket-lieferziel-input').forEach((input) => {
-        input.oninput = () => updatePaketField(Number.parseInt(input.dataset.paketIndex || '-1', 10), 'lieferziel', input.value);
+        input.oninput = () => {
+            updatePaketField(Number.parseInt(input.dataset.paketIndex || '-1', 10), 'lieferziel', input.value);
+            renderLieferzielSuggestionsForInput(input);
+        };
+        input.onfocus = () => renderLieferzielSuggestionsForInput(input);
+        input.onclick = () => renderLieferzielSuggestionsForInput(input);
+        input.onkeydown = (event) => {
+            if (event.key === 'Escape') {
+                hideAllLieferzielSuggestionBoxes();
+            }
+        };
     });
 
     container.querySelectorAll('.sendung-paket-anbieter-input').forEach((input) => {
@@ -697,6 +862,7 @@ export function initializeSendungsverwaltungView() {
     loadSendungDisplaySettings();
     applySendungDisplaySettingsUI();
     addDefaultFilters();
+    loadRegisteredEmpfaengerVornamen();
     listenForSendungSettingsSync();
     // Listener erst starten, nachdem sendungenCollectionRef gesetzt wurde.
     // Sonst werden neue Einträge zwar gespeichert, aber nicht in SENDUNGEN geladen.
@@ -784,6 +950,7 @@ function setupEventListeners() {
     const sendungErinnerungenAktiv = document.getElementById('sendungErinnerungenAktiv');
     const sendungAddPaketBtn = document.getElementById('sendungAddPaketBtn');
     const sendungAddInhaltRowBtn = document.getElementById('sendungAddInhaltRowBtn');
+    const sendungEmpfaenger = document.getElementById('sendungEmpfaenger');
     const sendungStatus = document.getElementById('sendungStatus');
     const sendungResetAutoStatusBtn = document.getElementById('sendungResetAutoStatusBtn');
 
@@ -821,6 +988,17 @@ function setupEventListeners() {
 
     if (sendungAddInhaltRowBtn) {
         sendungAddInhaltRowBtn.onclick = () => addInhaltRow(currentInhaltItems.length, 'bezeichnung');
+    }
+
+    if (sendungEmpfaenger) {
+        sendungEmpfaenger.oninput = () => renderEmpfaengerSuggestions(sendungEmpfaenger.value);
+        sendungEmpfaenger.onfocus = () => renderEmpfaengerSuggestions(sendungEmpfaenger.value);
+        sendungEmpfaenger.onclick = () => renderEmpfaengerSuggestions(sendungEmpfaenger.value);
+        sendungEmpfaenger.onkeydown = (event) => {
+            if (event.key === 'Escape') {
+                hideEmpfaengerSuggestions();
+            }
+        };
     }
 
     if (sendungStatus) {
@@ -897,6 +1075,12 @@ function setupEventListeners() {
         document.addEventListener('click', (e) => {
             if (!e.target.closest('#sendungSearchInput') && !e.target.closest('#sendungSearchSuggestionsBox')) {
                 hideSendungSearchSuggestions();
+            }
+            if (!e.target.closest('.sendung-lieferziel-wrapper')) {
+                hideAllLieferzielSuggestionBoxes();
+            }
+            if (!e.target.closest('#sendungEmpfaenger') && !e.target.closest('#sendungEmpfaengerSuggestions')) {
+                hideEmpfaengerSuggestions();
             }
         });
         document.body.dataset.sendungSuggestionsListenerAttached = 'true';
@@ -1274,6 +1458,11 @@ function prefillIntelligentForm() {
     if (ruecksendungSection) {
         ruecksendungSection.style.display = currentTab === 'ruecksendung' ? 'block' : 'none';
     }
+
+    const empfaengerInput = document.getElementById('sendungEmpfaenger');
+    if (empfaengerInput && !String(empfaengerInput.value || '').trim()) {
+        empfaengerInput.value = getCurrentUserFirstName();
+    }
 }
 
 function closeSendungModalUI() {
@@ -1318,6 +1507,10 @@ function setSendungModalReadMode(readMode) {
 
     applyPaketeReadMode(readMode);
     applyInhaltReadMode(readMode);
+    if (readMode) {
+        hideAllLieferzielSuggestionBoxes();
+        hideEmpfaengerSuggestions();
+    }
 
     const resetAutoStatusBtn = document.getElementById('sendungResetAutoStatusBtn');
     if (resetAutoStatusBtn) {
@@ -1356,7 +1549,7 @@ function clearModalFields() {
         sendungBeschreibung: '',
         sendungPrioritaet: 'normal',
         sendungAbsender: '',
-        sendungEmpfaenger: '',
+        sendungEmpfaenger: getCurrentUserFirstName(),
         sendungBestellnummer: '',
         sendungWert: '',
         sendungVersandkosten: '',
