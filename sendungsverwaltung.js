@@ -666,6 +666,12 @@ function applyPaketeReadMode(readMode) {
         element.disabled = readMode;
     });
 
+    const lockedTransportButtons = container.querySelectorAll('.sendung-add-transport-entry-btn, .sendung-remove-transport-entry-btn');
+    lockedTransportButtons.forEach((button) => {
+        button.classList.toggle('opacity-50', readMode);
+        button.classList.toggle('cursor-not-allowed', readMode);
+    });
+
     const readModeOnlyElements = container.querySelectorAll('.sendung-readmode-only');
     readModeOnlyElements.forEach((element) => {
         element.classList.toggle('hidden', !readMode);
