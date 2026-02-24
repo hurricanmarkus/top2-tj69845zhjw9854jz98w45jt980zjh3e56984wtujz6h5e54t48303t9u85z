@@ -572,6 +572,14 @@ function applyInhaltReadMode(readMode) {
         addRowBtn.classList.toggle('opacity-50', readMode);
         addRowBtn.classList.toggle('cursor-not-allowed', readMode);
     }
+
+    if (container) {
+        const removeRowButtons = container.querySelectorAll('.sendung-remove-inhalt-row-btn');
+        removeRowButtons.forEach((button) => {
+            button.classList.toggle('opacity-50', readMode);
+            button.classList.toggle('cursor-not-allowed', readMode);
+        });
+    }
 }
 
 function updateInhaltItem(rowIndex, field, value) {
@@ -828,16 +836,22 @@ function applyPaketeReadMode(readMode) {
         button.classList.toggle('cursor-not-allowed', readMode);
     });
 
+    const removePaketButtons = container.querySelectorAll('.sendung-remove-paket-btn');
+    removePaketButtons.forEach((button) => {
+        button.classList.toggle('opacity-50', readMode);
+        button.classList.toggle('cursor-not-allowed', readMode);
+    });
+
     const readModeOnlyElements = container.querySelectorAll('.sendung-readmode-only');
     readModeOnlyElements.forEach((element) => {
         element.classList.toggle('hidden', !readMode);
     });
 
     if (readMode) {
-        const firstPaketStatus = container.querySelector('.sendung-paket-status-select[data-paket-index="0"]');
-        if (firstPaketStatus) {
-            firstPaketStatus.disabled = false;
-        }
+        const paketStatusSelects = container.querySelectorAll('.sendung-paket-status-select');
+        paketStatusSelects.forEach((select) => {
+            select.disabled = false;
+        });
 
         const copyButtons = container.querySelectorAll('.sendung-copy-transportnummer-btn');
         copyButtons.forEach((button) => {
