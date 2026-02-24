@@ -2004,53 +2004,44 @@ function createSendungCard(sendung) {
     const cardLayoutClass = sendungViewMode === 'grid' ? 'h-full' : '';
 
     const transportEntriesDisplay = transportEntries.length > 0
-        ? transportEntries.map((entry, index) => {
+        ? `<div class="space-y-1">${transportEntries.map((entry, index) => {
             const trackingUrl = getTrackingUrl(entry.anbieter, entry.transportnummer);
-            const transportnummerDisplay = entry.transportnummer
-                ? `
-                    <span class="text-gray-500">•</span>
-                    <code class="bg-gray-100 px-2 py-0.5 rounded break-all">${entry.transportnummer}</code>
-                    <button type="button" data-copy-transport-index="${index}" class="text-amber-600 hover:text-amber-800 ml-1" title="Kopieren">
-                        📋
-                    </button>
-                    ${trackingUrl ? `<a data-tracking-link="true" href="${trackingUrl}" target="_blank" class="text-blue-600 hover:text-blue-800 ml-1" title="Tracking öffnen">🔗</a>` : ''}
-                `
-                : '<span class="text-xs text-gray-500">(Keine Transportnummer)</span>';
-
             const paketStatusInfo = STATUS_CONFIG[normalizeStatus(entry.paketStatus)] || STATUS_CONFIG.erwartet;
 
             return `
-                <div class="flex items-center gap-2 flex-wrap">
-                    ${entry.paketLabel ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">${entry.paketLabel}</span>` : ''}
-                    ${entry.paketStatus ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded ${paketStatusInfo.color}">${paketStatusInfo.icon} ${paketStatusInfo.label}</span>` : ''}
-                    <span class="font-semibold">🚚 ${entry.anbieter || 'Kein Anbieter'}</span>
-                    ${transportnummerDisplay}
+                <div class="flex items-center gap-2 min-w-0">
+                    ${entry.paketLabel ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 whitespace-nowrap">${entry.paketLabel}</span>` : ''}
+                    ${entry.paketStatus ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded ${paketStatusInfo.color} whitespace-nowrap">${paketStatusInfo.icon} ${paketStatusInfo.label}</span>` : ''}
+                    <div class="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
+                        <span class="font-semibold shrink-0">🚚</span>
+                        <span class="inline-block font-semibold truncate" style="max-width: 9rem;" title="${entry.anbieter || 'Kein Anbieter'}">${entry.anbieter || 'Kein Anbieter'}</span>
+                        <span class="text-gray-400 shrink-0">•</span>
+                        ${entry.transportnummer
+                            ? `<code class="inline-block bg-gray-100 px-2 py-0.5 rounded truncate" style="max-width: 10rem;" title="${entry.transportnummer}">${entry.transportnummer}</code>`
+                            : '<span class="text-xs text-gray-500 truncate" style="max-width: 10rem;">(Keine Transportnummer)</span>'}
+                    </div>
+                    ${entry.transportnummer
+                        ? `<button type="button" data-copy-transport-index="${index}" class="text-amber-600 hover:text-amber-800 shrink-0" title="Kopieren">📋</button>`
+                        : ''}
+                    ${trackingUrl
+                        ? `<a data-tracking-link="true" href="${trackingUrl}" target="_blank" class="text-blue-600 hover:text-blue-800 shrink-0" title="Tracking öffnen">🔗</a>`
+                        : ''}
                 </div>
             `;
-        }).join('')
+        }).join('')}</div>`
         : `
-            <div class="flex items-center gap-2 flex-wrap">
+            <div class="flex items-center gap-2 min-w-0">
                 <span class="font-semibold">🚚 Kein Anbieter</span>
                 <span class="text-xs text-gray-500">(Keine Transportnummer)</span>
             </div>
         `;
-
-    const paketStatusDisplay = pakete.map((paket, index) => {
-        const paketStatusInfo = STATUS_CONFIG[normalizeStatus(paket.status)] || STATUS_CONFIG.erwartet;
-        return `<span class="text-[11px] font-bold px-2 py-0.5 rounded ${paketStatusInfo.color}">📦 P${index + 1}: ${paketStatusInfo.label}</span>`;
-    }).join(' ');
 
     if (!sendungShowDetails) {
         return `
             <div id="sendung-${sendung.id}" class="card bg-white p-4 rounded-xl shadow-lg hover:shadow-xl transition cursor-pointer border-l-4 ${getBorderColor(sendung.typ)} ${cardLayoutClass}">
                 <h3 class="text-lg font-bold ${typInfo.color} break-words mb-3">${sendung.beschreibung}</h3>
                 <div class="space-y-2 text-sm">
-                    <div class="flex flex-wrap gap-1">
-                        ${paketStatusDisplay}
-                    </div>
-                    <div class="space-y-1">
-                        ${transportEntriesDisplay}
-                    </div>
+                    ${transportEntriesDisplay}
                     <p class="font-semibold text-orange-600">${deadlineText ? `⏰ ${deadlineText}` : '⏰ Keine Deadline gesetzt'}</p>
                 </div>
             </div>
@@ -2093,9 +2084,6 @@ function createSendungCard(sendung) {
             </div>
 
             <div class="ml-8 space-y-1 text-sm text-gray-700">
-                <div class="flex flex-wrap gap-1">
-                    ${paketStatusDisplay}
-                </div>
                 ${transportEntriesDisplay}
                 ${sendung.absender ? `<p class="break-words">📤 Von: ${sendung.absender}</p>` : ''}
                 ${sendung.empfaenger ? `<p class="break-words">📥 An: ${sendung.empfaenger}</p>` : ''}
