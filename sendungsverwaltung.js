@@ -158,6 +158,14 @@ const WARENUEBERNAHME_ABWEICHUNG_OPTIONS = {
     unbekannt: 'Unbekannt'
 };
 const WARENUEBERNAHME_PROBLEM_TYPEN = ['fehlt', 'zuviel', 'defekt', 'vertauscht', 'unbekannt'];
+const WARENUEBERNAHME_GELOEST_TYPEN = ['storno', 'rueckerstattet', 'sonstiges'];
+const WARENUEBERNAHME_NAV_STATUS_META = {
+    ungeprueft: { label: 'Ungeprüft', dot: 'bg-gray-900', badge: 'bg-gray-900 text-white', filterText: 'text-gray-700' },
+    in_pruefung: { label: 'In Prüfung', dot: 'bg-blue-600', badge: 'bg-blue-100 text-blue-700', filterText: 'text-blue-700' },
+    bestaetigt: { label: 'Bestätigt', dot: 'bg-emerald-600', badge: 'bg-emerald-100 text-emerald-700', filterText: 'text-emerald-700' },
+    unvollstaendig: { label: 'Unvollständig', dot: 'bg-amber-500', badge: 'bg-amber-100 text-amber-800', filterText: 'text-amber-800' },
+    problem: { label: 'Problem', dot: 'bg-red-600', badge: 'bg-red-100 text-red-700', filterText: 'text-red-700' }
+};
 const WARENUEBERNAHME_RESET_REQUIRED_CLICKS = 5;
 const WARENUEBERNAHME_RESET_WINDOW_MS = 5000;
 
@@ -171,6 +179,8 @@ let currentZuordnungPaketIndex = null;
 let currentWarenuebernahmePaketIndex = null;
 let registeredEmpfaengerVornamen = [];
 let warenuebernahmeResetClickTimestamps = [];
+let waSelectedInhaltId = '';
+let waFilterStatus = 'all';
 
 function normalizeStatus(status) {
     const normalized = String(status || '').trim().toLowerCase();
@@ -193,6 +203,10 @@ function createPotEntryId() {
     return `pot_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 }
 
+function createProblemResolutionId() {
+    return `potres_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+}
+
 function nowIso() {
     return new Date().toISOString();
 }
@@ -213,6 +227,27 @@ function normalizeTransportEntry(entry = {}) {
     return {
         anbieter: String(entry?.anbieter || '').trim(),
         transportnummer: String(entry?.transportnummer || '').trim()
+    };
+}
+
+function normalizeWarenuebernahmeProblemResolution(entry = {}) {
+    const mengeRaw = Number.parseInt(entry?.menge, 10);
+    const aktionRaw = String(entry?.aktion || 'geloest').trim().toLowerCase();
+    const aktion = aktionRaw === 'zuweisen' ? 'zuweisen' : 'geloest';
+    const geloestTypRaw = String(entry?.geloestTyp || '').trim().toLowerCase();
+    const geloestTyp = WARENUEBERNAHME_GELOEST_TYPEN.includes(geloestTypRaw) ? geloestTypRaw : 'sonstiges';
+
+    return {
+        resolutionId: String(entry?.resolutionId || '').trim() || createProblemResolutionId(),
+        problemPotEntryId: String(entry?.problemPotEntryId || '').trim(),
+        inhaltId: String(entry?.inhaltId || '').trim(),
+        menge: Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 1,
+        aktion,
+        zielPaketId: String(entry?.zielPaketId || '').trim(),
+        geloestTyp: aktion === 'geloest' ? geloestTyp : '',
+        kommentar: String(entry?.kommentar || '').trim(),
+        createdAt: entry?.createdAt || nowIso(),
+        createdBy: String(entry?.createdBy || '').trim()
     };
 }
 
@@ -308,6 +343,11 @@ function normalizeWarenuebernahme(warenuebernahme = {}) {
     const problemartikel = Array.isArray(warenuebernahme?.problemartikel)
         ? warenuebernahme.problemartikel.map(normalizeWarenuebernahmeProblemItem).filter((problem) => problem.inhaltId)
         : [];
+    const problemaufloesungen = Array.isArray(warenuebernahme?.problemaufloesungen)
+        ? warenuebernahme.problemaufloesungen
+            .map(normalizeWarenuebernahmeProblemResolution)
+            .filter((entry) => entry.problemPotEntryId && entry.inhaltId && entry.menge > 0)
+        : [];
 
     const totalSoll = positionen.reduce((sum, position) => sum + (position.mengeSoll || 0), 0);
     const totalIst = positionen.reduce((sum, position) => sum + (position.mengeIst || 0), 0);
@@ -322,6 +362,7 @@ function normalizeWarenuebernahme(warenuebernahme = {}) {
         status,
         positionen,
         problemartikel,
+        problemaufloesungen,
         zusammenfassung: {
             totalSoll,
             totalIst,
@@ -416,10 +457,24 @@ function computeProblemPotFromPakete(pakete = currentSendungPakete, inhaltItems 
         const normalizedWarenuebernahme = normalizeWarenuebernahme(paket?.warenuebernahme || {});
         if (!normalizedWarenuebernahme.aktiv) return;
 
+        const reassignedByPotEntryId = new Map();
+        normalizedWarenuebernahme.problemaufloesungen.forEach((resolution) => {
+            const problemPotEntryId = String(resolution?.problemPotEntryId || '').trim();
+            if (!problemPotEntryId || resolution.aktion !== 'zuweisen') return;
+            reassignedByPotEntryId.set(
+                problemPotEntryId,
+                (reassignedByPotEntryId.get(problemPotEntryId) || 0) + (resolution.menge || 0)
+            );
+        });
+
         normalizedWarenuebernahme.problemartikel.forEach((problem) => {
             const inhalt = inhaltById.get(problem.inhaltId);
+            const reassigned = reassignedByPotEntryId.get(problem.potEntryId) || 0;
+            const remainingProblem = Math.max(0, (problem.mengeProblem || 0) - reassigned);
+            if (remainingProblem <= 0) return;
             results.push(normalizeWarenuebernahmeProblemItem({
                 ...problem,
+                mengeProblem: remainingProblem,
                 paketId: String(paket?.paketId || '').trim(),
                 bezeichnung: String(problem?.bezeichnung || inhalt?.bezeichnung || '').trim(),
                 sourceUebernahmeId: String(problem?.sourceUebernahmeId || normalizedWarenuebernahme.uebernahmeId || '').trim(),
@@ -1317,6 +1372,8 @@ function closeWarenuebernahmeModal() {
     const modal = document.getElementById('sendungWarenuebernahmeModal');
     const rows = document.getElementById('sendungWarenuebernahmeRows');
     currentWarenuebernahmePaketIndex = null;
+    waSelectedInhaltId = '';
+    waFilterStatus = 'all';
     resetWarenuebernahmeResetSequence();
     if (!modal) return;
     modal.classList.add('hidden');
@@ -1335,9 +1392,7 @@ function renderWarenuebernahmeModal() {
 
     const inhaltById = getInhaltItemsById();
     const warenuebernahme = normalizeWarenuebernahme(paket.warenuebernahme || {});
-    const positionById = new Map(
-        warenuebernahme.positionen.map((position) => [position.inhaltId, position])
-    );
+    const positionById = new Map(warenuebernahme.positionen.map((position) => [position.inhaltId, position]));
     const problemByInhaltTyp = new Map();
     warenuebernahme.problemartikel.forEach((problem) => {
         const inhaltId = String(problem?.inhaltId || '').trim();
@@ -1358,271 +1413,494 @@ function renderWarenuebernahmeModal() {
 
     if (zuordnung.length === 0) {
         rows.innerHTML = '<div class="text-sm text-gray-500 italic">Dieses Paket hat noch keine zugeordneten Artikel.</div>';
-    } else {
-        rows.innerHTML = zuordnung.map((entry) => {
-            const inhalt = inhaltById.get(entry.inhaltId);
-            const existing = positionById.get(entry.inhaltId);
-            const existingProblemVerteilung = normalizeProblemVerteilung(existing?.problemVerteilung || {});
-            const geliefertInitial = Number.isFinite(existing?.mengeIst) && existing.mengeIst >= 0 ? existing.mengeIst : 0;
-            const problemInitialMap = {};
-            let problemInitialTotal = 0;
+        problemList.innerHTML = '<span class="text-xs text-gray-500">Noch keine Problempositionen.</span>';
+        return;
+    }
 
-            WARENUEBERNAHME_PROBLEM_TYPEN.forEach((typ) => {
-                const fallbackMenge = problemByInhaltTyp.get(`${entry.inhaltId}__${typ}`) || 0;
-                const initial = Math.max(0, existingProblemVerteilung[typ] || fallbackMenge);
-                if (initial > 0) {
-                    problemInitialMap[typ] = initial;
-                    problemInitialTotal += initial;
-                }
-            });
+    const getBaseStatus = (ungeprueft, geprueft, problemTotal) => {
+        if (problemTotal > 0) return 'problem';
+        if (ungeprueft <= 0) return 'bestaetigt';
+        if (geprueft > 0) return 'unvollstaendig';
+        return 'ungeprueft';
+    };
 
-            const ungeprueftInitial = Math.max(0, entry.mengeSoll - geliefertInitial - problemInitialTotal);
-            const geprueftInitial = geliefertInitial + problemInitialTotal;
-            const kommentar = existing?.kommentar || '';
+    const detailRowsHtml = zuordnung.map((entry, index) => {
+        const inhalt = inhaltById.get(entry.inhaltId);
+        const existing = positionById.get(entry.inhaltId);
+        const existingProblemVerteilung = normalizeProblemVerteilung(existing?.problemVerteilung || {});
+        const mengeIst = Number.isFinite(existing?.mengeIst) && existing.mengeIst >= 0 ? existing.mengeIst : 0;
+        const kommentar = existing?.kommentar || '';
 
-            const problemControls = WARENUEBERNAHME_PROBLEM_TYPEN.map((typ) => {
-                const initial = problemInitialMap[typ] || 0;
-                return `
-                    <div class="sendung-wa-problem-counter rounded-lg border border-gray-200 bg-white p-2" data-problem-typ="${typ}" data-counter="${initial}">
-                        <div class="text-xs font-semibold text-gray-700 mb-1">${WARENUEBERNAHME_ABWEICHUNG_OPTIONS[typ] || typ}</div>
-                        <div class="flex flex-wrap items-center gap-2 justify-start">
-                            <button type="button" class="sendung-wa-problem-minus-btn w-7 h-7 rounded-full bg-gray-100 text-gray-700 font-bold leading-none hover:bg-gray-200 transition">-</button>
-                            ${entry.mengeSoll > 10
-                                ? `<div class="flex items-center gap-1">
-                                    <input type="number" min="1" step="1" class="sendung-wa-problem-quick-add-input w-16 p-1 border border-gray-300 rounded text-xs" placeholder="Anzahl">
-                                    <button type="button" class="sendung-wa-problem-quick-add-btn px-2 py-1 rounded bg-emerald-500 text-white text-[11px] font-bold hover:bg-emerald-600 transition">+ Buchen</button>
-                                </div>`
-                                : ''}
-                            <button type="button" class="sendung-wa-problem-plus-btn w-7 h-7 rounded-full bg-emerald-600 text-white font-bold leading-none hover:bg-emerald-700 transition">+</button>
-                            <div class="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-bold min-w-[2.75rem] text-center">
-                                <span class="sendung-wa-problem-counter-value">${initial}</span>
-                            </div>
+        const problemByTyp = {};
+        let problemTotal = 0;
+        WARENUEBERNAHME_PROBLEM_TYPEN.forEach((typ) => {
+            const fallback = problemByInhaltTyp.get(`${entry.inhaltId}__${typ}`) || 0;
+            const menge = Math.max(0, existingProblemVerteilung[typ] || fallback);
+            problemByTyp[typ] = menge;
+            problemTotal += menge;
+        });
+
+        const geprueft = mengeIst + problemTotal;
+        const ungeprueft = Math.max(0, entry.mengeSoll - geprueft);
+        const baseStatus = getBaseStatus(ungeprueft, geprueft, problemTotal);
+
+        return `
+            <div class="sendung-wa-row rounded-xl border border-gray-200 bg-white p-3 space-y-3" data-order="${index}" data-inhalt-id="${entry.inhaltId}" data-menge-soll="${entry.mengeSoll}" data-counter="${mengeIst}" data-base-status="${baseStatus}" data-unchecked="${ungeprueft}">
+                <div class="flex items-center justify-between gap-2 flex-wrap">
+                    <div class="font-semibold text-sm text-gray-800 sendung-wa-item-label">${inhalt?.bezeichnung || 'Artikel'}</div>
+                    <span class="sendung-wa-status-pill text-[11px] px-2 py-1 rounded font-bold">${WARENUEBERNAHME_NAV_STATUS_META[baseStatus]?.label || 'Ungeprüft'}</span>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2">
+                        <div class="text-[10px] uppercase tracking-wide text-gray-500">Sollmenge</div>
+                        <div class="text-xl md:text-2xl font-extrabold text-gray-900 sendung-wa-soll-value">${entry.mengeSoll}</div>
+                    </div>
+                    <div class="rounded-lg border border-gray-200 bg-amber-50 px-2 py-2">
+                        <div class="text-[10px] uppercase tracking-wide text-amber-700">Offen</div>
+                        <div class="text-xl md:text-2xl font-extrabold text-amber-700 sendung-wa-offen-value">${ungeprueft}</div>
+                    </div>
+                    <div class="rounded-lg border border-gray-200 bg-emerald-50 px-2 py-2">
+                        <div class="text-[10px] uppercase tracking-wide text-emerald-700">Istmenge</div>
+                        <div class="text-xl md:text-2xl font-extrabold text-emerald-700 sendung-wa-main-counter-value">${mengeIst}</div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-center gap-3">
+                    <button type="button" class="sendung-wa-main-minus-btn w-14 h-14 rounded-full bg-gray-100 text-gray-800 font-black text-3xl leading-none hover:bg-gray-200 transition">-</button>
+                    <button type="button" class="sendung-wa-main-plus-btn w-14 h-14 rounded-full bg-emerald-600 text-white font-black text-3xl leading-none hover:bg-emerald-700 transition">+</button>
+                </div>
+
+                <div>
+                    <label class="text-xs text-gray-600">Kommentar (optional)</label>
+                    <input type="text" class="sendung-wa-kommentar-input mt-1 w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 text-sm" value="${kommentar}" placeholder="Optional">
+                </div>
+
+                <div class="rounded-lg border border-gray-200 bg-gray-50 overflow-hidden">
+                    <button type="button" class="sendung-wa-toggle-diff-btn w-full text-left px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-100 transition">Differenzen buchen</button>
+                    <div class="sendung-wa-diff-box hidden p-3 border-t border-gray-200 space-y-2">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            ${WARENUEBERNAHME_PROBLEM_TYPEN.map((typ) => `
+                                <div class="sendung-wa-problem-counter rounded-lg border border-gray-200 bg-white p-2" data-problem-typ="${typ}" data-counter="${problemByTyp[typ] || 0}">
+                                    <div class="text-xs font-semibold text-gray-700 mb-1">${WARENUEBERNAHME_ABWEICHUNG_OPTIONS[typ] || typ}</div>
+                                    <div class="flex items-center gap-2">
+                                        <button type="button" class="sendung-wa-problem-minus-btn w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold leading-none hover:bg-gray-200 transition">-</button>
+                                        <div class="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-bold min-w-[2.5rem] text-center">
+                                            <span class="sendung-wa-problem-counter-value">${problemByTyp[typ] || 0}</span>
+                                        </div>
+                                        <button type="button" class="sendung-wa-problem-plus-btn w-8 h-8 rounded-full bg-emerald-600 text-white font-bold leading-none hover:bg-emerald-700 transition">+</button>
+                                    </div>
+                                    <div class="text-[10px] text-gray-500 sendung-wa-problem-rule-state"></div>
+                                </div>
+                            `).join('')}
                         </div>
                     </div>
-                `;
-            }).join('');
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    rows.innerHTML = `
+        <div class="space-y-3">
+            <div class="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                <div class="text-xs font-bold text-gray-700 mb-2">Produkte</div>
+                <div id="sendungWarenuebernahmeNavigatorList" class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1"></div>
+            </div>
+            <div id="sendungWarenuebernahmeLegend" class="flex flex-wrap gap-2"></div>
+            <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
+                <p id="sendungWarenuebernahmeScopeHint" class="text-xs text-gray-600">Einzelansicht</p>
+                <button type="button" id="sendungWarenuebernahmeNextBtn" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition">Nächstes</button>
+            </div>
+            <div id="sendungWarenuebernahmeDetailList" class="space-y-3">${detailRowsHtml}</div>
+        </div>
+    `;
+
+    const navigatorList = rows.querySelector('#sendungWarenuebernahmeNavigatorList');
+    const legend = rows.querySelector('#sendungWarenuebernahmeLegend');
+    const detailList = rows.querySelector('#sendungWarenuebernahmeDetailList');
+    const scopeHint = rows.querySelector('#sendungWarenuebernahmeScopeHint');
+    const nextBtn = rows.querySelector('#sendungWarenuebernahmeNextBtn');
+    if (!navigatorList || !legend || !detailList || !scopeHint || !nextBtn) return;
+
+    const rowElements = Array.from(detailList.querySelectorAll('.sendung-wa-row'));
+    const orderedRows = () => [...rowElements].sort((left, right) => {
+        const l = Number.parseInt(left.dataset.order || '0', 10);
+        const r = Number.parseInt(right.dataset.order || '0', 10);
+        return (Number.isFinite(l) ? l : 0) - (Number.isFinite(r) ? r : 0);
+    });
+    const findRow = (inhaltId) => rowElements.find((row) => String(row.dataset.inhaltId || '').trim() === inhaltId) || null;
+
+    if (!waSelectedInhaltId || !findRow(waSelectedInhaltId)) {
+        const firstUnchecked = orderedRows().find((row) => String(row.dataset.baseStatus || '') === 'ungeprueft');
+        waSelectedInhaltId = String(firstUnchecked?.dataset.inhaltId || orderedRows()[0]?.dataset.inhaltId || '');
+    }
+
+    const updateRowSummary = (row) => {
+        const mengeSollRaw = Number.parseInt(row.dataset.mengeSoll || '0', 10);
+        const mengeSoll = Number.isFinite(mengeSollRaw) && mengeSollRaw > 0 ? mengeSollRaw : 0;
+        const mengeIstRaw = Number.parseInt(row.dataset.counter || '0', 10);
+        const mengeIst = Number.isFinite(mengeIstRaw) && mengeIstRaw > 0 ? mengeIstRaw : 0;
+        row.dataset.counter = String(mengeIst);
+
+        const problemByTyp = { fehlt: 0, zuviel: 0, defekt: 0, vertauscht: 0, unbekannt: 0 };
+        row.querySelectorAll('.sendung-wa-problem-counter').forEach((problemRow) => {
+            const typ = String(problemRow.dataset.problemTyp || '').trim().toLowerCase();
+            if (!WARENUEBERNAHME_PROBLEM_TYPEN.includes(typ)) return;
+            const mengeRaw = Number.parseInt(problemRow.dataset.counter || '0', 10);
+            problemByTyp[typ] = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
+        });
+
+        const nonFehlt = (problemByTyp.defekt || 0) + (problemByTyp.vertauscht || 0) + (problemByTyp.unbekannt || 0);
+        const maxFehlt = Math.max(0, mengeSoll - mengeIst - nonFehlt);
+        problemByTyp.fehlt = Math.min(problemByTyp.fehlt || 0, maxFehlt);
+
+        if (mengeSoll !== mengeIst) {
+            problemByTyp.zuviel = 0;
+        }
+
+        let problemTotal = 0;
+        row.querySelectorAll('.sendung-wa-problem-counter').forEach((problemRow) => {
+            const typ = String(problemRow.dataset.problemTyp || '').trim().toLowerCase();
+            const value = problemByTyp[typ] || 0;
+            problemTotal += value;
+            problemRow.dataset.counter = String(value);
+            const counterValue = problemRow.querySelector('.sendung-wa-problem-counter-value');
+            if (counterValue) counterValue.textContent = String(value);
+
+            const minusBtn = problemRow.querySelector('.sendung-wa-problem-minus-btn');
+            const plusBtn = problemRow.querySelector('.sendung-wa-problem-plus-btn');
+            if (minusBtn) {
+                minusBtn.disabled = value <= 0;
+                minusBtn.classList.toggle('opacity-40', value <= 0);
+                minusBtn.classList.toggle('cursor-not-allowed', value <= 0);
+            }
+
+            let plusDisabled = false;
+            let ruleText = 'immer möglich';
+            if (typ === 'fehlt') {
+                ruleText = 'nur bis Offen';
+                plusDisabled = maxFehlt <= value;
+            } else if (typ === 'zuviel') {
+                ruleText = 'nur wenn Soll = Ist';
+                plusDisabled = mengeSoll !== mengeIst;
+            }
+            if (plusBtn) {
+                plusBtn.disabled = plusDisabled;
+                plusBtn.classList.toggle('opacity-40', plusDisabled);
+                plusBtn.classList.toggle('cursor-not-allowed', plusDisabled);
+            }
+
+            const ruleState = problemRow.querySelector('.sendung-wa-problem-rule-state');
+            if (ruleState) ruleState.textContent = ruleText;
+        });
+
+        const geprueft = mengeIst + problemTotal;
+        const ungeprueft = Math.max(0, mengeSoll - geprueft);
+        const baseStatus = getBaseStatus(ungeprueft, geprueft, problemTotal);
+        row.dataset.baseStatus = baseStatus;
+        row.dataset.unchecked = String(ungeprueft);
+
+        const istValue = row.querySelector('.sendung-wa-main-counter-value');
+        if (istValue) istValue.textContent = String(mengeIst);
+        const offenValue = row.querySelector('.sendung-wa-offen-value');
+        if (offenValue) offenValue.textContent = String(ungeprueft);
+
+        const statusPill = row.querySelector('.sendung-wa-status-pill');
+        if (statusPill) {
+            statusPill.className = 'sendung-wa-status-pill text-[11px] px-2 py-1 rounded font-bold';
+            const meta = WARENUEBERNAHME_NAV_STATUS_META[baseStatus] || WARENUEBERNAHME_NAV_STATUS_META.ungeprueft;
+            statusPill.classList.add(...meta.badge.split(' '));
+            statusPill.textContent = meta.label;
+        }
+    };
+
+    const renderProblemList = () => {
+        const grouped = new Map();
+        rowElements.forEach((row) => {
+            row.querySelectorAll('.sendung-wa-problem-counter').forEach((problemRow) => {
+                const typ = String(problemRow.dataset.problemTyp || '').trim().toLowerCase();
+                const mengeRaw = Number.parseInt(problemRow.dataset.counter || '0', 10);
+                const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
+                if (!menge || !WARENUEBERNAHME_PROBLEM_TYPEN.includes(typ)) return;
+                const inhaltId = String(row.dataset.inhaltId || '').trim();
+                const key = `${inhaltId}__${typ}`;
+                grouped.set(key, {
+                    key,
+                    inhaltId,
+                    typ,
+                    menge,
+                    label: row.querySelector('.sendung-wa-item-label')?.textContent?.trim() || 'Artikel'
+                });
+            });
+        });
+
+        const resolutionsByPot = new Map();
+        warenuebernahme.problemaufloesungen.forEach((resolution) => {
+            const potId = String(resolution?.problemPotEntryId || '').trim();
+            if (!potId) return;
+            if (!resolutionsByPot.has(potId)) resolutionsByPot.set(potId, []);
+            resolutionsByPot.get(potId).push(resolution);
+        });
+
+        if (grouped.size === 0) {
+            problemList.innerHTML = '<span class="text-xs text-gray-500">Noch keine Problempositionen.</span>';
+            return;
+        }
+
+        const paketOptions = currentSendungPakete
+            .filter((candidate) => String(candidate?.paketId || '').trim() !== String(paket?.paketId || '').trim())
+            .map((candidate, idx) => `<option value="${candidate.paketId}">${candidate.paketLabel || `Paket ${idx + 1}`}</option>`)
+            .join('');
+
+        const existingProblemByKey = new Map();
+        warenuebernahme.problemartikel.forEach((problem) => {
+            const key = `${problem.inhaltId}__${problem.typ}`;
+            if (!existingProblemByKey.has(key)) existingProblemByKey.set(key, problem);
+        });
+
+        problemList.innerHTML = [...grouped.values()].map((entry) => {
+            const match = existingProblemByKey.get(entry.key);
+            const potEntryId = String(match?.potEntryId || `pot_${warenuebernahme.uebernahmeId}_${entry.key}`);
+            const linkedResolutions = resolutionsByPot.get(potEntryId) || [];
+            const resolvedTotal = linkedResolutions.reduce((sum, resolution) => sum + (resolution.menge || 0), 0);
+            const remainingForResolution = Math.max(0, entry.menge - resolvedTotal);
+            const linkedBadges = linkedResolutions.length > 0
+                ? linkedResolutions.map((resolution) => {
+                    const typLabel = resolution.aktion === 'zuweisen'
+                        ? `Zugewiesen (${resolution.menge})`
+                        : `Gelöst: ${(resolution.geloestTyp || 'sonstiges').replace('rueckerstattet', 'rückerstattet')}`;
+                    return `<span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[11px] font-semibold">${typLabel}</span>`;
+                }).join(' ')
+                : '<span class="text-[11px] text-gray-500">Noch keine Auflösung</span>';
 
             return `
-                <div class="sendung-wa-row rounded-lg border border-gray-200 bg-white p-3 space-y-3" data-inhalt-id="${entry.inhaltId}" data-menge-soll="${entry.mengeSoll}" data-counter="${geliefertInitial}" data-unchecked="${ungeprueftInitial}">
-                    <div class="flex items-center justify-between gap-2 flex-wrap">
-                        <div class="font-semibold text-sm text-gray-800 sendung-wa-item-label">${inhalt?.bezeichnung || 'Artikel'}</div>
-                        <span class="text-xs px-2 py-1 rounded bg-amber-100 text-amber-800 font-bold">Soll: ${entry.mengeSoll}</span>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-2 justify-start">
-                        <button type="button" class="sendung-wa-main-minus-btn w-9 h-9 rounded-full bg-gray-100 text-gray-700 font-bold text-lg leading-none hover:bg-gray-200 transition">-</button>
-                        ${entry.mengeSoll > 10
-                            ? `<div class="flex items-center gap-1">
-                                <input type="number" min="1" step="1" class="sendung-wa-main-quick-add-input w-20 p-1.5 border border-gray-300 rounded text-xs" placeholder="Anzahl">
-                                <button type="button" class="sendung-wa-main-quick-add-btn px-2.5 py-1.5 rounded bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 transition">+ Buchen</button>
-                            </div>`
-                            : ''}
-                        <button type="button" class="sendung-wa-main-plus-btn w-9 h-9 rounded-full bg-emerald-600 text-white font-bold text-lg leading-none hover:bg-emerald-700 transition">+</button>
-                        <div class="px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-sm min-w-[4rem] text-center">
-                            <span class="sendung-wa-main-counter-value">${geliefertInitial}</span>
+                <div class="rounded-lg border border-red-200 bg-white p-2 space-y-2">
+                    <div class="text-xs font-semibold text-red-700">${entry.menge}x ${entry.label} (${WARENUEBERNAHME_ABWEICHUNG_OPTIONS[entry.typ] || entry.typ})</div>
+                    <div class="text-[11px] text-red-700">Offen für Auflösung: <span class="font-bold">${remainingForResolution}</span></div>
+                    <div class="flex flex-wrap gap-1">${linkedBadges}</div>
+                    <div class="sendung-wa-problem-resolution-row grid grid-cols-1 md:grid-cols-5 gap-2 items-end" data-problem-pot-entry-id="${potEntryId}" data-inhalt-id="${entry.inhaltId}" data-counter="0" data-max="${remainingForResolution}">
+                        <select class="sendung-wa-resolution-action p-2 border border-gray-300 rounded text-xs md:col-span-1">
+                            <option value="zuweisen">Zu Paket zuweisen</option>
+                            <option value="geloest">Als gelöst bestätigen</option>
+                        </select>
+                        <select class="sendung-wa-resolution-target p-2 border border-gray-300 rounded text-xs md:col-span-1">${paketOptions || '<option value="">Kein weiteres Paket</option>'}</select>
+                        <select class="sendung-wa-resolution-geloest-typ p-2 border border-gray-300 rounded text-xs md:col-span-1 hidden">
+                            <option value="storno">Storno</option>
+                            <option value="rueckerstattet">Rückerstattet</option>
+                            <option value="sonstiges">Sonstiges</option>
+                        </select>
+                        <input type="text" class="sendung-wa-resolution-kommentar p-2 border border-gray-300 rounded text-xs md:col-span-1" placeholder="Kommentar">
+                        <div class="flex items-center gap-2 md:col-span-1">
+                            <button type="button" class="sendung-wa-resolution-minus w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold leading-none">-</button>
+                            <span class="sendung-wa-resolution-counter-value text-xs font-bold text-gray-700 min-w-[1.5rem] text-center">0</span>
+                            <button type="button" class="sendung-wa-resolution-plus w-8 h-8 rounded-full bg-red-600 text-white font-bold leading-none">+</button>
                         </div>
-                    </div>
-                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-2 space-y-2">
-                        <div class="text-xs font-bold text-gray-700">Abweichungen getrennt buchen</div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            ${problemControls}
-                        </div>
-                    </div>
-                    <div class="text-xs text-gray-600 flex flex-wrap gap-3">
-                        <span>Geliefert: <span class="font-bold text-emerald-700 sendung-wa-main-counter-value">${geliefertInitial}</span></span>
-                        <span>Abweichung gesamt: <span class="font-bold text-red-700 sendung-wa-problem-total">${problemInitialTotal}</span></span>
-                        <span>Geprüft: <span class="font-bold text-emerald-700 sendung-wa-checked-total">${geprueftInitial}</span> / ${entry.mengeSoll}</span>
-                        <span>Nicht geprüft: <span class="font-bold text-amber-700 sendung-wa-unchecked">${ungeprueftInitial}</span></span>
-                        <span class="font-bold ${ungeprueftInitial > 0 ? 'text-amber-700' : (problemInitialTotal > 0 ? 'text-red-700' : 'text-emerald-700')} sendung-wa-check-status">${ungeprueftInitial > 0 ? 'In Prüfung' : (problemInitialTotal > 0 ? 'Abweichung erfasst' : 'Vollständig geprüft')}</span>
-                    </div>
-                    <div>
-                        <label class="text-xs text-gray-600">Kommentar</label>
-                        <input type="text" class="sendung-wa-kommentar-input mt-1 w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 text-sm" value="${kommentar}" placeholder="Optional">
                     </div>
                 </div>
             `;
         }).join('');
 
-        const renderProblemListFromRows = () => {
-            const badges = [];
-            rows.querySelectorAll('.sendung-wa-row').forEach((row) => {
-                const itemLabel = row.querySelector('.sendung-wa-item-label')?.textContent?.trim() || 'Artikel';
-                row.querySelectorAll('.sendung-wa-problem-counter').forEach((problemRow) => {
-                    const typ = String(problemRow.dataset.problemTyp || '').trim().toLowerCase();
-                    const mengeRaw = Number.parseInt(problemRow.dataset.counter || '0', 10);
-                    const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
-                    if (!menge || !WARENUEBERNAHME_PROBLEM_TYPEN.includes(typ)) return;
-                    const label = WARENUEBERNAHME_ABWEICHUNG_OPTIONS[typ] || typ;
-                    badges.push(`<span class="px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">${menge}x ${itemLabel} (${label})</span>`);
-                });
+        problemList.querySelectorAll('.sendung-wa-problem-resolution-row').forEach((resolutionRow) => {
+            const actionSelect = resolutionRow.querySelector('.sendung-wa-resolution-action');
+            const targetSelect = resolutionRow.querySelector('.sendung-wa-resolution-target');
+            const geloestTypSelect = resolutionRow.querySelector('.sendung-wa-resolution-geloest-typ');
+            const minusBtn = resolutionRow.querySelector('.sendung-wa-resolution-minus');
+            const plusBtn = resolutionRow.querySelector('.sendung-wa-resolution-plus');
+            const counterValue = resolutionRow.querySelector('.sendung-wa-resolution-counter-value');
 
-                const ungeprueftRaw = Number.parseInt(row.dataset.unchecked || '0', 10);
-                const ungeprueft = Number.isFinite(ungeprueftRaw) && ungeprueftRaw > 0 ? ungeprueftRaw : 0;
-                if (ungeprueft > 0) {
-                    badges.push(`<span class="px-2 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold">${ungeprueft}x ${itemLabel} (${WARENUEBERNAHME_ABWEICHUNG_OPTIONS.nicht_geprueft})</span>`);
-                }
-            });
-
-            problemList.innerHTML = badges.length > 0
-                ? badges.join(' ')
-                : '<span class="text-xs text-gray-500">Noch keine Problempositionen.</span>';
-        };
-
-        rows.querySelectorAll('.sendung-wa-row').forEach((row) => {
-            const mengeSoll = Number.parseInt(row.dataset.mengeSoll || '0', 10);
-            const updateMainCounter = (nextValue) => {
-                const safeValue = Number.isFinite(nextValue) ? Math.max(0, nextValue) : 0;
-                row.dataset.counter = String(safeValue);
-                row.querySelectorAll('.sendung-wa-main-counter-value').forEach((element) => {
-                    element.textContent = String(safeValue);
-                });
+            const updateResolutionUi = () => {
+                const action = String(actionSelect?.value || 'zuweisen').trim().toLowerCase();
+                if (targetSelect) targetSelect.classList.toggle('hidden', action !== 'zuweisen');
+                if (geloestTypSelect) geloestTypSelect.classList.toggle('hidden', action !== 'geloest');
+                const counterRaw = Number.parseInt(resolutionRow.dataset.counter || '0', 10);
+                const maxRaw = Number.parseInt(resolutionRow.dataset.max || '0', 10);
+                const max = Number.isFinite(maxRaw) && maxRaw > 0 ? maxRaw : 0;
+                const counter = Number.isFinite(counterRaw) && counterRaw > 0 ? Math.min(counterRaw, max) : 0;
+                resolutionRow.dataset.counter = String(counter);
+                if (counterValue) counterValue.textContent = String(counter);
+                if (minusBtn) minusBtn.disabled = counter <= 0;
+                if (plusBtn) plusBtn.disabled = counter >= max || max <= 0;
             };
 
-            const updateProblemCounter = (problemRow, nextValue) => {
-                const safeValue = Number.isFinite(nextValue) ? Math.max(0, nextValue) : 0;
-                problemRow.dataset.counter = String(safeValue);
-                problemRow.querySelectorAll('.sendung-wa-problem-counter-value').forEach((element) => {
-                    element.textContent = String(safeValue);
-                });
-            };
-
-            const updateRowSummary = () => {
-                const geliefertRaw = Number.parseInt(row.dataset.counter || '0', 10);
-                const geliefert = Number.isFinite(geliefertRaw) && geliefertRaw > 0 ? geliefertRaw : 0;
-
-                let problemTotal = 0;
-                row.querySelectorAll('.sendung-wa-problem-counter').forEach((problemRow) => {
-                    const mengeRaw = Number.parseInt(problemRow.dataset.counter || '0', 10);
-                    const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
-                    problemTotal += menge;
-                });
-
-                const geprueftTotal = geliefert + problemTotal;
-                const ungeprueft = Math.max(0, mengeSoll - geprueftTotal);
-                row.dataset.unchecked = String(ungeprueft);
-
-                const problemTotalElement = row.querySelector('.sendung-wa-problem-total');
-                if (problemTotalElement) {
-                    problemTotalElement.textContent = String(problemTotal);
-                }
-
-                const checkedTotalElement = row.querySelector('.sendung-wa-checked-total');
-                if (checkedTotalElement) {
-                    checkedTotalElement.textContent = String(geprueftTotal);
-                }
-
-                const uncheckedElement = row.querySelector('.sendung-wa-unchecked');
-                if (uncheckedElement) {
-                    uncheckedElement.textContent = String(ungeprueft);
-                }
-
-                const statusElement = row.querySelector('.sendung-wa-check-status');
-                if (statusElement) {
-                    statusElement.classList.remove('text-amber-700', 'text-red-700', 'text-emerald-700');
-                    if (ungeprueft > 0) {
-                        statusElement.textContent = 'In Prüfung';
-                        statusElement.classList.add('text-amber-700');
-                    } else if (problemTotal > 0) {
-                        statusElement.textContent = 'Abweichung erfasst';
-                        statusElement.classList.add('text-red-700');
-                    } else {
-                        statusElement.textContent = 'Vollständig geprüft';
-                        statusElement.classList.add('text-emerald-700');
-                    }
-                }
-
-                renderProblemListFromRows();
-            };
-
-            const mainMinusBtn = row.querySelector('.sendung-wa-main-minus-btn');
-            const mainPlusBtn = row.querySelector('.sendung-wa-main-plus-btn');
-            const mainQuickAddInput = row.querySelector('.sendung-wa-main-quick-add-input');
-            const mainQuickAddBtn = row.querySelector('.sendung-wa-main-quick-add-btn');
-
-            if (mainMinusBtn) {
-                mainMinusBtn.onclick = () => {
-                    const currentValue = Number.parseInt(row.dataset.counter || '0', 10);
-                    updateMainCounter((Number.isFinite(currentValue) ? currentValue : 0) - 1);
-                    updateRowSummary();
+            if (actionSelect) actionSelect.onchange = updateResolutionUi;
+            if (minusBtn) {
+                minusBtn.onclick = () => {
+                    const current = Number.parseInt(resolutionRow.dataset.counter || '0', 10);
+                    resolutionRow.dataset.counter = String(Math.max(0, (Number.isFinite(current) ? current : 0) - 1));
+                    updateResolutionUi();
+                };
+            }
+            if (plusBtn) {
+                plusBtn.onclick = () => {
+                    const current = Number.parseInt(resolutionRow.dataset.counter || '0', 10);
+                    resolutionRow.dataset.counter = String((Number.isFinite(current) ? current : 0) + 1);
+                    updateResolutionUi();
                 };
             }
 
-            if (mainPlusBtn) {
-                mainPlusBtn.onclick = () => {
-                    const currentValue = Number.parseInt(row.dataset.counter || '0', 10);
-                    updateMainCounter((Number.isFinite(currentValue) ? currentValue : 0) + 1);
-                    updateRowSummary();
-                };
-            }
+            updateResolutionUi();
+        });
+    };
 
-            if (mainQuickAddBtn && mainQuickAddInput) {
-                mainQuickAddBtn.onclick = () => {
-                    const currentValue = Number.parseInt(row.dataset.counter || '0', 10);
-                    const addRaw = Number.parseInt(mainQuickAddInput.value || '0', 10);
-                    const addValue = Number.isFinite(addRaw) && addRaw > 0 ? addRaw : 0;
-                    updateMainCounter((Number.isFinite(currentValue) ? currentValue : 0) + addValue);
-                    mainQuickAddInput.value = '';
-                    mainQuickAddInput.focus();
-                    updateRowSummary();
-                };
+    const getDisplayStatus = (row) => {
+        const inhaltId = String(row.dataset.inhaltId || '').trim();
+        const base = String(row.dataset.baseStatus || 'ungeprueft');
+        return inhaltId === waSelectedInhaltId ? 'in_pruefung' : base;
+    };
 
-                mainQuickAddInput.onkeydown = (event) => {
-                    if (event.key !== 'Enter') return;
-                    event.preventDefault();
-                    mainQuickAddBtn.click();
-                };
-            }
+    const renderNavigator = () => {
+        navigatorList.innerHTML = orderedRows().map((row) => {
+            const inhaltId = String(row.dataset.inhaltId || '').trim();
+            const label = row.querySelector('.sendung-wa-item-label')?.textContent?.trim() || 'Artikel';
+            const statusKey = getDisplayStatus(row);
+            const meta = WARENUEBERNAHME_NAV_STATUS_META[statusKey] || WARENUEBERNAHME_NAV_STATUS_META.ungeprueft;
+            const isActive = inhaltId === waSelectedInhaltId;
+            return `
+                <button type="button" class="sendung-wa-nav-item w-full flex items-center justify-between gap-2 text-left px-2.5 py-2 rounded-lg border ${isActive ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'} hover:border-blue-300" data-inhalt-id="${inhaltId}">
+                    <span class="text-xs font-semibold text-gray-800 truncate">${label}</span>
+                    <span class="inline-flex items-center gap-1.5 text-[10px] font-bold ${meta.filterText}"><span class="w-2.5 h-2.5 rounded-full ${meta.dot}"></span>${meta.label}</span>
+                </button>
+            `;
+        }).join('');
+    };
 
-            row.querySelectorAll('.sendung-wa-problem-counter').forEach((problemRow) => {
-                const minusBtn = problemRow.querySelector('.sendung-wa-problem-minus-btn');
-                const plusBtn = problemRow.querySelector('.sendung-wa-problem-plus-btn');
-                const quickAddInput = problemRow.querySelector('.sendung-wa-problem-quick-add-input');
-                const quickAddBtn = problemRow.querySelector('.sendung-wa-problem-quick-add-btn');
+    const renderLegend = () => {
+        const options = [
+            { key: 'ungeprueft', text: 'Ungeprüft' },
+            { key: 'in_pruefung', text: 'In Prüfung' },
+            { key: 'bestaetigt', text: 'Bestätigt' },
+            { key: 'unvollstaendig', text: 'Unvollständig' },
+            { key: 'problem', text: 'Problem' }
+        ];
+        legend.innerHTML = options.map((option) => {
+            const meta = WARENUEBERNAHME_NAV_STATUS_META[option.key];
+            const active = waFilterStatus === option.key;
+            return `
+                <button type="button" class="sendung-wa-legend-filter px-2.5 py-1.5 rounded-full text-xs font-bold border ${active ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-700'}" data-filter-status="${option.key}">
+                    <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full ${meta.dot}"></span>${option.text}</span>
+                </button>
+            `;
+        }).join('');
+    };
 
-                if (minusBtn) {
-                    minusBtn.onclick = () => {
-                        const currentValue = Number.parseInt(problemRow.dataset.counter || '0', 10);
-                        updateProblemCounter(problemRow, (Number.isFinite(currentValue) ? currentValue : 0) - 1);
-                        updateRowSummary();
-                    };
-                }
+    const isRowVisible = (row) => {
+        const inhaltId = String(row.dataset.inhaltId || '').trim();
+        const base = String(row.dataset.baseStatus || 'ungeprueft');
+        if (waFilterStatus === 'all') return inhaltId === waSelectedInhaltId;
+        if (waFilterStatus === 'in_pruefung') return inhaltId === waSelectedInhaltId;
+        return base === waFilterStatus;
+    };
 
-                if (plusBtn) {
-                    plusBtn.onclick = () => {
-                        const currentValue = Number.parseInt(problemRow.dataset.counter || '0', 10);
-                        updateProblemCounter(problemRow, (Number.isFinite(currentValue) ? currentValue : 0) + 1);
-                        updateRowSummary();
-                    };
-                }
-
-                if (quickAddBtn && quickAddInput) {
-                    quickAddBtn.onclick = () => {
-                        const currentValue = Number.parseInt(problemRow.dataset.counter || '0', 10);
-                        const addRaw = Number.parseInt(quickAddInput.value || '0', 10);
-                        const addValue = Number.isFinite(addRaw) && addRaw > 0 ? addRaw : 0;
-                        updateProblemCounter(problemRow, (Number.isFinite(currentValue) ? currentValue : 0) + addValue);
-                        quickAddInput.value = '';
-                        quickAddInput.focus();
-                        updateRowSummary();
-                    };
-
-                    quickAddInput.onkeydown = (event) => {
-                        if (event.key !== 'Enter') return;
-                        event.preventDefault();
-                        quickAddBtn.click();
-                    };
-                }
-            });
-
-            updateMainCounter(Number.parseInt(row.dataset.counter || '0', 10));
-            updateRowSummary();
+    const applyDetailFilter = () => {
+        rowElements.forEach((row) => {
+            row.classList.toggle('hidden', !isRowVisible(row));
         });
 
-        renderProblemListFromRows();
+        if (waFilterStatus === 'all' || waFilterStatus === 'in_pruefung') {
+            scopeHint.textContent = 'Einzelansicht';
+        } else {
+            const label = WARENUEBERNAHME_NAV_STATUS_META[waFilterStatus]?.label || waFilterStatus;
+            scopeHint.textContent = `Filter: ${label}`;
+        }
+    };
 
-        return;
-    }
+    const refreshAll = () => {
+        rowElements.forEach((row) => updateRowSummary(row));
+        renderNavigator();
+        renderLegend();
+        applyDetailFilter();
+        renderProblemList();
+    };
 
-    problemList.innerHTML = '<span class="text-xs text-gray-500">Noch keine Problempositionen.</span>';
+    rowElements.forEach((row) => {
+        const toggleDiffBtn = row.querySelector('.sendung-wa-toggle-diff-btn');
+        const diffBox = row.querySelector('.sendung-wa-diff-box');
+        const mainMinusBtn = row.querySelector('.sendung-wa-main-minus-btn');
+        const mainPlusBtn = row.querySelector('.sendung-wa-main-plus-btn');
+
+        if (toggleDiffBtn && diffBox) {
+            toggleDiffBtn.onclick = () => diffBox.classList.toggle('hidden');
+        }
+        if (mainMinusBtn) {
+            mainMinusBtn.onclick = () => {
+                const current = Number.parseInt(row.dataset.counter || '0', 10);
+                row.dataset.counter = String(Math.max(0, (Number.isFinite(current) ? current : 0) - 1));
+                refreshAll();
+            };
+        }
+        if (mainPlusBtn) {
+            mainPlusBtn.onclick = () => {
+                const current = Number.parseInt(row.dataset.counter || '0', 10);
+                row.dataset.counter = String((Number.isFinite(current) ? current : 0) + 1);
+                refreshAll();
+            };
+        }
+
+        row.querySelectorAll('.sendung-wa-problem-counter').forEach((problemRow) => {
+            const minusBtn = problemRow.querySelector('.sendung-wa-problem-minus-btn');
+            const plusBtn = problemRow.querySelector('.sendung-wa-problem-plus-btn');
+            if (minusBtn) {
+                minusBtn.onclick = () => {
+                    const current = Number.parseInt(problemRow.dataset.counter || '0', 10);
+                    problemRow.dataset.counter = String(Math.max(0, (Number.isFinite(current) ? current : 0) - 1));
+                    refreshAll();
+                };
+            }
+            if (plusBtn) {
+                plusBtn.onclick = () => {
+                    if (plusBtn.disabled) return;
+                    const current = Number.parseInt(problemRow.dataset.counter || '0', 10);
+                    problemRow.dataset.counter = String((Number.isFinite(current) ? current : 0) + 1);
+                    refreshAll();
+                };
+            }
+        });
+    });
+
+    navigatorList.onclick = (event) => {
+        const button = event.target.closest('.sendung-wa-nav-item');
+        if (!button) return;
+        const inhaltId = String(button.dataset.inhaltId || '').trim();
+        if (!inhaltId) return;
+        waSelectedInhaltId = inhaltId;
+        waFilterStatus = 'all';
+        refreshAll();
+        findRow(inhaltId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    legend.onclick = (event) => {
+        const button = event.target.closest('.sendung-wa-legend-filter');
+        if (!button) return;
+        waFilterStatus = String(button.dataset.filterStatus || 'all').trim();
+        refreshAll();
+    };
+
+    nextBtn.onclick = () => {
+        const allRows = orderedRows();
+        const visibleRows = allRows.filter((row) => {
+            if (waFilterStatus === 'all') return true;
+            if (waFilterStatus === 'in_pruefung') return true;
+            return String(row.dataset.baseStatus || '') === waFilterStatus;
+        });
+        if (visibleRows.length === 0) return;
+
+        const currentIndex = visibleRows.findIndex((row) => String(row.dataset.inhaltId || '') === waSelectedInhaltId);
+        const afterCurrent = currentIndex >= 0 ? visibleRows.slice(currentIndex + 1) : visibleRows;
+        const beforeCurrent = currentIndex >= 0 ? visibleRows.slice(0, currentIndex + 1) : [];
+        const nextUnchecked = afterCurrent.find((row) => String(row.dataset.baseStatus || '') === 'ungeprueft')
+            || beforeCurrent.find((row) => String(row.dataset.baseStatus || '') === 'ungeprueft');
+        let nextRow = nextUnchecked;
+        if (!nextRow && currentIndex >= 0) {
+            nextRow = visibleRows[currentIndex + 1] || visibleRows[0];
+        }
+        if (!nextRow) nextRow = visibleRows[0];
+        waSelectedInhaltId = String(nextRow.dataset.inhaltId || '');
+        if (waFilterStatus === 'in_pruefung') waFilterStatus = 'all';
+        refreshAll();
+        nextRow.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    refreshAll();
 }
 
 function resetWarenuebernahmeResetSequence() {
@@ -1650,6 +1928,7 @@ function resetCurrentWarenuebernahmeToStandardwerte() {
         completedAt: null,
         positionen: [],
         problemartikel: [],
+        problemaufloesungen: [],
         updatedAt: nowIso(),
         updatedBy: currentUser?.mode || '',
         startedAt: bestehend.startedAt || nowIso()
@@ -1710,6 +1989,17 @@ function collectWarenuebernahmeFromModal() {
     const rows = document.querySelectorAll('#sendungWarenuebernahmeRows .sendung-wa-row');
     const positionen = [];
     const problemartikel = [];
+    const existingProblemByKey = new Map();
+    existing.problemartikel.forEach((problem) => {
+        const key = `${problem.inhaltId}__${problem.typ}`;
+        if (!existingProblemByKey.has(key)) {
+            existingProblemByKey.set(key, problem);
+        }
+    });
+
+    const problemaufloesungen = Array.isArray(existing.problemaufloesungen)
+        ? existing.problemaufloesungen.map(normalizeWarenuebernahmeProblemResolution)
+        : [];
     let hasUnchecked = false;
 
     rows.forEach((row) => {
@@ -1736,8 +2026,11 @@ function collectWarenuebernahmeFromModal() {
             problemVerteilung[typ] = menge;
             problemTotal += menge;
 
+            const previous = existingProblemByKey.get(`${inhaltId}__${typ}`);
+            const fallbackPotEntryId = `pot_${existing.uebernahmeId}_${inhaltId}__${typ}`;
+
             problemartikel.push({
-                potEntryId: createPotEntryId(),
+                potEntryId: previous?.potEntryId || fallbackPotEntryId,
                 inhaltId,
                 paketId: paket.paketId,
                 mengeSoll,
@@ -1746,8 +2039,8 @@ function collectWarenuebernahmeFromModal() {
                 typ,
                 kommentar,
                 sourceUebernahmeId: existing.uebernahmeId,
-                createdAt: nowIso(),
-                createdBy: currentUser?.mode || ''
+                createdAt: previous?.createdAt || nowIso(),
+                createdBy: previous?.createdBy || currentUser?.mode || ''
             });
         });
 
@@ -1758,9 +2051,9 @@ function collectWarenuebernahmeFromModal() {
 
         const dominantProblemTyp = Object.entries(problemVerteilung)
             .sort((left, right) => right[1] - left[1])[0]?.[0] || null;
-        const finalTyp = ungeprueft > 0
-            ? 'nicht_geprueft'
-            : (dominantProblemTyp || (mengeIst > mengeSoll ? 'zuviel' : 'ok'));
+        const finalTyp = dominantProblemTyp
+            ? dominantProblemTyp
+            : (ungeprueft > 0 ? 'nicht_geprueft' : (mengeIst > mengeSoll ? 'zuviel' : 'ok'));
 
         positionen.push({
             inhaltId,
@@ -1771,6 +2064,36 @@ function collectWarenuebernahmeFromModal() {
             kommentar,
             bestaetigtAt: ungeprueft > 0 ? null : nowIso()
         });
+    });
+
+    const resolutionRows = document.querySelectorAll('#sendungWarenuebernahmeProblemList .sendung-wa-problem-resolution-row');
+    resolutionRows.forEach((row) => {
+        const mengeRaw = Number.parseInt(row.dataset.counter || '0', 10);
+        const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
+        if (menge <= 0) return;
+
+        const problemPotEntryId = String(row.dataset.problemPotEntryId || '').trim();
+        const inhaltId = String(row.dataset.inhaltId || '').trim();
+        const action = String(row.querySelector('.sendung-wa-resolution-action')?.value || 'zuweisen').trim().toLowerCase();
+        const zielPaketId = String(row.querySelector('.sendung-wa-resolution-target')?.value || '').trim();
+        const geloestTyp = String(row.querySelector('.sendung-wa-resolution-geloest-typ')?.value || 'sonstiges').trim().toLowerCase();
+        const kommentar = String(row.querySelector('.sendung-wa-resolution-kommentar')?.value || '').trim();
+
+        if (!problemPotEntryId || !inhaltId) return;
+        if (action === 'zuweisen' && !zielPaketId) return;
+
+        problemaufloesungen.push(normalizeWarenuebernahmeProblemResolution({
+            resolutionId: createProblemResolutionId(),
+            problemPotEntryId,
+            inhaltId,
+            menge,
+            aktion: action === 'zuweisen' ? 'zuweisen' : 'geloest',
+            zielPaketId: action === 'zuweisen' ? zielPaketId : '',
+            geloestTyp: action === 'geloest' ? geloestTyp : '',
+            kommentar,
+            createdAt: nowIso(),
+            createdBy: currentUser?.mode || ''
+        }));
     });
 
     let status = 'offen';
@@ -1790,6 +2113,7 @@ function collectWarenuebernahmeFromModal() {
         status,
         positionen,
         problemartikel,
+        problemaufloesungen,
         updatedAt: nowIso(),
         updatedBy: currentUser?.mode || ''
     });
