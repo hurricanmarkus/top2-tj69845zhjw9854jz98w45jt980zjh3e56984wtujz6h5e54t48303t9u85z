@@ -1469,6 +1469,7 @@ function renderWarenuebernahmeModal() {
                 <div class="flex items-center justify-center gap-3">
                     <button type="button" class="sendung-wa-main-minus-btn w-14 h-14 rounded-full bg-gray-100 text-gray-800 font-black text-3xl leading-none hover:bg-gray-200 transition">-</button>
                     <button type="button" class="sendung-wa-main-plus-btn w-14 h-14 rounded-full bg-emerald-600 text-white font-black text-3xl leading-none hover:bg-emerald-700 transition">+</button>
+                    <button type="button" class="sendung-wa-main-next-btn min-w-[7.5rem] h-14 px-4 rounded-xl bg-blue-600 text-white text-base font-extrabold hover:bg-blue-700 transition">Nächstes</button>
                 </div>
 
                 <div>
@@ -1507,9 +1508,8 @@ function renderWarenuebernahmeModal() {
                 <div id="sendungWarenuebernahmeNavigatorList" class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1"></div>
             </div>
             <div id="sendungWarenuebernahmeLegend" class="flex flex-wrap gap-2"></div>
-            <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
-                <p id="sendungWarenuebernahmeScopeHint" class="text-xs text-gray-600">Einzelansicht</p>
-                <button type="button" id="sendungWarenuebernahmeNextBtn" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition">Nächstes</button>
+            <div class="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                <p id="sendungWarenuebernahmeScopeHint" class="text-xs text-gray-600">Nächstes: alle Status</p>
             </div>
             <div id="sendungWarenuebernahmeDetailList" class="space-y-3">${detailRowsHtml}</div>
         </div>
@@ -1519,8 +1519,7 @@ function renderWarenuebernahmeModal() {
     const legend = rows.querySelector('#sendungWarenuebernahmeLegend');
     const detailList = rows.querySelector('#sendungWarenuebernahmeDetailList');
     const scopeHint = rows.querySelector('#sendungWarenuebernahmeScopeHint');
-    const nextBtn = rows.querySelector('#sendungWarenuebernahmeNextBtn');
-    if (!navigatorList || !legend || !detailList || !scopeHint || !nextBtn) return;
+    if (!navigatorList || !legend || !detailList || !scopeHint) return;
 
     const rowElements = Array.from(detailList.querySelectorAll('.sendung-wa-row'));
     const orderedRows = () => [...rowElements].sort((left, right) => {
@@ -1604,6 +1603,22 @@ function renderWarenuebernahmeModal() {
         if (istValue) istValue.textContent = String(mengeIst);
         const offenValue = row.querySelector('.sendung-wa-offen-value');
         if (offenValue) offenValue.textContent = String(ungeprueft);
+
+        const mainMinusBtn = row.querySelector('.sendung-wa-main-minus-btn');
+        if (mainMinusBtn) {
+            const minusDisabled = mengeIst <= 0;
+            mainMinusBtn.disabled = minusDisabled;
+            mainMinusBtn.classList.toggle('opacity-40', minusDisabled);
+            mainMinusBtn.classList.toggle('cursor-not-allowed', minusDisabled);
+        }
+
+        const mainPlusBtn = row.querySelector('.sendung-wa-main-plus-btn');
+        if (mainPlusBtn) {
+            const plusDisabled = ungeprueft <= 0;
+            mainPlusBtn.disabled = plusDisabled;
+            mainPlusBtn.classList.toggle('opacity-40', plusDisabled);
+            mainPlusBtn.classList.toggle('cursor-not-allowed', plusDisabled);
+        }
 
         const statusPill = row.querySelector('.sendung-wa-status-pill');
         if (statusPill) {
@@ -1785,10 +1800,7 @@ function renderWarenuebernahmeModal() {
 
     const isRowVisible = (row) => {
         const inhaltId = String(row.dataset.inhaltId || '').trim();
-        const base = String(row.dataset.baseStatus || 'ungeprueft');
-        if (waFilterStatus === 'all') return inhaltId === waSelectedInhaltId;
-        if (waFilterStatus === 'in_pruefung') return inhaltId === waSelectedInhaltId;
-        return base === waFilterStatus;
+        return inhaltId === waSelectedInhaltId;
     };
 
     const applyDetailFilter = () => {
@@ -1796,12 +1808,36 @@ function renderWarenuebernahmeModal() {
             row.classList.toggle('hidden', !isRowVisible(row));
         });
 
-        if (waFilterStatus === 'all' || waFilterStatus === 'in_pruefung') {
-            scopeHint.textContent = 'Einzelansicht';
+        if (waFilterStatus === 'all') {
+            scopeHint.textContent = 'Nächstes: alle Status';
         } else {
             const label = WARENUEBERNAHME_NAV_STATUS_META[waFilterStatus]?.label || waFilterStatus;
-            scopeHint.textContent = `Filter: ${label}`;
+            scopeHint.textContent = `Nächstes: nur ${label}`;
         }
+    };
+
+    const goToNextRow = () => {
+        const allRows = orderedRows();
+        const visibleRows = allRows.filter((row) => {
+            if (waFilterStatus === 'all') return true;
+            if (waFilterStatus === 'in_pruefung') return true;
+            return String(row.dataset.baseStatus || '') === waFilterStatus;
+        });
+        if (visibleRows.length === 0) return;
+
+        const currentIndex = visibleRows.findIndex((row) => String(row.dataset.inhaltId || '') === waSelectedInhaltId);
+        const afterCurrent = currentIndex >= 0 ? visibleRows.slice(currentIndex + 1) : visibleRows;
+        const beforeCurrent = currentIndex >= 0 ? visibleRows.slice(0, currentIndex + 1) : [];
+        const nextUnchecked = afterCurrent.find((row) => String(row.dataset.baseStatus || '') === 'ungeprueft')
+            || beforeCurrent.find((row) => String(row.dataset.baseStatus || '') === 'ungeprueft');
+        let nextRow = nextUnchecked;
+        if (!nextRow && currentIndex >= 0) {
+            nextRow = visibleRows[currentIndex + 1] || visibleRows[0];
+        }
+        if (!nextRow) nextRow = visibleRows[0];
+        waSelectedInhaltId = String(nextRow.dataset.inhaltId || '');
+        refreshAll();
+        nextRow.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
     const refreshAll = () => {
@@ -1817,6 +1853,7 @@ function renderWarenuebernahmeModal() {
         const diffBox = row.querySelector('.sendung-wa-diff-box');
         const mainMinusBtn = row.querySelector('.sendung-wa-main-minus-btn');
         const mainPlusBtn = row.querySelector('.sendung-wa-main-plus-btn');
+        const mainNextBtn = row.querySelector('.sendung-wa-main-next-btn');
 
         if (toggleDiffBtn && diffBox) {
             toggleDiffBtn.onclick = () => diffBox.classList.toggle('hidden');
@@ -1830,10 +1867,14 @@ function renderWarenuebernahmeModal() {
         }
         if (mainPlusBtn) {
             mainPlusBtn.onclick = () => {
+                if (mainPlusBtn.disabled) return;
                 const current = Number.parseInt(row.dataset.counter || '0', 10);
                 row.dataset.counter = String((Number.isFinite(current) ? current : 0) + 1);
                 refreshAll();
             };
+        }
+        if (mainNextBtn) {
+            mainNextBtn.onclick = goToNextRow;
         }
 
         row.querySelectorAll('.sendung-wa-problem-counter').forEach((problemRow) => {
@@ -1863,7 +1904,6 @@ function renderWarenuebernahmeModal() {
         const inhaltId = String(button.dataset.inhaltId || '').trim();
         if (!inhaltId) return;
         waSelectedInhaltId = inhaltId;
-        waFilterStatus = 'all';
         refreshAll();
         findRow(inhaltId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
@@ -1871,33 +1911,9 @@ function renderWarenuebernahmeModal() {
     legend.onclick = (event) => {
         const button = event.target.closest('.sendung-wa-legend-filter');
         if (!button) return;
-        waFilterStatus = String(button.dataset.filterStatus || 'all').trim();
+        const selectedStatus = String(button.dataset.filterStatus || 'all').trim();
+        waFilterStatus = waFilterStatus === selectedStatus ? 'all' : selectedStatus;
         refreshAll();
-    };
-
-    nextBtn.onclick = () => {
-        const allRows = orderedRows();
-        const visibleRows = allRows.filter((row) => {
-            if (waFilterStatus === 'all') return true;
-            if (waFilterStatus === 'in_pruefung') return true;
-            return String(row.dataset.baseStatus || '') === waFilterStatus;
-        });
-        if (visibleRows.length === 0) return;
-
-        const currentIndex = visibleRows.findIndex((row) => String(row.dataset.inhaltId || '') === waSelectedInhaltId);
-        const afterCurrent = currentIndex >= 0 ? visibleRows.slice(currentIndex + 1) : visibleRows;
-        const beforeCurrent = currentIndex >= 0 ? visibleRows.slice(0, currentIndex + 1) : [];
-        const nextUnchecked = afterCurrent.find((row) => String(row.dataset.baseStatus || '') === 'ungeprueft')
-            || beforeCurrent.find((row) => String(row.dataset.baseStatus || '') === 'ungeprueft');
-        let nextRow = nextUnchecked;
-        if (!nextRow && currentIndex >= 0) {
-            nextRow = visibleRows[currentIndex + 1] || visibleRows[0];
-        }
-        if (!nextRow) nextRow = visibleRows[0];
-        waSelectedInhaltId = String(nextRow.dataset.inhaltId || '');
-        if (waFilterStatus === 'in_pruefung') waFilterStatus = 'all';
-        refreshAll();
-        nextRow.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
     refreshAll();
