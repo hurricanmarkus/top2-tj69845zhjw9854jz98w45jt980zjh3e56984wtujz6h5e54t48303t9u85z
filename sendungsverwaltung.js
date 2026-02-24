@@ -3493,7 +3493,9 @@ function doesSendungMatchSearchFilter(sendung, filter) {
     const searchValue = String(filter?.value || '').toLowerCase();
     const category = String(filter?.category || '');
     const transportEntries = getSendungTransportEntries(sendung);
-    const paketStatuses = getSendungPakete(sendung).map((paket) => normalizeStatus(paket.status));
+    const pakete = getSendungPakete(sendung);
+    const paketStatuses = pakete.map((paket) => normalizeStatus(paket.status));
+    const gesamtStatus = normalizeStatus(sendung.status || sendung.autoStatus || computeAutoStatusFromPakete(pakete));
 
     if (category === 'all') {
         const tags = (sendung.tags || []).map((tag) => String(tag || '').toLowerCase());
@@ -3510,8 +3512,7 @@ function doesSendungMatchSearchFilter(sendung, filter) {
     }
 
     if (category === 'status') {
-        return String(sendung.status || '').toLowerCase().includes(searchValue) ||
-            paketStatuses.some((status) => status.includes(searchValue));
+        return gesamtStatus.includes(searchValue);
     }
     if (category === 'anbieter') {
         return String(sendung.anbieter || '').toLowerCase().includes(searchValue) ||
