@@ -181,6 +181,7 @@ let registeredEmpfaengerVornamen = [];
 let warenuebernahmeResetClickTimestamps = [];
 let waSelectedInhaltId = '';
 let waFilterStatus = 'all';
+let waProblemPotExpanded = false;
 
 function normalizeStatus(status) {
     const normalized = String(status || '').trim().toLowerCase();
@@ -1374,6 +1375,7 @@ function closeWarenuebernahmeModal() {
     currentWarenuebernahmePaketIndex = null;
     waSelectedInhaltId = '';
     waFilterStatus = 'all';
+    waProblemPotExpanded = false;
     resetWarenuebernahmeResetSequence();
     if (!modal) return;
     modal.classList.add('hidden');
@@ -1388,7 +1390,8 @@ function renderWarenuebernahmeModal() {
     const subtitle = document.getElementById('sendungWarenuebernahmeSubtitle');
     const rows = document.getElementById('sendungWarenuebernahmeRows');
     const problemList = document.getElementById('sendungWarenuebernahmeProblemList');
-    if (!paket || !title || !subtitle || !rows || !problemList) return;
+    const problemSection = document.getElementById('sendungWarenuebernahmeProblemSection');
+    if (!paket || !title || !subtitle || !rows || !problemList || !problemSection) return;
 
     const inhaltById = getInhaltItemsById();
     const warenuebernahme = normalizeWarenuebernahme(paket.warenuebernahme || {});
@@ -1413,7 +1416,9 @@ function renderWarenuebernahmeModal() {
 
     if (zuordnung.length === 0) {
         rows.innerHTML = '<div class="text-sm text-gray-500 italic">Dieses Paket hat noch keine zugeordneten Artikel.</div>';
-        problemList.innerHTML = '<span class="text-xs text-gray-500">Noch keine Problempositionen.</span>';
+        waProblemPotExpanded = false;
+        problemList.innerHTML = '';
+        problemSection.classList.add('hidden');
         return;
     }
 
@@ -1658,9 +1663,13 @@ function renderWarenuebernahmeModal() {
         });
 
         if (grouped.size === 0) {
-            problemList.innerHTML = '<span class="text-xs text-gray-500">Noch keine Problempositionen.</span>';
+            waProblemPotExpanded = false;
+            problemList.innerHTML = '';
+            problemSection.classList.add('hidden');
             return;
         }
+
+        problemSection.classList.remove('hidden');
 
         const paketOptions = currentSendungPakete
             .filter((candidate) => String(candidate?.paketId || '').trim() !== String(paket?.paketId || '').trim())
@@ -1673,7 +1682,8 @@ function renderWarenuebernahmeModal() {
             if (!existingProblemByKey.has(key)) existingProblemByKey.set(key, problem);
         });
 
-        problemList.innerHTML = [...grouped.values()].map((entry) => {
+        const conflictCount = grouped.size;
+        const conflictItemsHtml = [...grouped.values()].map((entry) => {
             const match = existingProblemByKey.get(entry.key);
             const potEntryId = String(match?.potEntryId || `pot_${warenuebernahme.uebernahmeId}_${entry.key}`);
             const linkedResolutions = resolutionsByPot.get(potEntryId) || [];
@@ -1714,6 +1724,26 @@ function renderWarenuebernahmeModal() {
                 </div>
             `;
         }).join('');
+
+        const blinkClasses = conflictCount > 0 ? 'animate-pulse border-red-500 bg-red-100 text-red-800 shadow-md scale-[1.01]' : 'border-gray-200 bg-white text-gray-700';
+        problemList.innerHTML = `
+            <div class="space-y-2">
+                <button type="button" class="sendung-wa-problem-toggle w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-lg border-2 font-extrabold text-sm transition ${blinkClasses}">
+                    <span>Problem-Pot</span>
+                    <span class="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-full bg-red-600 text-white text-xs font-black">${conflictCount}</span>
+                </button>
+                <div class="sendung-wa-problem-collapsible ${waProblemPotExpanded ? '' : 'hidden'} space-y-2 max-h-48 overflow-y-auto pr-1">${conflictItemsHtml}</div>
+            </div>
+        `;
+
+        const problemToggle = problemList.querySelector('.sendung-wa-problem-toggle');
+        const problemCollapsible = problemList.querySelector('.sendung-wa-problem-collapsible');
+        if (problemToggle && problemCollapsible) {
+            problemToggle.onclick = () => {
+                waProblemPotExpanded = !waProblemPotExpanded;
+                problemCollapsible.classList.toggle('hidden', !waProblemPotExpanded);
+            };
+        }
 
         problemList.querySelectorAll('.sendung-wa-problem-resolution-row').forEach((resolutionRow) => {
             const actionSelect = resolutionRow.querySelector('.sendung-wa-resolution-action');
@@ -1826,6 +1856,15 @@ function renderWarenuebernahmeModal() {
         if (visibleRows.length === 0) return;
 
         const currentIndex = visibleRows.findIndex((row) => String(row.dataset.inhaltId || '') === waSelectedInhaltId);
+        if (waFilterStatus === 'all') {
+            const nextRow = currentIndex >= 0
+                ? (visibleRows[currentIndex + 1] || visibleRows[0])
+                : visibleRows[0];
+            waSelectedInhaltId = String(nextRow?.dataset.inhaltId || waSelectedInhaltId);
+            refreshAll();
+            return;
+        }
+
         const afterCurrent = currentIndex >= 0 ? visibleRows.slice(currentIndex + 1) : visibleRows;
         const beforeCurrent = currentIndex >= 0 ? visibleRows.slice(0, currentIndex + 1) : [];
         const nextUnchecked = afterCurrent.find((row) => String(row.dataset.baseStatus || '') === 'ungeprueft')
@@ -1837,7 +1876,6 @@ function renderWarenuebernahmeModal() {
         if (!nextRow) nextRow = visibleRows[0];
         waSelectedInhaltId = String(nextRow.dataset.inhaltId || '');
         refreshAll();
-        nextRow.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
     const refreshAll = () => {
@@ -1905,7 +1943,6 @@ function renderWarenuebernahmeModal() {
         if (!inhaltId) return;
         waSelectedInhaltId = inhaltId;
         refreshAll();
-        findRow(inhaltId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
     legend.onclick = (event) => {
@@ -2116,10 +2153,10 @@ function collectWarenuebernahmeFromModal() {
     if (positionen.length > 0) {
         status = hasUnchecked
             ? 'in_pruefung'
-            : (problemartikel.length > 0 ? 'problem' : 'abgeschlossen');
+            : 'abgeschlossen';
     }
 
-    const istFinalisiert = status === 'abgeschlossen' || status === 'problem';
+    const istFinalisiert = status === 'abgeschlossen';
 
     return normalizeWarenuebernahme({
         ...existing,
