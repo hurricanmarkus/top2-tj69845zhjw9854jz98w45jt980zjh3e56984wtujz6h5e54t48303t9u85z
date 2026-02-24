@@ -155,7 +155,7 @@ const WARENUEBERNAHME_ABWEICHUNG_OPTIONS = {
     zuviel: 'Zuviel',
     defekt: 'Defekt',
     vertauscht: 'Vertauscht',
-    unbekannt: 'Unbekannt'
+    unbekannt: 'Sonstiges'
 };
 const WARENUEBERNAHME_PROBLEM_TYPEN = ['fehlt', 'zuviel', 'defekt', 'vertauscht', 'unbekannt'];
 const WARENUEBERNAHME_GELOEST_TYPEN = ['storno', 'rueckerstattet', 'sonstiges'];
@@ -1473,7 +1473,12 @@ function renderWarenuebernahmeModal() {
 
                 <div class="flex items-center justify-center gap-3">
                     <button type="button" class="sendung-wa-main-minus-btn w-14 h-14 rounded-full bg-gray-100 text-gray-800 font-black text-3xl leading-none hover:bg-gray-200 transition">-</button>
-                    <button type="button" class="sendung-wa-main-plus-btn w-14 h-14 rounded-full bg-emerald-600 text-white font-black text-3xl leading-none hover:bg-emerald-700 transition">+</button>
+                    ${entry.mengeSoll > 10
+                        ? `<input type="number" min="1" step="1" max="${entry.mengeSoll}" class="sendung-wa-main-quick-input w-24 p-2 border-2 border-gray-300 rounded-lg text-sm text-center" value="1" aria-label="Bestätigungsmenge">`
+                        : ''}
+                    <button type="button" class="sendung-wa-main-plus-btn min-w-[13rem] h-14 px-4 rounded-xl bg-emerald-600 text-white text-sm font-extrabold hover:bg-emerald-700 transition">
+                        <span class="sendung-wa-main-plus-label">+1 Produkt bestätigen</span>
+                    </button>
                     <button type="button" class="sendung-wa-main-next-btn min-w-[7.5rem] h-14 px-4 rounded-xl bg-blue-600 text-white text-base font-extrabold hover:bg-blue-700 transition">Nächstes</button>
                 </div>
 
@@ -1547,6 +1552,7 @@ function renderWarenuebernahmeModal() {
         row.dataset.counter = String(mengeIst);
 
         const problemByTyp = { fehlt: 0, zuviel: 0, defekt: 0, vertauscht: 0, unbekannt: 0 };
+        const offenenLimitTypen = ['fehlt', 'defekt', 'vertauscht', 'unbekannt'];
         row.querySelectorAll('.sendung-wa-problem-counter').forEach((problemRow) => {
             const typ = String(problemRow.dataset.problemTyp || '').trim().toLowerCase();
             if (!WARENUEBERNAHME_PROBLEM_TYPEN.includes(typ)) return;
@@ -1554,9 +1560,15 @@ function renderWarenuebernahmeModal() {
             problemByTyp[typ] = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
         });
 
-        const nonFehlt = (problemByTyp.defekt || 0) + (problemByTyp.vertauscht || 0) + (problemByTyp.unbekannt || 0);
-        const maxFehlt = Math.max(0, mengeSoll - mengeIst - nonFehlt);
-        problemByTyp.fehlt = Math.min(problemByTyp.fehlt || 0, maxFehlt);
+        const maxDifferenzAusOffen = Math.max(0, mengeSoll - mengeIst);
+        offenenLimitTypen.forEach((typ) => {
+            const andereBelegteOffenMenge = offenenLimitTypen.reduce((sum, otherTyp) => {
+                if (otherTyp === typ) return sum;
+                return sum + (problemByTyp[otherTyp] || 0);
+            }, 0);
+            const maxForType = Math.max(0, maxDifferenzAusOffen - andereBelegteOffenMenge);
+            problemByTyp[typ] = Math.min(problemByTyp[typ] || 0, maxForType);
+        });
 
         if (mengeSoll !== mengeIst) {
             problemByTyp.zuviel = 0;
@@ -1580,13 +1592,20 @@ function renderWarenuebernahmeModal() {
             }
 
             let plusDisabled = false;
-            let ruleText = 'immer möglich';
-            if (typ === 'fehlt') {
-                ruleText = 'nur bis Offen';
-                plusDisabled = maxFehlt <= value;
+            let ruleText = 'nur bis Offen';
+            if (offenenLimitTypen.includes(typ)) {
+                const andereBelegteOffenMenge = offenenLimitTypen.reduce((sum, otherTyp) => {
+                    if (otherTyp === typ) return sum;
+                    return sum + (problemByTyp[otherTyp] || 0);
+                }, 0);
+                const maxForType = Math.max(0, maxDifferenzAusOffen - andereBelegteOffenMenge);
+                plusDisabled = value >= maxForType;
             } else if (typ === 'zuviel') {
                 ruleText = 'nur wenn Soll = Ist';
                 plusDisabled = mengeSoll !== mengeIst;
+            }
+            if (typ === 'fehlt') {
+                ruleText = 'nur bis Offen';
             }
             if (plusBtn) {
                 plusBtn.disabled = plusDisabled;
@@ -1623,6 +1642,24 @@ function renderWarenuebernahmeModal() {
             mainPlusBtn.disabled = plusDisabled;
             mainPlusBtn.classList.toggle('opacity-40', plusDisabled);
             mainPlusBtn.classList.toggle('cursor-not-allowed', plusDisabled);
+        }
+
+        const mainQuickInput = row.querySelector('.sendung-wa-main-quick-input');
+        let mainConfirmMenge = 1;
+        if (mainQuickInput) {
+            const inputRaw = Number.parseInt(mainQuickInput.value || '1', 10);
+            const inputClamped = Number.isFinite(inputRaw)
+                ? Math.max(1, Math.min(inputRaw, mengeSoll))
+                : 1;
+            mainQuickInput.value = String(inputClamped);
+            mainQuickInput.max = String(mengeSoll);
+            mainConfirmMenge = inputClamped;
+        }
+        row.dataset.mainConfirmMenge = String(mainConfirmMenge);
+
+        const mainPlusLabel = row.querySelector('.sendung-wa-main-plus-label');
+        if (mainPlusLabel) {
+            mainPlusLabel.textContent = `+${mainConfirmMenge} Produkt bestätigen`;
         }
 
         const statusPill = row.querySelector('.sendung-wa-status-pill');
@@ -1891,6 +1928,7 @@ function renderWarenuebernahmeModal() {
         const diffBox = row.querySelector('.sendung-wa-diff-box');
         const mainMinusBtn = row.querySelector('.sendung-wa-main-minus-btn');
         const mainPlusBtn = row.querySelector('.sendung-wa-main-plus-btn');
+        const mainQuickInput = row.querySelector('.sendung-wa-main-quick-input');
         const mainNextBtn = row.querySelector('.sendung-wa-main-next-btn');
 
         if (toggleDiffBtn && diffBox) {
@@ -1907,8 +1945,19 @@ function renderWarenuebernahmeModal() {
             mainPlusBtn.onclick = () => {
                 if (mainPlusBtn.disabled) return;
                 const current = Number.parseInt(row.dataset.counter || '0', 10);
-                row.dataset.counter = String((Number.isFinite(current) ? current : 0) + 1);
+                const currentSafe = Number.isFinite(current) ? current : 0;
+                const ungeprueftRaw = Number.parseInt(row.dataset.unchecked || '0', 10);
+                const ungeprueft = Number.isFinite(ungeprueftRaw) && ungeprueftRaw > 0 ? ungeprueftRaw : 0;
+                const confirmRaw = Number.parseInt(row.dataset.mainConfirmMenge || '1', 10);
+                const confirmMenge = Number.isFinite(confirmRaw) && confirmRaw > 0 ? confirmRaw : 1;
+                const addMenge = Math.min(confirmMenge, ungeprueft);
+                row.dataset.counter = String(currentSafe + addMenge);
                 refreshAll();
+            };
+        }
+        if (mainQuickInput) {
+            mainQuickInput.oninput = () => {
+                updateRowSummary(row);
             };
         }
         if (mainNextBtn) {
