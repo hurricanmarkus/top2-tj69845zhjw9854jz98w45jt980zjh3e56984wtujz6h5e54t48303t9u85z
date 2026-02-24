@@ -994,26 +994,14 @@ function computeAutoStatusFromPakete(pakete = []) {
     const statuses = pakete.map((paket) => normalizeStatus(paket.status));
     if (statuses.length === 0) return 'erwartet';
 
-    const statusPrioritaet = {
-        storniert: 0,
-        erwartet: 1,
-        unterwegs: 2,
-        zugestellt: 3,
-        problem: 4
-    };
-
-    let maxStatus = 'storniert';
-    let maxPrioritaet = statusPrioritaet[maxStatus];
-
-    statuses.forEach((status) => {
-        const prioritaet = statusPrioritaet[status] ?? statusPrioritaet.erwartet;
-        if (prioritaet > maxPrioritaet) {
-            maxPrioritaet = prioritaet;
-            maxStatus = status;
-        }
-    });
-
-    return maxStatus;
+    // Aggregation nach Paketfortschritt:
+    // Problem dominiert immer. Zugestellt nur, wenn alle nicht-stornierten Pakete zugestellt sind.
+    if (statuses.includes('problem')) return 'problem';
+    if (statuses.every((status) => status === 'storniert')) return 'storniert';
+    if (statuses.includes('erwartet')) return 'erwartet';
+    if (statuses.includes('unterwegs')) return 'unterwegs';
+    if (statuses.every((status) => status === 'zugestellt' || status === 'storniert')) return 'zugestellt';
+    return 'erwartet';
 }
 
 function getEarliestPaketDeadline(pakete = [], fieldKey) {
@@ -2253,6 +2241,7 @@ function collectWarenuebernahmeFromModal() {
         ? existing.problemaufloesungen.map(normalizeWarenuebernahmeProblemResolution)
         : [];
     let hasUnchecked = false;
+    let hasAnyProgress = false;
 
     rows.forEach((row) => {
         const inhaltId = String(row.dataset.inhaltId || '').trim();
@@ -2299,6 +2288,9 @@ function collectWarenuebernahmeFromModal() {
         const ungeprueft = Math.max(0, mengeSoll - mengeIst - problemTotal);
         if (ungeprueft > 0) {
             hasUnchecked = true;
+        }
+        if (mengeIst > 0 || problemTotal > 0) {
+            hasAnyProgress = true;
         }
 
         const dominantProblemTyp = Object.entries(problemVerteilung)
@@ -2350,9 +2342,9 @@ function collectWarenuebernahmeFromModal() {
 
     let status = 'offen';
     if (positionen.length > 0) {
-        status = hasUnchecked
-            ? 'in_pruefung'
-            : 'abgeschlossen';
+        status = !hasAnyProgress
+            ? 'offen'
+            : (hasUnchecked ? 'in_pruefung' : 'abgeschlossen');
     }
 
     const istFinalisiert = status === 'abgeschlossen';
