@@ -1515,7 +1515,7 @@ function renderWarenuebernahmeModal() {
         <div class="space-y-3">
             <div class="rounded-xl border border-gray-200 bg-gray-50 p-3">
                 <div class="text-xs font-bold text-gray-700 mb-2">Produkte</div>
-                <div id="sendungWarenuebernahmeNavigatorList" class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1"></div>
+                <div id="sendungWarenuebernahmeNavigatorList" class="grid grid-cols-2 gap-2 max-h-[14rem] overflow-y-auto pr-1"></div>
             </div>
             <div id="sendungWarenuebernahmeLegend" class="flex flex-wrap gap-2"></div>
             <div class="rounded-lg border border-gray-200 bg-white px-3 py-2">
@@ -1570,7 +1570,8 @@ function renderWarenuebernahmeModal() {
             problemByTyp[typ] = Math.min(problemByTyp[typ] || 0, maxForType);
         });
 
-        if (mengeSoll !== mengeIst) {
+        const offenFuerNichtZuviel = Math.max(0, mengeSoll - mengeIst - offenenLimitTypen.reduce((sum, typ) => sum + (problemByTyp[typ] || 0), 0));
+        if (offenFuerNichtZuviel > 0) {
             problemByTyp.zuviel = 0;
         }
 
@@ -1601,8 +1602,8 @@ function renderWarenuebernahmeModal() {
                 const maxForType = Math.max(0, maxDifferenzAusOffen - andereBelegteOffenMenge);
                 plusDisabled = value >= maxForType;
             } else if (typ === 'zuviel') {
-                ruleText = 'nur wenn Soll = Ist';
-                plusDisabled = mengeSoll !== mengeIst;
+                ruleText = 'nur wenn Offen = 0';
+                plusDisabled = offenFuerNichtZuviel > 0;
             }
             if (typ === 'fehlt') {
                 ruleText = 'nur bis Offen';
@@ -1736,28 +1737,11 @@ function renderWarenuebernahmeModal() {
                 : '<span class="text-[11px] text-gray-500">Noch keine Auflösung</span>';
 
             return `
-                <div class="rounded-lg border border-red-200 bg-white p-2 space-y-2">
+                <div class="sendung-wa-problem-card rounded-lg border border-red-200 bg-white p-2 space-y-2">
                     <div class="text-xs font-semibold text-red-700">${entry.menge}x ${entry.label} (${WARENUEBERNAHME_ABWEICHUNG_OPTIONS[entry.typ] || entry.typ})</div>
-                    <div class="text-[11px] text-red-700">Offen für Auflösung: <span class="font-bold">${remainingForResolution}</span></div>
+                    <div class="text-[11px] text-red-700">Offen für Auflösung: <span class="font-bold sendung-wa-resolution-remaining">${remainingForResolution}</span></div>
                     <div class="flex flex-wrap gap-1">${linkedBadges}</div>
-                    <div class="sendung-wa-problem-resolution-row grid grid-cols-1 md:grid-cols-5 gap-2 items-end" data-problem-pot-entry-id="${potEntryId}" data-inhalt-id="${entry.inhaltId}" data-counter="0" data-max="${remainingForResolution}">
-                        <select class="sendung-wa-resolution-action p-2 border border-gray-300 rounded text-xs md:col-span-1">
-                            <option value="zuweisen">Zu Paket zuweisen</option>
-                            <option value="geloest">Als gelöst bestätigen</option>
-                        </select>
-                        <select class="sendung-wa-resolution-target p-2 border border-gray-300 rounded text-xs md:col-span-1">${paketOptions || '<option value="">Kein weiteres Paket</option>'}</select>
-                        <select class="sendung-wa-resolution-geloest-typ p-2 border border-gray-300 rounded text-xs md:col-span-1 hidden">
-                            <option value="storno">Storno</option>
-                            <option value="rueckerstattet">Rückerstattet</option>
-                            <option value="sonstiges">Sonstiges</option>
-                        </select>
-                        <input type="text" class="sendung-wa-resolution-kommentar p-2 border border-gray-300 rounded text-xs md:col-span-1" placeholder="Kommentar">
-                        <div class="flex items-center gap-2 md:col-span-1">
-                            <button type="button" class="sendung-wa-resolution-minus w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold leading-none">-</button>
-                            <span class="sendung-wa-resolution-counter-value text-xs font-bold text-gray-700 min-w-[1.5rem] text-center">0</span>
-                            <button type="button" class="sendung-wa-resolution-plus w-8 h-8 rounded-full bg-red-600 text-white font-bold leading-none">+</button>
-                        </div>
-                    </div>
+                    <div class="sendung-wa-problem-resolution-list space-y-2" data-problem-pot-entry-id="${potEntryId}" data-inhalt-id="${entry.inhaltId}" data-total="${remainingForResolution}"></div>
                 </div>
             `;
         }).join('');
@@ -1782,45 +1766,154 @@ function renderWarenuebernahmeModal() {
             };
         }
 
-        problemList.querySelectorAll('.sendung-wa-problem-resolution-row').forEach((resolutionRow) => {
-            const actionSelect = resolutionRow.querySelector('.sendung-wa-resolution-action');
-            const targetSelect = resolutionRow.querySelector('.sendung-wa-resolution-target');
-            const geloestTypSelect = resolutionRow.querySelector('.sendung-wa-resolution-geloest-typ');
-            const minusBtn = resolutionRow.querySelector('.sendung-wa-resolution-minus');
-            const plusBtn = resolutionRow.querySelector('.sendung-wa-resolution-plus');
-            const counterValue = resolutionRow.querySelector('.sendung-wa-resolution-counter-value');
+        const createResolutionRowHtml = (potEntryId, inhaltId) => `
+            <div class="sendung-wa-problem-resolution-row rounded-lg border border-gray-200 bg-gray-50 p-2 space-y-2" data-problem-pot-entry-id="${potEntryId}" data-inhalt-id="${inhaltId}" data-counter="0" data-max="0">
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-2 items-end">
+                    <select class="sendung-wa-resolution-action p-2 border border-gray-300 rounded text-xs md:col-span-1">
+                        <option value="zuweisen">Zu Paket zuweisen</option>
+                        <option value="geloest">Als gelöst bestätigen</option>
+                    </select>
+                    <select class="sendung-wa-resolution-target p-2 border border-gray-300 rounded text-xs md:col-span-1">${paketOptions || '<option value="">Kein weiteres Paket</option>'}</select>
+                    <select class="sendung-wa-resolution-geloest-typ p-2 border border-gray-300 rounded text-xs md:col-span-1 hidden">
+                        <option value="storno">Storno</option>
+                        <option value="rueckerstattet">Rückerstattet</option>
+                        <option value="sonstiges">Sonstiges</option>
+                    </select>
+                    <input type="text" class="sendung-wa-resolution-kommentar p-2 border border-gray-300 rounded text-xs md:col-span-1" placeholder="Kommentar">
+                    <div class="flex items-center gap-2 md:col-span-1">
+                        <button type="button" class="sendung-wa-resolution-minus w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold leading-none">-</button>
+                        <span class="sendung-wa-resolution-counter-value text-xs font-bold text-gray-700 min-w-[1.5rem] text-center">0</span>
+                        <button type="button" class="sendung-wa-resolution-plus w-8 h-8 rounded-full bg-red-600 text-white font-bold leading-none">+</button>
+                    </div>
+                </div>
+                <div class="sendung-wa-resolution-empty-state text-[11px] text-gray-500">Noch keine Auflösung</div>
+            </div>
+        `;
 
-            const updateResolutionUi = () => {
-                const action = String(actionSelect?.value || 'zuweisen').trim().toLowerCase();
-                if (targetSelect) targetSelect.classList.toggle('hidden', action !== 'zuweisen');
-                if (geloestTypSelect) geloestTypSelect.classList.toggle('hidden', action !== 'geloest');
-                const counterRaw = Number.parseInt(resolutionRow.dataset.counter || '0', 10);
-                const maxRaw = Number.parseInt(resolutionRow.dataset.max || '0', 10);
-                const max = Number.isFinite(maxRaw) && maxRaw > 0 ? maxRaw : 0;
-                const counter = Number.isFinite(counterRaw) && counterRaw > 0 ? Math.min(counterRaw, max) : 0;
-                resolutionRow.dataset.counter = String(counter);
-                if (counterValue) counterValue.textContent = String(counter);
-                if (minusBtn) minusBtn.disabled = counter <= 0;
-                if (plusBtn) plusBtn.disabled = counter >= max || max <= 0;
+        problemList.querySelectorAll('.sendung-wa-problem-resolution-list').forEach((resolutionList) => {
+            const potEntryId = String(resolutionList.dataset.problemPotEntryId || '').trim();
+            const inhaltId = String(resolutionList.dataset.inhaltId || '').trim();
+            const totalRaw = Number.parseInt(resolutionList.dataset.total || '0', 10);
+            const total = Number.isFinite(totalRaw) && totalRaw > 0 ? totalRaw : 0;
+            if (!potEntryId || !inhaltId) return;
+            if (total > 0) {
+                resolutionList.innerHTML = createResolutionRowHtml(potEntryId, inhaltId);
+            } else {
+                resolutionList.innerHTML = '';
+            }
+
+            const syncResolutionRows = () => {
+                const getRows = () => Array.from(resolutionList.querySelectorAll('.sendung-wa-problem-resolution-row'));
+                let rowsInList = getRows();
+
+                rowsInList.forEach((resolutionRow) => {
+                    const counterRaw = Number.parseInt(resolutionRow.dataset.counter || '0', 10);
+                    const counter = Number.isFinite(counterRaw) && counterRaw > 0 ? Math.min(counterRaw, total) : 0;
+                    resolutionRow.dataset.counter = String(counter);
+                });
+
+                let allocated = rowsInList.reduce((sum, resolutionRow) => {
+                    const counterRaw = Number.parseInt(resolutionRow.dataset.counter || '0', 10);
+                    const counter = Number.isFinite(counterRaw) && counterRaw > 0 ? counterRaw : 0;
+                    return sum + counter;
+                }, 0);
+                let remaining = Math.max(0, total - allocated);
+
+                const zeroRows = rowsInList.filter((resolutionRow) => {
+                    const counterRaw = Number.parseInt(resolutionRow.dataset.counter || '0', 10);
+                    return !Number.isFinite(counterRaw) || counterRaw <= 0;
+                });
+
+                if (remaining > 0) {
+                    if (zeroRows.length === 0) {
+                        resolutionList.insertAdjacentHTML('beforeend', createResolutionRowHtml(potEntryId, inhaltId));
+                    } else if (zeroRows.length > 1) {
+                        zeroRows.slice(1).forEach((resolutionRow) => resolutionRow.remove());
+                    }
+                } else {
+                    zeroRows.forEach((resolutionRow) => resolutionRow.remove());
+                }
+
+                rowsInList = getRows();
+                allocated = rowsInList.reduce((sum, resolutionRow) => {
+                    const counterRaw = Number.parseInt(resolutionRow.dataset.counter || '0', 10);
+                    const counter = Number.isFinite(counterRaw) && counterRaw > 0 ? counterRaw : 0;
+                    return sum + counter;
+                }, 0);
+                remaining = Math.max(0, total - allocated);
+
+                const remainingValue = resolutionList.closest('.sendung-wa-problem-card')?.querySelector('.sendung-wa-resolution-remaining');
+                if (remainingValue) remainingValue.textContent = String(remaining);
+
+                rowsInList.forEach((resolutionRow) => {
+                    const actionSelect = resolutionRow.querySelector('.sendung-wa-resolution-action');
+                    const targetSelect = resolutionRow.querySelector('.sendung-wa-resolution-target');
+                    const geloestTypSelect = resolutionRow.querySelector('.sendung-wa-resolution-geloest-typ');
+                    const minusBtn = resolutionRow.querySelector('.sendung-wa-resolution-minus');
+                    const plusBtn = resolutionRow.querySelector('.sendung-wa-resolution-plus');
+                    const counterValue = resolutionRow.querySelector('.sendung-wa-resolution-counter-value');
+                    const emptyState = resolutionRow.querySelector('.sendung-wa-resolution-empty-state');
+                    const counterRaw = Number.parseInt(resolutionRow.dataset.counter || '0', 10);
+                    const counter = Number.isFinite(counterRaw) && counterRaw > 0 ? counterRaw : 0;
+                    const allocatedOthers = allocated - counter;
+                    const maxForRow = Math.max(0, total - allocatedOthers);
+
+                    resolutionRow.dataset.max = String(maxForRow);
+                    if (counterValue) counterValue.textContent = String(counter);
+
+                    if (actionSelect && targetSelect && geloestTypSelect) {
+                        const action = String(actionSelect.value || 'zuweisen').trim().toLowerCase();
+                        targetSelect.classList.toggle('hidden', action !== 'zuweisen');
+                        geloestTypSelect.classList.toggle('hidden', action !== 'geloest');
+                    }
+
+                    if (minusBtn) {
+                        const minusDisabled = counter <= 0;
+                        minusBtn.disabled = minusDisabled;
+                        minusBtn.classList.toggle('opacity-40', minusDisabled);
+                        minusBtn.classList.toggle('cursor-not-allowed', minusDisabled);
+                    }
+                    if (plusBtn) {
+                        const plusDisabled = maxForRow <= 0 || counter >= maxForRow;
+                        plusBtn.disabled = plusDisabled;
+                        plusBtn.classList.toggle('opacity-40', plusDisabled);
+                        plusBtn.classList.toggle('cursor-not-allowed', plusDisabled);
+                    }
+
+                    if (emptyState) {
+                        emptyState.classList.toggle('hidden', counter > 0);
+                    }
+                });
             };
 
-            if (actionSelect) actionSelect.onchange = updateResolutionUi;
-            if (minusBtn) {
-                minusBtn.onclick = () => {
+            resolutionList.onchange = (event) => {
+                if (event.target.closest('.sendung-wa-resolution-action')) {
+                    syncResolutionRows();
+                }
+            };
+
+            resolutionList.onclick = (event) => {
+                const resolutionRow = event.target.closest('.sendung-wa-problem-resolution-row');
+                if (!resolutionRow) return;
+
+                const minusBtn = event.target.closest('.sendung-wa-resolution-minus');
+                if (minusBtn) {
                     const current = Number.parseInt(resolutionRow.dataset.counter || '0', 10);
                     resolutionRow.dataset.counter = String(Math.max(0, (Number.isFinite(current) ? current : 0) - 1));
-                    updateResolutionUi();
-                };
-            }
-            if (plusBtn) {
-                plusBtn.onclick = () => {
+                    syncResolutionRows();
+                    return;
+                }
+
+                const plusBtn = event.target.closest('.sendung-wa-resolution-plus');
+                if (plusBtn) {
+                    if (plusBtn.disabled) return;
                     const current = Number.parseInt(resolutionRow.dataset.counter || '0', 10);
                     resolutionRow.dataset.counter = String((Number.isFinite(current) ? current : 0) + 1);
-                    updateResolutionUi();
-                };
-            }
+                    syncResolutionRows();
+                }
+            };
 
-            updateResolutionUi();
+            syncResolutionRows();
         });
     };
 
