@@ -942,6 +942,7 @@ function applyInhaltReadMode(readMode) {
         addRowBtn.disabled = readMode;
         addRowBtn.classList.toggle('opacity-50', readMode);
         addRowBtn.classList.toggle('cursor-not-allowed', readMode);
+        addRowBtn.classList.toggle('hidden', readMode);
     }
 
     if (container) {
@@ -949,6 +950,7 @@ function applyInhaltReadMode(readMode) {
         removeRowButtons.forEach((button) => {
             button.classList.toggle('opacity-50', readMode);
             button.classList.toggle('cursor-not-allowed', readMode);
+            button.classList.toggle('hidden', readMode);
         });
     }
 }
@@ -1640,6 +1642,7 @@ function applyPaketeReadMode(readMode) {
         addPaketBtn.disabled = readMode;
         addPaketBtn.classList.toggle('opacity-50', readMode);
         addPaketBtn.classList.toggle('cursor-not-allowed', readMode);
+        addPaketBtn.classList.toggle('hidden', readMode);
     }
 
     const container = getPaketeContainer();
@@ -1667,6 +1670,11 @@ function applyPaketeReadMode(readMode) {
         element.classList.toggle('hidden', !readMode);
     });
 
+    const editModeOnlyElements = container.querySelectorAll('.sendung-editmode-only');
+    editModeOnlyElements.forEach((element) => {
+        element.classList.toggle('hidden', readMode);
+    });
+
     if (readMode) {
         const paketStatusSelects = container.querySelectorAll('.sendung-paket-status-select');
         paketStatusSelects.forEach((select) => {
@@ -1688,8 +1696,7 @@ function applyPaketeReadMode(readMode) {
 
         const warenuebernahmeButtons = container.querySelectorAll('.sendung-open-warenuebernahme-btn');
         warenuebernahmeButtons.forEach((button) => {
-            const shouldEnable = !button.hasAttribute('disabled');
-            button.disabled = !shouldEnable;
+            button.disabled = false;
         });
     }
 
@@ -1748,7 +1755,7 @@ function renderPaketeEditor() {
                     ${readModeActions}
                     ${entryIndex === 0
                         ? '<span class="w-10 h-10 shrink-0"></span>'
-                        : `<button type="button" class="sendung-remove-transport-entry-btn w-10 h-10 shrink-0 rounded-full bg-red-500 text-white font-bold hover:bg-red-600 transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" title="Nummer entfernen">-</button>`}
+                        : `<button type="button" class="sendung-remove-transport-entry-btn sendung-editmode-only w-10 h-10 shrink-0 rounded-full bg-red-500 text-white font-bold hover:bg-red-600 transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" title="Nummer entfernen">-</button>`}
                 </div>
             </div>
         `;
@@ -1775,12 +1782,14 @@ function renderPaketeEditor() {
                         <span class="px-2 py-1 rounded-full ${warenuebernahmeMeta.color} font-semibold">Warenübernahme: ${warenuebernahmeMeta.label}</span>
                     </div>
                     <div class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
-                        <button type="button" class="sendung-open-zuordnung-btn px-3 py-2 rounded-lg bg-indigo-500 text-white text-xs font-bold hover:bg-indigo-600 transition" data-paket-index="${paketIndex}">Artikel zuordnen</button>
-                        <label class="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-gray-200 bg-white">
+                        <button type="button" class="sendung-open-zuordnung-btn sendung-editmode-only px-3 py-2 rounded-lg bg-indigo-500 text-white text-xs font-bold hover:bg-indigo-600 transition" data-paket-index="${paketIndex}">Artikel zuordnen</button>
+                        <label class="sendung-editmode-only flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-gray-200 bg-white">
                             <input type="checkbox" class="sendung-paket-warenuebernahme-toggle" data-paket-index="${paketIndex}" ${normalizeWarenuebernahme(paket.warenuebernahme || {}).aktiv ? 'checked' : ''}>
                             <span class="font-semibold text-gray-700">Warenübernahme aktiv</span>
                         </label>
-                        <button type="button" class="sendung-open-warenuebernahme-btn sendung-readmode-only hidden px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition ${normalizeWarenuebernahme(paket.warenuebernahme || {}).aktiv ? '' : 'opacity-50 cursor-not-allowed'}" data-paket-index="${paketIndex}" ${normalizeWarenuebernahme(paket.warenuebernahme || {}).aktiv ? '' : 'disabled'}>Warenübernahme öffnen</button>
+                        ${statusLocked
+                            ? `<button type="button" class="sendung-open-warenuebernahme-btn sendung-readmode-only hidden px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition" data-paket-index="${paketIndex}">Warenübernahme öffnen</button>`
+                            : ''}
                     </div>`
                     : ''}
 
@@ -1798,7 +1807,7 @@ function renderPaketeEditor() {
                 <div class="mt-3">
                     <div class="flex items-center justify-between mb-2">
                         <label class="text-xs font-bold text-gray-600">Lieferziel, Anbieter &amp; Sendungsnummern</label>
-                        <button type="button" class="sendung-add-transport-entry-btn px-2 py-1 rounded bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition" data-paket-index="${paketIndex}">+ Nummer</button>
+                        <button type="button" class="sendung-add-transport-entry-btn sendung-editmode-only px-2 py-1 rounded bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition" data-paket-index="${paketIndex}">+ Nummer</button>
                     </div>
                     <div class="space-y-2">${transportRows}</div>
                 </div>
@@ -2657,6 +2666,11 @@ function setSendungModalReadMode(readMode) {
         }
         field.disabled = readMode;
     });
+
+    const erinnerungenToggleWrapper = document.getElementById('sendungErinnerungenAktiv')?.closest('div.flex.items-center');
+    if (erinnerungenToggleWrapper) {
+        erinnerungenToggleWrapper.classList.toggle('hidden', readMode);
+    }
 
     if (!readMode) {
         const erinnerungenAktiv = document.getElementById('sendungErinnerungenAktiv');
