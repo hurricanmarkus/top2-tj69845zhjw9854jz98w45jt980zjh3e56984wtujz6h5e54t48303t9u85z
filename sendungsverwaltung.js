@@ -4201,8 +4201,8 @@ function createSendungCard(sendung) {
     const prioritaetInfo = PRIORITAET_CONFIG[sendung.prioritaet] || PRIORITAET_CONFIG.normal;
     const transportEntries = getSendungTransportEntries(sendung);
     const inhaltItems = getSendungInhaltItems(sendung);
-    const offenerPot = getSendungOffenerInhaltPot(sendung);
     const problemPot = getSendungWarenuebernahmeProblemPot(sendung);
+    const problemPotTotal = problemPot.reduce((sum, entry) => sum + (entry.mengeProblem || 0), 0);
 
     const deadlineText = getDeadlineText(sendung);
     const cardLayoutClass = sendungViewMode === 'grid' ? 'h-full' : '';
@@ -4239,18 +4239,25 @@ function createSendungCard(sendung) {
             </div>
         `;
 
-    const empfangMetaDisplay = sendung.typ === 'empfang'
+    const activeWarenuebernahmeBadges = pakete
+        .map((paket, index) => {
+            const wa = normalizeWarenuebernahme(paket.warenuebernahme || {});
+            if (!wa.aktiv) return '';
+            const waMeta = getWarenuebernahmeStatusMeta(paket);
+            return `<span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 font-semibold">P${index + 1}: WA ${waMeta.label}</span>`;
+        })
+        .filter(Boolean)
+        .join('');
+
+    const empfangMetaDisplay = (sendung.typ === 'empfang' && (problemPotTotal > 0 || activeWarenuebernahmeBadges))
         ? `<div class="ml-8 mt-2 space-y-1">
+            ${problemPotTotal > 0
+                ? `<div class="flex flex-wrap gap-1.5 text-[11px]">
+                    <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-extrabold animate-pulse">⚠️ Problem-Pot: ${problemPotTotal} Stk</span>
+                </div>`
+                : ''}
             <div class="flex flex-wrap gap-1.5 text-[11px]">
-                <span class="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-semibold">Zuordnungs-Pot: ${offenerPot.reduce((sum, entry) => sum + (entry.mengeOffen || 0), 0)} Stk</span>
-                <span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">Problem-Pot: ${problemPot.reduce((sum, entry) => sum + (entry.mengeProblem || 0), 0)} Stk</span>
-            </div>
-            <div class="flex flex-wrap gap-1.5 text-[11px]">
-                ${pakete.map((paket, index) => {
-                    const waMeta = getWarenuebernahmeStatusMeta(paket);
-                    const zuordnungSummary = getPaketZuordnungSummary(paket, inhaltItems);
-                    return `<span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 font-semibold">P${index + 1}: ${zuordnungSummary.menge} Stk • WA ${waMeta.label}</span>`;
-                }).join('')}
+                ${activeWarenuebernahmeBadges}
             </div>
         </div>`
         : '';
@@ -4258,7 +4265,10 @@ function createSendungCard(sendung) {
     if (!sendungShowDetails) {
         return `
             <div id="sendung-${sendung.id}" class="card bg-white p-4 rounded-xl shadow-lg hover:shadow-xl transition cursor-pointer border-l-4 ${getBorderColor(sendung.typ)} ${cardLayoutClass}">
-                <h3 class="text-lg font-bold ${typInfo.color} break-words mb-3">${sendung.beschreibung}</h3>
+                <div class="flex justify-between items-start mb-3 gap-2">
+                    <h3 class="text-lg font-bold ${typInfo.color} break-words">${sendung.beschreibung}</h3>
+                    <span class="px-4 py-1.5 rounded-full text-base font-extrabold ${statusInfo.color} whitespace-nowrap">${statusInfo.icon} ${statusInfo.label}</span>
+                </div>
                 <div class="space-y-2 text-sm">
                     ${transportEntriesDisplay}
                     <p class="font-semibold text-orange-600">${deadlineText ? `⏰ ${deadlineText}` : '⏰ Keine Deadline gesetzt'}</p>
@@ -4299,7 +4309,7 @@ function createSendungCard(sendung) {
                     </div>
                     ${sendung.produkt ? `<p class="text-sm text-gray-600 ml-8 break-words">Produkt: ${sendung.produkt}</p>` : ''}
                 </div>
-                <span class="px-3 py-1 rounded-full text-sm font-bold ${statusInfo.color} whitespace-nowrap">${statusInfo.icon} ${statusInfo.label}</span>
+                <span class="px-4 py-1.5 rounded-full text-base font-extrabold ${statusInfo.color} whitespace-nowrap">${statusInfo.icon} ${statusInfo.label}</span>
             </div>
 
             <div class="ml-8 space-y-1 text-sm text-gray-700">
