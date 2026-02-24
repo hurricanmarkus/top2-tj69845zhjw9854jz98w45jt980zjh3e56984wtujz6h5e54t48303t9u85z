@@ -89,10 +89,25 @@ const PRIORITAET_CONFIG = {
     dringend: { label: 'Dringend', icon: '🚨', badge: 'bg-red-100 text-red-800' }
 };
 
+const STATUS_VALUES = Object.keys(STATUS_CONFIG);
+
 const EMPTY_TRANSPORT_ENTRY = Object.freeze({
     anbieter: '',
     transportnummer: ''
 });
+
+let currentSendungPakete = [];
+let statusOverrideActive = false;
+let isInternalStatusUpdate = false;
+
+function normalizeStatus(status) {
+    const normalized = String(status || '').trim().toLowerCase();
+    return STATUS_VALUES.includes(normalized) ? normalized : 'erwartet';
+}
+
+function createPaketId() {
+    return `paket_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+}
 
 function normalizeTransportEntry(entry = {}) {
     return {
@@ -101,136 +116,70 @@ function normalizeTransportEntry(entry = {}) {
     };
 }
 
-function getTransportEntriesContainer() {
-    return document.getElementById('sendungTransportEntriesContainer');
-}
-
-function applyTransportEntriesReadMode(readMode) {
-    const addBtn = document.getElementById('sendungAddTransportEntryBtn');
-    if (addBtn) {
-        addBtn.disabled = readMode;
-        addBtn.classList.toggle('opacity-50', readMode);
-        addBtn.classList.toggle('cursor-not-allowed', readMode);
-    }
-
-    const container = getTransportEntriesContainer();
-    if (!container) return;
-
-    const entryInputs = container.querySelectorAll('.sendung-transport-anbieter-input, .sendung-transportnummer-input');
-    entryInputs.forEach((input) => {
-        input.disabled = readMode;
-    });
-
-    const removeButtons = container.querySelectorAll('.sendung-remove-transport-entry-btn');
-    removeButtons.forEach((btn) => {
-        btn.disabled = readMode;
-        btn.classList.toggle('opacity-50', readMode);
-        btn.classList.toggle('cursor-not-allowed', readMode);
-    });
-}
-
-function createTransportEntryRow(entry = EMPTY_TRANSPORT_ENTRY, isPrimary = false) {
-    const normalized = normalizeTransportEntry(entry);
-    const row = document.createElement('div');
-    row.className = 'flex flex-col md:flex-row gap-3';
-    row.dataset.transportEntryRow = 'true';
-    if (isPrimary) {
-        row.dataset.primaryTransportEntry = 'true';
-    }
-
-    row.innerHTML = `
-        <input type="text" list="anbieterList" placeholder="Transporteur (z.B. DHL, Hermes, DPD...)" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500 sendung-transport-anbieter-input" aria-label="Anbieter">
-        <div class="flex gap-2 w-full">
-            <input type="text" placeholder="Transportnummer / Sendungsnummer" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500 sendung-transportnummer-input" aria-label="Transportnummer">
-            ${isPrimary ? '' : '<button type="button" class="sendung-remove-transport-entry-btn w-10 h-10 shrink-0 rounded-full bg-red-500 text-white font-bold hover:bg-red-600 transition" title="Diese Zeile entfernen">-</button>'}
-        </div>
-    `;
-
-    const anbieterInput = row.querySelector('.sendung-transport-anbieter-input');
-    const transportnummerInput = row.querySelector('.sendung-transportnummer-input');
-
-    if (anbieterInput) {
-        anbieterInput.value = normalized.anbieter;
-        if (isPrimary) {
-            anbieterInput.id = 'sendungAnbieter';
-        }
-    }
-
-    if (transportnummerInput) {
-        transportnummerInput.value = normalized.transportnummer;
-        if (isPrimary) {
-            transportnummerInput.id = 'sendungTransportnummer';
-        }
-    }
-
-    if (!isPrimary) {
-        const removeBtn = row.querySelector('.sendung-remove-transport-entry-btn');
-        if (removeBtn) {
-            removeBtn.onclick = () => {
-                row.remove();
-            };
-        }
-    }
-
-    return row;
-}
-
-function setTransportEntries(entries = []) {
-    const container = getTransportEntriesContainer();
-    if (!container) return;
-
-    const normalizedEntries = Array.isArray(entries)
+function normalizeTransportEntries(entries = []) {
+    const normalized = Array.isArray(entries)
         ? entries.map(normalizeTransportEntry)
         : [];
-
-    const entriesToRender = normalizedEntries.length > 0
-        ? normalizedEntries
-        : [{ ...EMPTY_TRANSPORT_ENTRY }];
-
-    container.innerHTML = '';
-    entriesToRender.forEach((entry, index) => {
-        container.appendChild(createTransportEntryRow(entry, index === 0));
-    });
-
-    applyTransportEntriesReadMode(isSendungModalReadMode);
+    return normalized.length > 0 ? normalized : [{ ...EMPTY_TRANSPORT_ENTRY }];
 }
 
-function addTransportEntryRow(entry = EMPTY_TRANSPORT_ENTRY) {
-    const container = getTransportEntriesContainer();
-    if (!container) return;
-
-    container.appendChild(createTransportEntryRow(entry, false));
-    applyTransportEntriesReadMode(isSendungModalReadMode);
+function normalizePaket(paket = {}, index = 0) {
+    return {
+        paketId: String(paket?.paketId || '').trim() || createPaketId(),
+        paketLabel: String(paket?.paketLabel || '').trim() || `Paket ${index + 1}`,
+        status: normalizeStatus(paket?.status),
+        deadlineErwartet: String(paket?.deadlineErwartet || '').trim(),
+        deadlineVersand: String(paket?.deadlineVersand || '').trim(),
+        notiz: String(paket?.notiz || '').trim(),
+        transportEntries: normalizeTransportEntries(paket?.transportEntries)
+    };
 }
 
-function collectTransportEntries() {
-    const container = getTransportEntriesContainer();
+function getPaketeContainer() {
+    return document.getElementById('sendungPaketeContainer');
+}
 
-    if (!container) {
-        return [normalizeTransportEntry({
-            anbieter: document.getElementById('sendungAnbieter')?.value,
-            transportnummer: document.getElementById('sendungTransportnummer')?.value
-        })];
+function getSendungPakete(sendung = {}) {
+    if (Array.isArray(sendung?.pakete) && sendung.pakete.length > 0) {
+        return sendung.pakete.map((paket, index) => normalizePaket(paket, index));
     }
 
-    const rows = container.querySelectorAll('[data-transport-entry-row="true"]');
-    if (rows.length === 0) {
-        return [normalizeTransportEntry({
-            anbieter: document.getElementById('sendungAnbieter')?.value,
-            transportnummer: document.getElementById('sendungTransportnummer')?.value
-        })];
-    }
-
-    return Array.from(rows).map((row) => normalizeTransportEntry({
-        anbieter: row.querySelector('.sendung-transport-anbieter-input')?.value,
-        transportnummer: row.querySelector('.sendung-transportnummer-input')?.value
-    }));
-}
-
-function getSendungTransportEntries(sendung) {
-    const entries = Array.isArray(sendung?.transportEntries)
+    const legacyTransportEntries = Array.isArray(sendung?.transportEntries)
         ? sendung.transportEntries.map(normalizeTransportEntry).filter((entry) => entry.anbieter || entry.transportnummer)
         : [];
+
+    const fallbackEntries = legacyTransportEntries.length > 0
+        ? legacyTransportEntries
+        : [{
+            anbieter: String(sendung?.anbieter || '').trim(),
+            transportnummer: String(sendung?.transportnummer || '').trim()
+        }];
+
+    return [normalizePaket({
+        paketId: createPaketId(),
+        paketLabel: 'Paket 1',
+        status: normalizeStatus(sendung?.status),
+        deadlineErwartet: sendung?.deadlineErwartet || '',
+        deadlineVersand: sendung?.deadlineVersand || '',
+        transportEntries: fallbackEntries
+    }, 0)];
+}
+
+function getSendungTransportEntries(sendung = {}) {
+    const pakete = getSendungPakete(sendung);
+    const entries = [];
+
+    pakete.forEach((paket, paketIndex) => {
+        normalizeTransportEntries(paket.transportEntries).forEach((entry) => {
+            if (!entry.anbieter && !entry.transportnummer) return;
+            entries.push({
+                ...entry,
+                paketId: paket.paketId,
+                paketLabel: paket.paketLabel || `Paket ${paketIndex + 1}`,
+                paketStatus: paket.status
+            });
+        });
+    });
 
     if (entries.length > 0) {
         return entries;
@@ -242,6 +191,280 @@ function getSendungTransportEntries(sendung) {
     });
 
     return (legacyEntry.anbieter || legacyEntry.transportnummer) ? [legacyEntry] : [];
+}
+
+function computeAutoStatusFromPakete(pakete = []) {
+    const statuses = pakete.map((paket) => normalizeStatus(paket.status));
+    if (statuses.length === 0) return 'erwartet';
+
+    if (statuses.includes('problem')) return 'problem';
+    if (statuses.every((status) => status === 'storniert')) return 'storniert';
+    if (statuses.every((status) => status === 'zugestellt' || status === 'storniert')) return 'zugestellt';
+    if (statuses.includes('unterwegs')) return 'unterwegs';
+    return 'erwartet';
+}
+
+function getEarliestPaketDeadline(pakete = [], fieldKey) {
+    const validDates = pakete
+        .map((paket) => String(paket?.[fieldKey] || '').trim())
+        .filter(Boolean)
+        .map((value) => ({ value, date: new Date(value) }))
+        .filter((item) => !Number.isNaN(item.date.getTime()));
+
+    if (validDates.length === 0) {
+        return null;
+    }
+
+    validDates.sort((a, b) => a.date - b.date);
+    return validDates[0].value;
+}
+
+function updateStatusInfoUI(autoStatus) {
+    const info = document.getElementById('sendungStatusInfo');
+    const resetBtn = document.getElementById('sendungResetAutoStatusBtn');
+    if (!info || !resetBtn) return;
+
+    if (statusOverrideActive) {
+        info.textContent = `Manuell (Auto: ${STATUS_CONFIG[autoStatus]?.label || autoStatus})`;
+        info.className = 'text-xs font-semibold text-orange-800 bg-orange-100 px-2 py-1 rounded';
+        resetBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        resetBtn.disabled = false;
+    } else {
+        info.textContent = `Automatisch (${STATUS_CONFIG[autoStatus]?.label || autoStatus})`;
+        info.className = 'text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-1 rounded';
+        resetBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        resetBtn.disabled = true;
+    }
+}
+
+function syncOverallStatusWithPakete(forceAuto = false) {
+    const statusSelect = document.getElementById('sendungStatus');
+    const autoStatus = computeAutoStatusFromPakete(currentSendungPakete);
+    if (!statusSelect) return;
+
+    if (forceAuto) {
+        statusOverrideActive = false;
+    }
+
+    if (!statusOverrideActive || !statusSelect.value) {
+        isInternalStatusUpdate = true;
+        statusSelect.value = autoStatus;
+        isInternalStatusUpdate = false;
+    }
+
+    updateStatusInfoUI(autoStatus);
+}
+
+function addPaket() {
+    currentSendungPakete.push(normalizePaket({ status: 'erwartet' }, currentSendungPakete.length));
+    renderPaketeEditor();
+    syncOverallStatusWithPakete();
+}
+
+function removePaket(paketIndex) {
+    if (currentSendungPakete.length <= 1) {
+        return;
+    }
+    currentSendungPakete.splice(paketIndex, 1);
+    currentSendungPakete = currentSendungPakete.map((paket, index) => normalizePaket({ ...paket, paketLabel: `Paket ${index + 1}` }, index));
+    renderPaketeEditor();
+    syncOverallStatusWithPakete();
+}
+
+function addTransportEntryToPaket(paketIndex) {
+    const paket = currentSendungPakete[paketIndex];
+    if (!paket) return;
+    paket.transportEntries.push({ ...EMPTY_TRANSPORT_ENTRY });
+    renderPaketeEditor();
+}
+
+function removeTransportEntryFromPaket(paketIndex, entryIndex) {
+    const paket = currentSendungPakete[paketIndex];
+    if (!paket) return;
+
+    if (paket.transportEntries.length <= 1) {
+        paket.transportEntries[0] = { ...EMPTY_TRANSPORT_ENTRY };
+    } else {
+        paket.transportEntries.splice(entryIndex, 1);
+    }
+
+    renderPaketeEditor();
+}
+
+function updatePaketField(paketIndex, field, value) {
+    const paket = currentSendungPakete[paketIndex];
+    if (!paket) return;
+    paket[field] = field === 'status' ? normalizeStatus(value) : String(value || '').trim();
+    if (field === 'status') {
+        syncOverallStatusWithPakete();
+    }
+}
+
+function updateTransportEntryField(paketIndex, entryIndex, field, value) {
+    const paket = currentSendungPakete[paketIndex];
+    if (!paket || !paket.transportEntries[entryIndex]) return;
+    paket.transportEntries[entryIndex][field] = String(value || '').trim();
+}
+
+function collectPaketeForSave() {
+    const normalized = currentSendungPakete.map((paket, index) => {
+        const cleanedEntries = normalizeTransportEntries(paket.transportEntries)
+            .map(normalizeTransportEntry)
+            .filter((entry) => entry.anbieter || entry.transportnummer);
+
+        const normalizedPaket = normalizePaket({
+            ...paket,
+            paketLabel: `Paket ${index + 1}`,
+            transportEntries: cleanedEntries
+        }, index);
+
+        return {
+            ...normalizedPaket,
+            transportEntries: cleanedEntries
+        };
+    });
+
+    return normalized.length > 0
+        ? normalized
+        : [{ ...normalizePaket({ status: 'erwartet' }, 0), transportEntries: [] }];
+}
+
+function applyPaketeReadMode(readMode) {
+    const addPaketBtn = document.getElementById('sendungAddPaketBtn');
+    if (addPaketBtn) {
+        addPaketBtn.disabled = readMode;
+        addPaketBtn.classList.toggle('opacity-50', readMode);
+        addPaketBtn.classList.toggle('cursor-not-allowed', readMode);
+    }
+
+    const container = getPaketeContainer();
+    if (!container) return;
+
+    const paketInputs = container.querySelectorAll('input, textarea, select, button');
+    paketInputs.forEach((element) => {
+        element.disabled = readMode;
+    });
+}
+
+function renderPaketeEditor() {
+    const container = getPaketeContainer();
+    if (!container) return;
+
+    container.innerHTML = currentSendungPakete.map((paket, paketIndex) => {
+        const statusOptions = STATUS_VALUES.map((statusValue) => {
+            const config = STATUS_CONFIG[statusValue] || { label: statusValue, icon: '' };
+            const selected = paket.status === statusValue ? 'selected' : '';
+            return `<option value="${statusValue}" ${selected}>${config.icon} ${config.label}</option>`;
+        }).join('');
+
+        const transportRows = normalizeTransportEntries(paket.transportEntries).map((entry, entryIndex) => `
+            <div class="flex flex-col md:flex-row gap-2 items-start">
+                <input type="text" list="anbieterList" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-anbieter-input" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" value="${entry.anbieter}" placeholder="Transporteur (z.B. DHL)">
+                <div class="flex gap-2 w-full">
+                    <input type="text" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-transportnummer-input" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" value="${entry.transportnummer}" placeholder="Transportnummer / Sendungsnummer">
+                    ${entryIndex === 0
+                        ? '<span class="w-10 h-10 shrink-0"></span>'
+                        : `<button type="button" class="sendung-remove-transport-entry-btn w-10 h-10 shrink-0 rounded-full bg-red-500 text-white font-bold hover:bg-red-600 transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" title="Nummer entfernen">-</button>`}
+                </div>
+            </div>
+        `).join('');
+
+        return `
+            <div class="rounded-lg border border-amber-200 bg-white p-3">
+                <div class="flex items-center justify-between gap-2 flex-wrap">
+                    <h5 class="font-bold text-amber-800">📦 Paket ${paketIndex + 1}</h5>
+                    <div class="flex items-center gap-2">
+                        <select class="sendung-paket-status-select p-2 border-2 border-gray-300 rounded-lg bg-white text-sm" data-paket-index="${paketIndex}">
+                            ${statusOptions}
+                        </select>
+                        ${paketIndex === 0
+                            ? ''
+                            : `<button type="button" class="sendung-remove-paket-btn px-2.5 py-1.5 rounded-lg bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition" data-paket-index="${paketIndex}" title="Paket entfernen">- Paket</button>`}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">Deadline Erwartet</label>
+                        <input type="date" class="sendung-paket-deadline-erwartet w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm" data-paket-index="${paketIndex}" value="${paket.deadlineErwartet}">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">Deadline Versand</label>
+                        <input type="date" class="sendung-paket-deadline-versand w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm" data-paket-index="${paketIndex}" value="${paket.deadlineVersand}">
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-xs font-bold text-gray-600">Anbieter &amp; Sendungsnummern</label>
+                        <button type="button" class="sendung-add-transport-entry-btn px-2 py-1 rounded bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition" data-paket-index="${paketIndex}">+ Nummer</button>
+                    </div>
+                    <div class="space-y-2">${transportRows}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.querySelectorAll('.sendung-remove-paket-btn').forEach((button) => {
+        button.onclick = () => removePaket(Number.parseInt(button.dataset.paketIndex || '-1', 10));
+    });
+
+    container.querySelectorAll('.sendung-add-transport-entry-btn').forEach((button) => {
+        button.onclick = () => addTransportEntryToPaket(Number.parseInt(button.dataset.paketIndex || '-1', 10));
+    });
+
+    container.querySelectorAll('.sendung-remove-transport-entry-btn').forEach((button) => {
+        button.onclick = () => removeTransportEntryFromPaket(
+            Number.parseInt(button.dataset.paketIndex || '-1', 10),
+            Number.parseInt(button.dataset.entryIndex || '-1', 10)
+        );
+    });
+
+    container.querySelectorAll('.sendung-paket-status-select').forEach((select) => {
+        select.onchange = () => {
+            updatePaketField(Number.parseInt(select.dataset.paketIndex || '-1', 10), 'status', select.value);
+        };
+    });
+
+    container.querySelectorAll('.sendung-paket-deadline-erwartet').forEach((input) => {
+        input.oninput = () => updatePaketField(Number.parseInt(input.dataset.paketIndex || '-1', 10), 'deadlineErwartet', input.value);
+    });
+
+    container.querySelectorAll('.sendung-paket-deadline-versand').forEach((input) => {
+        input.oninput = () => updatePaketField(Number.parseInt(input.dataset.paketIndex || '-1', 10), 'deadlineVersand', input.value);
+    });
+
+    container.querySelectorAll('.sendung-paket-anbieter-input').forEach((input) => {
+        input.oninput = () => updateTransportEntryField(
+            Number.parseInt(input.dataset.paketIndex || '-1', 10),
+            Number.parseInt(input.dataset.entryIndex || '-1', 10),
+            'anbieter',
+            input.value
+        );
+    });
+
+    container.querySelectorAll('.sendung-paket-transportnummer-input').forEach((input) => {
+        input.oninput = () => updateTransportEntryField(
+            Number.parseInt(input.dataset.paketIndex || '-1', 10),
+            Number.parseInt(input.dataset.entryIndex || '-1', 10),
+            'transportnummer',
+            input.value
+        );
+    });
+
+    applyPaketeReadMode(isSendungModalReadMode);
+}
+
+function setPakete(pakete = []) {
+    const normalized = Array.isArray(pakete)
+        ? pakete.map((paket, index) => normalizePaket(paket, index))
+        : [];
+    currentSendungPakete = normalized.length > 0
+        ? normalized
+        : [normalizePaket({ status: 'erwartet' }, 0)];
+
+    renderPaketeEditor();
+    syncOverallStatusWithPakete();
 }
 
 export function initializeSendungsverwaltungView() {
@@ -343,7 +566,9 @@ function setupEventListeners() {
     const sendungFilterJoinMode = document.getElementById('sendungFilterJoinMode');
     const sendungTyp = document.getElementById('sendungTyp');
     const sendungErinnerungenAktiv = document.getElementById('sendungErinnerungenAktiv');
-    const sendungAddTransportEntryBtn = document.getElementById('sendungAddTransportEntryBtn');
+    const sendungAddPaketBtn = document.getElementById('sendungAddPaketBtn');
+    const sendungStatus = document.getElementById('sendungStatus');
+    const sendungResetAutoStatusBtn = document.getElementById('sendungResetAutoStatusBtn');
 
     if (openSendungModalBtn) {
         openSendungModalBtn.onclick = () => openSendungModal();
@@ -373,8 +598,23 @@ function setupEventListeners() {
         duplicateSendungBtn.onclick = () => duplicateCurrentSendungToNew();
     }
 
-    if (sendungAddTransportEntryBtn) {
-        sendungAddTransportEntryBtn.onclick = () => addTransportEntryRow();
+    if (sendungAddPaketBtn) {
+        sendungAddPaketBtn.onclick = () => addPaket();
+    }
+
+    if (sendungStatus) {
+        sendungStatus.onchange = () => {
+            if (isInternalStatusUpdate) return;
+            const autoStatus = computeAutoStatusFromPakete(currentSendungPakete);
+            statusOverrideActive = normalizeStatus(sendungStatus.value) !== autoStatus;
+            updateStatusInfoUI(autoStatus);
+        };
+    }
+
+    if (sendungResetAutoStatusBtn) {
+        sendungResetAutoStatusBtn.onclick = () => {
+            syncOverallStatusWithPakete(true);
+        };
     }
 
     if (sendungToggleDetailsBtn) {
@@ -689,6 +929,8 @@ function updateSendungSearchSuggestions(term) {
 function doesSendungMatchSearchFilter(sendung, filter) {
     const searchValue = String(filter?.value || '').toLowerCase();
     const category = String(filter?.category || '');
+    const transportEntries = getSendungTransportEntries(sendung);
+    const paketStatuses = getSendungPakete(sendung).map((paket) => normalizeStatus(paket.status));
 
     if (category === 'all') {
         const tags = (sendung.tags || []).map((tag) => String(tag || '').toLowerCase());
@@ -699,14 +941,18 @@ function doesSendungMatchSearchFilter(sendung, filter) {
             String(sendung.empfaenger || '').toLowerCase().includes(searchValue) ||
             String(sendung.prioritaet || '').toLowerCase().includes(searchValue) ||
             String(sendung.bestellnummer || '').toLowerCase().includes(searchValue) ||
+            transportEntries.some((entry) => String(entry?.anbieter || '').toLowerCase().includes(searchValue) || String(entry?.transportnummer || '').toLowerCase().includes(searchValue)) ||
+            paketStatuses.some((status) => status.includes(searchValue)) ||
             tags.some((tag) => tag.includes(searchValue));
     }
 
     if (category === 'status') {
-        return String(sendung.status || '').toLowerCase().includes(searchValue);
+        return String(sendung.status || '').toLowerCase().includes(searchValue) ||
+            paketStatuses.some((status) => status.includes(searchValue));
     }
     if (category === 'anbieter') {
-        return String(sendung.anbieter || '').toLowerCase().includes(searchValue);
+        return String(sendung.anbieter || '').toLowerCase().includes(searchValue) ||
+            transportEntries.some((entry) => String(entry?.anbieter || '').toLowerCase().includes(searchValue));
     }
     if (category === 'produkt') {
         return String(sendung.produkt || '').toLowerCase().includes(searchValue);
@@ -849,7 +1095,14 @@ function setSendungModalReadMode(readMode) {
         }
     }
 
-    applyTransportEntriesReadMode(readMode);
+    applyPaketeReadMode(readMode);
+
+    const resetAutoStatusBtn = document.getElementById('sendungResetAutoStatusBtn');
+    if (resetAutoStatusBtn) {
+        resetAutoStatusBtn.disabled = readMode || !statusOverrideActive;
+        resetAutoStatusBtn.classList.toggle('opacity-50', resetAutoStatusBtn.disabled);
+        resetAutoStatusBtn.classList.toggle('cursor-not-allowed', resetAutoStatusBtn.disabled);
+    }
 
     const saveSendungBtn = document.getElementById('saveSendungBtn');
     if (saveSendungBtn) {
@@ -879,20 +1132,14 @@ function clearModalFields() {
         sendungTyp: 'empfang',
         sendungStatus: 'erwartet',
         sendungBeschreibung: '',
-        sendungAnbieter: '',
-        sendungTransportnummer: '',
         sendungProdukt: '',
         sendungPrioritaet: 'normal',
         sendungAbsender: '',
         sendungEmpfaenger: '',
-        sendungDeadlineErwartet: '',
-        sendungDeadlineVersand: '',
         sendungBestellnummer: '',
         sendungWert: '',
         sendungVersandkosten: '',
         sendungLagerort: '',
-        sendungAufgeteiltIndex: '',
-        sendungAufgeteiltAnzahl: '',
         sendungTags: '',
         sendungInhalt: '',
         sendungNotizen: '',
@@ -920,13 +1167,14 @@ function clearModalFields() {
     const ruecksendungSection = document.getElementById('ruecksendungSection');
     if (ruecksendungSection) ruecksendungSection.style.display = 'none';
 
-    setTransportEntries([{ ...EMPTY_TRANSPORT_ENTRY }]);
+    statusOverrideActive = false;
+    setPakete([normalizePaket({ status: 'erwartet' }, 0)]);
+    syncOverallStatusWithPakete(true);
 }
 
 function fillModalWithSendungData(sendung) {
     const fieldMapping = {
         sendungTyp: 'typ',
-        sendungStatus: 'status',
         sendungBeschreibung: 'beschreibung',
         sendungProdukt: 'produkt',
         sendungPrioritaet: 'prioritaet',
@@ -936,8 +1184,6 @@ function fillModalWithSendungData(sendung) {
         sendungWert: 'wert',
         sendungVersandkosten: 'versandkosten',
         sendungLagerort: 'lagerort',
-        sendungAufgeteiltIndex: 'aufgeteiltIndex',
-        sendungAufgeteiltAnzahl: 'aufgeteiltAnzahl',
         sendungInhalt: 'inhalt',
         sendungNotizen: 'notizen',
         sendungRuecksendungGrund: 'ruecksendungGrund'
@@ -954,22 +1200,7 @@ function fillModalWithSendungData(sendung) {
         }
     });
 
-    const transportEntries = Array.isArray(sendung.transportEntries)
-        ? sendung.transportEntries.map(normalizeTransportEntry).filter((entry) => entry.anbieter || entry.transportnummer)
-        : [];
-
-    if (transportEntries.length > 0) {
-        setTransportEntries(transportEntries);
-    } else {
-        setTransportEntries([{
-            anbieter: sendung.anbieter || '',
-            transportnummer: sendung.transportnummer || ''
-        }]);
-    }
-
     const dateFields = {
-        sendungDeadlineErwartet: 'deadlineErwartet',
-        sendungDeadlineVersand: 'deadlineVersand',
         sendungRuecksendungFrist: 'ruecksendungFrist'
     };
 
@@ -1004,6 +1235,20 @@ function fillModalWithSendungData(sendung) {
     if (ruecksendungSection) {
         ruecksendungSection.style.display = sendung.typ === 'ruecksendung' ? 'block' : 'none';
     }
+
+    setPakete(getSendungPakete(sendung));
+
+    const statusSelect = document.getElementById('sendungStatus');
+    const autoStatus = computeAutoStatusFromPakete(currentSendungPakete);
+    const storedStatus = normalizeStatus(sendung.status || autoStatus);
+    statusOverrideActive = sendung.statusOverrideAktiv === true || storedStatus !== autoStatus;
+
+    if (statusSelect) {
+        isInternalStatusUpdate = true;
+        statusSelect.value = statusOverrideActive ? storedStatus : autoStatus;
+        isInternalStatusUpdate = false;
+    }
+    updateStatusInfoUI(autoStatus);
 }
 
 function duplicateCurrentSendungToNew() {
@@ -1018,13 +1263,17 @@ function duplicateCurrentSendungToNew() {
 }
 
 async function saveSendung() {
-    const status = document.getElementById('sendungStatus')?.value || 'erwartet';
+    const selectedStatus = normalizeStatus(document.getElementById('sendungStatus')?.value || 'erwartet');
 
     if (currentEditingSendungId && isSendungModalReadMode) {
         try {
+            const existingSendung = SENDUNGEN[currentEditingSendungId] || {};
+            const autoStatus = computeAutoStatusFromPakete(getSendungPakete(existingSendung));
             const sendungRef = doc(sendungenCollectionRef, currentEditingSendungId);
             await updateDoc(sendungRef, {
-                status,
+                status: selectedStatus,
+                autoStatus,
+                statusOverrideAktiv: selectedStatus !== autoStatus,
                 updatedAt: serverTimestamp()
             });
             alertUser('Status erfolgreich aktualisiert!');
@@ -1037,9 +1286,15 @@ async function saveSendung() {
     }
 
     const beschreibung = document.getElementById('sendungBeschreibung')?.value.trim();
-    const transportEntries = collectTransportEntries()
+    const pakete = collectPaketeForSave();
+    const autoStatus = computeAutoStatusFromPakete(pakete);
+    const finalStatus = statusOverrideActive ? selectedStatus : autoStatus;
+    const isStatusOverride = statusOverrideActive && finalStatus !== autoStatus;
+
+    const flatTransportEntries = pakete.flatMap((paket) => normalizeTransportEntries(paket.transportEntries))
+        .map(normalizeTransportEntry)
         .filter((entry) => entry.anbieter || entry.transportnummer);
-    const primaryTransportEntry = transportEntries[0] || { ...EMPTY_TRANSPORT_ENTRY };
+    const primaryTransportEntry = flatTransportEntries[0] || { ...EMPTY_TRANSPORT_ENTRY };
     const anbieter = primaryTransportEntry.anbieter;
     const transportnummer = primaryTransportEntry.transportnummer;
 
@@ -1058,23 +1313,27 @@ async function saveSendung() {
 
     const sendungData = {
         typ: typ,
-        status,
+        status: finalStatus,
+        autoStatus,
+        statusOverrideAktiv: isStatusOverride,
         beschreibung: beschreibung,
         anbieter: anbieter,
         transportnummer: transportnummer,
-        transportEntries: transportEntries,
+        sendungsnummer: transportnummer,
+        transportEntries: flatTransportEntries,
+        pakete: pakete,
         produkt: document.getElementById('sendungProdukt')?.value.trim() || '',
         prioritaet: document.getElementById('sendungPrioritaet')?.value || 'normal',
         absender: document.getElementById('sendungAbsender')?.value.trim() || '',
         empfaenger: document.getElementById('sendungEmpfaenger')?.value.trim() || '',
-        deadlineErwartet: document.getElementById('sendungDeadlineErwartet')?.value || null,
-        deadlineVersand: document.getElementById('sendungDeadlineVersand')?.value || null,
+        deadlineErwartet: getEarliestPaketDeadline(pakete, 'deadlineErwartet'),
+        deadlineVersand: getEarliestPaketDeadline(pakete, 'deadlineVersand'),
         bestellnummer: document.getElementById('sendungBestellnummer')?.value.trim() || '',
         wert: parseFloat(document.getElementById('sendungWert')?.value) || 0,
         versandkosten: parseFloat(document.getElementById('sendungVersandkosten')?.value) || 0,
         lagerort: document.getElementById('sendungLagerort')?.value.trim() || '',
-        aufgeteiltIndex: parseInt(document.getElementById('sendungAufgeteiltIndex')?.value) || null,
-        aufgeteiltAnzahl: parseInt(document.getElementById('sendungAufgeteiltAnzahl')?.value) || null,
+        aufgeteiltIndex: null,
+        aufgeteiltAnzahl: pakete.length,
         tags: tagsArray,
         inhalt: inhaltArray,
         notizen: document.getElementById('sendungNotizen')?.value.trim() || '',
@@ -1103,9 +1362,9 @@ async function saveSendung() {
 
         // Pushmail-Benachrichtigungen erstellen (nur für aktive Sendungen)
         const inaktiveStatus = ['zugestellt', 'storniert', 'verloren'];
-        if (sendungData.erwarteteAnkunft && currentUser?.mode && !inaktiveStatus.includes(sendungData.status)) {
-            const targetDate = new Date(sendungData.erwarteteAnkunft);
-            const sendungName = `${sendungData.anbieter || 'Sendung'} (${sendungData.sendungsnummer || 'keine Nr.'})`;
+        if (sendungData.deadlineErwartet && currentUser?.mode && !inaktiveStatus.includes(sendungData.status)) {
+            const targetDate = new Date(sendungData.deadlineErwartet);
+            const sendungName = `${sendungData.anbieter || 'Sendung'} (${sendungData.transportnummer || 'keine Nr.'})`;
             
             await createPendingNotification(
                 currentUser.mode,
@@ -1117,7 +1376,7 @@ async function saveSendung() {
                     targetDate: targetDate,
                     sendungName: sendungName,
                     anbieter: sendungData.anbieter || 'Unbekannt',
-                    sendungsnummer: sendungData.sendungsnummer || 'Keine',
+                    sendungsnummer: sendungData.transportnummer || 'Keine',
                     ablaufDatum: targetDate.toLocaleDateString('de-DE')
                 }
             );
@@ -1325,7 +1584,8 @@ function renderSendungen(sendungen) {
 }
 
 function createSendungCard(sendung) {
-    const statusInfo = STATUS_CONFIG[sendung.status] || STATUS_CONFIG.erwartet;
+    const pakete = getSendungPakete(sendung);
+    const statusInfo = STATUS_CONFIG[normalizeStatus(sendung.status)] || STATUS_CONFIG.erwartet;
     const typInfo = TYP_CONFIG[sendung.typ] || TYP_CONFIG.empfang;
     const prioritaetInfo = PRIORITAET_CONFIG[sendung.prioritaet] || PRIORITAET_CONFIG.normal;
     const transportEntries = getSendungTransportEntries(sendung);
@@ -1347,8 +1607,12 @@ function createSendungCard(sendung) {
                 `
                 : '<span class="text-xs text-gray-500">(Keine Transportnummer)</span>';
 
+            const paketStatusInfo = STATUS_CONFIG[normalizeStatus(entry.paketStatus)] || STATUS_CONFIG.erwartet;
+
             return `
                 <div class="flex items-center gap-2 flex-wrap">
+                    ${entry.paketLabel ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">${entry.paketLabel}</span>` : ''}
+                    ${entry.paketStatus ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded ${paketStatusInfo.color}">${paketStatusInfo.icon} ${paketStatusInfo.label}</span>` : ''}
                     <span class="font-semibold">🚚 ${entry.anbieter || 'Kein Anbieter'}</span>
                     ${transportnummerDisplay}
                 </div>
@@ -1361,11 +1625,19 @@ function createSendungCard(sendung) {
             </div>
         `;
 
+    const paketStatusDisplay = pakete.map((paket, index) => {
+        const paketStatusInfo = STATUS_CONFIG[normalizeStatus(paket.status)] || STATUS_CONFIG.erwartet;
+        return `<span class="text-[11px] font-bold px-2 py-0.5 rounded ${paketStatusInfo.color}">📦 P${index + 1}: ${paketStatusInfo.label}</span>`;
+    }).join(' ');
+
     if (!sendungShowDetails) {
         return `
             <div id="sendung-${sendung.id}" class="card bg-white p-4 rounded-xl shadow-lg hover:shadow-xl transition cursor-pointer border-l-4 ${getBorderColor(sendung.typ)} ${cardLayoutClass}">
                 <h3 class="text-lg font-bold ${typInfo.color} break-words mb-3">${sendung.beschreibung}</h3>
                 <div class="space-y-2 text-sm">
+                    <div class="flex flex-wrap gap-1">
+                        ${paketStatusDisplay}
+                    </div>
                     <div class="space-y-1">
                         ${transportEntriesDisplay}
                     </div>
@@ -1379,8 +1651,8 @@ function createSendungCard(sendung) {
         ? `<span class="text-xs px-2 py-1 rounded-full ${prioritaetInfo.badge}">${prioritaetInfo.icon} ${prioritaetInfo.label}</span>`
         : '';
 
-    const aufgeteiltBadge = sendung.aufgeteiltAnzahl > 1
-        ? `<span class="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">📦 ${sendung.aufgeteiltIndex || 1} von ${sendung.aufgeteiltAnzahl}</span>`
+    const paketCountBadge = pakete.length > 1
+        ? `<span class="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">📦 ${pakete.length} Pakete</span>`
         : '';
 
     const tagsBadges = (sendung.tags && sendung.tags.length > 0)
@@ -1410,6 +1682,9 @@ function createSendungCard(sendung) {
             </div>
 
             <div class="ml-8 space-y-1 text-sm text-gray-700">
+                <div class="flex flex-wrap gap-1">
+                    ${paketStatusDisplay}
+                </div>
                 ${transportEntriesDisplay}
                 ${sendung.absender ? `<p class="break-words">📤 Von: ${sendung.absender}</p>` : ''}
                 ${sendung.empfaenger ? `<p class="break-words">📥 An: ${sendung.empfaenger}</p>` : ''}
@@ -1418,7 +1693,7 @@ function createSendungCard(sendung) {
 
             <div class="ml-8 mt-2 flex flex-wrap gap-2">
                 ${prioritaetBadge}
-                ${aufgeteiltBadge}
+                ${paketCountBadge}
                 ${tagsBadges}
             </div>
             
@@ -1439,7 +1714,8 @@ function getBorderColor(typ) {
 }
 
 function getDeadlineText(sendung) {
-    const deadline = sendung.typ === 'empfang' ? sendung.deadlineErwartet : sendung.deadlineVersand;
+    const deadlineField = sendung.typ === 'empfang' ? 'deadlineErwartet' : 'deadlineVersand';
+    const deadline = sendung[deadlineField] || getEarliestPaketDeadline(getSendungPakete(sendung), deadlineField);
     if (!deadline) return null;
 
     const deadlineDate = new Date(deadline);
