@@ -99,6 +99,7 @@ const EMPTY_TRANSPORT_ENTRY = Object.freeze({
 let currentSendungPakete = [];
 let statusOverrideActive = false;
 let isInternalStatusUpdate = false;
+let currentInhaltItems = [];
 
 function normalizeStatus(status) {
     const normalized = String(status || '').trim().toLowerCase();
@@ -128,6 +129,7 @@ function normalizePaket(paket = {}, index = 0) {
         paketId: String(paket?.paketId || '').trim() || createPaketId(),
         paketLabel: String(paket?.paketLabel || '').trim() || `Paket ${index + 1}`,
         status: normalizeStatus(paket?.status),
+        lieferziel: String(paket?.lieferziel || '').trim(),
         deadlineErwartet: String(paket?.deadlineErwartet || '').trim(),
         deadlineVersand: String(paket?.deadlineVersand || '').trim(),
         notiz: String(paket?.notiz || '').trim(),
@@ -217,6 +219,173 @@ function getEarliestPaketDeadline(pakete = [], fieldKey) {
 
     validDates.sort((a, b) => a.date - b.date);
     return validDates[0].value;
+}
+
+function normalizeInhaltItem(item = {}) {
+    if (typeof item === 'string') {
+        return {
+            menge: 1,
+            bezeichnung: String(item || '').trim()
+        };
+    }
+
+    const mengeRaw = Number.parseInt(item?.menge, 10);
+    return {
+        menge: Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 1,
+        bezeichnung: String(item?.bezeichnung || '').trim()
+    };
+}
+
+function getSendungInhaltItems(sendung = {}) {
+    if (!Array.isArray(sendung?.inhalt)) {
+        return [];
+    }
+    return sendung.inhalt
+        .map(normalizeInhaltItem)
+        .filter((item) => item.bezeichnung);
+}
+
+function getInhaltRowsContainer() {
+    return document.getElementById('sendungInhaltRows');
+}
+
+function applyInhaltReadMode(readMode) {
+    const container = getInhaltRowsContainer();
+    const addRowBtn = document.getElementById('sendungAddInhaltRowBtn');
+
+    if (container) {
+        container.querySelectorAll('input, button').forEach((element) => {
+            element.disabled = readMode;
+        });
+    }
+
+    if (addRowBtn) {
+        addRowBtn.disabled = readMode;
+        addRowBtn.classList.toggle('opacity-50', readMode);
+        addRowBtn.classList.toggle('cursor-not-allowed', readMode);
+    }
+}
+
+function updateInhaltItem(rowIndex, field, value) {
+    const item = currentInhaltItems[rowIndex];
+    if (!item) return;
+
+    if (field === 'menge') {
+        const mengeRaw = Number.parseInt(value, 10);
+        item.menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 1;
+        return;
+    }
+
+    item.bezeichnung = String(value || '').trim();
+}
+
+function addInhaltRow(insertIndex = currentInhaltItems.length, focusField = 'bezeichnung') {
+    const safeIndex = Math.max(0, Math.min(insertIndex, currentInhaltItems.length));
+    currentInhaltItems.splice(safeIndex, 0, { menge: 1, bezeichnung: '' });
+    renderInhaltEditor(safeIndex, focusField);
+}
+
+function removeInhaltRow(rowIndex) {
+    if (rowIndex < 0 || rowIndex >= currentInhaltItems.length) return;
+
+    if (currentInhaltItems.length <= 1) {
+        currentInhaltItems = [{ menge: 1, bezeichnung: '' }];
+        renderInhaltEditor(0, 'bezeichnung');
+        return;
+    }
+
+    currentInhaltItems.splice(rowIndex, 1);
+    const nextFocusRow = Math.max(0, rowIndex - 1);
+    renderInhaltEditor(nextFocusRow, 'bezeichnung');
+}
+
+function setInhaltItems(items = []) {
+    const normalized = Array.isArray(items)
+        ? items.map(normalizeInhaltItem)
+        : [];
+    currentInhaltItems = normalized.length > 0
+        ? normalized
+        : [{ menge: 1, bezeichnung: '' }];
+
+    renderInhaltEditor();
+}
+
+function collectInhaltItemsForSave() {
+    return currentInhaltItems
+        .map(normalizeInhaltItem)
+        .filter((item) => item.bezeichnung);
+}
+
+function renderInhaltEditor(focusRowIndex = null, focusField = 'bezeichnung') {
+    const container = getInhaltRowsContainer();
+    if (!container) return;
+
+    container.innerHTML = currentInhaltItems.map((item, index) => `
+        <div class="rounded-lg border border-gray-200 bg-gray-50 p-2">
+            <div class="grid grid-cols-12 gap-2 items-center">
+                <div class="col-span-3 md:col-span-2">
+                    <input type="number" min="1" step="1" class="sendung-inhalt-menge-input w-full p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm" data-row-index="${index}" value="${item.menge || 1}" placeholder="Menge">
+                </div>
+                <div class="col-span-9 md:col-span-9">
+                    <input type="text" class="sendung-inhalt-bezeichnung-input w-full p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm" data-row-index="${index}" value="${item.bezeichnung || ''}" placeholder="Bezeichnung">
+                </div>
+                <div class="col-span-12 md:col-span-1 flex md:justify-end">
+                    ${index === 0
+                        ? '<span class="w-8 h-8"></span>'
+                        : `<button type="button" class="sendung-remove-inhalt-row-btn w-8 h-8 rounded-full bg-red-500 text-white font-bold hover:bg-red-600 transition" data-row-index="${index}" title="Zeile entfernen">-</button>`}
+                </div>
+            </div>
+        </div>
+    `).join('');
+
+    container.querySelectorAll('.sendung-inhalt-menge-input').forEach((input) => {
+        input.oninput = () => updateInhaltItem(Number.parseInt(input.dataset.rowIndex || '-1', 10), 'menge', input.value);
+        input.onkeydown = (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            const rowIndex = Number.parseInt(input.dataset.rowIndex || '-1', 10);
+            if (!input.value || Number.parseInt(input.value, 10) <= 0) {
+                input.value = '1';
+            }
+            updateInhaltItem(rowIndex, 'menge', input.value);
+            const target = container.querySelector(`.sendung-inhalt-bezeichnung-input[data-row-index="${rowIndex}"]`);
+            target?.focus();
+            target?.select();
+        };
+    });
+
+    container.querySelectorAll('.sendung-inhalt-bezeichnung-input').forEach((input) => {
+        input.oninput = () => updateInhaltItem(Number.parseInt(input.dataset.rowIndex || '-1', 10), 'bezeichnung', input.value);
+        input.onkeydown = (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            const rowIndex = Number.parseInt(input.dataset.rowIndex || '-1', 10);
+            const mengeInput = container.querySelector(`.sendung-inhalt-menge-input[data-row-index="${rowIndex}"]`);
+            if (mengeInput && (!mengeInput.value || Number.parseInt(mengeInput.value, 10) <= 0)) {
+                mengeInput.value = '1';
+            }
+            updateInhaltItem(rowIndex, 'menge', mengeInput?.value || '1');
+            updateInhaltItem(rowIndex, 'bezeichnung', input.value);
+            addInhaltRow(rowIndex + 1, 'bezeichnung');
+        };
+    });
+
+    container.querySelectorAll('.sendung-remove-inhalt-row-btn').forEach((button) => {
+        button.onclick = () => removeInhaltRow(Number.parseInt(button.dataset.rowIndex || '-1', 10));
+    });
+
+    applyInhaltReadMode(isSendungModalReadMode);
+
+    if (focusRowIndex === null) return;
+
+    setTimeout(() => {
+        const selector = focusField === 'menge'
+            ? `.sendung-inhalt-menge-input[data-row-index="${focusRowIndex}"]`
+            : `.sendung-inhalt-bezeichnung-input[data-row-index="${focusRowIndex}"]`;
+        const target = container.querySelector(selector);
+        target?.focus();
+        target?.select();
+    }, 0);
 }
 
 function updateStatusInfoUI(autoStatus) {
@@ -344,6 +513,23 @@ function applyPaketeReadMode(readMode) {
     paketInputs.forEach((element) => {
         element.disabled = readMode;
     });
+
+    const readModeOnlyElements = container.querySelectorAll('.sendung-readmode-only');
+    readModeOnlyElements.forEach((element) => {
+        element.classList.toggle('hidden', !readMode);
+    });
+
+    if (readMode) {
+        const firstPaketStatus = container.querySelector('.sendung-paket-status-select[data-paket-index="0"]');
+        if (firstPaketStatus) {
+            firstPaketStatus.disabled = false;
+        }
+
+        const copyButtons = container.querySelectorAll('.sendung-copy-transportnummer-btn');
+        copyButtons.forEach((button) => {
+            button.disabled = false;
+        });
+    }
 }
 
 function renderPaketeEditor() {
@@ -357,17 +543,33 @@ function renderPaketeEditor() {
             return `<option value="${statusValue}" ${selected}>${config.icon} ${config.label}</option>`;
         }).join('');
 
-        const transportRows = normalizeTransportEntries(paket.transportEntries).map((entry, entryIndex) => `
+        const transportRows = normalizeTransportEntries(paket.transportEntries).map((entry, entryIndex) => {
+            const trackingUrl = getTrackingUrl(entry.anbieter, entry.transportnummer);
+            const readModeActions = `
+                <div class="sendung-readmode-only hidden flex gap-1">
+                    <button type="button" class="sendung-copy-transportnummer-btn w-9 h-10 shrink-0 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" title="Nummer kopieren">📋</button>
+                    ${trackingUrl
+                        ? `<a href="${trackingUrl}" target="_blank" rel="noopener noreferrer" class="sendung-open-tracking-btn inline-flex items-center justify-center w-9 h-10 shrink-0 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition" title="Tracking öffnen">🔗</a>`
+                        : '<button type="button" class="w-9 h-10 shrink-0 rounded-lg bg-gray-100 text-gray-400 cursor-not-allowed" disabled title="Kein Tracking-Link">🔗</button>'}
+                </div>
+            `;
+
+            return `
             <div class="flex flex-col md:flex-row gap-2 items-start">
+                ${entryIndex === 0
+                    ? `<input type="text" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-lieferziel-input" data-paket-index="${paketIndex}" value="${paket.lieferziel || ''}" placeholder="Lieferziel (z.B. Zuhause, Büro)">`
+                    : '<div class="hidden md:block w-full"></div>'}
                 <input type="text" list="anbieterList" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-anbieter-input" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" value="${entry.anbieter}" placeholder="Transporteur (z.B. DHL)">
                 <div class="flex gap-2 w-full">
                     <input type="text" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-transportnummer-input" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" value="${entry.transportnummer}" placeholder="Transportnummer / Sendungsnummer">
+                    ${readModeActions}
                     ${entryIndex === 0
                         ? '<span class="w-10 h-10 shrink-0"></span>'
                         : `<button type="button" class="sendung-remove-transport-entry-btn w-10 h-10 shrink-0 rounded-full bg-red-500 text-white font-bold hover:bg-red-600 transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" title="Nummer entfernen">-</button>`}
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
 
         return `
             <div class="rounded-lg border border-amber-200 bg-white p-3">
@@ -396,7 +598,7 @@ function renderPaketeEditor() {
 
                 <div class="mt-3">
                     <div class="flex items-center justify-between mb-2">
-                        <label class="text-xs font-bold text-gray-600">Anbieter &amp; Sendungsnummern</label>
+                        <label class="text-xs font-bold text-gray-600">Lieferziel, Anbieter &amp; Sendungsnummern</label>
                         <button type="button" class="sendung-add-transport-entry-btn px-2 py-1 rounded bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition" data-paket-index="${paketIndex}">+ Nummer</button>
                     </div>
                     <div class="space-y-2">${transportRows}</div>
@@ -434,6 +636,10 @@ function renderPaketeEditor() {
         input.oninput = () => updatePaketField(Number.parseInt(input.dataset.paketIndex || '-1', 10), 'deadlineVersand', input.value);
     });
 
+    container.querySelectorAll('.sendung-paket-lieferziel-input').forEach((input) => {
+        input.oninput = () => updatePaketField(Number.parseInt(input.dataset.paketIndex || '-1', 10), 'lieferziel', input.value);
+    });
+
     container.querySelectorAll('.sendung-paket-anbieter-input').forEach((input) => {
         input.oninput = () => updateTransportEntryField(
             Number.parseInt(input.dataset.paketIndex || '-1', 10),
@@ -450,6 +656,16 @@ function renderPaketeEditor() {
             'transportnummer',
             input.value
         );
+    });
+
+    container.querySelectorAll('.sendung-copy-transportnummer-btn').forEach((button) => {
+        button.onclick = () => {
+            const paketIndex = Number.parseInt(button.dataset.paketIndex || '-1', 10);
+            const entryIndex = Number.parseInt(button.dataset.entryIndex || '-1', 10);
+            const paket = currentSendungPakete[paketIndex];
+            const entry = normalizeTransportEntries(paket?.transportEntries)[entryIndex] || { ...EMPTY_TRANSPORT_ENTRY };
+            copyToClipboard(entry.transportnummer || '');
+        };
     });
 
     applyPaketeReadMode(isSendungModalReadMode);
@@ -517,7 +733,7 @@ function switchTab(tabName) {
             tab.classList.remove('text-blue-600', 'border-blue-600', 'text-orange-600', 'border-orange-600');
         }
     });
-    
+
     dashboards.forEach(dashboard => {
         const shouldShow = dashboard.id === `dashboard${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`;
         dashboard.classList.toggle('hidden', !shouldShow);
@@ -567,6 +783,7 @@ function setupEventListeners() {
     const sendungTyp = document.getElementById('sendungTyp');
     const sendungErinnerungenAktiv = document.getElementById('sendungErinnerungenAktiv');
     const sendungAddPaketBtn = document.getElementById('sendungAddPaketBtn');
+    const sendungAddInhaltRowBtn = document.getElementById('sendungAddInhaltRowBtn');
     const sendungStatus = document.getElementById('sendungStatus');
     const sendungResetAutoStatusBtn = document.getElementById('sendungResetAutoStatusBtn');
 
@@ -600,6 +817,10 @@ function setupEventListeners() {
 
     if (sendungAddPaketBtn) {
         sendungAddPaketBtn.onclick = () => addPaket();
+    }
+
+    if (sendungAddInhaltRowBtn) {
+        sendungAddInhaltRowBtn.onclick = () => addInhaltRow(currentInhaltItems.length, 'bezeichnung');
     }
 
     if (sendungStatus) {
@@ -1096,6 +1317,7 @@ function setSendungModalReadMode(readMode) {
     }
 
     applyPaketeReadMode(readMode);
+    applyInhaltReadMode(readMode);
 
     const resetAutoStatusBtn = document.getElementById('sendungResetAutoStatusBtn');
     if (resetAutoStatusBtn) {
@@ -1132,16 +1354,12 @@ function clearModalFields() {
         sendungTyp: 'empfang',
         sendungStatus: 'erwartet',
         sendungBeschreibung: '',
-        sendungProdukt: '',
         sendungPrioritaet: 'normal',
         sendungAbsender: '',
         sendungEmpfaenger: '',
         sendungBestellnummer: '',
         sendungWert: '',
         sendungVersandkosten: '',
-        sendungLagerort: '',
-        sendungTags: '',
-        sendungInhalt: '',
         sendungNotizen: '',
         sendungRuecksendungFrist: '',
         sendungRuecksendungGrund: ''
@@ -1167,6 +1385,7 @@ function clearModalFields() {
     const ruecksendungSection = document.getElementById('ruecksendungSection');
     if (ruecksendungSection) ruecksendungSection.style.display = 'none';
 
+    setInhaltItems([]);
     statusOverrideActive = false;
     setPakete([normalizePaket({ status: 'erwartet' }, 0)]);
     syncOverallStatusWithPakete(true);
@@ -1176,15 +1395,12 @@ function fillModalWithSendungData(sendung) {
     const fieldMapping = {
         sendungTyp: 'typ',
         sendungBeschreibung: 'beschreibung',
-        sendungProdukt: 'produkt',
         sendungPrioritaet: 'prioritaet',
         sendungAbsender: 'absender',
         sendungEmpfaenger: 'empfaenger',
         sendungBestellnummer: 'bestellnummer',
         sendungWert: 'wert',
         sendungVersandkosten: 'versandkosten',
-        sendungLagerort: 'lagerort',
-        sendungInhalt: 'inhalt',
         sendungNotizen: 'notizen',
         sendungRuecksendungGrund: 'ruecksendungGrund'
     };
@@ -1192,13 +1408,11 @@ function fillModalWithSendungData(sendung) {
     Object.entries(fieldMapping).forEach(([elemId, fieldKey]) => {
         const elem = document.getElementById(elemId);
         if (elem && sendung[fieldKey] !== undefined) {
-            if (fieldKey === 'inhalt' && Array.isArray(sendung[fieldKey])) {
-                elem.value = sendung[fieldKey].join('\n');
-            } else {
-                elem.value = sendung[fieldKey] || '';
-            }
+            elem.value = sendung[fieldKey] || '';
         }
     });
+
+    setInhaltItems(sendung.inhalt || []);
 
     const dateFields = {
         sendungRuecksendungFrist: 'ruecksendungFrist'
@@ -1210,11 +1424,6 @@ function fillModalWithSendungData(sendung) {
             elem.value = sendung[fieldKey];
         }
     });
-
-    if (sendung.tags && Array.isArray(sendung.tags)) {
-        const tagsInput = document.getElementById('sendungTags');
-        if (tagsInput) tagsInput.value = sendung.tags.join(', ');
-    }
 
     const erinnerungenAktiv = document.getElementById('sendungErinnerungenAktiv');
     if (erinnerungenAktiv) {
@@ -1267,13 +1476,28 @@ async function saveSendung() {
 
     if (currentEditingSendungId && isSendungModalReadMode) {
         try {
-            const existingSendung = SENDUNGEN[currentEditingSendungId] || {};
-            const autoStatus = computeAutoStatusFromPakete(getSendungPakete(existingSendung));
+            const pakete = collectPaketeForSave();
+            const autoStatus = computeAutoStatusFromPakete(pakete);
+            const finalStatus = statusOverrideActive ? selectedStatus : autoStatus;
+            const isStatusOverride = statusOverrideActive && finalStatus !== autoStatus;
+
+            const flatTransportEntries = pakete.flatMap((paket) => normalizeTransportEntries(paket.transportEntries))
+                .map(normalizeTransportEntry)
+                .filter((entry) => entry.anbieter || entry.transportnummer);
+            const primaryTransportEntry = flatTransportEntries[0] || { ...EMPTY_TRANSPORT_ENTRY };
+
             const sendungRef = doc(sendungenCollectionRef, currentEditingSendungId);
             await updateDoc(sendungRef, {
-                status: selectedStatus,
+                status: finalStatus,
                 autoStatus,
-                statusOverrideAktiv: selectedStatus !== autoStatus,
+                statusOverrideAktiv: isStatusOverride,
+                pakete,
+                anbieter: primaryTransportEntry.anbieter,
+                transportnummer: primaryTransportEntry.transportnummer,
+                sendungsnummer: primaryTransportEntry.transportnummer,
+                transportEntries: flatTransportEntries,
+                deadlineErwartet: getEarliestPaketDeadline(pakete, 'deadlineErwartet'),
+                deadlineVersand: getEarliestPaketDeadline(pakete, 'deadlineVersand'),
                 updatedAt: serverTimestamp()
             });
             alertUser('Status erfolgreich aktualisiert!');
@@ -1305,11 +1529,7 @@ async function saveSendung() {
     
     const typ = document.getElementById('sendungTyp')?.value || 'empfang';
 
-    const inhaltText = document.getElementById('sendungInhalt')?.value.trim() || '';
-    const inhaltArray = inhaltText ? inhaltText.split('\n').map(i => i.trim()).filter(i => i) : [];
-
-    const tagsText = document.getElementById('sendungTags')?.value.trim() || '';
-    const tagsArray = tagsText ? tagsText.split(',').map(t => t.trim()).filter(t => t) : [];
+    const inhaltArray = collectInhaltItemsForSave();
 
     const sendungData = {
         typ: typ,
@@ -1322,7 +1542,6 @@ async function saveSendung() {
         sendungsnummer: transportnummer,
         transportEntries: flatTransportEntries,
         pakete: pakete,
-        produkt: document.getElementById('sendungProdukt')?.value.trim() || '',
         prioritaet: document.getElementById('sendungPrioritaet')?.value || 'normal',
         absender: document.getElementById('sendungAbsender')?.value.trim() || '',
         empfaenger: document.getElementById('sendungEmpfaenger')?.value.trim() || '',
@@ -1331,10 +1550,8 @@ async function saveSendung() {
         bestellnummer: document.getElementById('sendungBestellnummer')?.value.trim() || '',
         wert: parseFloat(document.getElementById('sendungWert')?.value) || 0,
         versandkosten: parseFloat(document.getElementById('sendungVersandkosten')?.value) || 0,
-        lagerort: document.getElementById('sendungLagerort')?.value.trim() || '',
         aufgeteiltIndex: null,
         aufgeteiltAnzahl: pakete.length,
-        tags: tagsArray,
         inhalt: inhaltArray,
         notizen: document.getElementById('sendungNotizen')?.value.trim() || '',
         erinnerungenAktiv: document.getElementById('sendungErinnerungenAktiv')?.checked || false,
@@ -1659,11 +1876,12 @@ function createSendungCard(sendung) {
         ? sendung.tags.map(tag => `<span class="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded-full">#${tag}</span>`).join(' ')
         : '';
     
-    const inhaltDisplay = sendung.inhalt && sendung.inhalt.length > 0
+    const inhaltItems = getSendungInhaltItems(sendung);
+    const inhaltDisplay = inhaltItems.length > 0
         ? `<div class="ml-8 mt-2">
             <p class="text-xs font-semibold text-gray-700">📦 Inhalt:</p>
             <div class="text-xs text-gray-600 flex flex-wrap gap-1">
-                ${sendung.inhalt.map(item => `<span class="bg-gray-100 px-2 py-0.5 rounded">${item}</span>`).join('')}
+                ${inhaltItems.map((item) => `<span class="bg-gray-100 px-2 py-0.5 rounded">${item.menge}x ${item.bezeichnung}</span>`).join('')}
             </div>
         </div>`
         : '';
