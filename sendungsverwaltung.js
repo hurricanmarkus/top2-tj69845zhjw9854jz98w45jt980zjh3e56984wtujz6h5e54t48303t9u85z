@@ -89,6 +89,144 @@ const PRIORITAET_CONFIG = {
     dringend: { label: 'Dringend', icon: '🚨', badge: 'bg-red-100 text-red-800' }
 };
 
+const EMPTY_TRANSPORT_ENTRY = Object.freeze({
+    anbieter: '',
+    transportnummer: ''
+});
+
+function normalizeTransportEntry(entry = {}) {
+    return {
+        anbieter: String(entry?.anbieter || '').trim(),
+        transportnummer: String(entry?.transportnummer || '').trim()
+    };
+}
+
+function getTransportEntriesContainer() {
+    return document.getElementById('sendungTransportEntriesContainer');
+}
+
+function applyTransportEntriesReadMode(readMode) {
+    const addBtn = document.getElementById('sendungAddTransportEntryBtn');
+    if (addBtn) {
+        addBtn.disabled = readMode;
+        addBtn.classList.toggle('opacity-50', readMode);
+        addBtn.classList.toggle('cursor-not-allowed', readMode);
+    }
+
+    const container = getTransportEntriesContainer();
+    if (!container) return;
+
+    const entryInputs = container.querySelectorAll('.sendung-transport-anbieter-input, .sendung-transportnummer-input');
+    entryInputs.forEach((input) => {
+        input.disabled = readMode;
+    });
+
+    const removeButtons = container.querySelectorAll('.sendung-remove-transport-entry-btn');
+    removeButtons.forEach((btn) => {
+        btn.disabled = readMode;
+        btn.classList.toggle('opacity-50', readMode);
+        btn.classList.toggle('cursor-not-allowed', readMode);
+    });
+}
+
+function createTransportEntryRow(entry = EMPTY_TRANSPORT_ENTRY, isPrimary = false) {
+    const normalized = normalizeTransportEntry(entry);
+    const row = document.createElement('div');
+    row.className = 'flex flex-col md:flex-row gap-3';
+    row.dataset.transportEntryRow = 'true';
+    if (isPrimary) {
+        row.dataset.primaryTransportEntry = 'true';
+    }
+
+    row.innerHTML = `
+        <input type="text" list="anbieterList" placeholder="Transporteur (z.B. DHL, Hermes, DPD...)" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500 sendung-transport-anbieter-input" aria-label="Anbieter">
+        <div class="flex gap-2 w-full">
+            <input type="text" placeholder="Transportnummer / Sendungsnummer" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500 sendung-transportnummer-input" aria-label="Transportnummer">
+            ${isPrimary ? '' : '<button type="button" class="sendung-remove-transport-entry-btn w-10 h-10 shrink-0 rounded-full bg-red-500 text-white font-bold hover:bg-red-600 transition" title="Diese Zeile entfernen">-</button>'}
+        </div>
+    `;
+
+    const anbieterInput = row.querySelector('.sendung-transport-anbieter-input');
+    const transportnummerInput = row.querySelector('.sendung-transportnummer-input');
+
+    if (anbieterInput) {
+        anbieterInput.value = normalized.anbieter;
+        if (isPrimary) {
+            anbieterInput.id = 'sendungAnbieter';
+        }
+    }
+
+    if (transportnummerInput) {
+        transportnummerInput.value = normalized.transportnummer;
+        if (isPrimary) {
+            transportnummerInput.id = 'sendungTransportnummer';
+        }
+    }
+
+    if (!isPrimary) {
+        const removeBtn = row.querySelector('.sendung-remove-transport-entry-btn');
+        if (removeBtn) {
+            removeBtn.onclick = () => {
+                row.remove();
+            };
+        }
+    }
+
+    return row;
+}
+
+function setTransportEntries(entries = []) {
+    const container = getTransportEntriesContainer();
+    if (!container) return;
+
+    const normalizedEntries = Array.isArray(entries)
+        ? entries.map(normalizeTransportEntry)
+        : [];
+
+    const entriesToRender = normalizedEntries.length > 0
+        ? normalizedEntries
+        : [{ ...EMPTY_TRANSPORT_ENTRY }];
+
+    container.innerHTML = '';
+    entriesToRender.forEach((entry, index) => {
+        container.appendChild(createTransportEntryRow(entry, index === 0));
+    });
+
+    applyTransportEntriesReadMode(isSendungModalReadMode);
+}
+
+function addTransportEntryRow(entry = EMPTY_TRANSPORT_ENTRY) {
+    const container = getTransportEntriesContainer();
+    if (!container) return;
+
+    container.appendChild(createTransportEntryRow(entry, false));
+    applyTransportEntriesReadMode(isSendungModalReadMode);
+}
+
+function collectTransportEntries() {
+    const container = getTransportEntriesContainer();
+
+    if (!container) {
+        return [normalizeTransportEntry({
+            anbieter: document.getElementById('sendungAnbieter')?.value,
+            transportnummer: document.getElementById('sendungTransportnummer')?.value
+        })];
+    }
+
+    const rows = container.querySelectorAll('[data-transport-entry-row="true"]');
+    if (rows.length === 0) {
+        return [normalizeTransportEntry({
+            anbieter: document.getElementById('sendungAnbieter')?.value,
+            transportnummer: document.getElementById('sendungTransportnummer')?.value
+        })];
+    }
+
+    return Array.from(rows).map((row) => normalizeTransportEntry({
+        anbieter: row.querySelector('.sendung-transport-anbieter-input')?.value,
+        transportnummer: row.querySelector('.sendung-transportnummer-input')?.value
+    }));
+}
+
 export function initializeSendungsverwaltungView() {
     if (!currentUser || !currentUser.mode) {
         console.log('[Sendungsverwaltung] User nicht geladen');
@@ -188,6 +326,7 @@ function setupEventListeners() {
     const sendungFilterJoinMode = document.getElementById('sendungFilterJoinMode');
     const sendungTyp = document.getElementById('sendungTyp');
     const sendungErinnerungenAktiv = document.getElementById('sendungErinnerungenAktiv');
+    const sendungAddTransportEntryBtn = document.getElementById('sendungAddTransportEntryBtn');
 
     if (openSendungModalBtn) {
         openSendungModalBtn.onclick = () => openSendungModal();
@@ -215,6 +354,10 @@ function setupEventListeners() {
 
     if (duplicateSendungBtn) {
         duplicateSendungBtn.onclick = () => duplicateCurrentSendungToNew();
+    }
+
+    if (sendungAddTransportEntryBtn) {
+        sendungAddTransportEntryBtn.onclick = () => addTransportEntryRow();
     }
 
     if (sendungToggleDetailsBtn) {
@@ -689,6 +832,8 @@ function setSendungModalReadMode(readMode) {
         }
     }
 
+    applyTransportEntriesReadMode(readMode);
+
     const saveSendungBtn = document.getElementById('saveSendungBtn');
     if (saveSendungBtn) {
         saveSendungBtn.textContent = readMode ? 'Status speichern' : 'Speichern';
@@ -757,6 +902,8 @@ function clearModalFields() {
 
     const ruecksendungSection = document.getElementById('ruecksendungSection');
     if (ruecksendungSection) ruecksendungSection.style.display = 'none';
+
+    setTransportEntries([{ ...EMPTY_TRANSPORT_ENTRY }]);
 }
 
 function fillModalWithSendungData(sendung) {
@@ -764,8 +911,6 @@ function fillModalWithSendungData(sendung) {
         sendungTyp: 'typ',
         sendungStatus: 'status',
         sendungBeschreibung: 'beschreibung',
-        sendungAnbieter: 'anbieter',
-        sendungTransportnummer: 'transportnummer',
         sendungProdukt: 'produkt',
         sendungPrioritaet: 'prioritaet',
         sendungAbsender: 'absender',
@@ -791,6 +936,19 @@ function fillModalWithSendungData(sendung) {
             }
         }
     });
+
+    const transportEntries = Array.isArray(sendung.transportEntries)
+        ? sendung.transportEntries.map(normalizeTransportEntry).filter((entry) => entry.anbieter || entry.transportnummer)
+        : [];
+
+    if (transportEntries.length > 0) {
+        setTransportEntries(transportEntries);
+    } else {
+        setTransportEntries([{
+            anbieter: sendung.anbieter || '',
+            transportnummer: sendung.transportnummer || ''
+        }]);
+    }
 
     const dateFields = {
         sendungDeadlineErwartet: 'deadlineErwartet',
@@ -862,8 +1020,11 @@ async function saveSendung() {
     }
 
     const beschreibung = document.getElementById('sendungBeschreibung')?.value.trim();
-    const anbieter = document.getElementById('sendungAnbieter')?.value.trim();
-    const transportnummer = document.getElementById('sendungTransportnummer')?.value.trim();
+    const transportEntries = collectTransportEntries()
+        .filter((entry) => entry.anbieter || entry.transportnummer);
+    const primaryTransportEntry = transportEntries[0] || { ...EMPTY_TRANSPORT_ENTRY };
+    const anbieter = primaryTransportEntry.anbieter;
+    const transportnummer = primaryTransportEntry.transportnummer;
 
     if (!beschreibung) {
         alertUser('Bitte fülle das Pflichtfeld Beschreibung aus.');
@@ -884,6 +1045,7 @@ async function saveSendung() {
         beschreibung: beschreibung,
         anbieter: anbieter,
         transportnummer: transportnummer,
+        transportEntries: transportEntries,
         produkt: document.getElementById('sendungProdukt')?.value.trim() || '',
         prioritaet: document.getElementById('sendungPrioritaet')?.value || 'normal',
         absender: document.getElementById('sendungAbsender')?.value.trim() || '',

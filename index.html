@@ -8140,26 +8140,29 @@
                     <input type="text" id="sendungBeschreibung" placeholder="z.B. Laptop von Amazon" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Anbieter</label>
-                        <input type="text" id="sendungAnbieter" list="anbieterList" placeholder="DHL, Hermes, DPD..." class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
-                        <datalist id="anbieterList">
-                            <option value="DHL">
-                            <option value="Hermes">
-                            <option value="DPD">
-                            <option value="Post Österreich">
-                            <option value="UPS">
-                            <option value="FedEx">
-                            <option value="GLS">
-                            <option value="Amazon Logistics">
-                        </datalist>
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="block text-sm font-bold text-gray-700">Anbieter</label>
+                        <button type="button" id="sendungAddTransportEntryBtn" class="w-8 h-8 rounded-full bg-amber-500 text-white font-bold hover:bg-amber-600 transition" title="Weitere Sendungsnummer hinzufügen">+</button>
                     </div>
 
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Transportnummer</label>
-                        <input type="text" id="sendungTransportnummer" placeholder="Trackingnummer" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500">
+                    <div id="sendungTransportEntriesContainer" class="space-y-3">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3" data-primary-transport-entry="true">
+                            <input type="text" id="sendungAnbieter" list="anbieterList" placeholder="Transporteur (z.B. DHL, Hermes, DPD...)" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500" aria-label="Anbieter">
+                            <input type="text" id="sendungTransportnummer" placeholder="Transportnummer / Sendungsnummer" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-amber-500" aria-label="Transportnummer">
+                        </div>
                     </div>
+
+                    <datalist id="anbieterList">
+                        <option value="DHL">
+                        <option value="Hermes">
+                        <option value="DPD">
+                        <option value="Post Österreich">
+                        <option value="UPS">
+                        <option value="FedEx">
+                        <option value="GLS">
+                        <option value="Amazon Logistics">
+                    </datalist>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
