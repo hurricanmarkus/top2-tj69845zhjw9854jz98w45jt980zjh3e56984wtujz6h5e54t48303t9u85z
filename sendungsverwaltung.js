@@ -147,10 +147,24 @@ const EMPTY_TRANSPORT_ENTRY = Object.freeze({
     transportnummer: ''
 });
 
+const WARENUEBERNAHME_STATUS_VALUES = ['offen', 'in_pruefung', 'abgeschlossen', 'problem'];
+const WARENUEBERNAHME_ABWEICHUNG_OPTIONS = {
+    ok: 'OK',
+    fehlt: 'Fehlt',
+    zuviel: 'Zuviel',
+    defekt: 'Defekt',
+    vertauscht: 'Vertauscht',
+    unbekannt: 'Unbekannt'
+};
+
 let currentSendungPakete = [];
 let statusOverrideActive = false;
 let isInternalStatusUpdate = false;
 let currentInhaltItems = [];
+let currentOffenerInhaltPot = [];
+let currentWarenuebernahmeProblemPot = [];
+let currentZuordnungPaketIndex = null;
+let currentWarenuebernahmePaketIndex = null;
 let registeredEmpfaengerVornamen = [];
 
 function normalizeStatus(status) {
@@ -162,10 +176,50 @@ function createPaketId() {
     return `paket_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 }
 
+function createInhaltId() {
+    return `inhalt_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+}
+
+function createWarenuebernahmeId() {
+    return `wu_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+}
+
+function createPotEntryId() {
+    return `pot_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+}
+
+function nowIso() {
+    return new Date().toISOString();
+}
+
+function isEmpfangTypValue(value = '') {
+    return String(value || '').trim().toLowerCase() === 'empfang';
+}
+
+function getCurrentModalTyp() {
+    return String(document.getElementById('sendungTyp')?.value || currentTab || 'empfang').trim().toLowerCase();
+}
+
+function isEmpfangContextActive() {
+    return isEmpfangTypValue(getCurrentModalTyp());
+}
+
 function normalizeTransportEntry(entry = {}) {
     return {
         anbieter: String(entry?.anbieter || '').trim(),
         transportnummer: String(entry?.transportnummer || '').trim()
+    };
+}
+
+function normalizeOffenerInhaltPotEntry(entry = {}, inhaltById = new Map()) {
+    const mengeOffenRaw = Number.parseInt(entry?.mengeOffen, 10);
+    const inhaltId = String(entry?.inhaltId || '').trim();
+    const inhalt = inhaltById.get(inhaltId);
+
+    return {
+        inhaltId,
+        bezeichnung: String(entry?.bezeichnung || inhalt?.bezeichnung || '').trim(),
+        mengeOffen: Number.isFinite(mengeOffenRaw) && mengeOffenRaw > 0 ? mengeOffenRaw : 0
     };
 }
 
@@ -176,16 +230,331 @@ function normalizeTransportEntries(entries = []) {
     return normalized.length > 0 ? normalized : [{ ...EMPTY_TRANSPORT_ENTRY }];
 }
 
+function normalizeInhaltZuordnungEntry(entry = {}) {
+    const mengeRaw = Number.parseInt(entry?.mengeSoll, 10);
+    return {
+        inhaltId: String(entry?.inhaltId || '').trim(),
+        mengeSoll: Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0
+    };
+}
+
+function normalizeWarenuebernahmePosition(position = {}) {
+    const mengeSollRaw = Number.parseInt(position?.mengeSoll, 10);
+    const mengeIstRaw = Number.parseInt(position?.mengeIst, 10);
+    const rawTyp = String(position?.abweichungstyp || 'ok').trim().toLowerCase();
+    const abweichungstyp = Object.prototype.hasOwnProperty.call(WARENUEBERNAHME_ABWEICHUNG_OPTIONS, rawTyp)
+        ? rawTyp
+        : 'ok';
+
+    return {
+        inhaltId: String(position?.inhaltId || '').trim(),
+        mengeSoll: Number.isFinite(mengeSollRaw) && mengeSollRaw > 0 ? mengeSollRaw : 0,
+        mengeIst: Number.isFinite(mengeIstRaw) && mengeIstRaw >= 0 ? mengeIstRaw : 0,
+        abweichungstyp,
+        kommentar: String(position?.kommentar || '').trim(),
+        bestaetigtAt: position?.bestaetigtAt || null
+    };
+}
+
+function normalizeWarenuebernahmeProblemItem(problem = {}) {
+    const mengeSollRaw = Number.parseInt(problem?.mengeSoll, 10);
+    const mengeIstRaw = Number.parseInt(problem?.mengeIst, 10);
+    const mengeProblemRaw = Number.parseInt(problem?.mengeProblem, 10);
+    const rawTyp = String(problem?.typ || 'unbekannt').trim().toLowerCase();
+
+    return {
+        potEntryId: String(problem?.potEntryId || '').trim() || createPotEntryId(),
+        inhaltId: String(problem?.inhaltId || '').trim(),
+        paketId: String(problem?.paketId || '').trim(),
+        bezeichnung: String(problem?.bezeichnung || '').trim(),
+        mengeSoll: Number.isFinite(mengeSollRaw) && mengeSollRaw >= 0 ? mengeSollRaw : 0,
+        mengeIst: Number.isFinite(mengeIstRaw) && mengeIstRaw >= 0 ? mengeIstRaw : 0,
+        mengeProblem: Number.isFinite(mengeProblemRaw) && mengeProblemRaw > 0 ? mengeProblemRaw : 1,
+        typ: Object.prototype.hasOwnProperty.call(WARENUEBERNAHME_ABWEICHUNG_OPTIONS, rawTyp) ? rawTyp : 'unbekannt',
+        kommentar: String(problem?.kommentar || '').trim(),
+        sourceUebernahmeId: String(problem?.sourceUebernahmeId || '').trim(),
+        createdAt: problem?.createdAt || nowIso(),
+        createdBy: String(problem?.createdBy || '').trim()
+    };
+}
+
+function normalizeWarenuebernahme(warenuebernahme = {}) {
+    const statusRaw = String(warenuebernahme?.status || 'offen').trim().toLowerCase();
+    const status = WARENUEBERNAHME_STATUS_VALUES.includes(statusRaw) ? statusRaw : 'offen';
+    const positionen = Array.isArray(warenuebernahme?.positionen)
+        ? warenuebernahme.positionen.map(normalizeWarenuebernahmePosition).filter((position) => position.inhaltId)
+        : [];
+    const problemartikel = Array.isArray(warenuebernahme?.problemartikel)
+        ? warenuebernahme.problemartikel.map(normalizeWarenuebernahmeProblemItem).filter((problem) => problem.inhaltId)
+        : [];
+
+    const totalSoll = positionen.reduce((sum, position) => sum + (position.mengeSoll || 0), 0);
+    const totalIst = positionen.reduce((sum, position) => sum + (position.mengeIst || 0), 0);
+    const totalProblem = problemartikel.reduce((sum, problem) => sum + (problem.mengeProblem || 0), 0);
+    const totalBestaetigt = positionen.length;
+
+    return {
+        uebernahmeId: String(warenuebernahme?.uebernahmeId || '').trim() || createWarenuebernahmeId(),
+        aktiv: warenuebernahme?.aktiv === true,
+        startedAt: warenuebernahme?.startedAt || null,
+        completedAt: warenuebernahme?.completedAt || null,
+        status,
+        positionen,
+        problemartikel,
+        zusammenfassung: {
+            totalSoll,
+            totalIst,
+            totalProblem,
+            totalBestaetigt
+        },
+        updatedAt: warenuebernahme?.updatedAt || null,
+        updatedBy: String(warenuebernahme?.updatedBy || '').trim()
+    };
+}
+
+function computeAbweichungstypFromSollIst(mengeSoll, mengeIst) {
+    if (mengeIst < mengeSoll) return 'fehlt';
+    if (mengeIst > mengeSoll) return 'zuviel';
+    return 'ok';
+}
+
+function applyWarenuebernahmeStatusToPaket(paket = {}) {
+    const normalizedWarenuebernahme = normalizeWarenuebernahme(paket?.warenuebernahme || {});
+    if (!normalizedWarenuebernahme.aktiv) {
+        return normalizeStatus(paket?.status);
+    }
+    return normalizedWarenuebernahme.status === 'problem' ? 'problem' : 'zugestellt';
+}
+
+function getEffectiveInhaltItems(items = currentInhaltItems) {
+    if (!Array.isArray(items)) return [];
+    return items
+        .map(normalizeInhaltItem)
+        .filter((item) => item.bezeichnung);
+}
+
+function getInhaltItemsById(items = currentInhaltItems) {
+    const byId = new Map();
+    getEffectiveInhaltItems(items).forEach((item) => {
+        byId.set(item.inhaltId, item);
+    });
+    return byId;
+}
+
+function getPaketZuordnungMengeForItem(paket = {}, inhaltId = '') {
+    if (!Array.isArray(paket?.inhaltZuordnung)) return 0;
+    const entry = paket.inhaltZuordnung.find((candidate) => String(candidate?.inhaltId || '').trim() === inhaltId);
+    if (!entry) return 0;
+    const mengeRaw = Number.parseInt(entry.mengeSoll, 10);
+    return Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
+}
+
+function computeOffenerInhaltPot(inhaltItems = currentInhaltItems, pakete = currentSendungPakete) {
+    const normalizedItems = getEffectiveInhaltItems(inhaltItems);
+    if (normalizedItems.length === 0) return [];
+
+    if (Array.isArray(pakete) && pakete.length === 1) {
+        const firstPaket = pakete[0] || {};
+        const hasExplicitZuordnung = Array.isArray(firstPaket.inhaltZuordnung) && firstPaket.inhaltZuordnung.length > 0;
+        if (!hasExplicitZuordnung) {
+            return [];
+        }
+    }
+
+    const assignedByInhaltId = new Map();
+    pakete.forEach((paket) => {
+        const zuordnung = Array.isArray(paket?.inhaltZuordnung) ? paket.inhaltZuordnung : [];
+        zuordnung.forEach((entry) => {
+            const normalizedEntry = normalizeInhaltZuordnungEntry(entry);
+            if (!normalizedEntry.inhaltId || normalizedEntry.mengeSoll <= 0) return;
+            assignedByInhaltId.set(
+                normalizedEntry.inhaltId,
+                (assignedByInhaltId.get(normalizedEntry.inhaltId) || 0) + normalizedEntry.mengeSoll
+            );
+        });
+    });
+
+    return normalizedItems
+        .map((item) => {
+            const assigned = assignedByInhaltId.get(item.inhaltId) || 0;
+            const mengeOffen = Math.max(0, item.menge - assigned);
+            return {
+                inhaltId: item.inhaltId,
+                bezeichnung: item.bezeichnung,
+                mengeOffen
+            };
+        })
+        .filter((entry) => entry.mengeOffen > 0);
+}
+
+function computeProblemPotFromPakete(pakete = currentSendungPakete, inhaltItems = currentInhaltItems) {
+    const inhaltById = getInhaltItemsById(inhaltItems);
+    const results = [];
+
+    pakete.forEach((paket) => {
+        const normalizedWarenuebernahme = normalizeWarenuebernahme(paket?.warenuebernahme || {});
+        if (!normalizedWarenuebernahme.aktiv) return;
+
+        normalizedWarenuebernahme.problemartikel.forEach((problem) => {
+            const inhalt = inhaltById.get(problem.inhaltId);
+            results.push(normalizeWarenuebernahmeProblemItem({
+                ...problem,
+                paketId: String(paket?.paketId || '').trim(),
+                bezeichnung: String(problem?.bezeichnung || inhalt?.bezeichnung || '').trim(),
+                sourceUebernahmeId: String(problem?.sourceUebernahmeId || normalizedWarenuebernahme.uebernahmeId || '').trim(),
+                createdBy: String(problem?.createdBy || normalizedWarenuebernahme.updatedBy || '').trim(),
+                createdAt: problem?.createdAt || normalizedWarenuebernahme.updatedAt || nowIso()
+            }));
+        });
+    });
+
+    return results;
+}
+
+function getSendungOffenerInhaltPot(sendung = {}) {
+    const inhaltItems = getSendungInhaltItems(sendung);
+    const inhaltById = new Map(inhaltItems.map((item) => [item.inhaltId, item]));
+
+    if (Array.isArray(sendung?.offenerInhaltPot)) {
+        return sendung.offenerInhaltPot
+            .map((entry) => normalizeOffenerInhaltPotEntry(entry, inhaltById))
+            .filter((entry) => entry.inhaltId && entry.mengeOffen > 0);
+    }
+
+    return computeOffenerInhaltPot(inhaltItems, getSendungPakete(sendung));
+}
+
+function getSendungWarenuebernahmeProblemPot(sendung = {}) {
+    const inhaltItems = getSendungInhaltItems(sendung);
+
+    if (Array.isArray(sendung?.warenuebernahmeProblemPot)) {
+        return sendung.warenuebernahmeProblemPot
+            .map((entry) => normalizeWarenuebernahmeProblemItem(entry))
+            .filter((entry) => entry.inhaltId && entry.mengeProblem > 0);
+    }
+
+    return computeProblemPotFromPakete(getSendungPakete(sendung), inhaltItems);
+}
+
+function ensureInhaltZuordnungConsistency() {
+    if (!Array.isArray(currentSendungPakete) || currentSendungPakete.length === 0) return;
+
+    const inhaltItems = getEffectiveInhaltItems();
+    const inhaltById = new Map(inhaltItems.map((item) => [item.inhaltId, item]));
+
+    currentSendungPakete = currentSendungPakete.map((paket, index) => {
+        const normalizedPaket = normalizePaket({ ...paket, paketLabel: `Paket ${index + 1}` }, index);
+        const zuordnungMap = new Map();
+        normalizedPaket.inhaltZuordnung.forEach((entry) => {
+            const normalizedEntry = normalizeInhaltZuordnungEntry(entry);
+            if (!normalizedEntry.inhaltId || normalizedEntry.mengeSoll <= 0 || !inhaltById.has(normalizedEntry.inhaltId)) return;
+            zuordnungMap.set(
+                normalizedEntry.inhaltId,
+                (zuordnungMap.get(normalizedEntry.inhaltId) || 0) + normalizedEntry.mengeSoll
+            );
+        });
+
+        normalizedPaket.inhaltZuordnung = Array.from(zuordnungMap.entries()).map(([inhaltId, mengeSoll]) => ({
+            inhaltId,
+            mengeSoll
+        }));
+
+        normalizedPaket.warenuebernahme = normalizeWarenuebernahme(normalizedPaket.warenuebernahme);
+        return normalizedPaket;
+    });
+
+    if (inhaltItems.length === 0) {
+        currentSendungPakete.forEach((paket) => {
+            paket.inhaltZuordnung = [];
+        });
+        currentOffenerInhaltPot = [];
+        currentWarenuebernahmeProblemPot = computeProblemPotFromPakete(currentSendungPakete, inhaltItems);
+        return;
+    }
+
+    if (currentSendungPakete.length === 1) {
+        currentSendungPakete[0].inhaltZuordnung = inhaltItems.map((item) => ({
+            inhaltId: item.inhaltId,
+            mengeSoll: item.menge
+        }));
+    } else {
+        inhaltItems.forEach((item) => {
+            let remaining = item.menge;
+            currentSendungPakete.forEach((paket) => {
+                const entry = paket.inhaltZuordnung.find((candidate) => candidate.inhaltId === item.inhaltId);
+                if (!entry) return;
+                const clamped = Math.max(0, Math.min(entry.mengeSoll, remaining));
+                entry.mengeSoll = clamped;
+                remaining -= clamped;
+            });
+        });
+
+        currentSendungPakete.forEach((paket) => {
+            paket.inhaltZuordnung = paket.inhaltZuordnung.filter((entry) => entry.mengeSoll > 0);
+        });
+    }
+
+    currentSendungPakete.forEach((paket) => {
+        paket.status = applyWarenuebernahmeStatusToPaket(paket);
+    });
+
+    currentOffenerInhaltPot = computeOffenerInhaltPot(inhaltItems, currentSendungPakete);
+    currentWarenuebernahmeProblemPot = computeProblemPotFromPakete(currentSendungPakete, inhaltItems);
+}
+
+function getPaketZuordnungSummary(paket = {}, inhaltItems = currentInhaltItems) {
+    const normalizedItems = getEffectiveInhaltItems(inhaltItems);
+    let positionen = 0;
+    let menge = 0;
+
+    normalizedItems.forEach((item) => {
+        const assigned = getPaketZuordnungMengeForItem(paket, item.inhaltId);
+        if (assigned > 0) {
+            positionen += 1;
+            menge += assigned;
+        }
+    });
+
+    return { positionen, menge };
+}
+
+function getWarenuebernahmeStatusMeta(paket = {}) {
+    const wa = normalizeWarenuebernahme(paket?.warenuebernahme || {});
+    if (!wa.aktiv) {
+        return { label: 'Nicht aktiv', color: 'bg-gray-100 text-gray-600' };
+    }
+
+    if (wa.status === 'problem') {
+        return { label: 'Problem', color: 'bg-red-100 text-red-700' };
+    }
+    if (wa.status === 'abgeschlossen') {
+        return { label: 'Abgeschlossen', color: 'bg-green-100 text-green-700' };
+    }
+    if (wa.status === 'in_pruefung') {
+        return { label: 'In Prüfung', color: 'bg-blue-100 text-blue-700' };
+    }
+    return { label: 'Offen', color: 'bg-amber-100 text-amber-700' };
+}
+
 function normalizePaket(paket = {}, index = 0) {
+    const normalizedWarenuebernahme = normalizeWarenuebernahme(paket?.warenuebernahme || {});
+    const normalizedStatus = normalizeStatus(paket?.status);
+
     return {
         paketId: String(paket?.paketId || '').trim() || createPaketId(),
         paketLabel: String(paket?.paketLabel || '').trim() || `Paket ${index + 1}`,
-        status: normalizeStatus(paket?.status),
+        status: normalizedWarenuebernahme.aktiv
+            ? (normalizedWarenuebernahme.status === 'problem' ? 'problem' : 'zugestellt')
+            : normalizedStatus,
         lieferziel: String(paket?.lieferziel || '').trim(),
         deadlineErwartet: String(paket?.deadlineErwartet || '').trim(),
         deadlineVersand: String(paket?.deadlineVersand || '').trim(),
         notiz: String(paket?.notiz || '').trim(),
-        transportEntries: normalizeTransportEntries(paket?.transportEntries)
+        transportEntries: normalizeTransportEntries(paket?.transportEntries),
+        inhaltZuordnung: Array.isArray(paket?.inhaltZuordnung)
+            ? paket.inhaltZuordnung.map(normalizeInhaltZuordnungEntry).filter((entry) => entry.inhaltId && entry.mengeSoll > 0)
+            : [],
+        warenuebernahme: normalizedWarenuebernahme
     };
 }
 
@@ -532,6 +901,7 @@ function getEarliestPaketDeadline(pakete = [], fieldKey) {
 function normalizeInhaltItem(item = {}) {
     if (typeof item === 'string') {
         return {
+            inhaltId: createInhaltId(),
             menge: 1,
             bezeichnung: String(item || '').trim()
         };
@@ -539,6 +909,7 @@ function normalizeInhaltItem(item = {}) {
 
     const mengeRaw = Number.parseInt(item?.menge, 10);
     return {
+        inhaltId: String(item?.inhaltId || '').trim() || createInhaltId(),
         menge: Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 1,
         bezeichnung: String(item?.bezeichnung || '').trim()
     };
@@ -597,7 +968,7 @@ function updateInhaltItem(rowIndex, field, value) {
 
 function addInhaltRow(insertIndex = currentInhaltItems.length, focusField = 'bezeichnung') {
     const safeIndex = Math.max(0, Math.min(insertIndex, currentInhaltItems.length));
-    currentInhaltItems.splice(safeIndex, 0, { menge: 1, bezeichnung: '' });
+    currentInhaltItems.splice(safeIndex, 0, { inhaltId: createInhaltId(), menge: 1, bezeichnung: '' });
     renderInhaltEditor(safeIndex, focusField);
 }
 
@@ -605,7 +976,7 @@ function removeInhaltRow(rowIndex) {
     if (rowIndex < 0 || rowIndex >= currentInhaltItems.length) return;
 
     if (currentInhaltItems.length <= 1) {
-        currentInhaltItems = [{ menge: 1, bezeichnung: '' }];
+        currentInhaltItems = [{ inhaltId: createInhaltId(), menge: 1, bezeichnung: '' }];
         renderInhaltEditor(0, 'bezeichnung');
         return;
     }
@@ -621,15 +992,16 @@ function setInhaltItems(items = []) {
         : [];
     currentInhaltItems = normalized.length > 0
         ? normalized
-        : [{ menge: 1, bezeichnung: '' }];
+        : [{ inhaltId: createInhaltId(), menge: 1, bezeichnung: '' }];
+
+    ensureInhaltZuordnungConsistency();
 
     renderInhaltEditor();
+    renderEmpfangPotOverview();
 }
 
 function collectInhaltItemsForSave() {
-    return currentInhaltItems
-        .map(normalizeInhaltItem)
-        .filter((item) => item.bezeichnung);
+    return getEffectiveInhaltItems(currentInhaltItems);
 }
 
 function renderInhaltEditor(focusRowIndex = null, focusField = 'bezeichnung') {
@@ -691,6 +1063,8 @@ function renderInhaltEditor(focusRowIndex = null, focusField = 'bezeichnung') {
     });
 
     applyInhaltReadMode(isSendungModalReadMode);
+    ensureInhaltZuordnungConsistency();
+    renderEmpfangPotOverview();
 
     if (focusRowIndex === null) return;
 
@@ -702,6 +1076,432 @@ function renderInhaltEditor(focusRowIndex = null, focusField = 'bezeichnung') {
         target?.focus();
         target?.select();
     }, 0);
+}
+
+function getEmpfangPotOverviewContainer() {
+    return document.getElementById('sendungEmpfangPotOverview');
+}
+
+function renderEmpfangPotOverview() {
+    const container = getEmpfangPotOverviewContainer();
+    if (!container) return;
+
+    if (!isEmpfangContextActive()) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+    }
+
+    ensureInhaltZuordnungConsistency();
+
+    const offeneMenge = currentOffenerInhaltPot.reduce((sum, entry) => sum + (entry.mengeOffen || 0), 0);
+    const problemMenge = currentWarenuebernahmeProblemPot.reduce((sum, entry) => sum + (entry.mengeProblem || 0), 0);
+
+    const offenerPotText = currentOffenerInhaltPot.length > 0
+        ? currentOffenerInhaltPot.map((entry) => `${entry.mengeOffen}x ${entry.bezeichnung || 'Artikel'}`).join(' • ')
+        : 'Keine offenen Mengen';
+
+    const problemPotText = currentWarenuebernahmeProblemPot.length > 0
+        ? currentWarenuebernahmeProblemPot
+            .slice(0, 5)
+            .map((entry) => `${entry.mengeProblem}x ${entry.bezeichnung || 'Artikel'} (${WARENUEBERNAHME_ABWEICHUNG_OPTIONS[entry.typ] || entry.typ})`)
+            .join(' • ')
+        : 'Keine Problempositionen';
+
+    container.classList.remove('hidden');
+    container.innerHTML = `
+        <div class="rounded-lg border border-indigo-200 bg-indigo-50/60 p-3 space-y-2">
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+                <span class="px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 font-semibold">Zuordnungs-Pot: ${offeneMenge} Stk</span>
+                <span class="px-2 py-1 rounded-full bg-red-100 text-red-700 font-semibold">Problem-Pot: ${problemMenge} Stk</span>
+            </div>
+            <p class="text-xs text-indigo-800"><span class="font-bold">Offen:</span> ${offenerPotText}</p>
+            <p class="text-xs text-red-700"><span class="font-bold">Probleme:</span> ${problemPotText}</p>
+        </div>
+    `;
+}
+
+function closeInhaltZuordnungModal() {
+    const modal = document.getElementById('sendungInhaltZuordnungModal');
+    const rows = document.getElementById('sendungInhaltZuordnungRows');
+    currentZuordnungPaketIndex = null;
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    if (rows) rows.innerHTML = '';
+}
+
+function renderInhaltZuordnungModal() {
+    const paketIndex = currentZuordnungPaketIndex;
+    const paket = currentSendungPakete[paketIndex];
+    const rows = document.getElementById('sendungInhaltZuordnungRows');
+    const hint = document.getElementById('sendungInhaltZuordnungHint');
+    const title = document.getElementById('sendungInhaltZuordnungTitle');
+    if (!paket || !rows || !hint || !title) return;
+
+    ensureInhaltZuordnungConsistency();
+
+    const inhaltItems = getEffectiveInhaltItems();
+    title.textContent = `Artikel zuordnen – ${paket.paketLabel || `Paket ${paketIndex + 1}`}`;
+
+    if (inhaltItems.length === 0) {
+        rows.innerHTML = '<div class="text-sm text-gray-500 italic">Keine Artikel in der Inhalt-Liste vorhanden.</div>';
+        hint.textContent = 'Füge zuerst Artikel in der Inhalt-Liste hinzu.';
+        return;
+    }
+
+    rows.innerHTML = inhaltItems.map((item) => {
+        const thisAssigned = getPaketZuordnungMengeForItem(paket, item.inhaltId);
+        const assignedOther = currentSendungPakete.reduce((sum, candidate, index) => {
+            if (index === paketIndex) return sum;
+            return sum + getPaketZuordnungMengeForItem(candidate, item.inhaltId);
+        }, 0);
+        const maxForThis = Math.max(0, item.menge - assignedOther);
+        const offen = Math.max(0, item.menge - assignedOther - thisAssigned);
+
+        return `
+            <div class="rounded-lg border border-gray-200 bg-white p-3 space-y-2 sendung-zuordnung-row" data-inhalt-id="${item.inhaltId}" data-menge-total="${item.menge}" data-assigned-other="${assignedOther}">
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <div class="font-semibold text-sm text-gray-800">${item.bezeichnung}</div>
+                    <div class="text-xs text-gray-600">Gesamt: <span class="font-bold">${item.menge}</span> • Andere Pakete: <span class="font-bold">${assignedOther}</span></div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                    <label class="text-xs text-gray-600">
+                        Diesem Paket
+                        <input type="number" min="0" max="${maxForThis}" step="1" value="${thisAssigned}" class="sendung-zuordnung-menge-input mt-1 w-full p-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 text-sm" data-inhalt-id="${item.inhaltId}">
+                    </label>
+                    <div class="text-xs text-gray-600">Max möglich: <span class="font-bold text-indigo-700">${maxForThis}</span></div>
+                    <div class="text-xs text-gray-600">Offener Pot danach: <span class="font-bold text-indigo-700">${offen}</span></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    const totalOffen = currentOffenerInhaltPot.reduce((sum, entry) => sum + (entry.mengeOffen || 0), 0);
+    hint.textContent = `Aktueller Zuordnungs-Pot: ${totalOffen} Stück`;
+}
+
+function openInhaltZuordnungModal(paketIndex) {
+    if (!isEmpfangContextActive()) return;
+    if (isSendungModalReadMode) {
+        alertUser('Artikelzuordnung ist nur im Bearbeitungsmodus möglich.', 'warning');
+        return;
+    }
+
+    const paket = currentSendungPakete[paketIndex];
+    const modal = document.getElementById('sendungInhaltZuordnungModal');
+    if (!paket || !modal) return;
+
+    currentZuordnungPaketIndex = paketIndex;
+    renderInhaltZuordnungModal();
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function applyInhaltZuordnungModal() {
+    const paketIndex = currentZuordnungPaketIndex;
+    const paket = currentSendungPakete[paketIndex];
+    const rows = document.querySelectorAll('#sendungInhaltZuordnungRows .sendung-zuordnung-row');
+    if (!paket) return;
+
+    const entries = [];
+    rows.forEach((row) => {
+        const inhaltId = String(row.dataset.inhaltId || '').trim();
+        if (!inhaltId) return;
+        const total = Number.parseInt(row.dataset.mengeTotal || '0', 10);
+        const assignedOther = Number.parseInt(row.dataset.assignedOther || '0', 10);
+        const maxForThis = Math.max(0, total - assignedOther);
+        const input = row.querySelector('.sendung-zuordnung-menge-input');
+        const rawValue = Number.parseInt(input?.value || '0', 10);
+        const mengeSoll = Number.isFinite(rawValue) ? Math.max(0, Math.min(maxForThis, rawValue)) : 0;
+        if (input) {
+            input.value = String(mengeSoll);
+        }
+        if (mengeSoll > 0) {
+            entries.push({ inhaltId, mengeSoll });
+        }
+    });
+
+    paket.inhaltZuordnung = entries;
+    ensureInhaltZuordnungConsistency();
+    renderPaketeEditor();
+    syncOverallStatusWithPakete();
+    closeInhaltZuordnungModal();
+}
+
+function closeWarenuebernahmeModal() {
+    const modal = document.getElementById('sendungWarenuebernahmeModal');
+    const rows = document.getElementById('sendungWarenuebernahmeRows');
+    currentWarenuebernahmePaketIndex = null;
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    if (rows) rows.innerHTML = '';
+}
+
+function renderWarenuebernahmeModal() {
+    const paketIndex = currentWarenuebernahmePaketIndex;
+    const paket = currentSendungPakete[paketIndex];
+    const title = document.getElementById('sendungWarenuebernahmeTitle');
+    const subtitle = document.getElementById('sendungWarenuebernahmeSubtitle');
+    const rows = document.getElementById('sendungWarenuebernahmeRows');
+    const problemList = document.getElementById('sendungWarenuebernahmeProblemList');
+    if (!paket || !title || !subtitle || !rows || !problemList) return;
+
+    const inhaltById = getInhaltItemsById();
+    const warenuebernahme = normalizeWarenuebernahme(paket.warenuebernahme || {});
+    const positionById = new Map(
+        warenuebernahme.positionen.map((position) => [position.inhaltId, position])
+    );
+
+    const zuordnung = Array.isArray(paket.inhaltZuordnung)
+        ? paket.inhaltZuordnung.map(normalizeInhaltZuordnungEntry).filter((entry) => entry.inhaltId && entry.mengeSoll > 0)
+        : [];
+
+    title.textContent = `Warenübernahme – ${paket.paketLabel || `Paket ${paketIndex + 1}`}`;
+    subtitle.textContent = `Status: ${getWarenuebernahmeStatusMeta(paket).label}`;
+
+    if (zuordnung.length === 0) {
+        rows.innerHTML = '<div class="text-sm text-gray-500 italic">Dieses Paket hat noch keine zugeordneten Artikel.</div>';
+    } else {
+        rows.innerHTML = zuordnung.map((entry) => {
+            const inhalt = inhaltById.get(entry.inhaltId);
+            const existing = positionById.get(entry.inhaltId);
+            const mengeIst = Number.isFinite(existing?.mengeIst) ? existing.mengeIst : entry.mengeSoll;
+            const autoTyp = computeAbweichungstypFromSollIst(entry.mengeSoll, mengeIst);
+            const selectedTyp = existing?.abweichungstyp || autoTyp;
+            const kommentar = existing?.kommentar || '';
+
+            return `
+                <div class="sendung-wa-row rounded-lg border border-gray-200 bg-white p-3 space-y-2" data-inhalt-id="${entry.inhaltId}" data-menge-soll="${entry.mengeSoll}">
+                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                        <div class="font-semibold text-sm text-gray-800">${inhalt?.bezeichnung || 'Artikel'}</div>
+                        <span class="text-xs px-2 py-1 rounded bg-amber-100 text-amber-800 font-bold">Soll: ${entry.mengeSoll}</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <label class="text-xs text-gray-600">Ist-Menge
+                            <input type="number" min="0" step="1" class="sendung-wa-ist-input mt-1 w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 text-sm" value="${mengeIst}">
+                        </label>
+                        <label class="text-xs text-gray-600">Abweichung
+                            <select class="sendung-wa-typ-select mt-1 w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 text-sm bg-white">
+                                ${Object.entries(WARENUEBERNAHME_ABWEICHUNG_OPTIONS).map(([key, label]) => `<option value="${key}" ${selectedTyp === key ? 'selected' : ''}>${label}</option>`).join('')}
+                            </select>
+                        </label>
+                        <label class="text-xs text-gray-600">Kommentar
+                            <input type="text" class="sendung-wa-kommentar-input mt-1 w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 text-sm" value="${kommentar}" placeholder="Optional">
+                        </label>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    const problemBadges = warenuebernahme.problemartikel.length > 0
+        ? warenuebernahme.problemartikel.map((problem) => {
+            const inhalt = inhaltById.get(problem.inhaltId);
+            const label = WARENUEBERNAHME_ABWEICHUNG_OPTIONS[problem.typ] || problem.typ;
+            return `<span class="px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">${problem.mengeProblem || 1}x ${inhalt?.bezeichnung || problem.bezeichnung || 'Artikel'} (${label})</span>`;
+        }).join(' ')
+        : '<span class="text-xs text-gray-500">Noch keine Problempositionen.</span>';
+    problemList.innerHTML = problemBadges;
+}
+
+function openWarenuebernahmeModal(paketIndex) {
+    if (!isEmpfangContextActive()) return;
+    if (!isSendungModalReadMode) {
+        alertUser('Warenübernahme öffnest du im Lesemodus der Sendung.', 'warning');
+        return;
+    }
+
+    const paket = currentSendungPakete[paketIndex];
+    const modal = document.getElementById('sendungWarenuebernahmeModal');
+    if (!paket || !modal) return;
+
+    const warenuebernahme = normalizeWarenuebernahme(paket.warenuebernahme || {});
+    if (!warenuebernahme.aktiv) {
+        alertUser('Warenübernahme ist für dieses Paket nicht aktiv.', 'warning');
+        return;
+    }
+
+    currentWarenuebernahmePaketIndex = paketIndex;
+    renderWarenuebernahmeModal();
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function collectWarenuebernahmeFromModal(markCompleted = false) {
+    const paket = currentSendungPakete[currentWarenuebernahmePaketIndex];
+    if (!paket) return null;
+
+    const existing = normalizeWarenuebernahme(paket.warenuebernahme || {});
+    const rows = document.querySelectorAll('#sendungWarenuebernahmeRows .sendung-wa-row');
+    const positionen = [];
+    const problemartikel = [];
+
+    rows.forEach((row) => {
+        const inhaltId = String(row.dataset.inhaltId || '').trim();
+        const mengeSoll = Number.parseInt(row.dataset.mengeSoll || '0', 10);
+        if (!inhaltId || !Number.isFinite(mengeSoll) || mengeSoll <= 0) return;
+
+        const istInput = row.querySelector('.sendung-wa-ist-input');
+        const typSelect = row.querySelector('.sendung-wa-typ-select');
+        const kommentarInput = row.querySelector('.sendung-wa-kommentar-input');
+
+        const mengeIstRaw = Number.parseInt(istInput?.value || '0', 10);
+        const mengeIst = Number.isFinite(mengeIstRaw) && mengeIstRaw >= 0 ? mengeIstRaw : 0;
+        const selectedTypRaw = String(typSelect?.value || 'ok').trim().toLowerCase();
+        const selectedTyp = Object.prototype.hasOwnProperty.call(WARENUEBERNAHME_ABWEICHUNG_OPTIONS, selectedTypRaw)
+            ? selectedTypRaw
+            : 'ok';
+        const autoTyp = computeAbweichungstypFromSollIst(mengeSoll, mengeIst);
+        const finalTyp = selectedTyp === 'ok' && autoTyp !== 'ok' ? autoTyp : selectedTyp;
+        const kommentar = String(kommentarInput?.value || '').trim();
+
+        positionen.push({
+            inhaltId,
+            mengeSoll,
+            mengeIst,
+            abweichungstyp: finalTyp,
+            kommentar,
+            bestaetigtAt: nowIso()
+        });
+
+        if (finalTyp !== 'ok' || mengeIst !== mengeSoll) {
+            problemartikel.push({
+                potEntryId: createPotEntryId(),
+                inhaltId,
+                paketId: paket.paketId,
+                mengeSoll,
+                mengeIst,
+                mengeProblem: Math.max(1, Math.abs(mengeSoll - mengeIst)),
+                typ: finalTyp,
+                kommentar,
+                sourceUebernahmeId: existing.uebernahmeId,
+                createdAt: nowIso(),
+                createdBy: currentUser?.mode || ''
+            });
+        }
+    });
+
+    let status = 'offen';
+    if (positionen.length > 0) {
+        if (problemartikel.length > 0) {
+            status = 'problem';
+        } else {
+            status = markCompleted ? 'abgeschlossen' : 'in_pruefung';
+        }
+    }
+
+    return normalizeWarenuebernahme({
+        ...existing,
+        aktiv: true,
+        startedAt: existing.startedAt || nowIso(),
+        completedAt: markCompleted ? nowIso() : existing.completedAt,
+        status,
+        positionen,
+        problemartikel,
+        updatedAt: nowIso(),
+        updatedBy: currentUser?.mode || ''
+    });
+}
+
+function getFlatTransportEntriesFromPakete(pakete = []) {
+    const entries = pakete
+        .flatMap((paket) => normalizeTransportEntries(paket.transportEntries))
+        .map(normalizeTransportEntry)
+        .filter((entry) => entry.anbieter || entry.transportnummer);
+
+    const primary = entries[0] || { ...EMPTY_TRANSPORT_ENTRY };
+    return { entries, primary };
+}
+
+async function writeWarenuebernahmeAudit(sendungId, paket, action, payloadDelta = {}) {
+    if (!sendungId || !sendungenCollectionRef) return;
+
+    try {
+        const sendungRef = doc(sendungenCollectionRef, sendungId);
+        const auditCollectionRef = collection(sendungRef, 'warenuebernahme_audit');
+        await addDoc(auditCollectionRef, {
+            timestamp: serverTimestamp(),
+            clientTimestamp: nowIso(),
+            userId: currentUser?.mode || '',
+            paketId: paket?.paketId || '',
+            uebernahmeId: paket?.warenuebernahme?.uebernahmeId || '',
+            action,
+            payloadDelta
+        });
+    } catch (error) {
+        console.warn('[Sendungsverwaltung] Audit-Log konnte nicht gespeichert werden:', error);
+    }
+}
+
+async function saveWarenuebernahmeFromModal(markCompleted = false) {
+    const paketIndex = currentWarenuebernahmePaketIndex;
+    const paket = currentSendungPakete[paketIndex];
+    if (!paket) return;
+
+    const aktualisiert = collectWarenuebernahmeFromModal(markCompleted);
+    if (!aktualisiert) return;
+
+    paket.warenuebernahme = aktualisiert;
+    paket.status = applyWarenuebernahmeStatusToPaket(paket);
+
+    ensureInhaltZuordnungConsistency();
+    renderPaketeEditor();
+    syncOverallStatusWithPakete();
+
+    if (!currentEditingSendungId || !sendungenCollectionRef) {
+        closeWarenuebernahmeModal();
+        return;
+    }
+
+    try {
+        const pakete = collectPaketeForSave();
+        const inhalt = collectInhaltItemsForSave();
+        const offenerInhaltPot = computeOffenerInhaltPot(inhalt, pakete);
+        const warenuebernahmeProblemPot = computeProblemPotFromPakete(pakete, inhalt);
+        const autoStatus = computeAutoStatusFromPakete(pakete);
+        const selectedStatus = normalizeStatus(document.getElementById('sendungStatus')?.value || autoStatus);
+        const finalStatus = statusOverrideActive ? selectedStatus : autoStatus;
+        const isStatusOverride = statusOverrideActive && finalStatus !== autoStatus;
+        const { entries: flatTransportEntries, primary } = getFlatTransportEntriesFromPakete(pakete);
+
+        const sendungRef = doc(sendungenCollectionRef, currentEditingSendungId);
+        await updateDoc(sendungRef, {
+            status: finalStatus,
+            autoStatus,
+            statusOverrideAktiv: isStatusOverride,
+            pakete,
+            inhalt,
+            offenerInhaltPot,
+            warenuebernahmeProblemPot,
+            anbieter: primary.anbieter,
+            transportnummer: primary.transportnummer,
+            sendungsnummer: primary.transportnummer,
+            transportEntries: flatTransportEntries,
+            deadlineErwartet: getEarliestPaketDeadline(pakete, 'deadlineErwartet'),
+            deadlineVersand: getEarliestPaketDeadline(pakete, 'deadlineVersand'),
+            updatedAt: serverTimestamp()
+        });
+
+        await writeWarenuebernahmeAudit(
+            currentEditingSendungId,
+            pakete[paketIndex],
+            markCompleted ? 'abschliessen' : 'zwischenstand_speichern',
+            {
+                status: aktualisiert.status,
+                totalProblem: aktualisiert.zusammenfassung.totalProblem,
+                totalSoll: aktualisiert.zusammenfassung.totalSoll,
+                totalIst: aktualisiert.zusammenfassung.totalIst
+            }
+        );
+
+        closeWarenuebernahmeModal();
+        alertUser(markCompleted ? 'Warenübernahme abgeschlossen und synchronisiert.' : 'Warenübernahme-Zwischenstand synchronisiert.');
+    } catch (error) {
+        console.error('[Sendungsverwaltung] Fehler beim Speichern der Warenübernahme:', error);
+        alertUser('Fehler beim Speichern der Warenübernahme: ' + error.message);
+    }
 }
 
 function updateStatusInfoUI(autoStatus) {
@@ -742,6 +1542,7 @@ function syncOverallStatusWithPakete(forceAuto = false) {
 
 function addPaket() {
     currentSendungPakete.push(normalizePaket({ status: 'erwartet' }, currentSendungPakete.length));
+    ensureInhaltZuordnungConsistency();
     renderPaketeEditor();
     syncOverallStatusWithPakete();
 }
@@ -752,6 +1553,7 @@ function removePaket(paketIndex) {
     }
     currentSendungPakete.splice(paketIndex, 1);
     currentSendungPakete = currentSendungPakete.map((paket, index) => normalizePaket({ ...paket, paketLabel: `Paket ${index + 1}` }, index));
+    ensureInhaltZuordnungConsistency();
     renderPaketeEditor();
     syncOverallStatusWithPakete();
 }
@@ -781,6 +1583,10 @@ function updatePaketField(paketIndex, field, value) {
     if (!paket) return;
     paket[field] = field === 'status' ? normalizeStatus(value) : String(value || '').trim();
     if (field === 'status') {
+        const normalizedWarenuebernahme = normalizeWarenuebernahme(paket.warenuebernahme || {});
+        if (normalizedWarenuebernahme.aktiv) {
+            paket.status = applyWarenuebernahmeStatusToPaket(paket);
+        }
         syncOverallStatusWithPakete();
     }
 }
@@ -792,20 +1598,34 @@ function updateTransportEntryField(paketIndex, entryIndex, field, value) {
 }
 
 function collectPaketeForSave() {
+    ensureInhaltZuordnungConsistency();
+
     const normalized = currentSendungPakete.map((paket, index) => {
         const cleanedEntries = normalizeTransportEntries(paket.transportEntries)
             .map(normalizeTransportEntry)
             .filter((entry) => entry.anbieter || entry.transportnummer);
 
+        const cleanedZuordnung = Array.isArray(paket.inhaltZuordnung)
+            ? paket.inhaltZuordnung
+                .map(normalizeInhaltZuordnungEntry)
+                .filter((entry) => entry.inhaltId && entry.mengeSoll > 0)
+            : [];
+
         const normalizedPaket = normalizePaket({
             ...paket,
             paketLabel: `Paket ${index + 1}`,
-            transportEntries: cleanedEntries
+            transportEntries: cleanedEntries,
+            inhaltZuordnung: cleanedZuordnung,
+            warenuebernahme: normalizeWarenuebernahme(paket.warenuebernahme || {})
         }, index);
+
+        normalizedPaket.status = applyWarenuebernahmeStatusToPaket(normalizedPaket);
 
         return {
             ...normalizedPaket,
-            transportEntries: cleanedEntries
+            transportEntries: cleanedEntries,
+            inhaltZuordnung: cleanedZuordnung,
+            warenuebernahme: normalizeWarenuebernahme(normalizedPaket.warenuebernahme || {})
         };
     });
 
@@ -850,7 +1670,10 @@ function applyPaketeReadMode(readMode) {
     if (readMode) {
         const paketStatusSelects = container.querySelectorAll('.sendung-paket-status-select');
         paketStatusSelects.forEach((select) => {
-            select.disabled = false;
+            const statusLocked = select.dataset.warenuebernahmeLocked === 'true';
+            select.disabled = statusLocked;
+            select.classList.toggle('opacity-50', statusLocked);
+            select.classList.toggle('cursor-not-allowed', statusLocked);
         });
 
         const copyButtons = container.querySelectorAll('.sendung-copy-transportnummer-btn');
@@ -862,6 +1685,22 @@ function applyPaketeReadMode(readMode) {
         trackingButtons.forEach((button) => {
             button.disabled = false;
         });
+
+        const warenuebernahmeButtons = container.querySelectorAll('.sendung-open-warenuebernahme-btn');
+        warenuebernahmeButtons.forEach((button) => {
+            const shouldEnable = !button.hasAttribute('disabled');
+            button.disabled = !shouldEnable;
+        });
+    }
+
+    if (!readMode) {
+        const paketStatusSelects = container.querySelectorAll('.sendung-paket-status-select');
+        paketStatusSelects.forEach((select) => {
+            const statusLocked = select.dataset.warenuebernahmeLocked === 'true';
+            select.disabled = statusLocked;
+            select.classList.toggle('opacity-50', statusLocked);
+            select.classList.toggle('cursor-not-allowed', statusLocked);
+        });
     }
 }
 
@@ -869,7 +1708,16 @@ function renderPaketeEditor() {
     const container = getPaketeContainer();
     if (!container) return;
 
+    ensureInhaltZuordnungConsistency();
+
+    const isEmpfang = isEmpfangContextActive();
+    const totalOffen = currentOffenerInhaltPot.reduce((sum, entry) => sum + (entry.mengeOffen || 0), 0);
+
     container.innerHTML = currentSendungPakete.map((paket, paketIndex) => {
+        const warenuebernahmeMeta = getWarenuebernahmeStatusMeta(paket);
+        const zuordnungSummary = getPaketZuordnungSummary(paket);
+        const statusLocked = normalizeWarenuebernahme(paket.warenuebernahme || {}).aktiv;
+
         const statusOptions = STATUS_VALUES.map((statusValue) => {
             const config = STATUS_CONFIG[statusValue] || { label: statusValue, icon: '' };
             const selected = paket.status === statusValue ? 'selected' : '';
@@ -911,7 +1759,7 @@ function renderPaketeEditor() {
                 <div class="flex items-center justify-between gap-2 flex-wrap">
                     <h5 class="font-bold text-amber-800">📦 Paket ${paketIndex + 1}</h5>
                     <div class="flex items-center gap-2">
-                        <select class="sendung-paket-status-select p-2 border-2 border-gray-300 rounded-lg bg-white text-sm" data-paket-index="${paketIndex}">
+                        <select class="sendung-paket-status-select p-2 border-2 border-gray-300 rounded-lg bg-white text-sm" data-paket-index="${paketIndex}" data-warenuebernahme-locked="${statusLocked ? 'true' : 'false'}">
                             ${statusOptions}
                         </select>
                         ${paketIndex === 0
@@ -919,6 +1767,22 @@ function renderPaketeEditor() {
                             : `<button type="button" class="sendung-remove-paket-btn px-2.5 py-1.5 rounded-lg bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition" data-paket-index="${paketIndex}" title="Paket entfernen">- Paket</button>`}
                     </div>
                 </div>
+
+                ${isEmpfang
+                    ? `<div class="mt-2 flex flex-wrap gap-2 items-center text-xs">
+                        <span class="px-2 py-1 rounded-full bg-blue-100 text-blue-800 font-semibold">Zuordnung: ${zuordnungSummary.positionen} Pos., ${zuordnungSummary.menge} Stk</span>
+                        <span class="px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 font-semibold">Offener Pot: ${totalOffen} Stk</span>
+                        <span class="px-2 py-1 rounded-full ${warenuebernahmeMeta.color} font-semibold">Warenübernahme: ${warenuebernahmeMeta.label}</span>
+                    </div>
+                    <div class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <button type="button" class="sendung-open-zuordnung-btn px-3 py-2 rounded-lg bg-indigo-500 text-white text-xs font-bold hover:bg-indigo-600 transition" data-paket-index="${paketIndex}">Artikel zuordnen</button>
+                        <label class="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-gray-200 bg-white">
+                            <input type="checkbox" class="sendung-paket-warenuebernahme-toggle" data-paket-index="${paketIndex}" ${normalizeWarenuebernahme(paket.warenuebernahme || {}).aktiv ? 'checked' : ''}>
+                            <span class="font-semibold text-gray-700">Warenübernahme aktiv</span>
+                        </label>
+                        <button type="button" class="sendung-open-warenuebernahme-btn sendung-readmode-only hidden px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition ${normalizeWarenuebernahme(paket.warenuebernahme || {}).aktiv ? '' : 'opacity-50 cursor-not-allowed'}" data-paket-index="${paketIndex}" ${normalizeWarenuebernahme(paket.warenuebernahme || {}).aktiv ? '' : 'disabled'}>Warenübernahme öffnen</button>
+                    </div>`
+                    : ''}
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
                     <div>
@@ -1023,7 +1887,49 @@ function renderPaketeEditor() {
         };
     });
 
+    container.querySelectorAll('.sendung-open-zuordnung-btn').forEach((button) => {
+        button.onclick = () => {
+            const paketIndex = Number.parseInt(button.dataset.paketIndex || '-1', 10);
+            openInhaltZuordnungModal(paketIndex);
+        };
+    });
+
+    container.querySelectorAll('.sendung-paket-warenuebernahme-toggle').forEach((toggle) => {
+        toggle.onchange = () => {
+            const paketIndex = Number.parseInt(toggle.dataset.paketIndex || '-1', 10);
+            const paket = currentSendungPakete[paketIndex];
+            if (!paket || !isEmpfangContextActive()) return;
+
+            const normalizedWarenuebernahme = normalizeWarenuebernahme(paket.warenuebernahme || {});
+            normalizedWarenuebernahme.aktiv = toggle.checked;
+            normalizedWarenuebernahme.updatedAt = nowIso();
+            normalizedWarenuebernahme.updatedBy = currentUser?.mode || '';
+            if (toggle.checked && !normalizedWarenuebernahme.startedAt) {
+                normalizedWarenuebernahme.startedAt = nowIso();
+            }
+            if (!toggle.checked) {
+                normalizedWarenuebernahme.status = 'offen';
+                normalizedWarenuebernahme.completedAt = null;
+            }
+
+            paket.warenuebernahme = normalizedWarenuebernahme;
+            paket.status = applyWarenuebernahmeStatusToPaket(paket);
+
+            ensureInhaltZuordnungConsistency();
+            renderPaketeEditor();
+            syncOverallStatusWithPakete();
+        };
+    });
+
+    container.querySelectorAll('.sendung-open-warenuebernahme-btn').forEach((button) => {
+        button.onclick = () => {
+            const paketIndex = Number.parseInt(button.dataset.paketIndex || '-1', 10);
+            openWarenuebernahmeModal(paketIndex);
+        };
+    });
+
     applyPaketeReadMode(isSendungModalReadMode);
+    renderEmpfangPotOverview();
 }
 
 function setPakete(pakete = []) {
@@ -1033,6 +1939,8 @@ function setPakete(pakete = []) {
     currentSendungPakete = normalized.length > 0
         ? normalized
         : [normalizePaket({ status: 'erwartet' }, 0)];
+
+    ensureInhaltZuordnungConsistency();
 
     renderPaketeEditor();
     syncOverallStatusWithPakete();
@@ -1145,6 +2053,13 @@ function setupEventListeners() {
     const sendungResetAutoStatusBtn = document.getElementById('sendungResetAutoStatusBtn');
     const closeTrackingOptionsBtn = document.getElementById('closeSendungTrackingOptionsModal');
     const trackingOptionsModal = document.getElementById('sendungTrackingOptionsModal');
+    const closeInhaltZuordnungBtn = document.getElementById('closeSendungInhaltZuordnungModal');
+    const applyInhaltZuordnungBtn = document.getElementById('applySendungInhaltZuordnungBtn');
+    const inhaltZuordnungModal = document.getElementById('sendungInhaltZuordnungModal');
+    const closeWarenuebernahmeBtn = document.getElementById('closeSendungWarenuebernahmeModal');
+    const saveWarenuebernahmeBtn = document.getElementById('saveSendungWarenuebernahmeBtn');
+    const completeWarenuebernahmeBtn = document.getElementById('completeSendungWarenuebernahmeBtn');
+    const warenuebernahmeModal = document.getElementById('sendungWarenuebernahmeModal');
 
     if (openSendungModalBtn) {
         openSendungModalBtn.onclick = () => openSendungModal();
@@ -1216,6 +2131,42 @@ function setupEventListeners() {
         trackingOptionsModal.onclick = (event) => {
             if (event.target === trackingOptionsModal) {
                 closeTrackingOptionsModal();
+            }
+        };
+    }
+
+    if (closeInhaltZuordnungBtn) {
+        closeInhaltZuordnungBtn.onclick = () => closeInhaltZuordnungModal();
+    }
+
+    if (applyInhaltZuordnungBtn) {
+        applyInhaltZuordnungBtn.onclick = () => applyInhaltZuordnungModal();
+    }
+
+    if (inhaltZuordnungModal) {
+        inhaltZuordnungModal.onclick = (event) => {
+            if (event.target === inhaltZuordnungModal) {
+                closeInhaltZuordnungModal();
+            }
+        };
+    }
+
+    if (closeWarenuebernahmeBtn) {
+        closeWarenuebernahmeBtn.onclick = () => closeWarenuebernahmeModal();
+    }
+
+    if (saveWarenuebernahmeBtn) {
+        saveWarenuebernahmeBtn.onclick = () => saveWarenuebernahmeFromModal(false);
+    }
+
+    if (completeWarenuebernahmeBtn) {
+        completeWarenuebernahmeBtn.onclick = () => saveWarenuebernahmeFromModal(true);
+    }
+
+    if (warenuebernahmeModal) {
+        warenuebernahmeModal.onclick = (event) => {
+            if (event.target === warenuebernahmeModal) {
+                closeWarenuebernahmeModal();
             }
         };
     }
@@ -1296,6 +2247,9 @@ function setupEventListeners() {
             if (ruecksendungSection) {
                 ruecksendungSection.style.display = e.target.value === 'ruecksendung' ? 'block' : 'none';
             }
+
+            renderPaketeEditor();
+            renderEmpfangPotOverview();
         };
     }
 
@@ -1674,6 +2628,8 @@ function closeSendungModalUI() {
     const editSendungBtn = document.getElementById('editSendungBtn');
     const duplicateSendungBtn = document.getElementById('duplicateSendungBtn');
     closeTrackingOptionsModal();
+    closeInhaltZuordnungModal();
+    closeWarenuebernahmeModal();
     if (modal) {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
@@ -1730,6 +2686,7 @@ function setSendungModalReadMode(readMode) {
     }
 
     isSendungModalReadMode = readMode;
+    renderEmpfangPotOverview();
 }
 
 function enableSendungEditMode() {
@@ -1782,6 +2739,11 @@ function clearModalFields() {
 
     const ruecksendungSection = document.getElementById('ruecksendungSection');
     if (ruecksendungSection) ruecksendungSection.style.display = 'none';
+
+    currentOffenerInhaltPot = [];
+    currentWarenuebernahmeProblemPot = [];
+    currentZuordnungPaketIndex = null;
+    currentWarenuebernahmePaketIndex = null;
 
     setInhaltItems([]);
     statusOverrideActive = false;
@@ -1843,6 +2805,9 @@ function fillModalWithSendungData(sendung) {
         ruecksendungSection.style.display = sendung.typ === 'ruecksendung' ? 'block' : 'none';
     }
 
+    currentOffenerInhaltPot = getSendungOffenerInhaltPot(sendung);
+    currentWarenuebernahmeProblemPot = getSendungWarenuebernahmeProblemPot(sendung);
+
     setPakete(getSendungPakete(sendung));
 
     const statusSelect = document.getElementById('sendungStatus');
@@ -1856,6 +2821,7 @@ function fillModalWithSendungData(sendung) {
         isInternalStatusUpdate = false;
     }
     updateStatusInfoUI(autoStatus);
+    renderEmpfangPotOverview();
 }
 
 function duplicateCurrentSendungToNew() {
@@ -1871,10 +2837,21 @@ function duplicateCurrentSendungToNew() {
 
 async function saveSendung() {
     const selectedStatus = normalizeStatus(document.getElementById('sendungStatus')?.value || 'erwartet');
+    const typ = document.getElementById('sendungTyp')?.value || 'empfang';
+    const isEmpfangTyp = isEmpfangTypValue(typ);
 
     if (currentEditingSendungId && isSendungModalReadMode) {
         try {
-            const pakete = collectPaketeForSave();
+            const rawPakete = collectPaketeForSave();
+            const pakete = isEmpfangTyp
+                ? rawPakete
+                : rawPakete.map((paket) => {
+                    const { inhaltZuordnung, warenuebernahme, ...rest } = paket;
+                    return rest;
+                });
+            const inhalt = collectInhaltItemsForSave();
+            const offenerInhaltPot = isEmpfangTyp ? computeOffenerInhaltPot(inhalt, rawPakete) : [];
+            const warenuebernahmeProblemPot = isEmpfangTyp ? computeProblemPotFromPakete(rawPakete, inhalt) : [];
             const autoStatus = computeAutoStatusFromPakete(pakete);
             const finalStatus = statusOverrideActive ? selectedStatus : autoStatus;
             const isStatusOverride = statusOverrideActive && finalStatus !== autoStatus;
@@ -1890,6 +2867,9 @@ async function saveSendung() {
                 autoStatus,
                 statusOverrideAktiv: isStatusOverride,
                 pakete,
+                inhalt,
+                offenerInhaltPot,
+                warenuebernahmeProblemPot,
                 anbieter: primaryTransportEntry.anbieter,
                 transportnummer: primaryTransportEntry.transportnummer,
                 sendungsnummer: primaryTransportEntry.transportnummer,
@@ -1908,7 +2888,13 @@ async function saveSendung() {
     }
 
     const beschreibung = document.getElementById('sendungBeschreibung')?.value.trim();
-    const pakete = collectPaketeForSave();
+    const rawPakete = collectPaketeForSave();
+    const pakete = isEmpfangTyp
+        ? rawPakete
+        : rawPakete.map((paket) => {
+            const { inhaltZuordnung, warenuebernahme, ...rest } = paket;
+            return rest;
+        });
     const autoStatus = computeAutoStatusFromPakete(pakete);
     const finalStatus = statusOverrideActive ? selectedStatus : autoStatus;
     const isStatusOverride = statusOverrideActive && finalStatus !== autoStatus;
@@ -1924,10 +2910,10 @@ async function saveSendung() {
         alertUser('Bitte fülle das Pflichtfeld Beschreibung aus.');
         return;
     }
-    
-    const typ = document.getElementById('sendungTyp')?.value || 'empfang';
 
     const inhaltArray = collectInhaltItemsForSave();
+    const offenerInhaltPot = isEmpfangTyp ? computeOffenerInhaltPot(inhaltArray, rawPakete) : [];
+    const warenuebernahmeProblemPot = isEmpfangTyp ? computeProblemPotFromPakete(rawPakete, inhaltArray) : [];
 
     const sendungData = {
         typ: typ,
@@ -1951,6 +2937,8 @@ async function saveSendung() {
         aufgeteiltIndex: null,
         aufgeteiltAnzahl: pakete.length,
         inhalt: inhaltArray,
+        offenerInhaltPot,
+        warenuebernahmeProblemPot,
         notizen: document.getElementById('sendungNotizen')?.value.trim() || '',
         erinnerungenAktiv: document.getElementById('sendungErinnerungenAktiv')?.checked || false,
         erinnerungTageVorher: parseInt(document.getElementById('sendungErinnerungTageVorher')?.value) || 3,
@@ -2207,6 +3195,9 @@ function createSendungCard(sendung) {
     const typInfo = TYP_CONFIG[sendung.typ] || TYP_CONFIG.empfang;
     const prioritaetInfo = PRIORITAET_CONFIG[sendung.prioritaet] || PRIORITAET_CONFIG.normal;
     const transportEntries = getSendungTransportEntries(sendung);
+    const inhaltItems = getSendungInhaltItems(sendung);
+    const offenerPot = getSendungOffenerInhaltPot(sendung);
+    const problemPot = getSendungWarenuebernahmeProblemPot(sendung);
 
     const deadlineText = getDeadlineText(sendung);
     const cardLayoutClass = sendungViewMode === 'grid' ? 'h-full' : '';
@@ -2243,6 +3234,22 @@ function createSendungCard(sendung) {
             </div>
         `;
 
+    const empfangMetaDisplay = sendung.typ === 'empfang'
+        ? `<div class="ml-8 mt-2 space-y-1">
+            <div class="flex flex-wrap gap-1.5 text-[11px]">
+                <span class="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-semibold">Zuordnungs-Pot: ${offenerPot.reduce((sum, entry) => sum + (entry.mengeOffen || 0), 0)} Stk</span>
+                <span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">Problem-Pot: ${problemPot.reduce((sum, entry) => sum + (entry.mengeProblem || 0), 0)} Stk</span>
+            </div>
+            <div class="flex flex-wrap gap-1.5 text-[11px]">
+                ${pakete.map((paket, index) => {
+                    const waMeta = getWarenuebernahmeStatusMeta(paket);
+                    const zuordnungSummary = getPaketZuordnungSummary(paket, inhaltItems);
+                    return `<span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 font-semibold">P${index + 1}: ${zuordnungSummary.menge} Stk • WA ${waMeta.label}</span>`;
+                }).join('')}
+            </div>
+        </div>`
+        : '';
+
     if (!sendungShowDetails) {
         return `
             <div id="sendung-${sendung.id}" class="card bg-white p-4 rounded-xl shadow-lg hover:shadow-xl transition cursor-pointer border-l-4 ${getBorderColor(sendung.typ)} ${cardLayoutClass}">
@@ -2250,6 +3257,7 @@ function createSendungCard(sendung) {
                 <div class="space-y-2 text-sm">
                     ${transportEntriesDisplay}
                     <p class="font-semibold text-orange-600">${deadlineText ? `⏰ ${deadlineText}` : '⏰ Keine Deadline gesetzt'}</p>
+                    ${empfangMetaDisplay}
                 </div>
             </div>
         `;
@@ -2267,7 +3275,6 @@ function createSendungCard(sendung) {
         ? sendung.tags.map(tag => `<span class="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded-full">#${tag}</span>`).join(' ')
         : '';
     
-    const inhaltItems = getSendungInhaltItems(sendung);
     const inhaltDisplay = inhaltItems.length > 0
         ? `<div class="ml-8 mt-2">
             <p class="text-xs font-semibold text-gray-700">📦 Inhalt:</p>
@@ -2304,6 +3311,7 @@ function createSendungCard(sendung) {
             </div>
             
             ${inhaltDisplay}
+            ${empfangMetaDisplay}
 
             ${sendung.notizen ? `<div class="ml-8 mt-2 text-xs text-gray-500 italic break-words">${sendung.notizen}</div>` : ''}
         </div>
