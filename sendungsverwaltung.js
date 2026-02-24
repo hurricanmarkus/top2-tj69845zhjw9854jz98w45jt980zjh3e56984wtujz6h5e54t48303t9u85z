@@ -1920,7 +1920,8 @@ function renderWarenuebernahmeModal() {
     const getDisplayStatus = (row) => {
         const inhaltId = String(row.dataset.inhaltId || '').trim();
         const base = String(row.dataset.baseStatus || 'ungeprueft');
-        return inhaltId === waSelectedInhaltId ? 'in_pruefung' : base;
+        if (inhaltId !== waSelectedInhaltId) return base;
+        return base === 'ungeprueft' ? 'in_pruefung' : base;
     };
 
     const renderNavigator = () => {
