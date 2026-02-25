@@ -169,6 +169,8 @@ const WARENUEBERNAHME_NAV_STATUS_META = {
 const WARENUEBERNAHME_RESET_REQUIRED_CLICKS = 5;
 const WARENUEBERNAHME_RESET_WINDOW_MS = 5000;
 const WARENUEBERNAHME_RESET_BUTTON_DEFAULT_LABEL = 'Warenübernahme zurücksetzen';
+const ZUORDNUNG_QUELLE_AUTO = 'auto';
+const ZUORDNUNG_QUELLE_MANUAL = 'manual';
 
 let currentSendungPakete = [];
 let statusOverrideActive = false;
@@ -269,7 +271,8 @@ function formatWarenuebernahmeStatusLabel(value = '') {
 function updateSendungModalCloseButtonVisibility() {
     const closeBtn = document.getElementById('closeSendungModal');
     if (!closeBtn) return;
-    closeBtn.classList.toggle('hidden', sendungModalHasUnsavedChanges);
+    const hasExistingSendung = Boolean(currentEditingSendungId && SENDUNGEN[currentEditingSendungId]);
+    closeBtn.classList.toggle('hidden', hasExistingSendung && sendungModalHasUnsavedChanges);
 }
 
 function setSendungModalDirty(isDirty = true) {
@@ -390,9 +393,16 @@ function normalizeTransportEntries(entries = []) {
 
 function normalizeInhaltZuordnungEntry(entry = {}) {
     const mengeRaw = Number.parseInt(entry?.mengeSoll, 10);
+    const quelleRaw = String(entry?.zuordnungQuelle || entry?.source || '').trim().toLowerCase();
+    const hasLegacyAutoFlag = entry?.autoZuordnung === true || entry?.isAuto === true;
+    const zuordnungQuelle = (quelleRaw === ZUORDNUNG_QUELLE_AUTO || hasLegacyAutoFlag)
+        ? ZUORDNUNG_QUELLE_AUTO
+        : ZUORDNUNG_QUELLE_MANUAL;
+
     return {
         inhaltId: String(entry?.inhaltId || '').trim(),
-        mengeSoll: Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0
+        mengeSoll: Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0,
+        zuordnungQuelle
     };
 }
 
@@ -564,12 +574,15 @@ function getInhaltItemsById(items = currentInhaltItems) {
     return byId;
 }
 
-function getPaketZuordnungMengeForItem(paket = {}, inhaltId = '') {
+function getPaketZuordnungMengeForItem(paket = {}, inhaltId = '', quelle = 'all') {
     if (!Array.isArray(paket?.inhaltZuordnung)) return 0;
-    const entry = paket.inhaltZuordnung.find((candidate) => String(candidate?.inhaltId || '').trim() === inhaltId);
-    if (!entry) return 0;
-    const mengeRaw = Number.parseInt(entry.mengeSoll, 10);
-    return Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
+
+    return paket.inhaltZuordnung.reduce((sum, candidate) => {
+        const normalizedEntry = normalizeInhaltZuordnungEntry(candidate);
+        if (!normalizedEntry.inhaltId || normalizedEntry.inhaltId !== inhaltId) return sum;
+        if (quelle !== 'all' && normalizedEntry.zuordnungQuelle !== quelle) return sum;
+        return sum + normalizedEntry.mengeSoll;
+    }, 0);
 }
 
 function computeOffenerInhaltPot(inhaltItems = currentInhaltItems, pakete = currentSendungPakete) {
@@ -687,16 +700,21 @@ function ensureInhaltZuordnungConsistency() {
         normalizedPaket.inhaltZuordnung.forEach((entry) => {
             const normalizedEntry = normalizeInhaltZuordnungEntry(entry);
             if (!normalizedEntry.inhaltId || normalizedEntry.mengeSoll <= 0 || !inhaltById.has(normalizedEntry.inhaltId)) return;
+            const key = `${normalizedEntry.inhaltId}::${normalizedEntry.zuordnungQuelle}`;
             zuordnungMap.set(
-                normalizedEntry.inhaltId,
-                (zuordnungMap.get(normalizedEntry.inhaltId) || 0) + normalizedEntry.mengeSoll
+                key,
+                (zuordnungMap.get(key) || 0) + normalizedEntry.mengeSoll
             );
         });
 
-        normalizedPaket.inhaltZuordnung = Array.from(zuordnungMap.entries()).map(([inhaltId, mengeSoll]) => ({
-            inhaltId,
-            mengeSoll
-        }));
+        normalizedPaket.inhaltZuordnung = Array.from(zuordnungMap.entries()).map(([entryKey, mengeSoll]) => {
+            const [inhaltId, zuordnungQuelle = ZUORDNUNG_QUELLE_MANUAL] = entryKey.split('::');
+            return {
+                inhaltId,
+                mengeSoll,
+                zuordnungQuelle: zuordnungQuelle === ZUORDNUNG_QUELLE_AUTO ? ZUORDNUNG_QUELLE_AUTO : ZUORDNUNG_QUELLE_MANUAL
+            };
+        });
 
         normalizedPaket.warenuebernahme = normalizeWarenuebernahme(normalizedPaket.warenuebernahme);
         return normalizedPaket;
@@ -712,24 +730,66 @@ function ensureInhaltZuordnungConsistency() {
     }
 
     if (currentSendungPakete.length === 1) {
-        currentSendungPakete[0].inhaltZuordnung = inhaltItems.map((item) => ({
-            inhaltId: item.inhaltId,
-            mengeSoll: item.menge
-        }));
+        const firstPaket = currentSendungPakete[0];
+        const rebuiltEntries = [];
+
+        inhaltItems.forEach((item) => {
+            const manualAssigned = getPaketZuordnungMengeForItem(firstPaket, item.inhaltId, ZUORDNUNG_QUELLE_MANUAL);
+            const clampedManual = Math.max(0, Math.min(item.menge, manualAssigned));
+
+            if (clampedManual > 0) {
+                rebuiltEntries.push({
+                    inhaltId: item.inhaltId,
+                    mengeSoll: clampedManual,
+                    zuordnungQuelle: ZUORDNUNG_QUELLE_MANUAL
+                });
+            }
+
+            const autoMenge = Math.max(0, item.menge - clampedManual);
+            if (autoMenge > 0) {
+                rebuiltEntries.push({
+                    inhaltId: item.inhaltId,
+                    mengeSoll: autoMenge,
+                    zuordnungQuelle: ZUORDNUNG_QUELLE_AUTO
+                });
+            }
+        });
+
+        firstPaket.inhaltZuordnung = rebuiltEntries;
     } else {
+        currentSendungPakete.forEach((paket) => {
+            paket.inhaltZuordnung = (Array.isArray(paket.inhaltZuordnung) ? paket.inhaltZuordnung : [])
+                .map(normalizeInhaltZuordnungEntry)
+                .filter((entry) => entry.inhaltId && entry.mengeSoll > 0 && entry.zuordnungQuelle === ZUORDNUNG_QUELLE_MANUAL);
+        });
+
         inhaltItems.forEach((item) => {
             let remaining = item.menge;
+
             currentSendungPakete.forEach((paket) => {
-                const entry = paket.inhaltZuordnung.find((candidate) => candidate.inhaltId === item.inhaltId);
-                if (!entry) return;
-                const clamped = Math.max(0, Math.min(entry.mengeSoll, remaining));
-                entry.mengeSoll = clamped;
+                const manualAssigned = getPaketZuordnungMengeForItem(paket, item.inhaltId, ZUORDNUNG_QUELLE_MANUAL);
+                const clamped = Math.max(0, Math.min(manualAssigned, remaining));
                 remaining -= clamped;
+
+                paket.inhaltZuordnung = paket.inhaltZuordnung.filter((entry) => {
+                    const normalizedEntry = normalizeInhaltZuordnungEntry(entry);
+                    return !(normalizedEntry.inhaltId === item.inhaltId && normalizedEntry.zuordnungQuelle === ZUORDNUNG_QUELLE_MANUAL);
+                });
+
+                if (clamped > 0) {
+                    paket.inhaltZuordnung.push({
+                        inhaltId: item.inhaltId,
+                        mengeSoll: clamped,
+                        zuordnungQuelle: ZUORDNUNG_QUELLE_MANUAL
+                    });
+                }
             });
         });
 
         currentSendungPakete.forEach((paket) => {
-            paket.inhaltZuordnung = paket.inhaltZuordnung.filter((entry) => entry.mengeSoll > 0);
+            paket.inhaltZuordnung = paket.inhaltZuordnung
+                .map(normalizeInhaltZuordnungEntry)
+                .filter((entry) => entry.inhaltId && entry.mengeSoll > 0);
         });
     }
 
@@ -1438,7 +1498,10 @@ function renderInhaltZuordnungModal() {
             : [];
 
         const inhaltById = new Map(inhaltItems.map((item) => [item.inhaltId, item]));
-        const rowsByInhaltId = new Map(zuordnungEntries.map((entry) => [entry.inhaltId, entry.mengeSoll]));
+        const rowsByInhaltId = new Map();
+        zuordnungEntries.forEach((entry) => {
+            rowsByInhaltId.set(entry.inhaltId, (rowsByInhaltId.get(entry.inhaltId) || 0) + entry.mengeSoll);
+        });
 
         const assignedRows = inhaltItems
             .map((item) => ({
@@ -1618,6 +1681,7 @@ function applyInhaltZuordnungModal() {
     const rows = document.querySelectorAll('#sendungInhaltZuordnungRows .sendung-zuordnung-row');
     if (!paket) return;
 
+    const isSinglePaket = currentSendungPakete.length === 1;
     const entries = [];
     rows.forEach((row) => {
         const inhaltId = String(row.dataset.inhaltId || '').trim();
@@ -1626,8 +1690,23 @@ function applyInhaltZuordnungModal() {
         const maxForThis = Number.isFinite(maxForThisRaw) && maxForThisRaw >= 0 ? maxForThisRaw : 0;
         const rawCounter = Number.parseInt(row.dataset.counter || '0', 10);
         const mengeSoll = Number.isFinite(rawCounter) ? Math.max(0, Math.min(maxForThis, rawCounter)) : 0;
-        if (mengeSoll > 0) {
-            entries.push({ inhaltId, mengeSoll });
+        if (mengeSoll <= 0) {
+            return;
+        }
+
+        let manualMenge = mengeSoll;
+        if (isSinglePaket) {
+            const existingManual = getPaketZuordnungMengeForItem(paket, inhaltId, ZUORDNUNG_QUELLE_MANUAL);
+            const existingTotal = getPaketZuordnungMengeForItem(paket, inhaltId);
+            manualMenge = mengeSoll === existingTotal ? existingManual : mengeSoll;
+        }
+
+        if (manualMenge > 0) {
+            entries.push({
+                inhaltId,
+                mengeSoll: manualMenge,
+                zuordnungQuelle: ZUORDNUNG_QUELLE_MANUAL
+            });
         }
     });
 
@@ -4580,6 +4659,7 @@ function setSendungModalReadMode(readMode) {
     const editSendungBtn = document.getElementById('editSendungBtn');
     const duplicateSendungBtn = document.getElementById('duplicateSendungBtn');
     const deleteSendungBtn = document.getElementById('deleteSendungBtn');
+    const cancelSendungBtn = document.getElementById('cancelSendungBtn');
     if (editSendungBtn) {
         editSendungBtn.style.display = (hasExistingSendung && readMode) ? 'inline-block' : 'none';
     }
@@ -4588,6 +4668,9 @@ function setSendungModalReadMode(readMode) {
     }
     if (deleteSendungBtn) {
         deleteSendungBtn.style.display = (hasExistingSendung && !readMode) ? 'inline-block' : 'none';
+    }
+    if (cancelSendungBtn) {
+        cancelSendungBtn.style.display = (!hasExistingSendung && !readMode) ? 'inline-block' : 'none';
     }
 
     isSendungModalReadMode = readMode;
