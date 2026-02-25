@@ -726,6 +726,7 @@ function ensureInhaltZuordnungConsistency() {
         });
         currentOffenerInhaltPot = [];
         currentWarenuebernahmeProblemPot = computeProblemPotFromPakete(currentSendungPakete, inhaltItems);
+        updateOffenerPotBadges();
         return;
     }
 
@@ -799,6 +800,7 @@ function ensureInhaltZuordnungConsistency() {
 
     currentOffenerInhaltPot = computeOffenerInhaltPot(inhaltItems, currentSendungPakete);
     currentWarenuebernahmeProblemPot = computeProblemPotFromPakete(currentSendungPakete, inhaltItems);
+    updateOffenerPotBadges();
 }
 
 function getPaketZuordnungSummary(paket = {}, inhaltItems = currentInhaltItems) {
@@ -1300,6 +1302,7 @@ function setInhaltItems(items = []) {
         : [{ inhaltId: createInhaltId(), menge: 1, bezeichnung: '' }];
 
     ensureInhaltZuordnungConsistency();
+    updateOffenerPotBadges();
 
     renderInhaltEditor();
     renderEmpfangPotOverview();
@@ -1385,6 +1388,13 @@ function renderInhaltEditor(focusRowIndex = null, focusField = 'bezeichnung') {
 
 function getEmpfangPotOverviewContainer() {
     return document.getElementById('sendungEmpfangPotOverview');
+}
+
+function updateOffenerPotBadges() {
+    const totalOffen = currentOffenerInhaltPot.reduce((sum, entry) => sum + (entry.mengeOffen || 0), 0);
+    document.querySelectorAll('.sendung-offener-pot-badge').forEach((badge) => {
+        badge.textContent = `Offener Pot: ${totalOffen} Stk`;
+    });
 }
 
 function renderEmpfangPotOverview() {
@@ -3698,7 +3708,7 @@ function renderPaketeEditor() {
                 ${isEmpfang
                     ? `<div class="mt-2 flex flex-wrap gap-2 items-center text-xs">
                         ${zuordnungBadge}
-                        ${isSendungModalReadMode ? '' : `<span class="px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 font-semibold">Offener Pot: ${totalOffen} Stk</span>`}
+                        <span class="sendung-editmode-only sendung-offener-pot-badge px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 font-semibold">Offener Pot: ${totalOffen} Stk</span>
                         <span class="px-2 py-1 rounded-full ${warenuebernahmeMeta.color} font-semibold">Warenübernahme: ${warenuebernahmeMeta.label}</span>
                     </div>
                     <div class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
