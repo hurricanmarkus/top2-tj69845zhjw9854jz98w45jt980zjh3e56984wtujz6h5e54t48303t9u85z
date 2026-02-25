@@ -179,7 +179,9 @@ let currentInhaltItems = [];
 let currentOffenerInhaltPot = [];
 let currentWarenuebernahmeProblemPot = [];
 let currentZuordnungPaketIndex = null;
+let currentZuordnungModalReadOnly = false;
 let currentWarenuebernahmePaketIndex = null;
+let statusManualUnlockActive = false;
 let registeredEmpfaengerVornamen = [];
 let warenuebernahmeResetClickTimestamps = [];
 let warenuebernahmeResetCountdownInterval = null;
@@ -1498,6 +1500,7 @@ function closeInhaltZuordnungModal() {
     const modal = document.getElementById('sendungInhaltZuordnungModal');
     const rows = document.getElementById('sendungInhaltZuordnungRows');
     currentZuordnungPaketIndex = null;
+    currentZuordnungModalReadOnly = false;
     if (!modal) return;
     modal.classList.add('hidden');
     modal.classList.remove('flex');
@@ -1515,7 +1518,7 @@ function renderInhaltZuordnungModal() {
 
     ensureInhaltZuordnungConsistency();
 
-    const isReadOnlyView = isSendungModalReadMode;
+    const isReadOnlyView = currentZuordnungModalReadOnly;
     const inhaltItems = getEffectiveInhaltItems();
     title.textContent = `${isReadOnlyView ? 'Artikel-Zuordnung' : 'Artikel zuordnen'} – ${paket.paketLabel || `Paket ${paketIndex + 1}`}`;
     applyBtn.classList.toggle('hidden', isReadOnlyView);
@@ -1710,7 +1713,7 @@ function renderInhaltZuordnungModal() {
         : `Aktueller Zuordnungs-Pot: ${totalOffen} Stück`;
 }
 
-function openInhaltZuordnungModal(paketIndex) {
+function openInhaltZuordnungModal(paketIndex, forceReadOnly = false) {
     if (!isEmpfangContextActive()) return;
 
     const paket = currentSendungPakete[paketIndex];
@@ -1718,13 +1721,14 @@ function openInhaltZuordnungModal(paketIndex) {
     if (!paket || !modal) return;
 
     currentZuordnungPaketIndex = paketIndex;
+    currentZuordnungModalReadOnly = Boolean(forceReadOnly || isSendungModalReadMode);
     renderInhaltZuordnungModal();
     modal.classList.remove('hidden');
     modal.classList.add('flex');
 }
 
 function applyInhaltZuordnungModal() {
-    if (isSendungModalReadMode) {
+    if (currentZuordnungModalReadOnly) {
         closeInhaltZuordnungModal();
         return;
     }
@@ -2077,7 +2081,7 @@ function renderWarenuebernahmeModal() {
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center">
                     <div class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2">
-                        <div class="text-[10px] uppercase tracking-wide text-gray-500">Sollmenge</div>
+                        <div class="text-[10px] uppercase tracking-wide text-gray-500">Bestell-Menge</div>
                         <div class="text-xl md:text-2xl font-extrabold text-gray-900 sendung-wa-soll-value">${entry.mengeSoll}</div>
                     </div>
                     <div class="rounded-lg border border-gray-200 bg-amber-50 px-2 py-2">
@@ -2085,7 +2089,7 @@ function renderWarenuebernahmeModal() {
                         <div class="text-xl md:text-2xl font-extrabold text-amber-700 sendung-wa-offen-value">${ungeprueft}</div>
                     </div>
                     <div class="rounded-lg border border-gray-200 bg-emerald-50 px-2 py-2">
-                        <div class="text-[10px] uppercase tracking-wide text-emerald-700">Istmenge</div>
+                        <div class="text-[10px] uppercase tracking-wide text-emerald-700">Korrekt &amp; Übernommen</div>
                         <div class="text-xl md:text-2xl font-extrabold text-emerald-700 sendung-wa-main-counter-value">${mengeIst}</div>
                     </div>
                 </div>
@@ -2765,6 +2769,11 @@ function renderWarenuebernahmeModal() {
     };
 
     const goToNextRow = () => {
+        if (waFilterStatus === 'in_pruefung') {
+            refreshAll();
+            return;
+        }
+
         const allRows = orderedRows();
         const visibleRows = allRows.filter((row) => {
             if (waFilterStatus === 'all') return true;
@@ -3452,20 +3461,70 @@ async function saveWarenuebernahmeFromModal() {
 
 function updateStatusInfoUI(autoStatus) {
     const info = document.getElementById('sendungStatusInfo');
-    const resetBtn = document.getElementById('sendungResetAutoStatusBtn');
-    if (!info || !resetBtn) return;
+    if (!info) return;
 
     if (statusOverrideActive) {
         info.textContent = `Manuell (Auto: ${STATUS_CONFIG[autoStatus]?.label || autoStatus})`;
         info.className = 'text-xs font-semibold text-orange-800 bg-orange-100 px-2 py-1 rounded';
-        resetBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-        resetBtn.disabled = false;
     } else {
         info.textContent = `Automatisch (${STATUS_CONFIG[autoStatus]?.label || autoStatus})`;
         info.className = 'text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-1 rounded';
-        resetBtn.classList.add('opacity-50', 'cursor-not-allowed');
-        resetBtn.disabled = true;
     }
+
+    updateOverallStatusControlState();
+}
+
+function updateOverallStatusControlState() {
+    const statusSelect = document.getElementById('sendungStatus');
+    const unlockBtn = document.getElementById('sendungStatusUnlockBtn');
+    const lockHint = document.getElementById('sendungStatusLockHint');
+    const resetAutoStatusBtn = document.getElementById('sendungResetAutoStatusBtn');
+
+    const manualUnlocked = statusManualUnlockActive || statusOverrideActive;
+    const needsManualLock = !isSendungModalReadMode && !manualUnlocked;
+
+    if (statusSelect) {
+        statusSelect.disabled = isSendungModalReadMode || needsManualLock;
+        statusSelect.classList.toggle('opacity-50', statusSelect.disabled);
+        statusSelect.classList.toggle('cursor-not-allowed', statusSelect.disabled);
+    }
+
+    if (unlockBtn) {
+        unlockBtn.classList.toggle('hidden', !needsManualLock);
+        unlockBtn.disabled = !needsManualLock;
+    }
+
+    if (lockHint) {
+        if (isSendungModalReadMode) {
+            lockHint.textContent = 'Lesemodus: Gesamtstatus ist gesperrt.';
+        } else if (needsManualLock) {
+            lockHint.textContent = '🔒 Manuell entsperren für Statusänderung.';
+        } else {
+            lockHint.textContent = '🔓 Manueller Gesamtstatus aktiv.';
+        }
+    }
+
+    if (resetAutoStatusBtn) {
+        const resetDisabled = isSendungModalReadMode || !statusOverrideActive;
+        resetAutoStatusBtn.disabled = resetDisabled;
+        resetAutoStatusBtn.classList.toggle('opacity-50', resetDisabled);
+        resetAutoStatusBtn.classList.toggle('cursor-not-allowed', resetDisabled);
+    }
+}
+
+function requestOverallStatusManualUnlock() {
+    if (isSendungModalReadMode) return;
+
+    const unlockInput = prompt('Zum Entsperren des manuellen Gesamtstatus bitte "MANUELL" eingeben:');
+    if (unlockInput === null) return;
+
+    if (unlockInput.trim() !== 'MANUELL') {
+        alertUser('Entsperren abgebrochen: Eingabe war nicht "MANUELL".', 'warning');
+        return;
+    }
+
+    statusManualUnlockActive = true;
+    updateOverallStatusControlState();
 }
 
 function syncOverallStatusWithPakete(forceAuto = false) {
@@ -3475,6 +3534,7 @@ function syncOverallStatusWithPakete(forceAuto = false) {
 
     if (forceAuto) {
         statusOverrideActive = false;
+        statusManualUnlockActive = false;
     }
 
     if (!statusOverrideActive || !statusSelect.value) {
@@ -3707,9 +3767,7 @@ function renderPaketeEditor() {
         const statusLocked = normalizedWarenuebernahme.aktiv;
         const waCanBeDisabled = !normalizedWarenuebernahme.aktiv || normalizedWarenuebernahme.status === 'offen';
         const statusManualAllowed = isPaketStatusManuellEditierbar(paket);
-        const zuordnungBadge = isSendungModalReadMode
-            ? `<button type="button" class="sendung-open-zuordnung-pill px-2 py-1 rounded-full bg-blue-100 text-blue-800 font-semibold hover:bg-blue-200 transition" data-paket-index="${paketIndex}">Zuordnung: ${zuordnungSummary.positionen} Pos., ${zuordnungSummary.menge} Stk</button>`
-            : `<span class="px-2 py-1 rounded-full bg-blue-100 text-blue-800 font-semibold">Zuordnung: ${zuordnungSummary.positionen} Pos., ${zuordnungSummary.menge} Stk</span>`;
+        const zuordnungBadge = `<button type="button" class="sendung-open-zuordnung-pill px-2 py-1 rounded-full bg-blue-100 text-blue-800 font-semibold hover:bg-blue-200 transition" data-paket-index="${paketIndex}">Zuordnung: ${zuordnungSummary.positionen} Pos., ${zuordnungSummary.menge} Stk</button>`;
 
         const statusOptions = STATUS_VALUES.map((statusValue) => {
             const config = STATUS_CONFIG[statusValue] || { label: statusValue, icon: '' };
@@ -3897,7 +3955,7 @@ function renderPaketeEditor() {
     container.querySelectorAll('.sendung-open-zuordnung-pill').forEach((button) => {
         button.onclick = () => {
             const paketIndex = Number.parseInt(button.dataset.paketIndex || '-1', 10);
-            openInhaltZuordnungModal(paketIndex);
+            openInhaltZuordnungModal(paketIndex, true);
         };
     });
 
@@ -4065,6 +4123,7 @@ function setupEventListeners() {
     const sendungAddInhaltRowBtn = document.getElementById('sendungAddInhaltRowBtn');
     const sendungEmpfaenger = document.getElementById('sendungEmpfaenger');
     const sendungStatus = document.getElementById('sendungStatus');
+    const sendungStatusUnlockBtn = document.getElementById('sendungStatusUnlockBtn');
     const sendungResetAutoStatusBtn = document.getElementById('sendungResetAutoStatusBtn');
     const closeTrackingOptionsBtn = document.getElementById('closeSendungTrackingOptionsModal');
     const trackingOptionsModal = document.getElementById('sendungTrackingOptionsModal');
@@ -4129,8 +4188,15 @@ function setupEventListeners() {
             if (isInternalStatusUpdate) return;
             const autoStatus = computeAutoStatusFromPakete(currentSendungPakete);
             statusOverrideActive = normalizeStatus(sendungStatus.value) !== autoStatus;
+            if (!statusOverrideActive) {
+                statusManualUnlockActive = false;
+            }
             updateStatusInfoUI(autoStatus);
         };
+    }
+
+    if (sendungStatusUnlockBtn) {
+        sendungStatusUnlockBtn.onclick = () => requestOverallStatusManualUnlock();
     }
 
     if (sendungResetAutoStatusBtn) {
@@ -4682,13 +4748,10 @@ function closeSendungModalUI() {
 function setSendungModalReadMode(readMode) {
     const modal = document.getElementById('sendungModal');
     if (!modal) return;
+    isSendungModalReadMode = readMode;
 
     const formFields = modal.querySelectorAll('input, textarea, select');
     formFields.forEach(field => {
-        if (field.id === 'sendungStatus') {
-            field.disabled = false;
-            return;
-        }
         field.disabled = readMode;
     });
 
@@ -4711,16 +4774,10 @@ function setSendungModalReadMode(readMode) {
 
     applyPaketeReadMode(readMode);
     applyInhaltReadMode(readMode);
+    updateOverallStatusControlState();
     if (readMode) {
         hideAllLieferzielSuggestionBoxes();
         hideEmpfaengerSuggestions();
-    }
-
-    const resetAutoStatusBtn = document.getElementById('sendungResetAutoStatusBtn');
-    if (resetAutoStatusBtn) {
-        resetAutoStatusBtn.disabled = readMode || !statusOverrideActive;
-        resetAutoStatusBtn.classList.toggle('opacity-50', resetAutoStatusBtn.disabled);
-        resetAutoStatusBtn.classList.toggle('cursor-not-allowed', resetAutoStatusBtn.disabled);
     }
 
     const saveSendungBtn = document.getElementById('saveSendungBtn');
@@ -4746,7 +4803,6 @@ function setSendungModalReadMode(readMode) {
         cancelSendungBtn.style.display = (!hasExistingSendung && !readMode) ? 'inline-block' : 'none';
     }
 
-    isSendungModalReadMode = readMode;
     updateSendungModalCloseButtonVisibility();
     renderEmpfangPotOverview();
 }
@@ -4809,6 +4865,7 @@ function clearModalFields() {
 
     setInhaltItems([]);
     statusOverrideActive = false;
+    statusManualUnlockActive = false;
     setPakete([normalizePaket({ status: 'erwartet' }, 0)]);
     syncOverallStatusWithPakete(true);
 }
@@ -4876,6 +4933,7 @@ function fillModalWithSendungData(sendung) {
     const autoStatus = computeAutoStatusFromPakete(currentSendungPakete);
     const storedStatus = normalizeStatus(sendung.status || autoStatus);
     statusOverrideActive = sendung.statusOverrideAktiv === true || storedStatus !== autoStatus;
+    statusManualUnlockActive = statusOverrideActive;
 
     if (statusSelect) {
         isInternalStatusUpdate = true;
