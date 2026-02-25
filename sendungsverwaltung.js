@@ -168,6 +168,7 @@ const WARENUEBERNAHME_NAV_STATUS_META = {
 };
 const WARENUEBERNAHME_RESET_REQUIRED_CLICKS = 5;
 const WARENUEBERNAHME_RESET_WINDOW_MS = 5000;
+const WARENUEBERNAHME_RESET_BUTTON_DEFAULT_LABEL = 'Warenübernahme zurücksetzen';
 
 let currentSendungPakete = [];
 let statusOverrideActive = false;
@@ -179,6 +180,7 @@ let currentZuordnungPaketIndex = null;
 let currentWarenuebernahmePaketIndex = null;
 let registeredEmpfaengerVornamen = [];
 let warenuebernahmeResetClickTimestamps = [];
+let warenuebernahmeResetCountdownInterval = null;
 let waSelectedInhaltId = '';
 let waFilterStatus = 'all';
 let waProblemPotExpanded = false;
@@ -251,6 +253,15 @@ function formatWarenuebernahmeGeloestTypLabel(value = '') {
     if (typ === 'nachlieferung') return 'Nachlieferung';
     if (typ === 'ermaessigung') return 'Ermäßigung';
     return 'Sonstiges';
+}
+
+function formatWarenuebernahmeStatusLabel(value = '') {
+    const status = String(value || '').trim().toLowerCase();
+    if (status === 'offen') return 'Offen';
+    if (status === 'in_pruefung') return 'In Prüfung';
+    if (status === 'abgeschlossen') return 'Abgeschlossen';
+    if (status === 'problem') return 'Problem';
+    return status || '-';
 }
 
 async function loadWarenuebernahmeAuditForCurrentPaket() {
@@ -1674,102 +1685,165 @@ function renderWarenuebernahmeModal() {
         candidate?.paketLabel || `Paket ${index + 1}`
     ]));
 
-    const commentEntries = warenuebernahme.positionen
-        .filter((entry) => String(entry?.kommentar || '').trim())
-        .map((entry) => {
-            const label = inhaltById.get(entry.inhaltId)?.bezeichnung || `Artikel (${entry.inhaltId || '-'})`;
-            return {
-                type: 'Kommentar',
-                title: label,
-                detail: String(entry.kommentar || '').trim(),
-                timestampMs: getSortableTimestampMs(entry.bestaetigtAt) || getSortableTimestampMs(warenuebernahme.updatedAt),
-                timestampLabel: formatCompactDateTime(entry.bestaetigtAt || warenuebernahme.updatedAt)
-            };
-        });
+    const stringifyProblemVerteilung = (problemVerteilung = {}) => Object.entries(normalizeProblemVerteilung(problemVerteilung))
+        .map(([typ, menge]) => `${WARENUEBERNAHME_ABWEICHUNG_OPTIONS[typ] || typ}: ${menge}`)
+        .join(', ');
 
-    const resolutionEntries = warenuebernahme.problemaufloesungen
-        .filter((entry) => Number.parseInt(entry?.menge, 10) > 0)
-        .map((entry) => {
-            const label = inhaltById.get(entry.inhaltId)?.bezeichnung || `Artikel (${entry.inhaltId || '-'})`;
-            const actionLabel = entry.aktion === 'zuweisen'
-                ? `Zuweisung → ${paketById.get(String(entry.zielPaketId || '')) || 'Paket'}`
-                : `Gelöst (${formatWarenuebernahmeGeloestTypLabel(entry.geloestTyp)})`;
-            const detailParts = [`${entry.menge}x`, actionLabel];
-            if (entry.kommentar) detailParts.push(`Kommentar: ${entry.kommentar}`);
-            return {
-                type: 'Auflösung',
-                title: label,
-                detail: detailParts.join(' • '),
-                timestampMs: getSortableTimestampMs(entry.createdAt),
-                timestampLabel: formatCompactDateTime(entry.createdAt)
-            };
-        });
-
-    const auditEntries = currentWarenuebernahmeAuditEntries.map((entry) => {
+    const auditEntries = currentWarenuebernahmeAuditEntries.flatMap((entry) => {
+        const timestampMs = getSortableTimestampMs(entry.timestamp) || getSortableTimestampMs(entry.clientTimestamp);
+        const timestampLabel = formatCompactDateTime(entry.timestamp || entry.clientTimestamp);
         const payload = entry?.payloadDelta || {};
-        const payloadParts = [];
-        if (payload.status) payloadParts.push(`Status: ${payload.status}`);
-        if (Number.isFinite(payload.totalSoll)) payloadParts.push(`Soll: ${payload.totalSoll}`);
-        if (Number.isFinite(payload.totalIst)) payloadParts.push(`Ist: ${payload.totalIst}`);
-        if (Number.isFinite(payload.totalProblem)) payloadParts.push(`Problem: ${payload.totalProblem}`);
-        const problemResolutionBookings = Array.isArray(payload?.problemResolutionBookings)
-            ? payload.problemResolutionBookings
-                .map((resolution) => {
-                    const artikel = String(resolution?.artikel || resolution?.inhaltId || 'Artikel').trim();
-                    const mengeRaw = Number.parseInt(resolution?.menge, 10);
-                    const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
-                    if (menge <= 0) return '';
-                    const loesungsweg = formatWarenuebernahmeGeloestTypLabel(resolution?.geloestTyp);
-                    const kommentar = String(resolution?.kommentar || '').trim();
-                    return `• Fehlerlösung: ${artikel} • Gelöst: ${loesungsweg} (${menge})${kommentar ? ` • Kommentar: ${kommentar}` : ''}`;
-                })
-                .filter(Boolean)
-            : [];
+        const action = String(entry?.action || '').trim().toLowerCase();
 
-        const bookingDetails = Array.isArray(payload?.articleBookings)
-            ? payload.articleBookings
-                .map((booking) => {
-                    const artikel = String(booking?.artikel || booking?.inhaltId || 'Artikel').trim();
-                    const sollRaw = Number.parseInt(booking?.soll, 10);
-                    const istRaw = Number.parseInt(booking?.ist, 10);
-                    const offenRaw = Number.parseInt(booking?.offen, 10);
-                    const soll = Number.isFinite(sollRaw) && sollRaw >= 0 ? sollRaw : 0;
-                    const ist = Number.isFinite(istRaw) && istRaw >= 0 ? istRaw : 0;
-                    const offen = Number.isFinite(offenRaw) && offenRaw >= 0 ? offenRaw : Math.max(0, soll - ist);
-                    const problemVerteilung = normalizeProblemVerteilung(booking?.problemVerteilung || {});
-                    const problemText = Object.entries(problemVerteilung)
-                        .map(([typ, menge]) => `${WARENUEBERNAHME_ABWEICHUNG_OPTIONS[typ] || typ}: ${menge}`)
-                        .join(', ');
-                    const teile = [`${artikel}: Ist ${ist}/${soll}`, `Offen ${offen}`];
-                    if (problemText) teile.push(`Fehler ${problemText}`);
-                    const kommentar = String(booking?.kommentar || '').trim();
-                    if (kommentar) teile.push(`Kommentar: ${kommentar}`);
-                    return teile.join(' • ');
-                })
-                .filter(Boolean)
-            : [];
+        const buildResolutionAuditEntry = (resolution = {}) => {
+            const artikel = String(resolution?.artikel || resolution?.inhaltId || 'Artikel').trim();
+            const mengeRaw = Number.parseInt(resolution?.menge, 10);
+            const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
+            if (menge <= 0) return null;
+            const loesungsweg = formatWarenuebernahmeGeloestTypLabel(resolution?.geloestTyp);
+            const kommentar = String(resolution?.kommentar || '').trim();
+            const detailLines = [`${artikel} • Gelöst: ${loesungsweg} (${menge})`];
+            if (kommentar) detailLines.push(`Kommentar: ${kommentar}`);
+            return {
+                type: 'Audit',
+                title: 'Fehlerlösung gebucht',
+                detailLines,
+                isProblemResolutionBooking: true,
+                timestampMs,
+                timestampLabel
+            };
+        };
 
-        const detailLines = [];
-        if (payloadParts.length > 0) detailLines.push(payloadParts.join(' • '));
-        if (problemResolutionBookings.length > 0) detailLines.push(...problemResolutionBookings);
-        if (bookingDetails.length > 0) {
-            detailLines.push(...bookingDetails.map((line) => `• ${line}`));
+        const buildArticleAuditEntry = (booking = {}) => {
+            const artikel = String(booking?.artikel || booking?.inhaltId || 'Artikel').trim();
+            const vorher = booking?.vorher || {};
+            const nachher = booking?.nachher || booking || {};
+
+            const detailLines = [];
+            if (Number.isFinite(vorher?.ist) && Number.isFinite(nachher?.ist) && Number.isFinite(vorher?.soll) && Number.isFinite(nachher?.soll)) {
+                if (vorher.ist !== nachher.ist || vorher.soll !== nachher.soll) {
+                    detailLines.push(`Ist/Soll: ${vorher.ist}/${vorher.soll} → ${nachher.ist}/${nachher.soll}`);
+                }
+            } else {
+                const sollRaw = Number.parseInt(nachher?.soll, 10);
+                const istRaw = Number.parseInt(nachher?.ist, 10);
+                const soll = Number.isFinite(sollRaw) && sollRaw >= 0 ? sollRaw : 0;
+                const ist = Number.isFinite(istRaw) && istRaw >= 0 ? istRaw : 0;
+                detailLines.push(`Ist/Soll: ${ist}/${soll}`);
+            }
+
+            if (Number.isFinite(vorher?.offen) && Number.isFinite(nachher?.offen)) {
+                if (vorher.offen !== nachher.offen) {
+                    detailLines.push(`Offen: ${vorher.offen} → ${nachher.offen}`);
+                }
+            } else if (Number.isFinite(nachher?.offen)) {
+                detailLines.push(`Offen: ${nachher.offen}`);
+            }
+
+            const vorherProblemText = stringifyProblemVerteilung(vorher?.problemVerteilung || {});
+            const nachherProblemText = stringifyProblemVerteilung(nachher?.problemVerteilung || {});
+            if (vorherProblemText !== nachherProblemText) {
+                detailLines.push(`Fehler: ${vorherProblemText || 'keine'} → ${nachherProblemText || 'keine'}`);
+            }
+
+            const vorherKommentar = String(vorher?.kommentar || '').trim();
+            const nachherKommentar = String(nachher?.kommentar || '').trim();
+            if (vorherKommentar !== nachherKommentar) {
+                detailLines.push(`Kommentar: ${vorherKommentar || '-'} → ${nachherKommentar || '-'}`);
+            }
+
+            if (detailLines.length === 0) {
+                detailLines.push('Artikelbuchung aktualisiert');
+            }
+
+            return {
+                type: 'Audit',
+                title: `Artikelbuchung: ${artikel}`,
+                detailLines,
+                isProblemResolutionBooking: false,
+                timestampMs,
+                timestampLabel
+            };
+        };
+
+        if (action === 'problemaufloesung_buchung') {
+            const item = buildResolutionAuditEntry(payload?.problemResolutionBooking || {});
+            return item ? [item] : [];
         }
-        if (detailLines.length === 0) {
-            detailLines.push('Änderung gespeichert');
+
+        if (action === 'artikel_buchung') {
+            return [buildArticleAuditEntry(payload?.articleBooking || {})];
         }
 
-        return {
+        if (action === 'status_aenderung') {
+            return [{
+                type: 'Audit',
+                title: 'Status geändert',
+                detailLines: [`${formatWarenuebernahmeStatusLabel(payload?.fromStatus)} → ${formatWarenuebernahmeStatusLabel(payload?.toStatus)}`],
+                isProblemResolutionBooking: false,
+                timestampMs,
+                timestampLabel
+            }];
+        }
+
+        if (action === 'reset') {
+            const detailLines = [];
+            if (payload?.fromStatus || payload?.toStatus) {
+                detailLines.push(`Status: ${formatWarenuebernahmeStatusLabel(payload?.fromStatus)} → ${formatWarenuebernahmeStatusLabel(payload?.toStatus)}`);
+            }
+            if (Number.isFinite(payload?.removedPositionen) && payload.removedPositionen > 0) {
+                detailLines.push(`Zurückgesetzt: ${payload.removedPositionen} Artikelbuchungen`);
+            }
+            if (Number.isFinite(payload?.removedProblemartikel) && payload.removedProblemartikel > 0) {
+                detailLines.push(`Zurückgesetzt: ${payload.removedProblemartikel} Problempositionen`);
+            }
+            if (Number.isFinite(payload?.removedProblemaufloesungen) && payload.removedProblemaufloesungen > 0) {
+                detailLines.push(`Zurückgesetzt: ${payload.removedProblemaufloesungen} Problemlösungen`);
+            }
+            if (detailLines.length === 0) {
+                detailLines.push('Warenübernahme zurückgesetzt');
+            }
+            return [{
+                type: 'Audit',
+                title: 'Warenübernahme zurückgesetzt',
+                detailLines,
+                isProblemResolutionBooking: false,
+                timestampMs,
+                timestampLabel
+            }];
+        }
+
+        if (action === 'buchen') {
+            const legacyEntries = [];
+            const legacyProblemResolutionBookings = Array.isArray(payload?.problemResolutionBookings)
+                ? payload.problemResolutionBookings
+                : [];
+            legacyProblemResolutionBookings.forEach((resolution) => {
+                const resolutionEntry = buildResolutionAuditEntry(resolution);
+                if (resolutionEntry) legacyEntries.push(resolutionEntry);
+            });
+
+            const legacyArticleBookings = Array.isArray(payload?.articleBookings)
+                ? payload.articleBookings
+                : [];
+            legacyArticleBookings.forEach((booking) => {
+                legacyEntries.push(buildArticleAuditEntry(booking));
+            });
+
+            if (legacyEntries.length > 0) return legacyEntries;
+        }
+
+        return [{
             type: 'Audit',
             title: `Aktion: ${entry.action || 'update'}`,
-            detailLines,
-            isProblemResolutionBooking: problemResolutionBookings.length > 0,
-            timestampMs: getSortableTimestampMs(entry.timestamp) || getSortableTimestampMs(entry.clientTimestamp),
-            timestampLabel: formatCompactDateTime(entry.timestamp || entry.clientTimestamp)
-        };
+            detailLines: ['Änderung gespeichert'],
+            isProblemResolutionBooking: false,
+            timestampMs,
+            timestampLabel
+        }];
     });
 
-    const historyEntries = [...commentEntries, ...resolutionEntries, ...auditEntries]
+    const historyEntries = [...auditEntries]
         .sort((left, right) => (right.timestampMs || 0) - (left.timestampMs || 0));
 
     const historyContentHtml = historyEntries.length > 0
@@ -1787,7 +1861,7 @@ function renderWarenuebernahmeModal() {
                 </div>
             </div>
         `).join('')
-        : '<div class="text-[11px] text-gray-500 italic">Keine Kommentare, Auflösungen oder Audit-Einträge vorhanden.</div>';
+        : '<div class="text-[11px] text-gray-500 italic">Keine Audit-Einträge vorhanden.</div>';
 
     const hasHistorischeProblemEintraege = warenuebernahme.problemartikel.length > 0 || warenuebernahme.problemaufloesungen.length > 0;
 
@@ -2634,7 +2708,42 @@ function renderWarenuebernahmeModal() {
 }
 
 function resetWarenuebernahmeResetSequence() {
+    if (warenuebernahmeResetCountdownInterval) {
+        clearInterval(warenuebernahmeResetCountdownInterval);
+        warenuebernahmeResetCountdownInterval = null;
+    }
     warenuebernahmeResetClickTimestamps = [];
+    const resetBtn = document.getElementById('resetSendungWarenuebernahmeBtn');
+    if (resetBtn) {
+        resetBtn.textContent = WARENUEBERNAHME_RESET_BUTTON_DEFAULT_LABEL;
+    }
+}
+
+function updateWarenuebernahmeResetButtonLabel() {
+    const resetBtn = document.getElementById('resetSendungWarenuebernahmeBtn');
+    if (!resetBtn) return;
+
+    const now = Date.now();
+    warenuebernahmeResetClickTimestamps = warenuebernahmeResetClickTimestamps
+        .filter((timestamp) => now - timestamp <= WARENUEBERNAHME_RESET_WINDOW_MS);
+
+    const clickCount = warenuebernahmeResetClickTimestamps.length;
+    if (clickCount <= 0) {
+        resetBtn.textContent = WARENUEBERNAHME_RESET_BUTTON_DEFAULT_LABEL;
+        return;
+    }
+
+    const firstClickAt = warenuebernahmeResetClickTimestamps[0] || now;
+    const remainingMs = Math.max(0, (firstClickAt + WARENUEBERNAHME_RESET_WINDOW_MS) - now);
+    const countdown = Math.max(0, Math.ceil(remainingMs / 1000));
+    const remainingClicks = Math.max(0, WARENUEBERNAHME_RESET_REQUIRED_CLICKS - clickCount);
+
+    if (remainingClicks <= 0) {
+        resetBtn.textContent = WARENUEBERNAHME_RESET_BUTTON_DEFAULT_LABEL;
+        return;
+    }
+
+    resetBtn.textContent = `${WARENUEBERNAHME_RESET_BUTTON_DEFAULT_LABEL} (noch ${remainingClicks} mal klicken (${countdown}))`;
 }
 
 function registerWarenuebernahmeResetClick() {
@@ -2643,6 +2752,18 @@ function registerWarenuebernahmeResetClick() {
         ...warenuebernahmeResetClickTimestamps.filter((timestamp) => now - timestamp <= WARENUEBERNAHME_RESET_WINDOW_MS),
         now
     ];
+
+    updateWarenuebernahmeResetButtonLabel();
+    if (!warenuebernahmeResetCountdownInterval) {
+        warenuebernahmeResetCountdownInterval = setInterval(() => {
+            updateWarenuebernahmeResetButtonLabel();
+            if (warenuebernahmeResetClickTimestamps.length === 0) {
+                clearInterval(warenuebernahmeResetCountdownInterval);
+                warenuebernahmeResetCountdownInterval = null;
+            }
+        }, 200);
+    }
+
     return warenuebernahmeResetClickTimestamps.length;
 }
 
@@ -2671,20 +2792,71 @@ function resetCurrentWarenuebernahmeToStandardwerte() {
     renderWarenuebernahmeModal();
 }
 
-function handleWarenuebernahmeResetRequest() {
+async function handleWarenuebernahmeResetRequest() {
+    const paketIndex = currentWarenuebernahmePaketIndex;
     const paket = currentSendungPakete[currentWarenuebernahmePaketIndex];
     if (!paket) return;
+    const vorher = normalizeWarenuebernahme(paket.warenuebernahme || {});
 
     const count = registerWarenuebernahmeResetClick();
     const remaining = WARENUEBERNAHME_RESET_REQUIRED_CLICKS - count;
     if (remaining > 0) {
-        alertUser(`Zum Zurücksetzen noch ${remaining}x innerhalb von 5 Sekunden drücken.`, 'warning');
         return;
     }
 
     resetWarenuebernahmeResetSequence();
     resetCurrentWarenuebernahmeToStandardwerte();
-    alertUser('Warenübernahme wurde auf Standardwerte zurückgesetzt.');
+
+    if (!currentEditingSendungId || !sendungenCollectionRef) return;
+
+    try {
+        const pakete = collectPaketeForSave();
+        const inhalt = collectInhaltItemsForSave();
+        const offenerInhaltPot = computeOffenerInhaltPot(inhalt, pakete);
+        const warenuebernahmeProblemPot = computeProblemPotFromPakete(pakete, inhalt);
+        const autoStatus = computeAutoStatusFromPakete(pakete);
+        const selectedStatus = normalizeStatus(document.getElementById('sendungStatus')?.value || autoStatus);
+        const finalStatus = statusOverrideActive ? selectedStatus : autoStatus;
+        const isStatusOverride = statusOverrideActive && finalStatus !== autoStatus;
+        const { entries: flatTransportEntries, primary } = getFlatTransportEntriesFromPakete(pakete);
+
+        const sendungRef = doc(sendungenCollectionRef, currentEditingSendungId);
+        await updateDoc(sendungRef, {
+            status: finalStatus,
+            autoStatus,
+            statusOverrideAktiv: isStatusOverride,
+            pakete,
+            inhalt,
+            offenerInhaltPot,
+            warenuebernahmeProblemPot,
+            anbieter: primary.anbieter,
+            transportnummer: primary.transportnummer,
+            sendungsnummer: primary.transportnummer,
+            transportEntries: flatTransportEntries,
+            deadlineErwartet: getEarliestPaketDeadline(pakete, 'deadlineErwartet'),
+            deadlineVersand: getEarliestPaketDeadline(pakete, 'deadlineVersand'),
+            updatedAt: serverTimestamp()
+        });
+
+        const aktuellesPaket = pakete[paketIndex];
+        await writeWarenuebernahmeAudit(
+            currentEditingSendungId,
+            aktuellesPaket,
+            'reset',
+            {
+                fromStatus: vorher.status,
+                toStatus: 'offen',
+                removedPositionen: vorher.positionen.length,
+                removedProblemartikel: vorher.problemartikel.length,
+                removedProblemaufloesungen: vorher.problemaufloesungen.length
+            }
+        );
+
+        await loadWarenuebernahmeAuditForCurrentPaket();
+    } catch (error) {
+        console.error('[Sendungsverwaltung] Fehler beim Zurücksetzen der Warenübernahme:', error);
+        alertUser('Fehler beim Zurücksetzen der Warenübernahme: ' + error.message, 'warning');
+    }
 }
 
 function openWarenuebernahmeModal(paketIndex) {
@@ -2710,6 +2882,7 @@ function openWarenuebernahmeModal(paketIndex) {
     waAuditLoading = Boolean(currentEditingSendungId && sendungenCollectionRef);
     resetWarenuebernahmeResetSequence();
     renderWarenuebernahmeModal();
+    updateWarenuebernahmeResetButtonLabel();
     if (waAuditLoading) {
         loadWarenuebernahmeAuditForCurrentPaket();
     }
@@ -2941,6 +3114,9 @@ async function saveWarenuebernahmeFromModal() {
         const offenerInhaltPot = computeOffenerInhaltPot(inhalt, pakete);
         const warenuebernahmeProblemPot = computeProblemPotFromPakete(pakete, inhalt);
         const previousResolutionIds = new Set(previousWarenuebernahme.problemaufloesungen.map((resolution) => String(resolution?.resolutionId || '').trim()).filter(Boolean));
+        const previousPositionsByInhaltId = new Map(
+            previousWarenuebernahme.positionen.map((position) => [String(position?.inhaltId || '').trim(), position])
+        );
         const problemResolutionBookings = aktualisiert.problemaufloesungen
             .filter((resolution) => {
                 const resolutionId = String(resolution?.resolutionId || '').trim();
@@ -2956,7 +3132,18 @@ async function saveWarenuebernahmeFromModal() {
                 kommentar: String(resolution?.kommentar || '').trim()
             }))
             .filter((resolution) => resolution.menge > 0);
-        const articleBookings = aktualisiert.positionen
+
+        const compareProblemVerteilung = (left = {}, right = {}) => {
+            const normalizedLeft = normalizeProblemVerteilung(left);
+            const normalizedRight = normalizeProblemVerteilung(right);
+            return WARENUEBERNAHME_PROBLEM_TYPEN.every((typ) => {
+                const leftValue = Number.parseInt(normalizedLeft[typ], 10) || 0;
+                const rightValue = Number.parseInt(normalizedRight[typ], 10) || 0;
+                return leftValue === rightValue;
+            });
+        };
+
+        const articleBookingChanges = aktualisiert.positionen
             .map((position) => {
                 const problemVerteilung = normalizeProblemVerteilung(position?.problemVerteilung || {});
                 const problemGesamt = Object.values(problemVerteilung).reduce((sum, menge) => sum + (menge || 0), 0);
@@ -2966,20 +3153,47 @@ async function saveWarenuebernahmeFromModal() {
                 const ist = Number.isFinite(istRaw) && istRaw >= 0 ? istRaw : 0;
                 const offen = Math.max(0, soll - ist - problemGesamt);
                 const kommentar = String(position?.kommentar || '').trim();
-                return {
-                    inhaltId: String(position?.inhaltId || '').trim(),
-                    artikel: String(inhaltById.get(String(position?.inhaltId || '').trim())?.bezeichnung || '').trim() || `Artikel (${position?.inhaltId || '-'})`,
+
+                const inhaltId = String(position?.inhaltId || '').trim();
+                const previousPosition = previousPositionsByInhaltId.get(inhaltId);
+                const previousProblemVerteilung = normalizeProblemVerteilung(previousPosition?.problemVerteilung || {});
+                const previousProblemGesamt = Object.values(previousProblemVerteilung).reduce((sum, menge) => sum + (menge || 0), 0);
+                const previousSollRaw = Number.parseInt(previousPosition?.mengeSoll, 10);
+                const previousIstRaw = Number.parseInt(previousPosition?.mengeIst, 10);
+                const vorher = {
+                    soll: Number.isFinite(previousSollRaw) && previousSollRaw >= 0 ? previousSollRaw : 0,
+                    ist: Number.isFinite(previousIstRaw) && previousIstRaw >= 0 ? previousIstRaw : 0,
+                    offen: Math.max(0, (Number.isFinite(previousSollRaw) && previousSollRaw >= 0 ? previousSollRaw : 0) - (Number.isFinite(previousIstRaw) && previousIstRaw >= 0 ? previousIstRaw : 0) - previousProblemGesamt),
+                    problemVerteilung: previousProblemVerteilung,
+                    kommentar: String(previousPosition?.kommentar || '').trim()
+                };
+
+                const nachher = {
                     soll,
                     ist,
                     offen,
                     problemVerteilung,
                     kommentar
                 };
+
+                const hatAenderung = !previousPosition
+                    || vorher.soll !== nachher.soll
+                    || vorher.ist !== nachher.ist
+                    || vorher.offen !== nachher.offen
+                    || vorher.kommentar !== nachher.kommentar
+                    || !compareProblemVerteilung(vorher.problemVerteilung, nachher.problemVerteilung);
+
+                return {
+                    inhaltId,
+                    artikel: String(inhaltById.get(inhaltId)?.bezeichnung || '').trim() || `Artikel (${position?.inhaltId || '-'})`,
+                    vorher,
+                    nachher,
+                    hatAenderung
+                };
             })
-            .filter((entry) => {
-                const hasProblem = Object.keys(entry.problemVerteilung).length > 0;
-                return entry.ist > 0 || hasProblem || entry.offen < entry.soll || Boolean(entry.kommentar);
-            });
+            .filter((entry) => entry.hatAenderung);
+
+        const statusChanged = previousWarenuebernahme.status !== aktualisiert.status;
         const autoStatus = computeAutoStatusFromPakete(pakete);
         const selectedStatus = normalizeStatus(document.getElementById('sendungStatus')?.value || autoStatus);
         const finalStatus = statusOverrideActive ? selectedStatus : autoStatus;
@@ -3004,19 +3218,37 @@ async function saveWarenuebernahmeFromModal() {
             updatedAt: serverTimestamp()
         });
 
-        await writeWarenuebernahmeAudit(
-            currentEditingSendungId,
-            pakete[paketIndex],
-            'buchen',
-            {
-                status: aktualisiert.status,
-                totalProblem: aktualisiert.zusammenfassung.totalProblem,
-                totalSoll: aktualisiert.zusammenfassung.totalSoll,
-                totalIst: aktualisiert.zusammenfassung.totalIst,
-                problemResolutionBookings,
-                articleBookings
-            }
-        );
+        const auditPaket = pakete[paketIndex];
+
+        for (const resolution of problemResolutionBookings) {
+            await writeWarenuebernahmeAudit(
+                currentEditingSendungId,
+                auditPaket,
+                'problemaufloesung_buchung',
+                { problemResolutionBooking: resolution }
+            );
+        }
+
+        for (const articleBooking of articleBookingChanges) {
+            await writeWarenuebernahmeAudit(
+                currentEditingSendungId,
+                auditPaket,
+                'artikel_buchung',
+                { articleBooking }
+            );
+        }
+
+        if (statusChanged) {
+            await writeWarenuebernahmeAudit(
+                currentEditingSendungId,
+                auditPaket,
+                'status_aenderung',
+                {
+                    fromStatus: previousWarenuebernahme.status,
+                    toStatus: aktualisiert.status
+                }
+            );
+        }
 
         closeWarenuebernahmeModal();
         alertUser('Warenübernahme gebucht und synchronisiert.');
