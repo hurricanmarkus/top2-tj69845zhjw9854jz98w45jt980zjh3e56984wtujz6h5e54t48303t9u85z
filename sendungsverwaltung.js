@@ -187,6 +187,8 @@ let waProblemPotExpanded = false;
 let waHistoryExpanded = false;
 let waAuditLoading = false;
 let currentWarenuebernahmeAuditEntries = [];
+let sendungModalHasUnsavedChanges = false;
+let warenuebernahmeModalHasUnsavedChanges = false;
 
 function normalizeStatus(status) {
     const normalized = String(status || '').trim().toLowerCase();
@@ -262,6 +264,28 @@ function formatWarenuebernahmeStatusLabel(value = '') {
     if (status === 'abgeschlossen') return 'Abgeschlossen';
     if (status === 'problem') return 'Problem';
     return status || '-';
+}
+
+function updateSendungModalCloseButtonVisibility() {
+    const closeBtn = document.getElementById('closeSendungModal');
+    if (!closeBtn) return;
+    closeBtn.classList.toggle('hidden', sendungModalHasUnsavedChanges);
+}
+
+function setSendungModalDirty(isDirty = true) {
+    sendungModalHasUnsavedChanges = Boolean(isDirty);
+    updateSendungModalCloseButtonVisibility();
+}
+
+function updateWarenuebernahmeCloseButtonVisibility() {
+    const closeBtn = document.getElementById('closeSendungWarenuebernahmeModal');
+    if (!closeBtn) return;
+    closeBtn.classList.toggle('hidden', warenuebernahmeModalHasUnsavedChanges);
+}
+
+function setWarenuebernahmeModalDirty(isDirty = true) {
+    warenuebernahmeModalHasUnsavedChanges = Boolean(isDirty);
+    updateWarenuebernahmeCloseButtonVisibility();
 }
 
 async function loadWarenuebernahmeAuditForCurrentPaket() {
@@ -1174,6 +1198,7 @@ function applyInhaltReadMode(readMode) {
 function updateInhaltItem(rowIndex, field, value) {
     const item = currentInhaltItems[rowIndex];
     if (!item) return;
+    setSendungModalDirty(true);
 
     if (field === 'menge') {
         const mengeRaw = Number.parseInt(value, 10);
@@ -1186,12 +1211,14 @@ function updateInhaltItem(rowIndex, field, value) {
 
 function addInhaltRow(insertIndex = currentInhaltItems.length, focusField = 'bezeichnung') {
     const safeIndex = Math.max(0, Math.min(insertIndex, currentInhaltItems.length));
+    setSendungModalDirty(true);
     currentInhaltItems.splice(safeIndex, 0, { inhaltId: createInhaltId(), menge: 1, bezeichnung: '' });
     renderInhaltEditor(safeIndex, focusField);
 }
 
 function removeInhaltRow(rowIndex) {
     if (rowIndex < 0 || rowIndex >= currentInhaltItems.length) return;
+    setSendungModalDirty(true);
 
     if (currentInhaltItems.length <= 1) {
         currentInhaltItems = [{ inhaltId: createInhaltId(), menge: 1, bezeichnung: '' }];
@@ -1605,6 +1632,7 @@ function applyInhaltZuordnungModal() {
     });
 
     paket.inhaltZuordnung = entries;
+    setSendungModalDirty(true);
     ensureInhaltZuordnungConsistency();
     renderPaketeEditor();
     syncOverallStatusWithPakete();
@@ -1621,6 +1649,7 @@ function closeWarenuebernahmeModal() {
     waHistoryExpanded = false;
     waAuditLoading = false;
     currentWarenuebernahmeAuditEntries = [];
+    setWarenuebernahmeModalDirty(false);
     resetWarenuebernahmeResetSequence();
     if (!modal) return;
     modal.classList.add('hidden');
@@ -1638,6 +1667,7 @@ function renderWarenuebernahmeModal() {
     const legacyProblemList = document.getElementById('sendungWarenuebernahmeProblemList');
     const legacyProblemSection = document.getElementById('sendungWarenuebernahmeProblemSection');
     if (!paket || !title || !subtitle || !rows) return;
+    updateWarenuebernahmeCloseButtonVisibility();
 
     const updateWarenuebernahmeSaveButtonState = () => {
         if (!saveBtn) return;
@@ -2454,6 +2484,7 @@ function renderWarenuebernahmeModal() {
 
             resolutionList.onchange = (event) => {
                 if (event.target.closest('.sendung-wa-resolution-action, .sendung-wa-resolution-geloest-typ')) {
+                    setWarenuebernahmeModalDirty(true);
                     syncResolutionRows();
                 }
             };
@@ -2494,6 +2525,7 @@ function renderWarenuebernahmeModal() {
                     }
 
                     total = Math.max(0, total - menge);
+                    setWarenuebernahmeModalDirty(true);
                     resolutionList.dataset.total = String(total);
                     resolutionRow.remove();
                     syncResolutionRows();
@@ -2503,6 +2535,7 @@ function renderWarenuebernahmeModal() {
                 const minusBtn = event.target.closest('.sendung-wa-resolution-minus');
                 if (minusBtn) {
                     const current = Number.parseInt(resolutionRow.dataset.counter || '0', 10);
+                    setWarenuebernahmeModalDirty(true);
                     resolutionRow.dataset.counter = String(Math.max(0, (Number.isFinite(current) ? current : 0) - 1));
                     syncResolutionRows();
                     return;
@@ -2512,6 +2545,7 @@ function renderWarenuebernahmeModal() {
                 if (plusBtn) {
                     if (plusBtn.disabled) return;
                     const current = Number.parseInt(resolutionRow.dataset.counter || '0', 10);
+                    setWarenuebernahmeModalDirty(true);
                     resolutionRow.dataset.counter = String((Number.isFinite(current) ? current : 0) + 1);
                     syncResolutionRows();
                 }
@@ -2631,6 +2665,7 @@ function renderWarenuebernahmeModal() {
         const mainPlusBtn = row.querySelector('.sendung-wa-main-plus-btn');
         const mainQuickInput = row.querySelector('.sendung-wa-main-quick-input');
         const mainNextBtn = row.querySelector('.sendung-wa-main-next-btn');
+        const kommentarInput = row.querySelector('.sendung-wa-kommentar-input');
 
         if (toggleDiffBtn && diffBox) {
             toggleDiffBtn.onclick = () => diffBox.classList.toggle('hidden');
@@ -2638,6 +2673,7 @@ function renderWarenuebernahmeModal() {
         if (mainMinusBtn) {
             mainMinusBtn.onclick = () => {
                 const current = Number.parseInt(row.dataset.counter || '0', 10);
+                setWarenuebernahmeModalDirty(true);
                 row.dataset.counter = String(Math.max(0, (Number.isFinite(current) ? current : 0) - 1));
                 refreshAll();
             };
@@ -2652,14 +2688,19 @@ function renderWarenuebernahmeModal() {
                 const confirmRaw = Number.parseInt(row.dataset.mainConfirmMenge || '1', 10);
                 const confirmMenge = Number.isFinite(confirmRaw) && confirmRaw > 0 ? confirmRaw : 1;
                 const addMenge = Math.min(confirmMenge, ungeprueft);
+                setWarenuebernahmeModalDirty(true);
                 row.dataset.counter = String(currentSafe + addMenge);
                 refreshAll();
             };
         }
         if (mainQuickInput) {
             mainQuickInput.oninput = () => {
+                setWarenuebernahmeModalDirty(true);
                 updateRowSummary(row);
             };
+        }
+        if (kommentarInput) {
+            kommentarInput.oninput = () => setWarenuebernahmeModalDirty(true);
         }
         if (mainNextBtn) {
             mainNextBtn.onclick = goToNextRow;
@@ -2671,6 +2712,7 @@ function renderWarenuebernahmeModal() {
             if (minusBtn) {
                 minusBtn.onclick = () => {
                     const current = Number.parseInt(problemRow.dataset.counter || '0', 10);
+                    setWarenuebernahmeModalDirty(true);
                     problemRow.dataset.counter = String(Math.max(0, (Number.isFinite(current) ? current : 0) - 1));
                     refreshAll();
                 };
@@ -2679,6 +2721,7 @@ function renderWarenuebernahmeModal() {
                 plusBtn.onclick = () => {
                     if (plusBtn.disabled) return;
                     const current = Number.parseInt(problemRow.dataset.counter || '0', 10);
+                    setWarenuebernahmeModalDirty(true);
                     problemRow.dataset.counter = String((Number.isFinite(current) ? current : 0) + 1);
                     refreshAll();
                 };
@@ -2805,6 +2848,7 @@ async function handleWarenuebernahmeResetRequest() {
     }
 
     resetWarenuebernahmeResetSequence();
+    setWarenuebernahmeModalDirty(true);
     resetCurrentWarenuebernahmeToStandardwerte();
 
     if (!currentEditingSendungId || !sendungenCollectionRef) return;
@@ -2853,6 +2897,7 @@ async function handleWarenuebernahmeResetRequest() {
         );
 
         await loadWarenuebernahmeAuditForCurrentPaket();
+        setWarenuebernahmeModalDirty(false);
     } catch (error) {
         console.error('[Sendungsverwaltung] Fehler beim Zurücksetzen der Warenübernahme:', error);
         alertUser('Fehler beim Zurücksetzen der Warenübernahme: ' + error.message, 'warning');
@@ -2881,6 +2926,7 @@ function openWarenuebernahmeModal(paketIndex) {
     currentWarenuebernahmeAuditEntries = [];
     waAuditLoading = Boolean(currentEditingSendungId && sendungenCollectionRef);
     resetWarenuebernahmeResetSequence();
+    setWarenuebernahmeModalDirty(false);
     renderWarenuebernahmeModal();
     updateWarenuebernahmeResetButtonLabel();
     if (waAuditLoading) {
@@ -3295,6 +3341,7 @@ function syncOverallStatusWithPakete(forceAuto = false) {
 }
 
 function addPaket() {
+    setSendungModalDirty(true);
     currentSendungPakete.push(normalizePaket({ status: 'erwartet' }, currentSendungPakete.length));
     ensureInhaltZuordnungConsistency();
     renderPaketeEditor();
@@ -3305,6 +3352,15 @@ function removePaket(paketIndex) {
     if (currentSendungPakete.length <= 1) {
         return;
     }
+
+    const confirmationText = prompt('Zum Entfernen dieses Pakets bitte "LÖSCHEN" eingeben:');
+    if (confirmationText === null) return;
+    if (confirmationText.trim() !== 'LÖSCHEN') {
+        alertUser('Löschen abgebrochen: Eingabe war nicht "LÖSCHEN".', 'warning');
+        return;
+    }
+
+    setSendungModalDirty(true);
     currentSendungPakete.splice(paketIndex, 1);
     currentSendungPakete = currentSendungPakete.map((paket, index) => normalizePaket({ ...paket, paketLabel: `Paket ${index + 1}` }, index));
     ensureInhaltZuordnungConsistency();
@@ -3315,6 +3371,7 @@ function removePaket(paketIndex) {
 function addTransportEntryToPaket(paketIndex) {
     const paket = currentSendungPakete[paketIndex];
     if (!paket) return;
+    setSendungModalDirty(true);
     paket.transportEntries.push({ ...EMPTY_TRANSPORT_ENTRY });
     renderPaketeEditor();
 }
@@ -3322,6 +3379,7 @@ function addTransportEntryToPaket(paketIndex) {
 function removeTransportEntryFromPaket(paketIndex, entryIndex) {
     const paket = currentSendungPakete[paketIndex];
     if (!paket) return;
+    setSendungModalDirty(true);
 
     if (paket.transportEntries.length <= 1) {
         paket.transportEntries[0] = { ...EMPTY_TRANSPORT_ENTRY };
@@ -3335,6 +3393,7 @@ function removeTransportEntryFromPaket(paketIndex, entryIndex) {
 function updatePaketField(paketIndex, field, value) {
     const paket = currentSendungPakete[paketIndex];
     if (!paket) return;
+    setSendungModalDirty(true);
     paket[field] = field === 'status' ? normalizeStatus(value) : String(value || '').trim();
     if (field === 'status') {
         const normalizedWarenuebernahme = normalizeWarenuebernahme(paket.warenuebernahme || {});
@@ -3354,6 +3413,7 @@ function updatePaketField(paketIndex, field, value) {
 function updateTransportEntryField(paketIndex, entryIndex, field, value) {
     const paket = currentSendungPakete[paketIndex];
     if (!paket || !paket.transportEntries[entryIndex]) return;
+    setSendungModalDirty(true);
     paket.transportEntries[entryIndex][field] = String(value || '').trim();
 }
 
@@ -3704,6 +3764,7 @@ function renderPaketeEditor() {
             }
 
             normalizedWarenuebernahme.aktiv = toggle.checked;
+            setSendungModalDirty(true);
             normalizedWarenuebernahme.updatedAt = nowIso();
             normalizedWarenuebernahme.updatedBy = currentUser?.mode || '';
             if (toggle.checked && !normalizedWarenuebernahme.startedAt) {
@@ -3862,6 +3923,7 @@ function setupEventListeners() {
     const resetWarenuebernahmeBtn = document.getElementById('resetSendungWarenuebernahmeBtn');
     const saveWarenuebernahmeBtn = document.getElementById('saveSendungWarenuebernahmeBtn');
     const warenuebernahmeModal = document.getElementById('sendungWarenuebernahmeModal');
+    const sendungModal = document.getElementById('sendungModal');
 
     if (openSendungModalBtn) {
         openSendungModalBtn.onclick = () => openSendungModal();
@@ -3922,7 +3984,20 @@ function setupEventListeners() {
     if (sendungResetAutoStatusBtn) {
         sendungResetAutoStatusBtn.onclick = () => {
             syncOverallStatusWithPakete(true);
+            setSendungModalDirty(true);
         };
+    }
+
+    if (sendungModal && !sendungModal.dataset.unsavedTrackingAttached) {
+        const markDirtyFromModalEvent = (event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLElement)) return;
+            if (target.id === 'sendungStatus' && isInternalStatusUpdate) return;
+            setSendungModalDirty(true);
+        };
+        sendungModal.addEventListener('input', markDirtyFromModalEvent);
+        sendungModal.addEventListener('change', markDirtyFromModalEvent);
+        sendungModal.dataset.unsavedTrackingAttached = 'true';
     }
 
     if (closeTrackingOptionsBtn) {
@@ -4373,11 +4448,13 @@ function openSendungModal(sendungId = null, copiedData = null) {
 
     if (!modal) return;
 
+    setSendungModalDirty(false);
+
     if (sendungId && SENDUNGEN[sendungId]) {
         modalTitle.textContent = '📦 Sendung ansehen';
-        deleteSendungBtn.style.display = 'inline-block';
-        if (editSendungBtn) editSendungBtn.style.display = 'inline-block';
-        if (duplicateSendungBtn) duplicateSendungBtn.style.display = 'inline-block';
+        if (deleteSendungBtn) deleteSendungBtn.style.display = 'none';
+        if (editSendungBtn) editSendungBtn.style.display = 'none';
+        if (duplicateSendungBtn) duplicateSendungBtn.style.display = 'none';
         fillModalWithSendungData(SENDUNGEN[sendungId]);
         setSendungModalReadMode(true);
         renderPaketeEditor();
@@ -4444,8 +4521,9 @@ function closeSendungModalUI() {
     if (duplicateSendungBtn) {
         duplicateSendungBtn.style.display = 'none';
     }
-    setSendungModalReadMode(false);
     currentEditingSendungId = null;
+    setSendungModalReadMode(false);
+    setSendungModalDirty(false);
     clearModalFields();
 }
 
@@ -4495,10 +4573,25 @@ function setSendungModalReadMode(readMode) {
 
     const saveSendungBtn = document.getElementById('saveSendungBtn');
     if (saveSendungBtn) {
-        saveSendungBtn.textContent = readMode ? 'Status speichern' : 'Speichern';
+        saveSendungBtn.textContent = readMode ? 'Speichern & schließen' : 'Speichern';
+    }
+
+    const hasExistingSendung = Boolean(currentEditingSendungId && SENDUNGEN[currentEditingSendungId]);
+    const editSendungBtn = document.getElementById('editSendungBtn');
+    const duplicateSendungBtn = document.getElementById('duplicateSendungBtn');
+    const deleteSendungBtn = document.getElementById('deleteSendungBtn');
+    if (editSendungBtn) {
+        editSendungBtn.style.display = (hasExistingSendung && readMode) ? 'inline-block' : 'none';
+    }
+    if (duplicateSendungBtn) {
+        duplicateSendungBtn.style.display = (hasExistingSendung && !readMode) ? 'inline-block' : 'none';
+    }
+    if (deleteSendungBtn) {
+        deleteSendungBtn.style.display = (hasExistingSendung && !readMode) ? 'inline-block' : 'none';
     }
 
     isSendungModalReadMode = readMode;
+    updateSendungModalCloseButtonVisibility();
     renderEmpfangPotOverview();
 }
 
