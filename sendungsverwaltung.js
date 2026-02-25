@@ -215,6 +215,14 @@ function nowIso() {
     return new Date().toISOString();
 }
 
+function escapeHtmlAttribute(value = '') {
+    return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('"', '&quot;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+}
+
 function getSortableTimestampMs(value) {
     if (!value) return 0;
     if (typeof value?.toDate === 'function') {
@@ -1202,7 +1210,7 @@ function renderInhaltEditor(focusRowIndex = null, focusField = 'bezeichnung') {
                     <input type="number" min="1" step="1" class="sendung-inhalt-menge-input w-full p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm" data-row-index="${index}" value="${item.menge || 1}" placeholder="Menge">
                 </div>
                 <div class="col-span-9 md:col-span-9">
-                    <input type="text" class="sendung-inhalt-bezeichnung-input w-full p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm" data-row-index="${index}" value="${item.bezeichnung || ''}" placeholder="Bezeichnung">
+                    <input type="text" class="sendung-inhalt-bezeichnung-input w-full p-2 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm" data-row-index="${index}" value="${escapeHtmlAttribute(item.bezeichnung || '')}" placeholder="Bezeichnung">
                 </div>
                 <div class="col-span-12 md:col-span-1 flex md:justify-end">
                     ${index === 0
@@ -1735,7 +1743,7 @@ function renderWarenuebernahmeModal() {
                     <span class="sendung-wa-status-pill text-[11px] px-2 py-1 rounded font-bold">${WARENUEBERNAHME_NAV_STATUS_META[baseStatus]?.label || 'Ungeprüft'}</span>
                 </div>
 
-                <div class="grid grid-cols-3 gap-2 text-center">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center">
                     <div class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2">
                         <div class="text-[10px] uppercase tracking-wide text-gray-500">Sollmenge</div>
                         <div class="text-xl md:text-2xl font-extrabold text-gray-900 sendung-wa-soll-value">${entry.mengeSoll}</div>
@@ -1750,20 +1758,20 @@ function renderWarenuebernahmeModal() {
                     </div>
                 </div>
 
-                <div class="flex items-center justify-center gap-3">
-                    <button type="button" class="sendung-wa-main-minus-btn w-14 h-14 rounded-full bg-gray-100 text-gray-800 font-black text-3xl leading-none hover:bg-gray-200 transition">-</button>
+                <div class="flex flex-wrap items-center justify-center gap-2">
+                    <button type="button" class="sendung-wa-main-minus-btn w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gray-100 text-gray-800 font-black text-3xl leading-none hover:bg-gray-200 transition">-</button>
                     ${entry.mengeSoll > 10
                         ? `<input type="number" min="1" step="1" max="${entry.mengeSoll}" class="sendung-wa-main-quick-input w-24 p-2 border-2 border-gray-300 rounded-lg text-sm text-center" value="1" aria-label="Bestätigungsmenge">`
                         : ''}
-                    <button type="button" class="sendung-wa-main-plus-btn min-w-[13rem] h-14 px-4 rounded-xl bg-emerald-600 text-white text-sm font-extrabold hover:bg-emerald-700 transition">
+                    <button type="button" class="sendung-wa-main-plus-btn w-full sm:w-auto sm:min-w-[13rem] h-12 sm:h-14 px-4 rounded-xl bg-emerald-600 text-white text-sm font-extrabold hover:bg-emerald-700 transition">
                         <span class="sendung-wa-main-plus-label">+1 Produkt bestätigen</span>
                     </button>
-                    <button type="button" class="sendung-wa-main-next-btn min-w-[7.5rem] h-14 px-4 rounded-xl bg-blue-600 text-white text-base font-extrabold hover:bg-blue-700 transition">Nächstes</button>
+                    <button type="button" class="sendung-wa-main-next-btn w-full sm:w-auto sm:min-w-[7.5rem] h-12 sm:h-14 px-4 rounded-xl bg-blue-600 text-white text-base font-extrabold hover:bg-blue-700 transition">Nächstes</button>
                 </div>
 
                 <div>
                     <label class="text-xs text-gray-600">Kommentar (optional)</label>
-                    <input type="text" class="sendung-wa-kommentar-input mt-1 w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 text-sm" value="${kommentar}" placeholder="Optional">
+                    <input type="text" class="sendung-wa-kommentar-input mt-1 w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 text-sm" value="${escapeHtmlAttribute(kommentar)}" placeholder="Optional">
                 </div>
 
                 <div class="rounded-lg border border-gray-200 bg-gray-50 overflow-hidden">
@@ -1804,7 +1812,7 @@ function renderWarenuebernahmeModal() {
             </div>
             <div class="rounded-xl border border-gray-200 bg-gray-50 p-3">
                 <div class="text-xs font-bold text-gray-700 mb-2">Produkte</div>
-                <div id="sendungWarenuebernahmeNavigatorList" class="grid grid-cols-2 gap-2 max-h-[14rem] overflow-y-auto pr-1"></div>
+                <div id="sendungWarenuebernahmeNavigatorList" class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[14rem] overflow-y-auto pr-1"></div>
             </div>
             <div id="sendungWarenuebernahmeLegend" class="flex flex-wrap gap-2"></div>
             <div class="rounded-lg border border-gray-200 bg-white px-3 py-2">
@@ -2982,16 +2990,16 @@ function renderPaketeEditor() {
             <div class="grid grid-cols-1 md:grid-cols-[1fr_0.6fr_1.4fr] gap-2 items-start">
                 ${entryIndex === 0
                     ? `<div class="sendung-lieferziel-wrapper relative w-full">
-                        <input type="text" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-lieferziel-input" data-paket-index="${paketIndex}" value="${paket.lieferziel || ''}" placeholder="Lieferziel (z.B. Zuhause, Büro)" autocomplete="off">
+                        <input type="text" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-lieferziel-input" data-paket-index="${paketIndex}" value="${escapeHtmlAttribute(paket.lieferziel || '')}" placeholder="Lieferziel (z.B. Zuhause, Büro)" autocomplete="off">
                         <div class="sendung-lieferziel-suggestions hidden absolute z-20 mt-1 w-full max-h-40 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg"></div>
                     </div>`
                     : '<div class="hidden md:block"></div>'}
-                <input type="text" list="anbieterList" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-anbieter-input" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" value="${entry.anbieter}" placeholder="Transporteur (z.B. DHL)">
-                <div class="flex gap-2 w-full">
-                    <input type="text" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-transportnummer-input" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" value="${entry.transportnummer}" placeholder="Transportnummer / Sendungsnummer">
+                <input type="text" list="anbieterList" class="w-full min-w-0 p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-anbieter-input" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" value="${escapeHtmlAttribute(entry.anbieter)}" placeholder="Transporteur (z.B. DHL)">
+                <div class="flex flex-wrap sm:flex-nowrap gap-2 w-full items-start">
+                    <input type="text" class="w-full min-w-0 p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-transportnummer-input" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" value="${escapeHtmlAttribute(entry.transportnummer)}" placeholder="Transportnummer / Sendungsnummer">
                     ${readModeActions}
                     ${entryIndex === 0
-                        ? '<span class="w-10 h-10 shrink-0"></span>'
+                        ? '<span class="hidden sm:block w-10 h-10 shrink-0"></span>'
                         : `<button type="button" class="sendung-remove-transport-entry-btn sendung-editmode-only w-10 h-10 shrink-0 rounded-full bg-red-500 text-white font-bold hover:bg-red-600 transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" title="Nummer entfernen">-</button>`}
                 </div>
             </div>
@@ -3002,9 +3010,9 @@ function renderPaketeEditor() {
             <div class="rounded-lg border border-amber-200 bg-white p-3">
                 <div class="flex items-center justify-between gap-2 flex-wrap">
                     <h5 class="font-bold text-amber-800">📦 Paket ${paketIndex + 1}</h5>
-                    <div class="flex flex-col items-end gap-1">
-                        <div class="flex items-center gap-2">
-                            <select class="sendung-paket-status-select p-2 border-2 border-gray-300 rounded-lg bg-white text-sm" data-paket-index="${paketIndex}" data-warenuebernahme-locked="${statusLocked ? 'true' : 'false'}" data-status-manual-allowed="${statusManualAllowed ? 'true' : 'false'}">
+                    <div class="flex flex-col items-stretch sm:items-end gap-1 w-full sm:w-auto">
+                        <div class="flex flex-wrap items-center justify-start sm:justify-end gap-2">
+                            <select class="sendung-paket-status-select w-full sm:w-auto p-2 border-2 border-gray-300 rounded-lg bg-white text-sm" data-paket-index="${paketIndex}" data-warenuebernahme-locked="${statusLocked ? 'true' : 'false'}" data-status-manual-allowed="${statusManualAllowed ? 'true' : 'false'}">
                                 ${statusOptions}
                             </select>
                             ${paketIndex === 0
@@ -3012,7 +3020,7 @@ function renderPaketeEditor() {
                                 : `<button type="button" class="sendung-remove-paket-btn sendung-editmode-only px-2.5 py-1.5 rounded-lg bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition" data-paket-index="${paketIndex}" title="Paket entfernen">- Paket</button>`}
                         </div>
                         ${(isEmpfang && statusLocked)
-                            ? `<button type="button" class="sendung-open-warenuebernahme-btn sendung-readmode-only hidden px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition" data-paket-index="${paketIndex}">Warenübernahme öffnen</button>`
+                            ? `<button type="button" class="sendung-open-warenuebernahme-btn sendung-readmode-only hidden w-full sm:w-auto px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition" data-paket-index="${paketIndex}">Warenübernahme öffnen</button>`
                             : ''}
                     </div>
                 </div>
@@ -4512,7 +4520,7 @@ function createSendungCard(sendung) {
         .join('');
 
     const empfangMetaDisplay = (sendung.typ === 'empfang' && (problemPotTotal > 0 || activeWarenuebernahmeBadges))
-        ? `<div class="ml-8 mt-2 space-y-1">
+        ? `<div class="ml-0 sm:ml-8 mt-2 space-y-1">
             ${problemPotTotal > 0
                 ? `<div class="flex flex-wrap gap-1.5 text-[11px]">
                     <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-extrabold animate-pulse">⚠️ Problem-Pot: ${problemPotTotal} Stk</span>
@@ -4533,7 +4541,7 @@ function createSendungCard(sendung) {
                 </div>
                 <div class="space-y-2 text-sm">
                     ${transportEntriesDisplay}
-                    <p class="font-semibold text-orange-600">${deadlineText ? `⏰ ${deadlineText}` : '⏰ Keine Deadline gesetzt'}</p>
+                    ${deadlineText ? `<p class="font-semibold text-orange-600">⏰ ${deadlineText}</p>` : ''}
                     ${empfangMetaDisplay}
                 </div>
             </div>
@@ -4553,7 +4561,7 @@ function createSendungCard(sendung) {
         : '';
     
     const inhaltDisplay = inhaltItems.length > 0
-        ? `<div class="ml-8 mt-2">
+        ? `<div class="ml-0 sm:ml-8 mt-2">
             <p class="text-xs font-semibold text-gray-700">📦 Inhalt:</p>
             <div class="text-xs text-gray-600 flex flex-wrap gap-1">
                 ${inhaltItems.map((item) => `<span class="bg-gray-100 px-2 py-0.5 rounded">${item.menge}x ${item.bezeichnung}</span>`).join('')}
@@ -4573,14 +4581,14 @@ function createSendungCard(sendung) {
                 <span class="px-4 py-1.5 rounded-full text-base font-extrabold ${statusInfo.color} whitespace-nowrap">${statusInfo.icon} ${statusInfo.label}</span>
             </div>
 
-            <div class="ml-8 space-y-1 text-sm text-gray-700">
+            <div class="ml-0 sm:ml-8 space-y-1 text-sm text-gray-700">
                 ${transportEntriesDisplay}
                 ${sendung.absender ? `<p class="break-words">📤 Von: ${sendung.absender}</p>` : ''}
                 ${sendung.empfaenger ? `<p class="break-words">📥 An: ${sendung.empfaenger}</p>` : ''}
                 ${deadlineText ? `<p class="font-semibold text-orange-600">⏰ ${deadlineText}</p>` : ''}
             </div>
 
-            <div class="ml-8 mt-2 flex flex-wrap gap-2">
+            <div class="ml-0 sm:ml-8 mt-2 flex flex-wrap gap-2">
                 ${prioritaetBadge}
                 ${paketCountBadge}
                 ${tagsBadges}
@@ -4589,7 +4597,7 @@ function createSendungCard(sendung) {
             ${inhaltDisplay}
             ${empfangMetaDisplay}
 
-            ${sendung.notizen ? `<div class="ml-8 mt-2 text-xs text-gray-500 italic break-words">${sendung.notizen}</div>` : ''}
+            ${sendung.notizen ? `<div class="ml-0 sm:ml-8 mt-2 text-xs text-gray-500 italic break-words">${sendung.notizen}</div>` : ''}
         </div>
     `;
 }

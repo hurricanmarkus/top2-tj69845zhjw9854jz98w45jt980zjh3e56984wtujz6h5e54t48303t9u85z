@@ -8105,11 +8105,11 @@
 <script type="module" src="checklist.js"></script>
 <script type="module" src="essensberechnung.js"></script>
     <!-- ========== SENDUNG MODAL ========== -->
-    <div id="sendungModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[100]">
-        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div class="flex justify-between items-center mb-6">
+    <div id="sendungModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-end md:items-center justify-center p-2 sm:p-4 z-[100]">
+        <div class="bg-white p-4 sm:p-6 rounded-t-2xl md:rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-y-auto">
+            <div class="flex justify-between items-start sm:items-center gap-2 mb-6">
                 <h3 id="sendungModalTitle" class="text-2xl font-bold text-amber-800">📦 Neue Sendung</h3>
-                <button id="closeSendungModal" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
+                <button id="closeSendungModal" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none shrink-0">&times;</button>
             </div>
 
             <div class="space-y-4">
@@ -8147,9 +8147,9 @@
                 <div id="sendungEmpfangPotOverview" class="hidden"></div>
 
                 <div class="border-2 border-amber-200 rounded-xl p-4 bg-amber-50/40">
-                    <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
                         <h4 class="text-sm font-bold text-amber-900">Pakete &amp; Sendungsnummern</h4>
-                        <button type="button" id="sendungAddPaketBtn" class="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 transition" title="Weiteres Paket hinzufügen">+ Paket</button>
+                        <button type="button" id="sendungAddPaketBtn" class="w-full sm:w-auto px-3 py-1.5 rounded-lg bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 transition" title="Weiteres Paket hinzufügen">+ Paket</button>
                     </div>
                     <p class="text-xs text-gray-600 mb-3">Jedes Paket hat eigenen Status, eigene Deadlines und eigene Sendungsnummer(n).</p>
 
@@ -8259,28 +8259,28 @@
                 </div>
             </div>
 
-            <div class="flex justify-end gap-3 mt-6 pt-4 border-t">
-                <button id="cancelSendungBtn" class="px-6 py-2.5 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-bold transition">
+            <div class="flex flex-wrap justify-end gap-3 mt-6 pt-4 border-t">
+                <button id="cancelSendungBtn" class="w-full sm:w-auto px-6 py-2.5 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-bold transition">
                     Abbrechen
                 </button>
-                <button id="editSendungBtn" style="display:none" class="px-6 py-2.5 bg-orange-500 text-white font-bold rounded-lg hover:bg-orange-600 transition">
+                <button id="editSendungBtn" style="display:none" class="w-full sm:w-auto px-6 py-2.5 bg-orange-500 text-white font-bold rounded-lg hover:bg-orange-600 transition">
                     Bearbeiten
                 </button>
-                <button id="duplicateSendungBtn" style="display:none" class="px-6 py-2.5 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 transition">
+                <button id="duplicateSendungBtn" style="display:none" class="w-full sm:w-auto px-6 py-2.5 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 transition">
                     Kopieren
                 </button>
-                <button id="deleteSendungBtn" style="display:none" class="px-6 py-2.5 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition">
+                <button id="deleteSendungBtn" style="display:none" class="w-full sm:w-auto px-6 py-2.5 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition">
                     Löschen
                 </button>
-                <button id="saveSendungBtn" class="px-6 py-2.5 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 transition">
+                <button id="saveSendungBtn" class="w-full sm:w-auto px-6 py-2.5 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 transition">
                     Speichern
                 </button>
             </div>
         </div>
     </div>
 
-    <div id="sendungTrackingOptionsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[110]">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-5">
+    <div id="sendungTrackingOptionsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-end md:items-center justify-center p-2 sm:p-4 z-[110]">
+        <div class="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-lg p-4 sm:p-5">
             <div class="flex items-center justify-between gap-3 mb-4">
                 <h3 id="sendungTrackingOptionsTitle" class="text-lg md:text-xl font-bold text-amber-800">Tracking wählen</h3>
                 <button id="closeSendungTrackingOptionsModal" type="button" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
@@ -8299,21 +8299,21 @@
                 <button id="closeSendungInhaltZuordnungModal" type="button" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
             </div>
             <div id="sendungInhaltZuordnungRows" class="p-4 space-y-3 overflow-y-auto"></div>
-            <div class="p-4 border-t border-gray-200 bg-white flex justify-end gap-2">
-                <button type="button" id="applySendungInhaltZuordnungBtn" class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition">Zuordnung speichern</button>
+            <div class="p-4 border-t border-gray-200 bg-white flex flex-wrap justify-end gap-2">
+                <button type="button" id="applySendungInhaltZuordnungBtn" class="w-full sm:w-auto px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition">Zuordnung speichern</button>
             </div>
         </div>
     </div>
 
     <div id="sendungWarenuebernahmeModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-end md:items-center justify-center p-3 md:p-4 z-[120]">
         <div class="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col">
-            <div class="p-4 border-b border-gray-200 flex items-center justify-between gap-3">
+            <div class="p-4 border-b border-gray-200 flex items-start sm:items-center justify-between gap-3">
                 <div>
                     <h3 id="sendungWarenuebernahmeTitle" class="text-base md:text-lg font-bold text-emerald-800">Warenübernahme</h3>
                     <p id="sendungWarenuebernahmeSubtitle" class="text-xs text-gray-600">Status: Offen</p>
                 </div>
-                <div class="flex items-center gap-2">
-                    <button id="resetSendungWarenuebernahmeBtn" type="button" class="px-3 py-1.5 rounded-lg bg-red-100 text-red-700 text-xs font-bold hover:bg-red-200 transition">Warenübernahme zurücksetzen</button>
+                <div class="flex flex-wrap justify-end items-center gap-2">
+                    <button id="resetSendungWarenuebernahmeBtn" type="button" class="w-full sm:w-auto px-3 py-1.5 rounded-lg bg-red-100 text-red-700 text-xs font-bold hover:bg-red-200 transition">Warenübernahme zurücksetzen</button>
                     <button id="closeSendungWarenuebernahmeModal" type="button" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
                 </div>
             </div>
@@ -8325,7 +8325,7 @@
             <div id="sendungWarenuebernahmeRows" class="p-4 space-y-3 overflow-y-auto"></div>
 
             <div class="p-4 border-t border-gray-200 bg-white flex flex-wrap justify-end gap-2">
-                <button type="button" id="saveSendungWarenuebernahmeBtn" class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition">Buchen</button>
+                <button type="button" id="saveSendungWarenuebernahmeBtn" class="w-full sm:w-auto px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition">Buchen</button>
             </div>
         </div>
     </div>
