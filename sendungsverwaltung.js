@@ -1219,6 +1219,15 @@ function renderEmpfangPotOverview() {
 
     const offeneMenge = currentOffenerInhaltPot.reduce((sum, entry) => sum + (entry.mengeOffen || 0), 0);
     const problemMenge = currentWarenuebernahmeProblemPot.reduce((sum, entry) => sum + (entry.mengeProblem || 0), 0);
+    const isReadOnlyView = isSendungModalReadMode;
+    const showZuordnungsPot = isReadOnlyView ? offeneMenge > 0 : true;
+    const showProblemPot = isReadOnlyView ? problemMenge > 0 : true;
+
+    if (!showZuordnungsPot && !showProblemPot) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+    }
 
     const offenerPotText = currentOffenerInhaltPot.length > 0
         ? currentOffenerInhaltPot.map((entry) => `${entry.mengeOffen}x ${entry.bezeichnung || 'Artikel'}`).join(' • ')
@@ -1235,11 +1244,11 @@ function renderEmpfangPotOverview() {
     container.innerHTML = `
         <div class="rounded-lg border border-indigo-200 bg-indigo-50/60 p-3 space-y-2">
             <div class="flex flex-wrap items-center gap-2 text-xs">
-                <span class="px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 font-semibold">Zuordnungs-Pot: ${offeneMenge} Stk</span>
-                <span class="px-2 py-1 rounded-full bg-red-100 text-red-700 font-semibold">Problem-Pot: ${problemMenge} Stk</span>
+                ${showZuordnungsPot ? `<span class="px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 font-semibold">Zuordnungs-Pot: ${offeneMenge} Stk</span>` : ''}
+                ${showProblemPot ? `<span class="px-2 py-1 rounded-full bg-red-100 text-red-700 font-semibold">Problem-Pot: ${problemMenge} Stk</span>` : ''}
             </div>
-            <p class="text-xs text-indigo-800"><span class="font-bold">Offen:</span> ${offenerPotText}</p>
-            <p class="text-xs text-red-700"><span class="font-bold">Probleme:</span> ${problemPotText}</p>
+            ${showZuordnungsPot ? `<p class="text-xs text-indigo-800"><span class="font-bold">Offen:</span> ${offenerPotText}</p>` : ''}
+            ${showProblemPot ? `<p class="text-xs text-red-700"><span class="font-bold">Probleme:</span> ${problemPotText}</p>` : ''}
         </div>
     `;
 }
@@ -1277,13 +1286,65 @@ function renderInhaltZuordnungModal() {
         return;
     }
 
+    if (isReadOnlyView) {
+        const zuordnungEntries = Array.isArray(paket.inhaltZuordnung)
+            ? paket.inhaltZuordnung.map(normalizeInhaltZuordnungEntry).filter((entry) => entry.inhaltId && entry.mengeSoll > 0)
+            : [];
+
+        const inhaltById = new Map(inhaltItems.map((item) => [item.inhaltId, item]));
+        const rowsByInhaltId = new Map(zuordnungEntries.map((entry) => [entry.inhaltId, entry.mengeSoll]));
+
+        const assignedRows = inhaltItems
+            .map((item) => ({
+                bezeichnung: item.bezeichnung,
+                menge: rowsByInhaltId.get(item.inhaltId) || 0
+            }))
+            .filter((entry) => entry.menge > 0);
+
+        zuordnungEntries.forEach((entry) => {
+            if (inhaltById.has(entry.inhaltId)) return;
+            assignedRows.push({
+                bezeichnung: `Artikel (${entry.inhaltId})`,
+                menge: entry.mengeSoll
+            });
+        });
+
+        if (assignedRows.length === 0) {
+            rows.innerHTML = '<div class="text-sm text-gray-500 italic">Für dieses Paket sind aktuell keine Artikel zugeordnet.</div>';
+            hint.textContent = 'Nur Lesemodus: Keine Zuordnung vorhanden.';
+            return;
+        }
+
+        rows.innerHTML = `
+            <div class="rounded-lg border border-indigo-200 bg-indigo-50/40 overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead class="bg-indigo-100 text-indigo-900">
+                        <tr>
+                            <th class="text-left px-3 py-2 font-bold">Artikel</th>
+                            <th class="text-right px-3 py-2 font-bold">Menge</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${assignedRows.map((entry) => `
+                            <tr class="border-t border-indigo-100 bg-white">
+                                <td class="px-3 py-2 text-gray-800">${entry.bezeichnung || 'Artikel'}</td>
+                                <td class="px-3 py-2 text-right font-extrabold text-indigo-800">${entry.menge}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        hint.textContent = `Nur Lesemodus: ${assignedRows.length} Artikelpositionen zugeordnet.`;
+        return;
+    }
+
     rows.innerHTML = inhaltItems.map((item) => {
         const thisAssigned = getPaketZuordnungMengeForItem(paket, item.inhaltId);
         const assignedOther = currentSendungPakete.reduce((sum, candidate, index) => {
             if (index === paketIndex) return sum;
             return sum + getPaketZuordnungMengeForItem(candidate, item.inhaltId);
         }, 0);
-        const assignedAll = thisAssigned + assignedOther;
         const maxForThis = Math.max(0, item.menge - assignedOther);
         const initialCounter = Math.max(0, Math.min(maxForThis, thisAssigned));
 
@@ -2664,6 +2725,11 @@ function applyPaketeReadMode(readMode) {
             select.classList.toggle('cursor-not-allowed', !manualAllowed);
         });
 
+        const zuordnungPillButtons = container.querySelectorAll('.sendung-open-zuordnung-pill');
+        zuordnungPillButtons.forEach((button) => {
+            button.disabled = false;
+        });
+
         const zuordnungButtons = container.querySelectorAll('.sendung-open-zuordnung-btn');
         zuordnungButtons.forEach((button) => {
             button.disabled = false;
@@ -2710,6 +2776,9 @@ function renderPaketeEditor() {
         const zuordnungSummary = getPaketZuordnungSummary(paket);
         const statusLocked = normalizeWarenuebernahme(paket.warenuebernahme || {}).aktiv;
         const statusManualAllowed = isPaketStatusManuellEditierbar(paket);
+        const zuordnungBadge = isSendungModalReadMode
+            ? `<button type="button" class="sendung-open-zuordnung-pill px-2 py-1 rounded-full bg-blue-100 text-blue-800 font-semibold hover:bg-blue-200 transition" data-paket-index="${paketIndex}">Zuordnung: ${zuordnungSummary.positionen} Pos., ${zuordnungSummary.menge} Stk</button>`
+            : `<span class="px-2 py-1 rounded-full bg-blue-100 text-blue-800 font-semibold">Zuordnung: ${zuordnungSummary.positionen} Pos., ${zuordnungSummary.menge} Stk</span>`;
 
         const statusOptions = STATUS_VALUES.map((statusValue) => {
             const config = STATUS_CONFIG[statusValue] || { label: statusValue, icon: '' };
@@ -2770,12 +2839,12 @@ function renderPaketeEditor() {
 
                 ${isEmpfang
                     ? `<div class="mt-2 flex flex-wrap gap-2 items-center text-xs">
-                        <span class="px-2 py-1 rounded-full bg-blue-100 text-blue-800 font-semibold">Zuordnung: ${zuordnungSummary.positionen} Pos., ${zuordnungSummary.menge} Stk</span>
-                        <span class="px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 font-semibold">Offener Pot: ${totalOffen} Stk</span>
+                        ${zuordnungBadge}
+                        ${isSendungModalReadMode ? '' : `<span class="px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 font-semibold">Offener Pot: ${totalOffen} Stk</span>`}
                         <span class="px-2 py-1 rounded-full ${warenuebernahmeMeta.color} font-semibold">Warenübernahme: ${warenuebernahmeMeta.label}</span>
                     </div>
                     <div class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
-                        <button type="button" class="sendung-open-zuordnung-btn px-3 py-2 rounded-lg bg-indigo-500 text-white text-xs font-bold hover:bg-indigo-600 transition" data-paket-index="${paketIndex}">${isSendungModalReadMode ? 'Zuordnung anzeigen' : 'Artikel zuordnen'}</button>
+                        <button type="button" class="sendung-open-zuordnung-btn sendung-editmode-only px-3 py-2 rounded-lg bg-indigo-500 text-white text-xs font-bold hover:bg-indigo-600 transition" data-paket-index="${paketIndex}">Artikel zuordnen</button>
                         <label class="sendung-editmode-only flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-gray-200 bg-white">
                             <input type="checkbox" class="sendung-paket-warenuebernahme-toggle" data-paket-index="${paketIndex}" ${normalizeWarenuebernahme(paket.warenuebernahme || {}).aktiv ? 'checked' : ''}>
                             <span class="font-semibold text-gray-700">Warenübernahme aktiv</span>
@@ -2888,6 +2957,13 @@ function renderPaketeEditor() {
     });
 
     container.querySelectorAll('.sendung-open-zuordnung-btn').forEach((button) => {
+        button.onclick = () => {
+            const paketIndex = Number.parseInt(button.dataset.paketIndex || '-1', 10);
+            openInhaltZuordnungModal(paketIndex);
+        };
+    });
+
+    container.querySelectorAll('.sendung-open-zuordnung-pill').forEach((button) => {
         button.onclick = () => {
             const paketIndex = Number.parseInt(button.dataset.paketIndex || '-1', 10);
             openInhaltZuordnungModal(paketIndex);
