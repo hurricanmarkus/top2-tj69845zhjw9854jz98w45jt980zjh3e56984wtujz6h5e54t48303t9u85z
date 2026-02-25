@@ -1587,9 +1587,12 @@ function renderWarenuebernahmeModal() {
     const title = document.getElementById('sendungWarenuebernahmeTitle');
     const subtitle = document.getElementById('sendungWarenuebernahmeSubtitle');
     const rows = document.getElementById('sendungWarenuebernahmeRows');
-    const problemList = document.getElementById('sendungWarenuebernahmeProblemList');
-    const problemSection = document.getElementById('sendungWarenuebernahmeProblemSection');
-    if (!paket || !title || !subtitle || !rows || !problemList || !problemSection) return;
+    const legacyProblemList = document.getElementById('sendungWarenuebernahmeProblemList');
+    const legacyProblemSection = document.getElementById('sendungWarenuebernahmeProblemSection');
+    if (!paket || !title || !subtitle || !rows) return;
+
+    if (legacyProblemList) legacyProblemList.innerHTML = '';
+    if (legacyProblemSection) legacyProblemSection.classList.add('hidden');
 
     const inhaltById = getInhaltItemsById();
     const warenuebernahme = normalizeWarenuebernahme(paket.warenuebernahme || {});
@@ -1655,10 +1658,43 @@ function renderWarenuebernahmeModal() {
         if (Number.isFinite(payload.totalSoll)) payloadParts.push(`Soll: ${payload.totalSoll}`);
         if (Number.isFinite(payload.totalIst)) payloadParts.push(`Ist: ${payload.totalIst}`);
         if (Number.isFinite(payload.totalProblem)) payloadParts.push(`Problem: ${payload.totalProblem}`);
+
+        const bookingDetails = Array.isArray(payload?.articleBookings)
+            ? payload.articleBookings
+                .map((booking) => {
+                    const artikel = String(booking?.artikel || booking?.inhaltId || 'Artikel').trim();
+                    const sollRaw = Number.parseInt(booking?.soll, 10);
+                    const istRaw = Number.parseInt(booking?.ist, 10);
+                    const offenRaw = Number.parseInt(booking?.offen, 10);
+                    const soll = Number.isFinite(sollRaw) && sollRaw >= 0 ? sollRaw : 0;
+                    const ist = Number.isFinite(istRaw) && istRaw >= 0 ? istRaw : 0;
+                    const offen = Number.isFinite(offenRaw) && offenRaw >= 0 ? offenRaw : Math.max(0, soll - ist);
+                    const problemVerteilung = normalizeProblemVerteilung(booking?.problemVerteilung || {});
+                    const problemText = Object.entries(problemVerteilung)
+                        .map(([typ, menge]) => `${WARENUEBERNAHME_ABWEICHUNG_OPTIONS[typ] || typ}: ${menge}`)
+                        .join(', ');
+                    const teile = [`${artikel}: Ist ${ist}/${soll}`, `Offen ${offen}`];
+                    if (problemText) teile.push(`Fehler ${problemText}`);
+                    const kommentar = String(booking?.kommentar || '').trim();
+                    if (kommentar) teile.push(`Kommentar: ${kommentar}`);
+                    return teile.join(' • ');
+                })
+                .filter(Boolean)
+            : [];
+
+        const detailLines = [];
+        if (payloadParts.length > 0) detailLines.push(payloadParts.join(' • '));
+        if (bookingDetails.length > 0) {
+            detailLines.push(...bookingDetails.map((line) => `• ${line}`));
+        }
+        if (detailLines.length === 0) {
+            detailLines.push('Änderung gespeichert');
+        }
+
         return {
             type: 'Audit',
             title: `Aktion: ${entry.action || 'update'}`,
-            detail: payloadParts.join(' • ') || 'Änderung gespeichert',
+            detailLines,
             timestampMs: getSortableTimestampMs(entry.timestamp) || getSortableTimestampMs(entry.clientTimestamp),
             timestampLabel: formatCompactDateTime(entry.timestamp || entry.clientTimestamp)
         };
@@ -1674,40 +1710,17 @@ function renderWarenuebernahmeModal() {
                     <span class="font-bold text-gray-800">${entry.type}: ${entry.title}</span>
                     ${entry.timestampLabel ? `<span class="text-gray-500 whitespace-nowrap">${entry.timestampLabel}</span>` : ''}
                 </div>
-                <div class="text-gray-600 mt-1 break-words">${entry.detail}</div>
+                <div class="text-gray-600 mt-1 space-y-0.5">
+                    ${(Array.isArray(entry.detailLines) ? entry.detailLines : [entry.detail])
+                        .filter((line) => String(line || '').trim())
+                        .map((line) => `<div class="break-words">${line}</div>`)
+                        .join('')}
+                </div>
             </div>
         `).join('')
         : '<div class="text-[11px] text-gray-500 italic">Keine Kommentare, Auflösungen oder Audit-Einträge vorhanden.</div>';
 
-    if (zuordnung.length === 0) {
-        rows.innerHTML = `
-            <div class="space-y-3">
-                <div class="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                    <button type="button" class="sendung-wa-history-toggle w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100 transition">
-                        <span>🧾 Verlauf &amp; Kommentare</span>
-                        <span class="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-2 rounded-full bg-slate-200 text-slate-700 text-[11px] font-black">${historyEntries.length}</span>
-                    </button>
-                    <div class="sendung-wa-history-collapsible ${waHistoryExpanded ? '' : 'hidden'} mt-2 space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                        ${waAuditLoading ? '<div class="text-[11px] text-gray-500 italic">Audit wird geladen…</div>' : ''}
-                        ${historyContentHtml}
-                    </div>
-                </div>
-                <div class="text-sm text-gray-500 italic">Dieses Paket hat noch keine zugeordneten Artikel.</div>
-            </div>
-        `;
-        const historyToggle = rows.querySelector('.sendung-wa-history-toggle');
-        const historyCollapsible = rows.querySelector('.sendung-wa-history-collapsible');
-        if (historyToggle && historyCollapsible) {
-            historyToggle.onclick = () => {
-                waHistoryExpanded = !waHistoryExpanded;
-                historyCollapsible.classList.toggle('hidden', !waHistoryExpanded);
-            };
-        }
-        waProblemPotExpanded = false;
-        problemList.innerHTML = '';
-        problemSection.classList.add('hidden');
-        return;
-    }
+    const hasHistorischeProblemEintraege = warenuebernahme.problemartikel.length > 0 || warenuebernahme.problemaufloesungen.length > 0;
 
     const getBaseStatus = (ungeprueft, geprueft, problemTotal) => {
         if (problemTotal > 0) return 'problem';
@@ -1798,26 +1811,35 @@ function renderWarenuebernahmeModal() {
         `;
     }).join('');
 
+    const hasZuordnung = zuordnung.length > 0;
+
     rows.innerHTML = `
         <div class="space-y-3">
             <div class="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                <button type="button" class="sendung-wa-history-toggle w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100 transition">
-                    <span>🧾 Verlauf &amp; Kommentare</span>
-                    <span class="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-2 rounded-full bg-slate-200 text-slate-700 text-[11px] font-black">${historyEntries.length}</span>
-                </button>
-                <div class="sendung-wa-history-collapsible ${waHistoryExpanded ? '' : 'hidden'} mt-2 space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                <div id="sendungWarenuebernahmeInsightGrid" class="grid grid-cols-1 gap-2">
+                    <button type="button" id="sendungWarenuebernahmeProblemTabBtn" class="sendung-wa-problem-tab hidden w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg border-2 font-extrabold text-sm transition"></button>
+                    <button type="button" id="sendungWarenuebernahmeHistoryTabBtn" class="sendung-wa-history-tab w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border-2 font-bold text-xs transition">
+                        <span>🧾 Verlauf &amp; Kommentare</span>
+                        <span class="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-full bg-slate-200 text-slate-700 text-[11px] font-black">${historyEntries.length}</span>
+                    </button>
+                </div>
+                <div id="sendungWarenuebernahmeProblemPanel" class="${waProblemPotExpanded ? '' : 'hidden'} mt-2 rounded-lg border border-red-200 bg-red-50 p-2">
+                    <div id="sendungWarenuebernahmeProblemPanelList" class="space-y-2"></div>
+                </div>
+                <div id="sendungWarenuebernahmeHistoryPanel" class="${waHistoryExpanded ? '' : 'hidden'} mt-2 space-y-1.5 max-h-52 overflow-y-auto pr-1">
                     ${waAuditLoading ? '<div class="text-[11px] text-gray-500 italic">Audit wird geladen…</div>' : ''}
                     ${historyContentHtml}
                 </div>
             </div>
-            <div class="rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <div class="rounded-xl border border-gray-200 bg-gray-50 p-3 ${hasZuordnung ? '' : 'hidden'}">
                 <div class="text-xs font-bold text-gray-700 mb-2">Produkte</div>
                 <div id="sendungWarenuebernahmeNavigatorList" class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[14rem] overflow-y-auto pr-1"></div>
             </div>
-            <div id="sendungWarenuebernahmeLegend" class="flex flex-wrap gap-2"></div>
-            <div class="rounded-lg border border-gray-200 bg-white px-3 py-2">
+            <div id="sendungWarenuebernahmeLegend" class="${hasZuordnung ? 'flex' : 'hidden'} flex-wrap gap-2"></div>
+            <div class="rounded-lg border border-gray-200 bg-white px-3 py-2 ${hasZuordnung ? '' : 'hidden'}">
                 <p id="sendungWarenuebernahmeScopeHint" class="text-xs text-gray-600">Nächstes: alle Status</p>
             </div>
+            ${hasZuordnung ? '' : '<div class="text-sm text-gray-500 italic">Dieses Paket hat noch keine zugeordneten Artikel.</div>'}
             <div id="sendungWarenuebernahmeDetailList" class="space-y-3">${detailRowsHtml}</div>
         </div>
     `;
@@ -1826,15 +1848,62 @@ function renderWarenuebernahmeModal() {
     const legend = rows.querySelector('#sendungWarenuebernahmeLegend');
     const detailList = rows.querySelector('#sendungWarenuebernahmeDetailList');
     const scopeHint = rows.querySelector('#sendungWarenuebernahmeScopeHint');
-    const historyToggle = rows.querySelector('.sendung-wa-history-toggle');
-    const historyCollapsible = rows.querySelector('.sendung-wa-history-collapsible');
-    if (historyToggle && historyCollapsible) {
-        historyToggle.onclick = () => {
-            waHistoryExpanded = !waHistoryExpanded;
-            historyCollapsible.classList.toggle('hidden', !waHistoryExpanded);
+    const insightGrid = rows.querySelector('#sendungWarenuebernahmeInsightGrid');
+    const problemTabBtn = rows.querySelector('#sendungWarenuebernahmeProblemTabBtn');
+    const historyTabBtn = rows.querySelector('#sendungWarenuebernahmeHistoryTabBtn');
+    const problemPanel = rows.querySelector('#sendungWarenuebernahmeProblemPanel');
+    const problemPanelList = rows.querySelector('#sendungWarenuebernahmeProblemPanelList');
+    const historyPanel = rows.querySelector('#sendungWarenuebernahmeHistoryPanel');
+    if (!navigatorList || !legend || !detailList || !scopeHint || !insightGrid || !historyTabBtn || !problemPanel || !problemPanelList || !historyPanel) return;
+
+    let hasProblemPane = hasHistorischeProblemEintraege;
+    let openProblemCount = 0;
+
+    const syncInsightPanels = () => {
+        if (!hasProblemPane) {
+            waProblemPotExpanded = false;
+        }
+        if (waProblemPotExpanded) {
+            waHistoryExpanded = false;
+        }
+
+        insightGrid.classList.toggle('sm:grid-cols-2', hasProblemPane);
+        historyTabBtn.classList.toggle('sm:col-span-2', !hasProblemPane);
+
+        if (problemTabBtn) {
+            problemTabBtn.className = `sendung-wa-problem-tab w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg border-2 font-extrabold text-sm transition ${waProblemPotExpanded ? 'border-red-500 bg-red-100 text-red-800 shadow-md' : 'border-red-200 bg-white text-red-700'} ${openProblemCount > 0 ? 'animate-pulse' : ''}`;
+            problemTabBtn.innerHTML = `
+                <span>⚠️ Fehlerpot</span>
+                <span class="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-full ${openProblemCount > 0 ? 'bg-red-600 text-white' : 'bg-red-200 text-red-700'} text-xs font-black">${openProblemCount}</span>
+            `;
+            problemTabBtn.classList.toggle('hidden', !hasProblemPane);
+        }
+
+        historyTabBtn.className = `sendung-wa-history-tab w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border-2 font-bold text-xs transition ${waHistoryExpanded ? 'border-slate-500 bg-slate-100 text-slate-800' : 'border-slate-200 bg-white text-slate-700'}`;
+        problemPanel.classList.toggle('hidden', !(hasProblemPane && waProblemPotExpanded));
+        historyPanel.classList.toggle('hidden', !waHistoryExpanded);
+    };
+
+    if (problemTabBtn) {
+        problemTabBtn.onclick = () => {
+            if (!hasProblemPane) return;
+            const next = !waProblemPotExpanded;
+            waProblemPotExpanded = next;
+            if (next) {
+                waHistoryExpanded = false;
+            }
+            syncInsightPanels();
         };
     }
-    if (!navigatorList || !legend || !detailList || !scopeHint) return;
+
+    historyTabBtn.onclick = () => {
+        const next = !waHistoryExpanded;
+        waHistoryExpanded = next;
+        if (next) {
+            waProblemPotExpanded = false;
+        }
+        syncInsightPanels();
+    };
 
     const rowElements = Array.from(detailList.querySelectorAll('.sendung-wa-row'));
     const orderedRows = () => [...rowElements].sort((left, right) => {
@@ -1978,20 +2047,21 @@ function renderWarenuebernahmeModal() {
     };
 
     const renderProblemList = () => {
-        const grouped = new Map();
+        const groupedCurrent = new Map();
         rowElements.forEach((row) => {
             row.querySelectorAll('.sendung-wa-problem-counter').forEach((problemRow) => {
                 const typ = String(problemRow.dataset.problemTyp || '').trim().toLowerCase();
                 const mengeRaw = Number.parseInt(problemRow.dataset.counter || '0', 10);
-                const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
-                if (!menge || !WARENUEBERNAHME_PROBLEM_TYPEN.includes(typ)) return;
+                const mengeAktuell = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
+                if (!WARENUEBERNAHME_PROBLEM_TYPEN.includes(typ)) return;
                 const inhaltId = String(row.dataset.inhaltId || '').trim();
+                if (!inhaltId) return;
                 const key = `${inhaltId}__${typ}`;
-                grouped.set(key, {
+                groupedCurrent.set(key, {
                     key,
                     inhaltId,
                     typ,
-                    menge,
+                    mengeAktuell,
                     label: row.querySelector('.sendung-wa-item-label')?.textContent?.trim() || 'Artikel'
                 });
             });
@@ -2005,71 +2075,100 @@ function renderWarenuebernahmeModal() {
             resolutionsByPot.get(potId).push(resolution);
         });
 
-        if (grouped.size === 0) {
-            waProblemPotExpanded = false;
-            problemList.innerHTML = '';
-            problemSection.classList.add('hidden');
-            return;
-        }
-
-        problemSection.classList.remove('hidden');
-
-        const paketOptions = currentSendungPakete
-            .filter((candidate) => String(candidate?.paketId || '').trim() !== String(paket?.paketId || '').trim())
-            .map((candidate, idx) => `<option value="${candidate.paketId}">${candidate.paketLabel || `Paket ${idx + 1}`}</option>`)
-            .join('');
-
         const existingProblemByKey = new Map();
         warenuebernahme.problemartikel.forEach((problem) => {
             const key = `${problem.inhaltId}__${problem.typ}`;
             if (!existingProblemByKey.has(key)) existingProblemByKey.set(key, problem);
         });
 
-        const conflictCount = grouped.size;
-        const conflictItemsHtml = [...grouped.values()].map((entry) => {
-            const match = existingProblemByKey.get(entry.key);
-            const potEntryId = String(match?.potEntryId || `pot_${warenuebernahme.uebernahmeId}_${entry.key}`);
-            const linkedResolutions = resolutionsByPot.get(potEntryId) || [];
-            const resolvedTotal = linkedResolutions.reduce((sum, resolution) => sum + (resolution.menge || 0), 0);
-            const remainingForResolution = Math.max(0, entry.menge - resolvedTotal);
-            const linkedBadges = linkedResolutions.length > 0
-                ? linkedResolutions.map((resolution) => {
+        const mergedEntries = new Map();
+        existingProblemByKey.forEach((problem, key) => {
+            const mengeRaw = Number.parseInt(problem?.mengeProblem, 10);
+            const mengeHistorisch = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
+            if (mengeHistorisch <= 0) return;
+            mergedEntries.set(key, {
+                key,
+                inhaltId: String(problem?.inhaltId || '').trim(),
+                typ: String(problem?.typ || '').trim().toLowerCase(),
+                mengeHistorisch,
+                mengeAktuell: 0,
+                hasCurrent: false,
+                label: String(problem?.bezeichnung || inhaltById.get(String(problem?.inhaltId || '').trim())?.bezeichnung || '').trim() || 'Artikel',
+                potEntryId: String(problem?.potEntryId || '').trim() || `pot_${warenuebernahme.uebernahmeId}_${key}`
+            });
+        });
+
+        groupedCurrent.forEach((entry, key) => {
+            const existing = mergedEntries.get(key);
+            mergedEntries.set(key, {
+                ...(existing || {}),
+                ...entry,
+                mengeHistorisch: existing?.mengeHistorisch || entry.mengeAktuell || 0,
+                hasCurrent: true,
+                potEntryId: existing?.potEntryId || `pot_${warenuebernahme.uebernahmeId}_${key}`
+            });
+        });
+
+        const problemEntries = [...mergedEntries.values()]
+            .map((entry) => {
+                const potEntryId = String(entry.potEntryId || `pot_${warenuebernahme.uebernahmeId}_${entry.key}`).trim();
+                const linkedResolutions = resolutionsByPot.get(potEntryId) || [];
+                const resolvedTotal = linkedResolutions.reduce((sum, resolution) => sum + (resolution.menge || 0), 0);
+                const basisMenge = entry.hasCurrent ? (entry.mengeAktuell || 0) : (entry.mengeHistorisch || 0);
+                const remainingForResolution = Math.max(0, basisMenge - resolvedTotal);
+                return {
+                    ...entry,
+                    potEntryId,
+                    linkedResolutions,
+                    basisMenge,
+                    remainingForResolution
+                };
+            })
+            .filter((entry) => entry.basisMenge > 0 || entry.linkedResolutions.length > 0)
+            .sort((left, right) => {
+                const openDelta = (right.remainingForResolution || 0) - (left.remainingForResolution || 0);
+                if (openDelta !== 0) return openDelta;
+                return String(left.label || '').localeCompare(String(right.label || ''), 'de');
+            });
+
+        hasProblemPane = problemEntries.length > 0 || hasHistorischeProblemEintraege;
+        openProblemCount = problemEntries.filter((entry) => entry.remainingForResolution > 0).length;
+
+        if (!hasProblemPane) {
+            waProblemPotExpanded = false;
+            problemPanelList.innerHTML = '';
+            syncInsightPanels();
+            return;
+        }
+
+        const paketOptions = currentSendungPakete
+            .filter((candidate) => String(candidate?.paketId || '').trim() !== String(paket?.paketId || '').trim())
+            .map((candidate, idx) => `<option value="${candidate.paketId}">${candidate.paketLabel || `Paket ${idx + 1}`}</option>`)
+            .join('');
+
+        const conflictItemsHtml = problemEntries.length > 0
+            ? problemEntries.map((entry) => {
+                const linkedBadges = entry.linkedResolutions.length > 0
+                ? entry.linkedResolutions.map((resolution) => {
                     const typLabel = resolution.aktion === 'zuweisen'
                         ? `Zugewiesen (${resolution.menge})`
-                        : `Gelöst: ${(resolution.geloestTyp || 'sonstiges').replace('rueckerstattet', 'rückerstattet')}`;
+                        : `Gelöst: ${(resolution.geloestTyp || 'sonstiges').replace('rueckerstattet', 'rückerstattet')} (${resolution.menge})`;
                     return `<span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[11px] font-semibold">${typLabel}</span>`;
                 }).join(' ')
-                : '<span class="text-[11px] text-gray-500">Noch keine Auflösung</span>';
+                : `<span class="text-[11px] ${entry.remainingForResolution > 0 ? 'text-gray-500' : 'text-emerald-700 font-semibold'}">${entry.remainingForResolution > 0 ? 'Noch keine Auflösung' : 'Vollständig kompensiert'}</span>`;
 
-            return `
-                <div class="sendung-wa-problem-card rounded-lg border border-red-200 bg-white p-2 space-y-2">
-                    <div class="text-xs font-semibold text-red-700">${entry.menge}x ${entry.label} (${WARENUEBERNAHME_ABWEICHUNG_OPTIONS[entry.typ] || entry.typ})</div>
-                    <div class="text-[11px] text-red-700">Offen für Auflösung: <span class="font-bold sendung-wa-resolution-remaining">${remainingForResolution}</span></div>
-                    <div class="flex flex-wrap gap-1">${linkedBadges}</div>
-                    <div class="sendung-wa-problem-resolution-list space-y-2" data-problem-pot-entry-id="${potEntryId}" data-inhalt-id="${entry.inhaltId}" data-total="${remainingForResolution}"></div>
-                </div>
-            `;
-        }).join('');
+                return `
+                    <div class="sendung-wa-problem-card rounded-lg border border-red-200 bg-white p-2 space-y-2">
+                        <div class="text-xs font-semibold text-red-700">${entry.basisMenge}x ${entry.label} (${WARENUEBERNAHME_ABWEICHUNG_OPTIONS[entry.typ] || entry.typ})</div>
+                        <div class="text-[11px] ${entry.remainingForResolution > 0 ? 'text-red-700' : 'text-emerald-700'}">Offen für Auflösung: <span class="font-bold sendung-wa-resolution-remaining">${entry.remainingForResolution}</span></div>
+                        <div class="flex flex-wrap gap-1">${linkedBadges}</div>
+                        <div class="sendung-wa-problem-resolution-list space-y-2" data-problem-pot-entry-id="${entry.potEntryId}" data-inhalt-id="${entry.inhaltId}" data-total="${entry.remainingForResolution}"></div>
+                    </div>
+                `;
+            }).join('')
+            : '<div class="text-[11px] text-gray-500 italic">Es wurden bereits Probleme dokumentiert, derzeit ist nichts offen.</div>';
 
-        const blinkClasses = conflictCount > 0 ? 'animate-pulse border-red-500 bg-red-100 text-red-800 shadow-md scale-[1.01]' : 'border-gray-200 bg-white text-gray-700';
-        problemList.innerHTML = `
-            <div class="space-y-2">
-                <button type="button" class="sendung-wa-problem-toggle w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-lg border-2 font-extrabold text-sm transition ${blinkClasses}">
-                    <span>Problem-Pot</span>
-                    <span class="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-full bg-red-600 text-white text-xs font-black">${conflictCount}</span>
-                </button>
-                <div class="sendung-wa-problem-collapsible ${waProblemPotExpanded ? '' : 'hidden'} space-y-2 max-h-48 overflow-y-auto pr-1">${conflictItemsHtml}</div>
-            </div>
-        `;
-
-        const problemToggle = problemList.querySelector('.sendung-wa-problem-toggle');
-        const problemCollapsible = problemList.querySelector('.sendung-wa-problem-collapsible');
-        if (problemToggle && problemCollapsible) {
-            problemToggle.onclick = () => {
-                waProblemPotExpanded = !waProblemPotExpanded;
-                problemCollapsible.classList.toggle('hidden', !waProblemPotExpanded);
-            };
-        }
+        problemPanelList.innerHTML = conflictItemsHtml;
 
         const createResolutionRowHtml = (potEntryId, inhaltId) => `
             <div class="sendung-wa-problem-resolution-row rounded-lg border border-gray-200 bg-gray-50 p-2 space-y-2" data-problem-pot-entry-id="${potEntryId}" data-inhalt-id="${inhaltId}" data-counter="0" data-max="0">
@@ -2095,7 +2194,7 @@ function renderWarenuebernahmeModal() {
             </div>
         `;
 
-        problemList.querySelectorAll('.sendung-wa-problem-resolution-list').forEach((resolutionList) => {
+        problemPanelList.querySelectorAll('.sendung-wa-problem-resolution-list').forEach((resolutionList) => {
             const potEntryId = String(resolutionList.dataset.problemPotEntryId || '').trim();
             const inhaltId = String(resolutionList.dataset.inhaltId || '').trim();
             const totalRaw = Number.parseInt(resolutionList.dataset.total || '0', 10);
@@ -2220,6 +2319,8 @@ function renderWarenuebernahmeModal() {
 
             syncResolutionRows();
         });
+
+        syncInsightPanels();
     };
 
     const getDisplayStatus = (row) => {
@@ -2577,7 +2678,7 @@ function collectWarenuebernahmeFromModal() {
         });
     });
 
-    const resolutionRows = document.querySelectorAll('#sendungWarenuebernahmeProblemList .sendung-wa-problem-resolution-row');
+    const resolutionRows = document.querySelectorAll('#sendungWarenuebernahmeProblemPanelList .sendung-wa-problem-resolution-row, #sendungWarenuebernahmeProblemList .sendung-wa-problem-resolution-row');
     resolutionRows.forEach((row) => {
         const mengeRaw = Number.parseInt(row.dataset.counter || '0', 10);
         const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
@@ -2683,8 +2784,33 @@ async function saveWarenuebernahmeFromModal() {
     try {
         const pakete = collectPaketeForSave();
         const inhalt = collectInhaltItemsForSave();
+        const inhaltById = new Map(inhalt.map((item) => [item.inhaltId, item]));
         const offenerInhaltPot = computeOffenerInhaltPot(inhalt, pakete);
         const warenuebernahmeProblemPot = computeProblemPotFromPakete(pakete, inhalt);
+        const articleBookings = aktualisiert.positionen
+            .map((position) => {
+                const problemVerteilung = normalizeProblemVerteilung(position?.problemVerteilung || {});
+                const problemGesamt = Object.values(problemVerteilung).reduce((sum, menge) => sum + (menge || 0), 0);
+                const sollRaw = Number.parseInt(position?.mengeSoll, 10);
+                const istRaw = Number.parseInt(position?.mengeIst, 10);
+                const soll = Number.isFinite(sollRaw) && sollRaw >= 0 ? sollRaw : 0;
+                const ist = Number.isFinite(istRaw) && istRaw >= 0 ? istRaw : 0;
+                const offen = Math.max(0, soll - ist - problemGesamt);
+                const kommentar = String(position?.kommentar || '').trim();
+                return {
+                    inhaltId: String(position?.inhaltId || '').trim(),
+                    artikel: String(inhaltById.get(String(position?.inhaltId || '').trim())?.bezeichnung || '').trim() || `Artikel (${position?.inhaltId || '-'})`,
+                    soll,
+                    ist,
+                    offen,
+                    problemVerteilung,
+                    kommentar
+                };
+            })
+            .filter((entry) => {
+                const hasProblem = Object.keys(entry.problemVerteilung).length > 0;
+                return entry.ist > 0 || hasProblem || entry.offen < entry.soll || Boolean(entry.kommentar);
+            });
         const autoStatus = computeAutoStatusFromPakete(pakete);
         const selectedStatus = normalizeStatus(document.getElementById('sendungStatus')?.value || autoStatus);
         const finalStatus = statusOverrideActive ? selectedStatus : autoStatus;
@@ -2717,7 +2843,8 @@ async function saveWarenuebernahmeFromModal() {
                 status: aktualisiert.status,
                 totalProblem: aktualisiert.zusammenfassung.totalProblem,
                 totalSoll: aktualisiert.zusammenfassung.totalSoll,
-                totalIst: aktualisiert.zusammenfassung.totalIst
+                totalIst: aktualisiert.zusammenfassung.totalIst,
+                articleBookings
             }
         );
 
@@ -2960,9 +3087,11 @@ function renderPaketeEditor() {
     const totalOffen = currentOffenerInhaltPot.reduce((sum, entry) => sum + (entry.mengeOffen || 0), 0);
 
     container.innerHTML = currentSendungPakete.map((paket, paketIndex) => {
+        const normalizedWarenuebernahme = normalizeWarenuebernahme(paket.warenuebernahme || {});
         const warenuebernahmeMeta = getWarenuebernahmeStatusMeta(paket);
         const zuordnungSummary = getPaketZuordnungSummary(paket);
-        const statusLocked = normalizeWarenuebernahme(paket.warenuebernahme || {}).aktiv;
+        const statusLocked = normalizedWarenuebernahme.aktiv;
+        const waCanBeDisabled = !normalizedWarenuebernahme.aktiv || normalizedWarenuebernahme.status === 'offen';
         const statusManualAllowed = isPaketStatusManuellEditierbar(paket);
         const zuordnungBadge = isSendungModalReadMode
             ? `<button type="button" class="sendung-open-zuordnung-pill px-2 py-1 rounded-full bg-blue-100 text-blue-800 font-semibold hover:bg-blue-200 transition" data-paket-index="${paketIndex}">Zuordnung: ${zuordnungSummary.positionen} Pos., ${zuordnungSummary.menge} Stk</button>`
@@ -3034,10 +3163,10 @@ function renderPaketeEditor() {
                     <div class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
                         <button type="button" class="sendung-open-zuordnung-btn sendung-editmode-only px-3 py-2 rounded-lg bg-indigo-500 text-white text-xs font-bold hover:bg-indigo-600 transition" data-paket-index="${paketIndex}">Artikel zuordnen</button>
                         <label class="sendung-editmode-only flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-gray-200 bg-white">
-                            <input type="checkbox" class="sendung-paket-warenuebernahme-toggle" data-paket-index="${paketIndex}" ${normalizeWarenuebernahme(paket.warenuebernahme || {}).aktiv ? 'checked' : ''}>
+                            <input type="checkbox" class="sendung-paket-warenuebernahme-toggle" data-paket-index="${paketIndex}" data-wa-status="${normalizedWarenuebernahme.status}" ${normalizedWarenuebernahme.aktiv ? 'checked' : ''}>
                             <span class="font-semibold text-gray-700">Warenübernahme aktiv</span>
                         </label>
-                        <div class="sendung-editmode-only"></div>
+                        <div class="sendung-editmode-only text-[11px] text-amber-700 font-semibold">${waCanBeDisabled ? '' : 'Zum Ausschalten zuerst Wareneingang zurücksetzen (Status: Offen).'}</div>
                     </div>`
                     : ''}
 
@@ -3165,6 +3294,13 @@ function renderPaketeEditor() {
             if (!paket || !isEmpfangContextActive()) return;
 
             const normalizedWarenuebernahme = normalizeWarenuebernahme(paket.warenuebernahme || {});
+            const tryingDisable = !toggle.checked;
+            if (tryingDisable && normalizedWarenuebernahme.aktiv && normalizedWarenuebernahme.status !== 'offen') {
+                toggle.checked = true;
+                alertUser('Warenübernahme kann nur bei Status "Offen" deaktiviert werden. Bitte zuerst Wareneingang zurücksetzen und danach ausschalten.', 'warning');
+                return;
+            }
+
             normalizedWarenuebernahme.aktiv = toggle.checked;
             normalizedWarenuebernahme.updatedAt = nowIso();
             normalizedWarenuebernahme.updatedBy = currentUser?.mode || '';
