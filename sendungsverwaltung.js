@@ -182,6 +182,9 @@ let warenuebernahmeResetClickTimestamps = [];
 let waSelectedInhaltId = '';
 let waFilterStatus = 'all';
 let waProblemPotExpanded = false;
+let waHistoryExpanded = false;
+let waAuditLoading = false;
+let currentWarenuebernahmeAuditEntries = [];
 
 function normalizeStatus(status) {
     const normalized = String(status || '').trim().toLowerCase();
@@ -210,6 +213,67 @@ function createProblemResolutionId() {
 
 function nowIso() {
     return new Date().toISOString();
+}
+
+function getSortableTimestampMs(value) {
+    if (!value) return 0;
+    if (typeof value?.toDate === 'function') {
+        const parsed = value.toDate();
+        return parsed instanceof Date && !Number.isNaN(parsed.getTime()) ? parsed.getTime() : 0;
+    }
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+}
+
+function formatCompactDateTime(value) {
+    const ts = getSortableTimestampMs(value);
+    if (!ts) return '';
+    return new Date(ts).toLocaleString('de-DE', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+async function loadWarenuebernahmeAuditForCurrentPaket() {
+    const paketIndex = currentWarenuebernahmePaketIndex;
+    const paket = currentSendungPakete[paketIndex];
+    if (!paket || !currentEditingSendungId || !sendungenCollectionRef) {
+        waAuditLoading = false;
+        currentWarenuebernahmeAuditEntries = [];
+        return;
+    }
+
+    const expectedPaketId = String(paket.paketId || '');
+    waAuditLoading = true;
+
+    try {
+        const sendungRef = doc(sendungenCollectionRef, currentEditingSendungId);
+        const snapshot = await getDocs(collection(sendungRef, 'warenuebernahme_audit'));
+        const entries = snapshot.docs
+            .map((snapshotDoc) => ({ id: snapshotDoc.id, ...snapshotDoc.data() }))
+            .filter((entry) => String(entry?.paketId || '') === expectedPaketId)
+            .sort((left, right) => {
+                const leftMs = getSortableTimestampMs(left?.timestamp) || getSortableTimestampMs(left?.clientTimestamp);
+                const rightMs = getSortableTimestampMs(right?.timestamp) || getSortableTimestampMs(right?.clientTimestamp);
+                return rightMs - leftMs;
+            })
+            .slice(0, 30);
+
+        const activePaket = currentSendungPakete[currentWarenuebernahmePaketIndex];
+        if (!activePaket || String(activePaket.paketId || '') !== expectedPaketId) return;
+        currentWarenuebernahmeAuditEntries = entries;
+    } catch (error) {
+        console.warn('[Sendungsverwaltung] Audit-Log konnte nicht geladen werden:', error);
+        currentWarenuebernahmeAuditEntries = [];
+    } finally {
+        const activePaket = currentSendungPakete[currentWarenuebernahmePaketIndex];
+        if (activePaket && String(activePaket.paketId || '') === expectedPaketId) {
+            waAuditLoading = false;
+            renderWarenuebernahmeModal();
+        }
+    }
 }
 
 function isEmpfangTypValue(value = '') {
@@ -1499,6 +1563,9 @@ function closeWarenuebernahmeModal() {
     waSelectedInhaltId = '';
     waFilterStatus = 'all';
     waProblemPotExpanded = false;
+    waHistoryExpanded = false;
+    waAuditLoading = false;
+    currentWarenuebernahmeAuditEntries = [];
     resetWarenuebernahmeResetSequence();
     if (!modal) return;
     modal.classList.add('hidden');
@@ -1537,8 +1604,97 @@ function renderWarenuebernahmeModal() {
     title.textContent = `Warenübernahme – ${paket.paketLabel || `Paket ${paketIndex + 1}`}`;
     subtitle.textContent = `Status: ${getWarenuebernahmeStatusMeta(paket).label}`;
 
+    const paketById = new Map(currentSendungPakete.map((candidate, index) => [
+        String(candidate?.paketId || ''),
+        candidate?.paketLabel || `Paket ${index + 1}`
+    ]));
+
+    const commentEntries = warenuebernahme.positionen
+        .filter((entry) => String(entry?.kommentar || '').trim())
+        .map((entry) => {
+            const label = inhaltById.get(entry.inhaltId)?.bezeichnung || `Artikel (${entry.inhaltId || '-'})`;
+            return {
+                type: 'Kommentar',
+                title: label,
+                detail: String(entry.kommentar || '').trim(),
+                timestampMs: getSortableTimestampMs(entry.bestaetigtAt) || getSortableTimestampMs(warenuebernahme.updatedAt),
+                timestampLabel: formatCompactDateTime(entry.bestaetigtAt || warenuebernahme.updatedAt)
+            };
+        });
+
+    const resolutionEntries = warenuebernahme.problemaufloesungen
+        .filter((entry) => Number.parseInt(entry?.menge, 10) > 0)
+        .map((entry) => {
+            const label = inhaltById.get(entry.inhaltId)?.bezeichnung || `Artikel (${entry.inhaltId || '-'})`;
+            const actionLabel = entry.aktion === 'zuweisen'
+                ? `Zuweisung → ${paketById.get(String(entry.zielPaketId || '')) || 'Paket'}`
+                : `Gelöst (${(entry.geloestTyp || 'sonstiges').replace('rueckerstattet', 'rückerstattet')})`;
+            const detailParts = [`${entry.menge}x`, actionLabel];
+            if (entry.kommentar) detailParts.push(`Kommentar: ${entry.kommentar}`);
+            return {
+                type: 'Auflösung',
+                title: label,
+                detail: detailParts.join(' • '),
+                timestampMs: getSortableTimestampMs(entry.createdAt),
+                timestampLabel: formatCompactDateTime(entry.createdAt)
+            };
+        });
+
+    const auditEntries = currentWarenuebernahmeAuditEntries.map((entry) => {
+        const payload = entry?.payloadDelta || {};
+        const payloadParts = [];
+        if (payload.status) payloadParts.push(`Status: ${payload.status}`);
+        if (Number.isFinite(payload.totalSoll)) payloadParts.push(`Soll: ${payload.totalSoll}`);
+        if (Number.isFinite(payload.totalIst)) payloadParts.push(`Ist: ${payload.totalIst}`);
+        if (Number.isFinite(payload.totalProblem)) payloadParts.push(`Problem: ${payload.totalProblem}`);
+        return {
+            type: 'Audit',
+            title: `Aktion: ${entry.action || 'update'}`,
+            detail: payloadParts.join(' • ') || 'Änderung gespeichert',
+            timestampMs: getSortableTimestampMs(entry.timestamp) || getSortableTimestampMs(entry.clientTimestamp),
+            timestampLabel: formatCompactDateTime(entry.timestamp || entry.clientTimestamp)
+        };
+    });
+
+    const historyEntries = [...commentEntries, ...resolutionEntries, ...auditEntries]
+        .sort((left, right) => (right.timestampMs || 0) - (left.timestampMs || 0));
+
+    const historyContentHtml = historyEntries.length > 0
+        ? historyEntries.slice(0, 40).map((entry) => `
+            <div class="rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[11px] leading-tight">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="font-bold text-gray-800">${entry.type}: ${entry.title}</span>
+                    ${entry.timestampLabel ? `<span class="text-gray-500 whitespace-nowrap">${entry.timestampLabel}</span>` : ''}
+                </div>
+                <div class="text-gray-600 mt-1 break-words">${entry.detail}</div>
+            </div>
+        `).join('')
+        : '<div class="text-[11px] text-gray-500 italic">Keine Kommentare, Auflösungen oder Audit-Einträge vorhanden.</div>';
+
     if (zuordnung.length === 0) {
-        rows.innerHTML = '<div class="text-sm text-gray-500 italic">Dieses Paket hat noch keine zugeordneten Artikel.</div>';
+        rows.innerHTML = `
+            <div class="space-y-3">
+                <div class="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                    <button type="button" class="sendung-wa-history-toggle w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100 transition">
+                        <span>🧾 Verlauf &amp; Kommentare</span>
+                        <span class="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-2 rounded-full bg-slate-200 text-slate-700 text-[11px] font-black">${historyEntries.length}</span>
+                    </button>
+                    <div class="sendung-wa-history-collapsible ${waHistoryExpanded ? '' : 'hidden'} mt-2 space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                        ${waAuditLoading ? '<div class="text-[11px] text-gray-500 italic">Audit wird geladen…</div>' : ''}
+                        ${historyContentHtml}
+                    </div>
+                </div>
+                <div class="text-sm text-gray-500 italic">Dieses Paket hat noch keine zugeordneten Artikel.</div>
+            </div>
+        `;
+        const historyToggle = rows.querySelector('.sendung-wa-history-toggle');
+        const historyCollapsible = rows.querySelector('.sendung-wa-history-collapsible');
+        if (historyToggle && historyCollapsible) {
+            historyToggle.onclick = () => {
+                waHistoryExpanded = !waHistoryExpanded;
+                historyCollapsible.classList.toggle('hidden', !waHistoryExpanded);
+            };
+        }
         waProblemPotExpanded = false;
         problemList.innerHTML = '';
         problemSection.classList.add('hidden');
@@ -1636,6 +1792,16 @@ function renderWarenuebernahmeModal() {
 
     rows.innerHTML = `
         <div class="space-y-3">
+            <div class="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                <button type="button" class="sendung-wa-history-toggle w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100 transition">
+                    <span>🧾 Verlauf &amp; Kommentare</span>
+                    <span class="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-2 rounded-full bg-slate-200 text-slate-700 text-[11px] font-black">${historyEntries.length}</span>
+                </button>
+                <div class="sendung-wa-history-collapsible ${waHistoryExpanded ? '' : 'hidden'} mt-2 space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                    ${waAuditLoading ? '<div class="text-[11px] text-gray-500 italic">Audit wird geladen…</div>' : ''}
+                    ${historyContentHtml}
+                </div>
+            </div>
             <div class="rounded-xl border border-gray-200 bg-gray-50 p-3">
                 <div class="text-xs font-bold text-gray-700 mb-2">Produkte</div>
                 <div id="sendungWarenuebernahmeNavigatorList" class="grid grid-cols-2 gap-2 max-h-[14rem] overflow-y-auto pr-1"></div>
@@ -1652,6 +1818,14 @@ function renderWarenuebernahmeModal() {
     const legend = rows.querySelector('#sendungWarenuebernahmeLegend');
     const detailList = rows.querySelector('#sendungWarenuebernahmeDetailList');
     const scopeHint = rows.querySelector('#sendungWarenuebernahmeScopeHint');
+    const historyToggle = rows.querySelector('.sendung-wa-history-toggle');
+    const historyCollapsible = rows.querySelector('.sendung-wa-history-collapsible');
+    if (historyToggle && historyCollapsible) {
+        historyToggle.onclick = () => {
+            waHistoryExpanded = !waHistoryExpanded;
+            historyCollapsible.classList.toggle('hidden', !waHistoryExpanded);
+        };
+    }
     if (!navigatorList || !legend || !detailList || !scopeHint) return;
 
     const rowElements = Array.from(detailList.querySelectorAll('.sendung-wa-row'));
@@ -2294,8 +2468,14 @@ function openWarenuebernahmeModal(paketIndex) {
     }
 
     currentWarenuebernahmePaketIndex = paketIndex;
+    waHistoryExpanded = false;
+    currentWarenuebernahmeAuditEntries = [];
+    waAuditLoading = Boolean(currentEditingSendungId && sendungenCollectionRef);
     resetWarenuebernahmeResetSequence();
     renderWarenuebernahmeModal();
+    if (waAuditLoading) {
+        loadWarenuebernahmeAuditForCurrentPaket();
+    }
     modal.classList.remove('hidden');
     modal.classList.add('flex');
 }
@@ -3654,6 +3834,7 @@ function openSendungModal(sendungId = null, copiedData = null) {
         if (duplicateSendungBtn) duplicateSendungBtn.style.display = 'inline-block';
         fillModalWithSendungData(SENDUNGEN[sendungId]);
         setSendungModalReadMode(true);
+        renderPaketeEditor();
     } else {
         modalTitle.textContent = '📦 Neue Sendung';
         deleteSendungBtn.style.display = 'none';
@@ -3735,13 +3916,17 @@ function setSendungModalReadMode(readMode) {
         field.disabled = readMode;
     });
 
-    const erinnerungenToggleWrapper = document.getElementById('sendungErinnerungenAktiv')?.closest('div.flex.items-center');
+    const erinnerungenAktiv = document.getElementById('sendungErinnerungenAktiv');
+    const erinnerungenSection = document.getElementById('sendungErinnerungenSection');
+    const erinnerungenToggleWrapper = erinnerungenAktiv?.closest('div.flex.items-center');
+    if (erinnerungenSection) {
+        erinnerungenSection.classList.toggle('hidden', readMode && !(erinnerungenAktiv?.checked));
+    }
     if (erinnerungenToggleWrapper) {
         erinnerungenToggleWrapper.classList.toggle('hidden', readMode);
     }
 
     if (!readMode) {
-        const erinnerungenAktiv = document.getElementById('sendungErinnerungenAktiv');
         const tageVorherSelect = document.getElementById('sendungErinnerungTageVorher');
         if (tageVorherSelect) {
             tageVorherSelect.disabled = !(erinnerungenAktiv?.checked);
@@ -4384,7 +4569,6 @@ function createSendungCard(sendung) {
                         <span class="text-2xl">${typInfo.icon}</span>
                         <h3 class="text-lg font-bold ${typInfo.color} break-words">${sendung.beschreibung}</h3>
                     </div>
-                    ${sendung.produkt ? `<p class="text-sm text-gray-600 ml-8 break-words">Produkt: ${sendung.produkt}</p>` : ''}
                 </div>
                 <span class="px-4 py-1.5 rounded-full text-base font-extrabold ${statusInfo.color} whitespace-nowrap">${statusInfo.icon} ${statusInfo.label}</span>
             </div>
