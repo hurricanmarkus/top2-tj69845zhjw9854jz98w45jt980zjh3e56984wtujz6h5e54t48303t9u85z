@@ -158,7 +158,7 @@ const WARENUEBERNAHME_ABWEICHUNG_OPTIONS = {
     unbekannt: 'Sonstiges'
 };
 const WARENUEBERNAHME_PROBLEM_TYPEN = ['fehlt', 'zuviel', 'defekt', 'vertauscht', 'unbekannt'];
-const WARENUEBERNAHME_GELOEST_TYPEN = ['storno', 'rueckerstattet', 'sonstiges'];
+const WARENUEBERNAHME_GELOEST_TYPEN = ['storno', 'rueckerstattet', 'nachlieferung', 'ermaessigung', 'sonstiges'];
 const WARENUEBERNAHME_NAV_STATUS_META = {
     ungeprueft: { label: 'Ungeprüft', dot: 'bg-gray-900', badge: 'bg-gray-900 text-white', filterText: 'text-gray-700' },
     in_pruefung: { label: 'In Prüfung', dot: 'bg-blue-600', badge: 'bg-blue-100 text-blue-700', filterText: 'text-blue-700' },
@@ -244,6 +244,15 @@ function formatCompactDateTime(value) {
     });
 }
 
+function formatWarenuebernahmeGeloestTypLabel(value = '') {
+    const typ = String(value || '').trim().toLowerCase();
+    if (typ === 'storno') return 'Storno';
+    if (typ === 'rueckerstattet' || typ === 'rueckerstattung') return 'Rückerstattung';
+    if (typ === 'nachlieferung') return 'Nachlieferung';
+    if (typ === 'ermaessigung') return 'Ermäßigung';
+    return 'Sonstiges';
+}
+
 async function loadWarenuebernahmeAuditForCurrentPaket() {
     const paketIndex = currentWarenuebernahmePaketIndex;
     const paket = currentSendungPakete[paketIndex];
@@ -308,7 +317,8 @@ function normalizeWarenuebernahmeProblemResolution(entry = {}) {
     const aktionRaw = String(entry?.aktion || 'geloest').trim().toLowerCase();
     const aktion = aktionRaw === 'zuweisen' ? 'zuweisen' : 'geloest';
     const geloestTypRaw = String(entry?.geloestTyp || '').trim().toLowerCase();
-    const geloestTyp = WARENUEBERNAHME_GELOEST_TYPEN.includes(geloestTypRaw) ? geloestTypRaw : 'sonstiges';
+    const geloestTypNormalized = geloestTypRaw === 'rueckerstattung' ? 'rueckerstattet' : geloestTypRaw;
+    const geloestTyp = WARENUEBERNAHME_GELOEST_TYPEN.includes(geloestTypNormalized) ? geloestTypNormalized : 'sonstiges';
 
     return {
         resolutionId: String(entry?.resolutionId || '').trim() || createProblemResolutionId(),
@@ -1639,7 +1649,7 @@ function renderWarenuebernahmeModal() {
             const label = inhaltById.get(entry.inhaltId)?.bezeichnung || `Artikel (${entry.inhaltId || '-'})`;
             const actionLabel = entry.aktion === 'zuweisen'
                 ? `Zuweisung → ${paketById.get(String(entry.zielPaketId || '')) || 'Paket'}`
-                : `Gelöst (${(entry.geloestTyp || 'sonstiges').replace('rueckerstattet', 'rückerstattet')})`;
+                : `Gelöst (${formatWarenuebernahmeGeloestTypLabel(entry.geloestTyp)})`;
             const detailParts = [`${entry.menge}x`, actionLabel];
             if (entry.kommentar) detailParts.push(`Kommentar: ${entry.kommentar}`);
             return {
@@ -2141,18 +2151,13 @@ function renderWarenuebernahmeModal() {
             return;
         }
 
-        const paketOptions = currentSendungPakete
-            .filter((candidate) => String(candidate?.paketId || '').trim() !== String(paket?.paketId || '').trim())
-            .map((candidate, idx) => `<option value="${candidate.paketId}">${candidate.paketLabel || `Paket ${idx + 1}`}</option>`)
-            .join('');
-
         const conflictItemsHtml = problemEntries.length > 0
             ? problemEntries.map((entry) => {
                 const linkedBadges = entry.linkedResolutions.length > 0
                 ? entry.linkedResolutions.map((resolution) => {
                     const typLabel = resolution.aktion === 'zuweisen'
                         ? `Zugewiesen (${resolution.menge})`
-                        : `Gelöst: ${(resolution.geloestTyp || 'sonstiges').replace('rueckerstattet', 'rückerstattet')} (${resolution.menge})`;
+                        : `Gelöst: ${formatWarenuebernahmeGeloestTypLabel(resolution.geloestTyp)} (${resolution.menge})`;
                     return `<span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[11px] font-semibold">${typLabel}</span>`;
                 }).join(' ')
                 : `<span class="text-[11px] ${entry.remainingForResolution > 0 ? 'text-gray-500' : 'text-emerald-700 font-semibold'}">${entry.remainingForResolution > 0 ? 'Noch keine Auflösung' : 'Vollständig kompensiert'}</span>`;
@@ -2172,24 +2177,29 @@ function renderWarenuebernahmeModal() {
 
         const createResolutionRowHtml = (potEntryId, inhaltId) => `
             <div class="sendung-wa-problem-resolution-row rounded-lg border border-gray-200 bg-gray-50 p-2 space-y-2" data-problem-pot-entry-id="${potEntryId}" data-inhalt-id="${inhaltId}" data-counter="0" data-max="0">
-                <div class="grid grid-cols-1 md:grid-cols-5 gap-2 items-end">
-                    <select class="sendung-wa-resolution-action p-2 border border-gray-300 rounded text-xs md:col-span-1">
-                        <option value="zuweisen">Zu Paket zuweisen</option>
+                <div class="grid grid-cols-1 md:grid-cols-6 gap-2 items-end">
+                    <select class="sendung-wa-resolution-action p-2 border border-gray-300 rounded text-xs md:col-span-2">
+                        <option value="ungeloest" selected>Ungelöst</option>
                         <option value="geloest">Als gelöst bestätigen</option>
                     </select>
-                    <select class="sendung-wa-resolution-target p-2 border border-gray-300 rounded text-xs md:col-span-1">${paketOptions || '<option value="">Kein weiteres Paket</option>'}</select>
-                    <select class="sendung-wa-resolution-geloest-typ p-2 border border-gray-300 rounded text-xs md:col-span-1 hidden">
-                        <option value="storno">Storno</option>
-                        <option value="rueckerstattet">Rückerstattet</option>
-                        <option value="sonstiges">Sonstiges</option>
-                    </select>
-                    <input type="text" class="sendung-wa-resolution-kommentar p-2 border border-gray-300 rounded text-xs md:col-span-1" placeholder="Kommentar">
-                    <div class="flex items-center gap-2 md:col-span-1">
-                        <button type="button" class="sendung-wa-resolution-minus w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold leading-none">-</button>
-                        <span class="sendung-wa-resolution-counter-value text-xs font-bold text-gray-700 min-w-[1.5rem] text-center">0</span>
-                        <button type="button" class="sendung-wa-resolution-plus w-8 h-8 rounded-full bg-red-600 text-white font-bold leading-none">+</button>
+                    <div class="sendung-wa-resolution-details hidden md:col-span-4 grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+                        <select class="sendung-wa-resolution-geloest-typ p-2 border border-gray-300 rounded text-xs md:col-span-1" required>
+                            <option value="">Bitte wählen...</option>
+                            <option value="storno">Storno</option>
+                            <option value="rueckerstattet">Rückerstattung</option>
+                            <option value="nachlieferung">Nachlieferung</option>
+                            <option value="ermaessigung">Ermäßigung</option>
+                            <option value="sonstiges">Sonstiges</option>
+                        </select>
+                        <input type="text" class="sendung-wa-resolution-kommentar p-2 border border-gray-300 rounded text-xs md:col-span-2" placeholder="Kommentar">
+                        <div class="flex items-center gap-2 md:col-span-1">
+                            <button type="button" class="sendung-wa-resolution-minus w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold leading-none">-</button>
+                            <span class="sendung-wa-resolution-counter-value text-xs font-bold text-gray-700 min-w-[1.5rem] text-center">0</span>
+                            <button type="button" class="sendung-wa-resolution-plus w-8 h-8 rounded-full bg-red-600 text-white font-bold leading-none">+</button>
+                        </div>
                     </div>
                 </div>
+                <button type="button" class="sendung-wa-resolution-book-btn hidden px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-700 transition">Lösung buchen</button>
                 <div class="sendung-wa-resolution-empty-state text-[11px] text-gray-500">Noch keine Auflösung</div>
             </div>
         `;
@@ -2211,8 +2221,10 @@ function renderWarenuebernahmeModal() {
                 let rowsInList = getRows();
 
                 rowsInList.forEach((resolutionRow) => {
+                    const action = String(resolutionRow.querySelector('.sendung-wa-resolution-action')?.value || 'ungeloest').trim().toLowerCase();
                     const counterRaw = Number.parseInt(resolutionRow.dataset.counter || '0', 10);
-                    const counter = Number.isFinite(counterRaw) && counterRaw > 0 ? Math.min(counterRaw, total) : 0;
+                    const parsedCounter = Number.isFinite(counterRaw) && counterRaw > 0 ? Math.min(counterRaw, total) : 0;
+                    const counter = action === 'geloest' ? parsedCounter : 0;
                     resolutionRow.dataset.counter = String(counter);
                 });
 
@@ -2251,47 +2263,62 @@ function renderWarenuebernahmeModal() {
 
                 rowsInList.forEach((resolutionRow) => {
                     const actionSelect = resolutionRow.querySelector('.sendung-wa-resolution-action');
-                    const targetSelect = resolutionRow.querySelector('.sendung-wa-resolution-target');
+                    const detailsWrap = resolutionRow.querySelector('.sendung-wa-resolution-details');
                     const geloestTypSelect = resolutionRow.querySelector('.sendung-wa-resolution-geloest-typ');
                     const minusBtn = resolutionRow.querySelector('.sendung-wa-resolution-minus');
                     const plusBtn = resolutionRow.querySelector('.sendung-wa-resolution-plus');
                     const counterValue = resolutionRow.querySelector('.sendung-wa-resolution-counter-value');
+                    const bookButton = resolutionRow.querySelector('.sendung-wa-resolution-book-btn');
                     const emptyState = resolutionRow.querySelector('.sendung-wa-resolution-empty-state');
+                    const action = String(actionSelect?.value || 'ungeloest').trim().toLowerCase();
+                    const isGeloest = action === 'geloest';
                     const counterRaw = Number.parseInt(resolutionRow.dataset.counter || '0', 10);
                     const counter = Number.isFinite(counterRaw) && counterRaw > 0 ? counterRaw : 0;
                     const allocatedOthers = allocated - counter;
                     const maxForRow = Math.max(0, total - allocatedOthers);
+                    const geloestTyp = String(geloestTypSelect?.value || '').trim().toLowerCase();
+                    const hasGeloestTyp = Boolean(geloestTyp);
 
                     resolutionRow.dataset.max = String(maxForRow);
                     if (counterValue) counterValue.textContent = String(counter);
 
-                    if (actionSelect && targetSelect && geloestTypSelect) {
-                        const action = String(actionSelect.value || 'zuweisen').trim().toLowerCase();
-                        targetSelect.classList.toggle('hidden', action !== 'zuweisen');
-                        geloestTypSelect.classList.toggle('hidden', action !== 'geloest');
+                    if (detailsWrap) {
+                        detailsWrap.classList.toggle('hidden', !isGeloest);
+                    }
+                    if (geloestTypSelect) {
+                        geloestTypSelect.required = isGeloest;
+                        const markMissing = isGeloest && counter > 0 && !hasGeloestTyp;
+                        geloestTypSelect.classList.toggle('border-red-400', markMissing);
+                        geloestTypSelect.classList.toggle('bg-red-50', markMissing);
                     }
 
                     if (minusBtn) {
-                        const minusDisabled = counter <= 0;
+                        const minusDisabled = !isGeloest || counter <= 0;
                         minusBtn.disabled = minusDisabled;
                         minusBtn.classList.toggle('opacity-40', minusDisabled);
                         minusBtn.classList.toggle('cursor-not-allowed', minusDisabled);
                     }
                     if (plusBtn) {
-                        const plusDisabled = maxForRow <= 0 || counter >= maxForRow;
+                        const plusDisabled = !isGeloest || !hasGeloestTyp || maxForRow <= 0 || counter >= maxForRow;
                         plusBtn.disabled = plusDisabled;
                         plusBtn.classList.toggle('opacity-40', plusDisabled);
                         plusBtn.classList.toggle('cursor-not-allowed', plusDisabled);
                     }
+                    if (bookButton) {
+                        const showBookButton = isGeloest && counter > 0;
+                        bookButton.classList.toggle('hidden', !showBookButton);
+                    }
 
                     if (emptyState) {
-                        emptyState.classList.toggle('hidden', counter > 0);
+                        const showEmptyState = !isGeloest || counter <= 0;
+                        emptyState.textContent = isGeloest ? 'Noch keine Auflösung' : 'Status: Ungelöst';
+                        emptyState.classList.toggle('hidden', !showEmptyState);
                     }
                 });
             };
 
             resolutionList.onchange = (event) => {
-                if (event.target.closest('.sendung-wa-resolution-action')) {
+                if (event.target.closest('.sendung-wa-resolution-action, .sendung-wa-resolution-geloest-typ')) {
                     syncResolutionRows();
                 }
             };
@@ -2679,34 +2706,49 @@ function collectWarenuebernahmeFromModal() {
     });
 
     const resolutionRows = document.querySelectorAll('#sendungWarenuebernahmeProblemPanelList .sendung-wa-problem-resolution-row, #sendungWarenuebernahmeProblemList .sendung-wa-problem-resolution-row');
+    let hasInvalidResolution = false;
     resolutionRows.forEach((row) => {
+        const action = String(row.querySelector('.sendung-wa-resolution-action')?.value || 'ungeloest').trim().toLowerCase();
+        if (action !== 'geloest') return;
+
         const mengeRaw = Number.parseInt(row.dataset.counter || '0', 10);
         const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
         if (menge <= 0) return;
 
         const problemPotEntryId = String(row.dataset.problemPotEntryId || '').trim();
         const inhaltId = String(row.dataset.inhaltId || '').trim();
-        const action = String(row.querySelector('.sendung-wa-resolution-action')?.value || 'zuweisen').trim().toLowerCase();
-        const zielPaketId = String(row.querySelector('.sendung-wa-resolution-target')?.value || '').trim();
-        const geloestTyp = String(row.querySelector('.sendung-wa-resolution-geloest-typ')?.value || 'sonstiges').trim().toLowerCase();
+        const geloestTypSelect = row.querySelector('.sendung-wa-resolution-geloest-typ');
+        const geloestTypRaw = String(geloestTypSelect?.value || '').trim().toLowerCase();
+        const geloestTyp = geloestTypRaw === 'rueckerstattung' ? 'rueckerstattet' : geloestTypRaw;
         const kommentar = String(row.querySelector('.sendung-wa-resolution-kommentar')?.value || '').trim();
 
         if (!problemPotEntryId || !inhaltId) return;
-        if (action === 'zuweisen' && !zielPaketId) return;
+        if (!WARENUEBERNAHME_GELOEST_TYPEN.includes(geloestTyp)) {
+            hasInvalidResolution = true;
+            if (geloestTypSelect) {
+                geloestTypSelect.classList.add('border-red-400', 'bg-red-50');
+            }
+            return;
+        }
 
         problemaufloesungen.push(normalizeWarenuebernahmeProblemResolution({
             resolutionId: createProblemResolutionId(),
             problemPotEntryId,
             inhaltId,
             menge,
-            aktion: action === 'zuweisen' ? 'zuweisen' : 'geloest',
-            zielPaketId: action === 'zuweisen' ? zielPaketId : '',
-            geloestTyp: action === 'geloest' ? geloestTyp : '',
+            aktion: 'geloest',
+            zielPaketId: '',
+            geloestTyp,
             kommentar,
             createdAt: nowIso(),
             createdBy: currentUser?.mode || ''
         }));
     });
+
+    if (hasInvalidResolution) {
+        alertUser('Bitte bei allen gelösten Einträgen einen Lösungstyp auswählen.', 'warning');
+        return null;
+    }
 
     let status = 'offen';
     if (positionen.length > 0) {
