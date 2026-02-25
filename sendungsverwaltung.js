@@ -1591,11 +1591,18 @@ function renderInhaltZuordnungModal() {
         }, 0);
         const maxForThis = Math.max(0, item.menge - assignedOther);
         const initialCounter = Math.max(0, Math.min(maxForThis, thisAssigned));
+        const initialRemaining = Math.max(0, maxForThis - initialCounter);
+        const rowHighlightClass = initialRemaining > 0
+            ? 'border-amber-300 bg-amber-50'
+            : 'border-gray-200 bg-white';
 
         return `
-            <div class="rounded-lg border border-gray-200 bg-white p-3 space-y-2 sendung-zuordnung-row" data-inhalt-id="${item.inhaltId}" data-max-for-this="${maxForThis}" data-counter="${initialCounter}" data-initial-counter="${initialCounter}">
+            <div class="rounded-lg border p-3 space-y-2 sendung-zuordnung-row ${rowHighlightClass}" data-inhalt-id="${item.inhaltId}" data-max-for-this="${maxForThis}" data-counter="${initialCounter}" data-initial-counter="${initialCounter}">
                 <div class="flex items-center justify-between gap-3 flex-wrap">
-                    <div class="font-semibold text-sm text-gray-800">${item.bezeichnung}</div>
+                    <div class="font-semibold text-sm text-gray-800 flex items-center gap-2">
+                        <span class="sendung-zuordnung-open-dot inline-flex w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse ${initialRemaining > 0 ? '' : 'hidden'}"></span>
+                        <span>${item.bezeichnung}</span>
+                    </div>
                     <div class="text-xs text-gray-600">Gesamt: <span class="font-bold">${item.menge}</span> • Andere Pakete: <span class="font-bold">${assignedOther}</span></div>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 justify-start">
@@ -1640,6 +1647,17 @@ function renderInhaltZuordnungModal() {
             const remainingElement = row.querySelector('.sendung-zuordnung-remaining-value');
             if (remainingElement) {
                 remainingElement.textContent = String(Math.max(0, maxForThis - safeValue));
+            }
+
+            const hasRemaining = (maxForThis - safeValue) > 0;
+            row.classList.toggle('bg-amber-50', hasRemaining);
+            row.classList.toggle('border-amber-300', hasRemaining);
+            row.classList.toggle('bg-white', !hasRemaining);
+            row.classList.toggle('border-gray-200', !hasRemaining);
+
+            const openDot = row.querySelector('.sendung-zuordnung-open-dot');
+            if (openDot) {
+                openDot.classList.toggle('hidden', !hasRemaining);
             }
         };
 
