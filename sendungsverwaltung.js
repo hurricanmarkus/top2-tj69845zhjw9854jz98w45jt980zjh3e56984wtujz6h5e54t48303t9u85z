@@ -583,20 +583,22 @@ function computeProblemPotFromPakete(pakete = currentSendungPakete, inhaltItems 
         const normalizedWarenuebernahme = normalizeWarenuebernahme(paket?.warenuebernahme || {});
         if (!normalizedWarenuebernahme.aktiv) return;
 
-        const reassignedByPotEntryId = new Map();
+        const resolvedByPotEntryId = new Map();
         normalizedWarenuebernahme.problemaufloesungen.forEach((resolution) => {
             const problemPotEntryId = String(resolution?.problemPotEntryId || '').trim();
-            if (!problemPotEntryId || resolution.aktion !== 'zuweisen') return;
-            reassignedByPotEntryId.set(
+            const mengeRaw = Number.parseInt(resolution?.menge, 10);
+            const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
+            if (!problemPotEntryId || menge <= 0) return;
+            resolvedByPotEntryId.set(
                 problemPotEntryId,
-                (reassignedByPotEntryId.get(problemPotEntryId) || 0) + (resolution.menge || 0)
+                (resolvedByPotEntryId.get(problemPotEntryId) || 0) + menge
             );
         });
 
         normalizedWarenuebernahme.problemartikel.forEach((problem) => {
             const inhalt = inhaltById.get(problem.inhaltId);
-            const reassigned = reassignedByPotEntryId.get(problem.potEntryId) || 0;
-            const remainingProblem = Math.max(0, (problem.mengeProblem || 0) - reassigned);
+            const resolved = resolvedByPotEntryId.get(problem.potEntryId) || 0;
+            const remainingProblem = Math.max(0, (problem.mengeProblem || 0) - resolved);
             if (remainingProblem <= 0) return;
             results.push(normalizeWarenuebernahmeProblemItem({
                 ...problem,
@@ -1301,9 +1303,13 @@ function renderEmpfangPotOverview() {
 
     const offeneMenge = currentOffenerInhaltPot.reduce((sum, entry) => sum + (entry.mengeOffen || 0), 0);
     const problemMenge = currentWarenuebernahmeProblemPot.reduce((sum, entry) => sum + (entry.mengeProblem || 0), 0);
+    const hasBookedSolutions = currentSendungPakete.some((paket) => {
+        const wa = normalizeWarenuebernahme(paket?.warenuebernahme || {});
+        return wa.problemaufloesungen.some((resolution) => Number.parseInt(resolution?.menge, 10) > 0);
+    });
     const isReadOnlyView = isSendungModalReadMode;
     const showZuordnungsPot = isReadOnlyView ? offeneMenge > 0 : true;
-    const showProblemPot = isReadOnlyView ? problemMenge > 0 : true;
+    const showProblemPot = isReadOnlyView ? (problemMenge > 0 || hasBookedSolutions) : true;
 
     if (!showZuordnungsPot && !showProblemPot) {
         container.classList.add('hidden');
@@ -1315,12 +1321,22 @@ function renderEmpfangPotOverview() {
         ? currentOffenerInhaltPot.map((entry) => `${entry.mengeOffen}x ${entry.bezeichnung || 'Artikel'}`).join(' • ')
         : 'Keine offenen Mengen';
 
-    const problemPotText = currentWarenuebernahmeProblemPot.length > 0
-        ? currentWarenuebernahmeProblemPot
-            .slice(0, 5)
-            .map((entry) => `${entry.mengeProblem}x ${entry.bezeichnung || 'Artikel'} (${WARENUEBERNAHME_ABWEICHUNG_OPTIONS[entry.typ] || entry.typ})`)
-            .join(' • ')
-        : 'Keine Problempositionen';
+    const inhaltById = getInhaltItemsById();
+    const unresolvedProblemLines = currentWarenuebernahmeProblemPot
+        .slice(0, 8)
+        .map((entry) => `${entry.mengeProblem}x ${entry.bezeichnung || 'Artikel'} (${WARENUEBERNAHME_ABWEICHUNG_OPTIONS[entry.typ] || entry.typ})`);
+    const bookedSolutionLines = currentSendungPakete
+        .flatMap((paket) => {
+            const wa = normalizeWarenuebernahme(paket?.warenuebernahme || {});
+            return wa.problemaufloesungen
+                .filter((resolution) => Number.parseInt(resolution?.menge, 10) > 0)
+                .map((resolution) => {
+                    const artikel = inhaltById.get(String(resolution?.inhaltId || '').trim())?.bezeichnung || 'Artikel';
+                    const kommentar = String(resolution?.kommentar || '').trim();
+                    return `${resolution.menge}x ${artikel} – LÖSUNG: ${formatWarenuebernahmeGeloestTypLabel(resolution.geloestTyp)} - Kommentar: ${kommentar || '-'}`;
+                });
+        })
+        .slice(0, 8);
 
     container.classList.remove('hidden');
     container.innerHTML = `
@@ -1330,7 +1346,17 @@ function renderEmpfangPotOverview() {
                 ${showProblemPot ? `<span class="px-2 py-1 rounded-full bg-red-100 text-red-700 font-semibold">Problem-Pot: ${problemMenge} Stk</span>` : ''}
             </div>
             ${showZuordnungsPot ? `<p class="text-xs text-indigo-800"><span class="font-bold">Offen:</span> ${offenerPotText}</p>` : ''}
-            ${showProblemPot ? `<p class="text-xs text-red-700"><span class="font-bold">Probleme:</span> ${problemPotText}</p>` : ''}
+            ${showProblemPot ? `
+                <div class="space-y-1">
+                    <p class="text-xs text-red-700"><span class="font-bold">Probleme:</span></p>
+                    ${unresolvedProblemLines.length > 0
+                        ? `<div class="space-y-0.5">${unresolvedProblemLines.map((line) => `<p class="text-xs text-red-700 font-semibold animate-pulse">${line}</p>`).join('')}</div>`
+                        : '<p class="text-xs text-emerald-700 font-semibold">Keine offenen Problempositionen</p>'}
+                    ${bookedSolutionLines.length > 0
+                        ? `<div class="pt-1 space-y-0.5">${bookedSolutionLines.map((line) => `<p class="text-xs text-emerald-800 font-bold">${line}</p>`).join('')}</div>`
+                        : ''}
+                </div>
+            ` : ''}
         </div>
     `;
 }
@@ -1597,9 +1623,27 @@ function renderWarenuebernahmeModal() {
     const title = document.getElementById('sendungWarenuebernahmeTitle');
     const subtitle = document.getElementById('sendungWarenuebernahmeSubtitle');
     const rows = document.getElementById('sendungWarenuebernahmeRows');
+    const saveBtn = document.getElementById('saveSendungWarenuebernahmeBtn');
     const legacyProblemList = document.getElementById('sendungWarenuebernahmeProblemList');
     const legacyProblemSection = document.getElementById('sendungWarenuebernahmeProblemSection');
     if (!paket || !title || !subtitle || !rows) return;
+
+    const updateWarenuebernahmeSaveButtonState = () => {
+        if (!saveBtn) return;
+        const hasPendingUnbookedResolution = Array.from(document.querySelectorAll('#sendungWarenuebernahmeProblemPanelList .sendung-wa-problem-resolution-row')).some((row) => {
+            const action = String(row.querySelector('.sendung-wa-resolution-action')?.value || 'ungeloest').trim().toLowerCase();
+            if (action !== 'geloest') return false;
+            const counterRaw = Number.parseInt(row.dataset.counter || '0', 10);
+            const counter = Number.isFinite(counterRaw) && counterRaw > 0 ? counterRaw : 0;
+            return counter > 0;
+        });
+        saveBtn.disabled = hasPendingUnbookedResolution;
+        saveBtn.classList.toggle('opacity-50', hasPendingUnbookedResolution);
+        saveBtn.classList.toggle('cursor-not-allowed', hasPendingUnbookedResolution);
+        saveBtn.title = hasPendingUnbookedResolution
+            ? 'Bitte zuerst alle erfassten Lösungen mit "Lösung buchen" bestätigen.'
+            : '';
+    };
 
     if (legacyProblemList) legacyProblemList.innerHTML = '';
     if (legacyProblemSection) legacyProblemSection.classList.add('hidden');
@@ -1668,6 +1712,19 @@ function renderWarenuebernahmeModal() {
         if (Number.isFinite(payload.totalSoll)) payloadParts.push(`Soll: ${payload.totalSoll}`);
         if (Number.isFinite(payload.totalIst)) payloadParts.push(`Ist: ${payload.totalIst}`);
         if (Number.isFinite(payload.totalProblem)) payloadParts.push(`Problem: ${payload.totalProblem}`);
+        const problemResolutionBookings = Array.isArray(payload?.problemResolutionBookings)
+            ? payload.problemResolutionBookings
+                .map((resolution) => {
+                    const artikel = String(resolution?.artikel || resolution?.inhaltId || 'Artikel').trim();
+                    const mengeRaw = Number.parseInt(resolution?.menge, 10);
+                    const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
+                    if (menge <= 0) return '';
+                    const loesungsweg = formatWarenuebernahmeGeloestTypLabel(resolution?.geloestTyp);
+                    const kommentar = String(resolution?.kommentar || '').trim();
+                    return `• Fehlerlösung: ${artikel} • Gelöst: ${loesungsweg} (${menge})${kommentar ? ` • Kommentar: ${kommentar}` : ''}`;
+                })
+                .filter(Boolean)
+            : [];
 
         const bookingDetails = Array.isArray(payload?.articleBookings)
             ? payload.articleBookings
@@ -1694,6 +1751,7 @@ function renderWarenuebernahmeModal() {
 
         const detailLines = [];
         if (payloadParts.length > 0) detailLines.push(payloadParts.join(' • '));
+        if (problemResolutionBookings.length > 0) detailLines.push(...problemResolutionBookings);
         if (bookingDetails.length > 0) {
             detailLines.push(...bookingDetails.map((line) => `• ${line}`));
         }
@@ -1705,6 +1763,7 @@ function renderWarenuebernahmeModal() {
             type: 'Audit',
             title: `Aktion: ${entry.action || 'update'}`,
             detailLines,
+            isProblemResolutionBooking: problemResolutionBookings.length > 0,
             timestampMs: getSortableTimestampMs(entry.timestamp) || getSortableTimestampMs(entry.clientTimestamp),
             timestampLabel: formatCompactDateTime(entry.timestamp || entry.clientTimestamp)
         };
@@ -1715,7 +1774,7 @@ function renderWarenuebernahmeModal() {
 
     const historyContentHtml = historyEntries.length > 0
         ? historyEntries.slice(0, 40).map((entry) => `
-            <div class="rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[11px] leading-tight">
+            <div class="rounded-lg border px-2.5 py-2 text-[11px] leading-tight ${entry.isProblemResolutionBooking ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-white'}">
                 <div class="flex items-center justify-between gap-2">
                     <span class="font-bold text-gray-800">${entry.type}: ${entry.title}</span>
                     ${entry.timestampLabel ? `<span class="text-gray-500 whitespace-nowrap">${entry.timestampLabel}</span>` : ''}
@@ -2157,7 +2216,7 @@ function renderWarenuebernahmeModal() {
                 ? entry.linkedResolutions.map((resolution) => {
                     const typLabel = resolution.aktion === 'zuweisen'
                         ? `Zugewiesen (${resolution.menge})`
-                        : `Gelöst: ${formatWarenuebernahmeGeloestTypLabel(resolution.geloestTyp)} (${resolution.menge})`;
+                        : `Gelöst: ${formatWarenuebernahmeGeloestTypLabel(resolution.geloestTyp)} (${resolution.menge})${String(resolution?.kommentar || '').trim() ? ` - Kommentar: ${String(resolution.kommentar).trim()}` : ''}`;
                     return `<span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[11px] font-semibold">${typLabel}</span>`;
                 }).join(' ')
                 : `<span class="text-[11px] ${entry.remainingForResolution > 0 ? 'text-gray-500' : 'text-emerald-700 font-semibold'}">${entry.remainingForResolution > 0 ? 'Noch keine Auflösung' : 'Vollständig kompensiert'}</span>`;
@@ -2166,7 +2225,7 @@ function renderWarenuebernahmeModal() {
                     <div class="sendung-wa-problem-card rounded-lg border border-red-200 bg-white p-2 space-y-2">
                         <div class="text-xs font-semibold text-red-700">${entry.basisMenge}x ${entry.label} (${WARENUEBERNAHME_ABWEICHUNG_OPTIONS[entry.typ] || entry.typ})</div>
                         <div class="text-[11px] ${entry.remainingForResolution > 0 ? 'text-red-700' : 'text-emerald-700'}">Offen für Auflösung: <span class="font-bold sendung-wa-resolution-remaining">${entry.remainingForResolution}</span></div>
-                        <div class="flex flex-wrap gap-1">${linkedBadges}</div>
+                        <div class="sendung-wa-linked-badges flex flex-wrap gap-1">${linkedBadges}</div>
                         <div class="sendung-wa-problem-resolution-list space-y-2" data-problem-pot-entry-id="${entry.potEntryId}" data-inhalt-id="${entry.inhaltId}" data-total="${entry.remainingForResolution}"></div>
                     </div>
                 `;
@@ -2208,7 +2267,7 @@ function renderWarenuebernahmeModal() {
             const potEntryId = String(resolutionList.dataset.problemPotEntryId || '').trim();
             const inhaltId = String(resolutionList.dataset.inhaltId || '').trim();
             const totalRaw = Number.parseInt(resolutionList.dataset.total || '0', 10);
-            const total = Number.isFinite(totalRaw) && totalRaw > 0 ? totalRaw : 0;
+            let total = Number.isFinite(totalRaw) && totalRaw > 0 ? totalRaw : 0;
             if (!potEntryId || !inhaltId) return;
             if (total > 0) {
                 resolutionList.innerHTML = createResolutionRowHtml(potEntryId, inhaltId);
@@ -2315,6 +2374,8 @@ function renderWarenuebernahmeModal() {
                         emptyState.classList.toggle('hidden', !showEmptyState);
                     }
                 });
+
+                updateWarenuebernahmeSaveButtonState();
             };
 
             resolutionList.onchange = (event) => {
@@ -2326,6 +2387,44 @@ function renderWarenuebernahmeModal() {
             resolutionList.onclick = (event) => {
                 const resolutionRow = event.target.closest('.sendung-wa-problem-resolution-row');
                 if (!resolutionRow) return;
+
+                const bookBtn = event.target.closest('.sendung-wa-resolution-book-btn');
+                if (bookBtn) {
+                    const action = String(resolutionRow.querySelector('.sendung-wa-resolution-action')?.value || 'ungeloest').trim().toLowerCase();
+                    if (action !== 'geloest') return;
+
+                    const counterRaw = Number.parseInt(resolutionRow.dataset.counter || '0', 10);
+                    const menge = Number.isFinite(counterRaw) && counterRaw > 0 ? counterRaw : 0;
+                    if (menge <= 0) return;
+
+                    const geloestTypSelect = resolutionRow.querySelector('.sendung-wa-resolution-geloest-typ');
+                    const geloestTypRaw = String(geloestTypSelect?.value || '').trim().toLowerCase();
+                    const geloestTyp = geloestTypRaw === 'rueckerstattung' ? 'rueckerstattet' : geloestTypRaw;
+                    if (!WARENUEBERNAHME_GELOEST_TYPEN.includes(geloestTyp)) {
+                        if (geloestTypSelect) {
+                            geloestTypSelect.classList.add('border-red-400', 'bg-red-50');
+                        }
+                        alertUser('Bitte zuerst einen Lösungsweg auswählen.', 'warning');
+                        return;
+                    }
+
+                    const kommentar = String(resolutionRow.querySelector('.sendung-wa-resolution-kommentar')?.value || '').trim();
+                    const problemPotEntryId = String(resolutionRow.dataset.problemPotEntryId || '').trim();
+                    const inhaltRowId = String(resolutionRow.dataset.inhaltId || '').trim();
+
+                    resolutionList.insertAdjacentHTML('beforeend', `<div class="sendung-wa-problem-booked-resolution hidden" data-resolution-id="${createProblemResolutionId()}" data-problem-pot-entry-id="${problemPotEntryId}" data-inhalt-id="${inhaltRowId}" data-menge="${menge}" data-geloest-typ="${geloestTyp}" data-kommentar="${escapeHtmlAttribute(kommentar)}"></div>`);
+
+                    const badgesWrap = resolutionList.closest('.sendung-wa-problem-card')?.querySelector('.sendung-wa-linked-badges');
+                    if (badgesWrap) {
+                        badgesWrap.insertAdjacentHTML('beforeend', `<span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[11px] font-semibold">Gelöst: ${formatWarenuebernahmeGeloestTypLabel(geloestTyp)} (${menge})${kommentar ? ` - Kommentar: ${kommentar}` : ''}</span>`);
+                    }
+
+                    total = Math.max(0, total - menge);
+                    resolutionList.dataset.total = String(total);
+                    resolutionRow.remove();
+                    syncResolutionRows();
+                    return;
+                }
 
                 const minusBtn = event.target.closest('.sendung-wa-resolution-minus');
                 if (minusBtn) {
@@ -2348,6 +2447,7 @@ function renderWarenuebernahmeModal() {
         });
 
         syncInsightPanels();
+        updateWarenuebernahmeSaveButtonState();
     };
 
     const getDisplayStatus = (row) => {
@@ -2530,6 +2630,7 @@ function renderWarenuebernahmeModal() {
     };
 
     refreshAll();
+    updateWarenuebernahmeSaveButtonState();
 }
 
 function resetWarenuebernahmeResetSequence() {
@@ -2706,33 +2807,41 @@ function collectWarenuebernahmeFromModal() {
     });
 
     const resolutionRows = document.querySelectorAll('#sendungWarenuebernahmeProblemPanelList .sendung-wa-problem-resolution-row, #sendungWarenuebernahmeProblemList .sendung-wa-problem-resolution-row');
-    let hasInvalidResolution = false;
-    resolutionRows.forEach((row) => {
+    const hasPendingUnbookedResolution = Array.from(resolutionRows).some((row) => {
         const action = String(row.querySelector('.sendung-wa-resolution-action')?.value || 'ungeloest').trim().toLowerCase();
-        if (action !== 'geloest') return;
-
+        if (action !== 'geloest') return false;
         const mengeRaw = Number.parseInt(row.dataset.counter || '0', 10);
+        const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
+        return menge > 0;
+    });
+    if (hasPendingUnbookedResolution) {
+        alertUser('Bitte zuerst die erfassten Lösungsmengen mit "Lösung buchen" bestätigen.', 'warning');
+        return null;
+    }
+
+    const bookedResolutionRows = document.querySelectorAll('#sendungWarenuebernahmeProblemPanelList .sendung-wa-problem-booked-resolution, #sendungWarenuebernahmeProblemList .sendung-wa-problem-booked-resolution');
+    let hasInvalidResolution = false;
+    bookedResolutionRows.forEach((row) => {
+        const mengeRaw = Number.parseInt(row.dataset.menge || '0', 10);
         const menge = Number.isFinite(mengeRaw) && mengeRaw > 0 ? mengeRaw : 0;
         if (menge <= 0) return;
 
         const problemPotEntryId = String(row.dataset.problemPotEntryId || '').trim();
         const inhaltId = String(row.dataset.inhaltId || '').trim();
-        const geloestTypSelect = row.querySelector('.sendung-wa-resolution-geloest-typ');
-        const geloestTypRaw = String(geloestTypSelect?.value || '').trim().toLowerCase();
+        const geloestTypSelect = null;
+        const geloestTypRaw = String(row.dataset.geloestTyp || '').trim().toLowerCase();
         const geloestTyp = geloestTypRaw === 'rueckerstattung' ? 'rueckerstattet' : geloestTypRaw;
-        const kommentar = String(row.querySelector('.sendung-wa-resolution-kommentar')?.value || '').trim();
+        const kommentar = String(row.dataset.kommentar || '').trim();
+        const resolutionId = String(row.dataset.resolutionId || '').trim() || createProblemResolutionId();
 
         if (!problemPotEntryId || !inhaltId) return;
         if (!WARENUEBERNAHME_GELOEST_TYPEN.includes(geloestTyp)) {
             hasInvalidResolution = true;
-            if (geloestTypSelect) {
-                geloestTypSelect.classList.add('border-red-400', 'bg-red-50');
-            }
             return;
         }
 
         problemaufloesungen.push(normalizeWarenuebernahmeProblemResolution({
-            resolutionId: createProblemResolutionId(),
+            resolutionId,
             problemPotEntryId,
             inhaltId,
             menge,
@@ -2808,6 +2917,8 @@ async function saveWarenuebernahmeFromModal() {
     const paket = currentSendungPakete[paketIndex];
     if (!paket) return;
 
+    const previousWarenuebernahme = normalizeWarenuebernahme(paket.warenuebernahme || {});
+
     const aktualisiert = collectWarenuebernahmeFromModal();
     if (!aktualisiert) return;
 
@@ -2829,6 +2940,22 @@ async function saveWarenuebernahmeFromModal() {
         const inhaltById = new Map(inhalt.map((item) => [item.inhaltId, item]));
         const offenerInhaltPot = computeOffenerInhaltPot(inhalt, pakete);
         const warenuebernahmeProblemPot = computeProblemPotFromPakete(pakete, inhalt);
+        const previousResolutionIds = new Set(previousWarenuebernahme.problemaufloesungen.map((resolution) => String(resolution?.resolutionId || '').trim()).filter(Boolean));
+        const problemResolutionBookings = aktualisiert.problemaufloesungen
+            .filter((resolution) => {
+                const resolutionId = String(resolution?.resolutionId || '').trim();
+                return resolutionId && !previousResolutionIds.has(resolutionId);
+            })
+            .map((resolution) => ({
+                resolutionId: String(resolution?.resolutionId || '').trim(),
+                problemPotEntryId: String(resolution?.problemPotEntryId || '').trim(),
+                inhaltId: String(resolution?.inhaltId || '').trim(),
+                artikel: String(inhaltById.get(String(resolution?.inhaltId || '').trim())?.bezeichnung || '').trim() || `Artikel (${resolution?.inhaltId || '-'})`,
+                menge: Number.parseInt(resolution?.menge, 10) || 0,
+                geloestTyp: String(resolution?.geloestTyp || '').trim().toLowerCase(),
+                kommentar: String(resolution?.kommentar || '').trim()
+            }))
+            .filter((resolution) => resolution.menge > 0);
         const articleBookings = aktualisiert.positionen
             .map((position) => {
                 const problemVerteilung = normalizeProblemVerteilung(position?.problemVerteilung || {});
@@ -2886,6 +3013,7 @@ async function saveWarenuebernahmeFromModal() {
                 totalProblem: aktualisiert.zusammenfassung.totalProblem,
                 totalSoll: aktualisiert.zusammenfassung.totalSoll,
                 totalIst: aktualisiert.zusammenfassung.totalIst,
+                problemResolutionBookings,
                 articleBookings
             }
         );
