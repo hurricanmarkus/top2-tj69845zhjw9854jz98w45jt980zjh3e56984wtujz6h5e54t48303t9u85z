@@ -406,6 +406,15 @@ function normalizeInhaltZuordnungEntry(entry = {}) {
     };
 }
 
+function normalizeInhaltZuordnungManualIds(ids = []) {
+    if (!Array.isArray(ids)) return [];
+    return Array.from(new Set(
+        ids
+            .map((id) => String(id || '').trim())
+            .filter(Boolean)
+    ));
+}
+
 function normalizeProblemVerteilung(raw = {}) {
     const source = (raw && typeof raw === 'object') ? raw : {};
     const normalized = {};
@@ -592,7 +601,8 @@ function computeOffenerInhaltPot(inhaltItems = currentInhaltItems, pakete = curr
     if (Array.isArray(pakete) && pakete.length === 1) {
         const firstPaket = pakete[0] || {};
         const hasExplicitZuordnung = Array.isArray(firstPaket.inhaltZuordnung) && firstPaket.inhaltZuordnung.length > 0;
-        if (!hasExplicitZuordnung) {
+        const hasManualTouchMarkers = normalizeInhaltZuordnungManualIds(firstPaket.inhaltZuordnungManualIds).length > 0;
+        if (!hasExplicitZuordnung && !hasManualTouchMarkers) {
             return [];
         }
     }
@@ -697,6 +707,8 @@ function ensureInhaltZuordnungConsistency() {
     currentSendungPakete = currentSendungPakete.map((paket, index) => {
         const normalizedPaket = normalizePaket({ ...paket, paketLabel: `Paket ${index + 1}` }, index);
         const zuordnungMap = new Map();
+        const manualIds = normalizeInhaltZuordnungManualIds(normalizedPaket.inhaltZuordnungManualIds)
+            .filter((inhaltId) => inhaltById.has(inhaltId));
         normalizedPaket.inhaltZuordnung.forEach((entry) => {
             const normalizedEntry = normalizeInhaltZuordnungEntry(entry);
             if (!normalizedEntry.inhaltId || normalizedEntry.mengeSoll <= 0 || !inhaltById.has(normalizedEntry.inhaltId)) return;
@@ -715,6 +727,7 @@ function ensureInhaltZuordnungConsistency() {
                 zuordnungQuelle: zuordnungQuelle === ZUORDNUNG_QUELLE_AUTO ? ZUORDNUNG_QUELLE_AUTO : ZUORDNUNG_QUELLE_MANUAL
             };
         });
+        normalizedPaket.inhaltZuordnungManualIds = manualIds;
 
         normalizedPaket.warenuebernahme = normalizeWarenuebernahme(normalizedPaket.warenuebernahme);
         return normalizedPaket;
@@ -723,6 +736,7 @@ function ensureInhaltZuordnungConsistency() {
     if (inhaltItems.length === 0) {
         currentSendungPakete.forEach((paket) => {
             paket.inhaltZuordnung = [];
+            paket.inhaltZuordnungManualIds = [];
         });
         currentOffenerInhaltPot = [];
         currentWarenuebernahmeProblemPot = computeProblemPotFromPakete(currentSendungPakete, inhaltItems);
@@ -732,6 +746,7 @@ function ensureInhaltZuordnungConsistency() {
 
     if (currentSendungPakete.length === 1) {
         const firstPaket = currentSendungPakete[0];
+        const manualTouchedIds = new Set(normalizeInhaltZuordnungManualIds(firstPaket.inhaltZuordnungManualIds));
         const rebuiltEntries = [];
 
         inhaltItems.forEach((item) => {
@@ -746,22 +761,28 @@ function ensureInhaltZuordnungConsistency() {
                 });
             }
 
-            const autoMenge = Math.max(0, item.menge - clampedManual);
-            if (autoMenge > 0) {
-                rebuiltEntries.push({
-                    inhaltId: item.inhaltId,
-                    mengeSoll: autoMenge,
-                    zuordnungQuelle: ZUORDNUNG_QUELLE_AUTO
-                });
+            if (!manualTouchedIds.has(item.inhaltId)) {
+                const autoMenge = Math.max(0, item.menge - clampedManual);
+                if (autoMenge > 0) {
+                    rebuiltEntries.push({
+                        inhaltId: item.inhaltId,
+                        mengeSoll: autoMenge,
+                        zuordnungQuelle: ZUORDNUNG_QUELLE_AUTO
+                    });
+                }
             }
         });
 
         firstPaket.inhaltZuordnung = rebuiltEntries;
+        firstPaket.inhaltZuordnungManualIds = Array.from(manualTouchedIds)
+            .filter((inhaltId) => inhaltById.has(inhaltId));
     } else {
         currentSendungPakete.forEach((paket) => {
             paket.inhaltZuordnung = (Array.isArray(paket.inhaltZuordnung) ? paket.inhaltZuordnung : [])
                 .map(normalizeInhaltZuordnungEntry)
                 .filter((entry) => entry.inhaltId && entry.mengeSoll > 0 && entry.zuordnungQuelle === ZUORDNUNG_QUELLE_MANUAL);
+            paket.inhaltZuordnungManualIds = normalizeInhaltZuordnungManualIds(paket.inhaltZuordnungManualIds)
+                .filter((inhaltId) => inhaltById.has(inhaltId));
         });
 
         inhaltItems.forEach((item) => {
@@ -840,6 +861,9 @@ function getWarenuebernahmeStatusMeta(paket = {}) {
 function normalizePaket(paket = {}, index = 0) {
     const normalizedWarenuebernahme = normalizeWarenuebernahme(paket?.warenuebernahme || {});
     const normalizedStatus = normalizeStatus(paket?.status);
+    const manualIdsSource = Array.isArray(paket?.inhaltZuordnungManualIds)
+        ? paket.inhaltZuordnungManualIds
+        : (Array.isArray(paket?.inhaltZuordnungManuellIds) ? paket.inhaltZuordnungManuellIds : []);
 
     return {
         paketId: String(paket?.paketId || '').trim() || createPaketId(),
@@ -853,6 +877,7 @@ function normalizePaket(paket = {}, index = 0) {
         inhaltZuordnung: Array.isArray(paket?.inhaltZuordnung)
             ? paket.inhaltZuordnung.map(normalizeInhaltZuordnungEntry).filter((entry) => entry.inhaltId && entry.mengeSoll > 0)
             : [],
+        inhaltZuordnungManualIds: normalizeInhaltZuordnungManualIds(manualIdsSource),
         warenuebernahme: normalizedWarenuebernahme
     };
 }
@@ -1691,36 +1716,50 @@ function applyInhaltZuordnungModal() {
     const rows = document.querySelectorAll('#sendungInhaltZuordnungRows .sendung-zuordnung-row');
     if (!paket) return;
 
-    const isSinglePaket = currentSendungPakete.length === 1;
+    const manualTouchedSet = new Set(normalizeInhaltZuordnungManualIds(paket.inhaltZuordnungManualIds));
+    const availableInhaltIds = new Set();
     const entries = [];
     rows.forEach((row) => {
         const inhaltId = String(row.dataset.inhaltId || '').trim();
         if (!inhaltId) return;
+        availableInhaltIds.add(inhaltId);
         const maxForThisRaw = Number.parseInt(row.dataset.maxForThis || '0', 10);
         const maxForThis = Number.isFinite(maxForThisRaw) && maxForThisRaw >= 0 ? maxForThisRaw : 0;
+        const initialCounterRaw = Number.parseInt(row.dataset.initialCounter || '0', 10);
+        const initialCounter = Number.isFinite(initialCounterRaw) ? Math.max(0, Math.min(maxForThis, initialCounterRaw)) : 0;
         const rawCounter = Number.parseInt(row.dataset.counter || '0', 10);
         const mengeSoll = Number.isFinite(rawCounter) ? Math.max(0, Math.min(maxForThis, rawCounter)) : 0;
-        if (mengeSoll <= 0) {
+
+        if (mengeSoll !== initialCounter) {
+            manualTouchedSet.add(inhaltId);
+        }
+
+        const isManualTouched = manualTouchedSet.has(inhaltId);
+        if (!isManualTouched) {
+            const existingManual = getPaketZuordnungMengeForItem(paket, inhaltId, ZUORDNUNG_QUELLE_MANUAL);
+            const manualMenge = Math.max(0, Math.min(mengeSoll, existingManual));
+            if (manualMenge > 0) {
+                entries.push({
+                    inhaltId,
+                    mengeSoll: manualMenge,
+                    zuordnungQuelle: ZUORDNUNG_QUELLE_MANUAL
+                });
+            }
             return;
         }
 
-        let manualMenge = mengeSoll;
-        if (isSinglePaket) {
-            const existingManual = getPaketZuordnungMengeForItem(paket, inhaltId, ZUORDNUNG_QUELLE_MANUAL);
-            const existingTotal = getPaketZuordnungMengeForItem(paket, inhaltId);
-            manualMenge = mengeSoll === existingTotal ? existingManual : mengeSoll;
-        }
-
-        if (manualMenge > 0) {
+        if (mengeSoll > 0) {
             entries.push({
                 inhaltId,
-                mengeSoll: manualMenge,
+                mengeSoll,
                 zuordnungQuelle: ZUORDNUNG_QUELLE_MANUAL
             });
         }
     });
 
     paket.inhaltZuordnung = entries;
+    paket.inhaltZuordnungManualIds = Array.from(manualTouchedSet)
+        .filter((inhaltId) => availableInhaltIds.has(inhaltId));
     setSendungModalDirty(true);
     ensureInhaltZuordnungConsistency();
     renderPaketeEditor();
@@ -3509,6 +3548,8 @@ function updateTransportEntryField(paketIndex, entryIndex, field, value) {
 function collectPaketeForSave() {
     ensureInhaltZuordnungConsistency();
 
+    const validInhaltIds = new Set(getEffectiveInhaltItems().map((item) => item.inhaltId));
+
     const normalized = currentSendungPakete.map((paket, index) => {
         const cleanedEntries = normalizeTransportEntries(paket.transportEntries)
             .map(normalizeTransportEntry)
@@ -3519,12 +3560,15 @@ function collectPaketeForSave() {
                 .map(normalizeInhaltZuordnungEntry)
                 .filter((entry) => entry.inhaltId && entry.mengeSoll > 0)
             : [];
+        const cleanedManualIds = normalizeInhaltZuordnungManualIds(paket.inhaltZuordnungManualIds)
+            .filter((inhaltId) => validInhaltIds.has(inhaltId));
 
         const normalizedPaket = normalizePaket({
             ...paket,
             paketLabel: `Paket ${index + 1}`,
             transportEntries: cleanedEntries,
             inhaltZuordnung: cleanedZuordnung,
+            inhaltZuordnungManualIds: cleanedManualIds,
             warenuebernahme: normalizeWarenuebernahme(paket.warenuebernahme || {})
         }, index);
 
@@ -3534,6 +3578,7 @@ function collectPaketeForSave() {
             ...normalizedPaket,
             transportEntries: cleanedEntries,
             inhaltZuordnung: cleanedZuordnung,
+            inhaltZuordnungManualIds: cleanedManualIds,
             warenuebernahme: normalizeWarenuebernahme(normalizedPaket.warenuebernahme || {})
         };
     });
@@ -4845,7 +4890,7 @@ async function saveSendung() {
             const pakete = isEmpfangTyp
                 ? rawPakete
                 : rawPakete.map((paket) => {
-                    const { inhaltZuordnung, warenuebernahme, ...rest } = paket;
+                    const { inhaltZuordnung, inhaltZuordnungManualIds, warenuebernahme, ...rest } = paket;
                     return rest;
                 });
             const inhalt = collectInhaltItemsForSave();
@@ -4891,7 +4936,7 @@ async function saveSendung() {
     const pakete = isEmpfangTyp
         ? rawPakete
         : rawPakete.map((paket) => {
-            const { inhaltZuordnung, warenuebernahme, ...rest } = paket;
+            const { inhaltZuordnung, inhaltZuordnungManualIds, warenuebernahme, ...rest } = paket;
             return rest;
         });
     const autoStatus = computeAutoStatusFromPakete(pakete);
