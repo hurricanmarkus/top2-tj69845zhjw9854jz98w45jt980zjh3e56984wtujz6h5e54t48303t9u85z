@@ -197,6 +197,27 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // MA-KARTE (Mitarbeiterkarten Tagesnutzung)
+    // ═══════════════════════════════════════════════════════════════
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/ma-karten_daily/{dayKey} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if false;
+
+      match /events/{eventId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated()
+          && request.resource.data.cardId is string
+          && request.resource.data.company is string
+          && request.resource.data.delta is int
+          && request.resource.data.delta in [-1, 1]
+          && request.resource.data.actorName is string;
+        allow update, delete: if false;
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // ZAHLUNGSVERWALTUNG (Payment Management)
     // ═══════════════════════════════════════════════════════════════
     

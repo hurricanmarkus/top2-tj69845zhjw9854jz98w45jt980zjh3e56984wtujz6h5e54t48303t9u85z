@@ -37,6 +37,7 @@ import { initializeGeschenkemanagement, listenForGeschenke, stopGeschenkemanagem
 import { initializeSendungsverwaltungView, listenForSendungen, stopSendungsverwaltungListeners } from './sendungsverwaltung.js';
 import { ensureNachrichtencenterSelfContact } from './notfall.js';
 import { initializeNotizen, stopNotizenListeners } from './notizen.js';
+import { initializeMitarbeiterkarte, stopMitarbeiterkarteListeners } from './ma-karte.js';
 // // ENDE-ZIKA //
 
 // PUSHOVER API TOKEN (fest codiert, für alle User gleich)
@@ -213,6 +214,9 @@ export function stopAllUserDependentListeners(resetMode = false) {
     if (typeof stopNotizenListeners === 'function') {
         stopNotizenListeners();
     }
+    if (typeof stopMitarbeiterkarteListeners === 'function') {
+        stopMitarbeiterkarteListeners();
+    }
 
     if (resetMode) {
         lastUserDependentListenerMode = null;
@@ -349,6 +353,11 @@ function startUserDependentListeners() {
         listenForSendungen();
     } else {
         console.error("Fehler: listenForSendungen ist nicht importiert!");
+    }
+
+    const maKarteView = document.getElementById('maKarteView');
+    if (maKarteView && maKarteView.classList.contains('active')) {
+        initializeMitarbeiterkarte();
     }
 }
 
@@ -1736,6 +1745,10 @@ export function navigate(targetViewName) {
 
     if (targetViewName === 'haushaltszahlungen') {
         initializeHaushaltszahlungen();
+    }
+
+    if (targetViewName === 'maKarte') {
+        initializeMitarbeiterkarte();
     }
 
     if (targetViewName === 'geschenkemanagement') {
