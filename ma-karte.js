@@ -33,9 +33,9 @@ const COMPANIES = [
 ];
 
 const COMPANY_LOGO_PATHS = {
-    billa: 'assets/ma-karte/logo-billa-billaplus.svg',
-    penny: 'assets/ma-karte/logo-penny.svg',
-    bipa: 'assets/ma-karte/logo-bipa.svg'
+    billa: 'assets/ma-karte/logo-billa-billaplus.png',
+    penny: 'assets/ma-karte/logo-penny.png',
+    bipa: 'assets/ma-karte/logo-bipa.png'
 };
 
 const CARD_ART_PATH = 'assets/ma-karte/rewe-mitarbeiterkarte.svg';
