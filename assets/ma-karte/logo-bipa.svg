@@ -1,5 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="220" height="72" viewBox="0 0 220 72" role="img" aria-label="BIPA Logo">
-  <rect x="0" y="0" width="220" height="72" rx="14" fill="#ec4899"/>
-  <rect x="0" y="0" width="220" height="72" rx="14" fill="none" stroke="#9d174d"/>
-  <text x="110" y="45" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="900" fill="#ffffff">BIPA</text>
+  <defs>
+    <linearGradient id="bipaPink" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#ff0695"/>
+      <stop offset="100%" stop-color="#d5007f"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0.5" y="0.5" width="219" height="71" rx="14" fill="url(#bipaPink)" stroke="#9d1359"/>
+  <text x="110" y="50" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="58" font-weight="900" fill="#f0f0f0" stroke="#c8c8c8" stroke-width="1.5">BIPA</text>
 </svg>
