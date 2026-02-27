@@ -205,10 +205,22 @@ function renderCardHistory(cardId) {
             ? '<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">+ Verwendung</span>'
             : '<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">- Korrektur</span>';
 
+        const actorLabel = escapeHtml(entry.actorName || 'Unbekannt');
+        const usedCardLabel = escapeHtml(getCardConfig(entry.cardId)?.label || cardId || 'Unbekannt');
+        const companyLabel = escapeHtml(entry.companyLabel || getCompanyLabel(entry.company));
+
         return `
             <li class="py-2 border-b border-gray-100 last:border-0">
-                <div class="flex items-center justify-between gap-2 flex-wrap">${actionBadge}<span class="text-xs text-gray-500">${formatEventDate(entry)}</span></div>
-                <p class="text-sm text-gray-700 mt-1">${escapeHtml(entry.actorName || 'Unbekannt')} · ${escapeHtml(entry.companyLabel || getCompanyLabel(entry.company))}</p>
+                <div class="flex items-start justify-between gap-2 flex-wrap">
+                    ${actionBadge}
+                    <div class="flex flex-col items-end gap-1">
+                        <span class="text-xs text-gray-500">${formatEventDate(entry)}</span>
+                        <span class="inline-flex items-center justify-center rounded-full bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1 text-xs font-bold">${actorLabel}</span>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-700 mt-1.5">
+                    MA-Karte <span class="inline-flex items-center rounded-md bg-orange-100 text-orange-700 px-2 py-0.5 font-bold">${usedCardLabel}</span> · ${companyLabel}
+                </p>
             </li>
         `;
     }).join('');
