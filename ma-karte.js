@@ -51,12 +51,17 @@ let modalInfoCardId = null;
 let listenersAttached = false;
 const actionInFlight = new Set();
 
+function buildEmptyCardUsage() {
+    return {
+        markus: { billa: 0, penny: 0, bipa: 0 },
+        jasmin: { billa: 0, penny: 0, bipa: 0 }
+    };
+}
+
 function buildEmptyUsageState() {
     return {
-        cards: {
-            markus: { billa: 0, penny: 0, bipa: 0 },
-            jasmin: { billa: 0, penny: 0, bipa: 0 }
-        }
+        cards: buildEmptyCardUsage(),
+        userUsageCounts: {}
     };
 }
 
@@ -97,6 +102,29 @@ function toSafeCount(value) {
     return Math.max(0, Math.min(MAX_DAILY_USAGE, Math.round(asNumber)));
 }
 
+function normalizeUserUsageCounts(rawUserUsageCounts) {
+    const normalized = {};
+    if (!rawUserUsageCounts || typeof rawUserUsageCounts !== 'object') return normalized;
+
+    Object.entries(rawUserUsageCounts).forEach(([userId, rawCardCounts]) => {
+        if (!userId || !rawCardCounts || typeof rawCardCounts !== 'object') return;
+
+        const emptyCardUsage = buildEmptyCardUsage();
+        CARDS.forEach((card) => {
+            const cardData = rawCardCounts[card.id] || {};
+            emptyCardUsage[card.id] = {
+                billa: toSafeCount(cardData.billa),
+                penny: toSafeCount(cardData.penny),
+                bipa: toSafeCount(cardData.bipa)
+            };
+        });
+
+        normalized[userId] = emptyCardUsage;
+    });
+
+    return normalized;
+}
+
 function normalizeDailyUsageState(rawData) {
     const fallback = buildEmptyUsageState();
     if (!rawData || typeof rawData !== 'object') return fallback;
@@ -112,11 +140,17 @@ function normalizeDailyUsageState(rawData) {
         };
     });
 
-    return { cards };
+    const userUsageCounts = normalizeUserUsageCounts(rawData.userUsageCounts);
+    return { cards, userUsageCounts };
 }
 
 function getRemainingCount(usedCount) {
     return Math.max(0, MAX_DAILY_USAGE - usedCount);
+}
+
+function getOwnUsedCount(state, userId, cardId, companyId) {
+    if (!userId) return 0;
+    return toSafeCount(state?.userUsageCounts?.[userId]?.[cardId]?.[companyId]);
 }
 
 function getStatusClasses(usedCount) {
@@ -162,7 +196,7 @@ function renderCardHistory(cardId) {
     const historyEntries = usageEvents.filter((entry) => entry.cardId === cardId);
 
     if (!historyEntries.length) {
-        return '<p class="text-sm text-gray-500">Heute noch keine Eintraege.</p>';
+        return '<p class="text-sm text-gray-500">Heute noch keine Einträge.</p>';
     }
 
     return historyEntries.map((entry) => {
@@ -191,9 +225,10 @@ function renderMitarbeiterkarte() {
 
         const rowsHtml = COMPANIES.map((company) => {
             const usedCount = toSafeCount(cardUsage[company.id]);
+            const ownUsedCount = getOwnUsedCount(dailyUsageState, currentUser?.mode || null, card.id, company.id);
             const remainingCount = getRemainingCount(usedCount);
             const limitReached = usedCount >= MAX_DAILY_USAGE;
-            const isZero = usedCount <= 0;
+            const ownIsZero = ownUsedCount <= 0;
             const companyLogoPath = COMPANY_LOGO_PATHS[company.id] || '';
 
             return `
@@ -204,7 +239,7 @@ function renderMitarbeiterkarte() {
                         </div>
                         <div>
                             <p class="text-sm font-bold text-slate-800 leading-tight">${escapeHtml(company.label)}</p>
-                            <p class="text-xs text-slate-500 mt-1">${usedCount} verwendet</p>
+                            <p class="text-xs text-slate-500 mt-1">${usedCount} verwendet · davon du ${ownUsedCount}</p>
                         </div>
                         <span class="text-[11px] font-black px-2 py-1 rounded-full border whitespace-nowrap ${getStatusClasses(usedCount)}">${remainingCount} frei</span>
                     </div>
@@ -216,14 +251,14 @@ function renderMitarbeiterkarte() {
                             class="rounded-lg px-3 py-2 text-sm font-black tracking-wide transition ${limitReached ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'}"
                             ${limitReached ? 'disabled' : ''}
                         >
-                            Verwendung hinzufuegen
+                            Verwendung hinzufügen
                         </button>
                         <button
                             data-action="remove-usage"
                             data-card-id="${card.id}"
                             data-company-id="${company.id}"
-                            class="rounded-lg px-3 py-2 text-lg leading-none font-black transition ${isZero ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}"
-                            ${isZero ? 'disabled' : ''}
+                            class="rounded-lg px-3 py-2 text-lg leading-none font-black transition ${ownIsZero ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}"
+                            ${ownIsZero ? 'disabled' : ''}
                             aria-label="Verwendung reduzieren"
                         >
                             -
@@ -235,13 +270,13 @@ function renderMitarbeiterkarte() {
 
         return `
             <section class="rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white shadow-sm overflow-hidden">
-                <div class="relative h-20 overflow-hidden border-b border-slate-200">
+                <div class="relative h-14 overflow-hidden border-b border-slate-200">
                     <img src="${CARD_ART_PATH}" alt="REWE Mitarbeiterkarte" class="absolute inset-0 w-full h-full object-cover">
                     <div class="absolute inset-0 bg-gradient-to-r from-slate-900/80 via-slate-700/50 to-slate-600/10"></div>
                     <div class="relative z-10 h-full px-3 py-2 text-white flex items-center justify-between gap-2">
                         <div>
                             <h3 class="text-lg font-black tracking-wide">Karte ${escapeHtml(card.label)}</h3>
-                            <p class="text-[11px] opacity-90">Live synchron fuer alle Benutzer</p>
+                            <p class="text-[11px] opacity-90">Live synchron für alle Benutzer</p>
                         </div>
                     </div>
                 </div>
@@ -284,7 +319,7 @@ function renderMitarbeiterkarte() {
                             <h4 class="text-lg font-black">Nutzungsprotokoll: ${escapeHtml(activeModalCard?.label || '')}</h4>
                             <p class="text-xs opacity-90">Wer hat wann welche Firma verwendet</p>
                         </div>
-                        <button data-action="close-info-modal" class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 font-black" aria-label="Popup schliessen">x</button>
+                        <button data-action="close-info-modal" class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 font-black" aria-label="Popup schließen">x</button>
                     </div>
                     <div class="p-4 max-h-[65vh] overflow-auto">
                         <ul class="space-y-1">${modalHistoryHtml}</ul>
@@ -397,8 +432,9 @@ function stopDayWatcher() {
 
 function toFriendlyErrorMessage(error) {
     if (!error || !error.message) return 'Speichern fehlgeschlagen.';
-    if (error.message.includes('MAX_LIMIT_REACHED')) return 'Limit erreicht: Heute ist fuer diese Firma nichts mehr frei.';
-    if (error.message.includes('MIN_LIMIT_REACHED')) return 'Es gibt keine Verwendung mehr zum Zuruecknehmen.';
+    if (error.message.includes('MAX_LIMIT_REACHED')) return 'Limit erreicht: Heute ist für diese Firma nichts mehr frei.';
+    if (error.message.includes('MIN_LIMIT_REACHED')) return 'Es gibt keine Verwendung mehr zum Zurücknehmen.';
+    if (error.message.includes('OWN_REDUCTION_FORBIDDEN')) return 'Du kannst nur eigene Verwendungen reduzieren.';
     return 'Speichern fehlgeschlagen. Bitte erneut versuchen.';
 }
 
@@ -431,13 +467,23 @@ async function adjustUsage(cardId, companyId, delta) {
             const daySnapshot = await transaction.get(dayDocRef);
             const currentState = normalizeDailyUsageState(daySnapshot.exists() ? daySnapshot.data() : null);
             const currentCount = toSafeCount(currentState.cards?.[cardId]?.[companyId]);
+            const actorId = currentUser.mode;
+            const actorUsageMap = currentState.userUsageCounts?.[actorId] || buildEmptyCardUsage();
+            const actorCurrentCount = toSafeCount(actorUsageMap?.[cardId]?.[companyId]);
             const nextCount = currentCount + delta;
+            const actorNextCount = actorCurrentCount + delta;
 
             if (nextCount > MAX_DAILY_USAGE) {
                 throw new Error('MAX_LIMIT_REACHED');
             }
             if (nextCount < 0) {
                 throw new Error('MIN_LIMIT_REACHED');
+            }
+            if (delta < 0 && actorCurrentCount <= 0) {
+                throw new Error('OWN_REDUCTION_FORBIDDEN');
+            }
+            if (actorNextCount < 0) {
+                throw new Error('OWN_REDUCTION_FORBIDDEN');
             }
 
             const nextCards = {
@@ -448,11 +494,23 @@ async function adjustUsage(cardId, companyId, delta) {
                 }
             };
 
+            const nextUserUsageCounts = {
+                ...currentState.userUsageCounts,
+                [actorId]: {
+                    ...actorUsageMap,
+                    [cardId]: {
+                        ...actorUsageMap[cardId],
+                        [companyId]: actorNextCount
+                    }
+                }
+            };
+
             const patchData = {
                 dateKey: activeDayKey,
                 timezone: TIME_ZONE,
                 updatedAt: serverTimestamp(),
-                cards: nextCards
+                cards: nextCards,
+                userUsageCounts: nextUserUsageCounts
             };
 
             if (!daySnapshot.exists()) {

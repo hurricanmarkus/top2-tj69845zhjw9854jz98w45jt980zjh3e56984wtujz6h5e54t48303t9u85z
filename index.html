@@ -1155,9 +1155,14 @@
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     <button id="maKarteToolCard"
-                        class="card h-28 p-4 rounded-xl border-2 border-indigo-200 bg-white hover:bg-indigo-50 transition text-left shadow-sm flex flex-col justify-between">
-                        <span class="text-xs font-bold uppercase tracking-wide text-indigo-500">Tool</span>
-                        <span class="text-lg font-bold text-indigo-700">MA-Karte</span>
+                        class="card relative h-28 p-0 rounded-xl border-2 border-slate-300 overflow-hidden transition text-left shadow-sm hover:shadow-lg">
+                        <img src="assets/ma-karte/rewe-mitarbeiterkarte.svg" alt="REWE Mitarbeiterkarte"
+                            class="absolute inset-0 h-full w-full object-cover">
+                        <div class="absolute inset-0 bg-gradient-to-r from-slate-900/75 via-slate-700/45 to-slate-600/20"></div>
+                        <div class="relative z-10 h-full p-4 flex flex-col justify-between">
+                            <span class="text-xs font-bold uppercase tracking-wide text-white/90">Tool</span>
+                            <span class="text-lg font-black text-white">MA-Karte</span>
+                        </div>
                     </button>
 
                     <div class="card h-28 p-4 rounded-xl border border-gray-200 bg-gray-50 text-gray-400 flex items-end">Reserviert</div>
@@ -1188,14 +1193,14 @@
                     <div class="border-t border-gray-300 mt-2"></div>
                 </div>
 
-                <div class="rounded-2xl border border-red-100 bg-gradient-to-r from-red-50 via-white to-amber-50 p-4 mb-4 shadow-sm">
-                    <div class="flex items-center justify-between gap-3 flex-wrap">
-                        <div>
-                            <h2 class="text-2xl font-black text-gray-800 tracking-tight">REWE Mitarbeiterkarte</h2>
-                            <p class="text-sm text-gray-600 mt-1">Schneller Live-Status für Markus- und Jasmin-Karte (BILLA/BILLA PLUS, PENNY, BIPA).</p>
-                        </div>
-                        <div class="text-xs font-semibold px-3 py-1 rounded-full bg-white border border-red-200 text-red-700">
-                            Tageslimit pro Firma: 2
+                <div class="relative rounded-2xl border border-slate-200 overflow-hidden mb-4 shadow-sm">
+                    <img src="assets/ma-karte/rewe-mitarbeiterkarte.svg" alt="REWE Mitarbeiterkarte"
+                        class="absolute inset-0 h-full w-full object-cover">
+                    <div class="absolute inset-0 bg-gradient-to-r from-slate-900/70 via-slate-800/40 to-slate-700/20"></div>
+                    <div class="relative z-10 p-4">
+                        <div class="inline-block rounded-xl bg-black/35 px-4 py-3 shadow-md backdrop-blur-[1px]">
+                            <h2 class="text-2xl font-black text-white tracking-tight">REWE Mitarbeiterkarte</h2>
+                            <p class="text-sm text-slate-100 mt-1">Schneller Live-Status für Markus- und Jasmin-Karte (BILLA/BILLA PLUS, PENNY, BIPA).</p>
                         </div>
                     </div>
                 </div>
