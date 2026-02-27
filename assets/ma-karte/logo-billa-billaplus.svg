@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="280" height="72" viewBox="0 0 280 72" role="img" aria-label="BILLA und BILLA PLUS Logo">
+  <rect x="0" y="0" width="280" height="72" rx="14" fill="#ffffff"/>
+  <rect x="0" y="0" width="280" height="72" rx="14" fill="none" stroke="#d1d5db"/>
+
+  <g transform="translate(12,12)">
+    <rect width="116" height="48" rx="10" fill="#facc15"/>
+    <text x="58" y="33" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="900" fill="#dc2626">BILLA</text>
+  </g>
+
+  <g transform="translate(144,12)">
+    <rect width="124" height="48" rx="10" fill="#ef4444"/>
+    <text x="62" y="24" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="900" fill="#ffffff">BILLA</text>
+    <text x="62" y="40" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="900" fill="#fef08a">PLUS</text>
+  </g>
+</svg>
