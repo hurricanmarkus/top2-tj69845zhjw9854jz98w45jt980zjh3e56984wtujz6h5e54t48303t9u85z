@@ -321,7 +321,8 @@ export async function checkCurrentUserValidity() {
                 'CHECKLIST',
                 'CHECKLIST_SWITCH',
                 'CHECKLIST_SETTINGS',
-                'ESSENSBERECHNUNG'
+                'ESSENSBERECHNUNG',
+                'TOOLS'
             ];
         }
 

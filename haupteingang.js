@@ -61,6 +61,7 @@ export const PERMISSIONS_CONFIG = {
     'ESSENSBERECHNUNG': { label: 'Essensberechnung', indent: false },
     'TERMINPLANER': { label: 'Termin finden', indent: false },
     'TERMINPLANER_CREATE': { label: '-> Neuen Termin anlegen', indent: true },
+    'TOOLS': { label: 'Tools', indent: false },
     'ZAHLUNGSVERWALTUNG': { label: 'Zahlungsverwaltung', indent: false },
     'ZAHLUNGSVERWALTUNG_CREATE': { label: '-> Neue Zahlung anlegen', indent: true },
     'TICKET_SUPPORT': { label: 'Ticket Support', indent: false },
@@ -157,6 +158,8 @@ export const views = {
     essensberechnung: { id: 'essensberechnungView' },
     notrufSettings: { id: 'notrufSettingsView' },
     terminplaner: { id: 'terminplanerView' },
+    tools: { id: 'toolsView' },
+    maKarte: { id: 'maKarteView' },
     zahlungsverwaltung: { id: 'zahlungsverwaltungView' },
     zahlungsverwaltungSettings: { id: 'zahlungsverwaltungSettingsView' },
     ticketSupport: { id: 'ticketSupportView' },
@@ -688,7 +691,7 @@ async function seedInitialData() {
         if (rolesSnapshot.empty) {
             const batch = writeBatch(db);
             const defaultRoles = {
-                SYSTEMADMIN: { name: 'Systemadmin', permissions: ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG', 'ZAHLUNGSVERWALTUNG', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE'], deletable: false },
+                SYSTEMADMIN: { name: 'Systemadmin', permissions: ['ENTRANCE', 'PUSHOVER', 'CHECKLIST', 'CHECKLIST_SWITCH', 'CHECKLIST_SETTINGS', 'ESSENSBERECHNUNG', 'TOOLS', 'ZAHLUNGSVERWALTUNG', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE'], deletable: false },
                 ADMIN: { name: 'Admin', permissions: ['ENTRANCE', 'PUSHOVER', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE'], deletable: false },
                 ANGEMELDET: { name: 'Angemeldet', permissions: ['ENTRANCE', 'TICKET_SUPPORT', 'WERTGUTHABEN', 'VERTRAGSVERWALTUNG', 'REZEPTE'], deletable: true },
                 NO_RIGHTS: { name: '- Keine Rechte -', permissions: [], deletable: false }
@@ -701,6 +704,16 @@ async function seedInitialData() {
             const noRightsSnap = await getDoc(noRightsDoc);
             if (!noRightsSnap.exists()) {
                 await setDoc(noRightsDoc, { name: '- Keine Rechte -', permissions: [], deletable: false });
+            }
+
+            const systemAdminRoleDoc = doc(rolesCollectionRef, 'SYSTEMADMIN');
+            const systemAdminRoleSnap = await getDoc(systemAdminRoleDoc);
+            if (systemAdminRoleSnap.exists()) {
+                const roleData = systemAdminRoleSnap.data() || {};
+                const rolePerms = Array.isArray(roleData.permissions) ? roleData.permissions : [];
+                if (!rolePerms.includes('TOOLS')) {
+                    await updateDoc(systemAdminRoleDoc, { permissions: [...rolePerms, 'TOOLS'] });
+                }
             }
         }
 
@@ -1630,6 +1643,11 @@ export function navigate(targetViewName) {
         // Zugriffsschutz für Haushaltszahlungen
         if (targetViewName === 'haushaltszahlungen' && !userPermissions.includes('HAUSHALTSZAHLUNGEN')) {
             return alertUser("Zugriff verweigert (Haushaltszahlungen).", 'error');
+        }
+
+        // Zugriffsschutz für Tools inkl. Unterseite
+        if ((targetViewName === 'tools' || targetViewName === 'maKarte') && !userPermissions.includes('TOOLS')) {
+            return alertUser("Zugriff verweigert (Tools).", 'error');
         }
     }
 
@@ -2661,6 +2679,12 @@ export function setupEventListeners() {
 
     const terminplanerCard = document.getElementById('terminplanerCard');
     if (terminplanerCard) terminplanerCard.addEventListener('click', () => navigate('terminplaner'));
+
+    const toolsCard = document.getElementById('toolsCard');
+    if (toolsCard) toolsCard.addEventListener('click', () => navigate('tools'));
+
+    const maKarteToolCard = document.getElementById('maKarteToolCard');
+    if (maKarteToolCard) maKarteToolCard.addEventListener('click', () => navigate('maKarte'));
 
     const haushaltszahlungenCard = document.getElementById('haushaltszahlungenCard');
     if (haushaltszahlungenCard) haushaltszahlungenCard.addEventListener('click', () => navigate('haushaltszahlungen'));
