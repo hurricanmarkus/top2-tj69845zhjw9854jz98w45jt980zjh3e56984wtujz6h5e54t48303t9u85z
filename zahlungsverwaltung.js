@@ -6497,6 +6497,7 @@ export async function initializeGuestView(guestId) {
         listContainer.innerHTML = '';
 
         let totalDebt = 0; // Summe NUR für aktive Posten
+        let hasUnknownActiveAmount = false;
         
         // BUGFIX 5: Namen im Header setzen
         document.getElementById('guest-name-display').textContent = guestRealName;
@@ -6531,18 +6532,20 @@ export async function initializeGuestView(guestId) {
                 // Summe berechnen (NUR für Aktive!)
                 if (!isFuture) {
                     let amount = parseFloat(p.remainingAmount);
+                    const safeAmount = Number.isFinite(amount) ? amount : 0;
                     let isMyDebt = (p.createdBy === p.creditorId); // Ersteller kriegt Geld -> Gast schuldet
                     // Logik Check:
                     // Wenn Ersteller = Creditor, dann schuldet Gast (Debtor) mir -> Gast hat Schuld (-)
                     // Wenn Ersteller = Debtor, dann schuldet Ersteller mir -> Gast hat Guthaben (+)
-                    if (p.creditorId === p.createdBy) totalDebt -= amount; // Gast muss zahlen
-                    else totalDebt += amount; // Gast bekommt Geld
+                    if (p.creditorId === p.createdBy) totalDebt -= safeAmount; // Gast muss zahlen
+                    else totalDebt += safeAmount; // Gast bekommt Geld
                 }
             });
 
             // 1. RENDER AKTIVE ITEMS
             activeItems.forEach(p => {
-                let amount = parseFloat(p.remainingAmount);
+                const isUnknownAmount = p.isTBD === true;
+                const amount = isUnknownAmount ? null : parseFloat(p.remainingAmount);
                 // Logik für Gast-Sicht:
                 // Wenn Ersteller (Admin) = Creditor, dann schulde ICH (Gast) das Geld. -> Rot
                 let isMyDebt = (p.creditorId === p.createdBy);
@@ -6553,14 +6556,28 @@ export async function initializeGuestView(guestId) {
                 let textInfo = isMyDebt ? "Du schuldest" : "Du bekommst";
                 if(isSinglePaymentMode && p.status === 'paid') textInfo = "✅ Erledigt";
 
+                let amountHtml = '';
+                if (isUnknownAmount) {
+                    amountHtml = `
+                        <span class="inline-block px-2 py-1 bg-orange-100 text-orange-700 border border-orange-300 rounded font-bold text-xs whitespace-nowrap">
+                            Betrag unbekannt
+                        </span>
+                    `;
+                } else {
+                    const safeAmount = Number.isFinite(amount) ? amount : 0;
+                    amountHtml = `
+                        <span class="font-mono font-bold ${isMyDebt ? 'text-red-600' : 'text-green-600'}">
+                            ${safeAmount.toFixed(2)} €
+                        </span>
+                    `;
+                }
+
                 div.innerHTML = `
                     <div>
                         <p class="font-bold text-gray-800">${p.title}</p>
                         <p class="text-xs text-gray-500">${textInfo}</p>
                     </div>
-                    <span class="font-mono font-bold ${isMyDebt ? 'text-red-600' : 'text-green-600'}">
-                        ${amount.toFixed(2)} €
-                    </span>
+                    ${amountHtml}
                 `;
                 div.onclick = () => openGuestDetailModal(p);
                 listContainer.appendChild(div);
@@ -6580,7 +6597,8 @@ export async function initializeGuestView(guestId) {
                 futureItems.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
 
                 futureItems.forEach(p => {
-                    let amount = parseFloat(p.remainingAmount);
+                    const isUnknownAmount = p.isTBD === true;
+                    const amount = isUnknownAmount ? null : parseFloat(p.remainingAmount);
                     let isMyDebt = (p.creditorId === p.createdBy);
 
                     const startObj = new Date(p.startDate);
@@ -6592,6 +6610,9 @@ export async function initializeGuestView(guestId) {
 
                     const div = document.createElement('div');
                     div.className = "p-3 bg-gray-50 border border-gray-200 rounded shadow-sm flex justify-between items-center cursor-pointer hover:bg-white transition mb-2 opacity-90";
+                    const amountHtml = isUnknownAmount
+                        ? `<span class="inline-block px-2 py-1 bg-orange-100 text-orange-700 border border-orange-300 rounded font-bold text-xs whitespace-nowrap">Betrag unbekannt</span>`
+                        : `<span class="font-mono font-bold text-gray-500">${(Number.isFinite(amount) ? amount : 0).toFixed(2)} €</span>`;
                     
                     div.innerHTML = `
                         <div>
@@ -6603,9 +6624,7 @@ export async function initializeGuestView(guestId) {
                             </div>
                             <p class="text-xs text-gray-400">Vorschau (${isMyDebt ? 'Schuld' : 'Haben'})</p>
                         </div>
-                        <span class="font-mono font-bold text-gray-500">
-                            ${amount.toFixed(2)} €
-                        </span>
+                        ${amountHtml}
                     `;
                     div.onclick = () => openGuestDetailModal(p);
                     listContainer.appendChild(div);
@@ -6628,6 +6647,16 @@ export async function initializeGuestView(guestId) {
             totalEl.textContent = "0,00 €";
             totalEl.className = "text-4xl font-extrabold text-gray-400";
             statusEl.textContent = "Alles erledigt.";
+        }
+
+        // Unbekannte Beträge klar kennzeichnen
+        activeItems.forEach((p) => {
+            if (p.isTBD === true) hasUnknownActiveAmount = true;
+        });
+
+        if (hasUnknownActiveAmount) {
+            const baseText = statusEl.textContent;
+            statusEl.innerHTML = `${baseText}<br><span class="text-[11px] text-orange-600 font-semibold">Hinweis: Es gibt Posten mit "Betrag unbekannt". Dieser Wert kann spaeter nachgetragen werden.</span>`;
         }
 
     } catch (e) {
@@ -6667,105 +6696,186 @@ function openGuestDetailModal(p) {
         document.body.appendChild(modal);
     }
 
-    // Formatierungen
-    const createdStr = new Date(p.createdAt?.toDate ? p.createdAt.toDate() : p.createdAt).toLocaleDateString();
-    const amountStr = parseFloat(p.amount).toFixed(2) + " €";
-    const remainStr = parseFloat(p.remainingAmount).toFixed(2) + " €";
-    
-    // Datum & Frist Strings
-    let dateInfoHtml = "";
-    
-    if (p.startDate || p.deadline) {
-        let startBlock = "";
-        let deadBlock = "";
+    const escapeHtml = (value) => String(value || '').replace(/[&<>'"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]));
+    const formatDate = (value, withTime = false) => {
+        if (!value) return '—';
+        const dateValue = value?.toDate ? value.toDate() : value;
+        const d = new Date(dateValue);
+        if (Number.isNaN(d.getTime())) return '—';
+        return d.toLocaleString('de-DE', withTime
+            ? { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }
+            : { day: '2-digit', month: '2-digit', year: 'numeric' }
+        );
+    };
 
-        if (p.startDate) {
-            const sDate = new Date(p.startDate).toLocaleDateString();
-            startBlock = `
-                <div class="flex flex-col items-center p-2 bg-white rounded border border-gray-200 flex-1">
-                    <span class="text-[10px] text-gray-400 uppercase font-bold">Startdatum</span>
-                    <span class="text-sm font-bold text-gray-700">${sDate}</span>
-                </div>`;
-        }
+    const parseInfoText = (rawText) => {
+        if (!rawText) return '';
+        return escapeHtml(rawText).replace(/\[LINK:[^\]]+\]/g, '<span class="text-indigo-500 font-semibold">Verknüpfter Eintrag</span>');
+    };
 
-        if (p.deadline) {
-            const dDate = new Date(p.deadline).toLocaleDateString();
-            // Deadline check für Farbe
-            const dObj = new Date(p.deadline);
-            dObj.setHours(23,59,59);
-            const now = new Date();
-            const isOver = dObj < now;
-            const styleClass = isOver ? "text-red-600" : "text-gray-700";
+    const typeLabels = { debt: 'Schuld / Forderung', transfer: 'Umbuchung', credit: 'Guthaben' };
+    const typeLabel = typeLabels[p.type] || 'Transaktion';
 
-            deadBlock = `
-                <div class="flex flex-col items-center p-2 bg-white rounded border border-gray-200 flex-1">
-                    <span class="text-[10px] text-gray-400 uppercase font-bold">Frist</span>
-                    <span class="text-sm font-bold ${styleClass}">${dDate}</span>
-                </div>`;
-        }
+    const knownCategories = [...SYSTEM_CATEGORIES, ...allCategories];
+    const foundCategory = knownCategories.find((c) => c.id === p.categoryId);
+    const categoryLabel = foundCategory?.name
+        ? escapeHtml(foundCategory.name)
+        : (p.categoryId ? `Eigene Kategorie (${escapeHtml(p.categoryId)})` : 'Diverse');
 
-        dateInfoHtml = `<div class="flex gap-2 mb-4">${startBlock}${deadBlock}</div>`;
+    const createdStr = formatDate(p.createdAt, false);
+    const startStr = formatDate(p.startDate, false);
+    const deadlineStr = formatDate(p.deadline, false);
+
+    const totalAmount = Number.parseFloat(p.amount);
+    const remainingAmount = Number.parseFloat(p.remainingAmount);
+    const isTBD = p.isTBD === true;
+
+    const amountDisplay = isTBD
+        ? '<span class="inline-block px-2 py-1 bg-orange-100 text-orange-700 border border-orange-300 rounded font-bold text-xs">Betrag unbekannt</span>'
+        : `${(Number.isFinite(totalAmount) ? totalAmount : 0).toFixed(2)} €`;
+
+    const remainingDisplay = isTBD
+        ? '<span class="inline-block px-2 py-1 bg-orange-100 text-orange-700 border border-orange-300 rounded font-bold text-xs">Betrag unbekannt</span>'
+        : `${(Number.isFinite(remainingAmount) ? remainingAmount : 0).toFixed(2)} €`;
+
+    const hasDeadline = deadlineStr !== '—';
+    let deadlineClass = 'text-gray-700';
+    if (hasDeadline) {
+        const dObj = new Date(p.deadline);
+        dObj.setHours(23, 59, 59, 999);
+        if (!Number.isNaN(dObj.getTime()) && dObj < new Date()) deadlineClass = 'text-red-600';
     }
 
-    // Verlauf schön formatieren
-    let historyHtml = '<p class="italic text-gray-400">Kein Verlauf.</p>';
-    if (p.history && p.history.length > 0) {
-        historyHtml = p.history.slice().reverse().map(h => {
-            const d = h.date?.toDate ? h.date.toDate() : new Date(h.date);
-            const dFmt = d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-            const cleanInfo = h.info.replace(/\[LINK:[^\]]+\]/g, '<span class="text-indigo-400 font-bold">Eintrag</span>');
-            return `
-                <div class="border-b border-gray-100 pb-1 mb-1 last:border-0">
-                    <span class="font-bold text-gray-700 text-xs">${h.user || 'System'}</span> 
-                    <span class="text-[10px] text-gray-400">(${dFmt})</span>
-                    <div class="text-xs mt-0.5">${cleanInfo}</div>
-                </div>`;
-        }).join('');
-    }
-
-    // Transaktionen
-    let transHtml = '';
-    if (p.transactions && p.transactions.length > 0) {
-        transHtml = `<h4 class="font-bold text-gray-800 mt-4 mb-2 border-b pb-1">Zahlungen</h4>`;
-        transHtml += p.transactions.map(tx => {
-            const tDate = new Date(tx.date?.toDate ? tx.date.toDate() : tx.date).toLocaleDateString();
-            return `
-                <div class="flex justify-between bg-green-50 p-2 rounded mb-1 border border-green-100">
-                    <div>
-                        <span class="font-bold text-green-700">+ ${parseFloat(tx.amount).toFixed(2)} €</span>
-                        <span class="text-xs text-gray-500 block">von ${tx.user} am ${tDate}</span>
+    let positionsHtml = '<p class="text-xs italic text-gray-400">Keine Posten erfasst.</p>';
+    if (Array.isArray(p.positions) && p.positions.length > 0) {
+        positionsHtml = p.positions.map((pos) => {
+            if (typeof pos === 'string') {
+                return `
+                    <div class="flex justify-between items-center text-xs border-b border-gray-100 py-1 last:border-0">
+                        <span class="text-gray-700">${escapeHtml(pos)}</span>
+                        <span class="text-gray-400">—</span>
                     </div>
-                </div>`;
+                `;
+            }
+            const pName = escapeHtml(pos?.name || 'Posten');
+            const pPrice = Number.parseFloat(pos?.price);
+            const pPriceText = Number.isFinite(pPrice)
+                ? `${pPrice.toFixed(2)} €`
+                : '—';
+            return `
+                <div class="flex justify-between items-center text-xs border-b border-gray-100 py-1 last:border-0">
+                    <span class="text-gray-700">${pName}</span>
+                    <span class="font-mono font-semibold text-gray-800">${pPriceText}</span>
+                </div>
+            `;
         }).join('');
     }
 
-    // Inhalt zusammenbauen
+    let transactionsHtml = '<p class="text-xs italic text-gray-400">Keine Zahlungen erfasst.</p>';
+    if (Array.isArray(p.transactions) && p.transactions.length > 0) {
+        const sortedTransactions = [...p.transactions].sort((a, b) => {
+            const dateA = new Date(a?.date?.toDate ? a.date.toDate() : a?.date).getTime() || 0;
+            const dateB = new Date(b?.date?.toDate ? b.date.toDate() : b?.date).getTime() || 0;
+            return dateB - dateA;
+        });
+        transactionsHtml = sortedTransactions.map((tx) => {
+            const txAmount = Number.parseFloat(tx?.amount);
+            const amountText = Number.isFinite(txAmount) ? `+ ${txAmount.toFixed(2)} €` : '+ 0,00 €';
+            const txUser = escapeHtml(tx?.user || 'Unbekannt');
+            const txDate = formatDate(tx?.date, true);
+            const txInfo = tx?.info ? `<div class="text-[11px] text-gray-500 mt-0.5">${parseInfoText(tx.info)}</div>` : '';
+            return `
+                <div class="bg-green-50 border border-green-100 rounded-lg p-2 mb-2 last:mb-0">
+                    <div class="flex justify-between items-start gap-2">
+                        <span class="font-bold text-green-700 text-sm">${amountText}</span>
+                        <span class="text-[10px] text-gray-500">${txDate}</span>
+                    </div>
+                    <p class="text-xs text-gray-600">von ${txUser}</p>
+                    ${txInfo}
+                </div>
+            `;
+        }).join('');
+    }
+
+    let historyHtml = '<p class="text-xs italic text-gray-400">Kein Verlauf vorhanden.</p>';
+    if (Array.isArray(p.history) && p.history.length > 0) {
+        historyHtml = [...p.history].reverse().map((h) => {
+            const user = escapeHtml(h?.user || 'System');
+            const date = formatDate(h?.date, true);
+            const info = parseInfoText(h?.info || '');
+            return `
+                <div class="border-b border-gray-100 pb-2 mb-2 last:border-0 last:pb-0 last:mb-0">
+                    <div class="flex justify-between items-start gap-2 mb-0.5">
+                        <span class="font-bold text-gray-700 text-xs">${user}</span>
+                        <span class="text-[10px] text-gray-400">${date}</span>
+                    </div>
+                    <div class="text-xs text-gray-600 leading-relaxed">${info}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    const posContentId = `guest-pos-content-${p.id}`;
+    const posIconId = `guest-pos-icon-${p.id}`;
+    const txContentId = `guest-tx-content-${p.id}`;
+    const txIconId = `guest-tx-icon-${p.id}`;
+    const logContentId = `guest-log-content-${p.id}`;
+    const logIconId = `guest-log-icon-${p.id}`;
+
+    const detailsText = String(p.notes || '').trim();
+
     content.innerHTML = `
-        <div class="bg-gray-100 p-3 rounded-lg mb-4">
-            <h2 class="text-xl font-bold text-gray-800 mb-1">${p.title}</h2>
-            <p class="text-xs text-gray-500">ID: #${p.id.slice(-4).toUpperCase()} • Erstellt: ${createdStr}</p>
+        <div class="bg-gradient-to-br from-emerald-50 to-white p-4 rounded-xl border border-emerald-100 mb-4 shadow-sm">
+            <h2 class="text-xl font-bold text-gray-800 mb-1">${escapeHtml(p.title || 'Eintrag')}</h2>
+            <p class="text-xs text-gray-500">ID: #${escapeHtml(String(p.id || '').slice(-4).toUpperCase())} • Erstellt: ${createdStr}</p>
         </div>
 
-        <div class="grid grid-cols-2 gap-4 mb-4 text-center">
-            <div class="p-2 border rounded-lg">
+        <div class="grid grid-cols-2 gap-3 mb-4 text-center">
+            <div class="p-3 border rounded-xl bg-white shadow-sm">
                 <p class="text-xs font-bold text-gray-400 uppercase">Gesamt</p>
-                <p class="font-bold text-gray-800">${amountStr}</p>
+                <p class="font-bold text-gray-800 mt-1">${amountDisplay}</p>
             </div>
-            <div class="p-2 border rounded-lg bg-yellow-50 border-yellow-200">
+            <div class="p-3 border rounded-xl bg-yellow-50 border-yellow-200 shadow-sm">
                 <p class="text-xs font-bold text-yellow-700 uppercase">Noch Offen</p>
-                <p class="font-bold text-yellow-800 text-lg">${remainStr}</p>
+                <p class="font-bold text-yellow-800 mt-1">${remainingDisplay}</p>
             </div>
         </div>
 
-        ${dateInfoHtml}
+        ${isTBD ? '<div class="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg text-xs text-orange-800 font-medium">Betrag unbekannt: Der Betrag wird ggf. später nachgetragen.</div>' : ''}
 
-        ${p.notes ? `<div class="mb-4 p-3 bg-yellow-50 border border-yellow-100 rounded text-sm"><strong>Notiz:</strong><br>${p.notes}</div>` : ''}
+        <div class="grid grid-cols-2 gap-y-3 gap-x-3 mb-4 p-3 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 shadow-sm">
+            <div><span class="font-bold text-gray-500">Startdatum:</span><br>${startStr}</div>
+            <div><span class="font-bold text-gray-500">Frist:</span><br><span class="${deadlineClass}">${deadlineStr}</span></div>
+            <div><span class="font-bold text-gray-500">Kategorie:</span><br>${categoryLabel}</div>
+            <div><span class="font-bold text-gray-500">Typ:</span><br>${escapeHtml(typeLabel)}</div>
+            ${p.invoiceNr ? `<div><span class="font-bold text-gray-500">Rechnungs-Nr.:</span><br>${escapeHtml(p.invoiceNr)}</div>` : ''}
+            ${p.orderNr ? `<div><span class="font-bold text-gray-500">Bestell-Nr.:</span><br>${escapeHtml(p.orderNr)}</div>` : ''}
+        </div>
 
-        ${transHtml}
+        ${detailsText ? `<div class="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700"><p class="text-[11px] uppercase font-bold text-gray-500 mb-1">Details</p>${escapeHtml(detailsText)}</div>` : ''}
 
-        <h4 class="font-bold text-gray-800 mt-4 mb-2 border-b pb-1">Protokoll / Verlauf</h4>
-        <div class="bg-white border rounded p-2 max-h-48 overflow-y-auto space-y-2">
-            ${historyHtml}
+        <div class="bg-white border border-gray-200 rounded-xl mb-4 overflow-hidden shadow-sm">
+            <button class="w-full flex justify-between items-center p-3 bg-gray-50 hover:bg-gray-100 transition" onclick="document.getElementById('${posContentId}').classList.toggle('hidden'); document.getElementById('${posIconId}').classList.toggle('rotate-180');">
+                <span class="text-xs font-bold text-gray-600 uppercase">Posten (${Array.isArray(p.positions) ? p.positions.length : 0})</span>
+                <svg id="${posIconId}" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            <div id="${posContentId}" class="hidden p-3 border-t border-gray-100 max-h-52 overflow-y-auto">${positionsHtml}</div>
+        </div>
+
+        <div class="bg-white border border-gray-200 rounded-xl mb-4 overflow-hidden shadow-sm">
+            <button class="w-full flex justify-between items-center p-3 bg-gray-50 hover:bg-gray-100 transition" onclick="document.getElementById('${txContentId}').classList.toggle('hidden'); document.getElementById('${txIconId}').classList.toggle('rotate-180');">
+                <span class="text-xs font-bold text-gray-600 uppercase">Zahlungshistorie</span>
+                <svg id="${txIconId}" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            <div id="${txContentId}" class="hidden p-3 border-t border-gray-100 max-h-52 overflow-y-auto bg-gray-50">${transactionsHtml}</div>
+        </div>
+
+        <div class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+            <button class="w-full flex justify-between items-center p-3 bg-gray-50 hover:bg-gray-100 transition" onclick="document.getElementById('${logContentId}').classList.toggle('hidden'); document.getElementById('${logIconId}').classList.toggle('rotate-180');">
+                <span class="text-xs font-bold text-gray-600 uppercase">System-Log</span>
+                <svg id="${logIconId}" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            <div id="${logContentId}" class="hidden p-3 border-t border-gray-100 max-h-60 overflow-y-auto bg-gray-50">${historyHtml}</div>
         </div>
     `;
 
