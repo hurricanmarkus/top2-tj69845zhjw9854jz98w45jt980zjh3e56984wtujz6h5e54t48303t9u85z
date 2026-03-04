@@ -181,6 +181,11 @@ function getVoucherById(voucherId) {
     return mitarbeitergutscheine.find((entry) => entry.id === voucherId) || null;
 }
 
+function isVoucherExpired(voucher, dayKey) {
+    if (!voucher || !isValidDayKey(voucher.validToDayKey) || !isValidDayKey(dayKey)) return false;
+    return voucher.validToDayKey < dayKey;
+}
+
 function getOwnVoucherUsedCount(voucher, userId) {
     if (!voucher || !userId) return 0;
     return toSafeVoucherCount(voucher.usageByUser?.[userId]);
@@ -199,6 +204,7 @@ function getVoucherStatusClasses(usedCount, maxCount) {
 function resetVoucherModalState() {
     voucherManagerCardId = null;
     voucherManagerEditVoucherId = null;
+    voucherManagerShowExpired = false;
 }
 
 const COMPANIES = [
@@ -234,6 +240,7 @@ let modalHistoryLoadRequestId = 0;
 let modalInfoMenuOpen = false;
 let voucherManagerCardId = null;
 let voucherManagerEditVoucherId = null;
+let voucherManagerShowExpired = false;
 let voucherAccordionOpen = {
     markus: false,
     jasmin: false
@@ -527,13 +534,22 @@ function renderVoucherManagerModal() {
     const formTitle = canEditVoucher ? 'Gutschein bearbeiten' : 'Neuen Gutschein anlegen';
     const submitLabel = canEditVoucher ? 'Gutschein aktualisieren' : 'Gutschein speichern';
 
+    const todayDayKey = getDayKeyNow();
     const allCardVouchers = getVouchersForCard(managerCard.id);
-    const ownVoucherRows = allCardVouchers
-        .filter((voucher) => voucher.createdById === ownUserId)
+    const ownAllVouchers = allCardVouchers.filter((voucher) => voucher.createdById === ownUserId);
+    const ownExpiredCount = ownAllVouchers.filter((voucher) => isVoucherExpired(voucher, todayDayKey)).length;
+    const ownVisibleVouchers = ownAllVouchers.filter((voucher) => voucherManagerShowExpired || !isVoucherExpired(voucher, todayDayKey));
+
+    const ownVoucherRows = ownVisibleVouchers
         .map((voucher) => {
             const usageTotal = toSafeVoucherCount(voucher.usageTotal);
+            const isEditingThisVoucher = voucherManagerEditVoucherId === voucher.id;
+            const rowClasses = isEditingThisVoucher
+                ? 'rounded-lg border border-amber-300 bg-amber-100 p-2.5'
+                : 'rounded-lg border border-slate-200 bg-slate-50 p-2.5';
+
             return `
-                <li class="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                <li class="${rowClasses}">
                     <div class="flex items-start justify-between gap-2 flex-wrap">
                         <div>
                             <p class="text-sm font-bold text-slate-800">${escapeHtml(voucher.title || 'Unbenannter Gutschein')}</p>
@@ -548,7 +564,10 @@ function renderVoucherManagerModal() {
             `;
         }).join('');
 
-    const ownVoucherListHtml = ownVoucherRows || '<p class="text-xs text-slate-500">Du hast für diese Karte noch keine Gutscheine angelegt.</p>';
+    const ownVoucherListHtml = ownVoucherRows || '<p class="text-xs text-slate-500">Keine Gutscheine in dieser Ansicht.</p>';
+    const expiredToggleLabel = voucherManagerShowExpired
+        ? 'Abgelaufene ausblenden'
+        : `Abgelaufene einblenden${ownExpiredCount > 0 ? ` (${ownExpiredCount})` : ''}`;
 
     return `
         <div class="fixed inset-0 z-[60]">
@@ -583,7 +602,10 @@ function renderVoucherManagerModal() {
                             </div>
                         </section>
                         <section class="rounded-xl border border-slate-200 bg-white p-3">
-                            <h5 class="text-sm font-black text-slate-800 mb-2">Deine Gutscheine</h5>
+                            <div class="mb-2 flex items-center justify-between gap-2">
+                                <h5 class="text-sm font-black text-slate-800">Deine Gutscheine</h5>
+                                <button data-action="toggle-voucher-show-expired" class="rounded-md border border-slate-300 bg-white hover:bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600">${expiredToggleLabel}</button>
+                            </div>
                             <div class="space-y-2">${ownVoucherListHtml}</div>
                         </section>
                     </div>
@@ -1013,6 +1035,11 @@ async function deleteVoucher(voucherId) {
         return;
     }
 
+    const confirmDelete = window.confirm(`Soll der Gutschein "${voucher.title || 'Unbenannter Gutschein'}" wirklich gelöscht werden?`);
+    if (!confirmDelete) {
+        return;
+    }
+
     try {
         await runTransaction(db, async (transaction) => {
             const voucherRef = getVoucherDocRef(voucherId);
@@ -1300,6 +1327,12 @@ function handleRootClick(event) {
 
     if (action === 'cancel-voucher-edit') {
         voucherManagerEditVoucherId = null;
+        renderMitarbeiterkarte();
+        return;
+    }
+
+    if (action === 'toggle-voucher-show-expired') {
+        voucherManagerShowExpired = !voucherManagerShowExpired;
         renderMitarbeiterkarte();
         return;
     }
