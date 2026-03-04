@@ -10,6 +10,7 @@ import {
 import {
     collection,
     doc,
+    getDocs,
     limit,
     onSnapshot,
     orderBy,
@@ -25,6 +26,83 @@ const CARDS = [
     { id: 'markus', label: 'Markus', accent: 'from-red-500 to-rose-600' },
     { id: 'jasmin', label: 'Jasmin', accent: 'from-sky-500 to-cyan-600' }
 ];
+
+function isValidDayKey(dayKey) {
+    return typeof dayKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dayKey);
+}
+
+function formatDayKeyLabel(dayKey) {
+    if (!isValidDayKey(dayKey)) return '--';
+
+    const parsed = new Date(`${dayKey}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return dayKey;
+
+    return new Intl.DateTimeFormat('de-AT', {
+        timeZone: TIME_ZONE,
+        weekday: 'short',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(parsed);
+}
+
+function getActiveModalHistoryDayKey() {
+    if (isValidDayKey(modalHistoryDayKey)) return modalHistoryDayKey;
+    return getDayKeyNow();
+}
+
+function resetModalHistorySelection() {
+    modalHistoryDayKey = null;
+    modalHistoryArchivedEvents = [];
+    modalHistoryLoading = false;
+    modalHistoryPickerOpen = false;
+    modalHistoryLoadRequestId += 1;
+}
+
+function getHistoryEventsForDay(dayKey) {
+    if (dayKey === currentDayKey) {
+        return usageEvents;
+    }
+    return modalHistoryArchivedEvents;
+}
+
+async function loadModalHistoryForDay(dayKey) {
+    if (!isValidDayKey(dayKey)) return;
+
+    const requestId = ++modalHistoryLoadRequestId;
+    modalHistoryLoading = true;
+    modalHistoryArchivedEvents = [];
+    renderMitarbeiterkarte();
+
+    if (dayKey === currentDayKey) {
+        modalHistoryLoading = false;
+        renderMitarbeiterkarte();
+        return;
+    }
+
+    try {
+        const dayDocRef = getDayDocRef(dayKey);
+        const eventsQuery = query(collection(dayDocRef, 'events'), orderBy('createdAt', 'desc'), limit(250));
+        const snapshot = await getDocs(eventsQuery);
+
+        if (requestId !== modalHistoryLoadRequestId) return;
+        modalHistoryArchivedEvents = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+    } catch (error) {
+        if (requestId !== modalHistoryLoadRequestId) return;
+        console.error('MA-Karte: Fehler beim Laden eines Archiv-Tages:', error);
+        alertUser('MA-Karte: Protokoll für den gewählten Tag konnte nicht geladen werden.', 'error');
+    } finally {
+        if (requestId !== modalHistoryLoadRequestId) return;
+        modalHistoryLoading = false;
+        renderMitarbeiterkarte();
+    }
+}
+
+function setModalHistoryDay(dayKey) {
+    if (!isValidDayKey(dayKey)) return;
+    modalHistoryDayKey = dayKey;
+    void loadModalHistoryForDay(dayKey);
+}
 
 const COMPANIES = [
     { id: 'billa', label: 'BILLA / BILLA PLUS' },
@@ -48,6 +126,11 @@ let currentUserMode = null;
 let dailyUsageState = buildEmptyUsageState();
 let usageEvents = [];
 let modalInfoCardId = null;
+let modalHistoryDayKey = null;
+let modalHistoryArchivedEvents = [];
+let modalHistoryLoading = false;
+let modalHistoryPickerOpen = false;
+let modalHistoryLoadRequestId = 0;
 let listenersAttached = false;
 const actionInFlight = new Set();
 
@@ -192,11 +275,17 @@ function formatEventDate(eventEntry) {
     }).format(eventDate);
 }
 
-function renderCardHistory(cardId) {
-    const historyEntries = usageEvents.filter((entry) => entry.cardId === cardId);
+function renderCardHistory(cardId, dayKey) {
+    const selectedDayLabel = formatDayKeyLabel(dayKey);
+
+    if (modalHistoryLoading) {
+        return `<p class="text-sm text-gray-500">Lade Protokoll für ${escapeHtml(selectedDayLabel)} ...</p>`;
+    }
+
+    const historyEntries = getHistoryEventsForDay(dayKey).filter((entry) => entry.cardId === cardId);
 
     if (!historyEntries.length) {
-        return '<p class="text-sm text-gray-500">Heute noch keine Einträge.</p>';
+        return `<p class="text-sm text-gray-500">Für ${escapeHtml(selectedDayLabel)} gibt es keine Einträge.</p>`;
     }
 
     return historyEntries.map((entry) => {
@@ -210,17 +299,17 @@ function renderCardHistory(cardId) {
         const companyLabel = escapeHtml(entry.companyLabel || getCompanyLabel(entry.company));
 
         return `
-            <li class="py-2 border-b border-gray-100 last:border-0">
-                <div class="flex items-start justify-between gap-2 flex-wrap">
-                    ${actionBadge}
-                    <div class="flex flex-col items-end gap-1">
-                        <span class="text-xs text-gray-500">${formatEventDate(entry)}</span>
-                        <span class="inline-flex items-center justify-center rounded-full bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1 text-xs font-bold">${actorLabel}</span>
-                    </div>
+            <li class="py-3 border-b-2 border-slate-200 last:border-b-0">
+                <div class="flex items-center justify-between gap-2 flex-wrap">
+                    <span class="text-xs text-gray-500">${formatEventDate(entry)}</span>
+                    <span class="inline-flex items-center justify-center rounded-full bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1 text-xs font-bold">${actorLabel}</span>
                 </div>
-                <p class="text-sm text-gray-700 mt-1.5">
-                    MA-Karte <span class="inline-flex items-center rounded-md bg-orange-100 text-orange-700 px-2 py-0.5 font-bold">${usedCardLabel}</span> · ${companyLabel}
-                </p>
+                <div class="mt-1 flex items-center gap-2 flex-wrap">
+                    ${actionBadge}
+                    <p class="text-sm text-gray-700">
+                        MA-Karte <span class="inline-flex items-center rounded-md bg-orange-100 text-orange-700 px-2 py-0.5 font-bold">${usedCardLabel}</span> · ${companyLabel}
+                    </p>
+                </div>
             </li>
         `;
     }).join('');
@@ -311,7 +400,12 @@ function renderMitarbeiterkarte() {
     }).join('');
 
     const activeModalCard = modalInfoCardId ? getCardConfig(modalInfoCardId) : null;
-    const modalHistoryHtml = activeModalCard ? renderCardHistory(activeModalCard.id) : '';
+    const modalDayKey = getActiveModalHistoryDayKey();
+    const modalDayLabel = formatDayKeyLabel(modalDayKey);
+    const modalDayIsToday = modalDayKey === getDayKeyNow();
+    const modalHistoryHtml = activeModalCard ? renderCardHistory(activeModalCard.id, modalDayKey) : '';
+    const modalDayInputValue = isValidDayKey(modalDayKey) ? modalDayKey : getDayKeyNow();
+    const pickerToggleLabel = modalHistoryPickerOpen ? 'Tagauswahl schließen' : 'Tag wählen';
 
     root.innerHTML = `
         <div class="flex items-center justify-between gap-2 flex-wrap">
@@ -329,9 +423,40 @@ function renderMitarbeiterkarte() {
                     <div class="px-4 py-3 bg-gradient-to-r from-slate-900 to-slate-700 text-white flex items-center justify-between gap-3">
                         <div>
                             <h4 class="text-lg font-black">Nutzungsprotokoll: ${escapeHtml(activeModalCard?.label || '')}</h4>
-                            <p class="text-xs opacity-90">Wer hat wann welche Firma verwendet</p>
+                            <p class="text-xs opacity-90 flex items-center gap-2 flex-wrap">
+                                <span>Tag: <strong>${escapeHtml(modalDayLabel)}</strong></span>
+                                ${modalDayIsToday ? '<span class="rounded-full bg-emerald-100/20 border border-emerald-200/50 px-2 py-0.5 text-[11px] font-bold">Heute</span>' : '<span class="rounded-full bg-amber-100/20 border border-amber-200/50 px-2 py-0.5 text-[11px] font-bold">Archivtag</span>'}
+                            </p>
                         </div>
-                        <button data-action="close-info-modal" class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 font-black" aria-label="Popup schließen">x</button>
+                        <div class="flex items-center gap-2">
+                            <button
+                                data-action="toggle-history-day-picker"
+                                class="rounded-lg border border-white/30 bg-white/20 hover:bg-white/30 px-3 py-1.5 text-xs font-bold"
+                                aria-label="Tag für Nutzungsprotokoll auswählen"
+                            >
+                                ${pickerToggleLabel}
+                            </button>
+                            <button data-action="close-info-modal" class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 font-black" aria-label="Popup schließen">x</button>
+                        </div>
+                    </div>
+                    <div class="px-4 py-2 border-b border-slate-200 bg-slate-50 ${modalHistoryPickerOpen ? '' : 'hidden'}">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <label for="maKarteHistoryDayInput" class="text-xs font-semibold text-slate-700">Tag auswählen:</label>
+                            <input
+                                id="maKarteHistoryDayInput"
+                                data-action="history-day-input"
+                                type="date"
+                                value="${escapeHtml(modalDayInputValue)}"
+                                max="${escapeHtml(getDayKeyNow())}"
+                                class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800"
+                            >
+                            <button
+                                data-action="show-history-today"
+                                class="rounded-md border border-slate-300 bg-white hover:bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700"
+                            >
+                                Heute
+                            </button>
+                        </div>
                     </div>
                     <div class="p-4 max-h-[65vh] overflow-auto">
                         <ul class="space-y-1">${modalHistoryHtml}</ul>
@@ -377,6 +502,8 @@ function subscribeToCurrentDay(force = false) {
         usageEvents = [];
         currentDayKey = null;
         currentUserMode = null;
+        resetModalHistorySelection();
+        modalInfoCardId = null;
         renderPleaseLogin();
         return;
     }
@@ -430,6 +557,7 @@ function startDayWatcher() {
 
         const latestDayKey = getDayKeyNow();
         if (latestDayKey !== currentDayKey) {
+            resetModalHistorySelection();
             modalInfoCardId = null;
             subscribeToCurrentDay(true);
         }
@@ -560,13 +688,29 @@ function handleRootClick(event) {
     const cardId = actionButton.dataset.cardId;
 
     if (action === 'close-info-modal') {
+        resetModalHistorySelection();
         modalInfoCardId = null;
         renderMitarbeiterkarte();
         return;
     }
 
+    if (action === 'toggle-history-day-picker') {
+        if (!modalInfoCardId) return;
+        modalHistoryPickerOpen = !modalHistoryPickerOpen;
+        renderMitarbeiterkarte();
+        return;
+    }
+
+    if (action === 'show-history-today') {
+        if (!modalInfoCardId) return;
+        setModalHistoryDay(getDayKeyNow());
+        return;
+    }
+
     if (action === 'toggle-info' && cardId) {
+        resetModalHistorySelection();
         modalInfoCardId = cardId;
+        modalHistoryDayKey = getDayKeyNow();
         renderMitarbeiterkarte();
         return;
     }
@@ -584,12 +728,22 @@ function handleRootClick(event) {
     }
 }
 
+function handleRootChange(event) {
+    const dayInput = event.target.closest('[data-action="history-day-input"]');
+    if (!dayInput || !modalInfoCardId) return;
+
+    const selectedDay = String(dayInput.value || '').trim();
+    if (!isValidDayKey(selectedDay)) return;
+    setModalHistoryDay(selectedDay);
+}
+
 export function initializeMitarbeiterkarte() {
     const root = getRootElement();
     if (!root) return;
 
     if (!listenersAttached) {
         root.addEventListener('click', handleRootClick);
+        root.addEventListener('change', handleRootChange);
         listenersAttached = true;
     }
 
