@@ -375,3 +375,16 @@ option {
 .main-content {
     overflow-y: scroll;
 }
+
+/* Gästelink: keine erzwungene leere Haupt-Scrollbar */
+.main-content.guest-main-content {
+    overflow-y: auto !important;
+    scrollbar-gutter: auto !important;
+    scrollbar-width: none;
+}
+
+.main-content.guest-main-content::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
+}

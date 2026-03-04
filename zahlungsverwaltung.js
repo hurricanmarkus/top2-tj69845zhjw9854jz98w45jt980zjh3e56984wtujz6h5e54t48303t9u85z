@@ -6468,9 +6468,10 @@ export async function initializeGuestView(guestId) {
     // Gastmodus: keine erzwungene, leere Scroll-Leiste + kein künstlicher Top-Abstand
     const mainContent = document.querySelector('.main-content');
     if (mainContent) {
+        mainContent.classList.add('guest-main-content');
         mainContent.classList.remove('space-y-4');
-        mainContent.style.overflowY = 'auto';
-        mainContent.style.scrollbarGutter = 'auto';
+        mainContent.style.setProperty('overflow-y', 'auto', 'important');
+        mainContent.style.setProperty('scrollbar-gutter', 'auto', 'important');
     }
 
     // Close Button Listener
