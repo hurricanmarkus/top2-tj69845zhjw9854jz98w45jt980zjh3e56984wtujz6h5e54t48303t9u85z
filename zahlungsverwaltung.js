@@ -6465,6 +6465,14 @@ export async function initializeGuestView(guestId) {
     if (!view) return;
     view.classList.add('active');
 
+    // Gastmodus: keine erzwungene, leere Scroll-Leiste + kein künstlicher Top-Abstand
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+        mainContent.classList.remove('space-y-4');
+        mainContent.style.overflowY = 'auto';
+        mainContent.style.scrollbarGutter = 'auto';
+    }
+
     // Close Button Listener
     const closeBtn = document.getElementById('btn-close-guest-modal');
     if (closeBtn) closeBtn.onclick = closeGuestDetailModal;
