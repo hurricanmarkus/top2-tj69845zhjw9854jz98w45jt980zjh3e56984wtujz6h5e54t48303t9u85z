@@ -124,11 +124,11 @@ function toSafeVoucherCount(value) {
 }
 
 function getVoucherCollectionRef() {
-    return collection(db, ...VOUCHER_COLLECTION_PATH);
+    return collection(db, 'artifacts', appId, 'public', 'data', 'ma-karten_gutscheine');
 }
 
 function getVoucherDocRef(voucherId) {
-    return doc(db, ...VOUCHER_COLLECTION_PATH, voucherId);
+    return doc(db, 'artifacts', appId, 'public', 'data', 'ma-karten_gutscheine', voucherId);
 }
 
 function normalizeVoucher(rawData, id) {
@@ -214,7 +214,6 @@ const COMPANY_LOGO_PATHS = {
 };
 
 const CARD_ART_PATH = 'assets/ma-karte/rewe-mitarbeiterkarte.svg';
-const VOUCHER_COLLECTION_PATH = ['artifacts', appId, 'public', 'data', 'ma-karten_gutscheine'];
 const MAX_VOUCHER_LIMIT = 999;
 
 let unsubscribeDailyUsage = null;
