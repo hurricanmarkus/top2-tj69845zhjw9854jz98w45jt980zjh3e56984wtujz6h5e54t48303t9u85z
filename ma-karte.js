@@ -104,6 +104,103 @@ function setModalHistoryDay(dayKey) {
     void loadModalHistoryForDay(dayKey);
 }
 
+function isDayKeyInRange(dayKey, fromDayKey, toDayKey) {
+    if (!isValidDayKey(dayKey) || !isValidDayKey(fromDayKey) || !isValidDayKey(toDayKey)) {
+        return false;
+    }
+    return dayKey >= fromDayKey && dayKey <= toDayKey;
+}
+
+function toSafeVoucherLimit(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return 1;
+    return Math.max(1, Math.min(MAX_VOUCHER_LIMIT, Math.round(parsed)));
+}
+
+function toSafeVoucherCount(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return 0;
+    return Math.max(0, Math.round(parsed));
+}
+
+function getVoucherCollectionRef() {
+    return collection(db, ...VOUCHER_COLLECTION_PATH);
+}
+
+function getVoucherDocRef(voucherId) {
+    return doc(db, ...VOUCHER_COLLECTION_PATH, voucherId);
+}
+
+function normalizeVoucher(rawData, id) {
+    const maxRedemptions = toSafeVoucherLimit(rawData?.maxRedemptions);
+    const usageTotal = toSafeVoucherCount(rawData?.usageTotal);
+    const usageByUserRaw = rawData?.usageByUser;
+    const usageByUser = {};
+
+    if (usageByUserRaw && typeof usageByUserRaw === 'object') {
+        Object.entries(usageByUserRaw).forEach(([userId, value]) => {
+            if (!userId) return;
+            usageByUser[userId] = toSafeVoucherCount(value);
+        });
+    }
+
+    return {
+        id,
+        cardId: rawData?.cardId === 'jasmin' ? 'jasmin' : 'markus',
+        title: typeof rawData?.title === 'string' ? rawData.title : '',
+        conditionText: typeof rawData?.conditionText === 'string' ? rawData.conditionText : '',
+        validFromDayKey: isValidDayKey(rawData?.validFromDayKey) ? rawData.validFromDayKey : getDayKeyNow(),
+        validToDayKey: isValidDayKey(rawData?.validToDayKey) ? rawData.validToDayKey : getDayKeyNow(),
+        infoText: typeof rawData?.infoText === 'string' ? rawData.infoText : '',
+        createdById: typeof rawData?.createdById === 'string' ? rawData.createdById : '',
+        createdByName: typeof rawData?.createdByName === 'string' ? rawData.createdByName : 'Unbekannt',
+        createdAt: rawData?.createdAt || null,
+        updatedAt: rawData?.updatedAt || null,
+        maxRedemptions,
+        usageTotal,
+        usageByUser,
+        deleted: Boolean(rawData?.deleted)
+    };
+}
+
+function getVouchersForCard(cardId) {
+    return mitarbeitergutscheine
+        .filter((entry) => !entry.deleted && entry.cardId === cardId)
+        .sort((a, b) => {
+            const aDate = timestampToDate(a.updatedAt, null)?.getTime() || 0;
+            const bDate = timestampToDate(b.updatedAt, null)?.getTime() || 0;
+            return bDate - aDate;
+        });
+}
+
+function getActiveVouchersForCard(cardId, dayKey) {
+    return getVouchersForCard(cardId).filter((entry) => isDayKeyInRange(dayKey, entry.validFromDayKey, entry.validToDayKey));
+}
+
+function getVoucherById(voucherId) {
+    return mitarbeitergutscheine.find((entry) => entry.id === voucherId) || null;
+}
+
+function getOwnVoucherUsedCount(voucher, userId) {
+    if (!voucher || !userId) return 0;
+    return toSafeVoucherCount(voucher.usageByUser?.[userId]);
+}
+
+function getVoucherStatusClasses(usedCount, maxCount) {
+    if (usedCount >= maxCount) {
+        return 'bg-red-100 text-red-700 border-red-200';
+    }
+    if (usedCount > 0) {
+        return 'bg-amber-100 text-amber-700 border-amber-200';
+    }
+    return 'bg-violet-100 text-violet-700 border-violet-200';
+}
+
+function resetVoucherModalState() {
+    voucherManagerCardId = null;
+    voucherManagerEditVoucherId = null;
+}
+
 const COMPANIES = [
     { id: 'billa', label: 'BILLA / BILLA PLUS' },
     { id: 'penny', label: 'PENNY' },
@@ -117,20 +214,31 @@ const COMPANY_LOGO_PATHS = {
 };
 
 const CARD_ART_PATH = 'assets/ma-karte/rewe-mitarbeiterkarte.svg';
+const VOUCHER_COLLECTION_PATH = ['artifacts', appId, 'public', 'data', 'ma-karten_gutscheine'];
+const MAX_VOUCHER_LIMIT = 999;
 
 let unsubscribeDailyUsage = null;
 let unsubscribeEvents = null;
+let unsubscribeVoucherDefinitions = null;
 let dayWatcherTimer = null;
 let currentDayKey = null;
 let currentUserMode = null;
 let dailyUsageState = buildEmptyUsageState();
 let usageEvents = [];
+let mitarbeitergutscheine = [];
 let modalInfoCardId = null;
 let modalHistoryDayKey = null;
 let modalHistoryArchivedEvents = [];
 let modalHistoryLoading = false;
 let modalHistoryPickerOpen = false;
 let modalHistoryLoadRequestId = 0;
+let modalInfoMenuOpen = false;
+let voucherManagerCardId = null;
+let voucherManagerEditVoucherId = null;
+let voucherAccordionOpen = {
+    markus: false,
+    jasmin: false
+};
 let listenersAttached = false;
 const actionInFlight = new Set();
 
@@ -289,14 +397,19 @@ function renderCardHistory(cardId, dayKey) {
     }
 
     return historyEntries.map((entry) => {
+        const isVoucherEvent = entry?.entryType === 'voucher' || typeof entry?.voucherId === 'string';
         const isAdd = Number(entry.delta) > 0;
-        const actionBadge = isAdd
-            ? '<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">+ Verwendung</span>'
-            : '<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">- Korrektur</span>';
+        const actionBadge = isVoucherEvent
+            ? `<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">${isAdd ? '+ Verwendung' : '- Korrektur'} · Sonderfall</span>`
+            : (isAdd
+                ? '<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">+ Verwendung</span>'
+                : '<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">- Korrektur</span>');
 
         const actorLabel = escapeHtml(entry.actorName || 'Unbekannt');
         const usedCardLabel = escapeHtml(getCardConfig(entry.cardId)?.label || cardId || 'Unbekannt');
-        const companyLabel = escapeHtml(entry.companyLabel || getCompanyLabel(entry.company));
+        const companyLabel = isVoucherEvent
+            ? `Gutschein: ${escapeHtml(entry.voucherTitle || 'Unbenannt')}`
+            : escapeHtml(entry.companyLabel || getCompanyLabel(entry.company));
 
         return `
             <li class="py-3 border-b-2 border-slate-200 last:border-b-0">
@@ -315,6 +428,172 @@ function renderCardHistory(cardId, dayKey) {
     }).join('');
 }
 
+function renderVoucherAccordion(cardId, dayKey) {
+    const activeVouchers = getActiveVouchersForCard(cardId, dayKey);
+    const hasActiveVouchers = activeVouchers.length > 0;
+    const isOpen = hasActiveVouchers && Boolean(voucherAccordionOpen[cardId]);
+    const caret = isOpen ? '&#9650;' : '&#9660;';
+
+    const headerClasses = hasActiveVouchers
+        ? 'cursor-pointer bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 text-white shadow-sm hover:opacity-95'
+        : 'cursor-not-allowed bg-gradient-to-r from-slate-300 to-slate-400 text-white/95 opacity-80';
+
+    const rowsHtml = hasActiveVouchers
+        ? activeVouchers.map((voucher) => {
+            const usedCount = toSafeVoucherCount(voucher.usageTotal);
+            const maxCount = toSafeVoucherLimit(voucher.maxRedemptions);
+            const ownUsedCount = getOwnVoucherUsedCount(voucher, currentUser?.mode || null);
+            const remainingCount = Math.max(0, maxCount - usedCount);
+            const ownCanReduce = ownUsedCount > 0;
+            const canAdd = remainingCount > 0;
+
+            const conditionHtml = voucher.conditionText
+                ? `<p class="text-xs text-slate-600 mt-1">Bedingung: ${escapeHtml(voucher.conditionText)}</p>`
+                : '';
+
+            const infoHtml = voucher.infoText
+                ? `<p class="text-xs text-slate-500 mt-1">Info: ${escapeHtml(voucher.infoText)}</p>`
+                : '';
+
+            return `
+                <div class="rounded-xl border border-violet-200 bg-white p-2.5">
+                    <div class="flex items-start justify-between gap-2 flex-wrap">
+                        <div>
+                            <p class="text-sm font-black text-violet-800 leading-tight">${escapeHtml(voucher.title || 'Unbenannter Gutschein')}</p>
+                            <p class="text-xs text-slate-500 mt-1">${usedCount} verwendet · davon du ${ownUsedCount}</p>
+                            <p class="text-xs text-slate-500 mt-1">Von ${escapeHtml(voucher.createdByName || 'Unbekannt')} · gültig ${escapeHtml(formatDayKeyLabel(voucher.validFromDayKey))} bis ${escapeHtml(formatDayKeyLabel(voucher.validToDayKey))}</p>
+                            ${conditionHtml}
+                            ${infoHtml}
+                        </div>
+                        <span class="text-[11px] font-black px-2 py-1 rounded-full border whitespace-nowrap ${getVoucherStatusClasses(usedCount, maxCount)}">${remainingCount} frei</span>
+                    </div>
+                    <div class="mt-2 grid grid-cols-[1fr_auto] gap-2">
+                        <button
+                            data-action="add-voucher-usage"
+                            data-voucher-id="${escapeHtml(voucher.id)}"
+                            class="rounded-lg px-3 py-2 text-sm font-black tracking-wide transition ${canAdd ? 'bg-violet-600 text-white hover:bg-violet-700' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}"
+                            ${canAdd ? '' : 'disabled'}
+                        >
+                            Verwendung hinzufügen
+                        </button>
+                        <button
+                            data-action="remove-voucher-usage"
+                            data-voucher-id="${escapeHtml(voucher.id)}"
+                            class="rounded-lg px-3 py-2 text-lg leading-none font-black transition ${ownCanReduce ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}"
+                            ${ownCanReduce ? '' : 'disabled'}
+                            aria-label="Gutscheinverwendung reduzieren"
+                        >
+                            -
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('')
+        : '<p class="text-xs text-slate-500">Keine aktiven Gutscheine für heute.</p>';
+
+    return `
+        <div class="pt-1">
+            <button
+                data-action="toggle-voucher-accordion"
+                data-card-id="${escapeHtml(cardId)}"
+                class="w-full h-8 px-3 rounded-lg text-xs font-black uppercase tracking-wide flex items-center justify-between ${headerClasses}"
+                ${hasActiveVouchers ? '' : 'disabled'}
+            >
+                <span>Mitarbeitergutscheine</span>
+                <span class="text-sm">${hasActiveVouchers ? caret : '-'}</span>
+            </button>
+            <div class="mt-2 space-y-2 ${isOpen ? '' : 'hidden'}">
+                ${rowsHtml}
+            </div>
+        </div>
+    `;
+}
+
+function renderVoucherManagerModal() {
+    const managerCard = voucherManagerCardId ? getCardConfig(voucherManagerCardId) : null;
+    if (!managerCard) return '';
+
+    const ownUserId = currentUser?.mode || '';
+    const ownUserName = currentUser?.displayName || currentUser?.mode || 'Unbekannt';
+    const editVoucher = voucherManagerEditVoucherId ? getVoucherById(voucherManagerEditVoucherId) : null;
+    const canEditVoucher = Boolean(editVoucher && editVoucher.createdById === ownUserId && editVoucher.cardId === managerCard.id);
+
+    const draftTitle = canEditVoucher ? editVoucher.title : '';
+    const draftMax = canEditVoucher ? String(editVoucher.maxRedemptions) : '1';
+    const draftCondition = canEditVoucher ? editVoucher.conditionText : '';
+    const draftFrom = canEditVoucher ? editVoucher.validFromDayKey : getDayKeyNow();
+    const draftTo = canEditVoucher ? editVoucher.validToDayKey : getDayKeyNow();
+    const draftInfo = canEditVoucher ? editVoucher.infoText : '';
+
+    const formTitle = canEditVoucher ? 'Gutschein bearbeiten' : 'Neuen Gutschein anlegen';
+    const submitLabel = canEditVoucher ? 'Gutschein aktualisieren' : 'Gutschein speichern';
+
+    const allCardVouchers = getVouchersForCard(managerCard.id);
+    const ownVoucherRows = allCardVouchers
+        .filter((voucher) => voucher.createdById === ownUserId)
+        .map((voucher) => {
+            const usageTotal = toSafeVoucherCount(voucher.usageTotal);
+            return `
+                <li class="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                    <div class="flex items-start justify-between gap-2 flex-wrap">
+                        <div>
+                            <p class="text-sm font-bold text-slate-800">${escapeHtml(voucher.title || 'Unbenannter Gutschein')}</p>
+                            <p class="text-xs text-slate-500 mt-1">Gültig ${escapeHtml(formatDayKeyLabel(voucher.validFromDayKey))} bis ${escapeHtml(formatDayKeyLabel(voucher.validToDayKey))} · ${usageTotal}/${toSafeVoucherLimit(voucher.maxRedemptions)} verwendet</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button data-action="edit-voucher" data-voucher-id="${escapeHtml(voucher.id)}" class="rounded-md border border-slate-300 bg-white hover:bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">Bearbeiten</button>
+                            <button data-action="delete-voucher" data-voucher-id="${escapeHtml(voucher.id)}" class="rounded-md border border-red-200 bg-red-50 hover:bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">Löschen</button>
+                        </div>
+                    </div>
+                </li>
+            `;
+        }).join('');
+
+    const ownVoucherListHtml = ownVoucherRows || '<p class="text-xs text-slate-500">Du hast für diese Karte noch keine Gutscheine angelegt.</p>';
+
+    return `
+        <div class="fixed inset-0 z-[60]">
+            <div class="absolute inset-0 bg-slate-900/50" data-action="close-voucher-manager"></div>
+            <div class="relative z-10 h-full w-full flex items-center justify-center p-4">
+                <div class="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+                    <div class="px-4 py-3 bg-gradient-to-r from-violet-700 to-fuchsia-700 text-white flex items-center justify-between gap-3">
+                        <div>
+                            <h4 class="text-lg font-black">Gutscheineverwaltung · Karte ${escapeHtml(managerCard.label)}</h4>
+                            <p class="text-xs opacity-90">Angelegt von ${escapeHtml(ownUserName)} · nur eigene Gutscheine sind editierbar</p>
+                        </div>
+                        <button data-action="close-voucher-manager" class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 font-black" aria-label="Popup schließen">x</button>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 max-h-[72vh] overflow-auto">
+                        <section class="rounded-xl border border-violet-200 bg-violet-50/40 p-3">
+                            <h5 class="text-sm font-black text-violet-800 mb-2">${formTitle}</h5>
+                            <div class="space-y-2">
+                                <input id="maVoucherTitleInput" type="text" value="${escapeHtml(draftTitle)}" maxlength="120" placeholder="Titel" class="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm text-slate-800">
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <input id="maVoucherMaxInput" type="number" min="1" max="${MAX_VOUCHER_LIMIT}" value="${escapeHtml(draftMax)}" class="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm text-slate-800" placeholder="Max. Einlösungen">
+                                    <input id="maVoucherConditionInput" type="text" value="${escapeHtml(draftCondition)}" maxlength="160" class="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm text-slate-800" placeholder="Bedingung">
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <input id="maVoucherFromInput" type="date" value="${escapeHtml(draftFrom)}" class="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm text-slate-800">
+                                    <input id="maVoucherToInput" type="date" value="${escapeHtml(draftTo)}" class="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm text-slate-800">
+                                </div>
+                                <textarea id="maVoucherInfoInput" rows="4" maxlength="600" class="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm text-slate-800" placeholder="Informationstext">${escapeHtml(draftInfo)}</textarea>
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <button data-action="save-voucher" class="rounded-md bg-violet-600 hover:bg-violet-700 px-3 py-2 text-xs font-black text-white">${submitLabel}</button>
+                                    <button data-action="cancel-voucher-edit" class="rounded-md border border-slate-300 bg-white hover:bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">Zurücksetzen</button>
+                                </div>
+                            </div>
+                        </section>
+                        <section class="rounded-xl border border-slate-200 bg-white p-3">
+                            <h5 class="text-sm font-black text-slate-800 mb-2">Deine Gutscheine</h5>
+                            <div class="space-y-2">${ownVoucherListHtml}</div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 function renderMitarbeiterkarte() {
     const root = getRootElement();
     if (!root) return;
@@ -323,6 +602,7 @@ function renderMitarbeiterkarte() {
 
     const cardsHtml = CARDS.map((card) => {
         const cardUsage = dailyUsageState.cards?.[card.id] || {};
+        const voucherAccordionHtml = renderVoucherAccordion(card.id, getDayKeyNow());
 
         const rowsHtml = COMPANIES.map((company) => {
             const usedCount = toSafeCount(cardUsage[company.id]);
@@ -394,7 +674,10 @@ function renderMitarbeiterkarte() {
                     </button>
                 </div>
 
-                <div class="px-3 pb-3 pt-1 space-y-2">${rowsHtml}</div>
+                <div class="px-3 pb-3 pt-1 space-y-2">
+                    ${rowsHtml}
+                    ${voucherAccordionHtml}
+                </div>
             </section>
         `;
     }).join('');
@@ -406,6 +689,14 @@ function renderMitarbeiterkarte() {
     const modalHistoryHtml = activeModalCard ? renderCardHistory(activeModalCard.id, modalDayKey) : '';
     const modalDayInputValue = isValidDayKey(modalDayKey) ? modalDayKey : getDayKeyNow();
     const pickerToggleLabel = modalHistoryPickerOpen ? 'Tagauswahl schließen' : 'Tag wählen';
+    const modalMenuHtml = modalInfoMenuOpen
+        ? `
+            <div class="absolute right-0 top-full mt-1 w-44 rounded-lg border border-slate-200 bg-white shadow-lg text-slate-700 overflow-hidden z-10">
+                <button data-action="open-voucher-manager" class="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-slate-100">Gutscheineverwaltung</button>
+            </div>
+        `
+        : '';
+    const voucherManagerModalHtml = renderVoucherManagerModal();
 
     root.innerHTML = `
         <div class="flex items-center justify-between gap-2 flex-wrap">
@@ -429,6 +720,17 @@ function renderMitarbeiterkarte() {
                             </p>
                         </div>
                         <div class="flex items-center gap-2">
+                            <div class="relative">
+                                <button
+                                    data-action="toggle-info-menu"
+                                    class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 font-black text-lg leading-none"
+                                    aria-label="Weitere Optionen"
+                                    title="Weitere Optionen"
+                                >
+                                    ⋮
+                                </button>
+                                ${modalMenuHtml}
+                            </div>
                             <button
                                 data-action="toggle-history-day-picker"
                                 class="rounded-lg border border-white/30 bg-white/20 hover:bg-white/30 px-3 py-1.5 text-xs font-bold"
@@ -464,6 +766,8 @@ function renderMitarbeiterkarte() {
                 </div>
             </div>
         </div>
+
+        ${voucherManagerModalHtml}
     `;
 }
 
@@ -485,9 +789,26 @@ function stopRealtimeListeners() {
     if (typeof unsubscribeEvents === 'function') {
         unsubscribeEvents();
     }
+    if (typeof unsubscribeVoucherDefinitions === 'function') {
+        unsubscribeVoucherDefinitions();
+    }
 
     unsubscribeDailyUsage = null;
     unsubscribeEvents = null;
+    unsubscribeVoucherDefinitions = null;
+}
+
+function subscribeToVoucherDefinitions() {
+    if (!db) return;
+
+    const voucherQuery = query(getVoucherCollectionRef(), orderBy('updatedAt', 'desc'), limit(300));
+    unsubscribeVoucherDefinitions = onSnapshot(voucherQuery, (snapshot) => {
+        mitarbeitergutscheine = snapshot.docs.map((docSnap) => normalizeVoucher(docSnap.data(), docSnap.id));
+        renderMitarbeiterkarte();
+    }, (error) => {
+        console.error('MA-Karte: Fehler beim Laden der Gutscheine:', error);
+        alertUser('MA-Karte: Gutscheine konnten nicht geladen werden.', 'error');
+    });
 }
 
 function subscribeToCurrentDay(force = false) {
@@ -500,9 +821,12 @@ function subscribeToCurrentDay(force = false) {
         stopRealtimeListeners();
         dailyUsageState = buildEmptyUsageState();
         usageEvents = [];
+        mitarbeitergutscheine = [];
         currentDayKey = null;
         currentUserMode = null;
         resetModalHistorySelection();
+        modalInfoMenuOpen = false;
+        resetVoucherModalState();
         modalInfoCardId = null;
         renderPleaseLogin();
         return;
@@ -512,6 +836,7 @@ function subscribeToCurrentDay(force = false) {
         force ||
         !unsubscribeDailyUsage ||
         !unsubscribeEvents ||
+        !unsubscribeVoucherDefinitions ||
         currentDayKey !== nextDayKey ||
         currentUserMode !== nextUserMode;
 
@@ -528,6 +853,7 @@ function subscribeToCurrentDay(force = false) {
 
     const dayDocRef = getDayDocRef(nextDayKey);
     const eventsQuery = query(collection(dayDocRef, 'events'), orderBy('createdAt', 'desc'), limit(250));
+    subscribeToVoucherDefinitions();
 
     unsubscribeDailyUsage = onSnapshot(dayDocRef, (snapshot) => {
         dailyUsageState = normalizeDailyUsageState(snapshot.exists() ? snapshot.data() : null);
@@ -558,6 +884,8 @@ function startDayWatcher() {
         const latestDayKey = getDayKeyNow();
         if (latestDayKey !== currentDayKey) {
             resetModalHistorySelection();
+            modalInfoMenuOpen = false;
+            resetVoucherModalState();
             modalInfoCardId = null;
             subscribeToCurrentDay(true);
         }
@@ -570,11 +898,235 @@ function stopDayWatcher() {
     dayWatcherTimer = null;
 }
 
+function closeVoucherManager() {
+    resetVoucherModalState();
+    renderMitarbeiterkarte();
+}
+
+function openVoucherManagerForCard(cardId) {
+    const card = getCardConfig(cardId);
+    if (!card) return;
+    voucherManagerCardId = card.id;
+    voucherManagerEditVoucherId = null;
+    modalInfoMenuOpen = false;
+    renderMitarbeiterkarte();
+}
+
+async function saveVoucherFromModal() {
+    const managerCard = voucherManagerCardId ? getCardConfig(voucherManagerCardId) : null;
+    if (!managerCard) return;
+
+    const titleInput = document.getElementById('maVoucherTitleInput');
+    const maxInput = document.getElementById('maVoucherMaxInput');
+    const conditionInput = document.getElementById('maVoucherConditionInput');
+    const fromInput = document.getElementById('maVoucherFromInput');
+    const toInput = document.getElementById('maVoucherToInput');
+    const infoInput = document.getElementById('maVoucherInfoInput');
+
+    const title = String(titleInput?.value || '').trim();
+    const maxRedemptions = toSafeVoucherLimit(maxInput?.value);
+    const conditionText = String(conditionInput?.value || '').trim();
+    const validFromDayKey = String(fromInput?.value || '').trim();
+    const validToDayKey = String(toInput?.value || '').trim();
+    const infoText = String(infoInput?.value || '').trim();
+
+    if (!title) {
+        alertUser('Bitte einen Gutschein-Titel eingeben.', 'error');
+        return;
+    }
+    if (!isValidDayKey(validFromDayKey) || !isValidDayKey(validToDayKey)) {
+        alertUser('Bitte einen gültigen Zeitraum (von/bis) auswählen.', 'error');
+        return;
+    }
+    if (validFromDayKey > validToDayKey) {
+        alertUser('"Von" darf nicht nach "Bis" liegen.', 'error');
+        return;
+    }
+
+    const actorId = currentUser?.mode || '';
+    if (!actorId || actorId === GUEST_MODE) {
+        alertUser('Bitte anmelden.', 'error');
+        return;
+    }
+
+    try {
+        const editVoucher = voucherManagerEditVoucherId ? getVoucherById(voucherManagerEditVoucherId) : null;
+
+        await runTransaction(db, async (transaction) => {
+            if (editVoucher) {
+                const editRef = getVoucherDocRef(editVoucher.id);
+                const editSnap = await transaction.get(editRef);
+                if (!editSnap.exists()) throw new Error('VOUCHER_NOT_FOUND');
+
+                const currentData = normalizeVoucher(editSnap.data(), editSnap.id);
+                if (currentData.createdById !== actorId) throw new Error('VOUCHER_EDIT_FORBIDDEN');
+
+                transaction.set(editRef, {
+                    title,
+                    maxRedemptions,
+                    conditionText,
+                    validFromDayKey,
+                    validToDayKey,
+                    infoText,
+                    updatedAt: serverTimestamp()
+                }, { merge: true });
+                return;
+            }
+
+            const createRef = doc(getVoucherCollectionRef());
+            transaction.set(createRef, {
+                cardId: managerCard.id,
+                title,
+                maxRedemptions,
+                conditionText,
+                validFromDayKey,
+                validToDayKey,
+                infoText,
+                usageTotal: 0,
+                usageByUser: {},
+                deleted: false,
+                createdById: actorId,
+                createdByName: currentUser?.displayName || actorId,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            });
+        });
+
+        voucherManagerEditVoucherId = null;
+        alertUser('Gutschein gespeichert.', 'success');
+        renderMitarbeiterkarte();
+    } catch (error) {
+        console.error('MA-Karte: Fehler beim Speichern eines Gutscheins:', error);
+        alertUser(toFriendlyErrorMessage(error), 'error');
+    }
+}
+
+async function deleteVoucher(voucherId) {
+    const voucher = getVoucherById(voucherId);
+    if (!voucher) {
+        alertUser('Gutschein nicht gefunden.', 'error');
+        return;
+    }
+
+    const actorId = currentUser?.mode || '';
+    if (!actorId || actorId !== voucher.createdById) {
+        alertUser('Du darfst nur eigene Gutscheine löschen.', 'error');
+        return;
+    }
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const voucherRef = getVoucherDocRef(voucherId);
+            const snapshot = await transaction.get(voucherRef);
+            if (!snapshot.exists()) throw new Error('VOUCHER_NOT_FOUND');
+
+            const currentData = normalizeVoucher(snapshot.data(), snapshot.id);
+            if (currentData.createdById !== actorId) throw new Error('VOUCHER_EDIT_FORBIDDEN');
+
+            transaction.set(voucherRef, {
+                deleted: true,
+                updatedAt: serverTimestamp()
+            }, { merge: true });
+        });
+
+        if (voucherManagerEditVoucherId === voucherId) {
+            voucherManagerEditVoucherId = null;
+        }
+
+        alertUser('Gutschein gelöscht.', 'success');
+        renderMitarbeiterkarte();
+    } catch (error) {
+        console.error('MA-Karte: Fehler beim Löschen eines Gutscheins:', error);
+        alertUser(toFriendlyErrorMessage(error), 'error');
+    }
+}
+
+async function adjustVoucherUsage(voucherId, delta) {
+    if (!db || !appId) {
+        alertUser('MA-Karte ist noch nicht bereit. Bitte kurz warten.', 'error');
+        return;
+    }
+
+    const actorId = currentUser?.mode || '';
+    if (!actorId || actorId === GUEST_MODE) {
+        alertUser('Bitte anmelden.', 'error');
+        return;
+    }
+
+    const opKey = `voucher:${voucherId}`;
+    if (actionInFlight.has(opKey)) return;
+    actionInFlight.add(opKey);
+
+    try {
+        const activeDayKey = getDayKeyNow();
+        const dayDocRef = getDayDocRef(activeDayKey);
+        const eventsCollectionRef = collection(dayDocRef, 'events');
+        const voucherRef = getVoucherDocRef(voucherId);
+
+        await runTransaction(db, async (transaction) => {
+            const voucherSnap = await transaction.get(voucherRef);
+            if (!voucherSnap.exists()) throw new Error('VOUCHER_NOT_FOUND');
+
+            const voucher = normalizeVoucher(voucherSnap.data(), voucherSnap.id);
+            if (voucher.deleted) throw new Error('VOUCHER_NOT_FOUND');
+            if (!isDayKeyInRange(activeDayKey, voucher.validFromDayKey, voucher.validToDayKey)) {
+                throw new Error('VOUCHER_NOT_ACTIVE');
+            }
+
+            const currentTotal = toSafeVoucherCount(voucher.usageTotal);
+            const actorCurrent = toSafeVoucherCount(voucher.usageByUser?.[actorId]);
+            const nextTotal = currentTotal + delta;
+            const actorNext = actorCurrent + delta;
+
+            if (nextTotal > toSafeVoucherLimit(voucher.maxRedemptions)) throw new Error('VOUCHER_LIMIT_REACHED');
+            if (nextTotal < 0) throw new Error('VOUCHER_MIN_REACHED');
+            if (delta < 0 && actorCurrent <= 0) throw new Error('VOUCHER_OWN_REDUCTION_FORBIDDEN');
+            if (actorNext < 0) throw new Error('VOUCHER_OWN_REDUCTION_FORBIDDEN');
+
+            const nextUsageByUser = {
+                ...voucher.usageByUser,
+                [actorId]: actorNext
+            };
+
+            transaction.set(voucherRef, {
+                usageTotal: nextTotal,
+                usageByUser: nextUsageByUser,
+                updatedAt: serverTimestamp()
+            }, { merge: true });
+
+            const eventDocRef = doc(eventsCollectionRef);
+            transaction.set(eventDocRef, {
+                dayKey: activeDayKey,
+                cardId: voucher.cardId,
+                entryType: 'voucher',
+                voucherId: voucher.id,
+                voucherTitle: voucher.title,
+                delta,
+                actorId,
+                actorName: currentUser?.displayName || actorId,
+                createdAt: serverTimestamp(),
+                clientTimestampIso: new Date().toISOString()
+            });
+        });
+    } catch (error) {
+        console.error('MA-Karte: Fehler bei Gutscheinverwendung:', error);
+        alertUser(toFriendlyErrorMessage(error), 'error');
+    } finally {
+        actionInFlight.delete(opKey);
+    }
+}
+
 function toFriendlyErrorMessage(error) {
     if (!error || !error.message) return 'Speichern fehlgeschlagen.';
     if (error.message.includes('MAX_LIMIT_REACHED')) return 'Limit erreicht: Heute ist für diese Firma nichts mehr frei.';
     if (error.message.includes('MIN_LIMIT_REACHED')) return 'Es gibt keine Verwendung mehr zum Zurücknehmen.';
     if (error.message.includes('OWN_REDUCTION_FORBIDDEN')) return 'Du kannst nur eigene Verwendungen reduzieren.';
+    if (error.message.includes('VOUCHER_LIMIT_REACHED')) return 'Dieser Gutschein ist vollständig verbraucht.';
+    if (error.message.includes('VOUCHER_MIN_REACHED')) return 'Für diesen Gutschein gibt es keine Verwendung zum Zurücknehmen.';
+    if (error.message.includes('VOUCHER_OWN_REDUCTION_FORBIDDEN')) return 'Du kannst nur eigene Gutscheinverwendungen zurücknehmen.';
+    if (error.message.includes('VOUCHER_NOT_FOUND')) return 'Der Gutschein wurde nicht gefunden oder ist nicht mehr verfügbar.';
+    if (error.message.includes('VOUCHER_NOT_ACTIVE')) return 'Der Gutschein ist außerhalb seines Gültigkeitszeitraums.';
+    if (error.message.includes('VOUCHER_EDIT_FORBIDDEN')) return 'Du darfst nur eigene Gutscheine bearbeiten.';
     return 'Speichern fehlgeschlagen. Bitte erneut versuchen.';
 }
 
@@ -686,24 +1238,97 @@ function handleRootClick(event) {
 
     const action = actionButton.dataset.action;
     const cardId = actionButton.dataset.cardId;
+    const voucherId = actionButton.dataset.voucherId;
 
     if (action === 'close-info-modal') {
         resetModalHistorySelection();
+        modalInfoMenuOpen = false;
+        resetVoucherModalState();
         modalInfoCardId = null;
         renderMitarbeiterkarte();
+        return;
+    }
+
+    if (action === 'close-voucher-manager') {
+        closeVoucherManager();
+        return;
+    }
+
+    if (action === 'toggle-info-menu') {
+        if (!modalInfoCardId) return;
+        modalInfoMenuOpen = !modalInfoMenuOpen;
+        renderMitarbeiterkarte();
+        return;
+    }
+
+    if (action === 'open-voucher-manager') {
+        if (!modalInfoCardId) return;
+        openVoucherManagerForCard(modalInfoCardId);
         return;
     }
 
     if (action === 'toggle-history-day-picker') {
         if (!modalInfoCardId) return;
         modalHistoryPickerOpen = !modalHistoryPickerOpen;
+        modalInfoMenuOpen = false;
         renderMitarbeiterkarte();
         return;
     }
 
     if (action === 'show-history-today') {
         if (!modalInfoCardId) return;
+        modalInfoMenuOpen = false;
         setModalHistoryDay(getDayKeyNow());
+        return;
+    }
+
+    if (action === 'toggle-voucher-accordion' && cardId) {
+        const hasActiveVouchers = getActiveVouchersForCard(cardId, getDayKeyNow()).length > 0;
+        if (!hasActiveVouchers) return;
+
+        voucherAccordionOpen = {
+            ...voucherAccordionOpen,
+            [cardId]: !Boolean(voucherAccordionOpen[cardId])
+        };
+        renderMitarbeiterkarte();
+        return;
+    }
+
+    if (action === 'save-voucher') {
+        void saveVoucherFromModal();
+        return;
+    }
+
+    if (action === 'cancel-voucher-edit') {
+        voucherManagerEditVoucherId = null;
+        renderMitarbeiterkarte();
+        return;
+    }
+
+    if (action === 'edit-voucher' && voucherId) {
+        const voucher = getVoucherById(voucherId);
+        const actorId = currentUser?.mode || '';
+        if (!voucher || voucher.createdById !== actorId || voucher.cardId !== voucherManagerCardId) {
+            alertUser('Du darfst nur eigene Gutscheine bearbeiten.', 'error');
+            return;
+        }
+        voucherManagerEditVoucherId = voucherId;
+        renderMitarbeiterkarte();
+        return;
+    }
+
+    if (action === 'delete-voucher' && voucherId) {
+        void deleteVoucher(voucherId);
+        return;
+    }
+
+    if (action === 'add-voucher-usage' && voucherId) {
+        void adjustVoucherUsage(voucherId, 1);
+        return;
+    }
+
+    if (action === 'remove-voucher-usage' && voucherId) {
+        void adjustVoucherUsage(voucherId, -1);
         return;
     }
 
@@ -711,6 +1336,8 @@ function handleRootClick(event) {
         resetModalHistorySelection();
         modalInfoCardId = cardId;
         modalHistoryDayKey = getDayKeyNow();
+        modalInfoMenuOpen = false;
+        resetVoucherModalState();
         renderMitarbeiterkarte();
         return;
     }
@@ -754,5 +1381,9 @@ export function initializeMitarbeiterkarte() {
 export function stopMitarbeiterkarteListeners() {
     stopRealtimeListeners();
     stopDayWatcher();
+    resetModalHistorySelection();
+    resetVoucherModalState();
+    modalInfoMenuOpen = false;
+    modalInfoCardId = null;
     actionInFlight.clear();
 }

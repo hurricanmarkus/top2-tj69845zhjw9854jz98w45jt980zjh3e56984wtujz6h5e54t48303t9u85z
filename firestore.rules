@@ -209,12 +209,38 @@ service cloud.firestore {
         allow read: if isAuthenticated();
         allow create: if isAuthenticated()
           && request.resource.data.cardId is string
-          && request.resource.data.company is string
           && request.resource.data.delta is int
           && request.resource.data.delta in [-1, 1]
-          && request.resource.data.actorName is string;
+          && request.resource.data.actorName is string
+          && (
+            (
+              (!('entryType' in request.resource.data) || request.resource.data.entryType == 'standard')
+              && request.resource.data.company is string
+            )
+            ||
+            (
+              request.resource.data.entryType == 'voucher'
+              && request.resource.data.voucherId is string
+              && request.resource.data.voucherTitle is string
+            )
+          );
         allow update, delete: if false;
       }
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/ma-karten_gutscheine/{voucherId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.cardId is string
+        && request.resource.data.title is string
+        && request.resource.data.maxRedemptions is int
+        && request.resource.data.maxRedemptions >= 1
+        && request.resource.data.validFromDayKey is string
+        && request.resource.data.validToDayKey is string
+        && request.resource.data.createdById is string
+        && request.resource.data.createdByName is string;
+      allow update: if isAuthenticated();
+      allow delete: if false;
     }
 
     // ═══════════════════════════════════════════════════════════════
