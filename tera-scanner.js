@@ -143,6 +143,8 @@ let activeTitle = '';
 let activeMode = 'manual';
 let autoIntervalSeconds = 2;
 let autoTimer = null;
+let menuStep = 'category';
+let selectedCategoryId = '';
 
 function getRoot() {
     return document.getElementById(APP_ROOT_ID);
@@ -241,49 +243,132 @@ function getCodeLabel(code) {
     return `${getCodeCategoryLabel(code)} > ${getCodeFunctionalName(code)}`;
 }
 
+function getMenuCategories() {
+    const categories = [];
+
+    QUICK_GROUPS.forEach((group, index) => {
+        const items = group.actions
+            .map((action) => {
+                const code = getCodeByManualOrder(action.manualPage, action.order);
+                if (!code) return null;
+                return { code, label: action.label };
+            })
+            .filter(Boolean);
+
+        if (items.length) {
+            categories.push({
+                id: `quick-${index}`,
+                title: group.title,
+                subtitle: 'Gebündelte Funktionen',
+                type: 'codes',
+                items
+            });
+        }
+    });
+
+    const pages = Array.from(new Set(cachedCodes.map((c) => c.manualPage))).sort((a, b) => a - b);
+    pages.forEach((manualPage) => {
+        const items = getManualPageCodes(manualPage).map((code) => ({
+            code,
+            label: getCodeFunctionalName(code)
+        }));
+
+        if (items.length) {
+            categories.push({
+                id: `chapter-${manualPage}`,
+                title: `Kapitel ${String(manualPage).padStart(2, '0')}`,
+                subtitle: PAGE_TITLES_DE[manualPage] || 'Scanner-Funktionen',
+                type: 'codes',
+                items
+            });
+        }
+    });
+
+    categories.push({
+        id: 'chars',
+        title: 'Zeichen & Wort-Sequenz',
+        subtitle: 'Einzelzeichen und Wörter scannen',
+        type: 'chars',
+        items: []
+    });
+
+    return categories;
+}
+
 function renderBaseLayout(root) {
     root.innerHTML = `
-        <section class="card bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+        <section class="h-[calc(100dvh-220px)] min-h-[540px] max-h-[780px] flex flex-col gap-2 overflow-hidden">
+            <div class="card bg-white rounded-xl border border-gray-200 p-3 shadow-sm basis-[42%] min-h-[210px]">
+                <div class="flex items-center justify-between gap-2 mb-2">
+                    <h3 class="text-base font-black text-gray-800">Aktiver Code</h3>
+                    <span class="text-[11px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">oben: Code</span>
+                </div>
+                <div id="teraViewerEmpty" class="text-xs text-gray-500 rounded-lg bg-gray-50 p-2 border border-gray-200">Unten zuerst Kategorie wählen, dann Funktion antippen.</div>
+                <div id="teraViewerActive" class="hidden space-y-2 min-w-0 h-full">
+                    <div class="min-w-0">
+                        <p id="teraViewerTitle" class="font-bold text-gray-800 text-xs break-words"></p>
+                        <p id="teraViewerSubline" class="text-[11px] text-gray-600 break-words"></p>
+                        <p id="teraViewerCounter" class="text-[11px] text-gray-500"></p>
+                        <p id="teraViewerRepeatHint" class="text-[11px] font-semibold"></p>
+                    </div>
+                    <div class="rounded-xl border border-gray-200 p-2 bg-white overflow-hidden">
+                        <img id="teraViewerImage" src="" alt="Scanner-Code" class="w-full max-h-[24vh] object-contain mx-auto" />
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                        <button id="teraPrevBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-200 text-xs font-semibold">◀ Vor</button>
+                        <button id="teraNextBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-200 text-xs font-semibold">Weiter ▶</button>
+                        <button id="teraToggleAutoBtn" class="py-1.5 px-2 rounded-md bg-orange-100 border border-orange-200 text-xs font-semibold text-orange-700">Auto</button>
+                        <button id="teraBackToOverviewBtn" class="py-1.5 px-2 rounded-md bg-slate-700 text-white text-xs font-semibold">Zurück zur Auswahl</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card bg-white rounded-xl border border-gray-200 p-3 shadow-sm flex-1 min-h-0 overflow-hidden">
+                <div class="flex items-center justify-between gap-2 mb-2">
+                    <h3 class="text-base font-black text-gray-800">Menüleiste</h3>
+                    <span class="text-[11px] font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">unten: Auswahl</span>
+                </div>
+                <div id="teraMenuContent" class="h-full overflow-auto"></div>
+            </div>
+        </section>
+    `;
+}
+
+function renderMenu(root) {
+    const host = root.querySelector('#teraMenuContent');
+    if (!host) return;
+
+    const categories = getMenuCategories();
+
+    if (menuStep === 'category') {
+        host.innerHTML = `
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                ${categories.map((category) => `
+                    <button data-ts-category-id="${escapeHtml(category.id)}" class="text-left rounded-lg border border-gray-200 p-3 bg-gray-50 hover:bg-orange-50 hover:border-orange-300 transition">
+                        <p class="text-xs font-black text-gray-800 uppercase tracking-wide">${escapeHtml(category.title)}</p>
+                        <p class="text-[11px] text-gray-600 mt-1">${escapeHtml(category.subtitle)}</p>
+                    </button>
+                `).join('')}
+            </div>
+        `;
+        return;
+    }
+
+    const selectedCategory = categories.find((category) => category.id === selectedCategoryId);
+    if (!selectedCategory) {
+        menuStep = 'category';
+        selectedCategoryId = '';
+        renderMenu(root);
+        return;
+    }
+
+    if (selectedCategory.type === 'chars') {
+        host.innerHTML = `
             <div class="flex items-center justify-between gap-2 mb-2">
-                <h3 class="text-base font-black text-gray-800">Aktiver Code</h3>
-                <span class="text-[11px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">Scanner-Ansicht</span>
+                <button id="teraCategoryBackBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">◀ Kategorien</button>
+                <p class="text-xs font-black text-gray-700">${escapeHtml(selectedCategory.title)}</p>
             </div>
-            <div id="teraViewerEmpty" class="text-xs text-gray-500 rounded-lg bg-gray-50 p-2 border border-gray-200">Wähle unten eine Funktion oder starte eine Zeichen-Sequenz.</div>
-            <div id="teraViewerActive" class="hidden space-y-2 min-w-0">
-                <div class="min-w-0">
-                    <p id="teraViewerTitle" class="font-bold text-gray-800 text-xs break-words"></p>
-                    <p id="teraViewerSubline" class="text-[11px] text-gray-600 break-words"></p>
-                    <p id="teraViewerCounter" class="text-[11px] text-gray-500"></p>
-                    <p id="teraViewerRepeatHint" class="text-[11px] font-semibold text-orange-700"></p>
-                </div>
-                <div class="rounded-xl border border-gray-200 p-2 bg-white overflow-hidden">
-                    <img id="teraViewerImage" src="" alt="Scanner-Code" class="w-full max-h-[52vh] object-contain mx-auto" />
-                </div>
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                    <button id="teraPrevBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-200 text-xs font-semibold">◀ Vor</button>
-                    <button id="teraNextBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-200 text-xs font-semibold">Weiter ▶</button>
-                    <button id="teraToggleAutoBtn" class="py-1.5 px-2 rounded-md bg-orange-100 border border-orange-200 text-xs font-semibold text-orange-700">Auto</button>
-                    <button id="teraBackToOverviewBtn" class="py-1.5 px-2 rounded-md bg-slate-700 text-white text-xs font-semibold">Zurück</button>
-                </div>
-            </div>
-        </section>
-
-        <section class="card bg-white rounded-xl border border-gray-200 p-3 shadow-sm mt-3">
-            <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-                <h3 class="text-base font-black text-gray-800">Gesamtsuche</h3>
-                <input id="teraSearchInput" type="text" placeholder="Suche: Kapitel, Funktion, Zeichen ..." class="w-full sm:w-80 p-2 border border-gray-300 rounded-lg text-sm" />
-            </div>
-            <div id="teraGlobalList" class="space-y-2"></div>
-        </section>
-
-        <section class="card bg-white rounded-xl border border-gray-200 p-3 shadow-sm mt-3">
-            <h3 class="text-base font-black text-gray-800 mb-2">Schnellzugriffe (gebündelt)</h3>
-            <div id="teraQuickGroups" class="grid grid-cols-1 lg:grid-cols-2 gap-2"></div>
-        </section>
-
-        <section class="card bg-white rounded-xl border border-gray-200 p-3 shadow-sm mt-3">
-            <h3 class="text-base font-black text-gray-800 mb-2">Zeichen & Wort-Sequenz</h3>
-            <p class="text-xs text-gray-500 mb-2">Wort eingeben und als Sequenz zeigen (manuell oder automatisch 1-5 Sekunden). Wiederholte Zeichen werden mit Scan-Hinweis markiert.</p>
+            <p class="text-xs text-gray-500 mb-2">Wort eingeben und Sequenz starten. Doppelte Zeichen werden auffällig markiert.</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-1.5 mb-2">
                 <input id="teraWordInput" type="text" placeholder="z. B. HALLO123" class="sm:col-span-2 p-2 border border-gray-300 rounded-lg text-sm" />
                 <select id="teraModeSelect" class="p-2 border border-gray-300 rounded-lg text-sm">
@@ -302,9 +387,26 @@ function renderBaseLayout(root) {
                 <button id="teraStartWordBtn" class="py-1.5 px-2 rounded-md bg-orange-500 text-white text-xs font-semibold">Wort-Sequenz starten</button>
                 <button id="teraShowSingleCharBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">Erstes Zeichen einzeln</button>
             </div>
-            <div id="teraCharGrid" class="grid grid-cols-8 sm:grid-cols-12 lg:grid-cols-16 gap-1"></div>
+            <div id="teraCharGrid" class="grid grid-cols-8 sm:grid-cols-12 gap-1"></div>
             <p id="teraCharHint" class="text-[11px] text-gray-500 mt-2"></p>
-        </section>
+        `;
+        renderCharGrid(root);
+        return;
+    }
+
+    host.innerHTML = `
+        <div class="flex items-center justify-between gap-2 mb-2">
+            <button id="teraCategoryBackBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">◀ Kategorien</button>
+            <p class="text-xs font-black text-gray-700 text-right">${escapeHtml(selectedCategory.title)}</p>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            ${selectedCategory.items.map((item) => `
+                <button data-ts-code-id="${escapeHtml(item.code.id)}" class="text-left p-2 rounded-md border border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50 transition min-w-0">
+                    <p class="text-xs font-bold text-gray-800 break-words">${escapeHtml(item.label)}</p>
+                    <p class="text-[11px] text-gray-500">${getCodeType(item.code)} · Quelle ${String(item.code.sourcePage).padStart(2, '0')}</p>
+                </button>
+            `).join('')}
+        </div>
     `;
 }
 
@@ -409,14 +511,19 @@ function renderViewer(root) {
     image.alt = `Scanner-Code ${code.id}`;
 
     title.textContent = getCodeFunctionalName(code);
-    subline.textContent = getCodeCategoryLabel(code);
+    subline.textContent = activeTitle ? `${activeTitle} · ${getCodeCategoryLabel(code)}` : getCodeCategoryLabel(code);
     counter.textContent = `Schritt ${activeIndex + 1}/${activeSequence.length} · ${getCodeType(code)} · Modus: ${activeMode === 'auto' ? 'Automatisch' : 'Manuell'}`;
     if (entry.char) {
         const printableChar = entry.char === ' ' ? 'Leerzeichen' : entry.char;
-        repeatHint.textContent = entry.repeatScan
-            ? `Wiederholung: '${printableChar}' erneut scannen (gleiches Zeichen).`
-            : `Eingegebenes Zeichen: '${printableChar}'.`;
+        if (entry.repeatScan) {
+            repeatHint.className = 'text-[12px] font-black text-red-900 bg-red-100 border-2 border-red-400 rounded-md px-2 py-1 animate-pulse';
+            repeatHint.textContent = `⚠ NOCHMALS SCANNEN: '${printableChar}' ist doppelt!`;
+        } else {
+            repeatHint.className = 'text-[11px] font-semibold text-orange-700';
+            repeatHint.textContent = `Zeichen: '${printableChar}'.`;
+        }
     } else {
+        repeatHint.className = 'text-[11px] font-semibold text-transparent';
         repeatHint.textContent = '';
     }
 
@@ -459,6 +566,21 @@ function showSingleCode(code, title = '') {
 function handleRootClick(event) {
     const root = getRoot();
     if (!root) return;
+
+    const categoryBtn = event.target.closest('[data-ts-category-id]');
+    if (categoryBtn) {
+        selectedCategoryId = categoryBtn.dataset.tsCategoryId || '';
+        menuStep = 'function';
+        renderMenu(root);
+        return;
+    }
+
+    if (event.target.closest('#teraCategoryBackBtn')) {
+        menuStep = 'category';
+        selectedCategoryId = '';
+        renderMenu(root);
+        return;
+    }
 
     const codeBtn = event.target.closest('[data-ts-code-id]');
     if (codeBtn) {
@@ -516,6 +638,9 @@ function handleRootClick(event) {
         activeSequence = [];
         activeIndex = 0;
         activeTitle = '';
+        menuStep = 'category';
+        selectedCategoryId = '';
+        renderMenu(root);
         renderViewer(root);
         return;
     }
@@ -628,9 +753,9 @@ export async function initializeTeraScannerView() {
     try {
         await ensureCodesLoaded();
         renderBaseLayout(root);
-        renderQuickGroups(root);
-        renderCharGrid(root);
-        renderGlobalList(root);
+        menuStep = 'category';
+        selectedCategoryId = '';
+        renderMenu(root);
         renderViewer(root);
         bindRootEvents(root);
     } catch (error) {
