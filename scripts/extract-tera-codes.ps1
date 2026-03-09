@@ -8,7 +8,7 @@ if (!(Test-Path $outDir)) {
     New-Item -ItemType Directory -Path $outDir | Out-Null
 }
 
-Get-ChildItem -Path $outDir -File -Filter '*.png' | Remove-Item -Force
+Get-ChildItem -Path $outDir -File -Filter 'p??_c???.png' | Remove-Item -Force
 
 function Merge-Boxes {
     param([System.Collections.ArrayList]$Boxes)
@@ -93,7 +93,7 @@ function Get-Code-Boxes {
         }
     }
 
-    function Dilate-Mask {
+    function Expand-Mask {
         param(
             [bool[]]$InputMask,
             [int]$W,
@@ -120,7 +120,7 @@ function Get-Code-Boxes {
         return $out
     }
 
-    function Collect-Components {
+    function Get-Components {
         param(
             [bool[]]$Mask,
             [bool[]]$DensityMask,
@@ -200,7 +200,7 @@ function Get-Code-Boxes {
         return $ret
     }
 
-    function Is-BarcodeLike {
+    function Test-BarcodeLike {
         param(
             [pscustomobject]$Box,
             [bool[]]$DensityMask,
@@ -226,22 +226,22 @@ function Get-Code-Boxes {
         return $strongRatio -ge 0.18
     }
 
-    $qrMask = Dilate-Mask -InputMask $dark -W $smallW -H $smallH -Rx 1 -Ry 1
-    $barMask = Dilate-Mask -InputMask $dark -W $smallW -H $smallH -Rx 3 -Ry 1
+    $qrMask = Expand-Mask -InputMask $dark -W $smallW -H $smallH -Rx 1 -Ry 1
+    $barMask = Expand-Mask -InputMask $dark -W $smallW -H $smallH -Rx 3 -Ry 1
 
-    $qrBoxes = Collect-Components -Mask $qrMask -DensityMask $dark -W $smallW -H $smallH -Filter {
+    $qrBoxes = Get-Components -Mask $qrMask -DensityMask $dark -W $smallW -H $smallH -Filter {
         param($bw, $bh, $ratio, $density)
         return ($bw -ge 34 -and $bw -le 140 -and $bh -ge 34 -and $bh -le 150 -and $ratio -ge 0.72 -and $ratio -le 1.35 -and $density -ge 0.22 -and $density -le 0.78)
     }
 
-    $barBoxes = Collect-Components -Mask $barMask -DensityMask $dark -W $smallW -H $smallH -Filter {
+    $barBoxes = Get-Components -Mask $barMask -DensityMask $dark -W $smallW -H $smallH -Filter {
         param($bw, $bh, $ratio, $density)
         return ($bw -ge 75 -and $bw -le 320 -and $bh -ge 14 -and $bh -le 85 -and $ratio -ge 2.1 -and $density -ge 0.15 -and $density -le 0.72)
     }
 
     $barFiltered = New-Object System.Collections.ArrayList
     foreach ($b in $barBoxes) {
-        if (Is-BarcodeLike -Box $b -DensityMask $dark -W $smallW -H $smallH) {
+        if (Test-BarcodeLike -Box $b -DensityMask $dark -W $smallW -H $smallH) {
             [void]$barFiltered.Add($b)
         }
     }
@@ -254,10 +254,35 @@ function Get-Code-Boxes {
 
     $final = New-Object System.Collections.ArrayList
     foreach ($b in $boxes) {
-        $ox = [Math]::Max(0, ($b.x * $Scale) - 8)
-        $oy = [Math]::Max(0, ($b.y * $Scale) - 8)
-        $ow = [Math]::Min($Original.Width - $ox, ($b.w * $Scale) + 16)
-        $oh = [Math]::Min($Original.Height - $oy, ($b.h * $Scale) + 16)
+        $baseX = $b.x * $Scale
+        $baseY = $b.y * $Scale
+        $baseW = $b.w * $Scale
+        $baseH = $b.h * $Scale
+
+        $ratio = $baseW / [double][Math]::Max(1, $baseH)
+        $isQrLike = $ratio -ge 0.7 -and $ratio -le 1.35
+
+        if ($isQrLike) {
+            $target = [Math]::Max($baseW, $baseH)
+            $pad = [Math]::Max(18, [int]($target * 0.16))
+            $cx = $baseX + ($baseW / 2.0)
+            $cy = $baseY + ($baseH / 2.0)
+            $half = ($target / 2.0) + $pad
+
+            $ox = [Math]::Max(0, [int][Math]::Floor($cx - $half))
+            $oy = [Math]::Max(0, [int][Math]::Floor($cy - $half))
+            $ow = [Math]::Min($Original.Width - $ox, [int][Math]::Ceiling(($half * 2.0)))
+            $oh = [Math]::Min($Original.Height - $oy, [int][Math]::Ceiling(($half * 2.0)))
+        }
+        else {
+            $padX = [Math]::Max(10, [int]($baseW * 0.04))
+            $padY = [Math]::Max(8, [int]($baseH * 0.1))
+            $ox = [Math]::Max(0, $baseX - $padX)
+            $oy = [Math]::Max(0, $baseY - $padY)
+            $ow = [Math]::Min($Original.Width - $ox, $baseW + ($padX * 2))
+            $oh = [Math]::Min($Original.Height - $oy, $baseH + ($padY * 2))
+        }
+
         if ($ow -lt 50 -or $oh -lt 40) { continue }
         [void]$final.Add([pscustomobject]@{ x = $ox; y = $oy; w = $ow; h = $oh })
     }

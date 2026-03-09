@@ -60,31 +60,65 @@ const PAGE_TITLES_DE = {
     26: 'Service & Support'
 };
 
-const QUICK_ACTIONS = [
-    { label: 'Werkseinstellungen', manualPage: 1, order: 1 },
-    { label: 'Batteriestand', manualPage: 1, order: 2 },
-    { label: '2.4G Modus', manualPage: 2, order: 5 },
-    { label: 'Bluetooth HID Modus', manualPage: 2, order: 6 },
-    { label: 'Bluetooth SPP Modus', manualPage: 2, order: 7 },
-    { label: 'Bluetooth BLE Modus', manualPage: 2, order: 8 },
-    { label: 'Pairing mit Dongle', manualPage: 3, order: 2 },
-    { label: 'Pairing mit Bluetooth', manualPage: 3, order: 4 },
-    { label: 'Tastatursprache: Deutsch', manualPage: 7, order: 9 },
-    { label: 'Terminator: CR', manualPage: 7, order: 1 },
-    { label: 'Terminator: LF', manualPage: 7, order: 2 },
-    { label: 'Terminator: CR+LF', manualPage: 7, order: 3 },
-    { label: 'Scanmodus: Tastendruck', manualPage: 5, order: 3 },
-    { label: 'Scanmodus: Kontinuierlich', manualPage: 5, order: 4 },
-    { label: 'Lautstärke: Hoch', manualPage: 6, order: 1 },
-    { label: 'Vibration: EIN', manualPage: 6, order: 5 },
-    { label: 'Sleep: 5 Minuten', manualPage: 6, order: 7 },
-    { label: 'Alle Barcodes EIN', manualPage: 8, order: 9 },
-    { label: 'Alle Barcodes AUS', manualPage: 8, order: 10 },
-    { label: 'QR-Code EIN', manualPage: 13, order: 1 },
-    { label: 'QR-Code AUS', manualPage: 13, order: 2 },
-    { label: 'Add Prefix', manualPage: 14, order: 1 },
-    { label: 'Add Suffix', manualPage: 15, order: 1 }
+const QUICK_GROUPS = [
+    {
+        title: 'Verbindung & Pairing',
+        actions: [
+            { label: '2.4G Modus', manualPage: 2, order: 5 },
+            { label: 'Bluetooth HID Modus', manualPage: 2, order: 6 },
+            { label: 'Bluetooth SPP Modus', manualPage: 2, order: 7 },
+            { label: 'Bluetooth BLE Modus', manualPage: 2, order: 8 },
+            { label: 'Pairing mit Dongle', manualPage: 3, order: 2 },
+            { label: 'Pairing mit Bluetooth', manualPage: 3, order: 4 }
+        ]
+    },
+    {
+        title: 'Feedback (Ton/Vibration)',
+        actions: [
+            { label: 'Lautstärke Hoch', manualPage: 6, order: 1 },
+            { label: 'Lautstärke Mittel', manualPage: 6, order: 2 },
+            { label: 'Lautstärke Niedrig', manualPage: 6, order: 3 },
+            { label: 'Ton AUS', manualPage: 6, order: 4 },
+            { label: 'Vibration EIN', manualPage: 6, order: 5 },
+            { label: 'Vibration AUS', manualPage: 6, order: 6 }
+        ]
+    },
+    {
+        title: 'Scan-Verhalten',
+        actions: [
+            { label: 'Werkseinstellungen', manualPage: 1, order: 1 },
+            { label: 'Batteriestand', manualPage: 1, order: 2 },
+            { label: 'Scanmodus Tastendruck', manualPage: 5, order: 3 },
+            { label: 'Scanmodus Kontinuierlich', manualPage: 5, order: 4 },
+            { label: 'Sleep 5 Minuten', manualPage: 6, order: 7 },
+            { label: 'Sleep sofort', manualPage: 6, order: 10 }
+        ]
+    },
+    {
+        title: 'Symbologie',
+        actions: [
+            { label: 'Alle Barcodes EIN', manualPage: 8, order: 9 },
+            { label: 'Alle Barcodes AUS', manualPage: 8, order: 10 },
+            { label: 'QR-Code EIN', manualPage: 13, order: 1 },
+            { label: 'QR-Code AUS', manualPage: 13, order: 2 },
+            { label: 'Add Prefix', manualPage: 14, order: 1 },
+            { label: 'Add Suffix', manualPage: 15, order: 1 }
+        ]
+    }
 ];
+
+const PAGE_CODE_LABELS = {
+    1: ['Werkseinstellungen', 'Batteriestand', 'Firmware-Version', 'Sofort-Upload-Modus'],
+    2: ['Speichermodus', 'Gespeicherte Daten hochladen', 'Anzahl gespeicherter Codes', 'Speicher leeren', '2.4G-Modus', 'Bluetooth HID-Modus', 'Bluetooth SPP-Modus', 'Bluetooth BLE-Modus'],
+    3: ['2.4G-Modus', 'Pairing mit Dongle erzwingen', 'Bluetooth HID-Modus', 'Pairing mit Bluetooth erzwingen'],
+    4: ['8-Sekunden Pairing EIN', '8-Sekunden Pairing AUS', 'Bluetooth SPP-Modus', 'Bluetooth BLE-Modus', 'HID-Übertragung Hoch', 'HID-Übertragung Mittel', 'HID-Übertragung Niedrig', 'HID-Übertragung Sehr niedrig'],
+    5: ['Bluetooth-Namenmodus aktivieren', 'Bluetooth-Namenbeispiel', 'Scanmodus Tastendruck', 'Scanmodus Dauerbetrieb', 'Zentrierung AUS', 'Nur zentrierter Code'],
+    6: ['Lautstärke Hoch', 'Lautstärke Mittel', 'Lautstärke Niedrig', 'Ton AUS', 'Vibration EIN', 'Vibration AUS', 'Sleep 5 Minuten', 'Sleep 30 Minuten', 'Kein Sleep', 'Sleep sofort', 'iOS Keyboard EIN', 'iOS Keyboard AUS'],
+    7: ['Terminator CR', 'Terminator LF', 'Terminator CR+LF', 'Kein Terminator', 'Terminator TAB', 'GBK Ausgabe', 'Unicode Ausgabe', 'Tastatursprache Englisch', 'Tastatursprache Deutsch', 'Tastatursprache Französisch', 'Tastatursprache Spanisch'],
+    8: ['Tastatursprache Italienisch', 'Tastatursprache Japanisch', 'Tastatursprache Britisch Englisch', 'Internationales Keyboard', 'Groß/Klein unverändert', 'Alles Großbuchstaben', 'Alles Kleinbuchstaben', 'Groß/Klein invertieren', 'Alle Barcodes EIN', 'Alle Barcodes AUS', 'Alle 1D-Codes EIN', 'Alle 1D-Codes AUS'],
+    9: ['Nur normale Codes', 'Normale + invertierte Codes', 'UPC-A EIN', 'UPC-A AUS', 'UPC-A Prüfziffer EIN', 'UPC-A Prüfziffer AUS', 'UPC-E EIN', 'UPC-E AUS', 'UPC-E Prüfziffer EIN', 'UPC-E Prüfziffer AUS', 'EAN-8 EIN', 'EAN-8 AUS'],
+    13: ['QR-Code EIN', 'QR-Code AUS', 'Micro-QR EIN', 'Micro-QR AUS', 'DataMatrix EIN', 'DataMatrix AUS', 'PDF417 EIN', 'PDF417 AUS', 'MicroPDF417 EIN', 'MicroPDF417 AUS', 'GS-Ersatz EIN', 'GS-Ersatz AUS']
+};
 
 const EXTRA_CODES = [
     { id: 'p21_char01', sourcePage: 28, manualPage: 21, index: 901, file: 'assets/tera-scanner/codes/p21_char01.png', x: 0, y: 0, w: 140, h: 140 },
@@ -178,57 +212,85 @@ function buildCharacterMap() {
     });
 }
 
-function getCodeLabel(code) {
+function getManualPosition(code) {
+    const list = getManualPageCodes(code.manualPage);
+    return list.findIndex((c) => c.id === code.id) + 1;
+}
+
+function getCodeFunctionalName(code) {
     const char = codeIdToChar.get(code.id);
     if (char) {
-        if (char === ' ') return 'Zeichen: Leerzeichen';
-        return `Zeichen: ${char}`;
+        return char === ' ' ? 'Zeichen Leerzeichen' : `Zeichen ${char}`;
     }
-    return `Code ${String(code.index).padStart(3, '0')}`;
+
+    const labels = PAGE_CODE_LABELS[code.manualPage] || [];
+    const pos = getManualPosition(code);
+    if (pos > 0 && pos <= labels.length) {
+        return labels[pos - 1];
+    }
+
+    return `Funktion ${String(pos > 0 ? pos : code.index).padStart(2, '0')}`;
+}
+
+function getCodeCategoryLabel(code) {
+    const title = PAGE_TITLES_DE[code.manualPage] || `Kapitel ${code.manualPage}`;
+    return `Kapitel ${String(code.manualPage).padStart(2, '0')} > ${title}`;
+}
+
+function getCodeLabel(code) {
+    return `${getCodeCategoryLabel(code)} > ${getCodeFunctionalName(code)}`;
 }
 
 function renderBaseLayout(root) {
     root.innerHTML = `
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <section class="xl:col-span-2 card bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <div class="flex items-center justify-between gap-2 mb-3">
-                    <h3 class="text-lg font-black text-gray-800">Schnellzugriff</h3>
-                    <span class="text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-200 px-2 py-1 rounded-full">Direkt-Scanner</span>
+        <section class="card bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+            <div class="flex items-center justify-between gap-2 mb-2">
+                <h3 class="text-base font-black text-gray-800">Aktiver Code</h3>
+                <span class="text-[11px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">Scanner-Ansicht</span>
+            </div>
+            <div id="teraViewerEmpty" class="text-xs text-gray-500 rounded-lg bg-gray-50 p-2 border border-gray-200">Wähle unten eine Funktion oder starte eine Zeichen-Sequenz.</div>
+            <div id="teraViewerActive" class="hidden space-y-2 min-w-0">
+                <div class="min-w-0">
+                    <p id="teraViewerTitle" class="font-bold text-gray-800 text-xs break-words"></p>
+                    <p id="teraViewerSubline" class="text-[11px] text-gray-600 break-words"></p>
+                    <p id="teraViewerCounter" class="text-[11px] text-gray-500"></p>
+                    <p id="teraViewerRepeatHint" class="text-[11px] font-semibold text-orange-700"></p>
                 </div>
-                <div id="teraQuickGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2"></div>
-            </section>
-
-            <section class="card bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <h3 class="text-lg font-black text-gray-800 mb-2">Code-Viewer</h3>
-                <div id="teraViewerEmpty" class="text-sm text-gray-500 rounded-lg bg-gray-50 p-3 border border-gray-200">Wähle links eine Funktion oder starte unten eine Zeichen-Sequenz.</div>
-                <div id="teraViewerActive" class="hidden space-y-3">
-                    <div>
-                        <p id="teraViewerTitle" class="font-bold text-gray-800 text-sm"></p>
-                        <p id="teraViewerCounter" class="text-xs text-gray-500"></p>
-                    </div>
-                    <div class="rounded-xl border border-gray-200 p-3 bg-white">
-                        <img id="teraViewerImage" src="" alt="Scanner-Code" class="w-full max-h-[420px] object-contain mx-auto" />
-                    </div>
-                    <div class="grid grid-cols-2 gap-2">
-                        <button id="teraPrevBtn" class="py-2 px-3 rounded-lg bg-gray-100 border border-gray-200 text-sm font-semibold">← Vorheriger</button>
-                        <button id="teraNextBtn" class="py-2 px-3 rounded-lg bg-gray-100 border border-gray-200 text-sm font-semibold">Nächster →</button>
-                        <button id="teraToggleAutoBtn" class="py-2 px-3 rounded-lg bg-orange-100 border border-orange-200 text-sm font-semibold text-orange-700">Auto starten</button>
-                        <button id="teraBackToOverviewBtn" class="py-2 px-3 rounded-lg bg-slate-700 text-white text-sm font-semibold">Zur Übersicht</button>
-                    </div>
+                <div class="rounded-xl border border-gray-200 p-2 bg-white overflow-hidden">
+                    <img id="teraViewerImage" src="" alt="Scanner-Code" class="w-full max-h-[52vh] object-contain mx-auto" />
                 </div>
-            </section>
-        </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    <button id="teraPrevBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-200 text-xs font-semibold">◀ Vor</button>
+                    <button id="teraNextBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-200 text-xs font-semibold">Weiter ▶</button>
+                    <button id="teraToggleAutoBtn" class="py-1.5 px-2 rounded-md bg-orange-100 border border-orange-200 text-xs font-semibold text-orange-700">Auto</button>
+                    <button id="teraBackToOverviewBtn" class="py-1.5 px-2 rounded-md bg-slate-700 text-white text-xs font-semibold">Zurück</button>
+                </div>
+            </div>
+        </section>
 
-        <section class="card bg-white rounded-xl border border-gray-200 p-4 shadow-sm mt-4">
-            <h3 class="text-lg font-black text-gray-800 mb-2">Zeichen & Wort-Sequenz</h3>
-            <p class="text-sm text-gray-500 mb-3">Gib ein Wort ein oder tippe einzelne Zeichen an. Anzeige-Modus: manuell oder automatisch (1-5 Sekunden).</p>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
-                <input id="teraWordInput" type="text" placeholder="z. B. ABC123" class="md:col-span-2 p-2 border border-gray-300 rounded-lg" />
-                <select id="teraModeSelect" class="p-2 border border-gray-300 rounded-lg">
-                    <option value="manual">Manuell (Pfeile)</option>
+        <section class="card bg-white rounded-xl border border-gray-200 p-3 shadow-sm mt-3">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <h3 class="text-base font-black text-gray-800">Gesamtsuche</h3>
+                <input id="teraSearchInput" type="text" placeholder="Suche: Kapitel, Funktion, Zeichen ..." class="w-full sm:w-80 p-2 border border-gray-300 rounded-lg text-sm" />
+            </div>
+            <div id="teraGlobalList" class="space-y-2"></div>
+        </section>
+
+        <section class="card bg-white rounded-xl border border-gray-200 p-3 shadow-sm mt-3">
+            <h3 class="text-base font-black text-gray-800 mb-2">Schnellzugriffe (gebündelt)</h3>
+            <div id="teraQuickGroups" class="grid grid-cols-1 lg:grid-cols-2 gap-2"></div>
+        </section>
+
+        <section class="card bg-white rounded-xl border border-gray-200 p-3 shadow-sm mt-3">
+            <h3 class="text-base font-black text-gray-800 mb-2">Zeichen & Wort-Sequenz</h3>
+            <p class="text-xs text-gray-500 mb-2">Wort eingeben und als Sequenz zeigen (manuell oder automatisch 1-5 Sekunden). Wiederholte Zeichen werden mit Scan-Hinweis markiert.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-1.5 mb-2">
+                <input id="teraWordInput" type="text" placeholder="z. B. HALLO123" class="sm:col-span-2 p-2 border border-gray-300 rounded-lg text-sm" />
+                <select id="teraModeSelect" class="p-2 border border-gray-300 rounded-lg text-sm">
+                    <option value="manual">Manuell</option>
                     <option value="auto">Automatisch</option>
                 </select>
-                <select id="teraIntervalSelect" class="p-2 border border-gray-300 rounded-lg">
+                <select id="teraIntervalSelect" class="p-2 border border-gray-300 rounded-lg text-sm">
                     <option value="1">1 Sekunde</option>
                     <option value="2" selected>2 Sekunden</option>
                     <option value="3">3 Sekunden</option>
@@ -236,40 +298,39 @@ function renderBaseLayout(root) {
                     <option value="5">5 Sekunden</option>
                 </select>
             </div>
-            <div class="flex flex-wrap gap-2 mb-3">
-                <button id="teraStartWordBtn" class="py-2 px-3 rounded-lg bg-orange-500 text-white text-sm font-semibold">Wort als Sequenz anzeigen</button>
-                <button id="teraShowSingleCharBtn" class="py-2 px-3 rounded-lg bg-gray-100 border border-gray-300 text-sm font-semibold">Erstes Zeichen einzeln anzeigen</button>
+            <div class="flex flex-wrap gap-1.5 mb-2">
+                <button id="teraStartWordBtn" class="py-1.5 px-2 rounded-md bg-orange-500 text-white text-xs font-semibold">Wort-Sequenz starten</button>
+                <button id="teraShowSingleCharBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">Erstes Zeichen einzeln</button>
             </div>
-            <div id="teraCharGrid" class="grid grid-cols-6 sm:grid-cols-10 lg:grid-cols-14 gap-1"></div>
-            <p id="teraCharHint" class="text-xs text-gray-500 mt-2"></p>
-        </section>
-
-        <section class="card bg-white rounded-xl border border-gray-200 p-4 shadow-sm mt-4">
-            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-                <h3 class="text-lg font-black text-gray-800">Alle Funktionen</h3>
-                <input id="teraSearchInput" type="text" placeholder="Suche nach Kapitel/Code/Zeichen" class="w-full sm:w-72 p-2 border border-gray-300 rounded-lg" />
-            </div>
-            <div id="teraChapterList" class="space-y-2"></div>
+            <div id="teraCharGrid" class="grid grid-cols-8 sm:grid-cols-12 lg:grid-cols-16 gap-1"></div>
+            <p id="teraCharHint" class="text-[11px] text-gray-500 mt-2"></p>
         </section>
     `;
 }
 
-function renderQuickActions(root) {
-    const grid = root.querySelector('#teraQuickGrid');
-    if (!grid) return;
+function renderQuickGroups(root) {
+    const groupsHost = root.querySelector('#teraQuickGroups');
+    if (!groupsHost) return;
 
-    const btns = QUICK_ACTIONS.map((action) => {
-        const code = getCodeByManualOrder(action.manualPage, action.order);
-        if (!code) return '';
+    groupsHost.innerHTML = QUICK_GROUPS.map((group) => {
+        const buttons = group.actions.map((action) => {
+            const code = getCodeByManualOrder(action.manualPage, action.order);
+            if (!code) return '';
+            return `
+                <button data-ts-code-id="${escapeHtml(code.id)}" class="text-left px-2 py-1 rounded-md border border-gray-200 bg-gray-50 hover:bg-orange-50 hover:border-orange-300 transition min-w-0">
+                    <p class="text-xs font-semibold text-gray-800 break-words">${escapeHtml(action.label)}</p>
+                    <p class="text-[11px] text-gray-500">Kapitel ${String(action.manualPage).padStart(2, '0')}</p>
+                </button>
+            `;
+        }).join('');
+
         return `
-            <button data-ts-code-id="${escapeHtml(code.id)}" class="text-left p-2 rounded-lg border border-gray-200 hover:border-orange-300 hover:bg-orange-50 transition">
-                <p class="text-sm font-bold text-gray-800">${escapeHtml(action.label)}</p>
-                <p class="text-xs text-gray-500">Kapitel ${String(action.manualPage).padStart(2, '0')} · ${getCodeType(code)}</p>
-            </button>
+            <div class="rounded-lg border border-gray-200 p-2 bg-white">
+                <h4 class="text-xs font-black text-gray-700 uppercase tracking-wide mb-1">${escapeHtml(group.title)}</h4>
+                <div class="grid grid-cols-2 gap-1">${buttons}</div>
+            </div>
         `;
-    }).filter(Boolean);
-
-    grid.innerHTML = btns.join('');
+    }).join('');
 }
 
 function renderCharGrid(root) {
@@ -286,36 +347,35 @@ function renderCharGrid(root) {
     hint.textContent = `Verfügbare Zeichen-Codes: ${chars.length}. Nicht verfügbare Zeichen werden bei der Wort-Sequenz übersprungen.`;
 }
 
-function renderChapterList(root) {
+function renderGlobalList(root) {
     const searchInput = root.querySelector('#teraSearchInput');
-    const container = root.querySelector('#teraChapterList');
+    const container = root.querySelector('#teraGlobalList');
     if (!container) return;
 
     const search = (searchInput?.value || '').trim().toLowerCase();
     const pages = Array.from(new Set(cachedCodes.map((c) => c.manualPage))).sort((a, b) => a - b);
 
     container.innerHTML = pages.map((manualPage) => {
-        const title = PAGE_TITLES_DE[manualPage] || `Kapitel ${manualPage}`;
-        const codes = getManualPageCodes(manualPage).filter((code) => {
-            const label = getCodeLabel(code).toLowerCase();
-            const chapter = title.toLowerCase();
-            return !search || label.includes(search) || chapter.includes(search) || String(manualPage).includes(search);
+        const chapterCodes = getManualPageCodes(manualPage).filter((code) => {
+            const hay = `${getCodeLabel(code)} ${getCodeType(code)} ${code.id}`.toLowerCase();
+            return !search || hay.includes(search);
         });
 
-        if (!codes.length) return '';
+        if (!chapterCodes.length) return '';
 
+        const title = PAGE_TITLES_DE[manualPage] || `Kapitel ${manualPage}`;
         return `
-            <details class="rounded-lg border border-gray-200" open>
-                <summary class="cursor-pointer select-none px-3 py-2 bg-gray-50 font-semibold text-gray-800">Kapitel ${String(manualPage).padStart(2, '0')} · ${escapeHtml(title)} (${codes.length})</summary>
-                <div class="p-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    ${codes.map((code) => `
-                        <button data-ts-code-id="${escapeHtml(code.id)}" class="text-left p-2 rounded border border-gray-200 hover:border-orange-300 hover:bg-orange-50 transition">
-                            <p class="text-sm font-bold text-gray-800">${escapeHtml(getCodeLabel(code))}</p>
-                            <p class="text-xs text-gray-500">${getCodeType(code)} · Quelle ${String(code.sourcePage).padStart(2, '0')} · #${String(code.index).padStart(3, '0')}</p>
+            <div class="rounded-lg border border-gray-200 overflow-hidden">
+                <div class="px-2 py-1.5 bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-700">Kapitel ${String(manualPage).padStart(2, '0')} > ${escapeHtml(title)} (${chapterCodes.length})</div>
+                <div class="p-1.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                    ${chapterCodes.map((code) => `
+                        <button data-ts-code-id="${escapeHtml(code.id)}" class="text-left p-2 rounded-md border border-gray-200 hover:border-orange-300 hover:bg-orange-50 transition min-w-0">
+                            <p class="text-xs font-bold text-gray-800 break-words">${escapeHtml(getCodeFunctionalName(code))}</p>
+                            <p class="text-[11px] text-gray-500">${getCodeType(code)} · Quelle ${String(code.sourcePage).padStart(2, '0')}</p>
                         </button>
                     `).join('')}
                 </div>
-            </details>
+            </div>
         `;
     }).join('');
 }
@@ -324,13 +384,15 @@ function renderViewer(root) {
     const empty = root.querySelector('#teraViewerEmpty');
     const active = root.querySelector('#teraViewerActive');
     const title = root.querySelector('#teraViewerTitle');
+    const subline = root.querySelector('#teraViewerSubline');
     const counter = root.querySelector('#teraViewerCounter');
+    const repeatHint = root.querySelector('#teraViewerRepeatHint');
     const image = root.querySelector('#teraViewerImage');
     const prevBtn = root.querySelector('#teraPrevBtn');
     const nextBtn = root.querySelector('#teraNextBtn');
     const autoBtn = root.querySelector('#teraToggleAutoBtn');
 
-    if (!empty || !active || !title || !counter || !image || !prevBtn || !nextBtn || !autoBtn) return;
+    if (!empty || !active || !title || !subline || !counter || !repeatHint || !image || !prevBtn || !nextBtn || !autoBtn) return;
 
     if (!activeSequence.length) {
         empty.classList.remove('hidden');
@@ -341,12 +403,22 @@ function renderViewer(root) {
     empty.classList.add('hidden');
     active.classList.remove('hidden');
 
-    const code = activeSequence[activeIndex];
+    const entry = activeSequence[activeIndex];
+    const code = entry.code || entry;
     image.src = code.file;
     image.alt = `Scanner-Code ${code.id}`;
 
-    title.textContent = activeTitle || getCodeLabel(code);
-    counter.textContent = `Code ${activeIndex + 1}/${activeSequence.length} · Kapitel ${String(code.manualPage).padStart(2, '0')} · ${getCodeType(code)} · Modus: ${activeMode === 'auto' ? 'Automatisch' : 'Manuell'}`;
+    title.textContent = getCodeFunctionalName(code);
+    subline.textContent = getCodeCategoryLabel(code);
+    counter.textContent = `Schritt ${activeIndex + 1}/${activeSequence.length} · ${getCodeType(code)} · Modus: ${activeMode === 'auto' ? 'Automatisch' : 'Manuell'}`;
+    if (entry.char) {
+        const printableChar = entry.char === ' ' ? 'Leerzeichen' : entry.char;
+        repeatHint.textContent = entry.repeatScan
+            ? `Wiederholung: '${printableChar}' erneut scannen (gleiches Zeichen).`
+            : `Eingegebenes Zeichen: '${printableChar}'.`;
+    } else {
+        repeatHint.textContent = '';
+    }
 
     const multiple = activeSequence.length > 1;
     prevBtn.disabled = !multiple;
@@ -361,7 +433,7 @@ function showSequence(sequence, title, mode, intervalSeconds) {
     stopAutoTimer();
     activeSequence = sequence;
     activeIndex = 0;
-    activeTitle = title;
+    activeTitle = title || '';
     activeMode = mode;
     autoIntervalSeconds = intervalSeconds;
 
@@ -381,7 +453,7 @@ function showSequence(sequence, title, mode, intervalSeconds) {
 }
 
 function showSingleCode(code, title = '') {
-    showSequence([code], title || getCodeLabel(code), 'manual', 2);
+    showSequence([{ code, repeatScan: false }], title || getCodeLabel(code), 'manual', 2);
 }
 
 function handleRootClick(event) {
@@ -460,19 +532,23 @@ function handleRootClick(event) {
 
         const chars = Array.from(raw);
         const missing = [];
+        let repeats = 0;
         const sequence = chars
-            .map((ch) => {
+            .map((ch, idx) => {
                 const code = charToCode.get(ch);
                 if (!code) missing.push(ch);
-                return code;
+                const repeatScan = idx > 0 && chars[idx - 1] === ch;
+                if (repeatScan) repeats += 1;
+                return code ? { code, char: ch, repeatScan } : null;
             })
             .filter(Boolean);
 
         if (hint) {
+            const repeatText = repeats > 0 ? ` Wiederholungen erkannt: ${repeats}x (erneut scannen nötig).` : '';
             if (missing.length) {
-                hint.textContent = `Achtung: ${missing.length} Zeichen ohne Mapping wurden übersprungen (${missing.join(' ')}).`;
+                hint.textContent = `Achtung: ${missing.length} Zeichen ohne Mapping wurden übersprungen (${missing.join(' ')}).${repeatText}`;
             } else {
-                hint.textContent = `Verfügbare Zeichen-Codes: ${charToCode.size}. Nicht verfügbare Zeichen werden bei der Wort-Sequenz übersprungen.`;
+                hint.textContent = `Verfügbare Zeichen-Codes: ${charToCode.size}. Nicht verfügbare Zeichen werden bei der Wort-Sequenz übersprungen.${repeatText}`;
             }
         }
 
@@ -485,7 +561,9 @@ function handleRootClick(event) {
         const interval = Math.min(5, Math.max(1, Number(intervalSelect.value) || 2));
 
         if (clickedSingle) {
-            showSingleCode(sequence[0], `Zeichen: ${chars[0]}`);
+            const first = sequence[0];
+            const printableChar = first.char === ' ' ? 'Leerzeichen' : first.char;
+            showSingleCode(first.code, `Zeichen: ${printableChar}`);
             return;
         }
 
@@ -496,7 +574,7 @@ function handleRootClick(event) {
 function handleRootInput(event) {
     if (event.target.id === 'teraSearchInput') {
         const root = getRoot();
-        if (root) renderChapterList(root);
+        if (root) renderGlobalList(root);
     }
 }
 
@@ -550,9 +628,9 @@ export async function initializeTeraScannerView() {
     try {
         await ensureCodesLoaded();
         renderBaseLayout(root);
-        renderQuickActions(root);
+        renderQuickGroups(root);
         renderCharGrid(root);
-        renderChapterList(root);
+        renderGlobalList(root);
         renderViewer(root);
         bindRootEvents(root);
     } catch (error) {
