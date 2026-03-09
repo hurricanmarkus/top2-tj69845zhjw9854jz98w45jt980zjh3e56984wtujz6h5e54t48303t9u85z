@@ -38,6 +38,7 @@ import { initializeSendungsverwaltungView, listenForSendungen, stopSendungsverwa
 import { ensureNachrichtencenterSelfContact } from './notfall.js';
 import { initializeNotizen, stopNotizenListeners } from './notizen.js';
 import { initializeMitarbeiterkarte, stopMitarbeiterkarteListeners } from './ma-karte.js';
+import { initializeTeraScannerView, stopTeraScannerListeners } from './tera-scanner.js';
 // // ENDE-ZIKA //
 
 // PUSHOVER API TOKEN (fest codiert, für alle User gleich)
@@ -161,6 +162,7 @@ export const views = {
     terminplaner: { id: 'terminplanerView' },
     tools: { id: 'toolsView' },
     maKarte: { id: 'maKarteView' },
+    teraScanner: { id: 'teraScannerView' },
     zahlungsverwaltung: { id: 'zahlungsverwaltungView' },
     zahlungsverwaltungSettings: { id: 'zahlungsverwaltungSettingsView' },
     ticketSupport: { id: 'ticketSupportView' },
@@ -216,6 +218,9 @@ export function stopAllUserDependentListeners(resetMode = false) {
     }
     if (typeof stopMitarbeiterkarteListeners === 'function') {
         stopMitarbeiterkarteListeners();
+    }
+    if (typeof stopTeraScannerListeners === 'function') {
+        stopTeraScannerListeners();
     }
 
     if (resetMode) {
@@ -1655,7 +1660,7 @@ export function navigate(targetViewName) {
         }
 
         // Zugriffsschutz für Tools inkl. Unterseite
-        if ((targetViewName === 'tools' || targetViewName === 'maKarte') && !userPermissions.includes('TOOLS')) {
+        if ((targetViewName === 'tools' || targetViewName === 'maKarte' || targetViewName === 'teraScanner') && !userPermissions.includes('TOOLS')) {
             return alertUser("Zugriff verweigert (Tools).", 'error');
         }
     }
@@ -1749,6 +1754,10 @@ export function navigate(targetViewName) {
 
     if (targetViewName === 'maKarte') {
         initializeMitarbeiterkarte();
+    }
+
+    if (targetViewName === 'teraScanner') {
+        initializeTeraScannerView();
     }
 
     if (targetViewName === 'geschenkemanagement') {
@@ -2698,6 +2707,9 @@ export function setupEventListeners() {
 
     const maKarteToolCard = document.getElementById('maKarteToolCard');
     if (maKarteToolCard) maKarteToolCard.addEventListener('click', () => navigate('maKarte'));
+
+    const teraScannerToolCard = document.getElementById('teraScannerToolCard');
+    if (teraScannerToolCard) teraScannerToolCard.addEventListener('click', () => navigate('teraScanner'));
 
     const haushaltszahlungenCard = document.getElementById('haushaltszahlungenCard');
     if (haushaltszahlungenCard) haushaltszahlungenCard.addEventListener('click', () => navigate('haushaltszahlungen'));
