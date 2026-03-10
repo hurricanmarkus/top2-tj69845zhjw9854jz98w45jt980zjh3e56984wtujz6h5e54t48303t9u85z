@@ -498,15 +498,34 @@ function renderBaseLayout(root) {
                 </div>
             </div>
 
-            <div class="card bg-white rounded-xl border border-gray-200 p-2 shadow-sm basis-[62%] min-h-[280px] mt-1 overflow-hidden">
+            <div class="card bg-white rounded-xl border border-gray-200 p-2 shadow-sm basis-[62%] min-h-[280px] mt-1 overflow-hidden flex flex-col">
                 <div class="flex items-center gap-2 mb-2">
                     <h3 class="text-base font-black text-gray-800">Menüleiste</h3>
                     <button id="teraMenuHeaderBackBtn" class="hidden justify-self-center py-1 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">&lt; Kategorien</button>
                 </div>
-                <div id="teraMenuContent" class="h-full overflow-x-scroll overflow-y-hidden pb-1" style="scrollbar-gutter: stable both-edges;"></div>
+                <div id="teraMenuContent" class="flex-1 min-h-0 overflow-x-auto overflow-y-hidden" style="scrollbar-gutter: stable both-edges;"></div>
+                <div id="teraMenuScrollbar" class="mt-1 h-3 overflow-x-scroll overflow-y-hidden rounded bg-gray-100 border border-gray-200">
+                    <div id="teraMenuScrollbarInner" class="h-px"></div>
+                </div>
             </div>
         </section>
     `;
+}
+
+function syncMenuScrollbar(root) {
+    const host = root.querySelector('#teraMenuContent');
+    const scrollbar = root.querySelector('#teraMenuScrollbar');
+    const scrollbarInner = root.querySelector('#teraMenuScrollbarInner');
+    if (!host || !scrollbar || !scrollbarInner) return;
+
+    const forceScroll = host.dataset.tsForceScrollbar === '1';
+    const minScrollableWidth = host.clientWidth + (forceScroll ? 32 : 0);
+    const targetWidth = Math.max(host.scrollWidth, minScrollableWidth);
+    scrollbarInner.style.width = `${targetWidth}px`;
+
+    if (Math.abs(scrollbar.scrollLeft - host.scrollLeft) > 1) {
+        scrollbar.scrollLeft = host.scrollLeft;
+    }
 }
 
 function renderMenu(root) {
@@ -521,6 +540,7 @@ function renderMenu(root) {
     const categories = getMenuCategories();
 
     if (menuStep === 'category') {
+        host.dataset.tsForceScrollbar = '1';
         host.innerHTML = `
             <div class="w-max pr-2" style="min-width: calc(100% + 18px);">
                 <div class="grid grid-flow-col auto-cols-[150px] grid-rows-4 gap-1.5 w-max min-w-full">
@@ -533,6 +553,7 @@ function renderMenu(root) {
                 </div>
             </div>
         `;
+        syncMenuScrollbar(root);
         return;
     }
 
@@ -545,6 +566,7 @@ function renderMenu(root) {
     }
 
     if (selectedCategory.type === 'favorites') {
+        host.dataset.tsForceScrollbar = '1';
         host.innerHTML = selectedCategory.items.length
             ? `
                 <div class="w-max pr-2" style="min-width: calc(100% + 18px);">
@@ -562,21 +584,23 @@ function renderMenu(root) {
                 </div>
             `
             : '<div class="w-max pr-2" style="min-width: calc(100% + 18px);"><div class="text-xs text-gray-500 rounded-lg bg-gray-50 p-2 border border-gray-200">Noch keine Favoriten gespeichert. Öffne oben einen Code/Sequenz und tippe auf ★ Favorit.</div></div>';
+        syncMenuScrollbar(root);
         return;
     }
 
     if (selectedCategory.type === 'chars') {
+        host.dataset.tsForceScrollbar = '0';
         host.innerHTML = `
-            <div class="w-max pr-2" style="min-width: calc(100% + 18px);">
-                <p class="text-xs font-black text-gray-700 mb-2">${escapeHtml(selectedCategory.title)}</p>
-                <p class="text-xs text-gray-500 mb-2">Wort eingeben und Sequenz starten. Doppelte Zeichen werden auffällig markiert.</p>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-1 mb-1.5">
-                    <input id="teraWordInput" type="text" placeholder="z. B. HALLO123" class="sm:col-span-2 p-2 border border-gray-300 rounded-lg text-sm" />
-                    <select id="teraModeSelect" class="p-2 border border-gray-300 rounded-lg text-sm">
+            <div class="w-full">
+                <p class="text-[11px] font-black text-gray-700 mb-1">${escapeHtml(selectedCategory.title)}</p>
+                <p class="text-[10px] text-gray-500 mb-1">Wort eingeben und Sequenz starten.</p>
+                <div class="grid grid-cols-[minmax(0,1fr)_92px_92px] gap-1 mb-1">
+                    <input id="teraWordInput" type="text" placeholder="z. B. HALLO123" class="p-1.5 border border-gray-300 rounded-lg text-xs" />
+                    <select id="teraModeSelect" class="p-1.5 border border-gray-300 rounded-lg text-xs">
                         <option value="manual">Manuell</option>
                         <option value="auto">Automatisch</option>
                     </select>
-                    <select id="teraIntervalSelect" class="p-2 border border-gray-300 rounded-lg text-sm">
+                    <select id="teraIntervalSelect" class="p-1.5 border border-gray-300 rounded-lg text-xs">
                         <option value="1">1 Sekunde</option>
                         <option value="2" selected>2 Sekunden</option>
                         <option value="3">3 Sekunden</option>
@@ -584,26 +608,28 @@ function renderMenu(root) {
                         <option value="5">5 Sekunden</option>
                     </select>
                 </div>
-                <div class="flex flex-wrap gap-1.5 mb-2">
-                    <button id="teraStartWordBtn" class="py-1.5 px-2 rounded-md bg-orange-500 text-white text-xs font-semibold">Wort-Sequenz starten</button>
-                    <button id="teraShowSingleCharBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">Erstes Zeichen einzeln</button>
+                <div class="grid grid-cols-2 gap-1 mb-1">
+                    <button id="teraStartWordBtn" class="py-1 px-1.5 rounded-md bg-orange-500 text-white text-[11px] font-semibold">Sequenz starten</button>
+                    <button id="teraShowSingleCharBtn" class="py-1 px-1.5 rounded-md bg-gray-100 border border-gray-300 text-[11px] font-semibold">Erstes Zeichen</button>
                 </div>
-                <div class="flex items-start gap-2 min-w-[640px]">
-                    <div class="flex flex-col gap-1.5 shrink-0">
-                        <button data-ts-char-mode="upper" class="w-[130px] py-2 px-3 rounded-lg border text-xs font-bold text-left transition">Großbuchstaben</button>
-                        <button data-ts-char-mode="lower" class="w-[130px] py-2 px-3 rounded-lg border text-xs font-bold text-left transition">Kleinbuchstaben</button>
-                        <button data-ts-char-mode="symbols" class="w-[130px] py-2 px-3 rounded-lg border text-xs font-bold text-left transition">Zeichen</button>
+                <div class="flex items-start gap-1 min-w-0">
+                    <div class="flex flex-col gap-1 shrink-0 w-[84px]">
+                        <button data-ts-char-mode="upper" class="w-full py-1 px-1.5 rounded-lg border text-[10px] font-bold text-left transition">Groß</button>
+                        <button data-ts-char-mode="lower" class="w-full py-1 px-1.5 rounded-lg border text-[10px] font-bold text-left transition">Klein</button>
+                        <button data-ts-char-mode="symbols" class="w-full py-1 px-1.5 rounded-lg border text-[10px] font-bold text-left transition">Zeichen</button>
                     </div>
-                    <div id="teraCharGrid" class="space-y-1.5"></div>
+                    <div id="teraCharGrid" class="space-y-1 flex-1 min-w-0"></div>
                 </div>
-                <p id="teraCharHint" class="text-[11px] text-gray-500 mt-1"></p>
+                <p id="teraCharHint" class="text-[10px] text-gray-500 mt-0.5"></p>
             </div>
         `;
         renderCharGrid(root);
+        syncMenuScrollbar(root);
         return;
     }
 
     host.innerHTML = `
+        
         <div class="w-max pr-2" style="min-width: calc(100% + 18px);">
             <p class="text-xs font-black text-gray-700 text-right mb-2">${escapeHtml(selectedCategory.title)}</p>
             <div class="grid grid-flow-col auto-cols-[182px] grid-rows-4 gap-1.5 w-max min-w-full">
@@ -616,6 +642,8 @@ function renderMenu(root) {
             </div>
         </div>
     `;
+    host.dataset.tsForceScrollbar = '1';
+    syncMenuScrollbar(root);
 }
 
 function renderQuickGroups(root) {
@@ -682,8 +710,8 @@ function renderCharGrid(root) {
             ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
             ['!', '"', '#', '$', '%', '&', '/', '(', ')', '='],
             ['-', '_', '+', '*', ',', '.', ';', ':', '<', '>'],
-            ['?', '@', '[', '\\', ']', '^', '`', '{', '|', '}', '~', 'DEL', 'Ç', 'ç'],
-            [' ']
+            ['?', '@', '[', '\\', ']', '^', '`', '{', '|'],
+            ['}', '~', 'DEL', 'Ç', 'ç', ' ']
         ]
     };
 
@@ -707,23 +735,23 @@ function renderCharGrid(root) {
     const rowIndentClassesByMode = {
         upper: ['', 'pl-3', 'pl-6'],
         lower: ['', 'pl-3', 'pl-6'],
-        symbols: ['', 'pl-2', 'pl-4', 'pl-1', 'pl-6']
+        symbols: ['', 'pl-1', 'pl-2', 'pl-1', 'pl-4']
     };
     const rowIndentClasses = rowIndentClassesByMode[activeCharKeyboardMode] || [];
 
     grid.innerHTML = rows.map((row, rowIndex) => `
-        <div class="flex items-center gap-1 ${rowIndentClasses[rowIndex] || ''}">
+        <div class="flex items-center gap-0.5 ${rowIndentClasses[rowIndex] || ''}">
             ${row.map((ch) => {
                 const label = ch === ' ' ? 'Leertaste' : ch;
-                const sizeClass = ch === ' ' ? 'min-w-[110px]' : (ch.length > 1 ? 'min-w-[44px]' : 'min-w-[28px]');
-                return `<button data-ts-char="${escapeHtml(ch)}" class="h-8 ${sizeClass} px-2 rounded border border-gray-300 bg-gray-50 text-[11px] font-semibold hover:bg-orange-50 hover:border-orange-300">${escapeHtml(label)}</button>`;
+                const sizeClass = ch === ' ' ? 'min-w-[46px]' : (ch.length > 1 ? 'min-w-[22px]' : 'min-w-[18px]');
+                return `<button data-ts-char="${escapeHtml(ch)}" class="h-6 ${sizeClass} px-1 rounded border border-gray-300 bg-gray-50 text-[10px] font-semibold hover:bg-orange-50 hover:border-orange-300">${escapeHtml(label)}</button>`;
             }).join('')}
         </div>
     `).join('');
 
     const charModeButtons = root.querySelectorAll('[data-ts-char-mode]');
-    const activeBtnClass = 'w-[130px] py-2 px-3 rounded-lg border text-xs font-bold text-left transition bg-orange-500 border-orange-600 text-white shadow-sm';
-    const inactiveBtnClass = 'w-[130px] py-2 px-3 rounded-lg border text-xs font-bold text-left transition bg-white border-gray-300 text-gray-700 hover:bg-gray-50';
+    const activeBtnClass = 'w-full py-1.5 px-2 rounded-lg border text-[11px] font-bold text-left transition bg-orange-500 border-orange-600 text-white shadow-sm';
+    const inactiveBtnClass = 'w-full py-1.5 px-2 rounded-lg border text-[11px] font-bold text-left transition bg-white border-gray-300 text-gray-700 hover:bg-gray-50';
     charModeButtons.forEach((btn) => {
         const mode = btn.dataset.tsCharMode || '';
         const active = mode === activeCharKeyboardMode;
@@ -1088,6 +1116,28 @@ function bindRootEvents(root) {
     if (root.dataset.tsBound === '1') return;
     root.addEventListener('click', handleRootClick);
     root.addEventListener('input', handleRootInput);
+
+    const host = root.querySelector('#teraMenuContent');
+    const scrollbar = root.querySelector('#teraMenuScrollbar');
+    if (host && scrollbar) {
+        host.addEventListener('scroll', () => {
+            if (Math.abs(scrollbar.scrollLeft - host.scrollLeft) > 1) {
+                scrollbar.scrollLeft = host.scrollLeft;
+            }
+        });
+
+        scrollbar.addEventListener('scroll', () => {
+            if (Math.abs(host.scrollLeft - scrollbar.scrollLeft) > 1) {
+                host.scrollLeft = scrollbar.scrollLeft;
+            }
+        });
+    }
+
+    window.addEventListener('resize', () => {
+        const activeRoot = getRoot();
+        if (activeRoot) syncMenuScrollbar(activeRoot);
+    });
+
     root.dataset.tsBound = '1';
 }
 
