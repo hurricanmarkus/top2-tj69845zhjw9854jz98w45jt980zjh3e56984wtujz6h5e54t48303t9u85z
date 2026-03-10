@@ -600,14 +600,14 @@ function getMenuCategories() {
 
 function renderBaseLayout(root) {
     root.innerHTML = `
-        <section class="h-[calc(100dvh-255px)] min-h-[500px] max-h-[700px] flex flex-col gap-2 overflow-hidden">
-            <div class="card bg-white rounded-xl border border-gray-200 p-2.5 shadow-sm basis-[38%] min-h-[205px]">
+        <section class="h-[calc(100dvh-235px)] min-h-[540px] max-h-[760px] flex flex-col gap-2 overflow-hidden">
+            <div class="card bg-white rounded-xl border border-gray-200 p-2.5 shadow-sm basis-[47%] min-h-[250px]">
                 <div class="flex items-center justify-between gap-2 mb-2">
                     <h3 class="text-sm font-black text-gray-800">Aktiver Code</h3>
                 </div>
                 <div id="teraViewerEmpty" class="text-xs text-gray-500 rounded-lg bg-gray-50 p-2 border border-gray-200">Unten zuerst Kategorie wählen, dann Funktion antippen.</div>
                 <div id="teraViewerActive" class="hidden min-w-0 h-full flex flex-col gap-1.5">
-                    <div class="min-w-0 shrink-0">
+                    <div class="min-w-0 shrink-0 pb-1">
                         <p id="teraViewerTitle" class="font-bold text-gray-800 text-xs break-words"></p>
                         <p id="teraViewerSubline" class="text-[11px] text-gray-600 break-words"></p>
                         <p id="teraViewerCounter" class="text-[11px] text-gray-500"></p>
@@ -618,21 +618,21 @@ function renderBaseLayout(root) {
                             <button id="teraToggleAutoBtn" class="py-1.5 px-2 rounded-md bg-orange-100 border border-orange-200 text-xs font-semibold text-orange-700">Auto</button>
                             <button id="teraSaveFavoriteBtn" class="py-1.5 px-2 rounded-md bg-amber-100 border border-amber-300 text-xs font-semibold text-amber-800">★ Favorit</button>
                         </div>
-                        <p id="teraViewerRepeatHint" class="text-[11px] font-semibold"></p>
+                        <p id="teraViewerRepeatHint" class="text-[11px] font-semibold min-h-[30px] leading-tight pt-0.5"></p>
                     </div>
-                    <div class="rounded-xl border border-gray-200 p-2 bg-white overflow-hidden flex-1 min-h-[86px] flex items-center justify-center">
+                    <div class="rounded-xl border border-gray-200 p-2 bg-white overflow-hidden flex-1 min-h-[120px] flex items-center justify-center">
                         <div id="teraViewerCountdown" class="hidden h-full w-full items-center justify-center text-3xl font-black text-orange-600"></div>
                         <img id="teraViewerImage" src="" alt="Scanner-Code" class="max-h-full max-w-full w-auto h-auto object-contain mx-auto" />
                     </div>
                 </div>
             </div>
 
-            <div class="card bg-white rounded-xl border border-gray-200 p-2 shadow-sm basis-[62%] min-h-[280px] mt-1 overflow-hidden flex flex-col">
-                <div class="flex items-center gap-2 mb-2">
-                    <h3 class="text-base font-black text-gray-800">Menüleiste</h3>
-                    <button id="teraMenuHeaderBackBtn" class="hidden justify-self-center py-1 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">&lt; Kategorien</button>
+            <div class="card bg-white rounded-xl border border-gray-200 p-1.5 shadow-sm basis-[53%] min-h-[220px] mt-1 overflow-hidden flex flex-col">
+                <div class="flex items-center gap-2 mb-1">
+                    <h3 class="text-sm font-black text-gray-800">Menüleiste</h3>
+                    <button id="teraMenuHeaderBackBtn" class="hidden justify-self-center py-0.5 px-2 rounded-md bg-gray-100 border border-gray-300 text-[11px] font-semibold">&lt; Kategorien</button>
                 </div>
-                <div id="teraMenuContent" class="flex-1 min-h-0 overflow-x-scroll overflow-y-hidden pb-1" style="scrollbar-gutter: stable both-edges;"></div>
+                <div id="teraMenuContent" class="flex-1 min-h-0 overflow-x-scroll overflow-y-hidden pb-0.5" style="scrollbar-gutter: stable both-edges;"></div>
             </div>
         </section>
     `;
@@ -652,11 +652,11 @@ function renderMenu(root) {
     if (menuStep === 'category') {
         host.innerHTML = `
             <div class="w-max pr-2" style="min-width: calc(100% + 18px);">
-                <div class="grid grid-flow-col auto-cols-[150px] grid-rows-4 gap-1.5 w-max min-w-full">
+                <div class="grid grid-flow-col auto-cols-[138px] grid-rows-4 gap-1 w-max min-w-full">
                     ${categories.map((category) => `
-                        <button data-ts-category-id="${escapeHtml(category.id)}" class="text-left rounded-lg border border-gray-200 p-1 bg-gray-50 hover:bg-orange-50 hover:border-orange-300 transition min-h-[38px]">
-                            <p class="text-[11px] font-black text-gray-800 uppercase tracking-wide leading-tight">${escapeHtml(category.title)}</p>
-                            <p class="text-[10px] text-gray-600 mt-0.5 leading-tight">${escapeHtml(category.subtitle)}</p>
+                        <button data-ts-category-id="${escapeHtml(category.id)}" class="text-left rounded-lg border border-gray-200 p-1 bg-gray-50 hover:bg-orange-50 hover:border-orange-300 transition min-h-[32px]">
+                            <p class="text-[10px] font-black text-gray-800 uppercase tracking-wide leading-tight">${escapeHtml(category.title)}</p>
+                            <p class="text-[9px] text-gray-600 mt-0.5 leading-tight">${escapeHtml(category.subtitle)}</p>
                         </button>
                     `).join('')}
                 </div>
@@ -677,14 +677,14 @@ function renderMenu(root) {
         host.innerHTML = selectedCategory.items.length
             ? `
                 <div class="w-max pr-2" style="min-width: calc(100% + 18px);">
-                    <div class="grid grid-flow-col auto-cols-[182px] grid-rows-4 gap-1.5 w-max min-w-full">
+                    <div class="grid grid-flow-col auto-cols-[164px] grid-rows-4 gap-1 w-max min-w-full">
                         ${selectedCategory.items.map((fav) => `
-                            <div class="rounded-md border border-amber-200 bg-amber-50 p-1 min-w-0">
+                            <div class="rounded-md border border-amber-200 bg-amber-50 p-0.5 min-w-0">
                                 <button data-ts-favorite-id="${escapeHtml(fav.id)}" class="w-full text-left">
-                                    <p class="text-xs font-bold text-amber-900 break-words">★ ${escapeHtml(fav.title || 'Favorit')}</p>
-                                    <p class="text-[11px] text-amber-700">${fav.codeIds.length > 1 ? `Sequenz (${fav.codeIds.length} Codes)` : 'Einzelcode'}</p>
+                                    <p class="text-[11px] font-bold text-amber-900 break-words">★ ${escapeHtml(fav.title || 'Favorit')}</p>
+                                    <p class="text-[10px] text-amber-700">${fav.codeIds.length > 1 ? `Sequenz (${fav.codeIds.length} Codes)` : 'Einzelcode'}</p>
                                 </button>
-                                <button data-ts-delete-favorite-id="${escapeHtml(fav.id)}" class="mt-1 w-full py-1 rounded border border-red-300 text-[11px] font-semibold text-red-700 bg-red-50 hover:bg-red-100">Löschen</button>
+                                <button data-ts-delete-favorite-id="${escapeHtml(fav.id)}" class="mt-0.5 w-full py-0.5 rounded border border-red-300 text-[10px] font-semibold text-red-700 bg-red-50 hover:bg-red-100">Löschen</button>
                             </div>
                         `).join('')}
                     </div>
@@ -735,11 +735,11 @@ function renderMenu(root) {
     host.innerHTML = `
         <div class="w-max pr-2" style="min-width: calc(100% + 18px);">
             <p class="text-xs font-black text-gray-700 text-right mb-2">${escapeHtml(selectedCategory.title)}</p>
-            <div class="grid grid-flow-col auto-cols-[182px] grid-rows-4 gap-1.5 w-max min-w-full">
+            <div class="grid grid-flow-col auto-cols-[166px] grid-rows-4 gap-1 w-max min-w-full">
                 ${selectedCategory.items.map((item) => `
-                    <button data-ts-code-id="${escapeHtml(item.code.id)}" class="text-left p-1.5 rounded-md border border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50 transition min-w-0 min-h-[40px]">
-                        <p class="text-[11px] font-bold text-gray-800 break-words leading-tight">${escapeHtml(item.label)}</p>
-                        <p class="text-[10px] text-gray-500 leading-tight">${escapeHtml(getCodeInfoText(item.code) || `${getCodeType(item.code)} · Quelle ${String(item.code.sourcePage).padStart(2, '0')}`)}</p>
+                    <button data-ts-code-id="${escapeHtml(item.code.id)}" class="text-left p-1 rounded-md border border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50 transition min-w-0 min-h-[34px]">
+                        <p class="text-[10px] font-bold text-gray-800 break-words leading-tight">${escapeHtml(item.label)}</p>
+                        <p class="text-[9px] text-gray-500 leading-tight">${escapeHtml(getCodeInfoText(item.code) || `${getCodeType(item.code)} · Quelle ${String(item.code.sourcePage).padStart(2, '0')}`)}</p>
                     </button>
                 `).join('')}
             </div>
@@ -946,14 +946,14 @@ function renderViewer(root) {
     if (entry.char) {
         const printableChar = entry.char === ' ' ? 'Leerzeichen' : entry.char;
         if (entry.repeatScan) {
-            repeatHint.className = 'text-[12px] font-black text-red-900 bg-red-100 border-2 border-red-400 rounded-md px-2 py-1 animate-pulse';
+            repeatHint.className = 'min-h-[30px] text-[12px] font-black text-red-900 bg-red-100 border-2 border-red-400 rounded-md px-2 py-1 leading-tight animate-pulse';
             repeatHint.textContent = `⚠ NOCHMALS SCANNEN: '${printableChar}' ist doppelt!`;
         } else {
-            repeatHint.className = 'text-[11px] font-semibold text-orange-700';
+            repeatHint.className = 'min-h-[30px] text-[11px] font-semibold text-orange-700 leading-tight pt-1';
             repeatHint.textContent = `Zeichen: '${printableChar}'.`;
         }
     } else {
-        repeatHint.className = 'text-[11px] font-semibold text-transparent';
+        repeatHint.className = 'min-h-[30px] text-[11px] font-semibold text-transparent';
         repeatHint.textContent = '';
     }
 
