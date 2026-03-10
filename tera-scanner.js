@@ -502,7 +502,7 @@ function renderBaseLayout(root) {
                     <h3 class="text-base font-black text-gray-800">Menüleiste</h3>
                     <button id="teraMenuHeaderBackBtn" class="hidden justify-self-center py-1 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">&lt; Kategorien</button>
                 </div>
-                <div id="teraMenuContent" class="h-full overflow-x-auto overflow-y-hidden"></div>
+                <div id="teraMenuContent" class="h-full overflow-x-scroll overflow-y-hidden pb-1" style="scrollbar-gutter: stable both-edges;"></div>
             </div>
         </section>
     `;
@@ -521,11 +521,11 @@ function renderMenu(root) {
 
     if (menuStep === 'category') {
         host.innerHTML = `
-            <div class="grid grid-flow-col auto-cols-[170px] grid-rows-4 gap-2 overflow-x-auto pb-1">
+            <div class="grid grid-flow-col auto-cols-[150px] grid-rows-4 gap-1.5 w-max min-w-full">
                 ${categories.map((category) => `
-                    <button data-ts-category-id="${escapeHtml(category.id)}" class="text-left rounded-lg border border-gray-200 p-1.5 bg-gray-50 hover:bg-orange-50 hover:border-orange-300 transition min-h-[48px]">
-                        <p class="text-xs font-black text-gray-800 uppercase tracking-wide">${escapeHtml(category.title)}</p>
-                        <p class="text-[11px] text-gray-600 mt-1">${escapeHtml(category.subtitle)}</p>
+                    <button data-ts-category-id="${escapeHtml(category.id)}" class="text-left rounded-lg border border-gray-200 p-1 bg-gray-50 hover:bg-orange-50 hover:border-orange-300 transition min-h-[38px]">
+                        <p class="text-[11px] font-black text-gray-800 uppercase tracking-wide leading-tight">${escapeHtml(category.title)}</p>
+                        <p class="text-[10px] text-gray-600 mt-0.5 leading-tight">${escapeHtml(category.subtitle)}</p>
                     </button>
                 `).join('')}
             </div>
@@ -544,7 +544,7 @@ function renderMenu(root) {
     if (selectedCategory.type === 'favorites') {
         host.innerHTML = selectedCategory.items.length
             ? `
-                <div class="grid grid-flow-col auto-cols-[190px] grid-rows-4 gap-1.5 overflow-x-auto pb-1">
+                <div class="grid grid-flow-col auto-cols-[182px] grid-rows-4 gap-1.5 w-max min-w-full">
                     ${selectedCategory.items.map((fav) => `
                         <div class="rounded-md border border-amber-200 bg-amber-50 p-1 min-w-0">
                             <button data-ts-favorite-id="${escapeHtml(fav.id)}" class="w-full text-left">
@@ -582,9 +582,7 @@ function renderMenu(root) {
                 <button id="teraStartWordBtn" class="py-1.5 px-2 rounded-md bg-orange-500 text-white text-xs font-semibold">Wort-Sequenz starten</button>
                 <button id="teraShowSingleCharBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">Erstes Zeichen einzeln</button>
             </div>
-            <div class="overflow-x-auto overflow-y-hidden pb-1">
-                <div id="teraCharGrid" class="grid grid-flow-col auto-cols-[34px] grid-rows-2 gap-1"></div>
-            </div>
+            <div id="teraCharGrid" class="space-y-1 w-max min-w-full"></div>
             <p id="teraCharHint" class="text-[11px] text-gray-500 mt-1"></p>
         `;
         renderCharGrid(root);
@@ -593,7 +591,7 @@ function renderMenu(root) {
 
     host.innerHTML = `
         <p class="text-xs font-black text-gray-700 text-right mb-2">${escapeHtml(selectedCategory.title)}</p>
-        <div class="grid grid-flow-col auto-cols-[190px] grid-rows-4 gap-1.5 overflow-x-auto pb-1">
+        <div class="grid grid-flow-col auto-cols-[182px] grid-rows-4 gap-1.5 w-max min-w-full">
             ${selectedCategory.items.map((item) => `
                 <button data-ts-code-id="${escapeHtml(item.code.id)}" class="text-left p-1.5 rounded-md border border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50 transition min-w-0 min-h-[40px]">
                     <p class="text-[11px] font-bold text-gray-800 break-words leading-tight">${escapeHtml(item.label)}</p>
@@ -635,12 +633,41 @@ function renderCharGrid(root) {
     if (!grid || !hint) return;
 
     const chars = Array.from(charToCode.keys()).sort((a, b) => a.localeCompare(b));
-    grid.innerHTML = chars.map((ch) => {
-        const label = ch === ' ' ? '␠' : ch;
-        return `<button data-ts-char="${escapeHtml(ch)}" class="py-1 px-2 rounded border border-gray-300 bg-gray-50 text-xs font-semibold hover:bg-orange-50 hover:border-orange-300">${escapeHtml(label)}</button>`;
-    }).join('');
+    const preferredRows = [
+        ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '+'],
+        ['Q', 'W', 'E', 'R', 'T', 'Z', 'U', 'I', 'O', 'P'],
+        ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+        ['Y', 'X', 'C', 'V', 'B', 'N', 'M'],
+        ['q', 'w', 'e', 'r', 't', 'z', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'y', 'x', 'c', 'v', 'b', 'n', 'm', ' ', '!', '"', '#', '$', '%', '&', '(', ')', '*', ',', '.', '/', ':', ';', '<', '=', '>', '?', '@', '[', '\\', ']', '^', '_', '`', '{', '|', '}', '~']
+    ];
 
-    hint.textContent = `Verfügbare Zeichen-Codes: ${chars.length}. Nicht verfügbare Zeichen werden bei der Wort-Sequenz übersprungen.`;
+    const used = new Set();
+    const rows = preferredRows
+        .map((row) => row.filter((ch) => {
+            if (!charToCode.has(ch) || used.has(ch)) return false;
+            used.add(ch);
+            return true;
+        }))
+        .filter((row) => row.length > 0);
+
+    const leftovers = chars.filter((ch) => !used.has(ch));
+    if (leftovers.length) {
+        if (!rows.length) rows.push([]);
+        rows[rows.length - 1] = rows[rows.length - 1].concat(leftovers);
+    }
+
+    const rowIndentClasses = ['', 'pl-2', 'pl-4', 'pl-6', 'pl-1'];
+    grid.innerHTML = rows.map((row, rowIndex) => `
+        <div class="flex items-center gap-1 ${rowIndentClasses[rowIndex] || ''}">
+            ${row.map((ch) => {
+                const label = ch === ' ' ? 'Leertaste' : ch;
+                const sizeClass = ch === ' ' ? 'min-w-[84px]' : 'min-w-[26px]';
+                return `<button data-ts-char="${escapeHtml(ch)}" class="h-7 ${sizeClass} px-2 rounded border border-gray-300 bg-gray-50 text-[11px] font-semibold hover:bg-orange-50 hover:border-orange-300">${escapeHtml(label)}</button>`;
+            }).join('')}
+        </div>
+    `).join('');
+
+    hint.textContent = `Verfügbare Zeichen-Codes: ${chars.length}. Tastaturansicht (QWERTZ-ähnlich). Nicht verfügbare Zeichen werden bei der Wort-Sequenz übersprungen.`;
 }
 
 function renderGlobalList(root) {
