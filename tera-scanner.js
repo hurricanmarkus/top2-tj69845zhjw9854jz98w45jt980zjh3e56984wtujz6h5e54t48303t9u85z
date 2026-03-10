@@ -151,6 +151,7 @@ let autoReplayReady = false;
 let menuStep = 'category';
 let selectedCategoryId = '';
 let favorites = [];
+let activeCharKeyboardMode = 'upper';
 
 function getRoot() {
     return document.getElementById(APP_ROOT_ID);
@@ -476,8 +477,8 @@ function renderBaseLayout(root) {
                     <h3 class="text-sm font-black text-gray-800">Aktiver Code</h3>
                 </div>
                 <div id="teraViewerEmpty" class="text-xs text-gray-500 rounded-lg bg-gray-50 p-2 border border-gray-200">Unten zuerst Kategorie wählen, dann Funktion antippen.</div>
-                <div id="teraViewerActive" class="hidden space-y-1.5 min-w-0 h-full">
-                    <div class="min-w-0">
+                <div id="teraViewerActive" class="hidden min-w-0 h-full flex flex-col gap-1.5">
+                    <div class="min-w-0 shrink-0">
                         <p id="teraViewerTitle" class="font-bold text-gray-800 text-xs break-words"></p>
                         <p id="teraViewerSubline" class="text-[11px] text-gray-600 break-words"></p>
                         <p id="teraViewerCounter" class="text-[11px] text-gray-500"></p>
@@ -490,9 +491,9 @@ function renderBaseLayout(root) {
                         </div>
                         <p id="teraViewerRepeatHint" class="text-[11px] font-semibold"></p>
                     </div>
-                    <div class="rounded-xl border border-gray-200 p-2 bg-white overflow-hidden">
-                        <div id="teraViewerCountdown" class="hidden h-[82px] flex items-center justify-center text-3xl font-black text-orange-600"></div>
-                        <img id="teraViewerImage" src="" alt="Scanner-Code" class="w-[52vw] sm:w-[34vw] max-w-[160px] h-auto object-contain mx-auto" />
+                    <div class="rounded-xl border border-gray-200 p-2 bg-white overflow-hidden flex-1 min-h-[86px] flex items-center justify-center">
+                        <div id="teraViewerCountdown" class="hidden h-full w-full items-center justify-center text-3xl font-black text-orange-600"></div>
+                        <img id="teraViewerImage" src="" alt="Scanner-Code" class="max-h-full max-w-full w-auto h-auto object-contain mx-auto" />
                     </div>
                 </div>
             </div>
@@ -521,13 +522,15 @@ function renderMenu(root) {
 
     if (menuStep === 'category') {
         host.innerHTML = `
-            <div class="grid grid-flow-col auto-cols-[150px] grid-rows-4 gap-1.5 w-max min-w-full">
-                ${categories.map((category) => `
-                    <button data-ts-category-id="${escapeHtml(category.id)}" class="text-left rounded-lg border border-gray-200 p-1 bg-gray-50 hover:bg-orange-50 hover:border-orange-300 transition min-h-[38px]">
-                        <p class="text-[11px] font-black text-gray-800 uppercase tracking-wide leading-tight">${escapeHtml(category.title)}</p>
-                        <p class="text-[10px] text-gray-600 mt-0.5 leading-tight">${escapeHtml(category.subtitle)}</p>
-                    </button>
-                `).join('')}
+            <div class="w-max pr-2" style="min-width: calc(100% + 18px);">
+                <div class="grid grid-flow-col auto-cols-[150px] grid-rows-4 gap-1.5 w-max min-w-full">
+                    ${categories.map((category) => `
+                        <button data-ts-category-id="${escapeHtml(category.id)}" class="text-left rounded-lg border border-gray-200 p-1 bg-gray-50 hover:bg-orange-50 hover:border-orange-300 transition min-h-[38px]">
+                            <p class="text-[11px] font-black text-gray-800 uppercase tracking-wide leading-tight">${escapeHtml(category.title)}</p>
+                            <p class="text-[10px] text-gray-600 mt-0.5 leading-tight">${escapeHtml(category.subtitle)}</p>
+                        </button>
+                    `).join('')}
+                </div>
             </div>
         `;
         return;
@@ -544,60 +547,73 @@ function renderMenu(root) {
     if (selectedCategory.type === 'favorites') {
         host.innerHTML = selectedCategory.items.length
             ? `
-                <div class="grid grid-flow-col auto-cols-[182px] grid-rows-4 gap-1.5 w-max min-w-full">
-                    ${selectedCategory.items.map((fav) => `
-                        <div class="rounded-md border border-amber-200 bg-amber-50 p-1 min-w-0">
-                            <button data-ts-favorite-id="${escapeHtml(fav.id)}" class="w-full text-left">
-                                <p class="text-xs font-bold text-amber-900 break-words">★ ${escapeHtml(fav.title || 'Favorit')}</p>
-                                <p class="text-[11px] text-amber-700">${fav.codeIds.length > 1 ? `Sequenz (${fav.codeIds.length} Codes)` : 'Einzelcode'}</p>
-                            </button>
-                            <button data-ts-delete-favorite-id="${escapeHtml(fav.id)}" class="mt-1 w-full py-1 rounded border border-red-300 text-[11px] font-semibold text-red-700 bg-red-50 hover:bg-red-100">Löschen</button>
-                        </div>
-                    `).join('')}
+                <div class="w-max pr-2" style="min-width: calc(100% + 18px);">
+                    <div class="grid grid-flow-col auto-cols-[182px] grid-rows-4 gap-1.5 w-max min-w-full">
+                        ${selectedCategory.items.map((fav) => `
+                            <div class="rounded-md border border-amber-200 bg-amber-50 p-1 min-w-0">
+                                <button data-ts-favorite-id="${escapeHtml(fav.id)}" class="w-full text-left">
+                                    <p class="text-xs font-bold text-amber-900 break-words">★ ${escapeHtml(fav.title || 'Favorit')}</p>
+                                    <p class="text-[11px] text-amber-700">${fav.codeIds.length > 1 ? `Sequenz (${fav.codeIds.length} Codes)` : 'Einzelcode'}</p>
+                                </button>
+                                <button data-ts-delete-favorite-id="${escapeHtml(fav.id)}" class="mt-1 w-full py-1 rounded border border-red-300 text-[11px] font-semibold text-red-700 bg-red-50 hover:bg-red-100">Löschen</button>
+                            </div>
+                        `).join('')}
+                    </div>
                 </div>
             `
-            : '<div class="text-xs text-gray-500 rounded-lg bg-gray-50 p-2 border border-gray-200">Noch keine Favoriten gespeichert. Öffne oben einen Code/Sequenz und tippe auf ★ Favorit.</div>';
+            : '<div class="w-max pr-2" style="min-width: calc(100% + 18px);"><div class="text-xs text-gray-500 rounded-lg bg-gray-50 p-2 border border-gray-200">Noch keine Favoriten gespeichert. Öffne oben einen Code/Sequenz und tippe auf ★ Favorit.</div></div>';
         return;
     }
 
     if (selectedCategory.type === 'chars') {
         host.innerHTML = `
-            <p class="text-xs font-black text-gray-700 mb-2">${escapeHtml(selectedCategory.title)}</p>
-            <p class="text-xs text-gray-500 mb-2">Wort eingeben und Sequenz starten. Doppelte Zeichen werden auffällig markiert.</p>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-1 mb-1.5">
-                <input id="teraWordInput" type="text" placeholder="z. B. HALLO123" class="sm:col-span-2 p-2 border border-gray-300 rounded-lg text-sm" />
-                <select id="teraModeSelect" class="p-2 border border-gray-300 rounded-lg text-sm">
-                    <option value="manual">Manuell</option>
-                    <option value="auto">Automatisch</option>
-                </select>
-                <select id="teraIntervalSelect" class="p-2 border border-gray-300 rounded-lg text-sm">
-                    <option value="1">1 Sekunde</option>
-                    <option value="2" selected>2 Sekunden</option>
-                    <option value="3">3 Sekunden</option>
-                    <option value="4">4 Sekunden</option>
-                    <option value="5">5 Sekunden</option>
-                </select>
+            <div class="w-max pr-2" style="min-width: calc(100% + 18px);">
+                <p class="text-xs font-black text-gray-700 mb-2">${escapeHtml(selectedCategory.title)}</p>
+                <p class="text-xs text-gray-500 mb-2">Wort eingeben und Sequenz starten. Doppelte Zeichen werden auffällig markiert.</p>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-1 mb-1.5">
+                    <input id="teraWordInput" type="text" placeholder="z. B. HALLO123" class="sm:col-span-2 p-2 border border-gray-300 rounded-lg text-sm" />
+                    <select id="teraModeSelect" class="p-2 border border-gray-300 rounded-lg text-sm">
+                        <option value="manual">Manuell</option>
+                        <option value="auto">Automatisch</option>
+                    </select>
+                    <select id="teraIntervalSelect" class="p-2 border border-gray-300 rounded-lg text-sm">
+                        <option value="1">1 Sekunde</option>
+                        <option value="2" selected>2 Sekunden</option>
+                        <option value="3">3 Sekunden</option>
+                        <option value="4">4 Sekunden</option>
+                        <option value="5">5 Sekunden</option>
+                    </select>
+                </div>
+                <div class="flex flex-wrap gap-1.5 mb-2">
+                    <button id="teraStartWordBtn" class="py-1.5 px-2 rounded-md bg-orange-500 text-white text-xs font-semibold">Wort-Sequenz starten</button>
+                    <button id="teraShowSingleCharBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">Erstes Zeichen einzeln</button>
+                </div>
+                <div class="flex items-start gap-2 min-w-[640px]">
+                    <div class="flex flex-col gap-1.5 shrink-0">
+                        <button data-ts-char-mode="upper" class="w-[130px] py-2 px-3 rounded-lg border text-xs font-bold text-left transition">Großbuchstaben</button>
+                        <button data-ts-char-mode="lower" class="w-[130px] py-2 px-3 rounded-lg border text-xs font-bold text-left transition">Kleinbuchstaben</button>
+                        <button data-ts-char-mode="symbols" class="w-[130px] py-2 px-3 rounded-lg border text-xs font-bold text-left transition">Zeichen</button>
+                    </div>
+                    <div id="teraCharGrid" class="space-y-1.5"></div>
+                </div>
+                <p id="teraCharHint" class="text-[11px] text-gray-500 mt-1"></p>
             </div>
-            <div class="flex flex-wrap gap-1.5 mb-2">
-                <button id="teraStartWordBtn" class="py-1.5 px-2 rounded-md bg-orange-500 text-white text-xs font-semibold">Wort-Sequenz starten</button>
-                <button id="teraShowSingleCharBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">Erstes Zeichen einzeln</button>
-            </div>
-            <div id="teraCharGrid" class="space-y-1 w-max min-w-full"></div>
-            <p id="teraCharHint" class="text-[11px] text-gray-500 mt-1"></p>
         `;
         renderCharGrid(root);
         return;
     }
 
     host.innerHTML = `
-        <p class="text-xs font-black text-gray-700 text-right mb-2">${escapeHtml(selectedCategory.title)}</p>
-        <div class="grid grid-flow-col auto-cols-[182px] grid-rows-4 gap-1.5 w-max min-w-full">
-            ${selectedCategory.items.map((item) => `
-                <button data-ts-code-id="${escapeHtml(item.code.id)}" class="text-left p-1.5 rounded-md border border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50 transition min-w-0 min-h-[40px]">
-                    <p class="text-[11px] font-bold text-gray-800 break-words leading-tight">${escapeHtml(item.label)}</p>
-                    <p class="text-[10px] text-gray-500 leading-tight">${getCodeType(item.code)} · Quelle ${String(item.code.sourcePage).padStart(2, '0')}</p>
-                </button>
-            `).join('')}
+        <div class="w-max pr-2" style="min-width: calc(100% + 18px);">
+            <p class="text-xs font-black text-gray-700 text-right mb-2">${escapeHtml(selectedCategory.title)}</p>
+            <div class="grid grid-flow-col auto-cols-[182px] grid-rows-4 gap-1.5 w-max min-w-full">
+                ${selectedCategory.items.map((item) => `
+                    <button data-ts-code-id="${escapeHtml(item.code.id)}" class="text-left p-1.5 rounded-md border border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50 transition min-w-0 min-h-[40px]">
+                        <p class="text-[11px] font-bold text-gray-800 break-words leading-tight">${escapeHtml(item.label)}</p>
+                        <p class="text-[10px] text-gray-500 leading-tight">${getCodeType(item.code)} · Quelle ${String(item.code.sourcePage).padStart(2, '0')}</p>
+                    </button>
+                `).join('')}
+            </div>
         </div>
     `;
 }
@@ -632,42 +648,90 @@ function renderCharGrid(root) {
     const hint = root.querySelector('#teraCharHint');
     if (!grid || !hint) return;
 
+    const validModes = new Set(['upper', 'lower', 'symbols']);
+    if (!validModes.has(activeCharKeyboardMode)) {
+        activeCharKeyboardMode = 'upper';
+    }
+
     const chars = Array.from(charToCode.keys()).sort((a, b) => a.localeCompare(b));
-    const preferredRows = [
-        ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '+'],
-        ['Q', 'W', 'E', 'R', 'T', 'Z', 'U', 'I', 'O', 'P'],
-        ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
-        ['Y', 'X', 'C', 'V', 'B', 'N', 'M'],
-        ['q', 'w', 'e', 'r', 't', 'z', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'y', 'x', 'c', 'v', 'b', 'n', 'm', ' ', '!', '"', '#', '$', '%', '&', '(', ')', '*', ',', '.', '/', ':', ';', '<', '=', '>', '?', '@', '[', '\\', ']', '^', '_', '`', '{', '|', '}', '~']
-    ];
+    const modeLabels = {
+        upper: 'Großbuchstaben',
+        lower: 'Kleinbuchstaben',
+        symbols: 'Zeichen'
+    };
+
+    const modeFilter = {
+        upper: (ch) => /^[A-Z]$/.test(ch),
+        lower: (ch) => /^[a-z]$/.test(ch),
+        symbols: (ch) => !/^[A-Za-z]$/.test(ch)
+    };
+
+    const scopedChars = chars.filter(modeFilter[activeCharKeyboardMode]);
+    const preferredRowsByMode = {
+        upper: [
+            ['Q', 'W', 'E', 'R', 'T', 'Z', 'U', 'I', 'O', 'P'],
+            ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+            ['Y', 'X', 'C', 'V', 'B', 'N', 'M']
+        ],
+        lower: [
+            ['q', 'w', 'e', 'r', 't', 'z', 'u', 'i', 'o', 'p'],
+            ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
+            ['y', 'x', 'c', 'v', 'b', 'n', 'm']
+        ],
+        symbols: [
+            ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
+            ['!', '"', '#', '$', '%', '&', '/', '(', ')', '='],
+            ['-', '_', '+', '*', ',', '.', ';', ':', '<', '>'],
+            ['?', '@', '[', '\\', ']', '^', '`', '{', '|', '}', '~', 'DEL', 'Ç', 'ç'],
+            [' ']
+        ]
+    };
+
+    const preferredRows = preferredRowsByMode[activeCharKeyboardMode] || [];
 
     const used = new Set();
     const rows = preferredRows
         .map((row) => row.filter((ch) => {
-            if (!charToCode.has(ch) || used.has(ch)) return false;
+            if (!scopedChars.includes(ch) || used.has(ch)) return false;
             used.add(ch);
             return true;
         }))
         .filter((row) => row.length > 0);
 
-    const leftovers = chars.filter((ch) => !used.has(ch));
+    const leftovers = scopedChars.filter((ch) => !used.has(ch));
     if (leftovers.length) {
         if (!rows.length) rows.push([]);
         rows[rows.length - 1] = rows[rows.length - 1].concat(leftovers);
     }
 
-    const rowIndentClasses = ['', 'pl-2', 'pl-4', 'pl-6', 'pl-1'];
+    const rowIndentClassesByMode = {
+        upper: ['', 'pl-3', 'pl-6'],
+        lower: ['', 'pl-3', 'pl-6'],
+        symbols: ['', 'pl-2', 'pl-4', 'pl-1', 'pl-6']
+    };
+    const rowIndentClasses = rowIndentClassesByMode[activeCharKeyboardMode] || [];
+
     grid.innerHTML = rows.map((row, rowIndex) => `
         <div class="flex items-center gap-1 ${rowIndentClasses[rowIndex] || ''}">
             ${row.map((ch) => {
                 const label = ch === ' ' ? 'Leertaste' : ch;
-                const sizeClass = ch === ' ' ? 'min-w-[84px]' : 'min-w-[26px]';
-                return `<button data-ts-char="${escapeHtml(ch)}" class="h-7 ${sizeClass} px-2 rounded border border-gray-300 bg-gray-50 text-[11px] font-semibold hover:bg-orange-50 hover:border-orange-300">${escapeHtml(label)}</button>`;
+                const sizeClass = ch === ' ' ? 'min-w-[110px]' : (ch.length > 1 ? 'min-w-[44px]' : 'min-w-[28px]');
+                return `<button data-ts-char="${escapeHtml(ch)}" class="h-8 ${sizeClass} px-2 rounded border border-gray-300 bg-gray-50 text-[11px] font-semibold hover:bg-orange-50 hover:border-orange-300">${escapeHtml(label)}</button>`;
             }).join('')}
         </div>
     `).join('');
 
-    hint.textContent = `Verfügbare Zeichen-Codes: ${chars.length}. Tastaturansicht (QWERTZ-ähnlich). Nicht verfügbare Zeichen werden bei der Wort-Sequenz übersprungen.`;
+    const charModeButtons = root.querySelectorAll('[data-ts-char-mode]');
+    const activeBtnClass = 'w-[130px] py-2 px-3 rounded-lg border text-xs font-bold text-left transition bg-orange-500 border-orange-600 text-white shadow-sm';
+    const inactiveBtnClass = 'w-[130px] py-2 px-3 rounded-lg border text-xs font-bold text-left transition bg-white border-gray-300 text-gray-700 hover:bg-gray-50';
+    charModeButtons.forEach((btn) => {
+        const mode = btn.dataset.tsCharMode || '';
+        const active = mode === activeCharKeyboardMode;
+        btn.className = active ? activeBtnClass : inactiveBtnClass;
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+
+    hint.textContent = `Verfügbare Zeichen-Codes: ${chars.length}. Aktive Tastatur: ${modeLabels[activeCharKeyboardMode]}. Nicht verfügbare Zeichen werden bei der Wort-Sequenz übersprungen.`;
 }
 
 function renderGlobalList(root) {
@@ -860,6 +924,16 @@ function handleRootClick(event) {
         const ch = charBtn.dataset.tsChar;
         const code = charToCode.get(ch);
         if (code) showSingleCode(code, `Zeichen: ${ch === ' ' ? 'Leerzeichen' : ch}`);
+        return;
+    }
+
+    const charModeBtn = event.target.closest('[data-ts-char-mode]');
+    if (charModeBtn) {
+        const mode = charModeBtn.dataset.tsCharMode;
+        if (mode === 'upper' || mode === 'lower' || mode === 'symbols') {
+            activeCharKeyboardMode = mode;
+            renderCharGrid(root);
+        }
         return;
     }
 
