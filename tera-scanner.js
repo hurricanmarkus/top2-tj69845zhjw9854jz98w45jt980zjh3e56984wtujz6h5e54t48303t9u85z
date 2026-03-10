@@ -915,25 +915,30 @@ function renderViewer(root) {
 
     if (!empty || !active || !mediaWrap || !title || !subline || !counter || !repeatHint || !countdown || !image || !prevBtn || !nextBtn || !autoBtn || !saveFavoriteBtn) return;
 
-    mediaWrap.className = isViewerZoomed
-        ? 'fixed inset-2 z-[80] rounded-xl border-2 border-orange-300 p-3 bg-white shadow-2xl flex items-center justify-center transition-all duration-150 cursor-zoom-out'
-        : 'rounded-xl border border-gray-200 p-2 bg-white overflow-hidden flex-1 min-h-[130px] sm:min-h-[120px] flex items-center justify-center transition-all duration-150 cursor-zoom-in';
-    image.className = isViewerZoomed
-        ? 'max-h-[calc(100dvh-40px)] max-w-[calc(100vw-24px)] w-auto h-auto object-contain mx-auto'
-        : 'max-h-full max-w-full w-auto h-auto object-contain mx-auto';
-    countdown.className = isViewerZoomed
-        ? 'hidden h-full w-full flex items-center justify-center text-5xl font-black text-orange-600'
-        : 'hidden h-full w-full flex items-center justify-center text-3xl font-black text-orange-600';
-
     if (!activeSequence.length) {
         isViewerZoomed = false;
+        active.className = 'hidden min-w-0 h-full flex flex-col gap-1.5';
         empty.classList.remove('hidden');
-        active.classList.add('hidden');
+        image.style.transform = 'scale(1)';
         return;
     }
 
     empty.classList.add('hidden');
-    active.classList.remove('hidden');
+    active.className = isViewerZoomed
+        ? 'min-w-0 flex flex-col gap-2 fixed inset-2 z-[90] rounded-xl border-2 border-orange-300 bg-white p-2 shadow-2xl'
+        : 'min-w-0 h-full flex flex-col gap-1.5';
+
+    mediaWrap.className = isViewerZoomed
+        ? 'rounded-xl border border-orange-200 p-2 bg-white overflow-auto flex-1 min-h-[220px] flex items-center justify-center transition-all duration-150 cursor-zoom-out'
+        : 'rounded-xl border border-gray-200 p-2 bg-white overflow-hidden flex-1 min-h-[130px] sm:min-h-[120px] flex items-center justify-center transition-all duration-150 cursor-zoom-in';
+    image.className = isViewerZoomed
+        ? 'max-h-[calc(100dvh-250px)] max-w-[calc(100vw-40px)] w-auto h-auto object-contain mx-auto transition-transform duration-150'
+        : 'max-h-full max-w-full w-auto h-auto object-contain mx-auto transition-transform duration-150';
+    image.style.transform = isViewerZoomed ? 'scale(2)' : 'scale(1)';
+    image.style.transformOrigin = 'center center';
+    countdown.className = isViewerZoomed
+        ? 'hidden h-full w-full flex items-center justify-center text-6xl font-black text-orange-600'
+        : 'hidden h-full w-full flex items-center justify-center text-3xl font-black text-orange-600';
 
     const entry = activeSequence[activeIndex];
     const code = entry.code || entry;
