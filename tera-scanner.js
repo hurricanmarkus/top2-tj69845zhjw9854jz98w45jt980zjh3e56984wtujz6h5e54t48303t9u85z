@@ -145,6 +145,9 @@ let activeTitle = '';
 let activeMode = 'manual';
 let autoIntervalSeconds = 2;
 let autoTimer = null;
+let countdownTimer = null;
+let countdownSeconds = null;
+let autoReplayReady = false;
 let menuStep = 'category';
 let selectedCategoryId = '';
 let favorites = [];
@@ -158,6 +161,11 @@ function stopAutoTimer() {
         clearInterval(autoTimer);
         autoTimer = null;
     }
+    if (countdownTimer) {
+        clearTimeout(countdownTimer);
+        countdownTimer = null;
+    }
+    countdownSeconds = null;
 }
 
 function getCodeType(code) {
@@ -247,6 +255,24 @@ function getCodeLabel(code) {
     return `${getCodeCategoryLabel(code)} > ${getCodeFunctionalName(code)}`;
 }
 
+function areCodeIdSequencesEqual(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i += 1) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+}
+
+function getActiveSequenceCodeIds() {
+    return activeSequence
+        .map((entry) => (entry.code || entry)?.id)
+        .filter(Boolean);
+}
+
+function isCodeIdsFavorited(codeIds) {
+    return favorites.some((fav) => areCodeIdSequencesEqual(fav.codeIds, codeIds));
+}
+
 function loadFavorites() {
     try {
         const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
@@ -270,14 +296,12 @@ function persistFavorites() {
 function addFavoriteFromActiveSequence() {
     if (!activeSequence.length) return;
 
-    const codeIds = activeSequence
-        .map((entry) => (entry.code || entry)?.id)
-        .filter(Boolean);
-    if (!codeIds.length) return;
+    const codeIds = getActiveSequenceCodeIds();
+    if (!codeIds.length || isCodeIdsFavorited(codeIds)) return;
 
     const suggested = activeTitle || (codeIds.length > 1 ? 'Neue Sequenz' : 'Neuer Favorit');
     const title = window.prompt('Favorit-Titel eingeben:', suggested);
-    if (!title) return;
+    if (!title || !title.trim()) return;
 
     favorites.unshift({
         id: `fav_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
@@ -285,6 +309,11 @@ function addFavoriteFromActiveSequence() {
         codeIds,
         createdAt: Date.now()
     });
+    persistFavorites();
+}
+
+function removeFavoriteById(favoriteId) {
+    favorites = favorites.filter((item) => item.id !== favoriteId);
     persistFavorites();
 }
 
@@ -309,6 +338,74 @@ function openFavoriteById(favoriteId) {
         return;
     }
     showSequence(seq, favorite.title, 'manual', autoIntervalSeconds);
+}
+
+function startAutoPlaybackPass() {
+    const root = getRoot();
+    if (!root || activeSequence.length <= 1) return;
+
+    activeIndex = 0;
+    renderViewer(root);
+
+    let nextIndex = 1;
+    autoTimer = setInterval(() => {
+        const activeRoot = getRoot();
+        if (!activeRoot) {
+            stopAutoTimer();
+            return;
+        }
+
+        if (nextIndex >= activeSequence.length) {
+            stopAutoTimer();
+            activeMode = 'manual';
+            autoReplayReady = true;
+            renderViewer(activeRoot);
+            return;
+        }
+
+        activeIndex = nextIndex;
+        nextIndex += 1;
+        renderViewer(activeRoot);
+    }, autoIntervalSeconds * 1000);
+}
+
+function startAutoSequencePlayback() {
+    if (activeSequence.length <= 1) return;
+
+    stopAutoTimer();
+    activeMode = 'auto';
+    autoReplayReady = false;
+    countdownSeconds = 3;
+
+    const root = getRoot();
+    if (root) renderViewer(root);
+
+    const tick = () => {
+        const activeRoot = getRoot();
+        if (!activeRoot) {
+            stopAutoTimer();
+            return;
+        }
+
+        if (countdownSeconds === null) return;
+
+        if (countdownSeconds <= 0) {
+            countdownTimer = setTimeout(() => {
+                countdownSeconds = null;
+                startAutoPlaybackPass();
+            }, 1000);
+            renderViewer(activeRoot);
+            return;
+        }
+
+        countdownTimer = setTimeout(() => {
+            countdownSeconds = Math.max(0, countdownSeconds - 1);
+            tick();
+        }, 1000);
+        renderViewer(activeRoot);
+    };
+
+    tick();
 }
 
 function getMenuCategories() {
@@ -373,11 +470,10 @@ function getMenuCategories() {
 
 function renderBaseLayout(root) {
     root.innerHTML = `
-        <section class="h-[calc(100dvh-220px)] min-h-[540px] max-h-[780px] flex flex-col gap-2 overflow-hidden">
-            <div class="card bg-white rounded-xl border border-gray-200 p-3 shadow-sm basis-[42%] min-h-[210px]">
+        <section class="h-[calc(100dvh-250px)] min-h-[500px] max-h-[700px] flex flex-col gap-2 overflow-hidden">
+            <div class="card bg-white rounded-xl border border-gray-200 p-3 shadow-sm basis-[66%] min-h-[260px]">
                 <div class="flex items-center justify-between gap-2 mb-2">
                     <h3 class="text-base font-black text-gray-800">Aktiver Code</h3>
-                    <span class="text-[11px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">oben: Code</span>
                 </div>
                 <div id="teraViewerEmpty" class="text-xs text-gray-500 rounded-lg bg-gray-50 p-2 border border-gray-200">Unten zuerst Kategorie wählen, dann Funktion antippen.</div>
                 <div id="teraViewerActive" class="hidden space-y-2 min-w-0 h-full">
@@ -395,16 +491,16 @@ function renderBaseLayout(root) {
                         <p id="teraViewerRepeatHint" class="text-[11px] font-semibold"></p>
                     </div>
                     <div class="rounded-xl border border-gray-200 p-2 bg-white overflow-hidden">
+                        <div id="teraViewerCountdown" class="hidden h-[24vh] flex items-center justify-center text-3xl font-black text-orange-600"></div>
                         <img id="teraViewerImage" src="" alt="Scanner-Code" class="w-full max-h-[24vh] object-contain mx-auto" />
                     </div>
                 </div>
             </div>
 
-            <div class="card bg-white rounded-xl border border-gray-200 p-3 shadow-sm flex-1 min-h-0 overflow-hidden">
-                <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-2">
+            <div class="card bg-white rounded-xl border border-gray-200 p-2 shadow-sm basis-[34%] min-h-[150px] max-h-[210px] overflow-hidden">
+                <div class="flex items-center gap-2 mb-2">
                     <h3 class="text-base font-black text-gray-800">Menüleiste</h3>
                     <button id="teraMenuHeaderBackBtn" class="hidden justify-self-center py-1 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">&lt; Kategorien</button>
-                    <span class="justify-self-end text-[11px] font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">unten: Auswahl</span>
                 </div>
                 <div id="teraMenuContent" class="h-full overflow-auto"></div>
             </div>
@@ -425,9 +521,9 @@ function renderMenu(root) {
 
     if (menuStep === 'category') {
         host.innerHTML = `
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div class="grid grid-flow-col auto-cols-[170px] grid-rows-4 gap-2 overflow-x-auto pb-1">
                 ${categories.map((category) => `
-                    <button data-ts-category-id="${escapeHtml(category.id)}" class="text-left rounded-lg border border-gray-200 p-3 bg-gray-50 hover:bg-orange-50 hover:border-orange-300 transition">
+                    <button data-ts-category-id="${escapeHtml(category.id)}" class="text-left rounded-lg border border-gray-200 p-2 bg-gray-50 hover:bg-orange-50 hover:border-orange-300 transition min-h-[62px]">
                         <p class="text-xs font-black text-gray-800 uppercase tracking-wide">${escapeHtml(category.title)}</p>
                         <p class="text-[11px] text-gray-600 mt-1">${escapeHtml(category.subtitle)}</p>
                     </button>
@@ -448,12 +544,15 @@ function renderMenu(root) {
     if (selectedCategory.type === 'favorites') {
         host.innerHTML = selectedCategory.items.length
             ? `
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                <div class="grid grid-flow-col auto-cols-[190px] grid-rows-4 gap-1.5 overflow-x-auto pb-1">
                     ${selectedCategory.items.map((fav) => `
-                        <button data-ts-favorite-id="${escapeHtml(fav.id)}" class="text-left p-2 rounded-md border border-amber-200 bg-amber-50 hover:bg-amber-100 transition min-w-0">
-                            <p class="text-xs font-bold text-amber-900 break-words">★ ${escapeHtml(fav.title || 'Favorit')}</p>
-                            <p class="text-[11px] text-amber-700">${fav.codeIds.length > 1 ? `Sequenz (${fav.codeIds.length} Codes)` : 'Einzelcode'}</p>
-                        </button>
+                        <div class="rounded-md border border-amber-200 bg-amber-50 p-1.5 min-w-0">
+                            <button data-ts-favorite-id="${escapeHtml(fav.id)}" class="w-full text-left">
+                                <p class="text-xs font-bold text-amber-900 break-words">★ ${escapeHtml(fav.title || 'Favorit')}</p>
+                                <p class="text-[11px] text-amber-700">${fav.codeIds.length > 1 ? `Sequenz (${fav.codeIds.length} Codes)` : 'Einzelcode'}</p>
+                            </button>
+                            <button data-ts-delete-favorite-id="${escapeHtml(fav.id)}" class="mt-1 w-full py-1 rounded border border-red-300 text-[11px] font-semibold text-red-700 bg-red-50 hover:bg-red-100">Löschen</button>
+                        </div>
                     `).join('')}
                 </div>
             `
@@ -492,7 +591,7 @@ function renderMenu(root) {
 
     host.innerHTML = `
         <p class="text-xs font-black text-gray-700 text-right mb-2">${escapeHtml(selectedCategory.title)}</p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+        <div class="grid grid-flow-col auto-cols-[190px] grid-rows-4 gap-1.5 overflow-x-auto pb-1">
             ${selectedCategory.items.map((item) => `
                 <button data-ts-code-id="${escapeHtml(item.code.id)}" class="text-left p-2 rounded-md border border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50 transition min-w-0">
                     <p class="text-xs font-bold text-gray-800 break-words">${escapeHtml(item.label)}</p>
@@ -582,13 +681,14 @@ function renderViewer(root) {
     const subline = root.querySelector('#teraViewerSubline');
     const counter = root.querySelector('#teraViewerCounter');
     const repeatHint = root.querySelector('#teraViewerRepeatHint');
+    const countdown = root.querySelector('#teraViewerCountdown');
     const image = root.querySelector('#teraViewerImage');
     const prevBtn = root.querySelector('#teraPrevBtn');
     const nextBtn = root.querySelector('#teraNextBtn');
     const autoBtn = root.querySelector('#teraToggleAutoBtn');
     const saveFavoriteBtn = root.querySelector('#teraSaveFavoriteBtn');
 
-    if (!empty || !active || !title || !subline || !counter || !repeatHint || !image || !prevBtn || !nextBtn || !autoBtn || !saveFavoriteBtn) return;
+    if (!empty || !active || !title || !subline || !counter || !repeatHint || !countdown || !image || !prevBtn || !nextBtn || !autoBtn || !saveFavoriteBtn) return;
 
     if (!activeSequence.length) {
         empty.classList.remove('hidden');
@@ -603,6 +703,16 @@ function renderViewer(root) {
     const code = entry.code || entry;
     image.src = code.file;
     image.alt = `Scanner-Code ${code.id}`;
+
+    if (countdownSeconds !== null) {
+        image.classList.add('hidden');
+        countdown.classList.remove('hidden');
+        countdown.textContent = `${countdownSeconds} s`;
+    } else {
+        image.classList.remove('hidden');
+        countdown.classList.add('hidden');
+        countdown.textContent = '';
+    }
 
     title.textContent = getCodeFunctionalName(code);
     subline.textContent = activeTitle ? `${activeTitle} · ${getCodeCategoryLabel(code)}` : getCodeCategoryLabel(code);
@@ -631,13 +741,19 @@ function renderViewer(root) {
     autoBtn.classList.toggle('border-gray-300', !multiple);
     autoBtn.classList.toggle('text-gray-400', !multiple);
 
-    autoBtn.textContent = autoTimer
-        ? `Auto stoppen (${autoIntervalSeconds}s)`
+    const autoActive = Boolean(autoTimer || countdownTimer);
+    autoBtn.textContent = autoActive
+        ? 'Auto stoppen'
         : multiple
-            ? `Automatisch (${autoIntervalSeconds}s)`
+            ? (autoReplayReady ? 'Nochmal abspielen' : `Automatisch (${autoIntervalSeconds}s)`)
             : 'Automatisch (nur Sequenz)';
 
-    saveFavoriteBtn.textContent = activeSequence.length > 1 ? '★ Sequenz-Favorit' : '★ Code-Favorit';
+    const activeCodeIds = getActiveSequenceCodeIds();
+    const alreadyFavorited = isCodeIdsFavorited(activeCodeIds);
+    saveFavoriteBtn.classList.toggle('hidden', alreadyFavorited);
+    if (!alreadyFavorited) {
+        saveFavoriteBtn.textContent = activeSequence.length > 1 ? '★ Sequenz-Favorit' : '★ Code-Favorit';
+    }
 }
 
 function showSequence(sequence, title, mode, intervalSeconds) {
@@ -645,8 +761,9 @@ function showSequence(sequence, title, mode, intervalSeconds) {
     activeSequence = sequence;
     activeIndex = 0;
     activeTitle = title || '';
-    activeMode = mode;
+    activeMode = mode === 'auto' && sequence.length > 1 ? 'auto' : 'manual';
     autoIntervalSeconds = intervalSeconds;
+    autoReplayReady = false;
 
     const root = getRoot();
     if (!root) return;
@@ -654,12 +771,7 @@ function showSequence(sequence, title, mode, intervalSeconds) {
     renderViewer(root);
 
     if (mode === 'auto' && sequence.length > 1) {
-        autoTimer = setInterval(() => {
-            activeIndex = (activeIndex + 1) % activeSequence.length;
-            const activeRoot = getRoot();
-            if (!activeRoot) return;
-            renderViewer(activeRoot);
-        }, autoIntervalSeconds * 1000);
+        startAutoSequencePlayback();
     }
 }
 
@@ -683,6 +795,17 @@ function handleRootClick(event) {
         menuStep = 'category';
         selectedCategoryId = '';
         renderMenu(root);
+        return;
+    }
+
+    const deleteFavoriteBtn = event.target.closest('[data-ts-delete-favorite-id]');
+    if (deleteFavoriteBtn) {
+        const favoriteId = deleteFavoriteBtn.dataset.tsDeleteFavoriteId;
+        if (favoriteId) {
+            removeFavoriteById(favoriteId);
+            renderMenu(root);
+            renderViewer(root);
+        }
         return;
     }
 
@@ -710,6 +833,9 @@ function handleRootClick(event) {
 
     const prevBtn = event.target.closest('#teraPrevBtn');
     if (prevBtn && activeSequence.length > 1) {
+        stopAutoTimer();
+        activeMode = 'manual';
+        autoReplayReady = true;
         activeIndex = (activeIndex - 1 + activeSequence.length) % activeSequence.length;
         renderViewer(root);
         return;
@@ -717,6 +843,9 @@ function handleRootClick(event) {
 
     const nextBtn = event.target.closest('#teraNextBtn');
     if (nextBtn && activeSequence.length > 1) {
+        stopAutoTimer();
+        activeMode = 'manual';
+        autoReplayReady = true;
         activeIndex = (activeIndex + 1) % activeSequence.length;
         renderViewer(root);
         return;
@@ -724,22 +853,16 @@ function handleRootClick(event) {
 
     const toggleAutoBtn = event.target.closest('#teraToggleAutoBtn');
     if (toggleAutoBtn) {
-        if (autoTimer) {
+        if (autoTimer || countdownTimer) {
             stopAutoTimer();
             activeMode = 'manual';
+            autoReplayReady = true;
             renderViewer(root);
             return;
         }
 
         if (activeSequence.length > 1) {
-            activeMode = 'auto';
-            autoTimer = setInterval(() => {
-                activeIndex = (activeIndex + 1) % activeSequence.length;
-                const activeRoot = getRoot();
-                if (!activeRoot) return;
-                renderViewer(activeRoot);
-            }, autoIntervalSeconds * 1000);
-            renderViewer(root);
+            startAutoSequencePlayback();
         }
         return;
     }
@@ -755,6 +878,7 @@ function handleRootClick(event) {
         activeSequence = [];
         activeIndex = 0;
         activeTitle = '';
+        autoReplayReady = false;
         menuStep = 'category';
         selectedCategoryId = '';
         renderMenu(root);
@@ -887,4 +1011,5 @@ export function stopTeraScannerListeners() {
     activeSequence = [];
     activeIndex = 0;
     activeTitle = '';
+    autoReplayReady = false;
 }
