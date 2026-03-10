@@ -31,20 +31,22 @@ const SOURCE_TO_MANUAL_PAGE = {
     19: 26
 };
 
+const CODES_TABLE_FILE = 'assets/tera-scanner/codes/codes_tabelle.csv';
+
 const PAGE_TITLES_DE = {
-    1: 'Factory Reset & Arbeitsmodus',
+    1: 'Werkseinstellungen & Arbeitsmodus',
     2: 'Arbeitsmodus & Kommunikation',
     3: '2.4G/Bluetooth Pairing',
-    4: 'Bluetooth SPP/BLE & Übertragungsgeschwindigkeit',
-    5: 'Bluetooth-Name / Scanmodus / Zentrierung',
-    6: 'Lautstärke / Vibration / Sleep / iOS',
+    4: 'Pairing-Optionen & Übertragung',
+    5: 'Bluetooth-Name & Scanmodus',
+    6: 'Feedback, Sleep & iOS',
     7: 'Terminator & Tastatur-Sprache',
-    8: 'Sprache/Fall & Symbologien-Übersicht',
+    8: 'Sprachlayout & Grundverhalten',
     9: 'Inverted/UPC/EAN-8',
     10: 'EAN-13 / ISBN / ISSN / Code 128',
     11: 'GS1-128 / Code39 / Code32 / Code93',
     12: 'Code11 / Codabar / DataBar',
-    13: '2D-Symbologien + GS Replacement',
+    13: 'QR/DataMatrix/PDF417',
     14: 'Prefix / Hide / ASCII Form',
     15: 'Suffix / Hide Prefix/Suffix',
     16: 'ASCII Transfer Meaning 0-3',
@@ -53,84 +55,84 @@ const PAGE_TITLES_DE = {
     19: 'ASCII Form 14-20',
     20: 'ASCII Form 21-27',
     21: 'ASCII Form 28-31 + Sonderzeichen',
-    22: 'Zeichen-Tabelle Teil 1',
-    23: 'Zeichen-Tabelle Teil 2',
-    24: 'Zeichen-Tabelle Teil 3',
-    25: 'Zeichen-Tabelle Teil 4',
-    26: 'Service & Support'
+    22: 'Zeichen A-B + Zahlen/Symbole',
+    23: 'Zeichen C-Z + [\\]',
+    24: 'Zeichen ^ bis u',
+    25: 'Zeichen v bis ç',
+    26: 'Weitere Scannerfunktionen'
 };
 
 const QUICK_GROUPS = [
     {
-        title: 'Verbindung & Pairing',
+        title: 'Systemstart',
+        subtitle: 'Grundfunktionen für den Start',
         actions: [
-            { label: '2.4G Modus', manualPage: 2, order: 5 },
-            { label: 'Bluetooth HID Modus', manualPage: 2, order: 6 },
-            { label: 'Bluetooth SPP Modus', manualPage: 2, order: 7 },
-            { label: 'Bluetooth BLE Modus', manualPage: 2, order: 8 },
-            { label: 'Pairing mit Dongle', manualPage: 3, order: 2 },
-            { label: 'Pairing mit Bluetooth', manualPage: 3, order: 4 }
+            { manualPage: 1, order: 1 },
+            { manualPage: 1, order: 2 },
+            { manualPage: 2, order: 1 },
+            { manualPage: 2, order: 4 },
+            { manualPage: 2, order: 5 },
+            { manualPage: 2, order: 8 }
+        ]
+    },
+    {
+        title: 'Verbindung & Pairing',
+        subtitle: '2.4G, Bluetooth und Pairing',
+        actions: [
+            { manualPage: 3, order: 1 },
+            { manualPage: 3, order: 2 },
+            { manualPage: 3, order: 3 },
+            { manualPage: 3, order: 4 },
+            { manualPage: 4, order: 1 },
+            { manualPage: 4, order: 2 }
         ]
     },
     {
         title: 'Feedback (Ton/Vibration)',
+        subtitle: 'Signal- und Ruheverhalten',
         actions: [
-            { label: 'Lautstärke Hoch', manualPage: 6, order: 1 },
-            { label: 'Lautstärke Mittel', manualPage: 6, order: 2 },
-            { label: 'Lautstärke Niedrig', manualPage: 6, order: 3 },
-            { label: 'Ton AUS', manualPage: 6, order: 4 },
-            { label: 'Vibration EIN', manualPage: 6, order: 5 },
-            { label: 'Vibration AUS', manualPage: 6, order: 6 }
+            { manualPage: 6, order: 1 },
+            { manualPage: 6, order: 2 },
+            { manualPage: 6, order: 3 },
+            { manualPage: 6, order: 4 },
+            { manualPage: 6, order: 5 },
+            { manualPage: 6, order: 6 },
+            { manualPage: 6, order: 7 },
+            { manualPage: 6, order: 10 }
         ]
     },
     {
-        title: 'Scan-Verhalten',
+        title: 'Tastatur & Sprache',
+        subtitle: 'Terminator, Layout und Schriftbild',
         actions: [
-            { label: 'Werkseinstellungen', manualPage: 1, order: 1 },
-            { label: 'Batteriestand', manualPage: 1, order: 2 },
-            { label: 'Scanmodus Tastendruck', manualPage: 5, order: 3 },
-            { label: 'Scanmodus Kontinuierlich', manualPage: 5, order: 4 },
-            { label: 'Sleep 5 Minuten', manualPage: 6, order: 7 },
-            { label: 'Sleep sofort', manualPage: 6, order: 10 }
+            { manualPage: 7, order: 1 },
+            { manualPage: 7, order: 2 },
+            { manualPage: 7, order: 3 },
+            { manualPage: 7, order: 8 },
+            { manualPage: 7, order: 9 },
+            { manualPage: 8, order: 5 },
+            { manualPage: 8, order: 6 },
+            { manualPage: 8, order: 7 }
         ]
     },
     {
         title: 'Symbologie',
+        subtitle: 'Häufige Code-Typen ein/aus',
         actions: [
-            { label: 'Alle Barcodes EIN', manualPage: 8, order: 9 },
-            { label: 'Alle Barcodes AUS', manualPage: 8, order: 10 },
-            { label: 'QR-Code EIN', manualPage: 13, order: 1 },
-            { label: 'QR-Code AUS', manualPage: 13, order: 2 },
-            { label: 'Add Prefix', manualPage: 14, order: 1 },
-            { label: 'Add Suffix', manualPage: 15, order: 1 }
+            { manualPage: 8, order: 9 },
+            { manualPage: 8, order: 10 },
+            { manualPage: 8, order: 11 },
+            { manualPage: 8, order: 12 },
+            { manualPage: 13, order: 1 },
+            { manualPage: 13, order: 2 },
+            { manualPage: 13, order: 5 },
+            { manualPage: 13, order: 6 }
         ]
     }
 ];
 
-const PAGE_CODE_LABELS = {
-    1: ['Werkseinstellungen', 'Batteriestand', 'Firmware-Version', 'Sofort-Upload-Modus'],
-    2: ['Speichermodus', 'Gespeicherte Daten hochladen', 'Anzahl gespeicherter Codes', 'Speicher leeren', '2.4G-Modus', 'Bluetooth HID-Modus', 'Bluetooth SPP-Modus', 'Bluetooth BLE-Modus'],
-    3: ['2.4G-Modus', 'Pairing mit Dongle erzwingen', 'Bluetooth HID-Modus', 'Pairing mit Bluetooth erzwingen'],
-    4: ['8-Sekunden Pairing EIN', '8-Sekunden Pairing AUS', 'Bluetooth SPP-Modus', 'Bluetooth BLE-Modus', 'HID-Übertragung Hoch', 'HID-Übertragung Mittel', 'HID-Übertragung Niedrig', 'HID-Übertragung Sehr niedrig'],
-    5: ['Bluetooth-Namenmodus aktivieren', 'Bluetooth-Namenbeispiel', 'Scanmodus Tastendruck', 'Scanmodus Dauerbetrieb', 'Zentrierung AUS', 'Nur zentrierter Code'],
-    6: ['Lautstärke Hoch', 'Lautstärke Mittel', 'Lautstärke Niedrig', 'Ton AUS', 'Vibration EIN', 'Vibration AUS', 'Sleep 5 Minuten', 'Sleep 30 Minuten', 'Kein Sleep', 'Sleep sofort', 'iOS Keyboard EIN', 'iOS Keyboard AUS'],
-    7: ['Terminator CR', 'Terminator LF', 'Terminator CR+LF', 'Kein Terminator', 'Terminator TAB', 'GBK Ausgabe', 'Unicode Ausgabe', 'Tastatursprache Englisch', 'Tastatursprache Deutsch', 'Tastatursprache Französisch', 'Tastatursprache Spanisch'],
-    8: ['Tastatursprache Italienisch', 'Tastatursprache Japanisch', 'Tastatursprache Britisch Englisch', 'Internationales Keyboard', 'Groß/Klein unverändert', 'Alles Großbuchstaben', 'Alles Kleinbuchstaben', 'Groß/Klein invertieren', 'Alle Barcodes EIN', 'Alle Barcodes AUS', 'Alle 1D-Codes EIN', 'Alle 1D-Codes AUS'],
-    9: ['Nur normale Codes', 'Normale + invertierte Codes', 'UPC-A EIN', 'UPC-A AUS', 'UPC-A Prüfziffer EIN', 'UPC-A Prüfziffer AUS', 'UPC-E EIN', 'UPC-E AUS', 'UPC-E Prüfziffer EIN', 'UPC-E Prüfziffer AUS', 'EAN-8 EIN', 'EAN-8 AUS'],
-    13: ['QR-Code EIN', 'QR-Code AUS', 'Micro-QR EIN', 'Micro-QR AUS', 'DataMatrix EIN', 'DataMatrix AUS', 'PDF417 EIN', 'PDF417 AUS', 'MicroPDF417 EIN', 'MicroPDF417 AUS', 'GS-Ersatz EIN', 'GS-Ersatz AUS']
-};
-
-const EXTRA_CODES = [
-    { id: 'p21_char01', sourcePage: 28, manualPage: 21, index: 901, file: 'assets/tera-scanner/codes/p21_char01.png', x: 0, y: 0, w: 140, h: 140 },
-    { id: 'p21_char02', sourcePage: 28, manualPage: 21, index: 902, file: 'assets/tera-scanner/codes/p21_char02.png', x: 0, y: 0, w: 140, h: 140 },
-    { id: 'p21_char03', sourcePage: 28, manualPage: 21, index: 903, file: 'assets/tera-scanner/codes/p21_char03.png', x: 0, y: 0, w: 140, h: 140 },
-    { id: 'p21_char04', sourcePage: 28, manualPage: 21, index: 904, file: 'assets/tera-scanner/codes/p21_char04.png', x: 0, y: 0, w: 140, h: 140 },
-    { id: 'p21_char05', sourcePage: 28, manualPage: 21, index: 905, file: 'assets/tera-scanner/codes/p21_char05.png', x: 0, y: 0, w: 140, h: 140 },
-    { id: 'p21_char06', sourcePage: 28, manualPage: 21, index: 906, file: 'assets/tera-scanner/codes/p21_char06.png', x: 0, y: 0, w: 140, h: 140 },
-    { id: 'p21_char07', sourcePage: 28, manualPage: 21, index: 907, file: 'assets/tera-scanner/codes/p21_char07.png', x: 0, y: 0, w: 140, h: 140 },
-    { id: 'p21_char08', sourcePage: 28, manualPage: 21, index: 908, file: 'assets/tera-scanner/codes/p21_char08.png', x: 0, y: 0, w: 140, h: 140 },
-    { id: 'p21_char09', sourcePage: 28, manualPage: 21, index: 909, file: 'assets/tera-scanner/codes/p21_char09.png', x: 0, y: 0, w: 140, h: 140 }
-];
+const PRIMARY_PAGE_ORDER = [1, 2, 3, 4, 5, 6, 7, 8, 9, 13];
+const ADVANCED_PAGE_ORDER = [10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21];
 
 const FAVORITES_STORAGE_KEY = 'tera_scanner_favorites_v1';
 
@@ -138,6 +140,9 @@ let cachedCodes = [];
 let codesById = new Map();
 let charToCode = new Map();
 let codeIdToChar = new Map();
+let codeMetaById = new Map();
+let skippedTableRows = [];
+let missingImageRows = [];
 
 let activeSequence = [];
 let activeIndex = 0;
@@ -173,6 +178,142 @@ function getCodeType(code) {
     return code.w >= code.h * 1.8 ? 'BAR' : 'QR';
 }
 
+function parseSemicolonCsvLine(line) {
+    const result = [];
+    let cell = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i += 1) {
+        const ch = line[i];
+
+        if (ch === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+                cell += '"';
+                i += 1;
+            } else {
+                inQuotes = !inQuotes;
+            }
+            continue;
+        }
+
+        if (ch === ';' && !inQuotes) {
+            result.push(cell);
+            cell = '';
+            continue;
+        }
+
+        cell += ch;
+    }
+
+    result.push(cell);
+    return result;
+}
+
+function parseCodeTableCsv(csvText) {
+    const lines = String(csvText || '')
+        .replace(/^\uFEFF/, '')
+        .replace(/\r/g, '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+    if (lines.length <= 1) return [];
+
+    const rows = [];
+    for (let i = 1; i < lines.length; i += 1) {
+        const cols = parseSemicolonCsvLine(lines[i]);
+        if (cols.length < 3) continue;
+        rows.push({
+            fileName: cols[0].trim(),
+            title: cols[1].trim(),
+            info: cols[2].trim()
+        });
+    }
+
+    return rows;
+}
+
+function parseCodeFileName(fileName) {
+    const match = /^p(\d{2})_c(\d{3})\.png$/i.exec(fileName || '');
+    if (!match) return null;
+
+    return {
+        sourcePage: Number(match[1]),
+        index: Number(match[2])
+    };
+}
+
+function inferCodeDimensions(title) {
+    const upper = String(title || '').toUpperCase();
+    const barcodeLike = /EAN|UPC|CODE\s?128|CODE11|CODE39|CODE32|CODE93|CODABAR|GS1|DATABAR|PDF417|MICROPDF417/.test(upper);
+    return barcodeLike ? { w: 260, h: 92 } : { w: 140, h: 140 };
+}
+
+async function doesCodeImageExist(fileName) {
+    const url = `assets/tera-scanner/codes/${fileName}`;
+
+    try {
+        const headResponse = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+        if (headResponse.ok) return true;
+    } catch {
+        // Manche Dev-Server unterstützen HEAD nicht.
+    }
+
+    try {
+        const getResponse = await fetch(url, { cache: 'no-store' });
+        return getResponse.ok;
+    } catch {
+        return false;
+    }
+}
+
+async function filterRowsWithExistingImages(rows) {
+    const checks = await Promise.all(rows.map(async (row) => {
+        const exists = await doesCodeImageExist(row.fileName);
+        return { row, exists };
+    }));
+
+    missingImageRows = checks
+        .filter((entry) => !entry.exists)
+        .map((entry) => entry.row.fileName);
+
+    return checks
+        .filter((entry) => entry.exists)
+        .map((entry) => entry.row);
+}
+
+async function loadUnassignedRowsFromLegacyManifest(knownFileNames) {
+    try {
+        const response = await fetch('assets/tera-scanner/codes/manifest.json', { cache: 'no-store' });
+        if (!response.ok) return [];
+
+        const raw = await response.json();
+        if (!Array.isArray(raw)) return [];
+
+        const allowedSourcePages = new Set(Object.keys(SOURCE_TO_MANUAL_PAGE).map((k) => Number(k)));
+        return raw
+            .map((item) => {
+                const sourcePage = Number(item.page);
+                if (!allowedSourcePages.has(sourcePage)) return null;
+
+                const id = String(item.id || '').trim();
+                if (!id) return null;
+
+                const fileName = `${id}.png`;
+                if (knownFileNames.has(fileName)) return null;
+
+                return {
+                    fileName,
+                    title: `Unzugeordnet · ${id}`,
+                    info: 'Kein Eintrag in der Tabelle vorhanden. Bitte Titel/Infotext ergänzen.'
+                };
+            })
+            .filter(Boolean);
+    } catch {
+        return [];
+    }
+}
+
 function getManualPageCodes(manualPage) {
     return cachedCodes
         .filter((c) => c.manualPage === manualPage)
@@ -184,43 +325,20 @@ function getCodeByManualOrder(manualPage, order) {
     return list[order - 1] || null;
 }
 
+function getCharacterFromTitle(title) {
+    const match = /^Zeichen\s+(.+)$/i.exec(String(title || '').trim());
+    if (!match) return '';
+    const token = match[1].trim();
+    return token === 'Leerzeichen' ? ' ' : token;
+}
+
 function buildCharacterMap() {
     charToCode = new Map();
     codeIdToChar = new Map();
-
-    const assignChars = (manualPage, chars) => {
-        const list = getManualPageCodes(manualPage);
-        let i = 0;
-        chars.forEach((ch) => {
-            if (!ch) return;
-            const code = list[i];
-            i += 1;
-            if (!code) return;
-            charToCode.set(ch, code);
-            codeIdToChar.set(code.id, ch);
-        });
-    };
-
-    assignChars(22, ['(', ')', '*', '+', ',', '-', '/', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '<', '=', '>', '?', '@', 'A', 'B']);
-    assignChars(23, ['C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '[', '\\', ']']);
-    assignChars(24, ['^', '_', '`', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u']);
-    assignChars(25, ['v', 'w', 'x', 'y', 'z', '{', '|', '}', '~', 'DEL', 'Ç', 'ç']);
-
-    const extraSymbolById = {
-        '-': 'p21_char01',
-        ' ': 'p21_char02',
-        '!': 'p21_char03',
-        '"': 'p21_char04',
-        '#': 'p21_char05',
-        '$': 'p21_char06',
-        '%': 'p21_char07',
-        '&': 'p21_char08',
-        '`': 'p21_char09'
-    };
-
-    Object.entries(extraSymbolById).forEach(([char, codeId]) => {
-        const code = codesById.get(codeId);
-        if (!code) return;
+    cachedCodes.forEach((code) => {
+        const title = codeMetaById.get(code.id)?.title || '';
+        const char = getCharacterFromTitle(title);
+        if (!char) return;
         charToCode.set(char, code);
         codeIdToChar.set(code.id, char);
     });
@@ -232,19 +350,19 @@ function getManualPosition(code) {
 }
 
 function getCodeFunctionalName(code) {
+    const tableTitle = codeMetaById.get(code.id)?.title;
+    if (tableTitle) return tableTitle;
+
     const char = codeIdToChar.get(code.id);
-    if (char) {
-        return char === ' ' ? 'Zeichen Leerzeichen' : `Zeichen ${char}`;
-    }
+    if (char) return char === ' ' ? 'Zeichen Leerzeichen' : `Zeichen ${char}`;
 
-    const labels = PAGE_CODE_LABELS[code.manualPage] || [];
     const pos = getManualPosition(code);
-    if (pos > 0 && pos <= labels.length) {
-        return labels[pos - 1];
-    }
-
     const chapterTitle = PAGE_TITLES_DE[code.manualPage] || `Kapitel ${String(code.manualPage).padStart(2, '0')}`;
     return `${chapterTitle} · Eintrag ${String(pos > 0 ? pos : code.index).padStart(2, '0')}`;
+}
+
+function getCodeInfoText(code) {
+    return codeMetaById.get(code.id)?.info || '';
 }
 
 function getCodeCategoryLabel(code) {
@@ -425,7 +543,7 @@ function getMenuCategories() {
             .map((action) => {
                 const code = getCodeByManualOrder(action.manualPage, action.order);
                 if (!code) return null;
-                return { code, label: action.label };
+                return { code, label: action.label || getCodeFunctionalName(code) };
             })
             .filter(Boolean);
 
@@ -433,15 +551,17 @@ function getMenuCategories() {
             categories.push({
                 id: `quick-${index}`,
                 title: group.title,
-                subtitle: 'Gebündelte Funktionen',
+                subtitle: group.subtitle || 'Gebündelte Funktionen',
                 type: 'codes',
                 items
             });
         }
     });
 
-    const pages = Array.from(new Set(cachedCodes.map((c) => c.manualPage))).sort((a, b) => a - b);
-    pages.forEach((manualPage) => {
+    const pagesWithCodes = new Set(cachedCodes.map((c) => c.manualPage));
+    const pushChapterCategory = (manualPage) => {
+        if (!pagesWithCodes.has(manualPage)) return;
+
         const items = getManualPageCodes(manualPage).map((code) => ({
             code,
             label: getCodeFunctionalName(code)
@@ -456,7 +576,9 @@ function getMenuCategories() {
                 items
             });
         }
-    });
+    };
+
+    PRIMARY_PAGE_ORDER.forEach(pushChapterCategory);
 
     categories.push({
         id: 'chars',
@@ -465,6 +587,13 @@ function getMenuCategories() {
         type: 'chars',
         items: []
     });
+
+    ADVANCED_PAGE_ORDER.forEach(pushChapterCategory);
+
+    Array.from(pagesWithCodes)
+        .sort((a, b) => a - b)
+        .filter((manualPage) => !PRIMARY_PAGE_ORDER.includes(manualPage) && !ADVANCED_PAGE_ORDER.includes(manualPage) && ![22, 23, 24, 25].includes(manualPage))
+        .forEach(pushChapterCategory);
 
     return categories;
 }
@@ -610,7 +739,7 @@ function renderMenu(root) {
                 ${selectedCategory.items.map((item) => `
                     <button data-ts-code-id="${escapeHtml(item.code.id)}" class="text-left p-1.5 rounded-md border border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50 transition min-w-0 min-h-[40px]">
                         <p class="text-[11px] font-bold text-gray-800 break-words leading-tight">${escapeHtml(item.label)}</p>
-                        <p class="text-[10px] text-gray-500 leading-tight">${getCodeType(item.code)} · Quelle ${String(item.code.sourcePage).padStart(2, '0')}</p>
+                        <p class="text-[10px] text-gray-500 leading-tight">${escapeHtml(getCodeInfoText(item.code) || `${getCodeType(item.code)} · Quelle ${String(item.code.sourcePage).padStart(2, '0')}`)}</p>
                     </button>
                 `).join('')}
             </div>
@@ -626,9 +755,10 @@ function renderQuickGroups(root) {
         const buttons = group.actions.map((action) => {
             const code = getCodeByManualOrder(action.manualPage, action.order);
             if (!code) return '';
+            const label = action.label || getCodeFunctionalName(code);
             return `
                 <button data-ts-code-id="${escapeHtml(code.id)}" class="text-left px-2 py-1 rounded-md border border-gray-200 bg-gray-50 hover:bg-orange-50 hover:border-orange-300 transition min-w-0">
-                    <p class="text-xs font-semibold text-gray-800 break-words">${escapeHtml(action.label)}</p>
+                    <p class="text-xs font-semibold text-gray-800 break-words">${escapeHtml(label)}</p>
                     <p class="text-[11px] text-gray-500">Kapitel ${String(action.manualPage).padStart(2, '0')}</p>
                 </button>
             `;
@@ -808,7 +938,10 @@ function renderViewer(root) {
     }
 
     title.textContent = getCodeFunctionalName(code);
-    subline.textContent = activeTitle ? `${activeTitle} · ${getCodeCategoryLabel(code)}` : getCodeCategoryLabel(code);
+    const codeInfoText = getCodeInfoText(code);
+    subline.textContent = activeTitle
+        ? `${activeTitle}${codeInfoText ? ` · ${codeInfoText}` : ''}`
+        : (codeInfoText || getCodeCategoryLabel(code));
     counter.textContent = `Schritt ${activeIndex + 1}/${activeSequence.length} · ${getCodeType(code)} · Modus: ${activeMode === 'auto' ? 'Automatisch' : 'Manuell'}`;
     if (entry.char) {
         const printableChar = entry.char === ' ' ? 'Leerzeichen' : entry.char;
@@ -1050,35 +1183,77 @@ function handleRootInput(event) {
     }
 }
 
-function normalizeCodes(rawCodes) {
+function normalizeCodesFromTableRows(rows) {
     const allowedSourcePages = new Set(Object.keys(SOURCE_TO_MANUAL_PAGE).map((k) => Number(k)));
+    const normalized = [];
+    skippedTableRows = [];
+    codeMetaById = new Map();
 
-    return rawCodes
-        .filter((item) => allowedSourcePages.has(Number(item.page)))
-        .map((item) => ({
-            id: item.id,
-            sourcePage: Number(item.page),
-            manualPage: SOURCE_TO_MANUAL_PAGE[Number(item.page)] || Number(item.page),
-            index: Number(item.index),
-            file: item.file,
-            x: Number(item.x),
-            y: Number(item.y),
-            w: Number(item.w),
-            h: Number(item.h)
-        }))
-        .sort((a, b) => (a.manualPage - b.manualPage) || (a.index - b.index));
+    rows.forEach((row) => {
+        const parsed = parseCodeFileName(row.fileName);
+        if (!parsed || !allowedSourcePages.has(parsed.sourcePage)) {
+            skippedTableRows.push(row.fileName || '(ohne Dateiname)');
+            return;
+        }
+
+        const id = row.fileName.replace(/\.png$/i, '');
+        const dims = inferCodeDimensions(row.title);
+        const code = {
+            id,
+            sourcePage: parsed.sourcePage,
+            manualPage: SOURCE_TO_MANUAL_PAGE[parsed.sourcePage] || parsed.sourcePage,
+            index: parsed.index,
+            file: `assets/tera-scanner/codes/${row.fileName}`,
+            x: 0,
+            y: 0,
+            w: dims.w,
+            h: dims.h
+        };
+
+        normalized.push(code);
+        codeMetaById.set(id, {
+            fileName: row.fileName,
+            title: row.title,
+            info: row.info
+        });
+    });
+
+    return normalized.sort((a, b) => (a.manualPage - b.manualPage) || (a.index - b.index));
 }
 
 async function ensureCodesLoaded() {
     if (cachedCodes.length) return;
 
-    const response = await fetch('assets/tera-scanner/codes/manifest.json', { cache: 'no-store' });
+    const response = await fetch(CODES_TABLE_FILE, { cache: 'no-store' });
     if (!response.ok) {
-        throw new Error(`Manifest konnte nicht geladen werden (${response.status}).`);
+        throw new Error(`Code-Tabelle konnte nicht geladen werden (${response.status}).`);
     }
 
-    const raw = await response.json();
-    cachedCodes = normalizeCodes(Array.isArray(raw) ? raw : []).concat(EXTRA_CODES);
+    const rawCsv = await response.text();
+    const rows = parseCodeTableCsv(rawCsv);
+    if (!rows.length) {
+        throw new Error('Code-Tabelle ist leer oder ungültig formatiert.');
+    }
+
+    const knownFileNames = new Set(rows.map((row) => row.fileName));
+    const unassignedRows = await loadUnassignedRowsFromLegacyManifest(knownFileNames);
+    if (unassignedRows.length) {
+        rows.push(...unassignedRows);
+    }
+
+    const rowsWithImages = await filterRowsWithExistingImages(rows);
+    cachedCodes = normalizeCodesFromTableRows(rowsWithImages);
+
+    if (missingImageRows.length) {
+        console.warn('Tera-Scanner: Tabellenzeilen ohne passende PNG wurden übersprungen:', missingImageRows);
+    }
+    if (skippedTableRows.length) {
+        console.warn('Tera-Scanner: Einige Tabellenzeilen wurden übersprungen (ungültiger Dateiname oder Quelle):', skippedTableRows);
+    }
+    if (!cachedCodes.length) {
+        throw new Error('Es konnten keine gültigen Codes aus Tabelle/Bildern geladen werden.');
+    }
+
     cachedCodes.sort((a, b) => (a.manualPage - b.manualPage) || (a.index - b.index));
     codesById = new Map(cachedCodes.map((code) => [code.id, code]));
     buildCharacterMap();
