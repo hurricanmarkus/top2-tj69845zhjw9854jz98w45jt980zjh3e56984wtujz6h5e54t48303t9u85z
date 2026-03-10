@@ -471,17 +471,17 @@ function getMenuCategories() {
 function renderBaseLayout(root) {
     root.innerHTML = `
         <section class="h-[calc(100dvh-255px)] min-h-[500px] max-h-[700px] flex flex-col gap-2 overflow-hidden">
-            <div class="card bg-white rounded-xl border border-gray-200 p-2.5 shadow-sm basis-[34%] min-h-[165px]">
+            <div class="card bg-white rounded-xl border border-gray-200 p-2.5 shadow-sm basis-[38%] min-h-[205px]">
                 <div class="flex items-center justify-between gap-2 mb-2">
                     <h3 class="text-sm font-black text-gray-800">Aktiver Code</h3>
                 </div>
                 <div id="teraViewerEmpty" class="text-xs text-gray-500 rounded-lg bg-gray-50 p-2 border border-gray-200">Unten zuerst Kategorie wählen, dann Funktion antippen.</div>
-                <div id="teraViewerActive" class="hidden space-y-2 min-w-0 h-full">
+                <div id="teraViewerActive" class="hidden space-y-1.5 min-w-0 h-full">
                     <div class="min-w-0">
                         <p id="teraViewerTitle" class="font-bold text-gray-800 text-xs break-words"></p>
                         <p id="teraViewerSubline" class="text-[11px] text-gray-600 break-words"></p>
                         <p id="teraViewerCounter" class="text-[11px] text-gray-500"></p>
-                        <div class="grid grid-cols-2 sm:grid-cols-5 gap-1.5 mt-1 mb-1">
+                        <div class="grid grid-cols-2 sm:grid-cols-5 gap-1 mt-1 mb-1">
                             <button id="teraPrevBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-200 text-xs font-semibold">◀ Vor</button>
                             <button id="teraNextBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-200 text-xs font-semibold">Weiter ▶</button>
                             <button id="teraBackToOverviewBtn" class="py-1.5 px-2 rounded-md bg-slate-700 text-white text-xs font-semibold">Zurück</button>
@@ -491,13 +491,13 @@ function renderBaseLayout(root) {
                         <p id="teraViewerRepeatHint" class="text-[11px] font-semibold"></p>
                     </div>
                     <div class="rounded-xl border border-gray-200 p-2 bg-white overflow-hidden">
-                        <div id="teraViewerCountdown" class="hidden h-[12vh] flex items-center justify-center text-3xl font-black text-orange-600"></div>
-                        <img id="teraViewerImage" src="" alt="Scanner-Code" class="w-full max-h-[12vh] object-contain mx-auto" />
+                        <div id="teraViewerCountdown" class="hidden h-[82px] flex items-center justify-center text-3xl font-black text-orange-600"></div>
+                        <img id="teraViewerImage" src="" alt="Scanner-Code" class="w-[52vw] sm:w-[34vw] max-w-[160px] h-auto object-contain mx-auto" />
                     </div>
                 </div>
             </div>
 
-            <div class="card bg-white rounded-xl border border-gray-200 p-2 shadow-sm basis-[66%] min-h-[280px] overflow-hidden">
+            <div class="card bg-white rounded-xl border border-gray-200 p-2 shadow-sm basis-[62%] min-h-[280px] mt-1 overflow-hidden">
                 <div class="flex items-center gap-2 mb-2">
                     <h3 class="text-base font-black text-gray-800">Menüleiste</h3>
                     <button id="teraMenuHeaderBackBtn" class="hidden justify-self-center py-1 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">&lt; Kategorien</button>
@@ -595,9 +595,9 @@ function renderMenu(root) {
         <p class="text-xs font-black text-gray-700 text-right mb-2">${escapeHtml(selectedCategory.title)}</p>
         <div class="grid grid-flow-col auto-cols-[190px] grid-rows-4 gap-1.5 overflow-x-auto pb-1">
             ${selectedCategory.items.map((item) => `
-                <button data-ts-code-id="${escapeHtml(item.code.id)}" class="text-left p-2 rounded-md border border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50 transition min-w-0">
-                    <p class="text-xs font-bold text-gray-800 break-words">${escapeHtml(item.label)}</p>
-                    <p class="text-[11px] text-gray-500">${getCodeType(item.code)} · Quelle ${String(item.code.sourcePage).padStart(2, '0')}</p>
+                <button data-ts-code-id="${escapeHtml(item.code.id)}" class="text-left p-1.5 rounded-md border border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50 transition min-w-0 min-h-[40px]">
+                    <p class="text-[11px] font-bold text-gray-800 break-words leading-tight">${escapeHtml(item.label)}</p>
+                    <p class="text-[10px] text-gray-500 leading-tight">${getCodeType(item.code)} · Quelle ${String(item.code.sourcePage).padStart(2, '0')}</p>
                 </button>
             `).join('')}
         </div>
@@ -804,9 +804,12 @@ function handleRootClick(event) {
     if (deleteFavoriteBtn) {
         const favoriteId = deleteFavoriteBtn.dataset.tsDeleteFavoriteId;
         if (favoriteId) {
-            removeFavoriteById(favoriteId);
-            renderMenu(root);
-            renderViewer(root);
+            const confirmed = window.confirm('Favorit wirklich löschen?');
+            if (confirmed) {
+                removeFavoriteById(favoriteId);
+                renderMenu(root);
+                renderViewer(root);
+            }
         }
         return;
     }
