@@ -470,10 +470,10 @@ function getMenuCategories() {
 
 function renderBaseLayout(root) {
     root.innerHTML = `
-        <section class="h-[calc(100dvh-250px)] min-h-[500px] max-h-[700px] flex flex-col gap-2 overflow-hidden">
-            <div class="card bg-white rounded-xl border border-gray-200 p-3 shadow-sm basis-[66%] min-h-[260px]">
+        <section class="h-[calc(100dvh-255px)] min-h-[500px] max-h-[700px] flex flex-col gap-2 overflow-hidden">
+            <div class="card bg-white rounded-xl border border-gray-200 p-2.5 shadow-sm basis-[34%] min-h-[165px]">
                 <div class="flex items-center justify-between gap-2 mb-2">
-                    <h3 class="text-base font-black text-gray-800">Aktiver Code</h3>
+                    <h3 class="text-sm font-black text-gray-800">Aktiver Code</h3>
                 </div>
                 <div id="teraViewerEmpty" class="text-xs text-gray-500 rounded-lg bg-gray-50 p-2 border border-gray-200">Unten zuerst Kategorie wählen, dann Funktion antippen.</div>
                 <div id="teraViewerActive" class="hidden space-y-2 min-w-0 h-full">
@@ -491,18 +491,18 @@ function renderBaseLayout(root) {
                         <p id="teraViewerRepeatHint" class="text-[11px] font-semibold"></p>
                     </div>
                     <div class="rounded-xl border border-gray-200 p-2 bg-white overflow-hidden">
-                        <div id="teraViewerCountdown" class="hidden h-[24vh] flex items-center justify-center text-3xl font-black text-orange-600"></div>
-                        <img id="teraViewerImage" src="" alt="Scanner-Code" class="w-full max-h-[24vh] object-contain mx-auto" />
+                        <div id="teraViewerCountdown" class="hidden h-[12vh] flex items-center justify-center text-3xl font-black text-orange-600"></div>
+                        <img id="teraViewerImage" src="" alt="Scanner-Code" class="w-full max-h-[12vh] object-contain mx-auto" />
                     </div>
                 </div>
             </div>
 
-            <div class="card bg-white rounded-xl border border-gray-200 p-2 shadow-sm basis-[34%] min-h-[150px] max-h-[210px] overflow-hidden">
+            <div class="card bg-white rounded-xl border border-gray-200 p-2 shadow-sm basis-[66%] min-h-[280px] overflow-hidden">
                 <div class="flex items-center gap-2 mb-2">
                     <h3 class="text-base font-black text-gray-800">Menüleiste</h3>
                     <button id="teraMenuHeaderBackBtn" class="hidden justify-self-center py-1 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">&lt; Kategorien</button>
                 </div>
-                <div id="teraMenuContent" class="h-full overflow-auto"></div>
+                <div id="teraMenuContent" class="h-full overflow-x-auto overflow-y-hidden"></div>
             </div>
         </section>
     `;
@@ -523,7 +523,7 @@ function renderMenu(root) {
         host.innerHTML = `
             <div class="grid grid-flow-col auto-cols-[170px] grid-rows-4 gap-2 overflow-x-auto pb-1">
                 ${categories.map((category) => `
-                    <button data-ts-category-id="${escapeHtml(category.id)}" class="text-left rounded-lg border border-gray-200 p-2 bg-gray-50 hover:bg-orange-50 hover:border-orange-300 transition min-h-[62px]">
+                    <button data-ts-category-id="${escapeHtml(category.id)}" class="text-left rounded-lg border border-gray-200 p-1.5 bg-gray-50 hover:bg-orange-50 hover:border-orange-300 transition min-h-[48px]">
                         <p class="text-xs font-black text-gray-800 uppercase tracking-wide">${escapeHtml(category.title)}</p>
                         <p class="text-[11px] text-gray-600 mt-1">${escapeHtml(category.subtitle)}</p>
                     </button>
@@ -546,7 +546,7 @@ function renderMenu(root) {
             ? `
                 <div class="grid grid-flow-col auto-cols-[190px] grid-rows-4 gap-1.5 overflow-x-auto pb-1">
                     ${selectedCategory.items.map((fav) => `
-                        <div class="rounded-md border border-amber-200 bg-amber-50 p-1.5 min-w-0">
+                        <div class="rounded-md border border-amber-200 bg-amber-50 p-1 min-w-0">
                             <button data-ts-favorite-id="${escapeHtml(fav.id)}" class="w-full text-left">
                                 <p class="text-xs font-bold text-amber-900 break-words">★ ${escapeHtml(fav.title || 'Favorit')}</p>
                                 <p class="text-[11px] text-amber-700">${fav.codeIds.length > 1 ? `Sequenz (${fav.codeIds.length} Codes)` : 'Einzelcode'}</p>
@@ -564,7 +564,7 @@ function renderMenu(root) {
         host.innerHTML = `
             <p class="text-xs font-black text-gray-700 mb-2">${escapeHtml(selectedCategory.title)}</p>
             <p class="text-xs text-gray-500 mb-2">Wort eingeben und Sequenz starten. Doppelte Zeichen werden auffällig markiert.</p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-1.5 mb-2">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-1 mb-1.5">
                 <input id="teraWordInput" type="text" placeholder="z. B. HALLO123" class="sm:col-span-2 p-2 border border-gray-300 rounded-lg text-sm" />
                 <select id="teraModeSelect" class="p-2 border border-gray-300 rounded-lg text-sm">
                     <option value="manual">Manuell</option>
@@ -582,8 +582,10 @@ function renderMenu(root) {
                 <button id="teraStartWordBtn" class="py-1.5 px-2 rounded-md bg-orange-500 text-white text-xs font-semibold">Wort-Sequenz starten</button>
                 <button id="teraShowSingleCharBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">Erstes Zeichen einzeln</button>
             </div>
-            <div id="teraCharGrid" class="grid grid-cols-8 sm:grid-cols-12 gap-1"></div>
-            <p id="teraCharHint" class="text-[11px] text-gray-500 mt-2"></p>
+            <div class="overflow-x-auto overflow-y-hidden pb-1">
+                <div id="teraCharGrid" class="grid grid-flow-col auto-cols-[34px] grid-rows-2 gap-1"></div>
+            </div>
+            <p id="teraCharHint" class="text-[11px] text-gray-500 mt-1"></p>
         `;
         renderCharGrid(root);
         return;
