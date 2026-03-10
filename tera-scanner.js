@@ -503,29 +503,10 @@ function renderBaseLayout(root) {
                     <h3 class="text-base font-black text-gray-800">Menüleiste</h3>
                     <button id="teraMenuHeaderBackBtn" class="hidden justify-self-center py-1 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">&lt; Kategorien</button>
                 </div>
-                <div id="teraMenuContent" class="flex-1 min-h-0 overflow-x-auto overflow-y-hidden" style="scrollbar-gutter: stable both-edges;"></div>
-                <div id="teraMenuScrollbar" class="mt-1 h-3 overflow-x-scroll overflow-y-hidden rounded bg-gray-100 border border-gray-200">
-                    <div id="teraMenuScrollbarInner" class="h-px"></div>
-                </div>
+                <div id="teraMenuContent" class="flex-1 min-h-0 overflow-x-scroll overflow-y-hidden pb-1" style="scrollbar-gutter: stable both-edges;"></div>
             </div>
         </section>
     `;
-}
-
-function syncMenuScrollbar(root) {
-    const host = root.querySelector('#teraMenuContent');
-    const scrollbar = root.querySelector('#teraMenuScrollbar');
-    const scrollbarInner = root.querySelector('#teraMenuScrollbarInner');
-    if (!host || !scrollbar || !scrollbarInner) return;
-
-    const forceScroll = host.dataset.tsForceScrollbar === '1';
-    const minScrollableWidth = host.clientWidth + (forceScroll ? 32 : 0);
-    const targetWidth = Math.max(host.scrollWidth, minScrollableWidth);
-    scrollbarInner.style.width = `${targetWidth}px`;
-
-    if (Math.abs(scrollbar.scrollLeft - host.scrollLeft) > 1) {
-        scrollbar.scrollLeft = host.scrollLeft;
-    }
 }
 
 function renderMenu(root) {
@@ -540,7 +521,6 @@ function renderMenu(root) {
     const categories = getMenuCategories();
 
     if (menuStep === 'category') {
-        host.dataset.tsForceScrollbar = '1';
         host.innerHTML = `
             <div class="w-max pr-2" style="min-width: calc(100% + 18px);">
                 <div class="grid grid-flow-col auto-cols-[150px] grid-rows-4 gap-1.5 w-max min-w-full">
@@ -553,7 +533,6 @@ function renderMenu(root) {
                 </div>
             </div>
         `;
-        syncMenuScrollbar(root);
         return;
     }
 
@@ -566,7 +545,6 @@ function renderMenu(root) {
     }
 
     if (selectedCategory.type === 'favorites') {
-        host.dataset.tsForceScrollbar = '1';
         host.innerHTML = selectedCategory.items.length
             ? `
                 <div class="w-max pr-2" style="min-width: calc(100% + 18px);">
@@ -584,12 +562,10 @@ function renderMenu(root) {
                 </div>
             `
             : '<div class="w-max pr-2" style="min-width: calc(100% + 18px);"><div class="text-xs text-gray-500 rounded-lg bg-gray-50 p-2 border border-gray-200">Noch keine Favoriten gespeichert. Öffne oben einen Code/Sequenz und tippe auf ★ Favorit.</div></div>';
-        syncMenuScrollbar(root);
         return;
     }
 
     if (selectedCategory.type === 'chars') {
-        host.dataset.tsForceScrollbar = '0';
         host.innerHTML = `
             <div class="w-full">
                 <p class="text-[11px] font-black text-gray-700 mb-1">${escapeHtml(selectedCategory.title)}</p>
@@ -624,12 +600,10 @@ function renderMenu(root) {
             </div>
         `;
         renderCharGrid(root);
-        syncMenuScrollbar(root);
         return;
     }
 
     host.innerHTML = `
-        
         <div class="w-max pr-2" style="min-width: calc(100% + 18px);">
             <p class="text-xs font-black text-gray-700 text-right mb-2">${escapeHtml(selectedCategory.title)}</p>
             <div class="grid grid-flow-col auto-cols-[182px] grid-rows-4 gap-1.5 w-max min-w-full">
@@ -642,8 +616,6 @@ function renderMenu(root) {
             </div>
         </div>
     `;
-    host.dataset.tsForceScrollbar = '1';
-    syncMenuScrollbar(root);
 }
 
 function renderQuickGroups(root) {
@@ -1116,28 +1088,6 @@ function bindRootEvents(root) {
     if (root.dataset.tsBound === '1') return;
     root.addEventListener('click', handleRootClick);
     root.addEventListener('input', handleRootInput);
-
-    const host = root.querySelector('#teraMenuContent');
-    const scrollbar = root.querySelector('#teraMenuScrollbar');
-    if (host && scrollbar) {
-        host.addEventListener('scroll', () => {
-            if (Math.abs(scrollbar.scrollLeft - host.scrollLeft) > 1) {
-                scrollbar.scrollLeft = host.scrollLeft;
-            }
-        });
-
-        scrollbar.addEventListener('scroll', () => {
-            if (Math.abs(host.scrollLeft - scrollbar.scrollLeft) > 1) {
-                host.scrollLeft = scrollbar.scrollLeft;
-            }
-        });
-    }
-
-    window.addEventListener('resize', () => {
-        const activeRoot = getRoot();
-        if (activeRoot) syncMenuScrollbar(activeRoot);
-    });
-
     root.dataset.tsBound = '1';
 }
 
