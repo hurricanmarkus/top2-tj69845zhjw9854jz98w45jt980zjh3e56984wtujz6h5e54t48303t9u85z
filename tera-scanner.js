@@ -148,6 +148,7 @@ let activeSequence = [];
 let activeIndex = 0;
 let activeTitle = '';
 let activeMode = 'manual';
+let isViewerZoomed = false;
 let autoIntervalSeconds = 2;
 let autoTimer = null;
 let countdownTimer = null;
@@ -600,8 +601,8 @@ function getMenuCategories() {
 
 function renderBaseLayout(root) {
     root.innerHTML = `
-        <section class="h-[calc(100dvh-235px)] min-h-[540px] max-h-[760px] flex flex-col gap-2 overflow-hidden">
-            <div class="card bg-white rounded-xl border border-gray-200 p-2.5 shadow-sm basis-[47%] min-h-[250px]">
+        <section class="h-auto sm:h-[calc(100dvh-235px)] min-h-0 sm:min-h-[540px] sm:max-h-[760px] flex flex-col gap-2 overflow-visible sm:overflow-hidden">
+            <div class="card bg-white rounded-xl border border-gray-200 p-2.5 shadow-sm basis-auto sm:basis-[47%] min-h-[250px]">
                 <div class="flex items-center justify-between gap-2 mb-2">
                     <h3 class="text-sm font-black text-gray-800">Aktiver Code</h3>
                 </div>
@@ -620,14 +621,14 @@ function renderBaseLayout(root) {
                         </div>
                         <p id="teraViewerRepeatHint" class="text-[11px] font-semibold min-h-[30px] leading-tight pt-0.5"></p>
                     </div>
-                    <div class="rounded-xl border border-gray-200 p-2 bg-white overflow-hidden flex-1 min-h-[120px] flex items-center justify-center">
-                        <div id="teraViewerCountdown" class="hidden h-full w-full items-center justify-center text-3xl font-black text-orange-600"></div>
+                    <div id="teraViewerMediaWrap" class="rounded-xl border border-gray-200 p-2 bg-white overflow-hidden flex-1 min-h-[130px] sm:min-h-[120px] flex items-center justify-center transition-all duration-150 cursor-zoom-in">
+                        <div id="teraViewerCountdown" class="hidden h-full w-full flex items-center justify-center text-3xl font-black text-orange-600"></div>
                         <img id="teraViewerImage" src="" alt="Scanner-Code" class="max-h-full max-w-full w-auto h-auto object-contain mx-auto" />
                     </div>
                 </div>
             </div>
 
-            <div class="card bg-white rounded-xl border border-gray-200 p-1.5 shadow-sm basis-[53%] min-h-[220px] mt-1 overflow-hidden flex flex-col">
+            <div class="card bg-white rounded-xl border border-gray-200 p-1.5 shadow-sm basis-auto sm:basis-[53%] min-h-[210px] sm:min-h-[220px] mt-1 overflow-hidden flex flex-col">
                 <div class="flex items-center gap-2 mb-1">
                     <h3 class="text-sm font-black text-gray-800">Menüleiste</h3>
                     <button id="teraMenuHeaderBackBtn" class="hidden justify-self-center py-0.5 px-2 rounded-md bg-gray-100 border border-gray-300 text-[11px] font-semibold">&lt; Kategorien</button>
@@ -900,6 +901,7 @@ function renderGlobalList(root) {
 function renderViewer(root) {
     const empty = root.querySelector('#teraViewerEmpty');
     const active = root.querySelector('#teraViewerActive');
+    const mediaWrap = root.querySelector('#teraViewerMediaWrap');
     const title = root.querySelector('#teraViewerTitle');
     const subline = root.querySelector('#teraViewerSubline');
     const counter = root.querySelector('#teraViewerCounter');
@@ -911,9 +913,20 @@ function renderViewer(root) {
     const autoBtn = root.querySelector('#teraToggleAutoBtn');
     const saveFavoriteBtn = root.querySelector('#teraSaveFavoriteBtn');
 
-    if (!empty || !active || !title || !subline || !counter || !repeatHint || !countdown || !image || !prevBtn || !nextBtn || !autoBtn || !saveFavoriteBtn) return;
+    if (!empty || !active || !mediaWrap || !title || !subline || !counter || !repeatHint || !countdown || !image || !prevBtn || !nextBtn || !autoBtn || !saveFavoriteBtn) return;
+
+    mediaWrap.className = isViewerZoomed
+        ? 'fixed inset-2 z-[80] rounded-xl border-2 border-orange-300 p-3 bg-white shadow-2xl flex items-center justify-center transition-all duration-150 cursor-zoom-out'
+        : 'rounded-xl border border-gray-200 p-2 bg-white overflow-hidden flex-1 min-h-[130px] sm:min-h-[120px] flex items-center justify-center transition-all duration-150 cursor-zoom-in';
+    image.className = isViewerZoomed
+        ? 'max-h-[calc(100dvh-40px)] max-w-[calc(100vw-24px)] w-auto h-auto object-contain mx-auto'
+        : 'max-h-full max-w-full w-auto h-auto object-contain mx-auto';
+    countdown.className = isViewerZoomed
+        ? 'hidden h-full w-full flex items-center justify-center text-5xl font-black text-orange-600'
+        : 'hidden h-full w-full flex items-center justify-center text-3xl font-black text-orange-600';
 
     if (!activeSequence.length) {
+        isViewerZoomed = false;
         empty.classList.remove('hidden');
         active.classList.add('hidden');
         return;
@@ -984,6 +997,7 @@ function renderViewer(root) {
 
 function showSequence(sequence, title, mode, intervalSeconds) {
     stopAutoTimer();
+    isViewerZoomed = false;
     activeSequence = sequence;
     activeIndex = 0;
     activeTitle = title || '';
@@ -1008,6 +1022,13 @@ function showSingleCode(code, title = '') {
 function handleRootClick(event) {
     const root = getRoot();
     if (!root) return;
+
+    const viewerMediaTap = event.target.closest('#teraViewerMediaWrap, #teraViewerImage, #teraViewerCountdown');
+    if (viewerMediaTap && activeSequence.length) {
+        isViewerZoomed = !isViewerZoomed;
+        renderViewer(root);
+        return;
+    }
 
     const categoryBtn = event.target.closest('[data-ts-category-id]');
     if (categoryBtn) {
@@ -1114,6 +1135,7 @@ function handleRootClick(event) {
 
     if (event.target.closest('#teraBackToOverviewBtn')) {
         stopAutoTimer();
+        isViewerZoomed = false;
         activeSequence = [];
         activeIndex = 0;
         activeTitle = '';
@@ -1289,6 +1311,7 @@ export async function initializeTeraScannerView() {
 
 export function stopTeraScannerListeners() {
     stopAutoTimer();
+    isViewerZoomed = false;
     activeSequence = [];
     activeIndex = 0;
     activeTitle = '';
