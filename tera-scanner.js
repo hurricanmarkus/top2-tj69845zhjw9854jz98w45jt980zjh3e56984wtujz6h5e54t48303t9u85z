@@ -132,6 +132,8 @@ const EXTRA_CODES = [
     { id: 'p21_char09', sourcePage: 28, manualPage: 21, index: 909, file: 'assets/tera-scanner/codes/p21_char09.png', x: 0, y: 0, w: 140, h: 140 }
 ];
 
+const FAVORITES_STORAGE_KEY = 'tera_scanner_favorites_v1';
+
 let cachedCodes = [];
 let codesById = new Map();
 let charToCode = new Map();
@@ -145,6 +147,7 @@ let autoIntervalSeconds = 2;
 let autoTimer = null;
 let menuStep = 'category';
 let selectedCategoryId = '';
+let favorites = [];
 
 function getRoot() {
     return document.getElementById(APP_ROOT_ID);
@@ -231,7 +234,8 @@ function getCodeFunctionalName(code) {
         return labels[pos - 1];
     }
 
-    return `Funktion ${String(pos > 0 ? pos : code.index).padStart(2, '0')}`;
+    const chapterTitle = PAGE_TITLES_DE[code.manualPage] || `Kapitel ${String(code.manualPage).padStart(2, '0')}`;
+    return `${chapterTitle} · Eintrag ${String(pos > 0 ? pos : code.index).padStart(2, '0')}`;
 }
 
 function getCodeCategoryLabel(code) {
@@ -243,8 +247,80 @@ function getCodeLabel(code) {
     return `${getCodeCategoryLabel(code)} > ${getCodeFunctionalName(code)}`;
 }
 
+function loadFavorites() {
+    try {
+        const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
+        const parsed = JSON.parse(raw || '[]');
+        favorites = Array.isArray(parsed)
+            ? parsed.filter((item) => item && Array.isArray(item.codeIds) && item.codeIds.length > 0)
+            : [];
+    } catch {
+        favorites = [];
+    }
+}
+
+function persistFavorites() {
+    try {
+        localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
+    } catch {
+        // no-op (z. B. private mode)
+    }
+}
+
+function addFavoriteFromActiveSequence() {
+    if (!activeSequence.length) return;
+
+    const codeIds = activeSequence
+        .map((entry) => (entry.code || entry)?.id)
+        .filter(Boolean);
+    if (!codeIds.length) return;
+
+    const suggested = activeTitle || (codeIds.length > 1 ? 'Neue Sequenz' : 'Neuer Favorit');
+    const title = window.prompt('Favorit-Titel eingeben:', suggested);
+    if (!title) return;
+
+    favorites.unshift({
+        id: `fav_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        title: title.trim(),
+        codeIds,
+        createdAt: Date.now()
+    });
+    persistFavorites();
+}
+
+function openFavoriteById(favoriteId) {
+    const favorite = favorites.find((item) => item.id === favoriteId);
+    if (!favorite) return;
+
+    const seq = favorite.codeIds
+        .map((codeId, index) => {
+            const code = codesById.get(codeId);
+            if (!code) return null;
+            return {
+                code,
+                repeatScan: index > 0 && favorite.codeIds[index - 1] === codeId
+            };
+        })
+        .filter(Boolean);
+
+    if (!seq.length) return;
+    if (seq.length === 1) {
+        showSingleCode(seq[0].code, favorite.title);
+        return;
+    }
+    showSequence(seq, favorite.title, 'manual', autoIntervalSeconds);
+}
+
 function getMenuCategories() {
     const categories = [];
+
+    categories.push({
+        id: 'favorites',
+        title: 'Favoriten',
+        subtitle: favorites.length ? `${favorites.length} gespeichert` : 'Noch keine Favoriten',
+        type: 'favorites',
+        items: favorites
+    });
 
     QUICK_GROUPS.forEach((group, index) => {
         const items = group.actions
@@ -309,24 +385,26 @@ function renderBaseLayout(root) {
                         <p id="teraViewerTitle" class="font-bold text-gray-800 text-xs break-words"></p>
                         <p id="teraViewerSubline" class="text-[11px] text-gray-600 break-words"></p>
                         <p id="teraViewerCounter" class="text-[11px] text-gray-500"></p>
+                        <div class="grid grid-cols-2 sm:grid-cols-5 gap-1.5 mt-1 mb-1">
+                            <button id="teraPrevBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-200 text-xs font-semibold">◀ Vor</button>
+                            <button id="teraNextBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-200 text-xs font-semibold">Weiter ▶</button>
+                            <button id="teraBackToOverviewBtn" class="py-1.5 px-2 rounded-md bg-slate-700 text-white text-xs font-semibold">Zurück</button>
+                            <button id="teraToggleAutoBtn" class="py-1.5 px-2 rounded-md bg-orange-100 border border-orange-200 text-xs font-semibold text-orange-700">Auto</button>
+                            <button id="teraSaveFavoriteBtn" class="py-1.5 px-2 rounded-md bg-amber-100 border border-amber-300 text-xs font-semibold text-amber-800">★ Favorit</button>
+                        </div>
                         <p id="teraViewerRepeatHint" class="text-[11px] font-semibold"></p>
                     </div>
                     <div class="rounded-xl border border-gray-200 p-2 bg-white overflow-hidden">
                         <img id="teraViewerImage" src="" alt="Scanner-Code" class="w-full max-h-[24vh] object-contain mx-auto" />
                     </div>
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                        <button id="teraPrevBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-200 text-xs font-semibold">◀ Vor</button>
-                        <button id="teraNextBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-200 text-xs font-semibold">Weiter ▶</button>
-                        <button id="teraToggleAutoBtn" class="py-1.5 px-2 rounded-md bg-orange-100 border border-orange-200 text-xs font-semibold text-orange-700">Auto</button>
-                        <button id="teraBackToOverviewBtn" class="py-1.5 px-2 rounded-md bg-slate-700 text-white text-xs font-semibold">Zurück zur Auswahl</button>
-                    </div>
                 </div>
             </div>
 
             <div class="card bg-white rounded-xl border border-gray-200 p-3 shadow-sm flex-1 min-h-0 overflow-hidden">
-                <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-2">
                     <h3 class="text-base font-black text-gray-800">Menüleiste</h3>
-                    <span class="text-[11px] font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">unten: Auswahl</span>
+                    <button id="teraMenuHeaderBackBtn" class="hidden justify-self-center py-1 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">&lt; Kategorien</button>
+                    <span class="justify-self-end text-[11px] font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">unten: Auswahl</span>
                 </div>
                 <div id="teraMenuContent" class="h-full overflow-auto"></div>
             </div>
@@ -336,7 +414,12 @@ function renderBaseLayout(root) {
 
 function renderMenu(root) {
     const host = root.querySelector('#teraMenuContent');
+    const menuBackBtn = root.querySelector('#teraMenuHeaderBackBtn');
     if (!host) return;
+
+    if (menuBackBtn) {
+        menuBackBtn.classList.toggle('hidden', menuStep === 'category');
+    }
 
     const categories = getMenuCategories();
 
@@ -362,12 +445,25 @@ function renderMenu(root) {
         return;
     }
 
+    if (selectedCategory.type === 'favorites') {
+        host.innerHTML = selectedCategory.items.length
+            ? `
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    ${selectedCategory.items.map((fav) => `
+                        <button data-ts-favorite-id="${escapeHtml(fav.id)}" class="text-left p-2 rounded-md border border-amber-200 bg-amber-50 hover:bg-amber-100 transition min-w-0">
+                            <p class="text-xs font-bold text-amber-900 break-words">★ ${escapeHtml(fav.title || 'Favorit')}</p>
+                            <p class="text-[11px] text-amber-700">${fav.codeIds.length > 1 ? `Sequenz (${fav.codeIds.length} Codes)` : 'Einzelcode'}</p>
+                        </button>
+                    `).join('')}
+                </div>
+            `
+            : '<div class="text-xs text-gray-500 rounded-lg bg-gray-50 p-2 border border-gray-200">Noch keine Favoriten gespeichert. Öffne oben einen Code/Sequenz und tippe auf ★ Favorit.</div>';
+        return;
+    }
+
     if (selectedCategory.type === 'chars') {
         host.innerHTML = `
-            <div class="flex items-center justify-between gap-2 mb-2">
-                <button id="teraCategoryBackBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">◀ Kategorien</button>
-                <p class="text-xs font-black text-gray-700">${escapeHtml(selectedCategory.title)}</p>
-            </div>
+            <p class="text-xs font-black text-gray-700 mb-2">${escapeHtml(selectedCategory.title)}</p>
             <p class="text-xs text-gray-500 mb-2">Wort eingeben und Sequenz starten. Doppelte Zeichen werden auffällig markiert.</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-1.5 mb-2">
                 <input id="teraWordInput" type="text" placeholder="z. B. HALLO123" class="sm:col-span-2 p-2 border border-gray-300 rounded-lg text-sm" />
@@ -395,10 +491,7 @@ function renderMenu(root) {
     }
 
     host.innerHTML = `
-        <div class="flex items-center justify-between gap-2 mb-2">
-            <button id="teraCategoryBackBtn" class="py-1.5 px-2 rounded-md bg-gray-100 border border-gray-300 text-xs font-semibold">◀ Kategorien</button>
-            <p class="text-xs font-black text-gray-700 text-right">${escapeHtml(selectedCategory.title)}</p>
-        </div>
+        <p class="text-xs font-black text-gray-700 text-right mb-2">${escapeHtml(selectedCategory.title)}</p>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             ${selectedCategory.items.map((item) => `
                 <button data-ts-code-id="${escapeHtml(item.code.id)}" class="text-left p-2 rounded-md border border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50 transition min-w-0">
@@ -493,8 +586,9 @@ function renderViewer(root) {
     const prevBtn = root.querySelector('#teraPrevBtn');
     const nextBtn = root.querySelector('#teraNextBtn');
     const autoBtn = root.querySelector('#teraToggleAutoBtn');
+    const saveFavoriteBtn = root.querySelector('#teraSaveFavoriteBtn');
 
-    if (!empty || !active || !title || !subline || !counter || !repeatHint || !image || !prevBtn || !nextBtn || !autoBtn) return;
+    if (!empty || !active || !title || !subline || !counter || !repeatHint || !image || !prevBtn || !nextBtn || !autoBtn || !saveFavoriteBtn) return;
 
     if (!activeSequence.length) {
         empty.classList.remove('hidden');
@@ -530,10 +624,20 @@ function renderViewer(root) {
     const multiple = activeSequence.length > 1;
     prevBtn.disabled = !multiple;
     nextBtn.disabled = !multiple;
+    autoBtn.disabled = !multiple;
     prevBtn.classList.toggle('opacity-50', !multiple);
     nextBtn.classList.toggle('opacity-50', !multiple);
+    autoBtn.classList.toggle('opacity-50', !multiple);
+    autoBtn.classList.toggle('border-gray-300', !multiple);
+    autoBtn.classList.toggle('text-gray-400', !multiple);
 
-    autoBtn.textContent = autoTimer ? 'Auto stoppen' : 'Auto starten';
+    autoBtn.textContent = autoTimer
+        ? `Auto stoppen (${autoIntervalSeconds}s)`
+        : multiple
+            ? `Automatisch (${autoIntervalSeconds}s)`
+            : 'Automatisch (nur Sequenz)';
+
+    saveFavoriteBtn.textContent = activeSequence.length > 1 ? '★ Sequenz-Favorit' : '★ Code-Favorit';
 }
 
 function showSequence(sequence, title, mode, intervalSeconds) {
@@ -575,10 +679,17 @@ function handleRootClick(event) {
         return;
     }
 
-    if (event.target.closest('#teraCategoryBackBtn')) {
+    if (event.target.closest('#teraMenuHeaderBackBtn')) {
         menuStep = 'category';
         selectedCategoryId = '';
         renderMenu(root);
+        return;
+    }
+
+    const favoriteBtn = event.target.closest('[data-ts-favorite-id]');
+    if (favoriteBtn) {
+        const favoriteId = favoriteBtn.dataset.tsFavoriteId;
+        if (favoriteId) openFavoriteById(favoriteId);
         return;
     }
 
@@ -630,6 +741,12 @@ function handleRootClick(event) {
             }, autoIntervalSeconds * 1000);
             renderViewer(root);
         }
+        return;
+    }
+
+    if (event.target.closest('#teraSaveFavoriteBtn')) {
+        addFavoriteFromActiveSequence();
+        renderMenu(root);
         return;
     }
 
@@ -752,6 +869,7 @@ export async function initializeTeraScannerView() {
 
     try {
         await ensureCodesLoaded();
+        loadFavorites();
         renderBaseLayout(root);
         menuStep = 'category';
         selectedCategoryId = '';
