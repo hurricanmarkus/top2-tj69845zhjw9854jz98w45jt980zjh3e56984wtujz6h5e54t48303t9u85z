@@ -5678,7 +5678,7 @@ function createSendungCard(sendung) {
                     ${entry.paketLabel
                         ? (showPaketHeader
                             ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 whitespace-nowrap">${paketLabelEscaped}</span>`
-                            : `<span class="text-[17px] leading-none font-black text-violet-700 whitespace-nowrap min-w-[5.25rem] pl-3 text-left" title="${paketLabelEscaped}">↳</span>`)
+                            : `<span class="inline-flex items-center min-w-[6.25rem] pl-1 text-violet-700" title="${paketLabelEscaped}"><span class="h-[2px] bg-violet-700 flex-1 mr-1"></span><span class="text-[17px] leading-none font-black">➜</span></span>`)
                         : ''}
                     <span class="text-[11px] font-bold px-2 py-0.5 rounded ${entryStatusInfo.color} whitespace-nowrap">${entryStatusInfo.icon} ${entryStatusInfo.label}</span>
                     <div class="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
