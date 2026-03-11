@@ -433,6 +433,50 @@ export const USER_COLORS = {
     DEFAULT: ['bg-indigo-600', 'hover:bg-indigo-700']
 };
 
+function registerAppServiceWorker() {
+    if (!('serviceWorker' in navigator)) {
+        return;
+    }
+
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return;
+        refreshing = true;
+        window.location.reload();
+    });
+
+    navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' })
+        .then(async (registration) => {
+            console.log('Service Worker registriert:', registration.scope);
+
+            await registration.update();
+
+            if (registration.waiting) {
+                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+
+            registration.addEventListener('updatefound', () => {
+                const installing = registration.installing;
+                if (!installing) return;
+
+                installing.addEventListener('statechange', () => {
+                    if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+                        installing.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                });
+            });
+
+            setInterval(() => {
+                registration.update().catch((error) => {
+                    console.warn('Service Worker Update-Check fehlgeschlagen:', error);
+                });
+            }, 5 * 60 * 1000);
+        })
+        .catch((error) => {
+            console.error('Service Worker registration failed:', error);
+        });
+}
+
 
 
 window.onload = function () {
@@ -487,13 +531,7 @@ window.onload = function () {
 
     setupEventListeners();
     initializeFirebase();
-    if ('serviceWorker' in navigator) {
-        try {
-            navigator.serviceWorker.register('/sw.js');
-        } catch (error) {
-            console.error('Service Worker registration failed:', error);
-        }
-    }
+    registerAppServiceWorker();
 };
 
 

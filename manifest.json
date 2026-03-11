@@ -1,8 +1,10 @@
 {
+  "id": "./?source=pwa",
   "name": "TOP2 App",
   "short_name": "TOP2",
   "description": "TOP2 Management App",
-  "start_url": "/",
+  "start_url": "./index.html?source=pwa",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#3b82f6",
