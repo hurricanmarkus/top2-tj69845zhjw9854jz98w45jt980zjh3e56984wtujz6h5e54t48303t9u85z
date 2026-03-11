@@ -1038,7 +1038,6 @@ function getSendungTransportEntries(sendung = {}) {
 
     pakete.forEach((paket, paketIndex) => {
         const normalizedPaketEntries = normalizeTransportEntries(paket.transportEntries);
-        const paketStatus = computeAutoStatusFromTransportEntries(normalizedPaketEntries);
         let hasMeaningfulEntry = false;
 
         normalizedPaketEntries.forEach((entry) => {
@@ -1047,7 +1046,6 @@ function getSendungTransportEntries(sendung = {}) {
                 ...entry,
                 paketId: paket.paketId,
                 paketLabel: paket.paketLabel || `Paket ${paketIndex + 1}`,
-                paketStatus,
                 showPaketHeader: !hasMeaningfulEntry
             });
             hasMeaningfulEntry = true;
@@ -5669,7 +5667,7 @@ function createSendungCard(sendung) {
 
     const transportEntriesDisplay = transportEntries.length > 0
         ? `<div class="space-y-1">${transportEntries.map((entry, index) => {
-            const paketStatusInfo = STATUS_CONFIG[normalizeStatus(entry.paketStatus)] || STATUS_CONFIG.erwartet;
+            const entryStatusInfo = STATUS_CONFIG[normalizeStatus(entry.status)] || STATUS_CONFIG.erwartet;
             const paketLabelEscaped = escapeHtmlAttribute(entry.paketLabel || '');
             const anbieterEscaped = escapeHtmlAttribute(entry.anbieter || 'Kein Anbieter');
             const transportnummerEscaped = escapeHtmlAttribute(entry.transportnummer || '');
@@ -5680,9 +5678,9 @@ function createSendungCard(sendung) {
                     ${entry.paketLabel
                         ? (showPaketHeader
                             ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 whitespace-nowrap">${paketLabelEscaped}</span>`
-                            : `<span class="text-[12px] font-bold px-2 py-0.5 rounded bg-violet-100 text-violet-700 whitespace-nowrap" title="${paketLabelEscaped}">↳</span>`)
+                            : `<span class="text-[17px] leading-none font-black text-violet-700 whitespace-nowrap min-w-[5.25rem] pl-3 text-left" title="${paketLabelEscaped}">↳</span>`)
                         : ''}
-                    ${(showPaketHeader && entry.paketStatus) ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded ${paketStatusInfo.color} whitespace-nowrap">${paketStatusInfo.icon} ${paketStatusInfo.label}</span>` : ''}
+                    <span class="text-[11px] font-bold px-2 py-0.5 rounded ${entryStatusInfo.color} whitespace-nowrap">${entryStatusInfo.icon} ${entryStatusInfo.label}</span>
                     <div class="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
                         <span class="font-semibold shrink-0">🚚</span>
                         <span class="inline-block font-semibold truncate" style="max-width: 9rem;" title="${anbieterEscaped}">${anbieterEscaped}</span>
