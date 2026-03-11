@@ -8427,6 +8427,60 @@
         </div>
     </div>
 
+    <div id="sendungTransportEntryModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-end md:items-center justify-center p-3 md:p-4 z-[112]">
+        <div class="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-xl max-h-[92vh] overflow-hidden flex flex-col">
+            <div class="p-4 border-b border-gray-200 flex items-center justify-between gap-3">
+                <h3 id="sendungTransportEntryModalTitle" class="text-base md:text-lg font-bold text-violet-800">Neue Sendungsnummer</h3>
+                <button id="closeSendungTransportEntryModal" type="button" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
+            </div>
+
+            <div class="p-4 space-y-3 overflow-y-auto">
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Status</label>
+                    <select id="sendungTransportEntryStatus" class="w-full p-2.5 border-2 border-violet-300 rounded-lg focus:border-violet-500 bg-violet-50 text-sm font-semibold">
+                        <option value="erwartet">⏳ Erwartet</option>
+                        <option value="unterwegs">🚚 Unterwegs</option>
+                        <option value="umleitung">↪️ Umleitung (siehe Info)</option>
+                        <option value="zugestellt">✅ Zugestellt</option>
+                        <option value="problem">⚠️ Problem</option>
+                        <option value="storniert">❌ Storniert</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Lieferziel</label>
+                    <input type="text" id="sendungTransportEntryLieferziel" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-violet-500 text-sm" placeholder="z. B. Sortierzentrum Wien, Zustellbasis Graz">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">PLZ (optional)</label>
+                        <input type="text" id="sendungTransportEntryPlz" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-violet-500 text-sm" placeholder="z. B. 1010">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Transportdienstleister</label>
+                        <input type="text" id="sendungTransportEntryAnbieter" list="anbieterList" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-violet-500 text-sm" placeholder="z. B. DHL, DPD">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Info</label>
+                    <input type="text" id="sendungTransportEntryInfo" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-violet-500 text-sm" placeholder="Zusatzinfos, Umleitungsgrund, etc.">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Sendungsnummer</label>
+                    <input type="text" id="sendungTransportEntryNummer" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-violet-500 text-sm" placeholder="Transport-/Trackingnummer">
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-gray-200 bg-white flex flex-col sm:flex-row sm:justify-end gap-2">
+                <button type="button" id="cancelSendungTransportEntryBtn" class="w-full sm:w-auto px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-bold hover:bg-gray-300 transition">Abbrechen</button>
+                <button type="button" id="saveSendungTransportEntryBtn" class="w-full sm:w-auto px-4 py-2 rounded-lg bg-violet-600 text-white font-bold hover:bg-violet-700 transition">Speichern</button>
+            </div>
+        </div>
+    </div>
+
     <div id="sendungInhaltZuordnungModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-end md:items-center justify-center p-3 md:p-4 z-[115]">
         <div class="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
             <div class="p-4 border-b border-gray-200 flex items-center justify-between gap-3">

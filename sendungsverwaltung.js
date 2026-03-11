@@ -73,22 +73,22 @@ const TRACKING_PROVIDER_CONFIG = {
     dhl: {
         label: 'DHL',
         logo: 'https://www.google.com/s2/favicons?domain=dhl.de&sz=64',
-        buildUrl: (encodedTrackingNumber) => `https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=${encodedTrackingNumber}`
+        buildUrl: (encodedTrackingNumber, encodedPlz = '') => `https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=${encodedTrackingNumber}${encodedPlz ? `&zip=${encodedPlz}` : ''}`
     },
     hermes: {
         label: 'Hermes',
         logo: 'https://www.google.com/s2/favicons?domain=hermesworld.com&sz=64',
-        buildUrl: (encodedTrackingNumber) => `https://www.hermesworld.com/de/sendungsverfolgung/tracking/?TrackID=${encodedTrackingNumber}`
+        buildUrl: (encodedTrackingNumber, encodedPlz = '') => `https://www.hermesworld.com/de/sendungsverfolgung/tracking/?TrackID=${encodedTrackingNumber}${encodedPlz ? `&zipcode=${encodedPlz}` : ''}`
     },
     dpd: {
         label: 'DPD',
         logo: 'https://www.google.com/s2/favicons?domain=dpd.de&sz=64',
-        buildUrl: (encodedTrackingNumber) => `https://tracking.dpd.de/parcelstatus?query=${encodedTrackingNumber}`
+        buildUrl: (encodedTrackingNumber, encodedPlz = '') => `https://tracking.dpd.de/parcelstatus?query=${encodedTrackingNumber}${encodedPlz ? `&postalcode=${encodedPlz}` : ''}`
     },
     'post österreich': {
         label: 'Post Österreich',
         logo: 'https://www.google.com/s2/favicons?domain=post.at&sz=64',
-        buildUrl: (encodedTrackingNumber) => `https://www.post.at/sv/sendungsdetails?snr=${encodedTrackingNumber}`
+        buildUrl: (encodedTrackingNumber, encodedPlz = '') => `https://www.post.at/sv/sendungsdetails?snr=${encodedTrackingNumber}${encodedPlz ? `&plz=${encodedPlz}` : ''}`
     },
     ups: {
         label: 'UPS',
@@ -103,7 +103,7 @@ const TRACKING_PROVIDER_CONFIG = {
     gls: {
         label: 'GLS',
         logo: 'https://www.google.com/s2/favicons?domain=gls-group.eu&sz=64',
-        buildUrl: (encodedTrackingNumber) => `https://gls-group.eu/DE/de/paketverfolgung?match=${encodedTrackingNumber}`
+        buildUrl: (encodedTrackingNumber, encodedPlz = '') => `https://gls-group.eu/DE/de/paketverfolgung?match=${encodedTrackingNumber}${encodedPlz ? `&zipcode=${encodedPlz}` : ''}`
     }
 };
 
@@ -123,6 +123,7 @@ const TRACKING_FALLBACKS = {
 const STATUS_CONFIG = {
     erwartet: { label: 'Erwartet', icon: '⏳', color: 'bg-blue-100 text-blue-800' },
     unterwegs: { label: 'Unterwegs', icon: '🚚', color: 'bg-yellow-100 text-yellow-800' },
+    umleitung: { label: 'Umleitung (siehe Info)', icon: '↪️', color: 'bg-violet-100 text-violet-800' },
     zugestellt: { label: 'Zugestellt', icon: '✅', color: 'bg-green-100 text-green-800' },
     problem: { label: 'Problem', icon: '⚠️', color: 'bg-red-100 text-red-800' },
     storniert: { label: 'Storniert', icon: '❌', color: 'bg-gray-100 text-gray-800' }
@@ -143,7 +144,11 @@ const PRIORITAET_CONFIG = {
 const STATUS_VALUES = Object.keys(STATUS_CONFIG);
 
 const EMPTY_TRANSPORT_ENTRY = Object.freeze({
+    status: 'erwartet',
+    lieferziel: '',
+    plz: '',
     anbieter: '',
+    info: '',
     transportnummer: ''
 });
 
@@ -183,6 +188,8 @@ let currentZuordnungModalReadOnly = false;
 let currentWarenuebernahmePaketIndex = null;
 let statusManualUnlockActive = false;
 let registeredEmpfaengerVornamen = [];
+let currentTransportEntryPaketIndex = null;
+let currentTransportEntryIndex = null;
 let warenuebernahmeResetClickTimestamps = [];
 let warenuebernahmeResetCountdownInterval = null;
 let waSelectedInhaltId = '';
@@ -197,6 +204,11 @@ let warenuebernahmeModalHasUnsavedChanges = false;
 function normalizeStatus(status) {
     const normalized = String(status || '').trim().toLowerCase();
     return STATUS_VALUES.includes(normalized) ? normalized : 'erwartet';
+}
+
+function normalizeStatusForOverall(status) {
+    const normalized = normalizeStatus(status);
+    return normalized === 'umleitung' ? 'unterwegs' : normalized;
 }
 
 function createPaketId() {
@@ -391,10 +403,15 @@ function isEmpfangContextActive() {
     return isEmpfangTypValue(getCurrentModalTyp());
 }
 
-function normalizeTransportEntry(entry = {}) {
+function normalizeTransportEntry(entry = {}, fallback = {}) {
+    const fallbackStatus = normalizeStatus(fallback?.status || 'erwartet');
     return {
-        anbieter: String(entry?.anbieter || '').trim(),
-        transportnummer: String(entry?.transportnummer || '').trim()
+        status: normalizeStatus(entry?.status || fallbackStatus),
+        lieferziel: String(entry?.lieferziel || fallback?.lieferziel || '').trim(),
+        plz: String(entry?.plz || fallback?.plz || '').trim(),
+        anbieter: String(entry?.anbieter || fallback?.anbieter || '').trim(),
+        info: String(entry?.info || fallback?.info || '').trim(),
+        transportnummer: String(entry?.transportnummer || fallback?.transportnummer || '').trim()
     };
 }
 
@@ -432,11 +449,11 @@ function normalizeOffenerInhaltPotEntry(entry = {}, inhaltById = new Map()) {
     };
 }
 
-function normalizeTransportEntries(entries = []) {
+function normalizeTransportEntries(entries = [], fallback = {}) {
     const normalized = Array.isArray(entries)
-        ? entries.map(normalizeTransportEntry)
+        ? entries.map((entry) => normalizeTransportEntry(entry, fallback))
         : [];
-    return normalized.length > 0 ? normalized : [{ ...EMPTY_TRANSPORT_ENTRY }];
+    return normalized.length > 0 ? normalized : [normalizeTransportEntry({}, fallback)];
 }
 
 function normalizeInhaltZuordnungEntry(entry = {}) {
@@ -589,8 +606,7 @@ function hasOpenWarenuebernahmeProblems(warenuebernahme = {}) {
 }
 
 function isPaketStatusManuellEditierbar(paket = {}) {
-    const wa = normalizeWarenuebernahme(paket?.warenuebernahme || {});
-    return !wa.aktiv || wa.status === 'offen';
+    return true;
 }
 
 function applyWarenuebernahmeStatusToPaket(paket = {}) {
@@ -602,7 +618,7 @@ function applyWarenuebernahmeStatusToPaket(paket = {}) {
     const waStatus = String(normalizedWarenuebernahme.status || 'offen');
     if (waStatus === 'offen') {
         const manualStatus = normalizeStatus(paket?.status);
-        if (['erwartet', 'unterwegs', 'storniert'].includes(manualStatus)) {
+        if (['erwartet', 'unterwegs', 'umleitung', 'storniert'].includes(manualStatus)) {
             return manualStatus;
         }
         return 'erwartet';
@@ -614,6 +630,46 @@ function applyWarenuebernahmeStatusToPaket(paket = {}) {
     }
 
     return 'problem';
+}
+
+function computeAutoStatusFromTransportEntries(entries = []) {
+    const statuses = normalizeTransportEntries(entries)
+        .map((entry) => normalizeStatus(entry?.status));
+
+    if (statuses.length === 0) return 'erwartet';
+    if (statuses.includes('problem')) return 'problem';
+    if (statuses.every((status) => status === 'storniert')) return 'storniert';
+    if (statuses.includes('erwartet')) return 'erwartet';
+    if (statuses.includes('umleitung')) return 'umleitung';
+    if (statuses.includes('unterwegs')) return 'unterwegs';
+    if (statuses.every((status) => status === 'zugestellt' || status === 'storniert')) return 'zugestellt';
+    return 'erwartet';
+}
+
+function computePaketAutoStatus(paket = {}) {
+    const transportAutoStatus = computeAutoStatusFromTransportEntries(paket?.transportEntries || []);
+    return applyWarenuebernahmeStatusToPaket({
+        ...paket,
+        status: transportAutoStatus
+    });
+}
+
+function applyPaketStatusByMode(paket = {}) {
+    const normalizedStatus = normalizeStatus(paket?.status);
+    const autoActive = paket?.statusAutoAktiv !== false;
+    if (autoActive) {
+        return {
+            ...paket,
+            statusAutoAktiv: true,
+            status: computePaketAutoStatus(paket)
+        };
+    }
+
+    return {
+        ...paket,
+        statusAutoAktiv: false,
+        status: normalizedStatus
+    };
 }
 
 function getEffectiveInhaltItems(items = currentInhaltItems) {
@@ -863,9 +919,7 @@ function ensureInhaltZuordnungConsistency() {
         });
     }
 
-    currentSendungPakete.forEach((paket) => {
-        paket.status = applyWarenuebernahmeStatusToPaket(paket);
-    });
+    currentSendungPakete = currentSendungPakete.map((paket) => applyPaketStatusByMode(paket));
 
     currentOffenerInhaltPot = computeOffenerInhaltPot(inhaltItems, currentSendungPakete);
     currentWarenuebernahmeProblemPot = computeProblemPotFromPakete(currentSendungPakete, inhaltItems);
@@ -909,19 +963,33 @@ function getWarenuebernahmeStatusMeta(paket = {}) {
 function normalizePaket(paket = {}, index = 0) {
     const normalizedWarenuebernahme = normalizeWarenuebernahme(paket?.warenuebernahme || {});
     const normalizedStatus = normalizeStatus(paket?.status);
+    const normalizedLieferziel = String(paket?.lieferziel || '').trim();
+    const normalizedTransportEntries = normalizeTransportEntries(paket?.transportEntries, {
+        status: normalizedStatus,
+        lieferziel: normalizedLieferziel
+    });
     const manualIdsSource = Array.isArray(paket?.inhaltZuordnungManualIds)
         ? paket.inhaltZuordnungManualIds
         : (Array.isArray(paket?.inhaltZuordnungManuellIds) ? paket.inhaltZuordnungManuellIds : []);
 
+    const statusAutoAktiv = paket?.statusAutoAktiv !== false;
+    const normalizedWithMode = applyPaketStatusByMode({
+        status: normalizedStatus,
+        statusAutoAktiv,
+        transportEntries: normalizedTransportEntries,
+        warenuebernahme: normalizedWarenuebernahme
+    });
+
     return {
         paketId: String(paket?.paketId || '').trim() || createPaketId(),
         paketLabel: String(paket?.paketLabel || '').trim() || `Paket ${index + 1}`,
-        status: applyWarenuebernahmeStatusToPaket({ status: normalizedStatus, warenuebernahme: normalizedWarenuebernahme }),
-        lieferziel: String(paket?.lieferziel || '').trim(),
+        status: normalizedWithMode.status,
+        statusAutoAktiv: normalizedWithMode.statusAutoAktiv,
+        lieferziel: normalizedLieferziel,
         deadlineErwartet: String(paket?.deadlineErwartet || '').trim(),
         deadlineVersand: String(paket?.deadlineVersand || '').trim(),
         notiz: String(paket?.notiz || '').trim(),
-        transportEntries: normalizeTransportEntries(paket?.transportEntries),
+        transportEntries: normalizedTransportEntries,
         inhaltZuordnung: Array.isArray(paket?.inhaltZuordnung)
             ? paket.inhaltZuordnung.map(normalizeInhaltZuordnungEntry).filter((entry) => entry.inhaltId && entry.mengeSoll > 0)
             : [],
@@ -940,12 +1008,15 @@ function getSendungPakete(sendung = {}) {
     }
 
     const legacyTransportEntries = Array.isArray(sendung?.transportEntries)
-        ? sendung.transportEntries.map(normalizeTransportEntry).filter((entry) => entry.anbieter || entry.transportnummer)
+        ? sendung.transportEntries
+            .map((entry) => normalizeTransportEntry(entry, { status: sendung?.status || 'erwartet' }))
+            .filter((entry) => entry.anbieter || entry.transportnummer)
         : [];
 
     const fallbackEntries = legacyTransportEntries.length > 0
         ? legacyTransportEntries
         : [{
+            status: normalizeStatus(sendung?.status || 'erwartet'),
             anbieter: String(sendung?.anbieter || '').trim(),
             transportnummer: String(sendung?.transportnummer || '').trim()
         }];
@@ -954,6 +1025,7 @@ function getSendungPakete(sendung = {}) {
         paketId: createPaketId(),
         paketLabel: 'Paket 1',
         status: normalizeStatus(sendung?.status),
+        statusAutoAktiv: sendung?.statusAutoAktiv !== false,
         deadlineErwartet: sendung?.deadlineErwartet || '',
         deadlineVersand: sendung?.deadlineVersand || '',
         transportEntries: fallbackEntries
@@ -1018,11 +1090,12 @@ function normalizeTrackingProviderKey(anbieter = '') {
     return normalized;
 }
 
-function getTrackingOptionsForEntry(anbieter, transportnummer) {
+function getTrackingOptionsForEntry(anbieter, transportnummer, plz = '') {
     const trackingNumber = String(transportnummer || '').trim();
     if (!trackingNumber) return [];
 
     const encodedTrackingNumber = encodeURIComponent(trackingNumber);
+    const encodedPlz = encodeURIComponent(String(plz || '').trim());
     const providerKey = normalizeTrackingProviderKey(anbieter);
     const providerConfig = TRACKING_PROVIDER_CONFIG[providerKey];
     const options = [];
@@ -1030,7 +1103,7 @@ function getTrackingOptionsForEntry(anbieter, transportnummer) {
     if (providerConfig?.buildUrl) {
         options.push({
             label: providerConfig.label,
-            url: providerConfig.buildUrl(encodedTrackingNumber),
+            url: providerConfig.buildUrl(encodedTrackingNumber, encodedPlz),
             logo: providerConfig.logo
         });
     }
@@ -1062,7 +1135,7 @@ function closeTrackingOptionsModal() {
     }
 }
 
-function openTrackingOptionsModal(anbieter, transportnummer) {
+function openTrackingOptionsModal(anbieter, transportnummer, plz = '') {
     const trackingNumber = String(transportnummer || '').trim();
     if (!trackingNumber) {
         alertUser('Keine Transportnummer vorhanden.', 'warning');
@@ -1074,7 +1147,7 @@ function openTrackingOptionsModal(anbieter, transportnummer) {
     const title = document.getElementById('sendungTrackingOptionsTitle');
     if (!modal || !list || !title) return;
 
-    const options = getTrackingOptionsForEntry(anbieter, trackingNumber);
+    const options = getTrackingOptionsForEntry(anbieter, trackingNumber, plz);
     if (options.length === 0) {
         alertUser('Keine Tracking-Links verfügbar.', 'warning');
         return;
@@ -1101,19 +1174,122 @@ function openTrackingOptionsModal(anbieter, transportnummer) {
     modal.classList.add('flex');
 }
 
+function closeTransportEntryModal() {
+    const modal = document.getElementById('sendungTransportEntryModal');
+    if (!modal) return;
+
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    currentTransportEntryPaketIndex = null;
+    currentTransportEntryIndex = null;
+}
+
+function openTransportEntryModal(paketIndex, entryIndex = null) {
+    if (isSendungModalReadMode) return;
+
+    const modal = document.getElementById('sendungTransportEntryModal');
+    const title = document.getElementById('sendungTransportEntryModalTitle');
+    const statusField = document.getElementById('sendungTransportEntryStatus');
+    const lieferzielField = document.getElementById('sendungTransportEntryLieferziel');
+    const plzField = document.getElementById('sendungTransportEntryPlz');
+    const anbieterField = document.getElementById('sendungTransportEntryAnbieter');
+    const infoField = document.getElementById('sendungTransportEntryInfo');
+    const nummerField = document.getElementById('sendungTransportEntryNummer');
+
+    const paket = currentSendungPakete[paketIndex];
+    if (!paket || !modal || !statusField || !lieferzielField || !plzField || !anbieterField || !infoField || !nummerField) {
+        return;
+    }
+
+    const normalizedEntries = normalizeTransportEntries(paket.transportEntries, { status: paket.status, lieferziel: paket.lieferziel || '' });
+    const isEdit = Number.isInteger(entryIndex) && entryIndex >= 0 && entryIndex < normalizedEntries.length;
+    const entry = isEdit
+        ? normalizedEntries[entryIndex]
+        : normalizeTransportEntry({}, { status: paket.status, lieferziel: paket.lieferziel || '' });
+
+    currentTransportEntryPaketIndex = paketIndex;
+    currentTransportEntryIndex = isEdit ? entryIndex : null;
+
+    if (title) {
+        title.textContent = isEdit ? 'Sendungsnummer bearbeiten' : 'Neue Sendungsnummer';
+    }
+
+    statusField.value = normalizeStatus(entry.status || 'erwartet');
+    lieferzielField.value = entry.lieferziel || '';
+    plzField.value = entry.plz || '';
+    anbieterField.value = entry.anbieter || '';
+    infoField.value = entry.info || '';
+    nummerField.value = entry.transportnummer || '';
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    setTimeout(() => {
+        lieferzielField.focus();
+    }, 20);
+}
+
+function saveTransportEntryFromModal() {
+    const paketIndex = currentTransportEntryPaketIndex;
+    if (!Number.isInteger(paketIndex) || paketIndex < 0) return;
+
+    const paket = currentSendungPakete[paketIndex];
+    if (!paket) return;
+
+    const statusField = document.getElementById('sendungTransportEntryStatus');
+    const lieferzielField = document.getElementById('sendungTransportEntryLieferziel');
+    const plzField = document.getElementById('sendungTransportEntryPlz');
+    const anbieterField = document.getElementById('sendungTransportEntryAnbieter');
+    const infoField = document.getElementById('sendungTransportEntryInfo');
+    const nummerField = document.getElementById('sendungTransportEntryNummer');
+
+    const entry = normalizeTransportEntry({
+        status: statusField?.value || 'erwartet',
+        lieferziel: lieferzielField?.value || '',
+        plz: plzField?.value || '',
+        anbieter: anbieterField?.value || '',
+        info: infoField?.value || '',
+        transportnummer: nummerField?.value || ''
+    });
+
+    setSendungModalDirty(true);
+    const normalizedEntries = normalizeTransportEntries(paket.transportEntries);
+
+    if (Number.isInteger(currentTransportEntryIndex) && currentTransportEntryIndex >= 0 && currentTransportEntryIndex < normalizedEntries.length) {
+        normalizedEntries[currentTransportEntryIndex] = entry;
+    } else {
+        if (normalizedEntries.length === 1 && !isMeaningfulTransportEntry(normalizedEntries[0])) {
+            normalizedEntries[0] = entry;
+        } else {
+            normalizedEntries.push(entry);
+        }
+    }
+
+    paket.transportEntries = normalizedEntries;
+    paket.lieferziel = String(normalizedEntries[0]?.lieferziel || '').trim();
+    applyAutoStatusToPaket(paket);
+
+    renderPaketeEditor();
+    syncOverallStatusWithPakete();
+    closeTransportEntryModal();
+}
+
 function getLieferzielHistoryOptions() {
     const values = [];
 
     Object.values(SENDUNGEN).forEach((sendung) => {
         getSendungPakete(sendung).forEach((paket) => {
-            const lieferziel = String(paket?.lieferziel || '').trim();
-            if (lieferziel) values.push(lieferziel);
+            normalizeTransportEntries(paket?.transportEntries, { lieferziel: paket?.lieferziel || '' }).forEach((entry) => {
+                const lieferziel = String(entry?.lieferziel || '').trim();
+                if (lieferziel) values.push(lieferziel);
+            });
         });
     });
 
     currentSendungPakete.forEach((paket) => {
-        const lieferziel = String(paket?.lieferziel || '').trim();
-        if (lieferziel) values.push(lieferziel);
+        normalizeTransportEntries(paket?.transportEntries, { lieferziel: paket?.lieferziel || '' }).forEach((entry) => {
+            const lieferziel = String(entry?.lieferziel || '').trim();
+            if (lieferziel) values.push(lieferziel);
+        });
     });
 
     const unique = new Map();
@@ -1245,7 +1421,7 @@ async function loadRegisteredEmpfaengerVornamen() {
 }
 
 function computeAutoStatusFromPakete(pakete = []) {
-    const statuses = pakete.map((paket) => normalizeStatus(paket.status));
+    const statuses = pakete.map((paket) => normalizeStatusForOverall(paket.status));
     if (statuses.length === 0) return 'erwartet';
 
     // Aggregation nach Paketfortschritt:
@@ -3306,9 +3482,9 @@ function getFlatTransportEntriesFromPakete(pakete = []) {
     const entries = pakete
         .flatMap((paket) => normalizeTransportEntries(paket.transportEntries))
         .map(normalizeTransportEntry)
-        .filter((entry) => entry.anbieter || entry.transportnummer);
+        .filter((entry) => isMeaningfulTransportEntry(entry));
 
-    const primary = entries[0] || { ...EMPTY_TRANSPORT_ENTRY };
+    const primary = entries.find((entry) => entry.anbieter || entry.transportnummer) || { ...EMPTY_TRANSPORT_ENTRY };
     return { entries, primary };
 }
 
@@ -3343,7 +3519,7 @@ async function saveWarenuebernahmeFromModal() {
     if (!aktualisiert) return;
 
     paket.warenuebernahme = aktualisiert;
-    paket.status = applyWarenuebernahmeStatusToPaket(paket);
+    applyAutoStatusToPaket(paket);
 
     ensureInhaltZuordnungConsistency();
     renderPaketeEditor();
@@ -3592,6 +3768,56 @@ function syncOverallStatusWithPakete(forceAuto = false) {
     updateStatusInfoUI(autoStatus);
 }
 
+function applyAutoStatusToPaket(paket = {}) {
+    if (paket?.statusAutoAktiv === false) {
+        return;
+    }
+    paket.status = computePaketAutoStatus(paket);
+}
+
+function requestPaketStatusManualUnlock(paketIndex) {
+    if (isSendungModalReadMode) return;
+
+    const paket = currentSendungPakete[paketIndex];
+    if (!paket) return;
+
+    const unlockInput = prompt('Zum Entsperren des manuellen Paketstatus bitte "MANUELL" eingeben:');
+    if (unlockInput === null) return;
+
+    if (unlockInput.trim() !== 'MANUELL') {
+        alertUser('Entsperren abgebrochen: Eingabe war nicht "MANUELL".', 'warning');
+        return;
+    }
+
+    paket.statusAutoAktiv = false;
+    setSendungModalDirty(true);
+    renderPaketeEditor();
+    syncOverallStatusWithPakete();
+}
+
+function enablePaketStatusAutomatik(paketIndex) {
+    const paket = currentSendungPakete[paketIndex];
+    if (!paket) return;
+
+    paket.statusAutoAktiv = true;
+    applyAutoStatusToPaket(paket);
+    setSendungModalDirty(true);
+    renderPaketeEditor();
+    syncOverallStatusWithPakete();
+}
+
+function isMeaningfulTransportEntry(entry = {}) {
+    const normalized = normalizeTransportEntry(entry);
+    return Boolean(
+        normalized.lieferziel
+        || normalized.plz
+        || normalized.anbieter
+        || normalized.info
+        || normalized.transportnummer
+        || normalized.status !== 'erwartet'
+    );
+}
+
 function addPaket() {
     setSendungModalDirty(true);
     currentSendungPakete.push(normalizePaket({ status: 'erwartet' }, currentSendungPakete.length));
@@ -3621,11 +3847,8 @@ function removePaket(paketIndex) {
 }
 
 function addTransportEntryToPaket(paketIndex) {
-    const paket = currentSendungPakete[paketIndex];
-    if (!paket) return;
-    setSendungModalDirty(true);
-    paket.transportEntries.push({ ...EMPTY_TRANSPORT_ENTRY });
-    renderPaketeEditor();
+    if (isSendungModalReadMode) return;
+    openTransportEntryModal(paketIndex);
 }
 
 function removeTransportEntryFromPaket(paketIndex, entryIndex) {
@@ -3639,7 +3862,12 @@ function removeTransportEntryFromPaket(paketIndex, entryIndex) {
         paket.transportEntries.splice(entryIndex, 1);
     }
 
+    paket.lieferziel = String(normalizeTransportEntries(paket.transportEntries)[0]?.lieferziel || '').trim();
+
+    applyAutoStatusToPaket(paket);
+
     renderPaketeEditor();
+    syncOverallStatusWithPakete();
 }
 
 function updatePaketField(paketIndex, field, value) {
@@ -3648,16 +3876,7 @@ function updatePaketField(paketIndex, field, value) {
     setSendungModalDirty(true);
     paket[field] = field === 'status' ? normalizeStatus(value) : String(value || '').trim();
     if (field === 'status') {
-        const normalizedWarenuebernahme = normalizeWarenuebernahme(paket.warenuebernahme || {});
-        if (normalizedWarenuebernahme.aktiv) {
-            if (!isPaketStatusManuellEditierbar(paket)) {
-                paket.status = applyWarenuebernahmeStatusToPaket(paket);
-                syncOverallStatusWithPakete();
-                return;
-            }
-
-            paket.status = applyWarenuebernahmeStatusToPaket(paket);
-        }
+        paket.statusAutoAktiv = false;
         syncOverallStatusWithPakete();
     }
 }
@@ -3666,7 +3885,17 @@ function updateTransportEntryField(paketIndex, entryIndex, field, value) {
     const paket = currentSendungPakete[paketIndex];
     if (!paket || !paket.transportEntries[entryIndex]) return;
     setSendungModalDirty(true);
-    paket.transportEntries[entryIndex][field] = String(value || '').trim();
+
+    if (field === 'status') {
+        paket.transportEntries[entryIndex][field] = normalizeStatus(value);
+    } else if (field === 'plz') {
+        paket.transportEntries[entryIndex][field] = String(value || '').replace(/\s+/g, '').toUpperCase();
+    } else {
+        paket.transportEntries[entryIndex][field] = String(value || '').trim();
+    }
+
+    applyAutoStatusToPaket(paket);
+    syncOverallStatusWithPakete();
 }
 
 function collectPaketeForSave() {
@@ -3677,7 +3906,8 @@ function collectPaketeForSave() {
     const normalized = currentSendungPakete.map((paket, index) => {
         const cleanedEntries = normalizeTransportEntries(paket.transportEntries)
             .map(normalizeTransportEntry)
-            .filter((entry) => entry.anbieter || entry.transportnummer);
+            .filter((entry) => isMeaningfulTransportEntry(entry));
+        const legacyLieferziel = String(cleanedEntries[0]?.lieferziel || '').trim();
 
         const cleanedZuordnung = Array.isArray(paket.inhaltZuordnung)
             ? paket.inhaltZuordnung
@@ -3690,13 +3920,16 @@ function collectPaketeForSave() {
         const normalizedPaket = normalizePaket({
             ...paket,
             paketLabel: `Paket ${index + 1}`,
+            lieferziel: legacyLieferziel,
             transportEntries: cleanedEntries,
             inhaltZuordnung: cleanedZuordnung,
             inhaltZuordnungManualIds: cleanedManualIds,
             warenuebernahme: normalizeWarenuebernahme(paket.warenuebernahme || {})
         }, index);
 
-        normalizedPaket.status = applyWarenuebernahmeStatusToPaket(normalizedPaket);
+        normalizedPaket.status = normalizedPaket.statusAutoAktiv === false
+            ? normalizeStatus(normalizedPaket.status)
+            : computePaketAutoStatus(normalizedPaket);
 
         return {
             ...normalizedPaket,
@@ -3754,10 +3987,15 @@ function applyPaketeReadMode(readMode) {
     if (readMode) {
         const paketStatusSelects = container.querySelectorAll('.sendung-paket-status-select');
         paketStatusSelects.forEach((select) => {
-            const manualAllowed = select.dataset.statusManualAllowed === 'true';
-            select.disabled = !manualAllowed;
-            select.classList.toggle('opacity-50', !manualAllowed);
-            select.classList.toggle('cursor-not-allowed', !manualAllowed);
+            select.disabled = true;
+            select.classList.toggle('opacity-50', true);
+            select.classList.toggle('cursor-not-allowed', true);
+        });
+
+        const transportStatusSelects = container.querySelectorAll('.sendung-transport-status-select');
+        transportStatusSelects.forEach((select) => {
+            select.disabled = false;
+            select.classList.remove('opacity-50', 'cursor-not-allowed');
         });
 
         const zuordnungPillButtons = container.querySelectorAll('.sendung-open-zuordnung-pill');
@@ -3767,11 +4005,6 @@ function applyPaketeReadMode(readMode) {
 
         const zuordnungButtons = container.querySelectorAll('.sendung-open-zuordnung-btn');
         zuordnungButtons.forEach((button) => {
-            button.disabled = false;
-        });
-
-        const copyButtons = container.querySelectorAll('.sendung-copy-transportnummer-btn');
-        copyButtons.forEach((button) => {
             button.disabled = false;
         });
 
@@ -3789,10 +4022,16 @@ function applyPaketeReadMode(readMode) {
     if (!readMode) {
         const paketStatusSelects = container.querySelectorAll('.sendung-paket-status-select');
         paketStatusSelects.forEach((select) => {
-            const manualAllowed = select.dataset.statusManualAllowed === 'true';
-            select.disabled = !manualAllowed;
-            select.classList.toggle('opacity-50', !manualAllowed);
-            select.classList.toggle('cursor-not-allowed', !manualAllowed);
+            const autoActive = select.dataset.statusAutoActive === 'true';
+            select.disabled = autoActive;
+            select.classList.toggle('opacity-50', autoActive);
+            select.classList.toggle('cursor-not-allowed', autoActive);
+        });
+
+        const transportStatusSelects = container.querySelectorAll('.sendung-transport-status-select');
+        transportStatusSelects.forEach((select) => {
+            select.disabled = false;
+            select.classList.remove('opacity-50', 'cursor-not-allowed');
         });
     }
 }
@@ -3810,47 +4049,86 @@ function renderPaketeEditor() {
         const normalizedWarenuebernahme = normalizeWarenuebernahme(paket.warenuebernahme || {});
         const warenuebernahmeMeta = getWarenuebernahmeStatusMeta(paket);
         const zuordnungSummary = getPaketZuordnungSummary(paket);
-        const statusLocked = normalizedWarenuebernahme.aktiv;
         const waCanBeDisabled = !normalizedWarenuebernahme.aktiv || normalizedWarenuebernahme.status === 'offen';
-        const statusManualAllowed = isPaketStatusManuellEditierbar(paket);
         const zuordnungBadge = `<button type="button" class="sendung-open-zuordnung-pill px-2 py-1 rounded-full bg-blue-100 text-blue-800 font-semibold hover:bg-blue-200 transition" data-paket-index="${paketIndex}">Zuordnung: ${zuordnungSummary.positionen} Pos., ${zuordnungSummary.menge} Stk</button>`;
 
         const statusOptions = STATUS_VALUES.map((statusValue) => {
             const config = STATUS_CONFIG[statusValue] || { label: statusValue, icon: '' };
             const selected = paket.status === statusValue ? 'selected' : '';
-            const blockedByWarenuebernahme = statusLocked && (statusValue === 'zugestellt' || statusValue === 'problem');
-            const disabled = blockedByWarenuebernahme ? 'disabled' : '';
-            return `<option value="${statusValue}" ${selected} ${disabled}>${config.icon} ${config.label}</option>`;
+            return `<option value="${statusValue}" ${selected}>${config.icon} ${config.label}</option>`;
         }).join('');
 
-        const transportRows = normalizeTransportEntries(paket.transportEntries).map((entry, entryIndex) => {
-            const readModeActions = `
-                <div class="sendung-readmode-only hidden flex gap-1">
-                    <button type="button" class="sendung-copy-transportnummer-btn w-9 h-10 shrink-0 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" title="Nummer kopieren">📋</button>
-                    ${entry.transportnummer
-                        ? `<button type="button" class="sendung-open-tracking-options-btn inline-flex items-center justify-center w-9 h-10 shrink-0 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" title="Tracking öffnen">🔗</button>`
-                        : '<button type="button" class="w-9 h-10 shrink-0 rounded-lg bg-gray-100 text-gray-400 cursor-not-allowed" disabled title="Kein Tracking-Link">🔗</button>'}
-                </div>
-            `;
+        const paketAutoStatus = computePaketAutoStatus(paket);
+        const paketAutoStatusLabel = STATUS_CONFIG[paketAutoStatus]?.label || paketAutoStatus;
+        const statusAutoAktiv = paket.statusAutoAktiv !== false;
+        const transportEntries = normalizeTransportEntries(paket.transportEntries, {
+            status: paket.status,
+            lieferziel: paket.lieferziel || ''
+        });
+
+        const desktopRows = transportEntries.map((entry, entryIndex) => {
+            const entryStatusOptions = STATUS_VALUES.map((statusValue) => {
+                const config = STATUS_CONFIG[statusValue] || { label: statusValue, icon: '' };
+                const selected = entry.status === statusValue ? 'selected' : '';
+                return `<option value="${statusValue}" ${selected}>${config.icon} ${config.label}</option>`;
+            }).join('');
 
             return `
-            <div class="grid grid-cols-1 md:grid-cols-[1fr_0.6fr_1.4fr] gap-2 items-start">
-                ${entryIndex === 0
-                    ? `<div class="sendung-lieferziel-wrapper relative w-full">
-                        <input type="text" class="w-full p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-lieferziel-input" data-paket-index="${paketIndex}" value="${escapeHtmlAttribute(paket.lieferziel || '')}" placeholder="Lieferziel (z.B. Zuhause, Büro)" autocomplete="off">
-                        <div class="sendung-lieferziel-suggestions hidden absolute z-20 mt-1 w-full max-h-40 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg"></div>
-                    </div>`
-                    : '<div class="hidden md:block"></div>'}
-                <input type="text" list="anbieterList" class="w-full min-w-0 p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-anbieter-input" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" value="${escapeHtmlAttribute(entry.anbieter)}" placeholder="Transporteur (z.B. DHL)">
-                <div class="flex flex-wrap sm:flex-nowrap gap-2 w-full items-start">
-                    <input type="text" class="w-full min-w-0 p-2.5 border-2 border-gray-300 rounded-lg focus:border-amber-500 text-sm sendung-paket-transportnummer-input" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" value="${escapeHtmlAttribute(entry.transportnummer)}" placeholder="Transportnummer / Sendungsnummer">
-                    ${readModeActions}
-                    ${entryIndex === 0
-                        ? '<span class="hidden sm:block w-10 h-10 shrink-0"></span>'
-                        : `<button type="button" class="sendung-remove-transport-entry-btn sendung-editmode-only w-10 h-10 shrink-0 rounded-full bg-red-500 text-white font-bold hover:bg-red-600 transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" title="Nummer entfernen">-</button>`}
+                <tr class="border-b border-violet-100 last:border-b-0">
+                    <td class="p-2 align-top">
+                        <select class="sendung-transport-status-select w-full p-2 border border-violet-300 rounded-lg bg-violet-50 text-xs font-semibold" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}">
+                            ${entryStatusOptions}
+                        </select>
+                    </td>
+                    <td class="p-2 align-top text-xs text-gray-700">${entry.lieferziel ? escapeHtmlAttribute(entry.lieferziel) : '—'}</td>
+                    <td class="p-2 align-top text-xs text-gray-700 whitespace-nowrap">${entry.plz ? escapeHtmlAttribute(entry.plz) : '—'}</td>
+                    <td class="p-2 align-top text-xs text-gray-700">${entry.anbieter ? escapeHtmlAttribute(entry.anbieter) : '—'}</td>
+                    <td class="p-2 align-top text-xs text-gray-700">${entry.info ? escapeHtmlAttribute(entry.info) : '—'}</td>
+                    <td class="p-2 align-top text-xs text-gray-700">${entry.transportnummer ? `<code class="px-2 py-0.5 rounded bg-gray-100">${escapeHtmlAttribute(entry.transportnummer)}</code>` : '—'}</td>
+                    <td class="p-2 align-top">
+                        <div class="flex flex-wrap gap-1">
+                            ${entry.transportnummer
+                                ? `<button type="button" class="sendung-open-tracking-options-btn inline-flex items-center justify-center px-2 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 text-xs font-bold transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" title="Tracking öffnen">🔗 Tracking</button>`
+                                : '<button type="button" class="inline-flex items-center justify-center px-2 py-1 rounded bg-gray-100 text-gray-400 text-xs font-bold cursor-not-allowed" disabled title="Keine Sendungsnummer">🔗 Tracking</button>'}
+                            <button type="button" class="sendung-edit-transport-entry-btn sendung-editmode-only inline-flex items-center justify-center px-2 py-1 rounded bg-amber-100 text-amber-700 hover:bg-amber-200 text-xs font-bold transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}">Bearbeiten</button>
+                            <button type="button" class="sendung-remove-transport-entry-btn sendung-editmode-only inline-flex items-center justify-center px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 text-xs font-bold transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}">Löschen</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        const mobileRows = transportEntries.map((entry, entryIndex) => {
+            const entryStatusOptions = STATUS_VALUES.map((statusValue) => {
+                const config = STATUS_CONFIG[statusValue] || { label: statusValue, icon: '' };
+                const selected = entry.status === statusValue ? 'selected' : '';
+                return `<option value="${statusValue}" ${selected}>${config.icon} ${config.label}</option>`;
+            }).join('');
+
+            return `
+                <div class="rounded-lg border border-violet-200 bg-white p-3 space-y-2">
+                    <div>
+                        <div class="text-[10px] uppercase tracking-wide text-violet-700 font-bold mb-1">Status</div>
+                        <select class="sendung-transport-status-select w-full p-2 border border-violet-300 rounded-lg bg-violet-50 text-xs font-semibold" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}">
+                            ${entryStatusOptions}
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div><span class="font-bold text-gray-500">Lieferziel:</span><br>${entry.lieferziel ? escapeHtmlAttribute(entry.lieferziel) : '—'}</div>
+                        <div><span class="font-bold text-gray-500">PLZ:</span><br>${entry.plz ? escapeHtmlAttribute(entry.plz) : '—'}</div>
+                        <div><span class="font-bold text-gray-500">Dienstleister:</span><br>${entry.anbieter ? escapeHtmlAttribute(entry.anbieter) : '—'}</div>
+                        <div><span class="font-bold text-gray-500">Nummer:</span><br>${entry.transportnummer ? `<code class="px-1.5 py-0.5 rounded bg-gray-100">${escapeHtmlAttribute(entry.transportnummer)}</code>` : '—'}</div>
+                    </div>
+                    <div class="text-xs"><span class="font-bold text-gray-500">Info:</span> ${entry.info ? escapeHtmlAttribute(entry.info) : '—'}</div>
+                    <div class="flex flex-wrap gap-1 pt-1">
+                        ${entry.transportnummer
+                            ? `<button type="button" class="sendung-open-tracking-options-btn inline-flex items-center justify-center px-2 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 text-xs font-bold transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" title="Tracking öffnen">🔗 Tracking</button>`
+                            : '<button type="button" class="inline-flex items-center justify-center px-2 py-1 rounded bg-gray-100 text-gray-400 text-xs font-bold cursor-not-allowed" disabled title="Keine Sendungsnummer">🔗 Tracking</button>'}
+                        <button type="button" class="sendung-edit-transport-entry-btn sendung-editmode-only inline-flex items-center justify-center px-2 py-1 rounded bg-amber-100 text-amber-700 hover:bg-amber-200 text-xs font-bold transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}">Bearbeiten</button>
+                        <button type="button" class="sendung-remove-transport-entry-btn sendung-editmode-only inline-flex items-center justify-center px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 text-xs font-bold transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}">Löschen</button>
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
         }).join('');
 
         return `
@@ -3859,14 +4137,16 @@ function renderPaketeEditor() {
                     <h5 class="font-bold text-amber-800">📦 Paket ${paketIndex + 1}</h5>
                     <div class="flex flex-col items-stretch sm:items-end gap-1 w-full sm:w-auto">
                         <div class="flex flex-wrap items-center justify-start sm:justify-end gap-2">
-                            <select class="sendung-paket-status-select w-full sm:w-auto p-2 border-2 border-gray-300 rounded-lg bg-white text-sm" data-paket-index="${paketIndex}" data-warenuebernahme-locked="${statusLocked ? 'true' : 'false'}" data-status-manual-allowed="${statusManualAllowed ? 'true' : 'false'}">
+                            <select class="sendung-paket-status-select w-full sm:w-auto p-2 border-2 border-gray-300 rounded-lg bg-white text-sm" data-paket-index="${paketIndex}" data-status-auto-active="${statusAutoAktiv ? 'true' : 'false'}">
                                 ${statusOptions}
                             </select>
+                            <button type="button" class="sendung-paket-status-unlock-btn sendung-editmode-only ${statusAutoAktiv ? '' : 'hidden'} px-2 py-1.5 rounded-lg border border-amber-300 bg-amber-100 text-amber-800 text-xs font-bold hover:bg-amber-200 transition" data-paket-index="${paketIndex}" title="Manuellen Paketstatus entsperren">🔒</button>
+                            <button type="button" class="sendung-paket-status-reset-auto-btn sendung-editmode-only ${statusAutoAktiv ? 'hidden' : ''} px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs font-bold hover:bg-gray-300 transition" data-paket-index="${paketIndex}">Automatik (${paketAutoStatusLabel})</button>
                             ${paketIndex === 0
                                 ? ''
                                 : `<button type="button" class="sendung-remove-paket-btn sendung-editmode-only px-2.5 py-1.5 rounded-lg bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition" data-paket-index="${paketIndex}" title="Paket entfernen">- Paket</button>`}
                         </div>
-                        ${(isEmpfang && statusLocked)
+                        ${(isEmpfang && normalizedWarenuebernahme.aktiv)
                             ? `<button type="button" class="sendung-open-warenuebernahme-btn sendung-readmode-only hidden w-full sm:w-auto px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition" data-paket-index="${paketIndex}">Warenübernahme öffnen</button>`
                             : ''}
                     </div>
@@ -3899,12 +4179,31 @@ function renderPaketeEditor() {
                     </div>
                 </div>
 
-                <div class="mt-3">
-                    <div class="flex items-center justify-between mb-2">
-                        <label class="text-xs font-bold text-gray-600">Lieferziel, Anbieter &amp; Sendungsnummern</label>
-                        <button type="button" class="sendung-add-transport-entry-btn sendung-editmode-only px-2 py-1 rounded bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition" data-paket-index="${paketIndex}">+ Nummer</button>
+                <div class="mt-3 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-fuchsia-50 p-2.5">
+                    <div class="flex items-center justify-between mb-2 gap-2">
+                        <label class="text-xs font-extrabold text-violet-900 tracking-wide uppercase">Sendungsverfolgung</label>
+                        <button type="button" class="sendung-add-transport-entry-btn sendung-editmode-only inline-flex items-center justify-center w-8 h-8 rounded-full bg-violet-600 text-white text-lg font-bold hover:bg-violet-700 transition" data-paket-index="${paketIndex}" title="Neue Sendungsnummer hinzufügen">+</button>
                     </div>
-                    <div class="space-y-2">${transportRows}</div>
+                    <p class="text-[11px] text-violet-700 mb-2">Mehrere Zwischenstopps möglich: jede Sendungsnummer als eigener Verlaufseintrag.</p>
+
+                    <div class="hidden md:block overflow-x-auto rounded-lg border border-violet-100 bg-white">
+                        <table class="min-w-[980px] w-full text-left">
+                            <thead class="bg-violet-100 text-violet-900 text-[11px] uppercase tracking-wide font-bold">
+                                <tr>
+                                    <th class="p-2">Status</th>
+                                    <th class="p-2">Lieferziel</th>
+                                    <th class="p-2">PLZ</th>
+                                    <th class="p-2">Transportdienstleister</th>
+                                    <th class="p-2">Info</th>
+                                    <th class="p-2">Sendungsnummer</th>
+                                    <th class="p-2">Aktion</th>
+                                </tr>
+                            </thead>
+                            <tbody>${desktopRows}</tbody>
+                        </table>
+                    </div>
+
+                    <div class="md:hidden space-y-2">${mobileRows}</div>
                 </div>
             </div>
         `;
@@ -3918,6 +4217,13 @@ function renderPaketeEditor() {
         button.onclick = () => addTransportEntryToPaket(Number.parseInt(button.dataset.paketIndex || '-1', 10));
     });
 
+    container.querySelectorAll('.sendung-edit-transport-entry-btn').forEach((button) => {
+        button.onclick = () => openTransportEntryModal(
+            Number.parseInt(button.dataset.paketIndex || '-1', 10),
+            Number.parseInt(button.dataset.entryIndex || '-1', 10)
+        );
+    });
+
     container.querySelectorAll('.sendung-remove-transport-entry-btn').forEach((button) => {
         button.onclick = () => removeTransportEntryFromPaket(
             Number.parseInt(button.dataset.paketIndex || '-1', 10),
@@ -3925,10 +4231,29 @@ function renderPaketeEditor() {
         );
     });
 
+    container.querySelectorAll('.sendung-transport-status-select').forEach((select) => {
+        select.onchange = () => {
+            updateTransportEntryField(
+                Number.parseInt(select.dataset.paketIndex || '-1', 10),
+                Number.parseInt(select.dataset.entryIndex || '-1', 10),
+                'status',
+                select.value
+            );
+        };
+    });
+
     container.querySelectorAll('.sendung-paket-status-select').forEach((select) => {
         select.onchange = () => {
             updatePaketField(Number.parseInt(select.dataset.paketIndex || '-1', 10), 'status', select.value);
         };
+    });
+
+    container.querySelectorAll('.sendung-paket-status-unlock-btn').forEach((button) => {
+        button.onclick = () => requestPaketStatusManualUnlock(Number.parseInt(button.dataset.paketIndex || '-1', 10));
+    });
+
+    container.querySelectorAll('.sendung-paket-status-reset-auto-btn').forEach((button) => {
+        button.onclick = () => enablePaketStatusAutomatik(Number.parseInt(button.dataset.paketIndex || '-1', 10));
     });
 
     container.querySelectorAll('.sendung-paket-deadline-erwartet').forEach((input) => {
@@ -3939,55 +4264,13 @@ function renderPaketeEditor() {
         input.oninput = () => updatePaketField(Number.parseInt(input.dataset.paketIndex || '-1', 10), 'deadlineVersand', input.value);
     });
 
-    container.querySelectorAll('.sendung-paket-lieferziel-input').forEach((input) => {
-        input.oninput = () => {
-            updatePaketField(Number.parseInt(input.dataset.paketIndex || '-1', 10), 'lieferziel', input.value);
-            renderLieferzielSuggestionsForInput(input);
-        };
-        input.onfocus = () => renderLieferzielSuggestionsForInput(input);
-        input.onclick = () => renderLieferzielSuggestionsForInput(input);
-        input.onkeydown = (event) => {
-            if (event.key === 'Escape') {
-                hideAllLieferzielSuggestionBoxes();
-            }
-        };
-    });
-
-    container.querySelectorAll('.sendung-paket-anbieter-input').forEach((input) => {
-        input.oninput = () => updateTransportEntryField(
-            Number.parseInt(input.dataset.paketIndex || '-1', 10),
-            Number.parseInt(input.dataset.entryIndex || '-1', 10),
-            'anbieter',
-            input.value
-        );
-    });
-
-    container.querySelectorAll('.sendung-paket-transportnummer-input').forEach((input) => {
-        input.oninput = () => updateTransportEntryField(
-            Number.parseInt(input.dataset.paketIndex || '-1', 10),
-            Number.parseInt(input.dataset.entryIndex || '-1', 10),
-            'transportnummer',
-            input.value
-        );
-    });
-
-    container.querySelectorAll('.sendung-copy-transportnummer-btn').forEach((button) => {
-        button.onclick = () => {
-            const paketIndex = Number.parseInt(button.dataset.paketIndex || '-1', 10);
-            const entryIndex = Number.parseInt(button.dataset.entryIndex || '-1', 10);
-            const paket = currentSendungPakete[paketIndex];
-            const entry = normalizeTransportEntries(paket?.transportEntries)[entryIndex] || { ...EMPTY_TRANSPORT_ENTRY };
-            copyToClipboard(entry.transportnummer || '');
-        };
-    });
-
     container.querySelectorAll('.sendung-open-tracking-options-btn').forEach((button) => {
         button.onclick = () => {
             const paketIndex = Number.parseInt(button.dataset.paketIndex || '-1', 10);
             const entryIndex = Number.parseInt(button.dataset.entryIndex || '-1', 10);
             const paket = currentSendungPakete[paketIndex];
             const entry = normalizeTransportEntries(paket?.transportEntries)[entryIndex] || { ...EMPTY_TRANSPORT_ENTRY };
-            openTrackingOptionsModal(entry.anbieter, entry.transportnummer);
+            openTrackingOptionsModal(entry.anbieter, entry.transportnummer, entry.plz);
         };
     });
 
@@ -4032,7 +4315,7 @@ function renderPaketeEditor() {
             }
 
             paket.warenuebernahme = normalizedWarenuebernahme;
-            paket.status = applyWarenuebernahmeStatusToPaket(paket);
+            applyAutoStatusToPaket(paket);
 
             ensureInhaltZuordnungConsistency();
             renderPaketeEditor();
@@ -4174,6 +4457,10 @@ function setupEventListeners() {
     const sendungResetAutoStatusBtn = document.getElementById('sendungResetAutoStatusBtn');
     const closeTrackingOptionsBtn = document.getElementById('closeSendungTrackingOptionsModal');
     const trackingOptionsModal = document.getElementById('sendungTrackingOptionsModal');
+    const closeTransportEntryBtn = document.getElementById('closeSendungTransportEntryModal');
+    const transportEntryCancelBtn = document.getElementById('cancelSendungTransportEntryBtn');
+    const transportEntrySaveBtn = document.getElementById('saveSendungTransportEntryBtn');
+    const transportEntryModal = document.getElementById('sendungTransportEntryModal');
     const closeInhaltZuordnungBtn = document.getElementById('closeSendungInhaltZuordnungModal');
     const applyInhaltZuordnungBtn = document.getElementById('applySendungInhaltZuordnungBtn');
     const inhaltZuordnungModal = document.getElementById('sendungInhaltZuordnungModal');
@@ -4277,6 +4564,26 @@ function setupEventListeners() {
         trackingOptionsModal.onclick = (event) => {
             if (event.target === trackingOptionsModal) {
                 closeTrackingOptionsModal();
+            }
+        };
+    }
+
+    if (closeTransportEntryBtn) {
+        closeTransportEntryBtn.onclick = () => closeTransportEntryModal();
+    }
+
+    if (transportEntryCancelBtn) {
+        transportEntryCancelBtn.onclick = () => closeTransportEntryModal();
+    }
+
+    if (transportEntrySaveBtn) {
+        transportEntrySaveBtn.onclick = () => saveTransportEntryFromModal();
+    }
+
+    if (transportEntryModal) {
+        transportEntryModal.onclick = (event) => {
+            if (event.target === transportEntryModal) {
+                closeTransportEntryModal();
             }
         };
     }
@@ -4641,7 +4948,7 @@ function doesSendungMatchSearchFilter(sendung, filter) {
     const transportEntries = getSendungTransportEntries(sendung);
     const pakete = getSendungPakete(sendung);
     const paketStatuses = pakete.map((paket) => normalizeStatus(paket.status));
-    const gesamtStatus = normalizeStatus(sendung.status || sendung.autoStatus || computeAutoStatusFromPakete(pakete));
+    const gesamtStatus = normalizeStatusForOverall(sendung.status || sendung.autoStatus || computeAutoStatusFromPakete(pakete));
 
     if (category === 'all') {
         const tags = (sendung.tags || []).map((tag) => String(tag || '').toLowerCase());
@@ -4767,6 +5074,7 @@ function prefillIntelligentForm() {
 function closeSendungModalUI() {
     const modal = document.getElementById('sendungModal');
     closeTrackingOptionsModal();
+    closeTransportEntryModal();
     closeInhaltZuordnungModal();
     closeWarenuebernahmeModal();
     if (modal) {
@@ -4940,7 +5248,7 @@ function fillModalWithSendungData(sendung) {
 
     const statusSelect = document.getElementById('sendungStatus');
     const autoStatus = computeAutoStatusFromPakete(currentSendungPakete);
-    const storedStatus = normalizeStatus(sendung.status || autoStatus);
+    const storedStatus = normalizeStatusForOverall(sendung.status || autoStatus);
     statusOverrideActive = sendung.statusOverrideAktiv === true || storedStatus !== autoStatus;
     statusManualUnlockActive = statusOverrideActive;
 
@@ -4985,10 +5293,7 @@ async function saveSendung() {
             const finalStatus = statusOverrideActive ? selectedStatus : autoStatus;
             const isStatusOverride = statusOverrideActive && finalStatus !== autoStatus;
 
-            const flatTransportEntries = pakete.flatMap((paket) => normalizeTransportEntries(paket.transportEntries))
-                .map(normalizeTransportEntry)
-                .filter((entry) => entry.anbieter || entry.transportnummer);
-            const primaryTransportEntry = flatTransportEntries[0] || { ...EMPTY_TRANSPORT_ENTRY };
+            const { entries: flatTransportEntries, primary: primaryTransportEntry } = getFlatTransportEntriesFromPakete(pakete);
 
             const sendungRef = doc(sendungenCollectionRef, currentEditingSendungId);
             await updateDoc(sendungRef, {
@@ -5028,10 +5333,7 @@ async function saveSendung() {
     const finalStatus = statusOverrideActive ? selectedStatus : autoStatus;
     const isStatusOverride = statusOverrideActive && finalStatus !== autoStatus;
 
-    const flatTransportEntries = pakete.flatMap((paket) => normalizeTransportEntries(paket.transportEntries))
-        .map(normalizeTransportEntry)
-        .filter((entry) => entry.anbieter || entry.transportnummer);
-    const primaryTransportEntry = flatTransportEntries[0] || { ...EMPTY_TRANSPORT_ENTRY };
+    const { entries: flatTransportEntries, primary: primaryTransportEntry } = getFlatTransportEntriesFromPakete(pakete);
     const anbieter = primaryTransportEntry.anbieter;
     const transportnummer = primaryTransportEntry.transportnummer;
 
@@ -5223,9 +5525,9 @@ function applyFiltersAndRender() {
 
 function updateStatistics(sendungen) {
     if (currentTab === 'empfang') {
-        const erwartet = sendungen.filter(s => s.status === 'erwartet').length;
-        const unterwegs = sendungen.filter(s => s.status === 'unterwegs').length;
-        const problem = sendungen.filter(s => s.status === 'problem').length;
+        const erwartet = sendungen.filter((s) => normalizeStatusForOverall(s.status) === 'erwartet').length;
+        const unterwegs = sendungen.filter((s) => normalizeStatusForOverall(s.status) === 'unterwegs').length;
+        const problem = sendungen.filter((s) => normalizeStatusForOverall(s.status) === 'problem').length;
         
         const elemErwartet = document.getElementById('empfangErwartet');
         const elemUnterwegs = document.getElementById('empfangUnterwegs');
@@ -5236,9 +5538,9 @@ function updateStatistics(sendungen) {
         if (elemProblem) elemProblem.textContent = problem;
         
     } else if (currentTab === 'versand') {
-        const vorbereitung = sendungen.filter(s => s.status === 'erwartet').length;
-        const unterwegs = sendungen.filter(s => s.status === 'unterwegs').length;
-        const problem = sendungen.filter(s => s.status === 'problem').length;
+        const vorbereitung = sendungen.filter((s) => normalizeStatusForOverall(s.status) === 'erwartet').length;
+        const unterwegs = sendungen.filter((s) => normalizeStatusForOverall(s.status) === 'unterwegs').length;
+        const problem = sendungen.filter((s) => normalizeStatusForOverall(s.status) === 'problem').length;
         
         const elemVorbereitung = document.getElementById('versandVorbereitung');
         const elemUnterwegs = document.getElementById('versandUnterwegs');
@@ -5249,8 +5551,8 @@ function updateStatistics(sendungen) {
         if (elemProblem) elemProblem.textContent = problem;
         
     } else if (currentTab === 'ruecksendung') {
-        const offen = sendungen.filter(s => s.status === 'erwartet').length;
-        const unterwegs = sendungen.filter(s => s.status === 'unterwegs').length;
+        const offen = sendungen.filter((s) => normalizeStatusForOverall(s.status) === 'erwartet').length;
+        const unterwegs = sendungen.filter((s) => normalizeStatusForOverall(s.status) === 'unterwegs').length;
         
         const now = new Date();
         const fristLaeuftAb = sendungen.filter(s => {
@@ -5312,7 +5614,7 @@ function renderSendungen(sendungen) {
                 e.stopPropagation();
                 const index = Number.parseInt(trackingLink.dataset.openTrackingOptionsIndex || '-1', 10);
                 const entry = transportEntries[index];
-                openTrackingOptionsModal(entry?.anbieter || '', entry?.transportnummer || '');
+                openTrackingOptionsModal(entry?.anbieter || '', entry?.transportnummer || '', entry?.plz || '');
             };
         });
     });
@@ -5320,7 +5622,7 @@ function renderSendungen(sendungen) {
 
 function createSendungCard(sendung) {
     const pakete = getSendungPakete(sendung);
-    const statusInfo = STATUS_CONFIG[normalizeStatus(sendung.status)] || STATUS_CONFIG.erwartet;
+    const statusInfo = STATUS_CONFIG[normalizeStatusForOverall(sendung.status)] || STATUS_CONFIG.erwartet;
     const typInfo = TYP_CONFIG[sendung.typ] || TYP_CONFIG.empfang;
     const prioritaetInfo = PRIORITAET_CONFIG[sendung.prioritaet] || PRIORITAET_CONFIG.normal;
     const transportEntries = getSendungTransportEntries(sendung);
@@ -5490,13 +5792,13 @@ function getDeadlineText(sendung) {
     }
 }
 
-function getTrackingUrl(anbieter, transportnummer) {
+function getTrackingUrl(anbieter, transportnummer, plz = '') {
     const trackingNumber = String(transportnummer || '').trim();
     if (!trackingNumber) {
         return null;
     }
 
-    const options = getTrackingOptionsForEntry(anbieter, trackingNumber);
+    const options = getTrackingOptionsForEntry(anbieter, trackingNumber, plz);
     if (options.length === 0) {
         return null;
     }
