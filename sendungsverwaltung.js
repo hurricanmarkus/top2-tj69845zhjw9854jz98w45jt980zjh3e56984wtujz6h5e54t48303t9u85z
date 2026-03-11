@@ -3895,6 +3895,9 @@ function updateTransportEntryField(paketIndex, entryIndex, field, value) {
     }
 
     applyAutoStatusToPaket(paket);
+    if (field === 'status') {
+        renderPaketeEditor();
+    }
     syncOverallStatusWithPakete();
 }
 
@@ -4073,20 +4076,36 @@ function renderPaketeEditor() {
                 return `<option value="${statusValue}" ${selected}>${config.icon} ${config.label}</option>`;
             }).join('');
 
+            const lieferzielEscaped = escapeHtmlAttribute(entry.lieferziel || '');
+            const plzEscaped = escapeHtmlAttribute(entry.plz || '');
+            const anbieterEscaped = escapeHtmlAttribute(entry.anbieter || '');
+            const infoEscaped = escapeHtmlAttribute(entry.info || '');
+            const transportnummerEscaped = escapeHtmlAttribute(entry.transportnummer || '');
+
             return `
                 <tr class="border-b border-violet-100 last:border-b-0">
                     <td class="p-2 align-top">
-                        <select class="sendung-transport-status-select w-full p-2 border border-violet-300 rounded-lg bg-violet-50 text-xs font-semibold" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}">
+                        <select class="sendung-transport-status-select w-full min-w-[120px] p-2 border border-violet-300 rounded-lg bg-violet-50 text-xs font-semibold" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}">
                             ${entryStatusOptions}
                         </select>
                     </td>
-                    <td class="p-2 align-top text-xs text-gray-700">${entry.lieferziel ? escapeHtmlAttribute(entry.lieferziel) : '—'}</td>
-                    <td class="p-2 align-top text-xs text-gray-700 whitespace-nowrap">${entry.plz ? escapeHtmlAttribute(entry.plz) : '—'}</td>
-                    <td class="p-2 align-top text-xs text-gray-700">${entry.anbieter ? escapeHtmlAttribute(entry.anbieter) : '—'}</td>
-                    <td class="p-2 align-top text-xs text-gray-700">${entry.info ? escapeHtmlAttribute(entry.info) : '—'}</td>
-                    <td class="p-2 align-top text-xs text-gray-700">${entry.transportnummer ? `<code class="px-2 py-0.5 rounded bg-gray-100">${escapeHtmlAttribute(entry.transportnummer)}</code>` : '—'}</td>
+                    <td class="p-2 align-top text-xs text-gray-700">${entry.lieferziel
+                        ? `<span class="block max-w-[170px] truncate" title="${lieferzielEscaped}">${lieferzielEscaped}</span>`
+                        : '—'}</td>
+                    <td class="p-2 align-top text-xs text-gray-700 whitespace-nowrap">${entry.plz
+                        ? `<span class="block max-w-[72px] truncate" title="${plzEscaped}">${plzEscaped}</span>`
+                        : '—'}</td>
+                    <td class="p-2 align-top text-xs text-gray-700">${entry.anbieter
+                        ? `<span class="block max-w-[120px] truncate" title="${anbieterEscaped}">${anbieterEscaped}</span>`
+                        : '—'}</td>
+                    <td class="p-2 align-top text-xs text-gray-700">${entry.info
+                        ? `<span class="block max-w-[136px] truncate" title="${infoEscaped}">${infoEscaped}</span>`
+                        : '—'}</td>
+                    <td class="p-2 align-top text-xs text-gray-700">${entry.transportnummer
+                        ? `<code class="block max-w-[170px] truncate px-2 py-0.5 rounded bg-gray-100" title="${transportnummerEscaped}">${transportnummerEscaped}</code>`
+                        : '—'}</td>
                     <td class="p-2 align-top">
-                        <div class="flex flex-wrap gap-1">
+                        <div class="flex flex-nowrap gap-1 whitespace-nowrap">
                             ${entry.transportnummer
                                 ? `<button type="button" class="sendung-open-tracking-options-btn inline-flex items-center justify-center px-2 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 text-xs font-bold transition" data-paket-index="${paketIndex}" data-entry-index="${entryIndex}" title="Tracking öffnen">🔗 Tracking</button>`
                                 : '<button type="button" class="inline-flex items-center justify-center px-2 py-1 rounded bg-gray-100 text-gray-400 text-xs font-bold cursor-not-allowed" disabled title="Keine Sendungsnummer">🔗 Tracking</button>'}
@@ -4187,13 +4206,22 @@ function renderPaketeEditor() {
                     <p class="text-[11px] text-violet-700 mb-2">Mehrere Zwischenstopps möglich: jede Sendungsnummer als eigener Verlaufseintrag.</p>
 
                     <div class="hidden md:block overflow-x-auto rounded-lg border border-violet-100 bg-white">
-                        <table class="min-w-[980px] w-full text-left">
+                        <table class="min-w-[860px] w-full table-fixed text-left">
+                            <colgroup>
+                                <col class="w-[132px]">
+                                <col class="w-[172px]">
+                                <col class="w-[76px]">
+                                <col class="w-[124px]">
+                                <col class="w-[140px]">
+                                <col class="w-[176px]">
+                                <col class="w-[220px]">
+                            </colgroup>
                             <thead class="bg-violet-100 text-violet-900 text-[11px] uppercase tracking-wide font-bold">
                                 <tr>
                                     <th class="p-2">Status</th>
                                     <th class="p-2">Lieferziel</th>
                                     <th class="p-2">PLZ</th>
-                                    <th class="p-2">Transportdienstleister</th>
+                                    <th class="p-2 leading-tight">Transport<br>dienstleister</th>
                                     <th class="p-2">Info</th>
                                     <th class="p-2">Sendungsnummer</th>
                                     <th class="p-2">Aktion</th>
