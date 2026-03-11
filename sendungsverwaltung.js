@@ -280,6 +280,52 @@ function updateSendungModalCloseButtonVisibility() {
 function setSendungModalDirty(isDirty = true) {
     sendungModalHasUnsavedChanges = Boolean(isDirty);
     updateSendungModalCloseButtonVisibility();
+    updateSendungModalFooterActions();
+}
+
+function updateSendungModalFooterActions() {
+    const hasExistingSendung = Boolean(currentEditingSendungId && SENDUNGEN[currentEditingSendungId]);
+    const isDirty = Boolean(sendungModalHasUnsavedChanges);
+
+    const closeFooterBtn = document.getElementById('closeSendungModalFooterBtn');
+    const cancelSendungBtn = document.getElementById('cancelSendungBtn');
+    const saveSendungBtn = document.getElementById('saveSendungBtn');
+    const secondaryActionsRow = document.getElementById('sendungModalSecondaryActions');
+    const editSendungBtn = document.getElementById('editSendungBtn');
+    const duplicateSendungBtn = document.getElementById('duplicateSendungBtn');
+    const deleteSendungBtn = document.getElementById('deleteSendungBtn');
+
+    if (closeFooterBtn) {
+        closeFooterBtn.classList.toggle('hidden', isDirty);
+    }
+
+    if (cancelSendungBtn) {
+        cancelSendungBtn.classList.toggle('hidden', !isDirty);
+    }
+
+    if (saveSendungBtn) {
+        saveSendungBtn.classList.toggle('hidden', !isDirty);
+        saveSendungBtn.classList.toggle('animate-pulse', isDirty);
+    }
+
+    const showEditButton = hasExistingSendung && isSendungModalReadMode && !isDirty;
+    const showDuplicateAndDelete = hasExistingSendung && !isSendungModalReadMode && !isDirty;
+
+    if (editSendungBtn) {
+        editSendungBtn.classList.toggle('hidden', !showEditButton);
+    }
+
+    if (duplicateSendungBtn) {
+        duplicateSendungBtn.classList.toggle('hidden', !showDuplicateAndDelete);
+    }
+
+    if (deleteSendungBtn) {
+        deleteSendungBtn.classList.toggle('hidden', !showDuplicateAndDelete);
+    }
+
+    if (secondaryActionsRow) {
+        secondaryActionsRow.classList.toggle('hidden', !(showEditButton || showDuplicateAndDelete));
+    }
 }
 
 function updateWarenuebernahmeCloseButtonVisibility() {
@@ -4106,6 +4152,7 @@ function addDefaultFilters() {
 function setupEventListeners() {
     const openSendungModalBtn = document.getElementById('openSendungModalBtn');
     const closeSendungModal = document.getElementById('closeSendungModal');
+    const closeSendungModalFooterBtn = document.getElementById('closeSendungModalFooterBtn');
     const cancelSendungBtn = document.getElementById('cancelSendungBtn');
     const saveSendungBtn = document.getElementById('saveSendungBtn');
     const deleteSendungBtn = document.getElementById('deleteSendungBtn');
@@ -4142,6 +4189,10 @@ function setupEventListeners() {
 
     if (closeSendungModal) {
         closeSendungModal.onclick = () => closeSendungModalUI();
+    }
+
+    if (closeSendungModalFooterBtn) {
+        closeSendungModalFooterBtn.onclick = () => closeSendungModalUI();
     }
 
     if (cancelSendungBtn) {
@@ -4660,9 +4711,6 @@ function openSendungModal(sendungId = null, copiedData = null) {
     currentEditingSendungId = sendungId;
     const modal = document.getElementById('sendungModal');
     const modalTitle = document.getElementById('sendungModalTitle');
-    const deleteSendungBtn = document.getElementById('deleteSendungBtn');
-    const editSendungBtn = document.getElementById('editSendungBtn');
-    const duplicateSendungBtn = document.getElementById('duplicateSendungBtn');
 
     if (!modal) return;
 
@@ -4670,17 +4718,11 @@ function openSendungModal(sendungId = null, copiedData = null) {
 
     if (sendungId && SENDUNGEN[sendungId]) {
         modalTitle.textContent = '📦 Sendung ansehen';
-        if (deleteSendungBtn) deleteSendungBtn.style.display = 'none';
-        if (editSendungBtn) editSendungBtn.style.display = 'none';
-        if (duplicateSendungBtn) duplicateSendungBtn.style.display = 'none';
         fillModalWithSendungData(SENDUNGEN[sendungId]);
         setSendungModalReadMode(true);
         renderPaketeEditor();
     } else {
         modalTitle.textContent = '📦 Neue Sendung';
-        deleteSendungBtn.style.display = 'none';
-        if (editSendungBtn) editSendungBtn.style.display = 'none';
-        if (duplicateSendungBtn) duplicateSendungBtn.style.display = 'none';
         clearModalFields();
         prefillIntelligentForm();
         if (copiedData) {
@@ -4724,20 +4766,12 @@ function prefillIntelligentForm() {
 
 function closeSendungModalUI() {
     const modal = document.getElementById('sendungModal');
-    const editSendungBtn = document.getElementById('editSendungBtn');
-    const duplicateSendungBtn = document.getElementById('duplicateSendungBtn');
     closeTrackingOptionsModal();
     closeInhaltZuordnungModal();
     closeWarenuebernahmeModal();
     if (modal) {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
-    }
-    if (editSendungBtn) {
-        editSendungBtn.style.display = 'none';
-    }
-    if (duplicateSendungBtn) {
-        duplicateSendungBtn.style.display = 'none';
     }
     currentEditingSendungId = null;
     setSendungModalReadMode(false);
@@ -4780,30 +4814,8 @@ function setSendungModalReadMode(readMode) {
         hideEmpfaengerSuggestions();
     }
 
-    const saveSendungBtn = document.getElementById('saveSendungBtn');
-    if (saveSendungBtn) {
-        saveSendungBtn.textContent = readMode ? 'Speichern & schließen' : 'Speichern';
-    }
-
-    const hasExistingSendung = Boolean(currentEditingSendungId && SENDUNGEN[currentEditingSendungId]);
-    const editSendungBtn = document.getElementById('editSendungBtn');
-    const duplicateSendungBtn = document.getElementById('duplicateSendungBtn');
-    const deleteSendungBtn = document.getElementById('deleteSendungBtn');
-    const cancelSendungBtn = document.getElementById('cancelSendungBtn');
-    if (editSendungBtn) {
-        editSendungBtn.style.display = (hasExistingSendung && readMode) ? 'inline-block' : 'none';
-    }
-    if (duplicateSendungBtn) {
-        duplicateSendungBtn.style.display = (hasExistingSendung && !readMode) ? 'inline-block' : 'none';
-    }
-    if (deleteSendungBtn) {
-        deleteSendungBtn.style.display = (hasExistingSendung && !readMode) ? 'inline-block' : 'none';
-    }
-    if (cancelSendungBtn) {
-        cancelSendungBtn.style.display = (!hasExistingSendung && !readMode) ? 'inline-block' : 'none';
-    }
-
     updateSendungModalCloseButtonVisibility();
+    updateSendungModalFooterActions();
     renderEmpfangPotOverview();
 }
 
@@ -4814,11 +4826,8 @@ function enableSendungEditMode() {
     }
 
     const modalTitle = document.getElementById('sendungModalTitle');
-    const editSendungBtn = document.getElementById('editSendungBtn');
-
     setSendungModalReadMode(false);
     if (modalTitle) modalTitle.textContent = '📦 Sendung bearbeiten';
-    if (editSendungBtn) editSendungBtn.style.display = 'none';
     alertUser('Bearbeitungsmodus aktiviert.');
 }
 
