@@ -180,6 +180,13 @@ const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'Vi
 
 let globalListenersStarted = false;
 let lastUserDependentListenerMode = null;
+let currentViewName = 'home';
+let top2HistoryInitialized = false;
+let top2HistoryCounter = 0;
+let isApplyingTop2History = false;
+let modalHistoryObserver = null;
+let modalHistorySyncTimer = null;
+let lastTrackedModalId = null;
 
 export let pushoverProgramConfigCache = {};
 export let pushoverRecipientGrantCache = {};
@@ -530,6 +537,7 @@ window.onload = function () {
     }
 
     setupEventListeners();
+    initializeGlobalBackNavigation();
     initializeFirebase();
     registerAppServiceWorker();
 };
@@ -830,7 +838,10 @@ export function alertUser(message, type) {
 export function cleanUrlParams() {
     try {
         const newUrl = window.location.origin + window.location.pathname;
-        window.history.replaceState({}, document.title, newUrl);
+        const currentState = window.history.state && window.history.state.__top2
+            ? window.history.state
+            : {};
+        window.history.replaceState(currentState, document.title, newUrl);
         console.log("URL-Parameter aufgeräumt.");
     } catch (e) {
         console.warn("URL konnte nicht aufgeräumt werden:", e);
@@ -1617,7 +1628,239 @@ function initializePushmailCenterView() {
     }
 }
 
-export function navigate(targetViewName) {
+function getActiveViewNameFromDom() {
+    for (const [viewName, viewConfig] of Object.entries(views)) {
+        const el = document.getElementById(viewConfig.id);
+        if (el && el.classList.contains('active')) {
+            return viewName;
+        }
+    }
+    return currentViewName || 'home';
+}
+
+function isModalVisible(el) {
+    if (!el || !el.isConnected) return false;
+    const style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    if (el.classList.contains('hidden')) return false;
+
+    const mayBeModal =
+        style.position === 'fixed' ||
+        el.classList.contains('fixed') ||
+        el.getAttribute('role') === 'dialog' ||
+        el.classList.contains('modal') ||
+        /modal/i.test(el.id || '');
+    if (!mayBeModal) return false;
+
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+}
+
+function getVisibleModalsSorted() {
+    const candidates = Array.from(document.querySelectorAll('[id*="Modal"], [id*="modal"], .modal'));
+    const uniqueCandidates = [...new Set(candidates)];
+
+    return uniqueCandidates
+        .filter(isModalVisible)
+        .map((el, index) => {
+            const zIndexRaw = window.getComputedStyle(el).zIndex;
+            const zIndex = Number.parseInt(zIndexRaw, 10);
+            return { el, index, zIndex: Number.isFinite(zIndex) ? zIndex : 0 };
+        })
+        .sort((a, b) => {
+            if (a.zIndex !== b.zIndex) return a.zIndex - b.zIndex;
+            return a.index - b.index;
+        })
+        .map(item => item.el);
+}
+
+function getTopVisibleModalId() {
+    const visibleModals = getVisibleModalsSorted();
+    const topModal = visibleModals[visibleModals.length - 1];
+    return topModal?.id || null;
+}
+
+function closeModalElement(modalEl) {
+    if (!modalEl) return;
+
+    const closeCandidate = modalEl.querySelector([
+        '[data-close-modal]',
+        '.modal-close',
+        '.close-modal',
+        '[aria-label="Schließen"]',
+        '[aria-label="Close"]',
+        'button[id^="close"]',
+        'button[id*="Close"]',
+        'button[id*="close"]'
+    ].join(', '));
+
+    if (closeCandidate) {
+        closeCandidate.click();
+        return;
+    }
+
+    modalEl.classList.add('hidden');
+    modalEl.style.display = 'none';
+    modalEl.setAttribute('aria-hidden', 'true');
+}
+
+function closeVisibleModalsUntil(targetModalId = null) {
+    let safetyCounter = 0;
+    while (safetyCounter < 30) {
+        const topModalId = getTopVisibleModalId();
+        if (!topModalId) return;
+        if (targetModalId && topModalId === targetModalId) return;
+        const topModalEl = document.getElementById(topModalId);
+        closeModalElement(topModalEl);
+
+        if (getTopVisibleModalId() === topModalId && topModalEl) {
+            topModalEl.classList.add('hidden');
+            topModalEl.style.display = 'none';
+            topModalEl.setAttribute('aria-hidden', 'true');
+            if (getTopVisibleModalId() === topModalId) {
+                return;
+            }
+        }
+
+        safetyCounter += 1;
+    }
+}
+
+function createTop2HistoryState(viewName, modalId = null, rootGuard = false) {
+    top2HistoryCounter += 1;
+    return {
+        __top2: true,
+        counter: top2HistoryCounter,
+        rootGuard: Boolean(rootGuard),
+        view: viewName,
+        modalId: modalId || null
+    };
+}
+
+function replaceTop2HistoryState(viewName, modalId = null, rootGuard = false) {
+    const state = createTop2HistoryState(viewName, modalId, rootGuard);
+    window.history.replaceState(state, document.title, window.location.href);
+    lastTrackedModalId = state.modalId;
+}
+
+function pushTop2HistoryState(viewName, modalId = null, rootGuard = false) {
+    const currentState = window.history.state;
+    if (
+        currentState &&
+        currentState.__top2 &&
+        currentState.view === viewName &&
+        currentState.modalId === (modalId || null) &&
+        Boolean(currentState.rootGuard) === Boolean(rootGuard)
+    ) {
+        return;
+    }
+
+    const state = createTop2HistoryState(viewName, modalId, rootGuard);
+    window.history.pushState(state, document.title, window.location.href);
+    lastTrackedModalId = state.modalId;
+}
+
+function applyTop2HistoryState(state) {
+    isApplyingTop2History = true;
+
+    try {
+        const targetViewName = state?.view && views[state.view] ? state.view : 'home';
+        const activeView = getActiveViewNameFromDom();
+        if (targetViewName !== activeView) {
+            navigate(targetViewName, { skipHistory: true });
+        } else {
+            currentViewName = targetViewName;
+        }
+
+        closeVisibleModalsUntil(state?.modalId || null);
+        lastTrackedModalId = getTopVisibleModalId();
+    } finally {
+        setTimeout(() => {
+            isApplyingTop2History = false;
+        }, 0);
+    }
+}
+
+function handleTop2PopState(event) {
+    if (!top2HistoryInitialized) return;
+
+    const state = event.state;
+    if (!state || !state.__top2) {
+        const activeView = getActiveViewNameFromDom();
+        const topModalId = getTopVisibleModalId();
+        replaceTop2HistoryState(activeView, topModalId, true);
+        pushTop2HistoryState(activeView, topModalId, false);
+        return;
+    }
+
+    applyTop2HistoryState(state);
+
+    if (state.rootGuard) {
+        const activeView = getActiveViewNameFromDom();
+        const topModalId = getTopVisibleModalId();
+        pushTop2HistoryState(activeView, topModalId, false);
+    }
+}
+
+function syncModalHistoryWithDom() {
+    if (!top2HistoryInitialized || isApplyingTop2History) return;
+
+    const activeView = getActiveViewNameFromDom();
+    const topModalId = getTopVisibleModalId();
+
+    if (topModalId === lastTrackedModalId) return;
+
+    if (topModalId) {
+        pushTop2HistoryState(activeView, topModalId, false);
+    } else if (lastTrackedModalId) {
+        replaceTop2HistoryState(activeView, null, false);
+    }
+
+    lastTrackedModalId = topModalId;
+}
+
+function scheduleModalHistorySync() {
+    if (modalHistorySyncTimer) {
+        clearTimeout(modalHistorySyncTimer);
+    }
+
+    modalHistorySyncTimer = setTimeout(() => {
+        modalHistorySyncTimer = null;
+        syncModalHistoryWithDom();
+    }, 60);
+}
+
+function initializeModalHistoryObserver() {
+    if (modalHistoryObserver || !document.body) return;
+
+    modalHistoryObserver = new MutationObserver(() => {
+        scheduleModalHistorySync();
+    });
+
+    modalHistoryObserver.observe(document.body, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ['class', 'style', 'open']
+    });
+
+    scheduleModalHistorySync();
+}
+
+function initializeGlobalBackNavigation() {
+    if (top2HistoryInitialized) return;
+
+    currentViewName = getActiveViewNameFromDom();
+    replaceTop2HistoryState(currentViewName, null, true);
+    pushTop2HistoryState(currentViewName, null, false);
+
+    window.addEventListener('popstate', handleTop2PopState);
+    initializeModalHistoryObserver();
+
+    top2HistoryInitialized = true;
+}
+
+export function navigate(targetViewName, options = {}) {
     console.log(`Navigiere zu: ${targetViewName}`);
     const targetView = views[targetViewName];
     if (!targetView) {
@@ -1800,6 +2043,11 @@ export function navigate(targetViewName) {
 
     if (targetViewName === 'geschenkemanagement') {
         initializeGeschenkemanagement();
+    }
+
+    currentViewName = targetViewName;
+    if (!options.skipHistory && top2HistoryInitialized) {
+        pushTop2HistoryState(targetViewName, getTopVisibleModalId(), false);
     }
 }
 
