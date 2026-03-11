@@ -4209,7 +4209,7 @@ function renderPaketeEditor() {
                     </div>
                     <p class="text-[11px] text-violet-700 mb-2">Mehrere Zwischenstopps möglich: jede Sendungsnummer als eigener Verlaufseintrag.</p>
 
-                    <div class="hidden md:block overflow-x-auto rounded-lg border border-violet-100 bg-white">
+                    <div class="overflow-x-auto rounded-lg border border-violet-100 bg-white">
                         <table class="min-w-[860px] w-full table-fixed text-left">
                             <colgroup>
                                 <col class="w-[132px]">
@@ -4234,8 +4234,6 @@ function renderPaketeEditor() {
                             <tbody>${desktopRows}</tbody>
                         </table>
                     </div>
-
-                    <div class="md:hidden space-y-2">${mobileRows}</div>
                 </div>
             </div>
         `;
@@ -5674,14 +5672,14 @@ function createSendungCard(sendung) {
             const showPaketHeader = entry.showPaketHeader !== false;
 
             return `
-                <div class="flex items-center gap-2 min-w-0">
+                <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 min-w-0">
                     ${entry.paketLabel
                         ? (showPaketHeader
                             ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 whitespace-nowrap">${paketLabelEscaped}</span>`
                             : `<span class="inline-flex items-center min-w-[6.25rem] pl-1 text-violet-700" title="${paketLabelEscaped}"><span class="h-[2px] bg-violet-700 flex-1 mr-1"></span><span class="text-[17px] leading-none font-black">➜</span></span>`)
                         : ''}
                     <span class="text-[11px] font-bold px-2 py-0.5 rounded ${entryStatusInfo.color} whitespace-nowrap">${entryStatusInfo.icon} ${entryStatusInfo.label}</span>
-                    <div class="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
+                    <div class="flex items-center gap-1 min-w-0 flex-1 overflow-hidden w-full sm:w-auto">
                         <span class="font-semibold shrink-0">🚚</span>
                         <span class="inline-block font-semibold truncate" style="max-width: 9rem;" title="${anbieterEscaped}">${anbieterEscaped}</span>
                         <span class="text-gray-400 shrink-0">•</span>
