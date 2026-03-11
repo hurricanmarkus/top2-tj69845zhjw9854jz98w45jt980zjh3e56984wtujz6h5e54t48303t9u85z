@@ -1037,14 +1037,20 @@ function getSendungTransportEntries(sendung = {}) {
     const entries = [];
 
     pakete.forEach((paket, paketIndex) => {
-        normalizeTransportEntries(paket.transportEntries).forEach((entry) => {
+        const normalizedPaketEntries = normalizeTransportEntries(paket.transportEntries);
+        const paketStatus = computeAutoStatusFromTransportEntries(normalizedPaketEntries);
+        let hasMeaningfulEntry = false;
+
+        normalizedPaketEntries.forEach((entry) => {
             if (!entry.anbieter && !entry.transportnummer) return;
             entries.push({
                 ...entry,
                 paketId: paket.paketId,
                 paketLabel: paket.paketLabel || `Paket ${paketIndex + 1}`,
-                paketStatus: paket.status
+                paketStatus,
+                showPaketHeader: !hasMeaningfulEntry
             });
+            hasMeaningfulEntry = true;
         });
     });
 
@@ -5664,17 +5670,25 @@ function createSendungCard(sendung) {
     const transportEntriesDisplay = transportEntries.length > 0
         ? `<div class="space-y-1">${transportEntries.map((entry, index) => {
             const paketStatusInfo = STATUS_CONFIG[normalizeStatus(entry.paketStatus)] || STATUS_CONFIG.erwartet;
+            const paketLabelEscaped = escapeHtmlAttribute(entry.paketLabel || '');
+            const anbieterEscaped = escapeHtmlAttribute(entry.anbieter || 'Kein Anbieter');
+            const transportnummerEscaped = escapeHtmlAttribute(entry.transportnummer || '');
+            const showPaketHeader = entry.showPaketHeader !== false;
 
             return `
                 <div class="flex items-center gap-2 min-w-0">
-                    ${entry.paketLabel ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 whitespace-nowrap">${entry.paketLabel}</span>` : ''}
-                    ${entry.paketStatus ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded ${paketStatusInfo.color} whitespace-nowrap">${paketStatusInfo.icon} ${paketStatusInfo.label}</span>` : ''}
+                    ${entry.paketLabel
+                        ? (showPaketHeader
+                            ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 whitespace-nowrap">${paketLabelEscaped}</span>`
+                            : `<span class="text-[12px] font-bold px-2 py-0.5 rounded bg-violet-100 text-violet-700 whitespace-nowrap" title="${paketLabelEscaped}">↳</span>`)
+                        : ''}
+                    ${(showPaketHeader && entry.paketStatus) ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded ${paketStatusInfo.color} whitespace-nowrap">${paketStatusInfo.icon} ${paketStatusInfo.label}</span>` : ''}
                     <div class="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
                         <span class="font-semibold shrink-0">🚚</span>
-                        <span class="inline-block font-semibold truncate" style="max-width: 9rem;" title="${entry.anbieter || 'Kein Anbieter'}">${entry.anbieter || 'Kein Anbieter'}</span>
+                        <span class="inline-block font-semibold truncate" style="max-width: 9rem;" title="${anbieterEscaped}">${anbieterEscaped}</span>
                         <span class="text-gray-400 shrink-0">•</span>
                         ${entry.transportnummer
-                            ? `<code class="inline-block bg-gray-100 px-2 py-0.5 rounded truncate" style="max-width: 10rem;" title="${entry.transportnummer}">${entry.transportnummer}</code>`
+                            ? `<code class="inline-block bg-gray-100 px-2 py-0.5 rounded truncate" style="max-width: 10rem;" title="${transportnummerEscaped}">${transportnummerEscaped}</code>`
                             : '<span class="text-xs text-gray-500 truncate" style="max-width: 10rem;">(Keine Transportnummer)</span>'}
                     </div>
                     ${entry.transportnummer
