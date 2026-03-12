@@ -33,8 +33,7 @@ import { initializeLizenzen, listenForLizenzen, stopLizenzenListener } from './l
 import { initializeVertragsverwaltung, listenForVertraege, stopVertragsverwaltungListeners } from './vertragsverwaltung.js';
 import { initRezeptverwaltung } from './rezeptverwaltung.js';
 import { initializeHaushaltszahlungen, listenForHaushaltszahlungen, stopHaushaltszahlungenListeners } from './haushaltszahlungen.js';
-import { initializeAbbuchungsberechner, listenForAbbuchungsberechner, stopAbbuchungsberechnerListeners } from './abbuchungsberechner.js';
-import { initializeAbbuchungsberechner2, stopAbbuchungsberechner2Listeners } from './abbuchungsberechner2.js';
+import { initializeAbbuchungsberechner, stopAbbuchungsberechnerListeners } from './abbuchungsberechner2.js';
 import { initializeGeschenkemanagement, listenForGeschenke, stopGeschenkemanagementListeners } from './geschenkemanagement.js';
 import { initializeSendungsverwaltungView, listenForSendungen, stopSendungsverwaltungListeners } from './sendungsverwaltung.js';
 import { ensureNachrichtencenterSelfContact } from './notfall.js';
@@ -179,7 +178,6 @@ export const views = {
     rezepte: { id: 'rezepteView' },
     haushaltszahlungen: { id: 'haushaltszahlungenView' },
     abbuchungsberechner: { id: 'abbuchungsberechnerView' },
-    abbuchungsberechner2: { id: 'abbuchungsberechner2View' },
     geschenkemanagement: { id: 'geschenkemanagementView' }
 };
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
@@ -222,9 +220,6 @@ export function stopAllUserDependentListeners(resetMode = false) {
     }
     if (typeof stopAbbuchungsberechnerListeners === 'function') {
         stopAbbuchungsberechnerListeners();
-    }
-    if (typeof stopAbbuchungsberechner2Listeners === 'function') {
-        stopAbbuchungsberechner2Listeners();
     }
     if (typeof stopGeschenkemanagementListeners === 'function') {
         stopGeschenkemanagementListeners();
@@ -359,12 +354,6 @@ function startUserDependentListeners() {
         listenForHaushaltszahlungen();
     } else {
         console.error("Fehler: listenForHaushaltszahlungen ist nicht importiert!");
-    }
-
-    if (typeof listenForAbbuchungsberechner === 'function') {
-        listenForAbbuchungsberechner();
-    } else {
-        console.error("Fehler: listenForAbbuchungsberechner ist nicht importiert!");
     }
 
     if (typeof listenForVertraege === 'function') {
@@ -1963,9 +1952,6 @@ export function navigate(targetViewName, options = {}) {
         if (targetViewName === 'abbuchungsberechner' && !userPermissions.includes('ABBUCHUNGSBERECHNER')) {
             return alertUser("Zugriff verweigert (Abbuchungsberechner).", 'error');
         }
-        if (targetViewName === 'abbuchungsberechner2' && !userPermissions.includes('ABBUCHUNGSBERECHNER')) {
-            return alertUser("Zugriff verweigert (Abbuchungsberechner 2).", 'error');
-        }
 
         // Zugriffsschutz für Tools inkl. Unterseite
         if ((targetViewName === 'tools' || targetViewName === 'maKarte' || targetViewName === 'teraScanner') && !userPermissions.includes('TOOLS')) {
@@ -2062,10 +2048,6 @@ export function navigate(targetViewName, options = {}) {
 
     if (targetViewName === 'abbuchungsberechner') {
         initializeAbbuchungsberechner();
-    }
-
-    if (targetViewName === 'abbuchungsberechner2') {
-        initializeAbbuchungsberechner2();
     }
 
     if (targetViewName === 'maKarte') {
@@ -3037,9 +3019,6 @@ export function setupEventListeners() {
 
     const abbuchungsberechnerCard = document.getElementById('abbuchungsberechnerCard');
     if (abbuchungsberechnerCard) abbuchungsberechnerCard.addEventListener('click', () => navigate('abbuchungsberechner'));
-
-    const abbuchungsberechner2Card = document.getElementById('abbuchungsberechner2Card');
-    if (abbuchungsberechner2Card) abbuchungsberechner2Card.addEventListener('click', () => navigate('abbuchungsberechner2'));
 
     const geschenkemanagementCard = document.getElementById('geschenkemanagementCard');
     if (geschenkemanagementCard) geschenkemanagementCard.addEventListener('click', () => navigate('geschenkemanagement'));

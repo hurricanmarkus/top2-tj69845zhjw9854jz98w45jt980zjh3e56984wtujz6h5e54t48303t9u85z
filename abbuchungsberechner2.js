@@ -78,7 +78,7 @@ function buildShell() {
         </div>
         <div class="bg-gradient-to-r from-blue-700 via-indigo-600 to-sky-600 text-white p-4 rounded-2xl shadow-md">
             <div class="flex items-start justify-between gap-3 flex-wrap">
-                <div><div class="flex items-center gap-2 flex-wrap"><h2 class="text-2xl font-bold">Abbuchungsberechner 2 (Test)</h2><span class="px-2 py-1 rounded-full bg-white/15 text-xs font-bold">Test-Version</span></div><p class="text-sm text-white/90 mt-1 max-w-3xl">Mehr Erklärung, bessere Vorschläge, stärkere Kontrolle über Datenqualität und Forecast.</p></div>
+                <div><div class="flex items-center gap-2 flex-wrap"><h2 class="text-2xl font-bold">Abbuchungsberechner</h2></div><p class="text-sm text-white/90 mt-1 max-w-3xl">Mehr Erklärung, bessere Vorschläge, stärkere Kontrolle über Datenqualität und Forecast.</p></div>
                 <span id="ab2-total-status" class="px-4 py-2 rounded-lg font-bold text-white bg-green-500">STABIL</span>
             </div>
             <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 text-center mt-4">
@@ -131,7 +131,7 @@ function ensureTransferLinkingFields() {
     const block = document.createElement('div');
     block.id = 'ab2-transfer-linking-block';
     block.className = 'rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 space-y-2';
-    block.innerHTML = `<div class="text-sm font-bold text-indigo-900 flex items-center gap-2">Zahlungsgrund-/Konten-Zuordnung (optional) ${helpButton('ab2-help-transfer-linking')}</div>${helpContent('ab2-help-transfer-linking', 'Wähle hier den Zahlungsgrund direkt aus deinen Eintrags-Titeln (ein oder mehrere). Optional kannst du beteiligte Konten/Personen markieren. Diese Zuordnung steuert die Ungleichgewichts-Analyse (z. B. YouTube-Preis steigt, Beiträge bleiben zu niedrig).')}<div class="grid grid-cols-1 md:grid-cols-2 gap-2"><div><label class="block text-xs font-bold text-indigo-800 mb-1">Zahlungsgrund (Titel)</label><select id="ab2-transfer-linked-titles" multiple size="5" class="w-full p-2 border rounded-lg bg-white"></select></div><div><label class="block text-xs font-bold text-indigo-800 mb-1">Beteiligte Konten/Personen</label><select id="ab2-transfer-linked-accounts" multiple size="5" class="w-full p-2 border rounded-lg bg-white"></select></div></div><div class="text-[11px] text-indigo-800">Mehrfachauswahl: Strg/Cmd gedrückt halten (Desktop) oder mehrere Einträge antippen (Smartphone).</div>`;
+    block.innerHTML = `<div class="text-sm font-bold text-indigo-900 flex items-center gap-2">Zahlungsgrund-Zuordnung (optional) ${helpButton('ab2-help-transfer-linking')}</div>${helpContent('ab2-help-transfer-linking', 'Wähle hier den Zahlungsgrund direkt aus deinen Eintrags-Titeln (ein oder mehrere). Diese Zuordnung steuert die Ungleichgewichts-Analyse (z. B. YouTube-Preis steigt, Beiträge bleiben zu niedrig).')}<div><label class="block text-xs font-bold text-indigo-800 mb-1">Zahlungsgrund (Titel)</label><select id="ab2-transfer-linked-titles" multiple size="5" class="w-full p-2 border rounded-lg bg-white"></select></div><div class="text-[11px] text-indigo-800">Mehrfachauswahl: Strg/Cmd gedrückt halten (Desktop) oder mehrere Einträge antippen (Smartphone).</div>`;
     noteWrap.parentElement.insertBefore(block, noteWrap.nextSibling);
     populateTransferLinkingOptions();
 }
@@ -140,12 +140,6 @@ function transferLinkedTitleLabel(value) {
     const key = String(value || '').trim();
     if (!key) return '';
     return ITEMS[key]?.title || key;
-}
-
-function transferLinkedAccountLabel(value) {
-    const key = String(value || '').trim();
-    if (!key) return '';
-    return ACCOUNTS[key]?.name || key;
 }
 
 function getListFieldValues(fieldId) {
@@ -177,11 +171,9 @@ function setMultiSelectOptions(select, options, selectedValues = []) {
     Array.from(select.options).forEach((opt) => { opt.selected = selectedSet.has(String(opt.value || '').trim().toLowerCase()); });
 }
 
-function populateTransferLinkingOptions(preselectedTitles = null, preselectedAccounts = null) {
+function populateTransferLinkingOptions(preselectedTitles = null) {
     const titleSelect = el('ab2-transfer-linked-titles');
-    const accountSelect = el('ab2-transfer-linked-accounts');
     const selectedTitles = Array.isArray(preselectedTitles) ? preselectedTitles : getListFieldValues('ab2-transfer-linked-titles');
-    const selectedAccounts = Array.isArray(preselectedAccounts) ? preselectedAccounts : getListFieldValues('ab2-transfer-linked-accounts');
 
     if (titleSelect) {
         const titleOptions = Object.values(ITEMS)
@@ -189,14 +181,6 @@ function populateTransferLinkingOptions(preselectedTitles = null, preselectedAcc
             .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')))
             .map((item) => ({ value: item.id, label: item.title || '-' }));
         setMultiSelectOptions(titleSelect, titleOptions, selectedTitles);
-    }
-
-    if (accountSelect) {
-        const accountOptions = Object.values(ACCOUNTS)
-            .filter((account) => account?.id)
-            .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
-            .map((account) => ({ value: account.id, label: `${account.name || '-'}${isPersonAccount(account) ? ' · Person' : ''}` }));
-        setMultiSelectOptions(accountSelect, accountOptions, selectedAccounts);
     }
 }
 
@@ -226,7 +210,7 @@ function enhanceStaticHelpTexts() {
 }
 
 function ensureShell() {
-    const root = el('abbuchungsberechner2-root');
+    const root = el('abbuchungsberechner-root');
     if (!root) return;
     if (!shellMounted) {
         root.innerHTML = buildShell();
@@ -643,8 +627,7 @@ function itemHasAlert(item, severity = '') { return FORECAST.alerts.some((alert)
 function setSelectOptions(select, options, value = '') { if (!select) return; const current = value || select.value || ''; select.innerHTML = options.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join(''); select.value = current; }
 function transferLinkingText(transfer) {
     const linkedTitles = (Array.isArray(transfer?.linkedTitles) ? transfer.linkedTitles : []).map((value) => transferLinkedTitleLabel(value));
-    const linkedAccounts = (Array.isArray(transfer?.linkedAccounts) ? transfer.linkedAccounts : []).map((value) => transferLinkedAccountLabel(value));
-    return `${linkedTitles.join(' ')} ${linkedAccounts.join(' ')}`.trim();
+    return linkedTitles.join(' ').trim();
 }
 function qualityEntry(accountId) { return FORECAST.quality.find((entry) => entry.accountId === accountId) || null; }
 function forecastCss(severity) { if (severity === 'alarm') return 'bg-red-50 border-red-200 text-red-700'; if (severity === 'warn') return 'bg-amber-50 border-amber-200 text-amber-700'; return 'bg-emerald-50 border-emerald-200 text-emerald-700'; }
@@ -820,11 +803,7 @@ function renderTransfers() {
         const target = ACCOUNTS[transfer.targetAccountId] || {};
         const sourceAlert = FORECAST.alerts.find((alert) => alert.accountId === transfer.sourceAccountId);
         const linkedTitles = (Array.isArray(transfer.linkedTitles) ? transfer.linkedTitles : []).map((value) => transferLinkedTitleLabel(value));
-        const linkedAccounts = (Array.isArray(transfer.linkedAccounts) ? transfer.linkedAccounts : []).map((value) => transferLinkedAccountLabel(value));
-        const linkedChunks = [];
-        if (linkedTitles.length) linkedChunks.push(`Titel: ${escapeHtml(linkedTitles.join(', '))}`);
-        if (linkedAccounts.length) linkedChunks.push(`Konten: ${escapeHtml(linkedAccounts.join(', '))}`);
-        const linkedInfo = linkedChunks.length ? `<div class="mt-1 text-[11px] text-indigo-700">${linkedChunks.join(' · ')}</div>` : '';
+        const linkedInfo = linkedTitles.length ? `<div class="mt-1 text-[11px] text-indigo-700">Titel: ${escapeHtml(linkedTitles.join(', '))}</div>` : '';
         return `<div class="rounded-lg border ${editingTransferId === transfer.id ? 'border-yellow-400 bg-yellow-50 shadow-md' : 'border-gray-200 bg-gray-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="font-bold text-gray-800">${escapeHtml(source.name || '-')} → ${escapeHtml(target.name || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(intervalLabel(transfer.intervalType, transfer.customMonths || []))} · nächste Ausführung: ${nextExecutionDate(transfer) ? formatDate(nextExecutionDate(transfer)) : '-'}</div></div><div class="flex gap-1"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-transfer-edit="${transfer.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-transfer-delete="${transfer.id}">Löschen</button></div></div><div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Betrag</div><div class="font-bold text-gray-800">${formatCurrency(transfer.amount)}</div></div><div><div class="text-gray-500">Start</div><div class="font-bold text-gray-800">${formatDate(transfer.validFrom)}</div></div><div><div class="text-gray-500">Ende</div><div class="font-bold text-gray-800">${transfer.validTo ? formatDate(transfer.validTo) : 'offen'}</div></div><div><div class="text-gray-500">Quellenlage</div><div class="font-bold ${sourceAlert?.severity === 'alarm' ? 'text-red-700' : sourceAlert?.severity === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">${sourceAlert ? `${sourceAlert.severity} ${monthLabel(sourceAlert.monthKey)}` : 'stabil'}</div></div></div><div class="mt-2 text-xs text-gray-600">${escapeHtml(transfer.note || '')}${linkedInfo}</div></div>`;
     }).join('') : '<p class="text-sm text-gray-400 italic">Noch keine Transferpläne.</p>';
 }
@@ -859,8 +838,7 @@ function renderPreviews() {
     const transferTarget = ACCOUNTS[el('ab2-transfer-target')?.value] || null;
     const transferAmount = toNum(el('ab2-transfer-amount')?.value, 0);
     const linkedTitles = getListFieldValues('ab2-transfer-linked-titles').map((value) => transferLinkedTitleLabel(value));
-    const linkedAccounts = getListFieldValues('ab2-transfer-linked-accounts').map((value) => transferLinkedAccountLabel(value));
-    const transferLinkText = linkedTitles.length || linkedAccounts.length ? ` Zugeordnet zu ${linkedTitles.length ? `Titeln: ${linkedTitles.join(', ')}` : ''}${linkedTitles.length && linkedAccounts.length ? ' | ' : ''}${linkedAccounts.length ? `Konten: ${linkedAccounts.join(', ')}` : ''}.` : '';
+    const transferLinkText = linkedTitles.length ? ` Zugeordnet zu Titeln: ${linkedTitles.join(', ')}.` : '';
     if (el('ab2-transfer-preview')) el('ab2-transfer-preview').textContent = transferSource && transferTarget && transferAmount > 0 ? `${formatCurrency(transferAmount)} fließen von ${transferSource.name || '-'} nach ${transferTarget.name || '-'} ${describeInterval(el('ab2-transfer-interval')?.value || 'monthly', el('ab2-transfer-start-month')?.value, parseMonths(el('ab2-transfer-custom-months')?.value), el('ab2-transfer-day')?.value)}.${transferLinkText}` : 'Noch unvollständig.';
     const reconAccount = ACCOUNTS[el('ab2-recon-account')?.value] || null;
     const reconType = el('ab2-recon-type')?.value || 'snapshot';
@@ -968,12 +946,12 @@ function editAccount(id) {
 }
 function resetTransferForm() {
     editingTransferId = '';
-    ['ab2-transfer-id', 'ab2-transfer-amount', 'ab2-transfer-start-month', 'ab2-transfer-custom-months', 'ab2-transfer-day', 'ab2-transfer-valid-to', 'ab2-transfer-note', 'ab2-transfer-linked-titles', 'ab2-transfer-linked-accounts'].forEach((id) => { if (el(id)) el(id).value = ''; });
+    ['ab2-transfer-id', 'ab2-transfer-amount', 'ab2-transfer-start-month', 'ab2-transfer-custom-months', 'ab2-transfer-day', 'ab2-transfer-valid-to', 'ab2-transfer-note', 'ab2-transfer-linked-titles'].forEach((id) => { if (el(id)) el(id).value = ''; });
     if (el('ab2-transfer-source')) el('ab2-transfer-source').value = '';
     if (el('ab2-transfer-target')) el('ab2-transfer-target').value = '';
     if (el('ab2-transfer-interval')) el('ab2-transfer-interval').value = 'monthly';
     if (el('ab2-transfer-valid-from')) el('ab2-transfer-valid-from').value = isoDate(new Date());
-    populateTransferLinkingOptions([], []);
+    populateTransferLinkingOptions([]);
     updateMainIntervalFields('ab2-transfer');
     renderTransfers();
     renderPreviews();
@@ -993,7 +971,7 @@ function editTransfer(id) {
     if (el('ab2-transfer-valid-from')) el('ab2-transfer-valid-from').value = transfer.validFrom || '';
     if (el('ab2-transfer-valid-to')) el('ab2-transfer-valid-to').value = transfer.validTo || '';
     if (el('ab2-transfer-note')) el('ab2-transfer-note').value = transfer.note || '';
-    populateTransferLinkingOptions(Array.isArray(transfer.linkedTitles) ? transfer.linkedTitles : [], Array.isArray(transfer.linkedAccounts) ? transfer.linkedAccounts : []);
+    populateTransferLinkingOptions(Array.isArray(transfer.linkedTitles) ? transfer.linkedTitles : []);
     updateMainIntervalFields('ab2-transfer');
     openModal('ab2-transfers-modal');
     renderTransfers();
@@ -1009,7 +987,7 @@ function resetReconForm() {
 async function writeAudit(action, entityType, entityId, beforeData = null, afterData = null, context = {}) {
     if (!auditRef || !uid()) return;
     try {
-        await addDoc(auditRef, { action, entityType, entityId, beforeData, afterData, context, appModule: 'ABBUCHUNGSBERECHNER_2_TEST', createdBy: uid(), createdByName: currentUser?.displayName || 'Unbekannt', createdAt: serverTimestamp() });
+        await addDoc(auditRef, { action, entityType, entityId, beforeData, afterData, context, appModule: 'ABBUCHUNGSBERECHNER', createdBy: uid(), createdByName: currentUser?.displayName || 'Unbekannt', createdAt: serverTimestamp() });
     } catch (error) { console.warn('AB2 Audit fehlgeschlagen:', error); }
 }
 async function upsertSnapshotEntry(accountId, date, value, note) {
@@ -1119,8 +1097,7 @@ async function saveTransfer() {
     if (validTo && parseDate(validTo) < parseDate(validFrom)) return alertUser('Gültig bis darf nicht vor Gültig ab liegen.', 'error');
     const before = TRANSFERS[id] || null;
     const linkedTitles = getListFieldValues('ab2-transfer-linked-titles');
-    const linkedAccounts = getListFieldValues('ab2-transfer-linked-accounts');
-    const payload = { sourceAccountId, targetAccountId, amount, intervalType, startMonth: intervalType === 'monthly' || intervalType === 'custom' ? null : (parseInt(el('ab2-transfer-start-month')?.value, 10) || null), customMonths, dayOfMonth: parseInt(el('ab2-transfer-day')?.value, 10) || 1, validFrom, validTo, note: el('ab2-transfer-note')?.value?.trim() || '', linkedTitles, linkedAccounts, createdBy: before?.createdBy || uid(), updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() };
+    const payload = { sourceAccountId, targetAccountId, amount, intervalType, startMonth: intervalType === 'monthly' || intervalType === 'custom' ? null : (parseInt(el('ab2-transfer-start-month')?.value, 10) || null), customMonths, dayOfMonth: parseInt(el('ab2-transfer-day')?.value, 10) || 1, validFrom, validTo, note: el('ab2-transfer-note')?.value?.trim() || '', linkedTitles, createdBy: before?.createdBy || uid(), updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() };
     try {
         if (id) {
             await updateDoc(doc(transfersRef, id), payload);
@@ -1515,7 +1492,7 @@ function attachListeners() {
     unsubAudit = onSnapshot(query(auditRef, where('createdBy', '==', userId)), (snap) => { AUDIT = {}; snap.forEach((d) => { AUDIT[d.id] = { id: d.id, ...d.data() }; }); }, (error) => console.error('AB2 audit listener:', error));
 }
 
-export function stopAbbuchungsberechner2Listeners() {
+export function stopAbbuchungsberechnerListeners() {
     if (unsubAccounts) { unsubAccounts(); unsubAccounts = null; }
     if (unsubItems) { unsubItems(); unsubItems = null; }
     if (unsubTransfers) { unsubTransfers(); unsubTransfers = null; }
@@ -1529,7 +1506,7 @@ export function stopAbbuchungsberechner2Listeners() {
     FORECAST = { timeline: [], alerts: [], details: {}, quality: [], setup: [], suggestions: [], imbalances: [] };
 }
 
-export function initializeAbbuchungsberechner2() {
+export function initializeAbbuchungsberechner() {
     if (!db) return;
     ensureShell();
     bindEvents();
