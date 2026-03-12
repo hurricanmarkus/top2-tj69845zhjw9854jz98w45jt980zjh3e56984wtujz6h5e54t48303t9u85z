@@ -35,8 +35,27 @@ function uid() { return currentUser?.mode || currentUser?.displayName || null; }
 function isGuest() { return !currentUser?.mode || currentUser.mode === GUEST_MODE; }
 function canCreate() { const p = currentUser?.permissions || []; return currentUser?.role === 'SYSTEMADMIN' || p.includes('ABBUCHUNGSBERECHNER_CREATE'); }
 function toNum(v, f = 0) { const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : f; }
+function roundMoney(v) { return Math.round(toNum(v, 0) * 100) / 100; }
 function isoDate(v) { const d = new Date(v); return Number.isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 function parseMonths(v) { return String(v || '').split(',').map(x => parseInt(x.trim(), 10)).filter(x => x >= 1 && x <= 12).filter((x, i, a) => a.indexOf(x) === i).sort((a, b) => a - b); }
+function normalizeSearchText(v) { return String(v || '').toLowerCase().replace(/(\d),(\d)/g, '$1.$2').replace(/\s+/g, ' ').trim(); }
+function normalizeAccountType(accountOrType) {
+    const raw = typeof accountOrType === 'string' ? accountOrType : accountOrType?.type;
+    return String(raw || '').trim().toLowerCase();
+}
+function normalizeAccountRole(accountOrRole) {
+    const raw = typeof accountOrRole === 'string' ? accountOrRole : accountOrRole?.role;
+    return String(raw || '').trim().toLowerCase();
+}
+function isPersonAccount(account) { return normalizeAccountType(account) === 'person'; }
+function canBeSourceAccount(account) {
+    const role = normalizeAccountRole(account);
+    return role === 'source' || role === 'both' || isPersonAccount(account);
+}
+function canBeTargetAccount(account) {
+    const role = normalizeAccountRole(account);
+    return role === 'target' || role === 'both';
+}
 
 function openModal(id) { const el = document.getElementById(id); if (el) el.style.display = 'flex'; }
 function closeModal(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
@@ -167,18 +186,19 @@ function buildForecast(horizon = 12) {
 
         const bucket = { key: `${y}-${String(m).padStart(2, '0')}`, label: `${MONTHS[m - 1]} ${y}`, accounts: {} };
         accounts.forEach((a) => {
-            const start = toNum(bal[a.id], 0);
-            const inflow = toNum(mv[a.id]?.in, 0);
-            const outflow = toNum(mv[a.id]?.out, 0);
-            let end = start + inflow - outflow;
+            const start = roundMoney(bal[a.id]);
+            const inflow = roundMoney(mv[a.id]?.in);
+            const outflow = roundMoney(mv[a.id]?.out);
+            let end = roundMoney(start + inflow - outflow);
             const snapshot = snapshotsByMonth[`${a.id}__${bucket.key}`];
-            if (snapshot) end = toNum(snapshot.value, end);
+            if (snapshot) end = roundMoney(snapshot.value);
             bal[a.id] = end;
-            const minBuffer = toNum(a.minBuffer, 0);
+            const minBuffer = roundMoney(a.minBuffer);
+            const delta = roundMoney(end - minBuffer);
             let severity = 'ok';
-            if (a.type !== 'person') {
-                if (end < minBuffer) severity = 'alarm';
-                else if (end < (minBuffer + Math.max(25, minBuffer * 0.1))) severity = 'warn';
+            if (!isPersonAccount(a)) {
+                if (delta < -0.009) severity = 'alarm';
+                else if (delta < Math.max(25, minBuffer * 0.1)) severity = 'warn';
             }
             if (severity !== 'ok') alerts.push({ severity, accountId: a.id, accountName: a.name, monthKey: bucket.key, endBalance: end, minBuffer });
             bucket.accounts[a.id] = { start, inflow, outflow, end, minBuffer, severity };
@@ -193,32 +213,44 @@ function buildForecast(horizon = 12) {
 
 function suggestions() {
     const list = [];
+    const snaps = latestSnapshots();
     const source = Object.values(ACCOUNTS)
-        .filter(a => a.type !== 'person' && (a.role === 'source' || a.role === 'both'))
+        .filter(a => !isPersonAccount(a) && canBeSourceAccount(a))
         .map((a) => {
-            const s = latestSnapshots()[a.id];
-            return { ...a, free: (s ? toNum(s.value, 0) : 0) - toNum(a.minBuffer, 0) };
+            const s = snaps[a.id];
+            return { ...a, free: roundMoney((s ? toNum(s.value, 0) : 0) - toNum(a.minBuffer, 0)) };
         })
         .sort((a, b) => b.free - a.free)[0];
 
-    if (!source) return list;
+    if (!source || source.free <= 0) return list;
 
-    Object.values(ACCOUNTS).filter(a => a.type !== 'person' && (a.role === 'target' || a.role === 'both')).forEach((target) => {
+    Object.values(ACCOUNTS).filter(a => !isPersonAccount(a) && canBeTargetAccount(a)).forEach((target) => {
         const rows = FORECAST.timeline.map(t => t.accounts[target.id]).filter(Boolean);
         if (!rows.length) return;
         const firstBadIdx = rows.findIndex(r => r.end < r.minBuffer);
         if (firstBadIdx < 0) return;
-        const once = Math.max(0, rows[firstBadIdx].minBuffer - rows[firstBadIdx].end);
-        const trend = (rows[rows.length - 1].end - rows[0].start) / rows.length;
-        const monthly = trend < 0 ? Math.abs(trend) : 0;
+
+        const firstRow = rows[0];
+        const immediateGap = Math.max(0, roundMoney(toNum(firstRow?.minBuffer, 0) - toNum(firstRow?.start, 0)));
+        const monthlyNeed = rows.reduce((maxNeed, row, idx) => {
+            const monthsUntilRow = idx + 1;
+            const projectedWithOnce = toNum(row.end, 0) + immediateGap;
+            const remainingGap = Math.max(0, toNum(row.minBuffer, 0) - projectedWithOnce);
+            return Math.max(maxNeed, remainingGap / monthsUntilRow);
+        }, 0);
+
+        const onceAmount = Number(immediateGap.toFixed(2));
+        const monthlyAmount = Number(monthlyNeed.toFixed(2));
+        if (onceAmount <= 0 && monthlyAmount <= 0) return;
+
         list.push({
             id: `${target.id}_${firstBadIdx}`,
             sourceId: source.id,
             sourceName: source.name,
             targetId: target.id,
             targetName: target.name,
-            onceAmount: Number(once.toFixed(2)),
-            monthlyAmount: Number(monthly.toFixed(2)),
+            onceAmount,
+            monthlyAmount,
             criticalMonth: FORECAST.timeline[firstBadIdx]?.key || '-'
         });
     });
@@ -285,7 +317,7 @@ function updateContributionRowState(row) {
 function updateAccountTypeDependencies() {
     const type = (document.getElementById('ab-account-type')?.value || 'bank').trim();
     const minBuffer = document.getElementById('ab-account-min-buffer');
-    const isPerson = type === 'person';
+    const isPerson = normalizeAccountType(type) === 'person';
     if (isPerson && minBuffer && !minBuffer.value) minBuffer.value = '0';
     setInputEnabled(minBuffer, !isPerson, isPerson);
 }
@@ -357,10 +389,10 @@ function openStatInsight(statKey) {
         const lines = Object.values(ACCOUNTS)
             .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
             .map((a) => {
-                const bal = toNum(snaps[a.id]?.value, 0);
-                const buf = toNum(a.minBuffer, 0);
-                const diff = bal - buf;
-                if (a.type === 'person') return `<strong>${escapeHtml(a.name || '-')}</strong>: Stand ${bal.toFixed(2)} € (Person/Quelle)`;
+                const bal = roundMoney(snaps[a.id]?.value);
+                const buf = roundMoney(a.minBuffer);
+                const diff = roundMoney(bal - buf);
+                if (isPersonAccount(a)) return `<strong>${escapeHtml(a.name || '-')}</strong>: Stand ${bal.toFixed(2)} € (Person/Quelle)`;
                 const hint = diff >= 0 ? `Überschuss ${diff.toFixed(2)} €` : `Unter Puffer ${Math.abs(diff).toFixed(2)} €`;
                 return `<strong>${escapeHtml(a.name || '-')}</strong>: Stand ${bal.toFixed(2)} € · Puffer ${buf.toFixed(2)} € · ${hint}`;
             });
@@ -393,17 +425,17 @@ function populateSelects() {
     const mk = (fn) => ['<option value="">Bitte wählen...</option>', ...accounts.filter(fn).map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)} (${escapeHtml(a.type || '-')})</option>`)].join('');
 
     const itemAcc = document.getElementById('ab-item-account');
-    if (itemAcc) { const old = itemAcc.value; itemAcc.innerHTML = mk(a => a.role === 'target' || a.role === 'both'); itemAcc.value = old; }
+    if (itemAcc) { const old = itemAcc.value; itemAcc.innerHTML = mk(a => canBeTargetAccount(a)); itemAcc.value = old; }
     const trS = document.getElementById('ab-transfer-source');
-    if (trS) { const old = trS.value; trS.innerHTML = mk(a => a.role === 'source' || a.role === 'both' || a.type === 'person'); trS.value = old; }
+    if (trS) { const old = trS.value; trS.innerHTML = mk(a => canBeSourceAccount(a)); trS.value = old; }
     const trT = document.getElementById('ab-transfer-target');
-    if (trT) { const old = trT.value; trT.innerHTML = mk(a => a.role === 'target' || a.role === 'both'); trT.value = old; }
+    if (trT) { const old = trT.value; trT.innerHTML = mk(a => canBeTargetAccount(a)); trT.value = old; }
     const recA = document.getElementById('ab-recon-account');
     if (recA) { const old = recA.value; recA.innerHTML = mk(() => true); recA.value = old; }
 
     document.querySelectorAll('.ab-contrib-source').forEach((sel) => {
         const old = sel.value;
-        sel.innerHTML = mk(a => a.role === 'source' || a.role === 'both' || a.type === 'person');
+        sel.innerHTML = mk(a => canBeSourceAccount(a));
         sel.value = old;
     });
 }
@@ -516,11 +548,12 @@ function renderDashboard() {
     if (accountHost) {
         const snaps = latestSnapshots();
         const html = Object.values(ACCOUNTS).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))).map((a) => {
-            const bal = snaps[a.id] ? toNum(snaps[a.id].value, 0) : 0;
-            const buf = toNum(a.minBuffer, 0);
-            const badge = a.type === 'person' ? '<span class="text-xs px-2 py-1 rounded bg-indigo-100 text-indigo-700">Person</span>' : (bal < buf ? '<span class="text-xs px-2 py-1 rounded bg-red-100 text-red-700">Unter Puffer</span>' : '<span class="text-xs px-2 py-1 rounded bg-green-100 text-green-700">Puffer ok</span>');
-            const diff = bal - buf;
-            const diffLine = a.type === 'person'
+            const bal = roundMoney(snaps[a.id]?.value);
+            const buf = roundMoney(a.minBuffer);
+            const diff = roundMoney(bal - buf);
+            const person = isPersonAccount(a);
+            const badge = person ? '<span class="text-xs px-2 py-1 rounded bg-indigo-100 text-indigo-700">Person</span>' : (diff < -0.009 ? '<span class="text-xs px-2 py-1 rounded bg-red-100 text-red-700">Unter Puffer</span>' : '<span class="text-xs px-2 py-1 rounded bg-green-100 text-green-700">Puffer ok</span>');
+            const diffLine = person
                 ? '<div class="text-xs text-indigo-600">Quelle/Person (kein Pufferzwang)</div>'
                 : `<div class="text-xs ${diff >= 0 ? 'text-green-700' : 'text-red-700'}">${diff >= 0 ? `Überschuss: +${diff.toFixed(2)} €` : `Differenz: ${diff.toFixed(2)} €`}</div>`;
             return `<div class="p-3 rounded-lg border bg-white"><div class="flex justify-between items-center"><div class="font-bold text-sm">${escapeHtml(a.name || '-')}</div>${badge}</div><div class="text-xs text-gray-500">${escapeHtml(a.bankName || '-')} ${a.iban ? `· ${escapeHtml(a.iban)}` : ''}</div><div class="text-sm font-semibold">Stand: ${bal.toFixed(2)} €</div><div class="text-xs text-gray-500">Puffer: ${buf.toFixed(2)} €</div>${diffLine}</div>`;
@@ -530,7 +563,7 @@ function renderDashboard() {
 
     const forecastHost = document.getElementById('ab-forecast-overview');
     if (forecastHost) {
-        const targets = Object.values(ACCOUNTS).filter(a => a.type !== 'person' && (a.role === 'target' || a.role === 'both'));
+        const targets = Object.values(ACCOUNTS).filter(a => !isPersonAccount(a) && canBeTargetAccount(a));
         if (!targets.length || !FORECAST.timeline.length) forecastHost.innerHTML = '<p class="text-sm text-gray-400 italic">Keine Forecast-Daten.</p>';
         else {
             const head = `<tr><th class="px-2 py-2 text-left text-xs font-bold text-blue-800">Monat</th>${targets.map(a => `<th class="px-2 py-2 text-left text-xs font-bold text-blue-800">${escapeHtml(a.name)}</th>`).join('')}</tr>`;
@@ -548,7 +581,8 @@ function renderDashboard() {
 
 function tokenMatch(text) {
     if (!filterTokens.length) return true;
-    const checks = filterTokens.map(t => text.includes(t));
+    const normalizedText = normalizeSearchText(text);
+    const checks = filterTokens.map(t => normalizedText.includes(t));
     const res = filterState.joinMode === 'or' ? checks.some(Boolean) : checks.every(Boolean);
     return filterState.negate ? !res : res;
 }
@@ -558,7 +592,9 @@ function matchItem(item) {
     if (filterState.status && st.key !== filterState.status) return false;
     if (filterState.typ && item.typ !== filterState.typ) return false;
     if (filterState.interval && item.intervalType !== filterState.interval) return false;
-    const txt = `${item.title || ''} ${item.notes || ''} ${(ACCOUNTS[item.accountId]?.name || '')} ${item.typ || ''} ${item.intervalType || ''}`.toLowerCase();
+    const amount = roundMoney(item.amount);
+    const contribTotal = roundMoney((Array.isArray(item.contributions) ? item.contributions : []).reduce((sum, c) => sum + toNum(c.amount, 0), 0));
+    const txt = `${item.title || ''} ${item.notes || ''} ${(ACCOUNTS[item.accountId]?.name || '')} ${item.typ || ''} ${item.intervalType || ''} ${amount.toFixed(2)} ${amount} ${contribTotal.toFixed(2)} ${contribTotal}`;
     return tokenMatch(txt);
 }
 
@@ -584,23 +620,30 @@ function renderAccounts() {
     const host = document.getElementById('ab-accounts-list'); if (!host) return;
     renderAccountFilterButtons();
     const snaps = latestSnapshots();
-    const q = accountListFilterState.query.trim().toLowerCase();
+    const q = normalizeSearchText(accountListFilterState.query);
     const rows = Object.values(ACCOUNTS)
-        .filter((a) => accountListFilterState.type === 'all' || a.type === accountListFilterState.type)
+        .filter((a) => {
+            if (accountListFilterState.type === 'all') return true;
+            return accountListFilterState.type === 'person' ? isPersonAccount(a) : !isPersonAccount(a);
+        })
         .filter((a) => {
             if (!q) return true;
-            const hay = `${a.name || ''} ${a.bankName || ''} ${a.iban || ''} ${a.type || ''} ${a.role || ''}`.toLowerCase();
+            const bal = roundMoney(snaps[a.id]?.value);
+            const buf = roundMoney(a.minBuffer);
+            const diff = roundMoney(bal - buf);
+            const hay = normalizeSearchText(`${a.name || ''} ${a.bankName || ''} ${a.iban || ''} ${a.type || ''} ${a.role || ''} ${bal.toFixed(2)} ${buf.toFixed(2)} ${diff.toFixed(2)} ${bal} ${buf} ${diff}`);
             return hay.includes(q);
         })
         .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
         .map((a) => {
-            const bal = toNum(snaps[a.id]?.value, 0);
-            const buf = toNum(a.minBuffer, 0);
-            const diff = bal - buf;
+            const bal = roundMoney(snaps[a.id]?.value);
+            const buf = roundMoney(a.minBuffer);
+            const diff = roundMoney(bal - buf);
+            const person = isPersonAccount(a);
             const editing = editingAccountId === a.id;
             const rowCls = editing ? 'bg-yellow-100 border-yellow-400' : 'bg-white';
-            const diffTxt = a.type === 'person' ? 'Person/Quelle' : (diff >= 0 ? `Überschuss +${diff.toFixed(2)} €` : `Differenz ${diff.toFixed(2)} €`);
-            return `<div class="p-2 rounded border ${rowCls} flex items-center justify-between gap-2"><div><div class="text-sm font-bold">${escapeHtml(a.name || '-')} ${editing ? '<span class="ml-1 text-[10px] px-2 py-0.5 rounded bg-yellow-300 text-yellow-900">In Bearbeitung</span>' : ''}</div><div class="text-xs text-gray-500">${escapeHtml(a.bankName || '-')} · ${escapeHtml(a.type || '-')} · Rolle: ${escapeHtml(a.role || '-')} ${a.iban ? `· ${escapeHtml(a.iban)}` : ''}</div><div class="text-xs text-gray-500">Stand: ${bal.toFixed(2)} € · Puffer: ${buf.toFixed(2)} €</div><div class="text-xs ${a.type === 'person' ? 'text-indigo-700' : (diff >= 0 ? 'text-green-700' : 'text-red-700')}">${diffTxt}</div></div><div class="flex gap-1"><button class="ab-account-action px-2 py-1 text-xs rounded bg-gray-100 hover:bg-gray-200" data-action="edit" data-id="${escapeHtml(a.id)}">Bearb.</button><button class="ab-account-action px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200" data-action="delete" data-id="${escapeHtml(a.id)}">Löschen</button></div></div>`;
+            const diffTxt = person ? 'Person/Quelle' : (diff >= 0 ? `Überschuss +${diff.toFixed(2)} €` : `Differenz ${diff.toFixed(2)} €`);
+            return `<div class="p-2 rounded border ${rowCls} flex items-center justify-between gap-2"><div><div class="text-sm font-bold">${escapeHtml(a.name || '-')} ${editing ? '<span class="ml-1 text-[10px] px-2 py-0.5 rounded bg-yellow-300 text-yellow-900">In Bearbeitung</span>' : ''}</div><div class="text-xs text-gray-500">${escapeHtml(a.bankName || '-')} · ${escapeHtml(a.type || '-')} · Rolle: ${escapeHtml(a.role || '-')} ${a.iban ? `· ${escapeHtml(a.iban)}` : ''}</div><div class="text-xs text-gray-500">Stand: ${bal.toFixed(2)} € · Puffer: ${buf.toFixed(2)} €</div><div class="text-xs ${person ? 'text-indigo-700' : (diff >= 0 ? 'text-green-700' : 'text-red-700')}">${diffTxt}</div></div><div class="flex gap-1"><button class="ab-account-action px-2 py-1 text-xs rounded bg-gray-100 hover:bg-gray-200" data-action="edit" data-id="${escapeHtml(a.id)}">Bearb.</button><button class="ab-account-action px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200" data-action="delete" data-id="${escapeHtml(a.id)}">Löschen</button></div></div>`;
         })
         .join('');
     host.innerHTML = rows || '<p class="text-sm text-gray-400 italic">Keine Konten/Quellen passend zum Filter.</p>';
@@ -609,20 +652,21 @@ function renderAccounts() {
 function renderTransfers() {
     const host = document.getElementById('ab-transfers-list'); if (!host) return;
     renderTransferFilterButtons();
-    const q = transferListFilterState.query.trim().toLowerCase();
+    const q = normalizeSearchText(transferListFilterState.query);
     const rows = Object.values(TRANSFERS)
         .filter((t) => {
             if (transferListFilterState.type === 'all') return true;
             const src = ACCOUNTS[t.sourceAccountId];
             const trg = ACCOUNTS[t.targetAccountId];
-            const hasPerson = src?.type === 'person' || trg?.type === 'person';
+            const hasPerson = isPersonAccount(src) || isPersonAccount(trg);
             return transferListFilterState.type === 'person' ? hasPerson : !hasPerson;
         })
         .filter((t) => {
             if (!q) return true;
             const src = ACCOUNTS[t.sourceAccountId]?.name || '';
             const trg = ACCOUNTS[t.targetAccountId]?.name || '';
-            const hay = `${src} ${trg} ${t.note || ''} ${intervalLabel(t.intervalType, t.customMonths)} ${toNum(t.amount, 0)}`.toLowerCase();
+            const amount = roundMoney(t.amount);
+            const hay = normalizeSearchText(`${src} ${trg} ${t.note || ''} ${intervalLabel(t.intervalType, t.customMonths)} ${amount.toFixed(2)} ${amount}`);
             return hay.includes(q);
         })
         .sort((a, b) => String(a.validFrom || '').localeCompare(String(b.validFrom || '')))
@@ -784,8 +828,8 @@ async function saveAccount() {
         name: (document.getElementById('ab-account-name')?.value || '').trim(),
         bankName: (document.getElementById('ab-account-bank')?.value || '').trim(),
         iban: (document.getElementById('ab-account-iban')?.value || '').trim(),
-        type: (document.getElementById('ab-account-type')?.value || 'bank').trim(),
-        role: (document.getElementById('ab-account-role')?.value || 'both').trim(),
+        type: normalizeAccountType(document.getElementById('ab-account-type')?.value || 'bank') || 'bank',
+        role: normalizeAccountRole(document.getElementById('ab-account-role')?.value || 'both') || 'both',
         minBuffer: toNum(document.getElementById('ab-account-min-buffer')?.value, 0),
         createdBy: uid(), updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp()
     };
@@ -972,7 +1016,7 @@ function resetFilters() {
 
 function addToken() {
     const input = document.getElementById('ab-search-input'); if (!input) return;
-    const v = input.value.trim().toLowerCase(); if (!v) return;
+    const v = normalizeSearchText(input.value); if (!v) return;
     if (!filterTokens.includes(v)) filterTokens.push(v);
     input.value = '';
     renderTags(); renderTable();
