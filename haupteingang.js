@@ -33,6 +33,7 @@ import { initializeLizenzen, listenForLizenzen, stopLizenzenListener } from './l
 import { initializeVertragsverwaltung, listenForVertraege, stopVertragsverwaltungListeners } from './vertragsverwaltung.js';
 import { initRezeptverwaltung } from './rezeptverwaltung.js';
 import { initializeHaushaltszahlungen, listenForHaushaltszahlungen, stopHaushaltszahlungenListeners } from './haushaltszahlungen.js';
+import { initializeAbbuchungsberechner, listenForAbbuchungsberechner, stopAbbuchungsberechnerListeners } from './abbuchungsberechner.js';
 import { initializeGeschenkemanagement, listenForGeschenke, stopGeschenkemanagementListeners } from './geschenkemanagement.js';
 import { initializeSendungsverwaltungView, listenForSendungen, stopSendungsverwaltungListeners } from './sendungsverwaltung.js';
 import { ensureNachrichtencenterSelfContact } from './notfall.js';
@@ -76,6 +77,8 @@ export const PERMISSIONS_CONFIG = {
     'REZEPTE': { label: 'Rezepte', indent: false },
     'HAUSHALTSZAHLUNGEN': { label: 'Haushaltszahlungen', indent: false },
     'HAUSHALTSZAHLUNGEN_CREATE': { label: '-> Neue Zahlung anlegen', indent: true },
+    'ABBUCHUNGSBERECHNER': { label: 'Abbuchungsberechner', indent: false },
+    'ABBUCHUNGSBERECHNER_CREATE': { label: '-> Neuen Eintrag anlegen', indent: true },
     'GESCHENKEMANAGEMENT': { label: 'Geschenkemanagement', indent: false },
     'GESCHENKEMANAGEMENT_CREATE': { label: '-> Neues Geschenk anlegen', indent: true }
 };
@@ -174,6 +177,7 @@ export const views = {
     sendungsverwaltung: { id: 'sendungsverwaltungView' },
     rezepte: { id: 'rezepteView' },
     haushaltszahlungen: { id: 'haushaltszahlungenView' },
+    abbuchungsberechner: { id: 'abbuchungsberechnerView' },
     geschenkemanagement: { id: 'geschenkemanagementView' }
 };
 const viewElements = Object.fromEntries(Object.keys(views).map(key => [key + 'View', document.getElementById(views[key].id)]));
@@ -213,6 +217,9 @@ export function stopAllUserDependentListeners(resetMode = false) {
     }
     if (typeof stopHaushaltszahlungenListeners === 'function') {
         stopHaushaltszahlungenListeners();
+    }
+    if (typeof stopAbbuchungsberechnerListeners === 'function') {
+        stopAbbuchungsberechnerListeners();
     }
     if (typeof stopGeschenkemanagementListeners === 'function') {
         stopGeschenkemanagementListeners();
@@ -347,6 +354,12 @@ function startUserDependentListeners() {
         listenForHaushaltszahlungen();
     } else {
         console.error("Fehler: listenForHaushaltszahlungen ist nicht importiert!");
+    }
+
+    if (typeof listenForAbbuchungsberechner === 'function') {
+        listenForAbbuchungsberechner();
+    } else {
+        console.error("Fehler: listenForAbbuchungsberechner ist nicht importiert!");
     }
 
     if (typeof listenForVertraege === 'function') {
@@ -1244,6 +1257,7 @@ function getPushmailCenterProgramDefinitions() {
         { id: 'VERTRAGSVERWALTUNG', title: 'Vertragsverwaltung', permission: 'VERTRAGSVERWALTUNG', border: 'border-indigo-600', text: 'text-indigo-700' },
         { id: 'REZEPTE', title: 'Rezepte', permission: 'REZEPTE', border: 'border-orange-500', text: 'text-orange-600' },
         { id: 'HAUSHALTSZAHLUNGEN', title: 'Haushaltszahlungen', permission: 'HAUSHALTSZAHLUNGEN', border: 'border-cyan-600', text: 'text-cyan-700' },
+        { id: 'ABBUCHUNGSBERECHNER', title: 'Abbuchungsberechner', permission: 'ABBUCHUNGSBERECHNER', border: 'border-blue-600', text: 'text-blue-700' },
         { id: 'GESCHENKEMANAGEMENT', title: 'Geschenkemanagement', permission: 'GESCHENKEMANAGEMENT', border: 'border-pink-600', text: 'text-pink-700' },
         { id: 'APPROVALS', title: 'Genehmigungsprozess', adminPermission: 'canSeeApprovals', border: 'border-green-500', text: 'text-green-700' }
     ];
@@ -1940,6 +1954,11 @@ export function navigate(targetViewName, options = {}) {
             return alertUser("Zugriff verweigert (Haushaltszahlungen).", 'error');
         }
 
+        // Zugriffsschutz für Abbuchungsberechner
+        if (targetViewName === 'abbuchungsberechner' && !userPermissions.includes('ABBUCHUNGSBERECHNER')) {
+            return alertUser("Zugriff verweigert (Abbuchungsberechner).", 'error');
+        }
+
         // Zugriffsschutz für Tools inkl. Unterseite
         if ((targetViewName === 'tools' || targetViewName === 'maKarte' || targetViewName === 'teraScanner') && !userPermissions.includes('TOOLS')) {
             return alertUser("Zugriff verweigert (Tools).", 'error');
@@ -2031,6 +2050,10 @@ export function navigate(targetViewName, options = {}) {
 
     if (targetViewName === 'haushaltszahlungen') {
         initializeHaushaltszahlungen();
+    }
+
+    if (targetViewName === 'abbuchungsberechner') {
+        initializeAbbuchungsberechner();
     }
 
     if (targetViewName === 'maKarte') {
@@ -2999,6 +3022,9 @@ export function setupEventListeners() {
 
     const haushaltszahlungenCard = document.getElementById('haushaltszahlungenCard');
     if (haushaltszahlungenCard) haushaltszahlungenCard.addEventListener('click', () => navigate('haushaltszahlungen'));
+
+    const abbuchungsberechnerCard = document.getElementById('abbuchungsberechnerCard');
+    if (abbuchungsberechnerCard) abbuchungsberechnerCard.addEventListener('click', () => navigate('abbuchungsberechner'));
 
     const geschenkemanagementCard = document.getElementById('geschenkemanagementCard');
     if (geschenkemanagementCard) geschenkemanagementCard.addEventListener('click', () => navigate('geschenkemanagement'));

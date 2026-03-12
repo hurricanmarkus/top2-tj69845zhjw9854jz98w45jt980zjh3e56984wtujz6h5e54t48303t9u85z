@@ -427,6 +427,52 @@ service cloud.firestore {
       allow delete: if isAuthenticated();
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // ABBUCHUNGSBERECHNER (Debit Calculator)
+    // ═══════════════════════════════════════════════════════════════
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/abbuchungsberechner_accounts/{docId} {
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update: if hasAppUserIdClaim()
+        && resource.data.createdBy == appUserId()
+        && request.resource.data.createdBy == appUserId();
+      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/abbuchungsberechner_cost_items/{docId} {
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update: if hasAppUserIdClaim()
+        && resource.data.createdBy == appUserId()
+        && request.resource.data.createdBy == appUserId();
+      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/abbuchungsberechner_transfer_plans/{docId} {
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update: if hasAppUserIdClaim()
+        && resource.data.createdBy == appUserId()
+        && request.resource.data.createdBy == appUserId();
+      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/abbuchungsberechner_reconciliation/{docId} {
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update: if hasAppUserIdClaim()
+        && resource.data.createdBy == appUserId()
+        && request.resource.data.createdBy == appUserId();
+      allow delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+    }
+
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/abbuchungsberechner_audit/{docId} {
+      allow read: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
+      allow create: if hasAppUserIdClaim() && request.resource.data.createdBy == appUserId();
+      allow update, delete: if false;
+    }
+
     // Einladungen für Notizen
     match /artifacts/20LVob88b3ovXRUyX3ra/public/data/notizen_einladungen/{einladungId} {
       allow read: if isAuthenticated();

@@ -138,7 +138,15 @@ export function setupPermissionDependencies(container) {
         ]
     );
 
-    // 8. NEU: Logik für NOTIZEN (Hauptansicht -> Anlegen)
+    // 8. NEU: Logik für ABBUCHUNGSBERECHNER (Hauptansicht -> Erstellen)
+    setupToggleLogic(
+        '[data-perm="ABBUCHUNGSBERECHNER"]',
+        [
+            '[data-perm="ABBUCHUNGSBERECHNER_CREATE"]'
+        ]
+    );
+
+    // 9. NEU: Logik für NOTIZEN (Hauptansicht -> Anlegen)
     setupToggleLogic(
         '[data-perm="NOTIZEN"]',
         [

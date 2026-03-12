@@ -312,6 +312,18 @@
                     </div>
                 </div>
 
+                <div id="abbuchungsberechnerCard" data-permission="ABBUCHUNGSBERECHNER"
+                    class="card bg-white p-4 rounded-xl shadow-lg flex items-center space-x-4 hover:shadow-xl transition duration-200 cursor-pointer w-full border-t-4 border-blue-600 hidden">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                        class="w-10 h-10 text-blue-600 flex-shrink-0">
+                        <path d="M3.75 5.25A2.25 2.25 0 0 1 6 3h12a2.25 2.25 0 0 1 2.25 2.25v2.25H3.75V5.25ZM3.75 9h16.5v9.75A2.25 2.25 0 0 1 18 21H6a2.25 2.25 0 0 1-2.25-2.25V9Zm4.5 3a.75.75 0 0 0 0 1.5h7.5a.75.75 0 0 0 0-1.5h-7.5Zm0 3a.75.75 0 0 0 0 1.5h4.5a.75.75 0 0 0 0-1.5h-4.5Z" />
+                    </svg>
+                    <div>
+                        <span class="text-xl font-bold text-blue-600 block">Abbuchungsberechner</span>
+                        <span class="text-sm text-gray-500">Konten, Forecasts & Abbuchungen im Blick.</span>
+                    </div>
+                </div>
+
                 <div id="geschenkemanagementCard" data-permission="GESCHENKEMANAGEMENT"
                     class="card bg-white p-4 rounded-xl shadow-lg flex items-center space-x-4 hover:shadow-xl transition duration-200 cursor-pointer w-full border-t-4 border-pink-600 hidden">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
@@ -3672,6 +3684,334 @@
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== ABBUCHUNGSBERECHNER VIEW ========== -->
+            <div id="abbuchungsberechnerView" class="view">
+                <div class="back-link-container w-full mb-3">
+                    <div class="flex justify-between items-center flex-wrap gap-2">
+                        <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition" data-target="home">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mr-1">
+                                <path d="m15 18-6-6 6-6" />
+                            </svg>
+                            <span class="text-base font-semibold">zurück</span>
+                        </button>
+                        <div class="flex gap-2 flex-wrap">
+                            <button id="ab-open-accounts-modal" class="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-bold text-sm">Konten</button>
+                            <button id="ab-open-transfers-modal" class="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-bold text-sm">Transfers</button>
+                            <button id="ab-open-recon-modal" class="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-bold text-sm">Abgleich</button>
+                            <button id="ab-open-suggestions-modal" class="px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 font-bold text-sm">Vorschläge</button>
+                            <button id="btn-create-abbuchung" class="py-2 px-4 bg-gradient-to-r from-blue-600 to-indigo-500 text-white font-bold rounded-lg hover:shadow-lg transition text-sm">Neu</button>
+                        </div>
+                    </div>
+                    <div class="border-t border-gray-300 mt-2"></div>
+                </div>
+
+                <div class="bg-gradient-to-r from-blue-600 to-indigo-500 text-white p-4 rounded-xl shadow-md mb-3">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-xl font-bold">Abbuchungsberechner</h2>
+                        <span id="ab-total-status" class="px-4 py-2 rounded-lg font-bold text-white bg-green-500">STABIL</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 text-center">
+                        <div class="bg-white/20 px-2 py-2 rounded-lg"><p id="ab-stat-accounts" class="text-lg font-bold">0</p><p class="text-[10px]">Konten</p></div>
+                        <div class="bg-green-500/30 px-2 py-2 rounded-lg"><p id="ab-stat-active" class="text-lg font-bold">0</p><p class="text-[10px]">Aktiv</p></div>
+                        <div class="bg-blue-500/30 px-2 py-2 rounded-lg"><p id="ab-stat-planned" class="text-lg font-bold">0</p><p class="text-[10px]">Geplant</p></div>
+                        <div class="bg-gray-500/30 px-2 py-2 rounded-lg"><p id="ab-stat-past" class="text-lg font-bold">0</p><p class="text-[10px]">Vergangen</p></div>
+                        <div class="bg-yellow-500/30 px-2 py-2 rounded-lg"><p id="ab-stat-errors" class="text-lg font-bold">0</p><p class="text-[10px]">Fehler</p></div>
+                        <div class="bg-amber-500/30 px-2 py-2 rounded-lg"><p id="ab-stat-warnings" class="text-lg font-bold">0</p><p class="text-[10px]">Warnung</p></div>
+                        <div class="bg-red-500/30 px-2 py-2 rounded-lg"><p id="ab-stat-alarms" class="text-lg font-bold">0</p><p class="text-[10px]">Alarm</p></div>
+                    </div>
+                </div>
+
+                <div id="ab-skipped-months" class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-3 rounded-lg mb-3 text-sm font-bold"></div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-3 mb-3">
+                    <div class="bg-white rounded-lg shadow p-3">
+                        <h3 class="text-sm font-bold text-gray-700 mb-2">Konten-Übersicht</h3>
+                        <div id="ab-account-overview" class="space-y-2">
+                            <p class="text-sm text-gray-400 italic">Noch keine Konten/Quellen.</p>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-3 xl:col-span-2">
+                        <h3 class="text-sm font-bold text-gray-700 mb-2">12-Monats-Forecast</h3>
+                        <div id="ab-forecast-overview" class="text-sm text-gray-400 italic">Keine Forecast-Daten.</div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-3 mb-3">
+                    <h3 class="text-sm font-bold text-gray-700 mb-2">Ausgleichsvorschläge</h3>
+                    <div id="ab-suggestion-preview" class="space-y-2">
+                        <p class="text-sm text-gray-400 italic">Plan aktuell stabil.</p>
+                    </div>
+                </div>
+
+                <div class="flex justify-center mb-2">
+                    <button id="ab-toggle-filter-controls" class="text-gray-500 hover:text-blue-700 transition flex items-center gap-1 text-xs font-bold py-1 px-4 rounded-full hover:bg-blue-50">
+                        <span>Filter & Kategorien</span>
+                        <svg id="ab-toggle-filter-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 transform transition-transform">
+                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div id="ab-filter-controls-wrapper" class="hidden mb-3 space-y-3">
+                    <div class="bg-white rounded-lg shadow p-3 space-y-3">
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <label class="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-lg cursor-pointer">
+                                <input type="checkbox" id="ab-filter-negate" class="w-4 h-4">
+                                <span class="font-bold text-red-600 text-sm">NICHT</span>
+                            </label>
+                            <select id="ab-search-join-mode" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold">
+                                <option value="and">AND</option>
+                                <option value="or">OR</option>
+                            </select>
+                            <input type="text" id="ab-search-input" placeholder="Suchen..." class="flex-1 min-w-[200px] p-2 border-2 border-gray-300 rounded-lg text-sm">
+                            <button id="ab-add-filter-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold transition text-sm">+ Filter</button>
+                            <button id="ab-reset-filters" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold transition text-sm">Reset</button>
+                        </div>
+                        <div id="ab-active-search-tags" class="flex flex-wrap gap-1"></div>
+                        <div class="flex flex-wrap gap-2">
+                            <select id="ab-filter-status" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                                <option value="">Alle Status</option>
+                                <option value="aktiv">Aktiv</option>
+                                <option value="geplant">Geplant</option>
+                                <option value="vergangen">Vergangen</option>
+                                <option value="fehler">Fehler</option>
+                            </select>
+                            <select id="ab-filter-typ" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                                <option value="">Alle Typen</option>
+                                <option value="belastung">Belastung</option>
+                                <option value="gutschrift">Gutschrift</option>
+                            </select>
+                            <select id="ab-filter-interval" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm">
+                                <option value="">Alle Intervalle</option>
+                                <option value="monthly">Monatlich</option>
+                                <option value="quarterly">Quartal</option>
+                                <option value="semiannual">Halbjahr</option>
+                                <option value="annual">Jährlich</option>
+                                <option value="custom">Individuell</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full">
+                            <thead class="bg-blue-50 border-b-2 border-blue-200">
+                                <tr>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Status</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Titel</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Konto</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Typ</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Intervall</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Betrag</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Beiträge</th>
+                                    <th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Gültigkeit</th>
+                                    <th class="px-3 py-3 text-center text-xs font-bold text-blue-800 uppercase">Aktionen</th>
+                                </tr>
+                            </thead>
+                            <tbody id="abbuchungsberechner-table-body" class="divide-y divide-gray-200">
+                                <tr>
+                                    <td colspan="9" class="px-4 py-8 text-center text-gray-400 italic">Keine Einträge vorhanden.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== ABBUCHUNGSBERECHNER ITEM MODAL ========== -->
+            <div id="abbuchungsberechnerItemModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <div class="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                        <h3 class="text-xl font-bold">Eintrag</h3>
+                        <button id="ab-close-item-modal" class="text-white/80 hover:text-white transition">✕</button>
+                    </div>
+                    <div class="p-4 space-y-4">
+                        <input type="hidden" id="ab-item-id">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Titel *</label><input id="ab-item-title" type="text" class="w-full p-2 border rounded-lg"></div>
+                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Konto *</label><select id="ab-item-account" class="w-full p-2 border rounded-lg"></select></div>
+                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Typ *</label><select id="ab-item-type" class="w-full p-2 border rounded-lg"><option value="belastung">Belastung</option><option value="gutschrift">Gutschrift</option></select></div>
+                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Betrag *</label><input id="ab-item-amount" type="text" class="w-full p-2 border rounded-lg"></div>
+                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Intervall</label><select id="ab-item-interval" class="w-full p-2 border rounded-lg"><option value="monthly">Monatlich</option><option value="quarterly">Quartal</option><option value="semiannual">Halbjahr</option><option value="annual">Jährlich</option><option value="custom">Individuell</option></select></div>
+                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Start-Monat</label><input id="ab-item-start-month" type="number" min="1" max="12" class="w-full p-2 border rounded-lg"></div>
+                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Individuelle Monate</label><input id="ab-item-custom-months" type="text" placeholder="1,3,8" class="w-full p-2 border rounded-lg"></div>
+                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Tag im Monat</label><input id="ab-item-day" type="number" min="1" max="31" class="w-full p-2 border rounded-lg"></div>
+                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Gültig ab *</label><input id="ab-item-valid-from" type="date" class="w-full p-2 border rounded-lg"></div>
+                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Gültig bis</label><input id="ab-item-valid-to" type="date" class="w-full p-2 border rounded-lg"></div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Notizen</label>
+                            <textarea id="ab-item-notes" rows="2" class="w-full p-2 border rounded-lg"></textarea>
+                        </div>
+                        <div class="bg-gray-50 p-3 rounded-lg border">
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="block text-sm font-bold text-gray-700">Beiträge / Gegenkonten</label>
+                                <button id="ab-add-contrib-btn" type="button" class="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm">+ Beitrag</button>
+                            </div>
+                            <div id="ab-contrib-list" class="space-y-2"></div>
+                        </div>
+                    </div>
+                    <div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-between gap-2 flex-wrap">
+                        <div class="flex gap-2">
+                            <button id="ab-item-edit-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300" style="display:none;">Bearbeiten</button>
+                            <button id="ab-item-delete-btn" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200" style="display:none;">Löschen</button>
+                            <button id="ab-item-abtausch-btn" class="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200" style="display:none;">Abtausch</button>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="ab-cancel-item-btn" class="px-5 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400">Abbrechen</button>
+                            <button id="ab-item-save-btn" class="px-5 py-2 bg-gradient-to-r from-blue-600 to-indigo-500 text-white font-bold rounded-lg">Speichern</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== ABBUCHUNGSBERECHNER ABTAUSCH MODAL ========== -->
+            <div id="ab-abtausch-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+                    <div class="bg-gradient-to-r from-purple-600 to-indigo-500 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                        <h3 class="text-xl font-bold">Abtausch</h3>
+                        <button id="ab-close-abtausch-modal" class="text-white/80 hover:text-white transition">✕</button>
+                    </div>
+                    <div class="p-4 space-y-3">
+                        <p id="ab-abtausch-old-info" class="text-sm text-gray-600 bg-gray-50 border rounded p-2">-</p>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Neues Startdatum *</label>
+                            <input id="ab-abtausch-new-start" type="date" class="w-full p-2 border rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Neuer Betrag *</label>
+                            <input id="ab-abtausch-new-amount" type="text" class="w-full p-2 border rounded-lg">
+                        </div>
+                    </div>
+                    <div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-2">
+                        <button id="ab-cancel-abtausch-btn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg">Abbrechen</button>
+                        <button id="ab-save-abtausch-btn" class="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-500 text-white rounded-lg">Übernehmen</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== ABBUCHUNGSBERECHNER KONTEN MODAL ========== -->
+            <div id="ab-accounts-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+                    <div class="sticky top-0 bg-gradient-to-r from-slate-700 to-slate-600 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                        <h3 class="text-xl font-bold">Konten / Quellen</h3>
+                        <button id="ab-close-accounts-modal" class="text-white/80 hover:text-white transition">✕</button>
+                    </div>
+                    <div class="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div class="space-y-3">
+                            <input type="hidden" id="ab-account-id">
+                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Name *</label><input id="ab-account-name" type="text" class="w-full p-2 border rounded-lg"></div>
+                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Bank</label><input id="ab-account-bank" type="text" class="w-full p-2 border rounded-lg"></div>
+                            <div><label class="block text-sm font-bold text-gray-700 mb-1">IBAN</label><input id="ab-account-iban" type="text" class="w-full p-2 border rounded-lg"></div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Typ</label><select id="ab-account-type" class="w-full p-2 border rounded-lg"><option value="bank">Bank</option><option value="person">Person</option></select></div>
+                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Rolle</label><select id="ab-account-role" class="w-full p-2 border rounded-lg"><option value="both">Quelle & Ziel</option><option value="source">Nur Quelle</option><option value="target">Nur Ziel</option></select></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Mindestpuffer</label><input id="ab-account-min-buffer" type="text" class="w-full p-2 border rounded-lg"></div>
+                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Startsaldo</label><input id="ab-account-start-balance" type="text" class="w-full p-2 border rounded-lg"></div>
+                            </div>
+                            <div class="flex gap-2">
+                                <button id="ab-reset-account-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg">Reset</button>
+                                <button id="ab-save-account-btn" class="px-4 py-2 bg-slate-700 text-white rounded-lg">Speichern</button>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-gray-700 mb-2">Bestehende Konten</h4>
+                            <div id="ab-accounts-list" class="space-y-2">
+                                <p class="text-sm text-gray-400 italic">Noch keine Konten/Quellen.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== ABBUCHUNGSBERECHNER TRANSFERS MODAL ========== -->
+            <div id="ab-transfers-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+                    <div class="sticky top-0 bg-gradient-to-r from-blue-700 to-indigo-700 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                        <h3 class="text-xl font-bold">Transferpläne</h3>
+                        <button id="ab-close-transfers-modal" class="text-white/80 hover:text-white transition">✕</button>
+                    </div>
+                    <div class="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div class="space-y-3">
+                            <input type="hidden" id="ab-transfer-id">
+                            <div class="grid grid-cols-2 gap-2">
+                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Quelle *</label><select id="ab-transfer-source" class="w-full p-2 border rounded-lg"></select></div>
+                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Ziel *</label><select id="ab-transfer-target" class="w-full p-2 border rounded-lg"></select></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Betrag *</label><input id="ab-transfer-amount" type="text" class="w-full p-2 border rounded-lg"></div>
+                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Intervall</label><select id="ab-transfer-interval" class="w-full p-2 border rounded-lg"><option value="monthly">Monatlich</option><option value="quarterly">Quartal</option><option value="semiannual">Halbjahr</option><option value="annual">Jährlich</option><option value="custom">Individuell</option></select></div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Start-Monat</label><input id="ab-transfer-start-month" type="number" min="1" max="12" class="w-full p-2 border rounded-lg"></div>
+                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Monate</label><input id="ab-transfer-custom-months" type="text" placeholder="1,3,8" class="w-full p-2 border rounded-lg"></div>
+                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Tag</label><input id="ab-transfer-day" type="number" min="1" max="31" class="w-full p-2 border rounded-lg"></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Gültig ab *</label><input id="ab-transfer-valid-from" type="date" class="w-full p-2 border rounded-lg"></div>
+                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Gültig bis</label><input id="ab-transfer-valid-to" type="date" class="w-full p-2 border rounded-lg"></div>
+                            </div>
+                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Notiz</label><input id="ab-transfer-note" type="text" class="w-full p-2 border rounded-lg"></div>
+                            <div class="flex gap-2">
+                                <button id="ab-reset-transfer-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg">Reset</button>
+                                <button id="ab-save-transfer-btn" class="px-4 py-2 bg-indigo-700 text-white rounded-lg">Speichern</button>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-gray-700 mb-2">Bestehende Transfers</h4>
+                            <div id="ab-transfers-list" class="space-y-2">
+                                <p class="text-sm text-gray-400 italic">Noch keine Daueraufträge.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== ABBUCHUNGSBERECHNER ABGLEICH MODAL ========== -->
+            <div id="ab-reconciliation-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <div class="sticky top-0 bg-gradient-to-r from-emerald-700 to-teal-700 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                        <h3 class="text-xl font-bold">Monatsabgleich</h3>
+                        <button id="ab-close-recon-modal" class="text-white/80 hover:text-white transition">✕</button>
+                    </div>
+                    <div class="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div class="space-y-3">
+                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Konto *</label><select id="ab-recon-account" class="w-full p-2 border rounded-lg"></select></div>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Typ</label><select id="ab-recon-type" class="w-full p-2 border rounded-lg"><option value="snapshot">Snapshot</option><option value="manual">Manuell</option></select></div>
+                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Datum *</label><input id="ab-recon-date" type="date" class="w-full p-2 border rounded-lg"></div>
+                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Wert *</label><input id="ab-recon-value" type="text" class="w-full p-2 border rounded-lg"></div>
+                            </div>
+                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Notiz</label><input id="ab-recon-note" type="text" class="w-full p-2 border rounded-lg"></div>
+                            <button id="ab-save-recon-btn" class="px-4 py-2 bg-emerald-700 text-white rounded-lg">Speichern</button>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-gray-700 mb-2">Letzte Abgleiche</h4>
+                            <div id="ab-recon-list" class="space-y-2">
+                                <p class="text-sm text-gray-400 italic">Noch keine Abgleiche.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== ABBUCHUNGSBERECHNER VORSCHLÄGE MODAL ========== -->
+            <div id="ab-suggestions-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <div class="sticky top-0 bg-gradient-to-r from-indigo-700 to-blue-700 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                        <h3 class="text-xl font-bold">Ausgleichsvorschläge</h3>
+                        <button id="ab-close-suggestions-modal" class="text-white/80 hover:text-white transition">✕</button>
+                    </div>
+                    <div id="ab-suggestions-content" class="p-4 space-y-3">
+                        <p class="text-sm text-gray-400 italic">Keine Vorschläge nötig.</p>
                     </div>
                 </div>
             </div>
