@@ -60,26 +60,56 @@ function compareNumber(actual, op, expected) { const a = roundMoney(actual); con
 function helpButton(targetId) { return `<button type="button" class="ab2-help-btn inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold hover:bg-blue-200" data-help-target="${targetId}" title="Info">i</button>`; }
 function helpContent(id, text) { return `<div id="${id}" class="ab2-help-content hidden mt-1 text-[11px] sm:text-xs leading-relaxed text-blue-900 bg-blue-50 border border-blue-200 rounded-lg p-2">${text}</div>`; }
 
+function ensureInlineStyles() {
+    if (document.getElementById('ab2-inline-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'ab2-inline-styles';
+    style.textContent = `
+        #abbuchungsberechner-root .ab2-shell {
+            overflow-x: hidden;
+        }
+        #abbuchungsberechner-root .ab2-shell * {
+            max-width: 100%;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+        @media (max-width: 640px) {
+            #abbuchungsberechner-root .ab2-shell {
+                font-size: 12px;
+            }
+            #abbuchungsberechner-root .ab2-shell .ab2-compact-btn {
+                font-size: 0.72rem;
+                line-height: 1rem;
+                padding: 0.4rem 0.55rem;
+            }
+            #abbuchungsberechner-root .ab2-shell .ab2-compact-card {
+                padding: 0.65rem;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
 function buildShell() {
     return `
-    <div class="space-y-4">
+    <div class="ab2-shell space-y-3 sm:space-y-4 text-[13px] sm:text-sm">
         <div class="back-link-container w-full mb-1">
             <div class="flex justify-between items-center flex-wrap gap-2">
-                <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition" data-target="home"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mr-1"><path d="m15 18-6-6 6-6"></path></svg><span class="text-base font-semibold">zurück</span></button>
+                <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition" data-target="home"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 sm:w-6 sm:h-6 mr-1"><path d="m15 18-6-6 6-6"></path></svg><span class="text-sm sm:text-base font-semibold">zurück</span></button>
                 <div class="flex gap-2 flex-wrap">
-                    <button id="ab2-open-accounts-modal" class="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-bold text-sm">Konten</button>
-                    <button id="ab2-open-transfers-modal" class="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-bold text-sm">Transfers</button>
-                    <button id="ab2-open-recon-modal" class="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-bold text-sm">Abgleich</button>
-                    <button id="ab2-open-suggestions-modal" class="px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 font-bold text-sm">Vorschläge</button>
-                    <button id="ab2-btn-create" class="py-2 px-4 bg-gradient-to-r from-blue-600 to-indigo-500 text-white font-bold rounded-lg hover:shadow-lg transition text-sm">Neu</button>
+                    <button id="ab2-open-accounts-modal" class="ab2-compact-btn px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-bold text-xs sm:text-sm">Konten</button>
+                    <button id="ab2-open-transfers-modal" class="ab2-compact-btn px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-bold text-xs sm:text-sm">Transfers</button>
+                    <button id="ab2-open-recon-modal" class="ab2-compact-btn px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-bold text-xs sm:text-sm">Abgleich</button>
+                    <button id="ab2-open-suggestions-modal" class="ab2-compact-btn px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 font-bold text-xs sm:text-sm">Vorschläge</button>
+                    <button id="ab2-btn-create" class="ab2-compact-btn py-2 px-4 bg-gradient-to-r from-blue-600 to-indigo-500 text-white font-bold rounded-lg hover:shadow-lg transition text-xs sm:text-sm">Neu</button>
                 </div>
             </div>
             <div class="border-t border-gray-300 mt-2"></div>
         </div>
-        <div class="bg-gradient-to-r from-blue-700 via-indigo-600 to-sky-600 text-white p-4 rounded-2xl shadow-md">
+        <div class="ab2-compact-card bg-gradient-to-r from-blue-700 via-indigo-600 to-sky-600 text-white p-3 sm:p-4 rounded-2xl shadow-md">
             <div class="flex items-start justify-between gap-3 flex-wrap">
-                <div><div class="flex items-center gap-2 flex-wrap"><h2 class="text-2xl font-bold">Abbuchungsberechner</h2></div><p class="text-sm text-white/90 mt-1 max-w-3xl">Mehr Erklärung, bessere Vorschläge, stärkere Kontrolle über Datenqualität und Forecast.</p></div>
-                <span id="ab2-total-status" class="px-4 py-2 rounded-lg font-bold text-white bg-green-500">STABIL</span>
+                <div><div class="flex items-center gap-2 flex-wrap"><h2 class="text-xl sm:text-2xl font-bold">Abbuchungsberechner</h2></div><p class="text-xs sm:text-sm text-white/90 mt-1 max-w-3xl">Mehr Erklärung, bessere Vorschläge, stärkere Kontrolle über Datenqualität und Forecast.</p></div>
+                <span id="ab2-total-status" class="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-bold text-xs sm:text-sm text-white bg-green-500">STABIL</span>
             </div>
             <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 text-center mt-4">
                 <button type="button" id="ab2-stat-card-accounts" data-stat="accounts" class="bg-white/20 px-2 py-2 rounded-lg transition cursor-pointer"><p id="ab2-stat-accounts" class="text-lg font-bold">0</p><p class="text-[10px]">Konten</p></button>
@@ -131,8 +161,16 @@ function ensureTransferLinkingFields() {
     const block = document.createElement('div');
     block.id = 'ab2-transfer-linking-block';
     block.className = 'rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 space-y-2';
-    block.innerHTML = `<div class="text-sm font-bold text-indigo-900 flex items-center gap-2">Zahlungsgrund-Zuordnung (optional) ${helpButton('ab2-help-transfer-linking')}</div>${helpContent('ab2-help-transfer-linking', 'Wähle hier den Zahlungsgrund direkt aus deinen Eintrags-Titeln (ein oder mehrere). Diese Zuordnung steuert die Ungleichgewichts-Analyse (z. B. YouTube-Preis steigt, Beiträge bleiben zu niedrig).')}<div><label class="block text-xs font-bold text-indigo-800 mb-1">Zahlungsgrund (Titel)</label><select id="ab2-transfer-linked-titles" multiple size="5" class="w-full p-2 border rounded-lg bg-white"></select></div><div class="text-[11px] text-indigo-800">Mehrfachauswahl: Strg/Cmd gedrückt halten (Desktop) oder mehrere Einträge antippen (Smartphone).</div>`;
+    block.innerHTML = `<div class="text-sm font-bold text-indigo-900 flex items-center gap-2">Zahlungsgrund-Zuordnung (optional) ${helpButton('ab2-help-transfer-linking')}</div>${helpContent('ab2-help-transfer-linking', 'Wähle hier den Zahlungsgrund direkt aus deinen Eintrags-Titeln (ein oder mehrere). Diese Zuordnung steuert die Ungleichgewichts-Analyse (z. B. YouTube-Preis steigt, Beiträge bleiben zu niedrig).')}<div><label class="block text-xs font-bold text-indigo-800 mb-1">Zahlungsgrund (Titel)</label><details id="ab2-transfer-linked-titles-dropdown" class="group relative"><summary class="list-none cursor-pointer w-full p-2 border rounded-lg bg-white text-sm text-gray-700 flex items-center justify-between gap-2"><span id="ab2-transfer-linked-titles-summary">Keine Titel ausgewählt</span><span class="text-[10px] text-gray-500">▼</span></summary><div id="ab2-transfer-linked-titles-list" class="mt-2 max-h-44 overflow-y-auto rounded-lg border border-indigo-200 bg-white p-2 space-y-1"></div></details></div><div class="text-[11px] text-indigo-800">Mehrfachauswahl: mehrere Kästchen direkt anhaken.</div>`;
     noteWrap.parentElement.insertBefore(block, noteWrap.nextSibling);
+    const linkedTitleList = el('ab2-transfer-linked-titles-list');
+    if (linkedTitleList && !linkedTitleList.dataset.listenerAttached) {
+        linkedTitleList.addEventListener('change', () => {
+            updateTransferLinkedTitlesSummary();
+            renderPreviews();
+        });
+        linkedTitleList.dataset.listenerAttached = 'true';
+    }
     populateTransferLinkingOptions();
 }
 
@@ -142,7 +180,26 @@ function transferLinkedTitleLabel(value) {
     return ITEMS[key]?.title || key;
 }
 
+function getTransferLinkedTitleValues() {
+    const host = el('ab2-transfer-linked-titles-list');
+    if (!host) return [];
+    return Array.from(host.querySelectorAll('input[type="checkbox"][data-transfer-linked-title]:checked'))
+        .map((node) => String(node.value || '').trim())
+        .filter(Boolean)
+        .filter((value, index, all) => all.findIndex((entry) => entry.toLowerCase() === value.toLowerCase()) === index);
+}
+
+function updateTransferLinkedTitlesSummary() {
+    const summary = el('ab2-transfer-linked-titles-summary');
+    if (!summary) return;
+    const selected = getTransferLinkedTitleValues().map((value) => transferLinkedTitleLabel(value));
+    summary.textContent = selected.length ? selected.join(', ') : 'Keine Titel ausgewählt';
+}
+
 function getListFieldValues(fieldId) {
+    if (fieldId === 'ab2-transfer-linked-titles') {
+        return getTransferLinkedTitleValues();
+    }
     const node = el(fieldId);
     if (!node) return [];
     if (node.tagName === 'SELECT' && node.multiple) {
@@ -154,8 +211,9 @@ function getListFieldValues(fieldId) {
     return parseCsvList(node.value || '');
 }
 
-function setMultiSelectOptions(select, options, selectedValues = []) {
-    if (!select) return;
+function setTransferLinkedTitleDropdownOptions(options, selectedValues = []) {
+    const host = el('ab2-transfer-linked-titles-list');
+    if (!host) return;
     const selected = (Array.isArray(selectedValues) ? selectedValues : [])
         .map((value) => String(value || '').trim())
         .filter(Boolean)
@@ -167,21 +225,23 @@ function setMultiSelectOptions(select, options, selectedValues = []) {
             merged.push({ value, label: value });
         }
     });
-    select.innerHTML = merged.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`).join('');
-    Array.from(select.options).forEach((opt) => { opt.selected = selectedSet.has(String(opt.value || '').trim().toLowerCase()); });
+    host.innerHTML = merged.length
+        ? merged.map((opt) => {
+            const value = String(opt.value || '').trim();
+            const checked = selectedSet.has(value.toLowerCase()) ? 'checked' : '';
+            return `<label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-indigo-50 cursor-pointer"><input type="checkbox" data-transfer-linked-title="1" value="${escapeHtml(value)}" ${checked} class="h-4 w-4"><span class="text-xs text-gray-700">${escapeHtml(opt.label || '-')}</span></label>`;
+        }).join('')
+        : '<div class="text-xs text-gray-500 px-1 py-1">Keine Einträge verfügbar.</div>';
+    updateTransferLinkedTitlesSummary();
 }
 
 function populateTransferLinkingOptions(preselectedTitles = null) {
-    const titleSelect = el('ab2-transfer-linked-titles');
-    const selectedTitles = Array.isArray(preselectedTitles) ? preselectedTitles : getListFieldValues('ab2-transfer-linked-titles');
-
-    if (titleSelect) {
-        const titleOptions = Object.values(ITEMS)
-            .filter((item) => item?.id && String(item.title || '').trim())
-            .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')))
-            .map((item) => ({ value: item.id, label: item.title || '-' }));
-        setMultiSelectOptions(titleSelect, titleOptions, selectedTitles);
-    }
+    const selectedTitles = Array.isArray(preselectedTitles) ? preselectedTitles : getTransferLinkedTitleValues();
+    const titleOptions = Object.values(ITEMS)
+        .filter((item) => item?.id && String(item.title || '').trim())
+        .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')))
+        .map((item) => ({ value: item.id, label: item.title || '-' }));
+    setTransferLinkedTitleDropdownOptions(titleOptions, selectedTitles);
 }
 
 function ensureContributionInfoHint() {
@@ -212,6 +272,7 @@ function enhanceStaticHelpTexts() {
 function ensureShell() {
     const root = el('abbuchungsberechner-root');
     if (!root) return;
+    ensureInlineStyles();
     if (!shellMounted) {
         root.innerHTML = buildShell();
         shellMounted = true;
@@ -688,12 +749,13 @@ function sortItems(list) {
 function populateSelects() {
     const accounts = Object.values(ACCOUNTS).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
     const accountOptions = [{ value: '', label: 'Bitte wählen...' }, ...accounts.map((account) => ({ value: account.id, label: `${account.name || '-'}${account.bank ? ` · ${account.bank}` : ''}` }))];
+    const reconAccountOptions = [{ value: '', label: 'Bitte wählen...' }, ...accounts.filter((account) => !isPersonAccount(account)).map((account) => ({ value: account.id, label: `${account.name || '-'}${account.bank ? ` · ${account.bank}` : ''}` }))];
     const sourceOptions = [{ value: '', label: 'Bitte wählen...' }, ...accounts.filter(canBeSourceAccount).map((account) => ({ value: account.id, label: `${account.name || '-'}${isPersonAccount(account) ? ' · Person' : ''}` }))];
     const targetOptions = [{ value: '', label: 'Bitte wählen...' }, ...accounts.filter(canBeTargetAccount).map((account) => ({ value: account.id, label: `${account.name || '-'}${isPersonAccount(account) ? ' · Person' : ''}` }))];
     setSelectOptions(el('ab2-item-account'), accountOptions);
     setSelectOptions(el('ab2-transfer-source'), sourceOptions);
     setSelectOptions(el('ab2-transfer-target'), targetOptions);
-    setSelectOptions(el('ab2-recon-account'), accountOptions);
+    setSelectOptions(el('ab2-recon-account'), reconAccountOptions);
     document.querySelectorAll('.ab2-contrib-source').forEach((select) => setSelectOptions(select, sourceOptions, select.value || ''));
     populateTransferLinkingOptions();
 }
@@ -744,7 +806,18 @@ function renderDashboard() {
     const forecast = el('ab2-forecast-overview');
     if (forecast) {
         const monitored = Object.values(ACCOUNTS).filter((account) => canBeTargetAccount(account) && !isPersonAccount(account));
-        forecast.innerHTML = monitored.length && FORECAST.timeline.length ? `<div class="overflow-x-auto"><table class="min-w-full text-xs"><thead><tr><th class="p-2 text-left text-gray-500">Monat</th>${monitored.map((account) => `<th class="p-2 text-left text-gray-500">${escapeHtml(account.name || '-')}</th>`).join('')}</tr></thead><tbody>${FORECAST.timeline.map((bucket) => `<tr class="border-t"><td class="p-2 font-bold text-gray-700">${escapeHtml(bucket.label)}</td>${monitored.map((account) => { const row = bucket.accounts[account.id] || {}; return `<td class="p-2"><button type="button" class="w-full text-left rounded-lg border px-2 py-2 ${forecastCss(row.severity)}" data-forecast-account="${account.id}" data-forecast-month="${bucket.key}"><div class="font-bold">${formatCurrency(row.end)}</div><div class="text-[10px]">Δ ${formatSignedCurrency(row.delta)}</div></button></td>`; }).join('')}</tr>`).join('')}</tbody></table></div>` : '<p class="text-sm text-gray-400 italic">Keine Forecast-Daten.</p>';
+        if (!monitored.length || !FORECAST.timeline.length) {
+            forecast.innerHTML = '<p class="text-sm text-gray-400 italic">Keine Forecast-Daten.</p>';
+        } else {
+            const monthlyBoxes = FORECAST.timeline.map((bucket) => {
+                const total = roundMoney(monitored.reduce((sum, account) => sum + toNum(bucket.accounts[account.id]?.end, 0), 0));
+                const hasAlarm = FORECAST.alerts.some((alert) => alert.monthKey === bucket.key && alert.severity === 'alarm');
+                const hasWarn = !hasAlarm && FORECAST.alerts.some((alert) => alert.monthKey === bucket.key && alert.severity === 'warn');
+                const tone = hasAlarm ? 'border-red-200 bg-red-50 text-red-700' : (hasWarn ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700');
+                return `<button type="button" class="w-full rounded-lg border ${tone} px-2 py-2 text-left" data-forecast-month="${bucket.key}"><div class="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-gray-600">${escapeHtml(bucket.label)}</div><div class="mt-1 text-sm sm:text-base font-bold">${formatCurrency(total)}</div></button>`;
+            });
+            forecast.innerHTML = `<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">${monthlyBoxes.join('')}</div>`;
+        }
     }
     const glossary = el('ab2-glossary');
     if (glossary && !glossary.innerHTML.trim()) glossary.innerHTML = `<div class="rounded-lg border border-blue-100 bg-blue-50 p-3"><div class="font-bold text-blue-900">Snapshot</div><div class="mt-1 text-blue-800">Ein echter Kontostand zu einem Datum. Er überschreibt den reinen Rechenwert für diesen Monat.</div></div><div class="rounded-lg border border-blue-100 bg-blue-50 p-3"><div class="font-bold text-blue-900">Mindestpuffer</div><div class="mt-1 text-blue-800">Betrag, der auf einem Bankkonto mindestens übrig bleiben soll.</div></div><div class="rounded-lg border border-blue-100 bg-blue-50 p-3"><div class="font-bold text-blue-900">Manuell</div><div class="mt-1 text-blue-800">Einmalige Korrektur für Zu- oder Abgang in genau einem Monat.</div></div><div class="rounded-lg border border-blue-100 bg-blue-50 p-3"><div class="font-bold text-blue-900">Beitrag</div><div class="mt-1 text-blue-800">Ein anderes Konto oder eine Person übernimmt einen Teil der Belastung.</div></div>`;
@@ -764,7 +837,7 @@ function renderTable() {
         const next = nextExecutionDate(item);
         const yearly = roundMoney(yearlyHitCount(item) * toNum(item.amount, 0));
         const effect = itemNetEffect(item);
-        return `<tr class="${itemHasAlert(item) ? 'bg-red-50/40' : ''}"><td class="px-3 py-3"><span class="px-2 py-1 rounded-full text-xs font-bold ${status.css}">${status.label}</span></td><td class="px-3 py-3"><div class="font-bold text-gray-800">${escapeHtml(item.title || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(item.notes || '')}</div>${contributionTotal(item) > 0 ? `<div class="mt-1 text-[10px] font-bold text-indigo-700">Beiträge: ${formatCurrency(contributionTotal(item))}</div>` : ''}</td><td class="px-3 py-3 text-sm text-gray-700">${escapeHtml(account.name || '-')}</td><td class="px-3 py-3 text-sm text-gray-700">${escapeHtml(item.typ || '-')}</td><td class="px-3 py-3 text-sm text-gray-700">${escapeHtml(intervalLabel(item.intervalType, item.customMonths || []))}</td><td class="px-3 py-3 text-sm font-bold text-gray-800">${formatCurrency(item.amount)}</td><td class="px-3 py-3 text-sm text-gray-700">${next ? formatDate(next) : '-'}</td><td class="px-3 py-3 text-sm text-gray-700">${formatCurrency(yearly)}</td><td class="px-3 py-3 text-sm font-bold ${effect < 0 ? 'text-red-700' : 'text-emerald-700'}">${formatSignedCurrency(effect)}</td><td class="px-3 py-3 text-sm text-gray-700">${formatDate(item.validFrom)}${item.validTo ? ` → ${formatDate(item.validTo)}` : ''}</td><td class="px-3 py-3 text-center"><div class="flex gap-1 justify-center"><button type="button" class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs" data-item-view="${item.id}">Ansehen</button><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-item-edit="${item.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-item-delete="${item.id}">Löschen</button></div></td></tr>`;
+        return `<tr class="${itemHasAlert(item) ? 'bg-red-50/40' : ''} hover:bg-blue-50/40 transition cursor-pointer" data-item-row="${item.id}"><td class="px-3 py-3"><span class="px-2 py-1 rounded-full text-xs font-bold ${status.css}">${status.label}</span></td><td class="px-3 py-3 max-w-[230px]"><div class="font-bold text-gray-800 break-words">${escapeHtml(item.title || '-')}</div><div class="text-xs text-gray-500 break-words">${escapeHtml(item.notes || '')}</div>${contributionTotal(item) > 0 ? `<div class="mt-1 text-[10px] font-bold text-indigo-700 break-words">Beiträge: ${formatCurrency(contributionTotal(item))}</div>` : ''}</td><td class="px-3 py-3 text-xs sm:text-sm text-gray-700">${escapeHtml(account.name || '-')}</td><td class="px-3 py-3 text-xs sm:text-sm text-gray-700">${escapeHtml(item.typ || '-')}</td><td class="px-3 py-3 text-xs sm:text-sm text-gray-700">${escapeHtml(intervalLabel(item.intervalType, item.customMonths || []))}</td><td class="px-3 py-3 text-xs sm:text-sm font-bold text-gray-800">${formatCurrency(item.amount)}</td><td class="px-3 py-3 text-xs sm:text-sm text-gray-700">${next ? formatDate(next) : '-'}</td><td class="px-3 py-3 text-xs sm:text-sm text-gray-700">${formatCurrency(yearly)}</td><td class="px-3 py-3 text-xs sm:text-sm font-bold ${effect < 0 ? 'text-red-700' : 'text-emerald-700'}">${formatSignedCurrency(effect)}</td><td class="px-3 py-3 text-xs sm:text-sm text-gray-700">${formatDate(item.validFrom)}${item.validTo ? ` → ${formatDate(item.validTo)}` : ''}</td><td class="px-3 py-3 text-center"><div class="flex gap-1 justify-center"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-item-edit="${item.id}">Bearbeiten</button></div></td></tr>`;
     }).join('');
 }
 function renderAccounts() {
@@ -862,6 +935,9 @@ function setItemReadOnly(readOnly) {
     if (el('ab2-add-contrib-btn')) el('ab2-add-contrib-btn').style.display = readOnly ? 'none' : 'inline-flex';
     if (el('ab2-item-save-btn')) el('ab2-item-save-btn').style.display = readOnly ? 'none' : 'inline-flex';
     if (el('ab2-item-edit-btn')) el('ab2-item-edit-btn').style.display = readOnly ? 'inline-flex' : 'none';
+    const editableExistingItem = !readOnly && Boolean(el('ab2-item-id')?.value);
+    if (el('ab2-item-delete-btn')) el('ab2-item-delete-btn').style.display = editableExistingItem ? 'inline-flex' : 'none';
+    if (el('ab2-item-abtausch-btn')) el('ab2-item-abtausch-btn').style.display = editableExistingItem ? 'inline-flex' : 'none';
 }
 function resetItemForm() {
     if (el('ab2-item-id')) el('ab2-item-id').value = '';
@@ -893,8 +969,8 @@ function fillItemForm(item, readOnly) {
     if (el('ab2-item-notes')) el('ab2-item-notes').value = item.notes || '';
     if (el('ab2-contrib-list')) el('ab2-contrib-list').innerHTML = '';
     (Array.isArray(item.contributions) ? item.contributions : []).forEach((row) => addContributionRow(row));
-    if (el('ab2-item-delete-btn')) el('ab2-item-delete-btn').style.display = item.id ? 'inline-flex' : 'none';
-    if (el('ab2-item-abtausch-btn')) el('ab2-item-abtausch-btn').style.display = item.id ? 'inline-flex' : 'none';
+    if (el('ab2-item-delete-btn')) el('ab2-item-delete-btn').style.display = item.id && !readOnly ? 'inline-flex' : 'none';
+    if (el('ab2-item-abtausch-btn')) el('ab2-item-abtausch-btn').style.display = item.id && !readOnly ? 'inline-flex' : 'none';
     updateMainIntervalFields('ab2-item');
     setItemReadOnly(!!readOnly);
     renderPreviews();
@@ -1035,7 +1111,8 @@ async function deleteItem(id) {
     const itemId = id || el('ab2-item-id')?.value || '';
     const before = ITEMS[itemId];
     if (!before) return;
-    if (!window.confirm(`Eintrag "${before.title || '-'}" wirklich löschen?`)) return;
+    const confirmation = window.prompt(`Zum Löschen von "${before.title || '-'}" bitte LÖSCHEN eingeben:`, '');
+    if (confirmation !== 'LÖSCHEN') return;
     try {
         await deleteDoc(doc(itemsRef, itemId));
         await writeAudit('delete', 'cost_item', itemId, cloneClean(before), null, { action: 'delete_item' });
@@ -1125,10 +1202,12 @@ async function deleteTransfer(id) {
 async function saveRecon() {
     if (!canCreate()) return alertUser('Keine Berechtigung.', 'error');
     const accountId = el('ab2-recon-account')?.value || '';
+    const account = ACCOUNTS[accountId] || null;
     const type = el('ab2-recon-type')?.value || 'snapshot';
     const date = el('ab2-recon-date')?.value || '';
     const value = toNum(el('ab2-recon-value')?.value, NaN);
     if (!accountId || !date || !Number.isFinite(value)) return alertUser('Bitte Konto, Datum und Wert ausfüllen.', 'error');
+    if (account && isPersonAccount(account)) return alertUser('Abgleich ist nur für Bankkonten möglich.', 'error');
     const existing = Object.values(RECON).find((entry) => entry.accountId === accountId && entry.type === type && entry.date === date) || null;
     const payload = { accountId, type, date, value: roundMoney(value), note: el('ab2-recon-note')?.value?.trim() || '', createdBy: existing?.createdBy || uid(), createdByName: existing?.createdByName || currentUser?.displayName || 'Unbekannt', updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() };
     try {
@@ -1247,12 +1326,47 @@ function openStatInsight(statKey) {
     }
     return openDetail('Info', html);
 }
-function openForecastInsight(accountId, month) {
-    const account = ACCOUNTS[accountId];
-    const detail = FORECAST.details[`${accountId}__${month}`];
-    if (!account || !detail) return;
-    const rows = (detail.entries || []).map((entry) => `<tr class="border-t"><td class="p-2 text-xs text-gray-600">${formatDate(entry.date)}</td><td class="p-2 text-sm text-gray-700">${escapeHtml(entry.label || '-')}</td><td class="p-2 text-sm font-bold ${toNum(entry.amount, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${entry.type === 'snapshot' ? formatCurrency(entry.amount) : formatSignedCurrency(entry.amount)}</td><td class="p-2 text-xs text-gray-500">${escapeHtml(entry.note || '')}</td></tr>`).join('');
-    openDetail(`${account.name || '-'} · ${monthLabel(month)}`, `<div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4"> <div class="rounded-lg bg-gray-50 p-3"><div class="text-xs text-gray-500">Start</div><div class="font-bold text-gray-800">${formatCurrency(detail.start)}</div></div><div class="rounded-lg bg-gray-50 p-3"><div class="text-xs text-gray-500">Zufluss</div><div class="font-bold text-emerald-700">${formatCurrency(detail.inflow)}</div></div><div class="rounded-lg bg-gray-50 p-3"><div class="text-xs text-gray-500">Abfluss</div><div class="font-bold text-red-700">${formatCurrency(detail.outflow)}</div></div><div class="rounded-lg bg-gray-50 p-3"><div class="text-xs text-gray-500">Differenz zu Puffer</div><div class="font-bold ${detail.delta < 0 ? 'text-red-700' : 'text-emerald-700'}">${formatSignedCurrency(detail.delta)}</div></div></div><div class="overflow-x-auto"><table class="min-w-full"><thead><tr><th class="p-2 text-left text-xs font-bold text-gray-500 uppercase">Datum</th><th class="p-2 text-left text-xs font-bold text-gray-500 uppercase">Wirkung</th><th class="p-2 text-left text-xs font-bold text-gray-500 uppercase">Betrag</th><th class="p-2 text-left text-xs font-bold text-gray-500 uppercase">Notiz</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="p-4 text-sm text-gray-400 italic">Keine Bewegungen in diesem Monat.</td></tr>'}</tbody></table></div>`);
+function reconContextForMonth(accountId, year, month) {
+    const monthStart = new Date(year, month - 1, 1);
+    const monthEnd = new Date(year, month, 0);
+    const rows = Object.values(RECON)
+        .filter((entry) => entry.accountId === accountId && entry.date)
+        .map((entry) => ({ ...entry, parsedDate: parseDate(entry.date) }))
+        .filter((entry) => entry.parsedDate)
+        .sort((a, b) => a.parsedDate - b.parsedDate);
+    const within = rows.filter((entry) => entry.parsedDate >= monthStart && entry.parsedDate <= monthEnd);
+    const before = [...rows].reverse().find((entry) => entry.parsedDate < monthStart) || null;
+    const after = rows.find((entry) => entry.parsedDate > monthEnd) || null;
+    return { before, within, after };
+}
+
+function reconContextLine(label, entry) {
+    if (!entry) return `<div class="text-xs text-gray-500">${label}: -</div>`;
+    const typeLabel = entry.type === 'snapshot' ? 'Snapshot' : 'Manuell';
+    const amountLabel = entry.type === 'snapshot' ? formatCurrency(entry.value) : formatSignedCurrency(entry.value);
+    return `<div class="text-xs text-gray-600">${label}: ${typeLabel} ${formatDate(entry.date)} · <span class="font-bold text-gray-800">${amountLabel}</span></div>`;
+}
+
+function openForecastInsight(month) {
+    const bucket = (FORECAST.timeline || []).find((entry) => entry.key === month) || null;
+    if (!bucket) return;
+    const [year, monthNum] = String(month || '').split('-').map(Number);
+    if (!year || !monthNum) return;
+    const monitored = Object.values(ACCOUNTS)
+        .filter((account) => canBeTargetAccount(account) && !isPersonAccount(account))
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+
+    const cards = monitored.map((account) => {
+        const detail = FORECAST.details[`${account.id}__${month}`] || { start: 0, inflow: 0, outflow: 0, end: 0, delta: 0, entries: [] };
+        const reconContext = reconContextForMonth(account.id, year, monthNum);
+        const movementRows = (detail.entries || []).map((entry) => `<tr class="border-t"><td class="p-2 text-xs text-gray-600">${formatDate(entry.date)}</td><td class="p-2 text-xs sm:text-sm text-gray-700">${escapeHtml(entry.label || '-')}</td><td class="p-2 text-xs sm:text-sm font-bold ${toNum(entry.amount, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${entry.type === 'snapshot' ? formatCurrency(entry.amount) : formatSignedCurrency(entry.amount)}</td><td class="p-2 text-xs text-gray-500">${escapeHtml(entry.note || '')}</td></tr>`).join('');
+        const inMonthRecon = reconContext.within.length
+            ? reconContext.within.map((entry) => reconContextLine('Im Zeitraum', entry)).join('')
+            : '<div class="text-xs text-gray-500">Im Zeitraum: keine Abgleiche</div>';
+        return `<div class="rounded-xl border border-gray-200 bg-gray-50 p-3"><div class="font-bold text-gray-800 text-sm sm:text-base">${escapeHtml(account.name || '-')}</div><div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2"><div class="rounded-lg bg-white p-2"><div class="text-[10px] text-gray-500">Kontostand vorher</div><div class="font-bold text-gray-800 text-xs sm:text-sm">${formatCurrency(detail.start)}</div></div><div class="rounded-lg bg-white p-2"><div class="text-[10px] text-gray-500">Kontostand nachher</div><div class="font-bold text-gray-800 text-xs sm:text-sm">${formatCurrency(detail.end)}</div></div><div class="rounded-lg bg-white p-2"><div class="text-[10px] text-gray-500">Zufluss / Abfluss</div><div class="font-bold text-xs sm:text-sm text-gray-800">${formatCurrency(detail.inflow)} / ${formatCurrency(detail.outflow)}</div></div><div class="rounded-lg bg-white p-2"><div class="text-[10px] text-gray-500">Differenz zu Puffer</div><div class="font-bold text-xs sm:text-sm ${detail.delta < 0 ? 'text-red-700' : 'text-emerald-700'}">${formatSignedCurrency(detail.delta)}</div></div></div><div class="mt-3 rounded-lg border border-indigo-100 bg-indigo-50 p-2 space-y-1">${reconContextLine('Vorher (nächster)', reconContext.before)}${inMonthRecon}${reconContextLine('Nachher (nächster)', reconContext.after)}</div><div class="mt-3 overflow-x-auto"><table class="min-w-full"><thead><tr><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Datum</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Wirkung</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Betrag</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Notiz</th></tr></thead><tbody>${movementRows || '<tr><td colspan="4" class="p-3 text-xs text-gray-400 italic">Keine Bewegungen in diesem Monat.</td></tr>'}</tbody></table></div></div>`;
+    }).join('');
+
+    openDetail(`Monatsübersicht ${bucket.label}`, cards || '<p class="text-sm text-gray-500">Keine Kontodaten vorhanden.</p>');
 }
 function resetFilters() {
     filterTokens = [];
@@ -1389,12 +1503,14 @@ function bindEvents() {
     const itemHost = el('ab2-table-body');
     if (itemHost && !itemHost.dataset.listenerAttached) {
         itemHost.addEventListener('click', (e) => {
-            const view = e.target.closest('[data-item-view]');
             const edit = e.target.closest('[data-item-edit]');
-            const del = e.target.closest('[data-item-delete]');
-            if (view) openItem(view.dataset.itemView, true);
-            if (edit) openItem(edit.dataset.itemEdit, false);
-            if (del) deleteItem(del.dataset.itemDelete);
+            if (edit) {
+                openItem(edit.dataset.itemEdit, false);
+                return;
+            }
+            if (e.target.closest('button')) return;
+            const row = e.target.closest('[data-item-row]');
+            if (row) openItem(row.dataset.itemRow, true);
         });
         itemHost.dataset.listenerAttached = 'true';
     }
@@ -1451,9 +1567,9 @@ function bindEvents() {
     const forecast = el('ab2-forecast-overview');
     if (forecast && !forecast.dataset.listenerAttached) {
         forecast.addEventListener('click', (e) => {
-            const btn = e.target.closest('[data-forecast-account]');
+            const btn = e.target.closest('[data-forecast-month]');
             if (!btn) return;
-            openForecastInsight(btn.dataset.forecastAccount, btn.dataset.forecastMonth);
+            openForecastInsight(btn.dataset.forecastMonth);
         });
         forecast.dataset.listenerAttached = 'true';
     }
