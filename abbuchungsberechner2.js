@@ -54,6 +54,7 @@ function normalizeAccountRole(accountOrRole) { const raw = typeof accountOrRole 
 function isPersonAccount(account) { return normalizeAccountType(account) === 'person'; }
 function canBeSourceAccount(account) { const role = normalizeAccountRole(account); return role === 'source' || role === 'both' || isPersonAccount(account); }
 function canBeTargetAccount(account) { const role = normalizeAccountRole(account); return role === 'target' || role === 'both'; }
+function isRelevantTargetAccount(account) { return !!account && canBeTargetAccount(account) && !isPersonAccount(account); }
 function intervalLabel(i, cm = []) { if (i === 'monthly') return 'Monatlich'; if (i === 'quarterly') return 'Quartal'; if (i === 'semiannual') return 'Halbjahr'; if (i === 'annual') return 'Jährlich'; if (i === 'custom') return cm.length ? `Individuell (${cm.map(m => MONTHS[m - 1]).join(', ')})` : 'Individuell'; return '-'; }
 function describeInterval(i, startMonth, customMonths, dayOfMonth) { const dayText = Number.isInteger(parseInt(dayOfMonth, 10)) ? ` am ${Math.min(Math.max(parseInt(dayOfMonth, 10), 1), 31)}. Tag` : ''; if (i === 'monthly') return `jeden Monat${dayText}`; if (i === 'quarterly') return `alle 3 Monate ab ${MONTHS[Math.max(0, (parseInt(startMonth, 10) || 1) - 1)]}${dayText}`; if (i === 'semiannual') return `alle 6 Monate ab ${MONTHS[Math.max(0, (parseInt(startMonth, 10) || 1) - 1)]}${dayText}`; if (i === 'annual') return `jährlich ab ${MONTHS[Math.max(0, (parseInt(startMonth, 10) || 1) - 1)]}${dayText}`; return `jedes Jahr in ${(customMonths || []).map(m => MONTHS[m - 1]).join(', ')}${dayText}`; }
 function compareNumber(actual, op, expected) { const a = roundMoney(actual); const b = roundMoney(expected); if (op === '>') return a > b; if (op === '>=') return a >= b; if (op === '<') return a < b; if (op === '<=') return a <= b; return a === b; }
@@ -138,7 +139,7 @@ function buildShell() {
                 <div class="flex flex-wrap gap-2"><button type="button" class="ab2-quick-filter px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700" data-value="critical">Kritisch</button><button type="button" class="ab2-quick-filter px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700" data-value="contrib">Mit Beitrag</button><button type="button" class="ab2-quick-filter px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700" data-value="planned">Geplant</button><button type="button" class="ab2-quick-filter px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700" data-value="errors">Fehler</button><button type="button" class="ab2-quick-filter px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700" data-value="">Alle</button></div>
             </div>
         </div>
-        <div class="bg-white rounded-xl shadow overflow-hidden"><div class="overflow-x-auto"><table class="min-w-full"><thead class="bg-blue-50 border-b-2 border-blue-200"><tr><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Status</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Titel</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Konto</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Typ</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Intervall</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Betrag</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Nächste</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Jahreswert</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Wirkung</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Gültigkeit</th><th class="px-3 py-3 text-center text-xs font-bold text-blue-800 uppercase">Aktionen</th></tr></thead><tbody id="ab2-table-body" class="divide-y divide-gray-200"><tr><td colspan="11" class="px-4 py-8 text-center text-gray-400 italic">Keine Einträge vorhanden.</td></tr></tbody></table></div></div>
+        <div class="bg-white rounded-xl shadow overflow-hidden"><div class="overflow-x-auto"><table class="min-w-[1240px]"><thead class="bg-blue-50 border-b-2 border-blue-200"><tr><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Status</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Titel</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Konto</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Typ</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Intervall</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Betrag</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Nächste</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Jahreswert</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Wirkung</th><th class="px-3 py-3 text-left text-xs font-bold text-blue-800 uppercase">Gültigkeit</th><th class="px-3 py-3 text-center text-xs font-bold text-blue-800 uppercase">Aktionen</th></tr></thead><tbody id="ab2-table-body" class="divide-y divide-gray-200"><tr><td colspan="11" class="px-4 py-8 text-center text-gray-400 italic">Keine Einträge vorhanden.</td></tr></tbody></table></div></div>
     </div>
     <div id="ab2-item-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display:none;"><div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto"><div class="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-500 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 class="text-xl font-bold">Eintrag</h3><button id="ab2-close-item-modal" class="text-white/80 hover:text-white transition">✕</button></div><div class="p-4 space-y-4"><input type="hidden" id="ab2-item-id"><div class="grid grid-cols-1 md:grid-cols-2 gap-3"><div><label class="block text-sm font-bold text-gray-700 mb-1">Titel *</label><input id="ab2-item-title" type="text" class="w-full p-2 border rounded-lg"></div><div><label class="block text-sm font-bold text-gray-700 mb-1">Konto *</label><select id="ab2-item-account" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-bold text-gray-700 mb-1">Typ *</label><select id="ab2-item-type" class="w-full p-2 border rounded-lg"><option value="belastung">Belastung</option><option value="gutschrift">Gutschrift</option></select></div><div><label class="block text-sm font-bold text-gray-700 mb-1">Betrag *</label><input id="ab2-item-amount" type="text" class="w-full p-2 border rounded-lg"></div><div><label class="block text-sm font-bold text-gray-700 mb-1">Intervall</label><select id="ab2-item-interval" class="w-full p-2 border rounded-lg"><option value="monthly">Monatlich</option><option value="quarterly">Quartal</option><option value="semiannual">Halbjahr</option><option value="annual">Jährlich</option><option value="custom">Individuell</option></select></div><div><label class="block text-sm font-bold text-gray-700 mb-1">Start-Monat ${helpButton('ab2-help-item-start-month')}</label><input id="ab2-item-start-month" type="number" min="1" max="12" class="w-full p-2 border rounded-lg">${helpContent('ab2-help-item-start-month', 'Nur für Quartal, Halbjahr oder Jahr: Startmonat des Zyklus.')}</div><div><label class="block text-sm font-bold text-gray-700 mb-1">Monate ${helpButton('ab2-help-item-custom-months')}</label><input id="ab2-item-custom-months" type="text" placeholder="1,3,8" class="w-full p-2 border rounded-lg">${helpContent('ab2-help-item-custom-months', 'Nur bei Individuell: Monate als Liste eingeben, z. B. 1,3,8.')}</div><div><label class="block text-sm font-bold text-gray-700 mb-1">Tag ${helpButton('ab2-help-item-day')}</label><input id="ab2-item-day" type="number" min="1" max="31" class="w-full p-2 border rounded-lg">${helpContent('ab2-help-item-day', 'Optionaler Ausführungstag. Bei kurzen Monaten wird automatisch der Monatsletzte verwendet.')}</div><div><label class="block text-sm font-bold text-gray-700 mb-1">Gültig ab *</label><input id="ab2-item-valid-from" type="date" class="w-full p-2 border rounded-lg"></div><div><label class="block text-sm font-bold text-gray-700 mb-1">Gültig bis</label><input id="ab2-item-valid-to" type="date" class="w-full p-2 border rounded-lg"></div></div><div><label class="block text-sm font-bold text-gray-700 mb-1">Notizen</label><textarea id="ab2-item-notes" rows="2" class="w-full p-2 border rounded-lg"></textarea></div><div class="rounded-xl border border-blue-100 bg-blue-50 p-3"><div class="text-sm font-bold text-blue-900 mb-1">So wirkt dieser Eintrag</div><div id="ab2-item-preview" class="text-sm text-blue-900">Noch unvollständig.</div></div><div class="bg-gray-50 p-3 rounded-lg border"><div class="flex justify-between items-center mb-2"><label class="block text-sm font-bold text-gray-700">Beiträge / Gegenkonten</label><button id="ab2-add-contrib-btn" type="button" class="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm">+ Beitrag</button></div><div id="ab2-contrib-list" class="space-y-2"></div></div></div><div class="sticky bottom-0 bg-gray-100 p-4 rounded-b-2xl flex justify-between gap-2 flex-wrap"><div class="flex gap-2"><button id="ab2-item-edit-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300" style="display:none;">Bearbeiten</button><button id="ab2-item-delete-btn" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200" style="display:none;">Löschen</button><button id="ab2-item-abtausch-btn" class="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200" style="display:none;">Abtausch</button></div><div class="flex gap-2"><button id="ab2-cancel-item-btn" class="px-5 py-2 bg-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-400">Abbrechen</button><button id="ab2-item-save-btn" class="px-5 py-2 bg-gradient-to-r from-blue-600 to-indigo-500 text-white font-bold rounded-lg">Speichern</button></div></div></div></div>
     <div id="ab2-abtausch-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display:none;"><div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg"><div class="bg-gradient-to-r from-purple-600 to-indigo-500 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 class="text-xl font-bold">Abtausch</h3><button id="ab2-close-abtausch-modal" class="text-white/80 hover:text-white transition">✕</button></div><div class="p-4 space-y-3"><p id="ab2-abtausch-old-info" class="text-sm text-gray-600 bg-gray-50 border rounded p-2">-</p><div><label class="block text-sm font-bold text-gray-700 mb-1">Neues Startdatum *</label><input id="ab2-abtausch-new-start" type="date" class="w-full p-2 border rounded-lg"></div><div><label class="block text-sm font-bold text-gray-700 mb-1">Neuer Betrag *</label><input id="ab2-abtausch-new-amount" type="text" class="w-full p-2 border rounded-lg"></div><div class="rounded-xl border border-purple-100 bg-purple-50 p-3"><div class="text-sm font-bold text-purple-900 mb-1">Auswirkung</div><div id="ab2-abtausch-preview" class="text-sm text-purple-900">Noch keine Vorschau.</div></div></div><div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-2"><button id="ab2-cancel-abtausch-btn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg">Abbrechen</button><button id="ab2-save-abtausch-btn" class="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-500 text-white rounded-lg">Übernehmen</button></div></div></div>
@@ -409,7 +410,7 @@ function latestSnapshotByAccountAndMonth() {
 function buildQuality(alerts = []) {
     const now = new Date();
     const currentMonth = currentMonthKey();
-    return Object.values(ACCOUNTS).map((account) => {
+    return Object.values(ACCOUNTS).filter(isRelevantTargetAccount).map((account) => {
         const accountSnapshots = Object.values(RECON)
             .filter((entry) => entry?.type === 'snapshot' && entry?.accountId === account.id && entry?.date)
             .sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -419,8 +420,8 @@ function buildQuality(alerts = []) {
         const currentSnapshot = accountSnapshots.some((entry) => String(entry.date || '').startsWith(currentMonth));
         let status = 'ok';
         let text = 'aktuell';
-        if (!latestDate) { status = isPersonAccount(account) ? 'warn' : 'alarm'; text = 'kein Snapshot'; }
-        else if (!currentSnapshot && !isPersonAccount(account)) { status = ageDays > 90 ? 'alarm' : 'warn'; text = 'aktueller Monat fehlt'; }
+        if (!latestDate) { status = 'alarm'; text = 'kein Snapshot'; }
+        else if (!currentSnapshot) { status = ageDays > 90 ? 'alarm' : 'warn'; text = 'aktueller Monat fehlt'; }
         else if (ageDays > 90) { status = 'alarm'; text = `zu alt (${ageDays} Tage)`; }
         else if (ageDays > 45) { status = 'warn'; text = `älter (${ageDays} Tage)`; }
         const nextAlert = alerts.find((alert) => alert.accountId === account.id && alert.severity === 'alarm') || alerts.find((alert) => alert.accountId === account.id);
@@ -449,6 +450,8 @@ function buildContributionImbalances() {
     const now = new Date();
     return Object.values(ITEMS)
         .map((item) => {
+            const account = ACCOUNTS[item.accountId] || null;
+            if (!isRelevantTargetAccount(account)) return null;
             if (itemStatus(item).key !== 'aktiv' || item?.typ !== 'belastung') return null;
             const directContribs = (Array.isArray(item.contributions) ? item.contributions : [])
                 .filter((contrib) => contrib?.sourceAccountId && toNum(contrib.amount, 0) > 0)
@@ -479,7 +482,6 @@ function buildContributionImbalances() {
             if (Math.abs(gapPerExecution) <= 0.009) return null;
             const referenceMonths = monthsSinceInclusive(item.validFrom || isoDate(now), now);
             const settlementAmount = roundMoney(gapPerExecution * referenceMonths);
-            const account = ACCOUNTS[item.accountId] || {};
             const severity = Math.abs(gapPerExecution) >= Math.max(5, itemAmount * 0.2) ? 'alarm' : 'warn';
             return {
                 id: item.id,
@@ -504,13 +506,15 @@ function buildSetup(quality, alerts, imbalances) {
     const items = Object.values(ITEMS);
     const targetAccounts = Object.values(ACCOUNTS).filter((account) => canBeTargetAccount(account) && !isPersonAccount(account));
     const invalid = items.filter((item) => itemStatus(item).key === 'fehler').length;
+    const qualityIssues = quality.filter((entry) => entry.status !== 'ok');
+    const alarms = alerts.filter((alert) => alert.severity === 'alarm');
     return [
-        { title: 'Konten', ok: Object.keys(ACCOUNTS).length > 0, text: Object.keys(ACCOUNTS).length ? `${Object.keys(ACCOUNTS).length} vorhanden` : 'Noch kein Konto angelegt' },
-        { title: 'Zielkonten', ok: targetAccounts.length > 0, text: targetAccounts.length ? `${targetAccounts.length} werden überwacht` : 'Kein Zielkonto für Forecast' },
-        { title: 'Einträge', ok: items.length > 0, text: items.length ? `${items.length} Buchungen geplant` : 'Noch keine Einträge' },
-        { title: 'Datenqualität', ok: quality.every((entry) => entry.status === 'ok' || isPersonAccount(ACCOUNTS[entry.accountId])), text: quality.filter((entry) => entry.status !== 'ok').length ? `${quality.filter((entry) => entry.status !== 'ok').length} Hinweise` : 'Alle relevanten Konten aktuell' },
-        { title: 'Titel-Beiträge', ok: !imbalances.length, text: imbalances.length ? `${imbalances.length} Ungleichgewicht(e)` : 'Alle Beiträge im Gleichgewicht' },
-        { title: 'Kontostandsprognose', ok: !alerts.some((alert) => alert.severity === 'alarm') && invalid === 0, text: invalid ? `${invalid} fehlerhafte Einträge` : alerts.some((alert) => alert.severity === 'alarm') ? `${alerts.filter((alert) => alert.severity === 'alarm').length} Alarm(e)` : 'Aktuell stabil' }
+        { key: 'accounts', title: 'Konten', ok: Object.keys(ACCOUNTS).length > 0, text: Object.keys(ACCOUNTS).length ? `${Object.keys(ACCOUNTS).length} vorhanden` : 'Noch kein Konto angelegt' },
+        { key: 'target_accounts', title: 'Zielkonten', ok: targetAccounts.length > 0, text: targetAccounts.length ? `${targetAccounts.length} werden überwacht` : 'Kein Zielkonto für Forecast' },
+        { key: 'items', title: 'Einträge', ok: items.length > 0, text: items.length ? `${items.length} Buchungen geplant` : 'Noch keine Einträge' },
+        { key: 'quality', title: 'Datenqualität', ok: qualityIssues.length === 0, text: qualityIssues.length ? `${qualityIssues.length} Hinweise` : 'Alle relevanten Konten aktuell' },
+        { key: 'imbalances', title: 'Titel-Beiträge', ok: !imbalances.length, text: imbalances.length ? `${imbalances.length} Ungleichgewicht(e)` : 'Alle Beiträge im Gleichgewicht' },
+        { key: 'forecast', title: 'Kontostandsprognose', ok: !alarms.length && invalid === 0, text: invalid ? `${invalid} fehlerhafte Einträge` : alarms.length ? `${alarms.length} Alarm(e)` : 'Aktuell stabil' }
     ];
 }
 function suggestions(timelineInput = null) {
@@ -653,10 +657,11 @@ function buildForecast(horizon = 12) {
             balances[account.id] = end;
             const minBuffer = isPersonAccount(account) ? 0 : roundMoney(account.minBuffer);
             const delta = roundMoney(end - minBuffer);
+            const relevantTarget = isRelevantTargetAccount(account);
             let severity = 'ok';
-            if (!isPersonAccount(account) && delta < -0.009) severity = 'alarm';
-            else if (!isPersonAccount(account) && minBuffer > 0 && delta < Math.max(25, minBuffer * 0.1)) severity = 'warn';
-            if (severity !== 'ok') alerts.push({ severity, accountId: account.id, accountName: account.name, monthKey: key, endBalance: end, minBuffer, delta });
+            if (relevantTarget && delta < -0.009) severity = 'alarm';
+            else if (relevantTarget && minBuffer > 0 && delta < Math.max(25, minBuffer * 0.1)) severity = 'warn';
+            if (severity !== 'ok' && relevantTarget) alerts.push({ severity, accountId: account.id, accountName: account.name, monthKey: key, endBalance: end, minBuffer, delta });
             details[`${account.id}__${key}`] = { start, inflow, outflow, end, minBuffer, delta, severity, entries: (movement[account.id]?.entries || []).sort((a, b) => String(a.date).localeCompare(String(b.date))) };
             bucket.accounts[account.id] = { start, inflow, outflow, end, minBuffer, delta, severity };
         });
@@ -784,9 +789,11 @@ function renderDashboard() {
         if (card) card.classList.toggle('ring-2', (counts[valueKey] || 0) > 0);
     });
     const setup = el('ab2-setup-panel');
-    if (setup) setup.innerHTML = FORECAST.setup.map((entry) => `<div class="rounded-xl border ${entry.ok ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="text-xs font-bold ${entry.ok ? 'text-emerald-700' : 'text-amber-700'}">${entry.ok ? 'OK' : 'PRÜFEN'}</div><div class="text-sm font-bold text-gray-800 mt-1">${escapeHtml(entry.title)}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(entry.text)}</div></div>`).join('');
+    if (setup) setup.innerHTML = FORECAST.setup.map((entry) => `<button type="button" class="w-full text-left rounded-xl border ${entry.ok ? 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100' : 'border-amber-200 bg-amber-50 hover:bg-amber-100'} p-3 transition" data-setup-key="${escapeHtml(entry.key || '')}"><div class="text-xs font-bold ${entry.ok ? 'text-emerald-700' : 'text-amber-700'}">${entry.ok ? 'OK' : 'PRÜFEN'}</div><div class="text-sm font-bold text-gray-800 mt-1">${escapeHtml(entry.title)}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(entry.text)}</div></button>`).join('');
     const quality = el('ab2-quality-banner');
-    const notes = FORECAST.quality.filter((entry) => entry.status !== 'ok').map((entry) => `${ACCOUNTS[entry.accountId]?.name || '-'}: ${entry.text}`);
+    const notes = FORECAST.quality
+        .filter((entry) => entry.status !== 'ok' && isRelevantTargetAccount(ACCOUNTS[entry.accountId]))
+        .map((entry) => `${ACCOUNTS[entry.accountId]?.name || '-'}: ${entry.text}`);
     if (quality) {
         quality.innerHTML = notes.length ? `<strong>Datenqualität beachten:</strong> ${escapeHtml(notes.join(' · '))}` : '';
         quality.classList.toggle('hidden', !notes.length);
@@ -837,7 +844,7 @@ function renderTable() {
         const next = nextExecutionDate(item);
         const yearly = roundMoney(yearlyHitCount(item) * toNum(item.amount, 0));
         const effect = itemNetEffect(item);
-        return `<tr class="${itemHasAlert(item) ? 'bg-red-50/40' : ''} hover:bg-blue-50/40 transition cursor-pointer" data-item-row="${item.id}"><td class="px-3 py-3"><span class="px-2 py-1 rounded-full text-xs font-bold ${status.css}">${status.label}</span></td><td class="px-3 py-3 max-w-[230px]"><div class="font-bold text-gray-800 break-words">${escapeHtml(item.title || '-')}</div><div class="text-xs text-gray-500 break-words">${escapeHtml(item.notes || '')}</div>${contributionTotal(item) > 0 ? `<div class="mt-1 text-[10px] font-bold text-indigo-700 break-words">Beiträge: ${formatCurrency(contributionTotal(item))}</div>` : ''}</td><td class="px-3 py-3 text-xs sm:text-sm text-gray-700">${escapeHtml(account.name || '-')}</td><td class="px-3 py-3 text-xs sm:text-sm text-gray-700">${escapeHtml(item.typ || '-')}</td><td class="px-3 py-3 text-xs sm:text-sm text-gray-700">${escapeHtml(intervalLabel(item.intervalType, item.customMonths || []))}</td><td class="px-3 py-3 text-xs sm:text-sm font-bold text-gray-800">${formatCurrency(item.amount)}</td><td class="px-3 py-3 text-xs sm:text-sm text-gray-700">${next ? formatDate(next) : '-'}</td><td class="px-3 py-3 text-xs sm:text-sm text-gray-700">${formatCurrency(yearly)}</td><td class="px-3 py-3 text-xs sm:text-sm font-bold ${effect < 0 ? 'text-red-700' : 'text-emerald-700'}">${formatSignedCurrency(effect)}</td><td class="px-3 py-3 text-xs sm:text-sm text-gray-700">${formatDate(item.validFrom)}${item.validTo ? ` → ${formatDate(item.validTo)}` : ''}</td><td class="px-3 py-3 text-center"><div class="flex gap-1 justify-center"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-item-edit="${item.id}">Bearbeiten</button></div></td></tr>`;
+        return `<tr class="${itemHasAlert(item) ? 'bg-red-50/40' : ''} hover:bg-blue-50/40 transition cursor-pointer" data-item-row="${item.id}"><td class="px-3 py-3 whitespace-nowrap"><span class="px-2 py-1 rounded-full text-xs font-bold ${status.css}">${status.label}</span></td><td class="px-3 py-3"><div class="font-bold text-gray-800 whitespace-nowrap">${escapeHtml(item.title || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(item.notes || '')}</div>${contributionTotal(item) > 0 ? `<div class="mt-1 text-[10px] font-bold text-indigo-700 whitespace-nowrap">Beiträge: ${formatCurrency(contributionTotal(item))}</div>` : ''}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${escapeHtml(account.name || '-')}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${escapeHtml(item.typ || '-')}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${escapeHtml(intervalLabel(item.intervalType, item.customMonths || []))}</td><td class="px-3 py-3 text-sm font-bold text-gray-800 whitespace-nowrap">${formatCurrency(item.amount)}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${next ? formatDate(next) : '-'}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${formatCurrency(yearly)}</td><td class="px-3 py-3 text-sm font-bold ${effect < 0 ? 'text-red-700' : 'text-emerald-700'} whitespace-nowrap">${formatSignedCurrency(effect)}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${formatDate(item.validFrom)}${item.validTo ? ` → ${formatDate(item.validTo)}` : ''}</td><td class="px-3 py-3 text-center whitespace-nowrap"><div class="flex gap-1 justify-center"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-item-edit="${item.id}">Bearbeiten</button></div></td></tr>`;
     }).join('');
 }
 function renderAccounts() {
@@ -874,10 +881,10 @@ function renderTransfers() {
     host.innerHTML = transfers.length ? transfers.map((transfer) => {
         const source = ACCOUNTS[transfer.sourceAccountId] || {};
         const target = ACCOUNTS[transfer.targetAccountId] || {};
-        const sourceAlert = FORECAST.alerts.find((alert) => alert.accountId === transfer.sourceAccountId);
+        const targetAlert = FORECAST.alerts.find((alert) => alert.accountId === transfer.targetAccountId);
         const linkedTitles = (Array.isArray(transfer.linkedTitles) ? transfer.linkedTitles : []).map((value) => transferLinkedTitleLabel(value));
         const linkedInfo = linkedTitles.length ? `<div class="mt-1 text-[11px] text-indigo-700">Titel: ${escapeHtml(linkedTitles.join(', '))}</div>` : '';
-        return `<div class="rounded-lg border ${editingTransferId === transfer.id ? 'border-yellow-400 bg-yellow-50 shadow-md' : 'border-gray-200 bg-gray-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="font-bold text-gray-800">${escapeHtml(source.name || '-')} → ${escapeHtml(target.name || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(intervalLabel(transfer.intervalType, transfer.customMonths || []))} · nächste Ausführung: ${nextExecutionDate(transfer) ? formatDate(nextExecutionDate(transfer)) : '-'}</div></div><div class="flex gap-1"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-transfer-edit="${transfer.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-transfer-delete="${transfer.id}">Löschen</button></div></div><div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Betrag</div><div class="font-bold text-gray-800">${formatCurrency(transfer.amount)}</div></div><div><div class="text-gray-500">Start</div><div class="font-bold text-gray-800">${formatDate(transfer.validFrom)}</div></div><div><div class="text-gray-500">Ende</div><div class="font-bold text-gray-800">${transfer.validTo ? formatDate(transfer.validTo) : 'offen'}</div></div><div><div class="text-gray-500">Quellenlage</div><div class="font-bold ${sourceAlert?.severity === 'alarm' ? 'text-red-700' : sourceAlert?.severity === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">${sourceAlert ? `${sourceAlert.severity} ${monthLabel(sourceAlert.monthKey)}` : 'stabil'}</div></div></div><div class="mt-2 text-xs text-gray-600">${escapeHtml(transfer.note || '')}${linkedInfo}</div></div>`;
+        return `<div class="rounded-lg border ${editingTransferId === transfer.id ? 'border-yellow-400 bg-yellow-50 shadow-md' : 'border-gray-200 bg-gray-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="font-bold text-gray-800">${escapeHtml(source.name || '-')} → ${escapeHtml(target.name || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(intervalLabel(transfer.intervalType, transfer.customMonths || []))} · nächste Ausführung: ${nextExecutionDate(transfer) ? formatDate(nextExecutionDate(transfer)) : '-'}</div></div><div class="flex gap-1"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-transfer-edit="${transfer.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-transfer-delete="${transfer.id}">Löschen</button></div></div><div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Betrag</div><div class="font-bold text-gray-800">${formatCurrency(transfer.amount)}</div></div><div><div class="text-gray-500">Start</div><div class="font-bold text-gray-800">${formatDate(transfer.validFrom)}</div></div><div><div class="text-gray-500">Ende</div><div class="font-bold text-gray-800">${transfer.validTo ? formatDate(transfer.validTo) : 'offen'}</div></div><div><div class="text-gray-500">Ziellage</div><div class="font-bold ${targetAlert?.severity === 'alarm' ? 'text-red-700' : targetAlert?.severity === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">${targetAlert ? `${targetAlert.severity} ${monthLabel(targetAlert.monthKey)}` : 'stabil'}</div></div></div><div class="mt-2 text-xs text-gray-600">${escapeHtml(transfer.note || '')}${linkedInfo}</div></div>`;
     }).join('') : '<p class="text-sm text-gray-400 italic">Noch keine Transferpläne.</p>';
 }
 function renderRecon() {
@@ -1326,6 +1333,49 @@ function openStatInsight(statKey) {
     }
     return openDetail('Info', html);
 }
+function openSetupInsight(setupKey) {
+    const targets = Object.values(ACCOUNTS).filter(isRelevantTargetAccount).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    const qualityIssues = (FORECAST.quality || []).filter((entry) => entry.status !== 'ok');
+    if (setupKey === 'accounts') {
+        const html = Object.values(ACCOUNTS)
+            .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+            .map((account) => `<div class="rounded-lg border border-gray-200 p-3"><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-600 mt-1">Typ: ${escapeHtml(isPersonAccount(account) ? 'Person' : 'Bank')} · Rolle: ${escapeHtml(normalizeAccountRole(account))}</div></div>`)
+            .join('') || '<p class="text-sm text-gray-500">Keine Konten vorhanden.</p>';
+        return openDetail('Setup · Konten', `<div class="space-y-2">${html}</div>`);
+    }
+    if (setupKey === 'target_accounts') {
+        const html = targets.map((account) => {
+            const row = FORECAST.timeline[0]?.accounts[account.id] || {};
+            return `<div class="rounded-lg border border-gray-200 p-3"><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-600 mt-1">Puffer ${formatCurrency(account.minBuffer)} · Aktueller Stand ${formatCurrency(row.end)} · Δ ${formatSignedCurrency(row.delta)}</div></div>`;
+        }).join('') || '<p class="text-sm text-gray-500">Keine Zielkonten vorhanden.</p>';
+        return openDetail('Setup · Zielkonten', `<div class="space-y-2">${html}</div>`);
+    }
+    if (setupKey === 'items') {
+        const html = Object.values(ITEMS)
+            .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')))
+            .map((item) => `<div class="rounded-lg border border-gray-200 p-3"><div class="font-bold text-gray-800">${escapeHtml(item.title || '-')}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(ACCOUNTS[item.accountId]?.name || '-')} · ${formatCurrency(item.amount)} · ${escapeHtml(intervalLabel(item.intervalType, item.customMonths || []))}</div></div>`)
+            .join('') || '<p class="text-sm text-gray-500">Keine Einträge vorhanden.</p>';
+        return openDetail('Setup · Einträge', `<div class="space-y-2">${html}</div>`);
+    }
+    if (setupKey === 'quality') {
+        const html = qualityIssues
+            .map((entry) => `<div class="rounded-lg border ${entry.status === 'alarm' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="font-bold text-gray-800">${escapeHtml(ACCOUNTS[entry.accountId]?.name || '-')}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(entry.text)}${entry.latest ? ` · letzter Snapshot ${formatDate(entry.latest.date)}` : ''}</div></div>`)
+            .join('') || '<p class="text-sm text-gray-500">Alle Zielkonten haben aktuelle Snapshot-Daten.</p>';
+        return openDetail('Setup · Datenqualität (nur Zielkonten)', `<div class="space-y-2">${html}</div>`);
+    }
+    if (setupKey === 'imbalances') {
+        const html = (FORECAST.imbalances || [])
+            .map((entry) => `<div class="rounded-lg border ${entry.severity === 'alarm' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="font-bold text-gray-800">${escapeHtml(entry.title || '-')}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(entry.accountName || '-')} · Lücke pro Ausführung ${formatSignedCurrency(entry.gapPerExecution)}</div></div>`)
+            .join('') || '<p class="text-sm text-gray-500">Keine Ungleichgewichte gefunden.</p>';
+        return openDetail('Setup · Titel-Beiträge', `<div class="space-y-2">${html}</div>`);
+    }
+    if (setupKey === 'forecast') {
+        const alerts = (FORECAST.alerts || []).slice().sort((a, b) => String(a.monthKey).localeCompare(String(b.monthKey)) || String(a.accountName || '').localeCompare(String(b.accountName || '')));
+        const html = alerts.map((alert) => `<div class="rounded-lg border ${alert.severity === 'alarm' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="font-bold text-gray-800">${escapeHtml(alert.accountName || '-')}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(monthLabel(alert.monthKey))} · Endstand ${formatCurrency(alert.endBalance)} · Puffer ${formatCurrency(alert.minBuffer)} · Δ ${formatSignedCurrency(alert.delta)}</div></div>`).join('') || '<p class="text-sm text-gray-500">Prognose aktuell ohne Warnung/Alarm.</p>';
+        return openDetail('Setup · Kontostandsprognose (nur Zielkonten)', `<div class="space-y-2">${html}</div>`);
+    }
+    return openDetail('Setup', '<p class="text-sm text-gray-500">Keine Details verfügbar.</p>');
+}
 function reconContextForMonth(accountId, year, month) {
     const monthStart = new Date(year, month - 1, 1);
     const monthEnd = new Date(year, month, 0);
@@ -1353,8 +1403,11 @@ function openForecastInsight(month) {
     const [year, monthNum] = String(month || '').split('-').map(Number);
     if (!year || !monthNum) return;
     const monitored = Object.values(ACCOUNTS)
-        .filter((account) => canBeTargetAccount(account) && !isPersonAccount(account))
+        .filter(isRelevantTargetAccount)
         .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+
+    const totalOld = roundMoney(monitored.reduce((sum, account) => sum + toNum(FORECAST.details[`${account.id}__${month}`]?.start, 0), 0));
+    const totalNew = roundMoney(monitored.reduce((sum, account) => sum + toNum(FORECAST.details[`${account.id}__${month}`]?.end, 0), 0));
 
     const cards = monitored.map((account) => {
         const detail = FORECAST.details[`${account.id}__${month}`] || { start: 0, inflow: 0, outflow: 0, end: 0, delta: 0, entries: [] };
@@ -1363,10 +1416,10 @@ function openForecastInsight(month) {
         const inMonthRecon = reconContext.within.length
             ? reconContext.within.map((entry) => reconContextLine('Im Zeitraum', entry)).join('')
             : '<div class="text-xs text-gray-500">Im Zeitraum: keine Abgleiche</div>';
-        return `<div class="rounded-xl border border-gray-200 bg-gray-50 p-3"><div class="font-bold text-gray-800 text-sm sm:text-base">${escapeHtml(account.name || '-')}</div><div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2"><div class="rounded-lg bg-white p-2"><div class="text-[10px] text-gray-500">Kontostand vorher</div><div class="font-bold text-gray-800 text-xs sm:text-sm">${formatCurrency(detail.start)}</div></div><div class="rounded-lg bg-white p-2"><div class="text-[10px] text-gray-500">Kontostand nachher</div><div class="font-bold text-gray-800 text-xs sm:text-sm">${formatCurrency(detail.end)}</div></div><div class="rounded-lg bg-white p-2"><div class="text-[10px] text-gray-500">Zufluss / Abfluss</div><div class="font-bold text-xs sm:text-sm text-gray-800">${formatCurrency(detail.inflow)} / ${formatCurrency(detail.outflow)}</div></div><div class="rounded-lg bg-white p-2"><div class="text-[10px] text-gray-500">Differenz zu Puffer</div><div class="font-bold text-xs sm:text-sm ${detail.delta < 0 ? 'text-red-700' : 'text-emerald-700'}">${formatSignedCurrency(detail.delta)}</div></div></div><div class="mt-3 rounded-lg border border-indigo-100 bg-indigo-50 p-2 space-y-1">${reconContextLine('Vorher (nächster)', reconContext.before)}${inMonthRecon}${reconContextLine('Nachher (nächster)', reconContext.after)}</div><div class="mt-3 overflow-x-auto"><table class="min-w-full"><thead><tr><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Datum</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Wirkung</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Betrag</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Notiz</th></tr></thead><tbody>${movementRows || '<tr><td colspan="4" class="p-3 text-xs text-gray-400 italic">Keine Bewegungen in diesem Monat.</td></tr>'}</tbody></table></div></div>`;
+        return `<div class="rounded-xl border border-gray-200 bg-gray-50 p-3"><div class="font-bold text-gray-800 text-sm sm:text-base">${escapeHtml(account.name || '-')}</div><div class="mt-2 rounded-lg border border-slate-200 bg-slate-100 p-2"><div class="text-[10px] uppercase tracking-wide text-slate-600">ALT (Monatsstart)</div><div class="text-base sm:text-lg font-bold text-slate-900">${formatCurrency(detail.start)}</div></div><div class="mt-2 text-[11px] text-gray-500 font-bold flex items-center gap-2"><span class="text-base">↓</span><span>Buchungen laufen von oben nach unten</span></div><div class="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 p-2 space-y-1">${reconContextLine('Vorher (nächster)', reconContext.before)}${inMonthRecon}${reconContextLine('Nachher (nächster)', reconContext.after)}</div><div class="mt-2 overflow-x-auto"><table class="min-w-full"><thead><tr><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Datum</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Wirkung</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Betrag</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Notiz</th></tr></thead><tbody>${movementRows || '<tr><td colspan="4" class="p-3 text-xs text-gray-400 italic">Keine Bewegungen in diesem Monat.</td></tr>'}</tbody></table></div><div class="mt-2 rounded-lg border-2 border-emerald-300 bg-emerald-50 p-2"><div class="text-[10px] uppercase tracking-wide text-emerald-700">NEU (Monatsende nach Buchungen)</div><div class="text-base sm:text-lg font-bold text-emerald-800">${formatCurrency(detail.end)}</div><div class="text-[11px] text-gray-600 mt-1">Zufluss ${formatCurrency(detail.inflow)} · Abfluss ${formatCurrency(detail.outflow)} · Δ zum Puffer ${formatSignedCurrency(detail.delta)}</div></div></div>`;
     }).join('');
 
-    openDetail(`Monatsübersicht ${bucket.label}`, cards || '<p class="text-sm text-gray-500">Keine Kontodaten vorhanden.</p>');
+    openDetail(`Monatsübersicht ${bucket.label}`, `<div class="space-y-3"><div class="sticky top-0 z-10 rounded-lg border border-slate-300 bg-slate-100 p-3 shadow-sm"><div class="text-[10px] uppercase tracking-wide text-slate-600">ALT (Start des Monats)</div><div class="text-lg sm:text-xl font-extrabold text-slate-900">${formatCurrency(totalOld)}</div></div><div class="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-2">Reihenfolge ist bewusst: <strong>oben ALT</strong> → dann alle Buchungen/Abgleiche → <strong>unten NEU</strong>.</div><div class="space-y-3 pb-20">${cards || '<p class="text-sm text-gray-500">Keine Kontodaten vorhanden.</p>'}</div><div class="sticky bottom-0 z-20 rounded-lg border-2 border-emerald-300 bg-emerald-50 p-3 shadow-md"><div class="text-[10px] uppercase tracking-wide text-emerald-700">NEU (Monatsende nach allen Buchungen)</div><div class="text-lg sm:text-xl font-extrabold text-emerald-800">${formatCurrency(totalNew)}</div></div></div>`);
 }
 function resetFilters() {
     filterTokens = [];
@@ -1499,6 +1552,15 @@ function bindEvents() {
             renderTable();
         });
         tagHost.dataset.listenerAttached = 'true';
+    }
+    const setupHost = el('ab2-setup-panel');
+    if (setupHost && !setupHost.dataset.listenerAttached) {
+        setupHost.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-setup-key]');
+            if (!btn) return;
+            openSetupInsight(btn.dataset.setupKey || '');
+        });
+        setupHost.dataset.listenerAttached = 'true';
     }
     const itemHost = el('ab2-table-body');
     if (itemHost && !itemHost.dataset.listenerAttached) {
