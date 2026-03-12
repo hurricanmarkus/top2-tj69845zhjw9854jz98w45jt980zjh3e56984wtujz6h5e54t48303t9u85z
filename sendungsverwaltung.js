@@ -453,7 +453,7 @@ function normalizeTransportEntries(entries = [], fallback = {}) {
     const normalized = Array.isArray(entries)
         ? entries.map((entry) => normalizeTransportEntry(entry, fallback))
         : [];
-    return normalized.length > 0 ? normalized : [normalizeTransportEntry({}, fallback)];
+    return normalized;
 }
 
 function normalizeInhaltZuordnungEntry(entry = {}) {
@@ -3860,8 +3860,10 @@ function removeTransportEntryFromPaket(paketIndex, entryIndex) {
     if (!paket) return;
     setSendungModalDirty(true);
 
-    if (paket.transportEntries.length <= 1) {
-        paket.transportEntries[0] = { ...EMPTY_TRANSPORT_ENTRY };
+    if (!Array.isArray(paket.transportEntries)) {
+        paket.transportEntries = [];
+    } else if (paket.transportEntries.length <= 1) {
+        paket.transportEntries = [];
     } else {
         paket.transportEntries.splice(entryIndex, 1);
     }
@@ -4202,9 +4204,12 @@ function renderPaketeEditor() {
                     </div>
                 </div>
 
-                <div class="mt-3 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-fuchsia-50 p-2.5">
+                <div class="mt-3 rounded-xl border border-sky-200 bg-gradient-to-r from-sky-50 via-indigo-50 to-fuchsia-50 p-2.5">
                     <div class="flex items-center justify-between mb-2 gap-2">
-                        <label class="text-xs font-extrabold text-violet-900 tracking-wide uppercase">Sendungsverfolgung</label>
+                        <div class="flex items-center gap-2">
+                            <label class="text-xs font-extrabold text-violet-900 tracking-wide uppercase">Sendungsverfolgung</label>
+                            <span class="flex items-center gap-1 text-sm" aria-hidden="true">📦🚚✈️</span>
+                        </div>
                         <button type="button" class="sendung-add-transport-entry-btn sendung-editmode-only inline-flex items-center justify-center w-8 h-8 rounded-full bg-violet-600 text-white text-lg font-bold hover:bg-violet-700 transition" data-paket-index="${paketIndex}" title="Neue Sendungsnummer hinzufügen">+</button>
                     </div>
                     <p class="text-[11px] text-violet-700 mb-2">Mehrere Zwischenstopps möglich: jede Sendungsnummer als eigener Verlaufseintrag.</p>
