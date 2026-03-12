@@ -121,14 +121,83 @@ function buildShell() {
 
 function ensureTransferLinkingFields() {
     const noteInput = el('ab2-transfer-note');
-    if (!noteInput || el('ab2-transfer-linking-block')) return;
+    if (!noteInput) return;
+    if (el('ab2-transfer-linking-block')) {
+        populateTransferLinkingOptions();
+        return;
+    }
     const noteWrap = noteInput.closest('div');
     if (!noteWrap || !noteWrap.parentElement) return;
     const block = document.createElement('div');
     block.id = 'ab2-transfer-linking-block';
     block.className = 'rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 space-y-2';
-    block.innerHTML = `<div class="text-sm font-bold text-indigo-900 flex items-center gap-2">Titel-/Konten-Zuordnung (optional) ${helpButton('ab2-help-transfer-linking')}</div>${helpContent('ab2-help-transfer-linking', 'Hier kannst du den Transfer einem oder mehreren Titeln zuordnen (z. B. YouTube) und beteiligte Konten notieren. Diese Zuordnung wird für Ungleichgewichts-Analysen und Abtausch-Ausgleich genutzt.')}<div class="grid grid-cols-1 md:grid-cols-2 gap-2"><input id="ab2-transfer-linked-titles" type="text" class="w-full p-2 border rounded-lg" placeholder="Titel, getrennt mit Komma"><input id="ab2-transfer-linked-accounts" type="text" class="w-full p-2 border rounded-lg" placeholder="Konten/Personen, getrennt mit Komma"></div>`;
+    block.innerHTML = `<div class="text-sm font-bold text-indigo-900 flex items-center gap-2">Zahlungsgrund-/Konten-Zuordnung (optional) ${helpButton('ab2-help-transfer-linking')}</div>${helpContent('ab2-help-transfer-linking', 'Wähle hier den Zahlungsgrund direkt aus deinen Eintrags-Titeln (ein oder mehrere). Optional kannst du beteiligte Konten/Personen markieren. Diese Zuordnung steuert die Ungleichgewichts-Analyse (z. B. YouTube-Preis steigt, Beiträge bleiben zu niedrig).')}<div class="grid grid-cols-1 md:grid-cols-2 gap-2"><div><label class="block text-xs font-bold text-indigo-800 mb-1">Zahlungsgrund (Titel)</label><select id="ab2-transfer-linked-titles" multiple size="5" class="w-full p-2 border rounded-lg bg-white"></select></div><div><label class="block text-xs font-bold text-indigo-800 mb-1">Beteiligte Konten/Personen</label><select id="ab2-transfer-linked-accounts" multiple size="5" class="w-full p-2 border rounded-lg bg-white"></select></div></div><div class="text-[11px] text-indigo-800">Mehrfachauswahl: Strg/Cmd gedrückt halten (Desktop) oder mehrere Einträge antippen (Smartphone).</div>`;
     noteWrap.parentElement.insertBefore(block, noteWrap.nextSibling);
+    populateTransferLinkingOptions();
+}
+
+function transferLinkedTitleLabel(value) {
+    const key = String(value || '').trim();
+    if (!key) return '';
+    return ITEMS[key]?.title || key;
+}
+
+function transferLinkedAccountLabel(value) {
+    const key = String(value || '').trim();
+    if (!key) return '';
+    return ACCOUNTS[key]?.name || key;
+}
+
+function getListFieldValues(fieldId) {
+    const node = el(fieldId);
+    if (!node) return [];
+    if (node.tagName === 'SELECT' && node.multiple) {
+        return Array.from(node.selectedOptions)
+            .map((option) => String(option.value || '').trim())
+            .filter(Boolean)
+            .filter((value, index, all) => all.findIndex((entry) => entry.toLowerCase() === value.toLowerCase()) === index);
+    }
+    return parseCsvList(node.value || '');
+}
+
+function setMultiSelectOptions(select, options, selectedValues = []) {
+    if (!select) return;
+    const selected = (Array.isArray(selectedValues) ? selectedValues : [])
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+        .filter((value, index, all) => all.findIndex((entry) => entry.toLowerCase() === value.toLowerCase()) === index);
+    const selectedSet = new Set(selected.map((value) => value.toLowerCase()));
+    const merged = [...options];
+    selected.forEach((value) => {
+        if (!merged.some((opt) => String(opt.value || '').trim().toLowerCase() === value.toLowerCase())) {
+            merged.push({ value, label: value });
+        }
+    });
+    select.innerHTML = merged.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`).join('');
+    Array.from(select.options).forEach((opt) => { opt.selected = selectedSet.has(String(opt.value || '').trim().toLowerCase()); });
+}
+
+function populateTransferLinkingOptions(preselectedTitles = null, preselectedAccounts = null) {
+    const titleSelect = el('ab2-transfer-linked-titles');
+    const accountSelect = el('ab2-transfer-linked-accounts');
+    const selectedTitles = Array.isArray(preselectedTitles) ? preselectedTitles : getListFieldValues('ab2-transfer-linked-titles');
+    const selectedAccounts = Array.isArray(preselectedAccounts) ? preselectedAccounts : getListFieldValues('ab2-transfer-linked-accounts');
+
+    if (titleSelect) {
+        const titleOptions = Object.values(ITEMS)
+            .filter((item) => item?.id && String(item.title || '').trim())
+            .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')))
+            .map((item) => ({ value: item.id, label: item.title || '-' }));
+        setMultiSelectOptions(titleSelect, titleOptions, selectedTitles);
+    }
+
+    if (accountSelect) {
+        const accountOptions = Object.values(ACCOUNTS)
+            .filter((account) => account?.id)
+            .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+            .map((account) => ({ value: account.id, label: `${account.name || '-'}${isPersonAccount(account) ? ' · Person' : ''}` }));
+        setMultiSelectOptions(accountSelect, accountOptions, selectedAccounts);
+    }
 }
 
 function ensureContributionInfoHint() {
@@ -148,11 +217,11 @@ function ensureContributionInfoHint() {
 function enhanceStaticHelpTexts() {
     const bufferHelp = el('ab2-help-account-buffer');
     if (bufferHelp) {
-        bufferHelp.textContent = 'Mindestbetrag, der auf Bankkonten verbleiben soll. Unter diesem Wert entstehen Warnung oder Alarm. Bei Person-Konten ist der Mindestpuffer absichtlich deaktiviert (immer 0), weil Personen als Geldquelle geführt werden und keine Bank-Unterdeckung auslösen sollen.';
+        bufferHelp.textContent = 'Mindestbetrag, der auf Bankkonten verbleiben soll. Unter diesem Wert entstehen Warnung oder Alarm. Für Person-Konten ist dieses Feld nicht verfügbar.';
     }
     const startBalanceHelp = el('ab2-help-account-start-balance');
     if (startBalanceHelp) {
-        startBalanceHelp.textContent = 'Startsaldo ist der rechnerische Startwert. Praktisch für Personen, um offene Vorleistungen/Schulden mitzunehmen (z. B. Person hat schon 20 € vorausgezahlt). Praktisch für Bankkonten, wenn du mit einem realen Ist-Stand startest.';
+        startBalanceHelp.textContent = 'Startsaldo ist der rechnerische Startwert für Bankkonten und wird als Snapshot in die Prognose übernommen. Für Person-Konten ist dieses Feld nicht verfügbar.';
     }
 }
 
@@ -181,7 +250,22 @@ function ensureRefs() {
 function setInputEnabled(n, enabled, clearWhenDisabled = false) { if (!n) return; if (!enabled && clearWhenDisabled) n.value = ''; n.disabled = !enabled; n.classList.toggle('bg-gray-100', !enabled); n.classList.toggle('text-gray-500', !enabled); }
 function updateMainIntervalFields(prefix) { const interval = (el(`${prefix}-interval`)?.value || 'monthly').trim(); const startMonth = el(`${prefix}-start-month`); const customMonths = el(`${prefix}-custom-months`); if (interval === 'custom') { setInputEnabled(startMonth, false, true); setInputEnabled(customMonths, true, false); return; } if (interval === 'monthly') { setInputEnabled(startMonth, false, true); setInputEnabled(customMonths, false, true); return; } setInputEnabled(startMonth, true, false); setInputEnabled(customMonths, false, true); }
 function updateContributionRowState(row) { if (!row) return; const interval = row.querySelector('.ab2-contrib-interval')?.value || 'inherit'; const customMonths = row.querySelector('.ab2-contrib-custom'); setInputEnabled(customMonths, interval === 'custom', interval !== 'custom'); }
-function updateAccountTypeDependencies() { const type = (el('ab2-account-type')?.value || 'bank').trim(); const minBuffer = el('ab2-account-min-buffer'); const isPerson = normalizeAccountType(type) === 'person'; if (isPerson && minBuffer && !minBuffer.value) minBuffer.value = '0'; setInputEnabled(minBuffer, !isPerson, isPerson); }
+function updateAccountTypeDependencies() {
+    const type = (el('ab2-account-type')?.value || 'bank').trim();
+    const isPerson = normalizeAccountType(type) === 'person';
+    const minBuffer = el('ab2-account-min-buffer');
+    const startBalance = el('ab2-account-start-balance');
+    const startDate = el('ab2-account-start-date');
+
+    setInputEnabled(minBuffer, !isPerson, isPerson);
+    if (isPerson && minBuffer) minBuffer.value = '0';
+    setInputEnabled(startBalance, !isPerson, isPerson);
+    setInputEnabled(startDate, !isPerson, isPerson);
+
+    [minBuffer?.closest('div'), startBalance?.closest('div'), startDate?.closest('div')].forEach((wrap) => {
+        if (wrap) wrap.classList.toggle('hidden', isPerson);
+    });
+}
 
 function monthKey(year, month) { return `${year}-${String(month).padStart(2, '0')}`; }
 function monthLabel(key) { const [year, month] = String(key || '').split('-').map(Number); return year && month ? `${MONTHS[month - 1]} ${year}` : '-'; }
@@ -304,12 +388,15 @@ function monthsSinceInclusive(startDate, endDate = new Date()) {
     if (!start || !end || end < start) return 1;
     return Math.max(1, ((end.getFullYear() - start.getFullYear()) * 12) + (end.getMonth() - start.getMonth()) + 1);
 }
-function transferLinkedToItem(transfer, itemTitle) {
-    const normalizedItemTitle = normalizeSearchText(itemTitle || '');
-    if (!normalizedItemTitle) return false;
+function transferLinkedToItem(transfer, item) {
     const linkedTitles = Array.isArray(transfer?.linkedTitles) ? transfer.linkedTitles : [];
+    if (!linkedTitles.length || !item) return false;
+    const itemId = String(item.id || '').trim().toLowerCase();
+    if (itemId && linkedTitles.some((title) => String(title || '').trim().toLowerCase() === itemId)) return true;
+    const normalizedItemTitle = normalizeSearchText(item.title || '');
+    if (!normalizedItemTitle) return false;
     return linkedTitles.some((title) => {
-        const normalizedTitle = normalizeSearchText(title);
+        const normalizedTitle = normalizeSearchText(transferLinkedTitleLabel(title));
         return normalizedTitle && (normalizedTitle.includes(normalizedItemTitle) || normalizedItemTitle.includes(normalizedTitle));
     });
 }
@@ -328,7 +415,7 @@ function buildContributionImbalances() {
                     note: contrib.note || ''
                 }));
             const linkedTransferContribs = Object.values(TRANSFERS)
-                .filter((transfer) => transferLinkedToItem(transfer, item.title))
+                .filter((transfer) => transferLinkedToItem(transfer, item))
                 .filter((transfer) => toNum(transfer.amount, 0) > 0)
                 .filter((transfer) => !!nextExecutionDate(transfer, 24))
                 .map((transfer) => ({
@@ -554,6 +641,11 @@ function renderTags() {
 }
 function itemHasAlert(item, severity = '') { return FORECAST.alerts.some((alert) => alert.accountId === item?.accountId && (!severity || alert.severity === severity)); }
 function setSelectOptions(select, options, value = '') { if (!select) return; const current = value || select.value || ''; select.innerHTML = options.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join(''); select.value = current; }
+function transferLinkingText(transfer) {
+    const linkedTitles = (Array.isArray(transfer?.linkedTitles) ? transfer.linkedTitles : []).map((value) => transferLinkedTitleLabel(value));
+    const linkedAccounts = (Array.isArray(transfer?.linkedAccounts) ? transfer.linkedAccounts : []).map((value) => transferLinkedAccountLabel(value));
+    return `${linkedTitles.join(' ')} ${linkedAccounts.join(' ')}`.trim();
+}
 function qualityEntry(accountId) { return FORECAST.quality.find((entry) => entry.accountId === accountId) || null; }
 function forecastCss(severity) { if (severity === 'alarm') return 'bg-red-50 border-red-200 text-red-700'; if (severity === 'warn') return 'bg-amber-50 border-amber-200 text-amber-700'; return 'bg-emerald-50 border-emerald-200 text-emerald-700'; }
 function matchItemToken(item, token) {
@@ -620,6 +712,7 @@ function populateSelects() {
     setSelectOptions(el('ab2-transfer-target'), targetOptions);
     setSelectOptions(el('ab2-recon-account'), accountOptions);
     document.querySelectorAll('.ab2-contrib-source').forEach((select) => setSelectOptions(select, sourceOptions, select.value || ''));
+    populateTransferLinkingOptions();
 }
 function renderDashboard() {
     const items = Object.values(ITEMS);
@@ -705,7 +798,7 @@ function renderAccounts() {
         const quality = qualityEntry(account.id);
         const itemCount = Object.values(ITEMS).filter((item) => item.accountId === account.id).length;
         const transferCount = Object.values(TRANSFERS).filter((transfer) => transfer.sourceAccountId === account.id || transfer.targetAccountId === account.id).length;
-        return `<div class="rounded-lg border ${editingAccountId === account.id ? 'border-yellow-400 bg-yellow-50 shadow-md' : 'border-gray-200 bg-gray-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(isPersonAccount(account) ? 'Person' : (account.bank || 'Bankkonto'))} · ${escapeHtml(normalizeAccountRole(account))}</div></div><div class="flex gap-1"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></div><div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Stand</div><div class="font-bold text-gray-800">${formatCurrency(latest?.value)}</div></div><div><div class="text-gray-500">Puffer</div><div class="font-bold text-gray-800">${formatCurrency(account.minBuffer)}</div></div><div><div class="text-gray-500">Differenz</div><div class="font-bold ${toNum(row.delta, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${formatSignedCurrency(row.delta)}</div></div><div><div class="text-gray-500">Snapshot</div><div class="font-bold ${quality?.status === 'alarm' ? 'text-red-700' : quality?.status === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">${quality?.latest ? formatDate(quality.latest.date) : 'fehlt'}</div></div></div><div class="mt-2 text-xs text-gray-600">Einträge: ${itemCount} · Transfers: ${transferCount}</div></div>`;
+        return `<div class="rounded-lg border ${editingAccountId === account.id ? 'border-yellow-400 bg-yellow-50 shadow-md' : 'border-gray-200 bg-gray-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(isPersonAccount(account) ? 'Person' : (account.bank || 'Bankkonto'))} · ${escapeHtml(normalizeAccountRole(account))}</div></div><div class="flex gap-1"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></div><div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Stand</div><div class="font-bold text-gray-800">${formatCurrency(latest?.value)}</div></div><div><div class="text-gray-500">Puffer</div><div class="font-bold text-gray-800">${isPersonAccount(account) ? 'entfällt' : formatCurrency(account.minBuffer)}</div></div><div><div class="text-gray-500">Differenz</div><div class="font-bold ${toNum(row.delta, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${formatSignedCurrency(row.delta)}</div></div><div><div class="text-gray-500">Snapshot</div><div class="font-bold ${quality?.status === 'alarm' ? 'text-red-700' : quality?.status === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">${quality?.latest ? formatDate(quality.latest.date) : 'fehlt'}</div></div></div><div class="mt-2 text-xs text-gray-600">Einträge: ${itemCount} · Transfers: ${transferCount}</div></div>`;
     }).join('') : '<p class="text-sm text-gray-400 italic">Noch keine Konten/Quellen.</p>';
 }
 function renderTransfers() {
@@ -720,14 +813,14 @@ function renderTransfers() {
             const person = isPersonAccount(source) || isPersonAccount(target);
             return transferListFilterState.type === 'person' ? person : !person;
         })
-        .filter((transfer) => !search || normalizeSearchText(`${ACCOUNTS[transfer.sourceAccountId]?.name || ''} ${ACCOUNTS[transfer.targetAccountId]?.name || ''} ${transfer.note || ''} ${(Array.isArray(transfer.linkedTitles) ? transfer.linkedTitles : []).join(' ')} ${(Array.isArray(transfer.linkedAccounts) ? transfer.linkedAccounts : []).join(' ')} ${formatCurrency(transfer.amount)} ${intervalLabel(transfer.intervalType, transfer.customMonths || [])}`).includes(search))
+        .filter((transfer) => !search || normalizeSearchText(`${ACCOUNTS[transfer.sourceAccountId]?.name || ''} ${ACCOUNTS[transfer.targetAccountId]?.name || ''} ${transfer.note || ''} ${transferLinkingText(transfer)} ${formatCurrency(transfer.amount)} ${intervalLabel(transfer.intervalType, transfer.customMonths || [])}`).includes(search))
         .sort((a, b) => String(ACCOUNTS[a.sourceAccountId]?.name || '').localeCompare(String(ACCOUNTS[b.sourceAccountId]?.name || '')));
     host.innerHTML = transfers.length ? transfers.map((transfer) => {
         const source = ACCOUNTS[transfer.sourceAccountId] || {};
         const target = ACCOUNTS[transfer.targetAccountId] || {};
         const sourceAlert = FORECAST.alerts.find((alert) => alert.accountId === transfer.sourceAccountId);
-        const linkedTitles = Array.isArray(transfer.linkedTitles) ? transfer.linkedTitles : [];
-        const linkedAccounts = Array.isArray(transfer.linkedAccounts) ? transfer.linkedAccounts : [];
+        const linkedTitles = (Array.isArray(transfer.linkedTitles) ? transfer.linkedTitles : []).map((value) => transferLinkedTitleLabel(value));
+        const linkedAccounts = (Array.isArray(transfer.linkedAccounts) ? transfer.linkedAccounts : []).map((value) => transferLinkedAccountLabel(value));
         const linkedChunks = [];
         if (linkedTitles.length) linkedChunks.push(`Titel: ${escapeHtml(linkedTitles.join(', '))}`);
         if (linkedAccounts.length) linkedChunks.push(`Konten: ${escapeHtml(linkedAccounts.join(', '))}`);
@@ -759,12 +852,14 @@ function renderPreviews() {
     const itemType = el('ab2-item-type')?.value || 'belastung';
     if (el('ab2-item-preview')) el('ab2-item-preview').textContent = itemAccount && itemAmount > 0 ? `${itemType === 'gutschrift' ? 'Erhöht' : 'Belastet'} ${itemAccount.name || '-'} mit ${formatCurrency(itemAmount)} ${describeInterval(el('ab2-item-interval')?.value || 'monthly', el('ab2-item-start-month')?.value, parseMonths(el('ab2-item-custom-months')?.value), el('ab2-item-day')?.value)}.` : 'Noch unvollständig.';
     const accType = normalizeAccountType(el('ab2-account-type')?.value || 'bank');
-    if (el('ab2-account-preview')) el('ab2-account-preview').textContent = `${el('ab2-account-name')?.value || 'Dieses Konto'} wird als ${accType === 'person' ? 'Person / Geldquelle' : 'Bankkonto'} geführt.${accType === 'person' ? ' Mindestpuffer ist hier absichtlich 0 (keine Unterdeckungsalarme für Personen). Startsaldo ist sinnvoll, wenn bereits Vorleistungen/Schulden bestehen.' : ` Mindestpuffer: ${formatCurrency(el('ab2-account-min-buffer')?.value || 0)}.`}${Number.isFinite(toNum(el('ab2-account-start-balance')?.value, NaN)) ? ` Snapshot-Vorschau: ${formatCurrency(el('ab2-account-start-balance')?.value || 0)} am ${formatDate(el('ab2-account-start-date')?.value)}` : ''}`;
+    const startBalance = toNum(el('ab2-account-start-balance')?.value, NaN);
+    const startPreview = accType === 'person' ? '' : (Number.isFinite(startBalance) ? ` Snapshot-Vorschau: ${formatCurrency(startBalance)} am ${formatDate(el('ab2-account-start-date')?.value)}` : '');
+    if (el('ab2-account-preview')) el('ab2-account-preview').textContent = `${el('ab2-account-name')?.value || 'Dieses Konto'} wird als ${accType === 'person' ? 'Person / Geldquelle' : 'Bankkonto'} geführt.${accType === 'person' ? ' Für Personen sind Mindestpuffer und Startsaldo deaktiviert.' : ` Mindestpuffer: ${formatCurrency(el('ab2-account-min-buffer')?.value || 0)}.`}${startPreview}`;
     const transferSource = ACCOUNTS[el('ab2-transfer-source')?.value] || null;
     const transferTarget = ACCOUNTS[el('ab2-transfer-target')?.value] || null;
     const transferAmount = toNum(el('ab2-transfer-amount')?.value, 0);
-    const linkedTitles = parseCsvList(el('ab2-transfer-linked-titles')?.value || '');
-    const linkedAccounts = parseCsvList(el('ab2-transfer-linked-accounts')?.value || '');
+    const linkedTitles = getListFieldValues('ab2-transfer-linked-titles').map((value) => transferLinkedTitleLabel(value));
+    const linkedAccounts = getListFieldValues('ab2-transfer-linked-accounts').map((value) => transferLinkedAccountLabel(value));
     const transferLinkText = linkedTitles.length || linkedAccounts.length ? ` Zugeordnet zu ${linkedTitles.length ? `Titeln: ${linkedTitles.join(', ')}` : ''}${linkedTitles.length && linkedAccounts.length ? ' | ' : ''}${linkedAccounts.length ? `Konten: ${linkedAccounts.join(', ')}` : ''}.` : '';
     if (el('ab2-transfer-preview')) el('ab2-transfer-preview').textContent = transferSource && transferTarget && transferAmount > 0 ? `${formatCurrency(transferAmount)} fließen von ${transferSource.name || '-'} nach ${transferTarget.name || '-'} ${describeInterval(el('ab2-transfer-interval')?.value || 'monthly', el('ab2-transfer-start-month')?.value, parseMonths(el('ab2-transfer-custom-months')?.value), el('ab2-transfer-day')?.value)}.${transferLinkText}` : 'Noch unvollständig.';
     const reconAccount = ACCOUNTS[el('ab2-recon-account')?.value] || null;
@@ -855,16 +950,17 @@ function editAccount(id) {
     const account = ACCOUNTS[id];
     if (!account) return;
     editingAccountId = id;
+    const accountType = normalizeAccountType(account.type || 'bank');
     const latest = latestSnapshots()[id];
     if (el('ab2-account-id')) el('ab2-account-id').value = account.id || '';
     if (el('ab2-account-name')) el('ab2-account-name').value = account.name || '';
     if (el('ab2-account-bank')) el('ab2-account-bank').value = account.bank || '';
     if (el('ab2-account-iban')) el('ab2-account-iban').value = account.iban || '';
-    if (el('ab2-account-type')) el('ab2-account-type').value = account.type || 'bank';
+    if (el('ab2-account-type')) el('ab2-account-type').value = accountType;
     if (el('ab2-account-role')) el('ab2-account-role').value = account.role || 'both';
-    if (el('ab2-account-min-buffer')) el('ab2-account-min-buffer').value = toNum(account.minBuffer, 0).toFixed(2);
-    if (el('ab2-account-start-balance')) el('ab2-account-start-balance').value = latest ? toNum(latest.value, 0).toFixed(2) : '';
-    if (el('ab2-account-start-date')) el('ab2-account-start-date').value = latest?.date || isoDate(new Date());
+    if (el('ab2-account-min-buffer')) el('ab2-account-min-buffer').value = accountType === 'person' ? '0' : toNum(account.minBuffer, 0).toFixed(2);
+    if (el('ab2-account-start-balance')) el('ab2-account-start-balance').value = accountType === 'person' ? '' : (latest ? toNum(latest.value, 0).toFixed(2) : '');
+    if (el('ab2-account-start-date')) el('ab2-account-start-date').value = accountType === 'person' ? isoDate(new Date()) : (latest?.date || isoDate(new Date()));
     updateAccountTypeDependencies();
     openModal('ab2-accounts-modal');
     renderAccounts();
@@ -877,6 +973,7 @@ function resetTransferForm() {
     if (el('ab2-transfer-target')) el('ab2-transfer-target').value = '';
     if (el('ab2-transfer-interval')) el('ab2-transfer-interval').value = 'monthly';
     if (el('ab2-transfer-valid-from')) el('ab2-transfer-valid-from').value = isoDate(new Date());
+    populateTransferLinkingOptions([], []);
     updateMainIntervalFields('ab2-transfer');
     renderTransfers();
     renderPreviews();
@@ -896,8 +993,7 @@ function editTransfer(id) {
     if (el('ab2-transfer-valid-from')) el('ab2-transfer-valid-from').value = transfer.validFrom || '';
     if (el('ab2-transfer-valid-to')) el('ab2-transfer-valid-to').value = transfer.validTo || '';
     if (el('ab2-transfer-note')) el('ab2-transfer-note').value = transfer.note || '';
-    if (el('ab2-transfer-linked-titles')) el('ab2-transfer-linked-titles').value = Array.isArray(transfer.linkedTitles) ? transfer.linkedTitles.join(', ') : '';
-    if (el('ab2-transfer-linked-accounts')) el('ab2-transfer-linked-accounts').value = Array.isArray(transfer.linkedAccounts) ? transfer.linkedAccounts.join(', ') : '';
+    populateTransferLinkingOptions(Array.isArray(transfer.linkedTitles) ? transfer.linkedTitles : [], Array.isArray(transfer.linkedAccounts) ? transfer.linkedAccounts : []);
     updateMainIntervalFields('ab2-transfer');
     openModal('ab2-transfers-modal');
     renderTransfers();
@@ -976,9 +1072,10 @@ async function saveAccount() {
     const name = el('ab2-account-name')?.value?.trim() || '';
     if (!name) return alertUser('Bitte Namen eingeben.', 'error');
     const before = ACCOUNTS[id] || null;
-    const payload = { name, bank: el('ab2-account-bank')?.value?.trim() || '', iban: el('ab2-account-iban')?.value?.trim() || '', type: normalizeAccountType(el('ab2-account-type')?.value || 'bank'), role: normalizeAccountRole(el('ab2-account-role')?.value || 'both'), minBuffer: roundMoney(toNum(el('ab2-account-min-buffer')?.value, 0)), createdBy: before?.createdBy || uid(), updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() };
-    const startBalance = toNum(el('ab2-account-start-balance')?.value, NaN);
-    const startDate = el('ab2-account-start-date')?.value || '';
+    const accountType = normalizeAccountType(el('ab2-account-type')?.value || 'bank');
+    const payload = { name, bank: el('ab2-account-bank')?.value?.trim() || '', iban: el('ab2-account-iban')?.value?.trim() || '', type: accountType, role: normalizeAccountRole(el('ab2-account-role')?.value || 'both'), minBuffer: accountType === 'person' ? 0 : roundMoney(toNum(el('ab2-account-min-buffer')?.value, 0)), createdBy: before?.createdBy || uid(), updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() };
+    const startBalance = accountType === 'person' ? NaN : toNum(el('ab2-account-start-balance')?.value, NaN);
+    const startDate = accountType === 'person' ? '' : (el('ab2-account-start-date')?.value || '');
     try {
         let accountId = id;
         if (id) {
@@ -1021,8 +1118,8 @@ async function saveTransfer() {
     if (intervalType === 'custom' && !customMonths.length) return alertUser('Bitte bei Individuell mindestens einen Monat angeben.', 'error');
     if (validTo && parseDate(validTo) < parseDate(validFrom)) return alertUser('Gültig bis darf nicht vor Gültig ab liegen.', 'error');
     const before = TRANSFERS[id] || null;
-    const linkedTitles = parseCsvList(el('ab2-transfer-linked-titles')?.value || '');
-    const linkedAccounts = parseCsvList(el('ab2-transfer-linked-accounts')?.value || '');
+    const linkedTitles = getListFieldValues('ab2-transfer-linked-titles');
+    const linkedAccounts = getListFieldValues('ab2-transfer-linked-accounts');
     const payload = { sourceAccountId, targetAccountId, amount, intervalType, startMonth: intervalType === 'monthly' || intervalType === 'custom' ? null : (parseInt(el('ab2-transfer-start-month')?.value, 10) || null), customMonths, dayOfMonth: parseInt(el('ab2-transfer-day')?.value, 10) || 1, validFrom, validTo, note: el('ab2-transfer-note')?.value?.trim() || '', linkedTitles, linkedAccounts, createdBy: before?.createdBy || uid(), updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() };
     try {
         if (id) {
@@ -1158,7 +1255,12 @@ function openStatInsight(statKey) {
             .join('');
         const imbalanceRows = (FORECAST.imbalances || [])
             .filter((entry) => entry.severity === severity)
-            .map((entry) => `<div class="rounded-lg border ${severity === 'alarm' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="font-bold text-gray-800">${escapeHtml(entry.title)}</div><div class="text-xs text-gray-600 mt-1">Konto ${escapeHtml(entry.accountName)} · Pro Ausführung ${formatSignedCurrency(entry.gapPerExecution)} (${entry.gapPerExecution < 0 ? 'zu wenig' : 'zu viel'})</div><div class="text-xs text-gray-600 mt-1">Seit ${entry.referenceMonths} Monat(en): ${formatSignedCurrency(entry.settlementAmount)} → ${entry.actionText}</div></div>`)
+            .map((entry) => {
+                const details = (Array.isArray(entry.details) ? entry.details : [])
+                    .map((row) => `${row.sourceName || '-'}: ${formatCurrency(row.amount)} (${row.kind === 'transfer' ? 'Transfer' : 'Beitrag'})`)
+                    .join(' · ');
+                return `<div class="rounded-lg border ${severity === 'alarm' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="font-bold text-gray-800">${escapeHtml(entry.title)}</div><div class="text-xs text-gray-600 mt-1">Konto ${escapeHtml(entry.accountName)} · Pro Ausführung ${formatSignedCurrency(entry.gapPerExecution)} (${entry.gapPerExecution < 0 ? 'zu wenig' : 'zu viel'})</div><div class="text-xs text-gray-600 mt-1">Seit ${entry.referenceMonths} Monat(en): ${formatSignedCurrency(entry.settlementAmount)} → ${entry.actionText}</div>${details ? `<div class="text-xs text-gray-600 mt-1">Zugeordnete Zahler: ${escapeHtml(details)}</div>` : ''}</div>`;
+            })
             .join('');
         const sections = [];
         if (forecastRows) sections.push(`<div class="space-y-2"><div class="text-xs font-bold uppercase tracking-wide text-gray-500">Konten-Prognose</div>${forecastRows}</div>`);
