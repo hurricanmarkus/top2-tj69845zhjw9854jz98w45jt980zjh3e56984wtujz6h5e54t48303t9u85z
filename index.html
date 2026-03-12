@@ -3716,13 +3716,13 @@
                     </div>
 
                     <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 text-center">
-                        <div class="bg-white/20 px-2 py-2 rounded-lg"><p id="ab-stat-accounts" class="text-lg font-bold">0</p><p class="text-[10px]">Konten</p></div>
-                        <div class="bg-green-500/30 px-2 py-2 rounded-lg"><p id="ab-stat-active" class="text-lg font-bold">0</p><p class="text-[10px]">Aktiv</p></div>
-                        <div class="bg-blue-500/30 px-2 py-2 rounded-lg"><p id="ab-stat-planned" class="text-lg font-bold">0</p><p class="text-[10px]">Geplant</p></div>
-                        <div class="bg-gray-500/30 px-2 py-2 rounded-lg"><p id="ab-stat-past" class="text-lg font-bold">0</p><p class="text-[10px]">Vergangen</p></div>
-                        <div class="bg-yellow-500/30 px-2 py-2 rounded-lg"><p id="ab-stat-errors" class="text-lg font-bold">0</p><p class="text-[10px]">Fehler</p></div>
-                        <div class="bg-amber-500/30 px-2 py-2 rounded-lg"><p id="ab-stat-warnings" class="text-lg font-bold">0</p><p class="text-[10px]">Warnung</p></div>
-                        <div class="bg-red-500/30 px-2 py-2 rounded-lg"><p id="ab-stat-alarms" class="text-lg font-bold">0</p><p class="text-[10px]">Alarm</p></div>
+                        <div id="ab-stat-card-accounts" class="bg-white/20 px-2 py-2 rounded-lg transition cursor-pointer"><p id="ab-stat-accounts" class="text-lg font-bold">0</p><p class="text-[10px]">Konten</p></div>
+                        <div id="ab-stat-card-active" class="bg-green-500/30 px-2 py-2 rounded-lg transition cursor-pointer"><p id="ab-stat-active" class="text-lg font-bold">0</p><p class="text-[10px]">Aktiv</p></div>
+                        <div id="ab-stat-card-planned" class="bg-blue-500/30 px-2 py-2 rounded-lg transition cursor-pointer"><p id="ab-stat-planned" class="text-lg font-bold">0</p><p class="text-[10px]">Geplant</p></div>
+                        <div id="ab-stat-card-past" class="bg-gray-500/30 px-2 py-2 rounded-lg transition cursor-pointer"><p id="ab-stat-past" class="text-lg font-bold">0</p><p class="text-[10px]">Vergangen</p></div>
+                        <div id="ab-stat-card-errors" class="bg-yellow-500/30 px-2 py-2 rounded-lg transition cursor-pointer"><p id="ab-stat-errors" class="text-lg font-bold">0</p><p class="text-[10px]">Fehler</p></div>
+                        <div id="ab-stat-card-warnings" class="bg-amber-500/30 px-2 py-2 rounded-lg transition cursor-pointer"><p id="ab-stat-warnings" class="text-lg font-bold">0</p><p class="text-[10px]">Warnung</p></div>
+                        <div id="ab-stat-card-alarms" class="bg-red-500/30 px-2 py-2 rounded-lg transition cursor-pointer"><p id="ab-stat-alarms" class="text-lg font-bold">0</p><p class="text-[10px]">Alarm</p></div>
                     </div>
                 </div>
 
@@ -3736,7 +3736,10 @@
                         </div>
                     </div>
                     <div class="bg-white rounded-lg shadow p-3 xl:col-span-2">
-                        <h3 class="text-sm font-bold text-gray-700 mb-2">12-Monats-Forecast</h3>
+                        <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">12-Monats-Forecast
+                            <button type="button" class="ab-help-btn inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold hover:bg-blue-200" data-help-target="ab-help-forecast" title="Info">i</button>
+                        </h3>
+                        <div id="ab-help-forecast" class="ab-help-content hidden mb-2 text-xs text-blue-900 bg-blue-50 border border-blue-200 rounded-lg p-2">Zeigt die voraussichtlichen Endstände je Monat für die nächsten 12 Monate. Werte unter Mindestpuffer sind kritisch (Warnung/Alarm) und brauchen Abgleich oder Transfer-Anpassung.</div>
                         <div id="ab-forecast-overview" class="text-sm text-gray-400 italic">Keine Forecast-Daten.</div>
                     </div>
                 </div>
@@ -3839,9 +3842,27 @@
                             <div><label class="block text-sm font-bold text-gray-700 mb-1">Typ *</label><select id="ab-item-type" class="w-full p-2 border rounded-lg"><option value="belastung">Belastung</option><option value="gutschrift">Gutschrift</option></select></div>
                             <div><label class="block text-sm font-bold text-gray-700 mb-1">Betrag *</label><input id="ab-item-amount" type="text" class="w-full p-2 border rounded-lg"></div>
                             <div><label class="block text-sm font-bold text-gray-700 mb-1">Intervall</label><select id="ab-item-interval" class="w-full p-2 border rounded-lg"><option value="monthly">Monatlich</option><option value="quarterly">Quartal</option><option value="semiannual">Halbjahr</option><option value="annual">Jährlich</option><option value="custom">Individuell</option></select></div>
-                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Start-Monat</label><input id="ab-item-start-month" type="number" min="1" max="12" class="w-full p-2 border rounded-lg"></div>
-                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Individuelle Monate</label><input id="ab-item-custom-months" type="text" placeholder="1,3,8" class="w-full p-2 border rounded-lg"></div>
-                            <div><label class="block text-sm font-bold text-gray-700 mb-1">Tag im Monat</label><input id="ab-item-day" type="number" min="1" max="31" class="w-full p-2 border rounded-lg"></div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Start-Monat
+                                    <button type="button" class="ab-help-btn inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold ml-1" data-help-target="ab-help-item-start-month" title="Info">i</button>
+                                </label>
+                                <input id="ab-item-start-month" type="number" min="1" max="12" class="w-full p-2 border rounded-lg">
+                                <div id="ab-help-item-start-month" class="ab-help-content hidden mt-1 text-xs text-blue-900 bg-blue-50 border border-blue-200 rounded-lg p-2">Nur für Quartal/Halbjahr/Jahr: Startmonat des Zyklus (1-12).</div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Individuelle Monate
+                                    <button type="button" class="ab-help-btn inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold ml-1" data-help-target="ab-help-item-custom-months" title="Info">i</button>
+                                </label>
+                                <input id="ab-item-custom-months" type="text" placeholder="1,3,8" class="w-full p-2 border rounded-lg">
+                                <div id="ab-help-item-custom-months" class="ab-help-content hidden mt-1 text-xs text-blue-900 bg-blue-50 border border-blue-200 rounded-lg p-2">Nur bei "Individuell": Kommagetrennte Monate eingeben, z. B. 1,3,8.</div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Tag im Monat
+                                    <button type="button" class="ab-help-btn inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold ml-1" data-help-target="ab-help-item-day" title="Info">i</button>
+                                </label>
+                                <input id="ab-item-day" type="number" min="1" max="31" class="w-full p-2 border rounded-lg">
+                                <div id="ab-help-item-day" class="ab-help-content hidden mt-1 text-xs text-blue-900 bg-blue-50 border border-blue-200 rounded-lg p-2">Optionaler Ausführungstag im Monat (1-31). Ohne Angabe wird mit Standardtag gerechnet.</div>
+                            </div>
                             <div><label class="block text-sm font-bold text-gray-700 mb-1">Gültig ab *</label><input id="ab-item-valid-from" type="date" class="w-full p-2 border rounded-lg"></div>
                             <div><label class="block text-sm font-bold text-gray-700 mb-1">Gültig bis</label><input id="ab-item-valid-to" type="date" class="w-full p-2 border rounded-lg"></div>
                         </div>
@@ -3914,8 +3935,20 @@
                                 <div><label class="block text-sm font-bold text-gray-700 mb-1">Rolle</label><select id="ab-account-role" class="w-full p-2 border rounded-lg"><option value="both">Quelle & Ziel</option><option value="source">Nur Quelle</option><option value="target">Nur Ziel</option></select></div>
                             </div>
                             <div class="grid grid-cols-2 gap-2">
-                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Mindestpuffer</label><input id="ab-account-min-buffer" type="text" class="w-full p-2 border rounded-lg"></div>
-                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Startsaldo</label><input id="ab-account-start-balance" type="text" class="w-full p-2 border rounded-lg"></div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Mindestpuffer
+                                        <button type="button" class="ab-help-btn inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold ml-1" data-help-target="ab-help-account-buffer" title="Info">i</button>
+                                    </label>
+                                    <input id="ab-account-min-buffer" type="text" class="w-full p-2 border rounded-lg">
+                                    <div id="ab-help-account-buffer" class="ab-help-content hidden mt-1 text-xs text-blue-900 bg-blue-50 border border-blue-200 rounded-lg p-2">Mindestbetrag, der auf dem Konto verbleiben soll. Unter diesem Wert entstehen Warnung/Alarm.</div>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Startsaldo
+                                        <button type="button" class="ab-help-btn inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold ml-1" data-help-target="ab-help-account-start" title="Info">i</button>
+                                    </label>
+                                    <input id="ab-account-start-balance" type="text" class="w-full p-2 border rounded-lg">
+                                    <div id="ab-help-account-start" class="ab-help-content hidden mt-1 text-xs text-blue-900 bg-blue-50 border border-blue-200 rounded-lg p-2">Aktueller Kontostand beim Anlegen/Bearbeiten. Wird als Snapshot gespeichert und für Forecast genutzt.</div>
+                                </div>
                             </div>
                             <div class="flex gap-2">
                                 <button id="ab-reset-account-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg">Reset</button>
@@ -3924,6 +3957,12 @@
                         </div>
                         <div>
                             <h4 class="font-bold text-gray-700 mb-2">Bestehende Konten</h4>
+                            <div class="flex flex-wrap gap-2 mb-2">
+                                <button id="ab-accounts-filter-all" type="button" class="ab-list-filter-btn px-2 py-1 text-xs rounded font-bold bg-blue-600 text-white">ALLE</button>
+                                <button id="ab-accounts-filter-bank" type="button" class="ab-list-filter-btn px-2 py-1 text-xs rounded font-bold bg-gray-100 text-gray-700 hover:bg-gray-200">Bank</button>
+                                <button id="ab-accounts-filter-person" type="button" class="ab-list-filter-btn px-2 py-1 text-xs rounded font-bold bg-gray-100 text-gray-700 hover:bg-gray-200">Person</button>
+                                <input id="ab-accounts-search" type="text" placeholder="Konto/Person suchen..." class="flex-1 min-w-[180px] p-1.5 border rounded text-xs">
+                            </div>
                             <div id="ab-accounts-list" class="space-y-2">
                                 <p class="text-sm text-gray-400 italic">Noch keine Konten/Quellen.</p>
                             </div>
@@ -3951,9 +3990,27 @@
                                 <div><label class="block text-sm font-bold text-gray-700 mb-1">Intervall</label><select id="ab-transfer-interval" class="w-full p-2 border rounded-lg"><option value="monthly">Monatlich</option><option value="quarterly">Quartal</option><option value="semiannual">Halbjahr</option><option value="annual">Jährlich</option><option value="custom">Individuell</option></select></div>
                             </div>
                             <div class="grid grid-cols-3 gap-2">
-                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Start-Monat</label><input id="ab-transfer-start-month" type="number" min="1" max="12" class="w-full p-2 border rounded-lg"></div>
-                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Monate</label><input id="ab-transfer-custom-months" type="text" placeholder="1,3,8" class="w-full p-2 border rounded-lg"></div>
-                                <div><label class="block text-sm font-bold text-gray-700 mb-1">Tag</label><input id="ab-transfer-day" type="number" min="1" max="31" class="w-full p-2 border rounded-lg"></div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Start-Monat
+                                        <button type="button" class="ab-help-btn inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold ml-1" data-help-target="ab-help-transfer-start-month" title="Info">i</button>
+                                    </label>
+                                    <input id="ab-transfer-start-month" type="number" min="1" max="12" class="w-full p-2 border rounded-lg">
+                                    <div id="ab-help-transfer-start-month" class="ab-help-content hidden mt-1 text-xs text-blue-900 bg-blue-50 border border-blue-200 rounded-lg p-2">Nur bei Quartal/Halbjahr/Jahr relevant: Startmonat des Transferzyklus.</div>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Monate
+                                        <button type="button" class="ab-help-btn inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold ml-1" data-help-target="ab-help-transfer-months" title="Info">i</button>
+                                    </label>
+                                    <input id="ab-transfer-custom-months" type="text" placeholder="1,3,8" class="w-full p-2 border rounded-lg">
+                                    <div id="ab-help-transfer-months" class="ab-help-content hidden mt-1 text-xs text-blue-900 bg-blue-50 border border-blue-200 rounded-lg p-2">Nur bei "Individuell" relevant: Monate als Liste eingeben (z. B. 1,3,8).</div>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Tag
+                                        <button type="button" class="ab-help-btn inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold ml-1" data-help-target="ab-help-transfer-day" title="Info">i</button>
+                                    </label>
+                                    <input id="ab-transfer-day" type="number" min="1" max="31" class="w-full p-2 border rounded-lg">
+                                    <div id="ab-help-transfer-day" class="ab-help-content hidden mt-1 text-xs text-blue-900 bg-blue-50 border border-blue-200 rounded-lg p-2">Optionaler Ausführungstag im Monat (1-31).</div>
+                                </div>
                             </div>
                             <div class="grid grid-cols-2 gap-2">
                                 <div><label class="block text-sm font-bold text-gray-700 mb-1">Gültig ab *</label><input id="ab-transfer-valid-from" type="date" class="w-full p-2 border rounded-lg"></div>
@@ -3967,6 +4024,12 @@
                         </div>
                         <div>
                             <h4 class="font-bold text-gray-700 mb-2">Bestehende Transfers</h4>
+                            <div class="flex flex-wrap gap-2 mb-2">
+                                <button id="ab-transfers-filter-all" type="button" class="ab-list-filter-btn px-2 py-1 text-xs rounded font-bold bg-blue-600 text-white">ALLE</button>
+                                <button id="ab-transfers-filter-bank" type="button" class="ab-list-filter-btn px-2 py-1 text-xs rounded font-bold bg-gray-100 text-gray-700 hover:bg-gray-200">Bank</button>
+                                <button id="ab-transfers-filter-person" type="button" class="ab-list-filter-btn px-2 py-1 text-xs rounded font-bold bg-gray-100 text-gray-700 hover:bg-gray-200">Person</button>
+                                <input id="ab-transfers-search" type="text" placeholder="Transfer suchen..." class="flex-1 min-w-[180px] p-1.5 border rounded text-xs">
+                            </div>
                             <div id="ab-transfers-list" class="space-y-2">
                                 <p class="text-sm text-gray-400 italic">Noch keine Daueraufträge.</p>
                             </div>
@@ -4013,6 +4076,17 @@
                     <div id="ab-suggestions-content" class="p-4 space-y-3">
                         <p class="text-sm text-gray-400 italic">Keine Vorschläge nötig.</p>
                     </div>
+                </div>
+            </div>
+
+            <!-- ========== ABBUCHUNGSBERECHNER STAT DETAIL MODAL ========== -->
+            <div id="ab-stat-detail-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <div class="sticky top-0 bg-gradient-to-r from-blue-700 to-indigo-700 text-white p-4 rounded-t-2xl flex justify-between items-center">
+                        <h3 id="ab-stat-detail-title" class="text-xl font-bold">Detailansicht</h3>
+                        <button id="ab-close-stat-detail-modal" class="text-white/80 hover:text-white transition">✕</button>
+                    </div>
+                    <div id="ab-stat-detail-content" class="p-4 space-y-3 text-sm text-gray-700"></div>
                 </div>
             </div>
 

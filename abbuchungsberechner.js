@@ -25,6 +25,11 @@ let itemReadMode = false;
 
 let filterTokens = [];
 let filterState = { negate: false, joinMode: 'and', status: '', typ: '', interval: '' };
+let editingAccountId = '';
+let editingTransferId = '';
+let accountListFilterState = { type: 'all', query: '' };
+let transferListFilterState = { type: 'all', query: '' };
+let helpHintsBound = false;
 
 function uid() { return currentUser?.mode || currentUser?.displayName || null; }
 function isGuest() { return !currentUser?.mode || currentUser.mode === GUEST_MODE; }
@@ -76,9 +81,21 @@ function dueInMonth(entity, y, m) {
 
 function latestSnapshots() {
     const map = {};
+    const todayIso = isoDate(new Date());
     Object.values(RECON).forEach((r) => {
         if (r.type !== 'snapshot' || !r.accountId || !r.date) return;
+        if (String(r.date) > todayIso) return;
         if (!map[r.accountId] || String(map[r.accountId].date) < String(r.date)) map[r.accountId] = r;
+    });
+    return map;
+}
+
+function latestSnapshotByAccountAndMonth() {
+    const map = {};
+    Object.values(RECON).forEach((r) => {
+        if (r.type !== 'snapshot' || !r.accountId || !r.date) return;
+        const key = `${r.accountId}__${String(r.date).slice(0, 7)}`;
+        if (!map[key] || String(map[key].date) < String(r.date)) map[key] = r;
     });
     return map;
 }
@@ -101,6 +118,7 @@ function findSkippedMonths() {
 function buildForecast(horizon = 12) {
     const accounts = Object.values(ACCOUNTS);
     const shots = latestSnapshots();
+    const snapshotsByMonth = latestSnapshotByAccountAndMonth();
     const bal = {};
     const alerts = [];
     accounts.forEach(a => { bal[a.id] = shots[a.id] ? toNum(shots[a.id].value, 0) : 0; });
@@ -152,7 +170,9 @@ function buildForecast(horizon = 12) {
             const start = toNum(bal[a.id], 0);
             const inflow = toNum(mv[a.id]?.in, 0);
             const outflow = toNum(mv[a.id]?.out, 0);
-            const end = start + inflow - outflow;
+            let end = start + inflow - outflow;
+            const snapshot = snapshotsByMonth[`${a.id}__${bucket.key}`];
+            if (snapshot) end = toNum(snapshot.value, end);
             bal[a.id] = end;
             const minBuffer = toNum(a.minBuffer, 0);
             let severity = 'ok';
@@ -225,6 +245,149 @@ function intervalLabel(i, cm = []) {
     return '-';
 }
 
+function setInputEnabled(el, enabled, clearWhenDisabled = false) {
+    if (!el) return;
+    if (!enabled && clearWhenDisabled) el.value = '';
+    el.disabled = !enabled;
+    el.classList.toggle('bg-gray-100', !enabled);
+    el.classList.toggle('text-gray-500', !enabled);
+}
+
+function updateMainIntervalFields(prefix) {
+    const interval = (document.getElementById(`${prefix}-interval`)?.value || 'monthly').trim();
+    const startMonth = document.getElementById(`${prefix}-start-month`);
+    const customMonths = document.getElementById(`${prefix}-custom-months`);
+
+    if (interval === 'custom') {
+        setInputEnabled(startMonth, false, true);
+        setInputEnabled(customMonths, true, false);
+        return;
+    }
+
+    if (interval === 'monthly') {
+        setInputEnabled(startMonth, false, true);
+        setInputEnabled(customMonths, false, true);
+        return;
+    }
+
+    setInputEnabled(startMonth, true, false);
+    setInputEnabled(customMonths, false, true);
+}
+
+function updateContributionRowState(row) {
+    if (!row) return;
+    const interval = row.querySelector('.ab-contrib-interval')?.value || 'inherit';
+    const customMonths = row.querySelector('.ab-contrib-custom');
+    const isCustom = interval === 'custom';
+    setInputEnabled(customMonths, isCustom, !isCustom);
+}
+
+function updateAccountTypeDependencies() {
+    const type = (document.getElementById('ab-account-type')?.value || 'bank').trim();
+    const minBuffer = document.getElementById('ab-account-min-buffer');
+    const isPerson = type === 'person';
+    if (isPerson && minBuffer && !minBuffer.value) minBuffer.value = '0';
+    setInputEnabled(minBuffer, !isPerson, isPerson);
+}
+
+function setFilterButtonState(id, active) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.className = active
+        ? 'ab-list-filter-btn px-2 py-1 text-xs rounded font-bold bg-blue-600 text-white'
+        : 'ab-list-filter-btn px-2 py-1 text-xs rounded font-bold bg-gray-100 text-gray-700 hover:bg-gray-200';
+}
+
+function renderAccountFilterButtons() {
+    setFilterButtonState('ab-accounts-filter-all', accountListFilterState.type === 'all');
+    setFilterButtonState('ab-accounts-filter-bank', accountListFilterState.type === 'bank');
+    setFilterButtonState('ab-accounts-filter-person', accountListFilterState.type === 'person');
+}
+
+function renderTransferFilterButtons() {
+    setFilterButtonState('ab-transfers-filter-all', transferListFilterState.type === 'all');
+    setFilterButtonState('ab-transfers-filter-bank', transferListFilterState.type === 'bank');
+    setFilterButtonState('ab-transfers-filter-person', transferListFilterState.type === 'person');
+}
+
+function applyStatCardPulse(cardId, value) {
+    const card = document.getElementById(cardId);
+    if (!card) return;
+    const active = Number(value) > 0;
+    card.classList.toggle('ring-2', active);
+    card.classList.toggle('ring-white/80', active);
+    card.classList.toggle('shadow-[0_0_18px_rgba(255,255,255,0.45)]', active);
+    card.classList.toggle('animate-pulse', active);
+    card.classList.toggle('cursor-pointer', true);
+}
+
+function closeAllHelpHints(exceptId = '') {
+    document.querySelectorAll('.ab-help-content').forEach((el) => {
+        if (exceptId && el.id === exceptId) return;
+        el.classList.add('hidden');
+    });
+}
+
+function toggleHelpHint(targetId) {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    const willOpen = target.classList.contains('hidden');
+    closeAllHelpHints();
+    if (willOpen) target.classList.remove('hidden');
+}
+
+function openStatDetail(title, bodyHtml) {
+    const titleEl = document.getElementById('ab-stat-detail-title');
+    const bodyEl = document.getElementById('ab-stat-detail-content');
+    if (titleEl) titleEl.textContent = title;
+    if (bodyEl) bodyEl.innerHTML = bodyHtml;
+    openModal('ab-stat-detail-modal');
+}
+
+function renderStatDetailList(lines) {
+    if (!lines.length) return '<p class="text-sm text-gray-500 italic">Keine betroffenen Einträge.</p>';
+    return `<ul class="space-y-2">${lines.map((line) => `<li class="text-sm text-gray-700 border rounded-lg px-3 py-2 bg-gray-50">${line}</li>`).join('')}</ul>`;
+}
+
+function openStatInsight(statKey) {
+    const items = Object.values(ITEMS);
+    const snaps = latestSnapshots();
+
+    if (statKey === 'accounts') {
+        const lines = Object.values(ACCOUNTS)
+            .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+            .map((a) => {
+                const bal = toNum(snaps[a.id]?.value, 0);
+                const buf = toNum(a.minBuffer, 0);
+                const diff = bal - buf;
+                if (a.type === 'person') return `<strong>${escapeHtml(a.name || '-')}</strong>: Stand ${bal.toFixed(2)} € (Person/Quelle)`;
+                const hint = diff >= 0 ? `Überschuss ${diff.toFixed(2)} €` : `Unter Puffer ${Math.abs(diff).toFixed(2)} €`;
+                return `<strong>${escapeHtml(a.name || '-')}</strong>: Stand ${bal.toFixed(2)} € · Puffer ${buf.toFixed(2)} € · ${hint}`;
+            });
+        return openStatDetail('Konten-Analyse', `${renderStatDetailList(lines)}<p class="text-xs text-blue-700 mt-3">Empfehlung: Konten mit negativer Differenz über Abgleich prüfen oder per Transfer stabilisieren.</p>`);
+    }
+
+    if (['aktiv', 'geplant', 'vergangen', 'fehler'].includes(statKey)) {
+        const lines = items
+            .filter((i) => itemStatus(i).key === statKey)
+            .map((i) => `<strong>${escapeHtml(i.title || '-')}</strong> · ${escapeHtml(ACCOUNTS[i.accountId]?.name || '-')} · ${toNum(i.amount, 0).toFixed(2)} €`);
+        return openStatDetail(`Status: ${statKey.toUpperCase()}`, `${renderStatDetailList(lines)}<p class="text-xs text-blue-700 mt-3">Empfehlung: Fehler zuerst korrigieren, geplante Einträge auf Datum/Betrag prüfen.</p>`);
+    }
+
+    if (statKey === 'warnings' || statKey === 'alarms') {
+        const severity = statKey === 'alarms' ? 'alarm' : 'warn';
+        const lines = FORECAST.alerts
+            .filter((a) => a.severity === severity)
+            .map((a) => `<strong>${escapeHtml(a.accountName || '-')}</strong> · Monat ${escapeHtml(a.monthKey)} · Endstand ${toNum(a.endBalance, 0).toFixed(2)} € (Puffer ${toNum(a.minBuffer, 0).toFixed(2)} €)`);
+        const rec = statKey === 'alarms'
+            ? 'Empfehlung: Sofortige Gegenmaßnahmen (Einmaltransfer oder Betragserhöhung) einplanen.'
+            : 'Empfehlung: Frühzeitig Dauerauftrag prüfen und ggf. leicht erhöhen.';
+        return openStatDetail(statKey === 'alarms' ? 'Alarm-Details' : 'Warnungs-Details', `${renderStatDetailList(lines)}<p class="text-xs text-blue-700 mt-3">${rec}</p>`);
+    }
+
+    return openStatDetail('Info', '<p class="text-sm text-gray-600">Für diese Kennzahl liegen aktuell keine Details vor.</p>');
+}
+
 function populateSelects() {
     const accounts = Object.values(ACCOUNTS).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
     const mk = (fn) => ['<option value="">Bitte wählen...</option>', ...accounts.filter(fn).map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)} (${escapeHtml(a.type || '-')})</option>`)].join('');
@@ -273,6 +436,7 @@ function resetItemForm() {
     const typ = document.getElementById('ab-item-type'); if (typ) typ.value = 'belastung';
     const interval = document.getElementById('ab-item-interval'); if (interval) interval.value = 'monthly';
     const c = document.getElementById('ab-contrib-list'); if (c) c.innerHTML = '';
+    updateMainIntervalFields('ab-item');
     setReadMode(false); populateSelects();
 }
 
@@ -292,6 +456,7 @@ function addContributionRow(v = {}) {
     row.querySelector('.ab-contrib-amount').value = v.amount ?? '';
     row.querySelector('.ab-contrib-interval').value = v.intervalType || 'inherit';
     row.querySelector('.ab-contrib-custom').value = Array.isArray(v.customMonths) ? v.customMonths.join(',') : '';
+    updateContributionRowState(row);
 }
 
 function collectContribs() {
@@ -300,7 +465,7 @@ function collectContribs() {
         const sourceAccountId = row.querySelector('.ab-contrib-source')?.value || '';
         const amount = toNum(row.querySelector('.ab-contrib-amount')?.value, 0);
         const intervalType = row.querySelector('.ab-contrib-interval')?.value || 'inherit';
-        const customMonths = parseMonths(row.querySelector('.ab-contrib-custom')?.value || '');
+        const customMonths = intervalType === 'custom' ? parseMonths(row.querySelector('.ab-contrib-custom')?.value || '') : [];
         if (!sourceAccountId || amount <= 0) return;
         out.push({ sourceAccountId, amount, intervalType, customMonths });
     });
@@ -333,6 +498,14 @@ function renderDashboard() {
     setTxt('ab-stat-warnings', warns);
     setTxt('ab-stat-alarms', alarms);
 
+    applyStatCardPulse('ab-stat-card-accounts', Object.keys(ACCOUNTS).length);
+    applyStatCardPulse('ab-stat-card-active', active);
+    applyStatCardPulse('ab-stat-card-planned', planned);
+    applyStatCardPulse('ab-stat-card-past', past);
+    applyStatCardPulse('ab-stat-card-errors', errors);
+    applyStatCardPulse('ab-stat-card-warnings', warns);
+    applyStatCardPulse('ab-stat-card-alarms', alarms);
+
     const skipped = document.getElementById('ab-skipped-months');
     if (skipped) {
         if (FORECAST.skippedMonths.length) { skipped.classList.remove('hidden'); skipped.textContent = `Monatsabgleich fehlt fuer: ${FORECAST.skippedMonths.join(', ')}`; }
@@ -346,7 +519,11 @@ function renderDashboard() {
             const bal = snaps[a.id] ? toNum(snaps[a.id].value, 0) : 0;
             const buf = toNum(a.minBuffer, 0);
             const badge = a.type === 'person' ? '<span class="text-xs px-2 py-1 rounded bg-indigo-100 text-indigo-700">Person</span>' : (bal < buf ? '<span class="text-xs px-2 py-1 rounded bg-red-100 text-red-700">Unter Puffer</span>' : '<span class="text-xs px-2 py-1 rounded bg-green-100 text-green-700">Puffer ok</span>');
-            return `<div class="p-3 rounded-lg border bg-white"><div class="flex justify-between items-center"><div class="font-bold text-sm">${escapeHtml(a.name || '-')}</div>${badge}</div><div class="text-xs text-gray-500">${escapeHtml(a.bankName || '-')} ${a.iban ? `· ${escapeHtml(a.iban)}` : ''}</div><div class="text-sm font-semibold">Stand: ${bal.toFixed(2)} €</div><div class="text-xs text-gray-500">Puffer: ${buf.toFixed(2)} €</div></div>`;
+            const diff = bal - buf;
+            const diffLine = a.type === 'person'
+                ? '<div class="text-xs text-indigo-600">Quelle/Person (kein Pufferzwang)</div>'
+                : `<div class="text-xs ${diff >= 0 ? 'text-green-700' : 'text-red-700'}">${diff >= 0 ? `Überschuss: +${diff.toFixed(2)} €` : `Differenz: ${diff.toFixed(2)} €`}</div>`;
+            return `<div class="p-3 rounded-lg border bg-white"><div class="flex justify-between items-center"><div class="font-bold text-sm">${escapeHtml(a.name || '-')}</div>${badge}</div><div class="text-xs text-gray-500">${escapeHtml(a.bankName || '-')} ${a.iban ? `· ${escapeHtml(a.iban)}` : ''}</div><div class="text-sm font-semibold">Stand: ${bal.toFixed(2)} €</div><div class="text-xs text-gray-500">Puffer: ${buf.toFixed(2)} €</div>${diffLine}</div>`;
         }).join('');
         accountHost.innerHTML = html || '<p class="text-sm text-gray-400 italic">Noch keine Konten/Quellen.</p>';
     }
@@ -405,12 +582,57 @@ function renderTable() {
 
 function renderAccounts() {
     const host = document.getElementById('ab-accounts-list'); if (!host) return;
-    host.innerHTML = Object.values(ACCOUNTS).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))).map((a) => `<div class="p-2 rounded border bg-white flex items-center justify-between gap-2"><div><div class="text-sm font-bold">${escapeHtml(a.name || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(a.bankName || '-')} · ${escapeHtml(a.type || '-')} · Rolle: ${escapeHtml(a.role || '-')} ${a.iban ? `· ${escapeHtml(a.iban)}` : ''}</div><div class="text-xs text-gray-500">Puffer: ${toNum(a.minBuffer, 0).toFixed(2)} €</div></div><div class="flex gap-1"><button class="ab-account-action px-2 py-1 text-xs rounded bg-gray-100 hover:bg-gray-200" data-action="edit" data-id="${escapeHtml(a.id)}">Bearb.</button><button class="ab-account-action px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200" data-action="delete" data-id="${escapeHtml(a.id)}">Löschen</button></div></div>`).join('') || '<p class="text-sm text-gray-400 italic">Noch keine Konten/Quellen.</p>';
+    renderAccountFilterButtons();
+    const snaps = latestSnapshots();
+    const q = accountListFilterState.query.trim().toLowerCase();
+    const rows = Object.values(ACCOUNTS)
+        .filter((a) => accountListFilterState.type === 'all' || a.type === accountListFilterState.type)
+        .filter((a) => {
+            if (!q) return true;
+            const hay = `${a.name || ''} ${a.bankName || ''} ${a.iban || ''} ${a.type || ''} ${a.role || ''}`.toLowerCase();
+            return hay.includes(q);
+        })
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+        .map((a) => {
+            const bal = toNum(snaps[a.id]?.value, 0);
+            const buf = toNum(a.minBuffer, 0);
+            const diff = bal - buf;
+            const editing = editingAccountId === a.id;
+            const rowCls = editing ? 'bg-yellow-100 border-yellow-400' : 'bg-white';
+            const diffTxt = a.type === 'person' ? 'Person/Quelle' : (diff >= 0 ? `Überschuss +${diff.toFixed(2)} €` : `Differenz ${diff.toFixed(2)} €`);
+            return `<div class="p-2 rounded border ${rowCls} flex items-center justify-between gap-2"><div><div class="text-sm font-bold">${escapeHtml(a.name || '-')} ${editing ? '<span class="ml-1 text-[10px] px-2 py-0.5 rounded bg-yellow-300 text-yellow-900">In Bearbeitung</span>' : ''}</div><div class="text-xs text-gray-500">${escapeHtml(a.bankName || '-')} · ${escapeHtml(a.type || '-')} · Rolle: ${escapeHtml(a.role || '-')} ${a.iban ? `· ${escapeHtml(a.iban)}` : ''}</div><div class="text-xs text-gray-500">Stand: ${bal.toFixed(2)} € · Puffer: ${buf.toFixed(2)} €</div><div class="text-xs ${a.type === 'person' ? 'text-indigo-700' : (diff >= 0 ? 'text-green-700' : 'text-red-700')}">${diffTxt}</div></div><div class="flex gap-1"><button class="ab-account-action px-2 py-1 text-xs rounded bg-gray-100 hover:bg-gray-200" data-action="edit" data-id="${escapeHtml(a.id)}">Bearb.</button><button class="ab-account-action px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200" data-action="delete" data-id="${escapeHtml(a.id)}">Löschen</button></div></div>`;
+        })
+        .join('');
+    host.innerHTML = rows || '<p class="text-sm text-gray-400 italic">Keine Konten/Quellen passend zum Filter.</p>';
 }
 
 function renderTransfers() {
     const host = document.getElementById('ab-transfers-list'); if (!host) return;
-    host.innerHTML = Object.values(TRANSFERS).sort((a, b) => String(a.validFrom || '').localeCompare(String(b.validFrom || ''))).map((t) => `<div class="p-2 rounded border bg-white flex items-center justify-between gap-2"><div><div class="text-sm font-bold">${escapeHtml(ACCOUNTS[t.sourceAccountId]?.name || '-')} → ${escapeHtml(ACCOUNTS[t.targetAccountId]?.name || '-')}</div><div class="text-xs text-gray-500">${toNum(t.amount, 0).toFixed(2)} € · ${intervalLabel(t.intervalType, t.customMonths)}</div><div class="text-xs text-gray-500">${escapeHtml(t.validFrom || '-')} ${t.validTo ? `bis ${escapeHtml(t.validTo)}` : 'fortlaufend'}</div></div><div class="flex gap-1"><button class="ab-transfer-action px-2 py-1 text-xs rounded bg-gray-100 hover:bg-gray-200" data-action="edit" data-id="${escapeHtml(t.id)}">Bearb.</button><button class="ab-transfer-action px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200" data-action="delete" data-id="${escapeHtml(t.id)}">Löschen</button></div></div>`).join('') || '<p class="text-sm text-gray-400 italic">Noch keine Dauerauftraege.</p>';
+    renderTransferFilterButtons();
+    const q = transferListFilterState.query.trim().toLowerCase();
+    const rows = Object.values(TRANSFERS)
+        .filter((t) => {
+            if (transferListFilterState.type === 'all') return true;
+            const src = ACCOUNTS[t.sourceAccountId];
+            const trg = ACCOUNTS[t.targetAccountId];
+            const hasPerson = src?.type === 'person' || trg?.type === 'person';
+            return transferListFilterState.type === 'person' ? hasPerson : !hasPerson;
+        })
+        .filter((t) => {
+            if (!q) return true;
+            const src = ACCOUNTS[t.sourceAccountId]?.name || '';
+            const trg = ACCOUNTS[t.targetAccountId]?.name || '';
+            const hay = `${src} ${trg} ${t.note || ''} ${intervalLabel(t.intervalType, t.customMonths)} ${toNum(t.amount, 0)}`.toLowerCase();
+            return hay.includes(q);
+        })
+        .sort((a, b) => String(a.validFrom || '').localeCompare(String(b.validFrom || '')))
+        .map((t) => {
+            const editing = editingTransferId === t.id;
+            const rowCls = editing ? 'bg-yellow-100 border-yellow-400' : 'bg-white';
+            return `<div class="p-2 rounded border ${rowCls} flex items-center justify-between gap-2"><div><div class="text-sm font-bold">${escapeHtml(ACCOUNTS[t.sourceAccountId]?.name || '-')} → ${escapeHtml(ACCOUNTS[t.targetAccountId]?.name || '-')} ${editing ? '<span class="ml-1 text-[10px] px-2 py-0.5 rounded bg-yellow-300 text-yellow-900">In Bearbeitung</span>' : ''}</div><div class="text-xs text-gray-500">${toNum(t.amount, 0).toFixed(2)} € · ${intervalLabel(t.intervalType, t.customMonths)}</div><div class="text-xs text-gray-500">${escapeHtml(t.validFrom || '-')} ${t.validTo ? `bis ${escapeHtml(t.validTo)}` : 'fortlaufend'}</div></div><div class="flex gap-1"><button class="ab-transfer-action px-2 py-1 text-xs rounded bg-gray-100 hover:bg-gray-200" data-action="edit" data-id="${escapeHtml(t.id)}">Bearb.</button><button class="ab-transfer-action px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200" data-action="delete" data-id="${escapeHtml(t.id)}">Löschen</button></div></div>`;
+        })
+        .join('');
+    host.innerHTML = rows || '<p class="text-sm text-gray-400 italic">Keine Transfers passend zum Filter.</p>';
 }
 
 function renderRecon() {
@@ -443,6 +665,7 @@ function fillItemForm(item, readOnly) {
     setVal('ab-item-valid-to', item.validTo || '');
     setVal('ab-item-notes', item.notes || '');
     (Array.isArray(item.contributions) ? item.contributions : []).forEach((c) => addContributionRow(c));
+    updateMainIntervalFields('ab-item');
     setReadMode(readOnly);
 }
 
@@ -464,6 +687,10 @@ async function saveItem() {
         contributions: collectContribs(),
         createdBy: uid(), updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp()
     };
+
+    if (payload.intervalType === 'monthly') payload.startMonth = null;
+    if (payload.intervalType === 'custom') payload.startMonth = null;
+    if (payload.intervalType !== 'custom') payload.customMonths = [];
 
     if (!payload.title || !payload.accountId || payload.amount <= 0 || !payload.validFrom) return alertUser('Bitte Titel, Konto, Betrag und Gueltig-Ab ausfuellen.', 'error');
     if (payload.intervalType === 'custom' && payload.customMonths.length === 0) return alertUser('Bei individuell bitte Monate angeben.', 'error');
@@ -520,6 +747,34 @@ function resetAccountForm() {
     ['ab-account-id', 'ab-account-name', 'ab-account-bank', 'ab-account-iban', 'ab-account-min-buffer', 'ab-account-start-balance'].forEach((id) => { const el = document.getElementById(id); if (el) el.value = ''; });
     const t = document.getElementById('ab-account-type'); if (t) t.value = 'bank';
     const r = document.getElementById('ab-account-role'); if (r) r.value = 'both';
+    editingAccountId = '';
+    updateAccountTypeDependencies();
+    renderAccounts();
+}
+
+async function upsertSnapshotEntry(accountId, date, value, note) {
+    const existing = Object.values(RECON).find((r) => r.accountId === accountId && r.type === 'snapshot' && r.date === date);
+    if (existing) {
+        await updateDoc(doc(reconRef, existing.id), {
+            value,
+            note,
+            updatedBy: currentUser?.displayName || 'Unbekannt',
+            updatedAt: serverTimestamp()
+        });
+        return existing.id;
+    }
+    const ref = await addDoc(reconRef, {
+        accountId,
+        type: 'snapshot',
+        date,
+        value,
+        note,
+        createdBy: uid(),
+        createdByName: currentUser?.displayName || 'Unbekannt',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+    });
+    return ref.id;
 }
 
 async function saveAccount() {
@@ -541,12 +796,15 @@ async function saveAccount() {
         if (id) {
             const before = JSON.parse(JSON.stringify(ACCOUNTS[id] || {}));
             await updateDoc(doc(accountsRef, id), payload);
+            if (Number.isFinite(startBalance)) {
+                await upsertSnapshotEntry(id, isoDate(new Date()), startBalance, 'Startsaldo nachgetragen (Kontobearbeitung)');
+            }
             await writeAudit('update', 'account', id, before, payload, { action: 'save_account' });
         } else {
             const createPayload = { ...payload, createdAt: serverTimestamp(), createdByName: currentUser?.displayName || 'Unbekannt' };
             const ref = await addDoc(accountsRef, createPayload);
             if (Number.isFinite(startBalance)) {
-                await addDoc(reconRef, { accountId: ref.id, type: 'snapshot', date: isoDate(new Date()), value: startBalance, note: 'Startsaldo beim Anlegen', createdBy: uid(), createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+                await upsertSnapshotEntry(ref.id, isoDate(new Date()), startBalance, 'Startsaldo beim Anlegen');
             }
             await writeAudit('create', 'account', ref.id, null, createPayload, { action: 'create_account' });
         }
@@ -556,8 +814,11 @@ async function saveAccount() {
 
 function editAccount(id) {
     const a = ACCOUNTS[id]; if (!a) return;
+    editingAccountId = id;
     const setVal = (el, v) => { const n = document.getElementById(el); if (n) n.value = v ?? ''; };
     setVal('ab-account-id', a.id); setVal('ab-account-name', a.name); setVal('ab-account-bank', a.bankName); setVal('ab-account-iban', a.iban); setVal('ab-account-type', a.type || 'bank'); setVal('ab-account-role', a.role || 'both'); setVal('ab-account-min-buffer', toNum(a.minBuffer, 0)); setVal('ab-account-start-balance', '');
+    updateAccountTypeDependencies();
+    renderAccounts();
 }
 
 async function deleteAccount(id) {
@@ -572,6 +833,9 @@ async function deleteAccount(id) {
 function resetTransferForm() {
     ['ab-transfer-id', 'ab-transfer-source', 'ab-transfer-target', 'ab-transfer-amount', 'ab-transfer-start-month', 'ab-transfer-custom-months', 'ab-transfer-day', 'ab-transfer-valid-from', 'ab-transfer-valid-to', 'ab-transfer-note'].forEach((id) => { const el = document.getElementById(id); if (el) el.value = ''; });
     const i = document.getElementById('ab-transfer-interval'); if (i) i.value = 'monthly';
+    editingTransferId = '';
+    updateMainIntervalFields('ab-transfer');
+    renderTransfers();
 }
 
 async function saveTransfer() {
@@ -590,6 +854,10 @@ async function saveTransfer() {
         note: (document.getElementById('ab-transfer-note')?.value || '').trim(),
         createdBy: uid(), updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp()
     };
+
+    if (payload.intervalType === 'monthly') payload.startMonth = null;
+    if (payload.intervalType === 'custom') payload.startMonth = null;
+    if (payload.intervalType !== 'custom') payload.customMonths = [];
 
     if (!payload.sourceAccountId || !payload.targetAccountId || payload.sourceAccountId === payload.targetAccountId || payload.amount <= 0 || !payload.validFrom) return alertUser('Bitte Quelle, Ziel, Betrag > 0 und Gueltig-Ab ausfüllen.', 'error');
     if (payload.intervalType === 'custom' && payload.customMonths.length === 0) return alertUser('Bei individuell bitte Monate angeben.', 'error');
@@ -610,8 +878,11 @@ async function saveTransfer() {
 
 function editTransfer(id) {
     const t = TRANSFERS[id]; if (!t) return;
+    editingTransferId = id;
     const setVal = (el, v) => { const n = document.getElementById(el); if (n) n.value = v ?? ''; };
     setVal('ab-transfer-id', t.id); setVal('ab-transfer-source', t.sourceAccountId); setVal('ab-transfer-target', t.targetAccountId); setVal('ab-transfer-amount', toNum(t.amount, 0)); setVal('ab-transfer-interval', t.intervalType || 'monthly'); setVal('ab-transfer-start-month', t.startMonth || ''); setVal('ab-transfer-custom-months', Array.isArray(t.customMonths) ? t.customMonths.join(',') : ''); setVal('ab-transfer-day', t.dayOfMonth || ''); setVal('ab-transfer-valid-from', t.validFrom || ''); setVal('ab-transfer-valid-to', t.validTo || ''); setVal('ab-transfer-note', t.note || '');
+    updateMainIntervalFields('ab-transfer');
+    renderTransfers();
 }
 
 async function deleteTransfer(id) {
@@ -634,8 +905,20 @@ async function saveRecon() {
     };
     if (!payload.accountId || !payload.date || !Number.isFinite(payload.value)) return alertUser('Bitte Konto, Datum und Wert ausfüllen.', 'error');
     try {
-        const ref = await addDoc(reconRef, payload);
-        await writeAudit('create', 'reconciliation', ref.id, null, payload, { action: 'create_recon' });
+        const existing = Object.values(RECON).find((r) => r.accountId === payload.accountId && r.type === payload.type && r.date === payload.date);
+        if (existing) {
+            const before = JSON.parse(JSON.stringify(existing));
+            await updateDoc(doc(reconRef, existing.id), {
+                value: payload.value,
+                note: payload.note,
+                updatedBy: currentUser?.displayName || 'Unbekannt',
+                updatedAt: serverTimestamp()
+            });
+            await writeAudit('update', 'reconciliation', existing.id, before, payload, { action: 'update_recon' });
+        } else {
+            const ref = await addDoc(reconRef, payload);
+            await writeAudit('create', 'reconciliation', ref.id, null, payload, { action: 'create_recon' });
+        }
         ['ab-recon-date', 'ab-recon-value', 'ab-recon-note'].forEach((id) => { const el = document.getElementById(id); if (el) el.value = ''; });
         alertUser('Abgleich gespeichert.', 'success');
     } catch (e) { console.error(e); alertUser(`Fehler beim Speichern: ${e.message || e}`, 'error'); }
@@ -725,6 +1008,7 @@ function bindEvents() {
     });
 
     on('ab-add-contrib-btn', 'click', () => addContributionRow());
+    on('ab-item-interval', 'change', () => updateMainIntervalFields('ab-item'));
     on('ab-close-abtausch-modal', 'click', () => closeModal('ab-abtausch-modal'));
     on('ab-cancel-abtausch-btn', 'click', () => closeModal('ab-abtausch-modal'));
     on('ab-save-abtausch-btn', 'click', abtausch);
@@ -732,15 +1016,36 @@ function bindEvents() {
     on('ab-close-accounts-modal', 'click', () => closeModal('ab-accounts-modal'));
     on('ab-save-account-btn', 'click', saveAccount);
     on('ab-reset-account-btn', 'click', resetAccountForm);
+    on('ab-account-type', 'change', updateAccountTypeDependencies);
+
+    on('ab-accounts-filter-all', 'click', () => { accountListFilterState.type = 'all'; renderAccounts(); });
+    on('ab-accounts-filter-bank', 'click', () => { accountListFilterState.type = 'bank'; renderAccounts(); });
+    on('ab-accounts-filter-person', 'click', () => { accountListFilterState.type = 'person'; renderAccounts(); });
+    on('ab-accounts-search', 'input', (e) => { accountListFilterState.query = e.target.value || ''; renderAccounts(); });
 
     on('ab-close-transfers-modal', 'click', () => closeModal('ab-transfers-modal'));
     on('ab-save-transfer-btn', 'click', saveTransfer);
     on('ab-reset-transfer-btn', 'click', resetTransferForm);
+    on('ab-transfer-interval', 'change', () => updateMainIntervalFields('ab-transfer'));
+
+    on('ab-transfers-filter-all', 'click', () => { transferListFilterState.type = 'all'; renderTransfers(); });
+    on('ab-transfers-filter-bank', 'click', () => { transferListFilterState.type = 'bank'; renderTransfers(); });
+    on('ab-transfers-filter-person', 'click', () => { transferListFilterState.type = 'person'; renderTransfers(); });
+    on('ab-transfers-search', 'input', (e) => { transferListFilterState.query = e.target.value || ''; renderTransfers(); });
 
     on('ab-close-recon-modal', 'click', () => closeModal('ab-reconciliation-modal'));
     on('ab-save-recon-btn', 'click', saveRecon);
 
     on('ab-close-suggestions-modal', 'click', () => closeModal('ab-suggestions-modal'));
+    on('ab-close-stat-detail-modal', 'click', () => closeModal('ab-stat-detail-modal'));
+
+    on('ab-stat-card-accounts', 'click', () => openStatInsight('accounts'));
+    on('ab-stat-card-active', 'click', () => openStatInsight('aktiv'));
+    on('ab-stat-card-planned', 'click', () => openStatInsight('geplant'));
+    on('ab-stat-card-past', 'click', () => openStatInsight('vergangen'));
+    on('ab-stat-card-errors', 'click', () => openStatInsight('fehler'));
+    on('ab-stat-card-warnings', 'click', () => openStatInsight('warnings'));
+    on('ab-stat-card-alarms', 'click', () => openStatInsight('alarms'));
 
     on('ab-toggle-filter-controls', 'click', async () => {
         const w = document.getElementById('ab-filter-controls-wrapper');
@@ -786,6 +1091,12 @@ function bindEvents() {
 
     const contribHost = document.getElementById('ab-contrib-list');
     if (contribHost && !contribHost.dataset.listenerAttached) {
+        contribHost.addEventListener('change', (e) => {
+            const intervalSel = e.target.closest('.ab-contrib-interval');
+            if (!intervalSel) return;
+            const row = intervalSel.closest('div.grid');
+            updateContributionRowState(row);
+        });
         contribHost.addEventListener('click', (e) => {
             const btn = e.target.closest('.ab-remove-contrib-btn'); if (!btn || itemReadMode) return;
             const row = btn.closest('div.grid'); if (row) row.remove();
@@ -833,6 +1144,26 @@ function bindEvents() {
         });
         sugHost.dataset.listenerAttached = 'true';
     }
+
+    if (!helpHintsBound) {
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('.ab-help-btn');
+            if (btn) {
+                e.preventDefault();
+                const targetId = btn.dataset.helpTarget || '';
+                if (targetId) toggleHelpHint(targetId);
+                return;
+            }
+            if (!e.target.closest('.ab-help-content')) closeAllHelpHints();
+        });
+        helpHintsBound = true;
+    }
+
+    updateMainIntervalFields('ab-item');
+    updateMainIntervalFields('ab-transfer');
+    updateAccountTypeDependencies();
+    renderAccountFilterButtons();
+    renderTransferFilterButtons();
 }
 
 function attachListeners() {
