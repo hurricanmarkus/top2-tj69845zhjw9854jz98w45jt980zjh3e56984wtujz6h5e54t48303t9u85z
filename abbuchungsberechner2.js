@@ -30,6 +30,7 @@ let transferListFilterState = { type: 'all', query: '' };
 let editingAccountId = '';
 let editingTransferId = '';
 let itemReadMode = false;
+const UNASSIGNED_TITLE_KEY = '__ab2_ohne_zuordnung__';
 
 function uid() { return currentUser?.mode || currentUser?.displayName || null; }
 function isGuest() { return !currentUser?.mode || currentUser.mode === GUEST_MODE; }
@@ -155,6 +156,8 @@ function ensureTransferLinkingFields() {
     if (!noteInput) return;
     if (el('ab2-transfer-linking-block')) {
         populateTransferLinkingOptions();
+        updateTransferLinkedTitleAllocationsUI();
+        updateTransferLinkingBudgetState();
         return;
     }
     const noteWrap = noteInput.closest('div');
@@ -162,23 +165,106 @@ function ensureTransferLinkingFields() {
     const block = document.createElement('div');
     block.id = 'ab2-transfer-linking-block';
     block.className = 'rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 space-y-2';
-    block.innerHTML = `<div class="text-sm font-bold text-indigo-900 flex items-center gap-2">Zahlungsgrund-Zuordnung (optional) ${helpButton('ab2-help-transfer-linking')}</div>${helpContent('ab2-help-transfer-linking', 'Wähle hier den Zahlungsgrund direkt aus deinen Eintrags-Titeln (ein oder mehrere). Diese Zuordnung steuert die Ungleichgewichts-Analyse (z. B. YouTube-Preis steigt, Beiträge bleiben zu niedrig).')}<div><label class="block text-xs font-bold text-indigo-800 mb-1">Zahlungsgrund (Titel)</label><details id="ab2-transfer-linked-titles-dropdown" class="group relative"><summary class="list-none cursor-pointer w-full p-2 border rounded-lg bg-white text-sm text-gray-700 flex items-center justify-between gap-2"><span id="ab2-transfer-linked-titles-summary">Keine Titel ausgewählt</span><span class="text-[10px] text-gray-500">▼</span></summary><div id="ab2-transfer-linked-titles-list" class="mt-2 max-h-44 overflow-y-auto rounded-lg border border-indigo-200 bg-white p-2 space-y-1"></div></details></div><div class="text-[11px] text-indigo-800">Mehrfachauswahl: mehrere Kästchen direkt anhaken.</div>`;
+    block.innerHTML = `<div class="text-sm font-bold text-indigo-900 flex items-center gap-2">Zahlungsgrund-Zuordnung ${helpButton('ab2-help-transfer-linking')}</div>${helpContent('ab2-help-transfer-linking', 'Pflichtfeld: Plane dein Transfer-Budget auf Zahlungsgründe auf. Du kannst auf mehrere Titel verteilen. Mit [OHNE ZUORDNUNG] erfasst du Rundungsreste (z. B. 0,01 €).')}<div><label class="block text-xs font-bold text-indigo-800 mb-1">Zahlungsgrund (Titel)</label><details id="ab2-transfer-linked-titles-dropdown" class="group relative"><summary class="list-none cursor-pointer w-full p-2 border rounded-lg bg-white text-sm text-gray-700 flex items-center justify-between gap-2"><span id="ab2-transfer-linked-titles-summary">Keine Titel ausgewählt</span><span class="text-[10px] text-gray-500">▼</span></summary><div id="ab2-transfer-linked-titles-list" class="mt-2 max-h-44 overflow-y-auto rounded-lg border border-indigo-200 bg-white p-2 space-y-1"></div></details></div><div id="ab2-transfer-allocation-summary" class="rounded-lg border border-indigo-200 bg-white p-2"><div class="text-[10px] uppercase tracking-wide text-indigo-700">Live-Bilanz</div><div id="ab2-transfer-linking-remaining" class="text-base font-extrabold text-indigo-900">Noch zu verplanen: 0.00 €</div><div id="ab2-transfer-linking-balance-line" class="text-xs text-indigo-700 mt-1">Verplant 0.00 € von 0.00 €</div></div><div id="ab2-transfer-allocation-list" class="space-y-2"></div><div class="text-[11px] text-indigo-800">Jeder ausgewählte Zahlungsgrund braucht einen Betrag. Nicht mehr als das Transfer-Budget planen.</div>`;
     noteWrap.parentElement.insertBefore(block, noteWrap.nextSibling);
     const linkedTitleList = el('ab2-transfer-linked-titles-list');
     if (linkedTitleList && !linkedTitleList.dataset.listenerAttached) {
         linkedTitleList.addEventListener('change', () => {
             updateTransferLinkedTitlesSummary();
+            updateTransferLinkedTitleAllocationsUI();
+            updateTransferLinkingBudgetState();
             renderPreviews();
         });
         linkedTitleList.dataset.listenerAttached = 'true';
     }
+    const allocationHost = el('ab2-transfer-allocation-list');
+    if (allocationHost && !allocationHost.dataset.listenerAttached) {
+        allocationHost.addEventListener('input', () => {
+            updateTransferLinkingBudgetState();
+            renderPreviews();
+        });
+        allocationHost.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-transfer-balance-title]');
+            if (!btn) return;
+            openTransferAllocationBalanceInsight(btn.dataset.transferBalanceTitle || '', el('ab2-transfer-id')?.value || '');
+        });
+        allocationHost.dataset.listenerAttached = 'true';
+    }
     populateTransferLinkingOptions();
+    updateTransferLinkedTitleAllocationsUI();
+    updateTransferLinkingBudgetState();
+}
+
+function normalizeTransferLinkedTitleKey(value) {
+    const key = String(value || '').trim();
+    if (!key) return '';
+    return key;
 }
 
 function transferLinkedTitleLabel(value) {
-    const key = String(value || '').trim();
+    const key = normalizeTransferLinkedTitleKey(value);
     if (!key) return '';
+    if (key === UNASSIGNED_TITLE_KEY) return '[OHNE ZUORDNUNG]';
     return ITEMS[key]?.title || key;
+}
+
+function normalizeTransferLinkedAllocations(raw) {
+    const map = new Map();
+    (Array.isArray(raw) ? raw : []).forEach((row) => {
+        const titleKey = normalizeTransferLinkedTitleKey(row?.titleKey || row?.value || row?.title || row?.linkedTitle);
+        const amount = roundMoney(toNum(row?.amount, 0));
+        if (!titleKey || amount <= 0) return;
+        map.set(titleKey, roundMoney((map.get(titleKey) || 0) + amount));
+    });
+    return Array.from(map.entries()).map(([titleKey, amount]) => ({ titleKey, amount }));
+}
+
+function getTransferLinkedAllocations(transfer) {
+    const explicit = normalizeTransferLinkedAllocations(transfer?.linkedTitleAllocations);
+    if (explicit.length) return explicit;
+    const linkedTitles = (Array.isArray(transfer?.linkedTitles) ? transfer.linkedTitles : [])
+        .map((value) => normalizeTransferLinkedTitleKey(value))
+        .filter(Boolean)
+        .filter((value, index, all) => all.findIndex((entry) => entry.toLowerCase() === value.toLowerCase()) === index);
+    if (!linkedTitles.length) return [];
+    const total = roundMoney(toNum(transfer?.amount, 0));
+    if (total <= 0) return [];
+    const base = roundMoney(total / linkedTitles.length);
+    let remaining = total;
+    return linkedTitles.map((titleKey, index) => {
+        const amount = index === linkedTitles.length - 1 ? roundMoney(remaining) : base;
+        remaining = roundMoney(remaining - amount);
+        return { titleKey, amount };
+    }).filter((row) => row.amount > 0);
+}
+
+function transferPlannedAmount(transfer) {
+    return roundMoney(getTransferLinkedAllocations(transfer).reduce((sum, row) => sum + toNum(row.amount, 0), 0));
+}
+
+function transferBudgetDiff(transfer) {
+    return roundMoney(toNum(transfer?.amount, 0) - transferPlannedAmount(transfer));
+}
+
+function transferAmountForItem(transfer, item) {
+    if (!item) return 0;
+    const allocations = getTransferLinkedAllocations(transfer);
+    if (!allocations.length) return 0;
+    const itemId = normalizeTransferLinkedTitleKey(item.id);
+    if (itemId) {
+        const direct = roundMoney(allocations
+            .filter((row) => String(row.titleKey || '').toLowerCase() === itemId.toLowerCase())
+            .reduce((sum, row) => sum + toNum(row.amount, 0), 0));
+        if (direct > 0.009) return direct;
+    }
+    const normalizedItemTitle = normalizeSearchText(item.title || '');
+    if (!normalizedItemTitle) return 0;
+    return roundMoney(allocations
+        .filter((row) => {
+            const normalizedTitle = normalizeSearchText(transferLinkedTitleLabel(row.titleKey));
+            return normalizedTitle && (normalizedTitle.includes(normalizedItemTitle) || normalizedItemTitle.includes(normalizedTitle));
+        })
+        .reduce((sum, row) => sum + toNum(row.amount, 0), 0));
 }
 
 function getTransferLinkedTitleValues() {
@@ -195,6 +281,93 @@ function updateTransferLinkedTitlesSummary() {
     if (!summary) return;
     const selected = getTransferLinkedTitleValues().map((value) => transferLinkedTitleLabel(value));
     summary.textContent = selected.length ? selected.join(', ') : 'Keine Titel ausgewählt';
+}
+
+function collectTransferLinkedAllocationsFromForm() {
+    const host = el('ab2-transfer-allocation-list');
+    if (!host) return [];
+    return normalizeTransferLinkedAllocations(Array.from(host.querySelectorAll('[data-transfer-allocation-row]')).map((row) => ({
+        titleKey: row.dataset.transferAllocationRow || '',
+        amount: toNum(row.querySelector('[data-transfer-allocation-amount]')?.value, 0)
+    })));
+}
+
+function transferLinkingFormState() {
+    const budget = roundMoney(toNum(el('ab2-transfer-amount')?.value, 0));
+    const allocations = collectTransferLinkedAllocationsFromForm();
+    const amountMap = new Map(allocations.map((row) => [String(row.titleKey || '').toLowerCase(), roundMoney(toNum(row.amount, 0))]));
+    const planned = roundMoney(allocations.reduce((sum, row) => sum + toNum(row.amount, 0), 0));
+    const diff = roundMoney(budget - planned);
+    const selected = getTransferLinkedTitleValues();
+    const hasSelection = selected.length > 0;
+    const hasPositive = allocations.some((row) => toNum(row.amount, 0) > 0);
+    const allSelectedPlanned = selected.every((titleKey) => toNum(amountMap.get(String(titleKey || '').toLowerCase()), 0) > 0);
+    return { budget, planned, diff, selected, allocations, hasSelection, hasPositive, allSelectedPlanned, overplanned: diff < -0.009 };
+}
+
+function updateTransferLinkingBudgetState() {
+    const state = transferLinkingFormState();
+    const remaining = el('ab2-transfer-linking-remaining');
+    const balanceLine = el('ab2-transfer-linking-balance-line');
+    const saveBtn = el('ab2-save-transfer-btn');
+    if (remaining) {
+        const text = state.diff > 0.009
+            ? `Noch zu verplanen: ${formatCurrency(state.diff)}`
+            : state.diff < -0.009
+                ? `Überplant um: ${formatCurrency(Math.abs(state.diff))}`
+                : 'Noch zu verplanen: 0.00 €';
+        remaining.textContent = text;
+        remaining.className = `text-base font-extrabold ${state.diff > 0.009 ? 'text-amber-700' : state.diff < -0.009 ? 'text-red-700' : 'text-emerald-700'}`;
+    }
+    if (balanceLine) {
+        balanceLine.textContent = `Verplant ${formatCurrency(state.planned)} von ${formatCurrency(state.budget)} · Differenz ${formatSignedCurrency(state.diff)}`;
+    }
+    if (saveBtn) {
+        const valid = state.hasSelection && state.hasPositive && state.allSelectedPlanned && !state.overplanned;
+        saveBtn.disabled = !valid;
+        saveBtn.classList.toggle('opacity-50', !valid);
+        saveBtn.classList.toggle('cursor-not-allowed', !valid);
+    }
+    return state;
+}
+
+function updateTransferLinkedTitleAllocationsUI(seedAllocations = null) {
+    const host = el('ab2-transfer-allocation-list');
+    if (!host) return;
+    const selected = getTransferLinkedTitleValues();
+    const currentMap = new Map(normalizeTransferLinkedAllocations(seedAllocations || collectTransferLinkedAllocationsFromForm()).map((row) => [String(row.titleKey || '').toLowerCase(), row.amount]));
+    host.innerHTML = selected.length
+        ? selected.map((titleKey) => {
+            const normalized = normalizeTransferLinkedTitleKey(titleKey);
+            const value = currentMap.get(normalized.toLowerCase());
+            return `<div class="rounded-lg border border-indigo-200 bg-white p-2" data-transfer-allocation-row="${escapeHtml(normalized)}"><div class="flex items-center justify-between gap-2"><div class="text-xs font-bold text-indigo-900">${escapeHtml(transferLinkedTitleLabel(normalized) || '-')}</div><button type="button" class="h-7 w-7 rounded-full border border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold" title="Bilanz anzeigen" data-transfer-balance-title="${escapeHtml(normalized)}">⚖</button></div><div class="mt-2"><input data-transfer-allocation-amount type="text" class="w-full p-2 border rounded-lg text-sm" placeholder="Betrag für diesen Zahlungsgrund" value="${Number.isFinite(toNum(value, NaN)) ? toNum(value, 0).toFixed(2) : ''}"></div></div>`;
+        }).join('')
+        : '<div class="text-xs text-indigo-700">Bitte mindestens einen Zahlungsgrund auswählen.</div>';
+}
+
+function openTransferAllocationBalanceInsight(titleKey, currentTransferId = '') {
+    const normalized = normalizeTransferLinkedTitleKey(titleKey);
+    if (!normalized) return;
+    const rows = Object.values(TRANSFERS)
+        .map((transfer) => {
+            if (currentTransferId && transfer.id === currentTransferId) return null;
+            const amount = roundMoney(getTransferLinkedAllocations(transfer)
+                .filter((row) => String(row.titleKey || '').toLowerCase() === normalized.toLowerCase())
+                .reduce((sum, row) => sum + toNum(row.amount, 0), 0));
+            if (amount <= 0) return null;
+            return {
+                transferId: transfer.id,
+                sourceName: ACCOUNTS[transfer.sourceAccountId]?.name || '-',
+                targetName: ACCOUNTS[transfer.targetAccountId]?.name || '-',
+                amount,
+                interval: intervalLabel(transfer.intervalType, transfer.customMonths || [])
+            };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.amount - a.amount);
+    const total = roundMoney(rows.reduce((sum, row) => sum + toNum(row.amount, 0), 0));
+    const list = rows.map((row) => `<div class="rounded-lg border border-gray-200 bg-gray-50 p-2"><div class="text-sm font-bold text-gray-800">${escapeHtml(row.sourceName)} → ${escapeHtml(row.targetName)}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(row.interval)} · ${formatCurrency(row.amount)}</div></div>`).join('') || '<p class="text-sm text-gray-500">Noch keine weiteren Zuordnungen gefunden.</p>';
+    openDetail(`Bilanz · ${transferLinkedTitleLabel(normalized)}`, `<div class="space-y-2"><div class="rounded-lg border border-indigo-200 bg-indigo-50 p-2"><div class="text-xs uppercase tracking-wide text-indigo-700">Gesamtzuordnung anderer Transfers</div><div class="text-lg font-extrabold text-indigo-900">${formatCurrency(total)}</div></div>${list}</div>`);
 }
 
 function getListFieldValues(fieldId) {
@@ -242,7 +415,8 @@ function populateTransferLinkingOptions(preselectedTitles = null) {
         .filter((item) => item?.id && String(item.title || '').trim())
         .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')))
         .map((item) => ({ value: item.id, label: item.title || '-' }));
-    setTransferLinkedTitleDropdownOptions(titleOptions, selectedTitles);
+    const fullOptions = [...titleOptions, { value: UNASSIGNED_TITLE_KEY, label: '[OHNE ZUORDNUNG]' }];
+    setTransferLinkedTitleDropdownOptions(fullOptions, selectedTitles);
 }
 
 function ensureContributionInfoHint() {
@@ -435,16 +609,7 @@ function monthsSinceInclusive(startDate, endDate = new Date()) {
     return Math.max(1, ((end.getFullYear() - start.getFullYear()) * 12) + (end.getMonth() - start.getMonth()) + 1);
 }
 function transferLinkedToItem(transfer, item) {
-    const linkedTitles = Array.isArray(transfer?.linkedTitles) ? transfer.linkedTitles : [];
-    if (!linkedTitles.length || !item) return false;
-    const itemId = String(item.id || '').trim().toLowerCase();
-    if (itemId && linkedTitles.some((title) => String(title || '').trim().toLowerCase() === itemId)) return true;
-    const normalizedItemTitle = normalizeSearchText(item.title || '');
-    if (!normalizedItemTitle) return false;
-    return linkedTitles.some((title) => {
-        const normalizedTitle = normalizeSearchText(transferLinkedTitleLabel(title));
-        return normalizedTitle && (normalizedTitle.includes(normalizedItemTitle) || normalizedItemTitle.includes(normalizedTitle));
-    });
+    return transferAmountForItem(transfer, item) > 0.009;
 }
 function buildContributionImbalances() {
     const now = new Date();
@@ -464,15 +629,16 @@ function buildContributionImbalances() {
                 }));
             const linkedTransferContribs = Object.values(TRANSFERS)
                 .filter((transfer) => transferLinkedToItem(transfer, item))
-                .filter((transfer) => toNum(transfer.amount, 0) > 0)
                 .filter((transfer) => !!nextExecutionDate(transfer, 24))
                 .map((transfer) => ({
                     kind: 'transfer',
+                    transferId: transfer.id,
                     sourceId: transfer.sourceAccountId,
                     sourceName: ACCOUNTS[transfer.sourceAccountId]?.name || '-',
-                    amount: roundMoney(toNum(transfer.amount, 0)),
+                    amount: roundMoney(transferAmountForItem(transfer, item)),
                     note: transfer.note || ''
-                }));
+                }))
+                .filter((row) => row.amount > 0);
             const allContribs = [...directContribs, ...linkedTransferContribs];
             if (!allContribs.length) return null;
             const itemAmount = roundMoney(toNum(item.amount, 0));
@@ -692,8 +858,52 @@ function renderTags() {
 function itemHasAlert(item, severity = '') { return FORECAST.alerts.some((alert) => alert.accountId === item?.accountId && (!severity || alert.severity === severity)); }
 function setSelectOptions(select, options, value = '') { if (!select) return; const current = value || select.value || ''; select.innerHTML = options.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join(''); select.value = current; }
 function transferLinkingText(transfer) {
-    const linkedTitles = (Array.isArray(transfer?.linkedTitles) ? transfer.linkedTitles : []).map((value) => transferLinkedTitleLabel(value));
-    return linkedTitles.join(' ').trim();
+    return getTransferLinkedAllocations(transfer)
+        .map((row) => `${transferLinkedTitleLabel(row.titleKey)} ${formatCurrency(row.amount)}`)
+        .join(' ')
+        .trim();
+}
+
+function transferAllocationSummaryLines(transfer) {
+    return getTransferLinkedAllocations(transfer)
+        .filter((row) => toNum(row.amount, 0) > 0)
+        .map((row) => `${transferLinkedTitleLabel(row.titleKey)}: ${formatCurrency(row.amount)}`);
+}
+
+function transferDiffCss(diff) {
+    if (diff < -0.009) return 'text-red-700';
+    if (diff > 0.009) return 'text-amber-700';
+    return 'text-emerald-700';
+}
+
+function itemCoverageSummary(item) {
+    const direct = roundMoney((Array.isArray(item?.contributions) ? item.contributions : []).reduce((sum, row) => sum + toNum(row.amount, 0), 0));
+    const transfer = roundMoney(Object.values(TRANSFERS).reduce((sum, plan) => sum + transferAmountForItem(plan, item), 0));
+    const covered = roundMoney(direct + transfer);
+    const diff = roundMoney(covered - toNum(item?.amount, 0));
+    return { direct, transfer, covered, diff };
+}
+
+function accountTransferBudgetDiff(accountId) {
+    const sum = Object.values(TRANSFERS)
+        .filter((transfer) => transfer.sourceAccountId === accountId)
+        .reduce((total, transfer) => total + transferBudgetDiff(transfer), 0);
+    return roundMoney(sum);
+}
+
+function updateModalFilterButtons(prefix, selectedType) {
+    const keys = ['all', 'bank', 'person'];
+    keys.forEach((key) => {
+        const btn = el(`ab2-${prefix}-filter-${key}`);
+        if (!btn) return;
+        const active = selectedType === key;
+        btn.classList.toggle('bg-blue-600', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('hover:bg-blue-700', active);
+        btn.classList.toggle('bg-gray-100', !active);
+        btn.classList.toggle('text-gray-700', !active);
+        btn.classList.toggle('hover:bg-gray-200', !active);
+    });
 }
 function qualityEntry(accountId) { return FORECAST.quality.find((entry) => entry.accountId === accountId) || null; }
 function forecastCss(severity) { if (severity === 'alarm') return 'bg-red-50 border-red-200 text-red-700'; if (severity === 'warn') return 'bg-amber-50 border-amber-200 text-amber-700'; return 'bg-emerald-50 border-emerald-200 text-emerald-700'; }
@@ -763,6 +973,8 @@ function populateSelects() {
     setSelectOptions(el('ab2-recon-account'), reconAccountOptions);
     document.querySelectorAll('.ab2-contrib-source').forEach((select) => setSelectOptions(select, sourceOptions, select.value || ''));
     populateTransferLinkingOptions();
+    updateTransferLinkedTitleAllocationsUI();
+    updateTransferLinkingBudgetState();
 }
 function renderDashboard() {
     const items = Object.values(ITEMS);
@@ -844,12 +1056,14 @@ function renderTable() {
         const next = nextExecutionDate(item);
         const yearly = roundMoney(yearlyHitCount(item) * toNum(item.amount, 0));
         const effect = itemNetEffect(item);
-        return `<tr class="${itemHasAlert(item) ? 'bg-red-50/40' : ''} hover:bg-blue-50/40 transition cursor-pointer" data-item-row="${item.id}"><td class="px-3 py-3 whitespace-nowrap"><span class="px-2 py-1 rounded-full text-xs font-bold ${status.css}">${status.label}</span></td><td class="px-3 py-3"><div class="font-bold text-gray-800 whitespace-nowrap">${escapeHtml(item.title || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(item.notes || '')}</div>${contributionTotal(item) > 0 ? `<div class="mt-1 text-[10px] font-bold text-indigo-700 whitespace-nowrap">Beiträge: ${formatCurrency(contributionTotal(item))}</div>` : ''}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${escapeHtml(account.name || '-')}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${escapeHtml(item.typ || '-')}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${escapeHtml(intervalLabel(item.intervalType, item.customMonths || []))}</td><td class="px-3 py-3 text-sm font-bold text-gray-800 whitespace-nowrap">${formatCurrency(item.amount)}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${next ? formatDate(next) : '-'}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${formatCurrency(yearly)}</td><td class="px-3 py-3 text-sm font-bold ${effect < 0 ? 'text-red-700' : 'text-emerald-700'} whitespace-nowrap">${formatSignedCurrency(effect)}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${formatDate(item.validFrom)}${item.validTo ? ` → ${formatDate(item.validTo)}` : ''}</td><td class="px-3 py-3 text-center whitespace-nowrap"><div class="flex gap-1 justify-center"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-item-edit="${item.id}">Bearbeiten</button></div></td></tr>`;
+        const coverage = itemCoverageSummary(item);
+        return `<tr class="${itemHasAlert(item) ? 'bg-red-50/40' : ''} hover:bg-blue-50/40 transition cursor-pointer" data-item-row="${item.id}"><td class="px-3 py-3 whitespace-nowrap"><span class="px-2 py-1 rounded-full text-xs font-bold ${status.css}">${status.label}</span></td><td class="px-3 py-3"><div class="font-bold text-gray-800 whitespace-nowrap">${escapeHtml(item.title || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(item.notes || '')}</div><div class="mt-1 text-[10px] font-bold text-indigo-700 whitespace-nowrap">Beiträge direkt ${formatCurrency(coverage.direct)} · Transfer ${formatCurrency(coverage.transfer)} · Δ ${formatSignedCurrency(coverage.diff)}</div></td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${escapeHtml(account.name || '-')}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${escapeHtml(item.typ || '-')}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${escapeHtml(intervalLabel(item.intervalType, item.customMonths || []))}</td><td class="px-3 py-3 text-sm font-bold text-gray-800 whitespace-nowrap">${formatCurrency(item.amount)}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${next ? formatDate(next) : '-'}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${formatCurrency(yearly)}</td><td class="px-3 py-3 text-sm font-bold ${effect < 0 ? 'text-red-700' : 'text-emerald-700'} whitespace-nowrap">${formatSignedCurrency(effect)}</td><td class="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">${formatDate(item.validFrom)}${item.validTo ? ` → ${formatDate(item.validTo)}` : ''}</td><td class="px-3 py-3 text-center whitespace-nowrap"><div class="flex gap-1 justify-center"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-item-edit="${item.id}">Bearbeiten</button></div></td></tr>`;
     }).join('');
 }
 function renderAccounts() {
     const host = el('ab2-accounts-list');
     if (!host) return;
+    updateModalFilterButtons('accounts', accountListFilterState.type);
     const search = normalizeSearchText(accountListFilterState.query);
     const accounts = Object.values(ACCOUNTS)
         .filter((account) => accountListFilterState.type === 'all' || normalizeAccountType(account) === accountListFilterState.type)
@@ -861,12 +1075,14 @@ function renderAccounts() {
         const quality = qualityEntry(account.id);
         const itemCount = Object.values(ITEMS).filter((item) => item.accountId === account.id).length;
         const transferCount = Object.values(TRANSFERS).filter((transfer) => transfer.sourceAccountId === account.id || transfer.targetAccountId === account.id).length;
-        return `<div class="rounded-lg border ${editingAccountId === account.id ? 'border-yellow-400 bg-yellow-50 shadow-md' : 'border-gray-200 bg-gray-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(isPersonAccount(account) ? 'Person' : (account.bank || 'Bankkonto'))} · ${escapeHtml(normalizeAccountRole(account))}</div></div><div class="flex gap-1"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></div><div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Stand</div><div class="font-bold text-gray-800">${formatCurrency(latest?.value)}</div></div><div><div class="text-gray-500">Puffer</div><div class="font-bold text-gray-800">${isPersonAccount(account) ? 'entfällt' : formatCurrency(account.minBuffer)}</div></div><div><div class="text-gray-500">Differenz</div><div class="font-bold ${toNum(row.delta, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${formatSignedCurrency(row.delta)}</div></div><div><div class="text-gray-500">Snapshot</div><div class="font-bold ${quality?.status === 'alarm' ? 'text-red-700' : quality?.status === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">${quality?.latest ? formatDate(quality.latest.date) : 'fehlt'}</div></div></div><div class="mt-2 text-xs text-gray-600">Einträge: ${itemCount} · Transfers: ${transferCount}</div></div>`;
+        const transferDiff = accountTransferBudgetDiff(account.id);
+        return `<div class="rounded-lg border ${editingAccountId === account.id ? 'border-yellow-400 bg-yellow-50 shadow-md' : 'border-gray-200 bg-gray-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(isPersonAccount(account) ? 'Person' : (account.bank || 'Bankkonto'))} · ${escapeHtml(normalizeAccountRole(account))}</div></div><div class="flex gap-1"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></div><div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Stand</div><div class="font-bold text-gray-800">${formatCurrency(latest?.value)}</div></div><div><div class="text-gray-500">Puffer</div><div class="font-bold text-gray-800">${isPersonAccount(account) ? 'entfällt' : formatCurrency(account.minBuffer)}</div></div><div><div class="text-gray-500">Differenz</div><div class="font-bold ${toNum(row.delta, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${formatSignedCurrency(row.delta)}</div></div><div><div class="text-gray-500">Snapshot</div><div class="font-bold ${quality?.status === 'alarm' ? 'text-red-700' : quality?.status === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">${quality?.latest ? formatDate(quality.latest.date) : 'fehlt'}</div></div></div><div class="mt-2 text-xs ${transferDiffCss(transferDiff)} font-bold">Transfer-Zuordnungsdifferenz (Quelle): ${formatSignedCurrency(transferDiff)}</div><div class="mt-1 text-xs text-gray-600">Einträge: ${itemCount} · Transfers: ${transferCount}</div></div>`;
     }).join('') : '<p class="text-sm text-gray-400 italic">Noch keine Konten/Quellen.</p>';
 }
 function renderTransfers() {
     const host = el('ab2-transfers-list');
     if (!host) return;
+    updateModalFilterButtons('transfers', transferListFilterState.type);
     const search = normalizeSearchText(transferListFilterState.query);
     const transfers = Object.values(TRANSFERS)
         .filter((transfer) => {
@@ -882,9 +1098,12 @@ function renderTransfers() {
         const source = ACCOUNTS[transfer.sourceAccountId] || {};
         const target = ACCOUNTS[transfer.targetAccountId] || {};
         const targetAlert = FORECAST.alerts.find((alert) => alert.accountId === transfer.targetAccountId);
-        const linkedTitles = (Array.isArray(transfer.linkedTitles) ? transfer.linkedTitles : []).map((value) => transferLinkedTitleLabel(value));
-        const linkedInfo = linkedTitles.length ? `<div class="mt-1 text-[11px] text-indigo-700">Titel: ${escapeHtml(linkedTitles.join(', '))}</div>` : '';
-        return `<div class="rounded-lg border ${editingTransferId === transfer.id ? 'border-yellow-400 bg-yellow-50 shadow-md' : 'border-gray-200 bg-gray-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="font-bold text-gray-800">${escapeHtml(source.name || '-')} → ${escapeHtml(target.name || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(intervalLabel(transfer.intervalType, transfer.customMonths || []))} · nächste Ausführung: ${nextExecutionDate(transfer) ? formatDate(nextExecutionDate(transfer)) : '-'}</div></div><div class="flex gap-1"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-transfer-edit="${transfer.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-transfer-delete="${transfer.id}">Löschen</button></div></div><div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Betrag</div><div class="font-bold text-gray-800">${formatCurrency(transfer.amount)}</div></div><div><div class="text-gray-500">Start</div><div class="font-bold text-gray-800">${formatDate(transfer.validFrom)}</div></div><div><div class="text-gray-500">Ende</div><div class="font-bold text-gray-800">${transfer.validTo ? formatDate(transfer.validTo) : 'offen'}</div></div><div><div class="text-gray-500">Ziellage</div><div class="font-bold ${targetAlert?.severity === 'alarm' ? 'text-red-700' : targetAlert?.severity === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">${targetAlert ? `${targetAlert.severity} ${monthLabel(targetAlert.monthKey)}` : 'stabil'}</div></div></div><div class="mt-2 text-xs text-gray-600">${escapeHtml(transfer.note || '')}${linkedInfo}</div></div>`;
+        const allocationLines = transferAllocationSummaryLines(transfer);
+        const planned = transferPlannedAmount(transfer);
+        const diff = transferBudgetDiff(transfer);
+        const linkedInfo = allocationLines.length ? `<div class="mt-1 text-[11px] text-indigo-700">Zahlungsgründe: ${escapeHtml(allocationLines.join(' · '))}</div>` : '<div class="mt-1 text-[11px] text-red-700 font-bold">Keine Zahlungsgrund-Zuordnung vorhanden.</div>';
+        const budgetInfo = `<div class="mt-1 text-[11px] font-bold ${transferDiffCss(diff)}">Verplant ${formatCurrency(planned)} von ${formatCurrency(transfer.amount)} · Differenz ${formatSignedCurrency(diff)}</div>`;
+        return `<div class="rounded-lg border ${editingTransferId === transfer.id ? 'border-yellow-400 bg-yellow-50 shadow-md' : 'border-gray-200 bg-gray-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="font-bold text-gray-800">${escapeHtml(source.name || '-')} → ${escapeHtml(target.name || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(intervalLabel(transfer.intervalType, transfer.customMonths || []))} · nächste Ausführung: ${nextExecutionDate(transfer) ? formatDate(nextExecutionDate(transfer)) : '-'}</div></div><div class="flex gap-1"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-transfer-edit="${transfer.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-transfer-delete="${transfer.id}">Löschen</button></div></div><div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Betrag</div><div class="font-bold text-gray-800">${formatCurrency(transfer.amount)}</div></div><div><div class="text-gray-500">Start</div><div class="font-bold text-gray-800">${formatDate(transfer.validFrom)}</div></div><div><div class="text-gray-500">Ende</div><div class="font-bold text-gray-800">${transfer.validTo ? formatDate(transfer.validTo) : 'offen'}</div></div><div><div class="text-gray-500">Ziellage</div><div class="font-bold ${targetAlert?.severity === 'alarm' ? 'text-red-700' : targetAlert?.severity === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">${targetAlert ? `${targetAlert.severity} ${monthLabel(targetAlert.monthKey)}` : 'stabil'}</div></div></div><div class="mt-2 text-xs text-gray-600">${escapeHtml(transfer.note || '')}${linkedInfo}${budgetInfo}</div></div>`;
     }).join('') : '<p class="text-sm text-gray-400 italic">Noch keine Transferpläne.</p>';
 }
 function renderRecon() {
@@ -917,8 +1136,10 @@ function renderPreviews() {
     const transferSource = ACCOUNTS[el('ab2-transfer-source')?.value] || null;
     const transferTarget = ACCOUNTS[el('ab2-transfer-target')?.value] || null;
     const transferAmount = toNum(el('ab2-transfer-amount')?.value, 0);
-    const linkedTitles = getListFieldValues('ab2-transfer-linked-titles').map((value) => transferLinkedTitleLabel(value));
-    const transferLinkText = linkedTitles.length ? ` Zugeordnet zu Titeln: ${linkedTitles.join(', ')}.` : '';
+    const linkingState = updateTransferLinkingBudgetState();
+    const transferLinkText = linkingState.allocations.length
+        ? ` Zugeordnet: ${linkingState.allocations.map((row) => `${transferLinkedTitleLabel(row.titleKey)} ${formatCurrency(row.amount)}`).join(', ')}. Differenz ${formatSignedCurrency(linkingState.diff)}.`
+        : ' Noch keine Zahlungsgrund-Zuordnung.';
     if (el('ab2-transfer-preview')) el('ab2-transfer-preview').textContent = transferSource && transferTarget && transferAmount > 0 ? `${formatCurrency(transferAmount)} fließen von ${transferSource.name || '-'} nach ${transferTarget.name || '-'} ${describeInterval(el('ab2-transfer-interval')?.value || 'monthly', el('ab2-transfer-start-month')?.value, parseMonths(el('ab2-transfer-custom-months')?.value), el('ab2-transfer-day')?.value)}.${transferLinkText}` : 'Noch unvollständig.';
     const reconAccount = ACCOUNTS[el('ab2-recon-account')?.value] || null;
     const reconType = el('ab2-recon-type')?.value || 'snapshot';
@@ -939,12 +1160,47 @@ function setItemReadOnly(readOnly) {
         node.classList.toggle('text-gray-500', !!readOnly);
     });
     document.querySelectorAll('#ab2-item-modal .ab2-remove-contrib').forEach((btn) => { btn.style.display = readOnly ? 'none' : 'inline-flex'; });
+    document.querySelectorAll('#ab2-item-modal .ab2-contrib-row[data-contrib-transfer-derived="1"]').forEach((row) => {
+        row.querySelectorAll('input, select, textarea').forEach((node) => {
+            node.disabled = true;
+            node.classList.add('bg-gray-100', 'text-gray-500');
+        });
+        row.querySelector('.ab2-remove-contrib')?.classList.add('hidden');
+    });
     if (el('ab2-add-contrib-btn')) el('ab2-add-contrib-btn').style.display = readOnly ? 'none' : 'inline-flex';
     if (el('ab2-item-save-btn')) el('ab2-item-save-btn').style.display = readOnly ? 'none' : 'inline-flex';
     if (el('ab2-item-edit-btn')) el('ab2-item-edit-btn').style.display = readOnly ? 'inline-flex' : 'none';
     const editableExistingItem = !readOnly && Boolean(el('ab2-item-id')?.value);
     if (el('ab2-item-delete-btn')) el('ab2-item-delete-btn').style.display = editableExistingItem ? 'inline-flex' : 'none';
     if (el('ab2-item-abtausch-btn')) el('ab2-item-abtausch-btn').style.display = editableExistingItem ? 'inline-flex' : 'none';
+}
+function buildReadOnlyContributionRows(item) {
+    const directRows = (Array.isArray(item?.contributions) ? item.contributions : [])
+        .filter((row) => row?.sourceAccountId && toNum(row.amount, 0) > 0)
+        .map((row) => ({
+            sourceAccountId: row.sourceAccountId,
+            amount: roundMoney(toNum(row.amount, 0)),
+            intervalType: row.intervalType || 'inherit',
+            customMonths: Array.isArray(row.customMonths) ? row.customMonths : [],
+            note: row.note || 'Direktbeitrag'
+        }));
+
+    const transferRows = Object.values(TRANSFERS)
+        .map((transfer) => {
+            const amount = transferAmountForItem(transfer, item);
+            if (amount <= 0) return null;
+            return {
+                sourceAccountId: transfer.sourceAccountId,
+                amount: roundMoney(amount),
+                intervalType: transfer.intervalType || 'monthly',
+                customMonths: Array.isArray(transfer.customMonths) ? transfer.customMonths : [],
+                note: `Transfer: ${ACCOUNTS[transfer.sourceAccountId]?.name || '-'} → ${ACCOUNTS[transfer.targetAccountId]?.name || '-'}`,
+                transferId: transfer.id
+            };
+        })
+        .filter(Boolean);
+
+    return [...directRows, ...transferRows];
 }
 function resetItemForm() {
     if (el('ab2-item-id')) el('ab2-item-id').value = '';
@@ -975,27 +1231,43 @@ function fillItemForm(item, readOnly) {
     if (el('ab2-item-valid-to')) el('ab2-item-valid-to').value = item.validTo || '';
     if (el('ab2-item-notes')) el('ab2-item-notes').value = item.notes || '';
     if (el('ab2-contrib-list')) el('ab2-contrib-list').innerHTML = '';
-    (Array.isArray(item.contributions) ? item.contributions : []).forEach((row) => addContributionRow(row));
+    const contribRows = readOnly ? buildReadOnlyContributionRows(item) : (Array.isArray(item.contributions) ? item.contributions : []);
+    if (contribRows.length) contribRows.forEach((row) => addContributionRow(row, { readOnly: !!readOnly }));
+    else if (readOnly && el('ab2-contrib-list')) el('ab2-contrib-list').innerHTML = '<p class="text-xs text-gray-500 italic">Keine Beiträge/Zuordnungen vorhanden.</p>';
     if (el('ab2-item-delete-btn')) el('ab2-item-delete-btn').style.display = item.id && !readOnly ? 'inline-flex' : 'none';
     if (el('ab2-item-abtausch-btn')) el('ab2-item-abtausch-btn').style.display = item.id && !readOnly ? 'inline-flex' : 'none';
     updateMainIntervalFields('ab2-item');
     setItemReadOnly(!!readOnly);
     renderPreviews();
 }
-function addContributionRow(v = {}) {
+function addContributionRow(v = {}, options = {}) {
     const host = el('ab2-contrib-list');
     if (!host) return;
+    const jumpButton = v.transferId
+        ? `<button type="button" class="px-2 py-1 rounded bg-indigo-100 text-indigo-700 text-xs font-bold hover:bg-indigo-200" data-contrib-transfer-jump="${escapeHtml(v.transferId)}">Transfer</button>`
+        : '';
     const row = document.createElement('div');
     row.className = 'ab2-contrib-row grid grid-cols-1 md:grid-cols-5 gap-2 items-start';
-    row.innerHTML = `<select class="ab2-contrib-source w-full p-2 border rounded-lg"></select><input class="ab2-contrib-amount w-full p-2 border rounded-lg" type="text" placeholder="Betrag" value="${Number.isFinite(toNum(v.amount, NaN)) ? toNum(v.amount, 0).toFixed(2) : ''}"><select class="ab2-contrib-interval w-full p-2 border rounded-lg"><option value="inherit">wie Eintrag</option><option value="monthly">monatlich</option><option value="quarterly">quartal</option><option value="semiannual">halbjahr</option><option value="annual">jährlich</option><option value="custom">individuell</option></select><input class="ab2-contrib-custom w-full p-2 border rounded-lg" type="text" placeholder="Monate" value="${Array.isArray(v.customMonths) ? v.customMonths.join(',') : ''}"><div class="flex gap-2"><input class="ab2-contrib-note flex-1 p-2 border rounded-lg" type="text" placeholder="Notiz" value="${escapeHtml(v.note || '')}"><button type="button" class="ab2-remove-contrib px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200">×</button></div>`;
+    if (v.transferId) {
+        row.dataset.contribTransferJump = String(v.transferId);
+        row.dataset.contribTransferDerived = '1';
+        row.classList.add('cursor-pointer');
+    }
+    row.innerHTML = `<select class="ab2-contrib-source w-full p-2 border rounded-lg"></select><input class="ab2-contrib-amount w-full p-2 border rounded-lg" type="text" placeholder="Betrag" value="${Number.isFinite(toNum(v.amount, NaN)) ? toNum(v.amount, 0).toFixed(2) : ''}"><select class="ab2-contrib-interval w-full p-2 border rounded-lg"><option value="inherit">wie Eintrag</option><option value="monthly">monatlich</option><option value="quarterly">quartal</option><option value="semiannual">halbjahr</option><option value="annual">jährlich</option><option value="custom">individuell</option></select><input class="ab2-contrib-custom w-full p-2 border rounded-lg" type="text" placeholder="Monate" value="${Array.isArray(v.customMonths) ? v.customMonths.join(',') : ''}"><div class="flex gap-2"><input class="ab2-contrib-note flex-1 p-2 border rounded-lg" type="text" placeholder="Notiz" value="${escapeHtml(v.note || '')}">${jumpButton}<button type="button" class="ab2-remove-contrib px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200">×</button></div>`;
     host.appendChild(row);
     populateSelects();
     row.querySelector('.ab2-contrib-source').value = v.sourceAccountId || '';
     row.querySelector('.ab2-contrib-interval').value = v.intervalType || 'inherit';
     updateContributionRowState(row);
+    if (options.readOnly) {
+        row.querySelector('.ab2-remove-contrib')?.classList.add('hidden');
+    }
 }
 function collectContribs() {
-    return Array.from(document.querySelectorAll('.ab2-contrib-row')).map((row) => ({ sourceAccountId: row.querySelector('.ab2-contrib-source')?.value || '', amount: roundMoney(toNum(row.querySelector('.ab2-contrib-amount')?.value, 0)), intervalType: row.querySelector('.ab2-contrib-interval')?.value || 'inherit', customMonths: parseMonths(row.querySelector('.ab2-contrib-custom')?.value || ''), note: row.querySelector('.ab2-contrib-note')?.value?.trim() || '' })).filter((row) => row.sourceAccountId && row.amount > 0);
+    return Array.from(document.querySelectorAll('.ab2-contrib-row'))
+        .filter((row) => row.dataset.contribTransferDerived !== '1')
+        .map((row) => ({ sourceAccountId: row.querySelector('.ab2-contrib-source')?.value || '', amount: roundMoney(toNum(row.querySelector('.ab2-contrib-amount')?.value, 0)), intervalType: row.querySelector('.ab2-contrib-interval')?.value || 'inherit', customMonths: parseMonths(row.querySelector('.ab2-contrib-custom')?.value || ''), note: row.querySelector('.ab2-contrib-note')?.value?.trim() || '' }))
+        .filter((row) => row.sourceAccountId && row.amount > 0);
 }
 function resetAccountForm() {
     editingAccountId = '';
@@ -1035,6 +1307,8 @@ function resetTransferForm() {
     if (el('ab2-transfer-interval')) el('ab2-transfer-interval').value = 'monthly';
     if (el('ab2-transfer-valid-from')) el('ab2-transfer-valid-from').value = isoDate(new Date());
     populateTransferLinkingOptions([]);
+    updateTransferLinkedTitleAllocationsUI([]);
+    updateTransferLinkingBudgetState();
     updateMainIntervalFields('ab2-transfer');
     renderTransfers();
     renderPreviews();
@@ -1054,7 +1328,11 @@ function editTransfer(id) {
     if (el('ab2-transfer-valid-from')) el('ab2-transfer-valid-from').value = transfer.validFrom || '';
     if (el('ab2-transfer-valid-to')) el('ab2-transfer-valid-to').value = transfer.validTo || '';
     if (el('ab2-transfer-note')) el('ab2-transfer-note').value = transfer.note || '';
-    populateTransferLinkingOptions(Array.isArray(transfer.linkedTitles) ? transfer.linkedTitles : []);
+    const linkedAllocations = getTransferLinkedAllocations(transfer);
+    const selectedTitles = linkedAllocations.map((row) => row.titleKey);
+    populateTransferLinkingOptions(selectedTitles);
+    updateTransferLinkedTitleAllocationsUI(linkedAllocations);
+    updateTransferLinkingBudgetState();
     updateMainIntervalFields('ab2-transfer');
     openModal('ab2-transfers-modal');
     renderTransfers();
@@ -1176,12 +1454,16 @@ async function saveTransfer() {
     const customMonths = intervalType === 'custom' ? parseMonths(el('ab2-transfer-custom-months')?.value || '') : [];
     const validFrom = el('ab2-transfer-valid-from')?.value || '';
     const validTo = el('ab2-transfer-valid-to')?.value || '';
+    const linking = transferLinkingFormState();
     if (!sourceAccountId || !targetAccountId || sourceAccountId === targetAccountId || amount <= 0 || !validFrom) return alertUser('Bitte Quelle, Ziel, Betrag und Startdatum korrekt ausfüllen.', 'error');
     if (intervalType === 'custom' && !customMonths.length) return alertUser('Bitte bei Individuell mindestens einen Monat angeben.', 'error');
     if (validTo && parseDate(validTo) < parseDate(validFrom)) return alertUser('Gültig bis darf nicht vor Gültig ab liegen.', 'error');
+    if (!linking.hasSelection || !linking.hasPositive || !linking.allSelectedPlanned) return alertUser('Bitte für jeden ausgewählten Zahlungsgrund einen Betrag > 0 erfassen.', 'error');
+    if (linking.overplanned) return alertUser('Die Zahlungsgrund-Zuordnung überschreitet das Transfer-Budget.', 'error');
     const before = TRANSFERS[id] || null;
-    const linkedTitles = getListFieldValues('ab2-transfer-linked-titles');
-    const payload = { sourceAccountId, targetAccountId, amount, intervalType, startMonth: intervalType === 'monthly' || intervalType === 'custom' ? null : (parseInt(el('ab2-transfer-start-month')?.value, 10) || null), customMonths, dayOfMonth: parseInt(el('ab2-transfer-day')?.value, 10) || 1, validFrom, validTo, note: el('ab2-transfer-note')?.value?.trim() || '', linkedTitles, createdBy: before?.createdBy || uid(), updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() };
+    const linkedTitleAllocations = normalizeTransferLinkedAllocations(linking.allocations);
+    const linkedTitles = linkedTitleAllocations.map((row) => row.titleKey);
+    const payload = { sourceAccountId, targetAccountId, amount, intervalType, startMonth: intervalType === 'monthly' || intervalType === 'custom' ? null : (parseInt(el('ab2-transfer-start-month')?.value, 10) || null), customMonths, dayOfMonth: parseInt(el('ab2-transfer-day')?.value, 10) || 1, validFrom, validTo, note: el('ab2-transfer-note')?.value?.trim() || '', linkedTitles, linkedTitleAllocations, createdBy: before?.createdBy || uid(), updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() };
     try {
         if (id) {
             await updateDoc(doc(transfersRef, id), payload);
@@ -1247,14 +1529,16 @@ async function applySuggestion(btn) {
     try {
         const [year, month] = String(suggestion.criticalMonth || currentMonthKey()).split('-').map(Number);
         for (const row of suggestion.monthlyAllocations) {
-            const payload = { sourceAccountId: row.sourceId, targetAccountId: suggestion.targetId, amount: row.amount, intervalType: 'monthly', startMonth: null, customMonths: [], dayOfMonth: 1, validFrom: isoDate(new Date()), validTo: '', note: `Automatisch aus AB2-Vorschlag (${suggestion.reason})`, createdBy: uid(), createdByName: currentUser?.displayName || 'Unbekannt', updatedBy: currentUser?.displayName || 'Unbekannt', createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+            const linkedTitleAllocations = [{ titleKey: UNASSIGNED_TITLE_KEY, amount: roundMoney(row.amount) }];
+            const payload = { sourceAccountId: row.sourceId, targetAccountId: suggestion.targetId, amount: row.amount, intervalType: 'monthly', startMonth: null, customMonths: [], dayOfMonth: 1, validFrom: isoDate(new Date()), validTo: '', note: `Automatisch aus AB2-Vorschlag (${suggestion.reason})`, linkedTitles: [UNASSIGNED_TITLE_KEY], linkedTitleAllocations, createdBy: uid(), createdByName: currentUser?.displayName || 'Unbekannt', updatedBy: currentUser?.displayName || 'Unbekannt', createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
             const ref = await addDoc(transfersRef, payload);
             await writeAudit('create', 'transfer_plan', ref.id, null, payload, { action: 'apply_suggestion_monthly', suggestionId });
         }
         for (const row of suggestion.onceAllocations) {
             const from = `${year}-${String(month).padStart(2, '0')}-01`;
             const until = `${year}-${String(month).padStart(2, '0')}-${String(lastDayOfMonth(year, month)).padStart(2, '0')}`;
-            const payload = { sourceAccountId: row.sourceId, targetAccountId: suggestion.targetId, amount: row.amount, intervalType: 'custom', startMonth: null, customMonths: [month], dayOfMonth: 1, validFrom: from, validTo: until, note: `Einmaliger AB2-Ausgleich (${suggestion.reason})`, createdBy: uid(), createdByName: currentUser?.displayName || 'Unbekannt', updatedBy: currentUser?.displayName || 'Unbekannt', createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+            const linkedTitleAllocations = [{ titleKey: UNASSIGNED_TITLE_KEY, amount: roundMoney(row.amount) }];
+            const payload = { sourceAccountId: row.sourceId, targetAccountId: suggestion.targetId, amount: row.amount, intervalType: 'custom', startMonth: null, customMonths: [month], dayOfMonth: 1, validFrom: from, validTo: until, note: `Einmaliger AB2-Ausgleich (${suggestion.reason})`, linkedTitles: [UNASSIGNED_TITLE_KEY], linkedTitleAllocations, createdBy: uid(), createdByName: currentUser?.displayName || 'Unbekannt', updatedBy: currentUser?.displayName || 'Unbekannt', createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
             const ref = await addDoc(transfersRef, payload);
             await writeAudit('create', 'transfer_plan', ref.id, null, payload, { action: 'apply_suggestion_once', suggestionId });
         }
@@ -1460,7 +1744,14 @@ function bindEvents() {
     on('ab2-close-item-modal', 'click', () => closeModal('ab2-item-modal'));
     on('ab2-cancel-item-btn', 'click', () => closeModal('ab2-item-modal'));
     on('ab2-item-save-btn', 'click', saveItem);
-    on('ab2-item-edit-btn', 'click', () => setItemReadOnly(false));
+    on('ab2-item-edit-btn', 'click', () => {
+        const id = el('ab2-item-id')?.value || '';
+        if (id && ITEMS[id]) {
+            fillItemForm(ITEMS[id], false);
+            return;
+        }
+        setItemReadOnly(false);
+    });
     on('ab2-item-delete-btn', 'click', () => deleteItem(el('ab2-item-id')?.value || ''));
     on('ab2-add-contrib-btn', 'click', () => addContributionRow());
     on('ab2-item-interval', 'change', () => { updateMainIntervalFields('ab2-item'); renderPreviews(); });
@@ -1584,6 +1875,18 @@ function bindEvents() {
             if (interval) updateContributionRowState(interval.closest('.ab2-contrib-row'));
         });
         contribHost.addEventListener('click', (e) => {
+            const jump = e.target.closest('[data-contrib-transfer-jump]');
+            if (jump) {
+                closeModal('ab2-item-modal');
+                editTransfer(jump.dataset.contribTransferJump || '');
+                return;
+            }
+            const rowJump = e.target.closest('[data-contrib-transfer-jump]') || e.target.closest('.ab2-contrib-row[data-contrib-transfer-jump]');
+            if (rowJump && rowJump.dataset.contribTransferJump) {
+                closeModal('ab2-item-modal');
+                editTransfer(rowJump.dataset.contribTransferJump || '');
+                return;
+            }
             const btn = e.target.closest('.ab2-remove-contrib');
             if (btn && !itemReadMode) btn.closest('.ab2-contrib-row')?.remove();
         });
