@@ -31,7 +31,10 @@ let editingAccountId = '';
 let editingTransferId = '';
 let itemReadMode = false;
 let transferSplitMode = 'right';
+let accountSplitMode = 'right';
+let reconSplitMode = 'right';
 let forecastExpandedOverride = null;
+let simulationDate = null;
 const UNASSIGNED_TITLE_KEY = '__ab2_ohne_zuordnung__';
 
 function uid() { return currentUser?.mode || currentUser?.displayName || null; }
@@ -40,33 +43,29 @@ function canCreate() { const p = currentUser?.permissions || []; return currentU
 function el(id) { return document.getElementById(id); }
 function openModal(id) { const n = el(id); if (n) n.style.display = 'flex'; }
 function closeModal(id) { const n = el(id); if (n) n.style.display = 'none'; }
-function ensureTransferSplitLayout() {
-    const leftPane = el('ab2-transfer-source')?.closest('.space-y-3');
-    const listHost = el('ab2-transfers-list');
-    const rightPane = listHost?.parentElement;
+function ensureSplitLayout(leftAnchorId, rightListHostId, splitterId) {
+    const leftPane = el(leftAnchorId)?.closest('.space-y-3');
+    const rightHost = el(rightListHostId);
+    const rightPane = rightHost?.parentElement;
     const container = leftPane?.parentElement;
     if (!leftPane || !rightPane || !container) return null;
     container.classList.add('ab2-transfer-split-layout');
     leftPane.classList.add('ab2-transfer-pane');
     rightPane.classList.add('ab2-transfer-pane');
-    let splitter = el('ab2-transfer-splitter');
+    let splitter = el(splitterId);
     if (!splitter || splitter.parentElement !== container) {
         splitter = document.createElement('button');
         splitter.type = 'button';
-        splitter.id = 'ab2-transfer-splitter';
+        splitter.id = splitterId;
         splitter.className = 'ab2-transfer-splitter';
         splitter.title = 'Ansicht umschalten';
-        splitter.setAttribute('aria-label', 'Transfer-Ansicht umschalten');
+        splitter.setAttribute('aria-label', 'Ansicht umschalten');
         container.insertBefore(splitter, rightPane);
     }
     return { container, leftPane, rightPane, splitter };
 }
-function setTransferSplitMode(mode, remember = true) {
-    const resolved = mode === 'left' ? 'left' : (mode === 'right' ? 'right' : transferSplitMode);
-    if (remember) transferSplitMode = resolved;
-    const layout = ensureTransferSplitLayout();
+function applySplitMode(layout, activeMode, leftLabel, rightLabel) {
     if (!layout) return;
-    const activeMode = remember ? transferSplitMode : resolved;
     const desktop = window.matchMedia('(min-width: 1024px)').matches;
     if (!desktop) {
         layout.container.style.gridTemplateColumns = 'minmax(0, 1fr)';
@@ -80,12 +79,33 @@ function setTransferSplitMode(mode, remember = true) {
     layout.leftPane.classList.toggle('ab2-transfer-pane-muted', activeMode !== 'left');
     layout.rightPane.classList.toggle('ab2-transfer-pane-muted', activeMode !== 'right');
     layout.splitter.setAttribute('aria-pressed', activeMode === 'left' ? 'true' : 'false');
-    layout.splitter.setAttribute('aria-label', activeMode === 'left' ? 'Bestehende Transfers ausklappen' : 'Quelle-Transfer-Wirkung ausklappen');
+    layout.splitter.setAttribute('aria-label', activeMode === 'left' ? rightLabel : leftLabel);
     layout.splitter.innerHTML = `<span class="${activeMode === 'left' ? 'text-indigo-700' : 'text-slate-400'}">◀</span><span class="${activeMode === 'right' ? 'text-indigo-700' : 'text-slate-400'}">▶</span>`;
 }
-function toggleTransferSplitMode() {
-    setTransferSplitMode(transferSplitMode === 'right' ? 'left' : 'right');
+function setTransferSplitMode(mode, remember = true) {
+    const resolved = mode === 'left' ? 'left' : (mode === 'right' ? 'right' : transferSplitMode);
+    if (remember) transferSplitMode = resolved;
+    const activeMode = remember ? transferSplitMode : resolved;
+    const layout = ensureSplitLayout('ab2-transfer-source', 'ab2-transfers-list', 'ab2-transfer-splitter');
+    applySplitMode(layout, activeMode, 'Quelle-/Wirkungsseite ausklappen', 'Bestehende Transfers ausklappen');
 }
+function toggleTransferSplitMode() { setTransferSplitMode(transferSplitMode === 'right' ? 'left' : 'right'); }
+function setAccountSplitMode(mode, remember = true) {
+    const resolved = mode === 'left' ? 'left' : (mode === 'right' ? 'right' : accountSplitMode);
+    if (remember) accountSplitMode = resolved;
+    const activeMode = remember ? accountSplitMode : resolved;
+    const layout = ensureSplitLayout('ab2-account-name', 'ab2-accounts-list', 'ab2-account-splitter');
+    applySplitMode(layout, activeMode, 'Kontenliste ausklappen', 'Konto-Formular ausklappen');
+}
+function toggleAccountSplitMode() { setAccountSplitMode(accountSplitMode === 'right' ? 'left' : 'right'); }
+function setReconSplitMode(mode, remember = true) {
+    const resolved = mode === 'left' ? 'left' : (mode === 'right' ? 'right' : reconSplitMode);
+    if (remember) reconSplitMode = resolved;
+    const activeMode = remember ? reconSplitMode : resolved;
+    const layout = ensureSplitLayout('ab2-recon-account', 'ab2-recon-list', 'ab2-recon-splitter');
+    applySplitMode(layout, activeMode, 'Abgleichsliste ausklappen', 'Abgleich-Formular ausklappen');
+}
+function toggleReconSplitMode() { setReconSplitMode(reconSplitMode === 'right' ? 'left' : 'right'); }
 function setForecastExpanded(expanded, remember = false) {
     const wrap = el('ab2-forecast-overview-wrap');
     const btn = el('ab2-forecast-toggle');
@@ -94,6 +114,28 @@ function setForecastExpanded(expanded, remember = false) {
     wrap.classList.toggle('hidden', !expanded);
     btn.textContent = expanded ? 'einklappen' : 'ausklappen';
     btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+}
+function referenceDate() { return simulationDate ? new Date(simulationDate.getTime()) : new Date(); }
+function referenceDayStart() {
+    const ref = referenceDate();
+    return new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+}
+function updateSimulationWarning() {
+    const warning = el('ab2-simulation-warning');
+    if (!warning) return;
+    if (simulationDate) {
+        warning.classList.remove('hidden');
+        warning.textContent = `⚠️ DATUMS-SIMULATION IST AKTIV! (${formatDate(simulationDate)})`;
+    } else {
+        warning.classList.add('hidden');
+        warning.textContent = '';
+    }
+}
+function applySimulationDate(value) {
+    const parsed = value ? parseDate(value) : null;
+    simulationDate = parsed ? new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()) : null;
+    FORECAST = buildForecast();
+    renderAll();
 }
 function toNum(v, f = 0) { const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : f; }
 function roundMoney(v) { return Math.round(toNum(v, 0) * 100) / 100; }
@@ -233,10 +275,12 @@ function buildShell() {
         <div id="ab2-setup-panel" class="space-y-2"></div>
         <div id="ab2-quality-banner" class="hidden bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-sm text-yellow-900"></div>
         <div id="ab2-imbalance-banner" class="hidden bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-900"></div>
+        <div id="ab2-simulation-warning" class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-3 rounded-lg font-bold text-sm"></div>
+        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200"><div class="flex flex-wrap gap-2 items-center"><label class="text-sm font-bold text-gray-700">📅 Datums-Simulation:</label><input type="date" id="ab2-simulation-datum" class="p-2 border-2 border-gray-300 rounded-lg text-sm"><button id="ab2-clear-simulation" type="button" class="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold text-sm">Zurücksetzen</button></div></div>
         <div class="grid grid-cols-1 gap-3">
             <div class="bg-white rounded-xl shadow p-3"><div class="flex items-center justify-between gap-2 mb-2"><h3 class="text-sm font-bold text-gray-700 flex items-center gap-2">12-Monate-Kontostandsprognose ${helpButton('ab2-help-forecast')}</h3><button id="ab2-forecast-toggle" type="button" class="px-2 py-1 rounded border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100">ausklappen</button></div><div id="ab2-forecast-state" class="inline-flex px-2 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700">ALLE OK</div>${helpContent('ab2-help-forecast', 'Zeigt die voraussichtlichen Endstände je Monat für die nächsten 12 Monate. Klick auf eine Zelle = Warum dieser Wert? Was wirkt? Was ist die beste Maßnahme?')}<div id="ab2-forecast-overview-wrap" class="mt-2 hidden"><div id="ab2-forecast-overview" class="text-sm text-gray-400 italic">Keine Forecast-Daten.</div></div></div>
         </div>
-        <div class="bg-white rounded-xl shadow p-3"><h3 class="text-sm font-bold text-gray-700 mb-2">Ausgleichsvorschläge</h3><div id="ab2-suggestion-preview" class="space-y-2"><p class="text-sm text-gray-400 italic">Plan aktuell stabil.</p></div></div>
+        <div id="ab2-suggestion-panel" class="bg-white rounded-xl shadow p-3"><h3 class="text-sm font-bold text-gray-700 mb-2">Ausgleichsvorschläge</h3><div id="ab2-suggestion-preview" class="space-y-2"></div></div>
         <div class="relative"><div class="flex justify-end"><button id="ab2-toggle-glossary" type="button" class="w-5 h-5 rounded-full border border-blue-200 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100" title="Begriffe einfach erklärt">i</button></div><div id="ab2-glossary" class="hidden mt-1 rounded-xl border border-blue-100 bg-white/95 p-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs shadow"></div></div>
         <div class="flex justify-center"><button id="ab2-toggle-filter-controls" class="text-gray-500 hover:text-blue-700 transition flex items-center gap-1 text-xs font-bold py-1 px-4 rounded-full hover:bg-blue-50"><span>Filter & Kategorien</span><svg id="ab2-toggle-filter-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 transform transition-transform"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"></path></svg></button></div>
         <div id="ab2-filter-controls-wrapper" class="hidden space-y-3">
@@ -599,24 +643,25 @@ function updateAccountTypeDependencies() {
 function monthKey(year, month) { return `${year}-${String(month).padStart(2, '0')}`; }
 function monthLabel(key) { const [year, month] = String(key || '').split('-').map(Number); return year && month ? `${MONTHS[month - 1]} ${year}` : '-'; }
 function lastDayOfMonth(year, month) { return new Date(year, month, 0).getDate(); }
-function currentMonthKey() { const now = new Date(); return monthKey(now.getFullYear(), now.getMonth() + 1); }
+function currentMonthKey() { const now = referenceDate(); return monthKey(now.getFullYear(), now.getMonth() + 1); }
 function freeMargin(account, row) { if (!row) return 0; return roundMoney(toNum(row.end, 0) - (isPersonAccount(account) ? 0 : toNum(account.minBuffer, 0))); }
 function cloneClean(data) { const next = { ...(data || {}) }; delete next.id; return next; }
 function monthNameList(list = []) { return list.map((m) => MONTHS[m - 1]).filter(Boolean).join(', ') || '-'; }
 function nextExecutionDate(entity, horizon = 36) {
-    const now = new Date();
+    const now = referenceDate();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     let year = now.getFullYear();
     let month = now.getMonth() + 1;
     for (let i = 0; i < horizon; i += 1) {
         const date = getExecutionDateForMonth(entity, year, month);
-        if (date && date >= new Date(now.getFullYear(), now.getMonth(), now.getDate())) return date;
+        if (date && date >= today) return date;
         month += 1;
         if (month > 12) { month = 1; year += 1; }
     }
     return null;
 }
 function yearlyHitCount(entity, horizon = 12) {
-    const now = new Date();
+    const now = referenceDate();
     let year = now.getFullYear();
     let month = now.getMonth() + 1;
     let hits = 0;
@@ -630,7 +675,7 @@ function yearlyHitCount(entity, horizon = 12) {
 function contributionTotal(item) { return roundMoney((Array.isArray(item?.contributions) ? item.contributions : []).reduce((sum, c) => sum + toNum(c?.amount, 0), 0)); }
 function itemNetEffect(item) { const signed = item?.typ === 'gutschrift' ? toNum(item?.amount, 0) : -toNum(item?.amount, 0); return roundMoney(signed + contributionTotal(item)); }
 function itemStatus(item) {
-    const now = new Date();
+    const now = referenceDayStart();
     const start = parseDate(item?.validFrom);
     const end = parseDate(item?.validTo);
     if (!item?.title || !item?.accountId || toNum(item?.amount, NaN) <= 0 || !start) return { key: 'fehler', label: 'Fehler', css: 'bg-red-100 text-red-700' };
@@ -691,7 +736,7 @@ function latestSnapshotByAccountAndMonth() {
     return map;
 }
 function buildQuality(alerts = []) {
-    const now = new Date();
+    const now = referenceDayStart();
     const currentMonth = currentMonthKey();
     return Object.values(ACCOUNTS).filter(isRelevantTargetAccount).map((account) => {
         const accountSnapshots = Object.values(RECON)
@@ -711,7 +756,7 @@ function buildQuality(alerts = []) {
         return { accountId: account.id, latest, latestDate, ageDays, currentSnapshot, status, text, nextAlert };
     });
 }
-function monthsSinceInclusive(startDate, endDate = new Date()) {
+function monthsSinceInclusive(startDate, endDate = referenceDate()) {
     const start = parseDate(startDate);
     const end = parseDate(endDate);
     if (!start || !end || end < start) return 1;
@@ -721,7 +766,7 @@ function transferLinkedToItem(transfer, item) {
     return transferAmountForItem(transfer, item) > 0.009;
 }
 function buildContributionImbalances() {
-    const now = new Date();
+    const now = referenceDate();
     return Object.values(ITEMS)
         .map((item) => {
             const account = ACCOUNTS[item.accountId] || null;
@@ -860,7 +905,8 @@ function buildForecast(horizon = 12) {
     const accounts = Object.values(ACCOUNTS);
     const alerts = [];
     const details = {};
-    const startMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const ref = referenceDate();
+    const startMonth = new Date(ref.getFullYear(), ref.getMonth(), 1);
     const baseSnapshots = latestSnapshots(startMonth);
     const monthSnapshots = latestSnapshotByAccountAndMonth();
     const balances = {};
@@ -1098,6 +1144,9 @@ function renderDashboard() {
         warnings: FORECAST.alerts.filter((alert) => alert.severity === 'warn').length + imbalanceWarn,
         alarms: FORECAST.alerts.filter((alert) => alert.severity === 'alarm').length + imbalanceAlarm
     };
+    const simInput = el('ab2-simulation-datum');
+    if (simInput) simInput.value = simulationDate ? isoDate(simulationDate) : '';
+    updateSimulationWarning();
     const total = el('ab2-total-status');
     if (total) {
         total.textContent = counts.alarms || counts.errors ? 'ALARM' : (counts.warnings ? 'HINWEIS' : (counts.accounts || items.length ? 'STABIL' : 'AUFBAU'));
@@ -1206,6 +1255,7 @@ function renderAccounts() {
         .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
     if (!accounts.length) {
         host.innerHTML = '<p class="text-sm text-gray-400 italic">Noch keine Konten/Quellen.</p>';
+        setAccountSplitMode(accountSplitMode, false);
         return;
     }
     const bankCount = accounts.filter((account) => !isPersonAccount(account)).length;
@@ -1220,6 +1270,7 @@ function renderAccounts() {
         return `<tr class="border-t border-slate-100 ${rowClass}"><td class="px-3 py-2 align-top"><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-[11px] text-gray-500">${escapeHtml(account.bank || (isPersonAccount(account) ? 'Person' : 'Bankkonto'))}</div></td><td class="px-3 py-2 text-xs text-gray-600">${escapeHtml(isPersonAccount(account) ? 'Person' : 'Bank')} · ${escapeHtml(normalizeAccountRole(account))}</td><td class="px-3 py-2 text-xs"><div class="font-bold ${toNum(row.delta, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">Forecast Δ ${formatSignedCurrency(row.delta)}</div><div class="mt-1 ${transferDiffCss(transferDiff)} font-bold">Transfer Δ ${formatSignedCurrency(transferDiff)}</div><div class="mt-1 ${quality?.status === 'alarm' ? 'text-red-700' : quality?.status === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">Snapshot: ${quality?.latest ? formatDate(quality.latest.date) : 'fehlt'}</div></td><td class="px-3 py-2 text-xs text-gray-600">${itemCount} Einträge · ${transferCount} Transfers</td><td class="px-3 py-2 text-right"><div class="flex gap-1 justify-end"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></td></tr>`;
     }).join('');
     host.innerHTML = `<div class="rounded-xl border border-slate-200 bg-white overflow-hidden"><div class="px-3 py-2 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center gap-2 text-xs"><span class="px-2 py-1 rounded-full bg-slate-200 text-slate-700 font-bold">Gesamt ${accounts.length}</span><span class="px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-bold">Bank ${bankCount}</span><span class="px-2 py-1 rounded-full bg-violet-100 text-violet-700 font-bold">Person ${personCount}</span></div><div class="overflow-x-auto max-h-[48vh]"><table class="ab2-simple-table min-w-[820px] text-sm"><thead class="bg-slate-100 text-slate-600"><tr><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Konto / Quelle</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Typ</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Status</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Nutzung</th><th class="px-3 py-2 text-right text-[11px] uppercase tracking-wide">Aktion</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+    setAccountSplitMode(accountSplitMode, false);
 }
 function renderTransfers() {
     const host = el('ab2-transfers-list');
@@ -1260,6 +1311,7 @@ function renderRecon() {
     if (!host) return;
     const recons = Object.values(RECON).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
     host.innerHTML = recons.length ? recons.map((entry) => `<div class="rounded-lg border border-gray-200 bg-gray-50 p-3"><div class="flex items-start justify-between gap-2"><div><div class="font-bold text-gray-800">${escapeHtml(ACCOUNTS[entry.accountId]?.name || '-')}</div><div class="text-xs text-gray-500">${entry.type === 'snapshot' ? 'Snapshot' : 'Manuell'} · ${formatDate(entry.date)}</div></div><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-recon-delete="${entry.id}">Löschen</button></div><div class="mt-2 text-sm font-bold ${entry.type === 'snapshot' ? 'text-blue-700' : toNum(entry.value, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${entry.type === 'snapshot' ? formatCurrency(entry.value) : formatSignedCurrency(entry.value)}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(entry.note || '')}</div></div>`).join('') : '<p class="text-sm text-gray-400 italic">Noch keine Abgleiche.</p>';
+    setReconSplitMode(reconSplitMode, false);
 }
 function suggestionCard(suggestion) {
     const monthly = suggestion.monthlyAllocations.map((row) => `${row.sourceName}: ${formatCurrency(row.amount)} / Monat`).join(' · ');
@@ -1269,8 +1321,10 @@ function suggestionCard(suggestion) {
 function renderSuggestionsModal() {
     const list = FORECAST.suggestions || [];
     const preview = el('ab2-suggestion-preview');
+    const panel = el('ab2-suggestion-panel');
     const modal = el('ab2-suggestions-content');
-    if (preview) preview.innerHTML = list.length ? list.slice(0, 3).map((suggestion) => suggestionCard(suggestion)).join('') : '<p class="text-sm text-gray-400 italic">Plan aktuell stabil. Keine Vorschläge nötig.</p>';
+    if (panel) panel.classList.toggle('hidden', !list.length);
+    if (preview) preview.innerHTML = list.length ? list.slice(0, 3).map((suggestion) => suggestionCard(suggestion)).join('') : '';
     if (modal) modal.innerHTML = list.length ? list.map((suggestion) => suggestionCard(suggestion)).join('') : '<p class="text-sm text-gray-400 italic">Keine Vorschläge nötig.</p>';
 }
 function renderPreviews() {
@@ -1418,6 +1472,7 @@ function resetAccountForm() {
     if (el('ab2-account-start-date')) el('ab2-account-start-date').value = isoDate(new Date());
     updateAccountTypeDependencies();
     renderAccounts();
+    setAccountSplitMode('right');
     renderPreviews();
 }
 function editAccount(id) {
@@ -1437,6 +1492,7 @@ function editAccount(id) {
     if (el('ab2-account-start-date')) el('ab2-account-start-date').value = accountType === 'person' ? isoDate(new Date()) : (latest?.date || isoDate(new Date()));
     updateAccountTypeDependencies();
     openModal('ab2-accounts-modal');
+    setAccountSplitMode('left');
     renderAccounts();
     renderPreviews();
 }
@@ -1486,6 +1542,7 @@ function resetReconForm() {
     ['ab2-recon-value', 'ab2-recon-note'].forEach((id) => { if (el(id)) el(id).value = ''; });
     if (el('ab2-recon-type')) el('ab2-recon-type').value = 'snapshot';
     if (el('ab2-recon-date')) el('ab2-recon-date').value = isoDate(new Date());
+    setReconSplitMode('right');
     renderPreviews();
 }
 async function writeAudit(action, entityType, entityId, beforeData = null, afterData = null, context = {}) {
@@ -1844,7 +1901,7 @@ function openForecastInsight(month) {
                 ? `-${formatCurrency(Math.abs(flowDiff))}`
                 : '0.00 €';
         const movementRows = (detail.entries || []).map((entry) => `<tr class="border-t"><td class="p-2 text-xs text-gray-600">${formatDate(entry.date)}</td><td class="p-2 text-xs sm:text-sm text-gray-700">${escapeHtml(entry.label || '-')}</td><td class="p-2 text-xs sm:text-sm font-bold ${toNum(entry.amount, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${entry.type === 'snapshot' ? formatCurrency(entry.amount) : formatSignedCurrency(entry.amount)}</td><td class="p-2 text-xs text-gray-500">${escapeHtml(entry.note || '')}</td></tr>`).join('');
-        return `<div class="rounded-xl border border-gray-200 bg-gray-50 p-3"><div class="font-bold text-gray-800 text-sm sm:text-base">${escapeHtml(account.name || '-')}</div><div class="mt-2 text-[11px] text-gray-500 font-bold flex items-center gap-2"><span class="text-base">↓</span><span>Buchungen laufen von oben nach unten</span></div><div class="mt-2 overflow-x-auto"><div class="rounded-lg border border-slate-200 bg-slate-100 p-2"><div class="text-[10px] uppercase tracking-wide text-slate-600">ALT (Monatsstart)</div><div class="text-base sm:text-lg font-bold text-slate-900">${formatCurrency(detail.start)}</div></div><table class="min-w-full mt-2"><thead><tr><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Datum</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Wirkung</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Betrag</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Notiz</th></tr></thead><tbody>${movementRows || '<tr><td colspan="4" class="p-3 text-xs text-gray-400 italic">Keine Bewegungen in diesem Monat.</td></tr>'}</tbody></table></div><div class="mt-2 rounded-lg border-2 border-emerald-300 bg-emerald-50 p-2"><div class="text-[10px] uppercase tracking-wide text-emerald-700">NEU (Monatsende nach Buchungen)</div><div class="text-base sm:text-lg font-bold text-emerald-800">${formatCurrency(detail.end)}</div><div class="text-[11px] text-gray-600 mt-1">Zufluss ${formatCurrency(detail.inflow)} · Abfluss ${formatCurrency(detail.outflow)} · Differenz <span class="font-extrabold ${flowDiffClass}">${flowDiffText}</span> · Δ zum Puffer ${formatSignedCurrency(detail.delta)}</div></div></div>`;
+        return `<div class="rounded-xl border border-gray-200 bg-gray-50 p-3"><div class="font-bold text-gray-800 text-sm sm:text-base">${escapeHtml(account.name || '-')}</div><div class="mt-2 text-[11px] text-gray-500 font-bold flex items-center gap-2"><span class="text-base">↓</span><span>Buchungen laufen von oben nach unten</span></div><div class="mt-2 overflow-x-auto"><table class="min-w-full"><thead><tr><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Datum</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Wirkung</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Betrag</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Notiz</th></tr></thead><tbody>${movementRows || '<tr><td colspan="4" class="p-3 text-xs text-gray-400 italic">Keine Bewegungen in diesem Monat.</td></tr>'}</tbody></table></div><div class="mt-2 text-[11px] text-gray-600">Zufluss ${formatCurrency(detail.inflow)} · Abfluss ${formatCurrency(detail.outflow)} · Differenz <span class="font-extrabold ${flowDiffClass}">${flowDiffText}</span> · Δ zum Puffer ${formatSignedCurrency(detail.delta)}</div></div>`;
     }).join('');
 
     openDetail(`Monatsübersicht ${bucket.label}`, `<div class="h-[68vh] sm:h-[72vh] max-h-[72vh] flex flex-col overflow-hidden"><div class="shrink-0 rounded-lg border border-slate-300 bg-slate-100 p-3 shadow-sm"><div class="text-[10px] uppercase tracking-wide text-slate-600">ALT (Start des Monats)</div><div class="text-lg sm:text-xl font-extrabold text-slate-900">${formatCurrency(totalOld)}</div></div><div class="shrink-0 mt-2 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-2">Reihenfolge ist bewusst: <strong>oben ALT</strong> → dann alle Buchungen → <strong>unten NEU</strong>.</div><div class="flex-1 min-h-0 overflow-y-auto mt-2 space-y-3 pr-1">${cards || '<p class="text-sm text-gray-500">Keine Kontodaten vorhanden.</p>'}</div><div class="shrink-0 mt-2 rounded-lg border-2 border-emerald-300 bg-emerald-50 p-3 shadow-md"><div class="text-[10px] uppercase tracking-wide text-emerald-700">NEU (Monatsende nach allen Buchungen)</div><div class="text-lg sm:text-xl font-extrabold text-emerald-800">${formatCurrency(totalNew)}</div></div></div>`);
@@ -1878,15 +1935,17 @@ function bindEvents() {
     const on = (id, event, handler) => { const node = el(id); if (node && !node.dataset.listenerAttached) { node.addEventListener(event, handler); node.dataset.listenerAttached = 'true'; } };
 
     on('ab2-btn-create', 'click', () => { if (!canCreate()) return alertUser('Keine Berechtigung.', 'error'); resetItemForm(); openModal('ab2-item-modal'); });
-    on('ab2-open-accounts-modal', 'click', () => { resetAccountForm(); openModal('ab2-accounts-modal'); });
+    on('ab2-open-accounts-modal', 'click', () => { resetAccountForm(); openModal('ab2-accounts-modal'); setAccountSplitMode('right'); });
     on('ab2-open-transfers-modal', 'click', () => { resetTransferForm(); openModal('ab2-transfers-modal'); setTransferSplitMode('right'); });
-    on('ab2-open-recon-modal', 'click', () => { resetReconForm(); openModal('ab2-reconciliation-modal'); });
+    on('ab2-open-recon-modal', 'click', () => { resetReconForm(); openModal('ab2-reconciliation-modal'); setReconSplitMode('right'); });
     on('ab2-open-suggestions-modal', 'click', () => { renderSuggestionsModal(); openModal('ab2-suggestions-modal'); });
     on('ab2-toggle-glossary', 'click', () => el('ab2-glossary')?.classList.toggle('hidden'));
     on('ab2-forecast-toggle', 'click', () => {
         const expanded = !el('ab2-forecast-overview-wrap')?.classList.contains('hidden');
         setForecastExpanded(!expanded, true);
     });
+    on('ab2-simulation-datum', 'change', (e) => applySimulationDate(e.target?.value || ''));
+    on('ab2-clear-simulation', 'click', () => applySimulationDate(''));
 
     on('ab2-close-item-modal', 'click', () => closeModal('ab2-item-modal'));
     on('ab2-cancel-item-btn', 'click', () => closeModal('ab2-item-modal'));
@@ -2053,6 +2112,20 @@ function bindEvents() {
         });
         transferModal.dataset.splitListenerAttached = 'true';
     }
+    const accountModal = el('ab2-accounts-modal');
+    if (accountModal && !accountModal.dataset.splitListenerAttached) {
+        accountModal.addEventListener('click', (e) => {
+            if (e.target.closest('#ab2-account-splitter')) toggleAccountSplitMode();
+        });
+        accountModal.dataset.splitListenerAttached = 'true';
+    }
+    const reconModal = el('ab2-reconciliation-modal');
+    if (reconModal && !reconModal.dataset.splitListenerAttached) {
+        reconModal.addEventListener('click', (e) => {
+            if (e.target.closest('#ab2-recon-splitter')) toggleReconSplitMode();
+        });
+        reconModal.dataset.splitListenerAttached = 'true';
+    }
     const reconHost = el('ab2-recon-list');
     if (reconHost && !reconHost.dataset.listenerAttached) {
         reconHost.addEventListener('click', (e) => {
@@ -2095,8 +2168,14 @@ function bindEvents() {
     updateMainIntervalFields('ab2-item');
     updateMainIntervalFields('ab2-transfer');
     updateAccountTypeDependencies();
+    setAccountSplitMode(accountSplitMode, false);
     setTransferSplitMode(transferSplitMode, false);
-    window.addEventListener('resize', () => setTransferSplitMode(transferSplitMode, false));
+    setReconSplitMode(reconSplitMode, false);
+    window.addEventListener('resize', () => {
+        setAccountSplitMode(accountSplitMode, false);
+        setTransferSplitMode(transferSplitMode, false);
+        setReconSplitMode(reconSplitMode, false);
+    });
 }
 function attachListeners() {
     if (isGuest()) return;
