@@ -88,6 +88,22 @@ function ensureInlineStyles() {
                 padding: 0.65rem;
             }
         }
+        #abbuchungsberechner-root .ab2-simple-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        #abbuchungsberechner-root .ab2-simple-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+        #abbuchungsberechner-root .ab2-click-row {
+            cursor: pointer;
+        }
+        #abbuchungsberechner-root .ab2-click-row:hover {
+            background: rgba(224, 231, 255, 0.45);
+        }
     `;
     document.head.appendChild(style);
 }
@@ -165,7 +181,7 @@ function ensureTransferLinkingFields() {
     const block = document.createElement('div');
     block.id = 'ab2-transfer-linking-block';
     block.className = 'rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 space-y-2';
-    block.innerHTML = `<div class="text-sm font-bold text-indigo-900 flex items-center gap-2">Zahlungsgrund-Zuordnung ${helpButton('ab2-help-transfer-linking')}</div>${helpContent('ab2-help-transfer-linking', 'Pflichtfeld: Plane dein Transfer-Budget auf Zahlungsgründe auf. Du kannst auf mehrere Titel verteilen. Mit [OHNE ZUORDNUNG] erfasst du Rundungsreste (z. B. 0,01 €).')}<div><label class="block text-xs font-bold text-indigo-800 mb-1">Zahlungsgrund (Titel)</label><details id="ab2-transfer-linked-titles-dropdown" class="group relative"><summary class="list-none cursor-pointer w-full p-2 border rounded-lg bg-white text-sm text-gray-700 flex items-center justify-between gap-2"><span id="ab2-transfer-linked-titles-summary">Keine Titel ausgewählt</span><span class="text-[10px] text-gray-500">▼</span></summary><div id="ab2-transfer-linked-titles-list" class="mt-2 max-h-44 overflow-y-auto rounded-lg border border-indigo-200 bg-white p-2 space-y-1"></div></details></div><div id="ab2-transfer-allocation-summary" class="rounded-lg border border-indigo-200 bg-white p-2"><div class="text-[10px] uppercase tracking-wide text-indigo-700">Live-Bilanz</div><div id="ab2-transfer-linking-remaining" class="text-base font-extrabold text-indigo-900">Noch zu verplanen: 0.00 €</div><div id="ab2-transfer-linking-balance-line" class="text-xs text-indigo-700 mt-1">Verplant 0.00 € von 0.00 €</div></div><div id="ab2-transfer-allocation-list" class="space-y-2"></div><div class="text-[11px] text-indigo-800">Jeder ausgewählte Zahlungsgrund braucht einen Betrag. Nicht mehr als das Transfer-Budget planen.</div>`;
+    block.innerHTML = `<div class="text-sm font-bold text-indigo-900 flex items-center gap-2">Zahlungsgrund-Zuordnung ${helpButton('ab2-help-transfer-linking')}</div>${helpContent('ab2-help-transfer-linking', 'Pflichtfeld: Plane dein Transfer-Budget auf Zahlungsgründe auf. Du kannst auf mehrere Titel verteilen. Mit [OHNE ZUORDNUNG] erfasst du Rundungsreste (z. B. 0,01 €).')}<div class="grid grid-cols-1 lg:grid-cols-2 gap-3"><div><label class="block text-xs font-bold text-indigo-800 mb-1">Zahlungsgrund (Titel)</label><details id="ab2-transfer-linked-titles-dropdown" class="group relative"><summary class="list-none cursor-pointer w-full p-2 border rounded-lg bg-white text-sm text-gray-700 flex items-center justify-between gap-2"><span id="ab2-transfer-linked-titles-summary">Keine Titel ausgewählt</span><span class="text-[10px] text-gray-500">▼</span></summary><div id="ab2-transfer-linked-titles-list" class="mt-2 max-h-56 overflow-y-auto rounded-lg border border-indigo-200 bg-white p-2 space-y-1"></div></details></div><div class="space-y-2"><div id="ab2-transfer-allocation-summary" class="rounded-lg border border-indigo-200 bg-white p-2"><div class="text-[10px] uppercase tracking-wide text-indigo-700">Live-Bilanz</div><div id="ab2-transfer-linking-remaining" class="text-base font-extrabold text-indigo-900">Noch zu verplanen: 0.00 €</div><div id="ab2-transfer-linking-balance-line" class="text-xs text-indigo-700 mt-1">Verplant 0.00 € von 0.00 €</div></div><div id="ab2-transfer-allocation-list" class="space-y-2"></div></div></div><div class="text-[11px] text-indigo-800">Jeder ausgewählte Zahlungsgrund braucht einen Betrag. Nicht mehr als das Transfer-Budget planen.</div>`;
     noteWrap.parentElement.insertBefore(block, noteWrap.nextSibling);
     const linkedTitleList = el('ab2-transfer-linked-titles-list');
     if (linkedTitleList && !linkedTitleList.dataset.listenerAttached) {
@@ -340,7 +356,7 @@ function updateTransferLinkedTitleAllocationsUI(seedAllocations = null) {
         ? selected.map((titleKey) => {
             const normalized = normalizeTransferLinkedTitleKey(titleKey);
             const value = currentMap.get(normalized.toLowerCase());
-            return `<div class="rounded-lg border border-indigo-200 bg-white p-2" data-transfer-allocation-row="${escapeHtml(normalized)}"><div class="flex items-center justify-between gap-2"><div class="text-xs font-bold text-indigo-900">${escapeHtml(transferLinkedTitleLabel(normalized) || '-')}</div><button type="button" class="h-7 w-7 rounded-full border border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold" title="Bilanz anzeigen" data-transfer-balance-title="${escapeHtml(normalized)}">⚖</button></div><div class="mt-2"><input data-transfer-allocation-amount type="text" class="w-full p-2 border rounded-lg text-sm" placeholder="Betrag für diesen Zahlungsgrund" value="${Number.isFinite(toNum(value, NaN)) ? toNum(value, 0).toFixed(2) : ''}"></div></div>`;
+            return `<div class="rounded-lg border border-indigo-200 bg-white p-2" data-transfer-allocation-row="${escapeHtml(normalized)}"><div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_130px_40px] gap-2 items-center"><div class="text-xs font-bold text-indigo-900">${escapeHtml(transferLinkedTitleLabel(normalized) || '-')}</div><input data-transfer-allocation-amount type="text" class="w-full p-2 border rounded-lg text-sm" placeholder="Betrag" value="${Number.isFinite(toNum(value, NaN)) ? toNum(value, 0).toFixed(2) : ''}"><button type="button" class="h-9 w-full sm:w-10 rounded-lg border border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold" title="Bilanz anzeigen" data-transfer-balance-title="${escapeHtml(normalized)}">⚖</button></div></div>`;
         }).join('')
         : '<div class="text-xs text-indigo-700">Bitte mindestens einen Zahlungsgrund auswählen.</div>';
 }
@@ -422,6 +438,8 @@ function populateTransferLinkingOptions(preselectedTitles = null) {
 function ensureContributionInfoHint() {
     const contribList = el('ab2-contrib-list');
     if (!contribList) return;
+    const addBtn = el('ab2-add-contrib-btn');
+    if (addBtn) addBtn.style.display = 'none';
     const panel = contribList.closest('.bg-gray-50.p-3.rounded-lg.border') || contribList.parentElement;
     if (!panel || el('ab2-help-contrib-usage')) return;
     const headerLabel = panel.querySelector('label');
@@ -429,7 +447,7 @@ function ensureContributionInfoHint() {
         headerLabel.insertAdjacentHTML('beforeend', ` ${helpButton('ab2-help-contrib-usage')}`);
     }
     const hintNode = document.createElement('div');
-    hintNode.innerHTML = helpContent('ab2-help-contrib-usage', 'Beiträge/Gegenkonten nutzt du, wenn eine Belastung (z. B. YouTube) anteilig von anderen Konten/Personen mitgetragen wird. Trage hier nur den Anteil ein, der wirklich zur Belastung gehört. So siehst du später sofort Überzahlung/Unterzahlung und den Ausgleich nach Abtausch.');
+    hintNode.innerHTML = helpContent('ab2-help-contrib-usage', 'Beiträge/Gegenkonten werden hier als kompakte Tabelle gezeigt: Direktbeiträge plus passende Transfer-Zuordnungen. Transfer-Zeilen sind klickbar und führen direkt zum Transferplan.');
     panel.insertBefore(hintNode.firstChild, contribList);
 }
 
@@ -1069,15 +1087,23 @@ function renderAccounts() {
         .filter((account) => accountListFilterState.type === 'all' || normalizeAccountType(account) === accountListFilterState.type)
         .filter((account) => !search || normalizeSearchText(`${account.name || ''} ${account.bank || ''} ${account.iban || ''} ${formatCurrency(account.minBuffer)}`).includes(search))
         .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
-    host.innerHTML = accounts.length ? accounts.map((account) => {
+    if (!accounts.length) {
+        host.innerHTML = '<p class="text-sm text-gray-400 italic">Noch keine Konten/Quellen.</p>';
+        return;
+    }
+    const bankCount = accounts.filter((account) => !isPersonAccount(account)).length;
+    const personCount = accounts.length - bankCount;
+    const rows = accounts.map((account) => {
         const row = FORECAST.timeline[0]?.accounts[account.id] || {};
         const latest = latestSnapshots()[account.id];
         const quality = qualityEntry(account.id);
         const itemCount = Object.values(ITEMS).filter((item) => item.accountId === account.id).length;
         const transferCount = Object.values(TRANSFERS).filter((transfer) => transfer.sourceAccountId === account.id || transfer.targetAccountId === account.id).length;
         const transferDiff = accountTransferBudgetDiff(account.id);
-        return `<div class="rounded-lg border ${editingAccountId === account.id ? 'border-yellow-400 bg-yellow-50 shadow-md' : 'border-gray-200 bg-gray-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(isPersonAccount(account) ? 'Person' : (account.bank || 'Bankkonto'))} · ${escapeHtml(normalizeAccountRole(account))}</div></div><div class="flex gap-1"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></div><div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Stand</div><div class="font-bold text-gray-800">${formatCurrency(latest?.value)}</div></div><div><div class="text-gray-500">Puffer</div><div class="font-bold text-gray-800">${isPersonAccount(account) ? 'entfällt' : formatCurrency(account.minBuffer)}</div></div><div><div class="text-gray-500">Differenz</div><div class="font-bold ${toNum(row.delta, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${formatSignedCurrency(row.delta)}</div></div><div><div class="text-gray-500">Snapshot</div><div class="font-bold ${quality?.status === 'alarm' ? 'text-red-700' : quality?.status === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">${quality?.latest ? formatDate(quality.latest.date) : 'fehlt'}</div></div></div><div class="mt-2 text-xs ${transferDiffCss(transferDiff)} font-bold">Transfer-Zuordnungsdifferenz (Quelle): ${formatSignedCurrency(transferDiff)}</div><div class="mt-1 text-xs text-gray-600">Einträge: ${itemCount} · Transfers: ${transferCount}</div></div>`;
-    }).join('') : '<p class="text-sm text-gray-400 italic">Noch keine Konten/Quellen.</p>';
+        const rowClass = editingAccountId === account.id ? 'bg-yellow-50' : 'bg-white';
+        return `<tr class="border-t border-slate-100 ${rowClass}"><td class="px-3 py-2 align-top"><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-[11px] text-gray-500">${escapeHtml(account.bank || (isPersonAccount(account) ? 'Person' : 'Bankkonto'))}</div></td><td class="px-3 py-2 text-xs text-gray-600">${escapeHtml(isPersonAccount(account) ? 'Person' : 'Bank')} · ${escapeHtml(normalizeAccountRole(account))}</td><td class="px-3 py-2 text-xs text-gray-700"><div>Stand <span class="font-bold text-gray-800">${formatCurrency(latest?.value)}</span></div><div>Puffer <span class="font-bold text-gray-800">${isPersonAccount(account) ? '-' : formatCurrency(account.minBuffer)}</span></div></td><td class="px-3 py-2 text-xs"><div class="font-bold ${toNum(row.delta, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">Forecast Δ ${formatSignedCurrency(row.delta)}</div><div class="mt-1 ${transferDiffCss(transferDiff)} font-bold">Transfer Δ ${formatSignedCurrency(transferDiff)}</div><div class="mt-1 ${quality?.status === 'alarm' ? 'text-red-700' : quality?.status === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">Snapshot: ${quality?.latest ? formatDate(quality.latest.date) : 'fehlt'}</div></td><td class="px-3 py-2 text-xs text-gray-600">${itemCount} Einträge · ${transferCount} Transfers</td><td class="px-3 py-2 text-right"><div class="flex gap-1 justify-end"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></td></tr>`;
+    }).join('');
+    host.innerHTML = `<div class="rounded-xl border border-slate-200 bg-white overflow-hidden"><div class="px-3 py-2 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center gap-2 text-xs"><span class="px-2 py-1 rounded-full bg-slate-200 text-slate-700 font-bold">Gesamt ${accounts.length}</span><span class="px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-bold">Bank ${bankCount}</span><span class="px-2 py-1 rounded-full bg-violet-100 text-violet-700 font-bold">Person ${personCount}</span></div><div class="overflow-x-auto max-h-[48vh]"><table class="ab2-simple-table min-w-[900px] text-sm"><thead class="bg-slate-100 text-slate-600"><tr><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Konto / Quelle</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Typ</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Saldo</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Status</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Nutzung</th><th class="px-3 py-2 text-right text-[11px] uppercase tracking-wide">Aktion</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function renderTransfers() {
     const host = el('ab2-transfers-list');
@@ -1094,17 +1120,23 @@ function renderTransfers() {
         })
         .filter((transfer) => !search || normalizeSearchText(`${ACCOUNTS[transfer.sourceAccountId]?.name || ''} ${ACCOUNTS[transfer.targetAccountId]?.name || ''} ${transfer.note || ''} ${transferLinkingText(transfer)} ${formatCurrency(transfer.amount)} ${intervalLabel(transfer.intervalType, transfer.customMonths || [])}`).includes(search))
         .sort((a, b) => String(ACCOUNTS[a.sourceAccountId]?.name || '').localeCompare(String(ACCOUNTS[b.sourceAccountId]?.name || '')));
-    host.innerHTML = transfers.length ? transfers.map((transfer) => {
+    if (!transfers.length) {
+        host.innerHTML = '<p class="text-sm text-gray-400 italic">Noch keine Transferpläne.</p>';
+        return;
+    }
+    const rows = transfers.map((transfer) => {
         const source = ACCOUNTS[transfer.sourceAccountId] || {};
         const target = ACCOUNTS[transfer.targetAccountId] || {};
         const targetAlert = FORECAST.alerts.find((alert) => alert.accountId === transfer.targetAccountId);
         const allocationLines = transferAllocationSummaryLines(transfer);
         const planned = transferPlannedAmount(transfer);
         const diff = transferBudgetDiff(transfer);
-        const linkedInfo = allocationLines.length ? `<div class="mt-1 text-[11px] text-indigo-700">Zahlungsgründe: ${escapeHtml(allocationLines.join(' · '))}</div>` : '<div class="mt-1 text-[11px] text-red-700 font-bold">Keine Zahlungsgrund-Zuordnung vorhanden.</div>';
-        const budgetInfo = `<div class="mt-1 text-[11px] font-bold ${transferDiffCss(diff)}">Verplant ${formatCurrency(planned)} von ${formatCurrency(transfer.amount)} · Differenz ${formatSignedCurrency(diff)}</div>`;
-        return `<div class="rounded-lg border ${editingTransferId === transfer.id ? 'border-yellow-400 bg-yellow-50 shadow-md' : 'border-gray-200 bg-gray-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="font-bold text-gray-800">${escapeHtml(source.name || '-')} → ${escapeHtml(target.name || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(intervalLabel(transfer.intervalType, transfer.customMonths || []))} · nächste Ausführung: ${nextExecutionDate(transfer) ? formatDate(nextExecutionDate(transfer)) : '-'}</div></div><div class="flex gap-1"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-transfer-edit="${transfer.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-transfer-delete="${transfer.id}">Löschen</button></div></div><div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Betrag</div><div class="font-bold text-gray-800">${formatCurrency(transfer.amount)}</div></div><div><div class="text-gray-500">Start</div><div class="font-bold text-gray-800">${formatDate(transfer.validFrom)}</div></div><div><div class="text-gray-500">Ende</div><div class="font-bold text-gray-800">${transfer.validTo ? formatDate(transfer.validTo) : 'offen'}</div></div><div><div class="text-gray-500">Ziellage</div><div class="font-bold ${targetAlert?.severity === 'alarm' ? 'text-red-700' : targetAlert?.severity === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">${targetAlert ? `${targetAlert.severity} ${monthLabel(targetAlert.monthKey)}` : 'stabil'}</div></div></div><div class="mt-2 text-xs text-gray-600">${escapeHtml(transfer.note || '')}${linkedInfo}${budgetInfo}</div></div>`;
-    }).join('') : '<p class="text-sm text-gray-400 italic">Noch keine Transferpläne.</p>';
+        const rowClass = editingTransferId === transfer.id ? 'bg-yellow-50' : 'bg-white';
+        const stateText = targetAlert ? `${targetAlert.severity} ${monthLabel(targetAlert.monthKey)}` : 'stabil';
+        const linkedText = allocationLines.length ? allocationLines.join(' | ') : 'Keine Zahlungsgrund-Zuordnung';
+        return `<tr class="border-t border-slate-100 ${rowClass}"><td class="px-3 py-2 align-top"><div class="font-bold text-gray-800">${escapeHtml(source.name || '-')}</div><div class="text-[11px] text-gray-500">→ ${escapeHtml(target.name || '-')}</div></td><td class="px-3 py-2 text-xs text-gray-600">${escapeHtml(intervalLabel(transfer.intervalType, transfer.customMonths || []))}<div class="mt-1">Nächste: ${nextExecutionDate(transfer) ? formatDate(nextExecutionDate(transfer)) : '-'}</div></td><td class="px-3 py-2 text-xs text-gray-700"><div class="font-bold text-gray-900">${formatCurrency(transfer.amount)}</div><div class="mt-1">Verplant ${formatCurrency(planned)}</div><div class="mt-1 font-bold ${transferDiffCss(diff)}">Δ ${formatSignedCurrency(diff)}</div></td><td class="px-3 py-2 text-xs text-indigo-700">${escapeHtml(linkedText)}</td><td class="px-3 py-2 text-xs ${targetAlert?.severity === 'alarm' ? 'text-red-700' : targetAlert?.severity === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">${escapeHtml(stateText)}</td><td class="px-3 py-2 text-xs text-gray-600">${escapeHtml(transfer.note || '-')}</td><td class="px-3 py-2 text-right"><div class="flex gap-1 justify-end"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-transfer-edit="${transfer.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-transfer-delete="${transfer.id}">Löschen</button></div></td></tr>`;
+    }).join('');
+    host.innerHTML = `<div class="rounded-xl border border-slate-200 bg-white overflow-hidden"><div class="px-3 py-2 border-b border-slate-200 bg-slate-50 text-xs text-slate-700">Einfache Übersicht: Quelle, Ziel, Intervall, Budget-Status und Zuordnung pro Transfer.</div><div class="overflow-x-auto max-h-[48vh]"><table class="ab2-simple-table min-w-[980px] text-sm"><thead class="bg-slate-100 text-slate-600"><tr><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Quelle → Ziel</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Intervall</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Budget</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Zahlungsgründe</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Ziellage</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Notiz</th><th class="px-3 py-2 text-right text-[11px] uppercase tracking-wide">Aktion</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function renderRecon() {
     const host = el('ab2-recon-list');
@@ -1159,30 +1191,24 @@ function setItemReadOnly(readOnly) {
         node.classList.toggle('bg-gray-100', !!readOnly);
         node.classList.toggle('text-gray-500', !!readOnly);
     });
-    document.querySelectorAll('#ab2-item-modal .ab2-remove-contrib').forEach((btn) => { btn.style.display = readOnly ? 'none' : 'inline-flex'; });
-    document.querySelectorAll('#ab2-item-modal .ab2-contrib-row[data-contrib-transfer-derived="1"]').forEach((row) => {
-        row.querySelectorAll('input, select, textarea').forEach((node) => {
-            node.disabled = true;
-            node.classList.add('bg-gray-100', 'text-gray-500');
-        });
-        row.querySelector('.ab2-remove-contrib')?.classList.add('hidden');
-    });
-    if (el('ab2-add-contrib-btn')) el('ab2-add-contrib-btn').style.display = readOnly ? 'none' : 'inline-flex';
+    if (el('ab2-add-contrib-btn')) el('ab2-add-contrib-btn').style.display = 'none';
     if (el('ab2-item-save-btn')) el('ab2-item-save-btn').style.display = readOnly ? 'none' : 'inline-flex';
     if (el('ab2-item-edit-btn')) el('ab2-item-edit-btn').style.display = readOnly ? 'inline-flex' : 'none';
     const editableExistingItem = !readOnly && Boolean(el('ab2-item-id')?.value);
     if (el('ab2-item-delete-btn')) el('ab2-item-delete-btn').style.display = editableExistingItem ? 'inline-flex' : 'none';
     if (el('ab2-item-abtausch-btn')) el('ab2-item-abtausch-btn').style.display = editableExistingItem ? 'inline-flex' : 'none';
 }
-function buildReadOnlyContributionRows(item) {
+function buildContributionRows(item) {
     const directRows = (Array.isArray(item?.contributions) ? item.contributions : [])
         .filter((row) => row?.sourceAccountId && toNum(row.amount, 0) > 0)
         .map((row) => ({
             sourceAccountId: row.sourceAccountId,
+            sourceName: ACCOUNTS[row.sourceAccountId]?.name || '-',
             amount: roundMoney(toNum(row.amount, 0)),
             intervalType: row.intervalType || 'inherit',
             customMonths: Array.isArray(row.customMonths) ? row.customMonths : [],
-            note: row.note || 'Direktbeitrag'
+            note: row.note || 'Direktbeitrag',
+            kind: 'Direktbeitrag'
         }));
 
     const transferRows = Object.values(TRANSFERS)
@@ -1191,16 +1217,35 @@ function buildReadOnlyContributionRows(item) {
             if (amount <= 0) return null;
             return {
                 sourceAccountId: transfer.sourceAccountId,
+                sourceName: ACCOUNTS[transfer.sourceAccountId]?.name || '-',
                 amount: roundMoney(amount),
                 intervalType: transfer.intervalType || 'monthly',
                 customMonths: Array.isArray(transfer.customMonths) ? transfer.customMonths : [],
                 note: `Transfer: ${ACCOUNTS[transfer.sourceAccountId]?.name || '-'} → ${ACCOUNTS[transfer.targetAccountId]?.name || '-'}`,
-                transferId: transfer.id
+                transferId: transfer.id,
+                kind: 'Transferplan'
             };
         })
         .filter(Boolean);
 
-    return [...directRows, ...transferRows];
+    return [...directRows, ...transferRows].sort((a, b) => String(a.sourceName || '').localeCompare(String(b.sourceName || '')));
+}
+
+function renderContributionTable(item) {
+    const host = el('ab2-contrib-list');
+    if (!host) return;
+    const rows = buildContributionRows(item);
+    if (!rows.length) {
+        host.innerHTML = '<p class="text-xs text-gray-500 italic">Keine Beiträge/Zuordnungen vorhanden.</p>';
+        return;
+    }
+    const body = rows.map((row) => {
+        const rowClass = row.transferId ? 'ab2-click-row bg-indigo-50/40' : 'bg-white';
+        const jumpAttr = row.transferId ? ` data-contrib-transfer-jump="${escapeHtml(row.transferId)}"` : '';
+        const intervalText = row.intervalType === 'inherit' ? 'wie Eintrag' : intervalLabel(row.intervalType, row.customMonths || []);
+        return `<tr class="border-t border-slate-100 ${rowClass}"${jumpAttr} data-contrib-direct="${row.transferId ? '0' : '1'}" data-contrib-source="${escapeHtml(row.sourceAccountId || '')}" data-contrib-amount="${escapeHtml(String(roundMoney(row.amount || 0)))}" data-contrib-interval="${escapeHtml(row.intervalType || 'inherit')}" data-contrib-custom="${escapeHtml(Array.isArray(row.customMonths) ? row.customMonths.join(',') : '')}" data-contrib-note="${escapeHtml(row.note || '')}"><td class="px-2 py-2 text-xs text-gray-700">${escapeHtml(row.sourceName || '-')}</td><td class="px-2 py-2 text-xs text-gray-600">${escapeHtml(row.kind || '-')}</td><td class="px-2 py-2 text-xs font-bold text-gray-900">${formatCurrency(row.amount)}</td><td class="px-2 py-2 text-xs text-gray-600">${escapeHtml(intervalText)}</td><td class="px-2 py-2 text-xs text-gray-600">${escapeHtml(row.note || '-')}</td><td class="px-2 py-2 text-right">${row.transferId ? `<button type="button" class="px-2 py-1 rounded bg-indigo-100 text-indigo-700 text-[11px] font-bold hover:bg-indigo-200" data-contrib-transfer-jump="${escapeHtml(row.transferId)}">Transfer</button>` : '<span class="text-[11px] text-gray-400">-</span>'}</td></tr>`;
+    }).join('');
+    host.innerHTML = `<div class="rounded-lg border border-slate-200 bg-slate-50 overflow-hidden"><div class="overflow-x-auto"><table class="ab2-simple-table min-w-[760px]"><thead class="bg-slate-100 text-slate-600"><tr><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Quelle</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Art</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Betrag</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Intervall</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Notiz</th><th class="px-2 py-2 text-right text-[11px] uppercase tracking-wide">Aktion</th></tr></thead><tbody>${body}</tbody></table></div></div>`;
 }
 function resetItemForm() {
     if (el('ab2-item-id')) el('ab2-item-id').value = '';
@@ -1209,7 +1254,7 @@ function resetItemForm() {
     if (el('ab2-item-interval')) el('ab2-item-interval').value = 'monthly';
     if (el('ab2-item-account')) el('ab2-item-account').value = '';
     if (el('ab2-item-valid-from')) el('ab2-item-valid-from').value = isoDate(new Date());
-    if (el('ab2-contrib-list')) el('ab2-contrib-list').innerHTML = '';
+    renderContributionTable(null);
     if (el('ab2-item-delete-btn')) el('ab2-item-delete-btn').style.display = 'none';
     if (el('ab2-item-abtausch-btn')) el('ab2-item-abtausch-btn').style.display = 'none';
     updateMainIntervalFields('ab2-item');
@@ -1230,43 +1275,22 @@ function fillItemForm(item, readOnly) {
     if (el('ab2-item-valid-from')) el('ab2-item-valid-from').value = item.validFrom || '';
     if (el('ab2-item-valid-to')) el('ab2-item-valid-to').value = item.validTo || '';
     if (el('ab2-item-notes')) el('ab2-item-notes').value = item.notes || '';
-    if (el('ab2-contrib-list')) el('ab2-contrib-list').innerHTML = '';
-    const contribRows = readOnly ? buildReadOnlyContributionRows(item) : (Array.isArray(item.contributions) ? item.contributions : []);
-    if (contribRows.length) contribRows.forEach((row) => addContributionRow(row, { readOnly: !!readOnly }));
-    else if (readOnly && el('ab2-contrib-list')) el('ab2-contrib-list').innerHTML = '<p class="text-xs text-gray-500 italic">Keine Beiträge/Zuordnungen vorhanden.</p>';
+    renderContributionTable(item);
     if (el('ab2-item-delete-btn')) el('ab2-item-delete-btn').style.display = item.id && !readOnly ? 'inline-flex' : 'none';
     if (el('ab2-item-abtausch-btn')) el('ab2-item-abtausch-btn').style.display = item.id && !readOnly ? 'inline-flex' : 'none';
     updateMainIntervalFields('ab2-item');
     setItemReadOnly(!!readOnly);
     renderPreviews();
 }
-function addContributionRow(v = {}, options = {}) {
-    const host = el('ab2-contrib-list');
-    if (!host) return;
-    const jumpButton = v.transferId
-        ? `<button type="button" class="px-2 py-1 rounded bg-indigo-100 text-indigo-700 text-xs font-bold hover:bg-indigo-200" data-contrib-transfer-jump="${escapeHtml(v.transferId)}">Transfer</button>`
-        : '';
-    const row = document.createElement('div');
-    row.className = 'ab2-contrib-row grid grid-cols-1 md:grid-cols-5 gap-2 items-start';
-    if (v.transferId) {
-        row.dataset.contribTransferJump = String(v.transferId);
-        row.dataset.contribTransferDerived = '1';
-        row.classList.add('cursor-pointer');
-    }
-    row.innerHTML = `<select class="ab2-contrib-source w-full p-2 border rounded-lg"></select><input class="ab2-contrib-amount w-full p-2 border rounded-lg" type="text" placeholder="Betrag" value="${Number.isFinite(toNum(v.amount, NaN)) ? toNum(v.amount, 0).toFixed(2) : ''}"><select class="ab2-contrib-interval w-full p-2 border rounded-lg"><option value="inherit">wie Eintrag</option><option value="monthly">monatlich</option><option value="quarterly">quartal</option><option value="semiannual">halbjahr</option><option value="annual">jährlich</option><option value="custom">individuell</option></select><input class="ab2-contrib-custom w-full p-2 border rounded-lg" type="text" placeholder="Monate" value="${Array.isArray(v.customMonths) ? v.customMonths.join(',') : ''}"><div class="flex gap-2"><input class="ab2-contrib-note flex-1 p-2 border rounded-lg" type="text" placeholder="Notiz" value="${escapeHtml(v.note || '')}">${jumpButton}<button type="button" class="ab2-remove-contrib px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200">×</button></div>`;
-    host.appendChild(row);
-    populateSelects();
-    row.querySelector('.ab2-contrib-source').value = v.sourceAccountId || '';
-    row.querySelector('.ab2-contrib-interval').value = v.intervalType || 'inherit';
-    updateContributionRowState(row);
-    if (options.readOnly) {
-        row.querySelector('.ab2-remove-contrib')?.classList.add('hidden');
-    }
-}
 function collectContribs() {
-    return Array.from(document.querySelectorAll('.ab2-contrib-row'))
-        .filter((row) => row.dataset.contribTransferDerived !== '1')
-        .map((row) => ({ sourceAccountId: row.querySelector('.ab2-contrib-source')?.value || '', amount: roundMoney(toNum(row.querySelector('.ab2-contrib-amount')?.value, 0)), intervalType: row.querySelector('.ab2-contrib-interval')?.value || 'inherit', customMonths: parseMonths(row.querySelector('.ab2-contrib-custom')?.value || ''), note: row.querySelector('.ab2-contrib-note')?.value?.trim() || '' }))
+    return Array.from(document.querySelectorAll('#ab2-contrib-list [data-contrib-direct="1"]'))
+        .map((row) => ({
+            sourceAccountId: row.dataset.contribSource || '',
+            amount: roundMoney(toNum(row.dataset.contribAmount, 0)),
+            intervalType: row.dataset.contribInterval || 'inherit',
+            customMonths: parseMonths(row.dataset.contribCustom || ''),
+            note: row.dataset.contribNote || ''
+        }))
         .filter((row) => row.sourceAccountId && row.amount > 0);
 }
 function resetAccountForm() {
@@ -1753,7 +1777,6 @@ function bindEvents() {
         setItemReadOnly(false);
     });
     on('ab2-item-delete-btn', 'click', () => deleteItem(el('ab2-item-id')?.value || ''));
-    on('ab2-add-contrib-btn', 'click', () => addContributionRow());
     on('ab2-item-interval', 'change', () => { updateMainIntervalFields('ab2-item'); renderPreviews(); });
     on('ab2-item-abtausch-btn', 'click', () => {
         const item = ITEMS[el('ab2-item-id')?.value || ''];
@@ -1870,25 +1893,13 @@ function bindEvents() {
     }
     const contribHost = el('ab2-contrib-list');
     if (contribHost && !contribHost.dataset.listenerAttached) {
-        contribHost.addEventListener('change', (e) => {
-            const interval = e.target.closest('.ab2-contrib-interval');
-            if (interval) updateContributionRowState(interval.closest('.ab2-contrib-row'));
-        });
         contribHost.addEventListener('click', (e) => {
-            const jump = e.target.closest('[data-contrib-transfer-jump]');
-            if (jump) {
-                closeModal('ab2-item-modal');
-                editTransfer(jump.dataset.contribTransferJump || '');
-                return;
-            }
-            const rowJump = e.target.closest('[data-contrib-transfer-jump]') || e.target.closest('.ab2-contrib-row[data-contrib-transfer-jump]');
+            const rowJump = e.target.closest('[data-contrib-transfer-jump]') || e.target.closest('tr[data-contrib-transfer-jump]');
             if (rowJump && rowJump.dataset.contribTransferJump) {
                 closeModal('ab2-item-modal');
                 editTransfer(rowJump.dataset.contribTransferJump || '');
                 return;
             }
-            const btn = e.target.closest('.ab2-remove-contrib');
-            if (btn && !itemReadMode) btn.closest('.ab2-contrib-row')?.remove();
         });
         contribHost.dataset.listenerAttached = 'true';
     }
