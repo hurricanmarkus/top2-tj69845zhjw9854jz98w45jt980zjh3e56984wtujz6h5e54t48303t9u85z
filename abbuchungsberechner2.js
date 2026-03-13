@@ -35,6 +35,7 @@ let accountSplitMode = 'right';
 let reconSplitMode = 'right';
 let forecastExpandedOverride = null;
 let simulationDate = null;
+let personControlAccountId = '';
 const UNASSIGNED_TITLE_KEY = '__ab2_ohne_zuordnung__';
 
 function uid() { return currentUser?.mode || currentUser?.displayName || null; }
@@ -152,6 +153,12 @@ function normalizeSearchText(v) { return String(v || '').toLowerCase().replace(/
 function normalizeAccountType(accountOrType) { const raw = typeof accountOrType === 'string' ? accountOrType : accountOrType?.type; return String(raw || '').trim().toLowerCase() === 'person' ? 'person' : 'bank'; }
 function normalizeAccountRole(accountOrRole) { const raw = typeof accountOrRole === 'string' ? accountOrRole : accountOrRole?.role; const n = String(raw || '').trim().toLowerCase(); return ['source', 'target', 'both'].includes(n) ? n : 'both'; }
 function isPersonAccount(account) { return normalizeAccountType(account) === 'person'; }
+function accountUsesBuffer(accountOrType, roleOverride = null) {
+    const type = normalizeAccountType(accountOrType);
+    const role = normalizeAccountRole(roleOverride ?? (typeof accountOrType === 'object' ? accountOrType?.role : null));
+    return type !== 'person' && role !== 'source';
+}
+function accountMinBuffer(account) { return accountUsesBuffer(account) ? roundMoney(toNum(account?.minBuffer, 0)) : 0; }
 function canBeSourceAccount(account) { const role = normalizeAccountRole(account); return role === 'source' || role === 'both' || isPersonAccount(account); }
 function canBeTargetAccount(account) { const role = normalizeAccountRole(account); return role === 'target' || role === 'both'; }
 function isRelevantTargetAccount(account) { return !!account && canBeTargetAccount(account) && !isPersonAccount(account); }
@@ -300,6 +307,18 @@ function buildShell() {
     <div id="ab2-reconciliation-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display:none;"><div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto"><div class="sticky top-0 bg-gradient-to-r from-emerald-700 to-teal-700 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 class="text-xl font-bold">Monatsabgleich</h3><button id="ab2-close-recon-modal" class="text-white/80 hover:text-white transition">✕</button></div><div class="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4"><div class="space-y-3"><div><label class="block text-sm font-bold text-gray-700 mb-1">Konto *</label><select id="ab2-recon-account" class="w-full p-2 border rounded-lg"></select></div><div class="grid grid-cols-3 gap-2"><div><label class="block text-sm font-bold text-gray-700 mb-1">Typ</label><select id="ab2-recon-type" class="w-full p-2 border rounded-lg"><option value="snapshot">Snapshot</option><option value="manual">Manuell</option></select></div><div><label class="block text-sm font-bold text-gray-700 mb-1">Datum *</label><input id="ab2-recon-date" type="date" class="w-full p-2 border rounded-lg"></div><div><label class="block text-sm font-bold text-gray-700 mb-1">Wert *</label><input id="ab2-recon-value" type="text" class="w-full p-2 border rounded-lg"></div></div><div><label class="block text-sm font-bold text-gray-700 mb-1">Notiz</label><input id="ab2-recon-note" type="text" class="w-full p-2 border rounded-lg"></div><div class="rounded-xl border border-emerald-100 bg-emerald-50 p-3"><div class="text-sm font-bold text-emerald-900 mb-1">So wirkt dieser Abgleich</div><div id="ab2-recon-preview" class="text-sm text-emerald-900">Noch unvollständig.</div></div><div class="flex gap-2"><button id="ab2-recon-today-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg">Heute</button><button id="ab2-save-recon-btn" class="px-4 py-2 bg-emerald-700 text-white rounded-lg">Speichern</button></div></div><div><h4 class="font-bold text-gray-700 mb-2">Letzte Abgleiche</h4><div id="ab2-recon-list" class="space-y-2"><p class="text-sm text-gray-400 italic">Noch keine Abgleiche.</p></div></div></div></div></div>
     <div id="ab2-suggestions-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display:none;"><div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto"><div class="sticky top-0 bg-gradient-to-r from-indigo-700 to-blue-700 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 class="text-xl font-bold">Vorschläge</h3><button id="ab2-close-suggestions-modal" class="text-white/80 hover:text-white transition">✕</button></div><div class="p-4"><div id="ab2-suggestions-content" class="space-y-3"></div></div></div></div>
     <div id="ab2-detail-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display:none;"><div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto"><div class="sticky top-0 bg-gradient-to-r from-slate-700 to-slate-600 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 id="ab2-detail-title" class="text-xl font-bold">Details</h3><button id="ab2-close-detail-modal" class="text-white/80 hover:text-white transition">✕</button></div><div id="ab2-detail-content" class="p-4"></div></div></div>`;
+}
+
+function ensurePersonControlModal() {
+    if (el('ab2-person-control-modal')) return;
+    const root = el('abbuchungsberechner-root');
+    if (!root) return;
+    const modal = document.createElement('div');
+    modal.id = 'ab2-person-control-modal';
+    modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+    modal.style.display = 'none';
+    modal.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto"><div class="sticky top-0 bg-gradient-to-r from-violet-700 to-indigo-700 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 id="ab2-person-control-title" class="text-xl font-bold">Personenkontrolle</h3><button id="ab2-close-person-control-modal" class="text-white/80 hover:text-white transition">✕</button></div><div class="p-4 space-y-4"><div class="rounded-xl border border-violet-100 bg-violet-50 p-3"><div class="text-sm font-bold text-violet-900 mb-2">Zeitraum prüfen</div><div class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end"><div><label class="block text-xs font-bold text-violet-900 mb-1">Von</label><input id="ab2-person-control-from" type="date" class="w-full p-2 border rounded-lg bg-white"></div><div><label class="block text-xs font-bold text-violet-900 mb-1">Bis</label><input id="ab2-person-control-to" type="date" class="w-full p-2 border rounded-lg bg-white"></div><div class="sm:col-span-2"><button id="ab2-person-control-refresh-btn" type="button" class="px-4 py-2 bg-violet-700 text-white rounded-lg font-bold hover:bg-violet-800 w-full sm:w-auto">Buchungen aktualisieren</button></div></div><div id="ab2-person-control-summary" class="mt-2 text-xs text-violet-800">-</div></div><div class="rounded-xl border border-gray-200 bg-white overflow-hidden"><div class="px-3 py-2 border-b border-gray-200 bg-gray-50 text-xs text-gray-600">Alle geplanten Buchungen von/an diese Person im gewählten Zeitraum.</div><div id="ab2-person-control-list" class="max-h-[38vh] overflow-auto p-2 text-sm text-gray-500">Bitte Zeitraum wählen.</div></div><div class="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3"><div class="text-sm font-bold text-slate-800">Kontrolle abschließen</div><div class="grid grid-cols-1 sm:grid-cols-3 gap-2"><div><label class="block text-xs font-bold text-slate-700 mb-1">Ergebnis *</label><select id="ab2-person-control-result" class="w-full p-2 border rounded-lg bg-white"><option value="">Bitte wählen...</option><option value="done">Kontrolle durchgeführt</option><option value="not_done">Kontrolle nicht durchgeführt</option></select></div><div class="sm:col-span-2"><label class="block text-xs font-bold text-slate-700 mb-1">Freitext / Grund</label><input id="ab2-person-control-note" type="text" class="w-full p-2 border rounded-lg bg-white" placeholder="z. B. Kontoauszug geprüft, 2 Beträge abgeglichen"></div></div><div class="flex flex-wrap justify-end gap-2"><button id="ab2-cancel-person-control-btn" type="button" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg">Abbrechen</button><button id="ab2-person-control-finish-btn" type="button" class="px-4 py-2 bg-violet-700 text-white rounded-lg font-bold hover:bg-violet-800">Protokollieren & beenden</button></div></div><div class="rounded-xl border border-amber-200 bg-amber-50 p-3"><div class="text-sm font-bold text-amber-900 mb-2">Bisherige Kontrollen</div><div id="ab2-person-control-history" class="space-y-2 text-sm text-amber-900">Noch keine Kontrollen protokolliert.</div></div></div></div>`;
+    root.appendChild(modal);
 }
 
 function ensureTransferLinkingFields() {
@@ -605,6 +624,7 @@ function ensureShell() {
         root.innerHTML = buildShell();
         shellMounted = true;
     }
+    ensurePersonControlModal();
     ensureTransferLinkingFields();
     ensureContributionInfoHint();
     enhanceStaticHelpTexts();
@@ -625,18 +645,19 @@ function updateMainIntervalFields(prefix) { const interval = (el(`${prefix}-inte
 function updateContributionRowState(row) { if (!row) return; const interval = row.querySelector('.ab2-contrib-interval')?.value || 'inherit'; const customMonths = row.querySelector('.ab2-contrib-custom'); setInputEnabled(customMonths, interval === 'custom', interval !== 'custom'); }
 function updateAccountTypeDependencies() {
     const type = (el('ab2-account-type')?.value || 'bank').trim();
-    const isPerson = normalizeAccountType(type) === 'person';
+    const role = normalizeAccountRole(el('ab2-account-role')?.value || 'both');
+    const usesBuffer = accountUsesBuffer(type, role);
     const minBuffer = el('ab2-account-min-buffer');
     const startBalance = el('ab2-account-start-balance');
     const startDate = el('ab2-account-start-date');
 
-    setInputEnabled(minBuffer, !isPerson, isPerson);
-    if (isPerson && minBuffer) minBuffer.value = '0';
-    setInputEnabled(startBalance, !isPerson, isPerson);
-    setInputEnabled(startDate, !isPerson, isPerson);
+    setInputEnabled(minBuffer, usesBuffer, !usesBuffer);
+    if (!usesBuffer && minBuffer) minBuffer.value = '0';
+    setInputEnabled(startBalance, usesBuffer, !usesBuffer);
+    setInputEnabled(startDate, usesBuffer, !usesBuffer);
 
     [minBuffer?.closest('div'), startBalance?.closest('div'), startDate?.closest('div')].forEach((wrap) => {
-        if (wrap) wrap.classList.toggle('hidden', isPerson);
+        if (wrap) wrap.classList.toggle('hidden', !usesBuffer);
     });
 }
 
@@ -644,7 +665,7 @@ function monthKey(year, month) { return `${year}-${String(month).padStart(2, '0'
 function monthLabel(key) { const [year, month] = String(key || '').split('-').map(Number); return year && month ? `${MONTHS[month - 1]} ${year}` : '-'; }
 function lastDayOfMonth(year, month) { return new Date(year, month, 0).getDate(); }
 function currentMonthKey() { const now = referenceDate(); return monthKey(now.getFullYear(), now.getMonth() + 1); }
-function freeMargin(account, row) { if (!row) return 0; return roundMoney(toNum(row.end, 0) - (isPersonAccount(account) ? 0 : toNum(account.minBuffer, 0))); }
+function freeMargin(account, row) { if (!row) return 0; return roundMoney(toNum(row.end, 0) - accountMinBuffer(account)); }
 function cloneClean(data) { const next = { ...(data || {}) }; delete next.id; return next; }
 function monthNameList(list = []) { return list.map((m) => MONTHS[m - 1]).filter(Boolean).join(', ') || '-'; }
 function nextExecutionDate(entity, horizon = 36) {
@@ -711,6 +732,207 @@ function getExecutionDateForMonth(entity, year, month) {
     return candidate;
 }
 function dueInMonth(entity, y, m) { return !!getExecutionDateForMonth(entity, y, m); }
+function forEachExecutionInRange(entity, fromDate, toDate, callback) {
+    const from = parseDate(fromDate);
+    const to = parseDate(toDate);
+    if (!from || !to || to < from || typeof callback !== 'function') return;
+    let year = from.getFullYear();
+    let month = from.getMonth() + 1;
+    const endCursor = (to.getFullYear() * 12) + to.getMonth();
+    while (((year * 12) + (month - 1)) <= endCursor) {
+        const exec = getExecutionDateForMonth(entity, year, month);
+        if (exec && exec >= from && exec <= to) callback(exec);
+        month += 1;
+        if (month > 12) { month = 1; year += 1; }
+    }
+}
+function personControlDefaultRange(baseDate = new Date()) {
+    const year = baseDate.getFullYear();
+    const from = new Date(year, 0, 1);
+    const prevMonthEnd = new Date(year, baseDate.getMonth(), 0);
+    const to = prevMonthEnd < from ? from : prevMonthEnd;
+    return { from: isoDate(from), to: isoDate(to) };
+}
+function personControlResultLabel(result) {
+    return result === 'done' ? 'Kontrolle durchgeführt' : result === 'not_done' ? 'Kontrolle nicht durchgeführt' : '-';
+}
+function personControlRowsForAccount(accountId, fromDate, toDate) {
+    if (!accountId) return [];
+    const rows = [];
+    Object.values(TRANSFERS).forEach((transfer) => {
+        const amount = roundMoney(toNum(transfer?.amount, 0));
+        if (amount <= 0 || (transfer.sourceAccountId !== accountId && transfer.targetAccountId !== accountId)) return;
+        forEachExecutionInRange(transfer, fromDate, toDate, (exec) => {
+            const fromPerson = transfer.sourceAccountId === accountId;
+            const peerId = fromPerson ? transfer.targetAccountId : transfer.sourceAccountId;
+            rows.push({
+                date: isoDate(exec),
+                direction: fromPerson ? 'von Person' : 'an Person',
+                type: 'Transfer',
+                counterparty: ACCOUNTS[peerId]?.name || '-',
+                amount: fromPerson ? -amount : amount,
+                note: transfer.note || ''
+            });
+        });
+    });
+    Object.values(ITEMS).forEach((item) => {
+        const amount = roundMoney(toNum(item?.amount, 0));
+        if (amount <= 0) return;
+        if (item.accountId === accountId) {
+            forEachExecutionInRange(item, fromDate, toDate, (exec) => {
+                const signed = item.typ === 'gutschrift' ? amount : -amount;
+                rows.push({
+                    date: isoDate(exec),
+                    direction: signed >= 0 ? 'an Person' : 'von Person',
+                    type: 'Eintrag',
+                    counterparty: item.title || '-',
+                    amount: signed,
+                    note: item.notes || ''
+                });
+            });
+        }
+        (Array.isArray(item.contributions) ? item.contributions : []).forEach((contrib) => {
+            const cAmount = roundMoney(toNum(contrib?.amount, 0));
+            if (!contrib?.sourceAccountId || contrib.sourceAccountId !== accountId || cAmount <= 0) return;
+            const intervalType = contrib.intervalType === 'inherit' ? item.intervalType : (contrib.intervalType || item.intervalType || 'monthly');
+            const contribEntity = {
+                intervalType,
+                startMonth: contrib.startMonth || item.startMonth,
+                customMonths: contrib.customMonths || [],
+                dayOfMonth: contrib.dayOfMonth || item.dayOfMonth,
+                validFrom: contrib.validFrom || item.validFrom,
+                validTo: contrib.validTo || item.validTo
+            };
+            forEachExecutionInRange(contribEntity, fromDate, toDate, (exec) => {
+                rows.push({
+                    date: isoDate(exec),
+                    direction: 'von Person',
+                    type: 'Beitrag',
+                    counterparty: `${ACCOUNTS[item.accountId]?.name || '-'} (${item.title || '-'})`,
+                    amount: -cAmount,
+                    note: contrib.note || ''
+                });
+            });
+        });
+    });
+    return rows.sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.type).localeCompare(String(b.type)) || String(a.counterparty).localeCompare(String(b.counterparty)));
+}
+function renderPersonControlHistory(accountId = personControlAccountId) {
+    const host = el('ab2-person-control-history');
+    if (!host) return;
+    const account = ACCOUNTS[accountId];
+    const logs = Array.isArray(account?.personControlLogs) ? account.personControlLogs.slice() : [];
+    const sorted = logs.sort((a, b) => toNum(b?.checkedAtMs, 0) - toNum(a?.checkedAtMs, 0));
+    if (!sorted.length) {
+        host.innerHTML = '<p class="text-sm text-amber-900/80">Noch keine Kontrollen protokolliert.</p>';
+        return;
+    }
+    host.innerHTML = sorted.slice(0, 20).map((entry) => {
+        const result = personControlResultLabel(entry?.result);
+        const resultCss = entry?.result === 'done' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800';
+        const from = formatDate(entry?.periodFrom || '');
+        const to = formatDate(entry?.periodTo || '');
+        const when = formatDate(entry?.checkedAt || '');
+        const by = entry?.checkedBy || 'Unbekannt';
+        const bookingCount = Number.isFinite(toNum(entry?.bookingCount, NaN)) ? ` · ${Math.max(0, parseInt(entry.bookingCount, 10) || 0)} Buchungen` : '';
+        return `<div class="rounded-lg border border-amber-200 bg-white p-2"><div class="flex flex-wrap items-center justify-between gap-2"><div class="text-xs text-gray-600">${escapeHtml(when)} · ${escapeHtml(by)}</div><span class="px-2 py-1 rounded-full text-[11px] font-bold ${resultCss}">${escapeHtml(result)}</span></div><div class="mt-1 text-xs text-gray-700">Zeitraum: ${escapeHtml(from)} bis ${escapeHtml(to)}${bookingCount}</div>${entry?.note ? `<div class="mt-1 text-xs text-gray-700">Notiz: ${escapeHtml(entry.note)}</div>` : ''}</div>`;
+    }).join('');
+}
+function renderPersonControlRows() {
+    const account = ACCOUNTS[personControlAccountId];
+    const list = el('ab2-person-control-list');
+    const summary = el('ab2-person-control-summary');
+    const fromValue = el('ab2-person-control-from')?.value || '';
+    const toValue = el('ab2-person-control-to')?.value || '';
+    const fromDate = parseDate(fromValue);
+    const toDate = parseDate(toValue);
+    if (!list || !summary) return;
+    if (!account || !isPersonAccount(account)) {
+        summary.textContent = 'Bitte eine Person auswählen.';
+        list.innerHTML = '<p class="text-sm text-gray-500">Keine Person ausgewählt.</p>';
+        return;
+    }
+    if (!fromDate || !toDate) {
+        summary.textContent = 'Bitte gültigen Zeitraum eingeben.';
+        list.innerHTML = '<p class="text-sm text-gray-500">Zeitraum ist unvollständig.</p>';
+        return;
+    }
+    if (toDate < fromDate) {
+        summary.textContent = 'Das Enddatum darf nicht vor dem Startdatum liegen.';
+        list.innerHTML = '<p class="text-sm text-red-600">Bitte Zeitraum korrigieren.</p>';
+        return;
+    }
+    const rows = personControlRowsForAccount(account.id, fromDate, toDate);
+    const incoming = roundMoney(rows.reduce((sum, row) => sum + (toNum(row.amount, 0) > 0 ? toNum(row.amount, 0) : 0), 0));
+    const outgoing = roundMoney(rows.reduce((sum, row) => sum + (toNum(row.amount, 0) < 0 ? Math.abs(toNum(row.amount, 0)) : 0), 0));
+    summary.textContent = `${rows.length} Buchung(en) · an Person ${formatCurrency(incoming)} · von Person ${formatCurrency(outgoing)}`;
+    if (!rows.length) {
+        list.innerHTML = '<p class="text-sm text-gray-500">Keine Buchungen im gewählten Zeitraum.</p>';
+        return;
+    }
+    const body = rows.map((row) => `<tr class="border-t"><td class="px-2 py-2 text-xs text-gray-600 whitespace-nowrap">${formatDate(row.date)}</td><td class="px-2 py-2 text-xs text-gray-700 whitespace-nowrap">${escapeHtml(row.direction)}</td><td class="px-2 py-2 text-xs text-gray-700 whitespace-nowrap">${escapeHtml(row.type)}</td><td class="px-2 py-2 text-sm text-gray-800">${escapeHtml(row.counterparty || '-')}</td><td class="px-2 py-2 text-sm font-bold whitespace-nowrap ${toNum(row.amount, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${formatSignedCurrency(row.amount)}</td><td class="px-2 py-2 text-xs text-gray-600">${escapeHtml(row.note || '')}</td></tr>`).join('');
+    list.innerHTML = `<div class="overflow-x-auto"><table class="min-w-[760px] w-full"><thead><tr class="bg-gray-50 border-b"><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide text-gray-500">Datum</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide text-gray-500">Richtung</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide text-gray-500">Art</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide text-gray-500">Gegenkonto / Zweck</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide text-gray-500">Betrag</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide text-gray-500">Notiz</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+function openPersonControl(accountId) {
+    const account = ACCOUNTS[accountId];
+    if (!account || !isPersonAccount(account)) return alertUser('Kontrolle ist nur für Personen verfügbar.', 'error');
+    personControlAccountId = accountId;
+    const title = el('ab2-person-control-title');
+    if (title) title.textContent = `Personenkontrolle · ${account.name || '-'}`;
+    const range = personControlDefaultRange(new Date());
+    if (el('ab2-person-control-from')) el('ab2-person-control-from').value = range.from;
+    if (el('ab2-person-control-to')) el('ab2-person-control-to').value = range.to;
+    if (el('ab2-person-control-result')) el('ab2-person-control-result').value = '';
+    if (el('ab2-person-control-note')) el('ab2-person-control-note').value = '';
+    renderPersonControlRows();
+    renderPersonControlHistory(accountId);
+    openModal('ab2-person-control-modal');
+}
+function closePersonControlModal() {
+    closeModal('ab2-person-control-modal');
+    personControlAccountId = '';
+}
+async function finishPersonControl() {
+    if (!canCreate()) return alertUser('Keine Berechtigung.', 'error');
+    const account = ACCOUNTS[personControlAccountId];
+    if (!account || !isPersonAccount(account)) return alertUser('Person nicht gefunden.', 'error');
+    const periodFrom = el('ab2-person-control-from')?.value || '';
+    const periodTo = el('ab2-person-control-to')?.value || '';
+    const fromDate = parseDate(periodFrom);
+    const toDate = parseDate(periodTo);
+    if (!fromDate || !toDate || toDate < fromDate) return alertUser('Bitte gültigen Zeitraum eingeben.', 'error');
+    const result = el('ab2-person-control-result')?.value || '';
+    if (!result) return alertUser('Bitte Ergebnis der Kontrolle auswählen.', 'error');
+    const note = el('ab2-person-control-note')?.value?.trim() || '';
+    const rows = personControlRowsForAccount(account.id, fromDate, toDate);
+    const entryDate = new Date();
+    const entry = {
+        result,
+        note,
+        periodFrom,
+        periodTo,
+        bookingCount: rows.length,
+        incomingAmount: roundMoney(rows.reduce((sum, row) => sum + (toNum(row.amount, 0) > 0 ? toNum(row.amount, 0) : 0), 0)),
+        outgoingAmount: roundMoney(rows.reduce((sum, row) => sum + (toNum(row.amount, 0) < 0 ? Math.abs(toNum(row.amount, 0)) : 0), 0)),
+        checkedAt: isoDate(entryDate),
+        checkedAtMs: entryDate.getTime(),
+        checkedBy: currentUser?.displayName || uid() || 'Unbekannt'
+    };
+    const before = cloneClean(account);
+    const existingLogs = Array.isArray(account.personControlLogs) ? account.personControlLogs : [];
+    const nextLogs = [...existingLogs, entry].sort((a, b) => toNum(a?.checkedAtMs, 0) - toNum(b?.checkedAtMs, 0)).slice(-60);
+    const payload = { personControlLogs: nextLogs, personControlLast: entry, updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() };
+    try {
+        await updateDoc(doc(accountsRef, account.id), payload);
+        await writeAudit('update', 'account', account.id, before, payload, { action: 'person_control_finish', result, periodFrom, periodTo, bookingCount: entry.bookingCount });
+        alertUser('Personenkontrolle protokolliert.', 'success');
+        closePersonControlModal();
+    } catch (error) {
+        console.error(error);
+        alertUser(`Fehler beim Protokollieren: ${error.message || error}`, 'error');
+    }
+}
+
 function latestSnapshots(beforeDate = null) {
     const map = {};
     Object.values(RECON).forEach((entry) => {
@@ -910,7 +1132,10 @@ function buildForecast(horizon = 12) {
     const baseSnapshots = latestSnapshots(startMonth);
     const monthSnapshots = latestSnapshotByAccountAndMonth();
     const balances = {};
-    accounts.forEach((account) => { balances[account.id] = baseSnapshots[account.id] ? toNum(baseSnapshots[account.id].value, 0) : 0; });
+    accounts.forEach((account) => {
+        const allowSnapshot = accountUsesBuffer(account);
+        balances[account.id] = allowSnapshot && baseSnapshots[account.id] ? toNum(baseSnapshots[account.id].value, 0) : 0;
+    });
     let year = startMonth.getFullYear();
     let month = startMonth.getMonth() + 1;
     const timeline = [];
@@ -971,12 +1196,12 @@ function buildForecast(horizon = 12) {
             const outflow = roundMoney(movement[account.id]?.out || 0);
             let end = roundMoney(start + inflow - outflow);
             const snapshot = monthSnapshots[`${account.id}__${key}`];
-            if (snapshot) {
+            if (snapshot && accountUsesBuffer(account)) {
                 end = roundMoney(snapshot.value);
                 movement[account.id].entries.push({ type: 'snapshot', date: snapshot.date, label: 'Snapshot', amount: end, note: snapshot.note || '' });
             }
             balances[account.id] = end;
-            const minBuffer = isPersonAccount(account) ? 0 : roundMoney(account.minBuffer);
+            const minBuffer = accountMinBuffer(account);
             const delta = roundMoney(end - minBuffer);
             const relevantTarget = isRelevantTargetAccount(account);
             let severity = 'ok';
@@ -1068,7 +1293,7 @@ function matchItemToken(item, token) {
     if (numeric) {
         const account = ACCOUNTS[item.accountId] || {};
         const row = FORECAST.timeline[0]?.accounts[item.accountId] || {};
-        const actual = numeric[1] === 'betrag' ? toNum(item.amount, 0) : numeric[1] === 'puffer' ? toNum(account.minBuffer, 0) : toNum(row.delta, 0);
+        const actual = numeric[1] === 'betrag' ? toNum(item.amount, 0) : numeric[1] === 'puffer' ? accountMinBuffer(account) : toNum(row.delta, 0);
         return compareNumber(actual, numeric[2], toNum(numeric[3], 0));
     }
     const structured = value.match(/^([^:]+):(.+)$/);
@@ -1251,7 +1476,7 @@ function renderAccounts() {
     const search = normalizeSearchText(accountListFilterState.query);
     const accounts = Object.values(ACCOUNTS)
         .filter((account) => accountListFilterState.type === 'all' || normalizeAccountType(account) === accountListFilterState.type)
-        .filter((account) => !search || normalizeSearchText(`${account.name || ''} ${account.bank || ''} ${account.iban || ''} ${formatCurrency(account.minBuffer)}`).includes(search))
+        .filter((account) => !search || normalizeSearchText(`${account.name || ''} ${account.bank || ''} ${account.iban || ''} ${formatCurrency(accountMinBuffer(account))}`).includes(search))
         .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
     if (!accounts.length) {
         host.innerHTML = '<p class="text-sm text-gray-400 italic">Noch keine Konten/Quellen.</p>';
@@ -1261,13 +1486,15 @@ function renderAccounts() {
     const bankCount = accounts.filter((account) => !isPersonAccount(account)).length;
     const personCount = accounts.length - bankCount;
     const rows = accounts.map((account) => {
+        const person = isPersonAccount(account);
         const row = FORECAST.timeline[0]?.accounts[account.id] || {};
         const quality = qualityEntry(account.id);
         const itemCount = Object.values(ITEMS).filter((item) => item.accountId === account.id).length;
         const transferCount = Object.values(TRANSFERS).filter((transfer) => transfer.sourceAccountId === account.id || transfer.targetAccountId === account.id).length;
         const transferDiff = accountTransferBudgetDiff(account.id);
         const rowClass = editingAccountId === account.id ? 'bg-yellow-50' : 'bg-white';
-        return `<tr class="border-t border-slate-100 ${rowClass}"><td class="px-3 py-2 align-top"><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-[11px] text-gray-500">${escapeHtml(account.bank || (isPersonAccount(account) ? 'Person' : 'Bankkonto'))}</div></td><td class="px-3 py-2 text-xs text-gray-600">${escapeHtml(isPersonAccount(account) ? 'Person' : 'Bank')} · ${escapeHtml(normalizeAccountRole(account))}</td><td class="px-3 py-2 text-xs"><div class="font-bold ${toNum(row.delta, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">Forecast Δ ${formatSignedCurrency(row.delta)}</div><div class="mt-1 ${transferDiffCss(transferDiff)} font-bold">Transfer Δ ${formatSignedCurrency(transferDiff)}</div><div class="mt-1 ${quality?.status === 'alarm' ? 'text-red-700' : quality?.status === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">Snapshot: ${quality?.latest ? formatDate(quality.latest.date) : 'fehlt'}</div></td><td class="px-3 py-2 text-xs text-gray-600">${itemCount} Einträge · ${transferCount} Transfers</td><td class="px-3 py-2 text-right"><div class="flex gap-1 justify-end"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></td></tr>`;
+        const controlButton = person ? `<button type="button" class="px-2 py-1 bg-violet-100 text-violet-700 rounded text-xs" data-account-control="${account.id}">Kontrolle</button>` : '';
+        return `<tr class="border-t border-slate-100 ${rowClass}"><td class="px-3 py-2 align-top"><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-[11px] text-gray-500">${escapeHtml(account.bank || (person ? 'Person' : 'Bankkonto'))}</div></td><td class="px-3 py-2 text-xs text-gray-600">${escapeHtml(person ? 'Person' : 'Bank')} · ${escapeHtml(normalizeAccountRole(account))}</td><td class="px-3 py-2 text-xs"><div class="font-bold ${toNum(row.delta, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">Forecast Δ ${formatSignedCurrency(row.delta)}</div><div class="mt-1 ${transferDiffCss(transferDiff)} font-bold">Transfer Δ ${formatSignedCurrency(transferDiff)}</div><div class="mt-1 ${quality?.status === 'alarm' ? 'text-red-700' : quality?.status === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">Snapshot: ${quality?.latest ? formatDate(quality.latest.date) : 'fehlt'}</div></td><td class="px-3 py-2 text-xs text-gray-600">${itemCount} Einträge · ${transferCount} Transfers</td><td class="px-3 py-2 text-right"><div class="flex gap-1 justify-end">${controlButton}<button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></td></tr>`;
     }).join('');
     host.innerHTML = `<div class="rounded-xl border border-slate-200 bg-white overflow-hidden"><div class="px-3 py-2 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center gap-2 text-xs"><span class="px-2 py-1 rounded-full bg-slate-200 text-slate-700 font-bold">Gesamt ${accounts.length}</span><span class="px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-bold">Bank ${bankCount}</span><span class="px-2 py-1 rounded-full bg-violet-100 text-violet-700 font-bold">Person ${personCount}</span></div><div class="overflow-x-auto max-h-[48vh]"><table class="ab2-simple-table min-w-[820px] text-sm"><thead class="bg-slate-100 text-slate-600"><tr><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Konto / Quelle</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Typ</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Status</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Nutzung</th><th class="px-3 py-2 text-right text-[11px] uppercase tracking-wide">Aktion</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
     setAccountSplitMode(accountSplitMode, false);
@@ -1333,9 +1560,17 @@ function renderPreviews() {
     const itemType = el('ab2-item-type')?.value || 'belastung';
     if (el('ab2-item-preview')) el('ab2-item-preview').textContent = itemAccount && itemAmount > 0 ? `${itemType === 'gutschrift' ? 'Erhöht' : 'Belastet'} ${itemAccount.name || '-'} mit ${formatCurrency(itemAmount)} ${describeInterval(el('ab2-item-interval')?.value || 'monthly', el('ab2-item-start-month')?.value, parseMonths(el('ab2-item-custom-months')?.value), el('ab2-item-day')?.value)}.` : 'Noch unvollständig.';
     const accType = normalizeAccountType(el('ab2-account-type')?.value || 'bank');
+    const accRole = normalizeAccountRole(el('ab2-account-role')?.value || 'both');
+    const accUsesBuffer = accountUsesBuffer(accType, accRole);
     const startBalance = toNum(el('ab2-account-start-balance')?.value, NaN);
-    const startPreview = accType === 'person' ? '' : (Number.isFinite(startBalance) ? ` Snapshot-Vorschau: ${formatCurrency(startBalance)} am ${formatDate(el('ab2-account-start-date')?.value)}` : '');
-    if (el('ab2-account-preview')) el('ab2-account-preview').textContent = `${el('ab2-account-name')?.value || 'Dieses Konto'} wird als ${accType === 'person' ? 'Person / Geldquelle' : 'Bankkonto'} geführt.${accType === 'person' ? ' Für Personen sind Mindestpuffer und Startsaldo deaktiviert.' : ` Mindestpuffer: ${formatCurrency(el('ab2-account-min-buffer')?.value || 0)}.`}${startPreview}`;
+    const startPreview = accUsesBuffer && Number.isFinite(startBalance) ? ` Snapshot-Vorschau: ${formatCurrency(startBalance)} am ${formatDate(el('ab2-account-start-date')?.value)}` : '';
+    const roleText = accRole === 'source' ? 'nur Quelle' : accRole === 'target' ? 'nur Ziel' : 'Quelle & Ziel';
+    const configHint = accType === 'person'
+        ? ' Für Personen sind Mindestpuffer und Startsaldo deaktiviert.'
+        : accUsesBuffer
+            ? ` Mindestpuffer: ${formatCurrency(el('ab2-account-min-buffer')?.value || 0)}.`
+            : ' Für reine Quellkonten sind Mindestpuffer und Startsaldo deaktiviert.';
+    if (el('ab2-account-preview')) el('ab2-account-preview').textContent = `${el('ab2-account-name')?.value || 'Dieses Konto'} wird als ${accType === 'person' ? 'Person / Geldquelle' : 'Bankkonto'} geführt (Rolle: ${roleText}).${configHint}${startPreview}`;
     const transferSource = ACCOUNTS[el('ab2-transfer-source')?.value] || null;
     const transferTarget = ACCOUNTS[el('ab2-transfer-target')?.value] || null;
     const transferAmount = toNum(el('ab2-transfer-amount')?.value, 0);
@@ -1480,16 +1715,18 @@ function editAccount(id) {
     if (!account) return;
     editingAccountId = id;
     const accountType = normalizeAccountType(account.type || 'bank');
+    const accountRole = normalizeAccountRole(account.role || 'both');
+    const usesBuffer = accountUsesBuffer(accountType, accountRole);
     const latest = latestSnapshots()[id];
     if (el('ab2-account-id')) el('ab2-account-id').value = account.id || '';
     if (el('ab2-account-name')) el('ab2-account-name').value = account.name || '';
     if (el('ab2-account-bank')) el('ab2-account-bank').value = account.bank || '';
     if (el('ab2-account-iban')) el('ab2-account-iban').value = account.iban || '';
     if (el('ab2-account-type')) el('ab2-account-type').value = accountType;
-    if (el('ab2-account-role')) el('ab2-account-role').value = account.role || 'both';
-    if (el('ab2-account-min-buffer')) el('ab2-account-min-buffer').value = accountType === 'person' ? '0' : toNum(account.minBuffer, 0).toFixed(2);
-    if (el('ab2-account-start-balance')) el('ab2-account-start-balance').value = accountType === 'person' ? '' : (latest ? toNum(latest.value, 0).toFixed(2) : '');
-    if (el('ab2-account-start-date')) el('ab2-account-start-date').value = accountType === 'person' ? isoDate(new Date()) : (latest?.date || isoDate(new Date()));
+    if (el('ab2-account-role')) el('ab2-account-role').value = accountRole;
+    if (el('ab2-account-min-buffer')) el('ab2-account-min-buffer').value = usesBuffer ? accountMinBuffer(account).toFixed(2) : '0';
+    if (el('ab2-account-start-balance')) el('ab2-account-start-balance').value = usesBuffer ? (latest ? toNum(latest.value, 0).toFixed(2) : '') : '';
+    if (el('ab2-account-start-date')) el('ab2-account-start-date').value = usesBuffer ? (latest?.date || isoDate(new Date())) : isoDate(new Date());
     updateAccountTypeDependencies();
     openModal('ab2-accounts-modal');
     setAccountSplitMode('left');
@@ -1613,9 +1850,11 @@ async function saveAccount() {
     if (!name) return alertUser('Bitte Namen eingeben.', 'error');
     const before = ACCOUNTS[id] || null;
     const accountType = normalizeAccountType(el('ab2-account-type')?.value || 'bank');
-    const payload = { name, bank: el('ab2-account-bank')?.value?.trim() || '', iban: el('ab2-account-iban')?.value?.trim() || '', type: accountType, role: normalizeAccountRole(el('ab2-account-role')?.value || 'both'), minBuffer: accountType === 'person' ? 0 : roundMoney(toNum(el('ab2-account-min-buffer')?.value, 0)), createdBy: before?.createdBy || uid(), updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() };
-    const startBalance = accountType === 'person' ? NaN : toNum(el('ab2-account-start-balance')?.value, NaN);
-    const startDate = accountType === 'person' ? '' : (el('ab2-account-start-date')?.value || '');
+    const role = normalizeAccountRole(el('ab2-account-role')?.value || 'both');
+    const usesBuffer = accountUsesBuffer(accountType, role);
+    const payload = { name, bank: el('ab2-account-bank')?.value?.trim() || '', iban: el('ab2-account-iban')?.value?.trim() || '', type: accountType, role, minBuffer: usesBuffer ? roundMoney(toNum(el('ab2-account-min-buffer')?.value, 0)) : 0, createdBy: before?.createdBy || uid(), updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() };
+    const startBalance = usesBuffer ? toNum(el('ab2-account-start-balance')?.value, NaN) : NaN;
+    const startDate = usesBuffer ? (el('ab2-account-start-date')?.value || '') : '';
     try {
         let accountId = id;
         if (id) {
@@ -1786,7 +2025,7 @@ function openStatInsight(statKey) {
     if (statKey === 'accounts') {
         html = Object.values(ACCOUNTS).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))).map((account) => {
             const row = FORECAST.timeline[0]?.accounts[account.id] || {};
-            return `<div class="rounded-lg border border-gray-200 p-3"><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-500 mt-1">Stand ${formatCurrency(row.end)} · Puffer ${formatCurrency(account.minBuffer)} · Differenz ${formatSignedCurrency(row.delta)}</div></div>`;
+            return `<div class="rounded-lg border border-gray-200 p-3"><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-500 mt-1">Stand ${formatCurrency(row.end)} · Puffer ${formatCurrency(accountMinBuffer(account))} · Differenz ${formatSignedCurrency(row.delta)}</div></div>`;
         }).join('') || html;
         return openDetail('Konten-Analyse', `<div class="space-y-2">${html}</div>`);
     }
@@ -1830,7 +2069,7 @@ function openSetupInsight(setupKey) {
     if (setupKey === 'target_accounts') {
         const html = targets.map((account) => {
             const row = FORECAST.timeline[0]?.accounts[account.id] || {};
-            return `<div class="rounded-lg border border-gray-200 p-3"><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-600 mt-1">Puffer ${formatCurrency(account.minBuffer)} · Aktueller Stand ${formatCurrency(row.end)} · Δ ${formatSignedCurrency(row.delta)}</div></div>`;
+            return `<div class="rounded-lg border border-gray-200 p-3"><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-600 mt-1">Puffer ${formatCurrency(accountMinBuffer(account))} · Aktueller Stand ${formatCurrency(row.end)} · Δ ${formatSignedCurrency(row.delta)}</div></div>`;
         }).join('') || '<p class="text-sm text-gray-500">Keine Zielkonten vorhanden.</p>';
         return openDetail('Setup · Zielkonten', `<div class="space-y-2">${html}</div>`);
     }
@@ -1977,10 +2216,17 @@ function bindEvents() {
     on('ab2-save-account-btn', 'click', saveAccount);
     on('ab2-reset-account-btn', 'click', resetAccountForm);
     on('ab2-account-type', 'change', () => { updateAccountTypeDependencies(); renderPreviews(); });
+    on('ab2-account-role', 'change', () => { updateAccountTypeDependencies(); renderPreviews(); });
     on('ab2-accounts-filter-all', 'click', () => { accountListFilterState.type = 'all'; renderAccounts(); });
     on('ab2-accounts-filter-bank', 'click', () => { accountListFilterState.type = 'bank'; renderAccounts(); });
     on('ab2-accounts-filter-person', 'click', () => { accountListFilterState.type = 'person'; renderAccounts(); });
     on('ab2-accounts-search', 'input', (e) => { accountListFilterState.query = e.target.value || ''; renderAccounts(); });
+    on('ab2-close-person-control-modal', 'click', closePersonControlModal);
+    on('ab2-cancel-person-control-btn', 'click', closePersonControlModal);
+    on('ab2-person-control-refresh-btn', 'click', renderPersonControlRows);
+    on('ab2-person-control-from', 'change', renderPersonControlRows);
+    on('ab2-person-control-to', 'change', renderPersonControlRows);
+    on('ab2-person-control-finish-btn', 'click', finishPersonControl);
 
     on('ab2-close-transfers-modal', 'click', () => closeModal('ab2-transfers-modal'));
     on('ab2-save-transfer-btn', 'click', saveTransfer);
@@ -2088,8 +2334,10 @@ function bindEvents() {
     const accHost = el('ab2-accounts-list');
     if (accHost && !accHost.dataset.listenerAttached) {
         accHost.addEventListener('click', (e) => {
+            const control = e.target.closest('[data-account-control]');
             const edit = e.target.closest('[data-account-edit]');
             const del = e.target.closest('[data-account-delete]');
+            if (control) openPersonControl(control.dataset.accountControl);
             if (edit) editAccount(edit.dataset.accountEdit);
             if (del) deleteAccount(del.dataset.accountDelete);
         });
