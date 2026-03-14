@@ -788,9 +788,43 @@ function enhanceStaticHelpTexts() {
         bufferHelp.textContent = 'Mindestbetrag, der auf Bankkonten verbleiben soll. Unter diesem Wert entstehen Warnung oder Alarm. Für Person-Konten ist dieses Feld nicht verfügbar.';
     }
     const startBalanceHelp = el('ab2-help-account-start-balance');
-    if (startBalanceHelp) {
-        startBalanceHelp.textContent = 'Startsaldo ist der rechnerische Startwert für Bankkonten und wird als Snapshot in die Prognose übernommen. Für Person-Konten ist dieses Feld nicht verfügbar.';
+    if (startBalanceHelp) startBalanceHelp.remove();
+}
+
+function updateAccountCurrentBalanceText(accountId = '') {
+    const valueNode = el('ab2-account-current-balance-value');
+    if (!valueNode) return;
+    const id = accountId || el('ab2-account-id')?.value || '';
+    if (!id) {
+        valueNode.textContent = '--';
+        return;
     }
+    const latest = latestSnapshots()[id] || null;
+    valueNode.textContent = latest ? formatCurrency(latest.value) : 'kein Snapshot';
+}
+
+function ensureAccountCurrentBalanceField() {
+    const startBalanceInput = el('ab2-account-start-balance');
+    const minBufferInput = el('ab2-account-min-buffer');
+    const startWrap = startBalanceInput?.closest('div');
+    if (startWrap && !el('ab2-account-current-balance-value')) {
+        const label = startWrap.querySelector('label');
+        if (label) label.textContent = 'Aktueller Kontostand:';
+        startWrap.querySelectorAll('.ab2-help-btn, .ab2-help-content').forEach((node) => node.remove());
+        if (startBalanceInput) startBalanceInput.remove();
+        const valueNode = document.createElement('div');
+        valueNode.id = 'ab2-account-current-balance-value';
+        valueNode.className = 'mt-1 text-sm font-bold text-slate-800';
+        valueNode.textContent = '--';
+        startWrap.appendChild(valueNode);
+    }
+    const startDateWrap = el('ab2-account-start-date')?.closest('div');
+    if (startDateWrap) startDateWrap.classList.add('hidden');
+    const lockBtn = el('ab2-account-unlock-amount-btn');
+    if (lockBtn && minBufferInput?.parentElement && lockBtn.parentElement !== minBufferInput.parentElement) {
+        minBufferInput.parentElement.appendChild(lockBtn.parentElement);
+    }
+    updateAccountCurrentBalanceText();
 }
 
 function restoreClassicTopActionRow() {
@@ -979,27 +1013,26 @@ function getEditableAccountAmountBase() {
 }
 
 function syncAccountAmountLockState() {
-    const input = el('ab2-account-start-balance');
     const minBufferInput = el('ab2-account-min-buffer');
     const id = el('ab2-account-id')?.value || '';
     const usesBuffer = accountUsesBuffer(el('ab2-account-type')?.value || 'bank', el('ab2-account-role')?.value || 'both');
     const lockBtn = el('ab2-account-unlock-amount-btn');
-    if (!input) return;
+    if (!minBufferInput) {
+        if (lockBtn) lockBtn.classList.add('hidden');
+        return;
+    }
     if (!usesBuffer) {
-        input.disabled = true;
-        if (minBufferInput) minBufferInput.disabled = true;
+        minBufferInput.disabled = true;
         if (lockBtn) lockBtn.classList.add('hidden');
         return;
     }
     if (!id) {
-        input.disabled = false;
-        if (minBufferInput) minBufferInput.disabled = false;
+        minBufferInput.disabled = false;
         if (lockBtn) lockBtn.classList.add('hidden');
         return;
     }
     const unlocked = accountAmountUnlockForId === id;
-    input.disabled = !unlocked;
-    if (minBufferInput) minBufferInput.disabled = !unlocked;
+    minBufferInput.disabled = !unlocked;
     if (lockBtn) {
         lockBtn.classList.toggle('hidden', unlocked);
         lockBtn.textContent = 'Betrag bearbeiten';
@@ -1036,7 +1069,7 @@ function syncTransferAmountLockState() {
 }
 
 function ensureAmountEditButtons() {
-    const accountInput = el('ab2-account-start-balance');
+    const accountInput = el('ab2-account-min-buffer');
     const transferInput = el('ab2-transfer-amount');
     if (accountInput && !el('ab2-account-unlock-amount-btn')) {
         const row = document.createElement('div');
@@ -1150,6 +1183,7 @@ function ensureShell() {
     ensureTransferLinkingFields();
     ensureContributionInfoHint();
     ensureAmountEditButtons();
+    ensureAccountCurrentBalanceField();
     ensureAccountAbtauschButton();
     ensureTransferAbtauschButton();
     ensureSettingsMenuModal();
@@ -1181,18 +1215,18 @@ function updateAccountTypeDependencies() {
     const role = normalizeAccountRole(el('ab2-account-role')?.value || 'both');
     const usesBuffer = accountUsesBuffer(type, role);
     const minBuffer = el('ab2-account-min-buffer');
-    const startBalance = el('ab2-account-start-balance');
-    const startDate = el('ab2-account-start-date');
+    const currentBalanceWrap = el('ab2-account-current-balance-value')?.closest('div') || el('ab2-account-start-balance')?.closest('div');
+    const startDateWrap = el('ab2-account-start-date')?.closest('div');
 
     setInputEnabled(minBuffer, usesBuffer, !usesBuffer);
     if (!usesBuffer && minBuffer) minBuffer.value = '0';
-    setInputEnabled(startBalance, usesBuffer, !usesBuffer);
-    setInputEnabled(startDate, usesBuffer, !usesBuffer);
 
-    [minBuffer?.closest('div'), startBalance?.closest('div'), startDate?.closest('div')].forEach((wrap) => {
+    [minBuffer?.closest('div'), currentBalanceWrap].forEach((wrap) => {
         if (wrap) wrap.classList.toggle('hidden', !usesBuffer);
     });
+    if (startDateWrap) startDateWrap.classList.add('hidden');
     syncAccountAmountLockState();
+    updateAccountCurrentBalanceText();
 }
 
 function monthKey(year, month) { return `${year}-${String(month).padStart(2, '0')}`; }
@@ -2302,7 +2336,8 @@ function renderTransfers() {
         const cardTone = active ? 'border-yellow-400 bg-yellow-50 ring-2 ring-yellow-300' : 'border-slate-200 bg-white hover:border-blue-300';
         const stateText = targetAlert ? `${targetAlert.severity} ${monthLabel(targetAlert.monthKey)}` : 'stabil';
         const linkedText = allocationLines.length ? allocationLines.join(' | ') : 'Keine Zahlungsgrund-Zuordnung';
-        return `<div class="rounded-xl border ${cardTone} p-3 transition" data-transfer-card="${transfer.id}"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-slate-800">${escapeHtml(source.name || '-')} → ${escapeHtml(target.name || '-')}</div><div class="text-[11px] text-slate-500">${escapeHtml(intervalLabel(transfer.intervalType, transfer.customMonths || []))} · Nächste ${nextExecutionDate(transfer) ? formatDate(nextExecutionDate(transfer)) : '-'}</div></div><span class="px-2 py-1 rounded-full text-[10px] ${targetAlert?.severity === 'alarm' ? 'bg-red-100 text-red-700' : targetAlert?.severity === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(stateText)}</span></div><div class="mt-3 text-xs text-slate-700"><div class="font-bold text-slate-800">Betrag: ${formatCurrency(transfer.amount)}</div><div class="mt-1">Verplant ${formatCurrency(planned)} · <span class="font-bold ${transferDiffCss(diff)}">Δ ${formatSignedCurrency(diff)}</span></div></div><div class="mt-1 text-xs text-indigo-700">${escapeHtml(linkedText)}</div><div class="mt-1 text-xs text-slate-600">${escapeHtml(transfer.note || '-')}</div><div class="mt-3 flex flex-wrap justify-end gap-1"><button type="button" class="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs" data-transfer-abtausch-open="${transfer.id}">Abtausch</button><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-transfer-edit="${transfer.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-transfer-delete="${transfer.id}">Löschen</button></div></div>`;
+        const noteLine = transfer.note ? `<div class="mt-1 text-xs text-slate-600">${escapeHtml(transfer.note)}</div>` : '';
+        return `<div class="rounded-xl border ${cardTone} p-3 transition" data-transfer-card="${transfer.id}"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-slate-800">${escapeHtml(source.name || '-')} → ${escapeHtml(target.name || '-')}</div><div class="text-[11px] text-slate-500">${escapeHtml(intervalLabel(transfer.intervalType, transfer.customMonths || []))} · Nächste ${nextExecutionDate(transfer) ? formatDate(nextExecutionDate(transfer)) : '-'}</div></div><span class="px-2 py-1 rounded-full text-[10px] ${targetAlert?.severity === 'alarm' ? 'bg-red-100 text-red-700' : targetAlert?.severity === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(stateText)}</span></div><div class="mt-3 text-xs text-slate-700"><div class="font-bold text-slate-800">Betrag: ${formatCurrency(transfer.amount)}</div><div class="mt-1">Verplant ${formatCurrency(planned)} · <span class="font-bold ${transferDiffCss(diff)}">Δ ${formatSignedCurrency(diff)}</span></div></div><div class="mt-1 text-xs text-indigo-700">${escapeHtml(linkedText)}</div>${noteLine}<div class="mt-3 flex flex-wrap justify-end gap-1"><button type="button" class="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs" data-transfer-abtausch-open="${transfer.id}">Abtausch</button><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-transfer-edit="${transfer.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-transfer-delete="${transfer.id}">Löschen</button></div></div>`;
     }).join('');
     host.innerHTML = `<div class="space-y-3"><button type="button" data-transfer-new="1" class="w-full rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 p-4 text-left hover:bg-blue-100 transition"><div class="text-sm font-extrabold text-blue-800">+ NEU</div><div class="text-xs text-blue-700">Neuen Dauerauftrag / neue Überweisung anlegen</div></button><div class="grid grid-cols-1 md:grid-cols-2 gap-2">${cards || '<p class="text-sm text-gray-400 italic">Noch keine Daueraufträge / Überweisungen.</p>'}</div></div>`;
     setTransferSplitMode(transferSplitMode, false);
@@ -2351,15 +2386,16 @@ function renderPreviews() {
     const accType = normalizeAccountType(el('ab2-account-type')?.value || 'bank');
     const accRole = normalizeAccountRole(el('ab2-account-role')?.value || 'both');
     const accUsesBuffer = accountUsesBuffer(accType, accRole);
-    const startBalance = toNum(el('ab2-account-start-balance')?.value, NaN);
-    const startPreview = accUsesBuffer && Number.isFinite(startBalance) ? ` Snapshot-Vorschau: ${formatCurrency(startBalance)} am ${formatDate(el('ab2-account-start-date')?.value)}` : '';
+    updateAccountCurrentBalanceText();
+    const currentBalanceText = el('ab2-account-current-balance-value')?.textContent || '--';
     const roleText = accRole === 'source' ? 'nur Quelle' : accRole === 'target' ? 'nur Ziel' : 'Quelle & Ziel';
     const configHint = accType === 'person'
-        ? ' Für Personen sind Mindestpuffer und Startsaldo deaktiviert.'
+        ? ' Für Personen ist der Mindestpuffer deaktiviert.'
         : accUsesBuffer
             ? ` Mindestpuffer: ${formatCurrency(el('ab2-account-min-buffer')?.value || 0)}.`
-            : ' Für reine Quellkonten sind Mindestpuffer und Startsaldo deaktiviert.';
-    if (el('ab2-account-preview')) el('ab2-account-preview').textContent = `${el('ab2-account-name')?.value || 'Dieses Konto'} wird als ${accType === 'person' ? 'Person / Geldquelle' : 'Bankkonto'} geführt (Rolle: ${roleText}).${configHint}${startPreview}`;
+            : ' Für reine Quellkonten ist der Mindestpuffer deaktiviert.';
+    const balanceHint = accUsesBuffer ? ` Aktueller Kontostand: ${currentBalanceText}.` : '';
+    if (el('ab2-account-preview')) el('ab2-account-preview').textContent = `${el('ab2-account-name')?.value || 'Dieses Konto'} wird als ${accType === 'person' ? 'Person / Geldquelle' : 'Bankkonto'} geführt (Rolle: ${roleText}).${configHint}${balanceHint}`;
     const transferSource = ACCOUNTS[el('ab2-transfer-source')?.value] || null;
     const transferTarget = ACCOUNTS[el('ab2-transfer-target')?.value] || null;
     const transferAmount = toNum(el('ab2-transfer-amount')?.value, 0);
@@ -2502,10 +2538,10 @@ function resetAccountForm(mode = 'list') {
         accountListFilterState.showPast = false;
     }
     setAccountModalView(mode);
-    ['ab2-account-id', 'ab2-account-name', 'ab2-account-bank', 'ab2-account-iban', 'ab2-account-min-buffer', 'ab2-account-start-balance'].forEach((id) => { if (el(id)) el(id).value = ''; });
+    ['ab2-account-id', 'ab2-account-name', 'ab2-account-bank', 'ab2-account-iban', 'ab2-account-min-buffer'].forEach((id) => { if (el(id)) el(id).value = ''; });
     if (el('ab2-account-type')) el('ab2-account-type').value = 'bank';
     if (el('ab2-account-role')) el('ab2-account-role').value = 'both';
-    if (el('ab2-account-start-date')) el('ab2-account-start-date').value = isoDate(new Date());
+    updateAccountCurrentBalanceText('');
     if (el('ab2-account-abtausch-btn')) el('ab2-account-abtausch-btn').classList.add('hidden');
     updateAccountTypeDependencies();
     syncAccountAmountLockState();
@@ -2521,7 +2557,6 @@ function editAccount(id) {
     const accountType = normalizeAccountType(account.type || 'bank');
     const accountRole = normalizeAccountRole(account.role || 'both');
     const usesBuffer = accountUsesBuffer(accountType, accountRole);
-    const latest = latestSnapshots()[id];
     setAccountModalView('edit');
     accountAmountUnlockForId = '';
     if (el('ab2-account-id')) el('ab2-account-id').value = account.id || '';
@@ -2531,8 +2566,7 @@ function editAccount(id) {
     if (el('ab2-account-type')) el('ab2-account-type').value = accountType;
     if (el('ab2-account-role')) el('ab2-account-role').value = accountRole;
     if (el('ab2-account-min-buffer')) el('ab2-account-min-buffer').value = usesBuffer ? accountMinBuffer(account).toFixed(2) : '0';
-    if (el('ab2-account-start-balance')) el('ab2-account-start-balance').value = usesBuffer ? (latest ? toNum(latest.value, 0).toFixed(2) : '') : '';
-    if (el('ab2-account-start-date')) el('ab2-account-start-date').value = usesBuffer ? (latest?.date || isoDate(new Date())) : isoDate(new Date());
+    updateAccountCurrentBalanceText(id);
     if (el('ab2-account-abtausch-btn')) el('ab2-account-abtausch-btn').classList.remove('hidden');
     updateAccountTypeDependencies();
     syncAccountAmountLockState();
@@ -2716,29 +2750,18 @@ async function saveAccount() {
     const role = normalizeAccountRole(el('ab2-account-role')?.value || 'both');
     const usesBuffer = accountUsesBuffer(accountType, role);
     const payload = { name, bank: el('ab2-account-bank')?.value?.trim() || '', iban: el('ab2-account-iban')?.value?.trim() || '', type: accountType, role, minBuffer: usesBuffer ? roundMoney(toNum(el('ab2-account-min-buffer')?.value, 0)) : 0, createdBy: before?.createdBy || uid(), updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() };
-    const startBalance = usesBuffer ? toNum(el('ab2-account-start-balance')?.value, NaN) : NaN;
-    const startDate = usesBuffer ? (el('ab2-account-start-date')?.value || '') : '';
-    if (id && usesBuffer && Number.isFinite(startBalance)) {
-        const base = getEditableAccountAmountBase();
-        if (accountAmountUnlockForId !== id && Number.isFinite(base) && Math.abs(roundMoney(startBalance) - roundMoney(base)) > 0.009) {
-            return alertUser('Betrag ist gesperrt. Bitte zuerst "Betrag bearbeiten" nutzen oder bei planmäßiger Änderung Abtausch verwenden.', 'error');
-        }
-    }
     if (id && usesBuffer && before && accountAmountUnlockForId !== id && Math.abs(roundMoney(payload.minBuffer) - roundMoney(toNum(before.minBuffer, 0))) > 0.009) {
         return alertUser('Mindestpuffer ist gesperrt. Bitte zuerst "Betrag bearbeiten" nutzen oder bei planmäßiger Änderung Abtausch verwenden.', 'error');
     }
     try {
-        let accountId = id;
         if (id) {
             await updateDoc(doc(accountsRef, id), payload);
             await writeAudit('update', 'account', id, cloneClean(before), payload, { action: 'save_account' });
         } else {
             const createPayload = { ...payload, createdAt: serverTimestamp(), createdByName: currentUser?.displayName || 'Unbekannt' };
             const ref = await addDoc(accountsRef, createPayload);
-            accountId = ref.id;
             await writeAudit('create', 'account', ref.id, null, createPayload, { action: 'create_account' });
         }
-        if (Number.isFinite(startBalance) && startDate) await upsertSnapshotEntry(accountId, startDate, startBalance, 'Startsaldo aus Kontoformular');
         resetAccountForm();
         alertUser('Konto gespeichert.', 'success');
     } catch (error) { console.error(error); alertUser(`Fehler beim Speichern: ${error.message || error}`, 'error'); }
