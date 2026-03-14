@@ -42,6 +42,7 @@ let accountModalViewMode = 'list';
 let transferModalViewMode = 'list';
 let reconModalViewMode = 'list';
 let editingReconId = '';
+let reconOlderVisibleCount = 3;
 let itemReadMode = false;
 let transferSplitMode = 'right';
 let accountSplitMode = 'right';
@@ -247,6 +248,10 @@ function formatDateWithWeekday(v) {
     return `${WEEKDAYS_SHORT[d.getDay()] || ''} ${formatDate(d)}`.trim();
 }
 function formatDateTime(v) { const d = timestampToDate(v) || parseDate(v); return d ? `${formatDate(d)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : '-'; }
+function formatEntityUpdateTime(entity, fallbackDate = null) {
+    const stamp = timestampToDate(entity?.updatedAt) || timestampToDate(entity?.createdAt) || (fallbackDate ? parseDate(fallbackDate) : null);
+    return formatDateTime(stamp);
+}
 function formatCurrency(v) { return `${roundMoney(v).toFixed(2)} €`; }
 function formatSignedCurrency(v) { const n = roundMoney(v); return `${n >= 0 ? '+' : ''}${n.toFixed(2)} €`; }
 function dateShiftDays(value, days = 0) {
@@ -2284,10 +2289,14 @@ function renderAccounts() {
         const transferDiff = accountTransferBudgetDiff(account.id);
         const latest = latestSnapshots()[account.id] || null;
         const amountText = latest ? formatCurrency(latest.value) : 'kein Betrag';
+        const worstDayDelta = toNum(row.minDayDelta, toNum(row.delta, 0));
+        const worstDayText = `Schlechteste Tagesabweichung (Kontostand minus Tagesbedarf): ${formatSignedCurrency(worstDayDelta)}`;
+        const transferText = `Transfer-Restbudget aus Zuordnungen: ${formatSignedCurrency(transferDiff)}`;
+        const updatedText = formatEntityUpdateTime(account);
         const active = editingAccountId === account.id;
         const cardTone = active ? 'border-yellow-400 bg-yellow-50 ring-2 ring-yellow-300' : 'border-slate-200 bg-white hover:border-blue-300';
         const controlButton = person ? `<button type="button" class="px-2 py-1 bg-violet-100 text-violet-700 rounded text-xs" data-account-control="${account.id}">Kontrolle</button>` : '';
-        return `<div class="rounded-xl border ${cardTone} p-3 transition" data-account-card="${account.id}"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-slate-800">${escapeHtml(account.name || '-')}</div><div class="text-[11px] text-slate-500">${escapeHtml(person ? 'Person / Quelle' : `${account.bank || 'Bankkonto'} · ${normalizeAccountRole(account)}`)}</div></div><span class="px-2 py-1 rounded-full text-[10px] ${quality?.status === 'alarm' ? 'bg-red-100 text-red-700' : quality?.status === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(quality?.text || 'aktuell')}</span></div><div class="mt-3 text-xs"><div class="font-bold text-slate-800">Betrag: ${amountText}</div><div class="mt-1 font-bold ${toNum(row.minDayDelta, toNum(row.delta, 0)) < 0 ? 'text-red-700' : 'text-emerald-700'}">Min Tages-Δ ${formatSignedCurrency(toNum(row.minDayDelta, toNum(row.delta, 0)))}</div><div class="mt-1 ${transferDiffCss(transferDiff)} font-bold">Transfer Δ ${formatSignedCurrency(transferDiff)}</div><div class="mt-1 text-slate-600">${itemCount} Einträge · ${transferCount} Transfers</div></div><div class="mt-3 flex flex-wrap gap-1 justify-end">${controlButton}<button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></div>`;
+        return `<div class="rounded-xl border ${cardTone} p-3 transition" data-account-card="${account.id}"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-slate-800">${escapeHtml(account.name || '-')}</div><div class="text-[11px] text-slate-500">${escapeHtml(person ? 'Person / Quelle' : `${account.bank || 'Bankkonto'} · ${normalizeAccountRole(account)}`)}</div></div><span class="px-2 py-1 rounded-full text-[10px] ${quality?.status === 'alarm' ? 'bg-red-100 text-red-700' : quality?.status === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(quality?.text || 'aktuell')}</span></div><div class="mt-3 text-xs"><div class="font-bold text-slate-800">Betrag: ${amountText}</div><div class="mt-1 font-bold ${worstDayDelta < 0 ? 'text-red-700' : 'text-emerald-700'}">${worstDayText}</div><div class="mt-1 ${transferDiffCss(transferDiff)} font-bold">${transferText}</div><div class="mt-1 text-slate-600">${itemCount} Einträge · ${transferCount} Transfers</div><div class="mt-1 text-[11px] text-slate-500">Zuletzt geändert: ${updatedText}</div></div><div class="mt-3 flex flex-wrap gap-1 justify-end">${controlButton}<button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></div>`;
     };
     const bankCards = visibleAccounts.filter((account) => !isPersonAccount(account)).map(renderAccountCard).join('');
     const personCards = visibleAccounts.filter((account) => isPersonAccount(account)).map(renderAccountCard).join('');
@@ -2337,7 +2346,8 @@ function renderTransfers() {
         const stateText = targetAlert ? `${targetAlert.severity} ${monthLabel(targetAlert.monthKey)}` : 'stabil';
         const linkedText = allocationLines.length ? allocationLines.join(' | ') : 'Keine Zahlungsgrund-Zuordnung';
         const noteLine = transfer.note ? `<div class="mt-1 text-xs text-slate-600">${escapeHtml(transfer.note)}</div>` : '';
-        return `<div class="rounded-xl border ${cardTone} p-3 transition" data-transfer-card="${transfer.id}"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-slate-800">${escapeHtml(source.name || '-')} → ${escapeHtml(target.name || '-')}</div><div class="text-[11px] text-slate-500">${escapeHtml(intervalLabel(transfer.intervalType, transfer.customMonths || []))} · Nächste ${nextExecutionDate(transfer) ? formatDate(nextExecutionDate(transfer)) : '-'}</div></div><span class="px-2 py-1 rounded-full text-[10px] ${targetAlert?.severity === 'alarm' ? 'bg-red-100 text-red-700' : targetAlert?.severity === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(stateText)}</span></div><div class="mt-3 text-xs text-slate-700"><div class="font-bold text-slate-800">Betrag: ${formatCurrency(transfer.amount)}</div><div class="mt-1">Verplant ${formatCurrency(planned)} · <span class="font-bold ${transferDiffCss(diff)}">Δ ${formatSignedCurrency(diff)}</span></div></div><div class="mt-1 text-xs text-indigo-700">${escapeHtml(linkedText)}</div>${noteLine}<div class="mt-3 flex flex-wrap justify-end gap-1"><button type="button" class="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs" data-transfer-abtausch-open="${transfer.id}">Abtausch</button><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-transfer-edit="${transfer.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-transfer-delete="${transfer.id}">Löschen</button></div></div>`;
+        const updatedText = formatEntityUpdateTime(transfer);
+        return `<div class="rounded-xl border ${cardTone} p-3 transition" data-transfer-card="${transfer.id}"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-slate-800">${escapeHtml(source.name || '-')} → ${escapeHtml(target.name || '-')}</div><div class="text-[11px] text-slate-500">${escapeHtml(intervalLabel(transfer.intervalType, transfer.customMonths || []))} · Nächste ${nextExecutionDate(transfer) ? formatDate(nextExecutionDate(transfer)) : '-'}</div></div><span class="px-2 py-1 rounded-full text-[10px] ${targetAlert?.severity === 'alarm' ? 'bg-red-100 text-red-700' : targetAlert?.severity === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(stateText)}</span></div><div class="mt-3 text-xs text-slate-700"><div class="font-bold text-slate-800">Betrag: ${formatCurrency(transfer.amount)}</div><div class="mt-1">Verplant ${formatCurrency(planned)} · <span class="font-bold ${transferDiffCss(diff)}">Differenz ${formatSignedCurrency(diff)}</span></div></div><div class="mt-1 text-xs text-indigo-700">${escapeHtml(linkedText)}</div>${noteLine}<div class="mt-1 text-[11px] text-slate-500">Zuletzt geändert: ${updatedText}</div><div class="mt-3 flex flex-wrap justify-end gap-1"><button type="button" class="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs" data-transfer-abtausch-open="${transfer.id}">Abtausch</button><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-transfer-edit="${transfer.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-transfer-delete="${transfer.id}">Löschen</button></div></div>`;
     }).join('');
     host.innerHTML = `<div class="space-y-3"><button type="button" data-transfer-new="1" class="w-full rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 p-4 text-left hover:bg-blue-100 transition"><div class="text-sm font-extrabold text-blue-800">+ NEU</div><div class="text-xs text-blue-700">Neuen Dauerauftrag / neue Überweisung anlegen</div></button><div class="grid grid-cols-1 md:grid-cols-2 gap-2">${cards || '<p class="text-sm text-gray-400 italic">Noch keine Daueraufträge / Überweisungen.</p>'}</div></div>`;
     setTransferSplitMode(transferSplitMode, false);
@@ -2346,11 +2356,37 @@ function renderTransfers() {
 function renderRecon() {
     const host = el('ab2-recon-list');
     if (!host) return;
-    const recons = Object.values(RECON).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    const recons = Object.values(RECON).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || newestEntityMs(b) - newestEntityMs(a));
     const visibleRecons = reconModalViewMode === 'edit' && editingReconId
         ? recons.filter((entry) => entry.id === editingReconId)
         : recons;
-    host.innerHTML = `<div class="space-y-2"><button type="button" data-recon-new="1" class="w-full rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50 p-3 text-left hover:bg-emerald-100 transition"><div class="text-sm font-extrabold text-emerald-800">+ NEU</div><div class="text-xs text-emerald-700">Neuen Abgleich anlegen</div></button>${visibleRecons.length ? visibleRecons.map((entry) => `<div class="rounded-lg border border-gray-200 bg-gray-50 p-3" data-recon-fill="${entry.id}"><div class="flex items-start justify-between gap-2"><div><div class="font-bold text-gray-800">${escapeHtml(ACCOUNTS[entry.accountId]?.name || '-')}</div><div class="text-xs text-gray-500">${entry.type === 'snapshot' ? 'Snapshot' : 'Manuell'} · ${formatDate(entry.date)}</div></div><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-recon-delete="${entry.id}">Löschen</button></div><div class="mt-2 text-sm font-bold ${entry.type === 'snapshot' ? 'text-blue-700' : toNum(entry.value, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${entry.type === 'snapshot' ? formatCurrency(entry.value) : formatSignedCurrency(entry.value)}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(entry.note || '')}</div></div>`).join('') : '<p class="text-sm text-gray-400 italic">Noch keine Abgleiche.</p>'}</div>`;
+    const reconCard = (entry, badgeText = '', cardTone = 'border-gray-200 bg-gray-50') => {
+        const recordedAt = formatEntityUpdateTime(entry, entry.date);
+        const badge = badgeText ? `<div class="mb-1 inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700">${badgeText}</div>` : '';
+        return `<div class="rounded-lg border ${cardTone} p-2" data-recon-card="${entry.id}">${badge}<div class="flex items-start justify-between gap-2"><div><div class="font-bold text-gray-800 text-sm">${escapeHtml(ACCOUNTS[entry.accountId]?.name || '-')}</div><div class="text-[11px] text-gray-500">${entry.type === 'snapshot' ? 'Snapshot (setzt Kontostand)' : 'Manuell (einmalige Korrektur)'} · Datum ${formatDate(entry.date)} · Uhrzeit ${recordedAt.split(' ')[1] || '--:--'}</div><div class="text-[11px] text-gray-500">Zuletzt geändert: ${recordedAt}</div></div><div class="flex gap-1"><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-recon-edit="${entry.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-recon-delete="${entry.id}">Löschen</button></div></div><div class="mt-1 text-sm font-bold ${entry.type === 'snapshot' ? 'text-blue-700' : toNum(entry.value, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${entry.type === 'snapshot' ? formatCurrency(entry.value) : formatSignedCurrency(entry.value)}</div><div class="text-xs text-gray-600 mt-0.5">${escapeHtml(entry.note || '')}</div></div>`;
+    };
+    let content = '<p class="text-sm text-gray-400 italic">Noch keine Abgleiche.</p>';
+    if (visibleRecons.length) {
+        if (reconModalViewMode === 'edit' && editingReconId) {
+            content = reconCard(visibleRecons[0], 'Ausgewählter Eintrag', 'border-blue-200 bg-blue-50');
+        } else {
+            const currentEntry = visibleRecons[0] || null;
+            const olderEntries = visibleRecons.slice(1);
+            const shownOlder = olderEntries.slice(0, reconOlderVisibleCount);
+            const hasMore = olderEntries.length > shownOlder.length;
+            const currentBlock = currentEntry
+                ? `<div class="space-y-1"><div class="text-xs font-bold uppercase tracking-wide text-emerald-700">Aktueller Eintrag (neuester)</div>${reconCard(currentEntry, 'Aktuell', 'border-emerald-200 bg-emerald-50')}</div>`
+                : '';
+            const olderBlock = shownOlder.length
+                ? `<div class="space-y-1"><div class="text-xs font-bold uppercase tracking-wide text-slate-600">Ältere Einträge</div>${shownOlder.map((entry) => reconCard(entry, 'Älter', 'border-slate-200 bg-slate-50')).join('')}</div>`
+                : '';
+            const loadMoreBtn = hasMore
+                ? `<button type="button" data-recon-load-more="1" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-100">Weitere anzeigen (+5)</button>`
+                : '';
+            content = `<div class="space-y-2">${currentBlock}${olderBlock}${loadMoreBtn}</div>`;
+        }
+    }
+    host.innerHTML = `<div class="space-y-2"><button type="button" data-recon-new="1" class="w-full rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50 p-3 text-left hover:bg-emerald-100 transition"><div class="text-sm font-extrabold text-emerald-800">+ NEU</div><div class="text-xs text-emerald-700">Neuen Abgleich anlegen</div></button>${content}</div>`;
     setReconSplitMode(reconSplitMode, false);
     applyModalViewState();
 }
@@ -2648,6 +2684,7 @@ function fillReconForm(entry) {
 }
 function resetReconForm(mode = 'list') {
     editingReconId = '';
+    if (mode === 'list') reconOlderVisibleCount = 3;
     setReconModalView(mode);
     if (el('ab2-recon-account')) el('ab2-recon-account').value = '';
     ['ab2-recon-value', 'ab2-recon-note'].forEach((id) => { if (el(id)) el(id).value = ''; });
@@ -2694,24 +2731,32 @@ async function saveItem() {
     try {
         if (id) {
             if (itemVersionRequiresSplit(before, payload)) {
-                const oldEndIso = previousDateIso(payload.validFrom);
-                if (!oldEndIso || parseDate(oldEndIso) < parseDate(before.validFrom)) {
-                    return alertUser('Bei Betrags-/Regeländerung bitte ein späteres "Gültig ab" setzen (Versionierung mit Abtausch).', 'error');
+                const beforeStart = parseDate(before.validFrom);
+                const nextStart = parseDate(payload.validFrom);
+                const correctionMode = !!beforeStart && !!nextStart && nextStart <= beforeStart;
+                if (correctionMode) {
+                    await updateDoc(doc(itemsRef, id), payload);
+                    await writeAudit('update', 'cost_item', id, cloneClean(before), payload, { action: 'save_item_correction' });
+                } else {
+                    const oldEndIso = previousDateIso(payload.validFrom);
+                    if (!oldEndIso || parseDate(oldEndIso) < parseDate(before.validFrom)) {
+                        return alertUser('Bei Betrags-/Regeländerung bitte ein späteres "Gültig ab" setzen (Versionierung mit Abtausch).', 'error');
+                    }
+                    await updateDoc(doc(itemsRef, id), { validTo: oldEndIso, updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() });
+                    const nextPayload = {
+                        ...payload,
+                        validFrom: payload.validFrom,
+                        validTo: payload.validTo || '',
+                        sourceItemId: before?.sourceItemId || before?.id || '',
+                        createdBy: before?.createdBy || uid(),
+                        createdByName: before?.createdByName || currentUser?.displayName || 'Unbekannt',
+                        createdAt: serverTimestamp(),
+                        updatedBy: currentUser?.displayName || 'Unbekannt',
+                        updatedAt: serverTimestamp()
+                    };
+                    const ref = await addDoc(itemsRef, nextPayload);
+                    await writeAudit('abtausch', 'cost_item', id, cloneClean(before), { newItemId: ref.id, oldEndIso, validFrom: payload.validFrom }, { action: 'save_item_version_split' });
                 }
-                await updateDoc(doc(itemsRef, id), { validTo: oldEndIso, updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() });
-                const nextPayload = {
-                    ...payload,
-                    validFrom: payload.validFrom,
-                    validTo: payload.validTo || '',
-                    sourceItemId: before?.sourceItemId || before?.id || '',
-                    createdBy: before?.createdBy || uid(),
-                    createdByName: before?.createdByName || currentUser?.displayName || 'Unbekannt',
-                    createdAt: serverTimestamp(),
-                    updatedBy: currentUser?.displayName || 'Unbekannt',
-                    updatedAt: serverTimestamp()
-                };
-                const ref = await addDoc(itemsRef, nextPayload);
-                await writeAudit('abtausch', 'cost_item', id, cloneClean(before), { newItemId: ref.id, oldEndIso, validFrom: payload.validFrom }, { action: 'save_item_version_split' });
             } else {
                 await updateDoc(doc(itemsRef, id), payload);
                 await writeAudit('update', 'cost_item', id, cloneClean(before), payload, { action: 'save_item' });
@@ -2804,24 +2849,32 @@ async function saveTransfer() {
     try {
         if (id) {
             if (transferVersionRequiresSplit(before, payload)) {
-                const oldEndIso = previousDateIso(payload.validFrom);
-                if (!oldEndIso || parseDate(oldEndIso) < parseDate(before.validFrom)) {
-                    return alertUser('Bei Transfer-Änderungen bitte ein späteres "Gültig ab" setzen (Versionierung mit Abtausch).', 'error');
+                const beforeStart = parseDate(before.validFrom);
+                const nextStart = parseDate(payload.validFrom);
+                const correctionMode = !!beforeStart && !!nextStart && nextStart <= beforeStart;
+                if (correctionMode) {
+                    await updateDoc(doc(transfersRef, id), payload);
+                    await writeAudit('update', 'transfer_plan', id, cloneClean(before), payload, { action: 'save_transfer_correction' });
+                } else {
+                    const oldEndIso = previousDateIso(payload.validFrom);
+                    if (!oldEndIso || parseDate(oldEndIso) < parseDate(before.validFrom)) {
+                        return alertUser('Bei Transfer-Änderungen bitte ein späteres "Gültig ab" setzen (Versionierung mit Abtausch).', 'error');
+                    }
+                    await updateDoc(doc(transfersRef, id), { validTo: oldEndIso, updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() });
+                    const nextPayload = {
+                        ...payload,
+                        validFrom: payload.validFrom,
+                        validTo: payload.validTo || '',
+                        sourceTransferId: before?.sourceTransferId || before?.id || '',
+                        createdBy: before?.createdBy || uid(),
+                        createdByName: before?.createdByName || currentUser?.displayName || 'Unbekannt',
+                        createdAt: serverTimestamp(),
+                        updatedBy: currentUser?.displayName || 'Unbekannt',
+                        updatedAt: serverTimestamp()
+                    };
+                    const ref = await addDoc(transfersRef, nextPayload);
+                    await writeAudit('abtausch', 'transfer_plan', id, cloneClean(before), { newTransferId: ref.id, oldEndIso, validFrom: payload.validFrom }, { action: 'save_transfer_version_split' });
                 }
-                await updateDoc(doc(transfersRef, id), { validTo: oldEndIso, updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() });
-                const nextPayload = {
-                    ...payload,
-                    validFrom: payload.validFrom,
-                    validTo: payload.validTo || '',
-                    sourceTransferId: before?.sourceTransferId || before?.id || '',
-                    createdBy: before?.createdBy || uid(),
-                    createdByName: before?.createdByName || currentUser?.displayName || 'Unbekannt',
-                    createdAt: serverTimestamp(),
-                    updatedBy: currentUser?.displayName || 'Unbekannt',
-                    updatedAt: serverTimestamp()
-                };
-                const ref = await addDoc(transfersRef, nextPayload);
-                await writeAudit('abtausch', 'transfer_plan', id, cloneClean(before), { newTransferId: ref.id, oldEndIso, validFrom: payload.validFrom }, { action: 'save_transfer_version_split' });
             } else {
                 await updateDoc(doc(transfersRef, id), payload);
                 await writeAudit('update', 'transfer_plan', id, cloneClean(before), payload, { action: 'save_transfer' });
@@ -3309,9 +3362,6 @@ function bindEvents() {
                 openItem(edit.dataset.itemEdit, false);
                 return;
             }
-            if (e.target.closest('button')) return;
-            const row = e.target.closest('[data-item-row]');
-            if (row) openItem(row.dataset.itemRow, true);
         });
         itemHost.dataset.listenerAttached = 'true';
     }
@@ -3341,10 +3391,6 @@ function bindEvents() {
             if (control) openPersonControl(control.dataset.accountControl);
             if (edit) editAccount(edit.dataset.accountEdit);
             if (del) deleteAccount(del.dataset.accountDelete);
-            if (!e.target.closest('button')) {
-                const card = e.target.closest('[data-account-card]');
-                if (card?.dataset.accountCard) editAccount(card.dataset.accountCard);
-            }
         });
         accHost.dataset.listenerAttached = 'true';
     }
@@ -3366,10 +3412,6 @@ function bindEvents() {
             }
             if (edit) editTransfer(edit.dataset.transferEdit);
             if (del) deleteTransfer(del.dataset.transferDelete);
-            if (!e.target.closest('button')) {
-                const card = e.target.closest('[data-transfer-card]');
-                if (card?.dataset.transferCard) editTransfer(card.dataset.transferCard);
-            }
         });
         transferHost.dataset.listenerAttached = 'true';
     }
@@ -3398,16 +3440,23 @@ function bindEvents() {
     if (reconHost && !reconHost.dataset.listenerAttached) {
         reconHost.addEventListener('click', (e) => {
             const create = e.target.closest('[data-recon-new]');
-            const fill = e.target.closest('[data-recon-fill]');
+            const edit = e.target.closest('[data-recon-edit]');
             const del = e.target.closest('[data-recon-delete]');
+            const loadMore = e.target.closest('[data-recon-load-more]');
             if (create) {
                 resetReconForm('create');
                 return;
             }
-            if (del) deleteRecon(del.dataset.reconDelete);
-            if (!del && fill?.dataset.reconFill) {
-                fillReconForm(RECON[fill.dataset.reconFill] || null);
+            if (loadMore) {
+                reconOlderVisibleCount += 5;
+                renderRecon();
+                return;
             }
+            if (edit?.dataset.reconEdit) {
+                fillReconForm(RECON[edit.dataset.reconEdit] || null);
+                return;
+            }
+            if (del) deleteRecon(del.dataset.reconDelete);
         });
         reconHost.dataset.listenerAttached = 'true';
     }
