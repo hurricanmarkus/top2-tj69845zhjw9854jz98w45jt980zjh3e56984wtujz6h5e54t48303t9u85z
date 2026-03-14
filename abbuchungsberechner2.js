@@ -22,7 +22,7 @@ let ITEMS = {};
 let TRANSFERS = {};
 let RECON = {};
 let AUDIT = {};
-let FORECAST = { timeline: [], alerts: [], details: {}, quality: [], setup: [], suggestions: [], imbalances: [] };
+let FORECAST = { timeline: [], alerts: [], details: {}, quality: [], setup: [], suggestions: [], imbalances: [], deviationWarnings: [] };
 let filterTokens = [];
 let filterState = { negate: false, joinMode: 'and', status: '', typ: '', interval: '', quick: '', sort: 'critical' };
 let accountListFilterState = { type: 'all', query: '' };
@@ -147,6 +147,85 @@ function formatDate(v) { const d = parseDate(v) || timestampToDate(v); return d 
 function formatDateTime(v) { const d = timestampToDate(v) || parseDate(v); return d ? `${formatDate(d)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : '-'; }
 function formatCurrency(v) { return `${roundMoney(v).toFixed(2)} €`; }
 function formatSignedCurrency(v) { const n = roundMoney(v); return `${n >= 0 ? '+' : ''}${n.toFixed(2)} €`; }
+function dateShiftDays(value, days = 0) {
+    const date = parseDate(value);
+    if (!date) return null;
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    return next;
+}
+function previousDateIso(value) {
+    const prev = dateShiftDays(value, -1);
+    return prev ? isoDate(prev) : '';
+}
+function easterSunday(year) {
+    const y = parseInt(year, 10);
+    if (!Number.isInteger(y) || y < 1900) return null;
+    const a = y % 19;
+    const b = Math.floor(y / 100);
+    const c = y % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + (2 * e) + (2 * i) - h - k) % 7;
+    const m = Math.floor((a + (11 * h) + (22 * l)) / 451);
+    const month = Math.floor((h + l - (7 * m) + 114) / 31);
+    const day = ((h + l - (7 * m) + 114) % 31) + 1;
+    return new Date(y, month - 1, day);
+}
+function austrianBankHolidaySet(year) {
+    const y = parseInt(year, 10);
+    if (!Number.isInteger(y)) return new Set();
+    if (!austrianBankHolidaySet.cache) austrianBankHolidaySet.cache = {};
+    if (austrianBankHolidaySet.cache[y]) return austrianBankHolidaySet.cache[y];
+    const keys = new Set([
+        `${y}-01-01`,
+        `${y}-01-06`,
+        `${y}-05-01`,
+        `${y}-08-15`,
+        `${y}-10-26`,
+        `${y}-11-01`,
+        `${y}-12-08`,
+        `${y}-12-25`,
+        `${y}-12-26`
+    ]);
+    const easter = easterSunday(y);
+    if (easter) {
+        [1, 39, 50, 60].forEach((offset) => {
+            const day = new Date(easter);
+            day.setDate(day.getDate() + offset);
+            keys.add(isoDate(day));
+        });
+    }
+    austrianBankHolidaySet.cache[y] = keys;
+    return keys;
+}
+function isAustrianBankHoliday(value) {
+    const date = parseDate(value);
+    if (!date) return false;
+    return austrianBankHolidaySet(date.getFullYear()).has(isoDate(date));
+}
+function isBusinessDay(value) {
+    const date = parseDate(value);
+    if (!date) return false;
+    const weekday = date.getDay();
+    if (weekday === 0 || weekday === 6) return false;
+    return !isAustrianBankHoliday(date);
+}
+function shiftToBusinessDay(value, direction = 1) {
+    const date = parseDate(value);
+    if (!date) return null;
+    const step = direction < 0 ? -1 : 1;
+    const candidate = new Date(date);
+    for (let i = 0; i < 10 && !isBusinessDay(candidate); i += 1) {
+        candidate.setDate(candidate.getDate() + step);
+    }
+    return candidate;
+}
 function parseMonths(v) { return String(v || '').split(',').map(x => parseInt(x.trim(), 10)).filter(x => x >= 1 && x <= 12).filter((x, i, a) => a.indexOf(x) === i).sort((a, b) => a - b); }
 function parseCsvList(v) { return String(v || '').split(',').map((x) => x.trim()).filter(Boolean).filter((x, i, a) => a.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i); }
 function normalizeSearchText(v) { return String(v || '').toLowerCase().replace(/(\d),(\d)/g, '$1.$2').replace(/€/g, '').replace(/\s+/g, ' ').trim(); }
@@ -285,7 +364,7 @@ function buildShell() {
         <div id="ab2-simulation-warning" class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-3 rounded-lg font-bold text-sm"></div>
         <div class="bg-gray-50 p-3 rounded-lg border border-gray-200"><div class="flex flex-wrap gap-2 items-center"><label class="text-sm font-bold text-gray-700">📅 Datums-Simulation:</label><input type="date" id="ab2-simulation-datum" class="p-2 border-2 border-gray-300 rounded-lg text-sm"><button id="ab2-clear-simulation" type="button" class="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold text-sm">Zurücksetzen</button></div></div>
         <div class="grid grid-cols-1 gap-3">
-            <div class="bg-white rounded-xl shadow p-3"><div class="flex items-center justify-between gap-2 mb-2"><h3 class="text-sm font-bold text-gray-700 flex items-center gap-2">12-Monate-Kontostandsprognose ${helpButton('ab2-help-forecast')}</h3><button id="ab2-forecast-toggle" type="button" class="px-2 py-1 rounded border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100">ausklappen</button></div><div id="ab2-forecast-state" class="inline-flex px-2 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700">ALLE OK</div>${helpContent('ab2-help-forecast', 'Zeigt die voraussichtlichen Endstände je Monat für die nächsten 12 Monate. Klick auf eine Zelle = Warum dieser Wert? Was wirkt? Was ist die beste Maßnahme?')}<div id="ab2-forecast-overview-wrap" class="mt-2 hidden"><div id="ab2-forecast-overview" class="text-sm text-gray-400 italic">Keine Forecast-Daten.</div></div></div>
+            <div class="bg-white rounded-xl shadow p-3"><div class="flex items-center justify-between gap-2 mb-2"><h3 class="text-sm font-bold text-gray-700 flex items-center gap-2">12-Monate-Kontostandsprognose ${helpButton('ab2-help-forecast')}</h3><button id="ab2-forecast-toggle" type="button" class="px-2 py-1 rounded border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100">ausklappen</button></div><div id="ab2-forecast-state" class="inline-flex px-2 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700">ALLE OK</div>${helpContent('ab2-help-forecast', 'Zeigt die Monatsvorschau mit tagesgenauer Simulation. Innerhalb eines Tages wird konservativ gerechnet (Abbuchung vor Eingang). Wochenenden und österreichische Bankfeiertage werden berücksichtigt. Klick auf eine Zelle = Warum kritisch? Welche Maßnahme hilft?')}<div id="ab2-forecast-overview-wrap" class="mt-2 hidden"><div id="ab2-forecast-overview" class="text-sm text-gray-400 italic">Keine Forecast-Daten.</div></div></div>
         </div>
         <div id="ab2-suggestion-panel" class="bg-white rounded-xl shadow p-3"><h3 class="text-sm font-bold text-gray-700 mb-2">Ausgleichsvorschläge</h3><div id="ab2-suggestion-preview" class="space-y-2"></div></div>
         <div class="relative"><div class="flex justify-end"><button id="ab2-toggle-glossary" type="button" class="w-5 h-5 rounded-full border border-blue-200 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100" title="Begriffe einfach erklärt">i</button></div><div id="ab2-glossary" class="hidden mt-1 rounded-xl border border-blue-100 bg-white/95 p-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs shadow"></div></div>
@@ -664,10 +743,66 @@ function updateAccountTypeDependencies() {
 function monthKey(year, month) { return `${year}-${String(month).padStart(2, '0')}`; }
 function monthLabel(key) { const [year, month] = String(key || '').split('-').map(Number); return year && month ? `${MONTHS[month - 1]} ${year}` : '-'; }
 function lastDayOfMonth(year, month) { return new Date(year, month, 0).getDate(); }
+function compareMonthKey(a, b) { return String(a || '').localeCompare(String(b || '')); }
+function monthKeyDate(key, day = 1) {
+    const [year, month] = String(key || '').split('-').map(Number);
+    if (!year || !month) return null;
+    const safeDay = Math.min(Math.max(parseInt(day, 10) || 1, 1), lastDayOfMonth(year, month));
+    return new Date(year, month - 1, safeDay);
+}
+function monthKeyFirstBusinessDay(key, day = 1) {
+    const base = monthKeyDate(key, day);
+    if (!base) return '';
+    return isoDate(shiftToBusinessDay(base, 1) || base);
+}
 function currentMonthKey() { const now = referenceDate(); return monthKey(now.getFullYear(), now.getMonth() + 1); }
 function freeMargin(account, row) { if (!row) return 0; return roundMoney(toNum(row.end, 0) - accountMinBuffer(account)); }
 function cloneClean(data) { const next = { ...(data || {}) }; delete next.id; return next; }
 function monthNameList(list = []) { return list.map((m) => MONTHS[m - 1]).filter(Boolean).join(', ') || '-'; }
+function monthListEquals(left = [], right = []) {
+    const a = parseMonths((Array.isArray(left) ? left : []).join(','));
+    const b = parseMonths((Array.isArray(right) ? right : []).join(','));
+    if (a.length !== b.length) return false;
+    return a.every((value, idx) => value === b[idx]);
+}
+function normalizeContribForCompare(list = []) {
+    return (Array.isArray(list) ? list : [])
+        .map((row) => ({
+            sourceAccountId: row?.sourceAccountId || '',
+            amount: roundMoney(toNum(row?.amount, 0)),
+            intervalType: row?.intervalType || 'inherit',
+            customMonths: parseMonths((Array.isArray(row?.customMonths) ? row.customMonths : []).join(',')),
+            note: String(row?.note || '').trim()
+        }))
+        .filter((row) => row.sourceAccountId && row.amount > 0)
+        .sort((a, b) => `${a.sourceAccountId}|${a.intervalType}|${a.amount}`.localeCompare(`${b.sourceAccountId}|${b.intervalType}|${b.amount}`));
+}
+function itemVersionRequiresSplit(before, payload) {
+    if (!before) return false;
+    if (roundMoney(toNum(before.amount, 0)) !== roundMoney(toNum(payload.amount, 0))) return true;
+    if (String(before.typ || '') !== String(payload.typ || '')) return true;
+    if (String(before.accountId || '') !== String(payload.accountId || '')) return true;
+    if (String(before.intervalType || 'monthly') !== String(payload.intervalType || 'monthly')) return true;
+    if ((parseInt(before.startMonth, 10) || null) !== (parseInt(payload.startMonth, 10) || null)) return true;
+    if ((parseInt(before.dayOfMonth, 10) || 1) !== (parseInt(payload.dayOfMonth, 10) || 1)) return true;
+    if (!monthListEquals(before.customMonths || [], payload.customMonths || [])) return true;
+    const contribBefore = JSON.stringify(normalizeContribForCompare(before.contributions || []));
+    const contribAfter = JSON.stringify(normalizeContribForCompare(payload.contributions || []));
+    return contribBefore !== contribAfter;
+}
+function transferVersionRequiresSplit(before, payload) {
+    if (!before) return false;
+    if (String(before.sourceAccountId || '') !== String(payload.sourceAccountId || '')) return true;
+    if (String(before.targetAccountId || '') !== String(payload.targetAccountId || '')) return true;
+    if (roundMoney(toNum(before.amount, 0)) !== roundMoney(toNum(payload.amount, 0))) return true;
+    if (String(before.intervalType || 'monthly') !== String(payload.intervalType || 'monthly')) return true;
+    if ((parseInt(before.startMonth, 10) || null) !== (parseInt(payload.startMonth, 10) || null)) return true;
+    if ((parseInt(before.dayOfMonth, 10) || 1) !== (parseInt(payload.dayOfMonth, 10) || 1)) return true;
+    if (!monthListEquals(before.customMonths || [], payload.customMonths || [])) return true;
+    const linkedBefore = JSON.stringify(normalizeTransferLinkedAllocations(before.linkedTitleAllocations || []));
+    const linkedAfter = JSON.stringify(normalizeTransferLinkedAllocations(payload.linkedTitleAllocations || []));
+    return linkedBefore !== linkedAfter;
+}
 function nextExecutionDate(entity, horizon = 36) {
     const now = referenceDate();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -729,10 +864,48 @@ function getExecutionDateForMonth(entity, year, month) {
     const targetDay = Math.min(Math.max(parseInt(entity?.dayOfMonth, 10) || (start ? start.getDate() : 1), 1), maxDay);
     let candidate = new Date(year, month - 1, targetDay);
     if (start && start.getFullYear() === year && start.getMonth() + 1 === month && candidate < start) candidate = new Date(start);
-    if (end && end.getFullYear() === year && end.getMonth() + 1 === month && candidate > end) return null;
-    return candidate;
+    const shifted = shiftToBusinessDay(candidate, 1) || candidate;
+    if (end && shifted > end) return null;
+    return shifted;
 }
 function dueInMonth(entity, y, m) { return !!getExecutionDateForMonth(entity, y, m); }
+function personEtaDelaysFromTransfer(transfer) {
+    const observations = Array.isArray(transfer?.arrivalObservations) ? transfer.arrivalObservations : [];
+    const delays = observations
+        .map((row) => {
+            if (!row) return null;
+            const scheduled = parseDate(row.scheduledDate || row.sollDate || '');
+            const arrived = parseDate(row.arrivalDate || row.istDate || row.date || '');
+            if (!scheduled || !arrived) return null;
+            const diffDays = Math.round((arrived - scheduled) / 86400000);
+            if (!Number.isFinite(diffDays)) return null;
+            return Math.max(0, diffDays);
+        })
+        .filter((value) => Number.isFinite(value));
+    return delays;
+}
+function personEtaModel(transfer) {
+    const delays = personEtaDelaysFromTransfer(transfer);
+    if (delays.length >= 3) {
+        const avg = roundMoney(delays.reduce((sum, value) => sum + value, 0) / delays.length);
+        return { historyCount: delays.length, delayDays: Math.max(0, Math.round(avg)), learned: true };
+    }
+    const fallbackDelay = Math.max(0, Math.round(toNum(transfer?.personEtaDelayDays, 1)));
+    const fallbackHistory = parseInt(transfer?.personEtaHistoryCount, 10) || 0;
+    if (fallbackHistory >= 3) {
+        return { historyCount: fallbackHistory, delayDays: fallbackDelay, learned: true };
+    }
+    return { historyCount: delays.length || fallbackHistory, delayDays: 1, learned: false };
+}
+function transferExecutionDateForForecast(transfer, year, month) {
+    const planned = getExecutionDateForMonth(transfer, year, month);
+    if (!planned) return null;
+    const source = ACCOUNTS[transfer?.sourceAccountId] || null;
+    if (!isPersonAccount(source)) return planned;
+    const eta = personEtaModel(transfer);
+    const shifted = dateShiftDays(planned, eta.delayDays);
+    return shiftToBusinessDay(shifted || planned, 1) || planned;
+}
 function forEachExecutionInRange(entity, fromDate, toDate, callback) {
     const from = parseDate(fromDate);
     const to = parseDate(toDate);
@@ -1060,6 +1233,44 @@ function buildSetup(quality, alerts, imbalances) {
         { key: 'forecast', title: 'Kontostandsprognose', ok: !alarms.length && invalid === 0, text: invalid ? `${invalid} fehlerhafte Einträge` : alarms.length ? `${alarms.length} Alarm(e)` : 'Aktuell stabil' }
     ];
 }
+function preferredOwnSourceAccount(targetId) {
+    const ownSources = Object.values(ACCOUNTS)
+        .filter((account) => account.id !== targetId)
+        .filter((account) => canBeSourceAccount(account) && !isPersonAccount(account))
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    return ownSources[0] || null;
+}
+function activeOwnMonthlyTransfer(targetId) {
+    const today = referenceDayStart();
+    const active = Object.values(TRANSFERS)
+        .filter((transfer) => transfer.targetAccountId === targetId)
+        .filter((transfer) => String(transfer.intervalType || '') === 'monthly')
+        .filter((transfer) => canBeSourceAccount(ACCOUNTS[transfer.sourceAccountId]) && !isPersonAccount(ACCOUNTS[transfer.sourceAccountId]))
+        .filter((transfer) => {
+            const from = parseDate(transfer.validFrom);
+            const to = parseDate(transfer.validTo);
+            if (!from) return false;
+            if (from > today) return false;
+            if (to && to < today) return false;
+            return true;
+        })
+        .sort((a, b) => toNum(b.amount, 0) - toNum(a.amount, 0));
+    return active[0] || null;
+}
+function buildDeviationWarnings(suggestionList = []) {
+    return suggestionList
+        .filter((entry) => !!entry?.deviationWarning)
+        .map((entry) => ({
+            targetId: entry.targetId,
+            targetName: entry.targetName,
+            currentMonthlyAmount: roundMoney(toNum(entry.currentMonthlyAmount, 0)),
+            recommendedMonthlyAmount: roundMoney(toNum(entry.recommendedMonthlyAmount, 0)),
+            effectiveFrom: entry.effectiveFrom || '',
+            criticalDate: entry.criticalDate || '',
+            criticalMinDayDelta: roundMoney(toNum(entry.criticalMinDayDelta, 0)),
+            text: `${entry.targetName}: Tageslogik-Lücke ${formatSignedCurrency(toNum(entry.criticalMinDayDelta, 0))}${entry.criticalDate ? ` am ${formatDate(entry.criticalDate)}` : ''}. Dauerauftrag ${formatCurrency(entry.currentMonthlyAmount)} → empfohlen ${formatCurrency(entry.recommendedMonthlyAmount)} ab ${formatDate(entry.effectiveFrom)}`
+        }));
+}
 function suggestions(timelineInput = null) {
     const timeline = timelineInput || FORECAST.timeline || [];
     if (!timeline.length) return [];
@@ -1067,56 +1278,61 @@ function suggestions(timelineInput = null) {
         .filter((account) => canBeTargetAccount(account) && !isPersonAccount(account))
         .map((target) => {
             const rows = timeline.map((bucket) => ({ ...bucket.accounts[target.id], key: bucket.key, label: bucket.label })).filter(Boolean);
-            const deficits = rows.map((row) => roundMoney(Math.max(0, toNum(row.minBuffer, 0) - toNum(row.end, 0))));
+            const deficits = rows.map((row) => roundMoney(Math.max(0, -toNum(row.minDayDelta, toNum(row.delta, 0)))));
             const firstBadIdx = deficits.findIndex((value) => value > 0.009);
             if (firstBadIdx < 0) return null;
             const deficitMonths = deficits.filter((value) => value > 0.009).length;
-            const monthlyNeed = deficitMonths >= 2 ? roundMoney(deficits.reduce((maxNeed, value, idx) => Math.max(maxNeed, value / (idx + 1)), 0)) : 0;
-            const onceNeed = roundMoney(Math.max(0, deficits[firstBadIdx] - (monthlyNeed * (firstBadIdx + 1))));
-            const caps = Object.values(ACCOUNTS)
-                .filter((source) => source.id !== target.id && canBeSourceAccount(source))
-                .map((source) => {
-                    const sourceRows = timeline.map((bucket) => bucket.accounts[source.id]).filter(Boolean);
-                    if (!sourceRows.length) return null;
-                    const futureRows = sourceRows.slice(firstBadIdx);
-                    const onceCap = futureRows.length ? roundMoney(Math.max(0, Math.min(...futureRows.map((row) => freeMargin(source, row))))) : 0;
-                    const monthlyCapRaw = sourceRows.reduce((minCap, row, idx) => Math.min(minCap, Math.max(0, freeMargin(source, row)) / (idx + 1)), Infinity);
-                    const monthlyCap = Number.isFinite(monthlyCapRaw) ? roundMoney(Math.max(0, monthlyCapRaw)) : 0;
-                    return { sourceId: source.id, sourceName: source.name, onceCap, monthlyCap };
-                })
-                .filter(Boolean)
-                .sort((a, b) => Math.max(b.onceCap, b.monthlyCap) - Math.max(a.onceCap, a.monthlyCap));
-
-            const take = (need, field) => {
-                let remaining = roundMoney(need);
-                return caps.map((cap) => {
-                    if (remaining <= 0) return null;
-                    const available = roundMoney(cap[field]);
-                    if (available <= 0) return null;
-                    const used = roundMoney(Math.min(available, remaining));
-                    remaining = roundMoney(remaining - used);
-                    return { sourceId: cap.sourceId, sourceName: cap.sourceName, amount: used };
-                }).filter(Boolean);
-            };
-
-            const monthlyAllocations = monthlyNeed > 0 ? take(monthlyNeed, 'monthlyCap') : [];
-            const onceAllocations = onceNeed > 0 ? take(onceNeed, 'onceCap') : [];
+            const monthlyNeed = deficitMonths >= 2 ? roundMoney(Math.max(...deficits)) : 0;
+            const onceNeed = roundMoney(Math.max(0, deficits[firstBadIdx] - monthlyNeed));
+            const baseTransfer = activeOwnMonthlyTransfer(target.id);
+            const fallbackSource = preferredOwnSourceAccount(target.id);
+            const sourceAccount = baseTransfer ? ACCOUNTS[baseTransfer.sourceAccountId] : fallbackSource;
+            const sourceId = sourceAccount?.id || '';
+            const sourceName = sourceAccount?.name || '-';
+            const currentMonthlyAmount = baseTransfer ? roundMoney(toNum(baseTransfer.amount, 0)) : 0;
+            const recommendedMonthlyAmount = roundMoney(currentMonthlyAmount + monthlyNeed);
+            const criticalKey = rows[firstBadIdx]?.key || currentMonthKey();
+            const preferredDay = parseInt(baseTransfer?.dayOfMonth, 10) || 1;
+            let monthlyStart = monthKeyFirstBusinessDay(criticalKey, preferredDay);
+            if (baseTransfer) {
+                const baseFrom = parseDate(baseTransfer.validFrom);
+                const currentStart = parseDate(monthlyStart);
+                if (baseFrom && currentStart && currentStart <= baseFrom) {
+                    const nextMonthDate = new Date(currentStart.getFullYear(), currentStart.getMonth() + 1, 1);
+                    monthlyStart = monthKeyFirstBusinessDay(monthKey(nextMonthDate.getFullYear(), nextMonthDate.getMonth() + 1), preferredDay);
+                }
+            }
+            const onceDate = monthKeyFirstBusinessDay(criticalKey, 1);
+            const monthlyAllocations = monthlyNeed > 0 && sourceId ? [{ sourceId, sourceName, amount: monthlyNeed, transferId: baseTransfer?.id || '' }] : [];
+            const onceAllocations = onceNeed > 0 && sourceId ? [{ sourceId, sourceName, amount: onceNeed }] : [];
             const monthlyCovered = roundMoney(monthlyAllocations.reduce((sum, row) => sum + toNum(row.amount, 0), 0));
             const onceCovered = roundMoney(onceAllocations.reduce((sum, row) => sum + toNum(row.amount, 0), 0));
             const reason = deficitMonths >= 2 ? 'strukturelles Defizit' : 'einmalige Spitze';
+            const deviationWarning = monthlyNeed > 0.009 && Math.abs(recommendedMonthlyAmount - currentMonthlyAmount) > 0.009;
             return {
-                id: `${target.id}__${rows[firstBadIdx]?.key || 'x'}`,
+                id: `${target.id}__${criticalKey}`,
                 targetId: target.id,
                 targetName: target.name,
-                criticalMonth: rows[firstBadIdx]?.key || currentMonthKey(),
+                criticalMonth: criticalKey,
                 criticalLabel: rows[firstBadIdx]?.label || '-',
+                criticalDate: rows[firstBadIdx]?.criticalDate || '',
+                criticalMinDayDelta: roundMoney(toNum(rows[firstBadIdx]?.minDayDelta, toNum(rows[firstBadIdx]?.delta, 0))),
                 reason,
                 monthlyNeed,
                 onceNeed,
+                preferredSourceId: sourceId,
+                preferredSourceName: sourceName,
+                recommendedTransferId: baseTransfer?.id || '',
+                currentMonthlyAmount,
+                recommendedMonthlyAmount,
+                effectiveFrom: monthlyStart,
+                onceDate,
                 monthlyAllocations,
                 onceAllocations,
                 monthlyCovered,
                 onceCovered,
+                deviationWarning,
+                conservativeMode: true,
                 fullyCovered: monthlyCovered + onceCovered >= monthlyNeed + onceNeed - 0.01,
                 shortfall: roundMoney(Math.max(0, monthlyNeed + onceNeed - monthlyCovered - onceCovered))
             };
@@ -1140,77 +1356,115 @@ function buildForecast(horizon = 12) {
     let year = startMonth.getFullYear();
     let month = startMonth.getMonth() + 1;
     const timeline = [];
+    const carryEvents = {};
+    const endMonthDate = new Date(startMonth.getFullYear(), startMonth.getMonth() + horizon - 1, 1);
+    const endMonthKey = monthKey(endMonthDate.getFullYear(), endMonthDate.getMonth() + 1);
 
     for (let i = 0; i < horizon; i += 1) {
         const key = monthKey(year, month);
         const bucket = { key, label: monthLabel(key), accounts: {} };
-        const movement = {};
-        accounts.forEach((account) => { movement[account.id] = { in: 0, out: 0, entries: [] }; });
+        const monthEvents = Array.isArray(carryEvents[key]) ? [...carryEvents[key]] : [];
+        delete carryEvents[key];
+        const routeEvent = (event) => {
+            const eventDate = parseDate(event?.date);
+            if (!eventDate || !event?.accountId) return;
+            const eventKey = monthKey(eventDate.getFullYear(), eventDate.getMonth() + 1);
+            if (eventKey !== key) {
+                if (compareMonthKey(eventKey, key) >= 0 && compareMonthKey(eventKey, endMonthKey) <= 0) {
+                    if (!Array.isArray(carryEvents[eventKey])) carryEvents[eventKey] = [];
+                    carryEvents[eventKey].push(event);
+                }
+                return;
+            }
+            monthEvents.push(event);
+        };
 
         Object.values(TRANSFERS).forEach((transfer) => {
-            const exec = getExecutionDateForMonth(transfer, year, month);
+            const exec = transferExecutionDateForForecast(transfer, year, month);
             const amount = toNum(transfer?.amount, 0);
             if (!exec || amount <= 0) return;
-            if (movement[transfer.sourceAccountId]) {
-                movement[transfer.sourceAccountId].out += amount;
-                movement[transfer.sourceAccountId].entries.push({ type: 'transfer-out', date: isoDate(exec), label: `Transfer an ${ACCOUNTS[transfer.targetAccountId]?.name || '-'}`, amount: -amount, note: transfer.note || '' });
-            }
-            if (movement[transfer.targetAccountId]) {
-                movement[transfer.targetAccountId].in += amount;
-                movement[transfer.targetAccountId].entries.push({ type: 'transfer-in', date: isoDate(exec), label: `Transfer von ${ACCOUNTS[transfer.sourceAccountId]?.name || '-'}`, amount, note: transfer.note || '' });
-            }
+            routeEvent({ type: 'transfer-out', date: isoDate(exec), accountId: transfer.sourceAccountId, amount: -amount, priority: 10, label: `Transfer an ${ACCOUNTS[transfer.targetAccountId]?.name || '-'}`, note: transfer.note || '' });
+            routeEvent({ type: 'transfer-in', date: isoDate(exec), accountId: transfer.targetAccountId, amount, priority: 20, label: `Transfer von ${ACCOUNTS[transfer.sourceAccountId]?.name || '-'}`, note: transfer.note || '' });
         });
 
         Object.values(ITEMS).forEach((item) => {
             const exec = getExecutionDateForMonth(item, year, month);
             const amount = toNum(item?.amount, 0);
-            if (!exec || amount <= 0 || !movement[item.accountId]) return;
+            if (!exec || amount <= 0 || !item.accountId) return;
             const signed = item.typ === 'gutschrift' ? amount : -amount;
-            if (signed >= 0) movement[item.accountId].in += signed; else movement[item.accountId].out += Math.abs(signed);
-            movement[item.accountId].entries.push({ type: 'item', date: isoDate(exec), label: item.title || '-', amount: signed, note: item.notes || '' });
+            routeEvent({ type: 'item', date: isoDate(exec), accountId: item.accountId, amount: signed, priority: signed >= 0 ? 20 : 10, label: item.title || '-', note: item.notes || '' });
             (Array.isArray(item.contributions) ? item.contributions : []).forEach((contrib) => {
                 const intervalType = contrib.intervalType === 'inherit' ? item.intervalType : (contrib.intervalType || item.intervalType || 'monthly');
                 const execContrib = getExecutionDateForMonth({ intervalType, startMonth: contrib.startMonth || item.startMonth, customMonths: contrib.customMonths || [], dayOfMonth: contrib.dayOfMonth || item.dayOfMonth, validFrom: contrib.validFrom || item.validFrom, validTo: contrib.validTo || item.validTo }, year, month);
                 const cAmount = toNum(contrib?.amount, 0);
                 if (!execContrib || cAmount <= 0) return;
-                movement[item.accountId].in += cAmount;
-                movement[item.accountId].entries.push({ type: 'contrib-in', date: isoDate(execContrib), label: `Beitrag ${ACCOUNTS[contrib.sourceAccountId]?.name || '-'}`, amount: cAmount, note: contrib.note || '' });
-                if (movement[contrib.sourceAccountId]) {
-                    movement[contrib.sourceAccountId].out += cAmount;
-                    movement[contrib.sourceAccountId].entries.push({ type: 'contrib-out', date: isoDate(execContrib), label: `Beitrag für ${item.title || '-'}`, amount: -cAmount, note: contrib.note || '' });
-                }
+                routeEvent({ type: 'contrib-in', date: isoDate(execContrib), accountId: item.accountId, amount: cAmount, priority: 20, label: `Beitrag ${ACCOUNTS[contrib.sourceAccountId]?.name || '-'}`, note: contrib.note || '' });
+                routeEvent({ type: 'contrib-out', date: isoDate(execContrib), accountId: contrib.sourceAccountId, amount: -cAmount, priority: 10, label: `Beitrag für ${item.title || '-'}`, note: contrib.note || '' });
             });
         });
 
         Object.values(RECON).forEach((entry) => {
-            if (entry?.type !== 'manual' || !entry?.accountId || !entry?.date) return;
+            if (!entry?.accountId || !entry?.date) return;
             const date = parseDate(entry.date);
-            if (!date || date.getFullYear() !== year || date.getMonth() + 1 !== month || !movement[entry.accountId]) return;
-            const value = toNum(entry.value, 0);
-            if (value >= 0) movement[entry.accountId].in += value; else movement[entry.accountId].out += Math.abs(value);
-            movement[entry.accountId].entries.push({ type: 'manual', date: entry.date, label: 'Manuelle Korrektur', amount: value, note: entry.note || '' });
+            if (!date || date.getFullYear() !== year || date.getMonth() + 1 !== month) return;
+            if (entry.type === 'manual') {
+                const value = toNum(entry.value, 0);
+                routeEvent({ type: 'manual', date: entry.date, accountId: entry.accountId, amount: value, priority: value >= 0 ? 20 : 10, label: 'Manuelle Korrektur', note: entry.note || '' });
+            }
         });
 
         accounts.forEach((account) => {
-            const start = roundMoney(balances[account.id]);
-            const inflow = roundMoney(movement[account.id]?.in || 0);
-            const outflow = roundMoney(movement[account.id]?.out || 0);
-            let end = roundMoney(start + inflow - outflow);
             const snapshot = monthSnapshots[`${account.id}__${key}`];
-            if (snapshot && accountUsesBuffer(account)) {
-                end = roundMoney(snapshot.value);
-                movement[account.id].entries.push({ type: 'snapshot', date: snapshot.date, label: 'Snapshot', amount: end, note: snapshot.note || '' });
-            }
-            balances[account.id] = end;
+            if (!snapshot || !accountUsesBuffer(account)) return;
+            routeEvent({ type: 'snapshot', date: snapshot.date, accountId: account.id, mode: 'set', value: roundMoney(toNum(snapshot.value, 0)), priority: 99, label: 'Snapshot', note: snapshot.note || '' });
+        });
+
+        monthEvents.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || (toNum(a.priority, 50) - toNum(b.priority, 50)) || String(a.label || '').localeCompare(String(b.label || '')) || String(a.accountId || '').localeCompare(String(b.accountId || '')));
+
+        const accountState = {};
+        accounts.forEach((account) => {
+            const start = roundMoney(toNum(balances[account.id], 0));
             const minBuffer = accountMinBuffer(account);
+            accountState[account.id] = { start, end: start, in: 0, out: 0, entries: [], minBuffer, minDayDelta: roundMoney(start - minBuffer), criticalDate: `${key}-01` };
+        });
+
+        monthEvents.forEach((event) => {
+            const state = accountState[event.accountId];
+            if (!state) return;
+            if (event.mode === 'set') {
+                state.end = roundMoney(toNum(event.value, state.end));
+            } else {
+                const amount = roundMoney(toNum(event.amount, 0));
+                state.end = roundMoney(state.end + amount);
+                if (amount >= 0) state.in = roundMoney(state.in + amount);
+                else state.out = roundMoney(state.out + Math.abs(amount));
+            }
+            const dayDelta = roundMoney(state.end - state.minBuffer);
+            if (dayDelta < state.minDayDelta) {
+                state.minDayDelta = dayDelta;
+                state.criticalDate = event.date;
+            }
+            const entryAmount = event.mode === 'set' ? state.end : roundMoney(toNum(event.amount, 0));
+            state.entries.push({ type: event.type, date: event.date, label: event.label || '-', amount: entryAmount, note: event.note || '', postBalance: state.end });
+        });
+
+        accounts.forEach((account) => {
+            const state = accountState[account.id] || { start: roundMoney(balances[account.id]), in: 0, out: 0, end: roundMoney(balances[account.id]), minBuffer: accountMinBuffer(account), minDayDelta: roundMoney(roundMoney(balances[account.id]) - accountMinBuffer(account)), criticalDate: `${key}-01`, entries: [] };
+            const start = roundMoney(state.start);
+            const inflow = roundMoney(state.in);
+            const outflow = roundMoney(state.out);
+            const end = roundMoney(state.end);
+            balances[account.id] = end;
+            const minBuffer = state.minBuffer;
             const delta = roundMoney(end - minBuffer);
+            const minDayDelta = roundMoney(state.minDayDelta);
             const relevantTarget = isRelevantTargetAccount(account);
             let severity = 'ok';
-            if (relevantTarget && delta < -0.009) severity = 'alarm';
-            else if (relevantTarget && minBuffer > 0 && delta < Math.max(25, minBuffer * 0.1)) severity = 'warn';
-            if (severity !== 'ok' && relevantTarget) alerts.push({ severity, accountId: account.id, accountName: account.name, monthKey: key, endBalance: end, minBuffer, delta });
-            details[`${account.id}__${key}`] = { start, inflow, outflow, end, minBuffer, delta, severity, entries: (movement[account.id]?.entries || []).sort((a, b) => String(a.date).localeCompare(String(b.date))) };
-            bucket.accounts[account.id] = { start, inflow, outflow, end, minBuffer, delta, severity };
+            if (relevantTarget && minDayDelta < -0.009) severity = 'alarm';
+            else if (relevantTarget && minBuffer > 0 && minDayDelta > 0.009 && minDayDelta < Math.max(25, minBuffer * 0.1)) severity = 'warn';
+            if (severity !== 'ok' && relevantTarget) alerts.push({ severity, accountId: account.id, accountName: account.name, monthKey: key, endBalance: end, minBuffer, delta, minDayDelta, criticalDate: state.criticalDate });
+            details[`${account.id}__${key}`] = { start, inflow, outflow, end, minBuffer, delta, minDayDelta, criticalDate: state.criticalDate, severity, entries: state.entries };
+            bucket.accounts[account.id] = { start, inflow, outflow, end, minBuffer, delta, minDayDelta, criticalDate: state.criticalDate, severity };
         });
 
         timeline.push(bucket);
@@ -1220,7 +1474,8 @@ function buildForecast(horizon = 12) {
 
     const quality = buildQuality(alerts);
     const imbalances = buildContributionImbalances();
-    return { timeline, alerts, details, quality, setup: buildSetup(quality, alerts, imbalances), suggestions: suggestions(timeline), imbalances };
+    const suggestionList = suggestions(timeline);
+    return { timeline, alerts, details, quality, setup: buildSetup(quality, alerts, imbalances), suggestions: suggestionList, imbalances, deviationWarnings: buildDeviationWarnings(suggestionList) };
 }
 function openDetail(title, html) { const t = el('ab2-detail-title'); const c = el('ab2-detail-content'); if (t) t.textContent = title; if (c) c.innerHTML = html; openModal('ab2-detail-modal'); }
 function renderTags() {
@@ -1294,7 +1549,7 @@ function matchItemToken(item, token) {
     if (numeric) {
         const account = ACCOUNTS[item.accountId] || {};
         const row = FORECAST.timeline[0]?.accounts[item.accountId] || {};
-        const actual = numeric[1] === 'betrag' ? toNum(item.amount, 0) : numeric[1] === 'puffer' ? accountMinBuffer(account) : toNum(row.delta, 0);
+        const actual = numeric[1] === 'betrag' ? toNum(item.amount, 0) : numeric[1] === 'puffer' ? accountMinBuffer(account) : toNum(row.minDayDelta, toNum(row.delta, 0));
         return compareNumber(actual, numeric[2], toNum(numeric[3], 0));
     }
     const structured = value.match(/^([^:]+):(.+)$/);
@@ -1359,6 +1614,7 @@ function populateSelects() {
 }
 function renderDashboard() {
     const items = Object.values(ITEMS);
+    const hasTargets = Object.values(ACCOUNTS).some((account) => isRelevantTargetAccount(account));
     const imbalanceWarn = (FORECAST.imbalances || []).filter((entry) => entry.severity === 'warn').length;
     const imbalanceAlarm = (FORECAST.imbalances || []).filter((entry) => entry.severity === 'alarm').length;
     const counts = {
@@ -1367,7 +1623,7 @@ function renderDashboard() {
         planned: items.filter((item) => itemStatus(item).key === 'geplant').length,
         past: items.filter((item) => itemStatus(item).key === 'vergangen').length,
         errors: items.filter((item) => itemStatus(item).key === 'fehler').length,
-        warnings: FORECAST.alerts.filter((alert) => alert.severity === 'warn').length + imbalanceWarn,
+        warnings: FORECAST.alerts.filter((alert) => alert.severity === 'warn').length + imbalanceWarn + (FORECAST.deviationWarnings || []).length,
         alarms: FORECAST.alerts.filter((alert) => alert.severity === 'alarm').length + imbalanceAlarm
     };
     const simInput = el('ab2-simulation-datum');
@@ -1407,9 +1663,20 @@ function renderDashboard() {
     const notes = FORECAST.quality
         .filter((entry) => entry.status !== 'ok' && isRelevantTargetAccount(ACCOUNTS[entry.accountId]))
         .map((entry) => `${ACCOUNTS[entry.accountId]?.name || '-'}: ${entry.text}`);
+    const deviationNotes = (FORECAST.deviationWarnings || []).map((entry) => entry.text);
+    const dailyAlertNotes = (FORECAST.alerts || [])
+        .slice()
+        .sort((a, b) => String(a.monthKey || '').localeCompare(String(b.monthKey || '')) || String(a.accountName || '').localeCompare(String(b.accountName || '')))
+        .slice(0, 4)
+        .map((alert) => `${alert.accountName || '-'}: Min Tages-Δ ${formatSignedCurrency(alert.minDayDelta)}${alert.criticalDate ? ` am ${formatDate(alert.criticalDate)}` : ''}`);
     if (quality) {
-        quality.innerHTML = notes.length ? `<strong>Datenqualität beachten:</strong> ${escapeHtml(notes.join(' · '))}` : '';
-        quality.classList.toggle('hidden', !notes.length);
+        const qualityText = notes.length ? `<strong>Datenqualität beachten:</strong> ${escapeHtml(notes.join(' · '))}` : '';
+        const deviationText = deviationNotes.length ? `<div class="mt-1"><strong>Dauerauftrag-Abweichung:</strong> ${escapeHtml(deviationNotes.join(' · '))}</div>` : '';
+        const dailyText = hasTargets
+            ? `<div class="mt-1"><strong>Tageslogik (Abbuchung vor Eingang):</strong> ${escapeHtml(dailyAlertNotes.length ? dailyAlertNotes.join(' · ') : 'Keine Lücke unter Mindestpuffer in der 12-Monats-Prognose.')}</div>`
+            : '';
+        quality.innerHTML = `${qualityText}${deviationText}${dailyText}`;
+        quality.classList.toggle('hidden', !notes.length && !deviationNotes.length && !hasTargets);
     }
     const imbalance = el('ab2-imbalance-banner');
     if (imbalance) {
@@ -1421,7 +1688,7 @@ function renderDashboard() {
     if (overview) overview.innerHTML = Object.values(ACCOUNTS).length ? Object.values(ACCOUNTS).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))).map((account) => {
         const row = FORECAST.timeline[0]?.accounts[account.id] || {};
         const q = qualityEntry(account.id);
-        return `<div class="rounded-lg border ${q?.status === 'alarm' ? 'border-red-200 bg-red-50' : q?.status === 'warn' ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-gray-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(isPersonAccount(account) ? 'Person / Quelle' : `${account.bank || 'Bankkonto'} · ${normalizeAccountRole(account)}`)}</div></div><span class="text-[10px] px-2 py-1 rounded-full ${q?.status === 'alarm' ? 'bg-red-100 text-red-700' : q?.status === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(q?.text || 'aktuell')}</span></div><div class="grid grid-cols-2 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Stand</div><div class="font-bold text-gray-800">${formatCurrency(row.end)}</div></div><div><div class="text-gray-500">Differenz</div><div class="font-bold ${toNum(row.delta, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${formatSignedCurrency(row.delta)}</div></div></div></div>`;
+        return `<div class="rounded-lg border ${q?.status === 'alarm' ? 'border-red-200 bg-red-50' : q?.status === 'warn' ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-gray-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-500">${escapeHtml(isPersonAccount(account) ? 'Person / Quelle' : `${account.bank || 'Bankkonto'} · ${normalizeAccountRole(account)}`)}</div></div><span class="text-[10px] px-2 py-1 rounded-full ${q?.status === 'alarm' ? 'bg-red-100 text-red-700' : q?.status === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(q?.text || 'aktuell')}</span></div><div class="grid grid-cols-2 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Stand</div><div class="font-bold text-gray-800">${formatCurrency(row.end)}</div></div><div><div class="text-gray-500">Min Tages-Δ</div><div class="font-bold ${toNum(row.minDayDelta, toNum(row.delta, 0)) < 0 ? 'text-red-700' : 'text-emerald-700'}">${formatSignedCurrency(toNum(row.minDayDelta, toNum(row.delta, 0)))}</div></div></div></div>`;
     }).join('') : '<p class="text-sm text-gray-400 italic">Noch keine Konten/Quellen.</p>';
     const forecast = el('ab2-forecast-overview');
     if (forecast) {
@@ -1444,7 +1711,7 @@ function renderDashboard() {
     const forecastState = el('ab2-forecast-state');
     if (forecastState) {
         forecastState.className = `inline-flex px-2 py-1 rounded-full text-[11px] font-bold ${forecastOk ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`;
-        forecastState.textContent = forecastOk ? 'ALLE OK' : `PRÜFEN: ${forecastSetup?.text || 'Auffälligkeiten'}`;
+        forecastState.textContent = forecastOk ? (hasTargets ? 'ALLE OK · keine Tageslücke' : 'ALLE OK') : `PRÜFEN: ${forecastSetup?.text || 'Auffälligkeiten'}`;
     }
     const defaultForecastExpanded = !forecastOk;
     const expandedForecast = forecastExpandedOverride === null ? defaultForecastExpanded : !!forecastExpandedOverride;
@@ -1495,7 +1762,7 @@ function renderAccounts() {
         const transferDiff = accountTransferBudgetDiff(account.id);
         const rowClass = editingAccountId === account.id ? 'bg-yellow-50' : 'bg-white';
         const controlButton = person ? `<button type="button" class="px-2 py-1 bg-violet-100 text-violet-700 rounded text-xs" data-account-control="${account.id}">Kontrolle</button>` : '';
-        return `<tr class="border-t border-slate-100 ${rowClass}"><td class="px-3 py-2 align-top"><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-[11px] text-gray-500">${escapeHtml(account.bank || (person ? 'Person' : 'Bankkonto'))}</div></td><td class="px-3 py-2 text-xs text-gray-600">${escapeHtml(person ? 'Person' : 'Bank')} · ${escapeHtml(normalizeAccountRole(account))}</td><td class="px-3 py-2 text-xs"><div class="font-bold ${toNum(row.delta, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">Forecast Δ ${formatSignedCurrency(row.delta)}</div><div class="mt-1 ${transferDiffCss(transferDiff)} font-bold">Transfer Δ ${formatSignedCurrency(transferDiff)}</div><div class="mt-1 ${quality?.status === 'alarm' ? 'text-red-700' : quality?.status === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">Snapshot: ${quality?.latest ? formatDate(quality.latest.date) : 'fehlt'}</div></td><td class="px-3 py-2 text-xs text-gray-600">${itemCount} Einträge · ${transferCount} Transfers</td><td class="px-3 py-2 text-right"><div class="flex gap-1 justify-end">${controlButton}<button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></td></tr>`;
+        return `<tr class="border-t border-slate-100 ${rowClass}"><td class="px-3 py-2 align-top"><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-[11px] text-gray-500">${escapeHtml(account.bank || (person ? 'Person' : 'Bankkonto'))}</div></td><td class="px-3 py-2 text-xs text-gray-600">${escapeHtml(person ? 'Person' : 'Bank')} · ${escapeHtml(normalizeAccountRole(account))}</td><td class="px-3 py-2 text-xs"><div class="font-bold ${toNum(row.minDayDelta, toNum(row.delta, 0)) < 0 ? 'text-red-700' : 'text-emerald-700'}">Min Tages-Δ ${formatSignedCurrency(toNum(row.minDayDelta, toNum(row.delta, 0)))}</div><div class="mt-1 ${transferDiffCss(transferDiff)} font-bold">Transfer Δ ${formatSignedCurrency(transferDiff)}</div><div class="mt-1 ${quality?.status === 'alarm' ? 'text-red-700' : quality?.status === 'warn' ? 'text-amber-700' : 'text-emerald-700'}">Snapshot: ${quality?.latest ? formatDate(quality.latest.date) : 'fehlt'}</div></td><td class="px-3 py-2 text-xs text-gray-600">${itemCount} Einträge · ${transferCount} Transfers</td><td class="px-3 py-2 text-right"><div class="flex gap-1 justify-end">${controlButton}<button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></td></tr>`;
     }).join('');
     host.innerHTML = `<div class="rounded-xl border border-slate-200 bg-white overflow-hidden"><div class="px-3 py-2 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center gap-2 text-xs"><span class="px-2 py-1 rounded-full bg-slate-200 text-slate-700 font-bold">Gesamt ${accounts.length}</span><span class="px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-bold">Bank ${bankCount}</span><span class="px-2 py-1 rounded-full bg-violet-100 text-violet-700 font-bold">Person ${personCount}</span></div><div class="overflow-x-auto max-h-[48vh]"><table class="ab2-simple-table min-w-[820px] text-sm"><thead class="bg-slate-100 text-slate-600"><tr><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Konto / Quelle</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Typ</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Status</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Nutzung</th><th class="px-3 py-2 text-right text-[11px] uppercase tracking-wide">Aktion</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
     setAccountSplitMode(accountSplitMode, false);
@@ -1544,7 +1811,17 @@ function renderRecon() {
 function suggestionCard(suggestion) {
     const monthly = suggestion.monthlyAllocations.map((row) => `${row.sourceName}: ${formatCurrency(row.amount)} / Monat`).join(' · ');
     const once = suggestion.onceAllocations.map((row) => `${row.sourceName}: ${formatCurrency(row.amount)} einmalig`).join(' · ');
-    return `<div class="rounded-xl border ${suggestion.fullyCovered ? 'border-indigo-200 bg-indigo-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-gray-800">${escapeHtml(suggestion.targetName)}</div><div class="text-xs text-gray-500">kritisch ab ${escapeHtml(suggestion.criticalLabel)} · ${escapeHtml(suggestion.reason)}</div></div><span class="px-2 py-1 rounded-full ${suggestion.fullyCovered ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'} text-xs font-bold">${suggestion.fullyCovered ? 'abgedeckt' : 'Teilabdeckung'}</span></div><div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Monatlich nötig</div><div class="font-bold text-gray-800">${formatCurrency(suggestion.monthlyNeed)}</div></div><div><div class="text-gray-500">Einmalig nötig</div><div class="font-bold text-gray-800">${formatCurrency(suggestion.onceNeed)}</div></div><div><div class="text-gray-500">Rest</div><div class="font-bold ${suggestion.shortfall > 0 ? 'text-amber-700' : 'text-emerald-700'}">${formatCurrency(suggestion.shortfall)}</div></div></div><div class="mt-2 text-xs text-gray-700">${monthly ? `<div><strong>Monatlich:</strong> ${escapeHtml(monthly)}</div>` : ''}${once ? `<div class="mt-1"><strong>Einmalig:</strong> ${escapeHtml(once)}</div>` : ''}${!monthly && !once ? '<div>Keine belastbare Quelle verfügbar. Bitte Snapshots und Einträge prüfen.</div>' : ''}</div><div class="mt-3 flex justify-end">${monthly || once ? `<button type="button" class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700" data-suggestion-id="${suggestion.id}">Vorschlag übernehmen</button>` : ''}</div></div>`;
+    const criticalHint = suggestion.criticalDate
+        ? `Kritischer Tag laut Tageslogik: ${formatDate(suggestion.criticalDate)} (Min Tages-Δ ${formatSignedCurrency(toNum(suggestion.criticalMinDayDelta, 0))}).`
+        : '';
+    const ownPlanLine = suggestion.monthlyNeed > 0.009
+        ? `Dauerauftrag ${formatCurrency(suggestion.currentMonthlyAmount)} → ${formatCurrency(suggestion.recommendedMonthlyAmount)} ab ${formatDate(suggestion.effectiveFrom)}.`
+        : 'Kein Dauerauftragswechsel nötig.';
+    const deviationHint = suggestion.deviationWarning ? `<div class="mt-1 text-amber-800"><strong>Warnung:</strong> Aktuell eingestellter Dauerauftrag weicht von Empfehlung ab.</div>` : '';
+    const onceHint = suggestion.onceNeed > 0.009
+        ? `<div class="mt-1"><strong>Einmalüberweisung frühzeitig:</strong> ${formatCurrency(suggestion.onceNeed)} am ${formatDate(suggestion.onceDate)} (danach als eingegangen bestätigen oder Snapshot setzen).</div>`
+        : '';
+    return `<div class="rounded-xl border ${suggestion.fullyCovered ? 'border-indigo-200 bg-indigo-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-gray-800">${escapeHtml(suggestion.targetName)}</div><div class="text-xs text-gray-500">kritisch ab ${escapeHtml(suggestion.criticalLabel)} · ${escapeHtml(suggestion.reason)} · konservatives Tagesmodell</div></div><span class="px-2 py-1 rounded-full ${suggestion.fullyCovered ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'} text-xs font-bold">${suggestion.fullyCovered ? 'abgedeckt' : 'Teilabdeckung'}</span></div><div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Monatlich nötig</div><div class="font-bold text-gray-800">${formatCurrency(suggestion.monthlyNeed)}</div></div><div><div class="text-gray-500">Einmalig nötig</div><div class="font-bold text-gray-800">${formatCurrency(suggestion.onceNeed)}</div></div><div><div class="text-gray-500">Rest</div><div class="font-bold ${suggestion.shortfall > 0 ? 'text-amber-700' : 'text-emerald-700'}">${formatCurrency(suggestion.shortfall)}</div></div></div><div class="mt-2 text-xs text-gray-700">${criticalHint ? `<div><strong>Tageswarnung:</strong> ${escapeHtml(criticalHint)}</div>` : ''}<div class="${criticalHint ? 'mt-1' : ''}"><strong>Empfehlung:</strong> ${escapeHtml(ownPlanLine)}</div>${monthly ? `<div class="mt-1"><strong>Monatlicher Zuschlag:</strong> ${escapeHtml(monthly)}</div>` : ''}${once ? `<div class="mt-1"><strong>Einmalig:</strong> ${escapeHtml(once)}</div>` : ''}${onceHint}${deviationHint}${!monthly && !once ? '<div>Keine belastbare eigene Quelle verfügbar. Bitte eigenes Quellkonto oder Dauerauftrag prüfen.</div>' : ''}</div><div class="mt-3 flex justify-end">${monthly || once ? `<button type="button" class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700" data-suggestion-id="${suggestion.id}">Vorschlag übernehmen</button>` : ''}</div></div>`;
 }
 function renderSuggestionsModal() {
     const list = FORECAST.suggestions || [];
@@ -1818,8 +2095,29 @@ async function saveItem() {
     const payload = { title, accountId, typ: el('ab2-item-type')?.value || 'belastung', amount, intervalType, startMonth: intervalType === 'monthly' || intervalType === 'custom' || intervalType === 'once' ? null : (parseInt(el('ab2-item-start-month')?.value, 10) || null), customMonths, dayOfMonth: parseInt(el('ab2-item-day')?.value, 10) || 1, validFrom, validTo, notes: el('ab2-item-notes')?.value?.trim() || '', contributions: collectContribs(), createdBy: before?.createdBy || uid(), updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() };
     try {
         if (id) {
-            await updateDoc(doc(itemsRef, id), payload);
-            await writeAudit('update', 'cost_item', id, cloneClean(before), payload, { action: 'save_item' });
+            if (itemVersionRequiresSplit(before, payload)) {
+                const oldEndIso = previousDateIso(payload.validFrom);
+                if (!oldEndIso || parseDate(oldEndIso) < parseDate(before.validFrom)) {
+                    return alertUser('Bei Betrags-/Regeländerung bitte ein späteres "Gültig ab" setzen (Versionierung mit Abtausch).', 'error');
+                }
+                await updateDoc(doc(itemsRef, id), { validTo: oldEndIso, updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() });
+                const nextPayload = {
+                    ...payload,
+                    validFrom: payload.validFrom,
+                    validTo: payload.validTo || '',
+                    sourceItemId: before?.sourceItemId || before?.id || '',
+                    createdBy: before?.createdBy || uid(),
+                    createdByName: before?.createdByName || currentUser?.displayName || 'Unbekannt',
+                    createdAt: serverTimestamp(),
+                    updatedBy: currentUser?.displayName || 'Unbekannt',
+                    updatedAt: serverTimestamp()
+                };
+                const ref = await addDoc(itemsRef, nextPayload);
+                await writeAudit('abtausch', 'cost_item', id, cloneClean(before), { newItemId: ref.id, oldEndIso, validFrom: payload.validFrom }, { action: 'save_item_version_split' });
+            } else {
+                await updateDoc(doc(itemsRef, id), payload);
+                await writeAudit('update', 'cost_item', id, cloneClean(before), payload, { action: 'save_item' });
+            }
         } else {
             const createPayload = { ...payload, createdAt: serverTimestamp(), createdByName: currentUser?.displayName || 'Unbekannt' };
             const ref = await addDoc(itemsRef, createPayload);
@@ -1906,8 +2204,29 @@ async function saveTransfer() {
     const payload = { sourceAccountId, targetAccountId, amount, intervalType, startMonth: intervalType === 'monthly' || intervalType === 'custom' || intervalType === 'once' ? null : (parseInt(el('ab2-transfer-start-month')?.value, 10) || null), customMonths, dayOfMonth: parseInt(el('ab2-transfer-day')?.value, 10) || 1, validFrom, validTo, note: el('ab2-transfer-note')?.value?.trim() || '', linkedTitles, linkedTitleAllocations, createdBy: before?.createdBy || uid(), updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() };
     try {
         if (id) {
-            await updateDoc(doc(transfersRef, id), payload);
-            await writeAudit('update', 'transfer_plan', id, cloneClean(before), payload, { action: 'save_transfer' });
+            if (transferVersionRequiresSplit(before, payload)) {
+                const oldEndIso = previousDateIso(payload.validFrom);
+                if (!oldEndIso || parseDate(oldEndIso) < parseDate(before.validFrom)) {
+                    return alertUser('Bei Transfer-Änderungen bitte ein späteres "Gültig ab" setzen (Versionierung mit Abtausch).', 'error');
+                }
+                await updateDoc(doc(transfersRef, id), { validTo: oldEndIso, updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() });
+                const nextPayload = {
+                    ...payload,
+                    validFrom: payload.validFrom,
+                    validTo: payload.validTo || '',
+                    sourceTransferId: before?.sourceTransferId || before?.id || '',
+                    createdBy: before?.createdBy || uid(),
+                    createdByName: before?.createdByName || currentUser?.displayName || 'Unbekannt',
+                    createdAt: serverTimestamp(),
+                    updatedBy: currentUser?.displayName || 'Unbekannt',
+                    updatedAt: serverTimestamp()
+                };
+                const ref = await addDoc(transfersRef, nextPayload);
+                await writeAudit('abtausch', 'transfer_plan', id, cloneClean(before), { newTransferId: ref.id, oldEndIso, validFrom: payload.validFrom }, { action: 'save_transfer_version_split' });
+            } else {
+                await updateDoc(doc(transfersRef, id), payload);
+                await writeAudit('update', 'transfer_plan', id, cloneClean(before), payload, { action: 'save_transfer' });
+            }
         } else {
             const createPayload = { ...payload, createdAt: serverTimestamp(), createdByName: currentUser?.displayName || 'Unbekannt' };
             const ref = await addDoc(transfersRef, createPayload);
@@ -1967,18 +2286,48 @@ async function applySuggestion(btn) {
     const suggestion = (FORECAST.suggestions || []).find((entry) => entry.id === suggestionId);
     if (!suggestion) return;
     try {
-        const [year, month] = String(suggestion.criticalMonth || currentMonthKey()).split('-').map(Number);
-        for (const row of suggestion.monthlyAllocations) {
-            const linkedTitleAllocations = [{ titleKey: UNASSIGNED_TITLE_KEY, amount: roundMoney(row.amount) }];
-            const payload = { sourceAccountId: row.sourceId, targetAccountId: suggestion.targetId, amount: row.amount, intervalType: 'monthly', startMonth: null, customMonths: [], dayOfMonth: 1, validFrom: isoDate(new Date()), validTo: '', note: `Automatisch aus AB2-Vorschlag (${suggestion.reason})`, linkedTitles: [UNASSIGNED_TITLE_KEY], linkedTitleAllocations, createdBy: uid(), createdByName: currentUser?.displayName || 'Unbekannt', updatedBy: currentUser?.displayName || 'Unbekannt', createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
-            const ref = await addDoc(transfersRef, payload);
-            await writeAudit('create', 'transfer_plan', ref.id, null, payload, { action: 'apply_suggestion_monthly', suggestionId });
+        const sourceId = suggestion.preferredSourceId || suggestion.monthlyAllocations?.[0]?.sourceId || suggestion.onceAllocations?.[0]?.sourceId || '';
+        if (!sourceId) return alertUser('Kein eigenes Quellkonto für den Vorschlag gefunden.', 'error');
+        const effectiveFrom = suggestion.effectiveFrom || monthKeyFirstBusinessDay(suggestion.criticalMonth || currentMonthKey(), 1) || isoDate(new Date());
+        const onceDate = suggestion.onceDate || monthKeyFirstBusinessDay(suggestion.criticalMonth || currentMonthKey(), 1) || effectiveFrom;
+        if (suggestion.monthlyNeed > 0.009) {
+            const currentTransfer = suggestion.recommendedTransferId ? TRANSFERS[suggestion.recommendedTransferId] : null;
+            const targetValidTo = currentTransfer?.validTo || '';
+            const newAmount = roundMoney(toNum(suggestion.recommendedMonthlyAmount, toNum(currentTransfer?.amount, 0) + toNum(suggestion.monthlyNeed, 0)));
+            if (currentTransfer) {
+                const oldEndIso = previousDateIso(effectiveFrom);
+                if (!oldEndIso || parseDate(oldEndIso) < parseDate(currentTransfer.validFrom)) {
+                    return alertUser('Vorschlag kann nicht versioniert werden. Bitte "Gültig ab" für den Vorschlag später wählen.', 'error');
+                }
+                await updateDoc(doc(transfersRef, currentTransfer.id), { validTo: oldEndIso, updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() });
+                const linkedTitleAllocations = normalizeTransferLinkedAllocations(currentTransfer.linkedTitleAllocations || [{ titleKey: UNASSIGNED_TITLE_KEY, amount: newAmount }]);
+                const payload = {
+                    ...cloneClean(currentTransfer),
+                    amount: newAmount,
+                    validFrom: effectiveFrom,
+                    validTo: targetValidTo,
+                    sourceTransferId: currentTransfer.sourceTransferId || currentTransfer.id,
+                    linkedTitles: linkedTitleAllocations.map((row) => row.titleKey),
+                    linkedTitleAllocations,
+                    createdBy: currentTransfer.createdBy || uid(),
+                    createdByName: currentTransfer.createdByName || currentUser?.displayName || 'Unbekannt',
+                    updatedBy: currentUser?.displayName || 'Unbekannt',
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp(),
+                    note: `${currentTransfer.note ? `${currentTransfer.note} | ` : ''}AB2 Empfehlung ${formatDate(effectiveFrom)}`
+                };
+                const ref = await addDoc(transfersRef, payload);
+                await writeAudit('abtausch', 'transfer_plan', currentTransfer.id, cloneClean(currentTransfer), { newTransferId: ref.id, oldEndIso, newAmount, effectiveFrom }, { action: 'apply_suggestion_monthly_split', suggestionId });
+            } else {
+                const linkedTitleAllocations = [{ titleKey: UNASSIGNED_TITLE_KEY, amount: newAmount }];
+                const payload = { sourceAccountId: sourceId, targetAccountId: suggestion.targetId, amount: newAmount, intervalType: 'monthly', startMonth: null, customMonths: [], dayOfMonth: 1, validFrom: effectiveFrom, validTo: '', note: `Automatisch aus AB2-Vorschlag (${suggestion.reason})`, linkedTitles: [UNASSIGNED_TITLE_KEY], linkedTitleAllocations, createdBy: uid(), createdByName: currentUser?.displayName || 'Unbekannt', updatedBy: currentUser?.displayName || 'Unbekannt', createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+                const ref = await addDoc(transfersRef, payload);
+                await writeAudit('create', 'transfer_plan', ref.id, null, payload, { action: 'apply_suggestion_monthly_create', suggestionId });
+            }
         }
-        for (const row of suggestion.onceAllocations) {
-            const from = `${year}-${String(month).padStart(2, '0')}-01`;
-            const until = `${year}-${String(month).padStart(2, '0')}-${String(lastDayOfMonth(year, month)).padStart(2, '0')}`;
-            const linkedTitleAllocations = [{ titleKey: UNASSIGNED_TITLE_KEY, amount: roundMoney(row.amount) }];
-            const payload = { sourceAccountId: row.sourceId, targetAccountId: suggestion.targetId, amount: row.amount, intervalType: 'once', startMonth: null, customMonths: [], dayOfMonth: 1, validFrom: from, validTo: until, note: `Einmaliger AB2-Ausgleich (${suggestion.reason})`, linkedTitles: [UNASSIGNED_TITLE_KEY], linkedTitleAllocations, createdBy: uid(), createdByName: currentUser?.displayName || 'Unbekannt', updatedBy: currentUser?.displayName || 'Unbekannt', createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+        if (suggestion.onceNeed > 0.009) {
+            const linkedTitleAllocations = [{ titleKey: UNASSIGNED_TITLE_KEY, amount: roundMoney(suggestion.onceNeed) }];
+            const payload = { sourceAccountId: sourceId, targetAccountId: suggestion.targetId, amount: roundMoney(suggestion.onceNeed), intervalType: 'once', startMonth: null, customMonths: [], dayOfMonth: 1, validFrom: onceDate, validTo: onceDate, note: `Einmaliger AB2-Ausgleich (${suggestion.reason}) · nach Eingang per Snapshot bestätigen`, linkedTitles: [UNASSIGNED_TITLE_KEY], linkedTitleAllocations, createdBy: uid(), createdByName: currentUser?.displayName || 'Unbekannt', updatedBy: currentUser?.displayName || 'Unbekannt', createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
             const ref = await addDoc(transfersRef, payload);
             await writeAudit('create', 'transfer_plan', ref.id, null, payload, { action: 'apply_suggestion_once', suggestionId });
         }
@@ -2026,7 +2375,7 @@ function openStatInsight(statKey) {
     if (statKey === 'accounts') {
         html = Object.values(ACCOUNTS).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))).map((account) => {
             const row = FORECAST.timeline[0]?.accounts[account.id] || {};
-            return `<div class="rounded-lg border border-gray-200 p-3"><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-500 mt-1">Stand ${formatCurrency(row.end)} · Puffer ${formatCurrency(accountMinBuffer(account))} · Differenz ${formatSignedCurrency(row.delta)}</div></div>`;
+            return `<div class="rounded-lg border border-gray-200 p-3"><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-500 mt-1">Stand ${formatCurrency(row.end)} · Puffer ${formatCurrency(accountMinBuffer(account))} · Min Tages-Δ ${formatSignedCurrency(toNum(row.minDayDelta, toNum(row.delta, 0)))}${row.criticalDate ? ` · kritisch am ${formatDate(row.criticalDate)}` : ''}</div></div>`;
         }).join('') || html;
         return openDetail('Konten-Analyse', `<div class="space-y-2">${html}</div>`);
     }
@@ -2038,7 +2387,7 @@ function openStatInsight(statKey) {
         const severity = statKey === 'alarms' ? 'alarm' : 'warn';
         const forecastRows = FORECAST.alerts
             .filter((alert) => alert.severity === severity)
-            .map((alert) => `<div class="rounded-lg border ${severity === 'alarm' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="font-bold text-gray-800">${escapeHtml(alert.accountName || '-')}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(monthLabel(alert.monthKey))} · Endstand ${formatCurrency(alert.endBalance)} · Puffer ${formatCurrency(alert.minBuffer)} · Differenz ${formatSignedCurrency(alert.delta)}</div></div>`)
+            .map((alert) => `<div class="rounded-lg border ${severity === 'alarm' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="font-bold text-gray-800">${escapeHtml(alert.accountName || '-')}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(monthLabel(alert.monthKey))} · Endstand ${formatCurrency(alert.endBalance)} · Puffer ${formatCurrency(alert.minBuffer)} · Min Tages-Δ ${formatSignedCurrency(alert.minDayDelta)}${alert.criticalDate ? ` · kritisch am ${formatDate(alert.criticalDate)}` : ''}</div><div class="text-xs mt-1 ${severity === 'alarm' ? 'text-red-800' : 'text-amber-800'}">Tageslogik-Hinweis: Am kritischen Tag wird zuerst die Abbuchung gerechnet. ${severity === 'alarm' ? 'Empfehlung: Dauerauftrag erhöhen oder Einmalüberweisung vor diesem Tag einplanen.' : 'Puffer ist knapp: kleinen Zuschlag prüfen oder Verlauf eng beobachten.'}</div></div>`)
             .join('');
         const imbalanceRows = (FORECAST.imbalances || [])
             .filter((entry) => entry.severity === severity)
@@ -2070,7 +2419,7 @@ function openSetupInsight(setupKey) {
     if (setupKey === 'target_accounts') {
         const html = targets.map((account) => {
             const row = FORECAST.timeline[0]?.accounts[account.id] || {};
-            return `<div class="rounded-lg border border-gray-200 p-3"><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-600 mt-1">Puffer ${formatCurrency(accountMinBuffer(account))} · Aktueller Stand ${formatCurrency(row.end)} · Δ ${formatSignedCurrency(row.delta)}</div></div>`;
+            return `<div class="rounded-lg border border-gray-200 p-3"><div class="font-bold text-gray-800">${escapeHtml(account.name || '-')}</div><div class="text-xs text-gray-600 mt-1">Puffer ${formatCurrency(accountMinBuffer(account))} · Aktueller Stand ${formatCurrency(row.end)} · Min Tages-Δ ${formatSignedCurrency(toNum(row.minDayDelta, toNum(row.delta, 0)))}</div></div>`;
         }).join('') || '<p class="text-sm text-gray-500">Keine Zielkonten vorhanden.</p>';
         return openDetail('Setup · Zielkonten', `<div class="space-y-2">${html}</div>`);
     }
@@ -2095,7 +2444,7 @@ function openSetupInsight(setupKey) {
     }
     if (setupKey === 'forecast') {
         const alerts = (FORECAST.alerts || []).slice().sort((a, b) => String(a.monthKey).localeCompare(String(b.monthKey)) || String(a.accountName || '').localeCompare(String(b.accountName || '')));
-        const html = alerts.map((alert) => `<div class="rounded-lg border ${alert.severity === 'alarm' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="font-bold text-gray-800">${escapeHtml(alert.accountName || '-')}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(monthLabel(alert.monthKey))} · Endstand ${formatCurrency(alert.endBalance)} · Puffer ${formatCurrency(alert.minBuffer)} · Δ ${formatSignedCurrency(alert.delta)}</div></div>`).join('') || '<p class="text-sm text-gray-500">Prognose aktuell ohne Warnung/Alarm.</p>';
+        const html = alerts.map((alert) => `<div class="rounded-lg border ${alert.severity === 'alarm' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="font-bold text-gray-800">${escapeHtml(alert.accountName || '-')}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(monthLabel(alert.monthKey))} · Endstand ${formatCurrency(alert.endBalance)} · Puffer ${formatCurrency(alert.minBuffer)} · Min Tages-Δ ${formatSignedCurrency(alert.minDayDelta)}${alert.criticalDate ? ` · kritisch am ${formatDate(alert.criticalDate)}` : ''}</div><div class="text-xs mt-1 ${alert.severity === 'alarm' ? 'text-red-800' : 'text-amber-800'}">${alert.severity === 'alarm' ? 'Maßnahme empfohlen: Dauerauftrag erhöhen bzw. Einmalüberweisung vor dem kritischen Tag planen.' : 'Hinweis: Puffer liegt knapp über dem Minimum, Verlauf weiter beobachten.'}</div></div>`).join('') || '<p class="text-sm text-gray-500">Prognose aktuell ohne Warnung/Alarm.</p>';
         return openDetail('Setup · Kontostandsprognose (nur Zielkonten)', `<div class="space-y-2">${html}</div>`);
     }
     return openDetail('Setup', '<p class="text-sm text-gray-500">Keine Details verfügbar.</p>');
@@ -2456,7 +2805,7 @@ export function stopAbbuchungsberechnerListeners() {
     TRANSFERS = {};
     RECON = {};
     AUDIT = {};
-    FORECAST = { timeline: [], alerts: [], details: {}, quality: [], setup: [], suggestions: [], imbalances: [] };
+    FORECAST = { timeline: [], alerts: [], details: {}, quality: [], setup: [], suggestions: [], imbalances: [], deviationWarnings: [] };
 }
 
 export function initializeAbbuchungsberechner() {
