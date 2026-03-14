@@ -37,6 +37,10 @@ let amountUnlockSecondsLeft = 0;
 let amountUnlockTimer = null;
 let transferAbtauschSourceId = '';
 let transferAbtauschOldEndManual = false;
+let accountModalViewMode = 'list';
+let transferModalViewMode = 'list';
+let reconModalViewMode = 'list';
+let editingReconId = '';
 let itemReadMode = false;
 let transferSplitMode = 'right';
 let accountSplitMode = 'right';
@@ -719,21 +723,87 @@ function enhanceStaticHelpTexts() {
     }
 }
 
-function enforceTopActionRow() {
+function restoreClassicTopActionRow() {
     const topBar = el('ab2-open-accounts-modal')?.closest('.flex.justify-between.items-center');
     const actionWrap = el('ab2-open-accounts-modal')?.parentElement;
-    const back = topBar?.querySelector('.back-link');
+    const back = el('ab2-open-accounts-modal')?.closest('.back-link-container')?.querySelector('.back-link');
     if (!topBar || !actionWrap) return;
-    if (back && !actionWrap.contains(back)) {
-        back.classList.add('ab2-compact-btn', 'px-3', 'py-2', 'bg-gray-100', 'text-gray-700', 'rounded-lg', 'hover:bg-gray-200', 'font-bold', 'text-xs', 'sm:text-sm');
+    if (back && !topBar.contains(back)) {
+        topBar.insertBefore(back, topBar.firstChild);
+    }
+    if (back) {
+        back.classList.remove('ab2-compact-btn', 'px-3', 'py-2', 'bg-gray-100', 'text-gray-700', 'rounded-lg', 'hover:bg-gray-200', 'font-bold', 'text-xs', 'sm:text-sm');
         const label = back.querySelector('span');
         if (label) label.textContent = 'zurück';
-        actionWrap.insertBefore(back, actionWrap.firstChild);
     }
-    topBar.classList.remove('justify-between', 'flex-wrap');
-    topBar.classList.add('justify-start');
-    actionWrap.classList.remove('flex-wrap');
-    actionWrap.classList.add('flex-nowrap', 'overflow-x-auto', 'w-full', 'pb-1');
+    topBar.classList.add('justify-between', 'flex-wrap');
+    topBar.classList.remove('justify-start');
+    actionWrap.classList.add('flex-wrap');
+    actionWrap.classList.remove('flex-nowrap', 'overflow-x-auto', 'w-full', 'pb-1');
+}
+
+function ensureSettingsMenuButton() {
+    const actionWrap = el('ab2-open-accounts-modal')?.parentElement;
+    const createBtn = el('ab2-btn-create');
+    if (!actionWrap || !createBtn) return;
+    const suggestionsBtn = el('ab2-open-suggestions-modal');
+    if (suggestionsBtn) suggestionsBtn.remove();
+    if (!el('ab2-open-settings-menu-modal')) {
+        const btn = document.createElement('button');
+        btn.id = 'ab2-open-settings-menu-modal';
+        btn.type = 'button';
+        btn.className = 'ab2-compact-btn px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-bold text-xs sm:text-sm';
+        btn.setAttribute('aria-label', 'Einstellungen');
+        btn.textContent = '⚙';
+        actionWrap.insertBefore(btn, createBtn);
+    }
+}
+
+function ensureSettingsMenuModal() {
+    if (el('ab2-settings-menu-modal')) return;
+    const root = el('abbuchungsberechner-root');
+    if (!root) return;
+    const modal = document.createElement('div');
+    modal.id = 'ab2-settings-menu-modal';
+    modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+    modal.style.display = 'none';
+    modal.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-md"><div class="bg-gradient-to-r from-slate-700 to-slate-600 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 class="text-xl font-bold">Einstellungen</h3><button id="ab2-close-settings-menu-modal" class="text-white/80 hover:text-white transition">✕</button></div><div class="p-4 space-y-2"><button type="button" id="ab2-settings-open-accounts" class="w-full text-left px-4 py-3 rounded-lg border border-slate-200 hover:bg-slate-50 font-bold text-slate-700">Konten / Quellen</button><button type="button" id="ab2-settings-open-transfers" class="w-full text-left px-4 py-3 rounded-lg border border-slate-200 hover:bg-slate-50 font-bold text-slate-700">Daueraufträge</button><button type="button" id="ab2-settings-open-recon" class="w-full text-left px-4 py-3 rounded-lg border border-slate-200 hover:bg-slate-50 font-bold text-slate-700">Abgleich</button></div><div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end"><button id="ab2-cancel-settings-menu-btn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg">Schließen</button></div></div>`;
+    root.appendChild(modal);
+}
+
+function setAccountModalView(mode) { accountModalViewMode = mode === 'create' || mode === 'edit' ? mode : 'list'; }
+function setTransferModalView(mode) { transferModalViewMode = mode === 'create' || mode === 'edit' ? mode : 'list'; }
+function setReconModalView(mode) { reconModalViewMode = mode === 'create' || mode === 'edit' ? mode : 'list'; }
+
+function modalPanels(formAnchorId, listHostId) {
+    const formPane = el(formAnchorId)?.closest('.space-y-3');
+    const listPane = el(listHostId)?.parentElement;
+    if (!formPane || !listPane) return null;
+    return { formPane, listPane };
+}
+
+function applyModalViewState() {
+    const accountPanels = modalPanels('ab2-account-name', 'ab2-accounts-list');
+    if (accountPanels) {
+        const showForm = accountModalViewMode !== 'list';
+        const showList = accountModalViewMode !== 'create';
+        accountPanels.formPane.classList.toggle('hidden', !showForm);
+        accountPanels.listPane.classList.toggle('hidden', !showList);
+    }
+    const transferPanels = modalPanels('ab2-transfer-source', 'ab2-transfers-list');
+    if (transferPanels) {
+        const showForm = transferModalViewMode !== 'list';
+        const showList = transferModalViewMode !== 'create';
+        transferPanels.formPane.classList.toggle('hidden', !showForm);
+        transferPanels.listPane.classList.toggle('hidden', !showList);
+    }
+    const reconPanels = modalPanels('ab2-recon-account', 'ab2-recon-list');
+    if (reconPanels) {
+        const showForm = reconModalViewMode !== 'list';
+        const showList = reconModalViewMode !== 'create';
+        reconPanels.formPane.classList.toggle('hidden', !showForm);
+        reconPanels.listPane.classList.toggle('hidden', !showList);
+    }
 }
 
 function stackModalIntoSingleWindow(formAnchorId, listHostId, stackMarker) {
@@ -831,22 +901,26 @@ function getEditableAccountAmountBase() {
 
 function syncAccountAmountLockState() {
     const input = el('ab2-account-start-balance');
+    const minBufferInput = el('ab2-account-min-buffer');
     const id = el('ab2-account-id')?.value || '';
     const usesBuffer = accountUsesBuffer(el('ab2-account-type')?.value || 'bank', el('ab2-account-role')?.value || 'both');
     const lockBtn = el('ab2-account-unlock-amount-btn');
     if (!input) return;
     if (!usesBuffer) {
         input.disabled = true;
+        if (minBufferInput) minBufferInput.disabled = true;
         if (lockBtn) lockBtn.classList.add('hidden');
         return;
     }
     if (!id) {
         input.disabled = false;
+        if (minBufferInput) minBufferInput.disabled = false;
         if (lockBtn) lockBtn.classList.add('hidden');
         return;
     }
     const unlocked = accountAmountUnlockForId === id;
     input.disabled = !unlocked;
+    if (minBufferInput) minBufferInput.disabled = !unlocked;
     if (lockBtn) {
         lockBtn.classList.remove('hidden');
         lockBtn.textContent = unlocked ? 'Betrag freigegeben' : 'Betrag bearbeiten';
@@ -999,8 +1073,11 @@ function ensureShell() {
     ensureAmountEditButtons();
     ensureAccountAbtauschButton();
     ensureTransferAbtauschButton();
+    ensureSettingsMenuModal();
+    ensureSettingsMenuButton();
     ensureUnifiedModalLayouts();
-    enforceTopActionRow();
+    restoreClassicTopActionRow();
+    applyModalViewState();
     enhanceStaticHelpTexts();
 }
 
@@ -2042,6 +2119,9 @@ function renderAccounts() {
         .filter((account) => accountListFilterState.type === 'all' || normalizeAccountType(account) === accountListFilterState.type)
         .filter((account) => !search || normalizeSearchText(`${account.name || ''} ${account.bank || ''} ${account.iban || ''} ${formatCurrency(accountMinBuffer(account))}`).includes(search))
         .sort((a, b) => newestEntityMs(b) - newestEntityMs(a) || String(a.name || '').localeCompare(String(b.name || '')));
+    const visibleAccounts = accountModalViewMode === 'edit' && editingAccountId
+        ? accounts.filter((account) => account.id === editingAccountId)
+        : accounts;
     const renderAccountCard = (account) => {
         const person = isPersonAccount(account);
         const row = FORECAST.timeline[0]?.accounts[account.id] || {};
@@ -2054,12 +2134,13 @@ function renderAccounts() {
         const active = editingAccountId === account.id;
         const cardTone = active ? 'border-yellow-400 bg-yellow-50 ring-2 ring-yellow-300' : 'border-slate-200 bg-white hover:border-blue-300';
         const controlButton = person ? `<button type="button" class="px-2 py-1 bg-violet-100 text-violet-700 rounded text-xs" data-account-control="${account.id}">Kontrolle</button>` : '';
-        return `<div class="rounded-xl border ${cardTone} p-3 transition" data-account-card="${account.id}"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-slate-800">${escapeHtml(account.name || '-')}</div><div class="text-[11px] text-slate-500">${escapeHtml(person ? 'Person / Quelle' : `${account.bank || 'Bankkonto'} · ${normalizeAccountRole(account)}`)}</div></div><span class="px-2 py-1 rounded-full text-[10px] ${quality?.status === 'alarm' ? 'bg-red-100 text-red-700' : quality?.status === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(quality?.text || 'aktuell')}</span></div><button type="button" data-account-amount-edit="${account.id}" class="mt-3 w-full text-left rounded-lg border border-amber-200 bg-amber-50 px-2 py-2"><div class="text-[10px] uppercase tracking-wide text-amber-800">Betrag</div><div class="text-sm font-extrabold text-amber-900">${amountText}</div><div class="text-[11px] text-amber-800">Klicken zum Bearbeiten (mit Sperre)</div></button><div class="mt-3 text-xs"><div class="font-bold ${toNum(row.minDayDelta, toNum(row.delta, 0)) < 0 ? 'text-red-700' : 'text-emerald-700'}">Min Tages-Δ ${formatSignedCurrency(toNum(row.minDayDelta, toNum(row.delta, 0)))}</div><div class="mt-1 ${transferDiffCss(transferDiff)} font-bold">Transfer Δ ${formatSignedCurrency(transferDiff)}</div><div class="mt-1 text-slate-600">${itemCount} Einträge · ${transferCount} Transfers</div></div><div class="mt-3 flex flex-wrap gap-1 justify-end">${controlButton}<button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></div>`;
+        return `<div class="rounded-xl border ${cardTone} p-3 transition" data-account-card="${account.id}"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-slate-800">${escapeHtml(account.name || '-')}</div><div class="text-[11px] text-slate-500">${escapeHtml(person ? 'Person / Quelle' : `${account.bank || 'Bankkonto'} · ${normalizeAccountRole(account)}`)}</div></div><span class="px-2 py-1 rounded-full text-[10px] ${quality?.status === 'alarm' ? 'bg-red-100 text-red-700' : quality?.status === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(quality?.text || 'aktuell')}</span></div><div class="mt-3 text-xs"><div class="font-bold text-slate-800">Betrag: ${amountText}</div><div class="mt-1 font-bold ${toNum(row.minDayDelta, toNum(row.delta, 0)) < 0 ? 'text-red-700' : 'text-emerald-700'}">Min Tages-Δ ${formatSignedCurrency(toNum(row.minDayDelta, toNum(row.delta, 0)))}</div><div class="mt-1 ${transferDiffCss(transferDiff)} font-bold">Transfer Δ ${formatSignedCurrency(transferDiff)}</div><div class="mt-1 text-slate-600">${itemCount} Einträge · ${transferCount} Transfers</div></div><div class="mt-3 flex flex-wrap gap-1 justify-end">${controlButton}<button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></div>`;
     };
-    const bankCards = accounts.filter((account) => !isPersonAccount(account)).map(renderAccountCard).join('');
-    const personCards = accounts.filter((account) => isPersonAccount(account)).map(renderAccountCard).join('');
-    host.innerHTML = `<div class="space-y-3"><button type="button" data-account-new="1" class="w-full rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 p-4 text-left hover:bg-blue-100 transition"><div class="text-sm font-extrabold text-blue-800">+ NEU</div><div class="text-xs text-blue-700">Neues Konto oder neue Person anlegen</div></button><div class="rounded-xl border border-slate-200 bg-slate-50 p-3"><div class="text-xs font-bold uppercase tracking-wide text-slate-600 mb-2">Bankkonten (${accounts.filter((a) => !isPersonAccount(a)).length})</div><div class="grid grid-cols-1 md:grid-cols-2 gap-2">${bankCards || '<div class="text-sm text-slate-400 italic">Keine Bankkonten vorhanden.</div>'}</div></div><div class="rounded-xl border border-violet-200 bg-violet-50 p-3"><div class="text-xs font-bold uppercase tracking-wide text-violet-700 mb-2">Personen (${accounts.filter((a) => isPersonAccount(a)).length})</div><div class="grid grid-cols-1 md:grid-cols-2 gap-2">${personCards || '<div class="text-sm text-violet-400 italic">Keine Personen vorhanden.</div>'}</div></div></div>`;
+    const bankCards = visibleAccounts.filter((account) => !isPersonAccount(account)).map(renderAccountCard).join('');
+    const personCards = visibleAccounts.filter((account) => isPersonAccount(account)).map(renderAccountCard).join('');
+    host.innerHTML = `<div class="space-y-3"><button type="button" data-account-new="1" class="w-full rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 p-4 text-left hover:bg-blue-100 transition"><div class="text-sm font-extrabold text-blue-800">+ NEU</div><div class="text-xs text-blue-700">Neues Konto oder neue Person anlegen</div></button><div class="rounded-xl border border-slate-200 bg-slate-50 p-3"><div class="text-xs font-bold uppercase tracking-wide text-slate-600 mb-2">Bankkonten (${visibleAccounts.filter((a) => !isPersonAccount(a)).length})</div><div class="grid grid-cols-1 md:grid-cols-2 gap-2">${bankCards || '<div class="text-sm text-slate-400 italic">Keine Bankkonten vorhanden.</div>'}</div></div><div class="rounded-xl border border-violet-200 bg-violet-50 p-3"><div class="text-xs font-bold uppercase tracking-wide text-violet-700 mb-2">Personen (${visibleAccounts.filter((a) => isPersonAccount(a)).length})</div><div class="grid grid-cols-1 md:grid-cols-2 gap-2">${personCards || '<div class="text-sm text-violet-400 italic">Keine Personen vorhanden.</div>'}</div></div></div>`;
     setAccountSplitMode(accountSplitMode, false);
+    applyModalViewState();
 }
 function renderTransfers() {
     const host = el('ab2-transfers-list');
@@ -2076,7 +2157,10 @@ function renderTransfers() {
         })
         .filter((transfer) => !search || normalizeSearchText(`${ACCOUNTS[transfer.sourceAccountId]?.name || ''} ${ACCOUNTS[transfer.targetAccountId]?.name || ''} ${transfer.note || ''} ${transferLinkingText(transfer)} ${formatCurrency(transfer.amount)} ${intervalLabel(transfer.intervalType, transfer.customMonths || [])}`).includes(search))
         .sort((a, b) => newestEntityMs(b) - newestEntityMs(a) || String(ACCOUNTS[a.sourceAccountId]?.name || '').localeCompare(String(ACCOUNTS[b.sourceAccountId]?.name || '')));
-    const cards = transfers.map((transfer) => {
+    const visibleTransfers = transferModalViewMode === 'edit' && editingTransferId
+        ? transfers.filter((transfer) => transfer.id === editingTransferId)
+        : transfers;
+    const cards = visibleTransfers.map((transfer) => {
         const source = ACCOUNTS[transfer.sourceAccountId] || {};
         const target = ACCOUNTS[transfer.targetAccountId] || {};
         const targetAlert = FORECAST.alerts.find((alert) => alert.accountId === transfer.targetAccountId);
@@ -2087,17 +2171,22 @@ function renderTransfers() {
         const cardTone = active ? 'border-yellow-400 bg-yellow-50 ring-2 ring-yellow-300' : 'border-slate-200 bg-white hover:border-blue-300';
         const stateText = targetAlert ? `${targetAlert.severity} ${monthLabel(targetAlert.monthKey)}` : 'stabil';
         const linkedText = allocationLines.length ? allocationLines.join(' | ') : 'Keine Zahlungsgrund-Zuordnung';
-        return `<div class="rounded-xl border ${cardTone} p-3 transition" data-transfer-card="${transfer.id}"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-slate-800">${escapeHtml(source.name || '-')} → ${escapeHtml(target.name || '-')}</div><div class="text-[11px] text-slate-500">${escapeHtml(intervalLabel(transfer.intervalType, transfer.customMonths || []))} · Nächste ${nextExecutionDate(transfer) ? formatDate(nextExecutionDate(transfer)) : '-'}</div></div><span class="px-2 py-1 rounded-full text-[10px] ${targetAlert?.severity === 'alarm' ? 'bg-red-100 text-red-700' : targetAlert?.severity === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(stateText)}</span></div><button type="button" data-transfer-amount-edit="${transfer.id}" class="mt-3 w-full text-left rounded-lg border border-amber-200 bg-amber-50 px-2 py-2"><div class="text-[10px] uppercase tracking-wide text-amber-800">Betrag</div><div class="text-sm font-extrabold text-amber-900">${formatCurrency(transfer.amount)}</div><div class="text-[11px] text-amber-800">Klicken zum Bearbeiten (mit Sperre)</div></button><div class="mt-3 text-xs text-slate-700">Verplant ${formatCurrency(planned)} · <span class="font-bold ${transferDiffCss(diff)}">Δ ${formatSignedCurrency(diff)}</span></div><div class="mt-1 text-xs text-indigo-700">${escapeHtml(linkedText)}</div><div class="mt-1 text-xs text-slate-600">${escapeHtml(transfer.note || '-')}</div><div class="mt-3 flex flex-wrap justify-end gap-1"><button type="button" class="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs" data-transfer-abtausch-open="${transfer.id}">Abtausch</button><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-transfer-edit="${transfer.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-transfer-delete="${transfer.id}">Löschen</button></div></div>`;
+        return `<div class="rounded-xl border ${cardTone} p-3 transition" data-transfer-card="${transfer.id}"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-slate-800">${escapeHtml(source.name || '-')} → ${escapeHtml(target.name || '-')}</div><div class="text-[11px] text-slate-500">${escapeHtml(intervalLabel(transfer.intervalType, transfer.customMonths || []))} · Nächste ${nextExecutionDate(transfer) ? formatDate(nextExecutionDate(transfer)) : '-'}</div></div><span class="px-2 py-1 rounded-full text-[10px] ${targetAlert?.severity === 'alarm' ? 'bg-red-100 text-red-700' : targetAlert?.severity === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(stateText)}</span></div><div class="mt-3 text-xs text-slate-700"><div class="font-bold text-slate-800">Betrag: ${formatCurrency(transfer.amount)}</div><div class="mt-1">Verplant ${formatCurrency(planned)} · <span class="font-bold ${transferDiffCss(diff)}">Δ ${formatSignedCurrency(diff)}</span></div></div><div class="mt-1 text-xs text-indigo-700">${escapeHtml(linkedText)}</div><div class="mt-1 text-xs text-slate-600">${escapeHtml(transfer.note || '-')}</div><div class="mt-3 flex flex-wrap justify-end gap-1"><button type="button" class="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs" data-transfer-abtausch-open="${transfer.id}">Abtausch</button><button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-transfer-edit="${transfer.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-transfer-delete="${transfer.id}">Löschen</button></div></div>`;
     }).join('');
     host.innerHTML = `<div class="space-y-3"><button type="button" data-transfer-new="1" class="w-full rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 p-4 text-left hover:bg-blue-100 transition"><div class="text-sm font-extrabold text-blue-800">+ NEU</div><div class="text-xs text-blue-700">Neuen Dauerauftrag / neue Überweisung anlegen</div></button><div class="grid grid-cols-1 md:grid-cols-2 gap-2">${cards || '<p class="text-sm text-gray-400 italic">Noch keine Daueraufträge / Überweisungen.</p>'}</div></div>`;
     setTransferSplitMode(transferSplitMode, false);
+    applyModalViewState();
 }
 function renderRecon() {
     const host = el('ab2-recon-list');
     if (!host) return;
     const recons = Object.values(RECON).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-    host.innerHTML = `<div class="space-y-2"><button type="button" data-recon-new="1" class="w-full rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50 p-3 text-left hover:bg-emerald-100 transition"><div class="text-sm font-extrabold text-emerald-800">+ NEU</div><div class="text-xs text-emerald-700">Neuen Abgleich anlegen</div></button>${recons.length ? recons.map((entry) => `<div class="rounded-lg border border-gray-200 bg-gray-50 p-3" data-recon-fill="${entry.id}"><div class="flex items-start justify-between gap-2"><div><div class="font-bold text-gray-800">${escapeHtml(ACCOUNTS[entry.accountId]?.name || '-')}</div><div class="text-xs text-gray-500">${entry.type === 'snapshot' ? 'Snapshot' : 'Manuell'} · ${formatDate(entry.date)}</div></div><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-recon-delete="${entry.id}">Löschen</button></div><div class="mt-2 text-sm font-bold ${entry.type === 'snapshot' ? 'text-blue-700' : toNum(entry.value, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${entry.type === 'snapshot' ? formatCurrency(entry.value) : formatSignedCurrency(entry.value)}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(entry.note || '')}</div></div>`).join('') : '<p class="text-sm text-gray-400 italic">Noch keine Abgleiche.</p>'}</div>`;
+    const visibleRecons = reconModalViewMode === 'edit' && editingReconId
+        ? recons.filter((entry) => entry.id === editingReconId)
+        : recons;
+    host.innerHTML = `<div class="space-y-2"><button type="button" data-recon-new="1" class="w-full rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50 p-3 text-left hover:bg-emerald-100 transition"><div class="text-sm font-extrabold text-emerald-800">+ NEU</div><div class="text-xs text-emerald-700">Neuen Abgleich anlegen</div></button>${visibleRecons.length ? visibleRecons.map((entry) => `<div class="rounded-lg border border-gray-200 bg-gray-50 p-3" data-recon-fill="${entry.id}"><div class="flex items-start justify-between gap-2"><div><div class="font-bold text-gray-800">${escapeHtml(ACCOUNTS[entry.accountId]?.name || '-')}</div><div class="text-xs text-gray-500">${entry.type === 'snapshot' ? 'Snapshot' : 'Manuell'} · ${formatDate(entry.date)}</div></div><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-recon-delete="${entry.id}">Löschen</button></div><div class="mt-2 text-sm font-bold ${entry.type === 'snapshot' ? 'text-blue-700' : toNum(entry.value, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${entry.type === 'snapshot' ? formatCurrency(entry.value) : formatSignedCurrency(entry.value)}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(entry.note || '')}</div></div>`).join('') : '<p class="text-sm text-gray-400 italic">Noch keine Abgleiche.</p>'}</div>`;
     setReconSplitMode(reconSplitMode, false);
+    applyModalViewState();
 }
 function suggestionCard(suggestion) {
     const monthly = suggestion.monthlyAllocations.map((row) => `${row.sourceName}: ${formatCurrency(row.amount)} / Monat`).join(' · ');
@@ -2157,7 +2246,7 @@ function renderPreviews() {
     const swapAmount = toNum(el('ab2-abtausch-new-amount')?.value, 0);
     if (el('ab2-abtausch-preview')) el('ab2-abtausch-preview').textContent = item && swapStart && swapAmount > 0 ? `${item.title || '-'} endet vor ${formatDate(swapStart)} und läuft ab dann mit ${formatCurrency(swapAmount)} weiter.` : 'Noch keine Vorschau.';
 }
-function renderAll() { populateSelects(); renderTags(); renderDashboard(); renderTable(); renderAccounts(); renderTransfers(); renderRecon(); renderPreviews(); }
+function renderAll() { populateSelects(); renderTags(); renderDashboard(); renderTable(); renderAccounts(); renderTransfers(); renderRecon(); applyModalViewState(); renderPreviews(); }
 function setItemReadOnly(readOnly) {
     itemReadMode = !!readOnly;
     document.querySelectorAll('#ab2-item-modal input, #ab2-item-modal select, #ab2-item-modal textarea').forEach((node) => {
@@ -2268,9 +2357,10 @@ function collectContribs() {
         }))
         .filter((row) => row.sourceAccountId && row.amount > 0);
 }
-function resetAccountForm() {
+function resetAccountForm(mode = 'list') {
     editingAccountId = '';
     accountAmountUnlockForId = '';
+    setAccountModalView(mode);
     ['ab2-account-id', 'ab2-account-name', 'ab2-account-bank', 'ab2-account-iban', 'ab2-account-min-buffer', 'ab2-account-start-balance'].forEach((id) => { if (el(id)) el(id).value = ''; });
     if (el('ab2-account-type')) el('ab2-account-type').value = 'bank';
     if (el('ab2-account-role')) el('ab2-account-role').value = 'both';
@@ -2279,6 +2369,7 @@ function resetAccountForm() {
     updateAccountTypeDependencies();
     syncAccountAmountLockState();
     renderAccounts();
+    applyModalViewState();
     setAccountSplitMode('right');
     renderPreviews();
 }
@@ -2290,6 +2381,7 @@ function editAccount(id) {
     const accountRole = normalizeAccountRole(account.role || 'both');
     const usesBuffer = accountUsesBuffer(accountType, accountRole);
     const latest = latestSnapshots()[id];
+    setAccountModalView('edit');
     accountAmountUnlockForId = '';
     if (el('ab2-account-id')) el('ab2-account-id').value = account.id || '';
     if (el('ab2-account-name')) el('ab2-account-name').value = account.name || '';
@@ -2306,12 +2398,14 @@ function editAccount(id) {
     openModal('ab2-accounts-modal');
     setAccountSplitMode('left');
     renderAccounts();
+    applyModalViewState();
     renderPreviews();
 }
-function resetTransferForm() {
+function resetTransferForm(mode = 'list') {
     editingTransferId = '';
     transferAmountUnlockForId = '';
     transferAbtauschSourceId = '';
+    setTransferModalView(mode);
     ['ab2-transfer-id', 'ab2-transfer-amount', 'ab2-transfer-start-month', 'ab2-transfer-custom-months', 'ab2-transfer-day', 'ab2-transfer-valid-to', 'ab2-transfer-note', 'ab2-transfer-linked-titles'].forEach((id) => { if (el(id)) el(id).value = ''; });
     if (el('ab2-transfer-source')) el('ab2-transfer-source').value = '';
     if (el('ab2-transfer-target')) el('ab2-transfer-target').value = '';
@@ -2324,6 +2418,7 @@ function resetTransferForm() {
     if (el('ab2-transfer-abtausch-btn')) el('ab2-transfer-abtausch-btn').classList.add('hidden');
     syncTransferAmountLockState();
     renderTransfers();
+    applyModalViewState();
     setTransferSplitMode('right');
     renderPreviews();
 }
@@ -2331,6 +2426,7 @@ function editTransfer(id) {
     const transfer = TRANSFERS[id];
     if (!transfer) return;
     editingTransferId = id;
+    setTransferModalView('edit');
     transferAmountUnlockForId = '';
     transferAbtauschSourceId = '';
     if (el('ab2-transfer-id')) el('ab2-transfer-id').value = transfer.id || '';
@@ -2355,22 +2451,30 @@ function editTransfer(id) {
     openModal('ab2-transfers-modal');
     setTransferSplitMode('left');
     renderTransfers();
+    applyModalViewState();
     renderPreviews();
 }
 function fillReconForm(entry) {
     if (!entry) return;
+    editingReconId = entry.id || '';
+    setReconModalView('edit');
     if (el('ab2-recon-account')) el('ab2-recon-account').value = entry.accountId || '';
     if (el('ab2-recon-type')) el('ab2-recon-type').value = entry.type || 'snapshot';
     if (el('ab2-recon-date')) el('ab2-recon-date').value = entry.date || isoDate(new Date());
     if (el('ab2-recon-value')) el('ab2-recon-value').value = toNum(entry.value, 0).toFixed(2);
     if (el('ab2-recon-note')) el('ab2-recon-note').value = entry.note || '';
+    applyModalViewState();
     renderPreviews();
 }
-function resetReconForm() {
+function resetReconForm(mode = 'list') {
+    editingReconId = '';
+    setReconModalView(mode);
     if (el('ab2-recon-account')) el('ab2-recon-account').value = '';
     ['ab2-recon-value', 'ab2-recon-note'].forEach((id) => { if (el(id)) el(id).value = ''; });
     if (el('ab2-recon-type')) el('ab2-recon-type').value = 'snapshot';
     if (el('ab2-recon-date')) el('ab2-recon-date').value = isoDate(new Date());
+    renderRecon();
+    applyModalViewState();
     setReconSplitMode('right');
     renderPreviews();
 }
@@ -2473,6 +2577,9 @@ async function saveAccount() {
         if (accountAmountUnlockForId !== id && Number.isFinite(base) && Math.abs(roundMoney(startBalance) - roundMoney(base)) > 0.009) {
             return alertUser('Betrag ist gesperrt. Bitte zuerst "Betrag bearbeiten" nutzen oder bei planmäßiger Änderung Abtausch verwenden.', 'error');
         }
+    }
+    if (id && usesBuffer && before && accountAmountUnlockForId !== id && Math.abs(roundMoney(payload.minBuffer) - roundMoney(toNum(before.minBuffer, 0))) > 0.009) {
+        return alertUser('Mindestpuffer ist gesperrt. Bitte zuerst "Betrag bearbeiten" nutzen oder bei planmäßiger Änderung Abtausch verwenden.', 'error');
     }
     try {
         let accountId = id;
@@ -2847,9 +2954,15 @@ function bindEvents() {
     const on = (id, event, handler) => { const node = el(id); if (node && !node.dataset.listenerAttached) { node.addEventListener(event, handler); node.dataset.listenerAttached = 'true'; } };
 
     on('ab2-btn-create', 'click', () => { if (!canCreate()) return alertUser('Keine Berechtigung.', 'error'); resetItemForm(); openModal('ab2-item-modal'); });
-    on('ab2-open-accounts-modal', 'click', () => { resetAccountForm(); openModal('ab2-accounts-modal'); setAccountSplitMode('right'); });
-    on('ab2-open-transfers-modal', 'click', () => { resetTransferForm(); openModal('ab2-transfers-modal'); setTransferSplitMode('right'); });
-    on('ab2-open-recon-modal', 'click', () => { resetReconForm(); openModal('ab2-reconciliation-modal'); setReconSplitMode('right'); });
+    on('ab2-open-accounts-modal', 'click', () => { resetAccountForm('list'); openModal('ab2-accounts-modal'); setAccountSplitMode('right'); });
+    on('ab2-open-transfers-modal', 'click', () => { resetTransferForm('list'); openModal('ab2-transfers-modal'); setTransferSplitMode('right'); });
+    on('ab2-open-recon-modal', 'click', () => { resetReconForm('list'); openModal('ab2-reconciliation-modal'); setReconSplitMode('right'); });
+    on('ab2-open-settings-menu-modal', 'click', () => openModal('ab2-settings-menu-modal'));
+    on('ab2-close-settings-menu-modal', 'click', () => closeModal('ab2-settings-menu-modal'));
+    on('ab2-cancel-settings-menu-btn', 'click', () => closeModal('ab2-settings-menu-modal'));
+    on('ab2-settings-open-accounts', 'click', () => { closeModal('ab2-settings-menu-modal'); resetAccountForm('list'); openModal('ab2-accounts-modal'); });
+    on('ab2-settings-open-transfers', 'click', () => { closeModal('ab2-settings-menu-modal'); resetTransferForm('list'); openModal('ab2-transfers-modal'); });
+    on('ab2-settings-open-recon', 'click', () => { closeModal('ab2-settings-menu-modal'); resetReconForm('list'); openModal('ab2-reconciliation-modal'); });
     on('ab2-open-suggestions-modal', 'click', () => { renderSuggestionsModal(); openModal('ab2-suggestions-modal'); });
     on('ab2-toggle-glossary', 'click', () => el('ab2-glossary')?.classList.toggle('hidden'));
     on('ab2-forecast-toggle', 'click', () => {
@@ -3044,16 +3157,10 @@ function bindEvents() {
         accHost.addEventListener('click', (e) => {
             const create = e.target.closest('[data-account-new]');
             const control = e.target.closest('[data-account-control]');
-            const amountEdit = e.target.closest('[data-account-amount-edit]');
             const edit = e.target.closest('[data-account-edit]');
             const del = e.target.closest('[data-account-delete]');
             if (create) {
-                resetAccountForm();
-                return;
-            }
-            if (amountEdit?.dataset.accountAmountEdit) {
-                editAccount(amountEdit.dataset.accountAmountEdit);
-                openAmountUnlockModal('account', amountEdit.dataset.accountAmountEdit);
+                resetAccountForm('create');
                 return;
             }
             if (control) openPersonControl(control.dataset.accountControl);
@@ -3070,17 +3177,11 @@ function bindEvents() {
     if (transferHost && !transferHost.dataset.listenerAttached) {
         transferHost.addEventListener('click', (e) => {
             const create = e.target.closest('[data-transfer-new]');
-            const amountEdit = e.target.closest('[data-transfer-amount-edit]');
             const openSwap = e.target.closest('[data-transfer-abtausch-open]');
             const edit = e.target.closest('[data-transfer-edit]');
             const del = e.target.closest('[data-transfer-delete]');
             if (create) {
-                resetTransferForm();
-                return;
-            }
-            if (amountEdit?.dataset.transferAmountEdit) {
-                editTransfer(amountEdit.dataset.transferAmountEdit);
-                openAmountUnlockModal('transfer', amountEdit.dataset.transferAmountEdit);
+                resetTransferForm('create');
                 return;
             }
             if (openSwap?.dataset.transferAbtauschOpen) {
@@ -3125,7 +3226,7 @@ function bindEvents() {
             const fill = e.target.closest('[data-recon-fill]');
             const del = e.target.closest('[data-recon-delete]');
             if (create) {
-                resetReconForm();
+                resetReconForm('create');
                 return;
             }
             if (del) deleteRecon(del.dataset.reconDelete);
