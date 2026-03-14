@@ -26,8 +26,8 @@ let AUDIT = {};
 let FORECAST = { timeline: [], alerts: [], details: {}, quality: [], setup: [], suggestions: [], imbalances: [], deviationWarnings: [] };
 let filterTokens = [];
 let filterState = { negate: false, joinMode: 'and', status: '', typ: '', interval: '', quick: '', sort: 'critical' };
-let accountListFilterState = { type: 'all', query: '', showPlanned: false, showPast: false };
-let transferListFilterState = { type: 'all', query: '', showPlanned: false, showPast: false };
+let accountListFilterState = { type: 'all', query: '', showActive: true, showPlanned: false, showPast: false };
+let transferListFilterState = { type: 'all', query: '', showActive: true, showPlanned: false, showPast: false };
 let editingAccountId = '';
 let editingTransferId = '';
 let accountAmountUnlockForId = '';
@@ -187,7 +187,7 @@ function ensureStatusVisibilityDropdown(prefix, searchInputId) {
     const details = document.createElement('details');
     details.id = `ab2-${prefix}-status-dropdown`;
     details.className = 'relative';
-    details.innerHTML = `<summary class="list-none cursor-pointer p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold text-gray-700"><span id="ab2-${prefix}-status-summary">Aktive (0)</span> ▾</summary><div class="absolute right-0 mt-1 w-64 z-20 rounded-lg border border-gray-200 bg-white shadow-lg p-2 space-y-2"><label class="flex items-center gap-2 text-xs text-gray-700"><input id="ab2-${prefix}-show-planned-toggle" type="checkbox" class="h-4 w-4"><span id="ab2-${prefix}-show-planned-label">Geplante (0) anzeigen</span></label><label class="flex items-center gap-2 text-xs text-gray-700"><input id="ab2-${prefix}-show-past-toggle" type="checkbox" class="h-4 w-4"><span id="ab2-${prefix}-show-past-label">Abgelaufene (0) anzeigen</span></label></div>`;
+    details.innerHTML = `<summary class="list-none cursor-pointer p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold text-gray-700"><span id="ab2-${prefix}-status-summary">Aktive (0)</span> ▾</summary><div class="absolute right-0 mt-1 w-64 z-20 rounded-lg border border-gray-200 bg-white shadow-lg p-2 space-y-2"><label class="flex items-center gap-2 text-xs text-gray-700"><input id="ab2-${prefix}-show-active-toggle" type="checkbox" class="h-4 w-4" checked><span id="ab2-${prefix}-show-active-label">Aktive (0) anzeigen</span></label><label class="flex items-center gap-2 text-xs text-gray-700"><input id="ab2-${prefix}-show-planned-toggle" type="checkbox" class="h-4 w-4"><span id="ab2-${prefix}-show-planned-label">Geplante (0) anzeigen</span></label><label class="flex items-center gap-2 text-xs text-gray-700"><input id="ab2-${prefix}-show-past-toggle" type="checkbox" class="h-4 w-4"><span id="ab2-${prefix}-show-past-label">Abgelaufene (0) anzeigen</span></label></div>`;
     parent.appendChild(details);
 }
 
@@ -198,19 +198,24 @@ function ensureModalStatusVisibilityControls() {
 
 function updateStatusVisibilityUi(prefix, state, counts) {
     const summary = el(`ab2-${prefix}-status-summary`);
+    const activeLabel = el(`ab2-${prefix}-show-active-label`);
     const plannedLabel = el(`ab2-${prefix}-show-planned-label`);
     const pastLabel = el(`ab2-${prefix}-show-past-label`);
+    const activeToggle = el(`ab2-${prefix}-show-active-toggle`);
     const plannedToggle = el(`ab2-${prefix}-show-planned-toggle`);
     const pastToggle = el(`ab2-${prefix}-show-past-toggle`);
+    if (activeLabel) activeLabel.textContent = `Aktive (${counts.active}) anzeigen`;
     if (plannedLabel) plannedLabel.textContent = `Geplante (${counts.planned}) anzeigen`;
     if (pastLabel) pastLabel.textContent = `Abgelaufene (${counts.past}) anzeigen`;
+    if (activeToggle) activeToggle.checked = state.showActive !== false;
     if (plannedToggle) plannedToggle.checked = !!state.showPlanned;
     if (pastToggle) pastToggle.checked = !!state.showPast;
     if (summary) {
-        const segments = [`Aktive (${counts.active})`];
+        const segments = [];
+        if (state.showActive !== false) segments.push(`Aktive (${counts.active})`);
         if (state.showPlanned) segments.push(`Geplante (${counts.planned})`);
         if (state.showPast) segments.push(`Abgelaufene (${counts.past})`);
-        summary.textContent = segments.join(' + ');
+        summary.textContent = segments.length ? segments.join(' + ') : 'Keine sichtbar';
     }
 }
 function applySimulationDate(value) {
@@ -1310,6 +1315,7 @@ function accountPlanStatus(account) {
 }
 
 function includeWithStatusVisibility(statusKey, state) {
+    if (statusKey === 'aktiv') return state.showActive !== false;
     if (statusKey === 'geplant') return !!state.showPlanned;
     if (statusKey === 'vergangen') return !!state.showPast;
     return true;
@@ -2434,7 +2440,12 @@ function renderContributionTable(item) {
         const intervalText = row.intervalType === 'inherit' ? 'wie Eintrag' : intervalLabel(row.intervalType, row.customMonths || []);
         return `<tr class="border-t border-slate-100 ${rowClass}"${jumpAttr} data-contrib-direct="${row.transferId ? '0' : '1'}" data-contrib-source="${escapeHtml(row.sourceAccountId || '')}" data-contrib-amount="${escapeHtml(String(roundMoney(row.amount || 0)))}" data-contrib-interval="${escapeHtml(row.intervalType || 'inherit')}" data-contrib-custom="${escapeHtml(Array.isArray(row.customMonths) ? row.customMonths.join(',') : '')}" data-contrib-note="${escapeHtml(row.note || '')}"><td class="px-2 py-2 text-xs text-gray-700">${escapeHtml(row.sourceName || '-')}</td><td class="px-2 py-2 text-xs text-gray-600">${escapeHtml(row.kind || '-')}</td><td class="px-2 py-2 text-xs font-bold text-gray-900">${formatCurrency(row.amount)}</td><td class="px-2 py-2 text-xs text-gray-600">${escapeHtml(intervalText)}</td><td class="px-2 py-2 text-xs text-gray-600">${escapeHtml(row.note || '-')}</td><td class="px-2 py-2 text-right">${row.transferId ? `<button type="button" class="px-2 py-1 rounded bg-indigo-100 text-indigo-700 text-[11px] font-bold hover:bg-indigo-200" data-contrib-transfer-jump="${escapeHtml(row.transferId)}">Transfer</button>` : '<span class="text-[11px] text-gray-400">-</span>'}</td></tr>`;
     }).join('');
-    host.innerHTML = `<div class="rounded-lg border border-slate-200 bg-slate-50 overflow-hidden"><div class="overflow-x-auto"><table class="ab2-simple-table min-w-[760px]"><thead class="bg-slate-100 text-slate-600"><tr><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Quelle</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Art</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Betrag</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Intervall</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Notiz</th><th class="px-2 py-2 text-right text-[11px] uppercase tracking-wide">Aktion</th></tr></thead><tbody>${body}</tbody></table></div></div>`;
+    const totalContrib = roundMoney(rows.reduce((sum, row) => sum + toNum(row.amount, 0), 0));
+    const itemTotal = roundMoney(toNum(item?.amount, 0));
+    const diff = roundMoney(totalContrib - itemTotal);
+    const diffClass = diff < -0.009 ? 'text-red-700' : diff > 0.009 ? 'text-amber-700' : 'text-emerald-700';
+    const footer = `<tr class="border-t-2 border-slate-200 bg-slate-100"><td colspan="6" class="px-2 py-2 text-xs font-bold text-slate-800">Gesamtsumme ${formatCurrency(totalContrib)} · von gesamt: ${formatCurrency(itemTotal)} · Differenz: <span class="${diffClass}">${formatSignedCurrency(diff)}</span></td></tr>`;
+    host.innerHTML = `<div class="rounded-lg border border-slate-200 bg-slate-50 overflow-hidden"><div class="overflow-x-auto"><table class="ab2-simple-table min-w-[760px]"><thead class="bg-slate-100 text-slate-600"><tr><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Quelle</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Art</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Betrag</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Intervall</th><th class="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Notiz</th><th class="px-2 py-2 text-right text-[11px] uppercase tracking-wide">Aktion</th></tr></thead><tbody>${body}</tbody><tfoot>${footer}</tfoot></table></div></div>`;
 }
 function resetItemForm() {
     if (el('ab2-item-id')) el('ab2-item-id').value = '';
@@ -2486,6 +2497,7 @@ function resetAccountForm(mode = 'list') {
     editingAccountId = '';
     accountAmountUnlockForId = '';
     if (mode === 'list') {
+        accountListFilterState.showActive = true;
         accountListFilterState.showPlanned = false;
         accountListFilterState.showPast = false;
     }
@@ -2535,6 +2547,7 @@ function resetTransferForm(mode = 'list') {
     transferAmountUnlockForId = '';
     transferAbtauschSourceId = '';
     if (mode === 'list') {
+        transferListFilterState.showActive = true;
         transferListFilterState.showPlanned = false;
         transferListFilterState.showPast = false;
     }
@@ -3174,6 +3187,7 @@ function bindEvents() {
     on('ab2-accounts-filter-all', 'click', () => { accountListFilterState.type = 'all'; renderAccounts(); });
     on('ab2-accounts-filter-bank', 'click', () => { accountListFilterState.type = 'bank'; renderAccounts(); });
     on('ab2-accounts-filter-person', 'click', () => { accountListFilterState.type = 'person'; renderAccounts(); });
+    on('ab2-accounts-show-active-toggle', 'change', (e) => { accountListFilterState.showActive = !!e.target?.checked; renderAccounts(); });
     on('ab2-accounts-show-planned-toggle', 'change', (e) => { accountListFilterState.showPlanned = !!e.target?.checked; renderAccounts(); });
     on('ab2-accounts-show-past-toggle', 'change', (e) => { accountListFilterState.showPast = !!e.target?.checked; renderAccounts(); });
     on('ab2-accounts-search', 'input', (e) => { accountListFilterState.query = e.target.value || ''; renderAccounts(); });
@@ -3191,6 +3205,7 @@ function bindEvents() {
     on('ab2-transfers-filter-all', 'click', () => { transferListFilterState.type = 'all'; renderTransfers(); });
     on('ab2-transfers-filter-bank', 'click', () => { transferListFilterState.type = 'bank'; renderTransfers(); });
     on('ab2-transfers-filter-person', 'click', () => { transferListFilterState.type = 'person'; renderTransfers(); });
+    on('ab2-transfers-show-active-toggle', 'change', (e) => { transferListFilterState.showActive = !!e.target?.checked; renderTransfers(); });
     on('ab2-transfers-show-planned-toggle', 'change', (e) => { transferListFilterState.showPlanned = !!e.target?.checked; renderTransfers(); });
     on('ab2-transfers-show-past-toggle', 'change', (e) => { transferListFilterState.showPast = !!e.target?.checked; renderTransfers(); });
     on('ab2-transfers-search', 'input', (e) => { transferListFilterState.query = e.target.value || ''; renderTransfers(); });
