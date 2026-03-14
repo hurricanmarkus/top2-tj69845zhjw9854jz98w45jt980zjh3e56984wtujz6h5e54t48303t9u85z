@@ -3,6 +3,7 @@ import { alertUser, appId, currentUser, db, escapeHtml, GUEST_MODE } from './hau
 import { getUserSetting, saveUserSetting } from './log-InOut.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mrz', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+const WEEKDAYS_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 let refsReady = false;
 let accountsRef = null;
 let itemsRef = null;
@@ -25,8 +26,8 @@ let AUDIT = {};
 let FORECAST = { timeline: [], alerts: [], details: {}, quality: [], setup: [], suggestions: [], imbalances: [], deviationWarnings: [] };
 let filterTokens = [];
 let filterState = { negate: false, joinMode: 'and', status: '', typ: '', interval: '', quick: '', sort: 'critical' };
-let accountListFilterState = { type: 'all', query: '' };
-let transferListFilterState = { type: 'all', query: '' };
+let accountListFilterState = { type: 'all', query: '', showPlanned: false, showPast: false };
+let transferListFilterState = { type: 'all', query: '', showPlanned: false, showPast: false };
 let editingAccountId = '';
 let editingTransferId = '';
 let accountAmountUnlockForId = '';
@@ -149,6 +150,69 @@ function updateSimulationWarning() {
         warning.textContent = '';
     }
 }
+
+function ensureFormActionLabels() {
+    const labels = {
+        'ab2-reset-account-btn': 'Abbrechen',
+        'ab2-reset-transfer-btn': 'Abbrechen',
+        'ab2-reset-item-btn': 'Abbrechen',
+        'ab2-cancel-item-btn': 'Abbrechen'
+    };
+    Object.entries(labels).forEach(([id, label]) => {
+        const btn = el(id);
+        if (btn) btn.textContent = label;
+    });
+}
+
+function ensureReconActionButtons() {
+    const saveBtn = el('ab2-save-recon-btn');
+    const footer = saveBtn?.parentElement;
+    if (!footer) return;
+    const todayBtn = el('ab2-recon-today-btn');
+    if (todayBtn) todayBtn.remove();
+    if (!el('ab2-cancel-recon-btn')) {
+        const cancelBtn = document.createElement('button');
+        cancelBtn.id = 'ab2-cancel-recon-btn';
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'px-4 py-2 bg-gray-300 text-gray-700 rounded-lg';
+        cancelBtn.textContent = 'Abbrechen';
+        footer.insertBefore(cancelBtn, saveBtn);
+    }
+}
+
+function ensureStatusVisibilityDropdown(prefix, searchInputId) {
+    const searchInput = el(searchInputId);
+    const parent = searchInput?.parentElement;
+    if (!searchInput || !parent || el(`ab2-${prefix}-status-dropdown`)) return;
+    const details = document.createElement('details');
+    details.id = `ab2-${prefix}-status-dropdown`;
+    details.className = 'relative';
+    details.innerHTML = `<summary class="list-none cursor-pointer p-2 border-2 border-gray-300 rounded-lg bg-white text-sm font-bold text-gray-700"><span id="ab2-${prefix}-status-summary">Aktive (0)</span> ▾</summary><div class="absolute right-0 mt-1 w-64 z-20 rounded-lg border border-gray-200 bg-white shadow-lg p-2 space-y-2"><label class="flex items-center gap-2 text-xs text-gray-700"><input id="ab2-${prefix}-show-planned-toggle" type="checkbox" class="h-4 w-4"><span id="ab2-${prefix}-show-planned-label">Geplante (0) anzeigen</span></label><label class="flex items-center gap-2 text-xs text-gray-700"><input id="ab2-${prefix}-show-past-toggle" type="checkbox" class="h-4 w-4"><span id="ab2-${prefix}-show-past-label">Abgelaufene (0) anzeigen</span></label></div>`;
+    parent.appendChild(details);
+}
+
+function ensureModalStatusVisibilityControls() {
+    ensureStatusVisibilityDropdown('accounts', 'ab2-accounts-search');
+    ensureStatusVisibilityDropdown('transfers', 'ab2-transfers-search');
+}
+
+function updateStatusVisibilityUi(prefix, state, counts) {
+    const summary = el(`ab2-${prefix}-status-summary`);
+    const plannedLabel = el(`ab2-${prefix}-show-planned-label`);
+    const pastLabel = el(`ab2-${prefix}-show-past-label`);
+    const plannedToggle = el(`ab2-${prefix}-show-planned-toggle`);
+    const pastToggle = el(`ab2-${prefix}-show-past-toggle`);
+    if (plannedLabel) plannedLabel.textContent = `Geplante (${counts.planned}) anzeigen`;
+    if (pastLabel) pastLabel.textContent = `Abgelaufene (${counts.past}) anzeigen`;
+    if (plannedToggle) plannedToggle.checked = !!state.showPlanned;
+    if (pastToggle) pastToggle.checked = !!state.showPast;
+    if (summary) {
+        const segments = [`Aktive (${counts.active})`];
+        if (state.showPlanned) segments.push(`Geplante (${counts.planned})`);
+        if (state.showPast) segments.push(`Abgelaufene (${counts.past})`);
+        summary.textContent = segments.join(' + ');
+    }
+}
 function applySimulationDate(value) {
     const parsed = value ? parseDate(value) : null;
     simulationDate = parsed ? new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()) : null;
@@ -172,6 +236,11 @@ function newestEntityMs(entity) {
 }
 function timestampToDate(v) { if (!v) return null; if (v instanceof Date) return v; if (typeof v.toDate === 'function') return v.toDate(); const d = new Date(v); return Number.isNaN(d.getTime()) ? null : d; }
 function formatDate(v) { const d = parseDate(v) || timestampToDate(v); return d ? `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}` : '-'; }
+function formatDateWithWeekday(v) {
+    const d = parseDate(v) || timestampToDate(v);
+    if (!d) return '-';
+    return `${WEEKDAYS_SHORT[d.getDay()] || ''} ${formatDate(d)}`.trim();
+}
 function formatDateTime(v) { const d = timestampToDate(v) || parseDate(v); return d ? `${formatDate(d)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : '-'; }
 function formatCurrency(v) { return `${roundMoney(v).toFixed(2)} €`; }
 function formatSignedCurrency(v) { const n = roundMoney(v); return `${n >= 0 ? '+' : ''}${n.toFixed(2)} €`; }
@@ -849,7 +918,7 @@ function updateAmountUnlockCountdownUi() {
     if (amountUnlockSecondsLeft > 0) {
         okBtn.disabled = true;
         okBtn.classList.add('opacity-60', 'cursor-not-allowed');
-        okBtn.textContent = `OK (${amountUnlockSecondsLeft}s)`;
+        okBtn.textContent = `OK (${String(amountUnlockSecondsLeft).padStart(2, '0')}s)`;
         hint.textContent = `Freigabe in ${amountUnlockSecondsLeft}s verfügbar.`;
     } else {
         okBtn.disabled = false;
@@ -888,6 +957,11 @@ function ensureAmountUnlockModal() {
     modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
     modal.style.display = 'none';
     modal.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg"><div class="bg-gradient-to-r from-amber-600 to-orange-500 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 id="ab2-amount-unlock-title" class="text-xl font-bold">Betrag korrigieren</h3><button id="ab2-close-amount-unlock-modal" class="text-white/80 hover:text-white transition">✕</button></div><div class="p-4 space-y-3"><p id="ab2-amount-unlock-text" class="text-sm text-gray-700">Der Betrag darf nur bei außerordentlichen Gründen korrigiert werden.</p><div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><div class="font-bold">Wichtiger Hinweis</div><div>Bei planmäßigen Änderungen bitte den Weg „Abtausch“ verwenden.</div></div><div id="ab2-amount-unlock-countdown" class="text-sm font-bold text-amber-800">Freigabe in 30s verfügbar.</div></div><div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-2"><button id="ab2-cancel-amount-unlock-btn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg">Schließen</button><button id="ab2-confirm-amount-unlock-btn" class="w-24 inline-flex justify-center px-4 py-2 bg-amber-600 text-white rounded-lg">OK (30s)</button></div></div>`;
+    const okBtn = modal.querySelector('#ab2-confirm-amount-unlock-btn');
+    if (okBtn) {
+        okBtn.classList.remove('w-24');
+        okBtn.classList.add('w-32', 'h-10', 'whitespace-nowrap', 'items-center', 'justify-center', 'leading-none', 'text-sm');
+    }
     root.appendChild(modal);
 }
 
@@ -1076,6 +1150,9 @@ function ensureShell() {
     ensureSettingsMenuModal();
     ensureSettingsMenuButton();
     ensureUnifiedModalLayouts();
+    ensureModalStatusVisibilityControls();
+    ensureReconActionButtons();
+    ensureFormActionLabels();
     restoreClassicTopActionRow();
     applyModalViewState();
     enhanceStaticHelpTexts();
@@ -1212,6 +1289,30 @@ function itemStatus(item) {
     if (start > now) return { key: 'geplant', label: 'Geplant', css: 'bg-blue-100 text-blue-700' };
     if (end && end < now) return { key: 'vergangen', label: 'Vergangen', css: 'bg-gray-100 text-gray-700' };
     return { key: 'aktiv', label: 'Aktiv', css: 'bg-green-100 text-green-700' };
+}
+
+function transferPlanStatus(transfer) {
+    const now = referenceDayStart();
+    const start = parseDate(transfer?.validFrom);
+    const end = parseDate(transfer?.validTo);
+    if (!transfer?.sourceAccountId || !transfer?.targetAccountId || toNum(transfer?.amount, NaN) <= 0 || !start) return { key: 'aktiv' };
+    if (start > now) return { key: 'geplant' };
+    if (end && end < now) return { key: 'vergangen' };
+    return { key: 'aktiv' };
+}
+
+function accountPlanStatus(account) {
+    const now = referenceDayStart();
+    const latest = latestSnapshots()[account?.id] || null;
+    const start = parseDate(latest?.date);
+    if (start && start > now) return { key: 'geplant' };
+    return { key: 'aktiv' };
+}
+
+function includeWithStatusVisibility(statusKey, state) {
+    if (statusKey === 'geplant') return !!state.showPlanned;
+    if (statusKey === 'vergangen') return !!state.showPast;
+    return true;
 }
 function getExecutionDateForMonth(entity, year, month) {
     const start = parseDate(entity?.validFrom);
@@ -2115,10 +2216,22 @@ function renderAccounts() {
     if (!host) return;
     updateModalFilterButtons('accounts', accountListFilterState.type);
     const search = normalizeSearchText(accountListFilterState.query);
-    const accounts = Object.values(ACCOUNTS)
+    const baseAccounts = Object.values(ACCOUNTS)
         .filter((account) => accountListFilterState.type === 'all' || normalizeAccountType(account) === accountListFilterState.type)
         .filter((account) => !search || normalizeSearchText(`${account.name || ''} ${account.bank || ''} ${account.iban || ''} ${formatCurrency(accountMinBuffer(account))}`).includes(search))
         .sort((a, b) => newestEntityMs(b) - newestEntityMs(a) || String(a.name || '').localeCompare(String(b.name || '')));
+    const accountStatuses = new Map(baseAccounts.map((account) => [account.id, accountPlanStatus(account).key]));
+    const accountCounts = { active: 0, planned: 0, past: 0 };
+    accountStatuses.forEach((status) => {
+        if (status === 'geplant') accountCounts.planned += 1;
+        else if (status === 'vergangen') accountCounts.past += 1;
+        else accountCounts.active += 1;
+    });
+    updateStatusVisibilityUi('accounts', accountListFilterState, accountCounts);
+    const accounts = baseAccounts.filter((account) => {
+        if (accountModalViewMode === 'edit' && editingAccountId === account.id) return true;
+        return includeWithStatusVisibility(accountStatuses.get(account.id) || 'aktiv', accountListFilterState);
+    });
     const visibleAccounts = accountModalViewMode === 'edit' && editingAccountId
         ? accounts.filter((account) => account.id === editingAccountId)
         : accounts;
@@ -2147,7 +2260,7 @@ function renderTransfers() {
     if (!host) return;
     updateModalFilterButtons('transfers', transferListFilterState.type);
     const search = normalizeSearchText(transferListFilterState.query);
-    const transfers = Object.values(TRANSFERS)
+    const baseTransfers = Object.values(TRANSFERS)
         .filter((transfer) => {
             if (transferListFilterState.type === 'all') return true;
             const source = ACCOUNTS[transfer.sourceAccountId];
@@ -2157,6 +2270,18 @@ function renderTransfers() {
         })
         .filter((transfer) => !search || normalizeSearchText(`${ACCOUNTS[transfer.sourceAccountId]?.name || ''} ${ACCOUNTS[transfer.targetAccountId]?.name || ''} ${transfer.note || ''} ${transferLinkingText(transfer)} ${formatCurrency(transfer.amount)} ${intervalLabel(transfer.intervalType, transfer.customMonths || [])}`).includes(search))
         .sort((a, b) => newestEntityMs(b) - newestEntityMs(a) || String(ACCOUNTS[a.sourceAccountId]?.name || '').localeCompare(String(ACCOUNTS[b.sourceAccountId]?.name || '')));
+    const transferStatuses = new Map(baseTransfers.map((transfer) => [transfer.id, transferPlanStatus(transfer).key]));
+    const transferCounts = { active: 0, planned: 0, past: 0 };
+    transferStatuses.forEach((status) => {
+        if (status === 'geplant') transferCounts.planned += 1;
+        else if (status === 'vergangen') transferCounts.past += 1;
+        else transferCounts.active += 1;
+    });
+    updateStatusVisibilityUi('transfers', transferListFilterState, transferCounts);
+    const transfers = baseTransfers.filter((transfer) => {
+        if (transferModalViewMode === 'edit' && editingTransferId === transfer.id) return true;
+        return includeWithStatusVisibility(transferStatuses.get(transfer.id) || 'aktiv', transferListFilterState);
+    });
     const visibleTransfers = transferModalViewMode === 'edit' && editingTransferId
         ? transfers.filter((transfer) => transfer.id === editingTransferId)
         : transfers;
@@ -2360,6 +2485,10 @@ function collectContribs() {
 function resetAccountForm(mode = 'list') {
     editingAccountId = '';
     accountAmountUnlockForId = '';
+    if (mode === 'list') {
+        accountListFilterState.showPlanned = false;
+        accountListFilterState.showPast = false;
+    }
     setAccountModalView(mode);
     ['ab2-account-id', 'ab2-account-name', 'ab2-account-bank', 'ab2-account-iban', 'ab2-account-min-buffer', 'ab2-account-start-balance'].forEach((id) => { if (el(id)) el(id).value = ''; });
     if (el('ab2-account-type')) el('ab2-account-type').value = 'bank';
@@ -2405,6 +2534,10 @@ function resetTransferForm(mode = 'list') {
     editingTransferId = '';
     transferAmountUnlockForId = '';
     transferAbtauschSourceId = '';
+    if (mode === 'list') {
+        transferListFilterState.showPlanned = false;
+        transferListFilterState.showPast = false;
+    }
     setTransferModalView(mode);
     ['ab2-transfer-id', 'ab2-transfer-amount', 'ab2-transfer-start-month', 'ab2-transfer-custom-months', 'ab2-transfer-day', 'ab2-transfer-valid-to', 'ab2-transfer-note', 'ab2-transfer-linked-titles'].forEach((id) => { if (el(id)) el(id).value = ''; });
     if (el('ab2-transfer-source')) el('ab2-transfer-source').value = '';
@@ -2919,7 +3052,7 @@ function openForecastInsight(month) {
             : flowDiff < -0.009
                 ? `-${formatCurrency(Math.abs(flowDiff))}`
                 : '0.00 €';
-        const movementRows = (detail.entries || []).map((entry) => `<tr class="border-t"><td class="p-2 text-xs text-gray-600">${formatDate(entry.date)}</td><td class="p-2 text-xs sm:text-sm text-gray-700">${escapeHtml(entry.label || '-')}</td><td class="p-2 text-xs sm:text-sm font-bold ${toNum(entry.amount, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${entry.type === 'snapshot' ? formatCurrency(entry.amount) : formatSignedCurrency(entry.amount)}</td><td class="p-2 text-xs text-gray-500">${escapeHtml(entry.note || '')}</td></tr>`).join('');
+        const movementRows = (detail.entries || []).map((entry) => `<tr class="border-t"><td class="p-2 text-xs text-gray-600">${formatDateWithWeekday(entry.date)}</td><td class="p-2 text-xs sm:text-sm text-gray-700">${escapeHtml(entry.label || '-')}</td><td class="p-2 text-xs sm:text-sm font-bold ${toNum(entry.amount, 0) < 0 ? 'text-red-700' : 'text-emerald-700'}">${entry.type === 'snapshot' ? formatCurrency(entry.amount) : formatSignedCurrency(entry.amount)}</td><td class="p-2 text-xs text-gray-500">${escapeHtml(entry.note || '')}</td></tr>`).join('');
         return `<div class="rounded-xl border border-gray-200 bg-gray-50 p-3"><div class="font-bold text-gray-800 text-sm sm:text-base">${escapeHtml(account.name || '-')}</div><div class="mt-2 text-[11px] text-gray-500 font-bold flex items-center gap-2"><span class="text-base">↓</span><span>Buchungen laufen von oben nach unten</span></div><div class="mt-2 overflow-x-auto"><table class="min-w-full"><thead><tr><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Datum</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Wirkung</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Betrag</th><th class="p-2 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase">Notiz</th></tr></thead><tbody>${movementRows || '<tr><td colspan="4" class="p-3 text-xs text-gray-400 italic">Keine Bewegungen in diesem Monat.</td></tr>'}</tbody></table></div><div class="mt-2 text-[11px] text-gray-600">Zufluss ${formatCurrency(detail.inflow)} · Abfluss ${formatCurrency(detail.outflow)} · Differenz <span class="font-extrabold ${flowDiffClass}">${flowDiffText}</span> · Δ zum Puffer ${formatSignedCurrency(detail.delta)}</div></div>`;
     }).join('');
 
@@ -3041,6 +3174,8 @@ function bindEvents() {
     on('ab2-accounts-filter-all', 'click', () => { accountListFilterState.type = 'all'; renderAccounts(); });
     on('ab2-accounts-filter-bank', 'click', () => { accountListFilterState.type = 'bank'; renderAccounts(); });
     on('ab2-accounts-filter-person', 'click', () => { accountListFilterState.type = 'person'; renderAccounts(); });
+    on('ab2-accounts-show-planned-toggle', 'change', (e) => { accountListFilterState.showPlanned = !!e.target?.checked; renderAccounts(); });
+    on('ab2-accounts-show-past-toggle', 'change', (e) => { accountListFilterState.showPast = !!e.target?.checked; renderAccounts(); });
     on('ab2-accounts-search', 'input', (e) => { accountListFilterState.query = e.target.value || ''; renderAccounts(); });
     on('ab2-close-person-control-modal', 'click', closePersonControlModal);
     on('ab2-cancel-person-control-btn', 'click', closePersonControlModal);
@@ -3056,11 +3191,13 @@ function bindEvents() {
     on('ab2-transfers-filter-all', 'click', () => { transferListFilterState.type = 'all'; renderTransfers(); });
     on('ab2-transfers-filter-bank', 'click', () => { transferListFilterState.type = 'bank'; renderTransfers(); });
     on('ab2-transfers-filter-person', 'click', () => { transferListFilterState.type = 'person'; renderTransfers(); });
+    on('ab2-transfers-show-planned-toggle', 'change', (e) => { transferListFilterState.showPlanned = !!e.target?.checked; renderTransfers(); });
+    on('ab2-transfers-show-past-toggle', 'change', (e) => { transferListFilterState.showPast = !!e.target?.checked; renderTransfers(); });
     on('ab2-transfers-search', 'input', (e) => { transferListFilterState.query = e.target.value || ''; renderTransfers(); });
 
     on('ab2-close-recon-modal', 'click', () => closeModal('ab2-reconciliation-modal'));
     on('ab2-save-recon-btn', 'click', saveRecon);
-    on('ab2-recon-today-btn', 'click', () => { if (el('ab2-recon-date')) el('ab2-recon-date').value = isoDate(new Date()); renderPreviews(); });
+    on('ab2-cancel-recon-btn', 'click', () => closeModal('ab2-reconciliation-modal'));
     on('ab2-close-suggestions-modal', 'click', () => closeModal('ab2-suggestions-modal'));
     on('ab2-close-detail-modal', 'click', () => closeModal('ab2-detail-modal'));
 
