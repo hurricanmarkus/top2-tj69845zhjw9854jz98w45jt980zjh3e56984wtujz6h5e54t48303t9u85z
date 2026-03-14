@@ -819,7 +819,7 @@ function ensureAccountCurrentBalanceField() {
         if (startBalanceInput) startBalanceInput.remove();
         const valueNode = document.createElement('div');
         valueNode.id = 'ab2-account-current-balance-value';
-        valueNode.className = 'mt-1 text-sm font-bold text-slate-800';
+        valueNode.className = 'mt-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center text-base font-extrabold text-slate-800 tabular-nums';
         valueNode.textContent = '--';
         startWrap.appendChild(valueNode);
     }
@@ -880,7 +880,19 @@ function ensureSettingsMenuModal() {
     modal.id = 'ab2-settings-menu-modal';
     modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
     modal.style.display = 'none';
-    modal.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-md"><div class="bg-gradient-to-r from-slate-700 to-slate-600 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 class="text-xl font-bold">Einstellungen</h3><button id="ab2-close-settings-menu-modal" class="text-white/80 hover:text-white transition">✕</button></div><div class="p-4 space-y-2"><button type="button" id="ab2-settings-open-accounts" class="w-full text-left px-4 py-3 rounded-lg border border-slate-200 hover:bg-slate-50 font-bold text-slate-700">Konten / Quellen</button><button type="button" id="ab2-settings-open-transfers" class="w-full text-left px-4 py-3 rounded-lg border border-slate-200 hover:bg-slate-50 font-bold text-slate-700">Daueraufträge</button><button type="button" id="ab2-settings-open-recon" class="w-full text-left px-4 py-3 rounded-lg border border-slate-200 hover:bg-slate-50 font-bold text-slate-700">Abgleich</button></div><div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end"><button id="ab2-cancel-settings-menu-btn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg">Schließen</button></div></div>`;
+    modal.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-md"><div class="bg-gradient-to-r from-slate-700 to-slate-600 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 class="text-xl font-bold">Einstellungen</h3><button id="ab2-close-settings-menu-modal" class="text-white/80 hover:text-white transition">✕</button></div><div class="p-4 space-y-2"><button type="button" id="ab2-settings-open-accounts" class="w-full text-left px-4 py-3 rounded-lg border border-slate-200 hover:bg-slate-50 font-bold text-slate-700">Konten / Quellen</button><button type="button" id="ab2-settings-open-transfers" class="w-full text-left px-4 py-3 rounded-lg border border-slate-200 hover:bg-slate-50 font-bold text-slate-700">Daueraufträge</button><button type="button" id="ab2-settings-open-recon" class="w-full text-left px-4 py-3 rounded-lg border border-slate-200 hover:bg-slate-50 font-bold text-slate-700">Abgleich</button><button type="button" id="ab2-settings-open-payments" class="w-full text-left px-4 py-3 rounded-lg border border-slate-200 hover:bg-slate-50 font-bold text-slate-700">Zahlungen</button></div><div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end"><button id="ab2-cancel-settings-menu-btn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg">Schließen</button></div></div>`;
+    root.appendChild(modal);
+}
+
+function ensurePaymentsOverviewModal() {
+    if (el('ab2-payments-modal')) return;
+    const root = el('abbuchungsberechner-root');
+    if (!root) return;
+    const modal = document.createElement('div');
+    modal.id = 'ab2-payments-modal';
+    modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+    modal.style.display = 'none';
+    modal.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-7xl max-h-[92vh] overflow-y-auto"><div class="sticky top-0 bg-gradient-to-r from-indigo-700 to-blue-700 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 class="text-xl font-bold">Zahlungen · Beteiligungsübersicht</h3><button id="ab2-close-payments-modal" class="text-white/80 hover:text-white transition">✕</button></div><div class="p-4 space-y-3"><div id="ab2-payments-summary" class="rounded-xl border border-indigo-100 bg-indigo-50 p-3 text-sm text-indigo-900">Lade Daten...</div><div class="rounded-xl border border-slate-200 bg-white overflow-hidden"><div class="overflow-x-auto"><table class="ab2-simple-table min-w-[1340px]"><thead class="bg-slate-100 text-slate-700"><tr><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Status</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Titel</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Konto</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Intervall</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Betrag</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Beteiligte</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Beteiligung gesamt</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Offen / Überdeckt</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Deckung</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Seit Start</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Quellen (Person/Bank)</th><th class="px-3 py-2 text-right text-[11px] uppercase tracking-wide">Lesen</th></tr></thead><tbody id="ab2-payments-table-body"><tr><td colspan="12" class="px-3 py-8 text-center text-gray-400 italic">Keine Zahlungen vorhanden.</td></tr></tbody></table></div></div></div></div><div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end"><button id="ab2-cancel-payments-btn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg">Schließen</button></div></div>`;
     root.appendChild(modal);
 }
 
@@ -1192,6 +1204,7 @@ function ensureShell() {
     ensureAccountAbtauschButton();
     ensureTransferAbtauschButton();
     ensureSettingsMenuModal();
+    ensurePaymentsOverviewModal();
     ensureSettingsMenuButton();
     ensureUnifiedModalLayouts();
     ensureModalStatusVisibilityControls();
@@ -2290,13 +2303,14 @@ function renderAccounts() {
         const latest = latestSnapshots()[account.id] || null;
         const amountText = latest ? formatCurrency(latest.value) : 'kein Betrag';
         const worstDayDelta = toNum(row.minDayDelta, toNum(row.delta, 0));
-        const worstDayText = `Schlechteste Tagesabweichung (Kontostand minus Tagesbedarf): ${formatSignedCurrency(worstDayDelta)}`;
-        const transferText = `Transfer-Restbudget aus Zuordnungen: ${formatSignedCurrency(transferDiff)}`;
+        const worstDayText = `Tages-Δ: ${formatSignedCurrency(worstDayDelta)}`;
+        const transferText = `Transfer-Δ: ${formatSignedCurrency(transferDiff)}`;
         const updatedText = formatEntityUpdateTime(account);
         const active = editingAccountId === account.id;
         const cardTone = active ? 'border-yellow-400 bg-yellow-50 ring-2 ring-yellow-300' : 'border-slate-200 bg-white hover:border-blue-300';
         const controlButton = person ? `<button type="button" class="px-2 py-1 bg-violet-100 text-violet-700 rounded text-xs" data-account-control="${account.id}">Kontrolle</button>` : '';
-        return `<div class="rounded-xl border ${cardTone} p-3 transition" data-account-card="${account.id}"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-slate-800">${escapeHtml(account.name || '-')}</div><div class="text-[11px] text-slate-500">${escapeHtml(person ? 'Person / Quelle' : `${account.bank || 'Bankkonto'} · ${normalizeAccountRole(account)}`)}</div></div><span class="px-2 py-1 rounded-full text-[10px] ${quality?.status === 'alarm' ? 'bg-red-100 text-red-700' : quality?.status === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(quality?.text || 'aktuell')}</span></div><div class="mt-3 text-xs"><div class="font-bold text-slate-800">Betrag: ${amountText}</div><div class="mt-1 font-bold ${worstDayDelta < 0 ? 'text-red-700' : 'text-emerald-700'}">${worstDayText}</div><div class="mt-1 ${transferDiffCss(transferDiff)} font-bold">${transferText}</div><div class="mt-1 text-slate-600">${itemCount} Einträge · ${transferCount} Transfers</div><div class="mt-1 text-[11px] text-slate-500">Zuletzt geändert: ${updatedText}</div></div><div class="mt-3 flex flex-wrap gap-1 justify-end">${controlButton}<button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></div>`;
+        const metricInfoButton = (metricKey) => `<button type="button" class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-current text-[10px] leading-none" data-account-metric-info="${metricKey}" data-account-id="${escapeHtml(account.id || '')}" title="Bedeutung anzeigen">i</button>`;
+        return `<div class="rounded-xl border ${cardTone} p-3 transition" data-account-card="${account.id}"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-slate-800">${escapeHtml(account.name || '-')}</div><div class="text-[11px] text-slate-500">${escapeHtml(person ? 'Person / Quelle' : `${account.bank || 'Bankkonto'} · ${normalizeAccountRole(account)}`)}</div></div><span class="px-2 py-1 rounded-full text-[10px] ${quality?.status === 'alarm' ? 'bg-red-100 text-red-700' : quality?.status === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(quality?.text || 'aktuell')}</span></div><div class="mt-3 text-xs"><div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center"><div class="text-[10px] uppercase tracking-wide text-slate-500">Aktueller Kontostand</div><div class="mt-0.5 text-base font-extrabold text-slate-800 tabular-nums">${amountText}</div></div><div class="mt-2 flex items-center gap-1 font-bold ${worstDayDelta < 0 ? 'text-red-700' : 'text-emerald-700'}"><span>${worstDayText}</span>${metricInfoButton('day')}</div><div class="mt-1 flex items-center gap-1 ${transferDiffCss(transferDiff)} font-bold"><span>${transferText}</span>${metricInfoButton('transfer')}</div><div class="mt-1 text-slate-600">${itemCount} Einträge · ${transferCount} Transfers</div><div class="mt-1 text-[11px] text-slate-500">Zuletzt geändert: ${updatedText}</div></div><div class="mt-3 flex flex-wrap gap-1 justify-end">${controlButton}<button type="button" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs" data-account-edit="${account.id}">Bearbeiten</button><button type="button" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs" data-account-delete="${account.id}">Löschen</button></div></div>`;
     };
     const bankCards = visibleAccounts.filter((account) => !isPersonAccount(account)).map(renderAccountCard).join('');
     const personCards = visibleAccounts.filter((account) => isPersonAccount(account)).map(renderAccountCard).join('');
@@ -2449,7 +2463,7 @@ function renderPreviews() {
     const swapAmount = toNum(el('ab2-abtausch-new-amount')?.value, 0);
     if (el('ab2-abtausch-preview')) el('ab2-abtausch-preview').textContent = item && swapStart && swapAmount > 0 ? `${item.title || '-'} endet vor ${formatDate(swapStart)} und läuft ab dann mit ${formatCurrency(swapAmount)} weiter.` : 'Noch keine Vorschau.';
 }
-function renderAll() { populateSelects(); renderTags(); renderDashboard(); renderTable(); renderAccounts(); renderTransfers(); renderRecon(); applyModalViewState(); renderPreviews(); }
+function renderAll() { populateSelects(); renderTags(); renderDashboard(); renderTable(); renderAccounts(); renderTransfers(); renderRecon(); renderPaymentsOverview(); applyModalViewState(); renderPreviews(); }
 function setItemReadOnly(readOnly) {
     itemReadMode = !!readOnly;
     document.querySelectorAll('#ab2-item-modal input, #ab2-item-modal select, #ab2-item-modal textarea').forEach((node) => {
@@ -2496,6 +2510,106 @@ function buildContributionRows(item) {
         .filter(Boolean);
 
     return [...directRows, ...transferRows].sort((a, b) => String(a.sourceName || '').localeCompare(String(b.sourceName || '')));
+}
+
+function paymentCoverageStats(item) {
+    const sourceMap = new Map();
+    buildContributionRows(item).forEach((row) => {
+        const key = String(row.sourceAccountId || row.sourceName || '-').toLowerCase();
+        if (!sourceMap.has(key)) {
+            sourceMap.set(key, {
+                sourceId: row.sourceAccountId || '',
+                sourceName: row.sourceName || '-',
+                amount: 0,
+                kinds: new Set()
+            });
+        }
+        const target = sourceMap.get(key);
+        target.amount = roundMoney(target.amount + toNum(row.amount, 0));
+        target.kinds.add(row.kind || '-');
+    });
+    const participants = Array.from(sourceMap.values())
+        .map((entry) => ({
+            sourceId: entry.sourceId,
+            sourceName: entry.sourceName,
+            amount: roundMoney(entry.amount),
+            kindText: Array.from(entry.kinds).join(' + ')
+        }))
+        .sort((a, b) => toNum(b.amount, 0) - toNum(a.amount, 0));
+    const itemAmount = roundMoney(toNum(item?.amount, 0));
+    const covered = roundMoney(participants.reduce((sum, row) => sum + toNum(row.amount, 0), 0));
+    const open = roundMoney(Math.max(0, itemAmount - covered));
+    const over = roundMoney(Math.max(0, covered - itemAmount));
+    const months = monthsSinceInclusive(item?.validFrom || isoDate(referenceDate()), referenceDate());
+    return {
+        participants,
+        participantCount: participants.length,
+        itemAmount,
+        covered,
+        open,
+        over,
+        coveragePercent: itemAmount > 0 ? roundMoney((covered / itemAmount) * 100) : 0,
+        months,
+        openSinceStart: roundMoney(open * months),
+        overSinceStart: roundMoney(over * months)
+    };
+}
+
+function renderPaymentsOverview() {
+    const body = el('ab2-payments-table-body');
+    const summary = el('ab2-payments-summary');
+    if (!body) return;
+    const statusOrder = { fehler: 0, aktiv: 1, geplant: 2, vergangen: 3 };
+    const payments = Object.values(ITEMS)
+        .filter((item) => item?.typ === 'belastung')
+        .sort((a, b) => {
+            const aStatus = itemStatus(a).key;
+            const bStatus = itemStatus(b).key;
+            const aOrder = statusOrder[aStatus] ?? 99;
+            const bOrder = statusOrder[bStatus] ?? 99;
+            return aOrder - bOrder || String(a.title || '').localeCompare(String(b.title || ''));
+        });
+    if (!payments.length) {
+        body.innerHTML = '<tr><td colspan="12" class="px-3 py-8 text-center text-gray-400 italic">Keine Ausgaben vorhanden.</td></tr>';
+        if (summary) summary.textContent = 'Noch keine Ausgaben im Dashboard vorhanden.';
+        return;
+    }
+    let openCount = 0;
+    let coveredCount = 0;
+    let totalOpen = 0;
+    let totalOver = 0;
+    body.innerHTML = payments.map((item) => {
+        const account = ACCOUNTS[item.accountId] || {};
+        const status = itemStatus(item);
+        const coverage = paymentCoverageStats(item);
+        const isOpen = coverage.open > 0.009;
+        if (isOpen) {
+            openCount += 1;
+            totalOpen = roundMoney(totalOpen + coverage.open);
+        } else if (coverage.over <= 0.009) {
+            coveredCount += 1;
+        } else {
+            totalOver = roundMoney(totalOver + coverage.over);
+        }
+        const rowTone = isOpen ? 'bg-yellow-50' : (coverage.over > 0.009 ? 'bg-blue-50/60' : 'bg-white');
+        const detailsText = coverage.participants.length
+            ? coverage.participants.map((entry) => `${entry.sourceName}: ${formatCurrency(entry.amount)} (${entry.kindText})`).join(' · ')
+            : '-';
+        const deltaText = isOpen
+            ? `<span class="font-bold text-amber-800">Offen ${formatCurrency(coverage.open)}</span>`
+            : coverage.over > 0.009
+                ? `<span class="font-bold text-blue-700">Überdeckt ${formatCurrency(coverage.over)}</span>`
+                : '<span class="font-bold text-emerald-700">Ausgeglichen</span>';
+        const sinceStartText = isOpen
+            ? `${formatCurrency(coverage.openSinceStart)} offen seit Start`
+            : coverage.over > 0.009
+                ? `${formatCurrency(coverage.overSinceStart)} überdeckt seit Start`
+                : `seit ${coverage.months} Monat(en) stabil`;
+        return `<tr class="border-t border-slate-100 ${rowTone}"><td class="px-3 py-2 whitespace-nowrap"><span class="px-2 py-1 rounded-full text-[11px] font-bold ${status.css}">${escapeHtml(status.label)}</span></td><td class="px-3 py-2"><div class="font-bold text-slate-800">${escapeHtml(item.title || '-')}</div><div class="text-[11px] text-slate-500">Gültig ab ${formatDate(item.validFrom)}${item.validTo ? ` bis ${formatDate(item.validTo)}` : ''}</div></td><td class="px-3 py-2 text-xs text-slate-700 whitespace-nowrap">${escapeHtml(account.name || '-')}</td><td class="px-3 py-2 text-xs text-slate-700 whitespace-nowrap">${escapeHtml(intervalLabel(item.intervalType, item.customMonths || []))}</td><td class="px-3 py-2 text-xs font-bold text-slate-900 whitespace-nowrap">${formatCurrency(item.amount)}</td><td class="px-3 py-2 text-xs text-slate-700 text-center">${coverage.participantCount}</td><td class="px-3 py-2 text-xs font-bold text-slate-800 whitespace-nowrap">${formatCurrency(coverage.covered)}</td><td class="px-3 py-2 text-xs whitespace-nowrap">${deltaText}</td><td class="px-3 py-2 text-xs font-bold ${isOpen ? 'text-amber-800' : 'text-emerald-700'} whitespace-nowrap">${coverage.coveragePercent.toFixed(0)}%</td><td class="px-3 py-2 text-xs text-slate-700 whitespace-nowrap">${escapeHtml(sinceStartText)}</td><td class="px-3 py-2 text-xs text-slate-700 min-w-[320px]">${escapeHtml(detailsText)}</td><td class="px-3 py-2 text-right whitespace-nowrap"><button type="button" class="px-2 py-1 rounded bg-blue-100 text-blue-700 text-xs font-bold hover:bg-blue-200" data-payment-open-item="${escapeHtml(item.id || '')}">Lesen</button></td></tr>`;
+    }).join('');
+    if (summary) {
+        summary.innerHTML = `<div class="font-bold">Ausgaben gesamt: ${payments.length} · vollständig zugeordnet: ${coveredCount}</div><div class="mt-1 text-xs">Offene Zahlungen: <span class="font-bold text-amber-800">${openCount}</span> (gesamt ${formatCurrency(totalOpen)} pro Ausführung). Überdeckungen: <span class="font-bold text-blue-700">${formatCurrency(totalOver)}</span> pro Ausführung.</div><div class="mt-1 text-xs">Gelb markierte Zeilen zeigen offene Zuordnung. Ziel: alle Kosten mit Beiträgen oder Transfer-Zuordnungen vollständig decken.</div>`;
+    }
 }
 
 function renderContributionTable(item) {
@@ -3022,6 +3136,30 @@ function openItem(id, readOnly = false) {
     fillItemForm(item, readOnly);
     openModal('ab2-item-modal');
 }
+
+function openAccountMetricInfo(metricKey, accountId) {
+    const account = ACCOUNTS[accountId] || null;
+    if (!account) return;
+    const row = FORECAST.timeline[0]?.accounts[accountId] || {};
+    const transferDiff = accountTransferBudgetDiff(accountId);
+    if (metricKey === 'day') {
+        const criticalText = row.criticalDate
+            ? `<div class="mt-1">Kritischer Tag in der Vorschau: <strong>${formatDate(row.criticalDate)}</strong>.</div>`
+            : '<div class="mt-1">Aktuell gibt es in der Vorschau keinen einzelnen kritischen Tag.</div>';
+        openDetail(
+            `Erklärung · Tages-Δ (${account.name || '-'})`,
+            `<div class="space-y-2 text-sm text-slate-700"><p><strong>Tages-Δ</strong> ist die niedrigste Tagesabweichung in der 12-Monats-Prognose. Dafür wird pro Tag gerechnet: Kontostand minus Tagesbedarf.</p><p>Ein negativer Wert bedeutet, dass der Bedarf an mindestens einem Tag nicht vollständig gedeckt war. Je negativer der Wert ist, desto größer ist die Unterdeckung am schlechtesten Tag.</p><p>Ein positiver Wert zeigt, dass selbst am kritischsten Tag noch Reserve vorhanden war.</p>${criticalText}</div>`
+        );
+        return;
+    }
+    if (metricKey === 'transfer') {
+        openDetail(
+            `Erklärung · Transfer-Δ (${account.name || '-'})`,
+            `<div class="space-y-2 text-sm text-slate-700"><p><strong>Transfer-Δ</strong> vergleicht die Summe der Transfer-Zuordnungen mit den dafür verplanten Transferbeträgen für dieses Konto.</p><p>Ein negativer Wert heißt: Es wurde mehr zugeordnet als aktuell durch Transfers bereitsteht. Dann ist ein Teil der Kosten rechnerisch noch offen.</p><p>Ein positiver Wert heißt: Es ist noch nicht vollständig verplantes Transfer-Budget vorhanden, das für weitere Zuordnungen genutzt werden kann.</p><p>Aktueller Wert: <strong>${formatSignedCurrency(transferDiff)}</strong>.</p></div>`
+        );
+    }
+}
+
 function openStatInsight(statKey) {
     let html = '<p class="text-sm text-gray-500">Keine Details vorhanden.</p>';
     if (statKey === 'accounts') {
@@ -3185,6 +3323,9 @@ function bindEvents() {
     on('ab2-settings-open-accounts', 'click', () => { closeModal('ab2-settings-menu-modal'); resetAccountForm('list'); openModal('ab2-accounts-modal'); });
     on('ab2-settings-open-transfers', 'click', () => { closeModal('ab2-settings-menu-modal'); resetTransferForm('list'); openModal('ab2-transfers-modal'); });
     on('ab2-settings-open-recon', 'click', () => { closeModal('ab2-settings-menu-modal'); resetReconForm('list'); openModal('ab2-reconciliation-modal'); });
+    on('ab2-settings-open-payments', 'click', () => { closeModal('ab2-settings-menu-modal'); renderPaymentsOverview(); openModal('ab2-payments-modal'); });
+    on('ab2-close-payments-modal', 'click', () => closeModal('ab2-payments-modal'));
+    on('ab2-cancel-payments-btn', 'click', () => closeModal('ab2-payments-modal'));
     on('ab2-open-suggestions-modal', 'click', () => { renderSuggestionsModal(); openModal('ab2-suggestions-modal'); });
     on('ab2-toggle-glossary', 'click', () => el('ab2-glossary')?.classList.toggle('hidden'));
     on('ab2-forecast-toggle', 'click', () => {
@@ -3362,6 +3503,11 @@ function bindEvents() {
                 openItem(edit.dataset.itemEdit, false);
                 return;
             }
+            const row = e.target.closest('[data-item-row]');
+            if (row?.dataset.itemRow) {
+                openItem(row.dataset.itemRow, true);
+                return;
+            }
         });
         itemHost.dataset.listenerAttached = 'true';
     }
@@ -3381,11 +3527,16 @@ function bindEvents() {
     if (accHost && !accHost.dataset.listenerAttached) {
         accHost.addEventListener('click', (e) => {
             const create = e.target.closest('[data-account-new]');
+            const metricInfo = e.target.closest('[data-account-metric-info]');
             const control = e.target.closest('[data-account-control]');
             const edit = e.target.closest('[data-account-edit]');
             const del = e.target.closest('[data-account-delete]');
             if (create) {
                 resetAccountForm('create');
+                return;
+            }
+            if (metricInfo?.dataset.accountMetricInfo) {
+                openAccountMetricInfo(metricInfo.dataset.accountMetricInfo, metricInfo.dataset.accountId || '');
                 return;
             }
             if (control) openPersonControl(control.dataset.accountControl);
@@ -3459,6 +3610,15 @@ function bindEvents() {
             if (del) deleteRecon(del.dataset.reconDelete);
         });
         reconHost.dataset.listenerAttached = 'true';
+    }
+    const paymentsHost = el('ab2-payments-table-body');
+    if (paymentsHost && !paymentsHost.dataset.listenerAttached) {
+        paymentsHost.addEventListener('click', (e) => {
+            const openBtn = e.target.closest('[data-payment-open-item]');
+            if (!openBtn?.dataset.paymentOpenItem) return;
+            openItem(openBtn.dataset.paymentOpenItem, true);
+        });
+        paymentsHost.dataset.listenerAttached = 'true';
     }
     const suggestionHosts = [el('ab2-suggestion-preview'), el('ab2-suggestions-content')].filter(Boolean);
     suggestionHosts.forEach((host) => {
