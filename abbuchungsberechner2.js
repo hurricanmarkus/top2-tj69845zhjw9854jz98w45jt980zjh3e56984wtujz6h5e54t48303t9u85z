@@ -362,10 +362,6 @@ function buildShell() {
             <div class="flex justify-between items-center flex-wrap gap-2">
                 <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition" data-target="home"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 sm:w-6 sm:h-6 mr-1"><path d="m15 18-6-6 6-6"></path></svg><span class="text-sm sm:text-base font-semibold">zurück</span></button>
                 <div class="flex gap-2 flex-wrap">
-                    <button id="ab2-open-accounts-modal" class="ab2-compact-btn px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-bold text-xs sm:text-sm">Konten</button>
-                    <button id="ab2-open-transfers-modal" class="ab2-compact-btn px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-bold text-xs sm:text-sm">Daueraufträge</button>
-                    <button id="ab2-open-recon-modal" class="ab2-compact-btn px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-bold text-xs sm:text-sm">Abgleich</button>
-                    <button id="ab2-open-suggestions-modal" class="ab2-compact-btn px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 font-bold text-xs sm:text-sm">Vorschläge</button>
                     <button id="ab2-btn-create" class="ab2-compact-btn py-2 px-4 bg-gradient-to-r from-blue-600 to-indigo-500 text-white font-bold rounded-lg hover:shadow-lg transition text-xs sm:text-sm">+ Buchung</button>
                 </div>
             </div>
@@ -724,9 +720,10 @@ function enhanceStaticHelpTexts() {
 }
 
 function restoreClassicTopActionRow() {
-    const topBar = el('ab2-open-accounts-modal')?.closest('.flex.justify-between.items-center');
-    const actionWrap = el('ab2-open-accounts-modal')?.parentElement;
-    const back = el('ab2-open-accounts-modal')?.closest('.back-link-container')?.querySelector('.back-link');
+    const anchor = el('ab2-open-settings-menu-modal') || el('ab2-btn-create');
+    const topBar = anchor?.closest('.flex.justify-between.items-center');
+    const actionWrap = anchor?.parentElement;
+    const back = topBar?.querySelector('.back-link');
     if (!topBar || !actionWrap) return;
     if (back && !topBar.contains(back)) {
         topBar.insertBefore(back, topBar.firstChild);
@@ -743,11 +740,14 @@ function restoreClassicTopActionRow() {
 }
 
 function ensureSettingsMenuButton() {
-    const actionWrap = el('ab2-open-accounts-modal')?.parentElement;
     const createBtn = el('ab2-btn-create');
+    const actionWrap = createBtn?.parentElement;
     if (!actionWrap || !createBtn) return;
     const suggestionsBtn = el('ab2-open-suggestions-modal');
     if (suggestionsBtn) suggestionsBtn.remove();
+    el('ab2-open-accounts-modal')?.remove();
+    el('ab2-open-transfers-modal')?.remove();
+    el('ab2-open-recon-modal')?.remove();
     if (!el('ab2-open-settings-menu-modal')) {
         const btn = document.createElement('button');
         btn.id = 'ab2-open-settings-menu-modal';
@@ -786,14 +786,14 @@ function applyModalViewState() {
     const accountPanels = modalPanels('ab2-account-name', 'ab2-accounts-list');
     if (accountPanels) {
         const showForm = accountModalViewMode !== 'list';
-        const showList = accountModalViewMode !== 'create';
+        const showList = accountModalViewMode === 'list';
         accountPanels.formPane.classList.toggle('hidden', !showForm);
         accountPanels.listPane.classList.toggle('hidden', !showList);
     }
     const transferPanels = modalPanels('ab2-transfer-source', 'ab2-transfers-list');
     if (transferPanels) {
         const showForm = transferModalViewMode !== 'list';
-        const showList = transferModalViewMode !== 'create';
+        const showList = transferModalViewMode === 'list';
         transferPanels.formPane.classList.toggle('hidden', !showForm);
         transferPanels.listPane.classList.toggle('hidden', !showList);
     }
@@ -887,7 +887,7 @@ function ensureAmountUnlockModal() {
     modal.id = 'ab2-amount-unlock-modal';
     modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
     modal.style.display = 'none';
-    modal.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg"><div class="bg-gradient-to-r from-amber-600 to-orange-500 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 id="ab2-amount-unlock-title" class="text-xl font-bold">Betrag korrigieren</h3><button id="ab2-close-amount-unlock-modal" class="text-white/80 hover:text-white transition">✕</button></div><div class="p-4 space-y-3"><p id="ab2-amount-unlock-text" class="text-sm text-gray-700">Der Betrag darf nur bei außerordentlichen Gründen korrigiert werden.</p><div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><div class="font-bold">Wichtiger Hinweis</div><div>Bei planmäßigen Änderungen bitte den Weg „Abtausch“ verwenden.</div></div><div id="ab2-amount-unlock-countdown" class="text-sm font-bold text-amber-800">Freigabe in 30s verfügbar.</div></div><div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-2"><button id="ab2-cancel-amount-unlock-btn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg">Schließen</button><button id="ab2-confirm-amount-unlock-btn" class="px-4 py-2 bg-amber-600 text-white rounded-lg">OK (30s)</button></div></div>`;
+    modal.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg"><div class="bg-gradient-to-r from-amber-600 to-orange-500 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 id="ab2-amount-unlock-title" class="text-xl font-bold">Betrag korrigieren</h3><button id="ab2-close-amount-unlock-modal" class="text-white/80 hover:text-white transition">✕</button></div><div class="p-4 space-y-3"><p id="ab2-amount-unlock-text" class="text-sm text-gray-700">Der Betrag darf nur bei außerordentlichen Gründen korrigiert werden.</p><div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><div class="font-bold">Wichtiger Hinweis</div><div>Bei planmäßigen Änderungen bitte den Weg „Abtausch“ verwenden.</div></div><div id="ab2-amount-unlock-countdown" class="text-sm font-bold text-amber-800">Freigabe in 30s verfügbar.</div></div><div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-2"><button id="ab2-cancel-amount-unlock-btn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg">Schließen</button><button id="ab2-confirm-amount-unlock-btn" class="w-24 inline-flex justify-center px-4 py-2 bg-amber-600 text-white rounded-lg">OK (30s)</button></div></div>`;
     root.appendChild(modal);
 }
 
@@ -922,8 +922,8 @@ function syncAccountAmountLockState() {
     input.disabled = !unlocked;
     if (minBufferInput) minBufferInput.disabled = !unlocked;
     if (lockBtn) {
-        lockBtn.classList.remove('hidden');
-        lockBtn.textContent = unlocked ? 'Betrag freigegeben' : 'Betrag bearbeiten';
+        lockBtn.classList.toggle('hidden', unlocked);
+        lockBtn.textContent = 'Betrag bearbeiten';
     }
 }
 
@@ -951,8 +951,8 @@ function syncTransferAmountLockState() {
     const unlocked = transferAmountUnlockForId === id;
     input.disabled = !unlocked;
     if (lockBtn) {
-        lockBtn.classList.remove('hidden');
-        lockBtn.textContent = unlocked ? 'Betrag freigegeben' : 'Betrag bearbeiten';
+        lockBtn.classList.toggle('hidden', unlocked);
+        lockBtn.textContent = 'Betrag bearbeiten';
     }
 }
 
@@ -2396,7 +2396,7 @@ function editAccount(id) {
     updateAccountTypeDependencies();
     syncAccountAmountLockState();
     openModal('ab2-accounts-modal');
-    setAccountSplitMode('left');
+    setAccountSplitMode('right');
     renderAccounts();
     applyModalViewState();
     renderPreviews();
@@ -2449,7 +2449,7 @@ function editTransfer(id) {
     if (el('ab2-transfer-abtausch-btn')) el('ab2-transfer-abtausch-btn').classList.remove('hidden');
     syncTransferAmountLockState();
     openModal('ab2-transfers-modal');
-    setTransferSplitMode('left');
+    setTransferSplitMode('right');
     renderTransfers();
     applyModalViewState();
     renderPreviews();
