@@ -127,6 +127,67 @@ function isVoteCorrectionAllowed(voteData = currentVoteData) {
     return !(voteData.hideAnswers && voteData.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur');
 }
 
+function getOptionTextForHistory(voteData, optionIndex) {
+    const option = voteData?.options?.[optionIndex];
+    if (!option) {
+        return '';
+    }
+
+    return option.timeEnd
+        ? `${option.date} ${option.timeStart}-${option.timeEnd}`
+        : `${option.date} ${option.timeStart}`;
+}
+
+function resolveHistoryChangeOptionIndex(change, voteData = currentVoteData) {
+    if (!change || !voteData?.options) {
+        return null;
+    }
+
+    if (Number.isInteger(change.optionIndex)) {
+        return change.optionIndex;
+    }
+
+    if (typeof change.optionText !== 'string') {
+        return null;
+    }
+
+    for (let i = 0; i < voteData.options.length; i++) {
+        const option = voteData.options[i];
+        if (!option) continue;
+
+        const optionText = getOptionTextForHistory(voteData, i);
+        const aliases = [optionText];
+        if (option.timeEnd) {
+            aliases.push(`${option.date} ${option.timeStart} - ${option.timeEnd}`);
+        } else {
+            aliases.push(`${option.date} ${option.timeStart} Uhr`);
+        }
+
+        if (aliases.includes(change.optionText)) {
+            return i;
+        }
+    }
+
+    return null;
+}
+
+function getCorrectionCountForOption(participant, optionIndex, voteData = currentVoteData) {
+    if (!participant || !Array.isArray(participant.answerHistory)) {
+        return 0;
+    }
+
+    let count = 0;
+    participant.answerHistory.forEach(log => {
+        const changes = Array.isArray(log?.changes) ? log.changes : [];
+        const hasChangeForOption = changes.some(change => resolveHistoryChangeOptionIndex(change, voteData) === optionIndex);
+        if (hasChangeForOption) {
+            count++;
+        }
+    });
+
+    return count;
+}
+
 
 // NEU: Zeigt die UI zur Auswahl des finalen Termins an
 function showFixDateSelection() {
@@ -815,7 +876,8 @@ export function initializeTerminplanerView() {
             const correctionCounter = e.target.closest('.correction-counter');
             if (correctionCounter) {
                 const userId = correctionCounter.dataset.userid;
-                renderCorrectionHistory(userId);
+                const optionIndex = Number.parseInt(correctionCounter.dataset.optionIndex || '', 10);
+                renderCorrectionHistory(userId, Number.isNaN(optionIndex) ? null : optionIndex);
             }
             
             const correctionButton = e.target.closest('.vote-correction-btn');
@@ -2465,11 +2527,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
             cardsHTML += `<th class="p-2 border-b border-r text-left font-semibold sticky left-0 bg-gray-100 z-10">Termin</th>`; // Sticky Header
 
             otherParticipants.forEach(p => {
-                const correctionCount = p.correctionCount || 0;
-                const correctionText = correctionCount > 0
-                    ? ` <span class="correction-counter text-blue-600 cursor-pointer" data-userid="${p.userId}">(${correctionCount})</span>`
-                    : '';
-                cardsHTML += `<th class="p-2 border-b font-semibold min-w-[100px]">${p.name}${correctionText}</th>`;
+                cardsHTML += `<th class="p-2 border-b font-semibold min-w-[100px]">${p.name}</th>`;
             });
             cardsHTML += `</tr></thead>`;
 
@@ -2487,6 +2545,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
                 // Stimmen-Symbole
                 otherParticipants.forEach(p => {
                     const answer = p.currentAnswers[optionIndex];
+                    const correctionCountForOption = getCorrectionCountForOption(p, optionIndex, voteData);
                     let answerIcon = '';
 
                     if (isStricken) {
@@ -2499,7 +2558,11 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
                         answerIcon = '<span class="text-yellow-500 font-bold text-xl">~</span>';
                     }
 
-                    cardsHTML += `<td class="p-2 border-b text-center">${answerIcon}</td>`;
+                    const correctionCounterHTML = correctionCountForOption > 0
+                        ? `<button class="correction-counter text-blue-600 cursor-pointer hover:underline text-xs font-semibold" data-userid="${p.userId}" data-option-index="${optionIndex}">(${correctionCountForOption})</button>`
+                        : '';
+
+                    cardsHTML += `<td class="p-2 border-b text-center"><div class="flex flex-col items-center justify-center gap-1">${answerIcon}${correctionCounterHTML}</div></td>`;
                 });
 
                 cardsHTML += `</tr>`;
@@ -2827,6 +2890,7 @@ async function saveVoteParticipation() {
                         `${option.date} ${option.timeStart}-${option.timeEnd}` :
                         `${option.date} ${option.timeStart}`;
                     changes.push({
+                        optionIndex: i,
                         optionText: optionText,
                         from: oldA,
                         to: newA
@@ -3169,7 +3233,7 @@ function switchToEditMode(targetOptionIndex = null) {
 
 
 // ----- Funktion zum Anzeigen des Korrektur-Verlaufs -----
-function renderCorrectionHistory(userId) {
+function renderCorrectionHistory(userId, targetOptionIndex = null) {
     if (!userId || !currentVoteData) return;
 
     // =================================================================
@@ -3224,15 +3288,34 @@ function renderCorrectionHistory(userId) {
         return;
     }
 
-    title.textContent = `Korrektur-Verlauf für ${participant.name}`;
+    const isTermFiltered = Number.isInteger(targetOptionIndex);
+    const targetOptionText = isTermFiltered ? getOptionTextForHistory(currentVoteData, targetOptionIndex) : '';
 
-    const history = participant.answerHistory;
+    title.textContent = isTermFiltered
+        ? `Korrektur-Verlauf für ${participant.name} (${targetOptionText || 'gewählter Termin'})`
+        : `Korrektur-Verlauf für ${participant.name}`;
 
-    if (!history || history.length === 0) {
-        content.innerHTML = `<p class="text-sm text-center text-gray-400">Keine Korrekturen für diesen Benutzer gefunden.</p>`;
+    const history = Array.isArray(participant.answerHistory) ? participant.answerHistory : [];
+    const filteredHistory = isTermFiltered
+        ? history
+            .map(log => {
+                const changes = Array.isArray(log?.changes) ? log.changes : [];
+                const relevantChanges = changes.filter(change => resolveHistoryChangeOptionIndex(change, currentVoteData) === targetOptionIndex);
+                return {
+                    ...log,
+                    changes: relevantChanges
+                };
+            })
+            .filter(log => log.changes.length > 0)
+        : history;
+
+    if (!filteredHistory || filteredHistory.length === 0) {
+        content.innerHTML = isTermFiltered
+            ? `<p class="text-sm text-center text-gray-400">Keine Korrekturen für diesen Termin gefunden.</p>`
+            : `<p class="text-sm text-center text-gray-400">Keine Korrekturen für diesen Benutzer gefunden.</p>`;
     } else {
         // Baue den HTML-Inhalt für den Verlauf
-        content.innerHTML = history.map(log => {
+        content.innerHTML = filteredHistory.map(log => {
 
             let dateObject = null;
             if (log.timestamp) {
@@ -3256,9 +3339,11 @@ function renderCorrectionHistory(userId) {
                 // HIER IST DIE NEUE PRÜFUNG
                 if (shouldHideDetails) {
                     // Versteckte Version
+                    const optionText = change.optionText || targetOptionText || 'Unbekannter Termin';
+
                     return `
                         <li class="text-sm">
-                            <strong>${change.optionText}:</strong> 
+                            <strong>${optionText}:</strong> 
                             <span class="text-gray-500 italic">Antwort geändert (Details versteckt)</span>
                         </li>
                     `;
@@ -3271,9 +3356,11 @@ function renderCorrectionHistory(userId) {
                         return '<span class="text-gray-500 italic">keine</span>';
                     };
 
+                    const optionText = change.optionText || targetOptionText || 'Unbekannter Termin';
+
                     return `
                         <li class="text-sm">
-                            <strong>${change.optionText}:</strong> 
+                            <strong>${optionText}:</strong> 
                             geändert von ${formatAnswer(change.from)} auf ${formatAnswer(change.to)}
                         </li>
                     `;
@@ -5055,6 +5142,7 @@ function handleAdminVoteEdit(participantId, optionIndex, newAnswer, clickedButto
     const historyLog = {
         timestamp: new Date(), // Lokale Zeit
         changes: [{
+            optionIndex: optionIndex,
             optionText: optionText,
             from: oldAnswer,
             to: newAnswer
@@ -5175,6 +5263,7 @@ function handleStrikeTerm(optionIndex, shouldBeStricken) {
                 const historyLog = {
                     timestamp: new Date(),
                     changes: [{
+                        optionIndex: optionIndex,
                         optionText: optionText,
                         from: oldAnswer,
                         to: 'no'
