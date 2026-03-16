@@ -10,11 +10,13 @@ let itemsRef = null;
 let transfersRef = null;
 let reconRef = null;
 let auditRef = null;
+let actionsRef = null;
 let unsubAccounts = null;
 let unsubItems = null;
 let unsubTransfers = null;
 let unsubRecon = null;
 let unsubAudit = null;
+let unsubActions = null;
 let shellMounted = false;
 let listenersBound = false;
 let helpHintsBound = false;
@@ -23,7 +25,10 @@ let ITEMS = {};
 let TRANSFERS = {};
 let RECON = {};
 let AUDIT = {};
+let ACTIONS = {};
 let FORECAST = { timeline: [], alerts: [], details: {}, quality: [], setup: [], suggestions: [], imbalances: [], deviationWarnings: [] };
+const FORECAST_HORIZON_OPTIONS = [3, 6, 12, 24];
+let forecastHorizonMonths = 12;
 let filterTokens = [];
 let filterState = { negate: false, joinMode: 'and', status: '', typ: '', interval: '', quick: '', sort: 'critical' };
 let accountListFilterState = { type: 'all', query: '', showActive: true, showPlanned: false, showPast: false };
@@ -219,11 +224,27 @@ function updateStatusVisibilityUi(prefix, state, counts) {
         summary.textContent = segments.length ? segments.join(' + ') : 'Keine sichtbar';
     }
 }
+function normalizeForecastHorizon(value, fallback = 12) {
+    const parsed = parseInt(value, 10);
+    if (FORECAST_HORIZON_OPTIONS.includes(parsed)) return parsed;
+    return FORECAST_HORIZON_OPTIONS.includes(fallback) ? fallback : 12;
+}
+function setForecastHorizon(value, persist = false) {
+    forecastHorizonMonths = normalizeForecastHorizon(value, forecastHorizonMonths);
+    const horizonInput = el('ab2-forecast-horizon');
+    if (horizonInput) horizonInput.value = String(forecastHorizonMonths);
+    if (persist) {
+        saveUserSetting('ab2_forecast_horizon', String(forecastHorizonMonths)).catch((error) => console.warn(error));
+    }
+}
+function rebuildForecastAndRender() {
+    FORECAST = buildForecast(forecastHorizonMonths);
+    renderAll();
+}
 function applySimulationDate(value) {
     const parsed = value ? parseDate(value) : null;
     simulationDate = parsed ? new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()) : null;
-    FORECAST = buildForecast();
-    renderAll();
+    rebuildForecastAndRender();
 }
 function toNum(v, f = 0) { const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : f; }
 function roundMoney(v) { return Math.round(toNum(v, 0) * 100) / 100; }
@@ -465,9 +486,9 @@ function buildShell() {
         <div id="ab2-quality-banner" class="hidden bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-sm text-yellow-900"></div>
         <div id="ab2-imbalance-banner" class="hidden bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-900"></div>
         <div id="ab2-simulation-warning" class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-3 rounded-lg font-bold text-sm"></div>
-        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200"><div class="flex flex-wrap gap-2 items-center"><label class="text-sm font-bold text-gray-700">📅 Datums-Simulation:</label><input type="date" id="ab2-simulation-datum" class="p-2 border-2 border-gray-300 rounded-lg text-sm"><button id="ab2-clear-simulation" type="button" class="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold text-sm">Zurücksetzen</button></div></div>
+        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200"><div class="flex flex-wrap gap-2 items-center"><label class="text-sm font-bold text-gray-700">📅 Datums-Simulation:</label><input type="date" id="ab2-simulation-datum" class="p-2 border-2 border-gray-300 rounded-lg text-sm"><button id="ab2-clear-simulation" type="button" class="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold text-sm">Zurücksetzen</button><label class="ml-auto text-xs font-bold text-gray-700" for="ab2-forecast-horizon">Forecast-Horizont</label><select id="ab2-forecast-horizon" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm"><option value="3">3 Monate</option><option value="6">6 Monate</option><option value="12" selected>12 Monate</option><option value="24">24 Monate</option></select></div></div>
         <div class="grid grid-cols-1 gap-3">
-            <div class="bg-white rounded-xl shadow p-3"><div class="flex items-center justify-between gap-2 mb-2"><h3 class="text-sm font-bold text-gray-700 flex items-center gap-2">12-Monate-Kontostandsprognose ${helpButton('ab2-help-forecast')}</h3><button id="ab2-forecast-toggle" type="button" class="px-2 py-1 rounded border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100">ausklappen</button></div><div id="ab2-forecast-state" class="inline-flex px-2 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700">ALLE OK</div>${helpContent('ab2-help-forecast', 'Zeigt die Monatsvorschau mit tagesgenauer Simulation. Innerhalb eines Tages wird konservativ gerechnet (Abbuchung vor Eingang). Wochenenden und österreichische Bankfeiertage werden berücksichtigt. Klick auf eine Zelle = Warum kritisch? Welche Maßnahme hilft?')}<div id="ab2-forecast-overview-wrap" class="mt-2 hidden"><div id="ab2-forecast-overview" class="text-sm text-gray-400 italic">Keine Forecast-Daten.</div></div></div>
+            <div class="bg-white rounded-xl shadow p-3"><div class="flex items-center justify-between gap-2 mb-2"><h3 id="ab2-forecast-title" class="text-sm font-bold text-gray-700 flex items-center gap-2">12-Monate-Kontostandsprognose ${helpButton('ab2-help-forecast')}</h3><button id="ab2-forecast-toggle" type="button" class="px-2 py-1 rounded border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100">ausklappen</button></div><div id="ab2-forecast-state" class="inline-flex px-2 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700">ALLE OK</div>${helpContent('ab2-help-forecast', 'Zeigt die Monatsvorschau mit tagesgenauer Simulation. Innerhalb eines Tages wird konservativ gerechnet (Abbuchung vor Eingang). Wochenenden und österreichische Bankfeiertage werden berücksichtigt. Klick auf eine Zelle = Warum kritisch? Welche Maßnahme hilft?')}<div id="ab2-forecast-overview-wrap" class="mt-2 hidden"><div id="ab2-forecast-overview" class="text-sm text-gray-400 italic">Keine Forecast-Daten.</div></div></div>
         </div>
         <div id="ab2-suggestion-panel" class="bg-white rounded-xl shadow p-3"><h3 class="text-sm font-bold text-gray-700 mb-2">Ausgleichsvorschläge</h3><div id="ab2-suggestion-preview" class="space-y-2"></div></div>
         <div class="relative"><div class="flex justify-end"><button id="ab2-toggle-glossary" type="button" class="w-5 h-5 rounded-full border border-blue-200 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100" title="Begriffe einfach erklärt">i</button></div><div id="ab2-glossary" class="hidden mt-1 rounded-xl border border-blue-100 bg-white/95 p-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs shadow"></div></div>
@@ -892,7 +913,7 @@ function ensurePaymentsOverviewModal() {
     modal.id = 'ab2-payments-modal';
     modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
     modal.style.display = 'none';
-    modal.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-7xl max-h-[92vh] overflow-y-auto"><div class="sticky top-0 bg-gradient-to-r from-indigo-700 to-blue-700 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 class="text-xl font-bold">Zahlungen · Beteiligungsübersicht</h3><button id="ab2-close-payments-modal" class="text-white/80 hover:text-white transition">✕</button></div><div class="p-4 space-y-3"><div id="ab2-payments-summary" class="rounded-xl border border-indigo-100 bg-indigo-50 p-3 text-sm text-indigo-900">Lade Daten...</div><div class="rounded-xl border border-slate-200 bg-white overflow-hidden"><div class="overflow-x-auto"><table class="ab2-simple-table min-w-[1340px]"><thead class="bg-slate-100 text-slate-700"><tr><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Status</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Titel</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Konto</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Intervall</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Betrag</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Beteiligte</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Beteiligung gesamt</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Offen / Überdeckt</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Deckung</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Seit Start</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Quellen (Person/Bank)</th><th class="px-3 py-2 text-right text-[11px] uppercase tracking-wide">Lesen</th></tr></thead><tbody id="ab2-payments-table-body"><tr><td colspan="12" class="px-3 py-8 text-center text-gray-400 italic">Keine Zahlungen vorhanden.</td></tr></tbody></table></div></div></div></div><div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end"><button id="ab2-cancel-payments-btn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg">Schließen</button></div></div>`;
+    modal.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-7xl max-h-[92vh] overflow-y-auto"><div class="sticky top-0 bg-gradient-to-r from-indigo-700 to-blue-700 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 class="text-xl font-bold">Zahlungen · Beteiligungsübersicht</h3><button id="ab2-close-payments-modal" class="text-white/80 hover:text-white transition">✕</button></div><div class="p-4 space-y-3"><div id="ab2-payments-summary" class="rounded-xl border border-indigo-100 bg-indigo-50 p-3 text-sm text-indigo-900">Lade Daten...</div><div class="rounded-xl border border-slate-200 bg-white overflow-hidden"><div class="overflow-x-auto"><table class="ab2-simple-table min-w-[1440px]"><thead class="bg-slate-100 text-slate-700"><tr><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Status</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Titel</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Konto</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Intervall</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Betrag</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Beteiligte</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Bedarf/Gedeckt (Horizont)</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Offen / Überdeckt</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Deckung</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Horizont</th><th class="px-3 py-2 text-left text-[11px] uppercase tracking-wide">Quellen (Person/Bank)</th><th class="px-3 py-2 text-right text-[11px] uppercase tracking-wide">Lesen</th></tr></thead><tbody id="ab2-payments-table-body"><tr><td colspan="12" class="px-3 py-8 text-center text-gray-400 italic">Keine Zahlungen vorhanden.</td></tr></tbody></table></div></div></div></div><div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end"><button id="ab2-cancel-payments-btn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg">Schließen</button></div></div>`;
     root.appendChild(modal);
 }
 
@@ -1222,6 +1243,7 @@ function ensureRefs() {
     transfersRef = collection(db, 'artifacts', appId, 'public', 'data', 'abbuchungsberechner_transfer_plans');
     reconRef = collection(db, 'artifacts', appId, 'public', 'data', 'abbuchungsberechner_reconciliation');
     auditRef = collection(db, 'artifacts', appId, 'public', 'data', 'abbuchungsberechner_audit');
+    actionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'abbuchungsberechner_actions');
     refsReady = true;
 }
 
@@ -1334,6 +1356,141 @@ function yearlyHitCount(entity, horizon = 12) {
         if (month > 12) { month = 1; year += 1; }
     }
     return hits;
+}
+function forecastWindow(horizonMonths = forecastHorizonMonths) {
+    const horizon = normalizeForecastHorizon(horizonMonths, forecastHorizonMonths);
+    const startDay = referenceDayStart();
+    const startMonthDate = new Date(startDay.getFullYear(), startDay.getMonth(), 1);
+    const endMonthDate = new Date(startMonthDate.getFullYear(), startMonthDate.getMonth() + horizon - 1, 1);
+    return { horizon, startDay, startMonthDate, endMonthDate };
+}
+function executionDatesInHorizon(entity, horizonMonths = forecastHorizonMonths) {
+    const { horizon, startDay, startMonthDate, endMonthDate } = forecastWindow(horizonMonths);
+    const endMonthKey = monthKey(endMonthDate.getFullYear(), endMonthDate.getMonth() + 1);
+    const dates = [];
+    let year = startMonthDate.getFullYear();
+    let month = startMonthDate.getMonth() + 1;
+    for (let i = 0; i < horizon; i += 1) {
+        const date = getExecutionDateForMonth(entity, year, month);
+        if (date && date >= startDay) {
+            const key = monthKey(date.getFullYear(), date.getMonth() + 1);
+            if (compareMonthKey(key, endMonthKey) <= 0) dates.push(date);
+        }
+        month += 1;
+        if (month > 12) { month = 1; year += 1; }
+    }
+    return dates;
+}
+function hitsInHorizon(entity, horizonMonths = forecastHorizonMonths) {
+    return executionDatesInHorizon(entity, horizonMonths).length;
+}
+function monthlyEquivalent(total, horizonMonths = forecastHorizonMonths) {
+    const horizon = Math.max(1, normalizeForecastHorizon(horizonMonths, forecastHorizonMonths));
+    return roundMoney(toNum(total, 0) / horizon);
+}
+function contributionEntity(item, contrib) {
+    const intervalType = contrib.intervalType === 'inherit' ? item.intervalType : (contrib.intervalType || item.intervalType || 'monthly');
+    return {
+        intervalType,
+        startMonth: contrib.startMonth || item.startMonth,
+        customMonths: contrib.customMonths || [],
+        dayOfMonth: contrib.dayOfMonth || item.dayOfMonth,
+        validFrom: contrib.validFrom || item.validFrom,
+        validTo: contrib.validTo || item.validTo
+    };
+}
+function itemNeedInHorizon(item, horizonMonths = forecastHorizonMonths) {
+    const amount = roundMoney(toNum(item?.amount, 0));
+    if (amount <= 0) return 0;
+    return roundMoney(hitsInHorizon(item, horizonMonths) * amount);
+}
+function directCoverageInHorizon(item, horizonMonths = forecastHorizonMonths) {
+    return roundMoney((Array.isArray(item?.contributions) ? item.contributions : [])
+        .filter((contrib) => contrib?.sourceAccountId && toNum(contrib.amount, 0) > 0)
+        .reduce((sum, contrib) => {
+            const amount = roundMoney(toNum(contrib.amount, 0));
+            const hits = hitsInHorizon(contributionEntity(item, contrib), horizonMonths);
+            return sum + (hits * amount);
+        }, 0));
+}
+function linkedCoverageInHorizon(item, horizonMonths = forecastHorizonMonths) {
+    return roundMoney(Object.values(TRANSFERS)
+        .filter((transfer) => transferLinkedToItem(transfer, item))
+        .reduce((sum, transfer) => {
+            const amount = roundMoney(transferAmountForItem(transfer, item));
+            if (amount <= 0) return sum;
+            const hits = hitsInHorizon(transfer, horizonMonths);
+            return sum + (hits * amount);
+        }, 0));
+}
+function contributionGapByHorizon(item, horizonMonths = forecastHorizonMonths) {
+    const horizon = normalizeForecastHorizon(horizonMonths, forecastHorizonMonths);
+    const itemAmount = roundMoney(toNum(item?.amount, 0));
+    const needInHorizon = itemNeedInHorizon(item, horizon);
+    const sourceMap = new Map();
+    const appendParticipant = (key, sourceId, sourceName, amountInHorizon, kind) => {
+        if (amountInHorizon <= 0.009) return;
+        if (!sourceMap.has(key)) {
+            sourceMap.set(key, {
+                sourceId,
+                sourceName,
+                amountInHorizon: 0,
+                kinds: new Set()
+            });
+        }
+        const row = sourceMap.get(key);
+        row.amountInHorizon = roundMoney(row.amountInHorizon + amountInHorizon);
+        row.kinds.add(kind || '-');
+    };
+    (Array.isArray(item?.contributions) ? item.contributions : [])
+        .filter((contrib) => contrib?.sourceAccountId && toNum(contrib.amount, 0) > 0)
+        .forEach((contrib) => {
+            const amount = roundMoney(toNum(contrib.amount, 0));
+            const hits = hitsInHorizon(contributionEntity(item, contrib), horizon);
+            appendParticipant(
+                `direct_${String(contrib.sourceAccountId || '').toLowerCase()}`,
+                contrib.sourceAccountId,
+                ACCOUNTS[contrib.sourceAccountId]?.name || '-',
+                roundMoney(hits * amount),
+                'Direktbeitrag'
+            );
+        });
+    Object.values(TRANSFERS)
+        .filter((transfer) => transferLinkedToItem(transfer, item))
+        .forEach((transfer) => {
+            const perExecution = roundMoney(transferAmountForItem(transfer, item));
+            if (perExecution <= 0.009) return;
+            const hits = hitsInHorizon(transfer, horizon);
+            appendParticipant(
+                `transfer_${String(transfer.sourceAccountId || '').toLowerCase()}`,
+                transfer.sourceAccountId || '',
+                ACCOUNTS[transfer.sourceAccountId]?.name || '-',
+                roundMoney(hits * perExecution),
+                'Transferplan'
+            );
+        });
+    const participants = Array.from(sourceMap.values())
+        .map((row) => ({
+            sourceId: row.sourceId,
+            sourceName: row.sourceName,
+            amountInHorizon: roundMoney(row.amountInHorizon),
+            amountPerMonth: monthlyEquivalent(row.amountInHorizon, horizon),
+            kindText: Array.from(row.kinds).join(' + ')
+        }))
+        .sort((a, b) => toNum(b.amountInHorizon, 0) - toNum(a.amountInHorizon, 0));
+    const coveredInHorizon = roundMoney(participants.reduce((sum, row) => sum + toNum(row.amountInHorizon, 0), 0));
+    const gapInHorizon = roundMoney(coveredInHorizon - needInHorizon);
+    const gapPerMonth = monthlyEquivalent(gapInHorizon, horizon);
+    return {
+        horizonMonths: horizon,
+        itemAmount,
+        needInHorizon,
+        coveredInHorizon,
+        gapInHorizon,
+        gapPerMonth,
+        participants,
+        coveragePercent: needInHorizon > 0 ? roundMoney((coveredInHorizon / needInHorizon) * 100) : 0
+    };
 }
 function contributionTotal(item) { return roundMoney((Array.isArray(item?.contributions) ? item.contributions : []).reduce((sum, c) => sum + toNum(c?.amount, 0), 0)); }
 function itemNetEffect(item) { const signed = item?.typ === 'gutschrift' ? toNum(item?.amount, 0) : -toNum(item?.amount, 0); return roundMoney(signed + contributionTotal(item)); }
@@ -1694,61 +1851,45 @@ function transferLinkedToItem(transfer, item) {
     return transferAmountForItem(transfer, item) > 0.009;
 }
 function buildContributionImbalances() {
-    const now = referenceDate();
+    const horizon = forecastHorizonMonths;
     return Object.values(ITEMS)
         .map((item) => {
             const account = ACCOUNTS[item.accountId] || null;
             if (!isRelevantTargetAccount(account)) return null;
             if (itemStatus(item).key !== 'aktiv' || item?.typ !== 'belastung') return null;
-            const directContribs = (Array.isArray(item.contributions) ? item.contributions : [])
-                .filter((contrib) => contrib?.sourceAccountId && toNum(contrib.amount, 0) > 0)
-                .map((contrib) => ({
-                    kind: 'beitrag',
-                    sourceId: contrib.sourceAccountId,
-                    sourceName: ACCOUNTS[contrib.sourceAccountId]?.name || '-',
-                    amount: roundMoney(toNum(contrib.amount, 0)),
-                    note: contrib.note || ''
-                }));
-            const linkedTransferContribs = Object.values(TRANSFERS)
-                .filter((transfer) => transferLinkedToItem(transfer, item))
-                .filter((transfer) => !!nextExecutionDate(transfer, 24))
-                .map((transfer) => ({
-                    kind: 'transfer',
-                    transferId: transfer.id,
-                    sourceId: transfer.sourceAccountId,
-                    sourceName: ACCOUNTS[transfer.sourceAccountId]?.name || '-',
-                    amount: roundMoney(transferAmountForItem(transfer, item)),
-                    note: transfer.note || ''
-                }))
-                .filter((row) => row.amount > 0);
-            const allContribs = [...directContribs, ...linkedTransferContribs];
-            if (!allContribs.length) return null;
-            const itemAmount = roundMoney(toNum(item.amount, 0));
-            if (itemAmount <= 0) return null;
-            const totalCovered = roundMoney(allContribs.reduce((sum, row) => sum + toNum(row.amount, 0), 0));
-            const gapPerExecution = roundMoney(totalCovered - itemAmount);
-            if (Math.abs(gapPerExecution) <= 0.009) return null;
-            const referenceMonths = monthsSinceInclusive(item.validFrom || isoDate(now), now);
-            const settlementAmount = roundMoney(gapPerExecution * referenceMonths);
-            const severity = Math.abs(gapPerExecution) >= Math.max(5, itemAmount * 0.2) ? 'alarm' : 'warn';
+            const gap = contributionGapByHorizon(item, horizon);
+            if (!gap.participants.length) return null;
+            if (Math.abs(gap.gapInHorizon) <= 0.009) return null;
+            const severity = Math.abs(gap.gapPerMonth) >= Math.max(5, gap.itemAmount * 0.2) ? 'alarm' : 'warn';
             return {
                 id: item.id,
                 itemId: item.id,
                 title: item.title || '-',
                 accountId: item.accountId,
                 accountName: account.name || '-',
-                itemAmount,
-                totalCovered,
-                gapPerExecution,
-                referenceMonths,
-                settlementAmount,
+                itemAmount: gap.itemAmount,
+                horizonMonths: gap.horizonMonths,
+                needInHorizon: gap.needInHorizon,
+                coveredInHorizon: gap.coveredInHorizon,
+                gapInHorizon: gap.gapInHorizon,
+                gapPerMonth: gap.gapPerMonth,
+                gapPerExecution: gap.gapPerMonth,
+                totalCovered: gap.coveredInHorizon,
+                referenceMonths: gap.horizonMonths,
+                settlementAmount: gap.gapInHorizon,
                 severity,
-                actionText: settlementAmount > 0 ? 'zurücküberweisen' : 'nachfordern',
-                details: allContribs
+                actionText: gap.gapInHorizon > 0 ? 'senken / rückführen' : 'nachfordern',
+                details: gap.participants.map((row) => ({
+                    sourceId: row.sourceId,
+                    sourceName: row.sourceName,
+                    kind: row.kindText,
+                    amount: row.amountInHorizon,
+                    amountPerMonth: row.amountPerMonth
+                }))
             };
         })
         .filter(Boolean)
-        .sort((a, b) => Math.abs(b.gapPerExecution) - Math.abs(a.gapPerExecution));
+        .sort((a, b) => Math.abs(b.gapPerMonth) - Math.abs(a.gapPerMonth));
 }
 function buildSetup(quality, alerts, imbalances) {
     const items = Object.values(ITEMS);
@@ -1789,6 +1930,22 @@ function activeOwnMonthlyTransfer(targetId) {
         .sort((a, b) => toNum(b.amount, 0) - toNum(a.amount, 0));
     return active[0] || null;
 }
+function nextMonthlyExecutionDate(dayOfMonth = 1, fromDate = referenceDayStart()) {
+    const from = parseDate(fromDate) || referenceDayStart();
+    let year = from.getFullYear();
+    let month = from.getMonth() + 1;
+    for (let i = 0; i < 24; i += 1) {
+        const candidate = getExecutionDateForMonth({ intervalType: 'monthly', dayOfMonth, validFrom: isoDate(from) }, year, month);
+        if (candidate && candidate >= from) return candidate;
+        month += 1;
+        if (month > 12) { month = 1; year += 1; }
+    }
+    return null;
+}
+function earliestBusinessDayFromToday() {
+    const today = referenceDayStart();
+    return isoDate(shiftToBusinessDay(today, 1) || today);
+}
 function buildDeviationWarnings(suggestionList = []) {
     return suggestionList
         .filter((entry) => !!entry?.deviationWarning)
@@ -1800,13 +1957,14 @@ function buildDeviationWarnings(suggestionList = []) {
             effectiveFrom: entry.effectiveFrom || '',
             criticalDate: entry.criticalDate || '',
             criticalMinDayDelta: roundMoney(toNum(entry.criticalMinDayDelta, 0)),
-            text: `${entry.targetName}: Tageslogik-Lücke ${formatSignedCurrency(toNum(entry.criticalMinDayDelta, 0))}${entry.criticalDate ? ` am ${formatDate(entry.criticalDate)}` : ''}. Dauerauftrag ${formatCurrency(entry.currentMonthlyAmount)} → empfohlen ${formatCurrency(entry.recommendedMonthlyAmount)} ab ${formatDate(entry.effectiveFrom)}`
+            text: `${entry.targetName}: ${entry.recommendedMonthlyAmount >= entry.currentMonthlyAmount ? 'Erhöhung' : 'Senkung'} empfohlen (${formatCurrency(entry.currentMonthlyAmount)} → ${formatCurrency(entry.recommendedMonthlyAmount)}) ab ${formatDate(entry.effectiveFrom)}${entry.criticalDate ? ` · Stichtag ${formatDate(entry.criticalDate)}` : ''}`
         }));
 }
-function suggestions(timelineInput = null) {
+function suggestions(timelineInput = null, imbalancesInput = null) {
     const timeline = timelineInput || FORECAST.timeline || [];
+    const imbalances = Array.isArray(imbalancesInput) ? imbalancesInput : (FORECAST.imbalances || []);
     if (!timeline.length) return [];
-    return Object.values(ACCOUNTS)
+    const list = Object.values(ACCOUNTS)
         .filter((account) => canBeTargetAccount(account) && !isPersonAccount(account))
         .map((target) => {
             const rows = timeline.map((bucket) => ({ ...bucket.accounts[target.id], key: bucket.key, label: bucket.label })).filter(Boolean);
@@ -1815,7 +1973,6 @@ function suggestions(timelineInput = null) {
             if (firstBadIdx < 0) return null;
             const deficitMonths = deficits.filter((value) => value > 0.009).length;
             const monthlyNeed = deficitMonths >= 2 ? roundMoney(Math.max(...deficits)) : 0;
-            const onceNeed = roundMoney(Math.max(0, deficits[firstBadIdx] - monthlyNeed));
             const baseTransfer = activeOwnMonthlyTransfer(target.id);
             const fallbackSource = preferredOwnSourceAccount(target.id);
             const sourceAccount = baseTransfer ? ACCOUNTS[baseTransfer.sourceAccountId] : fallbackSource;
@@ -1825,16 +1982,20 @@ function suggestions(timelineInput = null) {
             const recommendedMonthlyAmount = roundMoney(currentMonthlyAmount + monthlyNeed);
             const criticalKey = rows[firstBadIdx]?.key || currentMonthKey();
             const preferredDay = parseInt(baseTransfer?.dayOfMonth, 10) || 1;
-            let monthlyStart = monthKeyFirstBusinessDay(criticalKey, preferredDay);
-            if (baseTransfer) {
-                const baseFrom = parseDate(baseTransfer.validFrom);
-                const currentStart = parseDate(monthlyStart);
-                if (baseFrom && currentStart && currentStart <= baseFrom) {
-                    const nextMonthDate = new Date(currentStart.getFullYear(), currentStart.getMonth() + 1, 1);
-                    monthlyStart = monthKeyFirstBusinessDay(monthKey(nextMonthDate.getFullYear(), nextMonthDate.getMonth() + 1), preferredDay);
-                }
-            }
-            const onceDate = monthKeyFirstBusinessDay(criticalKey, 1);
+            const nextTransferExecutionDate = isoDate(nextMonthlyExecutionDate(preferredDay, referenceDayStart()) || monthKeyDate(criticalKey, preferredDay) || referenceDayStart());
+            const effectiveFrom = nextTransferExecutionDate;
+            const latestChangeDate = previousDateIso(effectiveFrom) || effectiveFrom;
+            const criticalDate = rows[firstBadIdx]?.criticalDate || monthKeyFirstBusinessDay(criticalKey, preferredDay);
+            const bridgeEntity = {
+                intervalType: 'monthly',
+                dayOfMonth: preferredDay,
+                validFrom: effectiveFrom,
+                validTo: previousDateIso(criticalDate)
+            };
+            const bridgeHits = monthlyNeed > 0.009 ? hitsInHorizon(bridgeEntity, forecastHorizonMonths) : 0;
+            const bridgeAmount = roundMoney(bridgeHits * monthlyNeed);
+            const onceNeed = roundMoney(Math.max(0, deficits[firstBadIdx] - bridgeAmount));
+            const onceDate = earliestBusinessDayFromToday();
             const monthlyAllocations = monthlyNeed > 0 && sourceId ? [{ sourceId, sourceName, amount: monthlyNeed, transferId: baseTransfer?.id || '' }] : [];
             const onceAllocations = onceNeed > 0 && sourceId ? [{ sourceId, sourceName, amount: onceNeed }] : [];
             const monthlyCovered = roundMoney(monthlyAllocations.reduce((sum, row) => sum + toNum(row.amount, 0), 0));
@@ -1847,7 +2008,9 @@ function suggestions(timelineInput = null) {
                 targetName: target.name,
                 criticalMonth: criticalKey,
                 criticalLabel: rows[firstBadIdx]?.label || '-',
-                criticalDate: rows[firstBadIdx]?.criticalDate || '',
+                criticalDate,
+                latestChangeDate,
+                nextTransferExecutionDate,
                 criticalMinDayDelta: roundMoney(toNum(rows[firstBadIdx]?.minDayDelta, toNum(rows[firstBadIdx]?.delta, 0))),
                 reason,
                 monthlyNeed,
@@ -1857,22 +2020,132 @@ function suggestions(timelineInput = null) {
                 recommendedTransferId: baseTransfer?.id || '',
                 currentMonthlyAmount,
                 recommendedMonthlyAmount,
-                effectiveFrom: monthlyStart,
+                effectiveFrom,
                 onceDate,
                 monthlyAllocations,
                 onceAllocations,
                 monthlyCovered,
                 onceCovered,
                 deviationWarning,
+                actionType: 'raise_monthly',
                 conservativeMode: true,
                 fullyCovered: monthlyCovered + onceCovered >= monthlyNeed + onceNeed - 0.01,
                 shortfall: roundMoney(Math.max(0, monthlyNeed + onceNeed - monthlyCovered - onceCovered))
             };
         })
+        .filter(Boolean);
+    Object.values(ACCOUNTS)
+        .filter((account) => canBeTargetAccount(account) && !isPersonAccount(account))
+        .forEach((target) => {
+            if (list.some((entry) => entry.targetId === target.id && toNum(entry.monthlyNeed, 0) > 0.009)) return;
+            const underRows = (imbalances || [])
+                .filter((entry) => entry.accountId === target.id && toNum(entry.gapPerMonth, 0) < -0.009);
+            if (!underRows.length) return;
+            const monthlyNeed = roundMoney(underRows.reduce((sum, entry) => sum + Math.abs(toNum(entry.gapPerMonth, 0)), 0));
+            if (monthlyNeed <= 0.5) return;
+            const requiredInHorizon = roundMoney(underRows.reduce((sum, entry) => sum + Math.abs(toNum(entry.gapInHorizon, 0)), 0));
+            const baseTransfer = activeOwnMonthlyTransfer(target.id);
+            const fallbackSource = preferredOwnSourceAccount(target.id);
+            const sourceAccount = baseTransfer ? ACCOUNTS[baseTransfer.sourceAccountId] : fallbackSource;
+            const sourceId = sourceAccount?.id || '';
+            const sourceName = sourceAccount?.name || '-';
+            const currentMonthlyAmount = baseTransfer ? roundMoney(toNum(baseTransfer.amount, 0)) : 0;
+            const recommendedMonthlyAmount = roundMoney(currentMonthlyAmount + monthlyNeed);
+            const preferredDay = parseInt(baseTransfer?.dayOfMonth, 10) || 1;
+            const effectiveFrom = isoDate(nextMonthlyExecutionDate(preferredDay, referenceDayStart()) || referenceDayStart());
+            const bridgeEntity = {
+                intervalType: 'monthly',
+                dayOfMonth: preferredDay,
+                validFrom: effectiveFrom,
+                validTo: ''
+            };
+            const bridgeHits = hitsInHorizon(bridgeEntity, forecastHorizonMonths);
+            const bridgeAmount = roundMoney(bridgeHits * monthlyNeed);
+            const onceNeed = roundMoney(Math.max(0, requiredInHorizon - bridgeAmount));
+            list.push({
+                id: `${target.id}__${currentMonthKey()}__under`,
+                targetId: target.id,
+                targetName: target.name,
+                criticalMonth: currentMonthKey(),
+                criticalLabel: monthLabel(currentMonthKey()),
+                criticalDate: monthKeyFirstBusinessDay(currentMonthKey(), preferredDay),
+                latestChangeDate: previousDateIso(effectiveFrom) || effectiveFrom,
+                nextTransferExecutionDate: effectiveFrom,
+                criticalMinDayDelta: 0,
+                reason: 'Titelunterdeckung im Horizont',
+                monthlyNeed,
+                onceNeed,
+                preferredSourceId: sourceId,
+                preferredSourceName: sourceName,
+                recommendedTransferId: baseTransfer?.id || '',
+                currentMonthlyAmount,
+                recommendedMonthlyAmount,
+                effectiveFrom,
+                onceDate: earliestBusinessDayFromToday(),
+                monthlyAllocations: monthlyNeed > 0 && sourceId ? [{ sourceId, sourceName, amount: monthlyNeed, transferId: baseTransfer?.id || '' }] : [],
+                onceAllocations: onceNeed > 0 && sourceId ? [{ sourceId, sourceName, amount: onceNeed }] : [],
+                monthlyCovered: monthlyNeed,
+                onceCovered: onceNeed,
+                deviationWarning: Math.abs(recommendedMonthlyAmount - currentMonthlyAmount) > 0.009,
+                actionType: 'raise_monthly',
+                conservativeMode: true,
+                fullyCovered: true,
+                shortfall: 0
+            });
+        });
+    Object.values(ACCOUNTS)
+        .filter((account) => canBeTargetAccount(account) && !isPersonAccount(account))
+        .forEach((target) => {
+            if (list.some((entry) => entry.targetId === target.id && toNum(entry.monthlyNeed, 0) > 0.009)) return;
+            const baseTransfer = activeOwnMonthlyTransfer(target.id);
+            if (!baseTransfer) return;
+            const overMonthly = roundMoney((imbalances || [])
+                .filter((entry) => entry.accountId === target.id && toNum(entry.gapPerMonth, 0) > 0.009)
+                .reduce((sum, entry) => sum + toNum(entry.gapPerMonth, 0), 0));
+            if (overMonthly <= 0.5) return;
+            const currentMonthlyAmount = roundMoney(toNum(baseTransfer.amount, 0));
+            const reduction = Math.min(currentMonthlyAmount, overMonthly);
+            if (reduction <= 0.5) return;
+            const recommendedMonthlyAmount = roundMoney(Math.max(0, currentMonthlyAmount - reduction));
+            const preferredDay = parseInt(baseTransfer?.dayOfMonth, 10) || 1;
+            const effectiveFrom = isoDate(nextMonthlyExecutionDate(preferredDay, referenceDayStart()) || referenceDayStart());
+            list.push({
+                id: `${target.id}__${currentMonthKey()}__lower`,
+                targetId: target.id,
+                targetName: target.name,
+                criticalMonth: currentMonthKey(),
+                criticalLabel: monthLabel(currentMonthKey()),
+                criticalDate: '',
+                latestChangeDate: previousDateIso(effectiveFrom) || effectiveFrom,
+                nextTransferExecutionDate: effectiveFrom,
+                criticalMinDayDelta: 0,
+                reason: 'Überdeckung in Beitragsplanung',
+                monthlyNeed: roundMoney(-reduction),
+                onceNeed: 0,
+                preferredSourceId: baseTransfer.sourceAccountId || '',
+                preferredSourceName: ACCOUNTS[baseTransfer.sourceAccountId]?.name || '-',
+                recommendedTransferId: baseTransfer.id || '',
+                currentMonthlyAmount,
+                recommendedMonthlyAmount,
+                effectiveFrom,
+                onceDate: '',
+                monthlyAllocations: [{ sourceId: baseTransfer.sourceAccountId || '', sourceName: ACCOUNTS[baseTransfer.sourceAccountId]?.name || '-', amount: roundMoney(-reduction), transferId: baseTransfer.id || '' }],
+                onceAllocations: [],
+                monthlyCovered: 0,
+                onceCovered: 0,
+                deviationWarning: Math.abs(reduction) > 0.009,
+                actionType: 'lower_monthly',
+                conservativeMode: true,
+                fullyCovered: true,
+                shortfall: 0
+            });
+        });
+    return list
         .filter(Boolean)
-        .sort((a, b) => String(a.criticalMonth).localeCompare(String(b.criticalMonth)) || (b.monthlyNeed + b.onceNeed) - (a.monthlyNeed + a.onceNeed));
+        .sort((a, b) => String(a.criticalMonth).localeCompare(String(b.criticalMonth)) || Math.abs(toNum(b.monthlyNeed, 0) + toNum(b.onceNeed, 0)) - Math.abs(toNum(a.monthlyNeed, 0) + toNum(a.onceNeed, 0)));
 }
-function buildForecast(horizon = 12) {
+function buildForecast(horizon = forecastHorizonMonths) {
+    const normalizedHorizon = normalizeForecastHorizon(horizon, forecastHorizonMonths);
     const accounts = Object.values(ACCOUNTS);
     const alerts = [];
     const details = {};
@@ -1889,10 +2162,10 @@ function buildForecast(horizon = 12) {
     let month = startMonth.getMonth() + 1;
     const timeline = [];
     const carryEvents = {};
-    const endMonthDate = new Date(startMonth.getFullYear(), startMonth.getMonth() + horizon - 1, 1);
+    const endMonthDate = new Date(startMonth.getFullYear(), startMonth.getMonth() + normalizedHorizon - 1, 1);
     const endMonthKey = monthKey(endMonthDate.getFullYear(), endMonthDate.getMonth() + 1);
 
-    for (let i = 0; i < horizon; i += 1) {
+    for (let i = 0; i < normalizedHorizon; i += 1) {
         const key = monthKey(year, month);
         const bucket = { key, label: monthLabel(key), accounts: {} };
         const monthEvents = Array.isArray(carryEvents[key]) ? [...carryEvents[key]] : [];
@@ -2006,7 +2279,7 @@ function buildForecast(horizon = 12) {
 
     const quality = buildQuality(alerts);
     const imbalances = buildContributionImbalances();
-    const suggestionList = suggestions(timeline);
+    const suggestionList = suggestions(timeline, imbalances);
     return { timeline, alerts, details, quality, setup: buildSetup(quality, alerts, imbalances), suggestions: suggestionList, imbalances, deviationWarnings: buildDeviationWarnings(suggestionList) };
 }
 function openDetail(title, html) { const t = el('ab2-detail-title'); const c = el('ab2-detail-content'); if (t) t.textContent = title; if (c) c.innerHTML = html; openModal('ab2-detail-modal'); }
@@ -2147,6 +2420,7 @@ function populateSelects() {
 function renderDashboard() {
     const items = Object.values(ITEMS);
     const hasTargets = Object.values(ACCOUNTS).some((account) => isRelevantTargetAccount(account));
+    const openActions = Object.values(ACTIONS).filter((entry) => String(entry?.status || 'open') === 'open');
     const imbalanceWarn = (FORECAST.imbalances || []).filter((entry) => entry.severity === 'warn').length;
     const imbalanceAlarm = (FORECAST.imbalances || []).filter((entry) => entry.severity === 'alarm').length;
     const counts = {
@@ -2155,11 +2429,14 @@ function renderDashboard() {
         planned: items.filter((item) => itemStatus(item).key === 'geplant').length,
         past: items.filter((item) => itemStatus(item).key === 'vergangen').length,
         errors: items.filter((item) => itemStatus(item).key === 'fehler').length,
-        warnings: FORECAST.alerts.filter((alert) => alert.severity === 'warn').length + imbalanceWarn + (FORECAST.deviationWarnings || []).length,
+        warnings: FORECAST.alerts.filter((alert) => alert.severity === 'warn').length + imbalanceWarn + (FORECAST.deviationWarnings || []).length + openActions.length,
         alarms: FORECAST.alerts.filter((alert) => alert.severity === 'alarm').length + imbalanceAlarm
     };
     const simInput = el('ab2-simulation-datum');
     if (simInput) simInput.value = simulationDate ? isoDate(simulationDate) : '';
+    setForecastHorizon(forecastHorizonMonths, false);
+    const forecastTitle = el('ab2-forecast-title');
+    if (forecastTitle) forecastTitle.innerHTML = `${forecastHorizonMonths}-Monate-Kontostandsprognose ${helpButton('ab2-help-forecast')}`;
     updateSimulationWarning();
     const total = el('ab2-total-status');
     if (total) {
@@ -2196,6 +2473,9 @@ function renderDashboard() {
         .filter((entry) => entry.status !== 'ok' && isRelevantTargetAccount(ACCOUNTS[entry.accountId]))
         .map((entry) => `${ACCOUNTS[entry.accountId]?.name || '-'}: ${entry.text}`);
     const deviationNotes = (FORECAST.deviationWarnings || []).map((entry) => entry.text);
+    const actionNotes = openActions
+        .slice(0, 4)
+        .map((entry) => `${entry.targetName || '-'}: offen bis Erledigt${entry.latestChangeDate ? ` · spätestens ${formatDate(entry.latestChangeDate)}` : ''}`);
     const dailyAlertNotes = (FORECAST.alerts || [])
         .slice()
         .sort((a, b) => String(a.monthKey || '').localeCompare(String(b.monthKey || '')) || String(a.accountName || '').localeCompare(String(b.accountName || '')))
@@ -2205,14 +2485,17 @@ function renderDashboard() {
         const qualityText = notes.length ? `<strong>Datenqualität beachten:</strong> ${escapeHtml(notes.join(' · '))}` : '';
         const deviationText = deviationNotes.length ? `<div class="mt-1"><strong>Dauerauftrag-Abweichung:</strong> ${escapeHtml(deviationNotes.join(' · '))}</div>` : '';
         const dailyText = hasTargets
-            ? `<div class="mt-1"><strong>Tageslogik (Abbuchung vor Eingang):</strong> ${escapeHtml(dailyAlertNotes.length ? dailyAlertNotes.join(' · ') : 'Keine Lücke unter Mindestpuffer in der 12-Monats-Prognose.')}</div>`
+            ? `<div class="mt-1"><strong>Tageslogik (Abbuchung vor Eingang):</strong> ${escapeHtml(dailyAlertNotes.length ? dailyAlertNotes.join(' · ') : `Keine Lücke unter Mindestpuffer in der ${forecastHorizonMonths}-Monats-Prognose.`)}</div>`
             : '';
-        quality.innerHTML = `${qualityText}${deviationText}${dailyText}`;
-        quality.classList.toggle('hidden', !notes.length && !deviationNotes.length && !hasTargets);
+        const actionsText = actionNotes.length
+            ? `<div class="mt-1"><strong>Offene Aktionen (Bestätigung ausstehend):</strong> ${escapeHtml(actionNotes.join(' · '))}</div>`
+            : '';
+        quality.innerHTML = `${qualityText}${deviationText}${dailyText}${actionsText}`;
+        quality.classList.toggle('hidden', !notes.length && !deviationNotes.length && !hasTargets && !actionNotes.length);
     }
     const imbalance = el('ab2-imbalance-banner');
     if (imbalance) {
-        const rows = (FORECAST.imbalances || []).slice(0, 4).map((entry) => `${entry.title}: ${entry.gapPerExecution < 0 ? 'zu wenig' : 'zu viel'} Beitrag (${formatSignedCurrency(entry.gapPerExecution)})`).join(' · ');
+        const rows = (FORECAST.imbalances || []).slice(0, 4).map((entry) => `${entry.title}: ${entry.gapPerMonth < 0 ? 'zu wenig' : 'zu viel'} (${formatSignedCurrency(entry.gapPerMonth)} / Monat)`).join(' · ');
         imbalance.innerHTML = rows ? `<strong>Titel-/Beitrags-Ungleichgewicht:</strong> ${escapeHtml(rows)}` : '';
         imbalance.classList.toggle('hidden', !rows);
     }
@@ -2404,29 +2687,61 @@ function renderRecon() {
     setReconSplitMode(reconSplitMode, false);
     applyModalViewState();
 }
+function actionCard(action) {
+    const overdue = action.latestChangeDate && parseDate(action.latestChangeDate) && referenceDayStart() > parseDate(action.latestChangeDate);
+    const statusLine = overdue
+        ? `<div class="text-xs text-red-800"><strong>Überfällig:</strong> Stichtag ${formatDate(action.latestChangeDate)} überschritten – neu berechnen und ggf. Zusatzanpassung übernehmen.</div>`
+        : `<div class="text-xs text-slate-700">Stichtag ${action.latestChangeDate ? formatDate(action.latestChangeDate) : '-'} · Wirksam ab ${formatDate(action.effectiveFrom)}${action.onceNeed > 0.009 ? ` · Einmalig ${formatCurrency(action.onceNeed)} am ${formatDate(action.onceDate)}` : ''}</div>`;
+    const monthlyLine = Math.abs(toNum(action.monthlyNeed, 0)) > 0.009
+        ? `<div class="text-xs text-slate-700">Dauerauftrag ${formatCurrency(action.currentMonthlyAmount)} → ${formatCurrency(action.recommendedMonthlyAmount)}</div>`
+        : '<div class="text-xs text-slate-700">Keine monatliche Änderung.</div>';
+    const plannedLine = action.plannedApplied
+        ? `<div class="text-xs text-indigo-800">Geplant übernommen am ${formatDate(action.plannedAtIso)}${action.plannedBy ? ` durch ${escapeHtml(action.plannedBy)}` : ''}. Abschluss steht noch aus.</div>`
+        : '<div class="text-xs text-amber-800">Noch nicht als geplant übernommen.</div>';
+    return `<div class="rounded-xl border ${overdue ? 'border-red-200 bg-red-50' : 'border-indigo-200 bg-indigo-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-slate-800">${escapeHtml(action.targetName || '-')}</div><div class="text-xs text-slate-500">Offene Aktion · ${escapeHtml(action.reason || '-')}</div></div><span class="px-2 py-1 rounded-full text-xs font-bold ${overdue ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${overdue ? 'überfällig' : 'offen'}</span></div><div class="mt-2 space-y-1">${statusLine}${monthlyLine}${plannedLine}</div><div class="mt-3 flex justify-end"><button type="button" class="px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700" data-action-done="${escapeHtml(action.id || '')}">Tatsächlich durchgeführt</button></div></div>`;
+}
 function suggestionCard(suggestion) {
-    const monthly = suggestion.monthlyAllocations.map((row) => `${row.sourceName}: ${formatCurrency(row.amount)} / Monat`).join(' · ');
+    const action = openActionForSuggestion(suggestion);
+    const monthly = suggestion.monthlyAllocations.map((row) => `${row.sourceName}: ${formatCurrency(Math.abs(toNum(row.amount, 0)))} / Monat`).join(' · ');
     const once = suggestion.onceAllocations.map((row) => `${row.sourceName}: ${formatCurrency(row.amount)} einmalig`).join(' · ');
+    const isReduction = toNum(suggestion.monthlyNeed, 0) < -0.009;
     const criticalHint = suggestion.criticalDate
         ? `Kritischer Tag laut Tageslogik: ${formatDate(suggestion.criticalDate)} (Min Tages-Δ ${formatSignedCurrency(toNum(suggestion.criticalMinDayDelta, 0))}).`
         : '';
-    const ownPlanLine = suggestion.monthlyNeed > 0.009
+    const ownPlanLine = Math.abs(toNum(suggestion.monthlyNeed, 0)) > 0.009
         ? `Dauerauftrag ${formatCurrency(suggestion.currentMonthlyAmount)} → ${formatCurrency(suggestion.recommendedMonthlyAmount)} ab ${formatDate(suggestion.effectiveFrom)}.`
         : 'Kein Dauerauftragswechsel nötig.';
-    const deviationHint = suggestion.deviationWarning ? `<div class="mt-1 text-amber-800"><strong>Warnung:</strong> Aktuell eingestellter Dauerauftrag weicht von Empfehlung ab.</div>` : '';
     const onceHint = suggestion.onceNeed > 0.009
-        ? `<div class="mt-1"><strong>Einmalüberweisung frühzeitig:</strong> ${formatCurrency(suggestion.onceNeed)} am ${formatDate(suggestion.onceDate)} (danach als eingegangen bestätigen oder Snapshot setzen).</div>`
+        ? `<div class="mt-1"><strong>Einmalüberweisung so früh wie möglich:</strong> ${formatCurrency(suggestion.onceNeed)} am ${formatDate(suggestion.onceDate)}.</div>`
         : '';
-    return `<div class="rounded-xl border ${suggestion.fullyCovered ? 'border-indigo-200 bg-indigo-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-gray-800">${escapeHtml(suggestion.targetName)}</div><div class="text-xs text-gray-500">kritisch ab ${escapeHtml(suggestion.criticalLabel)} · ${escapeHtml(suggestion.reason)} · konservatives Tagesmodell</div></div><span class="px-2 py-1 rounded-full ${suggestion.fullyCovered ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'} text-xs font-bold">${suggestion.fullyCovered ? 'abgedeckt' : 'Teilabdeckung'}</span></div><div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Monatlich nötig</div><div class="font-bold text-gray-800">${formatCurrency(suggestion.monthlyNeed)}</div></div><div><div class="text-gray-500">Einmalig nötig</div><div class="font-bold text-gray-800">${formatCurrency(suggestion.onceNeed)}</div></div><div><div class="text-gray-500">Rest</div><div class="font-bold ${suggestion.shortfall > 0 ? 'text-amber-700' : 'text-emerald-700'}">${formatCurrency(suggestion.shortfall)}</div></div></div><div class="mt-2 text-xs text-gray-700">${criticalHint ? `<div><strong>Tageswarnung:</strong> ${escapeHtml(criticalHint)}</div>` : ''}<div class="${criticalHint ? 'mt-1' : ''}"><strong>Empfehlung:</strong> ${escapeHtml(ownPlanLine)}</div>${monthly ? `<div class="mt-1"><strong>Monatlicher Zuschlag:</strong> ${escapeHtml(monthly)}</div>` : ''}${once ? `<div class="mt-1"><strong>Einmalig:</strong> ${escapeHtml(once)}</div>` : ''}${onceHint}${deviationHint}${!monthly && !once ? '<div>Keine belastbare eigene Quelle verfügbar. Bitte eigenes Quellkonto oder Dauerauftrag prüfen.</div>' : ''}</div><div class="mt-3 flex justify-end">${monthly || once ? `<button type="button" class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700" data-suggestion-id="${suggestion.id}">Vorschlag übernehmen</button>` : ''}</div></div>`;
+    const deadlineHint = suggestion.latestChangeDate
+        ? `<div class="mt-1 ${parseDate(suggestion.latestChangeDate) && referenceDayStart() > parseDate(suggestion.latestChangeDate) ? 'text-red-800' : 'text-slate-700'}"><strong>Späteste Änderung:</strong> ${formatDate(suggestion.latestChangeDate)}${suggestion.nextTransferExecutionDate ? ` · nächste Ausführung ${formatDate(suggestion.nextTransferExecutionDate)}` : ''}</div>`
+        : '';
+    const actionHint = action
+        ? `<div class="mt-1 text-amber-800"><strong>Offene Aktion:</strong> bleibt sichtbar bis "Tatsächlich durchgeführt" gesetzt ist.</div>`
+        : '';
+    const applyPossible = (Math.abs(toNum(suggestion.monthlyNeed, 0)) > 0.009 || toNum(suggestion.onceNeed, 0) > 0.009) && (suggestion.preferredSourceId || suggestion.monthlyAllocations?.length || suggestion.onceAllocations?.length);
+    return `<div class="rounded-xl border ${suggestion.fullyCovered ? 'border-indigo-200 bg-indigo-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-bold text-gray-800">${escapeHtml(suggestion.targetName)}</div><div class="text-xs text-gray-500">kritisch ab ${escapeHtml(suggestion.criticalLabel)} · ${escapeHtml(suggestion.reason)} · ${isReduction ? 'Senkung' : 'Erhöhung'} empfohlen</div></div><span class="px-2 py-1 rounded-full ${action ? 'bg-amber-100 text-amber-700' : (suggestion.fullyCovered ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700')} text-xs font-bold">${action ? 'Aktion offen' : (suggestion.fullyCovered ? 'abgedeckt' : 'Teilabdeckung')}</span></div><div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-3 text-xs"><div><div class="text-gray-500">Monatliche Anpassung</div><div class="font-bold text-gray-800">${formatSignedCurrency(suggestion.monthlyNeed)}</div></div><div><div class="text-gray-500">Einmalig nötig</div><div class="font-bold text-gray-800">${formatCurrency(suggestion.onceNeed)}</div></div><div><div class="text-gray-500">Rest</div><div class="font-bold ${suggestion.shortfall > 0 ? 'text-amber-700' : 'text-emerald-700'}">${formatCurrency(suggestion.shortfall)}</div></div></div><div class="mt-2 text-xs text-gray-700">${criticalHint ? `<div><strong>Tageswarnung:</strong> ${escapeHtml(criticalHint)}</div>` : ''}<div class="${criticalHint ? 'mt-1' : ''}"><strong>Empfehlung:</strong> ${escapeHtml(ownPlanLine)}</div>${deadlineHint}${monthly ? `<div class="mt-1"><strong>Monatlicher Zuschlag:</strong> ${escapeHtml(monthly)}</div>` : ''}${once ? `<div class="mt-1"><strong>Einmalig:</strong> ${escapeHtml(once)}</div>` : ''}${onceHint}${actionHint}${!monthly && !once ? '<div>Keine belastbare eigene Quelle verfügbar. Bitte eigenes Quellkonto oder Dauerauftrag prüfen.</div>' : ''}</div><div class="mt-3 flex flex-wrap justify-end gap-2">${applyPossible ? `<button type="button" class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700" data-suggestion-id="${escapeHtml(suggestion.id || '')}">Übernommen (geplant)</button>` : ''}${action ? `<button type="button" class="px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700" data-action-done="${escapeHtml(action.id || '')}">Tatsächlich durchgeführt</button>` : ''}</div></div>`;
 }
 function renderSuggestionsModal() {
     const list = FORECAST.suggestions || [];
+    const openActions = openActionsSorted();
+    const suggestionFingerprints = new Set(list.map((entry) => actionFingerprintFromSuggestion(entry)));
+    const orphanActions = openActions.filter((entry) => !suggestionFingerprints.has(String(entry.fingerprint || '')));
     const preview = el('ab2-suggestion-preview');
     const panel = el('ab2-suggestion-panel');
     const modal = el('ab2-suggestions-content');
-    if (panel) panel.classList.toggle('hidden', !list.length);
-    if (preview) preview.innerHTML = list.length ? list.slice(0, 3).map((suggestion) => suggestionCard(suggestion)).join('') : '';
-    if (modal) modal.innerHTML = list.length ? list.map((suggestion) => suggestionCard(suggestion)).join('') : '<p class="text-sm text-gray-400 italic">Keine Vorschläge nötig.</p>';
+    if (panel) panel.classList.toggle('hidden', !list.length && !openActions.length);
+    if (preview) {
+        const suggestionPreview = list.slice(0, 2).map((suggestion) => suggestionCard(suggestion)).join('');
+        const actionPreview = orphanActions.slice(0, 1).map((entry) => actionCard(entry)).join('');
+        preview.innerHTML = suggestionPreview || actionPreview || '<p class="text-sm text-gray-400 italic">Keine Vorschläge nötig.</p>';
+    }
+    if (modal) {
+        const suggestionSection = list.length ? `<div class="space-y-3"><div class="text-xs font-bold uppercase tracking-wide text-slate-600">Neue Empfehlungen</div>${list.map((suggestion) => suggestionCard(suggestion)).join('')}</div>` : '';
+        const actionSection = orphanActions.length ? `<div class="space-y-3"><div class="text-xs font-bold uppercase tracking-wide text-slate-600">Offene Aktionen (Bestätigung ausstehend)</div>${orphanActions.map((entry) => actionCard(entry)).join('')}</div>` : '';
+        modal.innerHTML = (suggestionSection || actionSection) ? `${suggestionSection}${suggestionSection && actionSection ? '<div class="h-2"></div>' : ''}${actionSection}` : '<p class="text-sm text-gray-400 italic">Keine Vorschläge nötig.</p>';
+    }
 }
 function renderPreviews() {
     const itemAccount = ACCOUNTS[el('ab2-item-account')?.value] || null;
@@ -2512,46 +2827,22 @@ function buildContributionRows(item) {
     return [...directRows, ...transferRows].sort((a, b) => String(a.sourceName || '').localeCompare(String(b.sourceName || '')));
 }
 
-function paymentCoverageStats(item) {
-    const sourceMap = new Map();
-    buildContributionRows(item).forEach((row) => {
-        const key = String(row.sourceAccountId || row.sourceName || '-').toLowerCase();
-        if (!sourceMap.has(key)) {
-            sourceMap.set(key, {
-                sourceId: row.sourceAccountId || '',
-                sourceName: row.sourceName || '-',
-                amount: 0,
-                kinds: new Set()
-            });
-        }
-        const target = sourceMap.get(key);
-        target.amount = roundMoney(target.amount + toNum(row.amount, 0));
-        target.kinds.add(row.kind || '-');
-    });
-    const participants = Array.from(sourceMap.values())
-        .map((entry) => ({
-            sourceId: entry.sourceId,
-            sourceName: entry.sourceName,
-            amount: roundMoney(entry.amount),
-            kindText: Array.from(entry.kinds).join(' + ')
-        }))
-        .sort((a, b) => toNum(b.amount, 0) - toNum(a.amount, 0));
-    const itemAmount = roundMoney(toNum(item?.amount, 0));
-    const covered = roundMoney(participants.reduce((sum, row) => sum + toNum(row.amount, 0), 0));
-    const open = roundMoney(Math.max(0, itemAmount - covered));
-    const over = roundMoney(Math.max(0, covered - itemAmount));
-    const months = monthsSinceInclusive(item?.validFrom || isoDate(referenceDate()), referenceDate());
+function paymentCoverageStats(item, horizonMonths = forecastHorizonMonths) {
+    const gap = contributionGapByHorizon(item, horizonMonths);
+    const open = roundMoney(Math.max(0, -gap.gapInHorizon));
+    const over = roundMoney(Math.max(0, gap.gapInHorizon));
     return {
-        participants,
-        participantCount: participants.length,
-        itemAmount,
-        covered,
+        participants: gap.participants,
+        participantCount: gap.participants.length,
+        itemAmount: gap.itemAmount,
+        executions: hitsInHorizon(item, horizonMonths),
+        needInHorizon: gap.needInHorizon,
+        coveredInHorizon: gap.coveredInHorizon,
         open,
         over,
-        coveragePercent: itemAmount > 0 ? roundMoney((covered / itemAmount) * 100) : 0,
-        months,
-        openSinceStart: roundMoney(open * months),
-        overSinceStart: roundMoney(over * months)
+        gapPerMonth: monthlyEquivalent(gap.gapInHorizon, horizonMonths),
+        coveragePercent: gap.coveragePercent,
+        horizonMonths: normalizeForecastHorizon(horizonMonths, forecastHorizonMonths)
     };
 }
 
@@ -2574,6 +2865,7 @@ function renderPaymentsOverview() {
         if (summary) summary.textContent = 'Noch keine Ausgaben im Dashboard vorhanden.';
         return;
     }
+    const horizon = forecastHorizonMonths;
     let openCount = 0;
     let coveredCount = 0;
     let totalOpen = 0;
@@ -2581,7 +2873,7 @@ function renderPaymentsOverview() {
     body.innerHTML = payments.map((item) => {
         const account = ACCOUNTS[item.accountId] || {};
         const status = itemStatus(item);
-        const coverage = paymentCoverageStats(item);
+        const coverage = paymentCoverageStats(item, horizon);
         const isOpen = coverage.open > 0.009;
         if (isOpen) {
             openCount += 1;
@@ -2593,22 +2885,18 @@ function renderPaymentsOverview() {
         }
         const rowTone = isOpen ? 'bg-yellow-50' : (coverage.over > 0.009 ? 'bg-blue-50/60' : 'bg-white');
         const detailsText = coverage.participants.length
-            ? coverage.participants.map((entry) => `${entry.sourceName}: ${formatCurrency(entry.amount)} (${entry.kindText})`).join(' · ')
+            ? coverage.participants.map((entry) => `${entry.sourceName}: ${formatCurrency(entry.amountInHorizon)} (${entry.kindText})`).join(' · ')
             : '-';
         const deltaText = isOpen
-            ? `<span class="font-bold text-amber-800">Offen ${formatCurrency(coverage.open)}</span>`
+            ? `<span class="font-bold text-amber-800">Offen ${formatCurrency(coverage.open)} / ${coverage.horizonMonths}M</span>`
             : coverage.over > 0.009
-                ? `<span class="font-bold text-blue-700">Überdeckt ${formatCurrency(coverage.over)}</span>`
+                ? `<span class="font-bold text-blue-700">Überdeckt ${formatCurrency(coverage.over)} / ${coverage.horizonMonths}M</span>`
                 : '<span class="font-bold text-emerald-700">Ausgeglichen</span>';
-        const sinceStartText = isOpen
-            ? `${formatCurrency(coverage.openSinceStart)} offen seit Start`
-            : coverage.over > 0.009
-                ? `${formatCurrency(coverage.overSinceStart)} überdeckt seit Start`
-                : `seit ${coverage.months} Monat(en) stabil`;
-        return `<tr class="border-t border-slate-100 ${rowTone}"><td class="px-3 py-2 whitespace-nowrap"><span class="px-2 py-1 rounded-full text-[11px] font-bold ${status.css}">${escapeHtml(status.label)}</span></td><td class="px-3 py-2"><div class="font-bold text-slate-800">${escapeHtml(item.title || '-')}</div><div class="text-[11px] text-slate-500">Gültig ab ${formatDate(item.validFrom)}${item.validTo ? ` bis ${formatDate(item.validTo)}` : ''}</div></td><td class="px-3 py-2 text-xs text-slate-700 whitespace-nowrap">${escapeHtml(account.name || '-')}</td><td class="px-3 py-2 text-xs text-slate-700 whitespace-nowrap">${escapeHtml(intervalLabel(item.intervalType, item.customMonths || []))}</td><td class="px-3 py-2 text-xs font-bold text-slate-900 whitespace-nowrap">${formatCurrency(item.amount)}</td><td class="px-3 py-2 text-xs text-slate-700 text-center">${coverage.participantCount}</td><td class="px-3 py-2 text-xs font-bold text-slate-800 whitespace-nowrap">${formatCurrency(coverage.covered)}</td><td class="px-3 py-2 text-xs whitespace-nowrap">${deltaText}</td><td class="px-3 py-2 text-xs font-bold ${isOpen ? 'text-amber-800' : 'text-emerald-700'} whitespace-nowrap">${coverage.coveragePercent.toFixed(0)}%</td><td class="px-3 py-2 text-xs text-slate-700 whitespace-nowrap">${escapeHtml(sinceStartText)}</td><td class="px-3 py-2 text-xs text-slate-700 min-w-[320px]">${escapeHtml(detailsText)}</td><td class="px-3 py-2 text-right whitespace-nowrap"><button type="button" class="px-2 py-1 rounded bg-blue-100 text-blue-700 text-xs font-bold hover:bg-blue-200" data-payment-open-item="${escapeHtml(item.id || '')}">Lesen</button></td></tr>`;
+        const monthDeltaText = `${formatSignedCurrency(coverage.gapPerMonth)} / Monat`;
+        return `<tr class="border-t border-slate-100 ${rowTone}"><td class="px-3 py-2 whitespace-nowrap"><span class="px-2 py-1 rounded-full text-[11px] font-bold ${status.css}">${escapeHtml(status.label)}</span></td><td class="px-3 py-2"><div class="font-bold text-slate-800">${escapeHtml(item.title || '-')}</div><div class="text-[11px] text-slate-500">Gültig ab ${formatDate(item.validFrom)}${item.validTo ? ` bis ${formatDate(item.validTo)}` : ''}</div></td><td class="px-3 py-2 text-xs text-slate-700 whitespace-nowrap">${escapeHtml(account.name || '-')}</td><td class="px-3 py-2 text-xs text-slate-700 whitespace-nowrap">${escapeHtml(intervalLabel(item.intervalType, item.customMonths || []))}</td><td class="px-3 py-2 text-xs font-bold text-slate-900 whitespace-nowrap">${formatCurrency(item.amount)} · ${coverage.executions}x/${coverage.horizonMonths}M</td><td class="px-3 py-2 text-xs text-slate-700 text-center">${coverage.participantCount}</td><td class="px-3 py-2 text-xs font-bold text-slate-800 whitespace-nowrap">Bedarf ${formatCurrency(coverage.needInHorizon)} · gedeckt ${formatCurrency(coverage.coveredInHorizon)}</td><td class="px-3 py-2 text-xs whitespace-nowrap">${deltaText}<div class="text-[11px] text-slate-600 mt-0.5">${monthDeltaText}</div></td><td class="px-3 py-2 text-xs font-bold ${isOpen ? 'text-amber-800' : 'text-emerald-700'} whitespace-nowrap">${coverage.coveragePercent.toFixed(0)}%</td><td class="px-3 py-2 text-xs text-slate-700 whitespace-nowrap">Horizont ${coverage.horizonMonths} Monate</td><td class="px-3 py-2 text-xs text-slate-700 min-w-[320px]">${escapeHtml(detailsText)}</td><td class="px-3 py-2 text-right whitespace-nowrap"><button type="button" class="px-2 py-1 rounded bg-blue-100 text-blue-700 text-xs font-bold hover:bg-blue-200" data-payment-open-item="${escapeHtml(item.id || '')}">Lesen</button></td></tr>`;
     }).join('');
     if (summary) {
-        summary.innerHTML = `<div class="font-bold">Ausgaben gesamt: ${payments.length} · vollständig zugeordnet: ${coveredCount}</div><div class="mt-1 text-xs">Offene Zahlungen: <span class="font-bold text-amber-800">${openCount}</span> (gesamt ${formatCurrency(totalOpen)} pro Ausführung). Überdeckungen: <span class="font-bold text-blue-700">${formatCurrency(totalOver)}</span> pro Ausführung.</div><div class="mt-1 text-xs">Gelb markierte Zeilen zeigen offene Zuordnung. Ziel: alle Kosten mit Beiträgen oder Transfer-Zuordnungen vollständig decken.</div>`;
+        summary.innerHTML = `<div class="font-bold">Ausgaben gesamt: ${payments.length} · vollständig zugeordnet: ${coveredCount}</div><div class="mt-1 text-xs">Offene Zahlungen: <span class="font-bold text-amber-800">${openCount}</span> (gesamt ${formatCurrency(totalOpen)} im ${horizon}-Monats-Horizont). Überdeckungen: <span class="font-bold text-blue-700">${formatCurrency(totalOver)}</span> im Horizont.</div><div class="mt-1 text-xs">Gelb markierte Zeilen zeigen echte Unterdeckung im gewählten Forecast-Horizont.</div>`;
     }
 }
 
@@ -2826,6 +3114,83 @@ async function upsertSnapshotEntry(accountId, date, value, note) {
     const ref = await addDoc(reconRef, { ...payload, createdAt: serverTimestamp() });
     await writeAudit('create', 'reconciliation', ref.id, null, payload, { action: 'snapshot_upsert' });
     return ref.id;
+}
+function actionFingerprintFromSuggestion(suggestion) {
+    const kind = suggestion?.actionType || (toNum(suggestion?.monthlyNeed, 0) < 0 ? 'lower_monthly' : 'raise_monthly');
+    return `${suggestion?.targetId || ''}__${suggestion?.criticalMonth || currentMonthKey()}__${kind}`;
+}
+function openActionForSuggestion(suggestion) {
+    const fingerprint = actionFingerprintFromSuggestion(suggestion);
+    return Object.values(ACTIONS).find((entry) => String(entry?.fingerprint || '') === fingerprint && String(entry?.status || 'open') === 'open') || null;
+}
+function openActionsSorted() {
+    return Object.values(ACTIONS)
+        .filter((entry) => String(entry?.status || 'open') === 'open')
+        .sort((a, b) => String(a.latestChangeDate || '').localeCompare(String(b.latestChangeDate || '')) || String(a.targetName || '').localeCompare(String(b.targetName || '')));
+}
+async function upsertSuggestionAction(suggestion, context = {}) {
+    if (!actionsRef || !uid()) return;
+    const fingerprint = actionFingerprintFromSuggestion(suggestion);
+    const existing = Object.values(ACTIONS).find((entry) => String(entry?.fingerprint || '') === fingerprint && String(entry?.status || 'open') === 'open') || null;
+    const payload = {
+        fingerprint,
+        status: 'open',
+        targetId: suggestion.targetId || '',
+        targetName: suggestion.targetName || '-',
+        suggestionId: suggestion.id || '',
+        actionType: suggestion.actionType || (toNum(suggestion.monthlyNeed, 0) < 0 ? 'lower_monthly' : 'raise_monthly'),
+        reason: suggestion.reason || '',
+        criticalMonth: suggestion.criticalMonth || '',
+        criticalDate: suggestion.criticalDate || '',
+        latestChangeDate: suggestion.latestChangeDate || '',
+        nextTransferExecutionDate: suggestion.nextTransferExecutionDate || '',
+        effectiveFrom: suggestion.effectiveFrom || '',
+        onceDate: suggestion.onceDate || '',
+        currentMonthlyAmount: roundMoney(toNum(suggestion.currentMonthlyAmount, 0)),
+        recommendedMonthlyAmount: roundMoney(toNum(suggestion.recommendedMonthlyAmount, 0)),
+        monthlyNeed: roundMoney(toNum(suggestion.monthlyNeed, 0)),
+        onceNeed: roundMoney(toNum(suggestion.onceNeed, 0)),
+        plannedApplied: !!context.plannedApplied,
+        plannedAtIso: context.plannedApplied ? isoDate(referenceDate()) : (existing?.plannedAtIso || ''),
+        plannedBy: context.plannedApplied ? (currentUser?.displayName || uid() || 'Unbekannt') : (existing?.plannedBy || ''),
+        updatedBy: currentUser?.displayName || 'Unbekannt',
+        updatedAt: serverTimestamp()
+    };
+    if (existing?.id) {
+        await updateDoc(doc(actionsRef, existing.id), payload);
+        await writeAudit('update', 'ab2_action', existing.id, cloneClean(existing), payload, { action: 'suggestion_action_upsert', suggestionId: suggestion.id || '' });
+        return existing.id;
+    }
+    const createPayload = {
+        ...payload,
+        createdBy: uid(),
+        createdByName: currentUser?.displayName || 'Unbekannt',
+        createdAt: serverTimestamp()
+    };
+    const ref = await addDoc(actionsRef, createPayload);
+    await writeAudit('create', 'ab2_action', ref.id, null, createPayload, { action: 'suggestion_action_create', suggestionId: suggestion.id || '' });
+    return ref.id;
+}
+async function markActionDone(actionId) {
+    if (!canCreate()) return alertUser('Keine Berechtigung.', 'error');
+    const action = ACTIONS[actionId] || null;
+    if (!action) return alertUser('Aktion nicht gefunden.', 'error');
+    if (String(action.status || 'open') !== 'open') return alertUser('Aktion ist bereits abgeschlossen.', 'info');
+    try {
+        const payload = {
+            status: 'done',
+            doneAtIso: isoDate(referenceDate()),
+            doneBy: currentUser?.displayName || uid() || 'Unbekannt',
+            updatedBy: currentUser?.displayName || 'Unbekannt',
+            updatedAt: serverTimestamp()
+        };
+        await updateDoc(doc(actionsRef, actionId), payload);
+        await writeAudit('update', 'ab2_action', actionId, cloneClean(action), payload, { action: 'suggestion_action_done' });
+        alertUser('Aktion als tatsächlich durchgeführt markiert.', 'success');
+    } catch (error) {
+        console.error(error);
+        alertUser(`Fehler beim Abschließen: ${error.message || error}`, 'error');
+    }
 }
 async function saveItem() {
     if (!canCreate()) return alertUser('Keine Berechtigung.', 'error');
@@ -3056,48 +3421,58 @@ async function applySuggestion(btn) {
         if (!sourceId) return alertUser('Kein eigenes Quellkonto für den Vorschlag gefunden.', 'error');
         const effectiveFrom = suggestion.effectiveFrom || monthKeyFirstBusinessDay(suggestion.criticalMonth || currentMonthKey(), 1) || isoDate(new Date());
         const onceDate = suggestion.onceDate || monthKeyFirstBusinessDay(suggestion.criticalMonth || currentMonthKey(), 1) || effectiveFrom;
-        if (suggestion.monthlyNeed > 0.009) {
+        if (Math.abs(toNum(suggestion.monthlyNeed, 0)) > 0.009) {
             const currentTransfer = suggestion.recommendedTransferId ? TRANSFERS[suggestion.recommendedTransferId] : null;
             const targetValidTo = currentTransfer?.validTo || '';
-            const newAmount = roundMoney(toNum(suggestion.recommendedMonthlyAmount, toNum(currentTransfer?.amount, 0) + toNum(suggestion.monthlyNeed, 0)));
+            const delta = toNum(suggestion.monthlyNeed, 0);
+            const newAmount = roundMoney(Math.max(0, toNum(suggestion.recommendedMonthlyAmount, toNum(currentTransfer?.amount, 0) + delta)));
             if (currentTransfer) {
                 const oldEndIso = previousDateIso(effectiveFrom);
                 if (!oldEndIso || parseDate(oldEndIso) < parseDate(currentTransfer.validFrom)) {
                     return alertUser('Vorschlag kann nicht versioniert werden. Bitte "Gültig ab" für den Vorschlag später wählen.', 'error');
                 }
                 await updateDoc(doc(transfersRef, currentTransfer.id), { validTo: oldEndIso, updatedBy: currentUser?.displayName || 'Unbekannt', updatedAt: serverTimestamp() });
-                const linkedTitleAllocations = normalizeTransferLinkedAllocations(currentTransfer.linkedTitleAllocations || [{ titleKey: UNASSIGNED_TITLE_KEY, amount: newAmount }]);
-                const payload = {
-                    ...cloneClean(currentTransfer),
-                    amount: newAmount,
-                    validFrom: effectiveFrom,
-                    validTo: targetValidTo,
-                    sourceTransferId: currentTransfer.sourceTransferId || currentTransfer.id,
-                    linkedTitles: linkedTitleAllocations.map((row) => row.titleKey),
-                    linkedTitleAllocations,
-                    createdBy: currentTransfer.createdBy || uid(),
-                    createdByName: currentTransfer.createdByName || currentUser?.displayName || 'Unbekannt',
-                    updatedBy: currentUser?.displayName || 'Unbekannt',
-                    createdAt: serverTimestamp(),
-                    updatedAt: serverTimestamp(),
-                    note: `${currentTransfer.note ? `${currentTransfer.note} | ` : ''}AB2 Empfehlung ${formatDate(effectiveFrom)}`
-                };
-                const ref = await addDoc(transfersRef, payload);
-                await writeAudit('abtausch', 'transfer_plan', currentTransfer.id, cloneClean(currentTransfer), { newTransferId: ref.id, oldEndIso, newAmount, effectiveFrom }, { action: 'apply_suggestion_monthly_split', suggestionId });
+                if (newAmount <= 0.009) {
+                    await writeAudit('update', 'transfer_plan', currentTransfer.id, cloneClean(currentTransfer), { validTo: oldEndIso }, { action: 'apply_suggestion_monthly_stop', suggestionId });
+                } else {
+                    const linkedTitleAllocations = normalizeTransferLinkedAllocations(currentTransfer.linkedTitleAllocations || [{ titleKey: UNASSIGNED_TITLE_KEY, amount: newAmount }]);
+                    const payload = {
+                        ...cloneClean(currentTransfer),
+                        amount: newAmount,
+                        validFrom: effectiveFrom,
+                        validTo: targetValidTo,
+                        sourceTransferId: currentTransfer.sourceTransferId || currentTransfer.id,
+                        linkedTitles: linkedTitleAllocations.map((row) => row.titleKey),
+                        linkedTitleAllocations,
+                        createdBy: currentTransfer.createdBy || uid(),
+                        createdByName: currentTransfer.createdByName || currentUser?.displayName || 'Unbekannt',
+                        updatedBy: currentUser?.displayName || 'Unbekannt',
+                        createdAt: serverTimestamp(),
+                        updatedAt: serverTimestamp(),
+                        note: `${currentTransfer.note ? `${currentTransfer.note} | ` : ''}AB2 Empfehlung ${formatDate(effectiveFrom)}`
+                    };
+                    const ref = await addDoc(transfersRef, payload);
+                    await writeAudit('abtausch', 'transfer_plan', currentTransfer.id, cloneClean(currentTransfer), { newTransferId: ref.id, oldEndIso, newAmount, effectiveFrom }, { action: 'apply_suggestion_monthly_split', suggestionId });
+                }
             } else {
-                const linkedTitleAllocations = [{ titleKey: UNASSIGNED_TITLE_KEY, amount: newAmount }];
-                const payload = { sourceAccountId: sourceId, targetAccountId: suggestion.targetId, amount: newAmount, intervalType: 'monthly', startMonth: null, customMonths: [], dayOfMonth: 1, validFrom: effectiveFrom, validTo: '', note: `Automatisch aus AB2-Vorschlag (${suggestion.reason})`, linkedTitles: [UNASSIGNED_TITLE_KEY], linkedTitleAllocations, createdBy: uid(), createdByName: currentUser?.displayName || 'Unbekannt', updatedBy: currentUser?.displayName || 'Unbekannt', createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
-                const ref = await addDoc(transfersRef, payload);
-                await writeAudit('create', 'transfer_plan', ref.id, null, payload, { action: 'apply_suggestion_monthly_create', suggestionId });
+                if (newAmount <= 0.009) {
+                    await writeAudit('info', 'transfer_plan', '', null, { targetId: suggestion.targetId, sourceId, effectiveFrom }, { action: 'apply_suggestion_monthly_skip_zero', suggestionId });
+                } else {
+                    const linkedTitleAllocations = [{ titleKey: UNASSIGNED_TITLE_KEY, amount: newAmount }];
+                    const payload = { sourceAccountId: sourceId, targetAccountId: suggestion.targetId, amount: newAmount, intervalType: 'monthly', startMonth: null, customMonths: [], dayOfMonth: 1, validFrom: effectiveFrom, validTo: '', note: `Automatisch aus AB2-Vorschlag (${suggestion.reason})`, linkedTitles: [UNASSIGNED_TITLE_KEY], linkedTitleAllocations, createdBy: uid(), createdByName: currentUser?.displayName || 'Unbekannt', updatedBy: currentUser?.displayName || 'Unbekannt', createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+                    const ref = await addDoc(transfersRef, payload);
+                    await writeAudit('create', 'transfer_plan', ref.id, null, payload, { action: 'apply_suggestion_monthly_create', suggestionId });
+                }
             }
         }
-        if (suggestion.onceNeed > 0.009) {
+        if (toNum(suggestion.onceNeed, 0) > 0.009) {
             const linkedTitleAllocations = [{ titleKey: UNASSIGNED_TITLE_KEY, amount: roundMoney(suggestion.onceNeed) }];
             const payload = { sourceAccountId: sourceId, targetAccountId: suggestion.targetId, amount: roundMoney(suggestion.onceNeed), intervalType: 'once', startMonth: null, customMonths: [], dayOfMonth: 1, validFrom: onceDate, validTo: onceDate, note: `Einmaliger AB2-Ausgleich (${suggestion.reason}) · nach Eingang per Snapshot bestätigen`, linkedTitles: [UNASSIGNED_TITLE_KEY], linkedTitleAllocations, createdBy: uid(), createdByName: currentUser?.displayName || 'Unbekannt', updatedBy: currentUser?.displayName || 'Unbekannt', createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
             const ref = await addDoc(transfersRef, payload);
             await writeAudit('create', 'transfer_plan', ref.id, null, payload, { action: 'apply_suggestion_once', suggestionId });
         }
-        alertUser('Vorschlag übernommen.', 'success');
+        await upsertSuggestionAction(suggestion, { plannedApplied: true });
+        alertUser('Vorschlag übernommen (geplant). Bitte danach als "tatsächlich durchgeführt" markieren.', 'success');
     } catch (error) { console.error(error); alertUser(`Fehler beim Übernehmen: ${error.message || error}`, 'error'); }
 }
 async function abtausch() {
@@ -3148,7 +3523,7 @@ function openAccountMetricInfo(metricKey, accountId) {
             : '<div class="mt-1">Aktuell gibt es in der Vorschau keinen einzelnen kritischen Tag.</div>';
         openDetail(
             `Erklärung · Tages-Δ (${account.name || '-'})`,
-            `<div class="space-y-2 text-sm text-slate-700"><p><strong>Tages-Δ</strong> ist die niedrigste Tagesabweichung in der 12-Monats-Prognose. Dafür wird pro Tag gerechnet: Kontostand minus Tagesbedarf.</p><p>Ein negativer Wert bedeutet, dass der Bedarf an mindestens einem Tag nicht vollständig gedeckt war. Je negativer der Wert ist, desto größer ist die Unterdeckung am schlechtesten Tag.</p><p>Ein positiver Wert zeigt, dass selbst am kritischsten Tag noch Reserve vorhanden war.</p>${criticalText}</div>`
+            `<div class="space-y-2 text-sm text-slate-700"><p><strong>Tages-Δ</strong> ist die niedrigste Tagesabweichung in der ${forecastHorizonMonths}-Monats-Prognose. Dafür wird pro Tag gerechnet: Kontostand minus Tagesbedarf.</p><p>Ein negativer Wert bedeutet, dass der Bedarf an mindestens einem Tag nicht vollständig gedeckt war. Je negativer der Wert ist, desto größer ist die Unterdeckung am schlechtesten Tag.</p><p>Ein positiver Wert zeigt, dass selbst am kritischsten Tag noch Reserve vorhanden war.</p>${criticalText}</div>`
         );
         return;
     }
@@ -3183,9 +3558,9 @@ function openStatInsight(statKey) {
             .filter((entry) => entry.severity === severity)
             .map((entry) => {
                 const details = (Array.isArray(entry.details) ? entry.details : [])
-                    .map((row) => `${row.sourceName || '-'}: ${formatCurrency(row.amount)} (${row.kind === 'transfer' ? 'Transfer' : 'Beitrag'})`)
+                    .map((row) => `${row.sourceName || '-'}: ${formatCurrency(row.amount)}${Number.isFinite(toNum(row.amountPerMonth, NaN)) ? ` (${formatCurrency(row.amountPerMonth)} / Monat)` : ''} (${row.kind || '-'})`)
                     .join(' · ');
-                return `<div class="rounded-lg border ${severity === 'alarm' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="font-bold text-gray-800">${escapeHtml(entry.title)}</div><div class="text-xs text-gray-600 mt-1">Konto ${escapeHtml(entry.accountName)} · Pro Ausführung ${formatSignedCurrency(entry.gapPerExecution)} (${entry.gapPerExecution < 0 ? 'zu wenig' : 'zu viel'})</div><div class="text-xs text-gray-600 mt-1">Seit ${entry.referenceMonths} Monat(en): ${formatSignedCurrency(entry.settlementAmount)} → ${entry.actionText}</div>${details ? `<div class="text-xs text-gray-600 mt-1">Zugeordnete Zahler: ${escapeHtml(details)}</div>` : ''}</div>`;
+                return `<div class="rounded-lg border ${severity === 'alarm' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="font-bold text-gray-800">${escapeHtml(entry.title)}</div><div class="text-xs text-gray-600 mt-1">Konto ${escapeHtml(entry.accountName)} · Lücke ${formatSignedCurrency(entry.gapPerMonth)} / Monat (${entry.gapPerMonth < 0 ? 'zu wenig' : 'zu viel'})</div><div class="text-xs text-gray-600 mt-1">${entry.horizonMonths || forecastHorizonMonths}M-Horizont: ${formatSignedCurrency(entry.gapInHorizon)} → ${entry.actionText}</div>${details ? `<div class="text-xs text-gray-600 mt-1">Zugeordnete Zahler: ${escapeHtml(details)}</div>` : ''}</div>`;
             })
             .join('');
         const sections = [];
@@ -3228,7 +3603,7 @@ function openSetupInsight(setupKey) {
     }
     if (setupKey === 'imbalances') {
         const html = (FORECAST.imbalances || [])
-            .map((entry) => `<div class="rounded-lg border ${entry.severity === 'alarm' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="font-bold text-gray-800">${escapeHtml(entry.title || '-')}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(entry.accountName || '-')} · Lücke pro Ausführung ${formatSignedCurrency(entry.gapPerExecution)}</div></div>`)
+            .map((entry) => `<div class="rounded-lg border ${entry.severity === 'alarm' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'} p-3"><div class="font-bold text-gray-800">${escapeHtml(entry.title || '-')}</div><div class="text-xs text-gray-600 mt-1">${escapeHtml(entry.accountName || '-')} · Lücke ${formatSignedCurrency(entry.gapPerMonth)} / Monat · ${entry.horizonMonths || forecastHorizonMonths}M: ${formatSignedCurrency(entry.gapInHorizon)}</div></div>`)
             .join('') || '<p class="text-sm text-gray-500">Keine Ungleichgewichte gefunden.</p>';
         return openDetail('Setup · Titel-Beiträge', `<div class="space-y-2">${html}</div>`);
     }
@@ -3334,6 +3709,10 @@ function bindEvents() {
     });
     on('ab2-simulation-datum', 'change', (e) => applySimulationDate(e.target?.value || ''));
     on('ab2-clear-simulation', 'click', () => applySimulationDate(''));
+    on('ab2-forecast-horizon', 'change', (e) => {
+        setForecastHorizon(e.target?.value || forecastHorizonMonths, true);
+        rebuildForecastAndRender();
+    });
     on('ab2-close-amount-unlock-modal', 'click', closeAmountUnlockModal);
     on('ab2-cancel-amount-unlock-btn', 'click', closeAmountUnlockModal);
     on('ab2-confirm-amount-unlock-btn', 'click', () => {
@@ -3625,7 +4004,14 @@ function bindEvents() {
         if (!host.dataset.listenerAttached) {
             host.addEventListener('click', (e) => {
                 const btn = e.target.closest('[data-suggestion-id]');
-                if (btn) applySuggestion(btn);
+                if (btn) {
+                    applySuggestion(btn);
+                    return;
+                }
+                const doneBtn = e.target.closest('[data-action-done]');
+                if (doneBtn?.dataset.actionDone) {
+                    markActionDone(doneBtn.dataset.actionDone);
+                }
             });
             host.dataset.listenerAttached = 'true';
         }
@@ -3673,13 +4059,15 @@ function attachListeners() {
     if (unsubTransfers) unsubTransfers();
     if (unsubRecon) unsubRecon();
     if (unsubAudit) unsubAudit();
+    if (unsubActions) unsubActions();
 
-    const rerender = () => { FORECAST = buildForecast(); renderAll(); };
+    const rerender = () => { FORECAST = buildForecast(forecastHorizonMonths); renderAll(); };
     unsubAccounts = onSnapshot(query(accountsRef, where('createdBy', '==', userId)), (snap) => { ACCOUNTS = {}; snap.forEach((d) => { ACCOUNTS[d.id] = { id: d.id, ...d.data() }; }); rerender(); }, (error) => console.error('AB2 accounts listener:', error));
     unsubItems = onSnapshot(query(itemsRef, where('createdBy', '==', userId)), (snap) => { ITEMS = {}; snap.forEach((d) => { ITEMS[d.id] = { id: d.id, ...d.data() }; }); rerender(); }, (error) => console.error('AB2 items listener:', error));
     unsubTransfers = onSnapshot(query(transfersRef, where('createdBy', '==', userId)), (snap) => { TRANSFERS = {}; snap.forEach((d) => { TRANSFERS[d.id] = { id: d.id, ...d.data() }; }); rerender(); }, (error) => console.error('AB2 transfers listener:', error));
     unsubRecon = onSnapshot(query(reconRef, where('createdBy', '==', userId)), (snap) => { RECON = {}; snap.forEach((d) => { RECON[d.id] = { id: d.id, ...d.data() }; }); rerender(); }, (error) => console.error('AB2 recon listener:', error));
     unsubAudit = onSnapshot(query(auditRef, where('createdBy', '==', userId)), (snap) => { AUDIT = {}; snap.forEach((d) => { AUDIT[d.id] = { id: d.id, ...d.data() }; }); }, (error) => console.error('AB2 audit listener:', error));
+    unsubActions = onSnapshot(query(actionsRef, where('createdBy', '==', userId)), (snap) => { ACTIONS = {}; snap.forEach((d) => { ACTIONS[d.id] = { id: d.id, ...d.data() }; }); rerender(); }, (error) => console.error('AB2 actions listener:', error));
 }
 
 export function stopAbbuchungsberechnerListeners() {
@@ -3688,11 +4076,13 @@ export function stopAbbuchungsberechnerListeners() {
     if (unsubTransfers) { unsubTransfers(); unsubTransfers = null; }
     if (unsubRecon) { unsubRecon(); unsubRecon = null; }
     if (unsubAudit) { unsubAudit(); unsubAudit = null; }
+    if (unsubActions) { unsubActions(); unsubActions = null; }
     ACCOUNTS = {};
     ITEMS = {};
     TRANSFERS = {};
     RECON = {};
     AUDIT = {};
+    ACTIONS = {};
     FORECAST = { timeline: [], alerts: [], details: {}, quality: [], setup: [], suggestions: [], imbalances: [], deviationWarnings: [] };
 }
 
@@ -3701,8 +4091,10 @@ export function initializeAbbuchungsberechner() {
     ensureShell();
     bindEvents();
     ensureRefs();
+    setForecastHorizon(getUserSetting('ab2_forecast_horizon') || String(forecastHorizonMonths), false);
     populateSelects();
     attachListeners();
+    FORECAST = buildForecast(forecastHorizonMonths);
     renderAll();
     if (getUserSetting('ab2_filter_open') === '1') {
         const w = el('ab2-filter-controls-wrapper');
