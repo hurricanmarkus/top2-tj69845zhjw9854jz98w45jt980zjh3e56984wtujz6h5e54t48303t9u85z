@@ -178,6 +178,9 @@ function getCorrectionCountForOption(participant, optionIndex, voteData = curren
 
     let count = 0;
     participant.answerHistory.forEach(log => {
+        if (log?.isCorrection === false) {
+            return;
+        }
         const changes = Array.isArray(log?.changes) ? log.changes : [];
         const hasChangeForOption = changes.some(change => resolveHistoryChangeOptionIndex(change, voteData) === optionIndex);
         if (hasChangeForOption) {
@@ -186,6 +189,20 @@ function getCorrectionCountForOption(participant, optionIndex, voteData = curren
     });
 
     return count;
+}
+
+function getTotalCorrectionCountFromHistory(answerHistory = []) {
+    if (!Array.isArray(answerHistory)) {
+        return 0;
+    }
+
+    return answerHistory.filter(log => {
+        if (log?.isCorrection === false) {
+            return false;
+        }
+        const changes = Array.isArray(log?.changes) ? log.changes : [];
+        return changes.length > 0;
+    }).length;
 }
 
 
@@ -1172,35 +1189,42 @@ export function initializeTerminplanerView() {
                 handleAdminVoteEdit(participantId, optionIndex, newAnswer, clickedButton);
             }
 
-            // 2. Klick auf "Name bearbeiten"
+            // 2. Klick auf "Abstimm-Details"
+            const detailsBtn = e.target.closest('.show-participant-details-btn');
+            if (detailsBtn) {
+                const participantId = detailsBtn.dataset.participantId;
+                renderParticipantVoteDetails(participantId);
+            }
+
+            // 3. Klick auf "Name bearbeiten"
             const editNameBtn = e.target.closest('.edit-participant-name-btn');
             if (editNameBtn) {
                 const participantId = editNameBtn.dataset.participantId;
                 toggleParticipantNameEdit(participantId, true); // true = Bearbeiten-Modus
             }
 
-            // 3. Klick auf "Name speichern"
+            // 4. Klick auf "Name speichern"
             const saveNameBtn = e.target.closest('.save-participant-name-btn');
             if (saveNameBtn) {
                 const participantId = saveNameBtn.dataset.participantId;
                 handleSaveParticipantName(participantId);
             }
 
-            // 4. Klick auf "Namen-Bearbeitung Abbrechen"
+            // 5. Klick auf "Namen-Bearbeitung Abbrechen"
             const cancelNameBtn = e.target.closest('.cancel-participant-name-btn');
             if (cancelNameBtn) {
                 const participantId = cancelNameBtn.dataset.participantId;
                 toggleParticipantNameEdit(participantId, false); // false = Ansichts-Modus
             }
 
-            // 5. Klick auf "Teilnehmer löschen"
+            // 6. Klick auf "Teilnehmer löschen"
             const deleteParticipantBtn = e.target.closest('.delete-participant-btn');
             if (deleteParticipantBtn) {
                 const participantId = deleteParticipantBtn.dataset.participantId;
                 handleDeleteParticipant(participantId);
             }
             
-            // 6. Klick auf den Namen zum Ein/Ausklappen
+            // 7. Klick auf den Namen zum Ein/Ausklappen
             const nameToggle = e.target.closest('.participant-name-toggle');
             if (nameToggle) {
                 // Finde die ID aus dem Elternelement
@@ -2903,13 +2927,14 @@ async function saveVoteParticipation() {
             if (changes.length > 0) {
                 const historyLog = {
                     timestamp: new Date(),
+                    isCorrection: true,
                     changes: changes,
                     changedBy: nameToSave
                 };
                 answerHistory.unshift(historyLog);
             }
 
-            correctionCount = answerHistory.length;
+            correctionCount = getTotalCorrectionCountFromHistory(answerHistory);
 
             newParticipantsArray[existingParticipantIndex] = {
                 ...oldParticipantData,
@@ -2927,7 +2952,13 @@ async function saveVoteParticipation() {
                 name: nameToSave,
                 currentAnswers: currentParticipantAnswers,
                 correctionCount: 0,
-                answerHistory: []
+                answerHistory: [{
+                    timestamp: new Date(),
+                    isCorrection: false,
+                    eventType: 'initial_vote_saved',
+                    changedBy: nameToSave,
+                    message: 'Erste Abstimmung gespeichert.'
+                }]
             });
         }
 
@@ -3295,7 +3326,9 @@ function renderCorrectionHistory(userId, targetOptionIndex = null) {
         ? `Korrektur-Verlauf für ${participant.name} (${targetOptionText || 'gewählter Termin'})`
         : `Korrektur-Verlauf für ${participant.name}`;
 
-    const history = Array.isArray(participant.answerHistory) ? participant.answerHistory : [];
+    const history = Array.isArray(participant.answerHistory)
+        ? participant.answerHistory.filter(log => log?.isCorrection !== false)
+        : [];
     const filteredHistory = isTermFiltered
         ? history
             .map(log => {
@@ -3384,6 +3417,109 @@ function renderCorrectionHistory(userId, targetOptionIndex = null) {
     }
 
     // Zeige das Modal
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+}
+
+function renderParticipantVoteDetails(participantId) {
+    if (!participantId || !currentVoteData) return;
+
+    const participant = currentVoteData.participants.find(p => p.userId === participantId);
+    if (!participant) {
+        console.error("Teilnehmer für Abstimm-Details nicht gefunden:", participantId);
+        return;
+    }
+
+    const modal = document.getElementById('correctionLogModal');
+    const title = document.getElementById('correction-log-title');
+    const content = document.getElementById('correction-log-content');
+    if (!modal || !title || !content) return;
+
+    title.textContent = `Abstimm-Details: ${participant.name}`;
+
+    const getSafeDate = (timestamp) => {
+        if (!timestamp) return null;
+        if (typeof timestamp.toDate === 'function') return timestamp.toDate();
+        if (timestamp instanceof Date) return timestamp;
+        const d = new Date(timestamp);
+        return Number.isNaN(d.getTime()) ? null : d;
+    };
+
+    const formatAnswer = (answer) => {
+        if (answer === 'yes') return '<span class="text-green-600 font-bold">Ja</span>';
+        if (answer === 'no') return '<span class="text-red-600 font-bold">Nein</span>';
+        if (answer === 'maybe') return '<span class="text-yellow-600 font-bold">Vielleicht</span>';
+        return '<span class="text-gray-500 italic">keine</span>';
+    };
+
+    const rawHistory = Array.isArray(participant.answerHistory) ? [...participant.answerHistory] : [];
+
+    const sortedHistory = rawHistory.sort((a, b) => {
+        const dateA = getSafeDate(a?.timestamp);
+        const dateB = getSafeDate(b?.timestamp);
+        const timeA = dateA ? dateA.getTime() : 0;
+        const timeB = dateB ? dateB.getTime() : 0;
+        return timeB - timeA;
+    });
+
+    if (sortedHistory.length === 0) {
+        content.innerHTML = `<p class="text-sm text-center text-gray-400">Keine Abstimm-Details für diesen Teilnehmer vorhanden.</p>`;
+    } else {
+        content.innerHTML = sortedHistory.map(log => {
+            const dateObject = getSafeDate(log.timestamp);
+            const timestamp = dateObject
+                ? dateObject.toLocaleString('de-DE', {
+                    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                })
+                : 'Unbekanntes Datum';
+
+            const actor = log.changedBy || 'Unbekannt';
+            const changes = Array.isArray(log.changes) ? log.changes : [];
+
+            let eventTitle = 'Ereignis';
+            if (log.eventType === 'initial_vote_saved') {
+                eventTitle = 'Erste Abstimmung gespeichert';
+            } else if (log.eventType === 'participant_added_by_admin') {
+                eventTitle = 'Teilnehmer manuell hinzugefügt';
+            } else if (log.eventType === 'participant_name_changed') {
+                eventTitle = 'Teilnehmer-Name geändert';
+            } else if (changes.length > 0) {
+                eventTitle = changes.length === 1 ? 'Antwort geändert' : 'Mehrere Antworten geändert';
+            }
+
+            let detailsHTML = '';
+            if (log.eventType === 'participant_name_changed') {
+                const oldName = log.oldName || 'Unbekannt';
+                const newName = log.newName || 'Unbekannt';
+                detailsHTML = `<li class="text-sm">Name geändert von <strong>${oldName}</strong> zu <strong>${newName}</strong>.</li>`;
+            } else if (changes.length > 0) {
+                detailsHTML = changes.map(change => {
+                    const optionText = change.optionText || getOptionTextForHistory(currentVoteData, resolveHistoryChangeOptionIndex(change, currentVoteData)) || 'Unbekannter Termin';
+                    return `
+                        <li class="text-sm">
+                            <strong>${optionText}:</strong>
+                            geändert von ${formatAnswer(change.from)} auf ${formatAnswer(change.to)}
+                        </li>
+                    `;
+                }).join('');
+            } else {
+                const message = log.message || 'Keine weiteren Details.';
+                detailsHTML = `<li class="text-sm">${message}</li>`;
+            }
+
+            return `
+                <div class="p-3 bg-white rounded-lg shadow-sm border">
+                    <p class="text-xs font-semibold text-gray-700">${timestamp} Uhr</p>
+                    <p class="text-sm font-bold text-gray-800 mt-1">${eventTitle}</p>
+                    <p class="text-xs text-gray-500 mt-1">von: ${actor}</p>
+                    <ul class="list-disc list-inside mt-2 space-y-1">
+                        ${detailsHTML}
+                    </ul>
+                </div>
+            `;
+        }).join('');
+    }
+
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
 }
@@ -5031,6 +5167,10 @@ function renderParticipantEditGrid(voteData) {
                     </div>
 
                     <div class="participant-controls-display-wrapper flex items-center gap-2 flex-shrink-0 ml-4">
+                        <button class="show-participant-details-btn py-1 px-2 bg-amber-100 text-amber-800 text-xs font-semibold rounded-lg hover:bg-amber-200"
+                                data-participant-id="${participantId}">
+                            Abstimm-Details
+                        </button>
                         <button class="edit-participant-name-btn py-1 px-2 bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg hover:bg-blue-200"
                                 data-participant-id="${participantId}">
                             Name ändern
@@ -5141,6 +5281,7 @@ function handleAdminVoteEdit(participantId, optionIndex, newAnswer, clickedButto
 
     const historyLog = {
         timestamp: new Date(), // Lokale Zeit
+        isCorrection: true,
         changes: [{
             optionIndex: optionIndex,
             optionText: optionText,
@@ -5155,7 +5296,7 @@ function handleAdminVoteEdit(participantId, optionIndex, newAnswer, clickedButto
     participant.currentAnswers[optionIndex] = newAnswer;
     if (!participant.answerHistory) participant.answerHistory = [];
     participant.answerHistory.unshift(historyLog); // Fügt den Log-Eintrag hinzu
-    participant.correctionCount = participant.answerHistory.length;
+    participant.correctionCount = getTotalCorrectionCountFromHistory(participant.answerHistory);
 
     // 4. Aktualisiere die UI (Knöpfe in der Zeile)
     const rowButtons = clickedButton.parentElement.querySelectorAll(`.admin-vote-grid-btn[data-participant-id="${participantId}"][data-option-index="${optionIndex}"]`);
@@ -5262,6 +5403,7 @@ function handleStrikeTerm(optionIndex, shouldBeStricken) {
                 // Füge einen Log-Eintrag hinzu
                 const historyLog = {
                     timestamp: new Date(),
+                    isCorrection: true,
                     changes: [{
                         optionIndex: optionIndex,
                         optionText: optionText,
@@ -5272,7 +5414,7 @@ function handleStrikeTerm(optionIndex, shouldBeStricken) {
                 };
                 if (!p.answerHistory) p.answerHistory = [];
                 p.answerHistory.unshift(historyLog);
-                p.correctionCount = p.answerHistory.length;
+                p.correctionCount = getTotalCorrectionCountFromHistory(p.answerHistory);
             }
         });
 
@@ -5352,7 +5494,13 @@ function handleAddNewParticipant() {
         name: name,
         currentAnswers: {}, // Beginnt mit leeren Antworten
         correctionCount: 0,
-        answerHistory: []
+        answerHistory: [{
+            timestamp: new Date(),
+            isCorrection: false,
+            eventType: 'participant_added_by_admin',
+            changedBy: `Admin (${currentUser.displayName || 'Unbekannt'})`,
+            message: 'Teilnehmer wurde manuell hinzugefügt.'
+        }]
     };
 
     // 5. Den Teilnehmer zu unserem LOKALEN Array hinzufügen
@@ -5396,6 +5544,21 @@ function handleSaveParticipantName(participantId) {
 
     // 1. Lokale Daten aktualisieren
     currentVoteData.participants[participantIndex].name = newName;
+    if (!Array.isArray(currentVoteData.participants[participantIndex].answerHistory)) {
+        currentVoteData.participants[participantIndex].answerHistory = [];
+    }
+    currentVoteData.participants[participantIndex].answerHistory.unshift({
+        timestamp: new Date(),
+        isCorrection: false,
+        eventType: 'participant_name_changed',
+        changedBy: `Admin (${currentUser.displayName || 'Unbekannt'})`,
+        oldName: oldName,
+        newName: newName,
+        message: 'Teilnehmer-Name aktualisiert.'
+    });
+    currentVoteData.participants[participantIndex].correctionCount = getTotalCorrectionCountFromHistory(
+        currentVoteData.participants[participantIndex].answerHistory
+    );
     
     // 2. UI (Anzeige) aktualisieren
     card.querySelector('.participant-name-display').textContent = newName;
