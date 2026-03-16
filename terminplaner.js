@@ -41,6 +41,7 @@ let hasEditChanges = false;
 let hasUnsavedVoteChanges = false;
 let originalParticipantAnswers = {};
 let voteSavePulseTimeout = null;
+let voteCorrectionHighlightTimeout = null;
 
 
 
@@ -111,6 +112,19 @@ function calculateBestOption(voteData) {
     });
 
     return bestOption;
+}
+
+function isVoteCorrectionAllowed(voteData = currentVoteData) {
+    if (!voteData) {
+        return false;
+    }
+
+    if (typeof voteData.allowVoteCorrection === 'boolean') {
+        return voteData.allowVoteCorrection;
+    }
+
+    // Fallback für ältere Umfragen ohne neues Feld
+    return !(voteData.hideAnswers && voteData.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur');
 }
 
 
@@ -806,7 +820,8 @@ export function initializeTerminplanerView() {
             
             const correctionButton = e.target.closest('.vote-correction-btn');
             if (correctionButton) {
-                switchToEditMode();
+                const optionIndex = Number.parseInt(correctionButton.dataset.optionIndex || '', 10);
+                switchToEditMode(Number.isNaN(optionIndex) ? null : optionIndex);
             }
 
             const copyTokenBtn = e.target.closest('#copy-vote-token-btn');
@@ -1820,6 +1835,7 @@ function renderVoteView(voteData) {
     
     const isPollClosed = isFixed || isClosedByTime || isManuallyClosed; // Gesamter "Geschlossen"-Status
     const isParticipationBlocked = isPollClosed || isNotStarted; // Darf man überhaupt abstimmen?
+    const correctionsAllowed = isVoteCorrectionAllowed(voteData);
 
     // (P3) Prüfen, ob der Gast bereits abgestimmt hat
     let youParticipant = null;
@@ -2066,8 +2082,6 @@ function renderVoteView(voteData) {
         // Nichts tun
     } 
     else {
-        const correctionsForbidden = (voteData.hideAnswers && voteData.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur');
-
         // (P3) Logik für Gast-per-Link
         if (currentGuestInfo && currentGuestInfo.voteId === voteData.id) {
             // Fall 1: Wir sind ein GAST-PER-LINK
@@ -2077,7 +2091,7 @@ function renderVoteView(voteData) {
             if (youParticipant) {
                 // Gast-per-Link hat bereits abgestimmt
                 if (nameDisplay) nameDisplay.textContent = youParticipant.name;
-                isVoteGridEditable = !correctionsForbidden;
+                isVoteGridEditable = false;
             } else {
                 // Gast-per-Link stimmt zum ersten Mal ab
                 if (nameDisplay) nameDisplay.textContent = currentGuestInfo.name;
@@ -2155,20 +2169,16 @@ function renderVoteView(voteData) {
             shouldShowHidden = true;
             infoText = "Die Antworten aller Teilnehmer sind bis zum Abschluss der Umfrage versteckt.";
         } 
-        else if (voteData.hideAnswersMode === 'bis_stimmabgabe_mit_korrektur') {
+        else if (voteData.hideAnswersMode === 'bis_stimmabgabe_mit_korrektur' || voteData.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur') {
             if (!youParticipant) {
                 shouldShowHidden = true;
-                infoText = "Die Antworten werden sichtbar, sobald du deine Stimme abgegeben hast. Du kannst deine Stimme danach korrigieren.";
+                infoText = correctionsAllowed
+                    ? "Die Antworten werden sichtbar, sobald du deine Stimme abgegeben hast. Du kannst deine Stimme danach korrigieren."
+                    : "Die Antworten werden sichtbar, sobald du deine Stimme abgegeben hast. Korrekturen sind danach nicht möglich.";
             } else {
-                infoText = "Du hast abgestimmt. Die Antworten sind jetzt für dich sichtbar.";
-            }
-        }
-        else if (voteData.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur') {
-             if (!youParticipant) {
-                shouldShowHidden = true;
-                infoText = "Die Antworten werden sichtbar, sobald du deine Stimme abgegeben hast. Achtung: Korrekturen sind danach nicht mehr möglich.";
-            } else {
-                infoText = "Du hast abgestimmt. Die Antworten sind jetzt für dich sichtbar. Korrekturen sind nicht möglich.";
+                infoText = correctionsAllowed
+                    ? "Du hast abgestimmt. Die Antworten sind jetzt für dich sichtbar."
+                    : "Du hast abgestimmt. Die Antworten sind jetzt für dich sichtbar. Korrekturen sind nicht möglich.";
             }
         }
     }
@@ -2322,18 +2332,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
     const activeParticipantId = getActiveParticipantId(voteData);
     const youParticipant = youParticipantFromView ||
         (activeParticipantId ? voteData.participants.find(p => p.userId === activeParticipantId) : null);
-    let correctionButtonHTML = '';
-
-    // Prüfe, ob "Korrektur"-Knopf angezeigt werden soll
-    if (youParticipant && !isEditable && !isClosed) {
-        const correctionsForbidden = (voteData.hideAnswers && voteData.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur');
-
-        if (correctionsForbidden) {
-            correctionButtonHTML = '<span class="text-xs font-semibold text-gray-500">(Korrektur für diese Umfrage deaktiviert)</span>';
-        } else {
-            correctionButtonHTML = `<button class="vote-correction-btn text-sm font-semibold text-blue-600 hover:underline">Antworten bearbeiten</button>`;
-        }
-    }
+    const correctionsAllowed = isVoteCorrectionAllowed(voteData);
 
     // Finde die ANDEREN Teilnehmer (für die Tabellenköpfe)
     const otherParticipants = activeParticipantId
@@ -2349,7 +2348,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
         cardsHTML += `<h3 class="text-xl font-bold text-gray-800 sticky top-0 bg-gray-100 z-10 p-2 -mx-2">${niceDate}</h3>`;
 
         // Die "Tages-Karte"
-        cardsHTML += `<div class="card bg-white rounded-xl border shadow-lg p-4 space-y-4">`;
+        cardsHTML += `<div class="card vote-day-card bg-white rounded-xl border shadow-lg p-4 space-y-4" data-vote-date="${date}">`;
 
 
         // --- TEIL 1: "DEINE ABSTIMMUNG" (Immer mobilfreundlich) ---
@@ -2400,6 +2399,15 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
                 else if (currentAnswer === 'maybe') answerIcon = '<span class="text-yellow-500 font-bold text-lg">~ Du hast mit VIELLEICHT gestimmt</span>';
                 else answerIcon = '<span class="text-gray-500 font-bold text-lg">? Du hast nicht geantwortet</span>';
 
+                let correctionButtonHTML = '';
+                if (!isClosed) {
+                    if (correctionsAllowed) {
+                        correctionButtonHTML = `<button class="vote-correction-btn text-sm font-semibold text-blue-600 hover:underline" data-option-index="${optionIndex}">Antworten bearbeiten</button>`;
+                    } else {
+                        correctionButtonHTML = '<span class="text-xs font-semibold text-gray-500">(Korrektur für diese Umfrage deaktiviert)</span>';
+                    }
+                }
+
                 yourAnswerHTML = `
                     <div class="p-3 bg-indigo-50 rounded-lg text-center">
                         ${answerIcon}
@@ -2416,7 +2424,7 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
 
             // Baue die "Deine Abstimmung"-ZEILE
             cardsHTML += `
-                <div class="vote-time-row-your-vote flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 ${index === 0 ? '' : 'border-t'}">
+                <div class="vote-time-row-your-vote flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 ${index === 0 ? '' : 'border-t'}" data-option-index="${optionIndex}">
                     <div class="flex-shrink-0 mb-2 sm:mb-0 sm:w-1/3">
                         <h4 class="text-lg font-bold ${timeClasses}">${timeString}</h4>
                     </div>
@@ -2777,7 +2785,7 @@ async function saveVoteParticipation() {
         let existingParticipantIndex = currentVoteData.participants.findIndex(p => p.userId === participantId);
 
         // --- NEUE PRÜFUNG: Korrektur verboten? ---
-        if (existingParticipantIndex > -1 && currentVoteData.hideAnswers && currentVoteData.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur') {
+        if (existingParticipantIndex > -1 && !isVoteCorrectionAllowed(currentVoteData)) {
             throw new Error("Speichern fehlgeschlagen: Diese Umfrage erlaubt keine Korrekturen nach der ersten Stimmabgabe.");
         }
 
@@ -2921,6 +2929,7 @@ async function saveGroupPoll() {
         // Checkboxen lesen
         const isPublic = document.getElementById('vote-setting-public').checked;
         const disableMaybe = document.getElementById('vote-setting-disable-maybe').checked;
+        const allowVoteCorrection = document.getElementById('vote-setting-allow-correction').checked;
 
         // Anonym-Einstellungen
         const isAnonymous = document.getElementById('vote-setting-anonymous').checked;
@@ -2991,6 +3000,7 @@ async function saveGroupPoll() {
             isPublic: isPublic,
             isAnonymous: isAnonymous,
             anonymousMode: isAnonymous ? anonymousMode : null,
+            allowVoteCorrection: allowVoteCorrection,
             hideAnswers: hideAnswers,
             hideAnswersMode: hideAnswers ? hideAnswersMode : null,
             accessPolicy: accessPolicy,
@@ -3113,13 +3123,48 @@ function resetEditWrapper() {
     }
 }
 
+function clearVoteCorrectionHighlight() {
+    const highlightedCards = document.querySelectorAll('.vote-correction-highlight');
+    highlightedCards.forEach(card => {
+        card.classList.remove('vote-correction-highlight', 'ring-4', 'ring-yellow-400', 'ring-offset-2', 'animate-pulse');
+    });
+
+    if (voteCorrectionHighlightTimeout) {
+        clearTimeout(voteCorrectionHighlightTimeout);
+        voteCorrectionHighlightTimeout = null;
+    }
+}
+
+function highlightCorrectionTargetOption(optionIndex) {
+    const optionRow = document.querySelector(`.vote-time-row-your-vote[data-option-index="${optionIndex}"]`);
+    const dayCard = optionRow ? optionRow.closest('.vote-day-card') : null;
+    const scrollTarget = optionRow || dayCard;
+
+    if (!scrollTarget) {
+        return;
+    }
+
+    scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    if (dayCard) {
+        dayCard.classList.add('vote-correction-highlight', 'ring-4', 'ring-yellow-400', 'ring-offset-2', 'animate-pulse');
+    }
+
+    voteCorrectionHighlightTimeout = setTimeout(() => {
+        clearVoteCorrectionHighlight();
+    }, 5000);
+}
+
 // ----- Funktion, die beim Klick auf "Korrektur" aufgerufen wird -----
-function switchToEditMode() {
-    const correctionBtn = document.querySelector('.vote-correction-btn');
-    if (correctionBtn) correctionBtn.classList.add('hidden');
+function switchToEditMode(targetOptionIndex = null) {
+    clearVoteCorrectionHighlight();
     isVoteGridEditable = true;
     updatePollTableAnswers(currentVoteData, true);
     checkIfAllAnswered();
+
+    if (Number.isInteger(targetOptionIndex) && targetOptionIndex >= 0) {
+        highlightCorrectionTargetOption(targetOptionIndex);
+    }
 }
 
 
@@ -3333,6 +3378,7 @@ try {
     // 3. Einstellungen füllen
     document.getElementById('vote-setting-public-edit').checked = voteData.isPublic;
     document.getElementById('vote-setting-disable-maybe-edit').checked = voteData.disableMaybe;
+    document.getElementById('vote-setting-allow-correction-edit').checked = isVoteCorrectionAllowed(voteData);
 
     // (Anonym-Einstellungen laden)
     const anonymousCheckboxEdit = document.getElementById('vote-setting-anonymous-edit');
@@ -3530,6 +3576,7 @@ async function saveVoteEdits() {
         // 4. Einstellungen lesen
         updateData.isPublic = document.getElementById('vote-setting-public-edit').checked;
         updateData.disableMaybe = document.getElementById('vote-setting-disable-maybe-edit').checked;
+        updateData.allowVoteCorrection = document.getElementById('vote-setting-allow-correction-edit').checked;
         updateData.isAnonymous = document.getElementById('vote-setting-anonymous-edit').checked;
         updateData.anonymousMode = updateData.isAnonymous ? document.getElementById('vote-setting-anonymous-mode-edit').value : null;
         updateData.hideAnswers = document.getElementById('vote-setting-hide-answers-edit').checked;
@@ -3892,6 +3939,7 @@ function showView(viewName) {
 
     if (viewName !== 'vote') {
         resetVoteParticipationSaveUi();
+        clearVoteCorrectionHighlight();
     }
     // =================================================================
     // ENDE KORREKTUR (Problem 3)
@@ -3930,6 +3978,7 @@ function resetCreateWizard() {
     endTimeInput.disabled = true;
     document.getElementById('vote-setting-public').checked = false;
     document.getElementById('vote-setting-disable-maybe').checked = false;
+    document.getElementById('vote-setting-allow-correction').checked = false;
     document.getElementById('vote-dates-container').innerHTML = '';
 
     // Anonym-Einstellungen zurücksetzen
