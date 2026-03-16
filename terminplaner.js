@@ -38,6 +38,9 @@ let originalParticipantsOnEditLoad = []; // NEU: Für Konflikt-Vermeidung (Bugfi
 let tempPreRegisteredGuests = []; // NEU (P3): Speichert Gäste-Namen beim Erstellen
 let currentGuestInfo = null; // NEU (P3): Speichert, wenn sich ein Gast per Link anmeldet
 let hasEditChanges = false;
+let hasUnsavedVoteChanges = false;
+let originalParticipantAnswers = {};
+let voteSavePulseTimeout = null;
 
 
 
@@ -747,6 +750,7 @@ export function initializeTerminplanerView() {
             if (clickedButton && !clickedButton.disabled) { 
                 const optionIndex = clickedButton.dataset.optionIndex;
                 const answer = clickedButton.dataset.answer;
+                const voteStatusBeforeSelection = getVoteAnswerStatus();
                 
                 // Setze die Antwort in unserem lokalen Speicher
                 currentParticipantAnswers[optionIndex] = answer;
@@ -784,7 +788,10 @@ export function initializeTerminplanerView() {
                 }
 
                 // Prüfe, ob der "Speichern"-Knopf angezeigt werden soll
-                checkIfAllAnswered();
+                checkIfAllAnswered({
+                    triggeredByUser: true,
+                    previouslyAllAnswered: voteStatusBeforeSelection.allAnswered
+                });
             }
             // =================================================================
             // ENDE KORREKTUR (Problem 4)
@@ -831,6 +838,12 @@ export function initializeTerminplanerView() {
     if (saveParticipationButton && !saveParticipationButton.dataset.listenerAttached) {
         saveParticipationButton.addEventListener('click', saveVoteParticipation);
         saveParticipationButton.dataset.listenerAttached = 'true';
+    }
+
+    const stickyVoteSaveButton = document.getElementById('vote-participation-save-btn');
+    if (stickyVoteSaveButton && !stickyVoteSaveButton.dataset.listenerAttached) {
+        stickyVoteSaveButton.addEventListener('click', saveVoteParticipation);
+        stickyVoteSaveButton.dataset.listenerAttached = 'true';
     }
     
     const editVoteButton = document.getElementById('show-edit-vote-btn');
@@ -2053,6 +2066,8 @@ function renderVoteView(voteData) {
         // Nichts tun
     } 
     else {
+        const correctionsForbidden = (voteData.hideAnswers && voteData.hideAnswersMode === 'bis_stimmabgabe_ohne_korrektur');
+
         // (P3) Logik für Gast-per-Link
         if (currentGuestInfo && currentGuestInfo.voteId === voteData.id) {
             // Fall 1: Wir sind ein GAST-PER-LINK
@@ -2062,7 +2077,7 @@ function renderVoteView(voteData) {
             if (youParticipant) {
                 // Gast-per-Link hat bereits abgestimmt
                 if (nameDisplay) nameDisplay.textContent = youParticipant.name;
-                isVoteGridEditable = false;
+                isVoteGridEditable = !correctionsForbidden;
             } else {
                 // Gast-per-Link stimmt zum ersten Mal ab
                 if (nameDisplay) nameDisplay.textContent = currentGuestInfo.name;
@@ -2110,9 +2125,12 @@ function renderVoteView(voteData) {
     }
     
     // ----- 7. Antworten laden (Sicher) -----
+    resetVoteParticipationSaveUi();
     currentParticipantAnswers = {};
+    originalParticipantAnswers = {};
     if (youParticipant) {
         currentParticipantAnswers = { ...youParticipant.currentAnswers };
+        originalParticipantAnswers = { ...youParticipant.currentAnswers };
     }
 
     // ----- 8. Knöpfe (Speichern, Admin-Edit) (Sicher) -----
@@ -2162,7 +2180,7 @@ function renderVoteView(voteData) {
     }
 
     // ----- 10. Tabelle rendern -----
-    updatePollTableAnswers(voteData, isVoteGridEditable, isPollClosed, shouldShowHidden); 
+    updatePollTableAnswers(voteData, isVoteGridEditable, isPollClosed, shouldShowHidden, youParticipant); 
     
     if (!isParticipationBlocked) {
         checkIfAllAnswered();
@@ -2179,7 +2197,7 @@ function renderVoteView(voteData) {
 
 // Baut die Abstimmungs-KARTEN (Layout: Hybrid-Tabelle pro Tag)
 // KORREKTUR: Problem 1, 2, 4 - Tabellarisch, Kompakt, Namen sichtbar, Mobil-Scroll
-function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, forceHidden = false) {
+function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, forceHidden = false, youParticipantFromView = null) {
     const optionsContainer = document.getElementById('vote-options-container');
     if (!optionsContainer) {
         console.error("Fehler: 'vote-options-container' nicht gefunden!");
@@ -2301,7 +2319,9 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
     let cardsHTML = '';
 
     // Finde den Teilnehmer (DICH)
-    const youParticipant = voteData.participants.find(p => p.userId === currentUser.mode);
+    const activeParticipantId = getActiveParticipantId(voteData);
+    const youParticipant = youParticipantFromView ||
+        (activeParticipantId ? voteData.participants.find(p => p.userId === activeParticipantId) : null);
     let correctionButtonHTML = '';
 
     // Prüfe, ob "Korrektur"-Knopf angezeigt werden soll
@@ -2316,7 +2336,9 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
     }
 
     // Finde die ANDEREN Teilnehmer (für die Tabellenköpfe)
-    const otherParticipants = voteData.participants.filter(p => p.userId !== currentUser.mode);
+    const otherParticipants = activeParticipantId
+        ? voteData.participants.filter(p => p.userId !== activeParticipantId)
+        : [...voteData.participants];
 
     // ÄUSSERE SCHLEIFE: Erstellt eine Karte pro TAG
     for (const date in optionsByDate) {
@@ -2501,39 +2523,179 @@ function updatePollTableAnswers(voteData, isEditable = false, isClosed = false, 
 
 
 
+function getActiveParticipantId(voteData = currentVoteData) {
+    if (currentGuestInfo && voteData && currentGuestInfo.voteId === voteData.id) {
+        return currentGuestInfo.id;
+    }
+    if (currentUser.mode !== GUEST_MODE) {
+        return currentUser.mode;
+    }
+    return null;
+}
+
+function getVoteAnswerStatus() {
+    if (!currentVoteData) {
+        return {
+            activeOptionsCount: 0,
+            answeredCount: 0,
+            allAnswered: false
+        };
+    }
+
+    let activeOptionsCount = 0;
+    let answeredCount = 0;
+
+    for (let i = 0; i < currentVoteData.options.length; i++) {
+        if (currentVoteData.options[i].isStricken === true) {
+            continue;
+        }
+        activeOptionsCount++;
+        if (currentParticipantAnswers[i]) {
+            answeredCount++;
+        }
+    }
+
+    return {
+        activeOptionsCount,
+        answeredCount,
+        allAnswered: activeOptionsCount > 0 && answeredCount === activeOptionsCount
+    };
+}
+
+function hasVoteAnswerChanges() {
+    if (!currentVoteData) {
+        return false;
+    }
+
+    for (let i = 0; i < currentVoteData.options.length; i++) {
+        if (currentVoteData.options[i].isStricken === true) {
+            continue;
+        }
+        const originalAnswer = originalParticipantAnswers[i] || '';
+        const currentAnswer = currentParticipantAnswers[i] || '';
+        if (originalAnswer !== currentAnswer) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function clearVoteSavePulse() {
+    const saveBtn = document.getElementById('vote-save-participation-btn');
+    if (saveBtn) {
+        saveBtn.classList.remove('animate-pulse', 'ring-4', 'ring-green-300');
+    }
+
+    if (voteSavePulseTimeout) {
+        clearTimeout(voteSavePulseTimeout);
+        voteSavePulseTimeout = null;
+    }
+}
+
+function highlightAndScrollToVoteSaveButton() {
+    const saveBtn = document.getElementById('vote-save-participation-btn');
+    if (!saveBtn || saveBtn.classList.contains('hidden')) {
+        return;
+    }
+
+    clearVoteSavePulse();
+    saveBtn.classList.add('animate-pulse', 'ring-4', 'ring-green-300');
+    saveBtn.scrollIntoView({ behavior: 'smooth', block: 'end' });
+
+    voteSavePulseTimeout = setTimeout(() => {
+        clearVoteSavePulse();
+    }, 5000);
+}
+
+function resetVoteParticipationSaveUi() {
+    hasUnsavedVoteChanges = false;
+    clearVoteSavePulse();
+
+    const saveBtn = document.getElementById('vote-save-participation-btn');
+    if (saveBtn) {
+        saveBtn.classList.add('hidden');
+    }
+
+    const bar = document.getElementById('vote-participation-save-bar');
+    if (bar) {
+        bar.classList.add('hidden');
+        bar.classList.remove('animate-pulse');
+    }
+}
+
+function updateVoteParticipationSaveBar(status) {
+    const bar = document.getElementById('vote-participation-save-bar');
+    const textEl = document.getElementById('vote-participation-save-text');
+    const hintEl = document.getElementById('vote-participation-save-hint');
+    const saveBtn = document.getElementById('vote-participation-save-btn');
+
+    if (!bar || !textEl || !hintEl || !saveBtn) {
+        return;
+    }
+
+    if (!isVoteGridEditable || !status.hasUnsavedChanges) {
+        bar.classList.add('hidden');
+        bar.classList.remove('animate-pulse');
+        saveBtn.disabled = true;
+        return;
+    }
+
+    bar.classList.remove('hidden');
+    bar.classList.add('animate-pulse');
+    const remaining = Math.max(0, status.activeOptionsCount - status.answeredCount);
+
+    if (status.allAnswered) {
+        textEl.textContent = 'Nicht gespeichert';
+        hintEl.textContent = 'Alles gewählt. Bitte jetzt speichern.';
+        saveBtn.disabled = false;
+    } else {
+        textEl.textContent = 'Nicht gespeichert';
+        hintEl.textContent = `Bitte zuerst bei allen Terminen wählen (${status.answeredCount}/${status.activeOptionsCount}).`;
+        saveBtn.disabled = true;
+
+        if (remaining <= 1) {
+            hintEl.textContent += ' Nur noch eine Auswahl fehlt.';
+        }
+    }
+}
+
 // ----- HELFER-FUNKTION zum Prüfen der Antworten -----
-function checkIfAllAnswered() {
+function checkIfAllAnswered(options = {}) {
     const saveBtn = document.getElementById('vote-save-participation-btn');
     if (!currentVoteData || !saveBtn) {
         if (saveBtn) saveBtn.classList.add('hidden');
+        resetVoteParticipationSaveUi();
         return;
     }
 
     if (!isVoteGridEditable) {
+        resetVoteParticipationSaveUi();
         saveBtn.classList.add('hidden');
         return;
     }
 
-    const totalOptions = currentVoteData.options.length;
+    const status = getVoteAnswerStatus();
+    status.hasUnsavedChanges = hasVoteAnswerChanges();
+    hasUnsavedVoteChanges = status.hasUnsavedChanges;
 
-    let allAnswered = true;
-    for (let i = 0; i < totalOptions; i++) {
-        // NEU: Überspringe gestrichene Termine
-        if (currentVoteData.options[i].isStricken === true) {
-            continue;
-        }
-        // ENDE NEU
-
-        if (!currentParticipantAnswers[i]) {
-            allAnswered = false;
-            break;
-        }
-    }
-
-    if (allAnswered) {
+    clearVoteSavePulse();
+    if (status.allAnswered && status.hasUnsavedChanges) {
         saveBtn.classList.remove('hidden');
+        saveBtn.classList.add('animate-pulse');
     } else {
         saveBtn.classList.add('hidden');
+    }
+
+    updateVoteParticipationSaveBar(status);
+
+    if (
+        options.triggeredByUser &&
+        options.previouslyAllAnswered === false &&
+        status.allAnswered &&
+        status.hasUnsavedChanges
+    ) {
+        highlightAndScrollToVoteSaveButton();
     }
 }
 
@@ -2547,6 +2709,7 @@ function checkIfAllAnswered() {
 // ----- DATENBANK-FUNKTION (Abstimmung speichern) -----
 async function saveVoteParticipation() {
     const saveBtn = document.getElementById('vote-save-participation-btn');
+    const stickySaveBtn = document.getElementById('vote-participation-save-btn');
 
     let participantName = '';
     let participantId = '';
@@ -2604,7 +2767,12 @@ async function saveVoteParticipation() {
         return alertUser("Bitte wähle für JEDEN (nicht-gestrichenen) Termin eine Antwort aus.", "error");
     }
 
-    setButtonLoading(saveBtn, true);
+    if (saveBtn) {
+        setButtonLoading(saveBtn, true);
+    }
+    if (stickySaveBtn) {
+        setButtonLoading(stickySaveBtn, true);
+    }
     try {
         let existingParticipantIndex = currentVoteData.participants.findIndex(p => p.userId === participantId);
 
@@ -2710,6 +2878,7 @@ async function saveVoteParticipation() {
         currentVoteData.participants = newParticipantsArray;
         currentVoteData.participantIds = participantIds;
 
+        resetVoteParticipationSaveUi();
         isVoteGridEditable = false;
         renderVoteView(currentVoteData); // Hier wird die Logik "Antworten anzeigen" neu ausgelöst
 
@@ -2717,7 +2886,12 @@ async function saveVoteParticipation() {
         console.error("Fehler beim Speichern der Abstimmung:", error);
         alertUser("Fehler beim Speichern: " + error.message, "error_long");
     } finally {
-        setButtonLoading(saveBtn, false);
+        if (saveBtn) {
+            setButtonLoading(saveBtn, false);
+        }
+        if (stickySaveBtn) {
+            setButtonLoading(stickySaveBtn, false);
+        }
     }
 }
 
@@ -2971,9 +3145,10 @@ function renderCorrectionHistory(userId) {
     const isPollClosed = isFixed || isClosedByTime || isManuallyClosed;
 
     // Finde den Teilnehmer, der sich das GERADE ANSCHAUT (nicht der, dessen Log wir öffnen)
-    const youParticipant = (currentUser.mode !== GUEST_MODE) ?
-        currentVoteData.participants.find(p => p.userId === currentUser.mode) :
-        null;
+    const activeParticipantId = getActiveParticipantId(currentVoteData);
+    const youParticipant = activeParticipantId
+        ? currentVoteData.participants.find(p => p.userId === activeParticipantId)
+        : null;
 
     // 2. Logik zum Verstecken (kopiert von renderVoteView)
     let shouldHideDetails = false; // Standard: Details anzeigen
@@ -3713,6 +3888,10 @@ function showView(viewName) {
     // =================================================================
     if (viewName !== 'edit') {
         setEditChanges(false); // Verstecke die "Speichern"-Leiste
+    }
+
+    if (viewName !== 'vote') {
+        resetVoteParticipationSaveUi();
     }
     // =================================================================
     // ENDE KORREKTUR (Problem 3)

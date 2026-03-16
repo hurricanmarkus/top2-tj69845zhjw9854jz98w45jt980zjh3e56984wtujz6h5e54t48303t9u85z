@@ -5159,6 +5159,8 @@
                         Abstimmung speichern
                     </button>
 
+                    <p class="text-xs text-gray-500 text-center mb-2">Hinweis: Deine Auswahl wird erst nach "Abstimmung speichern" übernommen.</p>
+
                 </div>
 
 
@@ -6371,6 +6373,20 @@
 
         </main>
 
+
+        <div id="vote-participation-save-bar" class="hidden flex-shrink-0 bg-amber-600 text-white p-2 shadow-lg border-t-2 border-amber-300 transition-all duration-300 z-20">
+            <div class="w-full flex items-center gap-3">
+                <div class="min-w-0 flex-grow">
+                    <p id="vote-participation-save-text" class="text-xs font-bold uppercase tracking-wide">Nicht gespeichert</p>
+                    <p id="vote-participation-save-hint" class="text-xs text-amber-100">Bitte zuerst bei allen Terminen wählen.</p>
+                </div>
+                <button id="vote-participation-save-btn"
+                    class="py-2 px-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition shadow-md text-sm disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none"
+                    disabled>
+                    Speichern
+                </button>
+            </div>
+        </div>
 
         <div id="sticky-save-bar" class="hidden flex-shrink-0 bg-red-700 text-white p-3
             flex justify-between items-center shadow-lg border-t-4 border-red-400 animate-pulse
