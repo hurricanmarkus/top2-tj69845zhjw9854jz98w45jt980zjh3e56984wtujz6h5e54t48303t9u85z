@@ -41,6 +41,8 @@ let amountUnlockMode = '';
 let amountUnlockEntityId = '';
 let amountUnlockSecondsLeft = 0;
 let amountUnlockTimer = null;
+const AMOUNT_UNLOCK_COUNTDOWN_SECONDS = 0;
+const SOLL_INPUT_IDS = ['ab2-item-amount', 'ab2-account-min-buffer', 'ab2-transfer-amount', 'ab2-recon-value', 'ab2-abtausch-new-amount', 'ab2-transfer-abtausch-new-amount'];
 let transferAbtauschSourceId = '';
 let transferAbtauschOldEndManual = false;
 let accountModalViewMode = 'list';
@@ -440,6 +442,14 @@ function ensureInlineStyles() {
         #abbuchungsberechner-root .ab2-transfer-pane-muted {
             opacity: 0.72;
         }
+        #abbuchungsberechner-root .ab2-soll-chip {
+            display: inline-flex;
+        }
+        @media (max-width: 900px) {
+            #abbuchungsberechner-root .ab2-soll-chip {
+                display: none !important;
+            }
+        }
         @media (max-width: 1023px) {
             #abbuchungsberechner-root .ab2-transfer-split-layout {
                 grid-template-columns: minmax(0, 1fr) !important;
@@ -557,6 +567,24 @@ function ensureTransferLinkingFields() {
             renderPreviews();
         });
         allocationHost.addEventListener('click', (e) => {
+            const infoBtn = e.target.closest('[data-transfer-allocation-info]');
+            if (infoBtn) {
+                openTransferAllocationInfo(infoBtn.dataset.transferAllocationInfo || '', el('ab2-transfer-id')?.value || '');
+                return;
+            }
+            const sollBtn = e.target.closest('[data-transfer-allocation-soll]');
+            if (sollBtn) {
+                const row = sollBtn.closest('[data-transfer-allocation-row]');
+                const input = row?.querySelector('[data-transfer-allocation-amount]');
+                const amount = roundMoney(toNum(sollBtn.dataset.sollAmount, NaN));
+                const title = transferLinkedTitleLabel(sollBtn.dataset.transferAllocationSoll || '') || '-';
+                if (!input || input.disabled || !Number.isFinite(amount)) return;
+                if (!window.confirm(`SOLL-Wert für „${title}“ übernehmen (${formatCurrency(amount)})?`)) return;
+                input.value = amount.toFixed(2);
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+                return;
+            }
             const btn = e.target.closest('[data-transfer-balance-title]');
             if (!btn) return;
             openTransferAllocationBalanceInsight(btn.dataset.transferBalanceTitle || '', el('ab2-transfer-id')?.value || '');
@@ -579,6 +607,118 @@ function transferLinkedTitleLabel(value) {
     if (!key) return '';
     if (key === UNASSIGNED_TITLE_KEY) return '[OHNE ZUORDNUNG]';
     return ITEMS[key]?.title || key;
+}
+
+function transferAllocationAmountForTitle(transfer, titleKey) {
+    const normalized = normalizeTransferLinkedTitleKey(titleKey);
+    if (!normalized) return 0;
+    return roundMoney(getTransferLinkedAllocations(transfer)
+        .filter((row) => String(row.titleKey || '').toLowerCase() === normalized.toLowerCase())
+        .reduce((sum, row) => sum + toNum(row.amount, 0), 0));
+}
+
+function currentTransferFormEntity() {
+    const validFrom = el('ab2-transfer-valid-from')?.value || isoDate(referenceDate());
+    return {
+        intervalType: el('ab2-transfer-interval')?.value || 'monthly',
+        startMonth: parseInt(el('ab2-transfer-start-month')?.value, 10) || null,
+        customMonths: parseMonths(el('ab2-transfer-custom-months')?.value || ''),
+        dayOfMonth: parseInt(el('ab2-transfer-day')?.value, 10) || 1,
+        validFrom,
+        validTo: el('ab2-transfer-valid-to')?.value || ''
+    };
+}
+
+function transferAllocationStats(titleKey, currentTransferId = '') {
+    const normalized = normalizeTransferLinkedTitleKey(titleKey);
+    const item = ITEMS[normalized] || null;
+    const intervalText = item ? intervalLabel(item.intervalType, item.customMonths || []) : '-';
+    const totalRaw = item ? roundMoney(toNum(item.amount, 0)) : 0;
+    const others = Object.values(TRANSFERS)
+        .filter((transfer) => !currentTransferId || transfer.id !== currentTransferId)
+        .map((transfer) => {
+            const amount = transferAllocationAmountForTitle(transfer, normalized);
+            if (amount <= 0.009) return null;
+            const hits = hitsInHorizon(transfer, forecastHorizonMonths);
+            return {
+                transferId: transfer.id,
+                sourceName: ACCOUNTS[transfer.sourceAccountId]?.name || '-',
+                targetName: ACCOUNTS[transfer.targetAccountId]?.name || '-',
+                intervalText: intervalLabel(transfer.intervalType, transfer.customMonths || []),
+                amount,
+                hits,
+                amountInHorizon: roundMoney(amount * hits),
+                nextDate: nextExecutionDate(transfer, 24)
+            };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.amount - a.amount);
+    const plannedByOthersRaw = roundMoney(others.reduce((sum, row) => sum + toNum(row.amount, 0), 0));
+    const openRaw = item ? roundMoney(Math.max(0, totalRaw - plannedByOthersRaw)) : 0;
+
+    const needInHorizon = item ? itemNeedInHorizon(item, forecastHorizonMonths) : 0;
+    const plannedByOthersInHorizon = roundMoney(others.reduce((sum, row) => sum + toNum(row.amountInHorizon, 0), 0));
+    const openInHorizon = item ? roundMoney(Math.max(0, needInHorizon - plannedByOthersInHorizon)) : 0;
+
+    const currentTransfer = TRANSFERS[currentTransferId] || null;
+    const currentEntity = currentTransfer || currentTransferFormEntity();
+    const currentHits = hitsInHorizon(currentEntity, forecastHorizonMonths);
+    const suggestedPerExecution = item
+        ? roundMoney(currentHits > 0 ? (openInHorizon / currentHits) : openRaw)
+        : NaN;
+
+    return {
+        normalized,
+        item,
+        intervalText,
+        totalRaw,
+        plannedByOthersRaw,
+        openRaw,
+        needInHorizon,
+        plannedByOthersInHorizon,
+        openInHorizon,
+        currentHits,
+        suggestedPerExecution,
+        others
+    };
+}
+
+function openTransferAllocationInfo(titleKey, currentTransferId = '') {
+    const normalized = normalizeTransferLinkedTitleKey(titleKey);
+    if (!normalized) return;
+    const stats = transferAllocationStats(normalized, currentTransferId);
+    const item = stats.item;
+    const directRows = (Array.isArray(item?.contributions) ? item.contributions : [])
+        .filter((contrib) => contrib?.sourceAccountId && toNum(contrib.amount, 0) > 0)
+        .map((contrib) => {
+            const entity = contributionEntity(item, contrib);
+            const intervalText = contrib.intervalType === 'inherit'
+                ? `${intervalLabel(item.intervalType, item.customMonths || [])} (wie Zahlung)`
+                : intervalLabel(contrib.intervalType || item.intervalType, contrib.customMonths || []);
+            return {
+                sourceName: ACCOUNTS[contrib.sourceAccountId]?.name || '-',
+                amount: roundMoney(toNum(contrib.amount, 0)),
+                intervalText,
+                nextDate: nextExecutionDate(entity, 24)
+            };
+        });
+
+    const directHtml = directRows.length
+        ? directRows.map((row) => `<div class="rounded-lg border border-slate-200 bg-white p-2"><div class="text-sm font-bold text-slate-800">Direktbeitrag: ${escapeHtml(row.sourceName)}</div><div class="text-xs text-slate-600 mt-1">${formatCurrency(row.amount)} · ${escapeHtml(row.intervalText)}${row.nextDate ? ` · nächste Ausführung ${formatDate(row.nextDate)}` : ''}</div></div>`).join('')
+        : '<p class="text-sm text-slate-500">Keine direkten Beiträge hinterlegt.</p>';
+
+    const othersHtml = stats.others.length
+        ? stats.others.map((row) => `<div class="rounded-lg border border-indigo-200 bg-indigo-50 p-2"><div class="text-sm font-bold text-indigo-900">${escapeHtml(row.sourceName)} → ${escapeHtml(row.targetName)}</div><div class="text-xs text-indigo-800 mt-1">${formatCurrency(row.amount)} je Ausführung · ${escapeHtml(row.intervalText)}${row.nextDate ? ` · nächste Ausführung ${formatDate(row.nextDate)}` : ''} · ${row.hits}x im ${forecastHorizonMonths}M-Horizont = ${formatCurrency(row.amountInHorizon)}</div></div>`).join('')
+        : '<p class="text-sm text-slate-500">Noch keine Zuordnungen durch andere Transfers gefunden.</p>';
+
+    const summaryHtml = item
+        ? `<div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3"><div class="text-xs uppercase tracking-wide text-emerald-700">Gesamtsicht</div><div class="text-sm text-emerald-900 mt-1">Zahlung: <strong>${escapeHtml(item.title || '-')}</strong> · ${formatCurrency(stats.totalRaw)} · ${escapeHtml(stats.intervalText)}</div><div class="text-sm text-emerald-900 mt-1">Durch andere verplant: <strong>${formatCurrency(stats.plannedByOthersRaw)}</strong>${stats.openRaw > 0.009 ? ` · offen: <strong>${formatCurrency(stats.openRaw)}</strong>` : ' · offen: 0.00 €'}</div><div class="text-xs text-emerald-800 mt-1">${forecastHorizonMonths}M-Horizont: Bedarf ${formatCurrency(stats.needInHorizon)} · durch andere verplant ${formatCurrency(stats.plannedByOthersInHorizon)} · offen ${formatCurrency(stats.openInHorizon)}</div>${Number.isFinite(stats.suggestedPerExecution) ? `<div class="text-xs text-emerald-800 mt-1">Empfohlener SOLL-Wert für den aktuellen Transfer: ${formatCurrency(stats.suggestedPerExecution)} je Ausführung</div>` : ''}</div>`
+        : `<div class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">Kein passender Dashboard-Eintrag (Titel) gefunden. Nur Transfer-Zuordnungen sind vorhanden.</div>`;
+
+    openDetail(
+        `Zuordnungsdetails · ${transferLinkedTitleLabel(normalized)}`,
+        `<div class="space-y-3">${summaryHtml}<div><div class="text-xs font-bold uppercase tracking-wide text-slate-600 mb-1">Direkte Beteiligte</div>${directHtml}</div><div><div class="text-xs font-bold uppercase tracking-wide text-slate-600 mb-1">Durch andere Transfers verplant</div>${othersHtml}</div></div>`
+    );
 }
 
 function normalizeTransferLinkedAllocations(raw) {
@@ -708,14 +848,25 @@ function updateTransferLinkedTitleAllocationsUI(seedAllocations = null) {
     const host = el('ab2-transfer-allocation-list');
     if (!host) return;
     const selected = getTransferLinkedTitleValues();
+    const currentTransferId = el('ab2-transfer-id')?.value || '';
     const currentMap = new Map(normalizeTransferLinkedAllocations(seedAllocations || collectTransferLinkedAllocationsFromForm()).map((row) => [String(row.titleKey || '').toLowerCase(), row.amount]));
     host.innerHTML = selected.length
         ? selected.map((titleKey) => {
             const normalized = normalizeTransferLinkedTitleKey(titleKey);
             const value = currentMap.get(normalized.toLowerCase());
-            return `<div class="rounded-lg border border-indigo-200 bg-white p-2" data-transfer-allocation-row="${escapeHtml(normalized)}"><div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_130px_40px] gap-2 items-center"><div class="text-xs font-bold text-indigo-900">${escapeHtml(transferLinkedTitleLabel(normalized) || '-')}</div><input data-transfer-allocation-amount type="text" class="w-full p-2 border rounded-lg text-sm" placeholder="Betrag" value="${Number.isFinite(toNum(value, NaN)) ? toNum(value, 0).toFixed(2) : ''}"><button type="button" class="h-9 w-full sm:w-10 rounded-lg border border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold" title="Bilanz anzeigen" data-transfer-balance-title="${escapeHtml(normalized)}">⚖</button></div></div>`;
+            const stats = transferAllocationStats(normalized, currentTransferId);
+            const infoLine = stats.item
+                ? `Summe total: ${formatCurrency(stats.totalRaw)} (${escapeHtml(stats.intervalText)}) / Durch andere verplant: ${formatCurrency(stats.plannedByOthersRaw)}${stats.openRaw > 0.009 ? ` / offen: ${formatCurrency(stats.openRaw)}` : ''}`
+                : 'Kein passender Dashboard-Eintrag gefunden.';
+            const sollAmount = roundMoney(toNum(stats.suggestedPerExecution, NaN));
+            const showSoll = Number.isFinite(sollAmount) && sollAmount > 0.009;
+            const sollButton = showSoll
+                ? `<button type="button" class="ab2-soll-chip w-full justify-center px-2 py-1 rounded-md border border-emerald-300 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 text-[11px] font-extrabold" data-transfer-allocation-soll="${escapeHtml(normalized)}" data-soll-amount="${escapeHtml(sollAmount.toFixed(2))}">SOLL: ${formatCurrency(sollAmount)}</button>`
+                : '';
+            return `<div class="rounded-lg border border-indigo-200 bg-white p-2" data-transfer-allocation-row="${escapeHtml(normalized)}"><div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,170px)_40px] gap-2 items-start"><div><div class="text-xs font-bold text-indigo-900">${escapeHtml(transferLinkedTitleLabel(normalized) || '-')}</div><div class="mt-1 text-[11px] text-indigo-700">${infoLine} / <button type="button" class="text-indigo-800 underline font-bold" data-transfer-allocation-info="${escapeHtml(normalized)}">[i]</button></div></div><div class="space-y-1"><input data-transfer-allocation-amount type="text" class="w-full p-2 border rounded-lg text-sm" placeholder="Betrag" value="${Number.isFinite(toNum(value, NaN)) ? toNum(value, 0).toFixed(2) : ''}">${sollButton}</div><button type="button" class="h-9 w-full sm:w-10 rounded-lg border border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold" title="Bilanz anzeigen" data-transfer-balance-title="${escapeHtml(normalized)}">⚖</button></div></div>`;
         }).join('')
         : '<div class="text-xs text-indigo-700">Bitte mindestens einen Zahlungsgrund auswählen.</div>';
+    updateSollHintButtons();
 }
 
 function openTransferAllocationBalanceInsight(titleKey, currentTransferId = '') {
@@ -1008,7 +1159,7 @@ function updateAmountUnlockCountdownUi() {
 function openAmountUnlockModal(mode, entityId) {
     amountUnlockMode = mode;
     amountUnlockEntityId = entityId;
-    amountUnlockSecondsLeft = 30;
+    amountUnlockSecondsLeft = AMOUNT_UNLOCK_COUNTDOWN_SECONDS;
     const title = el('ab2-amount-unlock-title');
     const text = el('ab2-amount-unlock-text');
     if (title) title.textContent = mode === 'account' ? 'Konto-Betrag korrigieren' : 'Transfer-Betrag korrigieren';
@@ -1017,12 +1168,125 @@ function openAmountUnlockModal(mode, entityId) {
     }
     updateAmountUnlockCountdownUi();
     clearAmountUnlockTimer();
-    amountUnlockTimer = window.setInterval(() => {
-        amountUnlockSecondsLeft = Math.max(0, amountUnlockSecondsLeft - 1);
-        updateAmountUnlockCountdownUi();
-        if (amountUnlockSecondsLeft <= 0) clearAmountUnlockTimer();
-    }, 1000);
+    if (amountUnlockSecondsLeft > 0) {
+        amountUnlockTimer = window.setInterval(() => {
+            amountUnlockSecondsLeft = Math.max(0, amountUnlockSecondsLeft - 1);
+            updateAmountUnlockCountdownUi();
+            if (amountUnlockSecondsLeft <= 0) clearAmountUnlockTimer();
+        }, 1000);
+    }
     openModal('ab2-amount-unlock-modal');
+}
+
+function transferSuggestedAmountFromSelections() {
+    const selected = getTransferLinkedTitleValues();
+    if (!selected.length) return NaN;
+    const currentTransferId = el('ab2-transfer-id')?.value || '';
+    const total = roundMoney(selected.reduce((sum, titleKey) => {
+        const stats = transferAllocationStats(titleKey, currentTransferId);
+        if (!Number.isFinite(toNum(stats.suggestedPerExecution, NaN))) return sum;
+        return sum + Math.max(0, toNum(stats.suggestedPerExecution, 0));
+    }, 0));
+    return total > 0.009 ? total : NaN;
+}
+
+function resolveSollAmountForInput(inputId) {
+    if (inputId === 'ab2-item-amount') {
+        const id = el('ab2-item-id')?.value || '';
+        return id && ITEMS[id] ? roundMoney(toNum(ITEMS[id].amount, 0)) : toNum(el(inputId)?.value, NaN);
+    }
+    if (inputId === 'ab2-account-min-buffer') {
+        const usesBuffer = accountUsesBuffer(el('ab2-account-type')?.value || 'bank', el('ab2-account-role')?.value || 'both');
+        if (!usesBuffer) return NaN;
+        const id = el('ab2-account-id')?.value || '';
+        if (id && ACCOUNTS[id]) return accountMinBuffer(ACCOUNTS[id]);
+        return toNum(el(inputId)?.value, NaN);
+    }
+    if (inputId === 'ab2-transfer-amount') {
+        const suggested = transferSuggestedAmountFromSelections();
+        if (Number.isFinite(suggested)) return suggested;
+        const id = el('ab2-transfer-id')?.value || '';
+        if (id && TRANSFERS[id]) return roundMoney(toNum(TRANSFERS[id].amount, 0));
+        return toNum(el(inputId)?.value, NaN);
+    }
+    if (inputId === 'ab2-recon-value') {
+        const accountId = el('ab2-recon-account')?.value || '';
+        const type = el('ab2-recon-type')?.value || 'snapshot';
+        if (type === 'snapshot' && accountId) {
+            const latest = latestSnapshots()[accountId] || null;
+            if (latest) return roundMoney(toNum(latest.value, 0));
+        }
+        return toNum(el(inputId)?.value, NaN);
+    }
+    if (inputId === 'ab2-abtausch-new-amount') {
+        const item = ITEMS[el('ab2-item-id')?.value || ''] || null;
+        return item ? roundMoney(toNum(item.amount, 0)) : toNum(el(inputId)?.value, NaN);
+    }
+    if (inputId === 'ab2-transfer-abtausch-new-amount') {
+        const sourceId = transferAbtauschSourceId || el('ab2-transfer-id')?.value || '';
+        const transfer = TRANSFERS[sourceId] || null;
+        return transfer ? roundMoney(toNum(transfer.amount, 0)) : toNum(el(inputId)?.value, NaN);
+    }
+    return NaN;
+}
+
+function ensureSollHintButtons() {
+    SOLL_INPUT_IDS.forEach((inputId) => {
+        const input = el(inputId);
+        if (!input) return;
+        let wrap = input.parentElement?.dataset.ab2SollWrap === inputId ? input.parentElement : null;
+        if (!wrap) {
+            const parent = input.parentElement;
+            if (!parent) return;
+            wrap = document.createElement('div');
+            wrap.className = 'relative';
+            wrap.dataset.ab2SollWrap = inputId;
+            parent.insertBefore(wrap, input);
+            wrap.appendChild(input);
+        }
+        input.classList.add('pr-32');
+        let btn = wrap.querySelector(`[data-ab2-soll-target="${inputId}"]`);
+        if (!btn) {
+            btn = document.createElement('button');
+            btn.type = 'button';
+            btn.dataset.ab2SollTarget = inputId;
+            btn.className = 'ab2-soll-chip absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded-md border border-emerald-300 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 text-[11px] font-extrabold';
+            wrap.appendChild(btn);
+        }
+    });
+    updateSollHintButtons();
+}
+
+function updateSollHintButtons() {
+    SOLL_INPUT_IDS.forEach((inputId) => {
+        const input = el(inputId);
+        const btn = document.querySelector(`[data-ab2-soll-target="${inputId}"]`);
+        if (!input || !btn) return;
+        const value = roundMoney(toNum(resolveSollAmountForInput(inputId), NaN));
+        const valid = Number.isFinite(value);
+        btn.classList.toggle('hidden', !valid);
+        if (!valid) {
+            btn.dataset.sollValue = '';
+            return;
+        }
+        btn.dataset.sollValue = value.toFixed(2);
+        btn.textContent = `SOLL: ${formatCurrency(value)}`;
+        const clickable = !input.disabled;
+        btn.disabled = !clickable;
+        btn.classList.toggle('opacity-50', !clickable);
+        btn.classList.toggle('cursor-not-allowed', !clickable);
+    });
+}
+
+function applySollAmountToInput(inputId, amount) {
+    const input = el(inputId);
+    const value = roundMoney(toNum(amount, NaN));
+    if (!input || input.disabled || !Number.isFinite(value)) return;
+    const label = input.closest('div')?.parentElement?.querySelector('label')?.textContent?.trim() || 'Betrag';
+    if (!window.confirm(`SOLL-Wert übernehmen (${formatCurrency(value)}) für „${label}“?`)) return;
+    input.value = value.toFixed(2);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 function ensureAmountUnlockModal() {
@@ -1033,7 +1297,7 @@ function ensureAmountUnlockModal() {
     modal.id = 'ab2-amount-unlock-modal';
     modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
     modal.style.display = 'none';
-    modal.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg"><div class="bg-gradient-to-r from-amber-600 to-orange-500 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 id="ab2-amount-unlock-title" class="text-xl font-bold">Betrag korrigieren</h3><button id="ab2-close-amount-unlock-modal" class="text-white/80 hover:text-white transition">✕</button></div><div class="p-4 space-y-3"><p id="ab2-amount-unlock-text" class="text-sm text-gray-700">Der Betrag darf nur bei außerordentlichen Gründen korrigiert werden.</p><div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><div class="font-bold">Wichtiger Hinweis</div><div>Bei planmäßigen Änderungen bitte den Weg „Abtausch“ verwenden.</div></div><div id="ab2-amount-unlock-countdown" class="text-sm font-bold text-amber-800">Freigabe in 30s verfügbar.</div></div><div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-2"><button id="ab2-cancel-amount-unlock-btn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg">Schließen</button><button id="ab2-confirm-amount-unlock-btn" class="w-24 inline-flex justify-center px-4 py-2 bg-amber-600 text-white rounded-lg">OK (30s)</button></div></div>`;
+    modal.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg"><div class="bg-gradient-to-r from-amber-600 to-orange-500 text-white p-4 rounded-t-2xl flex justify-between items-center"><h3 id="ab2-amount-unlock-title" class="text-xl font-bold">Betrag korrigieren</h3><button id="ab2-close-amount-unlock-modal" class="text-white/80 hover:text-white transition">✕</button></div><div class="p-4 space-y-3"><p id="ab2-amount-unlock-text" class="text-sm text-gray-700">Der Betrag darf nur bei außerordentlichen Gründen korrigiert werden.</p><div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><div class="font-bold">Wichtiger Hinweis</div><div>Bei planmäßigen Änderungen bitte den Weg „Abtausch“ verwenden.</div></div><div id="ab2-amount-unlock-countdown" class="text-sm font-bold text-amber-800">Freigabe aktiv. Nur für echte Korrektur verwenden.</div></div><div class="bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-2"><button id="ab2-cancel-amount-unlock-btn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg">Schließen</button><button id="ab2-confirm-amount-unlock-btn" class="w-24 inline-flex justify-center px-4 py-2 bg-amber-600 text-white rounded-lg">OK</button></div></div>`;
     const okBtn = modal.querySelector('#ab2-confirm-amount-unlock-btn');
     if (okBtn) {
         okBtn.classList.remove('w-24');
@@ -1221,6 +1485,7 @@ function ensureShell() {
     ensureTransferLinkingFields();
     ensureContributionInfoHint();
     ensureAmountEditButtons();
+    ensureSollHintButtons();
     ensureAccountCurrentBalanceField();
     ensureAccountAbtauschButton();
     ensureTransferAbtauschButton();
@@ -2773,10 +3038,11 @@ function renderPreviews() {
     const reconType = el('ab2-recon-type')?.value || 'snapshot';
     const reconValue = toNum(el('ab2-recon-value')?.value, 0);
     if (el('ab2-recon-preview')) el('ab2-recon-preview').textContent = reconAccount ? (reconType === 'snapshot' ? `Snapshot setzt ${reconAccount.name || '-'} auf ${formatCurrency(reconValue)}.` : `Manuelle Korrektur verändert ${reconAccount.name || '-'} einmalig um ${formatSignedCurrency(reconValue)}.`) : 'Noch unvollständig.';
-    const item = ITEMS[el('ab2-item-id')?.value] || null;
+    const item = ITEMS[el('ab2-item-id')?.value || ''] || null;
     const swapStart = el('ab2-abtausch-new-start')?.value || '';
     const swapAmount = toNum(el('ab2-abtausch-new-amount')?.value, 0);
     if (el('ab2-abtausch-preview')) el('ab2-abtausch-preview').textContent = item && swapStart && swapAmount > 0 ? `${item.title || '-'} endet vor ${formatDate(swapStart)} und läuft ab dann mit ${formatCurrency(swapAmount)} weiter.` : 'Noch keine Vorschau.';
+    updateSollHintButtons();
 }
 function renderAll() { populateSelects(); renderTags(); renderDashboard(); renderTable(); renderAccounts(); renderTransfers(); renderRecon(); renderPaymentsOverview(); applyModalViewState(); renderPreviews(); }
 function setItemReadOnly(readOnly) {
@@ -4016,6 +4282,17 @@ function bindEvents() {
             host.dataset.listenerAttached = 'true';
         }
     });
+    const root = el('abbuchungsberechner-root');
+    if (root && !root.dataset.sollListenerAttached) {
+        root.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-ab2-soll-target]');
+            if (!btn) return;
+            const inputId = btn.dataset.ab2SollTarget || '';
+            const amount = toNum(btn.dataset.sollValue, NaN);
+            applySollAmountToInput(inputId, amount);
+        });
+        root.dataset.sollListenerAttached = 'true';
+    }
     const forecast = el('ab2-forecast-overview');
     if (forecast && !forecast.dataset.listenerAttached) {
         forecast.addEventListener('click', (e) => {
