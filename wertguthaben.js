@@ -3324,6 +3324,15 @@ function openSettingsModal() {
         addKategorieBtn.dataset.listenerAttached = 'true';
     }
 
+    if (newCategoryInput && !newCategoryInput.dataset.enterListenerAttached) {
+        newCategoryInput.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            addWertguthabenKategorieFromSettings();
+        });
+        newCategoryInput.dataset.enterListenerAttached = 'true';
+    }
+
     document.getElementById('wertguthabenSettingsModal').style.display = 'flex';
 }
 

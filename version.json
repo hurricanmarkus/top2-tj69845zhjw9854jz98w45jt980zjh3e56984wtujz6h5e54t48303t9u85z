@@ -1,13 +1,22 @@
 {
-  "version": "1.0.0",
-  "buildId": "20260317-1",
+  "version": "1.0.1",
+  "buildId": "20260317-2",
   "releaseDate": "2026-03-17",
-  "releaseTime": "17:31",
+  "releaseTime": "18:12",
   "timezone": "Europe/Vienna",
-  "note": "Update-Dialog mit Jetzt/Später und automatischer Versionspruefung aktiviert.",
-  "commitId": "cde0a71e",
+  "note": "Wertguthaben-Einstellungen: Kategorie kann nun auch per Enter hinzugefuegt werden.",
+  "commitId": "e083202",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.0.1",
+      "buildId": "20260317-2",
+      "releaseDate": "2026-03-17",
+      "releaseTime": "18:12",
+      "note": "Wertguthaben-Einstellungen: Kategorie kann nun auch per Enter hinzugefuegt werden.",
+      "commitId": "e083202",
+      "obligation": "false"
+    },
     {
       "version": "1.0.0",
       "buildId": "20260317-1",
