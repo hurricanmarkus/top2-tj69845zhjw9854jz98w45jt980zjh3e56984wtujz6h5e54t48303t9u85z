@@ -449,7 +449,7 @@ function setupEventListeners() {
     if (betragInput && !betragInput.dataset.listenerAttached) {
         betragInput.addEventListener('input', updateTransaktionPreview);
         betragInput.addEventListener('keydown', (event) => {
-            if (event.key !== '-') return;
+            if (event.key !== '-' && event.key !== 'Subtract') return;
             const typ = document.getElementById('transaktionTyp')?.value;
             if (typ !== 'korrektur') return;
 
@@ -2114,7 +2114,7 @@ async function saveWertguthaben() {
     const maxEinloesungen = parseInt(document.getElementById('wgMaxEinloesungen').value) || 0;
     const bereitsEingeloest = parseInt(document.getElementById('wgBereitsEingeloest').value) || 0;
 
-    if (editId && !wertguthabenFormState.isWertUnlocked) {
+    if (editId && typ !== 'aktionscode' && !wertguthabenFormState.isWertUnlocked) {
         const existing = WERTGUTHABEN[editId];
         const originalWert = Number(existing?.wert || 0);
         if (Math.abs(wert - originalWert) > 0.0001) {
@@ -2429,9 +2429,17 @@ function handleTransaktionTypChange() {
 
     if (betragInput) {
         if (typ === 'korrektur') {
+            if (betragInput.type !== 'text') {
+                betragInput.type = 'text';
+            }
+            betragInput.inputMode = 'decimal';
             betragInput.placeholder = 'z. B. -5.00 oder +5.00';
             betragInput.removeAttribute('min');
         } else {
+            if (betragInput.type !== 'number') {
+                betragInput.type = 'number';
+            }
+            betragInput.inputMode = 'decimal';
             betragInput.placeholder = '0.00';
             betragInput.min = '0';
         }
