@@ -1,13 +1,22 @@
 {
-  "version": "1.0.2",
-  "buildId": "20260317-3",
+  "version": "1.0.3",
+  "buildId": "20260317-4",
   "releaseDate": "2026-03-17",
-  "releaseTime": "18:17",
+  "releaseTime": "19:56",
   "timezone": "Europe/Vienna",
-  "note": "Wertguthaben-Kategorie loeschen erfordert jetzt die Eingabe von LOESCHEN.",
+  "note": "Wertguthaben-Status beim Speichern bewertet jetzt den aktuellen Restwert statt Eingabewert.",
   "commitId": "e083202",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.0.3",
+      "buildId": "20260317-4",
+      "releaseDate": "2026-03-17",
+      "releaseTime": "19:56",
+      "note": "Wertguthaben-Status beim Speichern bewertet jetzt den aktuellen Restwert statt Eingabewert.",
+      "commitId": "e083202",
+      "obligation": "false"
+    },
     {
       "version": "1.0.2",
       "buildId": "20260317-3",

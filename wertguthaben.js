@@ -2214,6 +2214,9 @@ async function saveWertguthaben() {
     const notizen = document.getElementById('wgNotizen').value.trim();
     const maxEinloesungen = parseInt(document.getElementById('wgMaxEinloesungen').value) || 0;
     const bereitsEingeloest = parseInt(document.getElementById('wgBereitsEingeloest').value) || 0;
+    const statusEvaluationAmount = editId
+        ? parseWertAmount(existingEntry?.restwert, wert)
+        : wert;
 
     if (editId && typ !== 'aktionscode' && !wertguthabenFormState.isWertUnlocked) {
         const lockedWertReference = pickFirstNonEmptyString([
@@ -2227,7 +2230,7 @@ async function saveWertguthaben() {
         }
     }
 
-    if (!wertguthabenFormState.statusManuallyChanged && shouldAutoSetStatusToEingeloest(typ, wert, maxEinloesungen, bereitsEingeloest)) {
+    if (!wertguthabenFormState.statusManuallyChanged && shouldAutoSetStatusToEingeloest(typ, statusEvaluationAmount, maxEinloesungen, bereitsEingeloest)) {
         status = 'eingeloest';
         statusSelect.value = 'eingeloest';
     }
