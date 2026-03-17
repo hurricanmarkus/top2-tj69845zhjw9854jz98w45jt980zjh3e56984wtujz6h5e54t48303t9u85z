@@ -48,7 +48,9 @@ const wertguthabenFormState = {
     copySourceId: '',
     statusManuallyChanged: false,
     isWertUnlocked: false,
-    lockedEditEntryId: ''
+    lockedEditEntryId: '',
+    lastSelectedTyp: 'gutschein',
+    wertBeforeAktionscodeSwitch: ''
 };
 const transaktionModalState = {
     originalRestwert: 0,
@@ -459,7 +461,7 @@ function setupEventListeners() {
 
             event.preventDefault();
             const normalized = currentValue.replace(/^-/, '');
-            betragInput.value = normalized ? `-${normalized}` : '-0';
+            betragInput.value = normalized ? `-${normalized}` : '-';
             updateTransaktionPreview();
         });
         betragInput.dataset.listenerAttached = 'true';
@@ -1798,6 +1800,8 @@ function resetForm() {
 
     wertguthabenFormState.isWertUnlocked = false;
     wertguthabenFormState.lockedEditEntryId = '';
+    wertguthabenFormState.lastSelectedTyp = 'gutschein';
+    wertguthabenFormState.wertBeforeAktionscodeSwitch = '';
 
     handleTypChange();
 
@@ -1861,6 +1865,9 @@ function populateWertguthabenFormFromEntry(wg, options = {}) {
     document.getElementById('wgAusnahmen').value = wg.ausnahmen || '';
     document.getElementById('wgQuelle').value = wg.quelle || '';
 
+    wertguthabenFormState.lastSelectedTyp = wg.typ || 'gutschein';
+    wertguthabenFormState.wertBeforeAktionscodeSwitch = '';
+
     handleTypChange();
     validateEinloesungen();
 }
@@ -1885,6 +1892,8 @@ function closeWertguthabenModal() {
     setWertguthabenCopyMode(false);
     wertguthabenFormState.statusManuallyChanged = false;
     setWertBetragLockedState(false);
+    wertguthabenFormState.lastSelectedTyp = 'gutschein';
+    wertguthabenFormState.wertBeforeAktionscodeSwitch = '';
 }
 
 function shouldAutoSetStatusToEingeloest(typ, wert, maxEinloesungen, bereitsEingeloest) {
@@ -1908,6 +1917,19 @@ function handleTypChange() {
     const wertInput = document.getElementById('wgWert');
     const einloesefristInput = document.getElementById('wgEinloesefrist');
     const kaufdatumInput = document.getElementById('wgKaufdatum');
+    const previousTyp = wertguthabenFormState.lastSelectedTyp;
+
+    if (typ === 'aktionscode' && previousTyp && previousTyp !== 'aktionscode') {
+        const currentWert = String(wertInput?.value || '').trim();
+        wertguthabenFormState.wertBeforeAktionscodeSwitch = currentWert;
+    }
+
+    if (typ !== 'aktionscode' && previousTyp === 'aktionscode') {
+        const restoreWert = wertguthabenFormState.wertBeforeAktionscodeSwitch;
+        if (restoreWert !== '') {
+            wertInput.value = restoreWert;
+        }
+    }
 
     gutscheinFelder.classList.add('hidden');
     wertguthabenFelder.classList.add('hidden');
@@ -1949,6 +1971,8 @@ function handleTypChange() {
             wertguthabenFelder.classList.remove('hidden');
         }
     }
+
+    wertguthabenFormState.lastSelectedTyp = typ;
 }
 
 function handleEigentuemerChange() {
