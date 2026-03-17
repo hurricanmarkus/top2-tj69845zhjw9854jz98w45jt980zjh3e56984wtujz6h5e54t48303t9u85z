@@ -50,7 +50,8 @@ const wertguthabenFormState = {
     isWertUnlocked: false,
     lockedEditEntryId: '',
     lastSelectedTyp: 'gutschein',
-    wertBeforeAktionscodeSwitch: ''
+    wertBeforeAktionscodeSwitch: '',
+    statusBeforeAktionscodeSwitch: ''
 };
 const transaktionModalState = {
     originalRestwert: 0,
@@ -1802,6 +1803,7 @@ function resetForm() {
     wertguthabenFormState.lockedEditEntryId = '';
     wertguthabenFormState.lastSelectedTyp = 'gutschein';
     wertguthabenFormState.wertBeforeAktionscodeSwitch = '';
+    wertguthabenFormState.statusBeforeAktionscodeSwitch = '';
 
     handleTypChange();
 
@@ -1867,6 +1869,7 @@ function populateWertguthabenFormFromEntry(wg, options = {}) {
 
     wertguthabenFormState.lastSelectedTyp = wg.typ || 'gutschein';
     wertguthabenFormState.wertBeforeAktionscodeSwitch = '';
+    wertguthabenFormState.statusBeforeAktionscodeSwitch = '';
 
     handleTypChange();
     validateEinloesungen();
@@ -1894,6 +1897,7 @@ function closeWertguthabenModal() {
     setWertBetragLockedState(false);
     wertguthabenFormState.lastSelectedTyp = 'gutschein';
     wertguthabenFormState.wertBeforeAktionscodeSwitch = '';
+    wertguthabenFormState.statusBeforeAktionscodeSwitch = '';
 }
 
 function shouldAutoSetStatusToEingeloest(typ, wert, maxEinloesungen, bereitsEingeloest) {
@@ -1915,19 +1919,34 @@ function handleTypChange() {
     const wertguthabenFelder = document.getElementById('wertguthaben-felder');
     const aktionscodeFelder = document.getElementById('aktionscode-felder');
     const wertInput = document.getElementById('wgWert');
+    const statusSelect = document.getElementById('wgStatus');
     const einloesefristInput = document.getElementById('wgEinloesefrist');
     const kaufdatumInput = document.getElementById('wgKaufdatum');
     const previousTyp = wertguthabenFormState.lastSelectedTyp;
+    const existingEntry = editId ? WERTGUTHABEN[editId] : null;
 
     if (typ === 'aktionscode' && previousTyp && previousTyp !== 'aktionscode') {
         const currentWert = String(wertInput?.value || '').trim();
-        wertguthabenFormState.wertBeforeAktionscodeSwitch = currentWert;
+        const existingWert = existingEntry ? Number(existingEntry.wert || 0) : null;
+        let wertSnapshot = currentWert;
+        if ((!wertSnapshot || wertSnapshot === '0') && existingWert !== null && Number.isFinite(existingWert)) {
+            wertSnapshot = String(existingWert);
+        }
+        wertguthabenFormState.wertBeforeAktionscodeSwitch = wertSnapshot;
+        wertguthabenFormState.statusBeforeAktionscodeSwitch = String(statusSelect?.value || '');
     }
 
     if (typ !== 'aktionscode' && previousTyp === 'aktionscode') {
         const restoreWert = wertguthabenFormState.wertBeforeAktionscodeSwitch;
         if (restoreWert !== '') {
             wertInput.value = restoreWert;
+        } else if (existingEntry && Number.isFinite(Number(existingEntry.wert))) {
+            wertInput.value = String(Number(existingEntry.wert));
+        }
+
+        const restoreStatus = wertguthabenFormState.statusBeforeAktionscodeSwitch;
+        if (statusSelect && restoreStatus) {
+            statusSelect.value = restoreStatus;
         }
     }
 
