@@ -61,7 +61,7 @@ const transaktionModalState = {
     maxEinloesungen: 0,
     bereitsEingeloest: 0
 };
-const WG_WERT_UNLOCK_COUNTDOWN_SECONDS = 30;
+const WG_WERT_UNLOCK_COUNTDOWN_SECONDS = 1;
 let wgWertUnlockSecondsLeft = 0;
 let wgWertUnlockTimer = null;
 
@@ -2139,18 +2139,16 @@ async function saveWertguthaben() {
             data.createdAt = serverTimestamp();
             data.createdBy = currentUser.mode;
             const createdRef = await addDoc(wertguthabenCollection, data);
-            if (typ !== 'aktionscode' && wert > 0) {
-                const transaktionenRef = collection(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', createdRef.id, 'transaktionen');
-                await addDoc(transaktionenRef, {
-                    typ: 'gutschrift',
-                    betrag: wert,
-                    datum: serverTimestamp(),
-                    beschreibung: 'Startguthaben bei Erstellung',
-                    isSystemGeneratedStartguthaben: true,
-                    createdAt: serverTimestamp(),
-                    createdBy: currentUser.mode
-                });
-            }
+            const transaktionenRef = collection(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', createdRef.id, 'transaktionen');
+            await addDoc(transaktionenRef, {
+                typ: 'gutschrift',
+                betrag: wert,
+                datum: serverTimestamp(),
+                beschreibung: 'Startguthaben bei Erstellung',
+                isSystemGeneratedStartguthaben: true,
+                createdAt: serverTimestamp(),
+                createdBy: currentUser.mode
+            });
             alertUser('Wertguthaben erstellt!', 'success');
         }
 
