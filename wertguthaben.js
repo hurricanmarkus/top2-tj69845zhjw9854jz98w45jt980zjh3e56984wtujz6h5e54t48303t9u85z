@@ -48,6 +48,7 @@ const transaktionModalState = {
     source: 'dashboard',
     editTransaktionId: '',
     isEditMode: false,
+    isExistingTransaktionVerified: false,
     isEinloesungMode: false,
     maxEinloesungen: 0,
     bereitsEingeloest: 0
@@ -920,7 +921,7 @@ function renderWertguthabenTable() {
         const restzeit = w.typ === 'aktionscode' ? calculateRestzeit(w.gueltigBis) : calculateRestzeit(w.einloesefrist);
         const statusBadge = getStatusBadge(w, restzeit);
         const restwert = w.restwert !== undefined ? w.restwert : w.wert;
-        const verificationBadge = renderWertguthabenVerificationBadge(w);
+        const verificationBadge = renderWertguthabenVerificationBadge(w, 'text-emerald-700', 'icon');
         
         return `
             <tr class="hover:bg-gray-50 cursor-pointer transition" onclick="window.openWertguthabenDetails('${w.id}')">
@@ -1233,9 +1234,12 @@ function getWertguthabenVerificationMeta(entry) {
     return `Verifiziert von ${userName}`;
 }
 
-function renderWertguthabenVerificationBadge(entry, className = 'text-emerald-700') {
+function renderWertguthabenVerificationBadge(entry, className = 'text-emerald-700', mode = 'full') {
     const meta = getWertguthabenVerificationMeta(entry);
     if (!meta) return '';
+    if (mode === 'icon') {
+        return `<span class="text-xs font-semibold ${className}" title="${escapeHtml(meta)}">✅</span>`;
+    }
     return `<span class="text-[11px] font-semibold ${className}">✅ ${escapeHtml(meta)}</span>`;
 }
 
@@ -1988,6 +1992,10 @@ function updateTransaktionPreview() {
     if (!betragInput || !typSelect || !verfuegbar || !urspruenglich) return;
 
     if (typSelect.value === 'einloesung') {
+        betragInput.removeAttribute('max');
+        betragInput.classList.remove('border-red-500', 'focus:border-red-500');
+        setTransaktionSaveEnabled(true);
+        setTransaktionValidationHint('');
         const max = transaktionModalState.maxEinloesungen;
         const current = transaktionModalState.bereitsEingeloest;
         const availableText = max > 0 ? `${Math.max(0, max - current)} verfügbar` : '∞ verfügbar';
@@ -2005,11 +2013,43 @@ function updateTransaktionPreview() {
     }
 
     if (typSelect.value === 'verwendung') {
+        betragInput.max = transaktionModalState.originalRestwert.toFixed(2);
         nextRestwert = Math.max(0, nextRestwert);
+    } else {
+        betragInput.removeAttribute('max');
     }
+
+    const exceedsRestwert = typSelect.value === 'verwendung' && entered > transaktionModalState.originalRestwert;
+    const hasValidAmount = entered > 0;
+    const disableSave = !hasValidAmount || exceedsRestwert;
+
+    setTransaktionSaveEnabled(!disableSave);
+    if (exceedsRestwert) {
+        setTransaktionValidationHint(`Maximal verfügbar: ${transaktionModalState.originalRestwert.toFixed(2)} €`);
+    } else {
+        setTransaktionValidationHint('');
+    }
+    betragInput.classList.toggle('border-red-500', exceedsRestwert);
+    betragInput.classList.toggle('focus:border-red-500', exceedsRestwert);
 
     verfuegbar.textContent = `${nextRestwert.toFixed(2)} €`;
     urspruenglich.textContent = `${transaktionModalState.originalRestwert.toFixed(2)} €`;
+}
+
+function setTransaktionSaveEnabled(enabled) {
+    const saveBtn = document.getElementById('saveTransaktionBtn');
+    if (!saveBtn) return;
+    saveBtn.disabled = !enabled;
+    saveBtn.classList.toggle('opacity-50', !enabled);
+    saveBtn.classList.toggle('cursor-not-allowed', !enabled);
+}
+
+function setTransaktionValidationHint(message) {
+    const hint = document.getElementById('transaktionValidationHint');
+    if (!hint) return;
+    const text = String(message || '').trim();
+    hint.textContent = text;
+    hint.classList.toggle('hidden', !text);
 }
 
 function handleTransaktionTypChange() {
@@ -2068,6 +2108,7 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     const verifySection = document.getElementById('transaktionVerifySection');
     const verifyCheckbox = document.getElementById('transaktionVerifyCheckbox');
     const verifyInfo = document.getElementById('transaktionVerifyInfo');
+    const restwertVerifiziertInfo = document.getElementById('transaktionRestwertVerifiziertInfo');
     const allesEinloesenBtn = document.getElementById('transaktionAllesEinloesenBtn');
     const verfuegbarElement = document.getElementById('transaktionVerfuegbar');
     const betragLabel = document.querySelector('label[for="transaktionBetrag"]') || document.querySelector('#transaktionBetragContainer label');
@@ -2083,6 +2124,7 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     transaktionModalState.source = source;
     transaktionModalState.editTransaktionId = editTransaktion?.id || '';
     transaktionModalState.isEditMode = !!editTransaktion;
+    transaktionModalState.isExistingTransaktionVerified = !!editTransaktion?.betragVerifiziert;
     transaktionModalState.maxEinloesungen = Number(wg.maxEinloesungen || 0);
     transaktionModalState.bereitsEingeloest = Number(wg.bereitsEingeloest || 0);
     transaktionModalState.isEinloesungMode = false;
@@ -2148,6 +2190,17 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     transaktionBetragInput.value = editTransaktion?.betrag !== undefined ? Number(editTransaktion.betrag || 0).toFixed(2) : '';
     if (betragLabel) betragLabel.textContent = source === 'einloese' ? 'Betrag einlösen (€) *' : 'Betrag (€) *';
 
+    if (restwertVerifiziertInfo) {
+        const verificationMeta = getWertguthabenVerificationMeta(wg);
+        if (verificationMeta) {
+            restwertVerifiziertInfo.textContent = `✅ ${verificationMeta}`;
+            restwertVerifiziertInfo.classList.remove('hidden');
+        } else {
+            restwertVerifiziertInfo.textContent = '';
+            restwertVerifiziertInfo.classList.add('hidden');
+        }
+    }
+
     const today = new Date().toISOString().split('T')[0];
     transaktionDatumInput.value = today;
     transaktionDatumInput.disabled = source === 'einloese';
@@ -2168,12 +2221,14 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
             verifySection.classList.remove('hidden');
             const alreadyVerified = !!editTransaktion?.betragVerifiziert;
             verifyCheckbox.checked = alreadyVerified;
+            verifyCheckbox.disabled = alreadyVerified;
             verifyInfo.textContent = alreadyVerified
-                ? `Bereits verifiziert: ${formatDateTime(editTransaktion.betragVerifiziertAm)} · ${getDisplayUserName(editTransaktion.betragVerifiziertVon)}`
+                ? `Bereits verifiziert: ${formatDateTime(editTransaktion.betragVerifiziertAm)} · ${getDisplayUserName(editTransaktion.betragVerifiziertVon)} (nicht änderbar)`
                 : 'Bei Aktivierung wird der Betrag mit Zeitstempel und Benutzer verifiziert.';
         } else {
             verifySection.classList.add('hidden');
             verifyCheckbox.checked = false;
+            verifyCheckbox.disabled = false;
             verifyInfo.textContent = '';
         }
     }
@@ -2213,6 +2268,7 @@ function closeTransaktionModal() {
     transaktionModalState.source = 'dashboard';
     transaktionModalState.editTransaktionId = '';
     transaktionModalState.isEditMode = false;
+    transaktionModalState.isExistingTransaktionVerified = false;
     transaktionModalState.originalRestwert = 0;
     transaktionModalState.isEinloesungMode = false;
     transaktionModalState.maxEinloesungen = 0;
@@ -2232,6 +2288,7 @@ async function saveTransaktion() {
     const beschreibung = document.getElementById('transaktionBeschreibung').value.trim();
     const verifySection = document.getElementById('transaktionVerifySection');
     const shouldVerify = !!(verifySection && !verifySection.classList.contains('hidden') && document.getElementById('transaktionVerifyCheckbox')?.checked);
+    const needsNewVerification = shouldVerify && !transaktionModalState.isExistingTransaktionVerified;
 
     const wg = WERTGUTHABEN[wertguthabenId];
     if (!wg) {
@@ -2307,7 +2364,7 @@ async function saveTransaktion() {
 
     try {
         const transaktionenRef = collection(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen');
-        const verificationData = shouldVerify
+        const verificationData = needsNewVerification
             ? {
                 betragVerifiziert: true,
                 betragVerifiziertAm: serverTimestamp(),
@@ -2346,7 +2403,7 @@ async function saveTransaktion() {
             updatedAt: serverTimestamp(),
             updatedBy: currentUser.mode
         };
-        if (shouldVerify) {
+        if (needsNewVerification) {
             wgUpdateData.restwertVerifiziert = true;
             wgUpdateData.restwertVerifiziertAm = serverTimestamp();
             wgUpdateData.restwertVerifiziertVon = currentUser.mode;
