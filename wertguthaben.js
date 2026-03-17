@@ -46,7 +46,9 @@ let currentEinloeseWertguthabenId = '';
 const wertguthabenFormState = {
     isCopyMode: false,
     copySourceId: '',
-    statusManuallyChanged: false
+    statusManuallyChanged: false,
+    isWertUnlocked: false,
+    lockedEditEntryId: ''
 };
 const transaktionModalState = {
     originalRestwert: 0,
@@ -58,6 +60,9 @@ const transaktionModalState = {
     maxEinloesungen: 0,
     bereitsEingeloest: 0
 };
+const WG_WERT_UNLOCK_COUNTDOWN_SECONDS = 30;
+let wgWertUnlockSecondsLeft = 0;
+let wgWertUnlockTimer = null;
 
 const WG_UNASSIGNED_KATEGORIE = 'Nicht zugeordnet';
 const WG_SHORT_ID_LENGTH = 4;
@@ -69,6 +74,8 @@ const WG_FILTER_LABELS = {
     id: 'ID',
     name: 'Name',
     code: 'Code',
+    pin: 'PIN',
+    seriennummer: 'Seriennummer',
     unternehmen: 'Unternehmen',
     kategorie: 'Kategorie',
     eigentuemer: 'Eigentümer',
@@ -82,6 +89,8 @@ const WG_SUGGESTION_ICONS = {
     id: '🆔',
     name: '🧾',
     code: '#️⃣',
+    pin: '🔐',
+    seriennummer: '🏷️',
     unternehmen: '🏢',
     kategorie: '🏷️',
     eigentuemer: '👤',
@@ -221,6 +230,24 @@ function setupEventListeners() {
             wertguthabenFormState.statusManuallyChanged = true;
         });
         statusSelect.dataset.listenerAttached = 'true';
+    }
+
+    const wertUnlockBtn = document.getElementById('wgWertUnlockBtn');
+    if (wertUnlockBtn && !wertUnlockBtn.dataset.listenerAttached) {
+        wertUnlockBtn.addEventListener('click', openWertBetragUnlockPanel);
+        wertUnlockBtn.dataset.listenerAttached = 'true';
+    }
+
+    const wertUnlockCancelBtn = document.getElementById('wgWertUnlockCancelBtn');
+    if (wertUnlockCancelBtn && !wertUnlockCancelBtn.dataset.listenerAttached) {
+        wertUnlockCancelBtn.addEventListener('click', closeWertBetragUnlockPanel);
+        wertUnlockCancelBtn.dataset.listenerAttached = 'true';
+    }
+
+    const wertUnlockConfirmBtn = document.getElementById('wgWertUnlockConfirmBtn');
+    if (wertUnlockConfirmBtn && !wertUnlockConfirmBtn.dataset.listenerAttached) {
+        wertUnlockConfirmBtn.addEventListener('click', confirmWertBetragUnlock);
+        wertUnlockConfirmBtn.dataset.listenerAttached = 'true';
     }
 
     // Quick-Select Buttons für Ablaufdatum
@@ -646,7 +673,7 @@ function updateWertguthabenSearchSuggestions(term) {
     const data = Object.values(WERTGUTHABEN);
     list.innerHTML = '';
 
-    const categories = ['id', 'name', 'code', 'unternehmen', 'kategorie', 'eigentuemer', 'typ', 'status', 'betrag'];
+    const categories = ['id', 'name', 'code', 'pin', 'seriennummer', 'unternehmen', 'kategorie', 'eigentuemer', 'typ', 'status', 'betrag'];
     let hasHits = false;
 
     categories.forEach((category) => {
@@ -758,6 +785,48 @@ function doesWertguthabenMatchSearchFilter(wertguthabenEintrag, filter) {
         `${wert.toFixed(2)} €`,
         `${restwert.toFixed(2)} €`
     ].map((entry) => entry.toLowerCase().replace(',', '.'));
+    const pin = (wertguthabenEintrag.pin || '').toLowerCase();
+    const seriennummer = (wertguthabenEintrag.seriennummer || '').toLowerCase();
+    const fulltextValues = [
+        fixedId,
+        String(wertguthabenEintrag.fixedId || '').toLowerCase(),
+        name,
+        code,
+        pin,
+        seriennummer,
+        unternehmen,
+        kategorie,
+        eigentuemerName,
+        eigentuemerId,
+        typ,
+        typLabel,
+        statusKey,
+        statusLabel,
+        String(wertguthabenEintrag.kaufdatum || '').toLowerCase(),
+        String(wertguthabenEintrag.einloesefrist || '').toLowerCase(),
+        String(wertguthabenEintrag.warnung || '').toLowerCase(),
+        String(wertguthabenEintrag.notizen || '').toLowerCase(),
+        String(wertguthabenEintrag.codeAblauf || '').toLowerCase(),
+        String(wertguthabenEintrag.bedingungen || '').toLowerCase(),
+        String(wertguthabenEintrag.wertAblauf || '').toLowerCase(),
+        String(wertguthabenEintrag.rabattTyp || '').toLowerCase(),
+        String(wertguthabenEintrag.rabattWert || '').toLowerCase(),
+        String(wertguthabenEintrag.rabattEinheit || '').toLowerCase(),
+        String(wertguthabenEintrag.mindestbestellwert || '').toLowerCase(),
+        String(wertguthabenEintrag.maxRabatt || '').toLowerCase(),
+        String(wertguthabenEintrag.gueltigAb || '').toLowerCase(),
+        String(wertguthabenEintrag.gueltigBis || '').toLowerCase(),
+        String(wertguthabenEintrag.maxEinloesungen || '').toLowerCase(),
+        String(wertguthabenEintrag.bereitsEingeloest || '').toLowerCase(),
+        String(wertguthabenEintrag.kontogebunden || '').toLowerCase(),
+        String(wertguthabenEintrag.konto || '').toLowerCase(),
+        String(wertguthabenEintrag.neukunde || '').toLowerCase(),
+        String(wertguthabenEintrag.kombinierbar || '').toLowerCase(),
+        String(wertguthabenEintrag.kategorien || '').toLowerCase(),
+        String(wertguthabenEintrag.ausnahmen || '').toLowerCase(),
+        String(wertguthabenEintrag.quelle || '').toLowerCase(),
+        ...amountValues
+    ].join(' ');
 
     switch (filter.category) {
         case 'id':
@@ -766,6 +835,10 @@ function doesWertguthabenMatchSearchFilter(wertguthabenEintrag, filter) {
             return name.includes(value);
         case 'code':
             return code.includes(value);
+        case 'pin':
+            return pin.includes(value);
+        case 'seriennummer':
+            return seriennummer.includes(value);
         case 'unternehmen':
             return unternehmen.includes(value);
         case 'kategorie':
@@ -780,19 +853,88 @@ function doesWertguthabenMatchSearchFilter(wertguthabenEintrag, filter) {
             return amountValues.some((entry) => entry.includes(normalizedValue));
         case 'all':
         default:
-            return fixedId.includes(value) ||
-                name.includes(value) ||
-                code.includes(value) ||
-                unternehmen.includes(value) ||
-                kategorie.includes(value) ||
-                eigentuemerName.includes(value) ||
-                eigentuemerId.includes(value) ||
-                typ.includes(value) ||
-                typLabel.includes(value) ||
-                statusKey.includes(value) ||
-                statusLabel.includes(value) ||
-                amountValues.some((entry) => entry.includes(normalizedValue));
+            return fulltextValues.includes(value) || fulltextValues.includes(normalizedValue);
     }
+}
+
+function clearWertBetragUnlockTimer() {
+    if (wgWertUnlockTimer) {
+        window.clearInterval(wgWertUnlockTimer);
+        wgWertUnlockTimer = null;
+    }
+}
+
+function updateWertBetragUnlockCountdownUi() {
+    const okBtn = document.getElementById('wgWertUnlockConfirmBtn');
+    const countdown = document.getElementById('wgWertUnlockCountdown');
+    if (!okBtn || !countdown) return;
+
+    if (wgWertUnlockSecondsLeft > 0) {
+        okBtn.disabled = true;
+        okBtn.classList.add('opacity-60', 'cursor-not-allowed');
+        okBtn.textContent = `OK (${String(wgWertUnlockSecondsLeft).padStart(2, '0')}s)`;
+        countdown.textContent = `Freigabe in ${wgWertUnlockSecondsLeft}s verfügbar.`;
+    } else {
+        okBtn.disabled = false;
+        okBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+        okBtn.textContent = 'OK';
+        countdown.textContent = 'Freigabe aktiv. Nur für echte Korrektur verwenden.';
+    }
+}
+
+function setWertBetragLockedState(locked, entryId = '') {
+    const wertInput = document.getElementById('wgWert');
+    const unlockBtn = document.getElementById('wgWertUnlockBtn');
+    const lockInfo = document.getElementById('wgWertLockInfo');
+    if (!wertInput) return;
+
+    wertInput.disabled = !!locked;
+    wertInput.classList.toggle('bg-gray-100', !!locked);
+    wertInput.classList.toggle('cursor-not-allowed', !!locked);
+    if (unlockBtn) unlockBtn.classList.toggle('hidden', !locked);
+    if (lockInfo) lockInfo.classList.toggle('hidden', !locked);
+
+    if (locked) {
+        wertguthabenFormState.isWertUnlocked = false;
+        wertguthabenFormState.lockedEditEntryId = String(entryId || '');
+        closeWertBetragUnlockPanel();
+    } else {
+        wertguthabenFormState.lockedEditEntryId = '';
+        closeWertBetragUnlockPanel();
+    }
+}
+
+function openWertBetragUnlockPanel() {
+    const panel = document.getElementById('wgWertUnlockPanel');
+    if (!panel || !wertguthabenFormState.lockedEditEntryId) return;
+
+    panel.classList.remove('hidden');
+    wgWertUnlockSecondsLeft = WG_WERT_UNLOCK_COUNTDOWN_SECONDS;
+    updateWertBetragUnlockCountdownUi();
+    clearWertBetragUnlockTimer();
+
+    wgWertUnlockTimer = window.setInterval(() => {
+        wgWertUnlockSecondsLeft = Math.max(0, wgWertUnlockSecondsLeft - 1);
+        updateWertBetragUnlockCountdownUi();
+        if (wgWertUnlockSecondsLeft <= 0) {
+            clearWertBetragUnlockTimer();
+        }
+    }, 1000);
+}
+
+function closeWertBetragUnlockPanel() {
+    const panel = document.getElementById('wgWertUnlockPanel');
+    if (panel) panel.classList.add('hidden');
+    clearWertBetragUnlockTimer();
+    wgWertUnlockSecondsLeft = 0;
+    updateWertBetragUnlockCountdownUi();
+}
+
+function confirmWertBetragUnlock() {
+    if (wgWertUnlockSecondsLeft > 0 || !wertguthabenFormState.lockedEditEntryId) return;
+    wertguthabenFormState.isWertUnlocked = true;
+    setWertBetragLockedState(false);
+    alertUser('Betrag freigegeben. Bitte nur für echte Korrekturen nutzen.', 'info');
 }
 
 // ========================================
@@ -1622,6 +1764,9 @@ function resetForm() {
     document.getElementById('wgAusnahmen').value = '';
     document.getElementById('wgQuelle').value = '';
 
+    wertguthabenFormState.isWertUnlocked = false;
+    wertguthabenFormState.lockedEditEntryId = '';
+
     handleTypChange();
 
     document.getElementById('wertguthabenModal').style.display = 'flex';
@@ -1695,6 +1840,7 @@ function openCreateModal(options = {}) {
     resetForm();
     wertguthabenFormState.statusManuallyChanged = false;
     setWertguthabenCopyMode(false);
+    setWertBetragLockedState(false);
 
     if (opts.copyFromEntry) {
         populateWertguthabenFormFromEntry(opts.copyFromEntry, { isCopy: true });
@@ -1706,6 +1852,7 @@ function closeWertguthabenModal() {
     document.getElementById('wertguthabenModal').style.display = 'none';
     setWertguthabenCopyMode(false);
     wertguthabenFormState.statusManuallyChanged = false;
+    setWertBetragLockedState(false);
 }
 
 function shouldAutoSetStatusToEingeloest(typ, wert, maxEinloesungen, bereitsEingeloest) {
@@ -1904,6 +2051,14 @@ async function saveWertguthaben() {
     const maxEinloesungen = parseInt(document.getElementById('wgMaxEinloesungen').value) || 0;
     const bereitsEingeloest = parseInt(document.getElementById('wgBereitsEingeloest').value) || 0;
 
+    if (editId && !wertguthabenFormState.isWertUnlocked) {
+        const existing = WERTGUTHABEN[editId];
+        const originalWert = Number(existing?.wert || 0);
+        if (Math.abs(wert - originalWert) > 0.0001) {
+            return alertUser('Wert ist gesperrt. Bitte zuerst über das Schloss entsperren.', 'error');
+        }
+    }
+
     if (!wertguthabenFormState.statusManuallyChanged && shouldAutoSetStatusToEingeloest(typ, wert, maxEinloesungen, bereitsEingeloest)) {
         status = 'eingeloest';
         statusSelect.value = 'eingeloest';
@@ -1962,9 +2117,23 @@ async function saveWertguthaben() {
         } else {
             // Create
             data.fixedId = await generateUniqueGlobalShortId();
+            if (typ !== 'aktionscode') {
+                data.restwert = wert;
+            }
             data.createdAt = serverTimestamp();
             data.createdBy = currentUser.mode;
-            await addDoc(wertguthabenCollection, data);
+            const createdRef = await addDoc(wertguthabenCollection, data);
+            if (typ !== 'aktionscode' && wert > 0) {
+                const transaktionenRef = collection(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', createdRef.id, 'transaktionen');
+                await addDoc(transaktionenRef, {
+                    typ: 'gutschrift',
+                    betrag: wert,
+                    datum: serverTimestamp(),
+                    beschreibung: 'Startguthaben bei Erstellung',
+                    createdAt: serverTimestamp(),
+                    createdBy: currentUser.mode
+                });
+            }
             alertUser('Wertguthaben erstellt!', 'success');
         }
 
@@ -1991,6 +2160,7 @@ window.openEditWertguthaben = function(id) {
     populateWertguthabenFormFromEntry(wg, { isCopy: false });
     setWertguthabenCopyMode(false);
     wertguthabenFormState.statusManuallyChanged = false;
+    setWertBetragLockedState(wg.typ !== 'aktionscode', id);
 
     document.getElementById('wertguthabenModal').style.display = 'flex';
 };
@@ -2064,33 +2234,52 @@ function updateTransaktionPreview() {
         return;
     }
 
-    const entered = Math.max(0, Number.parseFloat(betragInput.value || '0') || 0);
+    const enteredRaw = Number.parseFloat(betragInput.value || '0');
+    const entered = Number.isFinite(enteredRaw) ? enteredRaw : 0;
+    const isVerwendung = typSelect.value === 'verwendung';
+    const isGutschrift = typSelect.value === 'gutschrift';
+    const isKorrektur = typSelect.value === 'korrektur';
     let nextRestwert = transaktionModalState.originalRestwert;
-    if (typSelect.value === 'verwendung') {
+    if (isVerwendung) {
         nextRestwert = transaktionModalState.originalRestwert - entered;
-    } else if (typSelect.value === 'gutschrift') {
+    } else if (isGutschrift || isKorrektur) {
         nextRestwert = transaktionModalState.originalRestwert + entered;
     }
 
-    if (typSelect.value === 'verwendung') {
+    if (isVerwendung) {
         betragInput.max = transaktionModalState.originalRestwert.toFixed(2);
+        betragInput.min = '0';
         nextRestwert = Math.max(0, nextRestwert);
+    } else if (isGutschrift) {
+        betragInput.removeAttribute('max');
+        betragInput.min = '0';
+    } else if (isKorrektur) {
+        betragInput.removeAttribute('max');
+        betragInput.removeAttribute('min');
     } else {
         betragInput.removeAttribute('max');
     }
 
-    const exceedsRestwert = typSelect.value === 'verwendung' && entered > transaktionModalState.originalRestwert;
-    const hasValidAmount = entered > 0;
-    const disableSave = !hasValidAmount || exceedsRestwert;
+    const exceedsRestwert = isVerwendung && entered > transaktionModalState.originalRestwert;
+    const negativeAfterKorrektur = isKorrektur && nextRestwert < 0;
+    const hasValidAmount = isKorrektur ? entered !== 0 : entered > 0;
+    const disableSave = !hasValidAmount || exceedsRestwert || negativeAfterKorrektur;
 
     setTransaktionSaveEnabled(!disableSave);
+    let validationMessage = '';
     if (exceedsRestwert) {
-        setTransaktionValidationHint(`Maximal verfügbar: ${transaktionModalState.originalRestwert.toFixed(2)} €`);
-    } else {
-        setTransaktionValidationHint('');
+        validationMessage = `Maximal verfügbar: ${transaktionModalState.originalRestwert.toFixed(2)} €`;
+    } else if (negativeAfterKorrektur) {
+        validationMessage = 'Korrektur würde den Restwert unter 0 setzen.';
+    } else if (!hasValidAmount) {
+        validationMessage = isKorrektur
+            ? 'Bitte einen Korrekturwert ungleich 0 eingeben.'
+            : 'Bitte einen Betrag größer als 0 eingeben.';
     }
-    betragInput.classList.toggle('border-red-500', exceedsRestwert);
-    betragInput.classList.toggle('focus:border-red-500', exceedsRestwert);
+    setTransaktionValidationHint(validationMessage);
+    const hasError = !!validationMessage;
+    betragInput.classList.toggle('border-red-500', hasError);
+    betragInput.classList.toggle('focus:border-red-500', hasError);
 
     verfuegbar.textContent = `${nextRestwert.toFixed(2)} €`;
     urspruenglich.textContent = `${transaktionModalState.originalRestwert.toFixed(2)} €`;
@@ -2120,6 +2309,9 @@ function handleTransaktionTypChange() {
     const betragContainer = document.getElementById('transaktionBetragContainer');
     const einloesungContainer = document.getElementById('transaktionEinloesungContainer');
     const allesEinloesenBtn = document.getElementById('transaktionAllesEinloesenBtn');
+    const betragInput = document.getElementById('transaktionBetrag');
+    const betragLabel = document.querySelector('label[for="transaktionBetrag"]') || document.querySelector('#transaktionBetragContainer label');
+    const source = document.getElementById('transaktionOpenSource')?.value || 'dashboard';
 
     const isEinloesungType = typ === 'einloesung';
     if (betragContainer) betragContainer.classList.toggle('hidden', isEinloesungType);
@@ -2131,6 +2323,24 @@ function handleTransaktionTypChange() {
     if (allesEinloesenBtn) {
         const showAlles = !transaktionModalState.isEditMode && !isEinloesungType && typ === 'verwendung';
         allesEinloesenBtn.classList.toggle('hidden', !showAlles);
+    }
+
+    if (betragLabel) {
+        if (typ === 'korrektur') {
+            betragLabel.textContent = 'Korrekturbetrag (+/- €) *';
+        } else {
+            betragLabel.textContent = source === 'einloese' ? 'Betrag einlösen (€) *' : 'Betrag (€) *';
+        }
+    }
+
+    if (betragInput) {
+        if (typ === 'korrektur') {
+            betragInput.placeholder = 'z. B. -5.00 oder +5.00';
+            betragInput.removeAttribute('min');
+        } else {
+            betragInput.placeholder = '0.00';
+            betragInput.min = '0';
+        }
     }
 
     updateTransaktionPreview();
@@ -2175,6 +2385,7 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     const saveBtn = document.getElementById('saveTransaktionBtn');
     const optionVerwendung = transaktionTypSelect?.querySelector('option[value="verwendung"]');
     const optionGutschrift = transaktionTypSelect?.querySelector('option[value="gutschrift"]');
+    const optionKorrektur = transaktionTypSelect?.querySelector('option[value="korrektur"]');
     const optionEinloesung = transaktionTypSelect?.querySelector('option[value="einloesung"]');
 
     document.getElementById('transaktionWertguthabenId').value = wertguthabenId;
@@ -2191,7 +2402,7 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
 
     const aktuellerRestwert = Number(wg.restwert !== undefined ? wg.restwert : wg.wert || 0);
     let originalRestwert = aktuellerRestwert;
-    if (editTransaktion && (editTransaktion.typ === 'verwendung' || editTransaktion.typ === 'gutschrift')) {
+    if (editTransaktion && (editTransaktion.typ === 'verwendung' || editTransaktion.typ === 'gutschrift' || editTransaktion.typ === 'korrektur')) {
         const originalBetrag = Number(editTransaktion.betrag || 0);
         originalRestwert = editTransaktion.typ === 'verwendung'
             ? aktuellerRestwert + originalBetrag
@@ -2219,6 +2430,10 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
             optionGutschrift.hidden = true;
             optionGutschrift.disabled = true;
         }
+        if (optionKorrektur) {
+            optionKorrektur.hidden = true;
+            optionKorrektur.disabled = true;
+        }
         if (optionEinloesung) {
             optionEinloesung.hidden = false;
             optionEinloesung.disabled = false;
@@ -2232,6 +2447,10 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
         if (optionGutschrift) {
             optionGutschrift.hidden = false;
             optionGutschrift.disabled = false;
+        }
+        if (optionKorrektur) {
+            optionKorrektur.hidden = false;
+            optionKorrektur.disabled = false;
         }
         if (optionEinloesung) {
             optionEinloesung.hidden = true;
@@ -2410,7 +2629,11 @@ async function saveTransaktion() {
         return;
     }
 
-    if (!betrag || betrag <= 0) {
+    if (typ === 'korrektur') {
+        if (Math.abs(betrag) <= 0) {
+            return alertUser('Bitte einen gültigen Korrekturbetrag eingeben (nicht 0).', 'error');
+        }
+    } else if (!betrag || betrag <= 0) {
         return alertUser('Bitte einen gültigen Betrag eingeben!', 'error');
     }
 
@@ -2418,9 +2641,13 @@ async function saveTransaktion() {
         return alertUser(`Nicht genug Guthaben! Verfügbar: ${transaktionModalState.originalRestwert.toFixed(2)} €`, 'error');
     }
 
+    if (typ === 'korrektur' && (transaktionModalState.originalRestwert + betrag) < 0) {
+        return alertUser('Korrektur würde den Restwert unter 0 setzen.', 'error');
+    }
+
     const neuerRestwert = typ === 'verwendung'
         ? Math.max(0, transaktionModalState.originalRestwert - betrag)
-        : transaktionModalState.originalRestwert + betrag;
+        : Math.max(0, transaktionModalState.originalRestwert + betrag);
 
     try {
         const transaktionenRef = collection(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen');
@@ -2677,10 +2904,20 @@ window.openWertguthabenDetails = async function(id) {
                     });
                 }
             }
-            const icon = t.typ === 'verwendung' ? '📉' : (t.typ === 'einloesung' ? '🎟️' : '📈');
-            const colorClass = t.typ === 'verwendung' ? 'text-red-600' : (t.typ === 'einloesung' ? 'text-pink-600' : 'text-green-600');
-            const betragText = t.typ === 'verwendung' ? `- ${(t.betrag || 0).toFixed(2)} €` : (t.typ === 'einloesung' ? '1x Einlösung' : `+ ${(t.betrag || 0).toFixed(2)} €`);
-            const canEdit = t.typ === 'verwendung' || t.typ === 'gutschrift';
+            const transaktionBetrag = Number(t.betrag || 0);
+            const isKorrektur = t.typ === 'korrektur';
+            const icon = t.typ === 'verwendung' ? '📉' : (t.typ === 'einloesung' ? '🎟️' : (isKorrektur ? '🛠️' : '📈'));
+            const colorClass = t.typ === 'verwendung'
+                ? 'text-red-600'
+                : (t.typ === 'einloesung' ? 'text-pink-600' : (isKorrektur ? 'text-amber-700' : 'text-green-600'));
+            const betragText = t.typ === 'verwendung'
+                ? `- ${Math.abs(transaktionBetrag).toFixed(2)} €`
+                : (t.typ === 'einloesung'
+                    ? '1x Einlösung'
+                    : (isKorrektur
+                        ? `${transaktionBetrag >= 0 ? '+' : '-'} ${Math.abs(transaktionBetrag).toFixed(2)} € (Korrektur)`
+                        : `+ ${Math.abs(transaktionBetrag).toFixed(2)} €`));
+            const canEdit = t.typ === 'verwendung' || t.typ === 'gutschrift' || t.typ === 'korrektur';
             const verifyInfo = t.betragVerifiziert ? `✅ Verifiziert: ${formatDateTime(t.betragVerifiziertAm)} · ${getDisplayUserName(t.betragVerifiziertVon)}` : '';
             
             return `
@@ -2895,6 +3132,10 @@ window.deleteTransaktion = async function(wertguthabenId, transaktionId) {
             updateData.restwert = aktuellerRestwert + (gelöschteTransaktion.betrag || 0);
         } else if (gelöschteTransaktion.typ === 'gutschrift') {
             // Gutschrift wieder abziehen
+            const aktuellerRestwert = aktuelleDaten.restwert !== undefined ? aktuelleDaten.restwert : aktuelleDaten.wert || 0;
+            updateData.restwert = Math.max(0, aktuellerRestwert - (gelöschteTransaktion.betrag || 0));
+        } else if (gelöschteTransaktion.typ === 'korrektur') {
+            // Korrektur rückgängig machen
             const aktuellerRestwert = aktuelleDaten.restwert !== undefined ? aktuelleDaten.restwert : aktuelleDaten.wert || 0;
             updateData.restwert = Math.max(0, aktuellerRestwert - (gelöschteTransaktion.betrag || 0));
         } else if (gelöschteTransaktion.typ === 'einloesung' && aktuelleDaten.typ === 'aktionscode') {
