@@ -417,6 +417,9 @@ export function switchToGuestMode(showNotification = true, message = "Abgemeldet
 
 // In log-InOut.js
 export function updateUIForMode() {
+    const homeLoadingSpinner = document.getElementById('homeLoadingSpinner');
+    if (homeLoadingSpinner) homeLoadingSpinner.style.display = 'none';
+
     // Ermittle Admin-Status und effektive Admin-Rechte
     const isAdmin = currentUser.role === 'ADMIN' || (currentUser.permissionType === 'individual' && currentUser.displayRole === 'ADMIN');
     const isSysAdmin = currentUser.role === 'SYSTEMADMIN';

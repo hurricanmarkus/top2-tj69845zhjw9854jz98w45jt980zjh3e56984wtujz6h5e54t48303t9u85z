@@ -50,6 +50,11 @@
 
             <div id="homeView" class="view active">
 
+                <div id="homeLoadingSpinner" class="flex flex-col items-center justify-center py-24 gap-5">
+                    <div class="w-16 h-16 border-4 border-gray-200 border-t-indigo-500 rounded-full animate-spin"></div>
+                    <p class="text-gray-400 text-base font-medium tracking-wide">Wird geladen…</p>
+                </div>
+
                 <div id="homeActionButtons" class="flex justify-between mb-3 gap-2 items-center min-h-[40px]">
                     <button id="pushmailCenterBar"
                         class="hidden bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-lg shadow-lg hover:bg-gray-700 transition z-10">
