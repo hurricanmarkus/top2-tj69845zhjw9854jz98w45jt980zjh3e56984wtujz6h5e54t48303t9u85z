@@ -42,6 +42,15 @@ let activeWertguthabenFilters = [];
 let wertguthabenSearchJoinMode = 'and';
 let pendingKategorieNormalizations = new Set();
 let pendingFixedIdAssignments = new Set();
+let currentEinloeseWertguthabenId = '';
+const transaktionModalState = {
+    originalRestwert: 0,
+    source: 'dashboard',
+    editTransaktionId: '',
+    isEinloesungMode: false,
+    maxEinloesungen: 0,
+    bereitsEingeloest: 0
+};
 
 const WG_UNASSIGNED_KATEGORIE = 'Nicht zugeordnet';
 const WG_SHORT_ID_LENGTH = 4;
@@ -261,6 +270,9 @@ function setupEventListeners() {
             if (!e.target.closest('#search-wertguthaben') && !e.target.closest('#wg-search-suggestions-box')) {
                 hideWertguthabenSearchSuggestions();
             }
+            if (!e.target.closest('#wg-einloese-id-input') && !e.target.closest('#wg-einloese-suggestions-box')) {
+                hideEinloeseSuggestions();
+            }
         });
         document.body.dataset.wgSuggestionsListenerAttached = 'true';
     }
@@ -321,6 +333,83 @@ function setupEventListeners() {
         resetFilters.addEventListener('click', resetWertguthabenFiltersToDefault);
         resetFilters.dataset.listenerAttached = 'true';
     }
+
+    const openEinloeseBtn = document.getElementById('btn-open-einloese-system');
+    if (openEinloeseBtn && !openEinloeseBtn.dataset.listenerAttached) {
+        openEinloeseBtn.addEventListener('click', openEinloeseSystemView);
+        openEinloeseBtn.dataset.listenerAttached = 'true';
+    }
+
+    const closeEinloeseBtn = document.getElementById('btn-close-einloese-system');
+    if (closeEinloeseBtn && !closeEinloeseBtn.dataset.listenerAttached) {
+        closeEinloeseBtn.addEventListener('click', closeEinloeseSystemView);
+        closeEinloeseBtn.dataset.listenerAttached = 'true';
+    }
+
+    const einloeseInput = document.getElementById('wg-einloese-id-input');
+    if (einloeseInput && !einloeseInput.dataset.listenerAttached) {
+        einloeseInput.addEventListener('input', (e) => {
+            const term = String(e.target.value || '');
+            resetEinloeseResult();
+            if (!term.trim()) {
+                hideEinloeseSuggestions();
+                return;
+            }
+            updateEinloeseSuggestions(term);
+        });
+        einloeseInput.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            const firstSuggestion = Object.values(WERTGUTHABEN)
+                .filter((entry) => entry.typ !== 'aktionscode')
+                .find((entry) => getWertguthabenDisplayId(entry).toLowerCase().includes(String(einloeseInput.value || '').replace('#', '').trim().toLowerCase()));
+            if (firstSuggestion) {
+                window.selectEinloeseWertguthaben(firstSuggestion.id);
+            }
+        });
+        einloeseInput.dataset.listenerAttached = 'true';
+    }
+
+    const einloeseBookingBtn = document.getElementById('wg-einloese-open-booking');
+    if (einloeseBookingBtn && !einloeseBookingBtn.dataset.listenerAttached) {
+        einloeseBookingBtn.addEventListener('click', () => {
+            if (!currentEinloeseWertguthabenId) {
+                alertUser('Bitte zuerst eine gültige ID auswählen.', 'warning');
+                return;
+            }
+            window.openTransaktionModal(currentEinloeseWertguthabenId, { source: 'einloese' });
+        });
+        einloeseBookingBtn.dataset.listenerAttached = 'true';
+    }
+
+    const detailsToggle = document.getElementById('transaktionDetailsToggle');
+    if (detailsToggle && !detailsToggle.dataset.listenerAttached) {
+        detailsToggle.addEventListener('click', () => {
+            const body = document.getElementById('transaktionDetailsBody');
+            const icon = document.getElementById('transaktionDetailsIcon');
+            if (!body || !icon) return;
+            body.classList.toggle('hidden');
+            icon.classList.toggle('rotate-180');
+        });
+        detailsToggle.dataset.listenerAttached = 'true';
+    }
+
+    const betragInput = document.getElementById('transaktionBetrag');
+    if (betragInput && !betragInput.dataset.listenerAttached) {
+        betragInput.addEventListener('input', updateTransaktionPreview);
+        betragInput.dataset.listenerAttached = 'true';
+    }
+
+    const allesEinloesenBtn = document.getElementById('transaktionAllesEinloesenBtn');
+    if (allesEinloesenBtn && !allesEinloesenBtn.dataset.listenerAttached) {
+        allesEinloesenBtn.addEventListener('click', () => {
+            const input = document.getElementById('transaktionBetrag');
+            if (!input) return;
+            input.value = transaktionModalState.originalRestwert.toFixed(2);
+            updateTransaktionPreview();
+        });
+        allesEinloesenBtn.dataset.listenerAttached = 'true';
+    }
 }
 
 function addWertguthabenFilterFromUi(options = {}) {
@@ -361,6 +450,161 @@ function addWertguthabenFilterFromUi(options = {}) {
     renderWertguthabenSearchTags();
     renderWertguthabenTable();
 }
+
+function openEinloeseSystemView() {
+    document.getElementById('wertguthabenDashboardSection')?.classList.add('hidden');
+    document.getElementById('wertguthabenEinloeseSection')?.classList.remove('hidden');
+    resetEinloeseSystemForm(true);
+}
+
+function closeEinloeseSystemView() {
+    document.getElementById('wertguthabenEinloeseSection')?.classList.add('hidden');
+    document.getElementById('wertguthabenDashboardSection')?.classList.remove('hidden');
+    hideEinloeseSuggestions();
+}
+
+function resetEinloeseResult() {
+    currentEinloeseWertguthabenId = '';
+    document.getElementById('wg-einloese-result')?.classList.add('hidden');
+    document.getElementById('wg-einloese-empty-state')?.classList.remove('hidden');
+}
+
+function resetEinloeseSystemForm(focusInput = false) {
+    const input = document.getElementById('wg-einloese-id-input');
+    if (input) input.value = '';
+    resetEinloeseResult();
+    hideEinloeseSuggestions();
+    if (focusInput && input) {
+        setTimeout(() => input.focus(), 0);
+    }
+}
+
+function hideEinloeseSuggestions() {
+    document.getElementById('wg-einloese-suggestions-box')?.classList.add('hidden');
+}
+
+function updateEinloeseSuggestions(term) {
+    const box = document.getElementById('wg-einloese-suggestions-box');
+    const list = document.getElementById('wg-einloese-suggestions-list');
+    if (!box || !list) return;
+
+    const normalized = String(term || '').replace('#', '').trim().toLowerCase();
+    if (!normalized) {
+        list.innerHTML = '';
+        box.classList.add('hidden');
+        return;
+    }
+
+    const candidates = Object.values(WERTGUTHABEN)
+        .filter((entry) => entry.typ !== 'aktionscode')
+        .map((entry) => ({
+            entry,
+            idText: getWertguthabenDisplayId(entry).toLowerCase()
+        }))
+        .filter(({ idText }) => idText.includes(normalized))
+        .sort((a, b) => {
+            const aStarts = a.idText.startsWith(normalized) ? 0 : 1;
+            const bStarts = b.idText.startsWith(normalized) ? 0 : 1;
+            return aStarts - bStarts || a.idText.localeCompare(b.idText);
+        })
+        .slice(0, 12)
+        .map(({ entry }) => entry);
+
+    if (candidates.length === 0) {
+        list.innerHTML = '<li class="px-4 py-3 text-sm text-gray-500">Keine passende ID gefunden.</li>';
+        box.classList.remove('hidden');
+        return;
+    }
+
+    list.innerHTML = candidates.map((entry) => {
+        const displayId = getWertguthabenDisplayId(entry);
+        const restwert = entry.restwert !== undefined ? Number(entry.restwert || 0) : Number(entry.wert || 0);
+        return `
+            <li>
+                <button type="button" onclick="window.selectEinloeseWertguthaben('${entry.id}')" class="w-full text-left px-4 py-3 hover:bg-emerald-50 border-b border-gray-100 last:border-0">
+                    <div class="flex items-center justify-between gap-3">
+                        <span class="font-mono font-bold text-emerald-700">#${escapeHtml(displayId)}</span>
+                        <span class="text-sm font-semibold text-gray-700">${restwert.toFixed(2)} €</span>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">${escapeHtml(entry.name || '-')} · ${escapeHtml(entry.unternehmen || '-')}</div>
+                </button>
+            </li>
+        `;
+    }).join('');
+    box.classList.remove('hidden');
+}
+
+function refreshEinloeseSelection() {
+    if (!currentEinloeseWertguthabenId) return;
+    const entry = WERTGUTHABEN[currentEinloeseWertguthabenId];
+    if (!entry) {
+        resetEinloeseResult();
+        return;
+    }
+    renderEinloeseEntry(entry);
+}
+
+function renderEinloeseEntry(entry) {
+    const restwert = entry.restwert !== undefined ? Number(entry.restwert || 0) : Number(entry.wert || 0);
+    const status = STATUS_CONFIG[entry.status || 'aktiv'] || STATUS_CONFIG.aktiv;
+    const eigentuemer = USERS[entry.eigentuemer]?.name || entry.eigentuemer || 'Unbekannt';
+    const restzeit = entry.typ === 'aktionscode' ? calculateRestzeit(entry.gueltigBis) : calculateRestzeit(entry.einloesefrist);
+
+    const detailItems = [
+        ['Eigentümer', eigentuemer],
+        ['Status', `${status.icon} ${status.label}`],
+        ['Unternehmen', entry.unternehmen || '-'],
+        ['Name', entry.name || '-'],
+        ['Ursprungswert', `${Number(entry.wert || 0).toFixed(2)} €`],
+        ['Restzeit', restzeit.replace(/<[^>]+>/g, '')],
+        ['Einlösefrist', entry.einloesefrist ? new Date(entry.einloesefrist).toLocaleDateString('de-DE') : 'Unbegrenzt'],
+        ['Code', entry.code || '-'],
+        ['PIN', entry.pin || '-'],
+        ['Seriennummer', entry.seriennummer || '-']
+    ];
+
+    const details = document.getElementById('wg-einloese-details');
+    if (details) {
+        details.innerHTML = detailItems.map(([label, value]) => `
+            <div class="p-3 rounded-lg border border-gray-200 bg-gray-50">
+                <p class="text-xs font-bold text-gray-500 uppercase tracking-wide">${escapeHtml(label)}</p>
+                <p class="text-base font-semibold text-gray-800 break-words">${escapeHtml(String(value))}</p>
+            </div>
+        `).join('');
+    }
+
+    const stamp = document.getElementById('wg-einloese-verified-stamp');
+    const verificationMeta = getWertguthabenVerificationMeta(entry);
+    if (stamp) {
+        if (verificationMeta) {
+            stamp.textContent = `✅ ${verificationMeta}`;
+            stamp.classList.remove('hidden');
+        } else {
+            stamp.classList.add('hidden');
+            stamp.textContent = '';
+        }
+    }
+
+    const balance = document.getElementById('wg-einloese-current-balance');
+    if (balance) balance.textContent = `${restwert.toFixed(2)} €`;
+
+    document.getElementById('wg-einloese-empty-state')?.classList.add('hidden');
+    document.getElementById('wg-einloese-result')?.classList.remove('hidden');
+}
+
+window.selectEinloeseWertguthaben = function(entryId) {
+    const entry = WERTGUTHABEN[entryId];
+    if (!entry) {
+        alertUser('Wertguthaben nicht gefunden.', 'error');
+        return;
+    }
+
+    currentEinloeseWertguthabenId = entryId;
+    const input = document.getElementById('wg-einloese-id-input');
+    if (input) input.value = `#${getWertguthabenDisplayId(entry)}`;
+    hideEinloeseSuggestions();
+    renderEinloeseEntry(entry);
+};
 
 function hideWertguthabenSearchSuggestions() {
     document.getElementById('wg-search-suggestions-box')?.classList.add('hidden');
@@ -604,6 +848,7 @@ export function listenForWertguthaben() {
             renderWertguthabenTable();
             updateStatistics();
             checkWertguthabenForNotifications();
+            refreshEinloeseSelection();
         }, (error) => {
             console.error("Fehler beim Laden der Wertguthaben:", error);
             alertUser("Fehler beim Laden der Wertguthaben. Bitte Firestore-Regeln prüfen.", 'error');
@@ -668,6 +913,7 @@ function renderWertguthabenTable() {
         const restzeit = w.typ === 'aktionscode' ? calculateRestzeit(w.gueltigBis) : calculateRestzeit(w.einloesefrist);
         const statusBadge = getStatusBadge(w, restzeit);
         const restwert = w.restwert !== undefined ? w.restwert : w.wert;
+        const verificationBadge = renderWertguthabenVerificationBadge(w);
         
         return `
             <tr class="hover:bg-gray-50 cursor-pointer transition" onclick="window.openWertguthabenDetails('${w.id}')">
@@ -685,6 +931,7 @@ function renderWertguthabenTable() {
                     <div class="flex flex-col">
                         <span class="font-bold text-emerald-700">${restwert !== undefined ? restwert.toFixed(2) + ' €' : '-'}</span>
                         ${w.wert && w.wert !== restwert ? `<span class="text-xs text-gray-500">von ${w.wert.toFixed(2)} €</span>` : ''}
+                        ${verificationBadge}
                     </div>
                 </td>
                 <td class="px-4 py-3 text-sm">${restzeit}</td>
@@ -937,6 +1184,52 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+function toDateValue(value) {
+    if (!value) return null;
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+    if (value.toDate && typeof value.toDate === 'function') {
+        const date = value.toDate();
+        return Number.isNaN(date.getTime()) ? null : date;
+    }
+    if (typeof value.seconds === 'number') {
+        const date = new Date(value.seconds * 1000);
+        return Number.isNaN(date.getTime()) ? null : date;
+    }
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatDateTime(value) {
+    const date = toDateValue(value);
+    if (!date) return '';
+    return date.toLocaleString('de-DE', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function getDisplayUserName(userId) {
+    if (!userId) return 'Unbekannt';
+    return USERS[userId]?.name || userId;
+}
+
+function getWertguthabenVerificationMeta(entry) {
+    if (!entry?.restwertVerifiziert) return null;
+    const timestamp = formatDateTime(entry.restwertVerifiziertAm);
+    const userName = getDisplayUserName(entry.restwertVerifiziertVon);
+    if (timestamp) return `Verifiziert am ${timestamp} von ${userName}`;
+    return `Verifiziert von ${userName}`;
+}
+
+function renderWertguthabenVerificationBadge(entry, className = 'text-emerald-700') {
+    const meta = getWertguthabenVerificationMeta(entry);
+    if (!meta) return '';
+    return `<span class="text-[11px] font-semibold ${className}">✅ ${escapeHtml(meta)}</span>`;
 }
 
 function normalizeFixedId(value) {
@@ -1660,90 +1953,169 @@ function populateEigentuemerDropdowns() {
 // TRANSAKTIONS-SYSTEM
 // ========================================
 
+function updateTransaktionPreview() {
+    const betragInput = document.getElementById('transaktionBetrag');
+    const typSelect = document.getElementById('transaktionTyp');
+    const verfuegbar = document.getElementById('transaktionVerfuegbar');
+    const urspruenglich = document.getElementById('transaktionUrspruenglich');
+    if (!betragInput || !typSelect || !verfuegbar || !urspruenglich) return;
+
+    if (typSelect.value === 'einloesung') {
+        const max = transaktionModalState.maxEinloesungen;
+        const current = transaktionModalState.bereitsEingeloest;
+        const availableText = max > 0 ? `${Math.max(0, max - current)} verfügbar` : '∞ verfügbar';
+        verfuegbar.textContent = `${current} / ${max > 0 ? max : '∞'} (${availableText})`;
+        urspruenglich.textContent = 'Aktionscode';
+        return;
+    }
+
+    const entered = Math.max(0, Number.parseFloat(betragInput.value || '0') || 0);
+    let nextRestwert = transaktionModalState.originalRestwert;
+    if (typSelect.value === 'verwendung') {
+        nextRestwert = transaktionModalState.originalRestwert - entered;
+    } else if (typSelect.value === 'gutschrift') {
+        nextRestwert = transaktionModalState.originalRestwert + entered;
+    }
+
+    if (typSelect.value === 'verwendung') {
+        nextRestwert = Math.max(0, nextRestwert);
+    }
+
+    verfuegbar.textContent = `${nextRestwert.toFixed(2)} €`;
+    urspruenglich.textContent = `${transaktionModalState.originalRestwert.toFixed(2)} €`;
+}
+
+function setTransaktionDetailsExpanded(expanded) {
+    const body = document.getElementById('transaktionDetailsBody');
+    const icon = document.getElementById('transaktionDetailsIcon');
+    if (!body || !icon) return;
+    body.classList.toggle('hidden', !expanded);
+    icon.classList.toggle('rotate-180', !!expanded);
+}
+
 // Transaktion Modal öffnen
-window.openTransaktionModal = async function(wertguthabenId) {
-    // WICHTIG: Aktuelle Daten aus der Datenbank holen, nicht aus Cache
+window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     const wertguthabenRef = doc(wertguthabenCollection, wertguthabenId);
     const wertguthabenDoc = await getDoc(wertguthabenRef);
-    
+
     if (!wertguthabenDoc.exists()) {
         return alertUser('Wertguthaben nicht gefunden!', 'error');
     }
-    
+
     const wg = wertguthabenDoc.data();
-    
-    // Cache aktualisieren
     WERTGUTHABEN[wertguthabenId] = { ...wg, id: wertguthabenId };
 
-    document.getElementById('transaktionWertguthabenId').value = wertguthabenId;
-    
-    // Transaktionstyp basierend auf Wertguthaben-Typ setzen
+    const source = options.source === 'einloese' ? 'einloese' : 'dashboard';
+    const editTransaktion = options.editTransaktion || null;
+    const isEditFromHistory = !!editTransaktion && !!options.openedFromHistory;
+
     const transaktionTypSelect = document.getElementById('transaktionTyp');
     const transaktionBetragInput = document.getElementById('transaktionBetrag');
     const transaktionBetragContainer = document.getElementById('transaktionBetragContainer');
     const transaktionEinloesungContainer = document.getElementById('transaktionEinloesungContainer');
-    const transaktionVerfuegbar = document.getElementById('transaktionVerfuegbar');
-    
-    // Standard: Verwendung
+    const transaktionDatumInput = document.getElementById('transaktionDatum');
+    const verifySection = document.getElementById('transaktionVerifySection');
+    const verifyCheckbox = document.getElementById('transaktionVerifyCheckbox');
+    const verifyInfo = document.getElementById('transaktionVerifyInfo');
+    const allesEinloesenBtn = document.getElementById('transaktionAllesEinloesenBtn');
+    const verfuegbarElement = document.getElementById('transaktionVerfuegbar');
+    const betragLabel = document.querySelector('label[for="transaktionBetrag"]') || document.querySelector('#transaktionBetragContainer label');
+    const saveBtn = document.getElementById('saveTransaktionBtn');
+
+    document.getElementById('transaktionWertguthabenId').value = wertguthabenId;
+    document.getElementById('editTransaktionId').value = editTransaktion?.id || '';
+    document.getElementById('transaktionOpenSource').value = source;
+
+    transaktionModalState.source = source;
+    transaktionModalState.editTransaktionId = editTransaktion?.id || '';
+    transaktionModalState.maxEinloesungen = Number(wg.maxEinloesungen || 0);
+    transaktionModalState.bereitsEingeloest = Number(wg.bereitsEingeloest || 0);
+    transaktionModalState.isEinloesungMode = false;
+
+    const aktuellerRestwert = Number(wg.restwert !== undefined ? wg.restwert : wg.wert || 0);
+    let originalRestwert = aktuellerRestwert;
+    if (editTransaktion && (editTransaktion.typ === 'verwendung' || editTransaktion.typ === 'gutschrift')) {
+        const originalBetrag = Number(editTransaktion.betrag || 0);
+        originalRestwert = editTransaktion.typ === 'verwendung'
+            ? aktuellerRestwert + originalBetrag
+            : aktuellerRestwert - originalBetrag;
+    }
+    transaktionModalState.originalRestwert = Math.max(0, originalRestwert);
+
     let typ = 'verwendung';
-    let betragPlatzhalter = '';
-    let verfuegbarText = '';
-    
     if (wg.typ === 'aktionscode') {
-        // Bei Aktionscode: Einlösung als Standard
         typ = 'einloesung';
-        betragPlatzhalter = '0';
-        verfuegbarText = `${wg.bereitsEingeloest || 0} / ${wg.maxEinloesungen || '∞'} Einlösungen`;
-    } else if (wg.typ === 'gutschein' || wg.typ === 'wertguthaben' || wg.typ === 'wertguthaben_gesetzlich') {
-        // Bei Gutscheinen/Guthaben: Betrag eingeben
+    }
+    if (editTransaktion?.typ) {
+        typ = editTransaktion.typ;
+    }
+    if (source === 'einloese') {
         typ = 'verwendung';
-        betragPlatzhalter = '';
-        const restwert = wg.restwert !== undefined ? wg.restwert : wg.wert || 0;
-        verfuegbarText = restwert.toFixed(2) + ' €';
     }
-    
+
     transaktionTypSelect.value = typ;
-    transaktionTypSelect.disabled = true; // Typ nicht änderbar machen
-    transaktionBetragInput.value = betragPlatzhalter;
-    
-    // Einlösung-Vormerkung zurücksetzen (wichtig für erneutes Öffnen)
-    const einloesungBtn = document.getElementById('einloesungVormerkenBtn');
-    const vorgemerktDiv = document.getElementById('einloesungVorgemerkt');
-    if (einloesungBtn) {
-        einloesungBtn.disabled = false;
-        einloesungBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
-        einloesungBtn.classList.add('bg-pink-600', 'hover:bg-pink-700');
-        einloesungBtn.textContent = '🎟️ 1x Einlösung buchen';
-    }
-    if (vorgemerktDiv) {
-        vorgemerktDiv.classList.add('hidden');
-    }
-    
-    // Sichtbarkeit der Container anpassen
-    if (wg.typ === 'aktionscode') {
+    transaktionTypSelect.disabled = true;
+
+    if (wg.typ === 'aktionscode' && typ === 'einloesung') {
         if (transaktionBetragContainer) transaktionBetragContainer.classList.add('hidden');
         if (transaktionEinloesungContainer) transaktionEinloesungContainer.classList.remove('hidden');
-        transaktionVerfuegbar.innerHTML = `
-            <div class="text-center">
-                <div class="text-3xl font-bold text-pink-600 mb-2">${wg.bereitsEingeloest || 0} / ${wg.maxEinloesungen || '∞'}</div>
-                <div class="text-sm text-gray-600">Einlösungen verwendet</div>
-                <div class="mt-2 text-lg font-semibold ${(wg.maxEinloesungen > 0 && wg.bereitsEingeloest >= wg.maxEinloesungen) ? 'text-red-600' : 'text-green-600'}">
-                    ${(wg.maxEinloesungen > 0 && wg.bereitsEingeloest >= wg.maxEinloesungen) ? '❌ Keine Einlösungen mehr verfügbar' : `✅ ${wg.maxEinloesungen > 0 ? (wg.maxEinloesungen - (wg.bereitsEingeloest || 0)) : '∞'} Einlösung(en) verfügbar`}
-                </div>
-            </div>
-        `;
+        if (allesEinloesenBtn) allesEinloesenBtn.classList.add('hidden');
+        transaktionModalState.isEinloesungMode = true;
     } else {
         if (transaktionBetragContainer) transaktionBetragContainer.classList.remove('hidden');
         if (transaktionEinloesungContainer) transaktionEinloesungContainer.classList.add('hidden');
-        transaktionVerfuegbar.textContent = verfuegbarText;
+        if (allesEinloesenBtn) allesEinloesenBtn.classList.remove('hidden');
     }
-    
-    document.getElementById('transaktionDatum').value = new Date().toISOString().split('T')[0];
-    document.getElementById('transaktionBestellnr').value = '';
-    document.getElementById('transaktionRechnungsnr').value = '';
-    document.getElementById('transaktionBeschreibung').value = '';
 
-    // Event-Listener für Transaktions-Modal (nur einmal)
+    transaktionBetragInput.value = editTransaktion?.betrag !== undefined ? Number(editTransaktion.betrag || 0).toFixed(2) : '';
+
+    if (source === 'einloese') {
+        transaktionBetragInput.classList.add('text-3xl', 'font-black');
+        if (verfuegbarElement) verfuegbarElement.classList.add('text-4xl');
+        if (betragLabel) betragLabel.textContent = 'Betrag einlösen (€) *';
+    } else {
+        transaktionBetragInput.classList.remove('text-3xl', 'font-black');
+        if (verfuegbarElement) verfuegbarElement.classList.remove('text-4xl');
+        if (betragLabel) betragLabel.textContent = 'Betrag (€) *';
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    transaktionDatumInput.value = today;
+    transaktionDatumInput.disabled = source === 'einloese';
+
+    if (editTransaktion?.datum) {
+        const editDate = toDateValue(editTransaktion.datum);
+        if (editDate) {
+            transaktionDatumInput.value = editDate.toISOString().split('T')[0];
+        }
+    }
+
+    document.getElementById('transaktionBestellnr').value = editTransaktion?.bestellnr || '';
+    document.getElementById('transaktionRechnungsnr').value = editTransaktion?.rechnungsnr || '';
+    document.getElementById('transaktionBeschreibung').value = editTransaktion?.beschreibung || '';
+
+    if (verifySection && verifyCheckbox && verifyInfo) {
+        if (isEditFromHistory) {
+            verifySection.classList.remove('hidden');
+            const alreadyVerified = !!editTransaktion?.betragVerifiziert;
+            verifyCheckbox.checked = alreadyVerified;
+            verifyInfo.textContent = alreadyVerified
+                ? `Bereits verifiziert: ${formatDateTime(editTransaktion.betragVerifiziertAm)} · ${getDisplayUserName(editTransaktion.betragVerifiziertVon)}`
+                : 'Bei Aktivierung wird der Betrag mit Zeitstempel und Benutzer verifiziert.';
+        } else {
+            verifySection.classList.add('hidden');
+            verifyCheckbox.checked = false;
+            verifyInfo.textContent = '';
+        }
+    }
+
+    if (saveBtn) {
+        saveBtn.textContent = editTransaktion ? 'Änderungen speichern' : 'Transaktion buchen';
+    }
+
+    setTransaktionDetailsExpanded(!!(editTransaktion?.bestellnr || editTransaktion?.rechnungsnr || editTransaktion?.beschreibung));
+    updateTransaktionPreview();
+
     const closeBtn = document.getElementById('closeTransaktionModal');
     if (closeBtn && !closeBtn.dataset.listenerAttached) {
         closeBtn.addEventListener('click', closeTransaktionModal);
@@ -1756,43 +2128,9 @@ window.openTransaktionModal = async function(wertguthabenId) {
         cancelBtn.dataset.listenerAttached = 'true';
     }
 
-    const saveBtn = document.getElementById('saveTransaktionBtn');
     if (saveBtn && !saveBtn.dataset.listenerAttached) {
         saveBtn.addEventListener('click', saveTransaktion);
         saveBtn.dataset.listenerAttached = 'true';
-    }
-
-    // Event-Listener für Einlösung-Vormerken-Button (einloesungBtn bereits oben deklariert)
-    if (einloesungBtn && !einloesungBtn.dataset.listenerAttached) {
-        einloesungBtn.addEventListener('click', function() {
-            // Einlösung vormerken
-            this.disabled = true;
-            this.classList.add('bg-gray-400', 'cursor-not-allowed');
-            this.classList.remove('bg-pink-600', 'hover:bg-pink-700');
-            this.textContent = '✅ 1x Einlösung vorgemerkt';
-            
-            // Vorgemerkt-Info anzeigen (vorgemerktDiv bereits oben deklariert)
-            if (vorgemerktDiv) {
-                vorgemerktDiv.classList.remove('hidden');
-            }
-            
-            // Transaktionstyp auf "einloesung" setzen
-            document.getElementById('transaktionTyp').value = 'einloesung';
-        });
-        einloesungBtn.dataset.listenerAttached = 'true';
-    }
-
-    // Event-Listener für "Transaktion buchen" Button im Details-Modal
-    const addTransBtn = document.getElementById('addTransaktionBtn');
-    if (addTransBtn && !addTransBtn.dataset.listenerAttached) {
-        addTransBtn.addEventListener('click', () => {
-            const wgId = addTransBtn.dataset.wertguthabenId;
-            if (wgId) {
-                document.getElementById('wertguthabenDetailsModal').style.display = 'none';
-                window.openTransaktionModal(wgId);
-            }
-        });
-        addTransBtn.dataset.listenerAttached = 'true';
     }
 
     document.getElementById('transaktionModal').style.display = 'flex';
@@ -1800,42 +2138,49 @@ window.openTransaktionModal = async function(wertguthabenId) {
 
 function closeTransaktionModal() {
     document.getElementById('transaktionModal').style.display = 'none';
+    document.getElementById('editTransaktionId').value = '';
+    document.getElementById('transaktionOpenSource').value = 'dashboard';
+    transaktionModalState.source = 'dashboard';
+    transaktionModalState.editTransaktionId = '';
+    transaktionModalState.originalRestwert = 0;
+    transaktionModalState.isEinloesungMode = false;
+    transaktionModalState.maxEinloesungen = 0;
+    transaktionModalState.bereitsEingeloest = 0;
+    setTransaktionDetailsExpanded(false);
 }
 
 // Transaktion speichern
 async function saveTransaktion() {
     const wertguthabenId = document.getElementById('transaktionWertguthabenId').value;
+    const editTransaktionId = document.getElementById('editTransaktionId').value;
+    const source = document.getElementById('transaktionOpenSource').value || 'dashboard';
     const typ = document.getElementById('transaktionTyp').value;
-    const betrag = parseFloat(document.getElementById('transaktionBetrag').value) || 0;
-    const datum = document.getElementById('transaktionDatum').value;
+    const betrag = Number.parseFloat(document.getElementById('transaktionBetrag').value || '0') || 0;
     const bestellnr = document.getElementById('transaktionBestellnr').value.trim();
     const rechnungsnr = document.getElementById('transaktionRechnungsnr').value.trim();
     const beschreibung = document.getElementById('transaktionBeschreibung').value.trim();
-
-    if (!datum) {
-        return alertUser('Bitte ein Datum eingeben!', 'error');
-    }
+    const verifySection = document.getElementById('transaktionVerifySection');
+    const shouldVerify = !!(verifySection && !verifySection.classList.contains('hidden') && document.getElementById('transaktionVerifyCheckbox')?.checked);
 
     const wg = WERTGUTHABEN[wertguthabenId];
     if (!wg) {
         return alertUser('Wertguthaben nicht gefunden!', 'error');
     }
 
-    // Aktionscode: Einlösung buchen
-    if (wg.typ === 'aktionscode' && typ === 'einloesung') {
-        const maxEinloesungen = wg.maxEinloesungen || 0;
-        const bereitsEingeloest = wg.bereitsEingeloest || 0;
-        
-        // Prüfen ob noch Einlösungen verfügbar (0 = unbegrenzt)
+    if (typ === 'einloesung') {
+        if (editTransaktionId) {
+            return alertUser('Einlösung kann hier nicht bearbeitet werden.', 'warning');
+        }
+
+        const maxEinloesungen = transaktionModalState.maxEinloesungen;
+        const bereitsEingeloest = transaktionModalState.bereitsEingeloest;
         if (maxEinloesungen > 0 && bereitsEingeloest >= maxEinloesungen) {
             return alertUser('Keine Einlösungen mehr verfügbar! Der Aktionscode ist bereits vollständig eingelöst.', 'error');
         }
 
         try {
-            // Transaktion als Subcollection speichern
             const transaktionenRef = collection(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen');
-            
-            const transaktionData = {
+            await addDoc(transaktionenRef, {
                 typ: 'einloesung',
                 betrag: 0,
                 datum: serverTimestamp(),
@@ -1844,35 +2189,25 @@ async function saveTransaktion() {
                 beschreibung: beschreibung || 'Aktionscode eingelöst',
                 createdAt: serverTimestamp(),
                 createdBy: currentUser.mode
-            };
+            });
 
-            await addDoc(transaktionenRef, transaktionData);
-
-            // Einlösungen erhöhen
             const neueEinloesungen = bereitsEingeloest + 1;
-            
-            // Update-Daten vorbereiten
+            const wertguthabenRef = doc(wertguthabenCollection, wertguthabenId);
             const updateData = {
                 bereitsEingeloest: neueEinloesungen,
                 updatedAt: serverTimestamp(),
                 updatedBy: currentUser.mode
             };
-            
-            // Status auf "eingeloest" setzen wenn max erreicht
             if (maxEinloesungen > 0 && neueEinloesungen >= maxEinloesungen) {
                 updateData.status = 'eingeloest';
             }
-
-            const wertguthabenRef = doc(wertguthabenCollection, wertguthabenId);
             await updateDoc(wertguthabenRef, updateData);
 
-            const statusMsg = (maxEinloesungen > 0 && neueEinloesungen >= maxEinloesungen) 
-                ? ' Der Aktionscode ist jetzt vollständig eingelöst!' 
-                : '';
-            alertUser(`Einlösung erfolgreich gebucht! (${neueEinloesungen}/${maxEinloesungen > 0 ? maxEinloesungen : '∞'})${statusMsg}`, 'success');
+            alertUser('Einlösung erfolgreich gebucht!', 'success');
             closeTransaktionModal();
-
-            // Details-Modal neu laden, falls offen
+            if (source === 'einloese') {
+                resetEinloeseSystemForm(true);
+            }
             if (document.getElementById('wertguthabenDetailsModal').style.display === 'flex') {
                 setTimeout(() => openWertguthabenDetails(wertguthabenId), 300);
             }
@@ -1883,59 +2218,104 @@ async function saveTransaktion() {
         return;
     }
 
-    // Normaler Modus: Betrag-basierte Transaktion
     if (!betrag || betrag <= 0) {
         return alertUser('Bitte einen gültigen Betrag eingeben!', 'error');
     }
 
-    const aktuellerRestwert = wg.restwert !== undefined ? wg.restwert : wg.wert || 0;
-
-    // Bei Verwendung: Prüfen, ob genug Guthaben vorhanden ist
-    if (typ === 'verwendung' && betrag > aktuellerRestwert) {
-        return alertUser(`Nicht genug Guthaben! Verfügbar: ${aktuellerRestwert.toFixed(2)} €`, 'error');
+    if (typ === 'verwendung' && betrag > transaktionModalState.originalRestwert) {
+        return alertUser(`Nicht genug Guthaben! Verfügbar: ${transaktionModalState.originalRestwert.toFixed(2)} €`, 'error');
     }
 
+    const neuerRestwert = typ === 'verwendung'
+        ? Math.max(0, transaktionModalState.originalRestwert - betrag)
+        : transaktionModalState.originalRestwert + betrag;
+
     try {
-        // Transaktion als Subcollection speichern
         const transaktionenRef = collection(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen');
-        
-        const transaktionData = {
-            typ,
-            betrag,
-            datum: serverTimestamp(),
-            bestellnr,
-            rechnungsnr,
-            beschreibung,
-            createdAt: serverTimestamp(),
-            createdBy: currentUser.mode
-        };
+        const verificationData = shouldVerify
+            ? {
+                betragVerifiziert: true,
+                betragVerifiziertAm: serverTimestamp(),
+                betragVerifiziertVon: currentUser.mode
+            }
+            : {};
 
-        await addDoc(transaktionenRef, transaktionData);
-
-        // Restwert aktualisieren
-        const neuerRestwert = typ === 'verwendung' 
-            ? aktuellerRestwert - betrag 
-            : aktuellerRestwert + betrag;
+        if (editTransaktionId) {
+            const transaktionRef = doc(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen', editTransaktionId);
+            await updateDoc(transaktionRef, {
+                typ,
+                betrag,
+                bestellnr,
+                rechnungsnr,
+                beschreibung,
+                updatedAt: serverTimestamp(),
+                updatedBy: currentUser.mode,
+                ...verificationData
+            });
+        } else {
+            await addDoc(transaktionenRef, {
+                typ,
+                betrag,
+                datum: serverTimestamp(),
+                bestellnr,
+                rechnungsnr,
+                beschreibung,
+                createdAt: serverTimestamp(),
+                createdBy: currentUser.mode
+            });
+        }
 
         const wertguthabenRef = doc(wertguthabenCollection, wertguthabenId);
-        await updateDoc(wertguthabenRef, {
+        const wgUpdateData = {
             restwert: neuerRestwert,
             updatedAt: serverTimestamp(),
             updatedBy: currentUser.mode
-        });
+        };
+        if (shouldVerify) {
+            wgUpdateData.restwertVerifiziert = true;
+            wgUpdateData.restwertVerifiziertAm = serverTimestamp();
+            wgUpdateData.restwertVerifiziertVon = currentUser.mode;
+        }
+        await updateDoc(wertguthabenRef, wgUpdateData);
 
-        alertUser('Transaktion erfolgreich gebucht!', 'success');
+        alertUser(editTransaktionId ? 'Transaktion aktualisiert!' : 'Transaktion erfolgreich gebucht!', 'success');
         closeTransaktionModal();
 
-        // Details-Modal neu laden, falls offen
+        if (source === 'einloese') {
+            resetEinloeseSystemForm(true);
+        }
+
         if (document.getElementById('wertguthabenDetailsModal').style.display === 'flex') {
             setTimeout(() => openWertguthabenDetails(wertguthabenId), 300);
         }
     } catch (error) {
-        console.error('Fehler beim Buchen der Transaktion:', error);
-        alertUser('Fehler beim Buchen: ' + error.message, 'error');
+        console.error('Fehler beim Speichern der Transaktion:', error);
+        alertUser('Fehler beim Speichern: ' + error.message, 'error');
     }
 }
+
+window.openEditTransaktionFromHistory = async function(wertguthabenId, transaktionId) {
+    try {
+        const transaktionRef = doc(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen', transaktionId);
+        const transaktionDoc = await getDoc(transaktionRef);
+        if (!transaktionDoc.exists()) {
+            return alertUser('Transaktion nicht gefunden!', 'error');
+        }
+
+        document.getElementById('wertguthabenDetailsModal').style.display = 'none';
+        await window.openTransaktionModal(wertguthabenId, {
+            source: 'dashboard',
+            openedFromHistory: true,
+            editTransaktion: {
+                id: transaktionDoc.id,
+                ...transaktionDoc.data()
+            }
+        });
+    } catch (error) {
+        console.error('Fehler beim Laden der Transaktion:', error);
+        alertUser('Transaktion konnte nicht geladen werden.', 'error');
+    }
+};
 
 // Transaktionen laden
 async function loadTransaktionen(wertguthabenId) {
@@ -2013,6 +2393,7 @@ window.openWertguthabenDetails = async function(id) {
             <div>
                 <p class="text-sm font-bold text-gray-600">Aktueller Restwert</p>
                 <p class="text-2xl font-bold text-emerald-700">${restwert.toFixed(2)} €</p>
+                ${renderWertguthabenVerificationBadge(wg, 'text-emerald-700')}
             </div>` : ''}
             <div>
                 <p class="text-sm font-bold text-gray-600">Restzeit</p>
@@ -2104,6 +2485,8 @@ window.openWertguthabenDetails = async function(id) {
             const icon = t.typ === 'verwendung' ? '📉' : (t.typ === 'einloesung' ? '🎟️' : '📈');
             const colorClass = t.typ === 'verwendung' ? 'text-red-600' : (t.typ === 'einloesung' ? 'text-pink-600' : 'text-green-600');
             const betragText = t.typ === 'verwendung' ? `- ${(t.betrag || 0).toFixed(2)} €` : (t.typ === 'einloesung' ? '1x Einlösung' : `+ ${(t.betrag || 0).toFixed(2)} €`);
+            const canEdit = t.typ === 'verwendung' || t.typ === 'gutschrift';
+            const verifyInfo = t.betragVerifiziert ? `✅ Verifiziert: ${formatDateTime(t.betragVerifiziertAm)} · ${getDisplayUserName(t.betragVerifiziertVon)}` : '';
             
             return `
                 <div class="p-3 bg-gray-50 rounded-lg border border-gray-200">
@@ -2119,12 +2502,16 @@ window.openWertguthabenDetails = async function(id) {
                                 ${t.bestellnr ? `<span>📦 Best.-Nr: ${t.bestellnr}</span>` : ''}
                                 ${t.rechnungsnr ? `<span>🧾 Rech.-Nr: ${t.rechnungsnr}</span>` : ''}
                             </div>
+                            ${verifyInfo ? `<div class="mt-1 text-xs font-semibold text-emerald-700">${verifyInfo}</div>` : ''}
                         </div>
-                        <button onclick="deleteTransaktion('${id}', '${t.id}')" 
-                                class="ml-2 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Transaktion löschen">
-                            🗑️
-                        </button>
+                        <div class="ml-2 flex gap-1">
+                            ${canEdit ? `<button onclick="window.openEditTransaktionFromHistory('${id}', '${t.id}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Transaktion bearbeiten">✏️</button>` : ''}
+                            <button onclick="deleteTransaktion('${id}', '${t.id}')" 
+                                    class="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                    title="Transaktion löschen">
+                                🗑️
+                            </button>
+                        </div>
                     </div>
                 </div>
             `;
@@ -2137,7 +2524,7 @@ window.openWertguthabenDetails = async function(id) {
     // Event-Listener für Buttons
     document.getElementById('addTransaktionBtn').onclick = () => {
         document.getElementById('wertguthabenDetailsModal').style.display = 'none';
-        window.openTransaktionModal(id);
+        window.openTransaktionModal(id, { source: 'dashboard' });
     };
 
     document.getElementById('editWertguthabenDetailsBtn').onclick = () => {

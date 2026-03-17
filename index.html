@@ -1884,36 +1884,49 @@
             <!-- ========== WERTGUTHABEN VIEW ========== -->
             <div id="wertguthabenView" class="view">
                 <div class="back-link-container w-full mb-3">
-                    <div class="flex justify-between items-center">
-                        <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition"
-                            data-target="home">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
-                                stroke-linejoin="round" class="w-6 h-6 mr-1">
-                                <path d="m15 18-6-6 6-6" />
-                            </svg>
-                            <span class="text-base font-semibold">zurück</span>
-                        </button>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-2">
+                        <div class="flex justify-center sm:justify-start">
+                            <button class="back-link flex items-center text-gray-600 hover:text-indigo-600 transition"
+                                data-target="home">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                    stroke-linejoin="round" class="w-6 h-6 mr-1">
+                                    <path d="m15 18-6-6 6-6" />
+                                </svg>
+                                <span class="text-base font-semibold">zurück</span>
+                            </button>
+                        </div>
 
-                        <div class="flex gap-2">
-                            <button id="btn-wertguthaben-settings"
-                                class="p-2 text-gray-500 hover:text-gray-800 transition rounded-full hover:bg-gray-200"
-                                title="Einstellungen & Kategorien verwalten">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6">
-                                    <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 0 1 1.262.125l1.669 1.669a1 1 0 0 1 .125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 0 1 .804.98v2.361a1 1 0 0 1-.804.98l-1.473.295a6.95 6.95 0 0 1-.587 1.416l.834 1.25a1 1 0 0 1-.125 1.262l-1.669 1.669a1 1 0 0 1-1.262.125l-1.25-.834a6.953 6.953 0 0 1-1.416.587l-.294 1.473a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.295-1.473a6.957 6.957 0 0 1-1.416-.587l-1.25.834a1 1 0 0 1-1.262-.125l-1.669-1.669a1 1 0 0 1-.125-1.262l.834-1.25a6.957 6.957 0 0 1-.587-1.416l-1.473-.294A1 1 0 0 1 1 11.18V8.82a1 1 0 0 1 .804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 0 1 .125-1.262l1.669-1.669a1 1 0 0 1 1.262-.125l1.25.834c.445-.245.919-.443 1.416-.587l.294-1.473ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd" />
-                                </svg>
+                        <div class="flex justify-center">
+                            <button id="btn-open-einloese-system"
+                                class="py-2 px-5 bg-white border-2 border-emerald-300 text-emerald-700 font-bold rounded-lg hover:bg-emerald-50 hover:border-emerald-500 transition text-sm">
+                                Einlöse-System
                             </button>
-                            <button id="btn-create-wertguthaben" 
-                                class="py-2 px-4 bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2 text-sm">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
-                                    <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-                                </svg>
-                                Neu
-                            </button>
+                        </div>
+
+                        <div class="flex justify-center sm:justify-end">
+                            <div class="flex gap-2">
+                                <button id="btn-wertguthaben-settings"
+                                    class="p-2 text-gray-500 hover:text-gray-800 transition rounded-full hover:bg-gray-200"
+                                    title="Einstellungen & Kategorien verwalten">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6">
+                                        <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 0 1 1.262.125l1.669 1.669a1 1 0 0 1 .125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 0 1 .804.98v2.361a1 1 0 0 1-.804.98l-1.473.295a6.95 6.95 0 0 1-.587 1.416l.834 1.25a1 1 0 0 1-.125 1.262l-1.669 1.669a1 1 0 0 1-1.262.125l-1.25-.834a6.953 6.953 0 0 1-1.416.587l-.294 1.473a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.295-1.473a6.957 6.957 0 0 1-1.416-.587l-1.25.834a1 1 0 0 1-1.262-.125l-1.669-1.669a1 1 0 0 1-.125-1.262l.834-1.25a6.957 6.957 0 0 1-.587-1.416l-1.473-.294A1 1 0 0 1 1 11.18V8.82a1 1 0 0 1 .804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 0 1 .125-1.262l1.669-1.669a1 1 0 0 1 1.262-.125l1.25.834c.445-.245.919-.443 1.416-.587l.294-1.473ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd" />
+                                    </svg>
+                                </button>
+                                <button id="btn-create-wertguthaben" 
+                                    class="py-2 px-4 bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-bold rounded-lg hover:shadow-lg transition flex items-center gap-2 text-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                                        <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                                    </svg>
+                                    Neu
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div class="border-t border-gray-300 mt-2"></div>
                 </div>
+
+                <div id="wertguthabenDashboardSection">
 
                 <!-- Header mit Statistiken -->
                 <div class="bg-gradient-to-r from-emerald-600 to-teal-500 text-white p-4 rounded-xl shadow-md mb-3">
@@ -2038,6 +2051,47 @@
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+                </div>
+
+                <div id="wertguthabenEinloeseSection" class="hidden">
+                    <div class="bg-white rounded-2xl border-2 border-emerald-200 shadow-md p-4 sm:p-8">
+                        <div class="flex items-center justify-between gap-2 mb-4">
+                            <h2 class="text-xl sm:text-2xl font-bold text-emerald-800">Einlöse-System</h2>
+                            <button id="btn-close-einloese-system" class="px-3 py-2 text-sm font-bold rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300">
+                                Zurück zur Liste
+                            </button>
+                        </div>
+
+                        <div class="max-w-3xl mx-auto relative">
+                            <label class="block text-center text-sm font-semibold text-gray-600 mb-2">ID eingeben</label>
+                            <input id="wg-einloese-id-input" type="text" placeholder="#AB12"
+                                class="w-full text-center font-mono text-3xl sm:text-5xl tracking-widest px-4 py-6 border-2 border-emerald-300 rounded-2xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200" autocomplete="off">
+                            <div id="wg-einloese-suggestions-box" class="hidden absolute z-40 left-0 right-0 mt-2 bg-white border-2 border-emerald-300 rounded-xl shadow-xl max-h-72 overflow-y-auto">
+                                <ul id="wg-einloese-suggestions-list"></ul>
+                            </div>
+                        </div>
+
+                        <div id="wg-einloese-empty-state" class="text-center text-gray-400 italic py-10">
+                            Gib eine ID ein, um ein Wertguthaben direkt einzulösen.
+                        </div>
+
+                        <div id="wg-einloese-result" class="hidden mt-6">
+                            <div class="text-center mb-6">
+                                <p class="text-sm font-bold text-gray-600">Aktueller Betrag</p>
+                                <p id="wg-einloese-current-balance" class="text-5xl sm:text-7xl font-black text-emerald-700 leading-none">0,00 €</p>
+                                <div id="wg-einloese-verified-stamp" class="hidden mt-2 text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg inline-block px-3 py-1"></div>
+                            </div>
+
+                            <div id="wg-einloese-details" class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6"></div>
+
+                            <div class="flex justify-center">
+                                <button id="wg-einloese-open-booking" class="px-8 py-3 text-lg font-bold rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow">
+                                    💳 Transaktion buchen
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -7992,6 +8046,8 @@
                 </div>
 
                 <input type="hidden" id="transaktionWertguthabenId">
+                <input type="hidden" id="editTransaktionId">
+                <input type="hidden" id="transaktionOpenSource" value="dashboard">
 
                 <div class="space-y-4">
                     <!-- Transaktionstyp -->
@@ -8004,12 +8060,17 @@
                         </select>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <!-- Betrag (für normale Wertguthaben) -->
                         <div id="transaktionBetragContainer">
                             <label class="block text-sm font-bold text-gray-700 mb-2">Betrag (€) *</label>
-                            <input type="number" id="transaktionBetrag" step="0.01" min="0" placeholder="0.00"
-                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500">
+                            <div class="flex gap-2">
+                                <input type="number" id="transaktionBetrag" step="0.01" min="0" placeholder="0.00"
+                                    class="flex-1 p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500">
+                                <button type="button" id="transaktionAllesEinloesenBtn" class="px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-bold text-sm">
+                                    Alles einlösen
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Einlösung (für Aktionscode) -->
@@ -8032,33 +8093,55 @@
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4">
-                        <!-- Bestellnummer -->
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-2">Bestellnummer</label>
-                            <input type="text" id="transaktionBestellnr" placeholder="z.B. 123456789"
-                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500">
-                        </div>
-
-                        <!-- Rechnungsnummer -->
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-2">Rechnungsnummer</label>
-                            <input type="text" id="transaktionRechnungsnr" placeholder="z.B. RE-2024-001"
-                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500">
-                        </div>
-                    </div>
-
-                    <!-- Beschreibung -->
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Beschreibung</label>
-                        <textarea id="transaktionBeschreibung" rows="3" placeholder="z.B. Einkauf vom 12.12.2024, 12:00 Uhr..."
-                            class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500"></textarea>
-                    </div>
-
-                    <!-- Verfügbarer Betrag Anzeige -->
                     <div class="p-4 bg-emerald-50 rounded-lg border-2 border-emerald-200">
-                        <p class="text-sm font-bold text-emerald-800">Verfügbares Guthaben:</p>
-                        <p class="text-2xl font-bold text-emerald-700" id="transaktionVerfuegbar">0,00 €</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <p class="text-sm font-bold text-emerald-800">Verfügbares Guthaben</p>
+                                <p class="text-2xl font-black text-emerald-700" id="transaktionVerfuegbar">0,00 €</p>
+                            </div>
+                            <div class="sm:text-right">
+                                <p class="text-sm font-bold text-gray-700">Ursprünglich</p>
+                                <p class="text-xl font-bold text-gray-700" id="transaktionUrspruenglich">0,00 €</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="transaktionVerifySection" class="hidden p-3 bg-yellow-50 border-2 border-yellow-200 rounded-lg">
+                        <label class="inline-flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="transaktionVerifyCheckbox" class="h-4 w-4 accent-yellow-600">
+                            <span class="font-bold text-yellow-800 text-sm">Betrag verifizieren</span>
+                        </label>
+                        <p id="transaktionVerifyInfo" class="text-xs text-yellow-700 mt-1"></p>
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg overflow-hidden">
+                        <button type="button" id="transaktionDetailsToggle" class="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold text-sm">
+                            <span>Details</span>
+                            <svg id="transaktionDetailsIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 transition-transform">
+                                <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        <div id="transaktionDetailsBody" class="hidden p-4 border-t border-gray-200 space-y-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-2">Bestellnummer</label>
+                                    <input type="text" id="transaktionBestellnr" placeholder="z.B. 123456789"
+                                        class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500">
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-2">Rechnungsnummer</label>
+                                    <input type="text" id="transaktionRechnungsnr" placeholder="z.B. RE-2024-001"
+                                        class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">Beschreibung</label>
+                                <textarea id="transaktionBeschreibung" rows="3" placeholder="z.B. Einkauf vom 12.12.2024, 12:00 Uhr..."
+                                    class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500"></textarea>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
