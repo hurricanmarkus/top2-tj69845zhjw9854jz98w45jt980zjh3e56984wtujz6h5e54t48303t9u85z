@@ -1898,7 +1898,7 @@
                         <div class="flex gap-2">
                             <button id="btn-wertguthaben-settings"
                                 class="p-2 text-gray-500 hover:text-gray-800 transition rounded-full hover:bg-gray-200"
-                                title="Standard-Warnungen einstellen">
+                                title="Einstellungen & Kategorien verwalten">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6">
                                     <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 0 1 1.262.125l1.669 1.669a1 1 0 0 1 .125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 0 1 .804.98v2.361a1 1 0 0 1-.804.98l-1.473.295a6.95 6.95 0 0 1-.587 1.416l.834 1.25a1 1 0 0 1-.125 1.262l-1.669 1.669a1 1 0 0 1-1.262.125l-1.25-.834a6.953 6.953 0 0 1-1.416.587l-.294 1.473a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.295-1.473a6.957 6.957 0 0 1-1.416-.587l-1.25.834a1 1 0 0 1-1.262-.125l-1.669-1.669a1 1 0 0 1-.125-1.262l.834-1.25a6.957 6.957 0 0 1-.587-1.416l-1.473-.294A1 1 0 0 1 1 11.18V8.82a1 1 0 0 1 .804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 0 1 .125-1.262l1.669-1.669a1 1 0 0 1 1.262-.125l1.25.834c.445-.245.919-.443 1.416-.587l.294-1.473ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd" />
                                 </svg>
@@ -1964,7 +1964,7 @@
                                 <option value="or">OR</option>
                             </select>
                             <div class="relative flex-1 min-w-[200px]">
-                                <input type="text" id="search-wertguthaben" placeholder="🔍 Suchen... (Name, Code, Unternehmen)" 
+                                <input type="text" id="search-wertguthaben" placeholder="🔍 Suchen... (ID, Name, Unternehmen, Kategorie)" 
                                     class="w-full p-2 border-2 border-gray-300 rounded-lg focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-sm">
                                 <div id="wg-search-suggestions-box" class="hidden absolute z-40 top-full left-0 right-0 mt-1 bg-white border-2 border-emerald-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
                                     <ul id="wg-search-suggestions-list" class="text-sm"></ul>
@@ -1990,6 +1990,11 @@
                                 <option value="aktionscode">🏷️ Aktionscode</option>
                             </select>
                             
+                            <select id="filter-wg-kategorie" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1 min-w-[170px]">
+                                <option value="">Alle Kategorien</option>
+                                <option value="Nicht zugeordnet">Nicht zugeordnet</option>
+                            </select>
+
                             <select id="filter-wg-eigentuemer" class="p-2 border-2 border-gray-300 rounded-lg bg-white text-sm flex-1 min-w-[150px]">
                                 <option value="">Alle Eigentümer</option>
                             </select>
@@ -2015,6 +2020,8 @@
                                 <tr>
                                     <th class="px-4 py-3 text-left text-xs font-bold text-emerald-800 uppercase">Eigentümer</th>
                                     <th class="px-4 py-3 text-left text-xs font-bold text-emerald-800 uppercase">Typ</th>
+                                    <th class="px-4 py-3 text-left text-xs font-bold text-emerald-800 uppercase">ID</th>
+                                    <th class="px-4 py-3 text-left text-xs font-bold text-emerald-800 uppercase">Kategorie</th>
                                     <th class="px-4 py-3 text-left text-xs font-bold text-emerald-800 uppercase">Name</th>
                                     <th class="px-4 py-3 text-left text-xs font-bold text-emerald-800 uppercase">Unternehmen</th>
                                     <th class="px-4 py-3 text-left text-xs font-bold text-emerald-800 uppercase">Wert</th>
@@ -2025,7 +2032,7 @@
                             </thead>
                             <tbody id="wertguthaben-table-body" class="divide-y divide-gray-200">
                                 <tr>
-                                    <td colspan="8" class="px-4 py-8 text-center text-gray-400 italic">
+                                    <td colspan="10" class="px-4 py-8 text-center text-gray-400 italic">
                                         Keine Wertguthaben vorhanden. Erstelle dein erstes Guthaben!
                                     </td>
                                 </tr>
@@ -7595,7 +7602,15 @@
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4">
+                    <div class="grid grid-cols-3 gap-4">
+                        <!-- Kategorie -->
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">Kategorie *</label>
+                            <select id="wgKategorie" class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-emerald-500 bg-white" required>
+                                <option value="Nicht zugeordnet">Nicht zugeordnet</option>
+                            </select>
+                        </div>
+
                         <!-- Name -->
                         <div>
                             <label class="block text-sm font-bold text-gray-700 mb-2">Name *</label>
@@ -7874,9 +7889,9 @@
 
         <!-- Modal: Wertguthaben Einstellungen -->
         <div id="wertguthabenSettingsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-[90]">
-            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg">
+            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-2xl font-bold text-emerald-800">⚙️ Standard-Warnungen</h3>
+                    <h3 class="text-2xl font-bold text-emerald-800">⚙️ Wertguthaben-Einstellungen</h3>
                     <button id="closeWertguthabenSettingsModal" class="text-gray-400 hover:text-red-600 font-bold text-3xl leading-none">&times;</button>
                 </div>
 
@@ -7884,56 +7899,75 @@
                     Lege fest, wie viele Tage vor Ablauf eine Warnung angezeigt werden soll, wenn bei einem Wertguthaben keine individuelle Warnung eingestellt ist.
                 </p>
 
-                <div class="space-y-4">
-                    <!-- Gutschein -->
-                    <div class="p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
-                        <div class="flex items-center gap-2 mb-2">
-                            <span class="text-2xl">🎁</span>
-                            <label class="block text-sm font-bold text-blue-800">Gutschein</label>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="space-y-4">
+                        <!-- Gutschein -->
+                        <div class="p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="text-2xl">🎁</span>
+                                <label class="block text-sm font-bold text-blue-800">Gutschein</label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="number" id="settings-warning-gutschein" min="0" value="14"
+                                    class="flex-1 p-3 border-2 border-blue-300 rounded-lg focus:border-blue-500 bg-white">
+                                <span class="text-sm text-blue-700 font-semibold">Tage</span>
+                            </div>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <input type="number" id="settings-warning-gutschein" min="0" value="14"
-                                class="flex-1 p-3 border-2 border-blue-300 rounded-lg focus:border-blue-500 bg-white">
-                            <span class="text-sm text-blue-700 font-semibold">Tage</span>
+
+                        <!-- Guthaben -->
+                        <div class="p-4 bg-purple-50 rounded-lg border-2 border-purple-200">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="text-2xl">💳</span>
+                                <label class="block text-sm font-bold text-purple-800">Guthaben</label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="number" id="settings-warning-guthaben" min="0" value="30"
+                                    class="flex-1 p-3 border-2 border-purple-300 rounded-lg focus:border-purple-500 bg-white">
+                                <span class="text-sm text-purple-700 font-semibold">Tage</span>
+                            </div>
+                        </div>
+
+                        <!-- Wertguthaben -->
+                        <div class="p-4 bg-emerald-50 rounded-lg border-2 border-emerald-200">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="text-2xl">🏦</span>
+                                <label class="block text-sm font-bold text-emerald-800">Wertguthaben</label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="number" id="settings-warning-wertguthaben" min="0" value="90"
+                                    class="flex-1 p-3 border-2 border-emerald-300 rounded-lg focus:border-emerald-500 bg-white">
+                                <span class="text-sm text-emerald-700 font-semibold">Tage</span>
+                            </div>
+                        </div>
+
+                        <!-- Wertguthaben (gesetzlich) -->
+                        <div class="p-4 bg-yellow-50 rounded-lg border-2 border-yellow-200">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="text-2xl">⚖️</span>
+                                <label class="block text-sm font-bold text-yellow-800">Wertguthaben (gesetzlich)</label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="number" id="settings-warning-wertguthaben_gesetzlich" min="0" value="180"
+                                    class="flex-1 p-3 border-2 border-yellow-300 rounded-lg focus:border-yellow-500 bg-white">
+                                <span class="text-sm text-yellow-700 font-semibold">Tage</span>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Guthaben -->
-                    <div class="p-4 bg-purple-50 rounded-lg border-2 border-purple-200">
-                        <div class="flex items-center gap-2 mb-2">
-                            <span class="text-2xl">💳</span>
-                            <label class="block text-sm font-bold text-purple-800">Guthaben</label>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <input type="number" id="settings-warning-guthaben" min="0" value="30"
-                                class="flex-1 p-3 border-2 border-purple-300 rounded-lg focus:border-purple-500 bg-white">
-                            <span class="text-sm text-purple-700 font-semibold">Tage</span>
-                        </div>
-                    </div>
-
-                    <!-- Wertguthaben -->
                     <div class="p-4 bg-emerald-50 rounded-lg border-2 border-emerald-200">
-                        <div class="flex items-center gap-2 mb-2">
-                            <span class="text-2xl">🏦</span>
-                            <label class="block text-sm font-bold text-emerald-800">Wertguthaben</label>
+                        <h4 class="font-bold text-emerald-900 mb-3">🏷️ Kategorien verwalten</h4>
+                        <p class="text-xs text-emerald-800 mb-3">
+                            "Nicht zugeordnet" ist fix und kann nicht gelöscht werden.
+                        </p>
+                        <div class="flex gap-2 mb-3">
+                            <input type="text" id="new-wg-kategorie-input" placeholder="Neue Kategorie..."
+                                class="flex-1 p-2.5 border-2 border-emerald-300 rounded-lg focus:border-emerald-500 bg-white">
+                            <button id="btn-add-wg-kategorie" class="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700">
+                                Hinzufügen
+                            </button>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <input type="number" id="settings-warning-wertguthaben" min="0" value="90"
-                                class="flex-1 p-3 border-2 border-emerald-300 rounded-lg focus:border-emerald-500 bg-white">
-                            <span class="text-sm text-emerald-700 font-semibold">Tage</span>
-                        </div>
-                    </div>
-
-                    <!-- Wertguthaben (gesetzlich) -->
-                    <div class="p-4 bg-yellow-50 rounded-lg border-2 border-yellow-200">
-                        <div class="flex items-center gap-2 mb-2">
-                            <span class="text-2xl">⚖️</span>
-                            <label class="block text-sm font-bold text-yellow-800">Wertguthaben (gesetzlich)</label>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <input type="number" id="settings-warning-wertguthaben_gesetzlich" min="0" value="180"
-                                class="flex-1 p-3 border-2 border-yellow-300 rounded-lg focus:border-yellow-500 bg-white">
-                            <span class="text-sm text-yellow-700 font-semibold">Tage</span>
+                        <div id="wg-settings-kategorien-list" class="space-y-2 max-h-72 overflow-y-auto bg-white border border-emerald-200 rounded-lg p-2">
+                            <p class="text-sm text-gray-500 italic">Keine zusätzlichen Kategorien vorhanden.</p>
                         </div>
                     </div>
                 </div>

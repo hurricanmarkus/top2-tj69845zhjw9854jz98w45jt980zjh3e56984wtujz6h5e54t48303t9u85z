@@ -283,6 +283,16 @@ service cloud.firestore {
       allow update, delete: if hasAppUserIdClaim() && resource.data.createdBy == appUserId();
     }
 
+    // GLOBAL-SHORT-IDS: Modulübergreifende Kurz-ID-Reservierung (#XXXX)
+    match /artifacts/20LVob88b3ovXRUyX3ra/public/data/global-short-ids/{shortId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && !exists(/databases/$(database)/documents/artifacts/20LVob88b3ovXRUyX3ra/public/data/global-short-ids/$(shortId))
+        && request.resource.data.module is string
+        && request.resource.data.createdBy is string;
+      allow update, delete: if false;
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // TICKET SUPPORT (Ticket Support System)
     // ═══════════════════════════════════════════════════════════════
