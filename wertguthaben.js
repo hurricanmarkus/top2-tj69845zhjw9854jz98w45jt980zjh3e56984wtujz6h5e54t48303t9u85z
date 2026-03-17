@@ -61,7 +61,7 @@ const transaktionModalState = {
     maxEinloesungen: 0,
     bereitsEingeloest: 0
 };
-const WG_WERT_UNLOCK_COUNTDOWN_SECONDS = 1;
+const WG_WERT_UNLOCK_COUNTDOWN_SECONDS = 30;
 let wgWertUnlockSecondsLeft = 0;
 let wgWertUnlockTimer = null;
 
@@ -446,6 +446,22 @@ function setupEventListeners() {
     const betragInput = document.getElementById('transaktionBetrag');
     if (betragInput && !betragInput.dataset.listenerAttached) {
         betragInput.addEventListener('input', updateTransaktionPreview);
+        betragInput.addEventListener('keydown', (event) => {
+            if (event.key !== '-') return;
+            const typ = document.getElementById('transaktionTyp')?.value;
+            if (typ !== 'korrektur') return;
+
+            const currentValue = String(betragInput.value || '').trim();
+            if (currentValue.startsWith('-')) {
+                event.preventDefault();
+                return;
+            }
+
+            event.preventDefault();
+            const normalized = currentValue.replace(/^-/, '');
+            betragInput.value = normalized ? `-${normalized}` : '-0';
+            updateTransaktionPreview();
+        });
         betragInput.dataset.listenerAttached = 'true';
     }
 
@@ -1885,6 +1901,7 @@ function shouldAutoSetStatusToEingeloest(typ, wert, maxEinloesungen, bereitsEing
 
 function handleTypChange() {
     const typ = document.getElementById('wgTyp').value;
+    const editId = document.getElementById('editWertguthabenId')?.value || '';
     const gutscheinFelder = document.getElementById('gutschein-felder');
     const wertguthabenFelder = document.getElementById('wertguthaben-felder');
     const aktionscodeFelder = document.getElementById('aktionscode-felder');
@@ -1898,8 +1915,10 @@ function handleTypChange() {
 
     // Wert, Einlösefrist und Kaufdatum für Aktionscode deaktivieren
     if (typ === 'aktionscode') {
+        wertguthabenFormState.isWertUnlocked = false;
+        setWertBetragLockedState(false);
         wertInput.disabled = true;
-        wertInput.value = '';
+        wertInput.value = '0';
         wertInput.classList.add('bg-gray-100', 'cursor-not-allowed');
         einloesefristInput.disabled = true;
         einloesefristInput.value = '';
@@ -1913,8 +1932,12 @@ function handleTypChange() {
             handleRabattTypChange();
         }
     } else {
-        wertInput.disabled = false;
-        wertInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
+        const shouldLockWert = !!editId && !wertguthabenFormState.isWertUnlocked;
+        setWertBetragLockedState(shouldLockWert, editId);
+        if (!shouldLockWert) {
+            wertInput.disabled = false;
+            wertInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
+        }
         einloesefristInput.disabled = false;
         einloesefristInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
         kaufdatumInput.disabled = false;
@@ -2175,7 +2198,8 @@ window.openEditWertguthaben = function(id) {
     populateWertguthabenFormFromEntry(wg, { isCopy: false });
     setWertguthabenCopyMode(false);
     wertguthabenFormState.statusManuallyChanged = false;
-    setWertBetragLockedState(wg.typ !== 'aktionscode', id);
+    wertguthabenFormState.isWertUnlocked = false;
+    handleTypChange();
 
     document.getElementById('wertguthabenModal').style.display = 'flex';
 };
@@ -2542,10 +2566,11 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     document.getElementById('transaktionRechnungsnr').value = editTransaktion?.rechnungsnr || '';
     document.getElementById('transaktionBeschreibung').value = editTransaktion?.beschreibung || '';
 
+    const verificationAllowed = isEditFromHistory && wg.typ !== 'aktionscode';
     let alreadyVerified = false;
 
     if (verifySection && verifyCheckbox && verifyInfo) {
-        if (isEditFromHistory) {
+        if (verificationAllowed) {
             verifySection.classList.remove('hidden');
             alreadyVerified = !!editTransaktion?.betragVerifiziert;
             verifyCheckbox.checked = alreadyVerified;
@@ -2556,7 +2581,7 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
         } else {
             verifySection.classList.add('hidden');
             verifyCheckbox.checked = false;
-            verifyCheckbox.disabled = false;
+            verifyCheckbox.disabled = !!isEditFromHistory;
             verifyInfo.textContent = '';
         }
     }
@@ -2571,7 +2596,10 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     setTransaktionVerificationOnlyUi(isEditFromHistory, source);
 
     if (isEditFromHistory) {
-        if (alreadyVerified) {
+        if (!verificationAllowed) {
+            setTransaktionSaveEnabled(false);
+            setTransaktionValidationHint('Für Aktionscodes ist keine Betragsverifizierung möglich.');
+        } else if (alreadyVerified) {
             setTransaktionSaveEnabled(false);
             setTransaktionValidationHint('Diese Transaktion ist bereits verifiziert und gesperrt.');
         } else {
@@ -2638,6 +2666,10 @@ async function saveTransaktion() {
 
     if (editTransaktionId) {
         try {
+            if (wg.typ === 'aktionscode') {
+                return alertUser('Für Aktionscodes ist keine Betragsverifizierung verfügbar.', 'warning');
+            }
+
             const transaktionRef = doc(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen', editTransaktionId);
             const transaktionDoc = await getDoc(transaktionRef);
             if (!transaktionDoc.exists()) {
@@ -2978,12 +3010,22 @@ window.openWertguthabenDetails = async function(id) {
 
     // Transaktionen laden und anzeigen
     const transaktionen = await loadTransaktionen(id);
+    const getTransaktionSortTimestamp = (transaktion) => {
+        const date = toDateValue(transaktion?.datum || transaktion?.createdAt || transaktion?.updatedAt);
+        return date ? date.getTime() : 0;
+    };
+    const sortedTransaktionen = [...transaktionen].sort((a, b) => {
+        const aSystem = isStartguthabenTransaktion(a);
+        const bSystem = isStartguthabenTransaktion(b);
+        if (aSystem !== bSystem) return aSystem ? -1 : 1;
+        return getTransaktionSortTimestamp(a) - getTransaktionSortTimestamp(b);
+    });
     const transaktionsList = document.getElementById('transaktionsList');
     
-    if (transaktionen.length === 0) {
+    if (sortedTransaktionen.length === 0) {
         transaktionsList.innerHTML = '<p class="text-center text-gray-400 italic py-4">Noch keine Transaktionen vorhanden.</p>';
     } else {
-        transaktionsList.innerHTML = transaktionen.map(t => {
+        transaktionsList.innerHTML = sortedTransaktionen.map(t => {
             // Firebase Timestamp korrekt in Date konvertieren
             let datum = '-';
             if (t.datum) {
@@ -3023,9 +3065,11 @@ window.openWertguthabenDetails = async function(id) {
                     : (isKorrektur
                         ? `${transaktionBetrag >= 0 ? '+' : '-'} ${Math.abs(transaktionBetrag).toFixed(2)} € (Korrektur)`
                         : `+ ${Math.abs(transaktionBetrag).toFixed(2)} €`));
-            const canEdit = t.typ === 'verwendung' || t.typ === 'gutschrift' || t.typ === 'korrektur';
+            const canEdit = (t.typ === 'verwendung' || t.typ === 'gutschrift' || t.typ === 'korrektur') && wg.typ !== 'aktionscode';
             const canDelete = !isStartguthaben;
-            const verifyInfo = t.betragVerifiziert ? `✅ Verifiziert: ${formatDateTime(t.betragVerifiziertAm)} · ${getDisplayUserName(t.betragVerifiziertVon)}` : '';
+            const verifyInfo = (wg.typ !== 'aktionscode' && t.betragVerifiziert)
+                ? `✅ Verifiziert: ${formatDateTime(t.betragVerifiziertAm)} · ${getDisplayUserName(t.betragVerifiziertVon)}`
+                : '';
             
             return `
                 <div class="p-3 bg-gray-50 rounded-lg border border-gray-200">
