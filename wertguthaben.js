@@ -55,6 +55,7 @@ const transaktionModalState = {
     source: 'dashboard',
     editTransaktionId: '',
     isEditMode: false,
+    isVerificationOnlyMode: false,
     isExistingTransaktionVerified: false,
     isEinloesungMode: false,
     maxEinloesungen: 0,
@@ -242,6 +243,12 @@ function setupEventListeners() {
     if (wertUnlockCancelBtn && !wertUnlockCancelBtn.dataset.listenerAttached) {
         wertUnlockCancelBtn.addEventListener('click', closeWertBetragUnlockPanel);
         wertUnlockCancelBtn.dataset.listenerAttached = 'true';
+    }
+
+    const wertUnlockCloseBtn = document.getElementById('closeWgWertUnlockModal');
+    if (wertUnlockCloseBtn && !wertUnlockCloseBtn.dataset.listenerAttached) {
+        wertUnlockCloseBtn.addEventListener('click', closeWertBetragUnlockPanel);
+        wertUnlockCloseBtn.dataset.listenerAttached = 'true';
     }
 
     const wertUnlockConfirmBtn = document.getElementById('wgWertUnlockConfirmBtn');
@@ -458,6 +465,15 @@ function setupEventListeners() {
         });
         allesEinloesenBtn.dataset.listenerAttached = 'true';
     }
+}
+
+function isStartguthabenTransaktion(transaktion) {
+    if (!transaktion) return false;
+    if (transaktion.isSystemGeneratedStartguthaben === true) return true;
+
+    const typ = String(transaktion.typ || '').toLowerCase();
+    const beschreibung = String(transaktion.beschreibung || '').trim().toLowerCase();
+    return typ === 'gutschrift' && beschreibung === 'startguthaben bei erstellung';
 }
 
 function addWertguthabenFilterFromUi(options = {}) {
@@ -905,10 +921,10 @@ function setWertBetragLockedState(locked, entryId = '') {
 }
 
 function openWertBetragUnlockPanel() {
-    const panel = document.getElementById('wgWertUnlockPanel');
-    if (!panel || !wertguthabenFormState.lockedEditEntryId) return;
+    const modal = document.getElementById('wgWertUnlockModal');
+    if (!modal || !wertguthabenFormState.lockedEditEntryId) return;
 
-    panel.classList.remove('hidden');
+    modal.style.display = 'flex';
     wgWertUnlockSecondsLeft = WG_WERT_UNLOCK_COUNTDOWN_SECONDS;
     updateWertBetragUnlockCountdownUi();
     clearWertBetragUnlockTimer();
@@ -923,8 +939,8 @@ function openWertBetragUnlockPanel() {
 }
 
 function closeWertBetragUnlockPanel() {
-    const panel = document.getElementById('wgWertUnlockPanel');
-    if (panel) panel.classList.add('hidden');
+    const modal = document.getElementById('wgWertUnlockModal');
+    if (modal) modal.style.display = 'none';
     clearWertBetragUnlockTimer();
     wgWertUnlockSecondsLeft = 0;
     updateWertBetragUnlockCountdownUi();
@@ -2130,6 +2146,7 @@ async function saveWertguthaben() {
                     betrag: wert,
                     datum: serverTimestamp(),
                     beschreibung: 'Startguthaben bei Erstellung',
+                    isSystemGeneratedStartguthaben: true,
                     createdAt: serverTimestamp(),
                     createdBy: currentUser.mode
                 });
@@ -2301,6 +2318,37 @@ function setTransaktionValidationHint(message) {
     hint.classList.toggle('hidden', !text);
 }
 
+function setTransaktionVerificationOnlyUi(enabled, source = 'dashboard') {
+    const typSelect = document.getElementById('transaktionTyp');
+    const betragInput = document.getElementById('transaktionBetrag');
+    const allesEinloesenBtn = document.getElementById('transaktionAllesEinloesenBtn');
+    const einloesungBtn = document.getElementById('einloesungVormerkenBtn');
+    const datumInput = document.getElementById('transaktionDatum');
+    const detailsToggle = document.getElementById('transaktionDetailsToggle');
+
+    const lockClassTargets = [betragInput, allesEinloesenBtn, einloesungBtn, detailsToggle];
+    lockClassTargets.forEach((target) => {
+        if (!target) return;
+        target.classList.toggle('opacity-60', !!enabled);
+        target.classList.toggle('cursor-not-allowed', !!enabled);
+    });
+
+    if (typSelect) typSelect.disabled = !!enabled || source === 'einloese';
+    if (betragInput) betragInput.disabled = !!enabled;
+    if (allesEinloesenBtn) allesEinloesenBtn.disabled = !!enabled;
+    if (einloesungBtn) einloesungBtn.disabled = !!enabled;
+    if (datumInput) datumInput.disabled = !!enabled || source === 'einloese';
+    if (detailsToggle) detailsToggle.disabled = !!enabled;
+
+    ['transaktionBestellnr', 'transaktionRechnungsnr', 'transaktionBeschreibung'].forEach((fieldId) => {
+        const field = document.getElementById(fieldId);
+        if (!field) return;
+        field.disabled = !!enabled;
+        field.classList.toggle('bg-gray-100', !!enabled);
+        field.classList.toggle('cursor-not-allowed', !!enabled);
+    });
+}
+
 function handleTransaktionTypChange() {
     const typSelect = document.getElementById('transaktionTyp');
     const typ = typSelect?.value || 'verwendung';
@@ -2395,6 +2443,7 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     transaktionModalState.source = source;
     transaktionModalState.editTransaktionId = editTransaktion?.id || '';
     transaktionModalState.isEditMode = !!editTransaktion;
+    transaktionModalState.isVerificationOnlyMode = isEditFromHistory;
     transaktionModalState.isExistingTransaktionVerified = !!editTransaktion?.betragVerifiziert;
     transaktionModalState.maxEinloesungen = Number(wg.maxEinloesungen || 0);
     transaktionModalState.bereitsEingeloest = Number(wg.bereitsEingeloest || 0);
@@ -2495,10 +2544,12 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     document.getElementById('transaktionRechnungsnr').value = editTransaktion?.rechnungsnr || '';
     document.getElementById('transaktionBeschreibung').value = editTransaktion?.beschreibung || '';
 
+    let alreadyVerified = false;
+
     if (verifySection && verifyCheckbox && verifyInfo) {
         if (isEditFromHistory) {
             verifySection.classList.remove('hidden');
-            const alreadyVerified = !!editTransaktion?.betragVerifiziert;
+            alreadyVerified = !!editTransaktion?.betragVerifiziert;
             verifyCheckbox.checked = alreadyVerified;
             verifyCheckbox.disabled = alreadyVerified;
             verifyInfo.textContent = alreadyVerified
@@ -2513,12 +2564,23 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     }
 
     if (saveBtn) {
-        saveBtn.textContent = editTransaktion ? 'Änderungen speichern' : 'Transaktion buchen';
+        saveBtn.textContent = editTransaktion ? 'Verifizierung speichern' : 'Transaktion buchen';
     }
 
     setTransaktionDetailsExpanded(!!(editTransaktion?.bestellnr || editTransaktion?.rechnungsnr || editTransaktion?.beschreibung));
     handleTransaktionTypChange();
     updateTransaktionPreview();
+    setTransaktionVerificationOnlyUi(isEditFromHistory, source);
+
+    if (isEditFromHistory) {
+        if (alreadyVerified) {
+            setTransaktionSaveEnabled(false);
+            setTransaktionValidationHint('Diese Transaktion ist bereits verifiziert und gesperrt.');
+        } else {
+            setTransaktionSaveEnabled(true);
+            setTransaktionValidationHint('Nur "Betrag verifizieren" kann in diesem Modus geändert werden.');
+        }
+    }
 
     const closeBtn = document.getElementById('closeTransaktionModal');
     if (closeBtn && !closeBtn.dataset.listenerAttached) {
@@ -2547,11 +2609,13 @@ function closeTransaktionModal() {
     transaktionModalState.source = 'dashboard';
     transaktionModalState.editTransaktionId = '';
     transaktionModalState.isEditMode = false;
+    transaktionModalState.isVerificationOnlyMode = false;
     transaktionModalState.isExistingTransaktionVerified = false;
     transaktionModalState.originalRestwert = 0;
     transaktionModalState.isEinloesungMode = false;
     transaktionModalState.maxEinloesungen = 0;
     transaktionModalState.bereitsEingeloest = 0;
+    setTransaktionVerificationOnlyUi(false, 'dashboard');
     setTransaktionDetailsExpanded(false);
 }
 
@@ -2572,6 +2636,48 @@ async function saveTransaktion() {
     const wg = WERTGUTHABEN[wertguthabenId];
     if (!wg) {
         return alertUser('Wertguthaben nicht gefunden!', 'error');
+    }
+
+    if (editTransaktionId) {
+        try {
+            const transaktionRef = doc(db, 'artifacts', appId, 'public', 'data', 'wertguthaben', wertguthabenId, 'transaktionen', editTransaktionId);
+            const transaktionDoc = await getDoc(transaktionRef);
+            if (!transaktionDoc.exists()) {
+                return alertUser('Transaktion nicht gefunden!', 'error');
+            }
+
+            if (!needsNewVerification) {
+                return alertUser('In diesem Modus kann nur "Betrag verifizieren" gespeichert werden.', 'warning');
+            }
+
+            await updateDoc(transaktionRef, {
+                betragVerifiziert: true,
+                betragVerifiziertAm: serverTimestamp(),
+                betragVerifiziertVon: currentUser.mode,
+                updatedAt: serverTimestamp(),
+                updatedBy: currentUser.mode
+            });
+
+            const wertguthabenRef = doc(wertguthabenCollection, wertguthabenId);
+            await updateDoc(wertguthabenRef, {
+                restwertVerifiziert: true,
+                restwertVerifiziertAm: serverTimestamp(),
+                restwertVerifiziertVon: currentUser.mode,
+                updatedAt: serverTimestamp(),
+                updatedBy: currentUser.mode
+            });
+
+            alertUser('Transaktion verifiziert!', 'success');
+            closeTransaktionModal();
+
+            if (document.getElementById('wertguthabenDetailsModal').style.display === 'flex') {
+                setTimeout(() => openWertguthabenDetails(wertguthabenId), 300);
+            }
+        } catch (error) {
+            console.error('Fehler bei der Verifizierung der Transaktion:', error);
+            alertUser('Fehler beim Verifizieren: ' + error.message, 'error');
+        }
+        return;
     }
 
     if (typ === 'einloesung' && wg.typ !== 'aktionscode') {
@@ -2679,6 +2785,7 @@ async function saveTransaktion() {
                 bestellnr,
                 rechnungsnr,
                 beschreibung,
+                isSystemGeneratedStartguthaben: false,
                 createdAt: serverTimestamp(),
                 createdBy: currentUser.mode
             });
@@ -2906,6 +3013,7 @@ window.openWertguthabenDetails = async function(id) {
             }
             const transaktionBetrag = Number(t.betrag || 0);
             const isKorrektur = t.typ === 'korrektur';
+            const isStartguthaben = isStartguthabenTransaktion(t);
             const icon = t.typ === 'verwendung' ? '📉' : (t.typ === 'einloesung' ? '🎟️' : (isKorrektur ? '🛠️' : '📈'));
             const colorClass = t.typ === 'verwendung'
                 ? 'text-red-600'
@@ -2918,6 +3026,7 @@ window.openWertguthabenDetails = async function(id) {
                         ? `${transaktionBetrag >= 0 ? '+' : '-'} ${Math.abs(transaktionBetrag).toFixed(2)} € (Korrektur)`
                         : `+ ${Math.abs(transaktionBetrag).toFixed(2)} €`));
             const canEdit = t.typ === 'verwendung' || t.typ === 'gutschrift' || t.typ === 'korrektur';
+            const canDelete = !isStartguthaben;
             const verifyInfo = t.betragVerifiziert ? `✅ Verifiziert: ${formatDateTime(t.betragVerifiziertAm)} · ${getDisplayUserName(t.betragVerifiziertVon)}` : '';
             
             return `
@@ -2930,6 +3039,7 @@ window.openWertguthabenDetails = async function(id) {
                                 <span class="text-sm text-gray-500">${datum}</span>
                             </div>
                             ${t.beschreibung ? `<p class="text-sm text-gray-600 mb-1">${t.beschreibung}</p>` : ''}
+                            ${isStartguthaben ? '<div class="mb-1 text-xs font-semibold text-amber-700">🔒 Systemeintrag (nicht löschbar)</div>' : ''}
                             <div class="flex gap-3 text-xs text-gray-500">
                                 ${t.bestellnr ? `<span>📦 Best.-Nr: ${t.bestellnr}</span>` : ''}
                                 ${t.rechnungsnr ? `<span>🧾 Rech.-Nr: ${t.rechnungsnr}</span>` : ''}
@@ -2938,11 +3048,11 @@ window.openWertguthabenDetails = async function(id) {
                         </div>
                         <div class="ml-2 flex gap-1">
                             ${canEdit ? `<button onclick="window.openEditTransaktionFromHistory('${id}', '${t.id}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Transaktion bearbeiten">✏️</button>` : ''}
-                            <button onclick="deleteTransaktion('${id}', '${t.id}')" 
+                            ${canDelete ? `<button onclick="deleteTransaktion('${id}', '${t.id}')" 
                                     class="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                                     title="Transaktion löschen">
                                 🗑️
-                            </button>
+                            </button>` : ''}
                         </div>
                     </div>
                 </div>
@@ -3111,6 +3221,9 @@ window.deleteTransaktion = async function(wertguthabenId, transaktionId) {
         }
         
         const gelöschteTransaktion = transaktionDoc.data();
+        if (isStartguthabenTransaktion(gelöschteTransaktion)) {
+            return alertUser('Die Startguthaben-Transaktion ist gesperrt und kann nicht gelöscht werden.', 'warning');
+        }
         
         // Jetzt Transaktion löschen
         await deleteDoc(transaktionRef);
