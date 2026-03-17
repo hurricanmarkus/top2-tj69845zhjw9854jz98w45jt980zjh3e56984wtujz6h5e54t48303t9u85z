@@ -47,6 +47,7 @@ const transaktionModalState = {
     originalRestwert: 0,
     source: 'dashboard',
     editTransaktionId: '',
+    isEditMode: false,
     isEinloesungMode: false,
     maxEinloesungen: 0,
     bereitsEingeloest: 0
@@ -195,10 +196,10 @@ function setupEventListeners() {
     }
 
     // Typ-Change Event
-    const typSelect = document.getElementById('wgTyp');
-    if (typSelect && !typSelect.dataset.listenerAttached) {
-        typSelect.addEventListener('change', handleTypChange);
-        typSelect.dataset.listenerAttached = 'true';
+    const wgTypSelect = document.getElementById('wgTyp');
+    if (wgTypSelect && !wgTypSelect.dataset.listenerAttached) {
+        wgTypSelect.addEventListener('change', handleTypChange);
+        wgTypSelect.dataset.listenerAttached = 'true';
     }
 
     // Eigentümer-Change Event
@@ -398,6 +399,12 @@ function setupEventListeners() {
     if (betragInput && !betragInput.dataset.listenerAttached) {
         betragInput.addEventListener('input', updateTransaktionPreview);
         betragInput.dataset.listenerAttached = 'true';
+    }
+
+    const typSelect = document.getElementById('transaktionTyp');
+    if (typSelect && !typSelect.dataset.listenerAttached) {
+        typSelect.addEventListener('change', handleTransaktionTypChange);
+        typSelect.dataset.listenerAttached = 'true';
     }
 
     const allesEinloesenBtn = document.getElementById('transaktionAllesEinloesenBtn');
@@ -1257,8 +1264,17 @@ function sanitizeWertguthabenKategorien(rawCategories) {
     return Array.from(unique).sort((a, b) => a.localeCompare(b, 'de'));
 }
 
+function getEditableWertguthabenKategorien() {
+    return sanitizeWertguthabenKategorien(wertguthabenSettings.kategorien);
+}
+
+function getDefaultFormKategorie() {
+    const editable = getEditableWertguthabenKategorien();
+    return editable[0] || WG_UNASSIGNED_KATEGORIE;
+}
+
 function getAllWertguthabenKategorien() {
-    return [WG_UNASSIGNED_KATEGORIE, ...sanitizeWertguthabenKategorien(wertguthabenSettings.kategorien)];
+    return [WG_UNASSIGNED_KATEGORIE, ...getEditableWertguthabenKategorien()];
 }
 
 function normalizeWertguthabenKategorie(rawCategory) {
@@ -1270,14 +1286,25 @@ function normalizeWertguthabenKategorie(rawCategory) {
 
 function populateKategorieDropdowns() {
     const allCategories = getAllWertguthabenKategorien();
+    const editableCategories = getEditableWertguthabenKategorien();
 
     const formSelect = document.getElementById('wgKategorie');
     if (formSelect) {
         const previous = normalizeWertguthabenKategorie(formSelect.value);
-        formSelect.innerHTML = allCategories
-            .map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`)
-            .join('');
-        formSelect.value = allCategories.includes(previous) ? previous : WG_UNASSIGNED_KATEGORIE;
+        if (editableCategories.length > 0) {
+            formSelect.innerHTML = `
+                <option value="${escapeHtml(WG_UNASSIGNED_KATEGORIE)}" disabled>${escapeHtml(WG_UNASSIGNED_KATEGORIE)} (automatisch)</option>
+                ${editableCategories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('')}
+            `;
+            if (previous === WG_UNASSIGNED_KATEGORIE) {
+                formSelect.value = WG_UNASSIGNED_KATEGORIE;
+            } else {
+                formSelect.value = editableCategories.includes(previous) ? previous : editableCategories[0];
+            }
+        } else {
+            formSelect.innerHTML = `<option value="${escapeHtml(WG_UNASSIGNED_KATEGORIE)}">${escapeHtml(WG_UNASSIGNED_KATEGORIE)} (automatisch)</option>`;
+            formSelect.value = WG_UNASSIGNED_KATEGORIE;
+        }
     }
 
     const filterSelect = document.getElementById('filter-wg-kategorie');
@@ -1546,7 +1573,7 @@ function resetForm() {
     document.getElementById('wgTyp').value = 'gutschein';
     document.getElementById('wgStatus').value = 'aktiv';
     document.getElementById('wgWert').value = '';
-    document.getElementById('wgKategorie').value = WG_UNASSIGNED_KATEGORIE;
+    document.getElementById('wgKategorie').value = getDefaultFormKategorie();
     document.getElementById('wgName').value = '';
     document.getElementById('wgUnternehmen').value = '';
     setKaufdatumToToday();
@@ -1985,6 +2012,30 @@ function updateTransaktionPreview() {
     urspruenglich.textContent = `${transaktionModalState.originalRestwert.toFixed(2)} €`;
 }
 
+function handleTransaktionTypChange() {
+    const typSelect = document.getElementById('transaktionTyp');
+    const typ = typSelect?.value || 'verwendung';
+    const wgId = document.getElementById('transaktionWertguthabenId')?.value;
+    const wg = WERTGUTHABEN[wgId];
+    const betragContainer = document.getElementById('transaktionBetragContainer');
+    const einloesungContainer = document.getElementById('transaktionEinloesungContainer');
+    const allesEinloesenBtn = document.getElementById('transaktionAllesEinloesenBtn');
+
+    const isEinloesungType = typ === 'einloesung';
+    if (betragContainer) betragContainer.classList.toggle('hidden', isEinloesungType);
+    if (einloesungContainer) {
+        const showEinloesung = isEinloesungType && wg?.typ === 'aktionscode';
+        einloesungContainer.classList.toggle('hidden', !showEinloesung);
+    }
+
+    if (allesEinloesenBtn) {
+        const showAlles = !transaktionModalState.isEditMode && !isEinloesungType && typ === 'verwendung';
+        allesEinloesenBtn.classList.toggle('hidden', !showAlles);
+    }
+
+    updateTransaktionPreview();
+}
+
 function setTransaktionDetailsExpanded(expanded) {
     const body = document.getElementById('transaktionDetailsBody');
     const icon = document.getElementById('transaktionDetailsIcon');
@@ -2021,6 +2072,9 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     const verfuegbarElement = document.getElementById('transaktionVerfuegbar');
     const betragLabel = document.querySelector('label[for="transaktionBetrag"]') || document.querySelector('#transaktionBetragContainer label');
     const saveBtn = document.getElementById('saveTransaktionBtn');
+    const optionVerwendung = transaktionTypSelect?.querySelector('option[value="verwendung"]');
+    const optionGutschrift = transaktionTypSelect?.querySelector('option[value="gutschrift"]');
+    const optionEinloesung = transaktionTypSelect?.querySelector('option[value="einloesung"]');
 
     document.getElementById('transaktionWertguthabenId').value = wertguthabenId;
     document.getElementById('editTransaktionId').value = editTransaktion?.id || '';
@@ -2028,6 +2082,7 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
 
     transaktionModalState.source = source;
     transaktionModalState.editTransaktionId = editTransaktion?.id || '';
+    transaktionModalState.isEditMode = !!editTransaktion;
     transaktionModalState.maxEinloesungen = Number(wg.maxEinloesungen || 0);
     transaktionModalState.bereitsEingeloest = Number(wg.bereitsEingeloest || 0);
     transaktionModalState.isEinloesungMode = false;
@@ -2053,31 +2108,45 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
         typ = 'verwendung';
     }
 
+    if (wg.typ === 'aktionscode') {
+        if (optionVerwendung) {
+            optionVerwendung.hidden = true;
+            optionVerwendung.disabled = true;
+        }
+        if (optionGutschrift) {
+            optionGutschrift.hidden = true;
+            optionGutschrift.disabled = true;
+        }
+        if (optionEinloesung) {
+            optionEinloesung.hidden = false;
+            optionEinloesung.disabled = false;
+        }
+        typ = 'einloesung';
+    } else {
+        if (optionVerwendung) {
+            optionVerwendung.hidden = false;
+            optionVerwendung.disabled = false;
+        }
+        if (optionGutschrift) {
+            optionGutschrift.hidden = false;
+            optionGutschrift.disabled = false;
+        }
+        if (optionEinloesung) {
+            optionEinloesung.hidden = true;
+            optionEinloesung.disabled = true;
+        }
+        if (typ === 'einloesung') typ = 'verwendung';
+    }
+
     transaktionTypSelect.value = typ;
-    transaktionTypSelect.disabled = true;
+    transaktionTypSelect.disabled = source === 'einloese';
 
     if (wg.typ === 'aktionscode' && typ === 'einloesung') {
-        if (transaktionBetragContainer) transaktionBetragContainer.classList.add('hidden');
-        if (transaktionEinloesungContainer) transaktionEinloesungContainer.classList.remove('hidden');
-        if (allesEinloesenBtn) allesEinloesenBtn.classList.add('hidden');
         transaktionModalState.isEinloesungMode = true;
-    } else {
-        if (transaktionBetragContainer) transaktionBetragContainer.classList.remove('hidden');
-        if (transaktionEinloesungContainer) transaktionEinloesungContainer.classList.add('hidden');
-        if (allesEinloesenBtn) allesEinloesenBtn.classList.remove('hidden');
     }
 
     transaktionBetragInput.value = editTransaktion?.betrag !== undefined ? Number(editTransaktion.betrag || 0).toFixed(2) : '';
-
-    if (source === 'einloese') {
-        transaktionBetragInput.classList.add('text-3xl', 'font-black');
-        if (verfuegbarElement) verfuegbarElement.classList.add('text-4xl');
-        if (betragLabel) betragLabel.textContent = 'Betrag einlösen (€) *';
-    } else {
-        transaktionBetragInput.classList.remove('text-3xl', 'font-black');
-        if (verfuegbarElement) verfuegbarElement.classList.remove('text-4xl');
-        if (betragLabel) betragLabel.textContent = 'Betrag (€) *';
-    }
+    if (betragLabel) betragLabel.textContent = source === 'einloese' ? 'Betrag einlösen (€) *' : 'Betrag (€) *';
 
     const today = new Date().toISOString().split('T')[0];
     transaktionDatumInput.value = today;
@@ -2114,6 +2183,7 @@ window.openTransaktionModal = async function(wertguthabenId, options = {}) {
     }
 
     setTransaktionDetailsExpanded(!!(editTransaktion?.bestellnr || editTransaktion?.rechnungsnr || editTransaktion?.beschreibung));
+    handleTransaktionTypChange();
     updateTransaktionPreview();
 
     const closeBtn = document.getElementById('closeTransaktionModal');
@@ -2142,6 +2212,7 @@ function closeTransaktionModal() {
     document.getElementById('transaktionOpenSource').value = 'dashboard';
     transaktionModalState.source = 'dashboard';
     transaktionModalState.editTransaktionId = '';
+    transaktionModalState.isEditMode = false;
     transaktionModalState.originalRestwert = 0;
     transaktionModalState.isEinloesungMode = false;
     transaktionModalState.maxEinloesungen = 0;
@@ -2165,6 +2236,10 @@ async function saveTransaktion() {
     const wg = WERTGUTHABEN[wertguthabenId];
     if (!wg) {
         return alertUser('Wertguthaben nicht gefunden!', 'error');
+    }
+
+    if (typ === 'einloesung' && wg.typ !== 'aktionscode') {
+        return alertUser('Einlösung ist nur für Aktionscodes möglich.', 'error');
     }
 
     if (typ === 'einloesung') {
