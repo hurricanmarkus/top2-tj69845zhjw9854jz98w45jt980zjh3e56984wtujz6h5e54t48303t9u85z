@@ -43,6 +43,11 @@ let wertguthabenSearchJoinMode = 'and';
 let pendingKategorieNormalizations = new Set();
 let pendingFixedIdAssignments = new Set();
 let currentEinloeseWertguthabenId = '';
+const wertguthabenFormState = {
+    isCopyMode: false,
+    copySourceId: '',
+    statusManuallyChanged: false
+};
 const transaktionModalState = {
     originalRestwert: 0,
     source: 'dashboard',
@@ -208,6 +213,14 @@ function setupEventListeners() {
     if (eigentuemerSelect && !eigentuemerSelect.dataset.listenerAttached) {
         eigentuemerSelect.addEventListener('change', handleEigentuemerChange);
         eigentuemerSelect.dataset.listenerAttached = 'true';
+    }
+
+    const statusSelect = document.getElementById('wgStatus');
+    if (statusSelect && !statusSelect.dataset.listenerAttached) {
+        statusSelect.addEventListener('change', () => {
+            wertguthabenFormState.statusManuallyChanged = true;
+        });
+        statusSelect.dataset.listenerAttached = 'true';
     }
 
     // Quick-Select Buttons für Ablaufdatum
@@ -1614,14 +1627,97 @@ function resetForm() {
     document.getElementById('wertguthabenModal').style.display = 'flex';
 }
 
-function openCreateModal() {
+function setWertguthabenCopyMode(enabled, sourceId = '') {
+    const notice = document.getElementById('wgCopyNotice');
+    if (notice) {
+        notice.classList.toggle('hidden', !enabled);
+    }
+    wertguthabenFormState.isCopyMode = !!enabled;
+    wertguthabenFormState.copySourceId = enabled ? String(sourceId || '') : '';
+}
+
+function populateWertguthabenFormFromEntry(wg, options = {}) {
+    if (!wg) return;
+    const isCopy = !!options.isCopy;
+
+    if (Object.keys(USERS).includes(wg.eigentuemer)) {
+        document.getElementById('wgEigentuemer').value = wg.eigentuemer;
+        document.getElementById('wgEigentuemerFrei').classList.add('hidden');
+        document.getElementById('wgEigentuemerFrei').value = '';
+    } else {
+        document.getElementById('wgEigentuemer').value = 'custom';
+        document.getElementById('wgEigentuemerFrei').value = wg.eigentuemer || '';
+        document.getElementById('wgEigentuemerFrei').classList.remove('hidden');
+    }
+
+    document.getElementById('wgTyp').value = wg.typ || 'gutschein';
+    document.getElementById('wgStatus').value = wg.status || 'aktiv';
+    document.getElementById('wgWert').value = isCopy ? '' : (wg.wert || '');
+    document.getElementById('wgKategorie').value = normalizeWertguthabenKategorie(wg.kategorie);
+    document.getElementById('wgName').value = wg.name || '';
+    document.getElementById('wgUnternehmen').value = wg.unternehmen || '';
+    document.getElementById('wgKaufdatum').value = wg.kaufdatum || '';
+    document.getElementById('wgEinloesefrist').value = wg.einloesefrist || '';
+    document.getElementById('wgCode').value = isCopy ? '' : (wg.code || '');
+    document.getElementById('wgPin').value = isCopy ? '' : (wg.pin || '');
+    document.getElementById('wgSeriennummer').value = isCopy ? '' : (wg.seriennummer || '');
+    document.getElementById('wgWarnung').value = wg.warnung || '';
+    document.getElementById('wgNotizen').value = wg.notizen || '';
+    document.getElementById('wgCodeAblauf').value = wg.codeAblauf || '';
+    document.getElementById('wgBedingungen').value = wg.bedingungen || '';
+    document.getElementById('wgWertAblauf').value = wg.wertAblauf || '';
+
+    document.getElementById('wgRabattTyp').value = wg.rabattTyp || 'prozent';
+    document.getElementById('wgRabattWert').value = wg.rabattWert || '';
+    document.getElementById('wgRabattEinheit').value = wg.rabattEinheit || '%';
+    document.getElementById('wgMindestbestellwert').value = wg.mindestbestellwert || '';
+    document.getElementById('wgMaxRabatt').value = wg.maxRabatt || '';
+    document.getElementById('wgGueltigAb').value = wg.gueltigAb || '';
+    document.getElementById('wgGueltigBis').value = wg.gueltigBis || '';
+    document.getElementById('wgMaxEinloesungen').value = wg.maxEinloesungen || '';
+    document.getElementById('wgBereitsEingeloest').value = wg.bereitsEingeloest || '0';
+    document.getElementById('wgKontogebunden').value = wg.kontogebunden || 'nein';
+    document.getElementById('wgKonto').value = wg.konto || '';
+    document.getElementById('wgNeukunde').value = wg.neukunde || 'nein';
+    document.getElementById('wgKombinierbar').value = wg.kombinierbar || 'ja';
+    document.getElementById('wgKategorien').value = wg.kategorien || '';
+    document.getElementById('wgAusnahmen').value = wg.ausnahmen || '';
+    document.getElementById('wgQuelle').value = wg.quelle || '';
+
+    handleTypChange();
+    validateEinloesungen();
+}
+
+function openCreateModal(options = {}) {
+    const opts = options instanceof Event ? {} : options;
     document.getElementById('wertguthabenModalTitle').textContent = 'Neues Wertguthaben';
     document.getElementById('editWertguthabenId').value = '';
     resetForm();
+    wertguthabenFormState.statusManuallyChanged = false;
+    setWertguthabenCopyMode(false);
+
+    if (opts.copyFromEntry) {
+        populateWertguthabenFormFromEntry(opts.copyFromEntry, { isCopy: true });
+        setWertguthabenCopyMode(true, opts.copyFromEntry.id || '');
+    }
 }
 
 function closeWertguthabenModal() {
     document.getElementById('wertguthabenModal').style.display = 'none';
+    setWertguthabenCopyMode(false);
+    wertguthabenFormState.statusManuallyChanged = false;
+}
+
+function shouldAutoSetStatusToEingeloest(typ, wert, maxEinloesungen, bereitsEingeloest) {
+    if (typ === 'aktionscode') {
+        return maxEinloesungen > 0 && bereitsEingeloest >= maxEinloesungen;
+    }
+
+    if (['gutschein', 'guthaben', 'wertguthaben', 'wertguthaben_gesetzlich'].includes(typ)) {
+        return wert <= 0;
+    }
+
+    return false;
 }
 
 function handleTypChange() {
@@ -1794,7 +1890,8 @@ async function saveWertguthaben() {
     }
 
     const typ = document.getElementById('wgTyp').value;
-    const status = document.getElementById('wgStatus').value;
+    const statusSelect = document.getElementById('wgStatus');
+    let status = statusSelect.value;
     const wert = parseFloat(document.getElementById('wgWert').value) || 0;
     const unternehmen = document.getElementById('wgUnternehmen').value.trim();
     const kaufdatum = document.getElementById('wgKaufdatum').value;
@@ -1804,6 +1901,13 @@ async function saveWertguthaben() {
     const seriennummer = document.getElementById('wgSeriennummer').value.trim();
     const warnung = parseInt(document.getElementById('wgWarnung').value) || null;
     const notizen = document.getElementById('wgNotizen').value.trim();
+    const maxEinloesungen = parseInt(document.getElementById('wgMaxEinloesungen').value) || 0;
+    const bereitsEingeloest = parseInt(document.getElementById('wgBereitsEingeloest').value) || 0;
+
+    if (!wertguthabenFormState.statusManuallyChanged && shouldAutoSetStatusToEingeloest(typ, wert, maxEinloesungen, bereitsEingeloest)) {
+        status = 'eingeloest';
+        statusSelect.value = 'eingeloest';
+    }
 
     const data = {
         eigentuemer,
@@ -1838,8 +1942,8 @@ async function saveWertguthaben() {
         data.maxRabatt = parseFloat(document.getElementById('wgMaxRabatt').value) || null;
         data.gueltigAb = document.getElementById('wgGueltigAb').value;
         data.gueltigBis = document.getElementById('wgGueltigBis').value;
-        data.maxEinloesungen = parseInt(document.getElementById('wgMaxEinloesungen').value) || 0;
-        data.bereitsEingeloest = parseInt(document.getElementById('wgBereitsEingeloest').value) || 0;
+        data.maxEinloesungen = maxEinloesungen;
+        data.bereitsEingeloest = bereitsEingeloest;
         data.kontogebunden = document.getElementById('wgKontogebunden').value;
         data.konto = document.getElementById('wgKonto').value.trim();
         data.neukunde = document.getElementById('wgNeukunde').value;
@@ -1884,53 +1988,9 @@ window.openEditWertguthaben = function(id) {
 
     document.getElementById('wertguthabenModalTitle').textContent = 'Wertguthaben bearbeiten';
     document.getElementById('editWertguthabenId').value = id;
-
-    // Eigentümer
-    if (Object.keys(USERS).includes(wg.eigentuemer)) {
-        document.getElementById('wgEigentuemer').value = wg.eigentuemer;
-        document.getElementById('wgEigentuemerFrei').classList.add('hidden');
-    } else {
-        document.getElementById('wgEigentuemer').value = 'custom';
-        document.getElementById('wgEigentuemerFrei').value = wg.eigentuemer;
-        document.getElementById('wgEigentuemerFrei').classList.remove('hidden');
-    }
-
-    document.getElementById('wgTyp').value = wg.typ;
-    document.getElementById('wgStatus').value = wg.status || 'aktiv';
-    document.getElementById('wgWert').value = wg.wert || '';
-    document.getElementById('wgKategorie').value = normalizeWertguthabenKategorie(wg.kategorie);
-    document.getElementById('wgName').value = wg.name || '';
-    document.getElementById('wgUnternehmen').value = wg.unternehmen || '';
-    document.getElementById('wgKaufdatum').value = wg.kaufdatum || '';
-    document.getElementById('wgEinloesefrist').value = wg.einloesefrist || '';
-    document.getElementById('wgCode').value = wg.code || '';
-    document.getElementById('wgPin').value = wg.pin || '';
-    document.getElementById('wgSeriennummer').value = wg.seriennummer || '';
-    document.getElementById('wgWarnung').value = wg.warnung || '';
-    document.getElementById('wgNotizen').value = wg.notizen || '';
-    document.getElementById('wgCodeAblauf').value = wg.codeAblauf || '';
-    document.getElementById('wgBedingungen').value = wg.bedingungen || '';
-    document.getElementById('wgWertAblauf').value = wg.wertAblauf || '';
-
-    // Aktionscode-Felder
-    document.getElementById('wgRabattTyp').value = wg.rabattTyp || 'prozent';
-    document.getElementById('wgRabattWert').value = wg.rabattWert || '';
-    document.getElementById('wgRabattEinheit').value = wg.rabattEinheit || '%';
-    document.getElementById('wgMindestbestellwert').value = wg.mindestbestellwert || '';
-    document.getElementById('wgMaxRabatt').value = wg.maxRabatt || '';
-    document.getElementById('wgGueltigAb').value = wg.gueltigAb || '';
-    document.getElementById('wgGueltigBis').value = wg.gueltigBis || '';
-    document.getElementById('wgMaxEinloesungen').value = wg.maxEinloesungen || '';
-    document.getElementById('wgBereitsEingeloest').value = wg.bereitsEingeloest || '0';
-    document.getElementById('wgKontogebunden').value = wg.kontogebunden || 'nein';
-    document.getElementById('wgKonto').value = wg.konto || '';
-    document.getElementById('wgNeukunde').value = wg.neukunde || 'nein';
-    document.getElementById('wgKombinierbar').value = wg.kombinierbar || 'ja';
-    document.getElementById('wgKategorien').value = wg.kategorien || '';
-    document.getElementById('wgAusnahmen').value = wg.ausnahmen || '';
-    document.getElementById('wgQuelle').value = wg.quelle || '';
-
-    handleTypChange();
+    populateWertguthabenFormFromEntry(wg, { isCopy: false });
+    setWertguthabenCopyMode(false);
+    wertguthabenFormState.statusManuallyChanged = false;
 
     document.getElementById('wertguthabenModal').style.display = 'flex';
 };
@@ -2403,6 +2463,9 @@ async function saveTransaktion() {
             updatedAt: serverTimestamp(),
             updatedBy: currentUser.mode
         };
+        if (wg.typ !== 'aktionscode' && shouldAutoSetStatusToEingeloest(wg.typ, neuerRestwert, Number(wg.maxEinloesungen || 0), Number(wg.bereitsEingeloest || 0))) {
+            wgUpdateData.status = 'eingeloest';
+        }
         if (needsNewVerification) {
             wgUpdateData.restwertVerifiziert = true;
             wgUpdateData.restwertVerifiziertAm = serverTimestamp();
@@ -2662,6 +2725,16 @@ window.openWertguthabenDetails = async function(id) {
     document.getElementById('editWertguthabenDetailsBtn').onclick = () => {
         document.getElementById('wertguthabenDetailsModal').style.display = 'none';
         window.openEditWertguthaben(id);
+    };
+
+    document.getElementById('copyWertguthabenBtn').onclick = () => {
+        document.getElementById('wertguthabenDetailsModal').style.display = 'none';
+        openCreateModal({
+            copyFromEntry: {
+                ...wg,
+                id
+            }
+        });
     };
 
     document.getElementById('deleteWertguthabenBtn').onclick = async () => {
