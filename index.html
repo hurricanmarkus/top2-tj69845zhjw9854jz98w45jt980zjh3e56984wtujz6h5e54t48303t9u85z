@@ -6543,8 +6543,9 @@
                 <span>Version:</span>
                 <span id="footerVersionNumber" class="text-green-500">1.0.0</span>
                 <button id="footerVersionIndicator" type="button"
-                    class="hidden text-[11px] leading-none px-1.5 py-0.5 rounded border border-gray-400 text-gray-200 hover:text-white hover:border-gray-200 transition"
-                    aria-label="Versionsinformationen öffnen">[i]</button>
+                    class="hidden text-sm leading-none text-gray-200 hover:text-white transition"
+                    style="font-family: Webdings, sans-serif;"
+                    aria-label="Versionsinformationen öffnen">&#x69;</button>
             </div>
             <div id="footerUser" class="font-medium text-xs sm:text-sm text-center">
             </div>
@@ -6553,8 +6554,8 @@
         </footer>
 
         <div id="versionInfoModal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-[120] p-4">
-            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-                <div class="bg-gradient-to-r from-indigo-600 to-cyan-500 p-4 flex justify-between items-center">
+            <div id="versionInfoModalCard" class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                <div id="versionInfoModalHeader" class="bg-gradient-to-r from-indigo-600 to-cyan-500 p-4 flex justify-between items-center">
                     <h3 id="versionInfoModalTitle" class="text-lg sm:text-xl font-bold text-white">Versionsinformationen</h3>
                     <button id="versionInfoCloseHeaderBtn" type="button" class="text-white/90 hover:text-white text-2xl leading-none">&times;</button>
                 </div>
