@@ -1615,7 +1615,15 @@ window.deleteWertguthabenKategorie = async function(category) {
     const current = sanitizeWertguthabenKategorien(wertguthabenSettings.kategorien);
     if (!current.includes(category)) return;
 
-    if (!confirm(`Kategorie "${category}" löschen?\nBetroffene Einträge werden auf "${WG_UNASSIGNED_KATEGORIE}" gesetzt.`)) {
+    const deleteKeyword = 'LÖSCHEN';
+    const confirmation = prompt(
+        `Kategorie "${category}" löschen?\nBetroffene Einträge werden auf "${WG_UNASSIGNED_KATEGORIE}" gesetzt.\n\nBitte zur Bestätigung ${deleteKeyword} eingeben:`
+    );
+    if (confirmation === null) {
+        return;
+    }
+    if (String(confirmation).trim() !== deleteKeyword) {
+        alertUser(`Löschen abgebrochen: Bitte exakt ${deleteKeyword} eingeben.`, 'warning');
         return;
     }
 

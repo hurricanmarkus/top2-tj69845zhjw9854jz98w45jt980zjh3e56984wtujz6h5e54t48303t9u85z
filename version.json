@@ -1,13 +1,22 @@
 {
-  "version": "1.0.1",
-  "buildId": "20260317-2",
+  "version": "1.0.2",
+  "buildId": "20260317-3",
   "releaseDate": "2026-03-17",
-  "releaseTime": "18:12",
+  "releaseTime": "18:17",
   "timezone": "Europe/Vienna",
-  "note": "Wertguthaben-Einstellungen: Kategorie kann nun auch per Enter hinzugefuegt werden.",
+  "note": "Wertguthaben-Kategorie loeschen erfordert jetzt die Eingabe von LOESCHEN.",
   "commitId": "e083202",
-  "obligation": "false",
+  "obligation": "true",
   "history": [
+    {
+      "version": "1.0.2",
+      "buildId": "20260317-3",
+      "releaseDate": "2026-03-17",
+      "releaseTime": "18:17",
+      "note": "Wertguthaben-Kategorie loeschen erfordert jetzt die Eingabe von LOESCHEN.",
+      "commitId": "e083202",
+      "obligation": "true"
+    },
     {
       "version": "1.0.1",
       "buildId": "20260317-2",
