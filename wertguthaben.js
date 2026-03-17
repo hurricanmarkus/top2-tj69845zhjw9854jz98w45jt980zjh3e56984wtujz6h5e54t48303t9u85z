@@ -47,6 +47,7 @@ const wertguthabenFormState = {
     isCopyMode: false,
     copySourceId: '',
     statusManuallyChanged: false,
+    statusManuallyChangedBeforeAktionscodeSwitch: false,
     isWertUnlocked: false,
     lockedEditEntryId: '',
     lastSelectedTyp: 'gutschein',
@@ -1802,6 +1803,7 @@ function resetForm() {
     wertguthabenFormState.isWertUnlocked = false;
     wertguthabenFormState.lockedEditEntryId = '';
     wertguthabenFormState.lastSelectedTyp = 'gutschein';
+    wertguthabenFormState.statusManuallyChangedBeforeAktionscodeSwitch = false;
     wertguthabenFormState.wertBeforeAktionscodeSwitch = '';
     wertguthabenFormState.statusBeforeAktionscodeSwitch = '';
 
@@ -1867,9 +1869,24 @@ function populateWertguthabenFormFromEntry(wg, options = {}) {
     document.getElementById('wgAusnahmen').value = wg.ausnahmen || '';
     document.getElementById('wgQuelle').value = wg.quelle || '';
 
-    wertguthabenFormState.lastSelectedTyp = wg.typ || 'gutschein';
-    wertguthabenFormState.wertBeforeAktionscodeSwitch = '';
-    wertguthabenFormState.statusBeforeAktionscodeSwitch = '';
+    const currentTyp = wg.typ || 'gutschein';
+    const currentWertSnapshot = normalizeWertSnapshotValue(wg.wert);
+    const persistedWertSnapshot = normalizeWertSnapshotValue(wg.wertBeforeAktionscodeSwitch);
+    const currentStatusSnapshot = String(wg.status || 'aktiv');
+    const persistedStatusSnapshot = String(wg.statusBeforeAktionscodeSwitch || '');
+
+    wertguthabenFormState.lastSelectedTyp = currentTyp;
+    wertguthabenFormState.statusManuallyChangedBeforeAktionscodeSwitch = false;
+    wertguthabenFormState.wertBeforeAktionscodeSwitch = isCopy
+        ? ''
+        : (currentTyp === 'aktionscode'
+            ? pickFirstNonEmptyString([persistedWertSnapshot, currentWertSnapshot])
+            : currentWertSnapshot);
+    wertguthabenFormState.statusBeforeAktionscodeSwitch = isCopy
+        ? ''
+        : (currentTyp === 'aktionscode'
+            ? pickFirstNonEmptyString([persistedStatusSnapshot, currentStatusSnapshot])
+            : currentStatusSnapshot);
 
     handleTypChange();
     validateEinloesungen();
@@ -1896,8 +1913,27 @@ function closeWertguthabenModal() {
     wertguthabenFormState.statusManuallyChanged = false;
     setWertBetragLockedState(false);
     wertguthabenFormState.lastSelectedTyp = 'gutschein';
+    wertguthabenFormState.statusManuallyChangedBeforeAktionscodeSwitch = false;
     wertguthabenFormState.wertBeforeAktionscodeSwitch = '';
     wertguthabenFormState.statusBeforeAktionscodeSwitch = '';
+}
+
+function normalizeWertSnapshotValue(rawValue) {
+    const normalizedRaw = String(rawValue ?? '').trim().replace(',', '.');
+    if (!normalizedRaw) return '';
+    const numericValue = Number(normalizedRaw);
+    if (!Number.isFinite(numericValue)) return '';
+    return String(numericValue);
+}
+
+function pickFirstNonEmptyString(values = []) {
+    for (const value of values) {
+        const normalized = String(value ?? '').trim();
+        if (normalized) {
+            return normalized;
+        }
+    }
+    return '';
 }
 
 function shouldAutoSetStatusToEingeloest(typ, wert, maxEinloesungen, bereitsEingeloest) {
@@ -1926,28 +1962,48 @@ function handleTypChange() {
     const existingEntry = editId ? WERTGUTHABEN[editId] : null;
 
     if (typ === 'aktionscode' && previousTyp && previousTyp !== 'aktionscode') {
-        const currentWert = String(wertInput?.value || '').trim();
-        const existingWert = existingEntry ? Number(existingEntry.wert || 0) : null;
-        let wertSnapshot = currentWert;
-        if ((!wertSnapshot || wertSnapshot === '0') && existingWert !== null && Number.isFinite(existingWert)) {
-            wertSnapshot = String(existingWert);
-        }
-        wertguthabenFormState.wertBeforeAktionscodeSwitch = wertSnapshot;
-        wertguthabenFormState.statusBeforeAktionscodeSwitch = String(statusSelect?.value || '');
+        const currentWertSnapshot = normalizeWertSnapshotValue(wertInput?.value);
+        const existingWertSnapshot = normalizeWertSnapshotValue(existingEntry?.wert);
+        const persistedWertSnapshot = normalizeWertSnapshotValue(existingEntry?.wertBeforeAktionscodeSwitch);
+        const inMemoryWertSnapshot = normalizeWertSnapshotValue(wertguthabenFormState.wertBeforeAktionscodeSwitch);
+
+        const preferredWertOrder = (editId && !wertguthabenFormState.isWertUnlocked)
+            ? [existingWertSnapshot, currentWertSnapshot, persistedWertSnapshot, inMemoryWertSnapshot]
+            : [currentWertSnapshot, existingWertSnapshot, persistedWertSnapshot, inMemoryWertSnapshot];
+
+        wertguthabenFormState.wertBeforeAktionscodeSwitch = pickFirstNonEmptyString(preferredWertOrder);
+        wertguthabenFormState.statusBeforeAktionscodeSwitch = pickFirstNonEmptyString([
+            String(statusSelect?.value || ''),
+            String(existingEntry?.statusBeforeAktionscodeSwitch || ''),
+            String(existingEntry?.status || ''),
+            String(wertguthabenFormState.statusBeforeAktionscodeSwitch || '')
+        ]);
+        wertguthabenFormState.statusManuallyChangedBeforeAktionscodeSwitch = !!wertguthabenFormState.statusManuallyChanged;
     }
 
     if (typ !== 'aktionscode' && previousTyp === 'aktionscode') {
         const restoreWert = wertguthabenFormState.wertBeforeAktionscodeSwitch;
         if (restoreWert !== '') {
             wertInput.value = restoreWert;
-        } else if (existingEntry && Number.isFinite(Number(existingEntry.wert))) {
-            wertInput.value = String(Number(existingEntry.wert));
+        } else {
+            const fallbackWert = pickFirstNonEmptyString([
+                normalizeWertSnapshotValue(existingEntry?.wertBeforeAktionscodeSwitch),
+                normalizeWertSnapshotValue(existingEntry?.wert)
+            ]);
+            if (fallbackWert !== '') {
+                wertInput.value = fallbackWert;
+            }
         }
 
-        const restoreStatus = wertguthabenFormState.statusBeforeAktionscodeSwitch;
+        const restoreStatus = pickFirstNonEmptyString([
+            wertguthabenFormState.statusBeforeAktionscodeSwitch,
+            String(existingEntry?.statusBeforeAktionscodeSwitch || ''),
+            String(existingEntry?.status || '')
+        ]);
         if (statusSelect && restoreStatus) {
             statusSelect.value = restoreStatus;
         }
+        wertguthabenFormState.statusManuallyChanged = !!wertguthabenFormState.statusManuallyChangedBeforeAktionscodeSwitch;
     }
 
     gutscheinFelder.classList.add('hidden');
@@ -2096,6 +2152,7 @@ window.validateEinloesungen = function() {
 // ========================================
 async function saveWertguthaben() {
     const editId = document.getElementById('editWertguthabenId').value;
+    const existingEntry = editId ? WERTGUTHABEN[editId] : null;
     
     // Validierung
     const name = document.getElementById('wgName').value.trim();
@@ -2134,8 +2191,7 @@ async function saveWertguthaben() {
     const bereitsEingeloest = parseInt(document.getElementById('wgBereitsEingeloest').value) || 0;
 
     if (editId && typ !== 'aktionscode' && !wertguthabenFormState.isWertUnlocked) {
-        const existing = WERTGUTHABEN[editId];
-        const originalWert = Number(existing?.wert || 0);
+        const originalWert = Number(existingEntry?.wert || 0);
         if (Math.abs(wert - originalWert) > 0.0001) {
             return alertUser('Wert ist gesperrt. Bitte zuerst über das Schloss entsperren.', 'error');
         }
@@ -2164,6 +2220,27 @@ async function saveWertguthaben() {
         updatedAt: serverTimestamp(),
         updatedBy: currentUser.mode
     };
+
+    const statusSnapshotForStorage = (typ === 'aktionscode')
+        ? pickFirstNonEmptyString([
+            wertguthabenFormState.statusBeforeAktionscodeSwitch,
+            String(existingEntry?.statusBeforeAktionscodeSwitch || ''),
+            String(existingEntry?.status || ''),
+            String(status || '')
+        ])
+        : String(status || '');
+
+    const wertSnapshotForStorage = (typ === 'aktionscode')
+        ? pickFirstNonEmptyString([
+            normalizeWertSnapshotValue(wertguthabenFormState.wertBeforeAktionscodeSwitch),
+            normalizeWertSnapshotValue(existingEntry?.wertBeforeAktionscodeSwitch),
+            normalizeWertSnapshotValue(existingEntry?.wert),
+            normalizeWertSnapshotValue(wert)
+        ])
+        : normalizeWertSnapshotValue(wert);
+
+    data.wertBeforeAktionscodeSwitch = wertSnapshotForStorage;
+    data.statusBeforeAktionscodeSwitch = statusSnapshotForStorage;
 
     // Typ-spezifische Felder
     if (typ === 'gutschein') {
