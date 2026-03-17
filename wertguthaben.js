@@ -3039,7 +3039,7 @@ window.openWertguthabenDetails = async function(id) {
                                 <span class="text-sm text-gray-500">${datum}</span>
                             </div>
                             ${t.beschreibung ? `<p class="text-sm text-gray-600 mb-1">${t.beschreibung}</p>` : ''}
-                            ${isStartguthaben ? '<div class="mb-1 text-xs font-semibold text-amber-700">🔒 Systemeintrag (nicht löschbar)</div>' : ''}
+                            ${isStartguthaben ? '<div class="mb-1 text-xs font-semibold text-amber-700">🔒 Systemeintrag</div>' : ''}
                             <div class="flex gap-3 text-xs text-gray-500">
                                 ${t.bestellnr ? `<span>📦 Best.-Nr: ${t.bestellnr}</span>` : ''}
                                 ${t.rechnungsnr ? `<span>🧾 Rech.-Nr: ${t.rechnungsnr}</span>` : ''}
