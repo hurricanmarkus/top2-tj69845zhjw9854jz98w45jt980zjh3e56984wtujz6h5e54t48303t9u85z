@@ -1,0 +1,18 @@
+{
+  "version": "1.0.0",
+  "buildId": "20260317-1",
+  "releaseDate": "2026-03-17",
+  "releaseTime": "17:31",
+  "timezone": "Europe/Vienna",
+  "note": "Update-Dialog mit Jetzt/Später und automatischer Versionspruefung aktiviert.",
+  "commitId": "cde0a71e",
+  "history": [
+    {
+      "version": "1.0.0",
+      "buildId": "20260317-1",
+      "releaseDate": "2026-03-17",
+      "releaseTime": "17:31",
+      "note": "Update-Dialog mit Jetzt/Später und automatischer Versionspruefung aktiviert."
+    }
+  ]
+}

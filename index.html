@@ -24,13 +24,15 @@
     <meta name="application-name" content="TOP 2 App">
     <meta name="apple-mobile-web-app-title" content="TOP 2">
     <meta name="theme-color" content="#4f46e5" />
+    <meta name="top2-app-version" content="1.0.0" />
+    <meta name="top2-build-id" content="20260317-1" />
     <meta name="msapplication-navbutton-color" content="#4f46e5">
     <meta name="apple-mobile-app-status-bar-style" content="black-translucent">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
     <link rel="apple-touch-icon" type="image/png" sizes="192x192"
         href="https://placehold.co/192x192/4f46e5/ffffff?text=T2">
 
-    <link rel="manifest" href="manifest.json?v=20260311-1">
+    <link rel="manifest" href="manifest.json?v=20260317-1">
 
     <link rel="stylesheet" href="style.css">
     
@@ -6537,14 +6539,61 @@
 
         <footer id="appFooter"
             class="flex-shrink-0 bg-gray-700 text-white border-t border-gray-600 p-2 flex justify-between items-center text-sm shadow-inner">
-            <div id="footerStatus" class="flex items-center text-xs sm:text-sm font-bold text-gray-500">
-                Status: <span class="ml-1 text-green-500">OK</span>
+            <div id="footerStatus" class="flex items-center text-xs sm:text-sm font-bold text-gray-500 gap-1.5">
+                <span>Version:</span>
+                <span id="footerVersionNumber" class="text-green-500">1.0.0</span>
+                <button id="footerVersionIndicator" type="button"
+                    class="hidden text-[11px] leading-none px-1.5 py-0.5 rounded border border-gray-400 text-gray-200 hover:text-white hover:border-gray-200 transition"
+                    aria-label="Versionsinformationen öffnen">[i]</button>
             </div>
             <div id="footerUser" class="font-medium text-xs sm:text-sm text-center">
             </div>
             <div id="footerLogout" class="flex items-center justify-end text-xs sm:text-sm">
             </div>
         </footer>
+
+        <div id="versionInfoModal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-[120] p-4">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                <div class="bg-gradient-to-r from-indigo-600 to-cyan-500 p-4 flex justify-between items-center">
+                    <h3 id="versionInfoModalTitle" class="text-lg sm:text-xl font-bold text-white">Versionsinformationen</h3>
+                    <button id="versionInfoCloseHeaderBtn" type="button" class="text-white/90 hover:text-white text-2xl leading-none">&times;</button>
+                </div>
+
+                <div class="p-4 space-y-3 overflow-y-auto">
+                    <p id="versionInfoModalSummary" class="text-sm text-gray-700">Aktuelle Informationen zur App-Version.</p>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                            <div class="text-xs uppercase tracking-wide text-gray-500">Aktuell (dieses Gerät)</div>
+                            <div id="versionInfoCurrentVersion" class="text-base font-bold text-gray-800 mt-1">-</div>
+                            <div id="versionInfoCurrentBuild" class="text-xs text-gray-500 mt-1">Build: -</div>
+                        </div>
+                        <div class="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                            <div class="text-xs uppercase tracking-wide text-amber-700">Neueste Version</div>
+                            <div id="versionInfoLatestVersion" class="text-base font-bold text-amber-900 mt-1">-</div>
+                            <div id="versionInfoLatestBuild" class="text-xs text-amber-700 mt-1">Build: -</div>
+                        </div>
+                    </div>
+
+                    <div class="rounded-lg border border-gray-200 p-3 space-y-1">
+                        <div class="text-sm"><span class="font-semibold text-gray-700">Datum:</span> <span id="versionInfoReleaseDate" class="text-gray-800">-</span></div>
+                        <div class="text-sm"><span class="font-semibold text-gray-700">Uhrzeit (AT):</span> <span id="versionInfoReleaseTime" class="text-gray-800">-</span></div>
+                        <div class="text-sm"><span class="font-semibold text-gray-700">Anmerkung:</span> <span id="versionInfoReleaseNote" class="text-gray-800">-</span></div>
+                    </div>
+
+                    <details id="versionHistoryDetails" class="rounded-lg border border-gray-200 p-3">
+                        <summary class="cursor-pointer font-semibold text-gray-700">Versionshistorie anzeigen</summary>
+                        <div id="versionInfoHistory" class="mt-3 space-y-2 text-sm text-gray-700"></div>
+                    </details>
+                </div>
+
+                <div class="p-4 border-t border-gray-200 bg-gray-50 flex flex-wrap justify-end gap-2">
+                    <button id="versionInfoLaterBtn" type="button" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300 transition">Später</button>
+                    <button id="versionInfoInstallBtn" type="button" class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition">Update jetzt</button>
+                    <button id="versionInfoCloseBtn" type="button" class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition hidden">Schließen</button>
+                </div>
+            </div>
+        </div>
 
         <div id="templateApplyModal"
             class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-30">

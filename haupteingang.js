@@ -447,8 +447,434 @@ export const USER_COLORS = {
     DEFAULT: ['bg-indigo-600', 'hover:bg-indigo-700']
 };
 
+const APP_VERSION_META = document.querySelector('meta[name="top2-app-version"]');
+const APP_BUILD_META = document.querySelector('meta[name="top2-build-id"]');
+const CURRENT_APP_VERSION = String(APP_VERSION_META?.content || '0.0.0').trim();
+const CURRENT_BUILD_ID = String(APP_BUILD_META?.content || 'local').trim();
+const VERSION_INFO_URL = '/version.json';
+const VERSION_CHECK_INTERVAL_MS = 2 * 60 * 1000;
+const UPDATE_DEFERRED_STORAGE_KEY = 'top2_update_deferred_version';
+
+let appUpdateCheckTimer = null;
+let appUpdateVisibilityListenerBound = false;
+let appVersionState = {
+    latestInfo: null,
+    updateAvailable: false,
+    registration: null
+};
+
+function getDeferredUpdateVersion() {
+    try {
+        return String(sessionStorage.getItem(UPDATE_DEFERRED_STORAGE_KEY) || '').trim();
+    } catch (error) {
+        console.warn('Update-Hinweis: sessionStorage nicht verfügbar.', error);
+        return '';
+    }
+}
+
+function setDeferredUpdateVersion(version) {
+    try {
+        if (version) {
+            sessionStorage.setItem(UPDATE_DEFERRED_STORAGE_KEY, String(version));
+        } else {
+            sessionStorage.removeItem(UPDATE_DEFERRED_STORAGE_KEY);
+        }
+    } catch (error) {
+        console.warn('Update-Hinweis: sessionStorage konnte nicht geschrieben werden.', error);
+    }
+}
+
+function extractMetaContentFromHtml(html, metaName) {
+    const safeName = String(metaName || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regexNameThenContent = new RegExp(`<meta[^>]*name=["']${safeName}["'][^>]*content=["']([^"']+)["'][^>]*>`, 'i');
+    const regexContentThenName = new RegExp(`<meta[^>]*content=["']([^"']+)["'][^>]*name=["']${safeName}["'][^>]*>`, 'i');
+
+    const matchA = html.match(regexNameThenContent);
+    if (matchA && matchA[1]) return String(matchA[1]).trim();
+
+    const matchB = html.match(regexContentThenName);
+    if (matchB && matchB[1]) return String(matchB[1]).trim();
+
+    return '';
+}
+
+async function fetchLatestIndexBuildInfo() {
+    const response = await fetch(`/index.html?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+            'Cache-Control': 'no-cache'
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`Index-Info nicht erreichbar (${response.status})`);
+    }
+
+    const html = await response.text();
+    return {
+        version: extractMetaContentFromHtml(html, 'top2-app-version'),
+        buildId: extractMetaContentFromHtml(html, 'top2-build-id')
+    };
+}
+
+async function fetchLatestVersionInfo() {
+    const [versionPayloadResult, indexBuildResult] = await Promise.allSettled([
+        (async () => {
+            const url = `${VERSION_INFO_URL}?t=${Date.now()}`;
+            const response = await fetch(url, {
+                cache: 'no-store',
+                headers: {
+                    'Cache-Control': 'no-cache'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Version-Info nicht erreichbar (${response.status})`);
+            }
+
+            return response.json();
+        })(),
+        fetchLatestIndexBuildInfo()
+    ]);
+
+    const data = versionPayloadResult.status === 'fulfilled' ? versionPayloadResult.value : null;
+    const indexBuild = indexBuildResult.status === 'fulfilled' ? indexBuildResult.value : { version: '', buildId: '' };
+
+    if (!data && !indexBuild.buildId && !indexBuild.version) {
+        throw new Error('Version-Info und Index-Metadaten nicht erreichbar.');
+    }
+
+    const versionFromJson = String(data?.version || data?.appVersion || data?.latestVersion || '').trim();
+    const buildFromJson = String(data?.buildId || data?.appBuildId || data?.build || '').trim();
+    const version = String(indexBuild.version || versionFromJson || CURRENT_APP_VERSION).trim() || CURRENT_APP_VERSION;
+    const buildId = String(indexBuild.buildId || buildFromJson || '').trim();
+    const releaseDate = String(data?.releaseDate || data?.date || data?.releasedAt || '-').trim() || '-';
+    const releaseTime = String(data?.releaseTime || data?.time || data?.releasedTime || '-').trim() || '-';
+    const releaseNote = String(data?.note || data?.releaseNote || data?.description || '-').trim() || '-';
+
+    let history = Array.isArray(data?.history) ? data.history : [];
+    history = history.map((entry) => ({
+        version: String(entry?.version || '-').trim() || '-',
+        buildId: String(entry?.buildId || entry?.build || '').trim(),
+        releaseDate: String(entry?.releaseDate || entry?.date || '-').trim() || '-',
+        releaseTime: String(entry?.releaseTime || entry?.time || '-').trim() || '-',
+        note: String(entry?.note || entry?.releaseNote || entry?.description || '-').trim() || '-'
+    }));
+
+    const hasCurrentInHistory = history.some((entry) => entry.version === version && entry.releaseDate === releaseDate && entry.releaseTime === releaseTime);
+    if (!hasCurrentInHistory) {
+        history.unshift({
+            version,
+            buildId,
+            releaseDate,
+            releaseTime,
+            note: releaseNote
+        });
+    }
+
+    return {
+        version,
+        buildId,
+        releaseDate,
+        releaseTime,
+        releaseNote,
+        history,
+        // commitId bleibt bewusst ungenutzt in der UI (unsichtbar fuer Benutzer)
+        commitId: String(data?.commitId || data?.commit || data?.revision || '').trim()
+    };
+}
+
+function getVersionInfoModalElements() {
+    return {
+        modal: document.getElementById('versionInfoModal'),
+        title: document.getElementById('versionInfoModalTitle'),
+        summary: document.getElementById('versionInfoModalSummary'),
+        currentVersion: document.getElementById('versionInfoCurrentVersion'),
+        currentBuild: document.getElementById('versionInfoCurrentBuild'),
+        latestVersion: document.getElementById('versionInfoLatestVersion'),
+        latestBuild: document.getElementById('versionInfoLatestBuild'),
+        releaseDate: document.getElementById('versionInfoReleaseDate'),
+        releaseTime: document.getElementById('versionInfoReleaseTime'),
+        releaseNote: document.getElementById('versionInfoReleaseNote'),
+        history: document.getElementById('versionInfoHistory'),
+        details: document.getElementById('versionHistoryDetails'),
+        laterBtn: document.getElementById('versionInfoLaterBtn'),
+        installBtn: document.getElementById('versionInfoInstallBtn'),
+        closeBtn: document.getElementById('versionInfoCloseBtn'),
+        closeHeaderBtn: document.getElementById('versionInfoCloseHeaderBtn')
+    };
+}
+
+function getFooterVersionElements() {
+    return {
+        versionNumber: document.getElementById('footerVersionNumber'),
+        indicator: document.getElementById('footerVersionIndicator')
+    };
+}
+
+function closeVersionInfoModal() {
+    const { modal } = getVersionInfoModalElements();
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+function isUpdateAvailable(versionInfo) {
+    if (!versionInfo) return false;
+
+    const versionChanged = Boolean(versionInfo.version) && versionInfo.version !== CURRENT_APP_VERSION;
+    const buildChanged = Boolean(versionInfo.buildId) && versionInfo.buildId !== CURRENT_BUILD_ID;
+
+    return versionChanged || buildChanged;
+}
+
+function renderVersionHistory(history) {
+    const { history: historyContainer } = getVersionInfoModalElements();
+    if (!historyContainer) return;
+
+    const rows = Array.isArray(history) ? history : [];
+    if (!rows.length) {
+        historyContainer.innerHTML = '<p class="text-gray-500 italic">Keine Historie vorhanden.</p>';
+        return;
+    }
+
+    historyContainer.innerHTML = rows.map((entry) => {
+        const version = entry?.version || '-';
+        const date = entry?.releaseDate || '-';
+        const time = entry?.releaseTime || '-';
+        const note = entry?.note || '-';
+        return `
+            <div class="rounded-lg border border-gray-200 bg-white p-2">
+                <div class="font-semibold text-gray-800">${version}</div>
+                <div class="text-xs text-gray-500">${date} ${time}</div>
+                <div class="text-sm text-gray-700 mt-1">${note}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function bindVersionModalEvents() {
+    const { modal, closeBtn, closeHeaderBtn } = getVersionInfoModalElements();
+    if (!modal) return;
+
+    if (modal.dataset.bound === 'true') return;
+
+    modal.addEventListener('click', (event) => {
+        if (event.target === modal) {
+            closeVersionInfoModal();
+        }
+    });
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => closeVersionInfoModal());
+    }
+
+    if (closeHeaderBtn) {
+        closeHeaderBtn.addEventListener('click', () => closeVersionInfoModal());
+    }
+
+    modal.dataset.bound = 'true';
+}
+
+function updateFooterVersionUI(versionInfo, hasUpdate) {
+    const { versionNumber, indicator } = getFooterVersionElements();
+    if (!versionNumber || !indicator) return;
+
+    versionNumber.textContent = CURRENT_APP_VERSION || '-';
+
+    indicator.classList.remove('hidden');
+
+    if (hasUpdate) {
+        indicator.textContent = 'Update';
+        indicator.className = 'text-[11px] leading-none px-2 py-0.5 rounded bg-orange-500 text-white border border-orange-300 animate-pulse hover:bg-orange-400 transition';
+        indicator.setAttribute('aria-label', 'Update verfuegbar');
+    } else {
+        indicator.textContent = '[i]';
+        indicator.className = 'text-[11px] leading-none px-1.5 py-0.5 rounded border border-gray-400 text-gray-200 hover:text-white hover:border-gray-200 transition';
+        indicator.setAttribute('aria-label', 'Versionsinformationen oeffnen');
+    }
+
+    indicator.onclick = () => {
+        openVersionInfoModal(versionInfo || appVersionState.latestInfo);
+    };
+}
+
+function openVersionInfoModal(versionInfoOverride = null) {
+    const info = versionInfoOverride || appVersionState.latestInfo || {
+        version: CURRENT_APP_VERSION,
+        buildId: CURRENT_BUILD_ID,
+        releaseDate: '-',
+        releaseTime: '-',
+        releaseNote: '-',
+        history: []
+    };
+
+    const hasUpdate = isUpdateAvailable(info);
+
+    const {
+        modal,
+        title,
+        summary,
+        currentVersion,
+        currentBuild,
+        latestVersion,
+        latestBuild,
+        releaseDate,
+        releaseTime,
+        releaseNote,
+        details,
+        laterBtn,
+        installBtn,
+        closeBtn
+    } = getVersionInfoModalElements();
+
+    if (!modal || !title || !summary || !currentVersion || !currentBuild || !latestVersion || !latestBuild || !releaseDate || !releaseTime || !releaseNote || !details || !laterBtn || !installBtn || !closeBtn) {
+        return;
+    }
+
+    currentVersion.textContent = CURRENT_APP_VERSION || '-';
+    currentBuild.textContent = `Build: ${CURRENT_BUILD_ID || '-'}`;
+    latestVersion.textContent = info.version || CURRENT_APP_VERSION || '-';
+    latestBuild.textContent = `Build: ${info.buildId || '-'}`;
+    releaseDate.textContent = info.releaseDate || '-';
+    releaseTime.textContent = info.releaseTime || '-';
+    releaseNote.textContent = info.releaseNote || '-';
+
+    renderVersionHistory(info.history);
+    details.open = false;
+
+    if (hasUpdate) {
+        title.textContent = 'Update verfuegbar';
+        summary.textContent = `Neue Version erkannt: ${CURRENT_APP_VERSION} -> ${info.version || CURRENT_APP_VERSION}.`; 
+        laterBtn.classList.remove('hidden');
+        installBtn.classList.remove('hidden');
+        closeBtn.classList.add('hidden');
+
+        laterBtn.disabled = false;
+        installBtn.disabled = false;
+        installBtn.textContent = 'Update jetzt';
+
+        laterBtn.onclick = () => {
+            setDeferredUpdateVersion(`${info.version || ''}|${info.buildId || ''}`);
+            closeVersionInfoModal();
+        };
+
+        installBtn.onclick = async () => {
+            const originalInstallText = installBtn.textContent;
+            installBtn.disabled = true;
+            laterBtn.disabled = true;
+            installBtn.textContent = 'Installiere...';
+            summary.textContent = 'Update wird installiert...';
+
+            try {
+                await installPendingAppUpdate(appVersionState.registration);
+            } catch (error) {
+                console.error('Update-Installation fehlgeschlagen:', error);
+                summary.textContent = 'Update fehlgeschlagen. Bitte erneut versuchen.';
+                installBtn.disabled = false;
+                laterBtn.disabled = false;
+                installBtn.textContent = originalInstallText;
+            }
+        };
+    } else {
+        title.textContent = 'Versionsinformationen';
+        summary.textContent = 'Diese App ist auf dem aktuellen Stand.';
+        laterBtn.classList.add('hidden');
+        installBtn.classList.add('hidden');
+        closeBtn.classList.remove('hidden');
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function forceAppReload() {
+    const url = new URL(window.location.href);
+    url.searchParams.set('__top2_refresh', String(Date.now()));
+    window.location.replace(url.toString());
+}
+
+async function installPendingAppUpdate(registration) {
+    setDeferredUpdateVersion('');
+
+    if (registration) {
+        try {
+            await registration.update();
+        } catch (error) {
+            console.warn('Service Worker Update beim Installieren fehlgeschlagen:', error);
+        }
+
+        if (registration.waiting) {
+            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            return;
+        }
+    }
+
+    forceAppReload();
+}
+
+async function checkAndPromptForAppUpdate(registration) {
+    if (registration) {
+        try {
+            await registration.update();
+        } catch (error) {
+            console.warn('Service Worker Update-Check fehlgeschlagen:', error);
+        }
+    }
+
+    try {
+        const latestInfo = await fetchLatestVersionInfo();
+        appVersionState.latestInfo = latestInfo;
+
+        const hasUpdate = isUpdateAvailable(latestInfo);
+        const deferredSignature = getDeferredUpdateVersion();
+        const latestSignature = `${latestInfo.version || ''}|${latestInfo.buildId || ''}`;
+
+        appVersionState.updateAvailable = hasUpdate;
+        updateFooterVersionUI(latestInfo, hasUpdate);
+
+        if (!hasUpdate) {
+            setDeferredUpdateVersion('');
+            closeVersionInfoModal();
+            return;
+        }
+
+        if (deferredSignature && deferredSignature === latestSignature) {
+            return;
+        }
+
+        // Update ist verfuegbar: Badge ist sichtbar und blinkt, Modal oeffnet auf Klick.
+    } catch (error) {
+        console.warn('Version-Check fehlgeschlagen:', error);
+        updateFooterVersionUI(appVersionState.latestInfo, appVersionState.updateAvailable);
+    }
+}
+
 function registerAppServiceWorker() {
+    const startVersionPolling = (registration) => {
+        appVersionState.registration = registration;
+        bindVersionModalEvents();
+
+        updateFooterVersionUI(appVersionState.latestInfo, appVersionState.updateAvailable);
+        checkAndPromptForAppUpdate(registration);
+
+        if (!appUpdateCheckTimer) {
+            appUpdateCheckTimer = setInterval(() => {
+                checkAndPromptForAppUpdate(registration);
+            }, VERSION_CHECK_INTERVAL_MS);
+        }
+
+        if (!appUpdateVisibilityListenerBound) {
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    checkAndPromptForAppUpdate(registration);
+                }
+            });
+            appUpdateVisibilityListenerBound = true;
+        }
+    };
+
     if (!('serviceWorker' in navigator)) {
+        startVersionPolling(null);
         return;
     }
 
@@ -456,38 +882,34 @@ function registerAppServiceWorker() {
     navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (refreshing) return;
         refreshing = true;
-        window.location.reload();
+        forceAppReload();
     });
 
     navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' })
         .then(async (registration) => {
             console.log('Service Worker registriert:', registration.scope);
+            startVersionPolling(registration);
 
-            await registration.update();
-
-            if (registration.waiting) {
-                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            try {
+                await registration.update();
+            } catch (error) {
+                console.warn('Service Worker initialer Update-Check fehlgeschlagen:', error);
             }
 
             registration.addEventListener('updatefound', () => {
                 const installing = registration.installing;
                 if (!installing) return;
 
-                installing.addEventListener('statechange', () => {
+                installing.addEventListener('statechange', async () => {
                     if (installing.state === 'installed' && navigator.serviceWorker.controller) {
-                        installing.postMessage({ type: 'SKIP_WAITING' });
+                        await checkAndPromptForAppUpdate(registration);
                     }
                 });
             });
-
-            setInterval(() => {
-                registration.update().catch((error) => {
-                    console.warn('Service Worker Update-Check fehlgeschlagen:', error);
-                });
-            }, 5 * 60 * 1000);
         })
         .catch((error) => {
             console.error('Service Worker registration failed:', error);
+            startVersionPolling(null);
         });
 }
 

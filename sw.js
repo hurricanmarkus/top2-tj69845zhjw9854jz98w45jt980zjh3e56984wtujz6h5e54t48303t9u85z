@@ -1,5 +1,6 @@
 // // @ts-check
-const SW_VERSION = 'top2-v20260311-1';
+const SW_VERSION = 'top2-v20260317-1';
+
 const APP_CACHE = `${SW_VERSION}-app`;
 const ASSET_CACHE = `${SW_VERSION}-assets`;
 
@@ -8,7 +9,7 @@ const APP_SHELL_URLS = [
   '/index.html',
   '/index.html?source=pwa',
   '/manifest.json',
-  '/manifest.json?v=20260311-1',
+  '/manifest.json?v=20260317-1',
   '/style.css'
 ];
 
@@ -48,6 +49,10 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  if (url.pathname === '/version.json') {
+    return;
+  }
 
   const destination = request.destination;
   const isAppCode = request.mode === 'navigate' || ['script', 'style', 'document', 'manifest', 'worker'].includes(destination);
