@@ -1936,6 +1936,13 @@ function pickFirstNonEmptyString(values = []) {
     return '';
 }
 
+function parseWertAmount(rawValue, fallback = 0) {
+    const normalized = normalizeWertSnapshotValue(rawValue);
+    if (!normalized) return fallback;
+    const numericValue = Number(normalized);
+    return Number.isFinite(numericValue) ? numericValue : fallback;
+}
+
 function shouldAutoSetStatusToEingeloest(typ, wert, maxEinloesungen, bereitsEingeloest) {
     if (typ === 'aktionscode') {
         return maxEinloesungen > 0 && bereitsEingeloest >= maxEinloesungen;
@@ -1995,6 +2002,8 @@ function handleTypChange() {
             }
         }
 
+        const restoredWertNumeric = parseWertAmount(wertInput?.value, 0);
+
         const restoreStatus = pickFirstNonEmptyString([
             wertguthabenFormState.statusBeforeAktionscodeSwitch,
             String(existingEntry?.statusBeforeAktionscodeSwitch || ''),
@@ -2003,6 +2012,14 @@ function handleTypChange() {
         if (statusSelect && restoreStatus) {
             statusSelect.value = restoreStatus;
         }
+
+        if (statusSelect && !wertguthabenFormState.statusManuallyChangedBeforeAktionscodeSwitch) {
+            const isMonetaryTyp = ['gutschein', 'guthaben', 'wertguthaben', 'wertguthaben_gesetzlich'].includes(typ);
+            if (isMonetaryTyp && restoredWertNumeric > 0 && statusSelect.value === 'eingeloest') {
+                statusSelect.value = 'aktiv';
+            }
+        }
+
         wertguthabenFormState.statusManuallyChanged = !!wertguthabenFormState.statusManuallyChangedBeforeAktionscodeSwitch;
     }
 
@@ -2178,7 +2195,7 @@ async function saveWertguthaben() {
     const typ = document.getElementById('wgTyp').value;
     const statusSelect = document.getElementById('wgStatus');
     let status = statusSelect.value;
-    const wert = parseFloat(document.getElementById('wgWert').value) || 0;
+    const wert = parseWertAmount(document.getElementById('wgWert').value, 0);
     const unternehmen = document.getElementById('wgUnternehmen').value.trim();
     const kaufdatum = document.getElementById('wgKaufdatum').value;
     const einloesefrist = document.getElementById('wgEinloesefrist').value;
@@ -2191,7 +2208,12 @@ async function saveWertguthaben() {
     const bereitsEingeloest = parseInt(document.getElementById('wgBereitsEingeloest').value) || 0;
 
     if (editId && typ !== 'aktionscode' && !wertguthabenFormState.isWertUnlocked) {
-        const originalWert = Number(existingEntry?.wert || 0);
+        const lockedWertReference = pickFirstNonEmptyString([
+            normalizeWertSnapshotValue(wertguthabenFormState.wertBeforeAktionscodeSwitch),
+            normalizeWertSnapshotValue(existingEntry?.wertBeforeAktionscodeSwitch),
+            normalizeWertSnapshotValue(existingEntry?.wert)
+        ]);
+        const originalWert = parseWertAmount(lockedWertReference, 0);
         if (Math.abs(wert - originalWert) > 0.0001) {
             return alertUser('Wert ist gesperrt. Bitte zuerst über das Schloss entsperren.', 'error');
         }
