@@ -773,7 +773,7 @@ if (user) {
         const titleAttr = realNameInfo.abbreviated && escapedFullRealName ? ` title="${escapedFullRealName}"` : '';
         const realNamePart = realNameInfo.displayName ? `<span class="text-gray-400 italic text-[10px] sm:text-xs ml-1 whitespace-nowrap"${titleAttr}>(${escapedRealName})</span>` : '';
         const displayName = (typeof escapeHtml === 'function' ? escapeHtml(currentUser.displayName || currentUser.mode) : (currentUser.displayName || currentUser.mode));
-        const roleDisplay = roleNameToDisplay ? `<span class="mx-1 text-gray-400">*</span><span class="${roleColor} italic whitespace-nowrap">(${(typeof escapeHtml === 'function' ? escapeHtml(roleNameToDisplay) : roleNameToDisplay)})</span>` : '';
+        const roleDisplay = roleNameToDisplay ? `<span class="mx-1 text-gray-400">❖</span><span class="${roleColor} italic whitespace-nowrap">(${(typeof escapeHtml === 'function' ? escapeHtml(roleNameToDisplay) : roleNameToDisplay)})</span>` : '';
         footerUser.innerHTML = `${displayName}${realNamePart ? ` ${realNamePart}` : ''}${roleDisplay ? ` ${roleDisplay}` : ''}`;
 
         const logoutButton = document.createElement('button');

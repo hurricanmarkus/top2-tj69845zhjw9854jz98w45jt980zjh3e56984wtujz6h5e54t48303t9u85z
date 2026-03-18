@@ -1,13 +1,22 @@
 {
-  "version": "1.0.4",
-  "buildId": "20260318-1",
+  "version": "1.0.5",
+  "buildId": "20260318-2",
   "releaseDate": "2026-03-18",
-  "releaseTime": "08:22",
+  "releaseTime": "08:49",
   "timezone": "Europe/Vienna",
-  "note": "Einloese-Scanner stoppt jetzt verlässlich beim Verlassen der Ansicht; Browser-Hinweistext korrigiert.",
-  "commitId": "507a08e",
+  "note": "Footer-Trennzeichen wieder auf ❖ gesetzt; Scanner erkennt jetzt auch Code-Treffer inkl. maskierter Varianten und Mehrfachauswahl.",
+  "commitId": "2e7eec5",
   "obligation": "false",
   "history": [
+    {
+      "version": "1.0.5",
+      "buildId": "20260318-2",
+      "releaseDate": "2026-03-18",
+      "releaseTime": "08:49",
+      "note": "Footer-Trennzeichen wieder auf ❖ gesetzt; Scanner erkennt jetzt auch Code-Treffer inkl. maskierter Varianten und Mehrfachauswahl.",
+      "commitId": "2e7eec5",
+      "obligation": "false"
+    },
     {
       "version": "1.0.4",
       "buildId": "20260318-1",

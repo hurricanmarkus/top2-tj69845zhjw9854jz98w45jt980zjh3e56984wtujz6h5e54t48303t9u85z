@@ -613,6 +613,198 @@ function findEinloeseEntryByIdText(rawValue, options = {}) {
     return entries.find((entry) => getWertguthabenDisplayId(entry).toUpperCase().includes(normalized)) || null;
 }
 
+function normalizeEinloeseCodeInput(rawValue) {
+    return String(rawValue || '')
+        .trim()
+        .replace(/\s+/g, '')
+        .toUpperCase();
+}
+
+function escapeRegExpForScanner(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function matchesMaskedEinloeseCode(scannedCode, storedCodePattern) {
+    const normalizedScanned = normalizeEinloeseCodeInput(scannedCode);
+    const normalizedPattern = normalizeEinloeseCodeInput(storedCodePattern);
+    if (!normalizedScanned || !normalizedPattern || !normalizedPattern.includes('*')) return false;
+
+    const regexSource = escapeRegExpForScanner(normalizedPattern).replace(/\\\*+/g, '.*');
+    try {
+        return new RegExp(`^${regexSource}$`, 'i').test(normalizedScanned);
+    } catch (error) {
+        console.warn('Masked-Code-Regex konnte nicht gebaut werden:', error);
+        return false;
+    }
+}
+
+function getSharedPrefixLength(first, second) {
+    const left = String(first || '');
+    const right = String(second || '');
+    const maxLength = Math.min(left.length, right.length);
+    let index = 0;
+    while (index < maxLength && left[index] === right[index]) {
+        index += 1;
+    }
+    return index;
+}
+
+function scoreEinloeseCodeCandidate(scannedCode, storedCode) {
+    const normalizedScanned = normalizeEinloeseCodeInput(scannedCode);
+    const normalizedStored = normalizeEinloeseCodeInput(storedCode);
+    if (!normalizedScanned || !normalizedStored) return 0;
+    if (normalizedScanned === normalizedStored) return 1000 + normalizedStored.length;
+
+    const storedWithoutMask = normalizedStored.replace(/\*/g, '');
+    if (!storedWithoutMask) return 0;
+
+    const prefixLength = getSharedPrefixLength(normalizedScanned, storedWithoutMask);
+    const minLength = Math.min(normalizedScanned.length, storedWithoutMask.length);
+    let alignedMatches = 0;
+    for (let i = 0; i < minLength; i += 1) {
+        if (normalizedScanned[i] === storedWithoutMask[i]) {
+            alignedMatches += 1;
+        }
+    }
+
+    let score = prefixLength * 8 + alignedMatches * 2;
+    if (normalizedScanned.includes(storedWithoutMask) || storedWithoutMask.includes(normalizedScanned)) {
+        score += 18;
+    }
+    if (normalizedStored.includes('*') && matchesMaskedEinloeseCode(normalizedScanned, normalizedStored)) {
+        score += 40;
+    }
+
+    score -= Math.min(Math.abs(normalizedScanned.length - storedWithoutMask.length), 10);
+    return Math.max(score, 0);
+}
+
+function uniqueEinloeseEntries(entries) {
+    const uniqueMap = new Map();
+    (Array.isArray(entries) ? entries : []).forEach((entry) => {
+        if (!entry?.id || uniqueMap.has(entry.id)) return;
+        uniqueMap.set(entry.id, entry);
+    });
+    return Array.from(uniqueMap.values());
+}
+
+function findEinloeseEntriesByScannedCode(rawValue) {
+    const scannedCode = normalizeEinloeseCodeInput(rawValue);
+    if (!scannedCode) {
+        return { scannedCode: '', exactMatches: [], maskedMatches: [], fuzzyMatches: [] };
+    }
+
+    const codeEntries = Object.values(WERTGUTHABEN)
+        .filter((entry) => entry.typ !== 'aktionscode')
+        .map((entry) => ({
+            entry,
+            normalizedCode: normalizeEinloeseCodeInput(entry.code)
+        }))
+        .filter(({ normalizedCode }) => !!normalizedCode);
+
+    const exactMatches = uniqueEinloeseEntries(
+        codeEntries
+            .filter(({ normalizedCode }) => normalizedCode === scannedCode)
+            .map(({ entry }) => entry)
+    );
+
+    const maskedMatches = exactMatches.length > 0
+        ? []
+        : uniqueEinloeseEntries(
+            codeEntries
+                .filter(({ normalizedCode }) => normalizedCode.includes('*') && matchesMaskedEinloeseCode(scannedCode, normalizedCode))
+                .map(({ entry }) => entry)
+        );
+
+    const scoredCandidates = codeEntries
+        .map(({ entry, normalizedCode }) => ({
+            entry,
+            score: scoreEinloeseCodeCandidate(scannedCode, normalizedCode)
+        }))
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score);
+
+    const bestScore = scoredCandidates[0]?.score || 0;
+    const fuzzyMatches = bestScore <= 0
+        ? []
+        : uniqueEinloeseEntries(
+            scoredCandidates
+                .filter(({ score }) => score >= Math.max(6, bestScore - 4))
+                .slice(0, 12)
+                .map(({ entry }) => entry)
+        );
+
+    return {
+        scannedCode,
+        exactMatches,
+        maskedMatches,
+        fuzzyMatches
+    };
+}
+
+function renderEinloeseEntrySuggestions(entries, options = {}) {
+    const box = document.getElementById('wg-einloese-suggestions-box');
+    const list = document.getElementById('wg-einloese-suggestions-list');
+    if (!box || !list) return;
+
+    const emptyMessage = String(options.emptyMessage || 'Keine passende ID gefunden.');
+    const headerText = String(options.headerText || '').trim();
+    const showCodeLabel = options.showCodeLabel !== false;
+    const candidates = uniqueEinloeseEntries(entries);
+
+    if (candidates.length === 0) {
+        list.innerHTML = `<li class="px-4 py-3 text-sm text-gray-500">${escapeHtml(emptyMessage)}</li>`;
+        box.classList.remove('hidden');
+        return;
+    }
+
+    const headerHtml = headerText
+        ? `<li class="px-4 py-2 text-xs font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border-b border-emerald-100">${escapeHtml(headerText)}</li>`
+        : '';
+
+    const itemsHtml = candidates.map((entry) => {
+        const displayId = getWertguthabenDisplayId(entry);
+        const restwert = entry.restwert !== undefined ? Number(entry.restwert || 0) : Number(entry.wert || 0);
+        const codeSnippet = String(entry.code || '').trim();
+        const detailLine = `${entry.name || '-'} · ${entry.unternehmen || '-'}${showCodeLabel && codeSnippet ? ` · Code: ${codeSnippet}` : ''}`;
+
+        return `
+            <li>
+                <button type="button" onclick="window.selectEinloeseWertguthaben('${entry.id}')" class="w-full text-left px-4 py-3 hover:bg-emerald-50 border-b border-gray-100 last:border-0">
+                    <div class="flex items-center justify-between gap-3">
+                        <span class="font-mono font-bold text-emerald-700">#${escapeHtml(displayId)}</span>
+                        <span class="text-sm font-semibold text-gray-700">${restwert.toFixed(2)} €</span>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1 break-all">${escapeHtml(detailLine)}</div>
+                </button>
+            </li>
+        `;
+    }).join('');
+
+    list.innerHTML = `${headerHtml}${itemsHtml}`;
+    box.classList.remove('hidden');
+}
+
+function showScannerEntrySelection(entries, options = {}) {
+    const candidates = uniqueEinloeseEntries(entries);
+    if (candidates.length === 0) return;
+
+    const scannedValue = String(options.scannedValue || '').trim();
+    const input = document.getElementById('wg-einloese-id-input');
+    if (input && scannedValue) {
+        input.value = scannedValue;
+    }
+
+    resetEinloeseResult();
+    renderEinloeseEntrySuggestions(candidates, {
+        headerText: options.headerText || 'Treffer auswählen',
+        emptyMessage: options.emptyMessage || 'Keine passenden Einträge gefunden.',
+        showCodeLabel: true
+    });
+    stopEinloeseScanner({ hidePanel: true, clearStatus: false });
+    setEinloeseScannerStatus(options.statusText || `${candidates.length} Treffer gefunden.`);
+}
+
 function setEinloeseScannerStatus(message, isError = false) {
     const statusEl = document.getElementById('wg-einloese-scanner-status');
     if (!statusEl) return;
@@ -689,22 +881,69 @@ async function scanEinloeseFrame() {
         const detections = await wgEinloeseBarcodeDetector.detect(video);
         if (!Array.isArray(detections) || detections.length === 0) return;
 
-        const rawValue = String(detections[0]?.rawValue || '').trim();
+        const rawValue = detections
+            .map((detection) => String(detection?.rawValue || '').trim())
+            .find((value) => !!value);
+        if (!rawValue) return;
+
         const scannedId = extractEinloeseIdFromScannedText(rawValue);
-        if (!scannedId) {
-            setEinloeseScannerStatus('Code erkannt, aber keine gültige #XXXX-ID gefunden.', true);
-            return;
-        }
+        if (scannedId) {
+            const idMatch = findEinloeseEntryByIdText(scannedId, { exactOnly: true });
+            if (idMatch) {
+                window.selectEinloeseWertguthaben(idMatch.id);
+                setEinloeseScannerStatus(`Treffer: #${getWertguthabenDisplayId(idMatch)}`);
+                stopEinloeseScanner({ hidePanel: true, clearStatus: true });
+                return;
+            }
 
-        const match = findEinloeseEntryByIdText(scannedId, { exactOnly: true });
-        if (!match) {
+            stopEinloeseScanner({ hidePanel: true, clearStatus: false });
             setEinloeseScannerStatus(`ID #${scannedId} ist nicht vorhanden.`, true);
+            alertUser(`ID #${scannedId} ist nicht vorhanden.`, 'error');
             return;
         }
 
-        window.selectEinloeseWertguthaben(match.id);
-        setEinloeseScannerStatus(`Treffer: #${getWertguthabenDisplayId(match)}`);
-        stopEinloeseScanner({ hidePanel: true, clearStatus: true });
+        const codeMatchResult = findEinloeseEntriesByScannedCode(rawValue);
+        const { scannedCode, exactMatches, maskedMatches, fuzzyMatches } = codeMatchResult;
+        const displayScanCode = scannedCode || rawValue;
+
+        if (exactMatches.length === 1) {
+            const match = exactMatches[0];
+            window.selectEinloeseWertguthaben(match.id);
+            setEinloeseScannerStatus(`Treffer: #${getWertguthabenDisplayId(match)} (Code ${displayScanCode})`);
+            stopEinloeseScanner({ hidePanel: true, clearStatus: true });
+            return;
+        }
+
+        if (exactMatches.length > 1) {
+            showScannerEntrySelection(exactMatches, {
+                scannedValue: displayScanCode,
+                headerText: `Code ${displayScanCode}: ${exactMatches.length} IDs gefunden`,
+                statusText: `${exactMatches.length} IDs mit demselben Code gefunden.`
+            });
+            return;
+        }
+
+        if (maskedMatches.length > 0) {
+            showScannerEntrySelection(maskedMatches, {
+                scannedValue: displayScanCode,
+                headerText: `Maskierte Code-Treffer (${maskedMatches.length})`,
+                statusText: `Code passt auf ${maskedMatches.length} maskierte Einträge.`
+            });
+            return;
+        }
+
+        if (fuzzyMatches.length > 0) {
+            showScannerEntrySelection(fuzzyMatches, {
+                scannedValue: displayScanCode,
+                headerText: 'Ähnlichste Code-Treffer',
+                statusText: 'Kein exakter Code gefunden – bitte passenden Eintrag auswählen.'
+            });
+            return;
+        }
+
+        stopEinloeseScanner({ hidePanel: true, clearStatus: false });
+        setEinloeseScannerStatus('Kein passender Code gefunden.', true);
+        alertUser('Kein passender Code gefunden.', 'error');
     } catch (error) {
         console.warn('Scanner-Analyse fehlgeschlagen:', error);
     } finally {
@@ -794,28 +1033,10 @@ function updateEinloeseSuggestions(term) {
         .slice(0, 12)
         .map(({ entry }) => entry);
 
-    if (candidates.length === 0) {
-        list.innerHTML = '<li class="px-4 py-3 text-sm text-gray-500">Keine passende ID gefunden.</li>';
-        box.classList.remove('hidden');
-        return;
-    }
-
-    list.innerHTML = candidates.map((entry) => {
-        const displayId = getWertguthabenDisplayId(entry);
-        const restwert = entry.restwert !== undefined ? Number(entry.restwert || 0) : Number(entry.wert || 0);
-        return `
-            <li>
-                <button type="button" onclick="window.selectEinloeseWertguthaben('${entry.id}')" class="w-full text-left px-4 py-3 hover:bg-emerald-50 border-b border-gray-100 last:border-0">
-                    <div class="flex items-center justify-between gap-3">
-                        <span class="font-mono font-bold text-emerald-700">#${escapeHtml(displayId)}</span>
-                        <span class="text-sm font-semibold text-gray-700">${restwert.toFixed(2)} €</span>
-                    </div>
-                    <div class="text-xs text-gray-500 mt-1">${escapeHtml(entry.name || '-')} · ${escapeHtml(entry.unternehmen || '-')}</div>
-                </button>
-            </li>
-        `;
-    }).join('');
-    box.classList.remove('hidden');
+    renderEinloeseEntrySuggestions(candidates, {
+        emptyMessage: 'Keine passende ID gefunden.',
+        showCodeLabel: false
+    });
 }
 
 function refreshEinloeseSelection() {
